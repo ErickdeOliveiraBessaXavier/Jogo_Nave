@@ -1,7 +1,7 @@
-
 import pygame
 from ..core.config import Config
 from ..core import colors
+
 
 class AlienBullet:
     def __init__(self, x: float, y: float):

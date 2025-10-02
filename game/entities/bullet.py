@@ -2,6 +2,7 @@ import pygame
 from ..core.config import Config
 from ..core import colors
 
+
 class Bullet:
     def __init__(self, x: float, y: float, damage: int = 10):
         self.x, self.y = x, y

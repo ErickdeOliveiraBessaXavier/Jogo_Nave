@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..app import GameApp
 
+
 class Scene(ABC):
     def __init__(self, app: "GameApp") -> None:
         self.app = app
@@ -19,12 +20,11 @@ class Scene(ABC):
         pass
 
     @abstractmethod
-    def update(self, dt: float):
-        ...
+    def update(self, dt: float): ...
 
     @abstractmethod
-    def render(self, surface: pygame.Surface):
-        ...
+    def render(self, surface: pygame.Surface): ...
+
 
 class StateManager:
     def __init__(self):

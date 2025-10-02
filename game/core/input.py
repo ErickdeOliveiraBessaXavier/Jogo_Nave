@@ -16,6 +16,7 @@ KEYMAP = {
     pygame.K_ESCAPE: "quit",
 }
 
+
 class Input:
     def poll_events(self) -> set[str]:
         actions: set[str] = set()

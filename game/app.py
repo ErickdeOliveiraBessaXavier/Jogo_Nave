@@ -4,10 +4,13 @@ from .core.state import StateManager
 from .scenes.preparation import PreparationScene
 from .core.input import Input
 
+
 class GameApp:
     def __init__(self):
         pygame.init()
-        self.screen = pygame.display.set_mode((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
+        self.screen = pygame.display.set_mode(
+            (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
+        )
         pygame.display.set_caption("Structured Pygame Template")
         self.clock = pygame.time.Clock()
         self.states = StateManager()
@@ -19,7 +22,8 @@ class GameApp:
         while running:
             dt = self.clock.tick(Config.FPS) / 1000.0
 
-            # event -> actions (we keep direct events for scenes that need them)
+            # event -> actions (we keep direct events for scenes that need
+            # them)
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False

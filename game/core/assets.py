@@ -6,6 +6,7 @@ import pygame
 BASE_DIR = Path(__file__).resolve().parents[1]  # .../game
 DEFAULT_FONT_PATH = BASE_DIR / "assets" / "fonts" / "PressStart2P-Regular.ttf"
 
+
 @lru_cache(maxsize=64)
 def get_font(size: int, path: str | Path | None = None) -> pygame.font.Font:
     """

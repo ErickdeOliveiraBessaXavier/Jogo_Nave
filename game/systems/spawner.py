@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from ..entities.meteor import Meteor
     from ..entities.alien import Alien
 
+
 class EnemySpawner:
     def __init__(self, config: LevelConfig):
         self.config = config
@@ -17,11 +18,14 @@ class EnemySpawner:
         self.timer.start()
         self.stopped = False
 
-    def update(self, dt: float, enemies: List[Union['Meteor', 'Alien']]) -> None:
-        if self.stopped: return
+    def update(self, dt: float,
+               enemies: List[Union["Meteor", "Alien"]]) -> None:
+        if self.stopped:
+            return
         self.timer.update(dt)
         if self.timer.done():
-            # Cria uma instÃ¢ncia do tipo de inimigo definido na configuraÃ§Ã£o da fase
+            # Cria uma instÃ¢ncia do tipo de inimigo definido na configuraÃ§Ã£o
+            # da fase
             enemies.append(self.config.enemy_type())
             self.timer.start()
 
@@ -29,11 +33,12 @@ class EnemySpawner:
         self.stopped = True
 
     def set_level(self, config: LevelConfig) -> None:
-        """ Atualiza o spawner para uma nova fase. """
+        """Atualiza o spawner para uma nova fase."""
         self.config = config
         self.timer.duration = self.config.spawn_every
         self.stopped = False
         self.timer.start()
+
 
 class PowerUpSpawner:
     def __init__(self) -> None:
@@ -49,5 +54,5 @@ class PowerUpSpawner:
         if self.timer.done():
             powerups.append(PowerUp())
             self._reset_timer()
-        
+
         powerups[:] = [p for p in powerups if not p.is_off_screen()]

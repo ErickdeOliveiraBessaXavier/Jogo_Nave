@@ -1,13 +1,26 @@
-import random, math, pygame
+import random
+import math
+import pygame
 from typing import List, Tuple
 from ..core.config import Config
 from ..core import colors
 
+
 class Meteor:
-    def __init__(self, size: int | None = None, x: float | None = None, y: float | None = None,
-                 vx: float | None = None, vy: float | None = None):
+    def __init__(
+        self,
+        size: int | None = None,
+        x: float | None = None,
+        y: float | None = None,
+        vx: float | None = None,
+        vy: float | None = None,
+    ):
         # tamanho base
-        self.size = size if size is not None else random.randint(Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE)
+        self.size = (
+            size
+            if size is not None
+            else random.randint(Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE)
+        )
         self.w = self.h = self.size * 2
 
         # posição
@@ -18,8 +31,13 @@ class Meteor:
         self.y = -self.h if y is None else y
 
         # velocidade vertical baseada no tamanho (pequenos mais rápidos)
-        ratio = (self.size - Config.MIN_METEOR_SIZE) / (Config.MAX_METEOR_SIZE - Config.MIN_METEOR_SIZE + 1e-6)
-        base_vy = Config.FAST_METEOR_SPEED - (Config.FAST_METEOR_SPEED - Config.SLOW_METEOR_SPEED) * ratio
+        ratio = (self.size - Config.MIN_METEOR_SIZE) / (
+            Config.MAX_METEOR_SIZE - Config.MIN_METEOR_SIZE + 1e-6
+        )
+        base_vy = (
+            Config.FAST_METEOR_SPEED
+            - (Config.FAST_METEOR_SPEED - Config.SLOW_METEOR_SPEED) * ratio
+        )
 
         # velocidade
         if vy is None:
@@ -29,7 +47,9 @@ class Meteor:
 
         if vx is None:
             if random.random() < Config.DIAGONAL_CHANCE:
-                self.vx = random.uniform(-120.0, 120.0) * (self.vy / max(Config.FAST_METEOR_SPEED, 1e-6))
+                self.vx = random.uniform(-120.0, 120.0) * (
+                    self.vy / max(Config.FAST_METEOR_SPEED, 1e-6)
+                )
             else:
                 self.vx = 0.0
         else:
@@ -40,7 +60,8 @@ class Meteor:
         self.rotation_speed = random.uniform(-3, 3) * (1.0 - ratio * 0.5)
 
         # forma irregular + cor
-        self._base_points: List[Tuple[float, float]] = self._generate_irregular_shape()
+        self._base_points: List[Tuple[float, float]
+                                ] = self._generate_irregular_shape()
         self.color_intensity = 1.0 - ratio * 0.3
         self.dead = False
 
@@ -62,7 +83,11 @@ class Meteor:
         self.x += self.vx * dt
         self.y += self.vy * dt
         self.rotation += self.rotation_speed
-        if (self.y > Config.SCREEN_HEIGHT) or (self.x < -self.w) or (self.x > Config.SCREEN_WIDTH):
+        if (
+            (self.y > Config.SCREEN_HEIGHT)
+            or (self.x < -self.w)
+            or (self.x > Config.SCREEN_WIDTH)
+        ):
             self.dead = True
 
     def _rotated_points(self) -> List[Tuple[int, int]]:
@@ -80,11 +105,19 @@ class Meteor:
     def draw(self, screen: pygame.Surface):
         points = self._rotated_points()
         if self.size <= Config.MIN_METEOR_SIZE + 8:
-            body_color = (int(255 * self.color_intensity), int(200 * self.color_intensity), int(100 * self.color_intensity))
+            body_color = (
+                int(255 * self.color_intensity),
+                int(200 * self.color_intensity),
+                int(100 * self.color_intensity),
+            )
             border_color = colors.YELLOW
             core_color = colors.LIGHT_ORANGE
         else:
-            body_color = (int(200 * self.color_intensity), int(100 * self.color_intensity), int(50 * self.color_intensity))
+            body_color = (
+                int(200 * self.color_intensity),
+                int(100 * self.color_intensity),
+                int(50 * self.color_intensity),
+            )
             border_color = colors.RED
             core_color = colors.DARK_RED
         pygame.draw.polygon(screen, body_color, points)
@@ -94,10 +127,9 @@ class Meteor:
 
     def get_points_value(self) -> int:
         # Calcula quão pequeno o meteoro é em relação ao máximo
-        size_factor = (Config.MAX_METEOR_SIZE - self.size)
+        size_factor = Config.MAX_METEOR_SIZE - self.size
         size_bonus = int(size_factor * Config.SIZE_BONUS_MULTIPLIER)
         return Config.BASE_POINTS + size_bonus
-
 
     # ── NOVO: regras de fragmentação ─────────────────────────────────────────
     def can_split(self) -> bool:
@@ -110,7 +142,9 @@ class Meteor:
         cy = self.y + self.h / 2
 
         count = random.randint(*Config.FRAGMENT_COUNT_RANGE)
-        target_size = max(Config.MIN_METEOR_SIZE, int(self.size * 0.55))  # metade ~55%
+        target_size = max(
+            Config.MIN_METEOR_SIZE, int(
+                self.size * 0.55))  # metade ~55%
         frags: List[Meteor] = []
 
         # Direção base aleatória; espalhe em cone
@@ -119,13 +153,17 @@ class Meteor:
 
         for _ in range(count):
             # variação de tamanho (±20%), garantindo >= MIN
-            s = max(Config.MIN_METEOR_SIZE, int(target_size * random.uniform(0.8, 1.2)))
+            s = max(Config.MIN_METEOR_SIZE, int(
+                target_size * random.uniform(0.8, 1.2)))
 
             # ângulo e velocidade
-            ang = math.radians(base_angle + random.uniform(-half_spread, half_spread))
-            speed = (self.vy * Config.FRAGMENT_SPEED_BOOST) * random.uniform(0.9, 1.25)
+            ang = math.radians(
+                base_angle + random.uniform(-half_spread, half_spread))
+            speed = (self.vy * Config.FRAGMENT_SPEED_BOOST) * \
+                random.uniform(0.9, 1.25)
             vx = math.cos(ang) * speed
-            vy = abs(math.sin(ang) * speed) + (self.vy * 0.2)  # tende a cair pra baixo
+            vy = abs(math.sin(ang) * speed) + \
+                (self.vy * 0.2)  # tende a cair pra baixo
 
             # ligeiro deslocamento pra não colidir imediatamente
             fx = cx + math.cos(ang) * (self.size * 0.5) - s

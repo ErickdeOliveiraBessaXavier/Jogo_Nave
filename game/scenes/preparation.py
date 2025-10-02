@@ -7,6 +7,7 @@ from ..render.renderer import Renderer
 if TYPE_CHECKING:
     from ..app import GameApp
 
+
 class PreparationScene(Scene):
     def __init__(self, app: "GameApp"):
         super().__init__(app)
@@ -17,11 +18,13 @@ class PreparationScene(Scene):
         self.time_left -= dt
         if self.time_left <= 0:
             from .playing import PlayingScene
+
             self.app.states.switch(PlayingScene(self.app))
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
             from .playing import PlayingScene
+
             self.app.states.switch(PlayingScene(self.app))
 
     def render(self, surface: pygame.Surface):

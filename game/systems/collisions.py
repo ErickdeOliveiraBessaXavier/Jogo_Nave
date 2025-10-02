@@ -10,12 +10,13 @@ from ..entities.powerup import PowerUp
 from ..entities.boss import Boss
 from ..entities.floating_score import FloatingScore
 
+
 class Collisions:
     def bullets_vs_enemies(
         self,
         bullets: list[Bullet],
         enemies: list[Meteor | Alien],
-        explosions: list[Explosion]
+        explosions: list[Explosion],
     ):
         score_gain = 0
         destroyed_count = 0
@@ -24,18 +25,22 @@ class Collisions:
         for b in bullets[:]:
             for enemy in enemies[:]:
                 if b.rect.colliderect(enemy.rect):
-                    if b in bullets: bullets.remove(b)
-                    if enemy in enemies: enemies.remove(enemy)
+                    if b in bullets:
+                        bullets.remove(b)
+                    if enemy in enemies:
+                        enemies.remove(enemy)
 
-                    cx, cy = (enemy.x + enemy.w/2, enemy.y + enemy.h/2)
-                    explosions.append(Explosion(cx, cy, size=enemy.w//2))
+                    cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
+                    explosions.append(Explosion(cx, cy, size=enemy.w // 2))
 
                     pts = enemy.get_points_value()
                     score_gain += pts
                     destroyed_count += 1
                     score_events.append((cx, cy, pts))
 
-                    if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
+                    if isinstance(
+                            enemy, Meteor) and hasattr(
+                            enemy, "spawn_fragments"):
                         fragments = enemy.spawn_fragments()
                         if fragments:
                             enemies.extend(fragments)
@@ -47,7 +52,7 @@ class Collisions:
         bullets: list[Bullet],
         boss: Boss,
         explosions: list[Explosion],
-        floating_scores: list[FloatingScore]
+        floating_scores: list[FloatingScore],
     ) -> int:
         score_gain = 0
         for b in bullets[:]:
@@ -58,33 +63,47 @@ class Collisions:
                 floating_scores.append(FloatingScore(b.x, b.y, boss.hit_score))
                 score_gain += boss.hit_score
                 if boss.dead:
-                    explosions.append(Explosion(boss.x + boss.w/2, boss.y + boss.h/2, size=100))
+                    explosions.append(
+                        Explosion(
+                            boss.x + boss.w / 2,
+                            boss.y + boss.h / 2,
+                            size=100))
         return score_gain
 
-    def ship_vs_boss(self, ship: Ship, boss: Boss, explosions: list[Explosion]) -> bool:
+    def ship_vs_boss(
+            self,
+            ship: Ship,
+            boss: Boss,
+            explosions: list[Explosion]) -> bool:
         if ship.invuln > 0:
             return False
         if ship.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
-            explosions.append(Explosion(ship.x + ship.w/2, ship.y + ship.h/2, size=30))
+            explosions.append(
+                Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
+            )
             return True
         return False
 
-    def ship_vs_enemies(
-        self,
-        ship: Ship,
-        enemies: list[Meteor | Alien],
-        explosions: list[Explosion]
-    ) -> bool:
+    def ship_vs_enemies(self,
+                        ship: Ship,
+                        enemies: list[Meteor | Alien],
+                        explosions: list[Explosion]) -> bool:
         if ship.invuln > 0:
             return False
         for enemy in enemies[:]:
             if ship.rect.colliderect(enemy.rect):
                 enemies.remove(enemy)
-                explosions.append(Explosion(ship.x + ship.w/2, ship.y + ship.h/2, size=30))
+                explosions.append(
+                    Explosion(
+                        ship.x + ship.w / 2,
+                        ship.y + ship.h / 2,
+                        size=30))
                 return True
         return False
 
-    def alien_bullets_vs_ship(self, ship: Ship, alien_bullets: list[AlienBullet]) -> bool:
+    def alien_bullets_vs_ship(
+        self, ship: Ship, alien_bullets: list[AlienBullet]
+    ) -> bool:
         if ship.invuln > 0:
             return False
         for bullet in alien_bullets[:]:

@@ -1,9 +1,9 @@
-
 import pygame
 import random
 from ..core.config import Config
 from ..core import colors
 from .alien_bullet import AlienBullet
+
 
 class Alien:
     def __init__(self):
@@ -43,11 +43,11 @@ class Alien:
         # Corpo principal
         body_rect = pygame.Rect(self.x, self.y + 5, self.w, self.h - 10)
         pygame.draw.rect(surface, colors.GREEN, body_rect, border_radius=5)
-        
+
         # Cockpit
         cockpit_rect = pygame.Rect(self.x + 10, self.y, self.w - 20, 10)
         pygame.draw.ellipse(surface, colors.MAGENTA, cockpit_rect)
         pygame.draw.ellipse(surface, colors.WHITE, cockpit_rect, 1)
 
     def get_points_value(self) -> int:
-        return 150 # Pontos por destruir um alien
+        return 150  # Pontos por destruir um alien

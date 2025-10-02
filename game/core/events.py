@@ -1,6 +1,7 @@
 from collections import defaultdict
 from typing import Callable, Any
 
+
 class EventBus:
     def __init__(self):
         self._subs: dict[str, list[Callable[..., None]]] = defaultdict(list)

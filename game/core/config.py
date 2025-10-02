@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Tuple
 
+
 @dataclass(frozen=True)
 class Config:
     # === DISPLAY SETTINGS ===
@@ -15,8 +16,8 @@ class Config:
     # === ENTITY SPEEDS (pixels/second) ===
     SHIP_SPEED: float = 300.0
     BULLET_SPEED: float = 480.0
-    FAST_METEOR_SPEED: float = 320.0   # pequenos
-    SLOW_METEOR_SPEED: float = 25.0    # grandes
+    FAST_METEOR_SPEED: float = 320.0  # pequenos
+    SLOW_METEOR_SPEED: float = 25.0  # grandes
     POWERUP_SPEED: int = 100
 
     # === METEOR SETTINGS ===
@@ -43,7 +44,8 @@ class Config:
 
     # === EFFECT DURATIONS (all in seconds) ===
     EXPLOSION_DURATION: float = 0.8
-    BOSS_EXPLOSION_DURATION: float = 3.0  # Explosão mais longa e dramática para o boss
+    # Explosão mais longa e dramática para o boss
+    BOSS_EXPLOSION_DURATION: float = 3.0
     INVULN_TIME: float = 3.0
     SHIELD_DURATION: float = 8.0
     DOUBLE_SHOT_DURATION: float = 10.0
@@ -57,7 +59,7 @@ class Config:
     BOSS_ENTRY_SPEED: float = 30.0
     BOSS_ENTRY_SHAKE_DURATION: float = 3.0
     BOSS_INITIAL_SPEED: float = 2.0
-    
+
     # === BOSS TIMING ===
     BOSS_CALM_ATTACK_INTERVAL: Tuple[float, float] = (3.0, 5.0)
     BOSS_FRENZY_ATTACK_INTERVAL: Tuple[float, float] = (1.0, 2.0)
@@ -71,4 +73,6 @@ class Config:
     BOSS_AIM_BLINK_ON_DURATION: int = 200
     BOSS_AIM_DASH_LENGTH: int = 20
     BOSS_AIM_GAP_LENGTH: int = 25
-    BOSS_CHARGE_CIRCLE_MAX_RADIUS: float = 40.0  # Raio máximo do círculo de carregamento
+    BOSS_CHARGE_CIRCLE_MAX_RADIUS: float = (
+        40.0  # Raio máximo do círculo de carregamento
+    )
