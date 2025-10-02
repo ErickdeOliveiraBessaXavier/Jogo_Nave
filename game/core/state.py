@@ -1,5 +1,9 @@
 import pygame
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..app import GameApp
 
 class Scene(ABC):
     def __init__(self, app: "GameApp") -> None:

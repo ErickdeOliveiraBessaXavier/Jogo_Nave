@@ -1,9 +1,13 @@
 import pygame
+from typing import TYPE_CHECKING, Optional
 from ..core.state import Scene
 from ..render.renderer import Renderer
 
+if TYPE_CHECKING:
+    from ..app import GameApp
+
 class PausedScene(Scene):
-    def __init__(self, app, previous_scene=None):
+    def __init__(self, app: "GameApp", previous_scene: Optional[Scene] = None):
         super().__init__(app)
         self.r = Renderer()
         self.previous_scene = previous_scene  # Armazena a cena anterior

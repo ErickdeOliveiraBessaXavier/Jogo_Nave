@@ -1,4 +1,5 @@
 import random, math, pygame
+from typing import List, Tuple
 from ..core.config import Config
 from ..core import colors
 
@@ -39,12 +40,12 @@ class Meteor:
         self.rotation_speed = random.uniform(-3, 3) * (1.0 - ratio * 0.5)
 
         # forma irregular + cor
-        self._base_points = self._generate_irregular_shape()
+        self._base_points: List[Tuple[float, float]] = self._generate_irregular_shape()
         self.color_intensity = 1.0 - ratio * 0.3
         self.dead = False
 
-    def _generate_irregular_shape(self):
-        pts = []
+    def _generate_irregular_shape(self) -> List[Tuple[float, float]]:
+        pts: List[Tuple[float, float]] = []
         num = max(6, min(12, 6 + (self.size - Config.MIN_METEOR_SIZE) // 3))
         for i in range(num):
             ang = (2 * math.pi * i) / num
@@ -64,12 +65,12 @@ class Meteor:
         if (self.y > Config.SCREEN_HEIGHT) or (self.x < -self.w) or (self.x > Config.SCREEN_WIDTH):
             self.dead = True
 
-    def _rotated_points(self):
+    def _rotated_points(self) -> List[Tuple[int, int]]:
         cr = math.cos(math.radians(self.rotation))
         sr = math.sin(math.radians(self.rotation))
         cx = self.x + self.w // 2
         cy = self.y + self.h // 2
-        out = []
+        out: List[Tuple[int, int]] = []
         for px, py in self._base_points:
             rx = px * cr - py * sr
             ry = px * sr + py * cr
@@ -102,7 +103,7 @@ class Meteor:
     def can_split(self) -> bool:
         return self.size >= Config.FRAGMENT_SPLIT_THRESHOLD
 
-    def spawn_fragments(self) -> list["Meteor"]:
+    def spawn_fragments(self) -> List["Meteor"]:
         if not self.can_split():
             return []
         cx = self.x + self.w / 2
@@ -110,13 +111,13 @@ class Meteor:
 
         count = random.randint(*Config.FRAGMENT_COUNT_RANGE)
         target_size = max(Config.MIN_METEOR_SIZE, int(self.size * 0.55))  # metade ~55%
-        frags: list[Meteor] = []
+        frags: List[Meteor] = []
 
         # Direção base aleatória; espalhe em cone
         base_angle = random.uniform(0, 360)
         half_spread = Config.FRAGMENT_SPREAD / 2
 
-        for i in range(count):
+        for _ in range(count):
             # variação de tamanho (±20%), garantindo >= MIN
             s = max(Config.MIN_METEOR_SIZE, int(target_size * random.uniform(0.8, 1.2)))
 

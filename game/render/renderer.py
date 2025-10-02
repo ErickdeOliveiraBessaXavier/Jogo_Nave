@@ -1,12 +1,23 @@
 import pygame, random
+from typing import TypedDict, Optional, TYPE_CHECKING
 from ..core import colors
 from ..core.config import Config
 from ..core.assets import get_font
 
+if TYPE_CHECKING:
+    from ..entities.ship import Ship
+
+class Star(TypedDict):
+    x: int
+    y: float
+    speed: float
+    size: int
+    brightness: int
+
 class StarField:
     def __init__(self, w: int, h: int, n: int = 60):
         self.w, self.h = w, h
-        self.stars = []
+        self.stars: list[Star] = []
         for _ in range(n):
             self.stars.append({
                 "x": random.randint(0, w),
@@ -40,7 +51,7 @@ class Renderer:
         self.starfield.update(dt)
         self.starfield.draw(surface)
 
-    def hud(self, surface: pygame.Surface, score: int, lives: int, enemies_destroyed: int, ship=None, level_number: int = 1):
+    def hud(self, surface: pygame.Surface, score: int, lives: int, enemies_destroyed: int, ship: Optional["Ship"] = None, level_number: int = 1):
         s = self.font_medium.render(f"Pontos: {score}", True, colors.WHITE)
         l = self.font_medium.render(f"Vidas: {lives}", True, colors.WHITE)
         lvl = self.font_medium.render(f"Fase: {level_number}", True, colors.WHITE)
@@ -55,7 +66,7 @@ class Renderer:
         if ship is not None:
             y = 110
 
-            def line(txt: str, color=colors.GREEN):
+            def line(txt: str, color: tuple[int, int, int] = colors.GREEN):
                 nonlocal y
                 t = self.font_small.render(txt, True, color)
                 surface.blit(t, (10, y))
@@ -124,7 +135,7 @@ class Renderer:
         crect = ct.get_rect(center=(Config.SCREEN_WIDTH//2, Config.SCREEN_HEIGHT - 100))
         surface.blit(ct, crect)
 
-    def effects_on_ship(self, surface: pygame.Surface, ship):
+    def effects_on_ship(self, surface: pygame.Surface, ship: "Ship"):
         """Desenha efeitos visuais na nave (ex.: halo de escudo)."""
         invuln = getattr(ship, "invuln", 0)
         if invuln > 0:

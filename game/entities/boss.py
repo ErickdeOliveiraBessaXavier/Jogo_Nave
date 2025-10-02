@@ -1,6 +1,6 @@
 import math
 import random
-from typing import List
+from typing import List, Any, TypedDict, Tuple
 
 import pygame
 
@@ -8,6 +8,24 @@ from ..core import colors
 from ..core.config import Config
 from ..core.time import Timer
 from .boss_laser import BossLaser
+
+
+class ChargingParticle(TypedDict):
+    """Type definition for charging particles."""
+    pos: pygame.Vector2
+    speed: float
+    color: Tuple[int, int, int]
+    size: float
+
+
+class DisappearParticle(TypedDict):
+    """Type definition for circle disappear particles."""
+    pos: pygame.Vector2
+    velocity: pygame.Vector2
+    size: float
+    color: Tuple[int, int, int]
+    lifetime: float
+    max_lifetime: float
 
 class Boss:
     """
@@ -21,13 +39,13 @@ class Boss:
     - Frenzy mode with enhanced attacks
     """
     # Constants for better maintainability
-    FRENZY_LASER_ANGLES = [-0.44, 0, 0.44]  # ~25 degrees in radians
-    LASER_DISTANCE = 2000  # Maximum laser reach
-    FACE_DISTANCE_RATIO = 0.5  # Face distance from center as ratio of size
-    MAX_CHARGE_RADIUS = 15.0  # Maximum charging circle radius
-    LASER_SPREAD_OFFSET = 10  # Offset between frenzy lasers
-    FACE_INDICATOR_SIZE = 8  # Size of face indicator rectangle
-    FACE_DIRECTION_LINE_LENGTH = 15  # Length of face direction indicator
+    FRENZY_LASER_ANGLES: List[float] = [-0.44, 0, 0.44]  # ~25 degrees in radians
+    LASER_DISTANCE: int = 2000  # Maximum laser reach
+    FACE_DISTANCE_RATIO: float = 0.5  # Face distance from center as ratio of size
+    MAX_CHARGE_RADIUS: float = 15.0  # Maximum charging circle radius
+    LASER_SPREAD_OFFSET: int = 10  # Offset between frenzy lasers
+    FACE_INDICATOR_SIZE: int = 8  # Size of face indicator rectangle
+    FACE_DIRECTION_LINE_LENGTH: int = 15  # Length of face direction indicator
     
     def __init__(self, x: float, y: float, health: int = Config.BOSS_HEALTH, hit_score: int = 50):
         # Position and size
@@ -60,9 +78,9 @@ class Boss:
         self.charge_progress = 0.0
         
         # Visual effects
-        self.charging_particles: List[dict] = []
+        self.charging_particles: List[ChargingParticle] = []
         self.fired_lasers: List[BossLaser] = []
-        self.circle_disappear_particles: List[dict] = []
+        self.circle_disappear_particles: List[DisappearParticle] = []
         
         # Orientation system - face always facing player
         self.rotation_angle = 0.0  # Ângulo de rotação em radianos
@@ -72,7 +90,7 @@ class Boss:
         # Laser delay system for better player reaction time
         self.laser_delay_timer = 0.0
         self.laser_delay_duration = 0.3  # 300ms de delay antes do disparo
-        self.pending_laser_data = None  # Dados do laser que será disparado após o delay
+        self.pending_laser_data: dict[str, Any] | None = None  # Dados do laser que será disparado após o delay
 
     def _update_orientation(self, player_x: float, player_y: float) -> None:
         """Update boss orientation to face the player."""
@@ -98,7 +116,7 @@ class Boss:
         self.face_center.x = boss_center_x + self.facing_direction.x * face_distance
         self.face_center.y = boss_center_y + self.facing_direction.y * face_distance
     
-    def _get_face_position(self) -> tuple:
+    def _get_face_position(self) -> tuple[float, float]:
         """Get the position of the main face (facing the player)."""
         return (self.face_center.x, self.face_center.y)
     
@@ -135,7 +153,6 @@ class Boss:
         if len(self.charging_particles) < 25:
             # Gerar partículas em um padrão circular ao redor da face principal
             face_x, face_y = self._get_face_position()
-            face_normal = self._get_face_normal()
             
             for _ in range(4):
                 # Gerar partículas em posições aleatórias ao redor da face
@@ -151,7 +168,7 @@ class Boss:
                     face_y + offset_y
                 )
                 
-                particle = {
+                particle: ChargingParticle = {
                     'pos': start_pos,
                     'speed': random.uniform(200, 350),
                     'color': random.choice([(255,255,100), (255,200,100), (255,255,255)]),
@@ -169,7 +186,7 @@ class Boss:
         else:
             return self._create_normal_laser(face_x, face_y, laser_lifetime)
 
-    def _create_laser_pattern(self, face_x: float, face_y: float, lifetime: float, is_frenzy: bool, face_normal: pygame.Vector2 = None) -> List[BossLaser]:
+    def _create_laser_pattern(self, face_x: float, face_y: float, lifetime: float, is_frenzy: bool, face_normal: pygame.Vector2 | None = None) -> List[BossLaser]:
         """Create laser pattern based on mode (unified implementation)."""
         # Use the provided face normal or get current one
         if face_normal is None:
@@ -177,7 +194,7 @@ class Boss:
         
         if is_frenzy:
             # Modo frenesi: 3 lasers em leque
-            lasers = []
+            lasers: List[BossLaser] = []
             
             for i, angle_offset in enumerate(self.FRENZY_LASER_ANGLES):
                 cos_offset = math.cos(angle_offset)
@@ -265,7 +282,7 @@ class Boss:
             start_x = face_x + math.cos(angle) * distance
             start_y = face_y + math.sin(angle) * distance
             
-            particle = {
+            particle: DisappearParticle = {
                 'pos': pygame.Vector2(start_x, start_y),
                 'velocity': pygame.Vector2(
                     math.cos(angle) * random.uniform(50, 100),
@@ -308,7 +325,7 @@ class Boss:
             
         return []
 
-    def _prepare_laser_data(self) -> dict:
+    def _prepare_laser_data(self) -> dict[str, Any]:
         """
         Prepare laser data for delayed firing.
         
@@ -347,7 +364,7 @@ class Boss:
         
         return []
     
-    def _create_lasers_from_data(self, laser_data: dict) -> List[BossLaser]:
+    def _create_lasers_from_data(self, laser_data: dict[str, Any]) -> List[BossLaser]:
         """Create lasers from prepared data."""
         return self._create_laser_pattern(
             laser_data['face_x'], 
@@ -379,7 +396,7 @@ class Boss:
             self.attack_timer = Timer(random.uniform(*Config.BOSS_CALM_ATTACK_INTERVAL))
         self.attack_timer.start()
 
-    def update(self, dt: float, player_x: float, player_y: float = None) -> List[BossLaser]:
+    def update(self, dt: float, player_x: float, player_y: float | None = None) -> List[BossLaser]:
         """Main update method - state machine."""
         self.frenzy_shake_timer = max(0.0, self.frenzy_shake_timer - dt)
         
@@ -425,10 +442,6 @@ class Boss:
         if (pygame.time.get_ticks() % Config.BOSS_AIM_BLINK_INTERVAL) < Config.BOSS_AIM_BLINK_ON_DURATION:
             face_x, face_y = self._get_face_position()
             face_normal = self._get_face_normal()
-            
-            # Calcular ponto final da linha de mira
-            end_x = face_x + face_normal.x * self.LASER_DISTANCE
-            end_y = face_y + face_normal.y * self.LASER_DISTANCE
             
             time_based_offset = (pygame.time.get_ticks() // 50) % (
                 Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH

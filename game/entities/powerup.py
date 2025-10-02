@@ -20,7 +20,7 @@ class PowerUp:
 
     def update(self, dt: float):
         self.y += self.speed * dt
-        self.rect.topleft = (self.x, self.y)
+        self.rect.topleft = (int(self.x), int(self.y))
         
         # Animação de pulsação
         self.animation_timer += dt * 5  # velocidade da pulsação
@@ -81,7 +81,6 @@ class PowerUp:
         text_surface = font.render(text, True, (255, 255, 255))
         
         # Centraliza o texto no power-up usando o centro do círculo pulsante
-        pulse_size = int(min(self.w, self.h) * self.pulse_scale)
         circle_center_x = self.rect.centerx
         circle_center_y = self.rect.centery
         

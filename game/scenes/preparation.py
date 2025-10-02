@@ -1,10 +1,14 @@
 import pygame
+from typing import TYPE_CHECKING
 from ..core.state import Scene
 from ..core.config import Config
 from ..render.renderer import Renderer
 
+if TYPE_CHECKING:
+    from ..app import GameApp
+
 class PreparationScene(Scene):
-    def __init__(self, app):
+    def __init__(self, app: "GameApp"):
         super().__init__(app)
         self.time_left = Config.PREPARATION_TIME
         self.r = Renderer()

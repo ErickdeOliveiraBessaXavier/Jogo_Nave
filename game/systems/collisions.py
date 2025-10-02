@@ -1,4 +1,4 @@
-import pygame, math, random
+import pygame
 from ..entities.ship import Ship
 from ..entities.meteor import Meteor
 from ..entities.alien import Alien
@@ -7,7 +7,6 @@ from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
 from ..entities.explosion import Explosion
 from ..entities.powerup import PowerUp
-from ..core.config import Config
 from ..entities.boss import Boss
 from ..entities.floating_score import FloatingScore
 

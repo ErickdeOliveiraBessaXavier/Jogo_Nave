@@ -67,7 +67,7 @@ class Ship:
             ship_color = (255, 255, 100)
 
         # Desenha a nave como um polígono (triângulo)
-        points = [
+        points: list[tuple[float, float]] = [
             (self.x + self.w / 2, self.y), # Ponto de cima
             (self.x, self.y + self.h),       # Ponto inferior esquerdo
             (self.x + self.w, self.y + self.h) # Ponto inferior direito

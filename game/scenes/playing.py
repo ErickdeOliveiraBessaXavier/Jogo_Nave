@@ -1,12 +1,11 @@
 import pygame, random, math
+from typing import TYPE_CHECKING
 from ..core.state import Scene
 from ..core.config import Config
 from ..render.renderer import Renderer
 from ..entities.ship import Ship
 from ..entities.bullet import Bullet
-from ..entities.alien import Alien
 from ..entities.explosion import Explosion
-from ..entities.boss import Boss
 from ..systems.spawner import EnemySpawner, PowerUpSpawner
 from ..systems.collisions import Collisions
 from ..systems.entity_manager import EntityManager
@@ -15,8 +14,11 @@ from ..core.levels import LEVELS
 from ..core.assets import get_font
 from ..core import colors
 
+if TYPE_CHECKING:
+    from ..app import GameApp
+
 class PlayingScene(Scene):
-    def __init__(self, app):
+    def __init__(self, app: "GameApp"):
         super().__init__(app)
         self.r = Renderer()
         self.ship = Ship(Config.SCREEN_WIDTH/2 - 20, Config.SCREEN_HEIGHT - 80)
@@ -61,16 +63,15 @@ class PlayingScene(Scene):
             slow_mo_dt = dt * 0.2
 
             # Atualiza entidades em câmera lenta
-            for entity_list in [self.entity_manager.enemies, self.entity_manager.bullets, self.entity_manager.alien_bullets, self.entity_manager.boss_lasers, self.entity_manager.explosions, self.entity_manager.powerups, self.entity_manager.floating_scores]:
+            from typing import Any
+            entity_lists: list[list[Any]] = [self.entity_manager.enemies, self.entity_manager.bullets, self.entity_manager.alien_bullets, self.entity_manager.boss_lasers, self.entity_manager.explosions, self.entity_manager.powerups, self.entity_manager.floating_scores]
+            for entity_list in entity_lists:
                 for entity in entity_list:
                     entity.update(slow_mo_dt)
             if self.entity_manager.boss:
                 lasers_fired = self.entity_manager.boss.update(slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery)
                 if lasers_fired:
-                    if isinstance(lasers_fired, list):
-                        self.entity_manager.boss_lasers.extend(lasers_fired)
-                    else:
-                        self.entity_manager.boss_lasers.append(lasers_fired)
+                    self.entity_manager.boss_lasers.extend(lasers_fired)
             
             self.entity_manager.cleanup()
             return
@@ -103,10 +104,7 @@ class PlayingScene(Scene):
         if self.entity_manager.boss:
             lasers_fired = self.entity_manager.boss.update(dt, self.ship.rect.centerx, self.ship.rect.centery)
             if lasers_fired:
-                if isinstance(lasers_fired, list):
-                    self.entity_manager.boss_lasers.extend(lasers_fired)
-                else:
-                    self.entity_manager.boss_lasers.append(lasers_fired)
+                self.entity_manager.boss_lasers.extend(lasers_fired)
 
         self.entity_manager.cleanup()
 

@@ -1,5 +1,18 @@
-import pygame, random, math
+import random
+from typing import List, Tuple, TypedDict
+
+import pygame
+
 from ..core.config import Config
+
+
+class DeathParticle(TypedDict):
+    """Type definition for laser death particles."""
+    pos: pygame.Vector2
+    vel: pygame.Vector2
+    size: float
+    color: Tuple[int, int, int]
+    lifespan: float
 
 class BossLaser:
     def __init__(self, x: float, y: float, target_x: float, target_y: float, lifetime: float = Config.BOSS_LASER_LIFETIME):
@@ -17,7 +30,7 @@ class BossLaser:
         self.timer = 0.0
 
         self.state = 'alive'
-        self.death_particles = []
+        self.death_particles: List[DeathParticle] = []
 
     @property
     def rect(self) -> pygame.Rect:
@@ -31,7 +44,7 @@ class BossLaser:
     def get_collision_line(self) -> tuple[tuple[float, float], tuple[float, float]]:
         return (self.x, self.y), (self.target_x, self.target_y)
 
-    def update(self, dt: float):
+    def update(self, dt: float) -> None:
         self.timer += dt
 
         if self.state == 'alive':
@@ -50,7 +63,7 @@ class BossLaser:
                 for i in range(num_particles_along_line):
                     pos_on_line = start_pos + line_vec * (i * 25 + random.uniform(0, 25))
                     for _ in range(2):
-                        particle = {
+                        particle: DeathParticle = {
                             'pos': pos_on_line + pygame.Vector2(random.uniform(-self.max_w/2, self.max_w/2), random.uniform(-self.max_w/2, self.max_w/2)),
                             'vel': pygame.Vector2(random.uniform(-180, 180), random.uniform(-80, 80)),
                             'size': random.uniform(2, 5),
@@ -88,7 +101,7 @@ class BossLaser:
     def is_animation_finished(self) -> bool:
         return self.dead
 
-    def draw(self, surface: pygame.Surface):
+    def draw(self, surface: pygame.Surface) -> None:
         if self.state == 'alive' and self.w > 0:
             start_point = (int(self.x), int(self.y))
             end_point = (int(self.target_x), int(self.target_y))

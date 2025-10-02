@@ -1,5 +1,4 @@
 import pygame
-from ..entities.ship import Ship
 from ..entities.bullet import Bullet
 from ..entities.meteor import Meteor
 from ..entities.alien import Alien
@@ -22,7 +21,7 @@ class EntityManager:
         self.boss: Boss | None = None
 
     def update(self, dt: float, player_x: float):
-        new_alien_bullets = []
+        new_alien_bullets: list[AlienBullet] = []
         for b in self.bullets: b.update(dt)
         for ab in self.alien_bullets: ab.update(dt)
         for bl in self.boss_lasers: bl.update(dt)
@@ -32,17 +31,15 @@ class EntityManager:
         if self.boss:
             lasers_fired = self.boss.update(dt, player_x)
             if lasers_fired:
-                if isinstance(lasers_fired, list):
-                    self.boss_lasers.extend(lasers_fired)
-                else:
-                    self.boss_lasers.append(lasers_fired)
+                self.boss_lasers.extend(lasers_fired)
         for enemy in self.enemies:
             shot = enemy.update(dt)
             if isinstance(enemy, Alien) and shot: new_alien_bullets.extend(shot)
         self.alien_bullets.extend(new_alien_bullets)
 
     def draw(self, surface: pygame.Surface):
-        entity_lists = [self.enemies, self.bullets, self.alien_bullets, self.boss_lasers, self.explosions, self.powerups, self.floating_scores]
+        from typing import Any
+        entity_lists: list[list[Any]] = [self.enemies, self.bullets, self.alien_bullets, self.boss_lasers, self.explosions, self.powerups, self.floating_scores]
         if self.boss: entity_lists.append([self.boss])
         for entity_list in entity_lists: 
             for entity in entity_list: entity.draw(surface)
