@@ -1,6 +1,5 @@
 import pygame
 from ..core.config import Config
-from ..core.time import Timer
 
 class Ship:
     def __init__(self, x: float, y: float):
