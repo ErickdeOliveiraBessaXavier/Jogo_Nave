@@ -8,6 +8,7 @@ from ..core import colors
 from ..core.config import Config
 from ..core.time import Timer
 from .boss_laser import BossLaser
+from .boss_cannon import BossCannon
 
 
 class ChargingParticle(TypedDict):
@@ -99,6 +100,11 @@ class Boss:
         )  # Direção que a face principal está voltada
         self.face_center = pygame.Vector2(0, 0)  # Centro da face principal
 
+        # Cannon position (fixed at the top center of the boss)
+        self.cannon_x = self.x + self.w / 2
+        self.cannon_y = self.y  # Canhão sempre no topo
+        self.cannon_rotation = 0.0  # Ângulo de rotação do canhão
+
         # Laser delay system for better player reaction time
         self.laser_delay_timer = 0.0
         self.laser_delay_duration = 0.3  # 300ms de delay antes do disparo
@@ -106,29 +112,20 @@ class Boss:
             None  # Dados do laser que será disparado após o delay
         )
 
+        # Substituir sistema de canhão antigo pelo novo
+        self.cannon = BossCannon()
+
     def _update_orientation(self, player_x: float, player_y: float) -> None:
-        """Update boss orientation to face the player."""
-        boss_center_x = self.x + self.w / 2
-        boss_center_y = self.y + self.h / 2
+        """Update cannon orientation to face the player."""
+        # Atualizar posição do canhão
+        self.cannon.update_position(self.x, self.y, self.w, self.h)
 
-        # Calcular direção para o jogador
-        dx = player_x - boss_center_x
-        dy = player_y - boss_center_y
+        # Fazer o canhão mirar no jogador
+        self.cannon.aim_at(player_x, player_y)
 
-        # Normalizar direção
-        length = math.sqrt(dx * dx + dy * dy)
-        if length > 0:
-            self.facing_direction.x = dx / length
-            self.facing_direction.y = dy / length
-
-            # Calcular ângulo de rotação
-            self.rotation_angle = math.atan2(dy, dx)
-
-        # Calcular posição do centro da face principal
-        # A face principal fica na direção do jogador
-        face_distance = min(self.w, self.h) * self.FACE_DISTANCE_RATIO
-        self.face_center.x = boss_center_x + self.facing_direction.x * face_distance
-        self.face_center.y = boss_center_y + self.facing_direction.y * face_distance
+        # Atualizar face_center e facing_direction para manter compatibilidade
+        self.face_center.x, self.face_center.y = self.cannon.get_position()
+        self.facing_direction = self.cannon.get_direction()
 
     def _get_face_position(self) -> tuple[float, float]:
         """Get the position of the main face (facing the player)."""
@@ -309,12 +306,12 @@ class Boss:
         if self.state not in ("charging", "converging"):
             return 0.0
 
-        # Durante charging, cresce de 0 até o raio máximo
+        # During charging, grows from 0 to max radius
         if self.state == "charging":
-            return self.charge_progress * self.MAX_CHARGE_RADIUS
+            return self.charge_progress * Config.BOSS_CHARGE_CIRCLE_MAX_RADIUS
 
-        # Durante converging, mantém o raio máximo
-        return self.MAX_CHARGE_RADIUS
+        # During converging, maintains max radius
+        return Config.BOSS_CHARGE_CIRCLE_MAX_RADIUS
 
     def _create_circle_disappear_particles(self) -> None:
         """Create small particles when the charging circle disappears."""
@@ -486,7 +483,7 @@ class Boss:
         elif self.state == "aiming":
             self.state = "charging"
             self.charge_timer.start()
-            self.charge_progress = 0.0  # Reset progress
+            self.charge_progress = 0.0 # Reset progress
             self.charging_particles.clear()
         elif self.state == "charging":
             self._update_charging_state(dt)
@@ -543,6 +540,30 @@ class Boss:
                     Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
                 )
 
+    def _draw_cannon(self, surface: pygame.Surface, offset_x: float, offset_y: float) -> None:
+        """Draw the boss's cannon."""
+        if self.state != "entering":
+            # Desenhar base do canhão (círculo)
+            pygame.draw.circle(
+                surface,
+                (200, 200, 200),
+                (int(self.cannon_x + offset_x), int(self.cannon_y + offset_y)),
+                10
+            )
+            
+            # Desenhar cano do canhão (linha na direção do alvo)
+            cannon_length = 20
+            end_x = self.cannon_x + math.cos(self.cannon_rotation) * cannon_length
+            end_y = self.cannon_y + math.sin(self.cannon_rotation) * cannon_length
+            
+            pygame.draw.line(
+                surface,
+                (200, 200, 200),
+                (int(self.cannon_x + offset_x), int(self.cannon_y + offset_y)),
+                (int(end_x + offset_x), int(end_y + offset_y)),
+                4
+            )
+
     def draw(self, surface: pygame.Surface) -> None:
         """Render the boss and its effects."""
         offset_x, offset_y = 0, 0
@@ -550,9 +571,11 @@ class Boss:
             offset_x = random.randint(-3, 3)
             offset_y = random.randint(-3, 3)
 
-        # Normal boss rendering
-        pygame.draw.rect(surface, (255, 0, 0), (self.x +
-                         offset_x, self.y + offset_y, self.w, self.h))
+        # Normal boss rendering (corpo vermelho)
+        pygame.draw.rect(surface, (255, 0, 0), (self.x + offset_x, self.y + offset_y, self.w, self.h))
+
+        # Desenhar o canhão usando a nova classe
+        self.cannon.draw(surface, offset_x, offset_y)
 
         # Desenhar indicação da face principal (pequeno retângulo na direção do
         # jogador)
@@ -616,19 +639,18 @@ class Boss:
                     (255, 255, 100),
                     (int(circle_x), int(circle_y)),
                     int(charge_radius),
-                    3,
+                    4,  # Aumentar espessura da borda
                 )
 
-                # Círculo interno semi-transparente (se necessário, pode usar
-                # uma surface temporária)
-                inner_radius = max(0, int(charge_radius - 10))
+                # Círculo interno
+                inner_radius = max(0, int(charge_radius - 8))
                 if inner_radius > 0:
                     pygame.draw.circle(
                         surface,
                         (255, 255, 0),
                         (int(circle_x), int(circle_y)),
                         inner_radius,
-                        1,
+                        2,  # Aumentar espessura do círculo interno
                     )
 
         # Charging particles
@@ -732,4 +754,5 @@ class Boss:
 
     def get_explosion_duration(self) -> float:
         """Return the explosion duration for this boss."""
+        return Config.BOSS_EXPLOSION_DURATION
         return Config.BOSS_EXPLOSION_DURATION

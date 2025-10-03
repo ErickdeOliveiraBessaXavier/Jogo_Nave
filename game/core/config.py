@@ -59,6 +59,7 @@ class Config:
     BOSS_ENTRY_SPEED: float = 30.0
     BOSS_ENTRY_SHAKE_DURATION: float = 3.0
     BOSS_INITIAL_SPEED: float = 2.0
+    LASER_DISTANCE: float = 800.0  # How far the boss laser can reach (in pixels)
 
     # === BOSS TIMING ===
     BOSS_CALM_ATTACK_INTERVAL: Tuple[float, float] = (3.0, 5.0)
@@ -73,6 +74,4 @@ class Config:
     BOSS_AIM_BLINK_ON_DURATION: int = 200
     BOSS_AIM_DASH_LENGTH: int = 20
     BOSS_AIM_GAP_LENGTH: int = 25
-    BOSS_CHARGE_CIRCLE_MAX_RADIUS: float = (
-        40.0  # Raio máximo do círculo de carregamento
-    )
+    BOSS_CHARGE_CIRCLE_MAX_RADIUS: float = 40.0  # Maximum radius of the charging circle effect
