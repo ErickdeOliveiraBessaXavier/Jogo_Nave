@@ -9,6 +9,7 @@ from ..core.config import Config
 from ..core.time import Timer
 from .boss_laser import BossLaser
 from .boss_cannon import BossCannon
+from .meteor import Meteor
 
 
 class ChargingParticle(TypedDict):
@@ -44,8 +45,8 @@ class Boss:
     """
 
     # Constants for better maintainability
-    FRENZY_LASER_ANGLES: List[float] = [-0.44,
-                                        0, 0.44]  # ~25 degrees in radians
+    FRENZY_LASER_ANGLES: List[float] = [-0.349,
+                                        0, 0.349]  # 20 degrees in radians
     LASER_DISTANCE: int = 2000  # Maximum laser reach
     FACE_DISTANCE_RATIO: float = 0.5  # Face distance from center as ratio of size
     MAX_CHARGE_RADIUS: float = 15.0  # Maximum charging circle radius
@@ -81,6 +82,8 @@ class Boss:
         self.state = "entering"
         self.frenzy_mode = False
         self.frenzy_shake_timer = 0.0
+        self.meteor_attack_timer = Timer(random.uniform(3.0, 5.0))
+        self.can_spawn_meteors = False
 
         # Attack system
         self._init_attack_system()
@@ -283,9 +286,11 @@ class Boss:
         if self.x <= 0 or self.x + self.w >= Config.SCREEN_WIDTH:
             self.direction *= -1
 
-        self.attack_timer.update(dt)
-        if self.attack_timer.done():
-            self.state = "aiming"
+        # Só atualizar timer de ataque e permitir novos ataques se não estiver tremendo
+        if self.frenzy_shake_timer <= 0:
+            self.attack_timer.update(dt)
+            if self.attack_timer.done():
+                self.state = "aiming"
 
     def _update_charging_state(self, dt: float) -> None:
         """Handle charging animation."""
@@ -453,10 +458,41 @@ class Boss:
                     *Config.BOSS_CALM_ATTACK_INTERVAL))
         self.attack_timer.start()
 
+    def spawn_aimed_meteor(self, target_x: float, target_y: float) -> Meteor:
+        """Spawns a meteor aimed at the player's position."""
+        # Posição de spawn (a partir do boss)
+        spawn_x = self.x + self.w/2
+        spawn_y = self.y + self.h/2
+        
+        # Calcula a direção para o alvo
+        dx = target_x - spawn_x
+        dy = target_y - spawn_y
+        length = math.sqrt(dx * dx + dy * dy)
+        
+        if length > 0:
+            dx = dx / length
+            dy = dy / length
+        
+        # Velocidade base do meteoro
+        base_speed = 200
+        
+        # Cria o meteoro com velocidade direcionada
+        meteor = Meteor(
+            size=random.randint(15, 25),
+            x=spawn_x,
+            y=spawn_y,
+            vx=dx * base_speed,
+            vy=dy * base_speed
+        )
+        
+        return meteor
+
     def update(
         self, dt: float, player_x: float, player_y: float | None = None
-    ) -> List[BossLaser]:
+    ) -> tuple[List[BossLaser], List["Meteor"]]:
         """Main update method - state machine."""
+        spawned_meteors: List["Meteor"] = []
+        lasers_fired: List[BossLaser] = []
         self.frenzy_shake_timer = max(0.0, self.frenzy_shake_timer - dt)
 
         # Store player position for drawing
@@ -466,6 +502,19 @@ class Boss:
         # Update orientation to face player
         if player_y is not None:
             self._update_orientation(player_x, player_y)
+
+        # Atualiza o timer de spawn de meteoros e spawna se estiver em modo frenético
+        if self.frenzy_mode and self.frenzy_shake_timer <= 0:
+            self.meteor_attack_timer.update(dt)
+            if self.meteor_attack_timer.done() and player_y is not None:
+                # Spawn 2-3 meteoros direcionados ao jogador
+                for _ in range(random.randint(2, 3)):
+                    # Adiciona alguma variação na mira para não ser muito preciso
+                    target_x = player_x + random.uniform(-50, 50)
+                    target_y = player_y + random.uniform(-30, 30)
+                    meteor = self.spawn_aimed_meteor(target_x, target_y)
+                    spawned_meteors.append(meteor)
+                self.meteor_attack_timer.start(random.uniform(2.0, 3.0))
 
         # Sempre atualizar partículas de desaparecimento do círculo
         self._update_circle_disappear_particles(dt)
@@ -488,13 +537,13 @@ class Boss:
         elif self.state == "charging":
             self._update_charging_state(dt)
         elif self.state == "converging":
-            return self._update_converging_state(dt)
+            lasers_fired = self._update_converging_state(dt)
         elif self.state == "preparing_to_fire":
-            return self._update_preparing_to_fire_state(dt)
+            lasers_fired = self._update_preparing_to_fire_state(dt)
         elif self.state == "firing":
             self._update_firing_state(dt)
 
-        return []
+        return (lasers_fired, spawned_meteors)
 
     def _draw_aiming_line(self, surface: pygame.Surface) -> None:
         """Draw the animated aiming line."""
@@ -740,13 +789,23 @@ class Boss:
             not self.frenzy_mode
             and self.health <= self.max_health * Config.BOSS_FRENZY_THRESHOLD
         ):
+            # Entrar em modo frenético e interromper qualquer ataque em andamento
             self.frenzy_mode = True
             self.speed *= Config.BOSS_FRENZY_SPEED_MULTIPLIER
-            self.attack_timer.duration = random.uniform(
-                *Config.BOSS_FRENZY_ATTACK_INTERVAL
-            )
-            self.fire_timer.duration = Config.BOSS_FRENZY_LASER_LIFETIME
             self.frenzy_shake_timer = Config.BOSS_FRENZY_SHAKE_DURATION
+            
+            # Interromper qualquer ataque em andamento
+            self.state = "active"
+            self.fired_lasers.clear()
+            self.charging_particles.clear()
+            self.circle_disappear_particles.clear()
+            
+            # Resetar timers de ataque para começar após o tremor
+            self.attack_timer = Timer(Config.BOSS_FRENZY_SHAKE_DURATION + random.uniform(
+                *Config.BOSS_FRENZY_ATTACK_INTERVAL
+            ))
+            self.fire_timer.duration = Config.BOSS_FRENZY_LASER_LIFETIME
+            self.attack_timer.start()
 
     def is_off_screen(self) -> bool:
         """Check if boss is completely off screen."""
