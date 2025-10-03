@@ -2,7 +2,6 @@ from functools import lru_cache
 from pathlib import Path
 import pygame
 
-
 # Caminho base para o jogo
 BASE_DIR = Path(__file__).resolve().parents[1]  # .../game
 DEFAULT_FONT_PATH = BASE_DIR / "assets" / "fonts" / "PressStart2P-Regular.ttf"
