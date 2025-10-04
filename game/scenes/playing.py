@@ -84,11 +84,13 @@ class PlayingScene(Scene):
                 for entity in entity_list:
                     entity.update(slow_mo_dt)
             if self.entity_manager.boss:
-                lasers_fired = self.entity_manager.boss.update(
+                lasers_fired, spawned_meteors = self.entity_manager.boss.update(
                     slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery
                 )
                 if lasers_fired:
                     self.entity_manager.boss_lasers.extend(lasers_fired)
+                if spawned_meteors:
+                    self.entity_manager.enemies.extend(spawned_meteors)
 
             self.entity_manager.cleanup()
             return
@@ -120,14 +122,7 @@ class PlayingScene(Scene):
             self.enemy_spawner.update(dt, self.entity_manager.enemies)
             self.powerup_spawner.update(dt, self.entity_manager.powerups)
 
-        self.entity_manager.update(dt, self.ship.rect.centerx)
-
-        if self.entity_manager.boss:
-            lasers_fired = self.entity_manager.boss.update(
-                dt, self.ship.rect.centerx, self.ship.rect.centery
-            )
-            if lasers_fired:
-                self.entity_manager.boss_lasers.extend(lasers_fired)
+        self.entity_manager.update(dt, self.ship.rect.centerx, self.ship.rect.centery)
 
         self.entity_manager.cleanup()
 

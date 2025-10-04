@@ -1,6 +1,6 @@
 import math
 import random
-from typing import List, Any, TypedDict, Tuple
+from typing import List, Any
 
 import pygame
 
@@ -8,28 +8,9 @@ from ..core import colors
 from ..core.config import Config
 from ..core.time import Timer
 from .boss_laser import BossLaser
-from .boss_cannon import BossCannon
+from .boss_cannon import BossCannon, BossAttackSystem
+from .boss_particles import BossParticleSystem
 from .meteor import Meteor
-
-
-class ChargingParticle(TypedDict):
-    """Type definition for charging particles."""
-
-    pos: pygame.Vector2
-    speed: float
-    color: Tuple[int, int, int]
-    size: float
-
-
-class DisappearParticle(TypedDict):
-    """Type definition for circle disappear particles."""
-
-    pos: pygame.Vector2
-    velocity: pygame.Vector2
-    size: float
-    color: Tuple[int, int, int]
-    lifetime: float
-    max_lifetime: float
 
 
 class Boss:
@@ -37,17 +18,16 @@ class Boss:
     Boss entity with face-oriented combat system.
 
     Features:
-    - Face orientation system that tracks player
+    - Face orientation system that tracks the player
     - State machine for complex behavior patterns
     - Particle effects for charging and firing
     - Delayed laser firing for better gameplay
     - Frenzy mode with enhanced attacks
     """
 
-    # Constants for better maintainability
-    FRENZY_LASER_ANGLES: List[float] = [-0.349,
-                                        0, 0.349]  # 20 degrees in radians
-    LASER_DISTANCE: int = 2000  # Maximum laser reach
+    # Use constants from BossAttackSystem
+    FRENZY_LASER_ANGLES = BossAttackSystem.FRENZY_LASER_ANGLES
+    LASER_DISTANCE = BossAttackSystem.LASER_DISTANCE
     FACE_DISTANCE_RATIO: float = 0.5  # Face distance from center as ratio of size
     MAX_CHARGE_RADIUS: float = 15.0  # Maximum charging circle radius
     LASER_SPREAD_OFFSET: int = 10  # Offset between frenzy lasers
@@ -74,7 +54,7 @@ class Boss:
         self.dead = False
 
         # Movement
-        self.speed = Config.BOSS_INITIAL_SPEED
+        self.speed = Config.BOSS_NORMAL_SPEED
         self.direction = 1
         self.entry_speed = Config.BOSS_ENTRY_SPEED
 
@@ -91,10 +71,9 @@ class Boss:
         # Manual charge progress tracking
         self.charge_progress = 0.0
 
-        # Visual effects
-        self.charging_particles: List[ChargingParticle] = []
+        # Visual effects - using new systems
+        self.particle_system = BossParticleSystem()
         self.fired_lasers: List[BossLaser] = []
-        self.circle_disappear_particles: List[DisappearParticle] = []
 
         # Orientation system - face always facing player
         self.rotation_angle = 0.0  # Ângulo de rotação em radianos
@@ -110,7 +89,7 @@ class Boss:
 
         # Laser delay system for better player reaction time
         self.laser_delay_timer = 0.0
-        self.laser_delay_duration = 0.3  # 300ms de delay antes do disparo
+        self.laser_delay_duration = Config.BOSS_LASER_DELAY
         self.pending_laser_data: dict[str, Any] | None = (
             None  # Dados do laser que será disparado após o delay
         )
@@ -148,49 +127,70 @@ class Boss:
         self.fire_duration = Config.BOSS_LASER_LIFETIME
         self.fire_timer = Timer(self.fire_duration)
 
+    def _get_charge_duration(self) -> float:
+        """Get charge duration based on frenzy mode."""
+        return (
+            Config.BOSS_FRENZY_CHARGE_DURATION 
+            if self.frenzy_mode 
+            else Config.BOSS_CHARGE_DURATION
+        )
+
+    def _get_laser_delay(self) -> float:
+        """Get laser delay based on frenzy mode."""
+        return (
+            Config.BOSS_FRENZY_LASER_DELAY 
+            if self.frenzy_mode 
+            else Config.BOSS_LASER_DELAY
+        )
+
+    def _get_aim_blink_interval(self) -> int:
+        """Get aim blink interval based on frenzy mode."""
+        return (
+            Config.BOSS_FRENZY_AIM_BLINK_INTERVAL 
+            if self.frenzy_mode 
+            else Config.BOSS_AIM_BLINK_INTERVAL
+        )
+
+    def _get_aim_blink_duration(self) -> int:
+        """Get aim blink duration based on frenzy mode."""
+        return (
+            Config.BOSS_FRENZY_AIM_BLINK_ON_DURATION 
+            if self.frenzy_mode 
+            else Config.BOSS_AIM_BLINK_ON_DURATION
+        )
+
+    def _get_animation_speed_multiplier(self) -> float:
+        """Get animation speed multiplier based on frenzy mode."""
+        return (
+            Config.BOSS_FRENZY_ANIMATION_SPEED_MULTIPLIER 
+            if self.frenzy_mode 
+            else Config.BOSS_ANIMATION_SPEED_MULTIPLIER
+        )
+
+    def _get_accelerated_dt(self, dt: float) -> float:
+        """Get delta time accelerated by animation speed multiplier."""
+        return dt * self._get_animation_speed_multiplier()
+
+    def _update_frenzy_timings(self) -> None:
+        """Update all timing values when entering frenzy mode."""
+        # Atualizar duração do carregamento
+        self.charge_duration = self._get_charge_duration()
+        self.charge_timer.duration = self.charge_duration
+        
+        # Atualizar delay do laser
+        self.laser_delay_duration = self._get_laser_delay()
+
     def _update_charging_particles(self, dt: float) -> None:
         """Update particle convergence animation."""
-        # As partículas convergem para o centro da face principal
-        target_point = pygame.Vector2(self.face_center.x, self.face_center.y)
-
-        for p in self.charging_particles[:]:
-            direction = target_point - p["pos"]
-            if direction.length() > 0:
-                direction.normalize_ip()
-
-            p["pos"] += direction * p["speed"] * dt
-            p["size"] -= 0.05
-
-            if p["pos"].distance_to(target_point) < 8 or p["size"] <= 0:
-                self.charging_particles.remove(p)
+        face_x, face_y = self._get_face_position()
+        # Usar delta time acelerado para animações mais rápidas no frenzy
+        accelerated_dt = self._get_accelerated_dt(dt)
+        self.particle_system.update_charging_particles(accelerated_dt, face_x, face_y)
 
     def _generate_charging_particles(self) -> None:
         """Generate new charging particles."""
-        if len(self.charging_particles) < 25:
-            # Gerar partículas em um padrão circular ao redor da face principal
-            face_x, face_y = self._get_face_position()
-
-            for _ in range(4):
-                # Gerar partículas em posições aleatórias ao redor da face
-                angle = random.uniform(0, 2 * math.pi)
-                distance = random.uniform(80, 150)
-
-                # Posição relativa ao centro da face
-                offset_x = math.cos(angle) * distance
-                offset_y = math.sin(angle) * distance
-
-                start_pos = pygame.Vector2(
-                    face_x + offset_x, face_y + offset_y)
-
-                particle: ChargingParticle = {
-                    "pos": start_pos,
-                    "speed": random.uniform(200, 350),
-                    "color": random.choice(
-                        [(255, 255, 100), (255, 200, 100), (255, 255, 255)]
-                    ),
-                    "size": random.uniform(5, 10),
-                }
-                self.charging_particles.append(particle)
+        face_x, face_y = self._get_face_position()
+        self.particle_system.generate_charging_particles(face_x, face_y)
 
     def _create_lasers(self) -> List[BossLaser]:
         """Create laser objects based on current mode."""
@@ -294,14 +294,17 @@ class Boss:
 
     def _update_charging_state(self, dt: float) -> None:
         """Handle charging animation."""
-        self.charge_timer.update(dt)
-        # Update manual progress tracking
+        # Usar delta time acelerado para acelerar toda a animação no frenzy
+        accelerated_dt = self._get_accelerated_dt(dt)
+        
+        self.charge_timer.update(dt)  # Timer mantém velocidade normal para consistência
+        # Update manual progress tracking com velocidade acelerada
         self.charge_progress = min(
-            1.0, self.charge_progress + dt / self.charge_duration
+            1.0, self.charge_progress + accelerated_dt / self.charge_duration
         )
 
         self._generate_charging_particles()
-        self._update_charging_particles(dt)
+        self._update_charging_particles(dt)  # Já usa accelerated_dt internamente
 
         if self.charge_timer.done():
             self.state = "converging"
@@ -321,56 +324,29 @@ class Boss:
     def _create_circle_disappear_particles(self) -> None:
         """Create small particles when the charging circle disappears."""
         face_x, face_y = self._get_face_position()
-
-        # Criar várias partículas pequenas ao redor da face principal
-        for _ in range(12):
-            angle = random.uniform(0, 2 * math.pi)
-            distance = random.uniform(10, 20)
-            start_x = face_x + math.cos(angle) * distance
-            start_y = face_y + math.sin(angle) * distance
-
-            particle: DisappearParticle = {
-                "pos": pygame.Vector2(start_x, start_y),
-                "velocity": pygame.Vector2(
-                    math.cos(angle) * random.uniform(50, 100),
-                    math.sin(angle) * random.uniform(50, 100),
-                ),
-                "size": random.uniform(2, 4),
-                "color": random.choice(
-                    [(255, 255, 200), (255, 255, 100), (255, 200, 100)]
-                ),
-                "lifetime": random.uniform(0.3, 0.6),
-                "max_lifetime": random.uniform(0.3, 0.6),
-            }
-            particle["max_lifetime"] = particle["lifetime"]
-            self.circle_disappear_particles.append(particle)
+        radius = self._get_charge_circle_radius()
+        self.particle_system.create_circle_disappear_particles(face_x, face_y, radius)
 
     def _update_circle_disappear_particles(self, dt: float) -> None:
         """Update the circle disappear particles."""
-        for p in self.circle_disappear_particles[:]:
-            p["pos"] += p["velocity"] * dt
-            p["lifetime"] -= dt
-
-            # Fade out effect
-            fade_ratio = p["lifetime"] / p["max_lifetime"]
-            p["size"] = fade_ratio * 4
-
-            if p["lifetime"] <= 0 or p["size"] <= 0:
-                self.circle_disappear_particles.remove(p)
+        # Usar delta time acelerado para partículas de desaparecimento mais rápidas
+        accelerated_dt = self._get_accelerated_dt(dt)
+        self.particle_system.update_circle_disappear_particles(accelerated_dt)
 
     def _update_converging_state(self, dt: float) -> List[BossLaser]:
         """Handle particle convergence and preparation for laser firing."""
         self._update_charging_particles(dt)
 
-        if not self.charging_particles:
+        if not self.particle_system.charging_particles:
             # Criar partículas de desaparecimento do círculo
-            if not self.circle_disappear_particles:  # Só criar uma vez
+            if not self.particle_system.circle_disappear_particles:  # Só criar uma vez
                 self._create_circle_disappear_particles()
 
             # Preparar dados do laser para disparo atrasado
             self.pending_laser_data = self._prepare_laser_data()
             self.state = "preparing_to_fire"
-            self.laser_delay_timer = self.laser_delay_duration
+            # Usar delay dinâmico baseado no modo frenzy
+            self.laser_delay_timer = self._get_laser_delay()
 
         return []
 
@@ -401,6 +377,9 @@ class Boss:
     def _update_preparing_to_fire_state(self, dt: float) -> List[BossLaser]:
         """Handle the delay before firing lasers."""
         self.laser_delay_timer -= dt
+        
+        # Continuar atualizando partículas de desaparecimento durante o delay
+        self._update_circle_disappear_particles(dt)
 
         if self.laser_delay_timer <= 0 and self.pending_laser_data:
             # Disparar o laser usando os dados preparados
@@ -458,34 +437,7 @@ class Boss:
                     *Config.BOSS_CALM_ATTACK_INTERVAL))
         self.attack_timer.start()
 
-    def spawn_aimed_meteor(self, target_x: float, target_y: float) -> Meteor:
-        """Spawns a meteor aimed at the player's position."""
-        # Posição de spawn (a partir do boss)
-        spawn_x = self.x + self.w/2
-        spawn_y = self.y + self.h/2
-        
-        # Calcula a direção para o alvo
-        dx = target_x - spawn_x
-        dy = target_y - spawn_y
-        length = math.sqrt(dx * dx + dy * dy)
-        
-        if length > 0:
-            dx = dx / length
-            dy = dy / length
-        
-        # Velocidade base do meteoro
-        base_speed = 200
-        
-        # Cria o meteoro com velocidade direcionada
-        meteor = Meteor(
-            size=random.randint(15, 25),
-            x=spawn_x,
-            y=spawn_y,
-            vx=dx * base_speed,
-            vy=dy * base_speed
-        )
-        
-        return meteor
+
 
     def update(
         self, dt: float, player_x: float, player_y: float | None = None
@@ -504,17 +456,37 @@ class Boss:
             self._update_orientation(player_x, player_y)
 
         # Atualiza o timer de spawn de meteoros e spawna se estiver em modo frenético
-        if self.frenzy_mode and self.frenzy_shake_timer <= 0:
+        # METEOROS SÃO CRIADOS QUANDO O BOSS NÃO ESTÁ ATACANDO (LASER)
+        if (self.frenzy_mode and self.frenzy_shake_timer <= 0 and 
+            self.state in ("active", "aiming") and  # Só quando não está atacando com laser
+            not self.pending_laser_data):  # E não tem laser pendente
+            
             self.meteor_attack_timer.update(dt)
             if self.meteor_attack_timer.done() and player_y is not None:
-                # Spawn 2-3 meteoros direcionados ao jogador
-                for _ in range(random.randint(2, 3)):
-                    # Adiciona alguma variação na mira para não ser muito preciso
-                    target_x = player_x + random.uniform(-50, 50)
-                    target_y = player_y + random.uniform(-30, 30)
-                    meteor = self.spawn_aimed_meteor(target_x, target_y)
-                    spawned_meteors.append(meteor)
-                self.meteor_attack_timer.start(random.uniform(2.0, 3.0))
+                # Spawn meteoros dos lados em movimento de arco
+                side_meteors = BossAttackSystem.spawn_side_meteors(
+                    self.x, self.y, self.w, self.h, player_x, player_y
+                )
+                spawned_meteors.extend(side_meteors)
+                
+                # Ocasionalmente, spawn um meteoro adicional do centro
+                if random.random() < 0.4:  # 40% de chance
+                    target_x = player_x + random.uniform(-30, 30)
+                    target_y = player_y + random.uniform(-20, 20)
+                    center_meteor = BossAttackSystem.spawn_aimed_meteor(
+                        self.x, self.y, self.w, self.h, target_x, target_y
+                    )
+                    spawned_meteors.append(center_meteor)
+                
+                # No modo frenzy, spawnar meteoros guiados ocasionalmente
+                if random.random() < Config.GUIDED_METEOR_SPAWN_CHANCE:
+                    guided_meteor = BossAttackSystem.spawn_guided_meteor(
+                        self.x, self.y, self.w, self.h, player_x, player_y
+                    )
+                    spawned_meteors.append(guided_meteor)
+                
+                # Timer mais curto para meteoros mais frequentes quando não atacando
+                self.meteor_attack_timer.start(random.uniform(1.5, 2.5))
 
         # Sempre atualizar partículas de desaparecimento do círculo
         self._update_circle_disappear_particles(dt)
@@ -531,9 +503,12 @@ class Boss:
             self._update_active_state(dt)
         elif self.state == "aiming":
             self.state = "charging"
+            # Atualizar duração do carregamento baseada no modo frenzy
+            self.charge_duration = self._get_charge_duration()
+            self.charge_timer.duration = self.charge_duration
             self.charge_timer.start()
             self.charge_progress = 0.0 # Reset progress
-            self.charging_particles.clear()
+            self.particle_system.clear_all()
         elif self.state == "charging":
             self._update_charging_state(dt)
         elif self.state == "converging":
@@ -548,8 +523,8 @@ class Boss:
     def _draw_aiming_line(self, surface: pygame.Surface) -> None:
         """Draw the animated aiming line."""
         if (
-            pygame.time.get_ticks() % Config.BOSS_AIM_BLINK_INTERVAL
-        ) < Config.BOSS_AIM_BLINK_ON_DURATION:
+            pygame.time.get_ticks() % self._get_aim_blink_interval()
+        ) < self._get_aim_blink_duration():
             face_x, face_y = self._get_face_position()
             face_normal = self._get_face_normal()
 
@@ -717,13 +692,7 @@ class Boss:
         self, surface: pygame.Surface, offset_x: float, offset_y: float
     ) -> None:
         """Draw charging particles."""
-        for p in self.charging_particles:
-            pygame.draw.circle(
-                surface,
-                p["color"],
-                (int(p["pos"][0] + offset_x), int(p["pos"][1] + offset_y)),
-                int(p["size"]),
-            )
+        self.particle_system.draw_particles(surface, offset_x, offset_y)
 
     def _draw_firing_warning(
         self, surface: pygame.Surface, offset_x: float, offset_y: float
@@ -743,13 +712,7 @@ class Boss:
         self, surface: pygame.Surface, offset_x: float, offset_y: float
     ) -> None:
         """Draw circle disappearing particles."""
-        for p in self.circle_disappear_particles:
-            pygame.draw.circle(
-                surface,
-                p["color"],
-                (int(p["pos"][0] + offset_x), int(p["pos"][1] + offset_y)),
-                max(1, int(p["size"])),
-            )
+        self.particle_system.draw_circle_disappear_particles(surface, offset_x, offset_y)
 
     def _draw_health_bar(self, surface: pygame.Surface) -> None:
         """Draw boss health bar."""
@@ -791,14 +754,16 @@ class Boss:
         ):
             # Entrar em modo frenético e interromper qualquer ataque em andamento
             self.frenzy_mode = True
-            self.speed *= Config.BOSS_FRENZY_SPEED_MULTIPLIER
+            self.speed = Config.BOSS_FRENZY_SPEED
             self.frenzy_shake_timer = Config.BOSS_FRENZY_SHAKE_DURATION
+            
+            # Atualizar todos os timings para o modo frenzy
+            self._update_frenzy_timings()
             
             # Interromper qualquer ataque em andamento
             self.state = "active"
             self.fired_lasers.clear()
-            self.charging_particles.clear()
-            self.circle_disappear_particles.clear()
+            self.particle_system.clear_all()
             
             # Resetar timers de ataque para começar após o tremor
             self.attack_timer = Timer(Config.BOSS_FRENZY_SHAKE_DURATION + random.uniform(

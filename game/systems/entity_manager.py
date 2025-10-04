@@ -8,6 +8,7 @@ from ..entities.boss_laser import BossLaser
 from ..entities.explosion import Explosion
 from ..entities.powerup import PowerUp
 from ..entities.floating_score import FloatingScore
+from ..entities.guided_meteor import GuidedMeteor
 
 
 class EntityManager:
@@ -21,7 +22,7 @@ class EntityManager:
         self.floating_scores: list[FloatingScore] = []
         self.boss: Boss | None = None
 
-    def update(self, dt: float, player_x: float):
+    def update(self, dt: float, player_x: float, player_y: float | None = None):
         new_alien_bullets: list[AlienBullet] = []
         for b in self.bullets:
             b.update(dt)
@@ -36,11 +37,17 @@ class EntityManager:
         for fs in self.floating_scores:
             fs.update(dt)
         if self.boss:
-            lasers_fired = self.boss.update(dt, player_x)
+            lasers_fired, spawned_meteors = self.boss.update(dt, player_x, player_y)
             if lasers_fired:
                 self.boss_lasers.extend(lasers_fired)
+            if spawned_meteors:
+                self.enemies.extend(spawned_meteors)
         for enemy in self.enemies:
-            shot = enemy.update(dt)
+            # Se for um meteoro guiado, passar a posição do jogador
+            if isinstance(enemy, GuidedMeteor):
+                shot = enemy.update(dt, player_x, player_y)
+            else:
+                shot = enemy.update(dt)
             if isinstance(enemy, Alien) and shot:
                 new_alien_bullets.extend(shot)
         self.alien_bullets.extend(new_alien_bullets)

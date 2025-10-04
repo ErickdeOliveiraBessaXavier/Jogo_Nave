@@ -60,9 +60,17 @@ class Collisions:
                 bullets.remove(b)
                 boss.take_damage(b.damage)
                 explosions.append(Explosion(b.x, b.y, size=15))
-                floating_scores.append(FloatingScore(b.x, b.y, boss.hit_score))
-                score_gain += boss.hit_score
+                
+                # Não dar pontos por acertar o boss, apenas ao derrotá-lo
                 if boss.dead:
+                    # Dar pontuação fixa de 10.000 ao derrotar o boss
+                    from ..core.config import Config
+                    floating_scores.append(FloatingScore(
+                        boss.x + boss.w / 2, 
+                        boss.y + boss.h / 2, 
+                        Config.BOSS_DEFEAT_SCORE
+                    ))
+                    score_gain += Config.BOSS_DEFEAT_SCORE
                     explosions.append(
                         Explosion(
                             boss.x + boss.w / 2,

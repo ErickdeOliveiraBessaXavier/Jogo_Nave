@@ -18,3 +18,4 @@ LIGHT_BLUE: Color = (173, 216, 230)
 LIGHT_GRAY: Color = (192, 192, 192)
 DARK_GRAY: Color = (64, 64, 64)
 BOSS_AIM_LINE: Color = (255, 100, 100)
+GUIDED_METEOR_GREEN: Color = (50, 255, 50)  # Verde brilhante para meteoros teleguiados
