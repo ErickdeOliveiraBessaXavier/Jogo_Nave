@@ -1,0 +1,3 @@
+cd "c:\Users\eobx\OneDrive\Documentos\Jogo"
+Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
+C:/Users/eobx/OneDrive/Documentos/Jogo/.venv/Scripts/pyinstaller.exe --onefile --noconsole --add-data "game/assets;game/assets" --name="JogoNave" run.py

@@ -39,4 +39,6 @@ class Input:
             held.add("hold_up")
         if keys[pygame.K_DOWN] or keys[pygame.K_s]:
             held.add("hold_down")
+        if keys[pygame.K_SPACE] or keys[pygame.K_RETURN]:
+            held.add("hold_shoot")
         return held

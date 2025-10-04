@@ -1,5 +1,5 @@
 import random
-from typing import List, Union, TYPE_CHECKING
+from typing import List, Union, TYPE_CHECKING, Dict, Type
 
 from ..core.time import Timer
 from ..core.config import Config
@@ -14,9 +14,15 @@ if TYPE_CHECKING:
 class EnemySpawner:
     def __init__(self, config: LevelConfig):
         self.config = config
-        self.timer = Timer(self.config.spawn_every)
-        self.timer.start()
         self.stopped = False
+        
+        # Criar um timer para cada tipo de inimigo
+        self.enemy_timers: Dict[Type[object], Timer] = {}
+        for enemy_type in self.config.enemy_types:
+            spawn_time = self.config.get_spawn_time(enemy_type)
+            timer = Timer(spawn_time)
+            timer.start()
+            self.enemy_timers[enemy_type] = timer
         
         # Timer separado para meteoros teleguiados (a cada 3 segundos)
         self.guided_meteor_timer = Timer(3.0)
@@ -28,15 +34,19 @@ class EnemySpawner:
         if self.stopped:
             return
             
-        # Timer normal para spawn de inimigos regulares
-        self.timer.update(dt)
-        if self.timer.done():
-            # Cria uma instância do tipo de inimigo definido na configuração da fase
-            enemies.append(self.config.enemy_type())
-            self.timer.start()
+        # Atualizar e verificar cada timer de inimigo
+        for enemy_type, timer in self.enemy_timers.items():
+            timer.update(dt)
+            if timer.done():
+                # Spawnar inimigo do tipo correspondente
+                new_enemy = enemy_type()  # type: ignore[misc]
+                enemies.append(new_enemy)  # type: ignore[arg-type]
+                timer.start()  # Reiniciar timer
         
         # Timer separado para meteoros teleguiados (a cada 3 segundos)
-        if (self.config.enemy_type.__name__ == 'Meteor' and 
+        # Só funciona se a fase tem meteoros na lista de tipos
+        from ..entities.meteor import Meteor
+        if (Meteor in self.config.enemy_types and 
             player_x is not None and player_y is not None):
             
             self.guided_meteor_timer.update(dt)
@@ -64,9 +74,15 @@ class EnemySpawner:
     def set_level(self, config: LevelConfig) -> None:
         """Atualiza o spawner para uma nova fase."""
         self.config = config
-        self.timer.duration = self.config.spawn_every
         self.stopped = False
-        self.timer.start()
+        
+        # Recriar timers para nova fase
+        self.enemy_timers = {}
+        for enemy_type in self.config.enemy_types:
+            spawn_time = self.config.get_spawn_time(enemy_type)
+            timer = Timer(spawn_time)
+            timer.start()
+            self.enemy_timers[enemy_type] = timer
         
         # Reiniciar timer de meteoros guiados para nova fase
         self.guided_meteor_timer.start()

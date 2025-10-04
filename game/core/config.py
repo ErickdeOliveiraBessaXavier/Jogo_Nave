@@ -48,6 +48,31 @@ class Config:
     # Explosão mais longa e dramática para o boss
     BOSS_EXPLOSION_DURATION: float = 5.0
     INVULN_TIME: float = 3.0
+    
+    # === GAMEPLAY TIMING ===
+    SHOOT_COOLDOWN: float = 0.20  # Tempo entre tiros quando segura a tecla
+    LEVEL_TRANSITION_DELAY: float = 2.0  # Delay entre fases (segundos)
+    BOSS_WARNING_DURATION: float = 5.0  # Duração do warning antes do boss
+    
+    # === SCREEN SHAKE SETTINGS ===
+    SCREEN_SHAKE_NORMAL: int = 10  # Intensidade normal do screen shake
+    SCREEN_SHAKE_GAME_OVER: int = 15  # Intensidade quando morre
+    SCREEN_SHAKE_BOSS_DEATH: int = 25  # Intensidade quando boss morre
+    SCREEN_SHAKE_BOSS_DEATH_DURATION: float = 1.5  # Duração shake boss death
+    
+    # === GAME OVER SETTINGS ===
+    GAME_OVER_FADE_DURATION: float = 2.0  # Duração do fade-in do game over
+    GAME_OVER_RESTART_DELAY: float = 1.5  # Delay para mostrar "Press R"
+    GAME_OVER_OVERLAY_ALPHA: int = 200  # Alpha do overlay escuro (0-255)
+    
+    # === BOSS EXPLOSION SETTINGS ===
+    BOSS_EXPLOSION_COUNT: int = 12  # Número de explosões em círculo
+    BOSS_EXPLOSION_RADIUS: int = 60  # Raio das explosões em círculo
+    BOSS_EXPLOSION_SMALL_SIZE: int = 40  # Tamanho explosões pequenas
+    BOSS_EXPLOSION_LARGE_SIZE: int = 120  # Tamanho explosão central
+    
+    # === UI SETTINGS ===
+    WARNING_FONT_SIZE: int = 60  # Tamanho da fonte do warning
     SHIELD_DURATION: float = 8.0
     DOUBLE_SHOT_DURATION: float = 10.0
     SPEED_BOOST_DURATION: float = 8.0

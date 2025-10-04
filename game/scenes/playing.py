@@ -38,12 +38,12 @@ class PlayingScene(Scene):
 
         self.level_transition_active = False
         self.level_transition_timer = 0.0
-        self.level_transition_delay = 2.0  # segundos
+        self.level_transition_delay = Config.LEVEL_TRANSITION_DELAY  # segundos
 
         self.screen_shake_timer = 0.0
-        self.screen_shake_intensity = 10
+        self.screen_shake_intensity = Config.SCREEN_SHAKE_NORMAL
         self.warning_timer = 0.0
-        self.warning_font = get_font(60)
+        self.warning_font = get_font(Config.WARNING_FONT_SIZE)
         self.game_surface = pygame.Surface(
             (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
@@ -114,6 +114,13 @@ class PlayingScene(Scene):
         held = self.app.input.poll_held()
         self.ship.move(held, dt)
 
+        # Tiro contínuo com tecla segurada
+        if "hold_shoot" in held and self.shoot_cd == 0.0 and not self.level_transition_active:
+            bullet_positions = self.ship.bullet_spawn()
+            for pos in bullet_positions:
+                self.entity_manager.bullets.append(Bullet(*pos))
+            self.shoot_cd = Config.SHOOT_COOLDOWN
+
         if (
             not self.boss_fight_active
             and not self.pre_boss_transition
@@ -133,11 +140,11 @@ class PlayingScene(Scene):
         # Lógica de progressão de fase
         if self.pre_boss_transition:
             if not self.entity_manager.enemies and self.warning_timer == 0.0:
-                self.warning_timer = 5.0
-                self.screen_shake_timer = 5.0
+                self.warning_timer = Config.BOSS_WARNING_DURATION
+                self.screen_shake_timer = Config.BOSS_WARNING_DURATION
             if self.warning_timer > 0:
                 self.pre_boss_timer += dt
-                if self.pre_boss_timer >= 5.0:
+                if self.pre_boss_timer >= Config.BOSS_WARNING_DURATION:
                     self._start_boss_fight()
         elif not self.boss_fight_active and not self.level_transition_active:
             self._check_level_progression()
@@ -242,7 +249,7 @@ class PlayingScene(Scene):
                     self.ship.rect.centery,
                     size=100))
             self.screen_shake_timer = 0.5
-            self.screen_shake_intensity = 15
+            self.screen_shake_intensity = Config.SCREEN_SHAKE_GAME_OVER
 
     def _check_level_progression(self):
         if self.enemies_destroyed_in_level >= self.level_config.enemies_to_clear:
@@ -272,27 +279,27 @@ class PlayingScene(Scene):
             self.entity_manager.boss.x + self.entity_manager.boss.w / 2,
             self.entity_manager.boss.y + self.entity_manager.boss.h / 2,
         )
-        self.screen_shake_timer = 1.5
-        self.screen_shake_intensity = 25
+        self.screen_shake_timer = Config.SCREEN_SHAKE_BOSS_DEATH_DURATION
+        self.screen_shake_intensity = Config.SCREEN_SHAKE_BOSS_DEATH
 
         # Explosões em círculo
-        num_explosions = 12
-        radius = 60
+        num_explosions = Config.BOSS_EXPLOSION_COUNT
+        radius = Config.BOSS_EXPLOSION_RADIUS
         for i in range(num_explosions):
             angle = (360 / num_explosions) * i
             rad_angle = math.radians(angle)
             ex = boss_center[0] + radius * math.cos(rad_angle)
             ey = boss_center[1] + radius * math.sin(rad_angle)
-            self.entity_manager.explosions.append(Explosion(ex, ey, size=40))
+            self.entity_manager.explosions.append(Explosion(ex, ey, size=Config.BOSS_EXPLOSION_SMALL_SIZE))
 
         # Explosão central maior
         self.entity_manager.explosions.append(
-            Explosion(boss_center[0], boss_center[1], size=120)
+            Explosion(boss_center[0], boss_center[1], size=Config.BOSS_EXPLOSION_LARGE_SIZE)
         )
 
         self.entity_manager.boss = None
         self.boss_fight_active = False
-        self.score += 1000
+        self.score += Config.BOSS_DEFEAT_SCORE
         self._advance_to_next_level()
 
     def _advance_to_next_level(self):
@@ -329,12 +336,6 @@ class PlayingScene(Scene):
 
                 self.app.states.switch(PausedScene(
                     self.app, previous_scene=self))
-            elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
-                if self.shoot_cd == 0.0 and not self.level_transition_active:
-                    bullet_positions = self.ship.bullet_spawn()
-                    for pos in bullet_positions:
-                        self.entity_manager.bullets.append(Bullet(*pos))
-                    self.shoot_cd = 0.15
 
     def render(self, surface: pygame.Surface):
         self.r.background(self.game_surface, dt=1.0 / Config.FPS)
@@ -372,13 +373,13 @@ class PlayingScene(Scene):
 
         if self.game_over_sequence_active:
             progress = min(
-                1.0, self.game_over_timer / 2.0
+                1.0, self.game_over_timer / Config.GAME_OVER_FADE_DURATION
             )  # Duração do fade-in principal
 
             overlay = pygame.Surface(
                 (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
             )
-            overlay_alpha = int(progress * 200)  # Um pouco mais escuro
+            overlay_alpha = int(progress * Config.GAME_OVER_OVERLAY_ALPHA)  # Um pouco mais escuro
             overlay.fill((0, 0, 0, overlay_alpha))
 
             # Renderiza "GAME OVER"
@@ -395,7 +396,7 @@ class PlayingScene(Scene):
             surface.blit(title_text, title_rect)
 
             # Renderiza pontuação e instrução de reinício após um atraso
-            restart_delay = 1.5  # segundos
+            restart_delay = Config.GAME_OVER_RESTART_DELAY  # segundos
             if self.game_over_timer > restart_delay:
                 sub_progress = min(
                     1.0, (self.game_over_timer - restart_delay) / 1.0)
