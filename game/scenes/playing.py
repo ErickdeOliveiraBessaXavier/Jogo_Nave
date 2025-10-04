@@ -24,9 +24,7 @@ class PlayingScene(Scene):
     def __init__(self, app: "GameApp"):
         super().__init__(app)
         self.r = Renderer()
-        self.ship = Ship(
-            Config.SCREEN_WIDTH / 2 - 20,
-            Config.SCREEN_HEIGHT - 80)
+        self.ship = Ship(Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT - 80)
         self.entity_manager = EntityManager()
 
         self.current_level_index = 0
@@ -44,8 +42,7 @@ class PlayingScene(Scene):
         self.screen_shake_intensity = Config.SCREEN_SHAKE_NORMAL
         self.warning_timer = 0.0
         self.warning_font = get_font(Config.WARNING_FONT_SIZE)
-        self.game_surface = pygame.Surface(
-            (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
+        self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
         self.enemy_spawner = EnemySpawner(self.level_config)
         self.powerup_spawner = PowerUpSpawner()
@@ -115,7 +112,11 @@ class PlayingScene(Scene):
         self.ship.move(held, dt)
 
         # Tiro contínuo com tecla segurada
-        if "hold_shoot" in held and self.shoot_cd == 0.0 and not self.level_transition_active:
+        if (
+            "hold_shoot" in held
+            and self.shoot_cd == 0.0
+            and not self.level_transition_active
+        ):
             bullet_positions = self.ship.bullet_spawn()
             for pos in bullet_positions:
                 self.entity_manager.bullets.append(Bullet(*pos))
@@ -126,8 +127,12 @@ class PlayingScene(Scene):
             and not self.pre_boss_transition
             and not self.level_transition_active
         ):
-            self.enemy_spawner.update(dt, self.entity_manager.enemies, 
-                                     self.ship.rect.centerx, self.ship.rect.centery)
+            self.enemy_spawner.update(
+                dt,
+                self.entity_manager.enemies,
+                self.ship.rect.centerx,
+                self.ship.rect.centery,
+            )
             self.powerup_spawner.update(dt, self.entity_manager.powerups)
 
         self.entity_manager.update(dt, self.ship.rect.centerx, self.ship.rect.centery)
@@ -167,8 +172,7 @@ class PlayingScene(Scene):
             self.entity_manager.explosions,
         )
         for x, y, pts in score_events:
-            self.entity_manager.floating_scores.append(
-                FloatingScore(x, y, pts))
+            self.entity_manager.floating_scores.append(FloatingScore(x, y, pts))
         self.score += gain
         self.total_enemies_destroyed += destroyed
         self.enemies_destroyed_in_level += destroyed
@@ -182,9 +186,8 @@ class PlayingScene(Scene):
             )
             self.score += score_gain
         if self.collisions.ship_vs_enemies(
-                self.ship,
-                self.entity_manager.enemies,
-                self.entity_manager.explosions):
+            self.ship, self.entity_manager.enemies, self.entity_manager.explosions
+        ):
             self._handle_ship_hit()
         if self.entity_manager.boss and self.collisions.ship_vs_boss(
             self.ship, self.entity_manager.boss, self.entity_manager.explosions
@@ -194,8 +197,7 @@ class PlayingScene(Scene):
             self.ship, self.entity_manager.alien_bullets
         ):
             self._handle_ship_hit()
-        if self.collisions.laser_vs_ship(
-                self.ship, self.entity_manager.boss_lasers):
+        if self.collisions.laser_vs_ship(self.ship, self.entity_manager.boss_lasers):
             self._handle_ship_hit()
 
         collected_powerups = self.collisions.ship_vs_powerups(
@@ -212,10 +214,12 @@ class PlayingScene(Scene):
                     )
                 elif kind == "double_shot":
                     self.ship.double_shot_timer = max(
-                        self.ship.double_shot_timer, Config.DOUBLE_SHOT_DURATION)
+                        self.ship.double_shot_timer, Config.DOUBLE_SHOT_DURATION
+                    )
                 elif kind == "speed":
                     self.ship.speed_boost_timer = max(
-                        self.ship.speed_boost_timer, Config.SPEED_BOOST_DURATION)
+                        self.ship.speed_boost_timer, Config.SPEED_BOOST_DURATION
+                    )
                 elif kind == "score":
                     self.score += Config.POWERUP_SCORE_BONUS
                 elif kind == "rainbow":
@@ -244,10 +248,8 @@ class PlayingScene(Scene):
             self.game_over_timer = 0.0
             self.ship.visible = False
             self.entity_manager.explosions.append(
-                Explosion(
-                    self.ship.rect.centerx,
-                    self.ship.rect.centery,
-                    size=100))
+                Explosion(self.ship.rect.centerx, self.ship.rect.centery, size=100)
+            )
             self.screen_shake_timer = 0.5
             self.screen_shake_intensity = Config.SCREEN_SHAKE_GAME_OVER
 
@@ -290,11 +292,15 @@ class PlayingScene(Scene):
             rad_angle = math.radians(angle)
             ex = boss_center[0] + radius * math.cos(rad_angle)
             ey = boss_center[1] + radius * math.sin(rad_angle)
-            self.entity_manager.explosions.append(Explosion(ex, ey, size=Config.BOSS_EXPLOSION_SMALL_SIZE))
+            self.entity_manager.explosions.append(
+                Explosion(ex, ey, size=Config.BOSS_EXPLOSION_SMALL_SIZE)
+            )
 
         # Explosão central maior
         self.entity_manager.explosions.append(
-            Explosion(boss_center[0], boss_center[1], size=Config.BOSS_EXPLOSION_LARGE_SIZE)
+            Explosion(
+                boss_center[0], boss_center[1], size=Config.BOSS_EXPLOSION_LARGE_SIZE
+            )
         )
 
         self.entity_manager.boss = None
@@ -334,8 +340,7 @@ class PlayingScene(Scene):
             if event.key == pygame.K_p:
                 from .paused import PausedScene
 
-                self.app.states.switch(PausedScene(
-                    self.app, previous_scene=self))
+                self.app.states.switch(PausedScene(self.app, previous_scene=self))
 
     def render(self, surface: pygame.Surface):
         self.r.background(self.game_surface, dt=1.0 / Config.FPS)
@@ -364,8 +369,7 @@ class PlayingScene(Scene):
         surface.blit(self.game_surface, shake_offset)
 
         if self.warning_timer > 0 and int(self.warning_timer * 5) % 2 == 1:
-            warning_text = self.warning_font.render(
-                "WARNING!", True, colors.RED)
+            warning_text = self.warning_font.render("WARNING!", True, colors.RED)
             text_rect = warning_text.get_rect(
                 center=(Config.SCREEN_WIDTH / 2, Config.SCREEN_HEIGHT / 2)
             )
@@ -379,7 +383,9 @@ class PlayingScene(Scene):
             overlay = pygame.Surface(
                 (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
             )
-            overlay_alpha = int(progress * Config.GAME_OVER_OVERLAY_ALPHA)  # Um pouco mais escuro
+            overlay_alpha = int(
+                progress * Config.GAME_OVER_OVERLAY_ALPHA
+            )  # Um pouco mais escuro
             overlay.fill((0, 0, 0, overlay_alpha))
 
             # Renderiza "GAME OVER"
@@ -398,8 +404,7 @@ class PlayingScene(Scene):
             # Renderiza pontuação e instrução de reinício após um atraso
             restart_delay = Config.GAME_OVER_RESTART_DELAY  # segundos
             if self.game_over_timer > restart_delay:
-                sub_progress = min(
-                    1.0, (self.game_over_timer - restart_delay) / 1.0)
+                sub_progress = min(1.0, (self.game_over_timer - restart_delay) / 1.0)
                 sub_alpha = int(sub_progress * 255)
 
                 score_text = self.game_over_font_subtitle.render(
@@ -407,9 +412,8 @@ class PlayingScene(Scene):
                 )
                 score_text.set_alpha(sub_alpha)
                 score_rect = score_text.get_rect(
-                    center=(
-                        Config.SCREEN_WIDTH / 2,
-                        Config.SCREEN_HEIGHT / 2 + 50))
+                    center=(Config.SCREEN_WIDTH / 2, Config.SCREEN_HEIGHT / 2 + 50)
+                )
                 surface.blit(score_text, score_rect)
 
                 restart_text = self.game_over_font_subtitle.render(
@@ -417,7 +421,6 @@ class PlayingScene(Scene):
                 )
                 restart_text.set_alpha(sub_alpha)
                 restart_rect = restart_text.get_rect(
-                    center=(
-                        Config.SCREEN_WIDTH / 2,
-                        Config.SCREEN_HEIGHT / 2 + 100))
+                    center=(Config.SCREEN_WIDTH / 2, Config.SCREEN_HEIGHT / 2 + 100)
+                )
                 surface.blit(restart_text, restart_rect)

@@ -35,11 +35,8 @@ class Boss:
     FACE_DIRECTION_LINE_LENGTH: int = 15  # Length of face direction indicator
 
     def __init__(
-            self,
-            x: float,
-            y: float,
-            health: int = Config.BOSS_HEALTH,
-            hit_score: int = 50):
+        self, x: float, y: float, health: int = Config.BOSS_HEALTH, hit_score: int = 50
+    ):
         # Position and size
         self.w = 100
         self.h = 80
@@ -119,9 +116,7 @@ class Boss:
 
     def _init_attack_system(self) -> None:
         """Initialize attack timing and states."""
-        self.attack_timer = Timer(
-            random.uniform(
-                *Config.BOSS_CALM_ATTACK_INTERVAL))
+        self.attack_timer = Timer(random.uniform(*Config.BOSS_CALM_ATTACK_INTERVAL))
         self.charge_duration = Config.BOSS_CHARGE_DURATION
         self.charge_timer = Timer(self.charge_duration)
         self.fire_duration = Config.BOSS_LASER_LIFETIME
@@ -130,40 +125,40 @@ class Boss:
     def _get_charge_duration(self) -> float:
         """Get charge duration based on frenzy mode."""
         return (
-            Config.BOSS_FRENZY_CHARGE_DURATION 
-            if self.frenzy_mode 
+            Config.BOSS_FRENZY_CHARGE_DURATION
+            if self.frenzy_mode
             else Config.BOSS_CHARGE_DURATION
         )
 
     def _get_laser_delay(self) -> float:
         """Get laser delay based on frenzy mode."""
         return (
-            Config.BOSS_FRENZY_LASER_DELAY 
-            if self.frenzy_mode 
+            Config.BOSS_FRENZY_LASER_DELAY
+            if self.frenzy_mode
             else Config.BOSS_LASER_DELAY
         )
 
     def _get_aim_blink_interval(self) -> int:
         """Get aim blink interval based on frenzy mode."""
         return (
-            Config.BOSS_FRENZY_AIM_BLINK_INTERVAL 
-            if self.frenzy_mode 
+            Config.BOSS_FRENZY_AIM_BLINK_INTERVAL
+            if self.frenzy_mode
             else Config.BOSS_AIM_BLINK_INTERVAL
         )
 
     def _get_aim_blink_duration(self) -> int:
         """Get aim blink duration based on frenzy mode."""
         return (
-            Config.BOSS_FRENZY_AIM_BLINK_ON_DURATION 
-            if self.frenzy_mode 
+            Config.BOSS_FRENZY_AIM_BLINK_ON_DURATION
+            if self.frenzy_mode
             else Config.BOSS_AIM_BLINK_ON_DURATION
         )
 
     def _get_animation_speed_multiplier(self) -> float:
         """Get animation speed multiplier based on frenzy mode."""
         return (
-            Config.BOSS_FRENZY_ANIMATION_SPEED_MULTIPLIER 
-            if self.frenzy_mode 
+            Config.BOSS_FRENZY_ANIMATION_SPEED_MULTIPLIER
+            if self.frenzy_mode
             else Config.BOSS_ANIMATION_SPEED_MULTIPLIER
         )
 
@@ -176,7 +171,7 @@ class Boss:
         # Atualizar duração do carregamento
         self.charge_duration = self._get_charge_duration()
         self.charge_timer.duration = self.charge_duration
-        
+
         # Atualizar delay do laser
         self.laser_delay_duration = self._get_laser_delay()
 
@@ -231,10 +226,8 @@ class Boss:
                 rotated_y = face_normal.x * sin_offset + face_normal.y * cos_offset
 
                 offset = (i - 1) * self.LASER_SPREAD_OFFSET  # -10, 0, +10
-                start_x = face_x + offset * \
-                    math.cos(self.rotation_angle + math.pi / 2)
-                start_y = face_y + offset * \
-                    math.sin(self.rotation_angle + math.pi / 2)
+                start_x = face_x + offset * math.cos(self.rotation_angle + math.pi / 2)
+                start_y = face_y + offset * math.sin(self.rotation_angle + math.pi / 2)
 
                 target_x = start_x + rotated_x * self.LASER_DISTANCE
                 target_y = start_y + rotated_y * self.LASER_DISTANCE
@@ -250,27 +243,19 @@ class Boss:
             target_x = face_x + face_normal.x * self.LASER_DISTANCE
             target_y = face_y + face_normal.y * self.LASER_DISTANCE
 
-            return [
-                BossLaser(
-                    face_x,
-                    face_y,
-                    target_x,
-                    target_y,
-                    lifetime=lifetime)]
+            return [BossLaser(face_x, face_y, target_x, target_y, lifetime=lifetime)]
 
     def _create_frenzy_lasers(
         self, face_x: float, face_y: float, lifetime: float
     ) -> List[BossLaser]:
         """Create multiple lasers for frenzy mode."""
-        return self._create_laser_pattern(
-            face_x, face_y, lifetime, is_frenzy=True)
+        return self._create_laser_pattern(face_x, face_y, lifetime, is_frenzy=True)
 
     def _create_normal_laser(
         self, face_x: float, face_y: float, lifetime: float
     ) -> List[BossLaser]:
         """Create single laser for normal mode."""
-        return self._create_laser_pattern(
-            face_x, face_y, lifetime, is_frenzy=False)
+        return self._create_laser_pattern(face_x, face_y, lifetime, is_frenzy=False)
 
     def _update_entering_state(self, dt: float) -> None:
         """Handle boss entry animation."""
@@ -296,7 +281,7 @@ class Boss:
         """Handle charging animation."""
         # Usar delta time acelerado para acelerar toda a animação no frenzy
         accelerated_dt = self._get_accelerated_dt(dt)
-        
+
         self.charge_timer.update(dt)  # Timer mantém velocidade normal para consistência
         # Update manual progress tracking com velocidade acelerada
         self.charge_progress = min(
@@ -377,7 +362,7 @@ class Boss:
     def _update_preparing_to_fire_state(self, dt: float) -> List[BossLaser]:
         """Handle the delay before firing lasers."""
         self.laser_delay_timer -= dt
-        
+
         # Continuar atualizando partículas de desaparecimento durante o delay
         self._update_circle_disappear_particles(dt)
 
@@ -396,8 +381,7 @@ class Boss:
 
         return []
 
-    def _create_lasers_from_data(
-            self, laser_data: dict[str, Any]) -> List[BossLaser]:
+    def _create_lasers_from_data(self, laser_data: dict[str, Any]) -> List[BossLaser]:
         """Create lasers from prepared data."""
         return self._create_laser_pattern(
             laser_data["face_x"],
@@ -432,12 +416,8 @@ class Boss:
                 random.uniform(*Config.BOSS_FRENZY_ATTACK_INTERVAL)
             )
         else:
-            self.attack_timer = Timer(
-                random.uniform(
-                    *Config.BOSS_CALM_ATTACK_INTERVAL))
+            self.attack_timer = Timer(random.uniform(*Config.BOSS_CALM_ATTACK_INTERVAL))
         self.attack_timer.start()
-
-
 
     def update(
         self, dt: float, player_x: float, player_y: float | None = None
@@ -457,10 +437,14 @@ class Boss:
 
         # Atualiza o timer de spawn de meteoros e spawna se estiver em modo frenético
         # METEOROS SÃO CRIADOS QUANDO O BOSS NÃO ESTÁ ATACANDO (LASER)
-        if (self.frenzy_mode and self.frenzy_shake_timer <= 0 and 
-            self.state in ("active", "aiming") and  # Só quando não está atacando com laser
-            not self.pending_laser_data):  # E não tem laser pendente
-            
+        if (
+            self.frenzy_mode
+            and self.frenzy_shake_timer <= 0
+            and self.state
+            in ("active", "aiming")  # Só quando não está atacando com laser
+            and not self.pending_laser_data
+        ):  # E não tem laser pendente
+
             self.meteor_attack_timer.update(dt)
             if self.meteor_attack_timer.done() and player_y is not None:
                 # Spawn meteoros dos lados em movimento de arco
@@ -468,7 +452,7 @@ class Boss:
                     self.x, self.y, self.w, self.h, player_x, player_y
                 )
                 spawned_meteors.extend(side_meteors)
-                
+
                 # Ocasionalmente, spawn um meteoro adicional do centro
                 if random.random() < 0.4:  # 40% de chance
                     target_x = player_x + random.uniform(-30, 30)
@@ -477,14 +461,14 @@ class Boss:
                         self.x, self.y, self.w, self.h, target_x, target_y
                     )
                     spawned_meteors.append(center_meteor)
-                
+
                 # No modo frenzy, spawnar meteoros guiados ocasionalmente
                 if random.random() < Config.GUIDED_METEOR_SPAWN_CHANCE:
                     guided_meteor = BossAttackSystem.spawn_guided_meteor(
                         self.x, self.y, self.w, self.h, player_x, player_y
                     )
                     spawned_meteors.append(guided_meteor)
-                
+
                 # Timer mais curto para meteoros mais frequentes quando não atacando
                 self.meteor_attack_timer.start(random.uniform(1.5, 2.5))
 
@@ -507,7 +491,7 @@ class Boss:
             self.charge_duration = self._get_charge_duration()
             self.charge_timer.duration = self.charge_duration
             self.charge_timer.start()
-            self.charge_progress = 0.0 # Reset progress
+            self.charge_progress = 0.0  # Reset progress
             self.particle_system.clear_all()
         elif self.state == "charging":
             self._update_charging_state(dt)
@@ -543,8 +527,7 @@ class Boss:
 
                 if end_distance > 0:  # Só desenhar se a linha está à frente da face
                     actual_start_distance = max(0, start_distance)
-                    actual_end_distance = min(
-                        self.LASER_DISTANCE, end_distance)
+                    actual_end_distance = min(self.LASER_DISTANCE, end_distance)
 
                     # Calcular posições reais da linha
                     start_line_x = face_x + face_normal.x * actual_start_distance
@@ -564,7 +547,9 @@ class Boss:
                     Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
                 )
 
-    def _draw_cannon(self, surface: pygame.Surface, offset_x: float, offset_y: float) -> None:
+    def _draw_cannon(
+        self, surface: pygame.Surface, offset_x: float, offset_y: float
+    ) -> None:
         """Draw the boss's cannon."""
         if self.state != "entering":
             # Desenhar base do canhão (círculo)
@@ -572,20 +557,20 @@ class Boss:
                 surface,
                 (200, 200, 200),
                 (int(self.cannon_x + offset_x), int(self.cannon_y + offset_y)),
-                10
+                10,
             )
-            
+
             # Desenhar cano do canhão (linha na direção do alvo)
             cannon_length = 20
             end_x = self.cannon_x + math.cos(self.cannon_rotation) * cannon_length
             end_y = self.cannon_y + math.sin(self.cannon_rotation) * cannon_length
-            
+
             pygame.draw.line(
                 surface,
                 (200, 200, 200),
                 (int(self.cannon_x + offset_x), int(self.cannon_y + offset_y)),
                 (int(end_x + offset_x), int(end_y + offset_y)),
-                4
+                4,
             )
 
     def draw(self, surface: pygame.Surface) -> None:
@@ -596,7 +581,9 @@ class Boss:
             offset_y = random.randint(-3, 3)
 
         # Normal boss rendering (corpo vermelho)
-        pygame.draw.rect(surface, (255, 0, 0), (self.x + offset_x, self.y + offset_y, self.w, self.h))
+        pygame.draw.rect(
+            surface, (255, 0, 0), (self.x + offset_x, self.y + offset_y, self.w, self.h)
+        )
 
         # Desenhar o canhão usando a nova classe
         self.cannon.draw(surface, offset_x, offset_y)
@@ -623,15 +610,11 @@ class Boss:
 
             # Linha pequena indicando direção
             line_end_x = (
-                face_x +
-                face_normal.x *
-                self.FACE_DIRECTION_LINE_LENGTH +
-                offset_x)
+                face_x + face_normal.x * self.FACE_DIRECTION_LINE_LENGTH + offset_x
+            )
             line_end_y = (
-                face_y +
-                face_normal.y *
-                self.FACE_DIRECTION_LINE_LENGTH +
-                offset_y)
+                face_y + face_normal.y * self.FACE_DIRECTION_LINE_LENGTH + offset_y
+            )
             pygame.draw.line(
                 surface,
                 (255, 255, 255),
@@ -712,17 +695,17 @@ class Boss:
         self, surface: pygame.Surface, offset_x: float, offset_y: float
     ) -> None:
         """Draw circle disappearing particles."""
-        self.particle_system.draw_circle_disappear_particles(surface, offset_x, offset_y)
+        self.particle_system.draw_circle_disappear_particles(
+            surface, offset_x, offset_y
+        )
 
     def _draw_health_bar(self, surface: pygame.Surface) -> None:
         """Draw boss health bar."""
         if self.health > 0:
             health_ratio = self.health / self.max_health
             bar_width = self.w * health_ratio
-            pygame.draw.rect(
-                surface, (255, 0, 0), (self.x, self.y - 20, self.w, 10))
-            pygame.draw.rect(
-                surface, (0, 255, 0), (self.x, self.y - 20, bar_width, 10))
+            pygame.draw.rect(surface, (255, 0, 0), (self.x, self.y - 20, self.w, 10))
+            pygame.draw.rect(surface, (0, 255, 0), (self.x, self.y - 20, bar_width, 10))
 
     def can_take_damage(self) -> bool:
         """Check if boss can currently take damage."""
@@ -756,19 +739,20 @@ class Boss:
             self.frenzy_mode = True
             self.speed = Config.BOSS_FRENZY_SPEED
             self.frenzy_shake_timer = Config.BOSS_FRENZY_SHAKE_DURATION
-            
+
             # Atualizar todos os timings para o modo frenzy
             self._update_frenzy_timings()
-            
+
             # Interromper qualquer ataque em andamento
             self.state = "active"
             self.fired_lasers.clear()
             self.particle_system.clear_all()
-            
+
             # Resetar timers de ataque para começar após o tremor
-            self.attack_timer = Timer(Config.BOSS_FRENZY_SHAKE_DURATION + random.uniform(
-                *Config.BOSS_FRENZY_ATTACK_INTERVAL
-            ))
+            self.attack_timer = Timer(
+                Config.BOSS_FRENZY_SHAKE_DURATION
+                + random.uniform(*Config.BOSS_FRENZY_ATTACK_INTERVAL)
+            )
             self.fire_timer.duration = Config.BOSS_FRENZY_LASER_LIFETIME
             self.attack_timer.start()
 

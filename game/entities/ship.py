@@ -29,8 +29,7 @@ class Ship:
         self.speed_boost_timer = max(0.0, self.speed_boost_timer - dt)
 
     def move(self, held_actions: set[str], dt: float):
-        current_speed = self.speed * \
-            (1.5 if self.speed_boost_timer > 0 else 1.0)
+        current_speed = self.speed * (1.5 if self.speed_boost_timer > 0 else 1.0)
         if "hold_left" in held_actions:
             self.x -= current_speed * dt
         if "hold_right" in held_actions:

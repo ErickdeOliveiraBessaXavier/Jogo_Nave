@@ -50,8 +50,7 @@ class BossLaser:
         max_y = max(self.y, self.target_y)
         return pygame.Rect(min_x, min_y, max_x - min_x, max_y - min_y)
 
-    def get_collision_line(
-            self) -> tuple[tuple[float, float], tuple[float, float]]:
+    def get_collision_line(self) -> tuple[tuple[float, float], tuple[float, float]]:
         return (self.x, self.y), (self.target_x, self.target_y)
 
     def update(self, dt: float) -> None:
@@ -101,8 +100,7 @@ class BossLaser:
             elif self.timer < self.expand_time + self.hold_time:
                 self.w = self.max_w
             else:
-                shrink_duration = self.lifetime - \
-                    (self.expand_time + self.hold_time)
+                shrink_duration = self.lifetime - (self.expand_time + self.hold_time)
                 progress = (
                     self.timer - (self.expand_time + self.hold_time)
                 ) / shrink_duration

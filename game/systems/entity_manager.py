@@ -77,8 +77,7 @@ class EntityManager:
         self.enemies = [e for e in self.enemies if not e.dead]
         self.explosions = [e for e in self.explosions if not e.finished()]
         self.powerups = [p for p in self.powerups if not p.is_off_screen()]
-        self.floating_scores = [
-            fs for fs in self.floating_scores if not fs.is_dead()]
+        self.floating_scores = [fs for fs in self.floating_scores if not fs.is_dead()]
 
     def clear_all(self):
         self.bullets.clear()

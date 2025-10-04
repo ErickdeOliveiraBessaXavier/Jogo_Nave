@@ -11,7 +11,7 @@ class Config:
 
     # === GAMEPLAY SETTINGS ===
     INITIAL_LIVES: int = 3
-    PREPARATION_TIME: float = 5.0  # seconds
+    PREPARATION_TIME: float = 3.0  # seconds
 
     # === ENTITY SPEEDS (pixels/second) ===
     SHIP_SPEED: float = 300.0
@@ -48,29 +48,29 @@ class Config:
     # Explosão mais longa e dramática para o boss
     BOSS_EXPLOSION_DURATION: float = 5.0
     INVULN_TIME: float = 3.0
-    
+
     # === GAMEPLAY TIMING ===
     SHOOT_COOLDOWN: float = 0.20  # Tempo entre tiros quando segura a tecla
     LEVEL_TRANSITION_DELAY: float = 2.0  # Delay entre fases (segundos)
     BOSS_WARNING_DURATION: float = 5.0  # Duração do warning antes do boss
-    
+
     # === SCREEN SHAKE SETTINGS ===
     SCREEN_SHAKE_NORMAL: int = 10  # Intensidade normal do screen shake
     SCREEN_SHAKE_GAME_OVER: int = 15  # Intensidade quando morre
     SCREEN_SHAKE_BOSS_DEATH: int = 25  # Intensidade quando boss morre
-    SCREEN_SHAKE_BOSS_DEATH_DURATION: float = 1.5  # Duração shake boss death
-    
+    SCREEN_SHAKE_BOSS_DEATH_DURATION: float = 2.5  # Duração shake boss death
+
     # === GAME OVER SETTINGS ===
     GAME_OVER_FADE_DURATION: float = 2.0  # Duração do fade-in do game over
     GAME_OVER_RESTART_DELAY: float = 1.5  # Delay para mostrar "Press R"
     GAME_OVER_OVERLAY_ALPHA: int = 200  # Alpha do overlay escuro (0-255)
-    
+
     # === BOSS EXPLOSION SETTINGS ===
     BOSS_EXPLOSION_COUNT: int = 12  # Número de explosões em círculo
     BOSS_EXPLOSION_RADIUS: int = 60  # Raio das explosões em círculo
     BOSS_EXPLOSION_SMALL_SIZE: int = 40  # Tamanho explosões pequenas
     BOSS_EXPLOSION_LARGE_SIZE: int = 120  # Tamanho explosão central
-    
+
     # === UI SETTINGS ===
     WARNING_FONT_SIZE: int = 60  # Tamanho da fonte do warning
     SHIELD_DURATION: float = 8.0
@@ -83,11 +83,11 @@ class Config:
     BOSS_FRENZY_THRESHOLD: float = 0.5
     BOSS_ENTRY_SPEED: float = 30.0
     BOSS_ENTRY_SHAKE_DURATION: float = 4.0
-    
+
     # Boss movement speeds
     BOSS_NORMAL_SPEED: float = 6.0  # Velocidade normal de movimento lateral
     BOSS_FRENZY_SPEED: float = 8.0  # Velocidade no modo frenzy (abaixo de 50% HP)
-    
+
     LASER_DISTANCE: float = 800.0  # How far the boss laser can reach (in pixels)
 
     # === BOSS TIMING ===
@@ -95,21 +95,23 @@ class Config:
     BOSS_FRENZY_ATTACK_INTERVAL: Tuple[float, float] = (1.0, 2.0)
     BOSS_LASER_LIFETIME: float = 2.0
     BOSS_FRENZY_LASER_LIFETIME: float = 1.5
-    
+
     # === BOSS ATTACK ANIMATION TIMING ===
     # Modo Normal
     BOSS_CHARGE_DURATION: float = 1.5  # Tempo do efeito visual de carregamento
     BOSS_LASER_DELAY: float = 0.3  # Delay antes do laser disparar (tempo de reação)
-    
+
     # Modo Frenzy (mais rápido e intenso)
     BOSS_FRENZY_CHARGE_DURATION: float = 0.25  # Carregamento 2x mais rápido
     BOSS_FRENZY_LASER_DELAY: float = 0.15  # Delay 2x menor (menos tempo de reação)
-    
+
     # === MULTIPLICADORES DE VELOCIDADE DE ANIMAÇÃO ===
     # Controla a velocidade de TODOS os efeitos visuais (partículas, círculos, etc.)
     BOSS_ANIMATION_SPEED_MULTIPLIER: float = 1.5  # Normal (1.0 = velocidade padrão)
-    BOSS_FRENZY_ANIMATION_SPEED_MULTIPLIER: float = 2.5  # Frenzy (2.5 = 2.5x mais rápido)
-    
+    BOSS_FRENZY_ANIMATION_SPEED_MULTIPLIER: float = (
+        2.5  # Frenzy (2.5 = 2.5x mais rápido)
+    )
+
     BOSS_FRENZY_SHAKE_DURATION: float = 3.0
 
     # === BOSS VISUAL EFFECTS ===
@@ -118,11 +120,13 @@ class Config:
     BOSS_AIM_BLINK_ON_DURATION: int = 200
     BOSS_AIM_DASH_LENGTH: int = 20
     BOSS_AIM_GAP_LENGTH: int = 25
-    
+
     # Efeitos de Mira no Frenzy (mais rápidos)
     BOSS_FRENZY_AIM_BLINK_INTERVAL: int = 200  # Pisca 2x mais rápido
     BOSS_FRENZY_AIM_BLINK_ON_DURATION: int = 100  # Duracao 2x menor
-    BOSS_CHARGE_CIRCLE_MAX_RADIUS: float = 30.0  # Maximum radius of the charging circle effect
+    BOSS_CHARGE_CIRCLE_MAX_RADIUS: float = (
+        30.0  # Maximum radius of the charging circle effect
+    )
 
     # === BOSS METEOR SETTINGS ===
     # Controla a imprecisão dos meteoros para balanceamento
@@ -131,7 +135,9 @@ class Config:
 
     # === GUIDED METEOR SETTINGS ===
     # Meteoros teleguiados que perseguem o jogador indefinidamente
-    GUIDED_METEOR_SPAWN_CHANCE: float = 0.5  # Chance de spawnar meteoro guiado no frenzy (100%)
+    GUIDED_METEOR_SPAWN_CHANCE: float = (
+        0.5  # Chance de spawnar meteoro guiado no frenzy (100%)
+    )
     GUIDED_METEOR_NORMAL_PHASES_CHANCE: float = 0.1  # Chance nas fases normais (10%)
     GUIDED_METEOR_MAX_SPEED: float = 250.0  # Velocidade máxima
     GUIDED_METEOR_ACCELERATION: float = 100.0  # Aceleração por segundo

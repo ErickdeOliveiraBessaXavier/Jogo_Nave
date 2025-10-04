@@ -38,9 +38,7 @@ class Collisions:
                     destroyed_count += 1
                     score_events.append((cx, cy, pts))
 
-                    if isinstance(
-                            enemy, Meteor) and hasattr(
-                            enemy, "spawn_fragments"):
+                    if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
                         fragments = enemy.spawn_fragments()
                         if fragments:
                             enemies.extend(fragments)
@@ -60,29 +58,26 @@ class Collisions:
                 bullets.remove(b)
                 boss.take_damage(b.damage)
                 explosions.append(Explosion(b.x, b.y, size=15))
-                
+
                 # Não dar pontos por acertar o boss, apenas ao derrotá-lo
                 if boss.dead:
                     # Dar pontuação fixa de 10.000 ao derrotar o boss
                     from ..core.config import Config
-                    floating_scores.append(FloatingScore(
-                        boss.x + boss.w / 2, 
-                        boss.y + boss.h / 2, 
-                        Config.BOSS_DEFEAT_SCORE
-                    ))
-                    score_gain += Config.BOSS_DEFEAT_SCORE
-                    explosions.append(
-                        Explosion(
+
+                    floating_scores.append(
+                        FloatingScore(
                             boss.x + boss.w / 2,
                             boss.y + boss.h / 2,
-                            size=100))
+                            Config.BOSS_DEFEAT_SCORE,
+                        )
+                    )
+                    score_gain += Config.BOSS_DEFEAT_SCORE
+                    explosions.append(
+                        Explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
+                    )
         return score_gain
 
-    def ship_vs_boss(
-            self,
-            ship: Ship,
-            boss: Boss,
-            explosions: list[Explosion]) -> bool:
+    def ship_vs_boss(self, ship: Ship, boss: Boss, explosions: list[Explosion]) -> bool:
         if ship.invuln > 0:
             return False
         if ship.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
@@ -92,20 +87,17 @@ class Collisions:
             return True
         return False
 
-    def ship_vs_enemies(self,
-                        ship: Ship,
-                        enemies: list[Meteor | Alien],
-                        explosions: list[Explosion]) -> bool:
+    def ship_vs_enemies(
+        self, ship: Ship, enemies: list[Meteor | Alien], explosions: list[Explosion]
+    ) -> bool:
         if ship.invuln > 0:
             return False
         for enemy in enemies[:]:
             if ship.rect.colliderect(enemy.rect):
                 enemies.remove(enemy)
                 explosions.append(
-                    Explosion(
-                        ship.x + ship.w / 2,
-                        ship.y + ship.h / 2,
-                        size=30))
+                    Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
+                )
                 return True
         return False
 

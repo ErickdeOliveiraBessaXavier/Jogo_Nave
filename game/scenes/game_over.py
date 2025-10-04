@@ -24,5 +24,8 @@ class GameOverScene(Scene):
 
     def render(self, surface: pygame.Surface):
         self.r.overlay(
-            surface, "", f"Score: {
-                self.score} — Pressione R para reiniciar")
+            surface,
+            "",
+            f"Score: {
+                self.score} — Pressione R para reiniciar",
+        )

@@ -42,10 +42,7 @@ class StarField:
     def draw(self, surface: pygame.Surface):
         for s in self.stars:
             c = (s["brightness"], s["brightness"], s["brightness"])
-            pygame.draw.circle(
-                surface, c, (int(
-                    s["x"]), int(
-                    s["y"])), s["size"])
+            pygame.draw.circle(surface, c, (int(s["x"]), int(s["y"])), s["size"])
 
 
 class Renderer:
@@ -71,10 +68,8 @@ class Renderer:
     ):
         s = self.font_medium.render(f"Pontos: {score}", True, colors.WHITE)
         l = self.font_medium.render(f"Vidas: {lives}", True, colors.WHITE)
-        lvl = self.font_medium.render(
-            f"Fase: {level_number}", True, colors.WHITE)
-        e = self.font_small.render(
-            f"Inimigos: {enemies_destroyed}", True, colors.WHITE)
+        lvl = self.font_medium.render(f"Fase: {level_number}", True, colors.WHITE)
+        e = self.font_small.render(f"Inimigos: {enemies_destroyed}", True, colors.WHITE)
 
         surface.blit(s, (10, 10))
         surface.blit(l, (Config.SCREEN_WIDTH - l.get_width() - 10, 10))
@@ -116,12 +111,8 @@ class Renderer:
         if subtitle:
             s = self.font_medium.render(subtitle, True, colors.WHITE)
             rect = s.get_rect(
-                center=(
-                    Config.SCREEN_WIDTH //
-                    2,
-                    Config.SCREEN_HEIGHT //
-                    2 +
-                    20))
+                center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2 + 20)
+            )
             surface.blit(s, rect)
 
     def preparation(self, surface: pygame.Surface, remaining: float):
@@ -173,8 +164,8 @@ class Renderer:
             cy = int(ship.y + ship.h / 2)
             radius = max(ship.w, ship.h) // 2 + 6
 
-            halo = pygame.Surface(
-                (radius * 2 + 6, radius * 2 + 6), pygame.SRCALPHA)
-            pygame.draw.circle(halo, (0, 120, 255, 120),
-                               (radius + 3, radius + 3), radius, width=3)
+            halo = pygame.Surface((radius * 2 + 6, radius * 2 + 6), pygame.SRCALPHA)
+            pygame.draw.circle(
+                halo, (0, 120, 255, 120), (radius + 3, radius + 3), radius, width=3
+            )
             surface.blit(halo, (cx - radius - 3, cy - radius - 3))

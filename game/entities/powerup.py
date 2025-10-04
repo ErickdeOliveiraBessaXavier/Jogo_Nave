@@ -94,10 +94,7 @@ class PowerUp:
         # Desenha o texto
         surface.blit(text_surface, text_rect)
 
-    def _draw_rainbow_effect(
-            self,
-            surface: pygame.Surface,
-            pulse_rect: pygame.Rect):
+    def _draw_rainbow_effect(self, surface: pygame.Surface, pulse_rect: pygame.Rect):
         """Desenha efeito arco-íris especial para o power-up rainbow"""
         import math
 
@@ -125,8 +122,7 @@ class PowerUp:
                 )
 
                 # Varia a intensidade das cores com a animação
-                intensity = 0.7 + 0.3 * \
-                    math.sin(self.animation_timer + i * 0.5)
+                intensity = 0.7 + 0.3 * math.sin(self.animation_timer + i * 0.5)
                 adjusted_color = tuple(int(c * intensity) for c in color)
 
                 pygame.draw.ellipse(surface, adjusted_color, layer_rect)

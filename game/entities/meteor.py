@@ -60,8 +60,7 @@ class Meteor:
         self.rotation_speed = random.uniform(-3, 3) * (1.0 - ratio * 0.5)
 
         # forma irregular + cor
-        self._base_points: List[Tuple[float, float]
-                                ] = self._generate_irregular_shape()
+        self._base_points: List[Tuple[float, float]] = self._generate_irregular_shape()
         self.color_intensity = 1.0 - ratio * 0.3
         self.dead = False
 
@@ -142,9 +141,7 @@ class Meteor:
         cy = self.y + self.h / 2
 
         count = random.randint(*Config.FRAGMENT_COUNT_RANGE)
-        target_size = max(
-            Config.MIN_METEOR_SIZE, int(
-                self.size * 0.55))  # metade ~55%
+        target_size = max(Config.MIN_METEOR_SIZE, int(self.size * 0.55))  # metade ~55%
         frags: List[Meteor] = []
 
         # Direção base aleatória; espalhe em cone
@@ -153,17 +150,13 @@ class Meteor:
 
         for _ in range(count):
             # variação de tamanho (±20%), garantindo >= MIN
-            s = max(Config.MIN_METEOR_SIZE, int(
-                target_size * random.uniform(0.8, 1.2)))
+            s = max(Config.MIN_METEOR_SIZE, int(target_size * random.uniform(0.8, 1.2)))
 
             # ângulo e velocidade
-            ang = math.radians(
-                base_angle + random.uniform(-half_spread, half_spread))
-            speed = (self.vy * Config.FRAGMENT_SPEED_BOOST) * \
-                random.uniform(0.9, 1.25)
+            ang = math.radians(base_angle + random.uniform(-half_spread, half_spread))
+            speed = (self.vy * Config.FRAGMENT_SPEED_BOOST) * random.uniform(0.9, 1.25)
             vx = math.cos(ang) * speed
-            vy = abs(math.sin(ang) * speed) + \
-                (self.vy * 0.2)  # tende a cair pra baixo
+            vy = abs(math.sin(ang) * speed) + (self.vy * 0.2)  # tende a cair pra baixo
 
             # ligeiro deslocamento pra não colidir imediatamente
             fx = cx + math.cos(ang) * (self.size * 0.5) - s
