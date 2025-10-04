@@ -119,7 +119,8 @@ class PlayingScene(Scene):
             and not self.pre_boss_transition
             and not self.level_transition_active
         ):
-            self.enemy_spawner.update(dt, self.entity_manager.enemies)
+            self.enemy_spawner.update(dt, self.entity_manager.enemies, 
+                                     self.ship.rect.centerx, self.ship.rect.centery)
             self.powerup_spawner.update(dt, self.entity_manager.powerups)
 
         self.entity_manager.update(dt, self.ship.rect.centerx, self.ship.rect.centery)

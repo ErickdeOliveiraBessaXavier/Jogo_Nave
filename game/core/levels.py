@@ -20,7 +20,7 @@ LEVELS: list[LevelConfig] = [
         level_number=1,
         enemy_type=Meteor,
         spawn_every=0.6,
-        enemies_to_clear=1,
+        enemies_to_clear=100,
         boss_type=Boss,
     ),
     LevelConfig(
@@ -29,7 +29,10 @@ LEVELS: list[LevelConfig] = [
         spawn_every=1.5,
         enemies_to_clear=15),
     LevelConfig(
-        level_number=3, enemy_type=Meteor, spawn_every=0.3, enemies_to_clear=30
+        level_number=3,
+        enemy_type=Meteor,
+        spawn_every=0.3,
+        enemies_to_clear=30
     ),
     # Adicione mais fases aqui
 ]

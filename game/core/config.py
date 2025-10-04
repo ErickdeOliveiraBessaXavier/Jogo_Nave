@@ -54,7 +54,7 @@ class Config:
     RAINBOW_DURATION: float = 15.0
 
     # === BOSS SETTINGS ===
-    BOSS_HEALTH: int = 100
+    BOSS_HEALTH: int = 850
     BOSS_FRENZY_THRESHOLD: float = 0.5
     BOSS_ENTRY_SPEED: float = 30.0
     BOSS_ENTRY_SHAKE_DURATION: float = 4.0
@@ -106,7 +106,8 @@ class Config:
 
     # === GUIDED METEOR SETTINGS ===
     # Meteoros teleguiados que perseguem o jogador indefinidamente
-    GUIDED_METEOR_SPAWN_CHANCE: float = 1.0  # Chance de spawnar meteoro guiado no frenzy (100%)
+    GUIDED_METEOR_SPAWN_CHANCE: float = 0.5  # Chance de spawnar meteoro guiado no frenzy (100%)
+    GUIDED_METEOR_NORMAL_PHASES_CHANCE: float = 0.1  # Chance nas fases normais (10%)
     GUIDED_METEOR_MAX_SPEED: float = 250.0  # Velocidade máxima
     GUIDED_METEOR_ACCELERATION: float = 100.0  # Aceleração por segundo
     GUIDED_METEOR_TURN_RATE: float = 3.0  # Taxa de curva (rad/s)
