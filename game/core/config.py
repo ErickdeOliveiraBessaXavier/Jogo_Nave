@@ -1,5 +1,15 @@
 from dataclasses import dataclass
 from typing import Tuple
+from enum import Enum
+
+
+class PowerUpType(Enum):
+    LIFE = "life"
+    SHIELD = "shield"
+    DOUBLE_SHOT = "double_shot"
+    SPEED = "speed"
+    SCORE = "score"
+    RAINBOW = "rainbow"
 
 
 @dataclass(frozen=True)
@@ -142,3 +152,14 @@ class Config:
     GUIDED_METEOR_MAX_SPEED: float = 250.0  # Velocidade máxima
     GUIDED_METEOR_ACCELERATION: float = 100.0  # Aceleração por segundo
     GUIDED_METEOR_TURN_RATE: float = 3.0  # Taxa de curva (rad/s)
+
+    # === POWERUP RARITY SYSTEM ===
+    # Chances individuais por tipo de power-up (devem somar 1.0)
+    POWERUP_RARITY_CHANCES = {
+        PowerUpType.SHIELD: 0.40,       # 40% - Comum
+        PowerUpType.DOUBLE_SHOT: 0.30,  # 30% - Comum  
+        PowerUpType.SPEED: 0.15,        # 15% - Raro
+        PowerUpType.LIFE: 0.10,         # 10% - Raro
+        PowerUpType.SCORE: 0.04,        # 4% - Épico
+        PowerUpType.RAINBOW: 0.01       # 1% - Lendário
+    }

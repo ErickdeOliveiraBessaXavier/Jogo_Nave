@@ -2,7 +2,7 @@ import random
 from typing import List, Union, TYPE_CHECKING, Dict, Type
 
 from ..core.time import Timer
-from ..core.config import Config
+from ..core.config import Config, PowerUpType
 from ..entities.powerup import PowerUp
 from ..core.levels import LevelConfig
 
@@ -100,6 +100,17 @@ class PowerUpSpawner:
     def __init__(self) -> None:
         self._reset_timer()
 
+    def _select_powerup_by_rarity(self) -> PowerUpType:
+        """Seleciona power-up baseado na raridade individual de cada tipo."""
+        powerup_chances = Config.POWERUP_RARITY_CHANCES
+        
+        # Cria lista ponderada
+        powerup_types = list(powerup_chances.keys())
+        weights = list(powerup_chances.values())
+        
+        # Escolhe baseado nos pesos
+        return random.choices(powerup_types, weights=weights)[0]
+
     def _reset_timer(self) -> None:
         min_t, max_t = Config.POWERUP_SPAWN_INTERVAL
         self.timer = Timer(random.uniform(min_t, max_t))
@@ -108,7 +119,8 @@ class PowerUpSpawner:
     def update(self, dt: float, powerups: List[PowerUp]) -> None:
         self.timer.update(dt)
         if self.timer.done():
-            powerups.append(PowerUp())
+            powerup_type = self._select_powerup_by_rarity()  # Usa sistema de raridade
+            powerups.append(PowerUp(powerup_type))
             self._reset_timer()
 
         powerups[:] = [p for p in powerups if not p.is_off_screen()]

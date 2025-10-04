@@ -38,15 +38,15 @@ LEVELS: list[LevelConfig] = [
     LevelConfig(
         level_number=2,
         enemy_spawn_config={
-            Alien: 1.5,  # Só aliens a cada 1.5 segundos
+            Alien: 0.8,  # Só aliens a cada 0.2 segundos
         },
-        enemies_to_clear=100,
+        enemies_to_clear=40,
     ),
     LevelConfig(
         level_number=3,
         enemy_spawn_config={
             Meteor: 0.3,  # Meteoros rápidos a cada 0.3 segundos
-            Alien: 2.0,  # Aliens a cada 1.2 segundos
+            Alien: 1.5,  # Aliens a cada 0.8 segundos
         },
         enemies_to_clear=150,
         boss_type=Boss,

@@ -1,14 +1,18 @@
 import random
 import pygame
-from ..core.config import Config
+from typing import Optional
+from ..core.config import Config, PowerUpType
 from ..core.assets import get_font
 
 
 class PowerUp:
-    TYPES = ["life", "shield", "double_shot", "speed", "score", "rainbow"]
-
-    def __init__(self):
-        self.kind = random.choice(PowerUp.TYPES)
+    def __init__(self, powerup_type: Optional[PowerUpType] = None):
+        # Se não especificado, usa distribuição uniforme (compatibilidade)
+        if powerup_type is None:
+            powerup_type = random.choice(list(PowerUpType))
+        
+        self.type = powerup_type
+        self.kind = powerup_type.value  # Mantém compatibilidade com código existente
         self.w, self.h = Config.POWERUP_SIZE, Config.POWERUP_SIZE
         self.x = random.randint(0, Config.SCREEN_WIDTH - self.w)
         self.y = -self.h
