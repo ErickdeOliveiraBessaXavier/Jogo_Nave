@@ -9,6 +9,7 @@ from ..entities.explosion import Explosion
 from ..entities.powerup import PowerUp
 from ..entities.boss import Boss
 from ..entities.floating_score import FloatingScore
+from ..core.sound import sound_manager
 
 
 class Collisions:
@@ -32,6 +33,12 @@ class Collisions:
 
                     cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
                     explosions.append(Explosion(cx, cy, size=enemy.w // 2))
+                    
+                    # Tocar som de explosão baseado no tipo de inimigo
+                    if isinstance(enemy, Meteor):
+                        sound_manager.play_explosion_asteroid()
+                    else:  # Se não é Meteor, é Alien
+                        sound_manager.play_explosion_alien()
 
                     pts = enemy.get_points_value()
                     score_gain += pts
@@ -57,6 +64,8 @@ class Collisions:
             if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
                 bullets.remove(b)
                 boss.take_damage(b.damage)
+                # Tocar som de dano no boss
+                sound_manager.play_boss_damage()
                 explosions.append(Explosion(b.x, b.y, size=15))
 
                 # Não dar pontos por acertar o boss, apenas ao derrotá-lo

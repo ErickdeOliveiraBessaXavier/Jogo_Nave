@@ -15,6 +15,7 @@ from ..entities.floating_score import FloatingScore
 from ..core.levels import LEVELS
 from ..core.assets import get_font
 from ..core import colors
+from ..core.sound import sound_manager
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -33,10 +34,14 @@ class PlayingScene(Scene):
         self.boss_fight_active = False
         self.pre_boss_transition = False
         self.pre_boss_timer = 0.0
+        self.warning_sound_played = False  # Flag para controlar o som de warning
 
         self.level_transition_active = False
         self.level_transition_timer = 0.0
         self.level_transition_delay = Config.LEVEL_TRANSITION_DELAY  # segundos
+        
+        # Iniciar música de fundo
+        sound_manager.play_background_music()
 
         self.screen_shake_timer = 0.0
         self.screen_shake_intensity = Config.SCREEN_SHAKE_NORMAL
@@ -115,11 +120,13 @@ class PlayingScene(Scene):
         if (
             "hold_shoot" in held
             and self.shoot_cd == 0.0
-            and not self.level_transition_active
+            # Permitir tiros durante transições para destruir inimigos restantes
         ):
             bullet_positions = self.ship.bullet_spawn()
             for pos in bullet_positions:
                 self.entity_manager.bullets.append(Bullet(*pos))
+            # Tocar som de tiro (varia entre os 3 sons automaticamente)
+            sound_manager.play_shot()
             self.shoot_cd = Config.SHOOT_COOLDOWN
 
         if (
@@ -139,14 +146,18 @@ class PlayingScene(Scene):
 
         self.entity_manager.cleanup()
 
-        if not self.level_transition_active:
-            self._handle_collisions()
+        # Processar colisões sempre (incluindo durante transições)
+        self._handle_collisions()
 
         # Lógica de progressão de fase
         if self.pre_boss_transition:
             if not self.entity_manager.enemies and self.warning_timer == 0.0:
                 self.warning_timer = Config.BOSS_WARNING_DURATION
                 self.screen_shake_timer = Config.BOSS_WARNING_DURATION
+                # Tocar som de warning apenas uma vez
+                if not self.warning_sound_played:
+                    sound_manager.play_warning()
+                    self.warning_sound_played = True
             if self.warning_timer > 0:
                 self.pre_boss_timer += dt
                 if self.pre_boss_timer >= Config.BOSS_WARNING_DURATION:
@@ -247,6 +258,8 @@ class PlayingScene(Scene):
             self.game_over_sequence_active = True
             self.game_over_timer = 0.0
             self.ship.visible = False
+            # Tocar som de explosão da nave
+            sound_manager.play_ship_explosion()
             self.entity_manager.explosions.append(
                 Explosion(self.ship.rect.centerx, self.ship.rect.centery, size=100)
             )
@@ -265,12 +278,19 @@ class PlayingScene(Scene):
     def _start_boss_fight(self):
         self.pre_boss_transition = False
         self.pre_boss_timer = 0.0
+        self.warning_sound_played = False  # Resetar flag para próximo boss
         self.boss_fight_active = True
         self.screen_shake_timer = Config.BOSS_ENTRY_SHAKE_DURATION
+        
+        # Parar som de warning
+        sound_manager.stop_all_sfx()
+        
         if self.level_config.boss_type:
             self.entity_manager.boss = self.level_config.boss_type(
                 Config.SCREEN_WIDTH / 2 - 50, 50
             )
+            # Tocar música do boss
+            sound_manager.play_boss_music()
 
     def _end_boss_fight(self):
         if not self.entity_manager.boss:
@@ -283,6 +303,9 @@ class PlayingScene(Scene):
         )
         self.screen_shake_timer = Config.SCREEN_SHAKE_BOSS_DEATH_DURATION
         self.screen_shake_intensity = Config.SCREEN_SHAKE_BOSS_DEATH
+
+        # Tocar som de explosão do boss
+        sound_manager.play_explosion_boss()
 
         # Explosões em círculo
         num_explosions = Config.BOSS_EXPLOSION_COUNT
@@ -306,6 +329,8 @@ class PlayingScene(Scene):
         self.entity_manager.boss = None
         self.boss_fight_active = False
         self.score += Config.BOSS_DEFEAT_SCORE
+        # Voltar para música normal
+        sound_manager.play_background_music()
         self._advance_to_next_level()
 
     def _advance_to_next_level(self):

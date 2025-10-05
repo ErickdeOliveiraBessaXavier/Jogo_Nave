@@ -33,7 +33,8 @@ LEVELS: list[LevelConfig] = [
         enemy_spawn_config={
             Meteor: 0.8,  # Meteoros a cada 0.8 segundos
         },
-        enemies_to_clear=150,
+        enemies_to_clear=1,
+        boss_type=Boss,
     ),
     LevelConfig(
         level_number=2,

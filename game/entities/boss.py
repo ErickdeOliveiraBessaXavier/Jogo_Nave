@@ -59,6 +59,7 @@ class Boss:
         self.state = "entering"
         self.frenzy_mode = False
         self.frenzy_shake_timer = 0.0
+        self.pending_frenzy = False  # Flag para ativar frenzy quando action atual acabar
         self.meteor_attack_timer = Timer(random.uniform(3.0, 5.0))
         self.can_spawn_meteors = False
 
@@ -166,6 +167,52 @@ class Boss:
         """Get delta time accelerated by animation speed multiplier."""
         return dt * self._get_animation_speed_multiplier()
 
+    def _is_in_attack_sequence(self) -> bool:
+        """Check if boss is currently in an attack sequence that shouldn't be interrupted."""
+        # Estados que representam uma sequência de ataque em andamento
+        return self.state in ("aiming", "charging", "converging", "preparing_to_fire", "firing")
+
+    def _can_activate_frenzy_now(self) -> bool:
+        """Check if frenzy mode can be activated immediately."""
+        # Só pode ativar frenzy se não estiver em uma sequência de ataque
+        return not self._is_in_attack_sequence()
+
+    def _activate_frenzy_mode(self) -> None:
+        """Activate frenzy mode immediately."""
+        self.frenzy_mode = True
+        self.pending_frenzy = False
+        self.speed = Config.BOSS_FRENZY_SPEED
+        self.frenzy_shake_timer = Config.BOSS_FRENZY_SHAKE_DURATION
+
+        # Atualizar todos os timings para o modo frenzy
+        self._update_frenzy_timings()
+
+        # Limpar ataques apenas se estiver em estado ativo
+        if self.state == "active":
+            # Se está em estado ativo, pode resetar normalmente
+            self.fired_lasers.clear()
+            self.particle_system.clear_all()
+            
+            # Resetar timers de ataque para começar após o tremor
+            self.attack_timer = Timer(
+                Config.BOSS_FRENZY_SHAKE_DURATION
+                + random.uniform(*Config.BOSS_FRENZY_ATTACK_INTERVAL)
+            )
+            self.attack_timer.start()
+        else:
+            # Se não está ativo, apenas ajustar para quando voltar a ficar ativo
+            # O timer será resetado quando a ação atual terminar
+            pass
+
+        self.fire_timer.duration = Config.BOSS_FRENZY_LASER_LIFETIME
+
+        print("💀 Boss entrou em modo FRENZY!")
+
+    def _check_pending_frenzy(self) -> None:
+        """Check if there's a pending frenzy activation and activate if possible."""
+        if self.pending_frenzy and self._can_activate_frenzy_now():
+            self._activate_frenzy_mode()
+
     def _update_frenzy_timings(self) -> None:
         """Update all timing values when entering frenzy mode."""
         # Atualizar duração do carregamento
@@ -264,6 +311,9 @@ class Boss:
             self.y = self.target_y
             self.state = "active"
             self.attack_timer.start()
+            
+            # Verificar se há frenzy pendente
+            self._check_pending_frenzy()
 
     def _update_active_state(self, dt: float) -> None:
         """Handle boss movement and attack timing."""
@@ -408,6 +458,9 @@ class Boss:
             self.state = "active"
             self._reset_attack_timer()
             self.fired_lasers.clear()
+            
+            # Verificar se há frenzy pendente
+            self._check_pending_frenzy()
 
     def _reset_attack_timer(self) -> None:
         """Reset attack timer based on current mode."""
@@ -434,6 +487,10 @@ class Boss:
         # Update orientation to face player
         if player_y is not None:
             self._update_orientation(player_x, player_y)
+
+        # Verificar se há frenzy pendente (somente se não está tremendo)
+        if self.frenzy_shake_timer <= 0:
+            self._check_pending_frenzy()
 
         # Atualiza o timer de spawn de meteoros e spawna se estiver em modo frenético
         # METEOROS SÃO CRIADOS QUANDO O BOSS NÃO ESTÁ ATACANDO (LASER)
@@ -733,28 +790,16 @@ class Boss:
         # Transition to frenzy mode
         if (
             not self.frenzy_mode
+            and not self.pending_frenzy
             and self.health <= self.max_health * Config.BOSS_FRENZY_THRESHOLD
         ):
-            # Entrar em modo frenético e interromper qualquer ataque em andamento
-            self.frenzy_mode = True
-            self.speed = Config.BOSS_FRENZY_SPEED
-            self.frenzy_shake_timer = Config.BOSS_FRENZY_SHAKE_DURATION
-
-            # Atualizar todos os timings para o modo frenzy
-            self._update_frenzy_timings()
-
-            # Interromper qualquer ataque em andamento
-            self.state = "active"
-            self.fired_lasers.clear()
-            self.particle_system.clear_all()
-
-            # Resetar timers de ataque para começar após o tremor
-            self.attack_timer = Timer(
-                Config.BOSS_FRENZY_SHAKE_DURATION
-                + random.uniform(*Config.BOSS_FRENZY_ATTACK_INTERVAL)
-            )
-            self.fire_timer.duration = Config.BOSS_FRENZY_LASER_LIFETIME
-            self.attack_timer.start()
+            # Verificar se pode ativar frenzy imediatamente ou precisa aguardar
+            if self._can_activate_frenzy_now():
+                self._activate_frenzy_mode()
+            else:
+                # Marcar frenzy como pendente para ativar quando possível
+                self.pending_frenzy = True
+                print("⚠️ Frenzy mode pendente - aguardando fim da ação atual...")
 
     def is_off_screen(self) -> bool:
         """Check if boss is completely off screen."""
