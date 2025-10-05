@@ -265,7 +265,11 @@ class Boss:
             # Modo frenesi: 3 lasers em leque
             lasers: List[BossLaser] = []
 
-            for i, angle_offset in enumerate(self.FRENZY_LASER_ANGLES):
+            # Criar na ordem: direita, esquerda, centro (centro por último para desenhar por cima)
+            laser_order = [2, 0, 1]  # direita, esquerda, centro
+            
+            for i in laser_order:
+                angle_offset = self.FRENZY_LASER_ANGLES[i]
                 cos_offset = math.cos(angle_offset)
                 sin_offset = math.sin(angle_offset)
 
@@ -274,7 +278,7 @@ class Boss:
 
                 offset = (i - 1) * self.LASER_SPREAD_OFFSET  # -10, 0, +10
                 start_x = face_x + offset * math.cos(self.rotation_angle + math.pi / 2)
-                start_y = face_y + offset * math.sin(self.rotation_angle + math.pi / 2)
+                start_y = face_y + offset * math.sin(self.rotation_angle + math.pi / 2) - 10  # Mais para cima
 
                 target_x = start_x + rotated_x * self.LASER_DISTANCE
                 target_y = start_y + rotated_y * self.LASER_DISTANCE
@@ -287,10 +291,11 @@ class Boss:
             return lasers
         else:
             # Modo calmo: laser único
+            laser_start_y = face_y - 15  # Mais para cima (mesmo offset do modo frenzy)
             target_x = face_x + face_normal.x * self.LASER_DISTANCE
-            target_y = face_y + face_normal.y * self.LASER_DISTANCE
+            target_y = laser_start_y + face_normal.y * self.LASER_DISTANCE
 
-            return [BossLaser(face_x, face_y, target_x, target_y, lifetime=lifetime)]
+            return [BossLaser(face_x, laser_start_y, target_x, target_y, lifetime=lifetime)]
 
     def _create_frenzy_lasers(
         self, face_x: float, face_y: float, lifetime: float
@@ -562,7 +567,7 @@ class Boss:
         return (lasers_fired, spawned_meteors)
 
     def _draw_aiming_line(self, surface: pygame.Surface) -> None:
-        """Draw the animated aiming line."""
+        """Draw the animated aiming line(s)."""
         if (
             pygame.time.get_ticks() % self._get_aim_blink_interval()
         ) < self._get_aim_blink_duration():
@@ -573,36 +578,115 @@ class Boss:
                 Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
             )
 
-            # Desenhar linha tracejada na direção da face
-            current_distance = time_based_offset - (
+            if self.frenzy_mode:
+                # Modo frenzy: desenhar múltiplas linhas de mira
+                self._draw_frenzy_aiming_lines(surface, face_x, face_y, face_normal, time_based_offset)
+            else:
+                # Modo normal: desenhar linha única
+                self._draw_single_aiming_line(surface, face_x, face_y, face_normal, time_based_offset)
+
+    def _draw_single_aiming_line(self, surface: pygame.Surface, face_x: float, face_y: float, 
+                                face_normal: pygame.Vector2, time_based_offset: int) -> None:
+        """Draw a single aiming line for normal mode."""
+        # Ajustar posição inicial para mais para cima (mesmo offset dos lasers)
+        line_start_y = face_y - 15
+        
+        current_distance = time_based_offset - (
+            Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
+        )
+
+        while current_distance < self.LASER_DISTANCE:
+            start_distance = current_distance
+            end_distance = current_distance + Config.BOSS_AIM_DASH_LENGTH
+
+            if end_distance > 0:  # Só desenhar se a linha está à frente da face
+                actual_start_distance = max(0, start_distance)
+                actual_end_distance = min(self.LASER_DISTANCE, end_distance)
+
+                # Calcular posições reais da linha (usando posição Y ajustada)
+                start_line_x = face_x + face_normal.x * actual_start_distance
+                start_line_y = line_start_y + face_normal.y * actual_start_distance
+                end_line_x = face_x + face_normal.x * actual_end_distance
+                end_line_y = line_start_y + face_normal.y * actual_end_distance
+
+                pygame.draw.line(
+                    surface,
+                    colors.BOSS_AIM_LINE,
+                    (start_line_x, start_line_y),
+                    (end_line_x, end_line_y),
+                    2,
+                )
+
+            current_distance += (
                 Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
             )
 
-            while current_distance < self.LASER_DISTANCE:
-                start_distance = current_distance
-                end_distance = current_distance + Config.BOSS_AIM_DASH_LENGTH
+    def _draw_frenzy_aiming_lines(self, surface: pygame.Surface, face_x: float, face_y: float,
+                                 face_normal: pygame.Vector2, time_based_offset: int) -> None:
+        """Draw multiple aiming lines for frenzy mode."""
+        
+        # Desenhar na ordem: Direita -> Esquerda -> Centro (centro por último para ficar por cima)
+        self._draw_single_frenzy_laser_line(surface, face_x, face_y, face_normal, time_based_offset, 2)  # Direita
+        self._draw_single_frenzy_laser_line(surface, face_x, face_y, face_normal, time_based_offset, 0)  # Esquerda  
+        self._draw_single_frenzy_laser_line(surface, face_x, face_y, face_normal, time_based_offset, 1)  # Centro
 
-                if end_distance > 0:  # Só desenhar se a linha está à frente da face
-                    actual_start_distance = max(0, start_distance)
-                    actual_end_distance = min(self.LASER_DISTANCE, end_distance)
+    def _draw_single_frenzy_laser_line(self, surface: pygame.Surface, face_x: float, face_y: float,
+                                      face_normal: pygame.Vector2, time_based_offset: int, laser_index: int) -> None:
+        """Draw a single laser line for frenzy mode."""
+        i = laser_index
+        angle_offset = self.FRENZY_LASER_ANGLES[i]
+        
+        # Calcular direção rotacionada para este laser
+        cos_offset = math.cos(angle_offset)
+        sin_offset = math.sin(angle_offset)
+        
+        rotated_x = face_normal.x * cos_offset - face_normal.y * sin_offset
+        rotated_y = face_normal.x * sin_offset + face_normal.y * cos_offset
+        rotated_normal = pygame.Vector2(rotated_x, rotated_y)
+        
+        # Calcular posição de início do laser (com offset lateral)
+        offset = (i - 1) * self.LASER_SPREAD_OFFSET  # -10, 0, +10
+        laser_start_x = face_x + offset * math.cos(self.rotation_angle + math.pi / 2)
+        laser_start_y = face_y + offset * math.sin(self.rotation_angle + math.pi / 2) - 15  # Mais para cima
+        
+        # Cor e espessura diferentes para cada linha
+        if i == 1:  # Laser central
+            line_color = colors.BOSS_AIM_LINE
+            line_width = 4  # Ainda mais grosso para garantir destaque
+        else:  # Lasers laterais
+            line_color = tuple(min(255, max(50, int(c * 0.6))) for c in colors.BOSS_AIM_LINE)
+            line_width = 2
+        
+        # Desenhar linha tracejada para este laser
+        current_distance = time_based_offset - (
+            Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
+        )
 
-                    # Calcular posições reais da linha
-                    start_line_x = face_x + face_normal.x * actual_start_distance
-                    start_line_y = face_y + face_normal.y * actual_start_distance
-                    end_line_x = face_x + face_normal.x * actual_end_distance
-                    end_line_y = face_y + face_normal.y * actual_end_distance
+        while current_distance < self.LASER_DISTANCE:
+            start_distance = current_distance
+            end_distance = current_distance + Config.BOSS_AIM_DASH_LENGTH
 
-                    pygame.draw.line(
-                        surface,
-                        colors.BOSS_AIM_LINE,
-                        (start_line_x, start_line_y),
-                        (end_line_x, end_line_y),
-                        2,
-                    )
+            if end_distance > 0:
+                actual_start_distance = max(0, start_distance)
+                actual_end_distance = min(self.LASER_DISTANCE, end_distance)
 
-                current_distance += (
-                    Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
+                # Calcular posições reais da linha
+                start_line_x = laser_start_x + rotated_normal.x * actual_start_distance
+                start_line_y = laser_start_y + rotated_normal.y * actual_start_distance
+                end_line_x = laser_start_x + rotated_normal.x * actual_end_distance
+                end_line_y = laser_start_y + rotated_normal.y * actual_end_distance
+
+                pygame.draw.line(
+                    surface,
+                    line_color,
+                    (start_line_x, start_line_y),
+                    (end_line_x, end_line_y),
+                    line_width,
                 )
+
+            current_distance += (
+                Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
+            )
 
     def _draw_cannon(
         self, surface: pygame.Surface, offset_x: float, offset_y: float
