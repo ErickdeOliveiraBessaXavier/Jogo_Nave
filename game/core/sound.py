@@ -143,11 +143,8 @@ class SoundManager:
                 # Usar volume específico do boss laser em vez do sfx geral
                 sound.set_volume(self.boss_laser_volume * self.master_volume)
                 self._sounds["boss_laser_charging"] = sound
-                print(f"✅ Som boss_laser_charging carregado: {boss_laser_charging_path}")
             except pygame.error as e:
                 print(f"Erro ao carregar som {boss_laser_charging_path}: {e}")
-        else:
-            print(f"❌ Arquivo não encontrado: {boss_laser_charging_path}")
         
         # Som de disparo do laser do boss
         boss_laser_fire_path = os.path.join(base_path, "sfx", "shots", "som_laser.mp3")
@@ -161,11 +158,6 @@ class SoundManager:
                 print(f"Erro ao carregar som {boss_laser_fire_path}: {e}")
         
         self._sound_groups["explosions"] = explosion_sounds
-        
-        print(f"Sons carregados: {len(self._sounds)} sons individuais")
-        print(f"Grupos de sons: {list(self._sound_groups.keys())}")
-        print(f"🎵 Sistema de som inicializado com nova estrutura organizada")
-        print(f"📁 Estrutura: music/ | sfx/shots/ | sfx/explosions/ | sfx/ui/")
     
     def play_shot(self):
         """Toca um som de tiro com técnicas anti-irritação."""
@@ -222,7 +214,6 @@ class SoundManager:
     def play_boss_laser_charging(self):
         """Toca som de carregamento do laser do boss com controle de volume inteligente."""
         if "boss_laser_charging" in self._sounds:
-            print("🔊 Tocando som de carregamento do boss laser")
             # Aplicar ducking na música (reduzir volume)
             self._duck_music(True)
             
@@ -237,7 +228,6 @@ class SoundManager:
     
     def stop_boss_laser_charging(self):
         """Para o som de carregamento do laser do boss e restaura música."""
-        print("🔇 Parando som de carregamento do boss laser")
         self.boss_laser_channel.stop()
         # Restaurar volume original da música
         self._duck_music(False)
@@ -245,7 +235,6 @@ class SoundManager:
     def play_boss_laser_fire(self):
         """Toca som de disparo do laser do boss com volume balanceado e controle."""
         if "boss_laser_fire" in self._sounds:
-            print("🔥 Tocando som de disparo do boss laser")
             # Volume ligeiramente mais alto para o disparo (momento de impacto)
             sound = self._sounds["boss_laser_fire"]
             fire_volume = min(1.0, self.boss_laser_volume * 1.2)  # 20% mais alto
@@ -257,7 +246,6 @@ class SoundManager:
     
     def stop_boss_laser_fire(self):
         """Para o som de disparo do laser do boss."""
-        print("🔇 Parando som de disparo do boss laser")
         self.boss_laser_fire_channel.stop()
     
     def _duck_music(self, duck: bool):
@@ -386,7 +374,6 @@ class SoundManager:
             
             self.current_music = music_type
             self.music_paused = False
-            print(f"🎵 Transição suave para música {music_type} concluída")
             
         except pygame.error as e:
             print(f"Erro na transição de música: {e}")
@@ -406,7 +393,6 @@ class SoundManager:
             # Não podemos forçar parar uma thread, mas podemos parar a música imediatamente
             pygame.mixer.music.stop()
             self.current_music = None
-            print("🔇 Transições de música interrompidas")
     
     def pause_music(self):
         """Pausa a música atual."""
@@ -438,7 +424,6 @@ class SoundManager:
         pygame.mixer.music.fadeout(fade_duration_ms)
         self.current_music = None
         self.music_paused = False
-        print(f"🔇 Fade out de música ({duration}s)")
     
     def play_warning(self):
         """Toca o som de aviso/warning."""
@@ -447,12 +432,10 @@ class SoundManager:
             self.warning_channel.stop()
             # Tocar no canal dedicado
             self.warning_channel.play(self._sounds["warning"])
-            print("⚠️ Som de warning tocado")
     
     def stop_warning(self):
         """Para especificamente o som de warning."""
         self.warning_channel.stop()
-        print("⚠️ Som de warning parado")
     
     def stop_all_sfx(self):
         """Para todos os efeitos sonoros (não afeta a música)."""
@@ -464,13 +447,6 @@ class SoundManager:
         # Parar todos os outros sons
         for sound in self._sounds.values():
             sound.stop()
-        print("🔇 Todos os efeitos sonoros parados")
-    
-    def set_music_volume(self, volume: float):
-        """Define o volume da música (0.0 a 1.0)."""
-        self.music_volume = max(0.0, min(1.0, volume))
-        pygame.mixer.music.set_volume(self.music_volume * self.master_volume)
-        print(f"🎼 Volume da música ajustado para {self.music_volume:.1%}")
 
 
 # Instância global do gerenciador de som

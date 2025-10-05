@@ -7,9 +7,9 @@ from ..core.assets import get_font
 
 class PowerUp:
     def __init__(self, powerup_type: Optional[PowerUpType] = None):
-        # Se não especificado, usa distribuição uniforme (compatibilidade)
+        # Se não especificado, usa o sistema de raridade do config
         if powerup_type is None:
-            powerup_type = random.choice(list(PowerUpType))
+            powerup_type = self._select_random_powerup()
         
         self.type = powerup_type
         self.kind = powerup_type.value  # Mantém compatibilidade com código existente
@@ -23,6 +23,19 @@ class PowerUp:
         self.animation_timer = 0.0
         self.pulse_scale = 1.0
 
+    def _select_random_powerup(self) -> PowerUpType:
+        """Seleciona um power-up aleatório baseado no sistema de raridade"""
+        rand_val = random.random()
+        cumulative = 0.0
+        
+        for powerup_type, chance in Config.POWERUP_RARITY_CHANCES.items():
+            cumulative += chance
+            if rand_val <= cumulative:
+                return powerup_type
+        
+        # Fallback para o último tipo se algo der errado
+        return PowerUpType.SHIELD
+
     def update(self, dt: float):
         self.y += self.speed * dt
         self.rect.topleft = (int(self.x), int(self.y))
@@ -35,11 +48,12 @@ class PowerUp:
 
     def draw(self, surface: pygame.Surface):
         color_map = {
-            "life": (255, 50, 50),  # vermelho mais suave
-            "shield": (50, 50, 255),  # azul mais suave
+            "life": (255, 50, 50),      # vermelho mais suave
+            "shield": (50, 50, 255),    # azul mais suave
             "double_shot": (50, 255, 50),  # verde mais suave
-            "speed": (255, 255, 50),  # amarelo mais suave
-            "score": (255, 50, 255),  # magenta mais suave
+            "speed": (255, 255, 50),    # amarelo mais suave
+            "score": (255, 50, 255),    # magenta mais suave
+            "rainbow": (255, 255, 255), # branco para rainbow
         }
 
         text_map = {
@@ -71,18 +85,22 @@ class PowerUp:
             self._draw_rainbow_effect(surface, pulse_rect)
         else:
             # Fundo principal
-            pygame.draw.ellipse(surface, color_map[self.kind], pulse_rect)
+            pygame.draw.ellipse(surface, color_map.get(self.kind, (255, 255, 255)), pulse_rect)
 
             # Borda brilhante
             pygame.draw.ellipse(surface, (255, 255, 255), pulse_rect, 2)
 
         # Desenha o texto
-        self._draw_text(surface, text_map[self.kind])
+        self._draw_text(surface, text_map.get(self.kind, "[?]"))
 
     def _draw_text(self, surface: pygame.Surface, text: str):
         """Desenha texto simples para cada tipo de power-up"""
-        # Usa o sistema de assets para carregar a fonte
-        font = get_font(10)  # Tamanho um pouco menor para melhor alinhamento
+        try:
+            # Usa o sistema de assets para carregar a fonte
+            font = get_font(10)  # Tamanho um pouco menor para melhor alinhamento
+        except:
+            # Fallback para fonte padrão se get_font falhar
+            font = pygame.font.Font(None, 16)
 
         # Renderiza o texto
         text_surface = font.render(text, True, (255, 255, 255))

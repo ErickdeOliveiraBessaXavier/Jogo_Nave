@@ -39,11 +39,16 @@ class PlayingScene(Scene):
         # Sistema de warning em 3 estágios
         self.warning_stage = 0  # 0=idle, 1=pre-delay, 2=warning-active, 3=post-delay
         self.warning_stage_timer = 0.0
+        
+        # Music transition control
+        self.music_fade_started = False
+        self.boss_music_started = False
 
+        # Level transition control
         self.level_transition_active = False
         self.level_transition_timer = 0.0
         self.level_transition_delay = Config.LEVEL_TRANSITION_DELAY  # segundos
-        
+
         # Iniciar música de fundo
         sound_manager.play_background_music()
 
@@ -177,17 +182,23 @@ class PlayingScene(Scene):
         self.warning_stage_timer += dt
         
         if self.warning_stage == 1:  # Estágio 1: Pre-delay (5s)
+            # Iniciar fade-out da música 3 segundos antes do warning
+            if (not self.music_fade_started and 
+                self.warning_stage_timer >= Config.BOSS_MUSIC_FADE_OUT_START):
+                sound_manager.fade_out_music(Config.BOSS_MUSIC_FADE_OUT_DURATION)
+                self.music_fade_started = True
+            
             if self.warning_stage_timer >= Config.BOSS_PRE_WARNING_DELAY:
                 self.warning_stage = 2
                 self.warning_stage_timer = 0.0
                 self.warning_timer = Config.BOSS_WARNING_DURATION
                 self.screen_shake_timer = Config.BOSS_WARNING_DURATION
-                # Tocar som de warning
+                # Tocar som de warning (sem música de fundo)
                 if not self.warning_sound_played:
                     sound_manager.play_warning()
                     self.warning_sound_played = True
                     
-        elif self.warning_stage == 2:  # Estágio 2: Warning ativo (3s)
+        elif self.warning_stage == 2:  # Estágio 2: Warning ativo (5s) - SILÊNCIO TOTAL
             if self.warning_stage_timer >= Config.BOSS_WARNING_DURATION:
                 self.warning_stage = 3
                 self.warning_stage_timer = 0.0
@@ -196,7 +207,7 @@ class PlayingScene(Scene):
                 # Parar som de warning quando o visual termina
                 sound_manager.stop_warning()
                 
-        elif self.warning_stage == 3:  # Estágio 3: Post-delay (3s)
+        elif self.warning_stage == 3:  # Estágio 3: Post-delay (3s) - CONTINUA SILÊNCIO
             if self.warning_stage_timer >= Config.BOSS_POST_WARNING_DELAY:
                 self._start_boss_fight()
 
@@ -318,6 +329,10 @@ class PlayingScene(Scene):
         self.warning_stage_timer = 0.0
         self.warning_timer = 0.0
         
+        # Reset music transition flags
+        self.music_fade_started = False
+        self.boss_music_started = False
+        
         self.boss_fight_active = True
         self.screen_shake_timer = Config.BOSS_ENTRY_SHAKE_DURATION
         
@@ -329,8 +344,9 @@ class PlayingScene(Scene):
             self.entity_manager.boss = self.level_config.boss_type(
                 Config.SCREEN_WIDTH / 2 - 50, 50
             )
-            # Tocar música do boss
+            # Iniciar fade-in da música do boss quando ele aparecer
             sound_manager.play_boss_music()
+            self.boss_music_started = True
 
     def _end_boss_fight(self):
         if not self.entity_manager.boss:
@@ -369,6 +385,11 @@ class PlayingScene(Scene):
         self.entity_manager.boss = None
         self.boss_fight_active = False
         self.score += Config.BOSS_DEFEAT_SCORE
+        
+        # Reset music transition flags for next boss
+        self.music_fade_started = False
+        self.boss_music_started = False
+        
         # Voltar para música normal
         sound_manager.play_background_music()
         self._advance_to_next_level()
