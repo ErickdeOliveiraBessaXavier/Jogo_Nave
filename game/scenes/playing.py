@@ -35,6 +35,10 @@ class PlayingScene(Scene):
         self.pre_boss_transition = False
         self.pre_boss_timer = 0.0
         self.warning_sound_played = False  # Flag para controlar o som de warning
+        
+        # Sistema de warning em 3 estágios
+        self.warning_stage = 0  # 0=idle, 1=pre-delay, 2=warning-active, 3=post-delay
+        self.warning_stage_timer = 0.0
 
         self.level_transition_active = False
         self.level_transition_timer = 0.0
@@ -49,7 +53,9 @@ class PlayingScene(Scene):
         self.warning_font = get_font(Config.WARNING_FONT_SIZE)
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
-        self.enemy_spawner = EnemySpawner(self.level_config)
+        # Inicializar spawner com delay inicial apenas para fase 1
+        is_initial_level = (self.current_level_index == 0)
+        self.enemy_spawner = EnemySpawner(self.level_config, is_initial_level)
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
 
@@ -127,7 +133,9 @@ class PlayingScene(Scene):
                 self.entity_manager.bullets.append(Bullet(*pos))
             # Tocar som de tiro (varia entre os 3 sons automaticamente)
             sound_manager.play_shot()
-            self.shoot_cd = Config.SHOOT_COOLDOWN
+            # Aplicar multiplicador de velocidade de ataque do power-up de velocidade
+            cooldown = Config.SHOOT_COOLDOWN / self.ship.attack_speed_multiplier
+            self.shoot_cd = cooldown
 
         if (
             not self.boss_fight_active
@@ -151,26 +159,52 @@ class PlayingScene(Scene):
 
         # Lógica de progressão de fase
         if self.pre_boss_transition:
-            if not self.entity_manager.enemies and self.warning_timer == 0.0:
-                self.warning_timer = Config.BOSS_WARNING_DURATION
-                self.screen_shake_timer = Config.BOSS_WARNING_DURATION
-                # Tocar som de warning apenas uma vez
-                if not self.warning_sound_played:
-                    sound_manager.play_warning()
-                    self.warning_sound_played = True
-            if self.warning_timer > 0:
-                self.pre_boss_timer += dt
-                if self.pre_boss_timer >= Config.BOSS_WARNING_DURATION:
-                    self._start_boss_fight()
+            if not self.entity_manager.enemies and self.warning_stage == 0:
+                # Iniciar sequência de warning em 3 estágios
+                self.warning_stage = 1  # Estágio 1: Pre-delay
+                self.warning_stage_timer = 0.0
+                self.warning_sound_played = False
+            
+            self._update_warning_system(dt)
+            
         elif not self.boss_fight_active and not self.level_transition_active:
             self._check_level_progression()
         elif self.entity_manager.boss and self.entity_manager.boss.dead:
             self._end_boss_fight()
+    
+    def _update_warning_system(self, dt: float):
+        """Atualiza o sistema de warning em 3 estágios."""
+        self.warning_stage_timer += dt
+        
+        if self.warning_stage == 1:  # Estágio 1: Pre-delay (5s)
+            if self.warning_stage_timer >= Config.BOSS_PRE_WARNING_DELAY:
+                self.warning_stage = 2
+                self.warning_stage_timer = 0.0
+                self.warning_timer = Config.BOSS_WARNING_DURATION
+                self.screen_shake_timer = Config.BOSS_WARNING_DURATION
+                # Tocar som de warning
+                if not self.warning_sound_played:
+                    sound_manager.play_warning()
+                    self.warning_sound_played = True
+                    
+        elif self.warning_stage == 2:  # Estágio 2: Warning ativo (3s)
+            if self.warning_stage_timer >= Config.BOSS_WARNING_DURATION:
+                self.warning_stage = 3
+                self.warning_stage_timer = 0.0
+                self.warning_timer = 0.0  # Parar warning visual
+                self.screen_shake_timer = 0.0  # Parar shake
+                # Parar som de warning quando o visual termina
+                sound_manager.stop_warning()
+                
+        elif self.warning_stage == 3:  # Estágio 3: Post-delay (3s)
+            if self.warning_stage_timer >= Config.BOSS_POST_WARNING_DELAY:
+                self._start_boss_fight()
 
     def _all_animations_finished(self) -> bool:
         return (
             not self.entity_manager.explosions
-            and not self.entity_manager.bullets
+            # Remover balas do jogador da verificação para permitir transições durante tiros
+            # and not self.entity_manager.bullets  
             and not self.entity_manager.alien_bullets
             and not self.entity_manager.boss_lasers
             and not self.entity_manager.enemies
@@ -279,10 +313,16 @@ class PlayingScene(Scene):
         self.pre_boss_transition = False
         self.pre_boss_timer = 0.0
         self.warning_sound_played = False  # Resetar flag para próximo boss
+        # Resetar sistema de warning
+        self.warning_stage = 0
+        self.warning_stage_timer = 0.0
+        self.warning_timer = 0.0
+        
         self.boss_fight_active = True
         self.screen_shake_timer = Config.BOSS_ENTRY_SHAKE_DURATION
         
-        # Parar som de warning
+        # Parar sons de warning e outros efeitos
+        sound_manager.stop_warning()
         sound_manager.stop_all_sfx()
         
         if self.level_config.boss_type:
@@ -351,7 +391,8 @@ class PlayingScene(Scene):
             self.enemy_spawner.set_level(self.level_config)
             self.enemies_destroyed_in_level = 0
 
-        self.entity_manager.clear_all()
+        # Usar método que preserva balas do jogador durante transições
+        self.entity_manager.clear_for_level_transition()
 
     def handle_event(self, event: pygame.event.Event):
         if self.game_over_sequence_active:

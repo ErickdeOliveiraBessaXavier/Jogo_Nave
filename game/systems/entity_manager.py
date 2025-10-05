@@ -88,3 +88,15 @@ class EntityManager:
         self.enemies.clear()
         self.explosions.clear()
         self.boss = None
+
+    def clear_for_level_transition(self):
+        """Limpa entidades para transição de fase, mas preserva balas do jogador."""
+        # Preservar balas do jogador durante transições
+        # self.bullets.clear()  # NÃO limpar balas do jogador
+        self.alien_bullets.clear()
+        self.boss_lasers.clear()
+        self.powerups.clear()
+        self.floating_scores.clear()
+        self.enemies.clear()
+        self.explosions.clear()
+        self.boss = None

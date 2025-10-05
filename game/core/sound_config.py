@@ -10,6 +10,10 @@ class SoundType(Enum):
     # Tiros
     SHOT = "shot"
     
+    # Boss Laser
+    BOSS_LASER_CHARGING = "boss_laser_charging"
+    BOSS_LASER_FIRE = "boss_laser_fire"
+    
     # Explosões
     EXPLOSION_ASTEROID = "explosion_asteroid"
     EXPLOSION_ALIEN = "explosion_alien"
@@ -40,12 +44,15 @@ VOLUME_CONFIG: Dict[str, float] = {
     "sfx": 0.7,         # Efeitos sonoros
     "music": 0.3,       # Música
     "shots": 0.4,       # Tiros específico
+    "boss_laser": 0.35, # Som do laser do boss (balanceado com música)
 }
 
 # Configurações de canais
 CHANNEL_CONFIG: Dict[str, int] = {
     "shots": 0,         # Canal dedicado para tiros
     "warning": 1,       # Canal dedicado para warning
+    "boss_laser": 2,    # Canal dedicado para carregamento do laser do boss
+    "boss_laser_fire": 3, # Canal dedicado para disparo do laser do boss
     "max_channels": 8,  # Número máximo de canais
 }
 
@@ -62,6 +69,8 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
     # Efeitos sonoros
     "sfx": {
         "shots": "sfx/shots/tiro_{}.wav",  # {} será substituído por 1,2,3
+        "boss_laser_charging": "sfx/shots/som_laser_carregando.mp3",
+        "boss_laser_fire": "sfx/shots/som_laser.mp3",
         "explosions": {
             "asteroid": "sfx/explosions/explosão_asteroides_{}.wav",  # {} = 0,1,2,3
             "alien": "sfx/explosions/explosão_naves_alienigenas.wav",
@@ -85,6 +94,12 @@ BEHAVIOR_CONFIG: Dict[str, Dict[str, Union[bool, float]]] = {
     "music": {
         "loop": True,
         "fade_duration": 1.0,  # Duração do fade ao trocar música
+    },
+    "boss_laser": {
+        "duck_music": True,     # Reduzir música durante som do laser
+        "duck_volume": 0.6,     # Volume da música durante o laser (60% do normal)
+        "fade_in": 0.1,         # Fade in suave para o som
+        "fade_out": 0.2,        # Fade out suave para o som
     }
 }
 

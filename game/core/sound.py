@@ -1,9 +1,11 @@
 import pygame
 import random
 import os
+import threading
+import time
 from typing import Dict, List
 
-from .sound_config import VOLUME_CONFIG, CHANNEL_CONFIG
+from .sound_config import VOLUME_CONFIG, CHANNEL_CONFIG, BEHAVIOR_CONFIG
 
 
 class SoundManager:
@@ -25,16 +27,21 @@ class SoundManager:
         self.master_volume = VOLUME_CONFIG["master"]
         self.sfx_volume = VOLUME_CONFIG["sfx"]
         self.music_volume = VOLUME_CONFIG["music"]
+        self.boss_laser_volume = VOLUME_CONFIG["boss_laser"]
         
         # Controle de tiros para evitar irritação
         self.shot_channel = pygame.mixer.Channel(CHANNEL_CONFIG["shots"])
         self.warning_channel = pygame.mixer.Channel(CHANNEL_CONFIG["warning"])
+        self.boss_laser_channel = pygame.mixer.Channel(CHANNEL_CONFIG["boss_laser"])
+        self.boss_laser_fire_channel = pygame.mixer.Channel(CHANNEL_CONFIG["boss_laser_fire"])
         self.last_shot_time = 0.0
         self.shot_volume_base = VOLUME_CONFIG["shots"]
         
         # Estado da música
         self.current_music = None
         self.music_paused = False
+        self.transition_thread = None
+        self.original_music_volume = self.music_volume
         
         # Carregar sons
         self._load_sounds()
@@ -127,6 +134,32 @@ class SoundManager:
             except pygame.error as e:
                 print(f"Erro ao carregar som {warning_path}: {e}")
         
+        # Sons do boss laser
+        # Som de carregamento do laser do boss
+        boss_laser_charging_path = os.path.join(base_path, "sfx", "shots", "som_laser_carregando.mp3")
+        if os.path.exists(boss_laser_charging_path):
+            try:
+                sound = pygame.mixer.Sound(boss_laser_charging_path)
+                # Usar volume específico do boss laser em vez do sfx geral
+                sound.set_volume(self.boss_laser_volume * self.master_volume)
+                self._sounds["boss_laser_charging"] = sound
+                print(f"✅ Som boss_laser_charging carregado: {boss_laser_charging_path}")
+            except pygame.error as e:
+                print(f"Erro ao carregar som {boss_laser_charging_path}: {e}")
+        else:
+            print(f"❌ Arquivo não encontrado: {boss_laser_charging_path}")
+        
+        # Som de disparo do laser do boss
+        boss_laser_fire_path = os.path.join(base_path, "sfx", "shots", "som_laser.mp3")
+        if os.path.exists(boss_laser_fire_path):
+            try:
+                sound = pygame.mixer.Sound(boss_laser_fire_path)
+                # Usar volume específico do boss laser em vez do sfx geral
+                sound.set_volume(self.boss_laser_volume * self.master_volume)
+                self._sounds["boss_laser_fire"] = sound
+            except pygame.error as e:
+                print(f"Erro ao carregar som {boss_laser_fire_path}: {e}")
+        
         self._sound_groups["explosions"] = explosion_sounds
         
         print(f"Sons carregados: {len(self._sounds)} sons individuais")
@@ -186,6 +219,60 @@ class SoundManager:
         if "boss_damage" in self._sounds:
             self._sounds["boss_damage"].play()
     
+    def play_boss_laser_charging(self):
+        """Toca som de carregamento do laser do boss com controle de volume inteligente."""
+        if "boss_laser_charging" in self._sounds:
+            print("🔊 Tocando som de carregamento do boss laser")
+            # Aplicar ducking na música (reduzir volume)
+            self._duck_music(True)
+            
+            # Configurar volume balanceado do som do laser
+            sound = self._sounds["boss_laser_charging"]
+            sound.set_volume(self.boss_laser_volume * self.master_volume)
+            
+            # Tocar no canal dedicado
+            self.boss_laser_channel.play(sound)
+        else:
+            print("❌ Som 'boss_laser_charging' não encontrado!")
+    
+    def stop_boss_laser_charging(self):
+        """Para o som de carregamento do laser do boss e restaura música."""
+        print("🔇 Parando som de carregamento do boss laser")
+        self.boss_laser_channel.stop()
+        # Restaurar volume original da música
+        self._duck_music(False)
+    
+    def play_boss_laser_fire(self):
+        """Toca som de disparo do laser do boss com volume balanceado e controle."""
+        if "boss_laser_fire" in self._sounds:
+            print("🔥 Tocando som de disparo do boss laser")
+            # Volume ligeiramente mais alto para o disparo (momento de impacto)
+            sound = self._sounds["boss_laser_fire"]
+            fire_volume = min(1.0, self.boss_laser_volume * 1.2)  # 20% mais alto
+            sound.set_volume(fire_volume * self.master_volume)
+            # Tocar no canal dedicado para controle
+            self.boss_laser_fire_channel.play(sound)
+        else:
+            print("❌ Som 'boss_laser_fire' não encontrado!")
+    
+    def stop_boss_laser_fire(self):
+        """Para o som de disparo do laser do boss."""
+        print("🔇 Parando som de disparo do boss laser")
+        self.boss_laser_fire_channel.stop()
+    
+    def _duck_music(self, duck: bool):
+        """Controla o volume da música (ducking) para dar espaço aos efeitos do boss."""
+        if not hasattr(pygame.mixer, 'music') or not pygame.mixer.music.get_busy():
+            return
+            
+        if duck:
+            # Reduzir volume da música para 60% do normal
+            duck_volume = self.original_music_volume * 0.6
+            pygame.mixer.music.set_volume(duck_volume * self.master_volume)
+        else:
+            # Restaurar volume original da música
+            pygame.mixer.music.set_volume(self.original_music_volume * self.master_volume)
+    
     def play_ship_explosion(self):
         """Toca som de explosão da nave do jogador."""
         if "ship_explosion" in self._sounds:
@@ -234,32 +321,92 @@ class SoundManager:
     # === MÉTODOS DE MÚSICA ===
     
     def play_background_music(self):
-        """Inicia a música de fundo do jogo."""
+        """Inicia a música de fundo com transição suave."""
         music_path = os.path.join("game", "assets", "sounds", "music", "background.mp3")
         if os.path.exists(music_path) and self.current_music != "background":
-            try:
-                pygame.mixer.music.load(music_path)
-                pygame.mixer.music.set_volume(self.music_volume * self.master_volume)
-                pygame.mixer.music.play(-1)  # Loop infinito
-                self.current_music = "background"
-                self.music_paused = False
-                print("🎵 Música de fundo iniciada")
-            except pygame.error as e:
-                print(f"Erro ao carregar música de fundo: {e}")
+            self._transition_to_music(music_path, "background")
     
     def play_boss_music(self):
-        """Inicia a música do boss."""
+        """Inicia a música do boss com transição suave."""
         music_path = os.path.join("game", "assets", "sounds", "music", "boss.mp3")
         if os.path.exists(music_path) and self.current_music != "boss":
+            self._transition_to_music(music_path, "boss")
+    
+    def _transition_to_music(self, music_path: str, music_type: str):
+        """Realiza transição suave entre músicas."""
+        # Cancela transição anterior se existir
+        if self.transition_thread and self.transition_thread.is_alive():
+            return
+        
+        # Inicia nova transição em thread separada
+        self.transition_thread = threading.Thread(
+            target=self._smooth_transition,
+            args=(music_path, music_type),
+            daemon=True
+        )
+        self.transition_thread.start()
+    
+    def _smooth_transition(self, music_path: str, music_type: str):
+        """Executa a transição suave entre músicas."""
+        fade_duration = float(BEHAVIOR_CONFIG["music"]["fade_duration"])
+        fade_steps = 20  # Número de passos para o fade
+        step_duration = fade_duration / fade_steps
+        
+        try:
+            # Fase 1: Fade out da música atual
+            if pygame.mixer.music.get_busy():
+                current_volume = pygame.mixer.music.get_volume()
+                
+                for i in range(fade_steps):
+                    volume = current_volume * (1 - (i + 1) / fade_steps)
+                    pygame.mixer.music.set_volume(volume)
+                    time.sleep(step_duration)
+                
+                pygame.mixer.music.stop()
+            
+            # Pequena pausa entre transições
+            time.sleep(0.1)
+            
+            # Fase 2: Carrega e inicia nova música
+            pygame.mixer.music.load(music_path)
+            target_volume = self.music_volume * self.master_volume
+            
+            # Inicia com volume zero
+            pygame.mixer.music.set_volume(0)
+            pygame.mixer.music.play(-1)  # Loop infinito
+            
+            # Fase 3: Fade in da nova música
+            for i in range(fade_steps):
+                volume = target_volume * (i + 1) / fade_steps
+                pygame.mixer.music.set_volume(volume)
+                time.sleep(step_duration)
+            
+            # Garante volume final correto
+            pygame.mixer.music.set_volume(target_volume)
+            
+            self.current_music = music_type
+            self.music_paused = False
+            print(f"🎵 Transição suave para música {music_type} concluída")
+            
+        except pygame.error as e:
+            print(f"Erro na transição de música: {e}")
+            # Fallback: carrega diretamente sem transição
             try:
                 pygame.mixer.music.load(music_path)
                 pygame.mixer.music.set_volume(self.music_volume * self.master_volume)
-                pygame.mixer.music.play(-1)  # Loop infinito
-                self.current_music = "boss"
+                pygame.mixer.music.play(-1)
+                self.current_music = music_type
                 self.music_paused = False
-                print("🎵 Música do boss iniciada")
-            except pygame.error as e:
-                print(f"Erro ao carregar música do boss: {e}")
+            except pygame.error as fallback_error:
+                print(f"Erro no fallback de música: {fallback_error}")
+    
+    def stop_music_transitions(self):
+        """Para todas as transições de música em andamento."""
+        if self.transition_thread and self.transition_thread.is_alive():
+            # Não podemos forçar parar uma thread, mas podemos parar a música imediatamente
+            pygame.mixer.music.stop()
+            self.current_music = None
+            print("🔇 Transições de música interrompidas")
     
     def pause_music(self):
         """Pausa a música atual."""
@@ -282,6 +429,17 @@ class SoundManager:
         self.music_paused = False
         print("⏹️ Música parada")
     
+    def fade_out_music(self, duration: float | None = None):
+        """Faz fade out suave da música atual."""
+        if duration is None:
+            duration = float(BEHAVIOR_CONFIG["music"]["fade_duration"])
+        
+        fade_duration_ms = int(duration * 1000)  # Pygame espera milissegundos
+        pygame.mixer.music.fadeout(fade_duration_ms)
+        self.current_music = None
+        self.music_paused = False
+        print(f"🔇 Fade out de música ({duration}s)")
+    
     def play_warning(self):
         """Toca o som de aviso/warning."""
         if "warning" in self._sounds:
@@ -291,11 +449,18 @@ class SoundManager:
             self.warning_channel.play(self._sounds["warning"])
             print("⚠️ Som de warning tocado")
     
+    def stop_warning(self):
+        """Para especificamente o som de warning."""
+        self.warning_channel.stop()
+        print("⚠️ Som de warning parado")
+    
     def stop_all_sfx(self):
         """Para todos os efeitos sonoros (não afeta a música)."""
         # Parar canais específicos
         self.warning_channel.stop()
         self.shot_channel.stop()
+        self.boss_laser_channel.stop()
+        self.boss_laser_fire_channel.stop()
         # Parar todos os outros sons
         for sound in self._sounds.values():
             sound.stop()

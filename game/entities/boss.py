@@ -7,6 +7,7 @@ import pygame
 from ..core import colors
 from ..core.config import Config
 from ..core.time import Timer
+from ..core.sound import sound_manager
 from .boss_laser import BossLaser
 from .boss_cannon import BossCannon, BossAttackSystem
 from .boss_particles import BossParticleSystem
@@ -191,6 +192,9 @@ class Boss:
         if self.state == "active":
             # Se está em estado ativo, pode resetar normalmente
             self.fired_lasers.clear()
+            # Parar sons do boss laser
+            sound_manager.stop_boss_laser_charging()
+            sound_manager.stop_boss_laser_fire()
             self.particle_system.clear_all()
             
             # Resetar timers de ataque para começar após o tremor
@@ -347,6 +351,8 @@ class Boss:
         self._update_charging_particles(dt)  # Já usa accelerated_dt internamente
 
         if self.charge_timer.done():
+            # Parar o som de carregamento quando a animação termina
+            sound_manager.stop_boss_laser_charging()
             self.state = "converging"
 
     def _get_charge_circle_radius(self) -> float:
@@ -424,6 +430,9 @@ class Boss:
         if self.laser_delay_timer <= 0 and self.pending_laser_data:
             # Disparar o laser usando os dados preparados
             new_lasers = self._create_lasers_from_data(self.pending_laser_data)
+            
+            # Tocar som de disparo do laser
+            sound_manager.play_boss_laser_fire()
 
             self.fired_lasers.extend(new_lasers)
             self.fire_timer = Timer(self.pending_laser_data["lifetime"])
@@ -456,6 +465,9 @@ class Boss:
             laser.update(dt)
             if laser.dead:
                 self.fired_lasers.remove(laser)
+                # Se não há mais lasers ativos, parar som de disparo
+                if not self.fired_lasers:
+                    sound_manager.stop_boss_laser_fire()
 
         if self.fire_timer.done() and all(
             l.is_animation_finished() for l in self.fired_lasers
@@ -463,6 +475,8 @@ class Boss:
             self.state = "active"
             self._reset_attack_timer()
             self.fired_lasers.clear()
+            # Garantir que o som pare quando limpar todos os lasers
+            sound_manager.stop_boss_laser_fire()
             
             # Verificar se há frenzy pendente
             self._check_pending_frenzy()
@@ -542,6 +556,9 @@ class Boss:
             laser.update(dt)
             if laser.dead:
                 self.fired_lasers.remove(laser)
+                # Se não há mais lasers ativos, parar som de disparo
+                if not self.fired_lasers:
+                    sound_manager.stop_boss_laser_fire()
 
         if self.state == "entering":
             self._update_entering_state(dt)
@@ -549,6 +566,10 @@ class Boss:
             self._update_active_state(dt)
         elif self.state == "aiming":
             self.state = "charging"
+            # Parar qualquer som de carregamento anterior antes de começar novo
+            sound_manager.stop_boss_laser_charging()
+            # Tocar som de carregamento do laser
+            sound_manager.play_boss_laser_charging()
             # Atualizar duração do carregamento baseada no modo frenzy
             self.charge_duration = self._get_charge_duration()
             self.charge_timer.duration = self.charge_duration

@@ -12,9 +12,19 @@ if TYPE_CHECKING:
 
 
 class EnemySpawner:
-    def __init__(self, config: LevelConfig):
+    def __init__(self, config: LevelConfig, is_initial_level: bool = False):
         self.config = config
         self.stopped = False
+
+        # Sistema de intensidade gradual para spawn orgânico
+        self.spawn_intensity = 0.0  # 0.0 = não spawna, 1.0 = taxa normal
+        if is_initial_level:
+            self.warm_up_duration = Config.INITIAL_GAME_DELAY  # Delay inicial da fase 1
+            self.warm_up_timer = self.warm_up_duration
+        else:
+            self.warm_up_duration = 0.0  # Outras fases começam imediatamente
+            self.warm_up_timer = 0.0
+            self.spawn_intensity = 1.0  # Já ativo
 
         # Criar um timer para cada tipo de inimigo
         self.enemy_timers: Dict[Type[object], Timer] = {}
@@ -38,11 +48,20 @@ class EnemySpawner:
         if self.stopped:
             return
 
+        # Sistema de delay inicial (período sem spawn seguido de ativação total)
+        if self.warm_up_timer > 0:
+            self.warm_up_timer -= dt
+            # Durante warm-up: intensidade 0% (nenhum spawn)
+            self.spawn_intensity = 0.0
+        else:
+            # Após warm-up: intensidade 100% (spawn normal)
+            self.spawn_intensity = 1.0
+
         # Atualizar e verificar cada timer de inimigo
         for enemy_type, timer in self.enemy_timers.items():
             timer.update(dt)
-            if timer.done():
-                # Spawnar inimigo do tipo correspondente
+            if timer.done() and random.random() < self.spawn_intensity:
+                # Spawnar inimigo com base na intensidade atual
                 new_enemy = enemy_type()  # type: ignore[misc]
                 enemies.append(new_enemy)  # type: ignore[arg-type]
                 timer.start()  # Reiniciar timer
@@ -58,9 +77,10 @@ class EnemySpawner:
         ):
 
             self.guided_meteor_timer.update(dt)
-            if self.guided_meteor_timer.done():
-                # 10% de chance de spawnar meteoro guiado
-                if random.random() < Config.GUIDED_METEOR_NORMAL_PHASES_CHANCE:
+            if self.guided_meteor_timer.done() and random.random() < self.spawn_intensity:
+                # Chance de spawnar meteoro guiado baseada na intensidade
+                base_chance = Config.GUIDED_METEOR_NORMAL_PHASES_CHANCE
+                if random.random() < base_chance:
                     from ..entities.guided_meteor import GuidedMeteor
 
                     guided_meteor = GuidedMeteor(
@@ -83,6 +103,10 @@ class EnemySpawner:
         """Atualiza o spawner para uma nova fase."""
         self.config = config
         self.stopped = False
+
+        # Reiniciar warm-up para nova fase (transições suaves)
+        self.warm_up_timer = Config.LEVEL_TRANSITION_DELAY
+        self.spawn_intensity = 0.0
 
         # Recriar timers para nova fase
         self.enemy_timers = {}

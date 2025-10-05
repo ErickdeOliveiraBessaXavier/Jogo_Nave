@@ -61,8 +61,14 @@ class Config:
 
     # === GAMEPLAY TIMING ===
     SHOOT_COOLDOWN: float = 0.20  # Tempo entre tiros quando segura a tecla
+    SPEED_ATTACK_MULTIPLIER: float = 2.0  # Multiplicador de velocidade de ataque com power-up de velocidade
     LEVEL_TRANSITION_DELAY: float = 2.0  # Delay entre fases (segundos)
-    BOSS_WARNING_DURATION: float = 5.0  # Duração do warning antes do boss
+    INITIAL_GAME_DELAY: float = 5.0  # Delay inicial antes da fase 1 começar (segundos)
+    
+    # Sistema de warning do boss (sequência de 3 fases)
+    BOSS_PRE_WARNING_DELAY: float = 5.0  # Delay antes do warning começar
+    BOSS_WARNING_DURATION: float = 3.0   # Duração do warning ativo 
+    BOSS_POST_WARNING_DELAY: float = 3.0 # Delay após warning antes do boss
 
     # === SCREEN SHAKE SETTINGS ===
     SCREEN_SHAKE_NORMAL: int = 10  # Intensidade normal do screen shake
@@ -79,7 +85,7 @@ class Config:
     BOSS_EXPLOSION_COUNT: int = 12  # Número de explosões em círculo
     BOSS_EXPLOSION_RADIUS: int = 60  # Raio das explosões em círculo
     BOSS_EXPLOSION_SMALL_SIZE: int = 40  # Tamanho explosões pequenas
-    BOSS_EXPLOSION_LARGE_SIZE: int = 120  # Tamanho explosão central
+    BOSS_EXPLOSION_LARGE_SIZE: int = 60  # Tamanho explosão central (reduzido para não demorar)
 
     # === UI SETTINGS ===
     WARNING_FONT_SIZE: int = 60  # Tamanho da fonte do warning
@@ -89,7 +95,7 @@ class Config:
     RAINBOW_DURATION: float = 15.0
 
     # === BOSS SETTINGS ===
-    BOSS_HEALTH: int = 850
+    BOSS_HEALTH: int = 50
     BOSS_FRENZY_THRESHOLD: float = 0.5
     BOSS_ENTRY_SPEED: float = 30.0
     BOSS_ENTRY_SHAKE_DURATION: float = 4.0
@@ -108,18 +114,18 @@ class Config:
 
     # === BOSS ATTACK ANIMATION TIMING ===
     # Modo Normal
-    BOSS_CHARGE_DURATION: float = 1.5  # Tempo do efeito visual de carregamento
+    BOSS_CHARGE_DURATION: float = 1.0  # Tempo do efeito visual de carregamento
     BOSS_LASER_DELAY: float = 0.3  # Delay antes do laser disparar (tempo de reação)
 
     # Modo Frenzy (mais rápido e intenso)
-    BOSS_FRENZY_CHARGE_DURATION: float = 0.25  # Carregamento 2x mais rápido
-    BOSS_FRENZY_LASER_DELAY: float = 0.15  # Delay 2x menor (menos tempo de reação)
+    BOSS_FRENZY_CHARGE_DURATION: float = 0.5  # Carregamento 2x mais rápido
+    BOSS_FRENZY_LASER_DELAY: float = 0.30  # Delay 2x menor (menos tempo de reação)
 
     # === MULTIPLICADORES DE VELOCIDADE DE ANIMAÇÃO ===
     # Controla a velocidade de TODOS os efeitos visuais (partículas, círculos, etc.)
-    BOSS_ANIMATION_SPEED_MULTIPLIER: float = 1.5  # Normal (1.0 = velocidade padrão)
+    BOSS_ANIMATION_SPEED_MULTIPLIER: float = 1.0  # Normal (1.0 = velocidade padrão)
     BOSS_FRENZY_ANIMATION_SPEED_MULTIPLIER: float = (
-        2.5  # Frenzy (2.5 = 2.5x mais rápido)
+        2.0  # Frenzy (2.5 = 2.5x mais rápido)
     )
 
     BOSS_FRENZY_SHAKE_DURATION: float = 3.0

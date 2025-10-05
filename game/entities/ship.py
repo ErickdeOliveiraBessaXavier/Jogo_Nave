@@ -18,6 +18,13 @@ class Ship:
         self.speed_boost_timer = 0.0
 
     @property
+    def attack_speed_multiplier(self) -> float:
+        """Retorna o multiplicador de velocidade de ataque baseado nos power-ups ativos."""
+        if self.speed_boost_timer > 0.0:
+            return Config.SPEED_ATTACK_MULTIPLIER  # Usar configuração personalizada
+        return 1.0
+
+    @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 

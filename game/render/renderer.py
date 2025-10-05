@@ -131,7 +131,7 @@ class Renderer:
             "[+] Vida extra",
             "[S] Escudo temporario",
             "[2X] Tiro duplo",
-            "[V] Velocidade aumentada",
+            "[V] Velocidade + Ataque rapido",
             "[*] Pontos bonus",
         ]
         x, y = Config.SCREEN_WIDTH - 400, 20
