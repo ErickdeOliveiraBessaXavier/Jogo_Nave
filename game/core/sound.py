@@ -4,9 +4,9 @@ import os
 import sys
 import threading
 import time
-from typing import Dict, List
+from typing import Dict, List, cast, Any
 
-from .sound_config import VOLUME_CONFIG, CHANNEL_CONFIG, BEHAVIOR_CONFIG
+from .sound_config import VOLUME_CONFIG, CHANNEL_CONFIG, BEHAVIOR_CONFIG, SOUND_PATHS
 
 
 def get_resource_path(relative_path: str) -> str:
@@ -61,97 +61,90 @@ class SoundManager:
         self._load_sounds()
     
     def _load_sounds(self):
-        """Carrega todos os sons do jogo usando configuração externa."""
-        base_path = get_resource_path("game/assets/sounds")
-        
-        # Verificar se a pasta base existe
+        """Carrega todos os sons do jogo usando as configurações de SOUND_PATHS."""
+        base_path = get_resource_path(str(SOUND_PATHS["base"]))
+
         if not os.path.exists(base_path):
+            print(f"Diretório de sons não encontrado: {base_path}")
             return
-        
+
+        sfx_paths = cast(Dict[str, Any], SOUND_PATHS["sfx"])
+
         # Carregar sons de tiro
         shot_sounds: List[pygame.mixer.Sound] = []
-        shot_path_template = "sfx/shots/tiro_{}.wav"
-        
-        for i in range(1, 4):  # tiro_1.wav, tiro_2.wav, tiro_3.wav
+        shot_path_template = sfx_paths["shots"]
+        for i in range(1, 4):
             sound_path = os.path.join(base_path, shot_path_template.format(i))
             if os.path.exists(sound_path):
                 try:
                     sound = pygame.mixer.Sound(sound_path)
-                    # Volume mais baixo para tiros
                     sound.set_volume(self.shot_volume_base * self.master_volume)
                     shot_sounds.append(sound)
                     self._sounds[f"shot_{i}"] = sound
                 except pygame.error as e:
                     print(f"Erro ao carregar som {sound_path}: {e}")
-        
         self._sound_groups["shots"] = shot_sounds
-        
+
         # Carregar sons de explosão
         explosion_sounds: List[pygame.mixer.Sound] = []
-        explosions_path = os.path.join(base_path, "sfx", "explosions")
+        explosion_paths = sfx_paths["explosions"]
         
-        if os.path.exists(explosions_path):
-            # Explosões de asteroides
-            for i in range(4):  # explosão_asteroides_0.wav até 3.wav
-                sound_path = os.path.join(explosions_path, f"explosão_asteroides_{i}.wav")
-                if os.path.exists(sound_path):
-                    try:
-                        sound = pygame.mixer.Sound(sound_path)
-                        sound.set_volume(self.sfx_volume * self.master_volume)
-                        explosion_sounds.append(sound)
-                        self._sounds[f"explosion_asteroid_{i}"] = sound
-                    except pygame.error as e:
-                        print(f"Erro ao carregar som {sound_path}: {e}")
-            
-            # Outros sons de explosão
-            explosion_files = {
-                "explosion_alien": "explosão_naves_alienigenas.wav",
-                "explosion_boss": "explisão_boss.wav", 
-                "boss_damage": "som_dano_boss.wav",
-                "ship_explosion": "explisão_nave.wav"
-            }
-            
-            for sound_key, filename in explosion_files.items():
-                sound_path = os.path.join(explosions_path, filename)
-                if os.path.exists(sound_path):
-                    try:
-                        sound = pygame.mixer.Sound(sound_path)
-                        sound.set_volume(self.sfx_volume * self.master_volume)
-                        self._sounds[sound_key] = sound
-                    except pygame.error as e:
-                        print(f"Erro ao carregar som {sound_path}: {e}")
-        
-        self._sound_groups["explosions"] = explosion_sounds
-        
-        # Carregamento do som de warning
-        ui_path = os.path.join(base_path, "sfx", "ui")
-        if os.path.exists(ui_path):
-            warning_path = os.path.join(ui_path, "warning.mp3")
-            if os.path.exists(warning_path):
+        # Explosões de asteroides
+        asteroid_template = explosion_paths["asteroid"]
+        for i in range(4):
+            sound_path = os.path.join(base_path, asteroid_template.format(i))
+            if os.path.exists(sound_path):
                 try:
-                    sound = pygame.mixer.Sound(warning_path)
+                    sound = pygame.mixer.Sound(sound_path)
                     sound.set_volume(self.sfx_volume * self.master_volume)
-                    self._sounds["warning"] = sound
+                    explosion_sounds.append(sound)
+                    self._sounds[f"explosion_asteroid_{i}"] = sound
                 except pygame.error as e:
-                    print(f"Erro ao carregar som {warning_path}: {e}")
+                    print(f"Erro ao carregar som {sound_path}: {e}")
         
-        # Sons do boss laser
-        laser_path = os.path.join(base_path, "sfx", "shots")
-        if os.path.exists(laser_path):
-            laser_files = {
-                "boss_laser_charging": "som_laser_carregando.mp3",
-                "boss_laser_fire": "som_laser.mp3"
-            }
-            
-            for sound_key, filename in laser_files.items():
-                sound_path = os.path.join(laser_path, filename)
-                if os.path.exists(sound_path):
-                    try:
-                        sound = pygame.mixer.Sound(sound_path)
-                        sound.set_volume(self.boss_laser_volume * self.master_volume)
-                        self._sounds[sound_key] = sound
-                    except pygame.error:
-                        pass  # Falha silenciosa se o arquivo não carregar
+        # Outras explosões
+        other_explosions = {
+            "explosion_alien": explosion_paths["alien"],
+            "explosion_boss": explosion_paths["boss"],
+            "boss_damage": explosion_paths["boss_damage"],
+            "ship_explosion": explosion_paths["ship"],
+        }
+        for key, path in other_explosions.items():
+            sound_path = os.path.join(base_path, path)
+            if os.path.exists(sound_path):
+                try:
+                    sound = pygame.mixer.Sound(sound_path)
+                    sound.set_volume(self.sfx_volume * self.master_volume)
+                    self._sounds[key] = sound
+                except pygame.error as e:
+                    print(f"Erro ao carregar som {sound_path}: {e}")
+
+        self._sound_groups["explosions"] = explosion_sounds
+
+        # Carregar som de warning
+        warning_path = os.path.join(base_path, sfx_paths["ui"]["warning"])
+        if os.path.exists(warning_path):
+            try:
+                sound = pygame.mixer.Sound(warning_path)
+                sound.set_volume(self.sfx_volume * self.master_volume)
+                self._sounds["warning"] = sound
+            except pygame.error as e:
+                print(f"Erro ao carregar som {warning_path}: {e}")
+
+        # Carregar sons do laser do boss
+        laser_sounds = {
+            "boss_laser_charging": sfx_paths["boss_laser_charging"],
+            "boss_laser_fire": sfx_paths["boss_laser_fire"],
+        }
+        for key, path in laser_sounds.items():
+            sound_path = os.path.join(base_path, path)
+            if os.path.exists(sound_path):
+                try:
+                    sound = pygame.mixer.Sound(sound_path)
+                    sound.set_volume(self.boss_laser_volume * self.master_volume)
+                    self._sounds[key] = sound
+                except pygame.error as e:
+                    print(f"Erro ao carregar som {sound_path}: {e}")
 
     def play_shot(self):
         """Toca um som de tiro com técnicas anti-irritação."""
@@ -308,13 +301,15 @@ class SoundManager:
     
     def play_background_music(self):
         """Inicia a música de fundo com transição suave."""
-        music_path = get_resource_path(os.path.join("game", "assets", "sounds", "music", "background.mp3"))
+        music_paths = cast(Dict[str, str], SOUND_PATHS["music"])
+        music_path = get_resource_path(os.path.join(str(SOUND_PATHS["base"]), music_paths["background"]))
         if os.path.exists(music_path) and self.current_music != "background":
             self._transition_to_music(music_path, "background")
     
     def play_boss_music(self):
         """Inicia a música do boss com transição suave."""
-        music_path = get_resource_path(os.path.join("game", "assets", "sounds", "music", "boss.mp3"))
+        music_paths = cast(Dict[str, str], SOUND_PATHS["music"])
+        music_path = get_resource_path(os.path.join(str(SOUND_PATHS["base"]), music_paths["boss"]))
         if os.path.exists(music_path) and self.current_music != "boss":
             self._transition_to_music(music_path, "boss")
 
