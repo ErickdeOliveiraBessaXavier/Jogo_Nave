@@ -157,10 +157,10 @@ class PlayingScene(Scene):
 
         self.entity_manager.update(dt, self.ship.rect.centerx, self.ship.rect.centery)
 
-        self.entity_manager.cleanup()
-
         # Processar colisões sempre (incluindo durante transições)
         self._handle_collisions()
+
+        self.entity_manager.cleanup()
 
         # Lógica de progressão de fase
         if self.pre_boss_transition:
@@ -226,7 +226,23 @@ class PlayingScene(Scene):
             self.entity_manager.bullets,
             self.entity_manager.enemies,
             self.entity_manager.explosions,
+            self.entity_manager.mine_explosions,
+            self.ship,
         )
+
+        mine_gain, mine_destroyed, mine_score_events, ship_hit = self.collisions.check_mine_explosions(
+            self.entity_manager.enemies,
+            self.entity_manager.mine_explosions,
+            self.entity_manager.explosions,
+            self.ship,
+        )
+        gain += mine_gain
+        destroyed += mine_destroyed
+        score_events.extend(mine_score_events)
+
+        if ship_hit:
+            self._handle_ship_hit()
+
         for x, y, pts in score_events:
             self.entity_manager.floating_scores.append(FloatingScore(x, y, pts))
         self.score += gain

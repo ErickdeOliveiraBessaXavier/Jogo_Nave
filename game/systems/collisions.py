@@ -6,18 +6,82 @@ from ..entities.bullet import Bullet
 from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
 from ..entities.explosion import Explosion
+from ..entities.mine_explosion import MineExplosion
 from ..entities.powerup import PowerUp
 from ..entities.boss import Boss
 from ..entities.floating_score import FloatingScore
 from ..core.sound import sound_manager
 
 
+from ..entities.explosive_mine import ExplosiveMine
+
+
 class Collisions:
+
+    def check_mine_explosions(
+        self,
+        enemies: list[Meteor | Alien | ExplosiveMine],
+        mine_explosions: list[MineExplosion],
+        explosions: list[Explosion],
+        ship: Ship,
+    ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+        ship_hit = False
+
+        for enemy in enemies[:]:
+            if isinstance(enemy, ExplosiveMine) and enemy.dead:
+                if enemy in enemies:
+                    enemies.remove(enemy)
+                cx, cy = (enemy.x, enemy.y)
+                explosion_radius = enemy.explosion_radius
+                mine_explosions.append(MineExplosion(cx, cy, size=explosion_radius))
+                if self.handle_mine_explosion(cx, cy, explosion_radius, enemies, ship, explosions):
+                    ship_hit = True
+                sound_manager.play_explosion_boss() # Som de explosão grande
+                pts = enemy.get_points_value()
+                score_gain += pts
+                destroyed_count += 1
+                score_events.append((cx, cy, pts))
+        return score_gain, destroyed_count, score_events, ship_hit
+
+    def handle_mine_explosion(
+        self,
+        explosion_x: float,
+        explosion_y: float,
+        explosion_radius: int,
+        enemies: list[Meteor | Alien | ExplosiveMine],
+        ship: Ship,
+        explosions: list[Explosion],
+    ) -> bool:
+        ship_hit = False
+        for enemy in enemies[:]:
+            dist_sq = (enemy.x - explosion_x) ** 2 + (enemy.y - explosion_y) ** 2
+            if dist_sq < explosion_radius ** 2:
+                if isinstance(enemy, ExplosiveMine):
+                    enemy.take_damage(enemy.health) # Trigger chain reaction
+                else:
+                    if enemy in enemies:
+                        enemies.remove(enemy)
+                    cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
+                    explosions.append(Explosion(cx, cy, size=enemy.w // 2))
+
+        # Check player collision
+        if ship.invuln <= 0:
+            dist_sq = (ship.x - explosion_x) ** 2 + (ship.y - explosion_y) ** 2
+            if dist_sq < explosion_radius ** 2:
+                explosions.append(Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30))
+                ship_hit = True
+        return ship_hit
+
     def bullets_vs_enemies(
         self,
         bullets: list[Bullet],
-        enemies: list[Meteor | Alien],
+        enemies: list[Meteor | Alien | ExplosiveMine],
         explosions: list[Explosion],
+        mine_explosions: list[MineExplosion],
+        ship: Ship,
     ):
         score_gain = 0
         destroyed_count = 0
@@ -28,27 +92,31 @@ class Collisions:
                 if b.rect.colliderect(enemy.rect):
                     if b in bullets:
                         bullets.remove(b)
-                    if enemy in enemies:
-                        enemies.remove(enemy)
 
-                    cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
-                    explosions.append(Explosion(cx, cy, size=enemy.w // 2))
-                    
-                    # Tocar som de explosão baseado no tipo de inimigo
-                    if isinstance(enemy, Meteor):
-                        sound_manager.play_explosion_asteroid()
-                    else:  # Se não é Meteor, é Alien
-                        sound_manager.play_explosion_alien()
+                    if isinstance(enemy, ExplosiveMine):
+                        enemy.take_damage(1)
+                    else:
+                        if enemy in enemies:
+                            enemies.remove(enemy)
 
-                    pts = enemy.get_points_value()
-                    score_gain += pts
-                    destroyed_count += 1
-                    score_events.append((cx, cy, pts))
+                        cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
+                        explosions.append(Explosion(cx, cy, size=enemy.w // 2))
+                        
+                        # Tocar som de explosão baseado no tipo de inimigo
+                        if isinstance(enemy, Meteor):
+                            sound_manager.play_explosion_asteroid()
+                        else:  # Se não é Meteor, é Alien
+                            sound_manager.play_explosion_alien()
 
-                    if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
-                        fragments = enemy.spawn_fragments()
-                        if fragments:
-                            enemies.extend(fragments)
+                        pts = enemy.get_points_value()
+                        score_gain += pts
+                        destroyed_count += 1
+                        score_events.append((cx, cy, pts))
+
+                        if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
+                            fragments = enemy.spawn_fragments()
+                            if fragments:
+                                enemies.extend(fragments)
                     break
         return score_gain, destroyed_count, score_events
 
@@ -97,7 +165,7 @@ class Collisions:
         return False
 
     def ship_vs_enemies(
-        self, ship: Ship, enemies: list[Meteor | Alien], explosions: list[Explosion]
+        self, ship: Ship, enemies: list[Meteor | Alien | ExplosiveMine], explosions: list[Explosion]
     ) -> bool:
         if ship.invuln > 0:
             return False

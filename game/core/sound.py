@@ -40,6 +40,7 @@ class SoundManager:
         self.master_volume: float = VOLUME_CONFIG["master"]
         self.sfx_volume: float = VOLUME_CONFIG["sfx"]
         self.music_volume: float = VOLUME_CONFIG["music"]
+        self.boss_music_volume: float = VOLUME_CONFIG["boss_music"]
         self.boss_laser_volume: float = VOLUME_CONFIG["boss_laser"]
         
         # Controle de tiros para evitar irritação
@@ -241,14 +242,18 @@ class SoundManager:
         """Controla o volume da música (ducking) para dar espaço aos efeitos do boss."""
         if not hasattr(pygame.mixer, 'music') or not pygame.mixer.music.get_busy():
             return
+        
+        current_music_base_volume = self.original_music_volume
+        if self.current_music == "boss":
+            current_music_base_volume = self.boss_music_volume
             
         if duck:
             # Reduzir volume da música para 60% do normal
-            duck_volume = self.original_music_volume * 0.6
+            duck_volume = current_music_base_volume * 0.6
             pygame.mixer.music.set_volume(duck_volume * self.master_volume)
         else:
             # Restaurar volume original da música
-            pygame.mixer.music.set_volume(self.original_music_volume * self.master_volume)
+            pygame.mixer.music.set_volume(current_music_base_volume * self.master_volume)
     
     def play_ship_explosion(self):
         """Toca som de explosão da nave do jogador."""
@@ -273,6 +278,12 @@ class SoundManager:
     def set_shot_volume(self, volume: float):
         """Define o volume específico dos tiros (0.0 a 1.0)."""
         self.shot_volume_base = max(0.0, min(1.0, volume))
+
+    def set_boss_music_volume(self, volume: float):
+        """Define o volume da música do boss (0.0 a 1.0)."""
+        self.boss_music_volume = max(0.0, min(1.0, volume))
+        if self.current_music == "boss":
+            pygame.mixer.music.set_volume(self.boss_music_volume * self.master_volume)
     
     def get_volumes(self):
         """Mostra todos os volumes atuais."""
@@ -280,6 +291,7 @@ class SoundManager:
         print(f"  🔊 Geral: {self.master_volume:.1%}")
         print(f"  🎵 Efeitos: {self.sfx_volume:.1%}")
         print(f"  🎼 Música: {self.music_volume:.1%}")
+        print(f"  🎼 Música Boss: {self.boss_music_volume:.1%}")
         print(f"  🔫 Tiros: {self.shot_volume_base:.1%}")
     
     def _update_all_volumes(self):
@@ -343,7 +355,10 @@ class SoundManager:
             
             # Fase 2: Carrega e inicia nova música
             pygame.mixer.music.load(music_path)
-            target_volume = self.music_volume * self.master_volume
+            if music_type == "boss":
+                target_volume = self.boss_music_volume * self.master_volume
+            else:
+                target_volume = self.music_volume * self.master_volume
             
             # Inicia com volume zero
             pygame.mixer.music.set_volume(0)

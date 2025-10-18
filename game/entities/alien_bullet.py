@@ -9,6 +9,10 @@ class AlienBullet:
         self.w, self.h = 4, 12
         self.speed = 250
         self.dead = False
+        self.color = colors.MAGENTA
+        self.light_magenta = (255, 100, 255)
+        self.flash_timer = 0.0
+        self.flash_interval = 0.1
 
     @property
     def rect(self) -> pygame.Rect:
@@ -19,5 +23,13 @@ class AlienBullet:
         if self.y > Config.SCREEN_HEIGHT:
             self.dead = True
 
+        self.flash_timer += dt
+        if self.flash_timer >= self.flash_interval:
+            if self.color == colors.MAGENTA:
+                self.color = self.light_magenta
+            else:
+                self.color = colors.MAGENTA
+            self.flash_timer = 0.0
+
     def draw(self, surface: pygame.Surface):
-        pygame.draw.rect(surface, colors.MAGENTA, self.rect)
+        pygame.draw.rect(surface, self.color, self.rect)

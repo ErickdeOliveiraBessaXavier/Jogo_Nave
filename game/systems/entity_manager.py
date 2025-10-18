@@ -6,18 +6,21 @@ from ..entities.boss import Boss
 from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
 from ..entities.explosion import Explosion
+from ..entities.mine_explosion import MineExplosion
 from ..entities.powerup import PowerUp
 from ..entities.floating_score import FloatingScore
 from ..entities.guided_meteor import GuidedMeteor
+from ..entities.explosive_mine import ExplosiveMine
 
 
 class EntityManager:
     def __init__(self):
         self.bullets: list[Bullet] = []
-        self.enemies: list[Meteor | Alien] = []
+        self.enemies: list[Meteor | Alien | ExplosiveMine] = []
         self.alien_bullets: list[AlienBullet] = []
         self.boss_lasers: list[BossLaser] = []
         self.explosions: list[Explosion] = []
+        self.mine_explosions: list[MineExplosion] = []
         self.powerups: list[PowerUp] = []
         self.floating_scores: list[FloatingScore] = []
         self.boss: Boss | None = None
@@ -32,6 +35,8 @@ class EntityManager:
             bl.update(dt)
         for e in self.explosions:
             e.update(dt)
+        for me in self.mine_explosions:
+            me.update(dt)
         for p in self.powerups:
             p.update(dt)
         for fs in self.floating_scores:
@@ -61,6 +66,7 @@ class EntityManager:
             self.alien_bullets,
             self.boss_lasers,
             self.explosions,
+            self.mine_explosions,
             self.powerups,
             self.floating_scores,
         ]
@@ -74,8 +80,13 @@ class EntityManager:
         self.bullets = [b for b in self.bullets if not b.dead]
         self.alien_bullets = [ab for ab in self.alien_bullets if not ab.dead]
         self.boss_lasers = [bl for bl in self.boss_lasers if not bl.dead]
-        self.enemies = [e for e in self.enemies if not e.dead]
+        self.enemies = [
+            e
+            for e in self.enemies
+            if not e.dead and not (isinstance(e, ExplosiveMine) and e.is_off_screen())
+        ]
         self.explosions = [e for e in self.explosions if not e.finished()]
+        self.mine_explosions = [me for me in self.mine_explosions if not me.finished()]
         self.powerups = [p for p in self.powerups if not p.is_off_screen()]
         self.floating_scores = [fs for fs in self.floating_scores if not fs.is_dead()]
 
@@ -87,6 +98,7 @@ class EntityManager:
         self.floating_scores.clear()
         self.enemies.clear()
         self.explosions.clear()
+        self.mine_explosions.clear()
         self.boss = None
 
     def clear_for_level_transition(self):
@@ -99,4 +111,5 @@ class EntityManager:
         self.floating_scores.clear()
         self.enemies.clear()
         self.explosions.clear()
+        self.mine_explosions.clear()
         self.boss = None

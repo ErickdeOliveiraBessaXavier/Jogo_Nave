@@ -6,6 +6,8 @@ from ..core.config import Config, PowerUpType
 from ..entities.powerup import PowerUp
 from ..core.levels import LevelConfig
 
+from ..entities.explosive_mine import ExplosiveMine
+
 if TYPE_CHECKING:
     from ..entities.meteor import Meteor
     from ..entities.alien import Alien
@@ -38,10 +40,14 @@ class EnemySpawner:
         self.guided_meteor_timer = Timer(3.0)
         self.guided_meteor_timer.start()
 
+        # Timer para minas explosivas
+        self.mine_spawn_timer = Timer(10.0)
+        self.mine_spawn_timer.start()
+
     def update(
         self,
         dt: float,
-        enemies: List[Union["Meteor", "Alien"]],
+        enemies: List[Union["Meteor", "Alien", "ExplosiveMine"]],
         player_x: float | None = None,
         player_y: float | None = None,
     ) -> None:
@@ -66,6 +72,15 @@ class EnemySpawner:
                 enemies.append(new_enemy)  # type: ignore[arg-type]
                 timer.start()  # Reiniciar timer
 
+        # Spawner de minas
+        if self.config.mines_enabled:
+            self.mine_spawn_timer.update(dt)
+            if self.mine_spawn_timer.done() and random.random() < self.spawn_intensity:
+                if random.random() < 0.5: # 50% de chance de spawnar minas
+                                    num_mines = random.choices([2, 3, 5], weights=[0.50, 0.25, 0.10], k=1)[0]
+                                    for _ in range(num_mines):
+                                        enemies.append(ExplosiveMine(y=-random.uniform(10, 100))) # Adiciona um delay aleatório no eixo y
+                                    self.mine_spawn_timer.start()
         # Timer separado para meteoros teleguiados (a cada 3 segundos)
         # Só funciona se a fase tem meteoros na lista de tipos
         from ..entities.meteor import Meteor
