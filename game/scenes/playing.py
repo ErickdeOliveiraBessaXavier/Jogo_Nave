@@ -133,9 +133,9 @@ class PlayingScene(Scene):
             and self.shoot_cd == 0.0
             # Permitir tiros durante transições para destruir inimigos restantes
         ):
-            bullet_positions = self.ship.bullet_spawn()
-            for pos in bullet_positions:
-                self.entity_manager.bullets.append(Bullet(*pos))
+            bullet_specs = self.ship.bullet_spawn()
+            for x, y, is_piercing in bullet_specs:
+                self.entity_manager.bullets.append(Bullet(x, y, piercing=is_piercing))
             # Tocar som de tiro (varia entre os 3 sons automaticamente)
             sound_manager.play_shot()
             # Aplicar multiplicador de velocidade de ataque do power-up de velocidade
@@ -294,6 +294,10 @@ class PlayingScene(Scene):
                     )
                 elif kind == "score":
                     self.score += Config.POWERUP_SCORE_BONUS
+                elif kind == "piercing_shot":
+                    self.ship.piercing_shot_timer = max(
+                        self.ship.piercing_shot_timer, Config.PIERCING_SHOT_DURATION
+                    )
                 elif kind == "rainbow":
                     self.lives += 1
                     self.ship.lives = self.lives

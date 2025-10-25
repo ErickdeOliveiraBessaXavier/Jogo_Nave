@@ -10,6 +10,7 @@ class PowerUpType(Enum):
     SPEED = "speed"
     SCORE = "score"
     RAINBOW = "rainbow"
+    PIERCING_SHOT = "piercing_shot"
 
 
 @dataclass(frozen=True)
@@ -73,13 +74,16 @@ class Config:
     DOUBLE_SHOT_DURATION: float = 10.0
     SPEED_BOOST_DURATION: float = 8.0
     RAINBOW_DURATION: float = 15.0
+    PIERCING_SHOT_DURATION: float = 7.0
     SPEED_ATTACK_MULTIPLIER: float = 2.0  # Multiplicador de velocidade de ataque
+    PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER: float = 1.5
 
     # Rarity system - chances devem somar 1.0
     POWERUP_RARITY_CHANCES = {
-        PowerUpType.SHIELD: 0.40,       # 40% - Comum
-        PowerUpType.DOUBLE_SHOT: 0.30,  # 30% - Comum  
-        PowerUpType.SPEED: 0.15,        # 15% - Raro
+        PowerUpType.SHIELD: 0.30,       # 30% - Comum
+        PowerUpType.DOUBLE_SHOT: 0.25,  # 25% - Comum
+        PowerUpType.SPEED: 0.15,        # 15% - Incomum
+        PowerUpType.PIERCING_SHOT: 0.15, # 15% - Raro
         PowerUpType.LIFE: 0.10,         # 10% - Raro
         PowerUpType.SCORE: 0.04,        # 4% - Épico
         PowerUpType.RAINBOW: 0.01       # 1% - Lendário

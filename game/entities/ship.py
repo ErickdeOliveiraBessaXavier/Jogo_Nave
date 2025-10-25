@@ -16,12 +16,15 @@ class Ship:
         # Power-ups
         self.double_shot_timer = 0.0
         self.speed_boost_timer = 0.0
+        self.piercing_shot_timer = 0.0
 
     @property
     def attack_speed_multiplier(self) -> float:
         """Retorna o multiplicador de velocidade de ataque baseado nos power-ups ativos."""
         if self.speed_boost_timer > 0.0:
             return Config.SPEED_ATTACK_MULTIPLIER  # Usar configuração personalizada
+        if self.piercing_shot_timer > 0.0:
+            return Config.PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER
         return 1.0
 
     @property
@@ -34,6 +37,7 @@ class Ship:
 
         self.double_shot_timer = max(0.0, self.double_shot_timer - dt)
         self.speed_boost_timer = max(0.0, self.speed_boost_timer - dt)
+        self.piercing_shot_timer = max(0.0, self.piercing_shot_timer - dt)
 
     def move(self, held_actions: set[str], dt: float):
         current_speed = self.speed * (1.5 if self.speed_boost_timer > 0 else 1.0)
@@ -57,14 +61,15 @@ class Ship:
         if self.y + self.h > Config.SCREEN_HEIGHT:
             self.y = Config.SCREEN_HEIGHT - self.h
 
-    def bullet_spawn(self) -> list[tuple[float, float]]:
+    def bullet_spawn(self) -> list[tuple[float, float, bool]]:
+        is_piercing = self.piercing_shot_timer > 0
         if self.double_shot_timer > 0:
             return [
-                (self.x + self.w * 0.2 - 2.5, self.y),
-                (self.x + self.w * 0.8 - 2.5, self.y),
+                (self.x + self.w * 0.2 - 2.5, self.y, is_piercing),
+                (self.x + self.w * 0.8 - 2.5, self.y, is_piercing),
             ]
         else:
-            return [(self.x + self.w / 2 - 2.5, self.y)]
+            return [(self.x + self.w / 2 - 2.5, self.y, is_piercing)]
 
     def draw(self, surface: pygame.Surface):
         if not self.visible:
@@ -74,7 +79,9 @@ class Ship:
             return
 
         ship_color = (255, 255, 255)
-        if self.speed_boost_timer > 0:
+        if self.piercing_shot_timer > 0:
+            ship_color = (200, 0, 255) # Roxo para piercing
+        elif self.speed_boost_timer > 0:
             ship_color = (100, 255, 255)
         elif self.double_shot_timer > 0:
             ship_color = (255, 255, 100)

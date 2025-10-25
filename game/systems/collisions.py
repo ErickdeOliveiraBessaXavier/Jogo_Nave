@@ -90,8 +90,9 @@ class Collisions:
         for b in bullets[:]:
             for enemy in enemies[:]:
                 if b.rect.colliderect(enemy.rect):
-                    if b in bullets:
-                        bullets.remove(b)
+                    if not b.piercing:
+                        if b in bullets:
+                            bullets.remove(b)
 
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
@@ -117,7 +118,8 @@ class Collisions:
                             fragments = enemy.spawn_fragments()
                             if fragments:
                                 enemies.extend(fragments)
-                    break
+                    if not b.piercing:
+                        break # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
     def bullets_vs_boss(
@@ -130,7 +132,8 @@ class Collisions:
         score_gain = 0
         for b in bullets[:]:
             if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
-                bullets.remove(b)
+                if not b.piercing:
+                    bullets.remove(b)
                 boss.take_damage(b.damage)
                 # Tocar som de dano no boss
                 sound_manager.play_boss_damage()

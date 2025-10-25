@@ -4,11 +4,12 @@ from ..core import colors
 
 
 class Bullet:
-    def __init__(self, x: float, y: float, damage: int = 10):
+    def __init__(self, x: float, y: float, damage: int = 10, piercing: bool = False):
         self.x, self.y = x, y
         self.w, self.h = 3, 10
         self.damage = damage
         self.dead = False
+        self.piercing = piercing
 
     @property
     def rect(self) -> pygame.Rect:
@@ -20,4 +21,5 @@ class Bullet:
             self.dead = True
 
     def draw(self, surface: pygame.Surface):
-        pygame.draw.rect(surface, colors.YELLOW, self.rect)
+        color = colors.PURPLE if self.piercing else colors.YELLOW
+        pygame.draw.rect(surface, color, self.rect)

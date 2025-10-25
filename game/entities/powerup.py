@@ -53,6 +53,7 @@ class PowerUp:
             "double_shot": (50, 255, 50),  # verde mais suave
             "speed": (255, 255, 50),    # amarelo mais suave
             "score": (255, 50, 255),    # magenta mais suave
+            "piercing_shot": (200, 0, 255), # roxo
             "rainbow": (255, 255, 255), # branco para rainbow
         }
 
@@ -62,6 +63,7 @@ class PowerUp:
             "double_shot": "[2X]",
             "speed": "[V]",
             "score": "[*]",
+            "piercing_shot": "[P]",
             "rainbow": "[ALL]",
         }
 

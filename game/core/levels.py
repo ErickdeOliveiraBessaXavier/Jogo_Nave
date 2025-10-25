@@ -33,10 +33,9 @@ LEVELS: list[LevelConfig] = [
     LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            Meteor: 0.7,
+            Meteor: 0.9,
         },
-        enemies_to_clear=0,
-        boss_type=Boss,
+        enemies_to_clear=250,
     ),
     LevelConfig(
         level_number=2,
