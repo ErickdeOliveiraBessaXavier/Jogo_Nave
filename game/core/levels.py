@@ -36,6 +36,7 @@ LEVELS: list[LevelConfig] = [
             Meteor: 0.9,
         },
         enemies_to_clear=250,
+        mines_enabled=True,
     ),
     LevelConfig(
         level_number=2,

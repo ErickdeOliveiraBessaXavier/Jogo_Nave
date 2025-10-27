@@ -29,6 +29,10 @@ class ExplosiveMine:
         self.pre_explosion_timer = 0.0
         self.is_exploding = False
 
+        # Pulsing animation
+        self.animation_timer = 0.0
+        self.pulse_scale = 1.0
+
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x) - self.radius, int(self.y) - self.radius, self.radius * 2, self.radius * 2)
@@ -56,12 +60,21 @@ class ExplosiveMine:
                 self.flash_timer = 0.0
             if self.pre_explosion_timer <= 0:
                 self.dead = True
+            
+            # Reset pulsing animation when exploding
+            self.pulse_scale = 1.0
             return
 
         self.y += self.speed * dt
 
         if self.shake_timer > 0:
             self.shake_timer -= dt
+
+        # Pulsing animation
+        self.animation_timer += dt * 3  # velocidade da pulsação
+        self.pulse_scale = 1.0 + 0.2 * abs(
+            pygame.math.Vector2(1, 0).rotate(self.animation_timer * 57.3).x
+        )
 
     def is_off_screen(self) -> bool:
         return self.y > Config.SCREEN_HEIGHT + self.radius
@@ -72,8 +85,9 @@ class ExplosiveMine:
             x += random.randint(-self.shake_intensity, self.shake_intensity)
             y += random.randint(-self.shake_intensity, self.shake_intensity)
 
-        pygame.draw.circle(surface, self.outline_color, (int(x), int(y)), self.radius)
-        pygame.draw.circle(surface, self.color, (int(x), int(y)), self.radius - 4)
+        pulsing_radius = self.radius * self.pulse_scale
+        pygame.draw.circle(surface, self.outline_color, (int(x), int(y)), int(pulsing_radius))
+        pygame.draw.circle(surface, self.color, (int(x), int(y)), int(pulsing_radius) - 4)
 
         if self.is_exploding:
             # Draw explosion radius indicator
