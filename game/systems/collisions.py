@@ -57,21 +57,33 @@ class Collisions:
     ) -> bool:
         ship_hit = False
         for enemy in enemies[:]:
-            dist_sq = (enemy.x - explosion_x) ** 2 + (enemy.y - explosion_y) ** 2
-            if dist_sq < explosion_radius ** 2:
+            if isinstance(enemy, ExplosiveMine):
+                enemy_cx, enemy_cy = enemy.x, enemy.y
+                enemy_r = enemy.radius
+            else:
+                enemy_cx, enemy_cy = enemy.x + enemy.w / 2, enemy.y + enemy.h / 2
+                enemy_r = enemy.w / 2
+
+            dist_sq = (enemy_cx - explosion_x) ** 2 + (enemy_cy - explosion_y) ** 2
+            if dist_sq < (explosion_radius + enemy_r) ** 2:
                 if isinstance(enemy, ExplosiveMine):
-                    enemy.take_damage(enemy.health) # Trigger chain reaction
+                    enemy.take_damage(enemy.health)  # Trigger chain reaction
                 else:
                     if enemy in enemies:
                         enemies.remove(enemy)
-                    cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
-                    explosions.append(Explosion(cx, cy, size=enemy.w // 2))
+                    explosions.append(Explosion(enemy_cx, enemy_cy, size=enemy.w // 2))
 
         # Check player collision
         if ship.invuln <= 0:
-            dist_sq = (ship.x - explosion_x) ** 2 + (ship.y - explosion_y) ** 2
-            if dist_sq < explosion_radius ** 2:
-                explosions.append(Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30))
+            ship_cx = ship.x + ship.w / 2
+            ship_cy = ship.y + ship.h / 2
+            ship_r = ship.w / 2
+
+            dist_sq = (ship_cx - explosion_x) ** 2 + (ship_cy - explosion_y) ** 2
+            if dist_sq < (explosion_radius + ship_r) ** 2:
+                explosions.append(
+                    Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
+                )
                 ship_hit = True
         return ship_hit
 
