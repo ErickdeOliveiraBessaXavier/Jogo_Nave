@@ -20,3 +20,22 @@ DARK_GRAY: Color = (64, 64, 64)
 BOSS_AIM_LINE: Color = (255, 100, 100)
 GUIDED_METEOR_GREEN: Color = (50, 255, 50)  # Verde brilhante para meteoros teleguiados
 PURPLE: Color = (200, 0, 255)
+
+# Cores dos power-ups
+POWERUP_LIFE: Color = (255, 50, 50)
+POWERUP_SHIELD: Color = (50, 50, 255)
+POWERUP_DOUBLE_SHOT: Color = (50, 255, 50)
+POWERUP_SPEED: Color = (255, 255, 50)
+POWERUP_SCORE: Color = (255, 50, 255)
+POWERUP_PIERCING_SHOT: Color = (200, 0, 255)
+POWERUP_RAINBOW: Color = (255, 255, 255)
+
+RAINBOW_COLORS = [
+    (255, 0, 0),      # vermelho
+    (255, 127, 0),    # laranja
+    (255, 255, 0),    # amarelo
+    (0, 255, 0),      # verde
+    (0, 0, 255),      # azul
+    (75, 0, 130),     # índigo
+    (148, 0, 211),    # violeta
+]

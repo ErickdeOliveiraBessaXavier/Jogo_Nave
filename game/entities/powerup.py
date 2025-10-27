@@ -3,6 +3,10 @@ import pygame
 from typing import Optional
 from ..core.config import Config, PowerUpType
 from ..core.assets import get_font
+from ..core.colors import (
+    POWERUP_LIFE, POWERUP_SHIELD, POWERUP_DOUBLE_SHOT, POWERUP_SPEED,
+    POWERUP_SCORE, POWERUP_PIERCING_SHOT, POWERUP_RAINBOW, RAINBOW_COLORS
+)
 
 
 class PowerUp:
@@ -48,13 +52,13 @@ class PowerUp:
 
     def draw(self, surface: pygame.Surface):
         color_map = {
-            "life": (255, 50, 50),      # vermelho mais suave
-            "shield": (50, 50, 255),    # azul mais suave
-            "double_shot": (50, 255, 50),  # verde mais suave
-            "speed": (255, 255, 50),    # amarelo mais suave
-            "score": (255, 50, 255),    # magenta mais suave
-            "piercing_shot": (200, 0, 255), # roxo
-            "rainbow": (255, 255, 255), # branco para rainbow
+            "life": POWERUP_LIFE,
+            "shield": POWERUP_SHIELD,
+            "double_shot": POWERUP_DOUBLE_SHOT,
+            "speed": POWERUP_SPEED,
+            "score": POWERUP_SCORE,
+            "piercing_shot": POWERUP_PIERCING_SHOT,
+            "rainbow": POWERUP_RAINBOW,
         }
 
         text_map = {
@@ -123,15 +127,7 @@ class PowerUp:
         import math
 
         # Cria múltiplas camadas de círculos com cores diferentes
-        colors = [
-            (255, 0, 0),  # vermelho
-            (255, 127, 0),  # laranja
-            (255, 255, 0),  # amarelo
-            (0, 255, 0),  # verde
-            (0, 0, 255),  # azul
-            (75, 0, 130),  # índigo
-            (148, 0, 211),  # violeta
-        ]
+        colors = RAINBOW_COLORS
 
         # Desenha círculos concêntricos com cores do arco-íris
         for i, color in enumerate(colors):
