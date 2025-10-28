@@ -7,9 +7,10 @@ Um emocionante jogo de tiro espacial desenvolvido com Python e Pygame! Controle 
 ### 🎮 **Gameplay**
 - **Controle fluido** da nave com movimentação e tiro contínuo
 - **Múltiplos níveis** com dificuldade progressiva  
-- **Sistema de inimigos** diversificado (meteoros, aliens, meteoros teleguiados)
-- **Batalhas épicas** contra chefes com múltiplos ataques
+- **Sistema de inimigos** diversificado (meteoros, aliens, naves kamikaze)
+- **Batalhas épicas** contra chefes com múltiplos padrões de ataque
 - **Sistema de pontuação** baseado em performance
+- **Trilha sonora e efeitos sonoros** imersivos
 
 ### 🎁 **Power-ups com Sistema de Raridade**
 - **Shield** (40%) - Proteção temporária
@@ -20,10 +21,11 @@ Um emocionante jogo de tiro espacial desenvolvido com Python e Pygame! Controle 
 - **Rainbow** (1%) - Todos os power-ups!
 
 ### 🎯 **Recursos Avançados**
-- **Meteoros teleguiados** que perseguem o jogador
-- **Sistema de spawn** individualizado por tipo de inimigo
-- **Efeitos visuais** e screen shake
+- **Inimigos com comportamento avançado** (minas explosivas, meteoros teleguiados)
+- **Boss com sistema de mira** e múltiplos canhões
+- **Sistema de partículas** para explosões e efeitos visuais
 - **Configurações centralizadas** para fácil balanceamento
+- **Sistema de som dinâmico** com música para gameplay e batalhas de chefe
 
 ## 🎮 Como Jogar
 
@@ -58,7 +60,9 @@ python run.py
 
 ```
 game/
-├── core/           # Sistemas principais
+├── assets/         # Recursos visuais e sonoros
+│   ├── sounds/     # Efeitos sonoros e música
+├── core/           # Sistemas principais (som, input, configurações)
 ├── entities/       # Entidades do jogo (nave, inimigos, projéteis)
 ├── render/         # Sistema de renderização
 ├── scenes/         # Cenas do jogo (menu, jogo, game over)
@@ -73,6 +77,12 @@ game/
 - **Type Hints** - Código tipado e documentado
 
 ## 📈 **Versões**
+
+### v3.0 - Sistema de Som e Novas Mecânicas
+- ✅ **Sistema de som completo** com música de fundo, música de chefe e SFX
+- ✅ **Novos inimigos:** Minas explosivas e naves menores
+- ✅ **Boss aprimorado** com novos padrões de ataque (canhões e mira)
+- ✅ **Efeitos de partículas** para o boss
 
 ### v2.0 - Sistema de Raridade de Power-ups
 - ✅ Implementado sistema de raridade individualizada
@@ -106,21 +116,9 @@ Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para detalhes.
 - [ ] Sistema de conquistas
 - [ ] Múltiplos tipos de nave
 - [ ] Editor de níveis
-- [ ] Música e efeitos sonoros
+- [x] Música e efeitos sonoros
 - [ ] Multiplayer local
 
 ---
 
 **Desenvolvido com ❤️ por [ErickdeOliveiraBessaXavier](https://github.com/ErickdeOliveiraBessaXavier)**
-
-## Controles
-
-*   **Setas ou WASD:** Mover a nave.
-*   **Barra de espaço ou Enter:** Atirar.
-*   **P:** Pausar o jogo.
-*   **R:** Reiniciar o jogo após o game over.
-
-## Tecnologias Utilizadas
-
-*   Python
-*   Pygame
