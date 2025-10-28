@@ -17,6 +17,7 @@ class Ship:
         self.double_shot_timer = 0.0
         self.speed_boost_timer = 0.0
         self.piercing_shot_timer = 0.0
+        self.mini_ships_timer = 0.0
 
     @property
     def attack_speed_multiplier(self) -> float:
@@ -38,6 +39,7 @@ class Ship:
         self.double_shot_timer = max(0.0, self.double_shot_timer - dt)
         self.speed_boost_timer = max(0.0, self.speed_boost_timer - dt)
         self.piercing_shot_timer = max(0.0, self.piercing_shot_timer - dt)
+        self.mini_ships_timer = max(0.0, self.mini_ships_timer - dt)
 
     def move(self, held_actions: set[str], dt: float):
         current_speed = self.speed * (1.5 if self.speed_boost_timer > 0 else 1.0)
@@ -81,6 +83,8 @@ class Ship:
         ship_color = (255, 255, 255)
         if self.piercing_shot_timer > 0:
             ship_color = (200, 0, 255) # Roxo para piercing
+        elif self.mini_ships_timer > 0:
+            ship_color = (173, 216, 230)
         elif self.speed_boost_timer > 0:
             ship_color = (100, 255, 255)
         elif self.double_shot_timer > 0:

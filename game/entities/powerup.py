@@ -5,7 +5,8 @@ from ..core.config import Config, PowerUpType
 from ..core.assets import get_font
 from ..core.colors import (
     POWERUP_LIFE, POWERUP_SHIELD, POWERUP_DOUBLE_SHOT, POWERUP_SPEED,
-    POWERUP_SCORE, POWERUP_PIERCING_SHOT, POWERUP_RAINBOW, RAINBOW_COLORS
+    POWERUP_SCORE, POWERUP_PIERCING_SHOT, POWERUP_RAINBOW, RAINBOW_COLORS,
+    POWERUP_MINI_SHIPS
 )
 
 
@@ -58,6 +59,7 @@ class PowerUp:
             "speed": POWERUP_SPEED,
             "score": POWERUP_SCORE,
             "piercing_shot": POWERUP_PIERCING_SHOT,
+            "mini_ships": POWERUP_MINI_SHIPS,
             "rainbow": POWERUP_RAINBOW,
         }
 
@@ -68,6 +70,7 @@ class PowerUp:
             "speed": "[V]",
             "score": "[*]",
             "piercing_shot": "[P]",
+            "mini_ships": "[M]",
             "rainbow": "[ALL]",
         }
 

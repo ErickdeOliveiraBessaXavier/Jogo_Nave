@@ -11,6 +11,7 @@ from ..entities.powerup import PowerUp
 from ..entities.boss import Boss
 from ..entities.floating_score import FloatingScore
 from ..core.sound import sound_manager
+from ..entities.mini_ship_bullet import MiniShipBullet
 
 
 from ..entities.explosive_mine import ExplosiveMine
@@ -86,6 +87,48 @@ class Collisions:
                 )
                 ship_hit = True
         return ship_hit
+
+    def mini_ship_bullets_vs_enemies(
+        self,
+        mini_ship_bullets: list[MiniShipBullet],
+        enemies: list[Meteor | Alien | ExplosiveMine],
+        explosions: list[Explosion],
+    ):
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        for b in mini_ship_bullets[:]:
+            for enemy in enemies[:]:
+                if b.rect.colliderect(enemy.rect):
+                    if b in mini_ship_bullets:
+                        mini_ship_bullets.remove(b)
+
+                    if isinstance(enemy, ExplosiveMine):
+                        enemy.take_damage(1)
+                    else:
+                        if enemy in enemies:
+                            enemies.remove(enemy)
+
+                        cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
+                        explosions.append(Explosion(cx, cy, size=enemy.w // 2))
+                        
+                        if isinstance(enemy, Meteor):
+                            sound_manager.play_explosion_asteroid()
+                        else:
+                            sound_manager.play_explosion_alien()
+
+                        pts = enemy.get_points_value()
+                        score_gain += pts
+                        destroyed_count += 1
+                        score_events.append((cx, cy, pts))
+
+                        if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
+                            fragments = enemy.spawn_fragments()
+                            if fragments:
+                                enemies.extend(fragments)
+                    break # Bullet is gone, check next bullet
+        return score_gain, destroyed_count, score_events
 
     def bullets_vs_enemies(
         self,
@@ -186,7 +229,10 @@ class Collisions:
             return False
         for enemy in enemies[:]:
             if ship.rect.colliderect(enemy.rect):
-                enemies.remove(enemy)
+                if isinstance(enemy, ExplosiveMine):
+                    enemy.dead = True  # Explode immediately
+                else:
+                    enemies.remove(enemy)
                 explosions.append(
                     Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
                 )

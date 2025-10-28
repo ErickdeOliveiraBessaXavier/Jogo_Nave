@@ -11,6 +11,7 @@ class PowerUpType(Enum):
     SCORE = "score"
     RAINBOW = "rainbow"
     PIERCING_SHOT = "piercing_shot"
+    MINI_SHIPS = "mini_ships"
 
 
 @dataclass(frozen=True)
@@ -75,15 +76,17 @@ class Config:
     SPEED_BOOST_DURATION: float = 8.0
     RAINBOW_DURATION: float = 15.0
     PIERCING_SHOT_DURATION: float = 7.0
+    MINI_SHIPS_DURATION: float = 25.0
     SPEED_ATTACK_MULTIPLIER: float = 2.0  # Multiplicador de velocidade de ataque
     PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER: float = 1.5
 
     # Rarity system - chances devem somar 1.0
     POWERUP_RARITY_CHANCES = {
-        PowerUpType.SHIELD: 0.30,       # 30% - Comum
+        PowerUpType.SHIELD: 0.20,       # 20% - Comum
         PowerUpType.DOUBLE_SHOT: 0.25,  # 25% - Comum
         PowerUpType.SPEED: 0.15,        # 15% - Incomum
         PowerUpType.PIERCING_SHOT: 0.15, # 15% - Raro
+        PowerUpType.MINI_SHIPS: 0.95,   # 10% - Raro
         PowerUpType.LIFE: 0.10,         # 10% - Raro
         PowerUpType.SCORE: 0.04,        # 4% - Épico
         PowerUpType.RAINBOW: 0.01       # 1% - Lendário

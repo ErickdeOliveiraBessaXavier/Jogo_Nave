@@ -11,6 +11,8 @@ from ..entities.powerup import PowerUp
 from ..entities.floating_score import FloatingScore
 from ..entities.guided_meteor import GuidedMeteor
 from ..entities.explosive_mine import ExplosiveMine
+from ..entities.mini_ship import MiniShip
+from ..entities.mini_ship_bullet import MiniShipBullet
 
 
 class EntityManager:
@@ -24,6 +26,8 @@ class EntityManager:
         self.powerups: list[PowerUp] = []
         self.floating_scores: list[FloatingScore] = []
         self.boss: Boss | None = None
+        self.mini_ships: list[MiniShip] = []
+        self.mini_ship_bullets: list[MiniShipBullet] = []
 
     def update(self, dt: float, player_x: float, player_y: float | None = None):
         new_alien_bullets: list[AlienBullet] = []
@@ -31,6 +35,8 @@ class EntityManager:
             b.update(dt)
         for ab in self.alien_bullets:
             ab.update(dt)
+        for vb in self.mini_ship_bullets:
+            vb.update(dt)
         for bl in self.boss_lasers:
             bl.update(dt)
         for e in self.explosions:
@@ -41,6 +47,8 @@ class EntityManager:
             p.update(dt)
         for fs in self.floating_scores:
             fs.update(dt)
+        for ms in self.mini_ships:
+            ms.update(dt, self.enemies, self.mini_ship_bullets)
         if self.boss:
             lasers_fired, spawned_meteors = self.boss.update(dt, player_x, player_y)
             if lasers_fired:
@@ -69,6 +77,8 @@ class EntityManager:
             self.mine_explosions,
             self.powerups,
             self.floating_scores,
+            self.mini_ship_bullets,
+            self.mini_ships,
         ]
         if self.boss:
             entity_lists.append([self.boss])
@@ -80,6 +90,7 @@ class EntityManager:
         self.bullets = [b for b in self.bullets if not b.dead]
         self.alien_bullets = [ab for ab in self.alien_bullets if not ab.dead]
         self.boss_lasers = [bl for bl in self.boss_lasers if not bl.dead]
+        self.mini_ship_bullets = [vb for vb in self.mini_ship_bullets if not vb.dead]
         self.enemies = [
             e
             for e in self.enemies
@@ -100,6 +111,8 @@ class EntityManager:
         self.explosions.clear()
         self.mine_explosions.clear()
         self.boss = None
+        self.mini_ships.clear()
+        self.mini_ship_bullets.clear()
 
     def clear_for_level_transition(self):
         """Limpa entidades para transição de fase, mas preserva balas do jogador."""
@@ -113,3 +126,5 @@ class EntityManager:
         self.explosions.clear()
         self.mine_explosions.clear()
         self.boss = None
+        self.mini_ships.clear()
+        self.mini_ship_bullets.clear()

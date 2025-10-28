@@ -16,6 +16,7 @@ from ..core.levels import LEVELS
 from ..core.assets import get_font
 from ..core import colors
 from ..core.sound import sound_manager
+from ..entities.mini_ship import MiniShip
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -124,6 +125,9 @@ class PlayingScene(Scene):
                     self._start_next_level()
 
         self.ship.update(dt)
+        if self.ship.mini_ships_timer == 0.0 and self.entity_manager.mini_ships:
+            self.entity_manager.mini_ships.clear()
+
         held = self.app.input.poll_held()
         self.ship.move(held, dt)
 
@@ -230,6 +234,15 @@ class PlayingScene(Scene):
             self.ship,
         )
 
+        vector_gain, vector_destroyed, vector_score_events = self.collisions.mini_ship_bullets_vs_enemies(
+            self.entity_manager.mini_ship_bullets,
+            self.entity_manager.enemies,
+            self.entity_manager.explosions,
+        )
+        gain += vector_gain
+        destroyed += vector_destroyed
+        score_events.extend(vector_score_events)
+
         mine_gain, mine_destroyed, mine_score_events, ship_hit = self.collisions.check_mine_explosions(
             self.entity_manager.enemies,
             self.entity_manager.mine_explosions,
@@ -298,6 +311,13 @@ class PlayingScene(Scene):
                     self.ship.piercing_shot_timer = max(
                         self.ship.piercing_shot_timer, Config.PIERCING_SHOT_DURATION
                     )
+                elif kind == "mini_ships":
+                    self.ship.mini_ships_timer = max(
+                        self.ship.mini_ships_timer, Config.MINI_SHIPS_DURATION
+                    )
+                    self.entity_manager.mini_ships.clear()
+                    self.entity_manager.mini_ships.append(MiniShip(self.ship, 'left'))
+                    self.entity_manager.mini_ships.append(MiniShip(self.ship, 'right'))
                 elif kind == "rainbow":
                     self.lives += 1
                     self.ship.lives = self.lives
@@ -310,6 +330,12 @@ class PlayingScene(Scene):
                     self.ship.speed_boost_timer = max(
                         self.ship.speed_boost_timer, Config.RAINBOW_DURATION
                     )
+                    self.ship.mini_ships_timer = max(
+                        self.ship.mini_ships_timer, Config.MINI_SHIPS_DURATION
+                    )
+                    self.entity_manager.mini_ships.clear()
+                    self.entity_manager.mini_ships.append(MiniShip(self.ship, 'left'))
+                    self.entity_manager.mini_ships.append(MiniShip(self.ship, 'right'))
                     self.score += Config.POWERUP_SCORE_BONUS * 2
 
     def _handle_ship_hit(self):
