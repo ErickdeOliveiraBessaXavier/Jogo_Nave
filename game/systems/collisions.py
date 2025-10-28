@@ -5,6 +5,7 @@ from ..entities.alien import Alien
 from ..entities.bullet import Bullet
 from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
+from ..entities.eye_laser import EyeLaser
 from ..entities.explosion import Explosion
 from ..entities.mine_explosion import MineExplosion
 from ..entities.powerup import PowerUp
@@ -12,6 +13,7 @@ from ..entities.boss import Boss
 from ..entities.floating_score import FloatingScore
 from ..core.sound import sound_manager
 from ..entities.mini_ship_bullet import MiniShipBullet
+from ..entities.eye_enemy import EyeEnemy
 
 
 from ..entities.explosive_mine import ExplosiveMine
@@ -21,7 +23,7 @@ class Collisions:
 
     def check_mine_explosions(
         self,
-        enemies: list[Meteor | Alien | ExplosiveMine],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         mine_explosions: list[MineExplosion],
         explosions: list[Explosion],
         ship: Ship,
@@ -52,7 +54,7 @@ class Collisions:
         explosion_x: float,
         explosion_y: float,
         explosion_radius: int,
-        enemies: list[Meteor | Alien | ExplosiveMine],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         ship: Ship,
         explosions: list[Explosion],
     ) -> bool:
@@ -91,7 +93,7 @@ class Collisions:
     def mini_ship_bullets_vs_enemies(
         self,
         mini_ship_bullets: list[MiniShipBullet],
-        enemies: list[Meteor | Alien | ExplosiveMine],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         explosions: list[Explosion],
     ):
         score_gain = 0
@@ -133,7 +135,7 @@ class Collisions:
     def bullets_vs_enemies(
         self,
         bullets: list[Bullet],
-        enemies: list[Meteor | Alien | ExplosiveMine],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         explosions: list[Explosion],
         mine_explosions: list[MineExplosion],
         ship: Ship,
@@ -223,7 +225,7 @@ class Collisions:
         return False
 
     def ship_vs_enemies(
-        self, ship: Ship, enemies: list[Meteor | Alien | ExplosiveMine], explosions: list[Explosion]
+        self, ship: Ship, enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy], explosions: list[Explosion]
     ) -> bool:
         if ship.invuln > 0:
             return False
@@ -250,6 +252,14 @@ class Collisions:
                 return True
         return False
 
+    def eye_laser_vs_ship(self, ship: Ship, eye_lasers: list[EyeLaser]) -> bool:
+        if ship.invuln > 0:
+            return False
+        for laser in eye_lasers:
+            if ship.rect.clipline(laser.get_collision_line()):
+                return True
+        return False
+
     def laser_vs_ship(self, ship: Ship, lasers: list[BossLaser]) -> bool:
         if ship.invuln > 0:
             return False
@@ -270,3 +280,4 @@ class Collisions:
                 kind = getattr(p, "kind", "shield")
                 collected_kinds.append(kind)
         return collected_kinds
+

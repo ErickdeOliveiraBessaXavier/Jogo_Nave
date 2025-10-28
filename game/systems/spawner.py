@@ -7,6 +7,7 @@ from ..entities.powerup import PowerUp
 from ..core.levels import LevelConfig
 
 from ..entities.explosive_mine import ExplosiveMine
+from ..entities.eye_enemy import EyeEnemy
 
 if TYPE_CHECKING:
     from ..entities.meteor import Meteor
@@ -47,7 +48,7 @@ class EnemySpawner:
     def update(
         self,
         dt: float,
-        enemies: List[Union["Meteor", "Alien", "ExplosiveMine"]],
+        enemies: List[Union["Meteor", "Alien", "ExplosiveMine", "EyeEnemy"]],
         player_x: float | None = None,
         player_y: float | None = None,
     ) -> None:
@@ -67,8 +68,12 @@ class EnemySpawner:
         for enemy_type, timer in self.enemy_timers.items():
             timer.update(dt)
             if timer.done() and random.random() < self.spawn_intensity:
-                # Spawnar inimigo com base na intensidade atual
-                new_enemy = enemy_type()  # type: ignore[misc]
+                if enemy_type == EyeEnemy:
+                    x = random.randint(40, Config.SCREEN_WIDTH - 80)
+                    y = random.randint(40, 100)
+                    new_enemy = EyeEnemy(x, y)
+                else:
+                    new_enemy = enemy_type()  # type: ignore[misc]
                 enemies.append(new_enemy)  # type: ignore[arg-type]
                 timer.start()  # Reiniciar timer
 

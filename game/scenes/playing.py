@@ -17,6 +17,8 @@ from ..core.assets import get_font
 from ..core import colors
 from ..core.sound import sound_manager
 from ..entities.mini_ship import MiniShip
+from ..entities.eye_enemy import EyeEnemy
+from ..entities.guided_meteor import GuidedMeteor
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -93,10 +95,16 @@ class PlayingScene(Scene):
                 self.entity_manager.explosions,
                 self.entity_manager.powerups,
                 self.entity_manager.floating_scores,
+                self.entity_manager.mini_ships,
             ]
             for entity_list in entity_lists:
                 for entity in entity_list:
-                    entity.update(slow_mo_dt)
+                    if isinstance(entity, (EyeEnemy, GuidedMeteor)):
+                        entity.update(slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery)
+                    elif isinstance(entity, MiniShip):
+                        entity.update(slow_mo_dt, [], [])
+                    else:
+                        entity.update(slow_mo_dt)
             if self.entity_manager.boss:
                 lasers_fired, spawned_meteors = self.entity_manager.boss.update(
                     slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery
@@ -281,6 +289,8 @@ class PlayingScene(Scene):
         if self.collisions.alien_bullets_vs_ship(
             self.ship, self.entity_manager.alien_bullets
         ):
+            self._handle_ship_hit()
+        if self.collisions.eye_laser_vs_ship(self.ship, self.entity_manager.eye_lasers):
             self._handle_ship_hit()
         if self.collisions.laser_vs_ship(self.ship, self.entity_manager.boss_lasers):
             self._handle_ship_hit()
@@ -478,7 +488,7 @@ class PlayingScene(Scene):
     def render(self, surface: pygame.Surface):
         self.r.background(self.game_surface, dt=1.0 / Config.FPS)
 
-        self.entity_manager.draw(self.game_surface)
+        self.entity_manager.draw(self.game_surface, self.ship.rect.centerx, self.ship.rect.centery)
         self.ship.draw(self.game_surface)
         self.r.hud(
             self.game_surface,

@@ -19,8 +19,9 @@ class ExplosiveMine:
         self.max_health = 5
         self.speed = 50
         self.dead = False
-        self.color = colors.RED
-        self.outline_color = colors.ORANGE
+        # Armazenar cores como tuplas explícitas
+        self.color: tuple[int, int, int] = colors.RED
+        self.outline_color: tuple[int, int, int] = colors.ORANGE
 
         self.shake_timer = 0.0
         self.shake_intensity = 0
@@ -53,6 +54,7 @@ class ExplosiveMine:
             self.pre_explosion_timer -= dt
             self.flash_timer += dt
             if self.flash_timer >= self.flash_interval:
+                # Alternar cores diretamente com tuplas
                 if self.color == colors.RED:
                     self.color = colors.YELLOW
                 else:

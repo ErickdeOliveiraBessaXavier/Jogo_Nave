@@ -7,6 +7,7 @@ from .mini_ship_bullet import MiniShipBullet
 from .meteor import Meteor
 from .alien import Alien
 from .explosive_mine import ExplosiveMine
+from .eye_enemy import EyeEnemy
 
 class MiniShip:
     def __init__(self, player_ship: Ship, side: str):
@@ -25,7 +26,7 @@ class MiniShip:
             self.target_offset_x = 40
         self.target_offset_y = 10
 
-    def update(self, dt: float, enemies: list[Meteor | Alien | ExplosiveMine], bullets: list[MiniShipBullet]):
+    def update(self, dt: float, enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy], bullets: list[MiniShipBullet]):
         # Movement
         target_x = self.player.x + self.player.w / 2 + self.target_offset_x - self.w / 2
         target_y = self.player.y + self.player.h / 2 + self.target_offset_y - self.h / 2
@@ -42,7 +43,7 @@ class MiniShip:
                 self.shoot(nearest_enemy, bullets)
                 self.shoot_timer = self.shoot_cooldown
 
-    def _find_nearest_enemy(self, enemies: list[Meteor | Alien | ExplosiveMine]) -> Meteor | Alien | ExplosiveMine | None:
+    def _find_nearest_enemy(self, enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy]) -> Meteor | Alien | ExplosiveMine | EyeEnemy | None:
         nearest_enemy = None
         min_dist_sq = float('inf')
 
@@ -59,7 +60,7 @@ class MiniShip:
         
         return nearest_enemy
 
-    def shoot(self, target: Meteor | Alien | ExplosiveMine, bullets: list[MiniShipBullet]):
+    def shoot(self, target: Meteor | Alien | ExplosiveMine | EyeEnemy, bullets: list[MiniShipBullet]):
         if isinstance(target, ExplosiveMine):
             target_cx, target_cy = target.x, target.y
         else:

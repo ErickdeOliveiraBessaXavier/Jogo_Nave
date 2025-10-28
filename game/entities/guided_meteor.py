@@ -47,7 +47,7 @@ class GuidedMeteor(Meteor):
         self.rotation_speed *= 3.0  # 3x mais rápido que meteoros normais
 
         # Cor especial para meteoros guiados - Verde para destaque
-        self.base_color = colors.GREEN
+        self.base_color: Tuple[int, int, int] = colors.GREEN
 
     def update(
         self, dt: float, target_x: float | None = None, target_y: float | None = None
@@ -121,8 +121,8 @@ class GuidedMeteor(Meteor):
                 int(255 * self.color_intensity),  # Verde brilhante
                 int(100 * self.color_intensity),  # Verde médio
             )
-            border_color = colors.GUIDED_METEOR_GREEN
-            core_color = colors.GREEN
+            border_color: Tuple[int, int, int] = colors.GUIDED_METEOR_GREEN
+            core_color: Tuple[int, int, int] = colors.GREEN
         else:
             body_color = (
                 int(30 * self.color_intensity),  # Verde muito escuro
@@ -141,7 +141,7 @@ class GuidedMeteor(Meteor):
         """Get color for the guided meteor."""
         if self.guided:
             # Sempre verde quando guiado
-            return self.base_color  # Verde
+            return self.base_color
         else:
             # Cor normal quando não guiado (nunca deveria acontecer)
             return (128, 128, 128)  # Cinza

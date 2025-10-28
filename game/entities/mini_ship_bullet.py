@@ -25,4 +25,5 @@ class MiniShipBullet:
             self.dead = True
 
     def draw(self, surface: pygame.Surface):
-        pygame.draw.rect(surface, colors.CYAN, self.rect)
+        bullet_color: tuple[int, int, int] = colors.CYAN
+        pygame.draw.rect(surface, bullet_color, self.rect)

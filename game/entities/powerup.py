@@ -94,7 +94,7 @@ class PowerUp:
             self._draw_rainbow_effect(surface, pulse_rect)
         else:
             # Fundo principal
-            pygame.draw.ellipse(surface, color_map.get(self.kind, (255, 255, 255)), pulse_rect)
+            pygame.draw.ellipse(surface, pygame.Color(color_map.get(self.kind, (255, 255, 255))), pulse_rect)
 
             # Borda brilhante
             pygame.draw.ellipse(surface, (255, 255, 255), pulse_rect, 2)
