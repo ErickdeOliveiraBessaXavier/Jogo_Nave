@@ -35,7 +35,7 @@ LEVELS: list[LevelConfig] = [
         level_number=1,
         enemy_spawn_config={
             Meteor: 0.9,
-            EyeEnemy: 25.0,
+            EyeEnemy: 5.0,
         },
         enemies_to_clear=250,
         mines_enabled=True,
