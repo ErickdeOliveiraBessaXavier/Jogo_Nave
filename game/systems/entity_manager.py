@@ -77,7 +77,7 @@ class EntityManager:
 
         self.alien_bullets.extend(new_alien_bullets)
         self.eye_lasers.extend(new_eye_lasers)
-    
+
     def draw(self, surface: pygame.Surface, player_x: float, player_y: float):
         """Desenha todas as entidades. EyeEnemy precisa da posição do jogador."""
         from typing import Any
@@ -95,14 +95,14 @@ class EntityManager:
             self.mini_ship_bullets,
             self.mini_ships,
         ]
-        
+
         if self.boss:
             entity_lists.append([self.boss])
-        
+
         for entity_list in entity_lists:
             for entity in entity_list:
                 entity.draw(surface)
-        
+
         # Desenhar inimigos (EyeEnemy precisa da posição do jogador)
         for enemy in self.enemies:
             if isinstance(enemy, EyeEnemy):

@@ -11,17 +11,21 @@ from ..entities.eye_enemy import EyeEnemy
 @dataclass
 class LevelConfig:
     level_number: int
-    enemy_spawn_config: dict[Type[Meteor | Alien | ExplosiveMine | EyeEnemy], float]  # Tipo -> tempo de spawn
+    enemy_spawn_config: dict[
+        Type[Meteor | Alien | ExplosiveMine | EyeEnemy], float
+    ]  # Tipo -> tempo de spawn
     enemies_to_clear: int  # quantos inimigos para passar de fase
     boss_type: Type[Boss] | None = None  # O tipo de classe do chefe (opcional)
-    mines_enabled: bool = False # Se as minas estão habilitadas neste nível
+    mines_enabled: bool = False  # Se as minas estão habilitadas neste nível
 
     @property
     def enemy_types(self) -> list[Type[Meteor | Alien | ExplosiveMine | EyeEnemy]]:
         """Retorna lista de tipos de inimigos configurados."""
         return list(self.enemy_spawn_config.keys())
 
-    def get_spawn_time(self, enemy_type: Type[Meteor | Alien | ExplosiveMine | EyeEnemy]) -> float:
+    def get_spawn_time(
+        self, enemy_type: Type[Meteor | Alien | ExplosiveMine | EyeEnemy]
+    ) -> float:
         """Retorna o tempo de spawn para um tipo específico de inimigo."""
         return self.enemy_spawn_config.get(enemy_type, 1.0)
 
@@ -35,14 +39,14 @@ LEVELS: list[LevelConfig] = [
         level_number=1,
         enemy_spawn_config={
             Meteor: 0.8,
-            #EyeEnemy: 5.0,
+            # EyeEnemy: 5.0,
         },
         enemies_to_clear=250,
     ),
     LevelConfig(
         level_number=2,
         enemy_spawn_config={
-            Alien: 0.7,           
+            Alien: 0.7,
         },
         enemies_to_clear=100,
         mines_enabled=True,
@@ -50,17 +54,17 @@ LEVELS: list[LevelConfig] = [
     LevelConfig(
         level_number=3,
         enemy_spawn_config={
-            Meteor: 0.4, 
-            Alien: 1.5, 
+            Meteor: 0.4,
+            Alien: 1.5,
         },
         enemies_to_clear=250,
         boss_type=Boss,
         mines_enabled=True,
     ),
-        LevelConfig(
+    LevelConfig(
         level_number=4,
         enemy_spawn_config={
-            Meteor: 0.4,            
+            Meteor: 0.4,
             EyeEnemy: 5.0,
         },
         enemies_to_clear=300,

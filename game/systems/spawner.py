@@ -81,11 +81,15 @@ class EnemySpawner:
         if self.config.mines_enabled:
             self.mine_spawn_timer.update(dt)
             if self.mine_spawn_timer.done() and random.random() < self.spawn_intensity:
-                if random.random() < 0.5: # 50% de chance de spawnar minas
-                                    num_mines = random.choices([2, 3, 5], weights=[0.50, 0.25, 0.10], k=1)[0]
-                                    for _ in range(num_mines):
-                                        enemies.append(ExplosiveMine(y=-random.uniform(10, 100))) # Adiciona um delay aleatório no eixo y
-                                    self.mine_spawn_timer.start()
+                if random.random() < 0.5:  # 50% de chance de spawnar minas
+                    num_mines = random.choices(
+                        [2, 3, 5], weights=[0.50, 0.25, 0.10], k=1
+                    )[0]
+                    for _ in range(num_mines):
+                        enemies.append(
+                            ExplosiveMine(y=-random.uniform(10, 100))
+                        )  # Adiciona um delay aleatório no eixo y
+                    self.mine_spawn_timer.start()
         # Timer separado para meteoros teleguiados (a cada 3 segundos)
         # Só funciona se a fase tem meteoros na lista de tipos
         from ..entities.meteor import Meteor
@@ -97,7 +101,10 @@ class EnemySpawner:
         ):
 
             self.guided_meteor_timer.update(dt)
-            if self.guided_meteor_timer.done() and random.random() < self.spawn_intensity:
+            if (
+                self.guided_meteor_timer.done()
+                and random.random() < self.spawn_intensity
+            ):
                 # Chance de spawnar meteoro guiado baseada na intensidade
                 base_chance = Config.GUIDED_METEOR_NORMAL_PHASES_CHANCE
                 if random.random() < base_chance:
@@ -147,11 +154,11 @@ class PowerUpSpawner:
     def _select_powerup_by_rarity(self) -> PowerUpType:
         """Seleciona power-up baseado na raridade individual de cada tipo."""
         powerup_chances = Config.POWERUP_RARITY_CHANCES
-        
+
         # Cria lista ponderada
         powerup_types = list(powerup_chances.keys())
         weights = list(powerup_chances.values())
-        
+
         # Escolhe baseado nos pesos
         return random.choices(powerup_types, weights=weights)[0]
 

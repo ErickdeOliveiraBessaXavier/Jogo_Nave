@@ -38,11 +38,11 @@ class PlayingScene(Scene):
         self.pre_boss_transition = False
         self.pre_boss_timer = 0.0
         self.warning_sound_played = False  # Flag para controlar o som de warning
-        
+
         # Sistema de warning em 3 estágios
         self.warning_stage = 0  # 0=idle, 1=pre-delay, 2=warning-active, 3=post-delay
         self.warning_stage_timer = 0.0
-        
+
         # Music transition control
         self.music_fade_started = False
         self.boss_music_started = False
@@ -62,7 +62,7 @@ class PlayingScene(Scene):
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
         # Inicializar spawner com delay inicial apenas para fase 1
-        is_initial_level = (self.current_level_index == 0)
+        is_initial_level = self.current_level_index == 0
         self.enemy_spawner = EnemySpawner(self.level_config, is_initial_level)
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
@@ -100,7 +100,9 @@ class PlayingScene(Scene):
             for entity_list in entity_lists:
                 for entity in entity_list:
                     if isinstance(entity, (EyeEnemy, GuidedMeteor)):
-                        entity.update(slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery)
+                        entity.update(
+                            slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery
+                        )
                     elif isinstance(entity, MiniShip):
                         entity.update(slow_mo_dt, [], [])
                     else:
@@ -181,25 +183,27 @@ class PlayingScene(Scene):
                 self.warning_stage = 1  # Estágio 1: Pre-delay
                 self.warning_stage_timer = 0.0
                 self.warning_sound_played = False
-            
+
             self._update_warning_system(dt)
-            
+
         elif not self.boss_fight_active and not self.level_transition_active:
             self._check_level_progression()
         elif self.entity_manager.boss and self.entity_manager.boss.dead:
             self._end_boss_fight()
-    
+
     def _update_warning_system(self, dt: float):
         """Atualiza o sistema de warning em 3 estágios."""
         self.warning_stage_timer += dt
-        
+
         if self.warning_stage == 1:  # Estágio 1: Pre-delay (5s)
             # Iniciar fade-out da música 3 segundos antes do warning
-            if (not self.music_fade_started and 
-                self.warning_stage_timer >= Config.BOSS_MUSIC_FADE_OUT_START):
+            if (
+                not self.music_fade_started
+                and self.warning_stage_timer >= Config.BOSS_MUSIC_FADE_OUT_START
+            ):
                 sound_manager.fade_out_music(Config.BOSS_MUSIC_FADE_OUT_DURATION)
                 self.music_fade_started = True
-            
+
             if self.warning_stage_timer >= Config.BOSS_PRE_WARNING_DELAY:
                 self.warning_stage = 2
                 self.warning_stage_timer = 0.0
@@ -209,7 +213,7 @@ class PlayingScene(Scene):
                 if not self.warning_sound_played:
                     sound_manager.play_warning()
                     self.warning_sound_played = True
-                    
+
         elif self.warning_stage == 2:  # Estágio 2: Warning ativo (5s) - SILÊNCIO TOTAL
             if self.warning_stage_timer >= Config.BOSS_WARNING_DURATION:
                 self.warning_stage = 3
@@ -218,7 +222,7 @@ class PlayingScene(Scene):
                 self.screen_shake_timer = 0.0  # Parar shake
                 # Parar som de warning quando o visual termina
                 sound_manager.stop_warning()
-                
+
         elif self.warning_stage == 3:  # Estágio 3: Post-delay (3s) - CONTINUA SILÊNCIO
             if self.warning_stage_timer >= Config.BOSS_POST_WARNING_DELAY:
                 self._start_boss_fight()
@@ -227,7 +231,7 @@ class PlayingScene(Scene):
         return (
             not self.entity_manager.explosions
             # Remover balas do jogador da verificação para permitir transições durante tiros
-            # and not self.entity_manager.bullets  
+            # and not self.entity_manager.bullets
             and not self.entity_manager.alien_bullets
             and not self.entity_manager.boss_lasers
             and not self.entity_manager.enemies
@@ -242,20 +246,24 @@ class PlayingScene(Scene):
             self.ship,
         )
 
-        vector_gain, vector_destroyed, vector_score_events = self.collisions.mini_ship_bullets_vs_enemies(
-            self.entity_manager.mini_ship_bullets,
-            self.entity_manager.enemies,
-            self.entity_manager.explosions,
+        vector_gain, vector_destroyed, vector_score_events = (
+            self.collisions.mini_ship_bullets_vs_enemies(
+                self.entity_manager.mini_ship_bullets,
+                self.entity_manager.enemies,
+                self.entity_manager.explosions,
+            )
         )
         gain += vector_gain
         destroyed += vector_destroyed
         score_events.extend(vector_score_events)
 
-        mine_gain, mine_destroyed, mine_score_events, ship_hit = self.collisions.check_mine_explosions(
-            self.entity_manager.enemies,
-            self.entity_manager.mine_explosions,
-            self.entity_manager.explosions,
-            self.ship,
+        mine_gain, mine_destroyed, mine_score_events, ship_hit = (
+            self.collisions.check_mine_explosions(
+                self.entity_manager.enemies,
+                self.entity_manager.mine_explosions,
+                self.entity_manager.explosions,
+                self.ship,
+            )
         )
         gain += mine_gain
         destroyed += mine_destroyed
@@ -326,8 +334,8 @@ class PlayingScene(Scene):
                         self.ship.mini_ships_timer, Config.MINI_SHIPS_DURATION
                     )
                     self.entity_manager.mini_ships.clear()
-                    self.entity_manager.mini_ships.append(MiniShip(self.ship, 'left'))
-                    self.entity_manager.mini_ships.append(MiniShip(self.ship, 'right'))
+                    self.entity_manager.mini_ships.append(MiniShip(self.ship, "left"))
+                    self.entity_manager.mini_ships.append(MiniShip(self.ship, "right"))
                 elif kind == "rainbow":
                     self.lives += 1
                     self.ship.lives = self.lives
@@ -344,8 +352,8 @@ class PlayingScene(Scene):
                         self.ship.mini_ships_timer, Config.MINI_SHIPS_DURATION
                     )
                     self.entity_manager.mini_ships.clear()
-                    self.entity_manager.mini_ships.append(MiniShip(self.ship, 'left'))
-                    self.entity_manager.mini_ships.append(MiniShip(self.ship, 'right'))
+                    self.entity_manager.mini_ships.append(MiniShip(self.ship, "left"))
+                    self.entity_manager.mini_ships.append(MiniShip(self.ship, "right"))
                     self.score += Config.POWERUP_SCORE_BONUS * 2
 
     def _handle_ship_hit(self):
@@ -384,18 +392,18 @@ class PlayingScene(Scene):
         self.warning_stage = 0
         self.warning_stage_timer = 0.0
         self.warning_timer = 0.0
-        
+
         # Reset music transition flags
         self.music_fade_started = False
         self.boss_music_started = False
-        
+
         self.boss_fight_active = True
         self.screen_shake_timer = Config.BOSS_ENTRY_SHAKE_DURATION
-        
+
         # Parar sons de warning e outros efeitos
         sound_manager.stop_warning()
         sound_manager.stop_all_sfx()
-        
+
         if self.level_config.boss_type:
             self.entity_manager.boss = self.level_config.boss_type(
                 Config.SCREEN_WIDTH / 2 - 50, 50
@@ -441,11 +449,11 @@ class PlayingScene(Scene):
         self.entity_manager.boss = None
         self.boss_fight_active = False
         self.score += Config.BOSS_DEFEAT_SCORE
-        
+
         # Reset music transition flags for next boss
         self.music_fade_started = False
         self.boss_music_started = False
-        
+
         # Voltar para música normal
         sound_manager.play_background_music()
         self._advance_to_next_level()
@@ -486,10 +494,18 @@ class PlayingScene(Scene):
                 self.app.states.switch(PausedScene(self.app, previous_scene=self))
 
     def render(self, surface: pygame.Surface):
-        boss_active = bool(self.boss_fight_active and self.entity_manager.boss and not self.entity_manager.boss.dead)
-        self.r.background(self.game_surface, dt=1.0 / Config.FPS, boss_active=boss_active)
+        boss_active = bool(
+            self.boss_fight_active
+            and self.entity_manager.boss
+            and not self.entity_manager.boss.dead
+        )
+        self.r.background(
+            self.game_surface, dt=1.0 / Config.FPS, boss_active=boss_active
+        )
 
-        self.entity_manager.draw(self.game_surface, self.ship.rect.centerx, self.ship.rect.centery)
+        self.entity_manager.draw(
+            self.game_surface, self.ship.rect.centerx, self.ship.rect.centery
+        )
         self.ship.draw(self.game_surface)
         self.r.hud(
             self.game_surface,

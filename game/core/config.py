@@ -36,7 +36,7 @@ class Config:
     SHIP_SPEED: float = 300.0
     BULLET_SPEED: float = 480.0
     FAST_METEOR_SPEED: float = 320.0  # meteoros pequenos
-    SLOW_METEOR_SPEED: float = 25.0   # meteoros grandes
+    SLOW_METEOR_SPEED: float = 25.0  # meteoros grandes
     POWERUP_SPEED: int = 100
 
     # ========================================
@@ -82,14 +82,14 @@ class Config:
 
     # Rarity system - chances devem somar 1.0
     POWERUP_RARITY_CHANCES = {
-        PowerUpType.SHIELD: 0.20,       # 20% - Comum
+        PowerUpType.SHIELD: 0.20,  # 20% - Comum
         PowerUpType.DOUBLE_SHOT: 0.25,  # 25% - Comum
-        PowerUpType.SPEED: 0.15,        # 15% - Incomum
-        PowerUpType.PIERCING_SHOT: 0.15, # 15% - Raro
-        PowerUpType.MINI_SHIPS: 0.10,   # 10% - Raro
-        PowerUpType.LIFE: 0.10,         # 10% - Raro
-        PowerUpType.SCORE: 0.04,        # 4% - Épico
-        PowerUpType.RAINBOW: 0.01       # 1% - Lendário
+        PowerUpType.SPEED: 0.15,  # 15% - Incomum
+        PowerUpType.PIERCING_SHOT: 0.15,  # 15% - Raro
+        PowerUpType.MINI_SHIPS: 0.10,  # 10% - Raro
+        PowerUpType.LIFE: 0.10,  # 10% - Raro
+        PowerUpType.SCORE: 0.04,  # 4% - Épico
+        PowerUpType.RAINBOW: 0.01,  # 1% - Lendário
     }
 
     # ========================================
@@ -107,16 +107,20 @@ class Config:
     INITIAL_GAME_DELAY: float = 5.0
 
     # Boss warning sequence
-    BOSS_PRE_WARNING_DELAY: float = 5.0   # Delay antes do warning
-    BOSS_WARNING_DURATION: float = 5.0    # Duração do warning ativo 
+    BOSS_PRE_WARNING_DELAY: float = 5.0  # Delay antes do warning
+    BOSS_WARNING_DURATION: float = 5.0  # Duração do warning ativo
     BOSS_POST_WARNING_DELAY: float = 3.0  # Delay após warning antes do boss
 
     # Music transition settings for boss warning
-    BOSS_MUSIC_FADE_OUT_START: float = 3.0     # Inicia fade-out 3s antes do warning
+    BOSS_MUSIC_FADE_OUT_START: float = 3.0  # Inicia fade-out 3s antes do warning
     BOSS_MUSIC_FADE_OUT_DURATION: float = 2.0  # Tempo do fade-out da música normal
-    BOSS_MUSIC_SILENCE_DURATION: float = 8.0   # Tempo total de silêncio (warning + delay)
-    BOSS_MUSIC_FADE_IN_DURATION: float = 3.0   # Tempo do fade-in da música do boss
-    BOSS_MUSIC_FADE_IN_START_DELAY: float = 1.0  # Delay antes do fade-in começar (quando boss aparece)
+    BOSS_MUSIC_SILENCE_DURATION: float = (
+        8.0  # Tempo total de silêncio (warning + delay)
+    )
+    BOSS_MUSIC_FADE_IN_DURATION: float = 3.0  # Tempo do fade-in da música do boss
+    BOSS_MUSIC_FADE_IN_START_DELAY: float = (
+        1.0  # Delay antes do fade-in começar (quando boss aparece)
+    )
 
     # ========================================
     # VISUAL EFFECTS & ANIMATIONS
@@ -152,8 +156,8 @@ class Config:
     BOSS_ENTRY_SHAKE_DURATION: float = 4.0
 
     # Boss movement
-    BOSS_NORMAL_SPEED: float = 6.0   # Velocidade normal lateral
-    BOSS_FRENZY_SPEED: float = 8.0   # Velocidade no frenzy
+    BOSS_NORMAL_SPEED: float = 6.0  # Velocidade normal lateral
+    BOSS_FRENZY_SPEED: float = 8.0  # Velocidade no frenzy
     BOSS_FRENZY_SHAKE_DURATION: float = 3.0
 
     # Boss laser system
@@ -189,8 +193,8 @@ class Config:
     BOSS_FRENZY_AIM_BLINK_ON_DURATION: int = 100
 
     # Boss meteor attacks
-    BOSS_METEOR_AIM_SPREAD: float = 30.0      # Desvio normal (±30°)
-    BOSS_SIDE_METEOR_AIM_SPREAD: float = 45.0 # Desvio lateral (±45°)
+    BOSS_METEOR_AIM_SPREAD: float = 30.0  # Desvio normal (±30°)
+    BOSS_SIDE_METEOR_AIM_SPREAD: float = 45.0  # Desvio lateral (±45°)
 
     # ========================================
     # UI SETTINGS

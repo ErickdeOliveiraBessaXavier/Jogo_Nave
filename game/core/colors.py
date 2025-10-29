@@ -32,11 +32,11 @@ POWERUP_MINI_SHIPS: Color = (173, 216, 230)
 POWERUP_RAINBOW: Color = (255, 255, 255)
 
 RAINBOW_COLORS = [
-    (255, 0, 0),      # vermelho
-    (255, 127, 0),    # laranja
-    (255, 255, 0),    # amarelo
-    (0, 255, 0),      # verde
-    (0, 0, 255),      # azul
-    (75, 0, 130),     # índigo
-    (148, 0, 211),    # violeta
+    (255, 0, 0),  # vermelho
+    (255, 127, 0),  # laranja
+    (255, 255, 0),  # amarelo
+    (0, 255, 0),  # verde
+    (0, 0, 255),  # azul
+    (75, 0, 130),  # índigo
+    (148, 0, 211),  # violeta
 ]

@@ -40,9 +40,11 @@ class Collisions:
                 cx, cy = (enemy.x, enemy.y)
                 explosion_radius = enemy.explosion_radius
                 mine_explosions.append(MineExplosion(cx, cy, size=explosion_radius))
-                if self.handle_mine_explosion(cx, cy, explosion_radius, enemies, ship, explosions):
+                if self.handle_mine_explosion(
+                    cx, cy, explosion_radius, enemies, ship, explosions
+                ):
                     ship_hit = True
-                sound_manager.play_explosion_boss() # Som de explosão grande
+                sound_manager.play_explosion_boss()  # Som de explosão grande
                 pts = enemy.get_points_value()
                 score_gain += pts
                 destroyed_count += 1
@@ -116,7 +118,7 @@ class Collisions:
 
                         cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
                         explosions.append(Explosion(cx, cy, size=enemy.w // 2))
-                        
+
                         if isinstance(enemy, Meteor):
                             sound_manager.play_explosion_asteroid()
                         else:
@@ -127,11 +129,13 @@ class Collisions:
                         destroyed_count += 1
                         score_events.append((cx, cy, pts))
 
-                        if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
+                        if isinstance(enemy, Meteor) and hasattr(
+                            enemy, "spawn_fragments"
+                        ):
                             fragments = enemy.spawn_fragments()
                             if fragments:
                                 enemies.extend(fragments)
-                    break # Bullet is gone, check next bullet
+                    break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
     def bullets_vs_enemies(
@@ -159,7 +163,7 @@ class Collisions:
 
                         cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
                         explosions.append(Explosion(cx, cy, size=enemy.w // 2))
-                        
+
                         # Tocar som de explosão baseado no tipo de inimigo
                         if isinstance(enemy, Meteor):
                             sound_manager.play_explosion_asteroid()
@@ -171,12 +175,14 @@ class Collisions:
                         destroyed_count += 1
                         score_events.append((cx, cy, pts))
 
-                        if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
+                        if isinstance(enemy, Meteor) and hasattr(
+                            enemy, "spawn_fragments"
+                        ):
                             fragments = enemy.spawn_fragments()
                             if fragments:
                                 enemies.extend(fragments)
                     if not b.piercing:
-                        break # Bullet is gone, check next bullet
+                        break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
     def bullets_vs_boss(
@@ -225,7 +231,10 @@ class Collisions:
         return False
 
     def ship_vs_enemies(
-        self, ship: Ship, enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy], explosions: list[Explosion]
+        self,
+        ship: Ship,
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        explosions: list[Explosion],
     ) -> bool:
         if ship.invuln > 0:
             return False
@@ -283,4 +292,3 @@ class Collisions:
                 kind = getattr(p, "kind", "shield")
                 collected_kinds.append(kind)
         return collected_kinds
-

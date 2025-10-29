@@ -2,6 +2,7 @@ import pygame
 from ..core.config import Config
 from ..core import colors
 
+
 class MiniShipBullet:
     def __init__(self, x: float, y: float, vx: float, vy: float, damage: int = 5):
         self.x = x
@@ -12,7 +13,7 @@ class MiniShipBullet:
         self.h = 4
         self.damage = damage
         self.dead = False
-        self.piercing = False # Mini-ship bullets are not piercing by default
+        self.piercing = False  # Mini-ship bullets are not piercing by default
 
     @property
     def rect(self) -> pygame.Rect:
@@ -21,7 +22,12 @@ class MiniShipBullet:
     def update(self, dt: float):
         self.x += self.vx * dt
         self.y += self.vy * dt
-        if self.y + self.h < 0 or self.y > Config.SCREEN_HEIGHT or self.x + self.w < 0 or self.x > Config.SCREEN_WIDTH:
+        if (
+            self.y + self.h < 0
+            or self.y > Config.SCREEN_HEIGHT
+            or self.x + self.w < 0
+            or self.x > Config.SCREEN_WIDTH
+        ):
             self.dead = True
 
     def draw(self, surface: pygame.Surface):

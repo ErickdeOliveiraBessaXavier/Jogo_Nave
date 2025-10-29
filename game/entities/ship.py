@@ -82,7 +82,7 @@ class Ship:
 
         ship_color = (255, 255, 255)
         if self.piercing_shot_timer > 0:
-            ship_color = (200, 0, 255) # Roxo para piercing
+            ship_color = (200, 0, 255)  # Roxo para piercing
         elif self.mini_ships_timer > 0:
             ship_color = (173, 216, 230)
         elif self.speed_boost_timer > 0:

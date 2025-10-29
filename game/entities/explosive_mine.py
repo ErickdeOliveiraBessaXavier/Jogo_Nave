@@ -3,10 +3,13 @@ import random
 from ..core.config import Config
 from ..core import colors
 
+
 class ExplosiveMine:
     def __init__(self, x: float | None = None, y: float | None = None):
         self.radius = 20  # Visual radius of the mine
-        self.explosion_radius = self.radius * 8  # Explosion radius is 4 times the visual radius
+        self.explosion_radius = (
+            self.radius * 8
+        )  # Explosion radius is 4 times the visual radius
         if x is None:
             self.x = random.randint(self.radius, Config.SCREEN_WIDTH - self.radius)
         else:
@@ -36,7 +39,12 @@ class ExplosiveMine:
 
     @property
     def rect(self) -> pygame.Rect:
-        return pygame.Rect(int(self.x) - self.radius, int(self.y) - self.radius, self.radius * 2, self.radius * 2)
+        return pygame.Rect(
+            int(self.x) - self.radius,
+            int(self.y) - self.radius,
+            self.radius * 2,
+            self.radius * 2,
+        )
 
     def take_damage(self, amount: int):
         if self.dead or self.is_exploding:
@@ -62,7 +70,7 @@ class ExplosiveMine:
                 self.flash_timer = 0.0
             if self.pre_explosion_timer <= 0:
                 self.dead = True
-            
+
             # Reset pulsing animation when exploding
             self.pulse_scale = 1.0
             return
@@ -88,8 +96,12 @@ class ExplosiveMine:
             y += random.randint(-self.shake_intensity, self.shake_intensity)
 
         pulsing_radius = self.radius * self.pulse_scale
-        pygame.draw.circle(surface, self.outline_color, (int(x), int(y)), int(pulsing_radius))
-        pygame.draw.circle(surface, self.color, (int(x), int(y)), int(pulsing_radius) - 4)
+        pygame.draw.circle(
+            surface, self.outline_color, (int(x), int(y)), int(pulsing_radius)
+        )
+        pygame.draw.circle(
+            surface, self.color, (int(x), int(y)), int(pulsing_radius) - 4
+        )
 
         if self.is_exploding:
             # Draw explosion radius indicator
@@ -98,9 +110,19 @@ class ExplosiveMine:
             end_alpha = 0.7 * 255
             alpha = start_alpha + (end_alpha - start_alpha) * progress
 
-            indicator_surface = pygame.Surface((self.explosion_radius * 2, self.explosion_radius * 2), pygame.SRCALPHA)
-            pygame.draw.circle(indicator_surface, (255, 255, 255, int(alpha)), (self.explosion_radius, self.explosion_radius), self.explosion_radius)
-            surface.blit(indicator_surface, (self.x - self.explosion_radius, self.y - self.explosion_radius))
+            indicator_surface = pygame.Surface(
+                (self.explosion_radius * 2, self.explosion_radius * 2), pygame.SRCALPHA
+            )
+            pygame.draw.circle(
+                indicator_surface,
+                (255, 255, 255, int(alpha)),
+                (self.explosion_radius, self.explosion_radius),
+                self.explosion_radius,
+            )
+            surface.blit(
+                indicator_surface,
+                (self.x - self.explosion_radius, self.y - self.explosion_radius),
+            )
 
     def get_points_value(self) -> int:
         return 250
