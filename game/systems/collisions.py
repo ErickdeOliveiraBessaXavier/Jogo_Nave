@@ -182,6 +182,7 @@ class Collisions:
                             if fragments:
                                 enemies.extend(fragments)
                     if not b.piercing:
+                        bullets.remove(b)
                         break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
