@@ -34,30 +34,36 @@ LEVELS: list[LevelConfig] = [
     LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            Meteor: 0.9,
-            EyeEnemy: 5.0,
+            Meteor: 0.8,
+            #EyeEnemy: 5.0,
         },
         enemies_to_clear=250,
-        mines_enabled=True,
     ),
     LevelConfig(
         level_number=2,
         enemy_spawn_config={
-            Alien: 0.7,
-            EyeEnemy: 5.0,
+            Alien: 0.7,           
         },
-        enemies_to_clear=50,
+        enemies_to_clear=100,
         mines_enabled=True,
     ),
     LevelConfig(
         level_number=3,
         enemy_spawn_config={
-            Meteor: 0.4,  # Meteoros rápidos a cada 0.3 segundos
-            Alien: 1.5,  # Aliens a cada 0.8 segundos
+            Meteor: 0.4, 
+            Alien: 1.5, 
         },
         enemies_to_clear=250,
         boss_type=Boss,
         mines_enabled=True,
+    ),
+        LevelConfig(
+        level_number=4,
+        enemy_spawn_config={
+            Meteor: 0.4,            
+            EyeEnemy: 5.0,
+        },
+        enemies_to_clear=300,
     ),
     # Adicione mais fases aqui
 ]

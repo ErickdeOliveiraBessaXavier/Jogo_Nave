@@ -32,9 +32,9 @@ class StarField:
                 }
             )
 
-    def update(self, dt: float):
+    def update(self, dt: float, speed_multiplier: float = 1.0):
         for s in self.stars:
-            s["y"] += s["speed"] * dt
+            s["y"] += s["speed"] * dt * speed_multiplier
             if s["y"] > self.h:
                 s["y"] = -s["size"]
                 s["x"] = random.randint(0, self.w)
@@ -52,9 +52,10 @@ class Renderer:
         self.font_large = get_font(32)
         self.starfield = StarField(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
 
-    def background(self, surface: pygame.Surface, dt: float):
+    def background(self, surface: pygame.Surface, dt: float, boss_active: bool = False):
         surface.fill(colors.BLACK)
-        self.starfield.update(dt)
+        speed_multiplier = Config.WARP_SPEED_MULTIPLIER if boss_active else 1.0
+        self.starfield.update(dt, speed_multiplier)
         self.starfield.draw(surface)
 
     def hud(

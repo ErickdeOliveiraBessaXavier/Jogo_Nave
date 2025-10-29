@@ -109,6 +109,8 @@ class Collisions:
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
                     else:
+                        if isinstance(enemy, EyeEnemy):
+                            enemy.destroy()
                         if enemy in enemies:
                             enemies.remove(enemy)
 
@@ -147,13 +149,11 @@ class Collisions:
         for b in bullets[:]:
             for enemy in enemies[:]:
                 if b.rect.colliderect(enemy.rect):
-                    if not b.piercing:
-                        if b in bullets:
-                            bullets.remove(b)
-
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
                     else:
+                        if isinstance(enemy, EyeEnemy):
+                            enemy.destroy()
                         if enemy in enemies:
                             enemies.remove(enemy)
 
@@ -234,7 +234,10 @@ class Collisions:
                 if isinstance(enemy, ExplosiveMine):
                     enemy.dead = True  # Explode immediately
                 else:
-                    enemies.remove(enemy)
+                    if isinstance(enemy, EyeEnemy):
+                        enemy.destroy()
+                    if enemy in enemies:
+                        enemies.remove(enemy)
                 explosions.append(
                     Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
                 )

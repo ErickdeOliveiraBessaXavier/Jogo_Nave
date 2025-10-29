@@ -486,7 +486,8 @@ class PlayingScene(Scene):
                 self.app.states.switch(PausedScene(self.app, previous_scene=self))
 
     def render(self, surface: pygame.Surface):
-        self.r.background(self.game_surface, dt=1.0 / Config.FPS)
+        boss_active = bool(self.boss_fight_active and self.entity_manager.boss and not self.entity_manager.boss.dead)
+        self.r.background(self.game_surface, dt=1.0 / Config.FPS, boss_active=boss_active)
 
         self.entity_manager.draw(self.game_surface, self.ship.rect.centerx, self.ship.rect.centery)
         self.ship.draw(self.game_surface)

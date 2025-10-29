@@ -86,7 +86,7 @@ class Config:
         PowerUpType.DOUBLE_SHOT: 0.25,  # 25% - Comum
         PowerUpType.SPEED: 0.15,        # 15% - Incomum
         PowerUpType.PIERCING_SHOT: 0.15, # 15% - Raro
-        PowerUpType.MINI_SHIPS: 0.95,   # 10% - Raro
+        PowerUpType.MINI_SHIPS: 0.10,   # 10% - Raro
         PowerUpType.LIFE: 0.10,         # 10% - Raro
         PowerUpType.SCORE: 0.04,        # 4% - Épico
         PowerUpType.RAINBOW: 0.01       # 1% - Lendário
@@ -121,6 +121,8 @@ class Config:
     # ========================================
     # VISUAL EFFECTS & ANIMATIONS
     # ========================================
+    WARP_SPEED_MULTIPLIER: float = 5.0
+
     # Explosion effects
     EXPLOSION_DURATION: float = 0.8
     BOSS_EXPLOSION_DURATION: float = 5.0

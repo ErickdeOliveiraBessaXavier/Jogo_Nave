@@ -73,14 +73,14 @@ class EyeEnemy:
             self.timer -= dt
             if self.timer <= 0:
                 self.state = "charging"
-                self.timer = self.charge_duration
+                self.timer = self.charge_duration # Timeout for charging
+                self._initialize_charging_particles()
 
         elif self.state == "charging":
             self._update_charging_particles(dt)
-            self._generate_charging_particles()
-            
             self.timer -= dt
-            if self.timer <= 0:
+            
+            if not self.charging_particles or self.timer <= 0:
                 self.state = "firing"
                 self.charging_particles.clear()
                 if self.locked_player_pos is not None:
@@ -136,21 +136,21 @@ class EyeEnemy:
             else:
                 self.charging_particles.remove(particle)
 
-    def _generate_charging_particles(self):
-        if len(self.charging_particles) < 15:
-            for _ in range(1):
-                angle = random.uniform(0, 2 * math.pi)
-                distance = random.uniform(40, 60)
-                pos = pygame.Vector2(self.rect.centerx + math.cos(angle) * distance, self.rect.centery + math.sin(angle) * distance)
-                # Selecionar cor explicitamente como tupla
-                particle_color: Tuple[int, int, int] = random.choice([colors.MAGENTA, colors.PURPLE])
-                particle: ChargingParticle = {
-                    "pos": pos,
-                    "speed": random.uniform(40, 60),
-                    "color": particle_color,
-                    "size": random.uniform(1, 3),
-                }
-                self.charging_particles.append(particle)
+    def _initialize_charging_particles(self):
+        self.charging_particles.clear()
+        for _ in range(25):
+            angle = random.uniform(0, 2 * math.pi)
+            distance = random.uniform(40, 80)
+            pos = pygame.Vector2(self.rect.centerx + math.cos(angle) * distance, self.rect.centery + math.sin(angle) * distance)
+            # Selecionar cor explicitamente como tupla
+            particle_color: Tuple[int, int, int] = random.choice([colors.MAGENTA, colors.PURPLE])
+            particle: ChargingParticle = {
+                "pos": pos,
+                "speed": random.uniform(50, 80),
+                "color": particle_color,
+                "size": random.uniform(1, 4),
+            }
+            self.charging_particles.append(particle)
 
     def _draw_dashed_line(self, surface: pygame.Surface, start_pos: tuple[float, float], end_pos: tuple[float, float], color: Tuple[int, int, int], width: int = 1, anim_offset: float = 0.0) -> None:
         x1, y1 = start_pos
@@ -328,3 +328,13 @@ class EyeEnemy:
 
     def get_points_value(self) -> int:
         return 200
+
+    def take_damage(self, amount: int):
+        self.health -= amount
+        if self.health <= 0:
+            self.destroy()
+
+    def destroy(self):
+        self.dead = True
+        if self.active_laser:
+            self.active_laser.dead = True
