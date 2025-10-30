@@ -15,6 +15,7 @@ from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.eye_laser import EyeLaser
+from ..entities.formation import Formation
 
 
 class EntityManager:
@@ -31,10 +32,18 @@ class EntityManager:
         self.boss: Boss | None = None
         self.mini_ships: list[MiniShip] = []
         self.mini_ship_bullets: list[MiniShipBullet] = []
+        self.formations: list[Formation] = []  # Nova lista para formações
 
     def update(self, dt: float, player_x: float, player_y: float):
         new_alien_bullets: list[AlienBullet] = []
         new_eye_lasers: list[EyeLaser] = []
+        
+        # Atualizar formações
+        for formation in self.formations[:]:
+            bullets_from_formation = formation.update(dt)
+            if bullets_from_formation:
+                new_alien_bullets.extend(bullets_from_formation)
+        
         for b in self.bullets:
             b.update(dt)
         for ab in self.alien_bullets:
@@ -53,8 +62,15 @@ class EntityManager:
             p.update(dt)
         for fs in self.floating_scores:
             fs.update(dt)
+        
+        # Coletar todos os inimigos (normais + formações) para as mini ships
+        all_enemies_for_mini_ships = list(self.enemies)
+        for formation in self.formations:
+            all_enemies_for_mini_ships.extend(formation.get_enemies())
+        
         for ms in self.mini_ships:
-            ms.update(dt, self.enemies, self.mini_ship_bullets)
+            ms.update(dt, all_enemies_for_mini_ships, self.mini_ship_bullets)
+        
         if self.boss:
             lasers_fired, spawned_meteors = self.boss.update(dt, player_x, player_y)
             if lasers_fired:
@@ -109,6 +125,10 @@ class EntityManager:
                 enemy.draw(surface, player_x, player_y)
             else:
                 enemy.draw(surface)
+        
+        # Desenhar formações
+        for formation in self.formations:
+            formation.draw(surface)
 
     def cleanup(self):
         self.bullets = [b for b in self.bullets if not b.dead]
@@ -125,6 +145,7 @@ class EntityManager:
         self.mine_explosions = [me for me in self.mine_explosions if not me.finished()]
         self.powerups = [p for p in self.powerups if not p.is_off_screen()]
         self.floating_scores = [fs for fs in self.floating_scores if not fs.is_dead()]
+        self.formations = [f for f in self.formations if not f.dead]  # Limpar formações mortas
 
     def clear_all(self):
         self.bullets.clear()
@@ -139,6 +160,7 @@ class EntityManager:
         self.boss = None
         self.mini_ships.clear()
         self.mini_ship_bullets.clear()
+        self.formations.clear()
 
     def clear_for_level_transition(self):
         """Limpa entidades para transição de fase, mas preserva balas do jogador."""
@@ -155,3 +177,4 @@ class EntityManager:
         self.boss = None
         self.mini_ships.clear()
         self.mini_ship_bullets.clear()
+        self.formations.clear()

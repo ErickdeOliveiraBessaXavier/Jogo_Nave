@@ -197,6 +197,30 @@ class Config:
     BOSS_SIDE_METEOR_AIM_SPREAD: float = 45.0  # Desvio lateral (±45°)
 
     # ========================================
+    # FORMATION SYSTEM
+    # ========================================
+    # Formation spawn settings
+    FORMATION_SPAWN_INTERVAL: Tuple[float, float] = (20.0, 35.0)  # Min/max tempo entre formações
+    
+    # Spiral entry settings
+    FORMATION_SPIRAL_RADIUS: float = 80.0  # Raio da espiral de entrada
+    FORMATION_SPIRAL_SPEED: float = 2.0  # Velocidade de rotação da espiral (rad/s)
+    FORMATION_SPIRAL_TIME_OFFSET: float = 0.15  # Delay entre cada inimigo na espiral
+    FORMATION_ENTRY_SPEED: float = 60.0  # Velocidade de descida durante entrada
+    
+    # Pattern settings
+    FORMATION_PATTERN_DURATION: float = 8.0  # Tempo em cada padrão antes de transicionar
+    FORMATION_TRANSITION_DURATION: float = 2.0  # Tempo de transição entre padrões
+    
+    # Pattern dimensions
+    FORMATION_CIRCLE_RADIUS: float = 100.0
+    FORMATION_V_SPACING: float = 45.0  # Espaçamento entre inimigos no V
+    FORMATION_SQUARE_SIZE: float = 180.0
+    FORMATION_LINE_SPACING: float = 50.0
+    FORMATION_DRIFT_SPEED: float = 30.0  # Velocidade de movimento lateral
+    FORMATION_DESCENT_SPEED: float = 50.0  # Velocidade de descida após formar padrão
+    
+    # ========================================
     # UI SETTINGS
     # ========================================
     WARNING_FONT_SIZE: int = 60

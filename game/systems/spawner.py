@@ -5,6 +5,7 @@ from ..core.time import Timer
 from ..core.config import Config, PowerUpType
 from ..entities.powerup import PowerUp
 from ..core.levels import LevelConfig
+from ..entities.formation import Formation, FormationPattern
 
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
@@ -44,6 +45,11 @@ class EnemySpawner:
         # Timer para minas explosivas
         self.mine_spawn_timer = Timer(10.0)
         self.mine_spawn_timer.start()
+        
+        # Timer para formações
+        min_t, max_t = Config.FORMATION_SPAWN_INTERVAL
+        self.formation_spawn_timer = Timer(random.uniform(min_t, max_t))
+        self.formation_spawn_timer.start()
 
     def update(
         self,
@@ -51,6 +57,7 @@ class EnemySpawner:
         enemies: List[Union["Meteor", "Alien", "ExplosiveMine", "EyeEnemy"]],
         player_x: float | None = None,
         player_y: float | None = None,
+        formations: List[Formation] | None = None,  # Nova lista de formações
     ) -> None:
         if self.stopped:
             return
@@ -90,6 +97,40 @@ class EnemySpawner:
                             ExplosiveMine(y=-random.uniform(10, 100))
                         )  # Adiciona um delay aleatório no eixo y
                     self.mine_spawn_timer.start()
+        
+        # Spawner de formações
+        if formations is not None and self.config.formations_enabled:
+            self.formation_spawn_timer.update(dt)
+            if self.formation_spawn_timer.done() and random.random() < self.spawn_intensity:
+                # Criar formação
+                formation_type = self.config.get_random_formation_type()
+                if formation_type:
+                    # Sequência de padrões baseada no tipo de formação
+                    if formation_type == "spiral_circle":
+                        patterns = [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE]
+                        count = random.randint(5, 8)
+                    elif formation_type == "spiral_v":
+                        patterns = [FormationPattern.SPIRAL_ENTRY, FormationPattern.V_SHAPE]
+                        count = random.choice([5, 7])  # V sempre com 5 ou 7 naves
+                    elif formation_type == "spiral_square":
+                        patterns = [FormationPattern.SPIRAL_ENTRY, FormationPattern.SQUARE]
+                        count = random.randint(5, 8)
+                    else:
+                        patterns = [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE, FormationPattern.V_SHAPE]
+                        count = random.choice([5, 7])  # V sempre com 5 ou 7 naves
+                    
+                    entry_x = random.randint(150, Config.SCREEN_WIDTH - 150)
+                    entry_y = -50  # Começar acima da tela
+                    
+                    from ..entities.alien import Alien
+                    new_formation = Formation(Alien, count, entry_x, entry_y, patterns)
+                    formations.append(new_formation)
+                    
+                    # Reiniciar timer
+                    min_t, max_t = Config.FORMATION_SPAWN_INTERVAL
+                    self.formation_spawn_timer = Timer(random.uniform(min_t, max_t))
+                    self.formation_spawn_timer.start()
+        
         # Timer separado para meteoros teleguiados (a cada 3 segundos)
         # Só funciona se a fase tem meteoros na lista de tipos
         from ..entities.meteor import Meteor

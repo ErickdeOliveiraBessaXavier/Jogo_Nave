@@ -166,6 +166,7 @@ class PlayingScene(Scene):
                 self.entity_manager.enemies,
                 self.ship.rect.centerx,
                 self.ship.rect.centery,
+                self.entity_manager.formations,  # Passar formações
             )
             self.powerup_spawner.update(dt, self.entity_manager.powerups)
 
@@ -238,6 +239,7 @@ class PlayingScene(Scene):
         )
 
     def _handle_collisions(self):
+        # Colisões com inimigos normais (não em formação)
         gain, destroyed, score_events = self.collisions.bullets_vs_enemies(
             self.entity_manager.bullets,
             self.entity_manager.enemies,
@@ -246,6 +248,21 @@ class PlayingScene(Scene):
             self.ship,
         )
 
+        # Colisões com inimigos em formações
+        for formation in self.entity_manager.formations:
+            formation_enemies = formation.get_enemies()
+            f_gain, f_destroyed, f_score_events = self.collisions.bullets_vs_enemies(
+                self.entity_manager.bullets,
+                formation_enemies,
+                self.entity_manager.explosions,
+                self.entity_manager.mine_explosions,
+                self.ship,
+            )
+            gain += f_gain
+            destroyed += f_destroyed
+            score_events.extend(f_score_events)
+
+        # Mini ships vs inimigos normais
         vector_gain, vector_destroyed, vector_score_events = (
             self.collisions.mini_ship_bullets_vs_enemies(
                 self.entity_manager.mini_ship_bullets,
@@ -256,7 +273,20 @@ class PlayingScene(Scene):
         gain += vector_gain
         destroyed += vector_destroyed
         score_events.extend(vector_score_events)
+        
+        # Mini ships vs inimigos em formações
+        for formation in self.entity_manager.formations:
+            formation_enemies = formation.get_enemies()
+            f_gain, f_destroyed, f_score_events = self.collisions.mini_ship_bullets_vs_enemies(
+                self.entity_manager.mini_ship_bullets,
+                formation_enemies,
+                self.entity_manager.explosions,
+            )
+            gain += f_gain
+            destroyed += f_destroyed
+            score_events.extend(f_score_events)
 
+        # Explosões de minas vs inimigos normais
         mine_gain, mine_destroyed, mine_score_events, ship_hit = (
             self.collisions.check_mine_explosions(
                 self.entity_manager.enemies,
@@ -268,6 +298,21 @@ class PlayingScene(Scene):
         gain += mine_gain
         destroyed += mine_destroyed
         score_events.extend(mine_score_events)
+        
+        # Explosões de minas vs inimigos em formações
+        for formation in self.entity_manager.formations:
+            formation_enemies = formation.get_enemies()
+            f_gain, f_destroyed, f_score_events, f_ship_hit = self.collisions.check_mine_explosions(
+                formation_enemies,
+                self.entity_manager.mine_explosions,
+                self.entity_manager.explosions,
+                self.ship,
+            )
+            gain += f_gain
+            destroyed += f_destroyed
+            score_events.extend(f_score_events)
+            if f_ship_hit:
+                ship_hit = True
 
         if ship_hit:
             self._handle_ship_hit()
@@ -286,10 +331,22 @@ class PlayingScene(Scene):
                 self.entity_manager.floating_scores,
             )
             self.score += score_gain
+        
+        # Colisão da nave com inimigos normais
         if self.collisions.ship_vs_enemies(
             self.ship, self.entity_manager.enemies, self.entity_manager.explosions
         ):
             self._handle_ship_hit()
+        
+        # Colisão da nave com inimigos em formações
+        for formation in self.entity_manager.formations:
+            formation_enemies = formation.get_enemies()
+            if self.collisions.ship_vs_enemies(
+                self.ship, formation_enemies, self.entity_manager.explosions
+            ):
+                self._handle_ship_hit()
+                break  # Só precisa acertar uma vez
+        
         if self.entity_manager.boss and self.collisions.ship_vs_boss(
             self.ship, self.entity_manager.boss, self.entity_manager.explosions
         ):

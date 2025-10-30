@@ -14,17 +14,31 @@ class Alien:
         self.speed_y = 60
         self.dead = False
         self.shoot_timer = random.uniform(1.5, 3.0)
+        
+        # Atributos para controle por formação
+        self.formation_controlled = False
+        self.formation_index = 0
+        self.formation_angle = 0.0
 
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
     def update(self, dt: float) -> list[AlienBullet] | None:
-        # Movimento
+        # Se controlado por formação, não move automaticamente
+        if self.formation_controlled:
+            # Apenas atualiza timer de tiro (o disparo é gerenciado pela Formation)
+            self.shoot_timer -= dt
+            # Marcar como morto se sair muito da tela (segurança)
+            if self.y > Config.SCREEN_HEIGHT + 100 or self.y < -100:
+                self.dead = True
+            return None
+        
+        # Movimento normal (quando não está em formação)
         self.x += self.speed_x * dt
         self.y += self.speed_y * dt
 
-        # Inverter direÃ§Ã£o nas bordas
+        # Inverter direção nas bordas
         if self.x <= 0 or self.x + self.w >= Config.SCREEN_WIDTH:
             self.speed_x *= -1
 
