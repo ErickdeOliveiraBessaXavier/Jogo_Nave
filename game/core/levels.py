@@ -41,7 +41,7 @@ LEVELS: list[LevelConfig] = [
             Meteor: 0.8,
             # EyeEnemy: 5.0,
         },
-        enemies_to_clear=250,
+        enemies_to_clear=200,
     ),
     LevelConfig(
         level_number=2,
@@ -54,8 +54,8 @@ LEVELS: list[LevelConfig] = [
     LevelConfig(
         level_number=3,
         enemy_spawn_config={
-            Meteor: 0.4,
-            Alien: 1.5,
+            Meteor: 0.5,
+            Alien: 2.5,
         },
         enemies_to_clear=250,
         boss_type=Boss,
