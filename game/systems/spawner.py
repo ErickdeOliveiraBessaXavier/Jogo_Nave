@@ -171,25 +171,58 @@ class EnemySpawner:
                         # Calcular margem segura baseada no tipo de formação
                         # Evitar spawn próximo às bordas para formações não saírem da tela
                         if formation_type == "spiral_circle":
-                            safe_margin = Config.FORMATION_CIRCLE_RADIUS + 100
+                            safe_margin = Config.FORMATION_CIRCLE_RADIUS
                         elif formation_type == "spiral_v":
                             half = count // 2
-                            safe_margin = half * Config.FORMATION_V_SPACING + 80
+                            safe_margin = half * Config.FORMATION_V_SPACING
                         elif formation_type == "spiral_square":
-                            safe_margin = Config.FORMATION_SQUARE_SIZE / 2 + 80
+                            safe_margin = Config.FORMATION_SQUARE_SIZE / 2
                         elif formation_type == "spiral_line":
-                            safe_margin = ((count - 1) * Config.FORMATION_LINE_SPACING) / 2 + 80
+                            safe_margin = ((count - 1) * Config.FORMATION_LINE_SPACING) / 2
                         elif formation_type == "full_cycle":
                             # Usar margem do círculo (maior padrão)
-                            safe_margin = Config.FORMATION_CIRCLE_RADIUS + 100
+                            safe_margin = Config.FORMATION_CIRCLE_RADIUS
                         else:
                             safe_margin = 200  # Fallback
                         
                         # Garantir que safe_margin não ultrapasse metade da largura da tela
                         safe_margin = min(safe_margin, Config.SCREEN_WIDTH / 2 - 100)
                         
-                        entry_x = random.randint(int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin))
-                        entry_y = -80  # Começar um pouco acima para entrada suave (não cortado, mas aparecendo gradualmente)
+                        # Tentar encontrar uma posição que não esteja muito próxima de outras formações
+                        min_distance = 300  # Distância mínima entre formações (pixels)
+                        max_attempts = 10  # Número máximo de tentativas
+                        entry_x = None
+                        
+                        for _ in range(max_attempts):
+                            candidate_x = random.randint(int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin))
+                            
+                            # Verificar distância de todas as formações existentes
+                            too_close = False
+                            for existing_formation in formations:
+                                distance = abs(candidate_x - existing_formation.center_x)
+                                if distance < min_distance:
+                                    too_close = True
+                                    break
+                            
+                            if not too_close:
+                                entry_x = candidate_x
+                                break
+                        
+                        # Se não encontrou posição boa após todas as tentativas, usar a última
+                        if entry_x is None:
+                            entry_x = random.randint(int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin))
+                        
+                        # Calcular entry_y baseado no padrão para evitar que fique cortado no topo
+                        # Considerar o raio/tamanho do padrão para definir posição segura
+                        if formation_type in ["spiral_circle", "full_cycle"]:
+                            # Círculo precisa de margem = raio + segurança (reduzida)
+                            entry_y = Config.FORMATION_CIRCLE_RADIUS + 40
+                        elif formation_type == "spiral_square":
+                            # Quadrado precisa de margem = metade do lado + segurança (reduzida)
+                            entry_y = Config.FORMATION_SQUARE_SIZE / 2 + 40
+                        else:
+                            # V, linha e outros: margem padrão (reduzida)
+                            entry_y = 80
                         
                         from ..entities.alien import Alien
                         new_formation = Formation(Alien, count, entry_x, entry_y, patterns)

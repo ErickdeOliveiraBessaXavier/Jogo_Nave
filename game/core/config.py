@@ -200,20 +200,20 @@ class Config:
     # FORMATION SYSTEM
     # ========================================
     # Formation spawn settings
-    FORMATION_SPAWN_INTERVAL: Tuple[float, float] = (10.0, 35.0)  # Min/max tempo entre formações
+    FORMATION_SPAWN_INTERVAL: Tuple[float, float] = (10.0, 15.0)  # Min/max tempo entre formações
     
     # Entry pattern settings - Curved path (Galaga-style)
     FORMATION_ENTRY_CURVE_AMPLITUDE: float = 150.0  # Amplitude da curva lateral (reduzida de 250)
     FORMATION_ENTRY_CURVE_FREQUENCY: float = 1.2  # Frequência da curva (mais loops)
     FORMATION_ENTRY_TIME_OFFSET: float = 0.25  # Delay entre cada nave na fila
-    FORMATION_ENTRY_SPEED: float = 120.0  # Velocidade de descida (curved path)
+    FORMATION_ENTRY_SPEED: float = 60.0  # Velocidade de descida (curved path) - REDUZIDA
     FORMATION_ENTRY_CURVE_OFFSET_X: float = 100.0  # Offset inicial horizontal (reduzido de 150)
     
     # Entry pattern speeds - Outros padrões de entrada
-    FORMATION_ENTRY_LOOP_SPEED: float = 100.0  # Velocidade de descida (loop)
-    FORMATION_ENTRY_WAVE_SPEED: float = 130.0  # Velocidade de descida (wave)
-    FORMATION_ENTRY_FAN_SPEED: float = 80.0  # Velocidade de descida (fan)
-    FORMATION_ENTRY_DIAGONAL_SPEED: float = 110.0  # Velocidade de descida (diagonal)
+    FORMATION_ENTRY_LOOP_SPEED: float = 50.0  # Velocidade de descida (loop) - REDUZIDA
+    FORMATION_ENTRY_WAVE_SPEED: float = 65.0  # Velocidade de descida (wave) - REDUZIDA
+    FORMATION_ENTRY_FAN_SPEED: float = 40.0  # Velocidade de descida (fan) - REDUZIDA
+    FORMATION_ENTRY_DIAGONAL_SPEED: float = 55.0  # Velocidade de descida (diagonal) - REDUZIDA
     
     # Pattern settings
     FORMATION_PATTERN_DURATION: float = 8.0  # Tempo em cada padrão antes de transicionar
@@ -224,8 +224,8 @@ class Config:
     FORMATION_V_SPACING: float = 45.0  # Espaçamento entre inimigos no V
     FORMATION_SQUARE_SIZE: float = 180.0
     FORMATION_LINE_SPACING: float = 50.0
-    FORMATION_DRIFT_SPEED: float = 30.0  # Velocidade de movimento lateral
-    FORMATION_DESCENT_SPEED: float = 10.0  # Velocidade de descida após formar padrão
+    FORMATION_DRIFT_SPEED: float = 150.0  # Velocidade de movimento lateral
+    FORMATION_DESCENT_SPEED: float = 30.0  # Velocidade de descida após formar padrão
     
     # ========================================
     # UI SETTINGS

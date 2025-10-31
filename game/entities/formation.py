@@ -65,6 +65,9 @@ class Formation:
             # Desabilitar movimento padrão do inimigo
             enemy.formation_controlled = True
             enemy.formation_index = i
+            # Adicionar controle de opacidade para fade-in
+            enemy.alpha = 0  # Começar invisível
+            enemy.fade_in_time = 0.0  # Tempo de fade
             self.enemies.append(enemy)
         
         # Padrões
@@ -226,7 +229,13 @@ class Formation:
                 # Nave ainda não começou a entrar, manter fora da tela
                 enemy.x = self.center_x - enemy.w / 2
                 enemy.y = -100
+                enemy.alpha = 0  # Invisível
                 continue
+            
+            # Fade-in suave: aumentar opacidade nos primeiros 0.5 segundos
+            enemy.fade_in_time += dt
+            fade_duration = 0.5
+            enemy.alpha = min(255, int((enemy.fade_in_time / fade_duration) * 255))
             
             # Progresso da entrada (0 a 1) - normalizado em 3.5 segundos
             entry_progress = min(1.0, t / 3.5)
@@ -250,7 +259,7 @@ class Formation:
             
             # Posição final: centro + curva + offset inicial que diminui
             target_x = self.center_x + curve_x + start_offset_x
-            target_y = self.center_y - 150 + descent_y  # Começa 150px acima do centro
+            target_y = self.center_y + 50 + descent_y  # Começa próximo ao centro (não muito acima)
             
             # LIMITAR POSIÇÃO HORIZONTAL (respeitar limites da tela)
             margin = 30
@@ -283,7 +292,13 @@ class Formation:
             if t <= 0:
                 enemy.x = self.center_x - enemy.w / 2
                 enemy.y = -100
+                enemy.alpha = 0  # Invisível
                 continue
+            
+            # Fade-in suave
+            enemy.fade_in_time += dt
+            fade_duration = 0.5
+            enemy.alpha = min(255, int((enemy.fade_in_time / fade_duration) * 255))
             
             # Progresso normalizado
             entry_progress = min(1.0, t / 3.5)
@@ -301,7 +316,7 @@ class Formation:
             
             # Convergir para o centro (loop afeta ambos X e Y)
             target_x = self.center_x + loop_x * (1.0 - entry_progress * 0.6)
-            target_y = self.center_y - 150 + descent_y + loop_y * 0.5
+            target_y = self.center_y + 50 + descent_y + loop_y * 0.5  # Próximo ao centro
             
             # LIMITAR POSIÇÃO HORIZONTAL
             margin = 30
@@ -325,6 +340,11 @@ class Formation:
             i = enemy.formation_index
             t = self.entry_time
             
+            # Fade-in suave para todas as naves
+            enemy.fade_in_time += dt
+            fade_duration = 0.5
+            enemy.alpha = min(255, int((enemy.fade_in_time / fade_duration) * 255))
+            
             # Todas entram ao mesmo tempo, mas com offset de fase
             phase_offset = (i / self.count) * math.pi * 2
             
@@ -339,7 +359,7 @@ class Formation:
             descent_y = t * Config.FORMATION_ENTRY_WAVE_SPEED
             
             target_x = self.center_x + wave_x
-            target_y = self.center_y - 200 + descent_y
+            target_y = self.center_y + descent_y  # Começa no centro e desce
             
             # LIMITAR POSIÇÃO HORIZONTAL
             margin = 30
@@ -363,6 +383,11 @@ class Formation:
             i = enemy.formation_index
             t = self.entry_time
             
+            # Fade-in suave
+            enemy.fade_in_time += dt
+            fade_duration = 0.5
+            enemy.alpha = min(255, int((enemy.fade_in_time / fade_duration) * 255))
+            
             # Progresso
             entry_progress = min(1.0, t / 3.0)
             
@@ -380,7 +405,7 @@ class Formation:
             descent_y = t * Config.FORMATION_ENTRY_FAN_SPEED
             
             target_x = self.center_x + fan_x
-            target_y = self.center_y - 120 + descent_y + fan_y
+            target_y = self.center_y + 30 + descent_y + fan_y  # Próximo ao centro
             
             # LIMITAR POSIÇÃO HORIZONTAL
             margin = 30
@@ -408,7 +433,13 @@ class Formation:
             if t <= 0:
                 enemy.x = self.center_x - enemy.w / 2
                 enemy.y = -100
+                enemy.alpha = 0  # Invisível
                 continue
+            
+            # Fade-in suave
+            enemy.fade_in_time += dt
+            fade_duration = 0.5
+            enemy.alpha = min(255, int((enemy.fade_in_time / fade_duration) * 255))
             
             # Metade vem da esquerda, metade da direita
             side = 1 if i < self.count // 2 else -1
@@ -421,7 +452,7 @@ class Formation:
             diag_y = t * Config.FORMATION_ENTRY_DIAGONAL_SPEED
             
             target_x = self.center_x + diag_x
-            target_y = self.center_y - 150 + diag_y
+            target_y = self.center_y + 50 + diag_y  # Próximo ao centro
             
             # LIMITAR POSIÇÃO HORIZONTAL
             margin = 30
@@ -494,20 +525,6 @@ class Formation:
         if not self.positions_locked:
             self._lock_final_positions()
         
-        # Movimento lento lateral para formações em padrão
-        movement_time = self.time_in_pattern
-        drift_x = math.sin(movement_time * 0.5) * Config.FORMATION_DRIFT_SPEED * dt
-        
-        # Calcular limites baseados na formação atual
-        max_offset_x = self._calculate_max_horizontal_offset()
-        
-        # Aplicar drift com limite de tela
-        new_center_x = self.center_x + drift_x
-        # Limitar movimento lateral
-        min_x = max_offset_x + 40  # Margem de segurança
-        max_x = Config.SCREEN_WIDTH - max_offset_x - 40
-        self.center_x = max(min_x, min(max_x, new_center_x))
-        
         # Movimento de descida após formação completa (não durante espiral)
         if self.current_pattern != FormationPattern.SPIRAL_ENTRY and not self.is_transitioning:
             self.center_y += Config.FORMATION_DESCENT_SPEED * dt
@@ -538,6 +555,12 @@ class Formation:
                 angle = (i / count) * 2 * math.pi
                 x = self.center_x + radius * math.cos(angle)
                 y = self.center_y + radius * math.sin(angle)
+                
+                # GARANTIR que não fique cortado no topo
+                # Assumindo altura de nave ~30px
+                min_y = 50  # Margem mínima do topo
+                y = max(min_y, y)
+                
                 positions.append((x, y))
         
         elif pattern == FormationPattern.V_SHAPE:
@@ -546,17 +569,18 @@ class Formation:
             spacing = Config.FORMATION_V_SPACING
             half = count // 2
             has_center = count % 2 == 1  # Se ímpar, tem nave no centro
+            min_y = 50  # Margem mínima do topo
             
             for i in range(count):
                 if has_center and i == half:
                     # Nave central (vértice do V) - apenas para contagem ímpar
                     x = self.center_x
-                    y = self.center_y
+                    y = max(min_y, self.center_y)
                 elif i < half:
                     # Lado esquerdo do V
                     offset = half - i
                     x = self.center_x - offset * spacing
-                    y = self.center_y + offset * spacing
+                    y = max(min_y, self.center_y + offset * spacing)
                 else:
                     # Lado direito do V
                     if has_center:
@@ -564,12 +588,13 @@ class Formation:
                     else:
                         offset = i - half + 1  # Para par, começar do 1
                     x = self.center_x + offset * spacing
-                    y = self.center_y + offset * spacing
+                    y = max(min_y, self.center_y + offset * spacing)
                 positions.append((x, y))
         
         elif pattern == FormationPattern.SQUARE:
             # MELHORADO: Distribuição mais uniforme
             side_length = Config.FORMATION_SQUARE_SIZE
+            min_y = 50  # Margem mínima do topo
             
             if count <= 4:
                 # Poucos inimigos: colocar nos cantos
@@ -582,6 +607,7 @@ class Formation:
                 for i in range(count):
                     x = self.center_x + corners[i][0]
                     y = self.center_y + corners[i][1]
+                    y = max(min_y, y)  # Garantir margem do topo
                     positions.append((x, y))
             else:
                 # Muitos inimigos: distribuir ao longo dos lados
@@ -603,14 +629,17 @@ class Formation:
                     else:  # Esquerda
                         x = self.center_x - side_length/2
                         y = self.center_y + side_length/2 - progress * side_length
+                    
+                    y = max(min_y, y)  # Garantir margem do topo
                     positions.append((x, y))
         
         elif pattern == FormationPattern.LINE:
             spacing = Config.FORMATION_LINE_SPACING
             total_width = (count - 1) * spacing
+            min_y = 50  # Margem mínima do topo
             for i in range(count):
                 x = self.center_x - total_width/2 + i * spacing
-                y = self.center_y
+                y = max(min_y, self.center_y)
                 positions.append((x, y))
         
         return positions

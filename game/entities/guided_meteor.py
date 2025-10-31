@@ -41,7 +41,7 @@ class GuidedMeteor(Meteor):
         # Estado do meteoro
         self.target_x = target_x
         self.target_y = target_y
-        self.guided = True  # Sempre guiado enquanto vivo
+        # Note: self.guided sempre True, poderia ser removido se não houver planos futuros
 
         # Acelerar rotação para meteoros guiados
         self.rotation_speed *= 3.0  # 3x mais rápido que meteoros normais
@@ -64,9 +64,8 @@ class GuidedMeteor(Meteor):
             self.target_x = target_x
             self.target_y = target_y
 
-        # Sistema de guiamento (sempre ativo enquanto vivo)
-        if self.guided:
-            self._update_guidance(dt)
+        # Sistema de guiamento (sempre ativo)
+        self._update_guidance(dt)
 
         # Física normal do meteoro (movimento e rotação)
         super().update(dt)
@@ -138,10 +137,5 @@ class GuidedMeteor(Meteor):
         pygame.draw.circle(screen, core_color, center, max(2, self.size // 4))
 
     def get_display_color(self) -> Tuple[int, int, int]:
-        """Get color for the guided meteor."""
-        if self.guided:
-            # Sempre verde quando guiado
-            return self.base_color
-        else:
-            # Cor normal quando não guiado (nunca deveria acontecer)
-            return (128, 128, 128)  # Cinza
+        """Get color for the guided meteor (always green)."""
+        return self.base_color

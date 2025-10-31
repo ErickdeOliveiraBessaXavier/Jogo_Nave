@@ -66,12 +66,10 @@ LEVELS: list[LevelConfig] = [
     LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            # Meteor: 0.8,            
-            # EyeEnemy: 5.0,
+            Meteor: 0.8,            
+            EyeEnemy: 15.0,
         },
         enemies_to_clear=200,
-        formations_enabled=True,
-        formation_types=["spiral_circle", "spiral_v"]
     ),
     LevelConfig(
         level_number=2,
@@ -80,8 +78,6 @@ LEVELS: list[LevelConfig] = [
         },
         enemies_to_clear=100,
         mines_enabled=True,
-        formations_enabled=True,
-        formation_types=["spiral_circle", "spiral_v"],
     ),
     LevelConfig(
         level_number=3,
