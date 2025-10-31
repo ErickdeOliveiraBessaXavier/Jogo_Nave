@@ -250,7 +250,16 @@ class Formation:
             
             # Posição final: centro + curva + offset inicial que diminui
             target_x = self.center_x + curve_x + start_offset_x
-            target_y = self.center_y - 200 + descent_y  # Começa 200px acima do centro
+            target_y = self.center_y - 150 + descent_y  # Começa 150px acima do centro
+            
+            # LIMITAR POSIÇÃO HORIZONTAL (respeitar limites da tela)
+            margin = 30
+            target_x = max(margin + enemy.w / 2, min(Config.SCREEN_WIDTH - margin - enemy.w / 2, target_x))
+            
+            # LIMITAR POSIÇÃO VERTICAL (permitir aparecer suavemente, mas não subir muito)
+            # Limite superior: não pode subir mais que uma nave completa acima da tela
+            # Limite inferior: deixa descer normalmente
+            target_y = max(-enemy.h, min(target_y, Config.SCREEN_HEIGHT))  # Não volta acima de -enemy.h
             
             enemy.x = target_x - enemy.w / 2
             enemy.y = target_y - enemy.h / 2
@@ -292,7 +301,14 @@ class Formation:
             
             # Convergir para o centro (loop afeta ambos X e Y)
             target_x = self.center_x + loop_x * (1.0 - entry_progress * 0.6)
-            target_y = self.center_y - 200 + descent_y + loop_y * 0.5
+            target_y = self.center_y - 150 + descent_y + loop_y * 0.5
+            
+            # LIMITAR POSIÇÃO HORIZONTAL
+            margin = 30
+            target_x = max(margin + enemy.w / 2, min(Config.SCREEN_WIDTH - margin - enemy.w / 2, target_x))
+            
+            # LIMITAR POSIÇÃO VERTICAL (não deixar subir além do topo)
+            target_y = max(-enemy.h, min(target_y, Config.SCREEN_HEIGHT))
             
             enemy.x = target_x - enemy.w / 2
             enemy.y = target_y - enemy.h / 2
@@ -323,7 +339,14 @@ class Formation:
             descent_y = t * Config.FORMATION_ENTRY_WAVE_SPEED
             
             target_x = self.center_x + wave_x
-            target_y = self.center_y - 250 + descent_y
+            target_y = self.center_y - 200 + descent_y
+            
+            # LIMITAR POSIÇÃO HORIZONTAL
+            margin = 30
+            target_x = max(margin + enemy.w / 2, min(Config.SCREEN_WIDTH - margin - enemy.w / 2, target_x))
+            
+            # LIMITAR POSIÇÃO VERTICAL (não deixar subir além do topo)
+            target_y = max(-enemy.h, min(target_y, Config.SCREEN_HEIGHT))
             
             enemy.x = target_x - enemy.w / 2
             enemy.y = target_y - enemy.h / 2
@@ -357,7 +380,14 @@ class Formation:
             descent_y = t * Config.FORMATION_ENTRY_FAN_SPEED
             
             target_x = self.center_x + fan_x
-            target_y = self.center_y - 150 + descent_y + fan_y
+            target_y = self.center_y - 120 + descent_y + fan_y
+            
+            # LIMITAR POSIÇÃO HORIZONTAL
+            margin = 30
+            target_x = max(margin + enemy.w / 2, min(Config.SCREEN_WIDTH - margin - enemy.w / 2, target_x))
+            
+            # LIMITAR POSIÇÃO VERTICAL (não deixar subir além do topo)
+            target_y = max(-enemy.h, min(target_y, Config.SCREEN_HEIGHT))
             
             enemy.x = target_x - enemy.w / 2
             enemy.y = target_y - enemy.h / 2
@@ -391,7 +421,14 @@ class Formation:
             diag_y = t * Config.FORMATION_ENTRY_DIAGONAL_SPEED
             
             target_x = self.center_x + diag_x
-            target_y = self.center_y - 200 + diag_y
+            target_y = self.center_y - 150 + diag_y
+            
+            # LIMITAR POSIÇÃO HORIZONTAL
+            margin = 30
+            target_x = max(margin + enemy.w / 2, min(Config.SCREEN_WIDTH - margin - enemy.w / 2, target_x))
+            
+            # LIMITAR POSIÇÃO VERTICAL (permitir aparecer suavemente)
+            target_y = max(-enemy.h, target_y)
             
             enemy.x = target_x - enemy.w / 2
             enemy.y = target_y - enemy.h / 2
@@ -461,7 +498,15 @@ class Formation:
         movement_time = self.time_in_pattern
         drift_x = math.sin(movement_time * 0.5) * Config.FORMATION_DRIFT_SPEED * dt
         
-        self.center_x += drift_x
+        # Calcular limites baseados na formação atual
+        max_offset_x = self._calculate_max_horizontal_offset()
+        
+        # Aplicar drift com limite de tela
+        new_center_x = self.center_x + drift_x
+        # Limitar movimento lateral
+        min_x = max_offset_x + 40  # Margem de segurança
+        max_x = Config.SCREEN_WIDTH - max_offset_x - 40
+        self.center_x = max(min_x, min(max_x, new_center_x))
         
         # Movimento de descida após formação completa (não durante espiral)
         if self.current_pattern != FormationPattern.SPIRAL_ENTRY and not self.is_transitioning:
@@ -573,6 +618,20 @@ class Formation:
     def _ease_in_out(self, t: float) -> float:
         """Função de easing para transições suaves."""
         return t * t * (3.0 - 2.0 * t)
+    
+    def _calculate_max_horizontal_offset(self) -> float:
+        """Calcula o offset horizontal máximo da formação atual."""
+        if self.current_pattern == FormationPattern.CIRCLE:
+            return Config.FORMATION_CIRCLE_RADIUS
+        elif self.current_pattern == FormationPattern.V_SHAPE:
+            half = self.count // 2
+            return half * Config.FORMATION_V_SPACING
+        elif self.current_pattern == FormationPattern.SQUARE:
+            return Config.FORMATION_SQUARE_SIZE / 2
+        elif self.current_pattern == FormationPattern.LINE:
+            return ((self.count - 1) * Config.FORMATION_LINE_SPACING) / 2
+        else:
+            return 100.0  # Fallback
     
     def _lock_final_positions(self):
         """Trava as posições finais de cada nave após formação completa."""

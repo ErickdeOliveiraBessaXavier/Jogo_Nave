@@ -19,8 +19,9 @@ class Config:
     # ========================================
     # DISPLAY & PERFORMANCE SETTINGS
     # ========================================
-    SCREEN_WIDTH: int = 1000
-    SCREEN_HEIGHT: int = 600
+    FULLSCREEN: bool = True  # True para fullscreen, False para janela
+    SCREEN_WIDTH: int = 1600  # Maior = elementos menores (era 1000)
+    SCREEN_HEIGHT: int = 900  # Maior = elementos menores (era 600)
     FPS: int = 60
 
     # ========================================
@@ -202,11 +203,11 @@ class Config:
     FORMATION_SPAWN_INTERVAL: Tuple[float, float] = (10.0, 35.0)  # Min/max tempo entre formações
     
     # Entry pattern settings - Curved path (Galaga-style)
-    FORMATION_ENTRY_CURVE_AMPLITUDE: float = 250.0  # Amplitude da curva lateral
+    FORMATION_ENTRY_CURVE_AMPLITUDE: float = 150.0  # Amplitude da curva lateral (reduzida de 250)
     FORMATION_ENTRY_CURVE_FREQUENCY: float = 1.2  # Frequência da curva (mais loops)
     FORMATION_ENTRY_TIME_OFFSET: float = 0.25  # Delay entre cada nave na fila
     FORMATION_ENTRY_SPEED: float = 120.0  # Velocidade de descida (curved path)
-    FORMATION_ENTRY_CURVE_OFFSET_X: float = 150.0  # Offset inicial horizontal
+    FORMATION_ENTRY_CURVE_OFFSET_X: float = 100.0  # Offset inicial horizontal (reduzido de 150)
     
     # Entry pattern speeds - Outros padrões de entrada
     FORMATION_ENTRY_LOOP_SPEED: float = 100.0  # Velocidade de descida (loop)

@@ -168,8 +168,28 @@ class EnemySpawner:
                         else:
                             count = 5  # Fallback
                         
-                        entry_x = random.randint(150, Config.SCREEN_WIDTH - 150)
-                        entry_y = -50  # Começar acima da tela
+                        # Calcular margem segura baseada no tipo de formação
+                        # Evitar spawn próximo às bordas para formações não saírem da tela
+                        if formation_type == "spiral_circle":
+                            safe_margin = Config.FORMATION_CIRCLE_RADIUS + 100
+                        elif formation_type == "spiral_v":
+                            half = count // 2
+                            safe_margin = half * Config.FORMATION_V_SPACING + 80
+                        elif formation_type == "spiral_square":
+                            safe_margin = Config.FORMATION_SQUARE_SIZE / 2 + 80
+                        elif formation_type == "spiral_line":
+                            safe_margin = ((count - 1) * Config.FORMATION_LINE_SPACING) / 2 + 80
+                        elif formation_type == "full_cycle":
+                            # Usar margem do círculo (maior padrão)
+                            safe_margin = Config.FORMATION_CIRCLE_RADIUS + 100
+                        else:
+                            safe_margin = 200  # Fallback
+                        
+                        # Garantir que safe_margin não ultrapasse metade da largura da tela
+                        safe_margin = min(safe_margin, Config.SCREEN_WIDTH / 2 - 100)
+                        
+                        entry_x = random.randint(int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin))
+                        entry_y = -80  # Começar um pouco acima para entrada suave (não cortado, mas aparecendo gradualmente)
                         
                         from ..entities.alien import Alien
                         new_formation = Formation(Alien, count, entry_x, entry_y, patterns)
