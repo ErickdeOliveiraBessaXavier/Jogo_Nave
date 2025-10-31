@@ -15,10 +15,20 @@ class FormationPattern(Enum):
     LINE = "line"
 
 
+class EntryPattern(Enum):
+    """Padrões de entrada disponíveis."""
+    CURVED_PATH = "curved_path"  # Galaga clássico
+    LOOP = "loop"  # Loop completo antes da posição
+    WAVE = "wave"  # Onda sincronizada
+    FAN = "fan"  # Leque abrindo
+    DIAGONAL_CROSS = "diagonal_cross"  # Diagonais cruzadas
+
+
 class Formation:
     """
     Gerencia um grupo de inimigos em formações geométricas.
-    Inimigos entram em espiral e depois se alinham em diferentes padrões.
+    Inimigos entram com diferentes padrões animados (curvas, loops, ondas, etc.)
+    e depois se alinham em formações geométricas (círculo, V, quadrado, linha).
     """
     
     def __init__(
@@ -39,6 +49,10 @@ class Formation:
             entry_y: Posição Y inicial (geralmente acima da tela)
             patterns_sequence: Sequência de padrões (padrão: espiral -> círculo -> V)
         """
+        # Validação: count deve ser >= 1
+        if count < 1:
+            raise ValueError(f"Formation count must be >= 1, got {count}")
+        
         self.enemy_type = enemy_type
         self.count = count
         self.center_x = entry_x
@@ -51,7 +65,6 @@ class Formation:
             # Desabilitar movimento padrão do inimigo
             enemy.formation_controlled = True
             enemy.formation_index = i
-            enemy.formation_angle = (i / count) * 2 * math.pi  # Ângulo inicial na espiral
             self.enemies.append(enemy)
         
         # Padrões
@@ -73,10 +86,11 @@ class Formation:
         self.transition_progress = 0.0
         self.is_transitioning = False
         
-        # Estado da espiral
-        self.spiral_time = 0.0
-        self.spiral_radius = Config.FORMATION_SPIRAL_RADIUS
-        self.spiral_complete = False
+        # Estado da entrada
+        self.entry_time = 0.0
+        
+        # Escolher padrão de entrada aleatoriamente
+        self.entry_pattern = self._choose_random_entry_pattern()
         
         # Posições-alvo para transições suaves
         self.target_positions: List[Tuple[float, float]] = []
@@ -91,10 +105,26 @@ class Formation:
         
         # Estado
         self.dead = False
-        self.fully_entered = False
+        self.formation_complete = False  # True quando todas as naves entraram e formação está estável
+    
+    def _choose_random_entry_pattern(self) -> EntryPattern:
+        """Escolhe aleatoriamente um padrão de entrada com pesos diferentes."""
+        patterns = [
+            EntryPattern.CURVED_PATH,
+            EntryPattern.LOOP,
+            EntryPattern.WAVE,
+            EntryPattern.FAN,
+            EntryPattern.DIAGONAL_CROSS
+        ]
+        weights = [0.35, 0.25, 0.20, 0.12, 0.08]  # Soma = 1.0
+        return random.choices(patterns, weights=weights)[0]
     
     def _precalculate_final_positions(self):
         """Pré-calcula as posições finais para evitar saltos visuais."""
+        # Validação: verificar se há pelo menos um padrão
+        if not self.patterns_sequence:
+            raise ValueError("patterns_sequence cannot be empty")
+        
         # Encontrar o primeiro padrão que não é SPIRAL_ENTRY
         target_pattern = None
         for pattern in self.patterns_sequence:
@@ -136,7 +166,7 @@ class Formation:
         
         # Atualizar posições baseado no padrão atual
         if self.current_pattern == FormationPattern.SPIRAL_ENTRY:
-            self._update_spiral(dt)
+            self._update_entry(dt)
         elif self.is_transitioning:
             self._update_transition(dt)
         else:
@@ -150,7 +180,8 @@ class Formation:
                 continue
             
             # Atualizar timers internos do inimigo (como shoot_timer)
-            if hasattr(enemy, 'shoot_timer'):
+            # MAS só permitir tiro se a formação estiver completamente formada
+            if hasattr(enemy, 'shoot_timer') and self.formation_complete and not self.is_transitioning:
                 enemy.shoot_timer -= dt
                 if enemy.shoot_timer <= 0:
                     from .alien_bullet import AlienBullet
@@ -167,32 +198,206 @@ class Formation:
         
         return all_bullets
 
-    def _update_spiral(self, dt: float):
-        """Atualiza posições durante entrada em espiral."""
-        self.spiral_time += dt
+    def _update_entry(self, dt: float):
+        """Delega para o método de entrada correto baseado no padrão escolhido."""
+        if self.entry_pattern == EntryPattern.CURVED_PATH:
+            self._update_curved_entry(dt)
+        elif self.entry_pattern == EntryPattern.LOOP:
+            self._update_loop_entry(dt)
+        elif self.entry_pattern == EntryPattern.WAVE:
+            self._update_wave_entry(dt)
+        elif self.entry_pattern == EntryPattern.FAN:
+            self._update_fan_entry(dt)
+        elif self.entry_pattern == EntryPattern.DIAGONAL_CROSS:
+            self._update_diagonal_cross_entry(dt)
+
+    def _update_curved_entry(self, dt: float):
+        """Atualiza posições durante entrada em fila indiana com trajetória curva (estilo Galaga)."""
+        self.entry_time += dt
         
         for enemy in self.enemies:
             # Usa índice fixo do inimigo para manter consistência
             i = enemy.formation_index
-            # Cada inimigo tem um offset de tempo na espiral
-            time_offset = i * Config.FORMATION_SPIRAL_TIME_OFFSET
-            t = max(0, self.spiral_time - time_offset)
+            # Cada nave entra com um delay (fila indiana)
+            time_offset = i * Config.FORMATION_ENTRY_TIME_OFFSET
+            t = max(0, self.entry_time - time_offset)
             
-            # Calcular posição na espiral
-            angle = enemy.formation_angle + t * Config.FORMATION_SPIRAL_SPEED
-            radius = self.spiral_radius * (1 - math.exp(-t * 0.5))
+            if t <= 0:
+                # Nave ainda não começou a entrar, manter fora da tela
+                enemy.x = self.center_x - enemy.w / 2
+                enemy.y = -100
+                continue
             
-            # Mover para baixo enquanto gira
-            target_x = self.center_x + radius * math.cos(angle)
-            target_y = self.center_y + t * Config.FORMATION_ENTRY_SPEED + radius * math.sin(angle)
+            # Progresso da entrada (0 a 1) - normalizado em 3.5 segundos
+            entry_progress = min(1.0, t / 3.5)
+            
+            # Determinar lado de entrada (alternado para visual interessante)
+            # Naves pares entram pela esquerda, ímpares pela direita
+            side = 1 if i % 2 == 0 else -1
+            
+            # Trajetória curva sinusoidal (estilo Galaga)
+            # Começa de um lado, faz curvas e vai se aproximando do centro
+            curve_x = math.sin(t * Config.FORMATION_ENTRY_CURVE_FREQUENCY) * Config.FORMATION_ENTRY_CURVE_AMPLITUDE
+            
+            # Reduzir amplitude da curva conforme se aproxima da formação final
+            curve_x *= (1.0 - entry_progress * 0.85)
+            
+            # Offset inicial baseado no lado de entrada
+            start_offset_x = side * Config.FORMATION_ENTRY_CURVE_OFFSET_X * (1.0 - entry_progress)
+            
+            # Movimento vertical constante
+            descent_y = t * Config.FORMATION_ENTRY_SPEED
+            
+            # Posição final: centro + curva + offset inicial que diminui
+            target_x = self.center_x + curve_x + start_offset_x
+            target_y = self.center_y - 200 + descent_y  # Começa 200px acima do centro
             
             enemy.x = target_x - enemy.w / 2
             enemy.y = target_y - enemy.h / 2
         
-        # Verificar se a espiral está completa
-        if self.spiral_time > self.count * Config.FORMATION_SPIRAL_TIME_OFFSET + 2.0:
-            self.spiral_complete = True
-            self.fully_entered = True
+        # Verificar se a entrada está completa
+        # Todas as naves entraram + tempo para última nave completar trajetória
+        total_entry_time = self.count * Config.FORMATION_ENTRY_TIME_OFFSET + 4.0
+        if self.entry_time > total_entry_time:
+            self.formation_complete = True
+            self._start_pattern_transition()
+
+    def _update_loop_entry(self, dt: float):
+        """Entrada com loop completo (estilo boss do Galaga)."""
+        self.entry_time += dt
+        
+        for enemy in self.enemies:
+            i = enemy.formation_index
+            time_offset = i * Config.FORMATION_ENTRY_TIME_OFFSET
+            t = max(0, self.entry_time - time_offset)
+            
+            if t <= 0:
+                enemy.x = self.center_x - enemy.w / 2
+                enemy.y = -100
+                continue
+            
+            # Progresso normalizado
+            entry_progress = min(1.0, t / 3.5)
+            
+            # Fazer um loop circular completo
+            loop_angle = t * 2.5  # Velocidade do loop
+            loop_radius = 150.0 * (1.0 - entry_progress * 0.7)  # Raio diminui
+            
+            # Posição no loop
+            loop_x = math.cos(loop_angle) * loop_radius
+            loop_y = math.sin(loop_angle) * loop_radius
+            
+            # Descida gradual
+            descent_y = t * Config.FORMATION_ENTRY_LOOP_SPEED
+            
+            # Convergir para o centro (loop afeta ambos X e Y)
+            target_x = self.center_x + loop_x * (1.0 - entry_progress * 0.6)
+            target_y = self.center_y - 200 + descent_y + loop_y * 0.5
+            
+            enemy.x = target_x - enemy.w / 2
+            enemy.y = target_y - enemy.h / 2
+        
+        if self.entry_time > self.count * Config.FORMATION_ENTRY_TIME_OFFSET + 4.0:
+            self.formation_complete = True
+            self._start_pattern_transition()
+
+    def _update_wave_entry(self, dt: float):
+        """Entrada sincronizada em onda."""
+        self.entry_time += dt
+        
+        for enemy in self.enemies:
+            i = enemy.formation_index
+            t = self.entry_time
+            
+            # Todas entram ao mesmo tempo, mas com offset de fase
+            phase_offset = (i / self.count) * math.pi * 2
+            
+            # Progresso
+            entry_progress = min(1.0, t / 3.0)
+            
+            # Onda horizontal
+            wave_x = math.sin(t * 2.0 + phase_offset) * 180.0
+            wave_x *= (1.0 - entry_progress * 0.8)
+            
+            # Descida
+            descent_y = t * Config.FORMATION_ENTRY_WAVE_SPEED
+            
+            target_x = self.center_x + wave_x
+            target_y = self.center_y - 250 + descent_y
+            
+            enemy.x = target_x - enemy.w / 2
+            enemy.y = target_y - enemy.h / 2
+        
+        if self.entry_time > 3.5:
+            self.formation_complete = True
+            self._start_pattern_transition()
+
+    def _update_fan_entry(self, dt: float):
+        """Entrada em leque - todas partem do centro e abrem."""
+        self.entry_time += dt
+        
+        for enemy in self.enemies:
+            i = enemy.formation_index
+            t = self.entry_time
+            
+            # Progresso
+            entry_progress = min(1.0, t / 3.0)
+            
+            # Ângulo único para cada nave
+            angle = (i / self.count) * math.pi * 1.5 - math.pi * 0.75  # Leque de 270°
+            
+            # Raio que aumenta com o tempo
+            radius = t * 100.0 * entry_progress
+            
+            # Posição no leque
+            fan_x = math.cos(angle) * radius
+            fan_y = math.sin(angle) * radius * 0.5  # Achatar verticalmente
+            
+            # Descida
+            descent_y = t * Config.FORMATION_ENTRY_FAN_SPEED
+            
+            target_x = self.center_x + fan_x
+            target_y = self.center_y - 150 + descent_y + fan_y
+            
+            enemy.x = target_x - enemy.w / 2
+            enemy.y = target_y - enemy.h / 2
+        
+        if self.entry_time > 3.5:
+            self.formation_complete = True
+            self._start_pattern_transition()
+
+    def _update_diagonal_cross_entry(self, dt: float):
+        """Entrada em diagonais cruzadas."""
+        self.entry_time += dt
+        
+        for enemy in self.enemies:
+            i = enemy.formation_index
+            time_offset = i * Config.FORMATION_ENTRY_TIME_OFFSET
+            t = max(0, self.entry_time - time_offset)
+            
+            if t <= 0:
+                enemy.x = self.center_x - enemy.w / 2
+                enemy.y = -100
+                continue
+            
+            # Metade vem da esquerda, metade da direita
+            side = 1 if i < self.count // 2 else -1
+            
+            # Progresso
+            entry_progress = min(1.0, t / 3.5)
+            
+            # Movimento diagonal
+            diag_x = side * 300 * (1.0 - entry_progress)
+            diag_y = t * Config.FORMATION_ENTRY_DIAGONAL_SPEED
+            
+            target_x = self.center_x + diag_x
+            target_y = self.center_y - 200 + diag_y
+            
+            enemy.x = target_x - enemy.w / 2
+            enemy.y = target_y - enemy.h / 2
+        
+        if self.entry_time > self.count * Config.FORMATION_ENTRY_TIME_OFFSET + 4.0:
+            self.formation_complete = True
             self._start_pattern_transition()
 
     def _start_pattern_transition(self):
@@ -265,7 +470,10 @@ class Formation:
         # Aplicar offsets fixos relativos ao centro (que se move)
         for enemy in self.enemies:
             i = enemy.formation_index
-            # CORRIGIDO: Verificar bounds para evitar IndexError
+            # IMPORTANTE: final_positions mantém tamanho original (count).
+            # Quando inimigos morrem, são removidos de self.enemies mas seus índices
+            # originais (formation_index) são preservados. Por isso verificamos bounds.
+            # Isso cria "buracos" visuais na formação quando inimigos são destruídos.
             if i < len(self.final_positions):
                 # Offset relativo ao centro
                 offset_x: float = cast(float, self.final_positions[i][0])
@@ -288,13 +496,15 @@ class Formation:
                 positions.append((x, y))
         
         elif pattern == FormationPattern.V_SHAPE:
+            # V-shape funciona tanto com contagem ímpar (tem centro) quanto par (sem centro)
+            # Recomendado: usar 5 ou 7 naves para visual mais balanceado
             spacing = Config.FORMATION_V_SPACING
             half = count // 2
             has_center = count % 2 == 1  # Se ímpar, tem nave no centro
             
             for i in range(count):
                 if has_center and i == half:
-                    # Nave central (vértice do V)
+                    # Nave central (vértice do V) - apenas para contagem ímpar
                     x = self.center_x
                     y = self.center_y
                 elif i < half:

@@ -1,5 +1,5 @@
 import random
-from typing import List, Union, TYPE_CHECKING, Dict, Type
+from typing import List, Union, TYPE_CHECKING, Dict, Type, TypedDict, Tuple
 
 from ..core.time import Timer
 from ..core.config import Config, PowerUpType
@@ -15,10 +15,56 @@ if TYPE_CHECKING:
     from ..entities.alien import Alien
 
 
+class FormationConfig(TypedDict, total=False):
+    """Configuração de um tipo de formação."""
+    patterns: List[FormationPattern]
+    count_range: Tuple[int, int]
+    count_options: List[int]
+
+
+# Configurações de formações disponíveis
+FORMATION_CONFIGS: Dict[str, FormationConfig] = {
+    "spiral_circle": {
+        "patterns": [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE],
+        "count_range": (5, 8),
+    },
+    "spiral_v": {
+        "patterns": [FormationPattern.SPIRAL_ENTRY, FormationPattern.V_SHAPE],
+        "count_options": [5, 7],  # V sempre com 5 ou 7 naves
+    },
+    "spiral_square": {
+        "patterns": [FormationPattern.SPIRAL_ENTRY, FormationPattern.SQUARE],
+        "count_range": (5, 8),
+    },
+    "spiral_line": {
+        "patterns": [FormationPattern.SPIRAL_ENTRY, FormationPattern.LINE],
+        "count_range": (5, 8),
+    },
+    "full_cycle": {
+        "patterns": [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE, FormationPattern.V_SHAPE],
+        "count_options": [5, 7],  # V sempre com 5 ou 7 naves
+    },
+}
+
+
 class EnemySpawner:
     def __init__(self, config: LevelConfig, is_initial_level: bool = False):
         self.config = config
         self.stopped = False
+
+        # Validar tipos de formação configurados
+        if config.formations_enabled and config.formation_types:
+            invalid_types = config.validate_formation_types(set(FORMATION_CONFIGS.keys()))
+            if invalid_types:
+                print(f"WARNING: Level {config.level_number} has invalid formation types: {invalid_types}")
+                print(f"Available types: {list(FORMATION_CONFIGS.keys())}")
+                # Filtrar tipos inválidos
+                config.formation_types = [t for t in config.formation_types if t in FORMATION_CONFIGS]
+                if not config.formation_types:
+                    print(f"WARNING: No valid formation types remain. Disabling formations for level {config.level_number}")
+                    config.formations_enabled = False
+                else:
+                    print(f"Using valid types: {config.formation_types}")
 
         # Sistema de intensidade gradual para spawn orgânico
         self.spawn_intensity = 0.0  # 0.0 = não spawna, 1.0 = taxa normal
@@ -105,26 +151,29 @@ class EnemySpawner:
                 # Criar formação
                 formation_type = self.config.get_random_formation_type()
                 if formation_type:
-                    # Sequência de padrões baseada no tipo de formação
-                    if formation_type == "spiral_circle":
-                        patterns = [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE]
-                        count = random.randint(5, 8)
-                    elif formation_type == "spiral_v":
-                        patterns = [FormationPattern.SPIRAL_ENTRY, FormationPattern.V_SHAPE]
-                        count = random.choice([5, 7])  # V sempre com 5 ou 7 naves
-                    elif formation_type == "spiral_square":
-                        patterns = [FormationPattern.SPIRAL_ENTRY, FormationPattern.SQUARE]
-                        count = random.randint(5, 8)
+                    if formation_type not in FORMATION_CONFIGS:
+                        # Warning: tipo de formação não existe
+                        print(f"WARNING: Formation type '{formation_type}' not found in FORMATION_CONFIGS. Skipping.")
                     else:
-                        patterns = [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE, FormationPattern.V_SHAPE]
-                        count = random.choice([5, 7])  # V sempre com 5 ou 7 naves
-                    
-                    entry_x = random.randint(150, Config.SCREEN_WIDTH - 150)
-                    entry_y = -50  # Começar acima da tela
-                    
-                    from ..entities.alien import Alien
-                    new_formation = Formation(Alien, count, entry_x, entry_y, patterns)
-                    formations.append(new_formation)
+                        # Buscar configuração do tipo de formação
+                        config = FORMATION_CONFIGS[formation_type]
+                        patterns = config.get("patterns", [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE])
+                        
+                        # Determinar contagem de naves
+                        if "count_options" in config:
+                            count = random.choice(config["count_options"])
+                        elif "count_range" in config:
+                            count_range = config["count_range"]
+                            count = random.randint(count_range[0], count_range[1])
+                        else:
+                            count = 5  # Fallback
+                        
+                        entry_x = random.randint(150, Config.SCREEN_WIDTH - 150)
+                        entry_y = -50  # Começar acima da tela
+                        
+                        from ..entities.alien import Alien
+                        new_formation = Formation(Alien, count, entry_x, entry_y, patterns)
+                        formations.append(new_formation)
                     
                     # Reiniciar timer
                     min_t, max_t = Config.FORMATION_SPAWN_INTERVAL

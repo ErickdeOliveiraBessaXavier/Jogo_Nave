@@ -1,3 +1,3 @@
-from .formation import Formation, FormationPattern
+from .formation import Formation, FormationPattern, EntryPattern
 
-__all__ = ['Formation', 'FormationPattern']
+__all__ = ['Formation', 'FormationPattern', 'EntryPattern']

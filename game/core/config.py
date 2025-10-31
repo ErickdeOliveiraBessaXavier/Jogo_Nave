@@ -114,9 +114,8 @@ class Config:
     # Music transition settings for boss warning
     BOSS_MUSIC_FADE_OUT_START: float = 3.0  # Inicia fade-out 3s antes do warning
     BOSS_MUSIC_FADE_OUT_DURATION: float = 2.0  # Tempo do fade-out da música normal
-    BOSS_MUSIC_SILENCE_DURATION: float = (
-        8.0  # Tempo total de silêncio (warning + delay)
-    )
+    # Calculado dinamicamente: warning + delay pós-warning
+    BOSS_MUSIC_SILENCE_DURATION: float = BOSS_WARNING_DURATION + BOSS_POST_WARNING_DELAY  # 5.0 + 3.0 = 8.0
     BOSS_MUSIC_FADE_IN_DURATION: float = 3.0  # Tempo do fade-in da música do boss
     BOSS_MUSIC_FADE_IN_START_DELAY: float = (
         1.0  # Delay antes do fade-in começar (quando boss aparece)
@@ -200,13 +199,20 @@ class Config:
     # FORMATION SYSTEM
     # ========================================
     # Formation spawn settings
-    FORMATION_SPAWN_INTERVAL: Tuple[float, float] = (20.0, 35.0)  # Min/max tempo entre formações
+    FORMATION_SPAWN_INTERVAL: Tuple[float, float] = (10.0, 35.0)  # Min/max tempo entre formações
     
-    # Spiral entry settings
-    FORMATION_SPIRAL_RADIUS: float = 80.0  # Raio da espiral de entrada
-    FORMATION_SPIRAL_SPEED: float = 2.0  # Velocidade de rotação da espiral (rad/s)
-    FORMATION_SPIRAL_TIME_OFFSET: float = 0.15  # Delay entre cada inimigo na espiral
-    FORMATION_ENTRY_SPEED: float = 60.0  # Velocidade de descida durante entrada
+    # Entry pattern settings - Curved path (Galaga-style)
+    FORMATION_ENTRY_CURVE_AMPLITUDE: float = 250.0  # Amplitude da curva lateral
+    FORMATION_ENTRY_CURVE_FREQUENCY: float = 1.2  # Frequência da curva (mais loops)
+    FORMATION_ENTRY_TIME_OFFSET: float = 0.25  # Delay entre cada nave na fila
+    FORMATION_ENTRY_SPEED: float = 120.0  # Velocidade de descida (curved path)
+    FORMATION_ENTRY_CURVE_OFFSET_X: float = 150.0  # Offset inicial horizontal
+    
+    # Entry pattern speeds - Outros padrões de entrada
+    FORMATION_ENTRY_LOOP_SPEED: float = 100.0  # Velocidade de descida (loop)
+    FORMATION_ENTRY_WAVE_SPEED: float = 130.0  # Velocidade de descida (wave)
+    FORMATION_ENTRY_FAN_SPEED: float = 80.0  # Velocidade de descida (fan)
+    FORMATION_ENTRY_DIAGONAL_SPEED: float = 110.0  # Velocidade de descida (diagonal)
     
     # Pattern settings
     FORMATION_PATTERN_DURATION: float = 8.0  # Tempo em cada padrão antes de transicionar
@@ -218,9 +224,15 @@ class Config:
     FORMATION_SQUARE_SIZE: float = 180.0
     FORMATION_LINE_SPACING: float = 50.0
     FORMATION_DRIFT_SPEED: float = 30.0  # Velocidade de movimento lateral
-    FORMATION_DESCENT_SPEED: float = 50.0  # Velocidade de descida após formar padrão
+    FORMATION_DESCENT_SPEED: float = 10.0  # Velocidade de descida após formar padrão
     
     # ========================================
     # UI SETTINGS
     # ========================================
     WARNING_FONT_SIZE: int = 60
+
+
+# Validação: garantir que as chances de power-up somam 1.0
+_powerup_chances_sum = sum(Config.POWERUP_RARITY_CHANCES.values())
+assert abs(_powerup_chances_sum - 1.0) < 0.001, \
+    f"POWERUP_RARITY_CHANCES must sum to 1.0, got {_powerup_chances_sum:.4f}"

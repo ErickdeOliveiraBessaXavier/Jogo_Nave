@@ -40,6 +40,26 @@ class LevelConfig:
         if self.formation_types:
             return random.choice(self.formation_types)
         return None
+    
+    def validate_formation_types(self, valid_types: set[str]) -> list[str]:
+        """
+        Valida os tipos de formação configurados.
+        
+        Args:
+            valid_types: Conjunto de tipos válidos (chaves de FORMATION_CONFIGS)
+        
+        Returns:
+            Lista de tipos inválidos encontrados (vazia se todos válidos)
+        """
+        if not self.formation_types:
+            return []
+        
+        invalid: list[str] = []
+        for formation_type in self.formation_types:
+            if formation_type not in valid_types:
+                invalid.append(formation_type)
+        
+        return invalid
 
 
 LEVELS: list[LevelConfig] = [
@@ -73,7 +93,7 @@ LEVELS: list[LevelConfig] = [
         boss_type=Boss,
         mines_enabled=True,
         formations_enabled=True,
-        formation_types=["spiral_circle", "spiral_v", "spiral_square"],
+        formation_types=["spiral_circle", "spiral_v", "spiral_square", "spiral_line"],
     ),
     LevelConfig(
         level_number=4,
