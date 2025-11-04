@@ -66,8 +66,8 @@ LEVELS: list[LevelConfig] = [
     LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            Meteor: 0.8,            
-            EyeEnemy: 15.0,
+            Meteor: 0.6,            
+            #EyeEnemy: 15.0,
         },
         enemies_to_clear=200,
     ),
@@ -85,21 +85,32 @@ LEVELS: list[LevelConfig] = [
             Meteor: 0.5,
             Alien: 2.5,
         },
-        enemies_to_clear=250,
+        enemies_to_clear=300,
         boss_type=Boss,
         mines_enabled=True,
-        formations_enabled=True,
-        formation_types=["spiral_circle", "spiral_v", "spiral_square", "spiral_line"],
+        #formations_enabled=True,
+        #formation_types=["spiral_circle", "spiral_v", "spiral_square", "spiral_line"],
     ),
     LevelConfig(
         level_number=4,
         enemy_spawn_config={
-            Meteor: 0.4,
-            EyeEnemy: 5.0,
+            #Meteor: 1.0,
+            #EyeEnemy: 5.0,
         },
         enemies_to_clear=300,
+        mines_enabled=True,
         formations_enabled=True,
-        formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle"],
+        formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
+    ),
+        LevelConfig(
+        level_number=5,
+        enemy_spawn_config={
+            Meteor: 1.5,
+            EyeEnemy: 5.0,
+        },
+        enemies_to_clear=350,
+        formations_enabled=True,
+        formation_types=["spiral_v", "full_cycle", "spiral_line"],
     ),
     # Adicione mais fases aqui
 ]
