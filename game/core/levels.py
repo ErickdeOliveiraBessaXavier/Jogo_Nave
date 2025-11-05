@@ -6,6 +6,7 @@ from ..entities.alien import Alien
 from ..entities.boss import Boss
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
+from ..entities.spike_boss import SpikeBoss
 
 
 @dataclass
@@ -15,7 +16,7 @@ class LevelConfig:
         Type[Meteor | Alien | ExplosiveMine | EyeEnemy], float
     ]  # Tipo -> tempo de spawn
     enemies_to_clear: int  # quantos inimigos para passar de fase
-    boss_type: Type[Boss] | None = None  # O tipo de classe do chefe (opcional)
+    boss_type: Type[Boss | SpikeBoss] | None = None  # O tipo de classe do chefe (opcional)
     mines_enabled: bool = False  # Se as minas estão habilitadas neste nível
     formations_enabled: bool = False  # Se formações estão habilitadas neste nível
     formation_types: list[str] | None = None  # Tipos de formação disponíveis
@@ -69,7 +70,8 @@ LEVELS: list[LevelConfig] = [
             Meteor: 0.6,            
             #EyeEnemy: 15.0,
         },
-        enemies_to_clear=200,
+        enemies_to_clear=0,
+        boss_type=SpikeBoss,
     ),
     LevelConfig(
         level_number=2,
@@ -102,7 +104,7 @@ LEVELS: list[LevelConfig] = [
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
     ),
-        LevelConfig(
+    LevelConfig(
         level_number=5,
         enemy_spawn_config={
             Meteor: 1.5,
@@ -111,6 +113,18 @@ LEVELS: list[LevelConfig] = [
         enemies_to_clear=350,
         formations_enabled=True,
         formation_types=["spiral_v", "full_cycle", "spiral_line"],
+    ),
+    LevelConfig(
+        level_number=6,
+        enemy_spawn_config={
+            Meteor: 0.8,
+            Alien: 3.0,
+        },
+        enemies_to_clear=400,
+        boss_type=SpikeBoss,  # Novo SpikeBoss na fase 6
+        mines_enabled=True,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v", "full_cycle"],
     ),
     # Adicione mais fases aqui
 ]

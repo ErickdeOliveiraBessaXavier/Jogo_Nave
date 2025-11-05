@@ -155,6 +155,91 @@ class Config:
     BOSS_ENTRY_SPEED: float = 30.0
     BOSS_ENTRY_SHAKE_DURATION: float = 4.0
 
+    # ========================================
+    # SPIKE BOSS SYSTEM
+    # ========================================
+    # Basic stats
+    SPIKE_BOSS_HEALTH: int = 1200
+    SPIKE_BOSS_FRENZY_THRESHOLD: float = 0.5
+    SPIKE_BOSS_ENTRY_SPEED: float = 25.0
+    SPIKE_BOSS_SPEED: float = 80.0  # Velocidade horizontal normal
+    SPIKE_BOSS_FRENZY_SPEED: float = 120.0  # Velocidade no frenzy
+    SPIKE_BOSS_FRENZY_SHAKE_DURATION: float = 3.0
+    
+    # Proximity attack (quando jogador se aproxima demais)
+    SPIKE_BOSS_PROXIMITY_DISTANCE: float = 150.0  # Distância mínima para ativar
+    SPIKE_BOSS_PROXIMITY_COOLDOWN: float = 3.0  # Tempo entre ataques de proximidade
+    SPIKE_BOSS_PROXIMITY_TELEGRAPH_DURATION: float = 0.4  # Duração do aviso antes do ataque
+    SPIKE_BOSS_PROXIMITY_WAVE_DURATION: float = 0.6  # Duração da onda visual
+    SPIKE_BOSS_PROXIMITY_WAVE_MAX_RADIUS: float = 180.0  # Raio máximo da onda
+    SPIKE_BOSS_PROXIMITY_DAMAGE: int = 1  # Dano se atingir o jogador
+    SPIKE_BOSS_PROXIMITY_WARNING_COLOR_NORMAL: Tuple[int, int, int] = (255, 255, 0)  # Amarelo (aviso)
+    SPIKE_BOSS_PROXIMITY_WARNING_COLOR_FRENZY: Tuple[int, int, int] = (255, 0, 0)  # Vermelho (aviso)
+    SPIKE_BOSS_PROXIMITY_WAVE_COLOR_NORMAL: Tuple[int, int, int] = (0, 255, 255)  # Ciano (onda)
+    SPIKE_BOSS_PROXIMITY_WAVE_COLOR_FRENZY: Tuple[int, int, int] = (255, 0, 0)  # Vermelho (onda)
+    SPIKE_BOSS_PROXIMITY_WAVE_INNER_COLOR_NORMAL: Tuple[int, int, int] = (255, 255, 255)  # Branco (centro)
+    SPIKE_BOSS_PROXIMITY_WAVE_INNER_COLOR_FRENZY: Tuple[int, int, int] = (255, 255, 0)  # Amarelo (centro)
+
+    # Mouth animation (boca abrindo e fechando)
+    SPIKE_BOSS_MOUTH_CYCLE_DURATION: float = 2.0  # Duração completa do ciclo (abrir + fechar)
+    SPIKE_BOSS_MOUTH_MAX_OPENING: int = 15  # Altura máxima que a boca abre
+    SPIKE_BOSS_BODY_STRETCH: int = 8  # Pixels que o corpo estica quando a boca abre
+
+    # Eye behavior (comportamento dos olhos)
+    SPIKE_BOSS_EYE_TRACK_DURATION: float = 2.5  # Tempo seguindo a nave
+    SPIKE_BOSS_EYE_FRENETIC_DURATION: float = 1.0  # Tempo olhando freneticamente
+    SPIKE_BOSS_EYE_FRENETIC_SPEED: float = 0.15  # Velocidade da mudança frenética (segundos)
+
+    # Attack timing
+    SPIKE_BOSS_ATTACK_INTERVAL: Tuple[float, float] = (3.0, 5.0)  # Normal mode
+    SPIKE_BOSS_FRENZY_ATTACK_INTERVAL: Tuple[float, float] = (1.5, 2.5)  # Frenzy mode
+
+    # Spike spawn settings (quantidade de triângulos grudados criados por ataque)
+    SPIKE_BOSS_SPIKE_COUNT: Tuple[int, int] = (3, 5)  # Quantidade normal
+    SPIKE_BOSS_FRENZY_SPIKE_COUNT: Tuple[int, int] = (6, 9)  # Quantidade no frenzy
+
+    # ========================================
+    # SPIKE (PROJECTILE) SYSTEM
+    # ========================================
+    SPIKE_SIZE: int = 25  # Tamanho do triângulo
+    SPIKE_DAMAGE: int = 1
+    SPIKE_POINTS: int = 50  # Pontos ao destruir
+    SPIKE_WALL_SPACING: int = 5  # Espaçamento entre triângulos na parede
+    SPIKE_MAX_ATTACKING: int = 10  # Máximo de triângulos atacando simultaneamente
+    
+    # Sistema de ondas de ataque
+    SPIKE_WAVE_MIN_SIZE: int = 3  # Mínimo de triângulos por onda
+    SPIKE_WAVE_MAX_SIZE: int = 6  # Máximo de triângulos por onda
+    SPIKE_WAVE_INTERVAL: float = 4.0  # Pausa entre ondas (segundos)
+    SPIKE_FRENZY_WAVE_INTERVAL: float = 2.5  # Pausa entre ondas no frenzy
+    
+    # Comportamento de grudado na parede
+    SPIKE_MIN_ATTACH_TIME: float = 1.0  # Tempo mínimo grudado antes de atacar
+    SPIKE_MAX_ATTACH_TIME: float = 2.5  # Tempo máximo grudado antes de atacar
+    
+    # Tremor antes de soltar
+    SPIKE_TREMBLE_DURATION: float = 1.0  # Duração do tremor
+    SPIKE_MAX_TREMBLE: int = 5  # Intensidade máxima do tremor (pixels)
+    
+    # Míssil teleguiado
+    SPIKE_INITIAL_SPEED: float = 50.0  # Velocidade inicial base ao soltar
+    SPIKE_SPEED_VARIATION: float = 30.0  # Variação de velocidade (+/- pixels/s)
+    SPIKE_ACCELERATION: float = 200.0  # Aceleração do míssil
+    SPIKE_MAX_SPEED: float = 300.0  # Velocidade máxima base
+    SPIKE_MAX_SPEED_VARIATION: float = 50.0  # Variação na velocidade máxima
+    SPIKE_AIM_IMPRECISION: float = 100.0  # Imprecisão na mira (pixels)
+    SPIKE_ROTATION_SPEED_MIN: float = 8.0  # Velocidade mínima de rotação ao voar (rad/s) - giro rápido!
+    SPIKE_ROTATION_SPEED_MAX: float = 15.0  # Velocidade máxima de rotação ao voar (rad/s) - giro muito rápido!
+    
+    # Efeito de entrada (zoom-in)
+    SPIKE_SPAWN_ANIMATION_DURATION: float = 0.4  # Duração do zoom-in (segundos)
+    SPIKE_SPAWN_DELAY_MIN: float = 0.0  # Delay mínimo antes do spawn
+    SPIKE_SPAWN_DELAY_MAX: float = 2.0  # Delay máximo antes do spawn
+    
+    # Respawn e controle de lançamento
+    SPIKE_RESPAWN_TIME: float = 10.0  # Tempo para triângulo reaparecer após sair
+    SPIKE_LAUNCH_COOLDOWN: float = 0.2  # Intervalo mínimo entre lançamentos dentro da onda
+
     # Boss movement
     BOSS_NORMAL_SPEED: float = 6.0  # Velocidade normal lateral
     BOSS_FRENZY_SPEED: float = 8.0  # Velocidade no frenzy

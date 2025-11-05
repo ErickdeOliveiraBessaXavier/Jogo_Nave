@@ -108,13 +108,22 @@ class PlayingScene(Scene):
                     else:
                         entity.update(slow_mo_dt)
             if self.entity_manager.boss:
-                lasers_fired, spawned_meteors = self.entity_manager.boss.update(
-                    slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery
-                )
-                if lasers_fired:
-                    self.entity_manager.boss_lasers.extend(lasers_fired)
-                if spawned_meteors:
-                    self.entity_manager.enemies.extend(spawned_meteors)
+                from ..entities.spike_boss import SpikeBoss
+                
+                if isinstance(self.entity_manager.boss, SpikeBoss):
+                    spawned_spikes, _ = self.entity_manager.boss.update(
+                        slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery, self.entity_manager.spikes
+                    )
+                    if spawned_spikes:
+                        self.entity_manager.spikes.extend(spawned_spikes)
+                else:
+                    lasers_fired, spawned_meteors = self.entity_manager.boss.update(
+                        slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery
+                    )
+                    if lasers_fired:
+                        self.entity_manager.boss_lasers.extend(lasers_fired)
+                    if spawned_meteors:
+                        self.entity_manager.enemies.extend(spawned_meteors)
 
             self.entity_manager.cleanup()
             return
@@ -324,13 +333,49 @@ class PlayingScene(Scene):
         self.enemies_destroyed_in_level += destroyed
 
         if self.entity_manager.boss:
-            score_gain = self.collisions.bullets_vs_boss(
-                self.entity_manager.bullets,
-                self.entity_manager.boss,
-                self.entity_manager.explosions,
-                self.entity_manager.floating_scores,
-            )
+            from ..entities.spike_boss import SpikeBoss
+            
+            # Verificar tipo de boss e usar colisão apropriada
+            if isinstance(self.entity_manager.boss, SpikeBoss):
+                score_gain = self.collisions.bullets_vs_spike_boss(
+                    self.entity_manager.bullets,
+                    self.entity_manager.boss,
+                    self.entity_manager.explosions,
+                    self.entity_manager.floating_scores,
+                )
+                # Mini ships vs SpikeBoss
+                mini_ship_boss_gain = self.collisions.mini_ship_bullets_vs_spike_boss(
+                    self.entity_manager.mini_ship_bullets,
+                    self.entity_manager.boss,
+                    self.entity_manager.explosions,
+                    self.entity_manager.floating_scores,
+                )
+                score_gain += mini_ship_boss_gain
+            else:
+                score_gain = self.collisions.bullets_vs_boss(
+                    self.entity_manager.bullets,
+                    self.entity_manager.boss,  # type: ignore
+                    self.entity_manager.explosions,
+                    self.entity_manager.floating_scores,
+                )
+                # Mini ships vs Boss normal
+                mini_ship_boss_gain = self.collisions.mini_ship_bullets_vs_boss(
+                    self.entity_manager.mini_ship_bullets,
+                    self.entity_manager.boss,  # type: ignore
+                    self.entity_manager.explosions,
+                    self.entity_manager.floating_scores,
+                )
+                score_gain += mini_ship_boss_gain
             self.score += score_gain
+        
+        # Mini ships vs Spikes
+        if self.entity_manager.spikes:
+            spike_gain = self.collisions.mini_ship_bullets_vs_spikes(
+                self.entity_manager.mini_ship_bullets,
+                self.entity_manager.spikes,
+                self.entity_manager.explosions,
+            )
+            self.score += spike_gain
         
         # Colisão da nave com inimigos normais
         if self.collisions.ship_vs_enemies(
@@ -347,10 +392,22 @@ class PlayingScene(Scene):
                 self._handle_ship_hit()
                 break  # Só precisa acertar uma vez
         
-        if self.entity_manager.boss and self.collisions.ship_vs_boss(
-            self.ship, self.entity_manager.boss, self.entity_manager.explosions
-        ):
-            self._handle_ship_hit()
+        if self.entity_manager.boss:
+            from ..entities.spike_boss import SpikeBoss
+            
+            # Verificar tipo de boss para colisão apropriada
+            if isinstance(self.entity_manager.boss, SpikeBoss):
+                if self.collisions.ship_vs_spike_boss(
+                    self.ship, self.entity_manager.boss, self.entity_manager.explosions
+                ):
+                    self._handle_ship_hit()
+            else:
+                if self.collisions.ship_vs_boss(
+                    self.ship, self.entity_manager.boss,  # type: ignore
+                    self.entity_manager.explosions
+                ):
+                    self._handle_ship_hit()
+        
         if self.collisions.alien_bullets_vs_ship(
             self.ship, self.entity_manager.alien_bullets
         ):
@@ -359,6 +416,18 @@ class PlayingScene(Scene):
             self._handle_ship_hit()
         if self.collisions.laser_vs_ship(self.ship, self.entity_manager.boss_lasers):
             self._handle_ship_hit()
+
+        # Colisões com espinhos (SpikeBoss)
+        if self.collisions.ship_vs_spikes(self.ship, self.entity_manager.spikes, self.entity_manager.explosions):
+            self._handle_ship_hit()
+        
+        # Balas vs espinhos
+        spike_score = self.collisions.bullets_vs_spikes(
+            self.entity_manager.bullets,
+            self.entity_manager.spikes,
+            self.entity_manager.explosions,
+        )
+        self.score += spike_score
 
         collected_powerups = self.collisions.ship_vs_powerups(
             self.ship, self.entity_manager.powerups
@@ -502,6 +571,15 @@ class PlayingScene(Scene):
                 boss_center[0], boss_center[1], size=Config.BOSS_EXPLOSION_LARGE_SIZE
             )
         )
+
+        # Limpar todos os spikes quando o boss for derrotado
+        for spike in self.entity_manager.spikes[:]:
+            # Criar pequenas explosões onde os spikes estavam
+            if spike.state != 'respawning':
+                self.entity_manager.explosions.append(
+                    Explosion(spike.center_x, spike.center_y, size=15)
+                )
+        self.entity_manager.spikes.clear()
 
         self.entity_manager.boss = None
         self.boss_fight_active = False

@@ -16,6 +16,8 @@ from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.eye_laser import EyeLaser
 from ..entities.formation import Formation
+from ..entities.spike import Spike
+from ..entities.spike_boss import SpikeBoss
 
 
 class EntityManager:
@@ -29,10 +31,11 @@ class EntityManager:
         self.mine_explosions: list[MineExplosion] = []
         self.powerups: list[PowerUp] = []
         self.floating_scores: list[FloatingScore] = []
-        self.boss: Boss | None = None
+        self.boss: Boss | SpikeBoss | None = None
         self.mini_ships: list[MiniShip] = []
         self.mini_ship_bullets: list[MiniShipBullet] = []
         self.formations: list[Formation] = []  # Nova lista para formações
+        self.spikes: list[Spike] = []  # Lista para espinhos do SpikeBoss
 
     def update(self, dt: float, player_x: float, player_y: float):
         new_alien_bullets: list[AlienBullet] = []
@@ -71,12 +74,25 @@ class EntityManager:
         for ms in self.mini_ships:
             ms.update(dt, all_enemies_for_mini_ships, self.mini_ship_bullets)
         
+        # Atualizar spikes (precisam da posição do jogador para míssil teleguiado)
+        # Contar quantos triângulos estão atualmente atacando (trembling ou flying)
+        attacking_count = sum(1 for spike in self.spikes if spike.state in ('trembling', 'flying'))
+        for spike in self.spikes:
+            spike.update(dt, player_x, player_y, attacking_count)
+        
         if self.boss:
-            lasers_fired, spawned_meteors = self.boss.update(dt, player_x, player_y)
-            if lasers_fired:
-                self.boss_lasers.extend(lasers_fired)
-            if spawned_meteors:
-                self.enemies.extend(spawned_meteors)
+            # SpikeBoss retorna (List[Spike], List[Spike])
+            if isinstance(self.boss, SpikeBoss):
+                spawned_spikes, _ = self.boss.update(dt, player_x, player_y, self.spikes)
+                if spawned_spikes:
+                    self.spikes.extend(spawned_spikes)
+            # Boss normal retorna (List[BossLaser], List[Meteor])
+            else:
+                lasers_fired, spawned_meteors = self.boss.update(dt, player_x, player_y)
+                if lasers_fired:
+                    self.boss_lasers.extend(lasers_fired)
+                if spawned_meteors:
+                    self.enemies.extend(spawned_meteors)
         for enemy in self.enemies:
             if isinstance(enemy, Alien):
                 shot = enemy.update(dt)
@@ -110,6 +126,7 @@ class EntityManager:
             self.floating_scores,
             self.mini_ship_bullets,
             self.mini_ships,
+            self.spikes,  # Adicionar spikes
         ]
 
         if self.boss:
@@ -146,6 +163,7 @@ class EntityManager:
         self.powerups = [p for p in self.powerups if not p.is_off_screen()]
         self.floating_scores = [fs for fs in self.floating_scores if not fs.is_dead()]
         self.formations = [f for f in self.formations if not f.dead]  # Limpar formações mortas
+        self.spikes = [s for s in self.spikes if not s.dead]  # Limpar spikes mortos
 
     def clear_all(self):
         self.bullets.clear()
@@ -161,6 +179,7 @@ class EntityManager:
         self.mini_ships.clear()
         self.mini_ship_bullets.clear()
         self.formations.clear()
+        self.spikes.clear()
 
     def clear_for_level_transition(self):
         """Limpa entidades para transição de fase, mas preserva balas do jogador."""
@@ -178,3 +197,4 @@ class EntityManager:
         self.mini_ships.clear()
         self.mini_ship_bullets.clear()
         self.formations.clear()
+        self.spikes.clear()
