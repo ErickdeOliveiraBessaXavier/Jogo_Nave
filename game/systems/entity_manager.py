@@ -5,6 +5,7 @@ from ..entities.alien import Alien
 from ..entities.boss import Boss
 from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
+from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.explosion import Explosion
 from ..entities.mine_explosion import MineExplosion
 from ..entities.powerup import PowerUp
@@ -25,7 +26,7 @@ class EntityManager:
         self.bullets: list[Bullet] = []
         self.enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy] = []
         self.alien_bullets: list[AlienBullet] = []
-        self.boss_lasers: list[BossLaser] = []
+        self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
         self.eye_lasers: list[EyeLaser] = []
         self.explosions: list[Explosion] = []
         self.mine_explosions: list[MineExplosion] = []
@@ -81,11 +82,13 @@ class EntityManager:
             spike.update(dt, player_x, player_y, attacking_count)
         
         if self.boss:
-            # SpikeBoss retorna (List[Spike], List[Spike])
+            # SpikeBoss retorna (List[Spike], List[SpikeBossLaser])
             if isinstance(self.boss, SpikeBoss):
-                spawned_spikes, _ = self.boss.update(dt, player_x, player_y, self.spikes)
+                spawned_spikes, spike_boss_lasers = self.boss.update(dt, player_x, player_y, self.spikes)
                 if spawned_spikes:
                     self.spikes.extend(spawned_spikes)
+                if spike_boss_lasers:
+                    self.boss_lasers.extend(spike_boss_lasers)  # type: ignore
             # Boss normal retorna (List[BossLaser], List[Meteor])
             else:
                 lasers_fired, spawned_meteors = self.boss.update(dt, player_x, player_y)

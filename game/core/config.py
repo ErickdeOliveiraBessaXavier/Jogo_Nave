@@ -163,15 +163,16 @@ class Config:
     SPIKE_BOSS_FRENZY_THRESHOLD: float = 0.5
     SPIKE_BOSS_ENTRY_SPEED: float = 25.0
     SPIKE_BOSS_SPEED: float = 80.0  # Velocidade horizontal normal
-    SPIKE_BOSS_FRENZY_SPEED: float = 120.0  # Velocidade no frenzy
+    SPIKE_BOSS_FRENZY_SPEED: float = 520.0  # Velocidade no frenzy
     SPIKE_BOSS_FRENZY_SHAKE_DURATION: float = 3.0
+    SPIKE_BOSS_FRENZY_PAUSE_DURATION: float = 2.0  # Tempo de pausa quando entra em frenzy
     
     # Proximity attack (quando jogador se aproxima demais)
-    SPIKE_BOSS_PROXIMITY_DISTANCE: float = 150.0  # Distância mínima para ativar
+    SPIKE_BOSS_PROXIMITY_DISTANCE: float = 250.0  # Distância mínima para ativar
     SPIKE_BOSS_PROXIMITY_COOLDOWN: float = 3.0  # Tempo entre ataques de proximidade
-    SPIKE_BOSS_PROXIMITY_TELEGRAPH_DURATION: float = 0.4  # Duração do aviso antes do ataque
-    SPIKE_BOSS_PROXIMITY_WAVE_DURATION: float = 0.6  # Duração da onda visual
-    SPIKE_BOSS_PROXIMITY_WAVE_MAX_RADIUS: float = 180.0  # Raio máximo da onda
+    SPIKE_BOSS_PROXIMITY_TELEGRAPH_DURATION: float = 0.8  # Duração do aviso antes do ataque
+    SPIKE_BOSS_PROXIMITY_WAVE_DURATION: float = 0.8  # Duração da onda visual
+    SPIKE_BOSS_PROXIMITY_WAVE_MAX_RADIUS: float = 280.0  # Raio máximo da onda
     SPIKE_BOSS_PROXIMITY_DAMAGE: int = 1  # Dano se atingir o jogador
     SPIKE_BOSS_PROXIMITY_WARNING_COLOR_NORMAL: Tuple[int, int, int] = (255, 255, 0)  # Amarelo (aviso)
     SPIKE_BOSS_PROXIMITY_WARNING_COLOR_FRENZY: Tuple[int, int, int] = (255, 0, 0)  # Vermelho (aviso)
@@ -189,6 +190,11 @@ class Config:
     SPIKE_BOSS_EYE_TRACK_DURATION: float = 2.5  # Tempo seguindo a nave
     SPIKE_BOSS_EYE_FRENETIC_DURATION: float = 1.0  # Tempo olhando freneticamente
     SPIKE_BOSS_EYE_FRENETIC_SPEED: float = 0.15  # Velocidade da mudança frenética (segundos)
+
+    # Giant laser attack (ataque de laser gigante no frenzy)
+    SPIKE_BOSS_LASER_COOLDOWN: float = 8.0  # Cooldown entre lasers
+    SPIKE_BOSS_LASER_CHARGE_TIME: float = 1.0  # Tempo de carregamento antes de disparar
+    SPIKE_BOSS_LASER_LIFETIME: float = 1.5  # Duração do laser
 
     # Attack timing
     SPIKE_BOSS_ATTACK_INTERVAL: Tuple[float, float] = (3.0, 5.0)  # Normal mode

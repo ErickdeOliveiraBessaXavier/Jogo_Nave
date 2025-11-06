@@ -7,6 +7,7 @@ from ..entities.bullet import Bullet
 from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
 from ..entities.eye_laser import EyeLaser
+from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.explosion import Explosion
 from ..entities.mine_explosion import MineExplosion
 from ..entities.powerup import PowerUp
@@ -282,6 +283,15 @@ class Collisions:
             return False
         for laser in lasers:
             if laser.w > 0 and ship.rect.clipline(laser.get_collision_line()):
+                return True
+        return False
+    
+    def spike_boss_laser_vs_ship(self, ship: Ship, lasers: list[SpikeBossLaser]) -> bool:
+        """Colisão entre laser gigante do SpikeBoss e nave."""
+        if ship.invuln > 0:
+            return False
+        for laser in lasers:
+            if laser.w > 0 and ship.rect.colliderect(laser.get_collision_rect()):
                 return True
         return False
 

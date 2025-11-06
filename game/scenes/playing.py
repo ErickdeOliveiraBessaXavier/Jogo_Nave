@@ -19,6 +19,7 @@ from ..core.sound import sound_manager
 from ..entities.mini_ship import MiniShip
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.guided_meteor import GuidedMeteor
+from ..entities.spike_boss_laser import SpikeBossLaser
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -72,6 +73,10 @@ class PlayingScene(Scene):
         self.ship.lives = self.lives
         self.total_enemies_destroyed = 0
         self.shoot_cd = 0.0
+        
+        # Sistema de cheat codes
+        self.cheat_buffer = ""  # Buffer para sequência de teclas
+        self.god_mode = False  # Modo invulnerável
 
         # Sequência de Game Over
         self.game_over_sequence_active = False
@@ -111,11 +116,13 @@ class PlayingScene(Scene):
                 from ..entities.spike_boss import SpikeBoss
                 
                 if isinstance(self.entity_manager.boss, SpikeBoss):
-                    spawned_spikes, _ = self.entity_manager.boss.update(
+                    spawned_spikes, spike_boss_lasers = self.entity_manager.boss.update(
                         slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery, self.entity_manager.spikes
                     )
                     if spawned_spikes:
                         self.entity_manager.spikes.extend(spawned_spikes)
+                    if spike_boss_lasers:
+                        self.entity_manager.boss_lasers.extend(spike_boss_lasers)
                 else:
                     lasers_fired, spawned_meteors = self.entity_manager.boss.update(
                         slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery
@@ -150,11 +157,18 @@ class PlayingScene(Scene):
         held = self.app.input.poll_held()
         self.ship.move(held, dt)
 
+        # Verificar se o boss está em pausa do frenzy
+        boss_pausing = False
+        if self.entity_manager.boss:
+            from ..entities.spike_boss import SpikeBoss
+            if isinstance(self.entity_manager.boss, SpikeBoss):
+                boss_pausing = self.entity_manager.boss.is_pausing_game()
+
         # Tiro contínuo com tecla segurada
         if (
             "hold_shoot" in held
             and self.shoot_cd == 0.0
-            # Permitir tiros durante transições para destruir inimigos restantes
+            and not boss_pausing
         ):
             bullet_specs = self.ship.bullet_spawn()
             for x, y, is_piercing in bullet_specs:
@@ -164,7 +178,20 @@ class PlayingScene(Scene):
             # Aplicar multiplicador de velocidade de ataque do power-up de velocidade
             cooldown = Config.SHOOT_COOLDOWN / self.ship.attack_speed_multiplier
             self.shoot_cd = cooldown
-
+        
+        # Se boss está em pausa, só atualiza o boss (com tremor)
+        if boss_pausing:
+            from ..entities.spike_boss import SpikeBoss
+            if isinstance(self.entity_manager.boss, SpikeBoss):
+                spawned_spikes, spike_boss_lasers = self.entity_manager.boss.update(
+                    dt, self.ship.rect.centerx, self.ship.rect.centery, self.entity_manager.spikes
+                )
+                if spawned_spikes:
+                    self.entity_manager.spikes.extend(spawned_spikes)
+                if spike_boss_lasers:
+                    self.entity_manager.boss_lasers.extend(spike_boss_lasers)
+            return  # Não atualiza nada mais
+        
         if (
             not self.boss_fight_active
             and not self.pre_boss_transition
@@ -246,6 +273,32 @@ class PlayingScene(Scene):
             and not self.entity_manager.boss_lasers
             and not self.entity_manager.enemies
         )
+    
+    def _process_cheat_input(self, event: pygame.event.Event):
+        """
+        Processa entrada de teclado para detectar cheat codes.
+        Cheat code: '271195' para ativar/desativar invulnerabilidade.
+        """
+        # Obter caractere da tecla pressionada (números e letras)
+        if event.key >= pygame.K_0 and event.key <= pygame.K_9:
+            char = chr(event.key)
+            self.cheat_buffer += char
+            
+            # Manter apenas os últimos 6 caracteres (tamanho de "271195")
+            if len(self.cheat_buffer) > 6:
+                self.cheat_buffer = self.cheat_buffer[-6:]
+            
+            # Verificar se o código foi digitado
+            if self.cheat_buffer == "271195":
+                self.god_mode = not self.god_mode
+                self.cheat_buffer = ""  # Resetar buffer
+                
+                if self.god_mode:
+                    print("🛡️ GOD MODE ATIVADO - Invulnerabilidade ligada!")
+                    if hasattr(sound_manager, 'play_powerup'):
+                        sound_manager.play_powerup()  # type: ignore
+                else:
+                    print("⚔️ GOD MODE DESATIVADO - Invulnerabilidade desligada!")
 
     def _handle_collisions(self):
         # Colisões com inimigos normais (não em formação)
@@ -414,7 +467,15 @@ class PlayingScene(Scene):
             self._handle_ship_hit()
         if self.collisions.eye_laser_vs_ship(self.ship, self.entity_manager.eye_lasers):
             self._handle_ship_hit()
-        if self.collisions.laser_vs_ship(self.ship, self.entity_manager.boss_lasers):
+
+        from ..entities.boss_laser import BossLaser
+        boss_lasers = [laser for laser in self.entity_manager.boss_lasers if isinstance(laser, BossLaser)]
+        if self.collisions.laser_vs_ship(self.ship, boss_lasers):
+            self._handle_ship_hit()
+        
+        # Verificar colisão com laser do SpikeBoss (filtrando SpikeBossLaser)
+        spike_boss_lasers = [laser for laser in self.entity_manager.boss_lasers if isinstance(laser, SpikeBossLaser)]
+        if self.collisions.spike_boss_laser_vs_ship(self.ship, spike_boss_lasers):
             self._handle_ship_hit()
 
         # Colisões com espinhos (SpikeBoss)
@@ -483,6 +544,10 @@ class PlayingScene(Scene):
                     self.score += Config.POWERUP_SCORE_BONUS * 2
 
     def _handle_ship_hit(self):
+        # God mode: ignorar dano
+        if self.god_mode:
+            return
+            
         if self.ship.invuln > 0 or self.game_over_sequence_active:
             return
         self.lives -= 1
@@ -627,6 +692,9 @@ class PlayingScene(Scene):
                 from .paused import PausedScene
 
                 self.app.states.switch(PausedScene(self.app, previous_scene=self))
+            
+            # Sistema de cheat code
+            self._process_cheat_input(event)
 
     def render(self, surface: pygame.Surface):
         boss_active = bool(

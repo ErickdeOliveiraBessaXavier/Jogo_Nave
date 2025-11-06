@@ -1,6 +1,6 @@
 import math
 import random
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import pygame
 
@@ -8,6 +8,7 @@ from ..core import colors
 from ..core.config import Config
 from ..core.sound import sound_manager
 from .spike import Spike
+from .spike_boss_laser import SpikeBossLaser
 
 
 class SpikeBoss:
@@ -88,6 +89,16 @@ class SpikeBoss:
         # Flag para disparar todos os spikes ao entrar em frenzy
         self.should_launch_all_spikes = False
         
+        # Sistema de pausa dramática do frenzy
+        self.frenzy_pause_active = False
+        self.frenzy_pause_timer = 0.0
+        
+        # Sistema de laser gigante (frenzy)
+        self.laser_cooldown = 0.0
+        self.laser_charging = False
+        self.laser_charge_timer = 0.0
+        self.laser_active_timer = 0.0
+        
         # Sistema de ataque de proximidade
         self.proximity_attack_cooldown = 0.0
         self.proximity_attack_active = False
@@ -104,6 +115,8 @@ class SpikeBoss:
         if self.health <= 0:
             self.health = 0
             self.dead = True
+            self.laser_charging = False
+            self.laser_active_timer = 0.0
             sound_manager.play_explosion_boss()
             return
         
@@ -114,20 +127,31 @@ class SpikeBoss:
         sound_manager.play_boss_damage()
 
     def _enter_frenzy(self):
-        """Ativa modo frenzy."""
+        """Ativa modo frenzy com pausa dramática."""
         self.frenzy_mode = True
         self.state = "frenzy"
         self.frenzy_shake_timer = Config.SPIKE_BOSS_FRENZY_SHAKE_DURATION
         self.speed = Config.SPIKE_BOSS_FRENZY_SPEED
+        
+        # Ativar pausa dramática
+        self.frenzy_pause_active = True
+        self.frenzy_pause_timer = 0.0
         # Marcar que deve disparar todos os spikes
         self.should_launch_all_spikes = True
         # Som de frenzy (se disponível, senão sem som)
         if hasattr(sound_manager, 'play_boss_frenzy'):
             sound_manager.play_boss_frenzy()  # type: ignore
-
-    def update(self, dt: float, player_x: float, player_y: float, spikes: List[Spike]) -> Tuple[List[Spike], List[Spike]]:
+    
+    def is_pausing_game(self) -> bool:
         """
-        Atualiza o boss e retorna spikes criados.
+        Retorna True se o boss está em pausa dramática do frenzy.
+        Usado pela playing.py para pausar outros elementos.
+        """
+        return self.frenzy_pause_active
+
+    def update(self, dt: float, player_x: float, player_y: float, spikes: List[Spike]) -> Tuple[List[Spike], List[SpikeBossLaser]]:
+        """
+        Atualiza o boss e retorna spikes e lasers criados.
         
         Args:
             dt: Delta time
@@ -136,15 +160,27 @@ class SpikeBoss:
             spikes: Lista de todos os spikes ativos (para controle de ondas)
             
         Returns:
-            Tupla (spikes criados, lista vazia)
+            Tupla (spikes criados, lasers criados)
             - Primeiro elemento: spikes da parede inicial (só na primeira vez)
-            - Segundo elemento: sempre vazio (compatibilidade com assinatura do Boss)
+            - Segundo elemento: laser gigante (se disparado)
         """
         spawned_spikes: List[Spike] = []
-        
         # Armazenar posição do jogador para desenho dos olhos
         self.player_x = player_x
         self.player_y = player_y
+        
+        # Se está em pausa do frenzy, não atualiza nada além do timer e animações visuais
+        if self.frenzy_pause_active:
+            self.frenzy_pause_timer += dt
+            self.pulse += self.pulse_speed * dt
+            
+            # Terminar pausa após duração
+            if self.frenzy_pause_timer >= Config.SPIKE_BOSS_FRENZY_PAUSE_DURATION:
+                self.frenzy_pause_active = False
+                # Disparar todos os spikes
+                self.should_launch_all_spikes = True
+            
+            return (spawned_spikes, [])
 
         # Atualizar animação de pulsação
         self.pulse += self.pulse_speed * dt
@@ -175,24 +211,31 @@ class SpikeBoss:
         if self.frenzy_shake_timer > 0:
             self.frenzy_shake_timer -= dt
 
+        if self.laser_active_timer > 0:
+            self.laser_active_timer -= dt
+
         # Movimento horizontal
-        self.x += self.speed * self.direction * dt
-        
-        # Inverter direção nas bordas
-        if self.x <= 0:
-            self.x = 0
-            self.direction = 1
-        elif self.x >= Config.SCREEN_WIDTH - self.w:
-            self.x = Config.SCREEN_WIDTH - self.w
-            self.direction = -1
+        if not self.proximity_telegraph_active and not self.laser_charging and self.laser_active_timer <= 0:
+            self.x += self.speed * self.direction * dt
+            
+            # Inverter direção nas bordas
+            if self.x <= 0:
+                self.x = 0
+                self.direction = 1
+            elif self.x >= Config.SCREEN_WIDTH - self.w:
+                self.x = Config.SCREEN_WIDTH - self.w
+                self.direction = -1
         
         # Controlar ondas de ataque
         self._update_waves(dt, spikes)
         
         # Verificar ataque de proximidade
         self._check_proximity_attack(dt)
+        
+        # Verificar ataque de laser (só no frenzy)
+        laser = self._update_laser_attack(dt)
 
-        return (spawned_spikes, [])
+        return (spawned_spikes, [laser] if laser else [])
     
     def get_wave_interval(self) -> float:
         """
@@ -377,7 +420,7 @@ class SpikeBoss:
             return
         
         # Não atacar se em cooldown ou em estado entering
-        if self.proximity_attack_cooldown > 0 or self.state == "entering":
+        if self.proximity_attack_cooldown > 0 or self.state == "entering" or self.frenzy_pause_active:
             return
         
         # Calcular distância até o jogador
@@ -399,6 +442,64 @@ class SpikeBoss:
         # Som de aviso (se disponível)
         if hasattr(sound_manager, 'play_boss_warning'):
             sound_manager.play_boss_warning()  # type: ignore
+    
+    def _update_laser_attack(self, dt: float) -> Optional[SpikeBossLaser]:
+        """
+        Atualiza sistema de laser gigante (só ativo no frenzy).
+        
+        Args:
+            dt: Delta time
+            
+        Returns:
+            SpikeBossLaser se disparar um laser, None caso contrário
+        """
+        # Atualizar cooldown
+        if self.laser_cooldown > 0:
+            self.laser_cooldown -= dt
+        
+        # Atualizar carregamento
+        if self.laser_charging:
+            self.laser_charge_timer += dt
+            
+            # Disparar laser após carregamento
+            if self.laser_charge_timer >= Config.SPIKE_BOSS_LASER_CHARGE_TIME:
+                self.laser_charging = False
+                self.laser_charge_timer = 0.0
+                self.laser_cooldown = Config.SPIKE_BOSS_LASER_COOLDOWN
+                self.laser_active_timer = Config.SPIKE_BOSS_LASER_LIFETIME
+                
+                # Criar laser
+                boss_center_x = self.x + self.w / 2
+                boss_bottom_y = self.y + self.h
+                target_y = Config.SCREEN_HEIGHT
+                
+                # Som de laser (se disponível)
+                if hasattr(sound_manager, 'play_boss_laser'):
+                    sound_manager.play_boss_laser()  # type: ignore
+                
+                return SpikeBossLaser(
+                    x=boss_center_x,
+                    y=boss_bottom_y,
+                    target_y=target_y,
+                    width=self.w,
+                    lifetime=Config.SPIKE_BOSS_LASER_LIFETIME
+                )
+            else:
+                return None
+        
+        # Não atacar se não está em frenzy ou está em pausa/entering
+        if not self.frenzy_mode or self.frenzy_pause_active or self.state == "entering":
+            return None
+        
+        # Não atacar se em cooldown
+        if self.laser_cooldown > 0:
+            return None
+        
+        # Iniciar carregamento do laser
+        self.laser_charging = True
+        self.laser_charge_timer = 0.0
+        
+        return None
     
     def get_proximity_attack_data(self) -> tuple[bool, float, float, float] | None:
         """
@@ -434,23 +535,44 @@ class SpikeBoss:
         # Esticar corpo verticalmente quando boca abre
         body_stretch = int(mouth_opening * Config.SPIKE_BOSS_BODY_STRETCH)
         
-        # Shake effect durante frenzy
+        # Shake effect
         offset_x = 0
         offset_y = 0
-        if self.frenzy_shake_timer > 0:
+        
+        # Tremor intenso durante pausa do frenzy (birra de raiva)
+        if self.frenzy_pause_active:
+            offset_x = random.randint(-5, 5)
+            offset_y = random.randint(-5, 5)
+        # Tremor durante carregamento do laser
+        elif self.laser_charging:
+            offset_x = random.randint(-5, 5)
+            offset_y = random.randint(-5, 5)
+        # Tremor leve durante telegraph (medo)
+        elif self.proximity_telegraph_active:
+            offset_x = random.randint(-1, 1)
+            offset_y = random.randint(-1, 1)
+        # Tremor forte durante frenzy
+        elif self.frenzy_shake_timer > 0:
             offset_x = random.randint(-3, 3)
             offset_y = random.randint(-3, 3)
 
         draw_x = int(self.x + offset_x)
         draw_y = int(self.y + offset_y - body_stretch)  # Sobe quando estica
 
-        # Cor baseada no modo
-        if self.frenzy_mode:
+        # Cor baseada no modo (vermelho se está no telegraph de proximidade)
+        if self.proximity_telegraph_active or self.laser_charging or self.laser_active_timer > 0:
+            # Modo "medo" - vermelho com olhos fechados
+            body_color = colors.RED
+            eye_color = colors.RED
+            eyes_closed = True
+        elif self.frenzy_mode:
             body_color = colors.DARK_RED
             eye_color = colors.RED
+            eyes_closed = False
         else:
             body_color = (80, 80, 120)
             eye_color = colors.CYAN
+            eyes_closed = False
 
         # Corpo principal (formato de cabeça com chifres) - altura aumenta com abertura
         current_height = self.h + body_stretch
@@ -482,58 +604,70 @@ class SpikeBoss:
         right_eye_x = draw_x + 2 * self.w // 3
         eye_y = draw_y + current_height // 2
 
-        pygame.draw.circle(surface, eye_color, (left_eye_x, eye_y), eye_size)
-        pygame.draw.circle(surface, eye_color, (right_eye_x, eye_y), eye_size)
-        
-        # Pupilas (comportamento alternado)
-        pupil_color = colors.BLACK if not self.frenzy_mode else colors.YELLOW
-        pupil_size = eye_size // 2
-        pupil_max_offset = eye_size - pupil_size - 2  # Margem de segurança
-        
-        # Modo: Seguindo a nave
-        if self.eye_mode == "tracking":
-            # Calcular direção do olho esquerdo para o jogador
-            left_dx = self.player_x - left_eye_x
-            left_dy = self.player_y - eye_y
-            left_distance = math.sqrt(left_dx * left_dx + left_dy * left_dy)
+        # Se olhos estão fechados (modo medo), desenhar linhas ao invés de círculos
+        if eyes_closed:
+            # Desenhar linhas horizontais para simular olhos fechados
+            line_length = eye_size
+            pygame.draw.line(surface, colors.BLACK, 
+                           (left_eye_x - line_length // 2, eye_y), 
+                           (left_eye_x + line_length // 2, eye_y), 3)
+            pygame.draw.line(surface, colors.BLACK, 
+                           (right_eye_x - line_length // 2, eye_y), 
+                           (right_eye_x + line_length // 2, eye_y), 3)
+        else:
+            # Desenhar olhos normalmente
+            pygame.draw.circle(surface, eye_color, (left_eye_x, eye_y), eye_size)
+            pygame.draw.circle(surface, eye_color, (right_eye_x, eye_y), eye_size)
             
-            if left_distance > 0:
-                # Normalizar e aplicar offset máximo
-                left_pupil_x = left_eye_x + int((left_dx / left_distance) * pupil_max_offset)
-                left_pupil_y = eye_y + int((left_dy / left_distance) * pupil_max_offset)
-            else:
-                left_pupil_x = left_eye_x
-                left_pupil_y = eye_y
+            # Pupilas (comportamento alternado)
+            pupil_color = colors.BLACK if not self.frenzy_mode else colors.YELLOW
+            pupil_size = eye_size // 2
+            pupil_max_offset = eye_size - pupil_size - 2  # Margem de segurança
             
-            # Calcular direção do olho direito para o jogador
-            right_dx = self.player_x - right_eye_x
-            right_dy = self.player_y - eye_y
-            right_distance = math.sqrt(right_dx * right_dx + right_dy * right_dy)
+            # Modo: Seguindo a nave
+            if self.eye_mode == "tracking":
+                # Calcular direção do olho esquerdo para o jogador
+                left_dx = self.player_x - left_eye_x
+                left_dy = self.player_y - eye_y
+                left_distance = math.sqrt(left_dx * left_dx + left_dy * left_dy)
+                
+                if left_distance > 0:
+                    # Normalizar e aplicar offset máximo
+                    left_pupil_x = left_eye_x + int((left_dx / left_distance) * pupil_max_offset)
+                    left_pupil_y = eye_y + int((left_dy / left_distance) * pupil_max_offset)
+                else:
+                    left_pupil_x = left_eye_x
+                    left_pupil_y = eye_y
+                
+                # Calcular direção do olho direito para o jogador
+                right_dx = self.player_x - right_eye_x
+                right_dy = self.player_y - eye_y
+                right_distance = math.sqrt(right_dx * right_dx + right_dy * right_dy)
+                
+                if right_distance > 0:
+                    # Normalizar e aplicar offset máximo
+                    right_pupil_x = right_eye_x + int((right_dx / right_distance) * pupil_max_offset)
+                    right_pupil_y = eye_y + int((right_dy / right_distance) * pupil_max_offset)
+                else:
+                    right_pupil_x = right_eye_x
+                    right_pupil_y = eye_y
             
-            if right_distance > 0:
-                # Normalizar e aplicar offset máximo
-                right_pupil_x = right_eye_x + int((right_dx / right_distance) * pupil_max_offset)
-                right_pupil_y = eye_y + int((right_dy / right_distance) * pupil_max_offset)
-            else:
-                right_pupil_x = right_eye_x
-                right_pupil_y = eye_y
-        
-        # Modo: Olhando freneticamente
-        else:  # self.eye_mode == "frenetic"
-            # Posição horizontal baseada na direção
-            offset_x = self.eye_frenetic_direction * pupil_max_offset
-            # Posição vertical aleatória suave
-            offset_y = int(math.sin(self.eye_frenetic_timer * 10) * pupil_max_offset * 0.5)
+            # Modo: Olhando freneticamente
+            else:  # self.eye_mode == "frenetic"
+                # Posição horizontal baseada na direção
+                offset_x = self.eye_frenetic_direction * pupil_max_offset
+                # Posição vertical aleatória suave
+                offset_y = int(math.sin(self.eye_frenetic_timer * 10) * pupil_max_offset * 0.5)
+                
+                left_pupil_x = left_eye_x + offset_x
+                left_pupil_y = eye_y + offset_y
+                
+                right_pupil_x = right_eye_x + offset_x
+                right_pupil_y = eye_y + offset_y
             
-            left_pupil_x = left_eye_x + offset_x
-            left_pupil_y = eye_y + offset_y
-            
-            right_pupil_x = right_eye_x + offset_x
-            right_pupil_y = eye_y + offset_y
-        
-        # Desenhar pupilas
-        pygame.draw.circle(surface, pupil_color, (left_pupil_x, left_pupil_y), pupil_size)
-        pygame.draw.circle(surface, pupil_color, (right_pupil_x, right_pupil_y), pupil_size)
+            # Desenhar pupilas
+            pygame.draw.circle(surface, pupil_color, (left_pupil_x, left_pupil_y), pupil_size)
+            pygame.draw.circle(surface, pupil_color, (right_pupil_x, right_pupil_y), pupil_size)
         
         # Desenhar aviso de proximidade (telegraph)
         if self.proximity_telegraph_active:
@@ -619,42 +753,62 @@ class SpikeBoss:
             if self.proximity_wave_radius > 40:
                 pygame.draw.circle(surface, inner_color, (boss_center_x, boss_center_y), 
                                  int(self.proximity_wave_radius * 0.4), width=4)
+        
+        # Efeito de carregamento do laser
+        if self.laser_charging:
+            boss_center_x = int(self.x + self.w / 2)
+            boss_bottom_y = int(self.y + current_height)
+            
+            # Progresso do carregamento
+            progress = self.laser_charge_timer / Config.SPIKE_BOSS_LASER_CHARGE_TIME
+            
+            # Partículas de energia convergindo para o centro
+            num_particles = 8
+            for i in range(num_particles):
+                angle = (i / num_particles) * 360 + (self.laser_charge_timer * 360)
+                radius = 60 * (1 - progress)  # Convergem para o centro
+                px = boss_center_x + int(math.cos(math.radians(angle)) * radius)
+                py = boss_bottom_y + int(math.sin(math.radians(angle)) * radius)
+                particle_size = int(3 + 2 * progress)
+                pygame.draw.circle(surface, colors.YELLOW, (px, py), particle_size)
 
         # Boca (interior branco atrás + dentes por cima)
         mouth_base_y = draw_y + int(current_height * 0.75)
         mouth_opening_pixels = int(mouth_opening * Config.SPIKE_BOSS_MOUTH_MAX_OPENING)
         
         tooth_height = 8  # Altura fixa dos dentes
+        mouth_width = self.w - 40  # Largura total da boca
         
         # PRIMEIRO: Desenhar o interior branco da boca (atrás)
         if mouth_opening_pixels > 2:
             mouth_rect = pygame.Rect(
                 draw_x + 20,
                 mouth_base_y,  # Começa na linha da boca
-                self.w - 40,
+                mouth_width,
                 mouth_opening_pixels  # Altura total da abertura
             )
             pygame.draw.rect(surface, colors.WHITE, mouth_rect)
         
-        # SEGUNDO: Desenhar dentes por cima do interior branco
-        teeth_count = 8
+        # SEGUNDO: Desenhar dentes espaçados ao longo da largura
+        num_teeth = 4  # Número de dentes
         tooth_color = colors.GRAY
-        tooth_width = (self.w - 40) // teeth_count
+        tooth_width = 10  # Largura individual de cada dente
         
-        for i in range(teeth_count):
-            # Apenas dentes nos índices pares (intercalados)
-            if i % 2 == 0:
-                # Calcular posição do dente
-                tooth_x = draw_x + 20 + tooth_width * i
-                
-                # Triângulo apontando para baixo (sobrepõe o branco)
-                tooth_points = [
-                    (tooth_x, mouth_base_y),  # Canto superior esquerdo
-                    (tooth_x + tooth_width, mouth_base_y),  # Canto superior direito
-                    (tooth_x + tooth_width // 2, mouth_base_y + tooth_height)  # Ponta inferior (fixa)
-                ]
-                
-                pygame.draw.polygon(surface, tooth_color, tooth_points)
+        # Calcular espaçamento para distribuir os dentes uniformemente
+        spacing = (mouth_width - (num_teeth * tooth_width)) / (num_teeth + 1)
+        
+        for i in range(num_teeth):
+            # Posição do dente com espaçamento uniforme
+            tooth_x = draw_x + 20 + spacing + i * (tooth_width + spacing)
+            
+            # Triângulo apontando para baixo (sobrepõe o branco)
+            tooth_points = [
+                (int(tooth_x), mouth_base_y),  # Canto superior esquerdo
+                (int(tooth_x + tooth_width), mouth_base_y),  # Canto superior direito
+                (int(tooth_x + tooth_width / 2), mouth_base_y + tooth_height)  # Ponta inferior (fixa)
+            ]
+            
+            pygame.draw.polygon(surface, tooth_color, tooth_points)
 
         # Barra de vida
         self._draw_health_bar(surface, draw_x, draw_y)
