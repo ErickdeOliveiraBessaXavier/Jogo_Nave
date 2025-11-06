@@ -34,7 +34,7 @@ FORMATION_CONFIGS: Dict[str, FormationConfig] = {
     },
     "spiral_square": {
         "patterns": [FormationPattern.SPIRAL_ENTRY, FormationPattern.SQUARE],
-        "count_range": (5, 8),
+        "count_options": [4, 8, 12],  # Quadrado sempre com 4, 8 ou 12 naves
     },
     "spiral_line": {
         "patterns": [FormationPattern.SPIRAL_ENTRY, FormationPattern.LINE],

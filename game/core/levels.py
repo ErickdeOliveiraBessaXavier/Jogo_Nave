@@ -70,7 +70,7 @@ LEVELS: list[LevelConfig] = [
             Meteor: 0.6,            
             #EyeEnemy: 15.0,
         },
-        enemies_to_clear=0,
+        enemies_to_clear=200,
         boss_type=SpikeBoss,
     ),
     LevelConfig(
@@ -90,8 +90,6 @@ LEVELS: list[LevelConfig] = [
         enemies_to_clear=300,
         boss_type=Boss,
         mines_enabled=True,
-        #formations_enabled=True,
-        #formation_types=["spiral_circle", "spiral_v", "spiral_square", "spiral_line"],
     ),
     LevelConfig(
         level_number=4,
@@ -121,10 +119,21 @@ LEVELS: list[LevelConfig] = [
             Alien: 3.0,
         },
         enemies_to_clear=400,
-        boss_type=SpikeBoss,  # Novo SpikeBoss na fase 6
         mines_enabled=True,
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v", "full_cycle"],
+    ),
+    LevelConfig(
+        level_number=7,
+        enemy_spawn_config={
+            Meteor: 1.5,
+            EyeEnemy: 5.0,
+        },
+        enemies_to_clear=400,
+        boss_type=SpikeBoss,  # Novo SpikeBoss na fase 7
+        mines_enabled=True,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v", "spiral_line"],
     ),
     # Adicione mais fases aqui
 ]

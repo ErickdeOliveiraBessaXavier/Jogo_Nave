@@ -592,46 +592,56 @@ class Formation:
                 positions.append((x, y))
         
         elif pattern == FormationPattern.SQUARE:
-            # MELHORADO: Distribuição mais uniforme
             side_length = Config.FORMATION_SQUARE_SIZE
-            min_y = 50  # Margem mínima do topo
+
+            # Apenas valores válidos: 4, 8 ou 12
+            valid_counts = [4, 8, 12]
+            if count not in valid_counts:
+                # Encontrar o valor válido mais próximo
+                count = min(valid_counts, key=lambda x: abs(x - count))
+
+            if count == 0:
+                return []
+
+            positions = []
+            half_len = side_length / 2
             
-            if count <= 4:
-                # Poucos inimigos: colocar nos cantos
-                corners = [
-                    (-side_length/2, -side_length/2),  # Top-left
-                    (side_length/2, -side_length/2),   # Top-right
-                    (side_length/2, side_length/2),    # Bottom-right
-                    (-side_length/2, side_length/2),   # Bottom-left
-                ]
-                for i in range(count):
-                    x = self.center_x + corners[i][0]
-                    y = self.center_y + corners[i][1]
-                    y = max(min_y, y)  # Garantir margem do topo
-                    positions.append((x, y))
-            else:
-                # Muitos inimigos: distribuir ao longo dos lados
-                per_side = math.ceil(count / 4)
-                for i in range(count):
-                    side = i // per_side
-                    pos_in_side = i % per_side
-                    progress = pos_in_side / max(1, per_side - 1) if per_side > 1 else 0.5
-                    
-                    if side == 0:  # Topo
-                        x = self.center_x - side_length/2 + progress * side_length
-                        y = self.center_y - side_length/2
-                    elif side == 1:  # Direita
-                        x = self.center_x + side_length/2
-                        y = self.center_y - side_length/2 + progress * side_length
-                    elif side == 2:  # Baixo
-                        x = self.center_x + side_length/2 - progress * side_length
-                        y = self.center_y + side_length/2
-                    else:  # Esquerda
-                        x = self.center_x - side_length/2
-                        y = self.center_y + side_length/2 - progress * side_length
-                    
-                    y = max(min_y, y)  # Garantir margem do topo
-                    positions.append((x, y))
+            # Calcular quantos inimigos por lado (distribuição uniforme)
+            enemies_per_side = count // 4
+            
+            # Vértices do quadrado
+            top_left = (-half_len, -half_len)
+            top_right = (half_len, -half_len)
+            bottom_right = (half_len, half_len)
+            bottom_left = (-half_len, half_len)
+            
+            # TOPO: de top-left para top-right
+            for i in range(enemies_per_side):
+                progress = (i + 1) / (enemies_per_side + 1)
+                x = self.center_x + top_left[0] + progress * side_length
+                y = self.center_y + top_left[1]
+                positions.append((x, y))
+
+            # DIREITA: de top-right para bottom-right
+            for i in range(enemies_per_side):
+                progress = (i + 1) / (enemies_per_side + 1)
+                x = self.center_x + top_right[0]
+                y = self.center_y + top_right[1] + progress * side_length
+                positions.append((x, y))
+
+            # BAIXO: de bottom-right para bottom-left
+            for i in range(enemies_per_side):
+                progress = (i + 1) / (enemies_per_side + 1)
+                x = self.center_x + bottom_right[0] - progress * side_length
+                y = self.center_y + bottom_right[1]
+                positions.append((x, y))
+
+            # ESQUERDA: de bottom-left para top-left
+            for i in range(enemies_per_side):
+                progress = (i + 1) / (enemies_per_side + 1)
+                x = self.center_x + bottom_left[0]
+                y = self.center_y + bottom_left[1] - progress * side_length
+                positions.append((x, y))
         
         elif pattern == FormationPattern.LINE:
             spacing = Config.FORMATION_LINE_SPACING
@@ -681,7 +691,6 @@ class Formation:
                 offset_y = pattern_y - self.center_y
                 self.final_positions.append((offset_x, offset_y))
             else:
-                # Fallback: sem offset
                 self.final_positions.append((0.0, 0.0))
         
         self.positions_locked = True
