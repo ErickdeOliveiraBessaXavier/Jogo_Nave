@@ -40,14 +40,16 @@ class Ship:
         self.invuln = 0  # ms
         self.lives = Config.INITIAL_LIVES
         self.visible = True
+        self.move_vec = pygame.math.Vector2(0, 0)
 
         # Power-ups
-        self.double_shot_timer = 0.0
-        self.speed_boost_timer = 0.0
-        self.piercing_shot_timer = 0.0
-        self.mini_ships_timer = 0.0
+        self.double_shot_timer: float = 0.0
+        self.speed_boost_timer: float = 0.0
+        self.piercing_shot_timer: float = 0.0
+        self.mini_ships_timer: float = 0.0
         self.is_entering = False
         self.entry_particles: list[ParticleDict] = []
+        self.thruster_particles: list[ParticleDict] = []
 
     @property
     def attack_speed_multiplier(self) -> float:
@@ -86,7 +88,7 @@ class Ship:
                 )
                 self.entry_particles.append(particle)
 
-        # Atualizar e remover partículas antigas
+        # Atualizar e remover partículas antigas de entrada
         for particle in self.entry_particles[:]:
             particle["lifetime"] -= dt
             if particle["lifetime"] <= 0:
@@ -94,6 +96,30 @@ class Ship:
             else:
                 particle["x"] += particle["vx"] * dt
                 particle["y"] += particle["vy"] * dt
+
+        # Gerar novas partículas de thruster
+        for _ in range(2):  # Gerar 2 novas partículas por frame
+            particle = ParticleDict(
+                x=self.x + self.w / 2 + random.uniform(-5, 5),
+                y=self.y + self.h,
+                vx=random.uniform(-10, 10),
+                vy=random.uniform(100, 200),  # Mover para baixo mais rápido
+                lifetime=random.uniform(0.05, 0.15), # Vida mais curta
+                size=random.uniform(2, 4),
+                color=(255, random.randint(100, 200), 0),  # Cor de fogo
+            )
+            self.thruster_particles.append(particle)
+
+        # Atualizar e remover partículas antigas de thruster
+        for particle in self.thruster_particles[:]:
+            particle["lifetime"] -= dt
+            if particle["lifetime"] <= 0:
+                self.thruster_particles.remove(particle)
+            else:
+                particle["x"] += particle["vx"] * dt
+                particle["y"] += particle["vy"] * dt
+                particle["size"] -= 1 * dt  # Diminuir de tamanho
+
 
     def move(self, held_actions: set[str], dt: float):
         current_speed = self.speed * (1.5 if self.speed_boost_timer > 0 else 1.0)
@@ -142,6 +168,10 @@ class Ship:
 
         if self.invuln > 0 and int(self.invuln / 100) % 2 == 0:
             return
+
+        # Desenhar partículas de thruster (atrás da nave)
+        for p in self.thruster_particles:
+            pygame.draw.circle(surface, p["color"], (p["x"], p["y"]), p["size"])
 
         # Calcular tremor
         shake_x, shake_y = 0, 0
