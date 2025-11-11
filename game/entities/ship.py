@@ -1,7 +1,7 @@
 import pygame
 import random
 from ..core.config import Config
-from typing import List, Tuple, TypedDict
+from typing import Tuple, TypedDict, Union
 
 
 class ParticleDict(TypedDict):
@@ -15,9 +15,25 @@ class ParticleDict(TypedDict):
 
 
 class Ship:
+    PIXEL_ART_SPRITE = [
+        "   W   ",
+        "  WWW  ",
+        "  WGW  ",
+        " WWGWW ",
+        "WWWRWWW",
+        "  RRR  ",
+    ]
+    COLOR_MAP: dict[str, Union[Tuple[int, int, int], Tuple[int, int, int, int]]] = {
+        "W": (255, 255, 255),  # White
+        "G": (150, 150, 150),  # Gray
+        "R": (255, 0, 0),      # Red (thruster)
+        " ": (0, 0, 0, 0),     # Transparent
+    }
+    PIXEL_SIZE = 5  # Size of each pixel in the sprite
+
     def __init__(self, x: float, y: float):
-        self.w = 40
-        self.h = 40
+        self.w = len(self.PIXEL_ART_SPRITE[0]) * self.PIXEL_SIZE
+        self.h = len(self.PIXEL_ART_SPRITE) * self.PIXEL_SIZE
         self.x = x
         self.y = y
         self.speed = 250
@@ -127,29 +143,22 @@ class Ship:
         if self.invuln > 0 and int(self.invuln / 100) % 2 == 0:
             return
 
-        ship_color = (255, 255, 255)
-        if self.piercing_shot_timer > 0:
-            ship_color = (200, 0, 255)  # Roxo para piercing
-        elif self.mini_ships_timer > 0:
-            ship_color = (173, 216, 230)
-        elif self.speed_boost_timer > 0:
-            ship_color = (100, 255, 255)
-        elif self.double_shot_timer > 0:
-            ship_color = (255, 255, 100)
-
         # Calcular tremor
         shake_x, shake_y = 0, 0
         if self.is_entering:
             shake_x = random.randint(-2, 2)
             shake_y = random.randint(-2, 2)
 
-        # Desenha a nave como um polígono (triângulo) com o tremor
-        points: List[Tuple[float, float]] = [
-            (self.x + self.w / 2 + shake_x, self.y + shake_y),  # Ponto de cima
-            (self.x + shake_x, self.y + self.h + shake_y),  # Ponto inferior esquerdo
-            (self.x + self.w + shake_x, self.y + self.h + shake_y),  # Ponto inferior direito
-        ]
-        pygame.draw.polygon(surface, ship_color, points)
+        # Desenha a nave como pixel art com o tremor
+        for row_idx, row in enumerate(self.PIXEL_ART_SPRITE):
+            for col_idx, char in enumerate(row):
+                color = self.COLOR_MAP.get(char)
+                if color and len(color) == 4 and color[3] == 0:  # Transparente
+                    continue
+                if color:
+                    pixel_x = self.x + col_idx * self.PIXEL_SIZE + shake_x
+                    pixel_y = self.y + row_idx * self.PIXEL_SIZE + shake_y
+                    pygame.draw.rect(surface, color, (pixel_x, pixel_y, self.PIXEL_SIZE, self.PIXEL_SIZE))
 
         # Desenhar partículas de entrada (acima da nave)
         for p in self.entry_particles:
