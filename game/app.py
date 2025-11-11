@@ -1,7 +1,7 @@
 import pygame
 from .core.config import Config
 from .core.state import StateManager
-from .scenes.preparation import PreparationScene
+from .scenes.playing import PlayingScene
 from .core.input import Input
 
 
@@ -49,7 +49,7 @@ class GameApp:
         self.clock = pygame.time.Clock()
         self.states = StateManager()
         self.input = Input()
-        self.states.push(PreparationScene(self))
+        self.states.push(PlayingScene(self))
 
     def run(self):
         running = True

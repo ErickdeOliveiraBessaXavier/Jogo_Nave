@@ -29,7 +29,8 @@ class PlayingScene(Scene):
     def __init__(self, app: "GameApp"):
         super().__init__(app)
         self.r = Renderer()
-        self.ship = Ship(Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT - 80)
+        self.ship = Ship(Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT)
+        self.ship.is_entering = True
         self.entity_manager = EntityManager()
 
         self.current_level_index = 0
@@ -84,7 +85,31 @@ class PlayingScene(Scene):
         self.game_over_font_title = get_font(80)
         self.game_over_font_subtitle = get_font(30)
 
+        # Estado de preparação
+        self.state = "preparing"
+        self.preparation_time_left = Config.PREPARATION_TIME
+
     def update(self, dt: float):
+        if self.state == "preparing":
+            self.preparation_time_left -= dt
+
+            # Mover a nave para a posição inicial de forma suave
+            target_y = Config.SCREEN_HEIGHT - 80
+            initial_y = Config.SCREEN_HEIGHT
+            
+            if self.preparation_time_left > 0:
+                elapsed_time = Config.PREPARATION_TIME - self.preparation_time_left
+                progress = min(1.0, elapsed_time / Config.PREPARATION_TIME)
+                # Interpolação linear para suavizar o movimento
+                self.ship.y = initial_y + (target_y - initial_y) * progress
+            else:
+                self.ship.y = target_y
+                self.state = "playing"
+                self.ship.is_entering = False
+
+            self.ship.update(dt)  # Atualiza animações da nave (ex: propulsores)
+            return
+
         if self.game_over_sequence_active:
             self.game_over_timer += dt
             slow_mo_dt = dt * 0.2
@@ -682,9 +707,7 @@ class PlayingScene(Scene):
     def handle_event(self, event: pygame.event.Event):
         if self.game_over_sequence_active:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                from .preparation import PreparationScene
-
-                self.app.states.switch(PreparationScene(self.app))
+                self.app.states.switch(PlayingScene(self.app))
             return
 
         if event.type == pygame.KEYDOWN:
@@ -697,13 +720,25 @@ class PlayingScene(Scene):
             self._process_cheat_input(event)
 
     def render(self, surface: pygame.Surface):
-        boss_active = bool(
-            self.boss_fight_active
-            and self.entity_manager.boss
-            and not self.entity_manager.boss.dead
-        )
+        # Definir a velocidade das estrelas com base no estado do jogo
+        speed_multiplier = 1.0
+        if self.state == "preparing":
+            # Efeito de desaceleração na chegada
+            progress = (Config.PREPARATION_TIME - self.preparation_time_left) / Config.PREPARATION_TIME
+            progress = min(1.0, max(0.0, progress))  # Garantir que esteja entre 0 e 1
+            # Interpola para começar rápido e terminar na velocidade normal
+            speed_multiplier = 1.0 + (Config.WARP_SPEED_MULTIPLIER - 1.0) * (1.0 - progress**2)
+        else:
+            boss_active = bool(
+                self.boss_fight_active
+                and self.entity_manager.boss
+                and not self.entity_manager.boss.dead
+            )
+            if boss_active:
+                speed_multiplier = Config.WARP_SPEED_MULTIPLIER
+
         self.r.background(
-            self.game_surface, dt=1.0 / Config.FPS, boss_active=boss_active
+            self.game_surface, dt=1.0 / Config.FPS, speed_multiplier=speed_multiplier
         )
 
         self.entity_manager.draw(
@@ -787,3 +822,6 @@ class PlayingScene(Scene):
                     center=(Config.SCREEN_WIDTH / 2, Config.SCREEN_HEIGHT / 2 + 100)
                 )
                 surface.blit(restart_text, restart_rect)
+
+        if self.state == "preparing":
+            self.r.preparation(surface, self.preparation_time_left)

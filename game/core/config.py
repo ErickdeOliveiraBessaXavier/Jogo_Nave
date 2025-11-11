@@ -27,8 +27,8 @@ class Config:
     # ========================================
     # BASIC GAMEPLAY SETTINGS
     # ========================================
-    INITIAL_LIVES: int = 3
-    PREPARATION_TIME: float = 3.0  # seconds
+    INITIAL_LIVES: int = 5
+    PREPARATION_TIME: float = 5.0  # seconds
     SHOOT_COOLDOWN: float = 0.20  # Tempo entre tiros quando segura a tecla
 
     # ========================================
@@ -125,7 +125,7 @@ class Config:
     # ========================================
     # VISUAL EFFECTS & ANIMATIONS
     # ========================================
-    WARP_SPEED_MULTIPLIER: float = 5.0
+    WARP_SPEED_MULTIPLIER: float = 200.0
 
     # Explosion effects
     EXPLOSION_DURATION: float = 0.8
