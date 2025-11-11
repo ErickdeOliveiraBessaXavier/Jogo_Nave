@@ -6,7 +6,6 @@ from ..core.state import Scene
 from ..core.config import Config
 from ..render.renderer import Renderer
 from ..entities.ship import Ship
-from ..entities.bullet import Bullet
 from ..entities.explosion import Explosion
 from ..systems.spawner import EnemySpawner, PowerUpSpawner
 from ..systems.collisions import Collisions
@@ -197,7 +196,7 @@ class PlayingScene(Scene):
         ):
             bullet_specs = self.ship.bullet_spawn()
             for x, y, is_piercing in bullet_specs:
-                self.entity_manager.bullets.append(Bullet(x, y, piercing=is_piercing))
+                self.entity_manager.spawn_bullet(x, y, piercing=is_piercing)
             # Tocar som de tiro (varia entre os 3 sons automaticamente)
             sound_manager.play_shot()
             # Aplicar multiplicador de velocidade de ataque do power-up de velocidade

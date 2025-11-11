@@ -10,10 +10,19 @@ class Bullet:
         self.damage = damage
         self.dead = False
         self.piercing = piercing
+        self.active = True  # Para o Pool Pattern
 
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+
+    def reset(self, x: float, y: float, damage: int = 10, piercing: bool = False):
+        """Reconfigura a bala para reutilização no pool."""
+        self.x, self.y = x, y
+        self.damage = damage
+        self.dead = False
+        self.piercing = piercing
+        self.active = True
 
     def update(self, dt: float):
         self.y -= Config.BULLET_SPEED * dt

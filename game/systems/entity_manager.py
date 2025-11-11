@@ -1,5 +1,6 @@
 import pygame
 from ..entities.bullet import Bullet
+from ..entities.bullet_pool import BulletPool
 from ..entities.meteor import Meteor
 from ..entities.meteor_pool import MeteorPool
 from ..entities.alien import Alien
@@ -39,6 +40,7 @@ class EntityManager:
         self.formations: list[Formation] = []  # Nova lista para formações
         self.spikes: list[Spike] = []  # Lista para espinhos do SpikeBoss
         self.meteor_pool = MeteorPool(initial_size=100)  # Pool de meteoros
+        self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
 
     def update(self, dt: float, player_x: float, player_y: float):
         new_alien_bullets: list[AlienBullet] = []
@@ -173,6 +175,28 @@ class EntityManager:
         self.enemies.append(meteor)
         return meteor
 
+    def spawn_bullet(
+        self,
+        x: float,
+        y: float,
+        damage: int = 10,
+        piercing: bool = False,
+    ) -> Bullet:
+        """
+        Spawna uma bala usando o pool.
+
+        Args:
+            x, y: Posição inicial da bala
+            damage: Dano da bala
+            piercing: Se a bala é perfurante
+
+        Returns:
+            Bala criada ou reutilizada do pool
+        """
+        bullet = self.bullet_pool.get(x=x, y=y, damage=damage, piercing=piercing)
+        self.bullets.append(bullet)
+        return bullet
+
     def cleanup(self):
         self.bullets = [b for b in self.bullets if not b.dead]
         self.alien_bullets = [ab for ab in self.alien_bullets if not ab.dead]
@@ -207,6 +231,7 @@ class EntityManager:
         self.formations.clear()
         self.spikes.clear()
         self.meteor_pool.clear_active()  # Limpar meteoros ativos do pool
+        self.bullet_pool.clear_active()  # Limpar balas ativas do pool
 
     def clear_for_level_transition(self):
         """Limpa entidades para transição de fase, mas preserva balas do jogador."""
@@ -225,4 +250,5 @@ class EntityManager:
         self.mini_ship_bullets.clear()
         self.formations.clear()
         self.meteor_pool.clear_active()  # Limpar meteoros ativos do pool
+        # NÃO limpar bullet_pool aqui para manter balas do jogador
         self.spikes.clear()

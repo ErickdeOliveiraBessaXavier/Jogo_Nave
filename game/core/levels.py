@@ -134,5 +134,12 @@ LEVELS: list[LevelConfig] = [
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v", "spiral_line"],
     ),
+        LevelConfig(
+        level_number=8,
+        enemy_spawn_config={
+            Meteor: 0.1,
+        },
+        enemies_to_clear=200,        
+    ),
     # Adicione mais fases aqui
 ]
