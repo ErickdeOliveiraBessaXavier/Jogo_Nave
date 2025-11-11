@@ -224,10 +224,9 @@ class PlayingScene(Scene):
         ):
             self.enemy_spawner.update(
                 dt,
-                self.entity_manager.enemies,
+                self.entity_manager,
                 self.ship.rect.centerx,
                 self.ship.rect.centery,
-                self.entity_manager.formations,  # Passar formações
             )
             self.powerup_spawner.update(dt, self.entity_manager.powerups)
 

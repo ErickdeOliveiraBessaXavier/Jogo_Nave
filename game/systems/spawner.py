@@ -1,5 +1,5 @@
 import random
-from typing import List, Union, TYPE_CHECKING, Dict, Type, TypedDict, Tuple
+from typing import TYPE_CHECKING, Dict, Type, TypedDict, Tuple, List
 
 from ..core.time import Timer
 from ..core.config import Config, PowerUpType
@@ -11,8 +11,7 @@ from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 
 if TYPE_CHECKING:
-    from ..entities.meteor import Meteor
-    from ..entities.alien import Alien
+    from ..systems.entity_manager import EntityManager
 
 
 class FormationConfig(TypedDict, total=False):
@@ -100,10 +99,9 @@ class EnemySpawner:
     def update(
         self,
         dt: float,
-        enemies: List[Union["Meteor", "Alien", "ExplosiveMine", "EyeEnemy"]],
+        entity_manager: "EntityManager",
         player_x: float | None = None,
         player_y: float | None = None,
-        formations: List[Formation] | None = None,  # Nova lista de formações
     ) -> None:
         if self.stopped:
             return
@@ -125,9 +123,16 @@ class EnemySpawner:
                     x = random.randint(40, Config.SCREEN_WIDTH - 80)
                     y = random.randint(40, 100)
                     new_enemy = EyeEnemy(x, y)
+                    entity_manager.enemies.append(new_enemy)
                 else:
-                    new_enemy = enemy_type()  # type: ignore[misc]
-                enemies.append(new_enemy)  # type: ignore[arg-type]
+                    from ..entities.meteor import Meteor
+                    if enemy_type == Meteor:
+                        # Usar o pool para meteoros
+                        entity_manager.spawn_meteor()
+                    else:
+                        # Outros inimigos normalmente
+                        new_enemy = enemy_type()  # type: ignore[misc]
+                        entity_manager.enemies.append(new_enemy)  # type: ignore[arg-type]
                 timer.start()  # Reiniciar timer
 
         # Spawner de minas
@@ -139,13 +144,13 @@ class EnemySpawner:
                         [2, 3, 5], weights=[0.50, 0.25, 0.10], k=1
                     )[0]
                     for _ in range(num_mines):
-                        enemies.append(
+                        entity_manager.enemies.append(
                             ExplosiveMine(y=-random.uniform(10, 100))
                         )  # Adiciona um delay aleatório no eixo y
                     self.mine_spawn_timer.start()
         
         # Spawner de formações
-        if formations is not None and self.config.formations_enabled:
+        if self.config.formations_enabled:
             self.formation_spawn_timer.update(dt)
             if self.formation_spawn_timer.done() and random.random() < self.spawn_intensity:
                 # Criar formação
@@ -198,7 +203,7 @@ class EnemySpawner:
                             
                             # Verificar distância de todas as formações existentes
                             too_close = False
-                            for existing_formation in formations:
+                            for existing_formation in entity_manager.formations:
                                 distance = abs(candidate_x - existing_formation.center_x)
                                 if distance < min_distance:
                                     too_close = True
@@ -226,7 +231,7 @@ class EnemySpawner:
                         
                         from ..entities.alien import Alien
                         new_formation = Formation(Alien, count, entry_x, entry_y, patterns)
-                        formations.append(new_formation)
+                        entity_manager.formations.append(new_formation)
                     
                     # Reiniciar timer
                     min_t, max_t = Config.FORMATION_SPAWN_INTERVAL
@@ -262,7 +267,7 @@ class EnemySpawner:
                         target_x=player_x,
                         target_y=player_y,
                     )
-                    enemies.append(guided_meteor)
+                    entity_manager.enemies.append(guided_meteor)
 
                 self.guided_meteor_timer.start()  # Reinicia timer de 3 segundos
 

@@ -1,6 +1,7 @@
 import pygame
 from ..entities.bullet import Bullet
 from ..entities.meteor import Meteor
+from ..entities.meteor_pool import MeteorPool
 from ..entities.alien import Alien
 from ..entities.boss import Boss
 from ..entities.alien_bullet import AlienBullet
@@ -37,6 +38,7 @@ class EntityManager:
         self.mini_ship_bullets: list[MiniShipBullet] = []
         self.formations: list[Formation] = []  # Nova lista para formações
         self.spikes: list[Spike] = []  # Lista para espinhos do SpikeBoss
+        self.meteor_pool = MeteorPool(initial_size=100)  # Pool de meteoros
 
     def update(self, dt: float, player_x: float, player_y: float):
         new_alien_bullets: list[AlienBullet] = []
@@ -150,6 +152,27 @@ class EntityManager:
         for formation in self.formations:
             formation.draw(surface)
 
+    def spawn_meteor(
+        self,
+        size: int | None = None,
+        x: float | None = None,
+        y: float | None = None,
+        vx: float | None = None,
+        vy: float | None = None,
+    ) -> Meteor:
+        """
+        Spawna um meteoro usando o pool.
+
+        Args:
+            size, x, y, vx, vy: Parâmetros de configuração do meteoro
+
+        Returns:
+            Meteoro criado ou reutilizado do pool
+        """
+        meteor = self.meteor_pool.get(size=size, x=x, y=y, vx=vx, vy=vy)
+        self.enemies.append(meteor)
+        return meteor
+
     def cleanup(self):
         self.bullets = [b for b in self.bullets if not b.dead]
         self.alien_bullets = [ab for ab in self.alien_bullets if not ab.dead]
@@ -183,6 +206,7 @@ class EntityManager:
         self.mini_ship_bullets.clear()
         self.formations.clear()
         self.spikes.clear()
+        self.meteor_pool.clear_active()  # Limpar meteoros ativos do pool
 
     def clear_for_level_transition(self):
         """Limpa entidades para transição de fase, mas preserva balas do jogador."""
@@ -200,4 +224,5 @@ class EntityManager:
         self.mini_ships.clear()
         self.mini_ship_bullets.clear()
         self.formations.clear()
+        self.meteor_pool.clear_active()  # Limpar meteoros ativos do pool
         self.spikes.clear()
