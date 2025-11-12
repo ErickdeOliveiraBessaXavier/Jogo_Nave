@@ -70,7 +70,8 @@ LEVELS: list[LevelConfig] = [
             Meteor: 0.6,            
             #EyeEnemy: 15.0,
         },
-        enemies_to_clear=200,        
+        enemies_to_clear=0,
+        boss_type=Boss,     
     ),
     LevelConfig(
         level_number=2,

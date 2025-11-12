@@ -240,7 +240,6 @@ class EntityManager:
         self.alien_bullets.clear()
         self.boss_lasers.clear()
         self.eye_lasers.clear()
-        self.powerups.clear()
         self.floating_scores.clear()
         self.enemies.clear()
         self.explosions.clear()

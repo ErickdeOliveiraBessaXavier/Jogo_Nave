@@ -1,6 +1,7 @@
 import math
 import random
 from typing import List, Any
+from collections import deque
 
 import pygame
 
@@ -97,6 +98,39 @@ class Boss:
 
         # Substituir sistema de canhão antigo pelo novo
         self.cannon = BossCannon()
+
+        # Sistema de quadrados flutuantes (seguem o boss com delay)
+        self.position_history: deque[tuple[float, float]] = deque(maxlen=30)  # Histórico de posições
+        self.floating_squares: List[dict[str, Any]] = []
+        self._init_floating_squares()
+        
+        # Animação de pulsação para os quadrados flutuantes
+        self.squares_animation_timer = 0.0
+
+    def _init_floating_squares(self) -> None:
+        """Inicializa os quadrados flutuantes ao redor do boss."""
+        # Criar 8 quadrados em posições diferentes ao redor do corpo principal
+        configs = [
+            {"offset_x": -40, "offset_y": -30, "size": 20, "delay": 5},   # Esquerda superior
+            {"offset_x": 40, "offset_y": -30, "size": 20, "delay": 5},    # Direita superior
+            {"offset_x": -50, "offset_y": 10, "size": 25, "delay": 10},   # Esquerda meio
+            {"offset_x": 50, "offset_y": 10, "size": 25, "delay": 10},    # Direita meio
+            {"offset_x": -35, "offset_y": 50, "size": 18, "delay": 15},   # Esquerda inferior
+            {"offset_x": 35, "offset_y": 50, "size": 18, "delay": 15},    # Direita inferior
+            {"offset_x": 0, "offset_y": -45, "size": 15, "delay": 8},     # Topo centro
+            {"offset_x": 0, "offset_y": 65, "size": 22, "delay": 12},     # Base centro
+        ]
+        
+        for config in configs:
+            self.floating_squares.append({
+                "offset_x": config["offset_x"],
+                "offset_y": config["offset_y"],
+                "base_size": config["size"],  # Tamanho base
+                "size": config["size"],  # Tamanho atual (será animado)
+                "delay": config["delay"],  # Frames de delay
+                "x": self.x + self.w / 2 + config["offset_x"],
+                "y": self.y + self.h / 2 + config["offset_y"],
+            })
 
     def _update_orientation(self, player_x: float, player_y: float) -> None:
         """Update cannon orientation to face the player."""
@@ -515,6 +549,34 @@ class Boss:
         self.player_x = player_x
         self.player_y = player_y
 
+        # Atualizar histórico de posições para os quadrados flutuantes
+        center_x = self.x + self.w / 2
+        center_y = self.y + self.h / 2
+        self.position_history.append((center_x, center_y))
+
+        # Atualizar animação de pulsação dos quadrados (mesma lógica do power-up)
+        self.squares_animation_timer += dt * 5  # Velocidade da pulsação
+        pulse_scale = 1.0 + 0.2 * abs(
+            pygame.math.Vector2(1, 0).rotate(self.squares_animation_timer * 57.3).x
+        )
+
+        # Atualizar posições dos quadrados flutuantes com lerp (movimento suave)
+        lerp_speed = 7.0  # Mesma velocidade das mini_ships
+        for square in self.floating_squares:
+            delay_frames = square["delay"]
+            if len(self.position_history) > delay_frames:
+                # Pegar posição alvo do histórico
+                delayed_pos = self.position_history[-delay_frames]
+                target_x = delayed_pos[0] + square["offset_x"]
+                target_y = delayed_pos[1] + square["offset_y"]
+                
+                # Interpolar suavemente entre posição atual e alvo (lerp)
+                square["x"] += (target_x - square["x"]) * lerp_speed * dt
+                square["y"] += (target_y - square["y"]) * lerp_speed * dt
+            
+            # Aplicar pulsação ao tamanho
+            square["size"] = square["base_size"] * pulse_scale
+
         # Update orientation to face player
         if player_y is not None:
             self._update_orientation(player_x, player_y)
@@ -750,6 +812,55 @@ class Boss:
 
             current_distance += Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
 
+    def _draw_floating_squares(
+        self, surface: pygame.Surface, offset_x: float, offset_y: float, behind: bool
+    ) -> None:
+        """Desenha os quadrados flutuantes ao redor do boss."""
+        for i, square in enumerate(self.floating_squares):
+            # Alternar quais quadrados desenhar na frente ou atrás
+            # Quadrados com índice par ficam atrás, ímpares na frente
+            if (i % 2 == 0) != behind:
+                continue
+            
+            # Calcular cor baseada no modo frenzy
+            if self.frenzy_mode:
+                # No frenzy, cores mais intensas e variadas
+                base_red = 255
+                base_green = random.randint(0, 100)
+                base_blue = 0
+            else:
+                # Modo normal, vermelho mais escuro
+                base_red = 200
+                base_green = 0
+                base_blue = 0
+            
+            # Variar a intensidade baseada na distância do centro
+            intensity = 0.7 + (i / len(self.floating_squares)) * 0.3
+            color = (
+                int(base_red * intensity),
+                int(base_green * intensity),
+                int(base_blue * intensity)
+            )
+            
+            # Desenhar o quadrado
+            square_x = square["x"] - square["size"] / 2 + offset_x
+            square_y = square["y"] - square["size"] / 2 + offset_y
+            
+            pygame.draw.rect(
+                surface,
+                color,
+                (int(square_x), int(square_y), square["size"], square["size"])
+            )
+            
+            # Desenhar borda mais clara
+            border_color = tuple(min(255, c + 50) for c in color)
+            pygame.draw.rect(
+                surface,
+                border_color,
+                (int(square_x), int(square_y), square["size"], square["size"]),
+                2
+            )
+
     def _draw_cannon(
         self, surface: pygame.Surface, offset_x: float, offset_y: float
     ) -> None:
@@ -783,10 +894,16 @@ class Boss:
             offset_x = random.randint(-3, 3)
             offset_y = random.randint(-3, 3)
 
-        # Normal boss rendering (corpo vermelho)
+        # Desenhar quadrados flutuantes ATRÁS do corpo principal
+        self._draw_floating_squares(surface, offset_x, offset_y, behind=True)
+
+        # Normal boss rendering (corpo vermelho - corpo principal)
         pygame.draw.rect(
             surface, (255, 0, 0), (self.x + offset_x, self.y + offset_y, self.w, self.h)
         )
+
+        # Desenhar quadrados flutuantes NA FRENTE do corpo principal
+        self._draw_floating_squares(surface, offset_x, offset_y, behind=False)
 
         # Desenhar o canhão usando a nova classe
         self.cannon.draw(surface, offset_x, offset_y)

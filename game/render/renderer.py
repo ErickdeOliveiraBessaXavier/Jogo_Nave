@@ -36,8 +36,8 @@ class StarField:
         for s in self.stars:
             s["y"] += s["speed"] * dt * speed_multiplier
             if s["y"] > self.h:
-                # Seamless wrap-around logic
-                s["y"] = (s["y"] + s["size"]) % (self.h + s["size"]) - s["size"]
+                # Reposicionar estrela no topo (acima da tela)
+                s["y"] = -s["size"]  # Começa logo acima da tela
                 s["x"] = random.randint(0, self.w)
 
     def draw(self, surface: pygame.Surface):
