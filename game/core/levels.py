@@ -70,8 +70,8 @@ LEVELS: list[LevelConfig] = [
             Meteor: 0.6,            
             #EyeEnemy: 15.0,
         },
-        enemies_to_clear=0,
-        boss_type=Boss,     
+        enemies_to_clear=200,
+        #boss_type=Boss,     
     ),
     LevelConfig(
         level_number=2,
@@ -130,7 +130,7 @@ LEVELS: list[LevelConfig] = [
             EyeEnemy: 5.0,
         },
         enemies_to_clear=250,
-        boss_type=SpikeBoss,  # Novo SpikeBoss na fase 7
+        boss_type=SpikeBoss,
         mines_enabled=True,
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v", "spiral_line"],

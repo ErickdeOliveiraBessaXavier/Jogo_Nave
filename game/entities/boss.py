@@ -1054,45 +1054,50 @@ class Boss:
             )
 
     def _draw_pixelated_boss(self, surface: pygame.Surface, offset_x: float, offset_y: float) -> None:
-        """Desenha o boss com bordas serrilhadas/pixeladas (efeito retro)."""
+        """Desenha o boss com bordas serrilhadas/pixeladas (efeito retro vazado)."""
         x = int(self.x + offset_x)
         y = int(self.y + offset_y)
         
-        # Corpo principal vermelho
-        main_red = (255, 0, 0)
-        pygame.draw.rect(surface, main_red, (x, y, self.w, self.h))
+        # Criar superfície temporária com suporte a transparência
+        temp_surface = pygame.Surface((int(self.w), int(self.h)), pygame.SRCALPHA)
         
-        # Criar efeito de borda serrilhada/pixelada mais agressivo
-        pixel_size = 6  # Aumentado de 3 para 6
-        dark_red = (180, 0, 0)
+        # Corpo principal vermelho (preencher toda a superfície)
+        main_red = (255, 0, 0, 255)
+        temp_surface.fill(main_red)
+        
+        # Criar efeito de borda serrilhada/pixelada TRANSPARENTE (vazado)
+        pixel_size = 6
+        transparent = (0, 0, 0, 0)  # Completamente transparente
         
         # Padrão irregular para as bordas (assimétrico)
-        # Cada posição tem chance diferente de ter pixel
         pattern = [1, 1, 0, 1, 0, 1, 1, 0, 0, 1]  # Padrão irregular que se repete
         
-        # Borda superior (serrilhada irregular)
+        # Borda superior (serrilhada irregular vazada)
         for i in range(0, int(self.w), pixel_size):
             idx = (i // pixel_size) % len(pattern)
             if pattern[idx]:
-                pygame.draw.rect(surface, dark_red, (x + i, y, pixel_size, pixel_size))
+                pygame.draw.rect(temp_surface, transparent, (i, 0, pixel_size, pixel_size))
         
-        # Borda inferior (serrilhada irregular - padrão diferente)
+        # Borda inferior (serrilhada irregular vazada - padrão diferente)
         for i in range(0, int(self.w), pixel_size):
             idx = (i // pixel_size) % len(pattern)
             if pattern[(idx + 3) % len(pattern)]:  # Offset para padrão diferente
-                pygame.draw.rect(surface, dark_red, (x + i, y + self.h - pixel_size, pixel_size, pixel_size))
+                pygame.draw.rect(temp_surface, transparent, (i, int(self.h) - pixel_size, pixel_size, pixel_size))
         
-        # Borda esquerda (serrilhada irregular)
+        # Borda esquerda (serrilhada irregular vazada)
         for i in range(0, int(self.h), pixel_size):
             idx = (i // pixel_size) % len(pattern)
             if pattern[(idx + 1) % len(pattern)]:
-                pygame.draw.rect(surface, dark_red, (x, y + i, pixel_size, pixel_size))
+                pygame.draw.rect(temp_surface, transparent, (0, i, pixel_size, pixel_size))
         
-        # Borda direita (serrilhada irregular - padrão diferente)
+        # Borda direita (serrilhada irregular vazada - padrão diferente)
         for i in range(0, int(self.h), pixel_size):
             idx = (i // pixel_size) % len(pattern)
             if pattern[(idx + 5) % len(pattern)]:
-                pygame.draw.rect(surface, dark_red, (x + self.w - pixel_size, y + i, pixel_size, pixel_size))
+                pygame.draw.rect(temp_surface, transparent, (int(self.w) - pixel_size, i, pixel_size, pixel_size))
+        
+        # Desenhar a superfície temporária na posição final
+        surface.blit(temp_surface, (x, y))
 
     def draw(self, surface: pygame.Surface) -> None:
         """Render the boss and its effects."""
