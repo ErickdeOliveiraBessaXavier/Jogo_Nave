@@ -1,12 +1,21 @@
 from dataclasses import dataclass
 from typing import Type
 import random
+from enum import Enum
 from ..entities.meteor import Meteor
 from ..entities.alien import Alien
 from ..entities.boss import Boss
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.spike_boss import SpikeBoss
+
+
+class FormationType(Enum):
+    SPIRAL_CIRCLE = "spiral_circle"
+    SPIRAL_V = "spiral_v"
+    SPIRAL_SQUARE = "spiral_square"
+    FULL_CYCLE = "full_cycle"
+    SPIRAL_LINE = "spiral_line"
 
 
 @dataclass
@@ -19,7 +28,7 @@ class LevelConfig:
     boss_type: Type[Boss | SpikeBoss] | None = None  # O tipo de classe do chefe (opcional)
     mines_enabled: bool = False  # Se as minas estão habilitadas neste nível
     formations_enabled: bool = False  # Se formações estão habilitadas neste nível
-    formation_types: list[str] | None = None  # Tipos de formação disponíveis
+    formation_types: list[FormationType] | None = None  # Tipos de formação disponíveis
 
     @property
     def enemy_types(self) -> list[Type[Meteor | Alien | ExplosiveMine | EyeEnemy]]:
@@ -39,7 +48,7 @@ class LevelConfig:
     def get_random_formation_type(self) -> str | None:
         """Retorna um tipo de formação aleatório da lista."""
         if self.formation_types:
-            return random.choice(self.formation_types)
+            return random.choice(self.formation_types).value
         return None
     
     def validate_formation_types(self, valid_types: set[str]) -> list[str]:
@@ -57,8 +66,8 @@ class LevelConfig:
         
         invalid: list[str] = []
         for formation_type in self.formation_types:
-            if formation_type not in valid_types:
-                invalid.append(formation_type)
+            if formation_type.value not in valid_types:
+                invalid.append(formation_type.value)
         
         return invalid
 
@@ -100,7 +109,7 @@ LEVELS: list[LevelConfig] = [
         enemies_to_clear=150,
         mines_enabled=True,
         formations_enabled=True,
-        formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
+        formation_types=[FormationType.SPIRAL_CIRCLE, FormationType.SPIRAL_V, FormationType.SPIRAL_SQUARE, FormationType.FULL_CYCLE, FormationType.SPIRAL_LINE],
     ),
     LevelConfig(
         level_number=5,
@@ -110,7 +119,7 @@ LEVELS: list[LevelConfig] = [
         },
         enemies_to_clear=200,
         formations_enabled=True,
-        formation_types=["spiral_v", "full_cycle", "spiral_line"],
+        formation_types=[FormationType.SPIRAL_V, FormationType.FULL_CYCLE, FormationType.SPIRAL_LINE],
     ),
     LevelConfig(
         level_number=6,
@@ -121,7 +130,7 @@ LEVELS: list[LevelConfig] = [
         enemies_to_clear=300,
         mines_enabled=True,
         formations_enabled=True,
-        formation_types=["spiral_circle", "spiral_v", "full_cycle"],
+        formation_types=[FormationType.SPIRAL_CIRCLE, FormationType.SPIRAL_V, FormationType.FULL_CYCLE],
     ),
     LevelConfig(
         level_number=7,
@@ -133,7 +142,7 @@ LEVELS: list[LevelConfig] = [
         boss_type=SpikeBoss,
         mines_enabled=True,
         formations_enabled=True,
-        formation_types=["spiral_circle", "spiral_v", "spiral_line"],
+        formation_types=[FormationType.SPIRAL_CIRCLE, FormationType.SPIRAL_V, FormationType.SPIRAL_LINE],
     ),
         LevelConfig(
         level_number=8,
@@ -144,3 +153,37 @@ LEVELS: list[LevelConfig] = [
     ),
     # Adicione mais fases aqui
 ]
+
+
+class LevelManager:
+    """
+    Gerencia a progressão de níveis no jogo.
+    """
+    def __init__(self, levels: list[LevelConfig]):
+        self._levels = sorted(levels, key=lambda lvl: lvl.level_number)
+        self.current_level_index = 0
+
+    def start_next_level(self) -> None:
+        """
+        Avança para o próximo nível, se houver.
+        """
+        if not self.is_last_level():
+            self.current_level_index += 1
+
+    def get_current_config(self) -> LevelConfig:
+        """
+        Retorna a configuração do nível atual.
+        """
+        return self._levels[self.current_level_index]
+
+    def is_last_level(self) -> bool:
+        """
+        Verifica se o nível atual é o último.
+        """
+        return self.current_level_index >= len(self._levels) - 1
+
+    def reset(self) -> None:
+        """
+        Reinicia a progressão para o primeiro nível.
+        """
+        self.current_level_index = 0

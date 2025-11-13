@@ -3,6 +3,7 @@ from .core.config import Config
 from .core.state import StateManager
 from .scenes.playing import PlayingScene
 from .core.input import Input
+from .core.levels import LevelManager, LEVELS
 
 
 class GameApp:
@@ -49,7 +50,8 @@ class GameApp:
         self.clock = pygame.time.Clock()
         self.states = StateManager()
         self.input = Input()
-        self.states.push(PlayingScene(self))
+        self.level_manager = LevelManager(LEVELS)
+        self.states.push(PlayingScene(self, self.level_manager))
 
     def run(self):
         running = True

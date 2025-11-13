@@ -28,7 +28,7 @@ class PausedScene(Scene):
                 # Fallback caso não tenha cena anterior
                 from .playing import PlayingScene
 
-                self.app.states.switch(PlayingScene(self.app))
+                self.app.states.switch(PlayingScene(self.app, self.app.level_manager))
 
     def render(self, surface: pygame.Surface):
         # Renderiza a cena anterior primeiro (congelada)
