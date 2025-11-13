@@ -41,13 +41,13 @@ class GuidedMeteor(Meteor):
         # Estado do meteoro
         self.target_x = target_x
         self.target_y = target_y
-        self.guided = True  # Sempre guiado enquanto vivo
+        # Note: self.guided sempre True, poderia ser removido se não houver planos futuros
 
         # Acelerar rotação para meteoros guiados
         self.rotation_speed *= 3.0  # 3x mais rápido que meteoros normais
 
         # Cor especial para meteoros guiados - Verde para destaque
-        self.base_color = colors.GREEN
+        self.base_color: Tuple[int, int, int] = colors.GREEN
 
     def update(
         self, dt: float, target_x: float | None = None, target_y: float | None = None
@@ -64,9 +64,8 @@ class GuidedMeteor(Meteor):
             self.target_x = target_x
             self.target_y = target_y
 
-        # Sistema de guiamento (sempre ativo enquanto vivo)
-        if self.guided:
-            self._update_guidance(dt)
+        # Sistema de guiamento (sempre ativo)
+        self._update_guidance(dt)
 
         # Física normal do meteoro (movimento e rotação)
         super().update(dt)
@@ -121,8 +120,8 @@ class GuidedMeteor(Meteor):
                 int(255 * self.color_intensity),  # Verde brilhante
                 int(100 * self.color_intensity),  # Verde médio
             )
-            border_color = colors.GUIDED_METEOR_GREEN
-            core_color = colors.GREEN
+            border_color: Tuple[int, int, int] = colors.GUIDED_METEOR_GREEN
+            core_color: Tuple[int, int, int] = colors.GREEN
         else:
             body_color = (
                 int(30 * self.color_intensity),  # Verde muito escuro
@@ -138,10 +137,5 @@ class GuidedMeteor(Meteor):
         pygame.draw.circle(screen, core_color, center, max(2, self.size // 4))
 
     def get_display_color(self) -> Tuple[int, int, int]:
-        """Get color for the guided meteor."""
-        if self.guided:
-            # Sempre verde quando guiado
-            return self.base_color  # Verde
-        else:
-            # Cor normal quando não guiado (nunca deveria acontecer)
-            return (128, 128, 128)  # Cinza
+        """Get color for the guided meteor (always green)."""
+        return self.base_color

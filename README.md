@@ -1,123 +1,84 @@
-# 🚀 Space Shooter Game (Jogo de Nave)
+# 🚀 Jogo de Nave (Space Shooter)
 
-Um emocionante jogo de tiro espacial desenvolvido com Python e Pygame! Controle sua nave, destrua inimigos e enfrente chefes épicos em múltiplos níveis.
+Um emocionante jogo de tiro espacial de progressão infinita, desenvolvido em Python com a biblioteca Pygame. Desafie suas habilidades desviando de asteroides, destruindo naves alienígenas e enfrentando chefes poderosos para alcançar a maior pontuação possível.
 
-## ✨ Funcionalidades
+## ✨ Funcionalidades Principais
 
-### 🎮 **Gameplay**
-- **Controle fluido** da nave com movimentação e tiro contínuo
-- **Múltiplos níveis** com dificuldade progressiva  
-- **Sistema de inimigos** diversificado (meteoros, aliens, naves kamikaze)
-- **Batalhas épicas** contra chefes com múltiplos padrões de ataque
-- **Sistema de pontuação** baseado em performance
-- **Trilha sonora e efeitos sonoros** imersivos
-
-### 🎁 **Power-ups com Sistema de Raridade**
-- **Shield** (40%) - Proteção temporária
-- **Double Shot** (30%) - Tiro duplo
-- **Speed Boost** (15%) - Velocidade aumentada  
-- **Extra Life** (10%) - Vida adicional
-- **Score Multiplier** (4%) - Multiplicador de pontos
-- **Rainbow** (1%) - Todos os power-ups!
-
-### 🎯 **Recursos Avançados**
-- **Inimigos com comportamento avançado** (minas explosivas, meteoros teleguiados)
-- **Boss com sistema de mira** e múltiplos canhões
-- **Sistema de partículas** para explosões e efeitos visuais
-- **Configurações centralizadas** para fácil balanceamento
-- **Sistema de som dinâmico** com música para gameplay e batalhas de chefe
+- **Jogabilidade Infinita:** Sobreviva o máximo que puder contra ondas crescentes de inimigos.
+- **Inimigos Variados:** Enfrente meteoros, naves alienígenas, meteoros teleguiados e chefes desafiadores.
+- **Power-ups com Raridade:** Colete power-ups para ganhar vantagens, com um sistema de raridade que torna cada partida única:
+  - **Shield (40%):** Proteção temporária contra danos.
+  - **Double Shot (30%):** Aumenta seu poder de fogo com tiros duplos.
+  - **Speed Boost (15%):** Aumenta a velocidade de movimento da sua nave.
+  - **Extra Life (10%):** Ganhe uma vida extra.
+  - **Score Multiplier (4%):** Multiplique sua pontuação.
+  - **Rainbow (1%):** Ativa todos os outros power-ups simultaneamente!
+- **Efeitos Visuais:** Inclui efeitos de explosão e "screen shake" para uma experiência mais imersiva.
+- **Sistema de Pontuação:** Sua pontuação aumenta ao destruir inimigos.
 
 ## 🎮 Como Jogar
 
-### 📋 **Pré-requisitos**
-```bash
-Python 3.8+
-Pygame 2.0+
-```
+### Pré-requisitos
 
-### 🚀 **Instalação e Execução**
+- Python 3.8 ou superior
+- Git
+
+### Instalação
+
+Siga estes passos para configurar o ambiente de desenvolvimento e executar o jogo.
+
 ```bash
 # 1. Clone o repositório
 git clone https://github.com/ErickdeOliveiraBessaXavier/Jogo_Nave.git
 
-# 2. Navegue até o diretório
+# 2. Navegue até o diretório do projeto
 cd Jogo_Nave
 
-# 3. Instale dependências
+# 3. (Opcional mas recomendado) Crie e ative um ambiente virtual
+# Em Windows
+python -m venv venv
+venv\Scripts\activate
+# Em macOS/Linux
+python3 -m venv venv
+source venv/bin/activate
+
+# 4. Instale as dependências
 pip install -r requirements.txt
 
-# 4. Execute o jogo
+# 5. Execute o jogo
 python run.py
 ```
 
-### 🎮 **Controles**
-- **WASD** ou **Setas** - Movimento da nave
-- **Espaço** - Atirar (segure para tiro contínuo)
-- **P** - Pausar/Despausar
-- **R** - Reiniciar (na tela de game over)
+### Controles
 
-## 🏗️ **Arquitetura do Projeto**
+- **Setas Direcionais ou WASD:** Mover a nave.
+- **Barra de Espaço:** Atirar (mantenha pressionado para tiro contínuo).
+- **P:** Pausar e despausar o jogo.
+- **R:** Reiniciar o jogo na tela de "Game Over".
+- **ESC:** Sair do jogo.
+
+## 🏗️ Estrutura do Projeto
+
+O projeto é organizado de forma modular para facilitar a manutenção e a adição de novas funcionalidades.
 
 ```
-game/
-├── assets/         # Recursos visuais e sonoros
-│   ├── sounds/     # Efeitos sonoros e música
-├── core/           # Sistemas principais (som, input, configurações)
-├── entities/       # Entidades do jogo (nave, inimigos, projéteis)
-├── render/         # Sistema de renderização
-├── scenes/         # Cenas do jogo (menu, jogo, game over)
-└── systems/        # Sistemas de gameplay (spawn, colisões)
+Jogo_Nave/
+├── game/
+│   ├── assets/         # Contém fontes, sons e músicas
+│   ├── core/           # Lógica central (configurações, estado, som)
+│   ├── entities/       # Todas as entidades do jogo (jogador, inimigos, projéteis)
+│   ├── render/         # Lógica de renderização
+│   ├── scenes/         # Cenas do jogo (jogando, game over, pausa)
+│   └── systems/        # Sistemas de gerenciamento (colisões, spawns)
+├── requirements.txt    # Dependências do projeto
+└── run.py              # Ponto de entrada da aplicação
 ```
 
-## 🔧 **Tecnologias Utilizadas**
+## 🔧 Tecnologias Utilizadas
 
-- **Python 3.12** - Linguagem principal
-- **Pygame** - Engine de jogos 2D
-- **Dataclasses** - Configurações estruturadas
-- **Type Hints** - Código tipado e documentado
-
-## 📈 **Versões**
-
-### v3.0 - Sistema de Som e Novas Mecânicas
-- ✅ **Sistema de som completo** com música de fundo, música de chefe e SFX
-- ✅ **Novos inimigos:** Minas explosivas e naves menores
-- ✅ **Boss aprimorado** com novos padrões de ataque (canhões e mira)
-- ✅ **Efeitos de partículas** para o boss
-
-### v2.0 - Sistema de Raridade de Power-ups
-- ✅ Implementado sistema de raridade individualizada
-- ✅ Power-ups com probabilidades específicas
-- ✅ Balanceamento aprimorado
-
-### v1.5 - Meteoros Teleguiados  
-- ✅ Meteoros que perseguem o jogador
-- ✅ Sistema de spawn multi-timer
-- ✅ Configurações centralizadas
-
-### v1.0 - Versão Base
-- ✅ Gameplay completo
-- ✅ Sistema de chefes
-- ✅ Power-ups básicos
-
-## 🤝 **Contribuindo**
-
-1. Fork o projeto
-2. Crie uma branch (`git checkout -b feature/nova-funcionalidade`)
-3. Commit suas mudanças (`git commit -am 'feat: Nova funcionalidade'`)
-4. Push para a branch (`git push origin feature/nova-funcionalidade`)
-5. Abra um Pull Request
-
-## 📄 **Licença**
-
-Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para detalhes.
-
-## 🎯 **Roadmap**
-
-- [ ] Sistema de conquistas
-- [ ] Múltiplos tipos de nave
-- [ ] Editor de níveis
-- [x] Música e efeitos sonoros
-- [ ] Multiplayer local
+- **Linguagem:** Python 3
+- **Biblioteca Gráfica:** Pygame
+- **Estrutura:** Código modularizado com gerenciamento de cenas e entidades.
 
 ---
 

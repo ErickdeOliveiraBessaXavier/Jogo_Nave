@@ -32,11 +32,12 @@ class StarField:
                 }
             )
 
-    def update(self, dt: float):
+    def update(self, dt: float, speed_multiplier: float = 1.0):
         for s in self.stars:
-            s["y"] += s["speed"] * dt
+            s["y"] += s["speed"] * dt * speed_multiplier
             if s["y"] > self.h:
-                s["y"] = -s["size"]
+                # Reposicionar estrela no topo (acima da tela)
+                s["y"] = -s["size"]  # Começa logo acima da tela
                 s["x"] = random.randint(0, self.w)
 
     def draw(self, surface: pygame.Surface):
@@ -52,9 +53,9 @@ class Renderer:
         self.font_large = get_font(32)
         self.starfield = StarField(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
 
-    def background(self, surface: pygame.Surface, dt: float):
+    def background(self, surface: pygame.Surface, dt: float, speed_multiplier: float = 1.0):
         surface.fill(colors.BLACK)
-        self.starfield.update(dt)
+        self.starfield.update(dt, speed_multiplier)
         self.starfield.draw(surface)
 
     def hud(

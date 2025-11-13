@@ -4,9 +4,15 @@ from typing import Optional
 from ..core.config import Config, PowerUpType
 from ..core.assets import get_font
 from ..core.colors import (
-    POWERUP_LIFE, POWERUP_SHIELD, POWERUP_DOUBLE_SHOT, POWERUP_SPEED,
-    POWERUP_SCORE, POWERUP_PIERCING_SHOT, POWERUP_RAINBOW, RAINBOW_COLORS,
-    POWERUP_MINI_SHIPS
+    POWERUP_LIFE,
+    POWERUP_SHIELD,
+    POWERUP_DOUBLE_SHOT,
+    POWERUP_SPEED,
+    POWERUP_SCORE,
+    POWERUP_PIERCING_SHOT,
+    POWERUP_RAINBOW,
+    RAINBOW_COLORS,
+    POWERUP_MINI_SHIPS,
 )
 
 
@@ -15,7 +21,7 @@ class PowerUp:
         # Se não especificado, usa o sistema de raridade do config
         if powerup_type is None:
             powerup_type = self._select_random_powerup()
-        
+
         self.type = powerup_type
         self.kind = powerup_type.value  # Mantém compatibilidade com código existente
         self.w, self.h = Config.POWERUP_SIZE, Config.POWERUP_SIZE
@@ -32,12 +38,12 @@ class PowerUp:
         """Seleciona um power-up aleatório baseado no sistema de raridade"""
         rand_val = random.random()
         cumulative = 0.0
-        
+
         for powerup_type, chance in Config.POWERUP_RARITY_CHANCES.items():
             cumulative += chance
             if rand_val <= cumulative:
                 return powerup_type
-        
+
         # Fallback para o último tipo se algo der errado
         return PowerUpType.SHIELD
 
@@ -94,7 +100,11 @@ class PowerUp:
             self._draw_rainbow_effect(surface, pulse_rect)
         else:
             # Fundo principal
-            pygame.draw.ellipse(surface, color_map.get(self.kind, (255, 255, 255)), pulse_rect)
+            pygame.draw.ellipse(
+                surface,
+                pygame.Color(color_map.get(self.kind, (255, 255, 255))),
+                pulse_rect,
+            )
 
             # Borda brilhante
             pygame.draw.ellipse(surface, (255, 255, 255), pulse_rect, 2)

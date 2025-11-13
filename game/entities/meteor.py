@@ -63,6 +63,7 @@ class Meteor:
         self._base_points: List[Tuple[float, float]] = self._generate_irregular_shape()
         self.color_intensity = 1.0 - ratio * 0.3
         self.dead = False
+        self.active = True  # Para o Pool Pattern
 
     def _generate_irregular_shape(self) -> List[Tuple[float, float]]:
         pts: List[Tuple[float, float]] = []
@@ -73,6 +74,65 @@ class Meteor:
             r = self.size * rv
             pts.append((r * math.cos(ang), r * math.sin(ang)))
         return pts
+
+    def reset(
+        self,
+        size: int | None = None,
+        x: float | None = None,
+        y: float | None = None,
+        vx: float | None = None,
+        vy: float | None = None,
+    ):
+        """Reconfigura o meteoro para reutilização no pool."""
+        # tamanho base
+        self.size = (
+            size
+            if size is not None
+            else random.randint(Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE)
+        )
+        self.w = self.h = self.size * 2
+
+        # posição
+        if x is None:
+            self.x = random.randint(0, Config.SCREEN_WIDTH - self.w)
+        else:
+            self.x = x
+        self.y = -self.h if y is None else y
+
+        # velocidade vertical baseada no tamanho
+        ratio = (self.size - Config.MIN_METEOR_SIZE) / (
+            Config.MAX_METEOR_SIZE - Config.MIN_METEOR_SIZE + 1e-6
+        )
+        base_vy = (
+            Config.FAST_METEOR_SPEED
+            - (Config.FAST_METEOR_SPEED - Config.SLOW_METEOR_SPEED) * ratio
+        )
+
+        # velocidade
+        if vy is None:
+            self.vy = base_vy
+        else:
+            self.vy = vy
+
+        if vx is None:
+            if random.random() < Config.DIAGONAL_CHANCE:
+                self.vx = random.uniform(-120.0, 120.0) * (
+                    self.vy / max(Config.FAST_METEOR_SPEED, 1e-6)
+                )
+            else:
+                self.vx = 0.0
+        else:
+            self.vx = vx
+
+        # rotação
+        self.rotation = 0.0
+        self.rotation_speed = random.uniform(-3, 3) * (1.0 - ratio * 0.5)
+
+        # forma irregular + cor
+        self._base_points = self._generate_irregular_shape()
+        self.color_intensity = 1.0 - ratio * 0.3
+        self.dead = False
+        self.active = True
 
     @property
     def rect(self) -> pygame.Rect:

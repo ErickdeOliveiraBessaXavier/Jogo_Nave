@@ -1,10 +1,14 @@
 import pygame
 from ..entities.bullet import Bullet
+from ..entities.bullet_pool import BulletPool
 from ..entities.meteor import Meteor
+from ..entities.meteor_pool import MeteorPool
 from ..entities.alien import Alien
 from ..entities.boss import Boss
+from ..entities.boss_square import BossSquare
 from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
+from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.explosion import Explosion
 from ..entities.mine_explosion import MineExplosion
 from ..entities.powerup import PowerUp
@@ -13,24 +17,43 @@ from ..entities.guided_meteor import GuidedMeteor
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
+from ..entities.eye_enemy import EyeEnemy
+from ..entities.eye_laser import EyeLaser
+from ..entities.formation import Formation
+from ..entities.spike import Spike
+from ..entities.spike_boss import SpikeBoss
 
 
 class EntityManager:
     def __init__(self):
         self.bullets: list[Bullet] = []
-        self.enemies: list[Meteor | Alien | ExplosiveMine] = []
+        self.enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy] = []
         self.alien_bullets: list[AlienBullet] = []
-        self.boss_lasers: list[BossLaser] = []
+        self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
+        self.boss_squares: list[BossSquare] = []  # Quadrados lançados pelo boss
+        self.eye_lasers: list[EyeLaser] = []
         self.explosions: list[Explosion] = []
         self.mine_explosions: list[MineExplosion] = []
         self.powerups: list[PowerUp] = []
         self.floating_scores: list[FloatingScore] = []
-        self.boss: Boss | None = None
+        self.boss: Boss | SpikeBoss | None = None
         self.mini_ships: list[MiniShip] = []
         self.mini_ship_bullets: list[MiniShipBullet] = []
+        self.formations: list[Formation] = []  # Nova lista para formações
+        self.spikes: list[Spike] = []  # Lista para espinhos do SpikeBoss
+        self.meteor_pool = MeteorPool(initial_size=100)  # Pool de meteoros
+        self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
 
-    def update(self, dt: float, player_x: float, player_y: float | None = None):
+    def update(self, dt: float, player_x: float, player_y: float):
         new_alien_bullets: list[AlienBullet] = []
+        new_eye_lasers: list[EyeLaser] = []
+        
+        # Atualizar formações
+        for formation in self.formations[:]:
+            bullets_from_formation = formation.update(dt)
+            if bullets_from_formation:
+                new_alien_bullets.extend(bullets_from_formation)
+        
         for b in self.bullets:
             b.update(dt)
         for ab in self.alien_bullets:
@@ -39,6 +62,8 @@ class EntityManager:
             vb.update(dt)
         for bl in self.boss_lasers:
             bl.update(dt)
+        for el in self.eye_lasers:
+            el.update(dt)
         for e in self.explosions:
             e.update(dt)
         for me in self.mine_explosions:
@@ -47,49 +72,151 @@ class EntityManager:
             p.update(dt)
         for fs in self.floating_scores:
             fs.update(dt)
+        
+        # Coletar todos os inimigos (normais + formações) para as mini ships
+        all_enemies_for_mini_ships = list(self.enemies)
+        for formation in self.formations:
+            all_enemies_for_mini_ships.extend(formation.get_enemies())
+        
         for ms in self.mini_ships:
-            ms.update(dt, self.enemies, self.mini_ship_bullets)
+            ms.update(dt, all_enemies_for_mini_ships, self.mini_ship_bullets)
+        
+        # Atualizar spikes (precisam da posição do jogador para míssil teleguiado)
+        # Contar quantos triângulos estão atualmente atacando (trembling ou flying)
+        attacking_count = sum(1 for spike in self.spikes if spike.state in ('trembling', 'flying'))
+        for spike in self.spikes:
+            spike.update(dt, player_x, player_y, attacking_count)
+        
         if self.boss:
-            lasers_fired, spawned_meteors = self.boss.update(dt, player_x, player_y)
-            if lasers_fired:
-                self.boss_lasers.extend(lasers_fired)
-            if spawned_meteors:
-                self.enemies.extend(spawned_meteors)
-        for enemy in self.enemies:
-            # Se for um meteoro guiado, passar a posição do jogador
-            if isinstance(enemy, GuidedMeteor):
-                shot = enemy.update(dt, player_x, player_y)
+            # SpikeBoss retorna (List[Spike], List[SpikeBossLaser])
+            if isinstance(self.boss, SpikeBoss):
+                spawned_spikes, spike_boss_lasers = self.boss.update(dt, player_x, player_y, self.spikes)
+                if spawned_spikes:
+                    self.spikes.extend(spawned_spikes)
+                if spike_boss_lasers:
+                    self.boss_lasers.extend(spike_boss_lasers)  # type: ignore
+            # Boss normal retorna (List[BossLaser], List[Meteor], List[BossSquare])
             else:
+                lasers_fired, spawned_meteors, spawned_squares = self.boss.update(dt, player_x, player_y)
+                if lasers_fired:
+                    self.boss_lasers.extend(lasers_fired)
+                if spawned_meteors:
+                    self.enemies.extend(spawned_meteors)
+                if spawned_squares:
+                    self.boss_squares.extend(spawned_squares)
+        for enemy in self.enemies:
+            if isinstance(enemy, Alien):
                 shot = enemy.update(dt)
-            if isinstance(enemy, Alien) and shot:
-                new_alien_bullets.extend(shot)
-        self.alien_bullets.extend(new_alien_bullets)
+                if shot:
+                    new_alien_bullets.extend(shot)
+            elif isinstance(enemy, EyeEnemy):
+                shot = enemy.update(dt, player_x, player_y)
+                if shot:
+                    new_eye_lasers.extend(shot)
+            elif isinstance(enemy, GuidedMeteor):
+                enemy.update(dt, player_x, player_y)
+            else:
+                enemy.update(dt)
 
-    def draw(self, surface: pygame.Surface):
+        self.alien_bullets.extend(new_alien_bullets)
+        self.eye_lasers.extend(new_eye_lasers)
+        
+        # Atualizar quadrados do boss (obtém dimensões dinâmicas da tela)
+        screen = pygame.display.get_surface()
+        screen_width = screen.get_width() if screen else 1600
+        screen_height = screen.get_height() if screen else 900
+        for square in self.boss_squares[:]:
+            square.update(dt, screen_width, screen_height)
+            if square.dead:
+                self.boss_squares.remove(square)
+
+    def draw(self, surface: pygame.Surface, player_x: float, player_y: float):
+        """Desenha todas as entidades. EyeEnemy precisa da posição do jogador."""
         from typing import Any
 
+        # Entidades que não precisam da posição do jogador
         entity_lists: list[list[Any]] = [
-            self.enemies,
             self.bullets,
             self.alien_bullets,
             self.boss_lasers,
+            self.boss_squares,  # Quadrados do boss
+            self.eye_lasers,
             self.explosions,
             self.mine_explosions,
             self.powerups,
             self.floating_scores,
             self.mini_ship_bullets,
             self.mini_ships,
+            self.spikes,  # Adicionar spikes
         ]
+
         if self.boss:
             entity_lists.append([self.boss])
+
         for entity_list in entity_lists:
             for entity in entity_list:
                 entity.draw(surface)
+
+        # Desenhar inimigos (EyeEnemy precisa da posição do jogador)
+        for enemy in self.enemies:
+            if isinstance(enemy, EyeEnemy):
+                enemy.draw(surface, player_x, player_y)
+            else:
+                enemy.draw(surface)
+        
+        # Desenhar formações
+        for formation in self.formations:
+            formation.draw(surface)
+
+    def spawn_meteor(
+        self,
+        size: int | None = None,
+        x: float | None = None,
+        y: float | None = None,
+        vx: float | None = None,
+        vy: float | None = None,
+    ) -> Meteor:
+        """
+        Spawna um meteoro usando o pool.
+
+        Args:
+            size, x, y, vx, vy: Parâmetros de configuração do meteoro
+
+        Returns:
+            Meteoro criado ou reutilizado do pool
+        """
+        meteor = self.meteor_pool.get(size=size, x=x, y=y, vx=vx, vy=vy)
+        self.enemies.append(meteor)
+        return meteor
+
+    def spawn_bullet(
+        self,
+        x: float,
+        y: float,
+        damage: int = 10,
+        piercing: bool = False,
+    ) -> Bullet:
+        """
+        Spawna uma bala usando o pool.
+
+        Args:
+            x, y: Posição inicial da bala
+            damage: Dano da bala
+            piercing: Se a bala é perfurante
+
+        Returns:
+            Bala criada ou reutilizada do pool
+        """
+        bullet = self.bullet_pool.get(x=x, y=y, damage=damage, piercing=piercing)
+        self.bullets.append(bullet)
+        return bullet
 
     def cleanup(self):
         self.bullets = [b for b in self.bullets if not b.dead]
         self.alien_bullets = [ab for ab in self.alien_bullets if not ab.dead]
         self.boss_lasers = [bl for bl in self.boss_lasers if not bl.dead]
+        self.boss_squares = [bs for bs in self.boss_squares if not bs.dead]
+        self.eye_lasers = [el for el in self.eye_lasers if not el.dead]
         self.mini_ship_bullets = [vb for vb in self.mini_ship_bullets if not vb.dead]
         self.enemies = [
             e
@@ -100,11 +227,15 @@ class EntityManager:
         self.mine_explosions = [me for me in self.mine_explosions if not me.finished()]
         self.powerups = [p for p in self.powerups if not p.is_off_screen()]
         self.floating_scores = [fs for fs in self.floating_scores if not fs.is_dead()]
+        self.formations = [f for f in self.formations if not f.dead]  # Limpar formações mortas
+        self.spikes = [s for s in self.spikes if not s.dead]  # Limpar spikes mortos
 
     def clear_all(self):
         self.bullets.clear()
         self.alien_bullets.clear()
         self.boss_lasers.clear()
+        self.boss_squares.clear()
+        self.eye_lasers.clear()
         self.powerups.clear()
         self.floating_scores.clear()
         self.enemies.clear()
@@ -113,6 +244,10 @@ class EntityManager:
         self.boss = None
         self.mini_ships.clear()
         self.mini_ship_bullets.clear()
+        self.formations.clear()
+        self.spikes.clear()
+        self.meteor_pool.clear_active()  # Limpar meteoros ativos do pool
+        self.bullet_pool.clear_active()  # Limpar balas ativas do pool
 
     def clear_for_level_transition(self):
         """Limpa entidades para transição de fase, mas preserva balas do jogador."""
@@ -120,7 +255,8 @@ class EntityManager:
         # self.bullets.clear()  # NÃO limpar balas do jogador
         self.alien_bullets.clear()
         self.boss_lasers.clear()
-        self.powerups.clear()
+        self.boss_squares.clear()
+        self.eye_lasers.clear()
         self.floating_scores.clear()
         self.enemies.clear()
         self.explosions.clear()
@@ -128,3 +264,7 @@ class EntityManager:
         self.boss = None
         self.mini_ships.clear()
         self.mini_ship_bullets.clear()
+        self.formations.clear()
+        self.meteor_pool.clear_active()  # Limpar meteoros ativos do pool
+        # NÃO limpar bullet_pool aqui para manter balas do jogador
+        self.spikes.clear()

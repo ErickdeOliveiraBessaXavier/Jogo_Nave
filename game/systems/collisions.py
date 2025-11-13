@@ -1,17 +1,25 @@
 import pygame
+import math
 from ..entities.ship import Ship
 from ..entities.meteor import Meteor
 from ..entities.alien import Alien
 from ..entities.bullet import Bullet
 from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
+from ..entities.eye_laser import EyeLaser
+from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.explosion import Explosion
 from ..entities.mine_explosion import MineExplosion
 from ..entities.powerup import PowerUp
 from ..entities.boss import Boss
+from ..entities.boss_square import BossSquare
 from ..entities.floating_score import FloatingScore
 from ..core.sound import sound_manager
 from ..entities.mini_ship_bullet import MiniShipBullet
+from ..entities.eye_enemy import EyeEnemy
+from ..entities.spike import Spike
+from ..entities.spike_boss import SpikeBoss
+from ..core.config import Config
 
 
 from ..entities.explosive_mine import ExplosiveMine
@@ -21,7 +29,7 @@ class Collisions:
 
     def check_mine_explosions(
         self,
-        enemies: list[Meteor | Alien | ExplosiveMine],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         mine_explosions: list[MineExplosion],
         explosions: list[Explosion],
         ship: Ship,
@@ -38,9 +46,11 @@ class Collisions:
                 cx, cy = (enemy.x, enemy.y)
                 explosion_radius = enemy.explosion_radius
                 mine_explosions.append(MineExplosion(cx, cy, size=explosion_radius))
-                if self.handle_mine_explosion(cx, cy, explosion_radius, enemies, ship, explosions):
+                if self.handle_mine_explosion(
+                    cx, cy, explosion_radius, enemies, ship, explosions
+                ):
                     ship_hit = True
-                sound_manager.play_explosion_boss() # Som de explosão grande
+                sound_manager.play_explosion_boss()  # Som de explosão grande
                 pts = enemy.get_points_value()
                 score_gain += pts
                 destroyed_count += 1
@@ -52,7 +62,7 @@ class Collisions:
         explosion_x: float,
         explosion_y: float,
         explosion_radius: int,
-        enemies: list[Meteor | Alien | ExplosiveMine],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         ship: Ship,
         explosions: list[Explosion],
     ) -> bool:
@@ -91,7 +101,7 @@ class Collisions:
     def mini_ship_bullets_vs_enemies(
         self,
         mini_ship_bullets: list[MiniShipBullet],
-        enemies: list[Meteor | Alien | ExplosiveMine],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         explosions: list[Explosion],
     ):
         score_gain = 0
@@ -107,12 +117,14 @@ class Collisions:
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
                     else:
+                        if isinstance(enemy, EyeEnemy):
+                            enemy.destroy()
                         if enemy in enemies:
                             enemies.remove(enemy)
 
                         cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
                         explosions.append(Explosion(cx, cy, size=enemy.w // 2))
-                        
+
                         if isinstance(enemy, Meteor):
                             sound_manager.play_explosion_asteroid()
                         else:
@@ -123,17 +135,19 @@ class Collisions:
                         destroyed_count += 1
                         score_events.append((cx, cy, pts))
 
-                        if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
+                        if isinstance(enemy, Meteor) and hasattr(
+                            enemy, "spawn_fragments"
+                        ):
                             fragments = enemy.spawn_fragments()
                             if fragments:
                                 enemies.extend(fragments)
-                    break # Bullet is gone, check next bullet
+                    break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
     def bullets_vs_enemies(
         self,
         bullets: list[Bullet],
-        enemies: list[Meteor | Alien | ExplosiveMine],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         explosions: list[Explosion],
         mine_explosions: list[MineExplosion],
         ship: Ship,
@@ -145,19 +159,17 @@ class Collisions:
         for b in bullets[:]:
             for enemy in enemies[:]:
                 if b.rect.colliderect(enemy.rect):
-                    if not b.piercing:
-                        if b in bullets:
-                            bullets.remove(b)
-
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
                     else:
+                        if isinstance(enemy, EyeEnemy):
+                            enemy.destroy()
                         if enemy in enemies:
                             enemies.remove(enemy)
 
                         cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
                         explosions.append(Explosion(cx, cy, size=enemy.w // 2))
-                        
+
                         # Tocar som de explosão baseado no tipo de inimigo
                         if isinstance(enemy, Meteor):
                             sound_manager.play_explosion_asteroid()
@@ -169,12 +181,15 @@ class Collisions:
                         destroyed_count += 1
                         score_events.append((cx, cy, pts))
 
-                        if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
+                        if isinstance(enemy, Meteor) and hasattr(
+                            enemy, "spawn_fragments"
+                        ):
                             fragments = enemy.spawn_fragments()
                             if fragments:
                                 enemies.extend(fragments)
                     if not b.piercing:
-                        break # Bullet is gone, check next bullet
+                        bullets.remove(b)
+                        break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
     def bullets_vs_boss(
@@ -223,7 +238,10 @@ class Collisions:
         return False
 
     def ship_vs_enemies(
-        self, ship: Ship, enemies: list[Meteor | Alien | ExplosiveMine], explosions: list[Explosion]
+        self,
+        ship: Ship,
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        explosions: list[Explosion],
     ) -> bool:
         if ship.invuln > 0:
             return False
@@ -232,7 +250,10 @@ class Collisions:
                 if isinstance(enemy, ExplosiveMine):
                     enemy.dead = True  # Explode immediately
                 else:
-                    enemies.remove(enemy)
+                    if isinstance(enemy, EyeEnemy):
+                        enemy.destroy()
+                    if enemy in enemies:
+                        enemies.remove(enemy)
                 explosions.append(
                     Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
                 )
@@ -250,6 +271,14 @@ class Collisions:
                 return True
         return False
 
+    def eye_laser_vs_ship(self, ship: Ship, eye_lasers: list[EyeLaser]) -> bool:
+        if ship.invuln > 0:
+            return False
+        for laser in eye_lasers:
+            if ship.rect.clipline(laser.get_collision_line()):
+                return True
+        return False
+
     def laser_vs_ship(self, ship: Ship, lasers: list[BossLaser]) -> bool:
         if ship.invuln > 0:
             return False
@@ -257,6 +286,99 @@ class Collisions:
             if laser.w > 0 and ship.rect.clipline(laser.get_collision_line()):
                 return True
         return False
+    
+    def spike_boss_laser_vs_ship(self, ship: Ship, lasers: list[SpikeBossLaser]) -> bool:
+        """Colisão entre laser gigante do SpikeBoss e nave."""
+        if ship.invuln > 0:
+            return False
+        for laser in lasers:
+            if laser.w > 0 and ship.rect.colliderect(laser.get_collision_rect()):
+                return True
+        return False
+
+    def mini_ship_bullets_vs_boss(
+        self,
+        mini_ship_bullets: list[MiniShipBullet],
+        boss: Boss,
+        explosions: list[Explosion],
+        floating_scores: list[FloatingScore],
+    ) -> int:
+        """Colisão de balas das mini ships com Boss normal."""
+        score_gain = 0
+        for b in mini_ship_bullets[:]:
+            if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
+                mini_ship_bullets.remove(b)
+                boss.take_damage(b.damage)
+                sound_manager.play_boss_damage()
+                explosions.append(Explosion(b.x, b.y, size=15))
+
+                if boss.dead:
+                    from ..core.config import Config
+
+                    floating_scores.append(
+                        FloatingScore(
+                            boss.x + boss.w / 2,
+                            boss.y + boss.h / 2,
+                            Config.BOSS_DEFEAT_SCORE,
+                        )
+                    )
+                    score_gain += Config.BOSS_DEFEAT_SCORE
+                    explosions.append(
+                        Explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
+                    )
+        return score_gain
+
+    def mini_ship_bullets_vs_spike_boss(
+        self,
+        mini_ship_bullets: list[MiniShipBullet],
+        boss: SpikeBoss,
+        explosions: list[Explosion],
+        floating_scores: list[FloatingScore],
+    ) -> int:
+        """Colisão de balas das mini ships com SpikeBoss."""
+        score_gain = 0
+        for b in mini_ship_bullets[:]:
+            if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
+                mini_ship_bullets.remove(b)
+                boss.take_damage(b.damage)
+                sound_manager.play_boss_damage()
+                explosions.append(Explosion(b.x, b.y, size=15))
+
+                if boss.dead:
+                    from ..core.config import Config
+
+                    floating_scores.append(
+                        FloatingScore(
+                            boss.x + boss.w / 2,
+                            boss.y + boss.h / 2,
+                            Config.BOSS_DEFEAT_SCORE,
+                        )
+                    )
+                    score_gain += Config.BOSS_DEFEAT_SCORE
+                    explosions.append(
+                        Explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
+                    )
+        return score_gain
+
+    def mini_ship_bullets_vs_spikes(
+        self,
+        mini_ship_bullets: list[MiniShipBullet],
+        spikes: list[Spike],
+        explosions: list[Explosion],
+    ) -> int:
+        """Colisão de balas das mini ships com Spikes."""
+        score_gain = 0
+        for b in mini_ship_bullets[:]:
+            for spike in spikes[:]:
+                # Só colide se o spike estiver voando
+                if spike.state == 'flying' and b.rect.colliderect(spike.rect):
+                    mini_ship_bullets.remove(b)
+                    spikes.remove(spike)
+                    explosions.append(Explosion(spike.center_x, spike.center_y, size=15))
+                    sound_manager.play_explosion_alien()
+                    score_gain += Config.SPIKE_POINTS
+                    break
+        return score_gain
 
     def ship_vs_powerups(
         self,
@@ -270,3 +392,173 @@ class Collisions:
                 kind = getattr(p, "kind", "shield")
                 collected_kinds.append(kind)
         return collected_kinds
+
+    def ship_vs_spikes(self, ship: Ship, spikes: list[Spike], explosions: list[Explosion]) -> bool:
+        """Verifica colisão entre nave e espinhos."""
+        if ship.invuln > 0:
+            return False
+        for spike in spikes[:]:
+            if ship.rect.colliderect(spike.rect):
+                # Destruir o espinho ao acertar a nave
+                spike.dead = True
+                # Criar explosão no local do spike
+                explosions.append(
+                    Explosion(spike.center_x, spike.center_y, size=15)
+                )
+                return True
+        return False
+
+    def bullets_vs_spikes(
+        self,
+        bullets: list[Bullet],
+        spikes: list[Spike],
+        explosions: list[Explosion],
+    ) -> int:
+        """Verifica colisão entre balas e espinhos. Retorna pontos ganhos."""
+        score_gain = 0
+        for b in bullets[:]:
+            for spike in spikes[:]:
+                if b.rect.colliderect(spike.rect):
+                    # Remover bala
+                    if not b.piercing and b in bullets:
+                        bullets.remove(b)
+                    
+                    # Destruir espinho
+                    if spike in spikes:
+                        spikes.remove(spike)
+                    spike.dead = True
+                    
+                    # Explosão pequena no centro do spike
+                    explosions.append(
+                        Explosion(spike.center_x, spike.center_y, size=15)
+                    )
+                    
+                    # Som
+                    sound_manager.play_explosion_asteroid()
+                    
+                    # Pontos
+                    score_gain += spike.get_points_value()
+                    break  # Próxima bala
+        return score_gain
+
+    def bullets_vs_spike_boss(
+        self,
+        bullets: list[Bullet],
+        boss: SpikeBoss,
+        explosions: list[Explosion],
+        floating_scores: list[FloatingScore],
+    ) -> int:
+        """Colisão de balas com SpikeBoss."""
+        score_gain = 0
+        for b in bullets[:]:
+            if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
+                if not b.piercing:
+                    bullets.remove(b)
+                boss.take_damage(b.damage)
+                sound_manager.play_boss_damage()
+                explosions.append(Explosion(b.x, b.y, size=15))
+
+                # Pontos ao derrotar
+                if boss.dead:
+                    from ..core.config import Config
+
+                    floating_scores.append(
+                        FloatingScore(
+                            boss.x + boss.w / 2,
+                            boss.y + boss.h / 2,
+                            Config.BOSS_DEFEAT_SCORE,
+                        )
+                    )
+                    score_gain += Config.BOSS_DEFEAT_SCORE
+                    explosions.append(
+                        Explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
+                    )
+        return score_gain
+
+    def ship_vs_spike_boss(
+        self, ship: Ship, boss: SpikeBoss, explosions: list[Explosion]
+    ) -> bool:
+        """Colisão entre nave e SpikeBoss."""
+        if ship.invuln > 0:
+            return False
+        
+        # Colisão com o corpo do boss
+        if ship.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
+            explosions.append(
+                Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
+            )
+            return True
+        
+        # Colisão com onda de proximidade
+        proximity_data = boss.get_proximity_attack_data()
+        if proximity_data:
+            _, boss_center_x, boss_center_y, wave_radius = proximity_data
+            # Calcular distância do centro da nave ao centro do boss
+            ship_center_x = ship.x + ship.w / 2
+            ship_center_y = ship.y + ship.h / 2
+            dx = ship_center_x - boss_center_x
+            dy = ship_center_y - boss_center_y
+            distance = math.sqrt(dx * dx + dy * dy)
+            
+            # Se a nave está dentro da onda
+            if distance <= wave_radius:
+                explosions.append(
+                    Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=20)
+                )
+                return True
+        
+        return False
+    
+    def bullets_vs_boss_squares(
+        self,
+        bullets: list[Bullet],
+        boss_squares: list[BossSquare],
+        explosions: list[Explosion],
+    ) -> int:
+        """
+        Colisão entre balas do jogador e quadrados do boss.
+        Os quadrados NÃO são destruídos, apenas geram explosão visual.
+        Retorna número de acertos para feedback visual/sonoro.
+        """
+        hit_count = 0
+        
+        for bullet in bullets[:]:
+            if bullet.dead:
+                continue
+                
+            bullet_rect = bullet.rect
+            
+            for square in boss_squares:
+                if square.dead:
+                    continue
+                    
+                square_rect = square.get_rect()
+                if bullet_rect.colliderect(square_rect):
+                    # Criar explosão no ponto de impacto
+                    explosions.append(Explosion(bullet.x, bullet.y, size=20))
+                    
+                    # Destruir apenas a bala
+                    bullet.dead = True
+                    hit_count += 1
+                    
+                    # Som de impacto (mesmo som de dano ao boss)
+                    sound_manager.play_boss_damage()
+                    break
+        
+        return hit_count
+    
+    def ship_vs_boss_squares(self, ship: Ship, boss_squares: list[BossSquare]) -> bool:
+        """
+        Colisão entre nave e quadrados do boss (indestrutíveis).
+        Os quadrados não são destruídos ao colidir.
+        """
+        if ship.invuln > 0:
+            return False
+        
+        ship_rect = ship.rect
+        
+        for square in boss_squares:
+            if ship_rect.colliderect(square.get_rect()):
+                return True
+        
+        return False

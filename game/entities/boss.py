@@ -1,6 +1,7 @@
 import math
 import random
 from typing import List, Any
+from collections import deque
 
 import pygame
 
@@ -12,6 +13,7 @@ from .boss_laser import BossLaser
 from .boss_cannon import BossCannon, BossAttackSystem
 from .boss_particles import BossParticleSystem
 from .meteor import Meteor
+from .boss_square import BossSquare
 
 
 class Boss:
@@ -60,8 +62,10 @@ class Boss:
         self.state = "entering"
         self.frenzy_mode = False
         self.frenzy_shake_timer = 0.0
-        self.pending_frenzy = False  # Flag para ativar frenzy quando action atual acabar
-        self.meteor_attack_timer = Timer(random.uniform(3.0, 5.0))
+        self.pending_frenzy = (
+            False  # Flag para ativar frenzy quando action atual acabar
+        )
+        self.square_attack_timer = Timer(random.uniform(2.0, 3.5))
         self.can_spawn_meteors = False
 
         # Attack system
@@ -95,6 +99,55 @@ class Boss:
 
         # Substituir sistema de canhão antigo pelo novo
         self.cannon = BossCannon()
+
+        # Sistema de quadrados flutuantes (seguem o boss com delay)
+        self.position_history: deque[tuple[float, float]] = deque(maxlen=30)  # Histórico de posições
+        self.floating_squares: List[dict[str, Any]] = []
+        self._init_floating_squares()
+        
+        # Animação de pulsação para os quadrados flutuantes
+        self.squares_animation_timer = 0.0
+        
+        # Sistema de lançamento sequencial de quadrados
+        self.square_launch_queue: List[dict[str, Any]] = []  # Fila de quadrados prontos para lançar
+        self.square_launch_timer = 0.0  # Timer para lançamento sequencial
+        self.square_launch_delay = 0.15  # 150ms entre cada lançamento
+
+    def _init_floating_squares(self) -> None:
+        """Inicializa os quadrados flutuantes ao redor do boss."""
+        # Criar mais quadrados (14) em posições diferentes ao redor do corpo principal
+        configs: list[dict[str, int | float]] = [
+            {"offset_x": -40, "offset_y": -30, "size": 20, "delay": 5, "speed_var": 0.9},   # Esquerda superior
+            {"offset_x": 40, "offset_y": -30, "size": 20, "delay": 5, "speed_var": 1.1},    # Direita superior
+            {"offset_x": -50, "offset_y": 10, "size": 25, "delay": 10, "speed_var": 1.05},   # Esquerda meio
+            {"offset_x": 50, "offset_y": 10, "size": 25, "delay": 10, "speed_var": 0.95},    # Direita meio
+            {"offset_x": -35, "offset_y": 50, "size": 18, "delay": 15, "speed_var": 1.15},   # Esquerda inferior
+            {"offset_x": 35, "offset_y": 50, "size": 18, "delay": 15, "speed_var": 0.85},    # Direita inferior
+            {"offset_x": 0, "offset_y": -45, "size": 15, "delay": 8, "speed_var": 1.0},     # Topo centro
+            {"offset_x": 0, "offset_y": 65, "size": 22, "delay": 12, "speed_var": 1.08},     # Base centro
+            # Novos quadrados adicionais
+            {"offset_x": -60, "offset_y": -10, "size": 17, "delay": 7, "speed_var": 0.92},   # Esquerda lateral superior
+            {"offset_x": 60, "offset_y": -10, "size": 17, "delay": 7, "speed_var": 1.12},    # Direita lateral superior
+            {"offset_x": -25, "offset_y": 25, "size": 16, "delay": 9, "speed_var": 1.03},    # Esquerda meio-inferior
+            {"offset_x": 25, "offset_y": 25, "size": 16, "delay": 9, "speed_var": 0.97},     # Direita meio-inferior
+            {"offset_x": -15, "offset_y": -40, "size": 14, "delay": 6, "speed_var": 0.88},   # Esquerda-centro topo
+            {"offset_x": 15, "offset_y": -40, "size": 14, "delay": 6, "speed_var": 1.18},    # Direita-centro topo
+        ]
+        
+        for config in configs:
+            self.floating_squares.append({
+                "offset_x": float(config["offset_x"]),
+                "offset_y": float(config["offset_y"]),
+                "base_size": float(config["size"]),  # Tamanho base
+                "size": float(config["size"]),  # Tamanho atual (será animado)
+                "delay": int(config["delay"]),  # Frames de delay
+                "x": self.x + self.w / 2 + float(config["offset_x"]),
+                "y": self.y + self.h / 2 + float(config["offset_y"]),
+                "state": "following",  # Estados: "following", "preparing", "launched"
+                "rotation": 0.0,  # Ângulo de rotação
+                "prepare_timer": 0.0,  # Timer para animação de preparação
+                "speed_var": float(config["speed_var"]),  # Variação de velocidade (0.85 a 1.18)
+            })
 
     def _update_orientation(self, player_x: float, player_y: float) -> None:
         """Update cannon orientation to face the player."""
@@ -171,7 +224,13 @@ class Boss:
     def _is_in_attack_sequence(self) -> bool:
         """Check if boss is currently in an attack sequence that shouldn't be interrupted."""
         # Estados que representam uma sequência de ataque em andamento
-        return self.state in ("aiming", "charging", "converging", "preparing_to_fire", "firing")
+        return self.state in (
+            "aiming",
+            "charging",
+            "converging",
+            "preparing_to_fire",
+            "firing",
+        )
 
     def _can_activate_frenzy_now(self) -> bool:
         """Check if frenzy mode can be activated immediately."""
@@ -196,7 +255,7 @@ class Boss:
             sound_manager.stop_boss_laser_charging()
             sound_manager.stop_boss_laser_fire()
             self.particle_system.clear_all()
-            
+
             # Resetar timers de ataque para começar após o tremor
             self.attack_timer = Timer(
                 Config.BOSS_FRENZY_SHAKE_DURATION
@@ -271,7 +330,7 @@ class Boss:
 
             # Criar na ordem: direita, esquerda, centro (centro por último para desenhar por cima)
             laser_order = [2, 0, 1]  # direita, esquerda, centro
-            
+
             for i in laser_order:
                 angle_offset = self.FRENZY_LASER_ANGLES[i]
                 cos_offset = math.cos(angle_offset)
@@ -282,7 +341,9 @@ class Boss:
 
                 offset = (i - 1) * self.LASER_SPREAD_OFFSET  # -10, 0, +10
                 start_x = face_x + offset * math.cos(self.rotation_angle + math.pi / 2)
-                start_y = face_y + offset * math.sin(self.rotation_angle + math.pi / 2) - 10  # Mais para cima
+                start_y = (
+                    face_y + offset * math.sin(self.rotation_angle + math.pi / 2) - 10
+                )  # Mais para cima
 
                 target_x = start_x + rotated_x * self.LASER_DISTANCE
                 target_y = start_y + rotated_y * self.LASER_DISTANCE
@@ -299,7 +360,9 @@ class Boss:
             target_x = face_x + face_normal.x * self.LASER_DISTANCE
             target_y = laser_start_y + face_normal.y * self.LASER_DISTANCE
 
-            return [BossLaser(face_x, laser_start_y, target_x, target_y, lifetime=lifetime)]
+            return [
+                BossLaser(face_x, laser_start_y, target_x, target_y, lifetime=lifetime)
+            ]
 
     def _create_frenzy_lasers(
         self, face_x: float, face_y: float, lifetime: float
@@ -320,7 +383,7 @@ class Boss:
             self.y = self.target_y
             self.state = "active"
             self.attack_timer.start()
-            
+
             # Verificar se há frenzy pendente
             self._check_pending_frenzy()
 
@@ -430,7 +493,7 @@ class Boss:
         if self.laser_delay_timer <= 0 and self.pending_laser_data:
             # Disparar o laser usando os dados preparados
             new_lasers = self._create_lasers_from_data(self.pending_laser_data)
-            
+
             # Tocar som de disparo do laser
             sound_manager.play_boss_laser_fire()
 
@@ -477,7 +540,7 @@ class Boss:
             self.fired_lasers.clear()
             # Garantir que o som pare quando limpar todos os lasers
             sound_manager.stop_boss_laser_fire()
-            
+
             # Verificar se há frenzy pendente
             self._check_pending_frenzy()
 
@@ -491,17 +554,119 @@ class Boss:
             self.attack_timer = Timer(random.uniform(*Config.BOSS_CALM_ATTACK_INTERVAL))
         self.attack_timer.start()
 
+    def _launch_square_projectiles(self, player_x: float, player_y: float) -> List[BossSquare]:
+        """
+        Launch one or more floating squares as projectiles towards the player.
+        DEPRECATED: Use inline logic in update() instead.
+        """
+        # Este método não é mais usado - a lógica está inline no update()
+        return []
+    
+    def _create_square_projectile(self, square: dict[str, Any], player_x: float, player_y: float) -> BossSquare:
+        """Cria um projétil a partir de um quadrado flutuante."""
+        # Posição inicial do quadrado
+        start_x = square["x"]
+        start_y = square["y"]
+        
+        # Calcular direção para o jogador com imprecisão
+        dx = player_x - start_x
+        dy = player_y - start_y
+        distance = math.sqrt(dx * dx + dy * dy)
+        
+        if distance > 0:
+            # Normalizar
+            dx /= distance
+            dy /= distance
+            
+            # Adicionar imprecisão (±30 graus aproximadamente)
+            inaccuracy = random.uniform(-0.5, 0.5)
+            dx += inaccuracy
+            dy += inaccuracy
+            
+            # Normalizar novamente
+            new_distance = math.sqrt(dx * dx + dy * dy)
+            if new_distance > 0:
+                dx /= new_distance
+                dy /= new_distance
+        else:
+            dx, dy = 0, 1  # Fallback: para baixo
+        
+        # Velocidade do projétil
+        speed = 250.0
+        vx = dx * speed
+        vy = dy * speed
+        
+        # Criar projétil
+        return BossSquare(start_x, start_y, vx, vy, square["base_size"])
+
     def update(
         self, dt: float, player_x: float, player_y: float | None = None
-    ) -> tuple[List[BossLaser], List["Meteor"]]:
+    ) -> tuple[List[BossLaser], List["Meteor"], List[BossSquare]]:
         """Main update method - state machine."""
         spawned_meteors: List["Meteor"] = []
+        spawned_squares: List[BossSquare] = []
         lasers_fired: List[BossLaser] = []
         self.frenzy_shake_timer = max(0.0, self.frenzy_shake_timer - dt)
 
         # Store player position for drawing
         self.player_x = player_x
         self.player_y = player_y
+
+        # Atualizar histórico de posições para os quadrados flutuantes
+        center_x = self.x + self.w / 2
+        center_y = self.y + self.h / 2
+        self.position_history.append((center_x, center_y))
+
+        # Atualizar animação de pulsação dos quadrados (mesma lógica do power-up)
+        self.squares_animation_timer += dt * 5  # Velocidade da pulsação
+        pulse_scale = 1.0 + 0.2 * abs(
+            pygame.math.Vector2(1, 0).rotate(self.squares_animation_timer * 57.3).x
+        )
+
+        # Atualizar posições e estados dos quadrados flutuantes
+        base_lerp_speed = 7.0  # Velocidade base das mini_ships
+        for square in self.floating_squares:
+            if square["state"] == "following":
+                # Quadrado segue o boss normalmente com velocidade variada
+                delay_frames = square["delay"]
+                if len(self.position_history) > delay_frames:
+                    # Pegar posição alvo do histórico
+                    delayed_pos = self.position_history[-delay_frames]
+                    target_x = delayed_pos[0] + square["offset_x"]
+                    target_y = delayed_pos[1] + square["offset_y"]
+                    
+                    # Aplicar variação de velocidade individual para movimento mais orgânico
+                    lerp_speed = base_lerp_speed * square["speed_var"]
+                    
+                    # Interpolar suavemente entre posição atual e alvo (lerp)
+                    square["x"] += (target_x - square["x"]) * lerp_speed * dt
+                    square["y"] += (target_y - square["y"]) * lerp_speed * dt
+                
+                # Aplicar pulsação ao tamanho
+                square["size"] = square["base_size"] * pulse_scale
+                square["rotation"] = 0.0  # Sem rotação
+                
+            elif square["state"] == "preparing":
+                # Quadrado está se preparando para ser lançado (girando no lugar)
+                square["prepare_timer"] += dt
+                square["rotation"] += dt * 720  # Gira 720 graus por segundo (2 rotações/seg)
+                
+                # Pulsação mais rápida e intensa durante preparação
+                prepare_pulse = 1.0 + 0.4 * abs(math.sin(square["prepare_timer"] * 10))
+                square["size"] = square["base_size"] * prepare_pulse
+                
+                # Após 1 segundo de preparação, marca como pronto para lançamento
+                if square["prepare_timer"] >= 1.0:
+                    square["state"] = "ready_to_launch"
+            
+            elif square["state"] == "launching":
+                # Quadrado está na fila de lançamento, continua girando
+                square["prepare_timer"] += dt
+                square["rotation"] += dt * 720
+                
+                # Manter pulsação intensa
+                prepare_pulse = 1.0 + 0.4 * abs(math.sin(square["prepare_timer"] * 10))
+                square["size"] = square["base_size"] * prepare_pulse
 
         # Update orientation to face player
         if player_y is not None:
@@ -511,42 +676,63 @@ class Boss:
         if self.frenzy_shake_timer <= 0:
             self._check_pending_frenzy()
 
-        # Atualiza o timer de spawn de meteoros e spawna se estiver em modo frenético
-        # METEOROS SÃO CRIADOS QUANDO O BOSS NÃO ESTÁ ATACANDO (LASER)
+        # Sistema de lançamento sequencial de quadrados
+        if self.frenzy_mode and self.frenzy_shake_timer <= 0 and player_y is not None:
+            # Atualizar timer de lançamento sequencial
+            if self.square_launch_queue:
+                self.square_launch_timer += dt
+                
+                # Lançar próximo quadrado da fila quando o timer completar
+                if self.square_launch_timer >= self.square_launch_delay:
+                    square = self.square_launch_queue.pop(0)
+                    projectile = self._create_square_projectile(square, player_x, player_y)
+                    spawned_squares.append(projectile)
+                    
+                    # Resetar quadrado para seguir o boss novamente
+                    square["state"] = "following"
+                    square["prepare_timer"] = 0.0
+                    square["rotation"] = 0.0
+                    
+                    # Resetar timer para próximo lançamento
+                    self.square_launch_timer = 0.0
+            
+            # Adicionar quadrados prontos à fila de lançamento
+            ready_squares = [sq for sq in self.floating_squares if sq["state"] == "ready_to_launch"]
+            if ready_squares:
+                for square in ready_squares:
+                    # Marcar como "launching" para não adicionar novamente
+                    square["state"] = "launching"
+                    self.square_launch_queue.append(square)
+
+        # Atualiza o timer de ataque de quadrados no modo frenético
+        # Timer apenas PREPARA novos quadrados (não lança)
         if (
             self.frenzy_mode
             and self.frenzy_shake_timer <= 0
             and self.state
             in ("active", "aiming")  # Só quando não está atacando com laser
             and not self.pending_laser_data
+            and player_y is not None
         ):  # E não tem laser pendente
 
-            self.meteor_attack_timer.update(dt)
-            if self.meteor_attack_timer.done() and player_y is not None:
-                # Spawn meteoros dos lados em movimento de arco
-                side_meteors = BossAttackSystem.spawn_side_meteors(
-                    self.x, self.y, self.w, self.h, player_x, player_y
-                )
-                spawned_meteors.extend(side_meteors)
+            # Timer para selecionar novos quadrados para preparar
+            self.square_attack_timer.update(dt)
+            if self.square_attack_timer.done():
+                # Apenas preparar novos quadrados se não houver nenhum em preparação/pronto/lançando
+                preparing_or_ready = [sq for sq in self.floating_squares if sq["state"] in ("preparing", "ready_to_launch", "launching")]
+                if not preparing_or_ready:
+                    # Escolher 3-6 quadrados aleatórios para começar a preparar
+                    following_squares = [sq for sq in self.floating_squares if sq["state"] == "following"]
+                    if following_squares:
+                        num_to_prepare = random.randint(3, min(6, len(following_squares)))
+                        squares_to_prepare = random.sample(following_squares, num_to_prepare)
+                        
+                        for square in squares_to_prepare:
+                            square["state"] = "preparing"
+                            square["prepare_timer"] = 0.0
 
-                # Ocasionalmente, spawn um meteoro adicional do centro
-                if random.random() < 0.4:  # 40% de chance
-                    target_x = player_x + random.uniform(-30, 30)
-                    target_y = player_y + random.uniform(-20, 20)
-                    center_meteor = BossAttackSystem.spawn_aimed_meteor(
-                        self.x, self.y, self.w, self.h, target_x, target_y
-                    )
-                    spawned_meteors.append(center_meteor)
-
-                # No modo frenzy, spawnar meteoros guiados ocasionalmente
-                if random.random() < Config.GUIDED_METEOR_SPAWN_CHANCE:
-                    guided_meteor = BossAttackSystem.spawn_guided_meteor(
-                        self.x, self.y, self.w, self.h, player_x, player_y
-                    )
-                    spawned_meteors.append(guided_meteor)
-
-                # Timer mais curto para meteoros mais frequentes quando não atacando
-                self.meteor_attack_timer.start(random.uniform(1.5, 2.5))
+                # Timer para próximo ciclo
+                self.square_attack_timer.start(random.uniform(2.0, 3.5))
 
         # Sempre atualizar partículas de desaparecimento do círculo
         self._update_circle_disappear_particles(dt)
@@ -585,7 +771,7 @@ class Boss:
         elif self.state == "firing":
             self._update_firing_state(dt)
 
-        return (lasers_fired, spawned_meteors)
+        return (lasers_fired, spawned_meteors, spawned_squares)
 
     def _draw_aiming_line(self, surface: pygame.Surface) -> None:
         """Draw the animated aiming line(s)."""
@@ -601,17 +787,27 @@ class Boss:
 
             if self.frenzy_mode:
                 # Modo frenzy: desenhar múltiplas linhas de mira
-                self._draw_frenzy_aiming_lines(surface, face_x, face_y, face_normal, time_based_offset)
+                self._draw_frenzy_aiming_lines(
+                    surface, face_x, face_y, face_normal, time_based_offset
+                )
             else:
                 # Modo normal: desenhar linha única
-                self._draw_single_aiming_line(surface, face_x, face_y, face_normal, time_based_offset)
+                self._draw_single_aiming_line(
+                    surface, face_x, face_y, face_normal, time_based_offset
+                )
 
-    def _draw_single_aiming_line(self, surface: pygame.Surface, face_x: float, face_y: float, 
-                                face_normal: pygame.Vector2, time_based_offset: int) -> None:
+    def _draw_single_aiming_line(
+        self,
+        surface: pygame.Surface,
+        face_x: float,
+        face_y: float,
+        face_normal: pygame.Vector2,
+        time_based_offset: int,
+    ) -> None:
         """Draw a single aiming line for normal mode."""
         # Ajustar posição inicial para mais para cima (mesmo offset dos lasers)
         line_start_y = face_y - 15
-        
+
         current_distance = time_based_offset - (
             Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
         )
@@ -638,46 +834,67 @@ class Boss:
                     2,
                 )
 
-            current_distance += (
-                Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
-            )
+            current_distance += Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
 
-    def _draw_frenzy_aiming_lines(self, surface: pygame.Surface, face_x: float, face_y: float,
-                                 face_normal: pygame.Vector2, time_based_offset: int) -> None:
+    def _draw_frenzy_aiming_lines(
+        self,
+        surface: pygame.Surface,
+        face_x: float,
+        face_y: float,
+        face_normal: pygame.Vector2,
+        time_based_offset: int,
+    ) -> None:
         """Draw multiple aiming lines for frenzy mode."""
-        
-        # Desenhar na ordem: Direita -> Esquerda -> Centro (centro por último para ficar por cima)
-        self._draw_single_frenzy_laser_line(surface, face_x, face_y, face_normal, time_based_offset, 2)  # Direita
-        self._draw_single_frenzy_laser_line(surface, face_x, face_y, face_normal, time_based_offset, 0)  # Esquerda  
-        self._draw_single_frenzy_laser_line(surface, face_x, face_y, face_normal, time_based_offset, 1)  # Centro
 
-    def _draw_single_frenzy_laser_line(self, surface: pygame.Surface, face_x: float, face_y: float,
-                                      face_normal: pygame.Vector2, time_based_offset: int, laser_index: int) -> None:
+        # Desenhar na ordem: Direita -> Esquerda -> Centro (centro por último para ficar por cima)
+        self._draw_single_frenzy_laser_line(
+            surface, face_x, face_y, face_normal, time_based_offset, 2
+        )  # Direita
+        self._draw_single_frenzy_laser_line(
+            surface, face_x, face_y, face_normal, time_based_offset, 0
+        )  # Esquerda
+        self._draw_single_frenzy_laser_line(
+            surface, face_x, face_y, face_normal, time_based_offset, 1
+        )  # Centro
+
+    def _draw_single_frenzy_laser_line(
+        self,
+        surface: pygame.Surface,
+        face_x: float,
+        face_y: float,
+        face_normal: pygame.Vector2,
+        time_based_offset: int,
+        laser_index: int,
+    ) -> None:
         """Draw a single laser line for frenzy mode."""
         i = laser_index
         angle_offset = self.FRENZY_LASER_ANGLES[i]
-        
+
         # Calcular direção rotacionada para este laser
         cos_offset = math.cos(angle_offset)
         sin_offset = math.sin(angle_offset)
-        
+
         rotated_x = face_normal.x * cos_offset - face_normal.y * sin_offset
         rotated_y = face_normal.x * sin_offset + face_normal.y * cos_offset
         rotated_normal = pygame.Vector2(rotated_x, rotated_y)
-        
+
         # Calcular posição de início do laser (com offset lateral)
         offset = (i - 1) * self.LASER_SPREAD_OFFSET  # -10, 0, +10
         laser_start_x = face_x + offset * math.cos(self.rotation_angle + math.pi / 2)
-        laser_start_y = face_y + offset * math.sin(self.rotation_angle + math.pi / 2) - 15  # Mais para cima
-        
+        laser_start_y = (
+            face_y + offset * math.sin(self.rotation_angle + math.pi / 2) - 15
+        )  # Mais para cima
+
         # Cor e espessura diferentes para cada linha
         if i == 1:  # Laser central
             line_color = colors.BOSS_AIM_LINE
             line_width = 4  # Ainda mais grosso para garantir destaque
         else:  # Lasers laterais
-            line_color = tuple(min(255, max(50, int(c * 0.6))) for c in colors.BOSS_AIM_LINE)
+            line_color = tuple(
+                min(255, max(50, int(c * 0.6))) for c in colors.BOSS_AIM_LINE
+            )
             line_width = 2
-        
+
         # Desenhar linha tracejada para este laser
         current_distance = time_based_offset - (
             Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
@@ -705,9 +922,110 @@ class Boss:
                     line_width,
                 )
 
-            current_distance += (
-                Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
-            )
+            current_distance += Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
+
+    def _draw_floating_squares(
+        self, surface: pygame.Surface, offset_x: float, offset_y: float, behind: bool
+    ) -> None:
+        """Desenha os quadrados flutuantes ao redor do boss."""
+        for i, square in enumerate(self.floating_squares):
+            # Alternar quais quadrados desenhar na frente ou atrás
+            # Quadrados com índice par ficam atrás, ímpares na frente
+            if (i % 2 == 0) != behind:
+                continue
+            
+            # Calcular cor baseada no modo e estado
+            if square["state"] in ("preparing", "launching"):
+                # Quadrado se preparando ou na fila de lançamento: cor amarela/laranja pulsante
+                pulse_intensity = 0.5 + 0.5 * abs(math.sin(square["prepare_timer"] * 8))
+                color = (
+                    255,
+                    int(200 * pulse_intensity),
+                    0
+                )
+                border_color: tuple[int, int, int] = (255, 255, 0)
+            elif self.frenzy_mode:
+                # No frenzy, cores mais intensas e variadas
+                base_red = 255
+                base_green = random.randint(0, 100)
+                base_blue = 0
+                intensity = 0.7 + (i / len(self.floating_squares)) * 0.3
+                color = (
+                    int(base_red * intensity),
+                    int(base_green * intensity),
+                    int(base_blue * intensity)
+                )
+                r, g, b = color
+                border_color = (min(255, r + 50), min(255, g + 50), min(255, b + 50))
+            else:
+                # Modo normal, vermelho mais escuro
+                base_red = 200
+                base_green = 0
+                base_blue = 0
+                intensity = 0.7 + (i / len(self.floating_squares)) * 0.3
+                color = (
+                    int(base_red * intensity),
+                    int(base_green * intensity),
+                    int(base_blue * intensity)
+                )
+                r, g, b = color
+                border_color = (min(255, r + 50), min(255, g + 50), min(255, b + 50))
+            
+            # Se o quadrado está girando, desenhar com rotação
+            if square["rotation"] > 0:
+                self._draw_rotated_square(surface, square, color, border_color, offset_x, offset_y)
+            else:
+                # Desenhar o quadrado normalmente
+                square_x = square["x"] - square["size"] / 2 + offset_x
+                square_y = square["y"] - square["size"] / 2 + offset_y
+                
+                pygame.draw.rect(
+                    surface,
+                    color,
+                    (int(square_x), int(square_y), square["size"], square["size"])
+                )
+                
+                # Desenhar borda mais clara
+                pygame.draw.rect(
+                    surface,
+                    border_color,
+                    (int(square_x), int(square_y), square["size"], square["size"]),
+                    2
+                )
+    
+    def _draw_rotated_square(
+        self, surface: pygame.Surface, square: dict[str, Any], 
+        color: tuple[int, int, int], border_color: tuple[int, int, int],
+        offset_x: float, offset_y: float
+    ) -> None:
+        """Desenha um quadrado rotacionado."""
+        size = square["size"]
+        center_x = square["x"] + offset_x
+        center_y = square["y"] + offset_y
+        angle_rad = math.radians(square["rotation"])
+        
+        # Calcular os 4 cantos do quadrado rotacionado
+        half_size = size / 2
+        corners = [
+            (-half_size, -half_size),
+            (half_size, -half_size),
+            (half_size, half_size),
+            (-half_size, half_size)
+        ]
+        
+        # Rotacionar cada canto
+        rotated_corners: list[tuple[float, float]] = []
+        for cx, cy in corners:
+            # Aplicar rotação
+            rx = cx * math.cos(angle_rad) - cy * math.sin(angle_rad)
+            ry = cx * math.sin(angle_rad) + cy * math.cos(angle_rad)
+            rotated_corners.append((center_x + rx, center_y + ry))
+        
+        # Desenhar polígono preenchido
+        pygame.draw.polygon(surface, color, rotated_corners)
+        
+        # Desenhar borda
+        pygame.draw.polygon(surface, border_color, rotated_corners, 2)
 
     def _draw_cannon(
         self, surface: pygame.Surface, offset_x: float, offset_y: float
@@ -735,6 +1053,52 @@ class Boss:
                 4,
             )
 
+    def _draw_pixelated_boss(self, surface: pygame.Surface, offset_x: float, offset_y: float) -> None:
+        """Desenha o boss com bordas serrilhadas/pixeladas (efeito retro vazado)."""
+        x = int(self.x + offset_x)
+        y = int(self.y + offset_y)
+        
+        # Criar superfície temporária com suporte a transparência
+        temp_surface = pygame.Surface((int(self.w), int(self.h)), pygame.SRCALPHA)
+        
+        # Corpo principal vermelho (preencher toda a superfície)
+        main_red = (255, 0, 0, 255)
+        temp_surface.fill(main_red)
+        
+        # Criar efeito de borda serrilhada/pixelada TRANSPARENTE (vazado)
+        pixel_size = 6
+        transparent = (0, 0, 0, 0)  # Completamente transparente
+        
+        # Padrão irregular para as bordas (assimétrico)
+        pattern = [1, 1, 0, 1, 0, 1, 1, 0, 0, 1]  # Padrão irregular que se repete
+        
+        # Borda superior (serrilhada irregular vazada)
+        for i in range(0, int(self.w), pixel_size):
+            idx = (i // pixel_size) % len(pattern)
+            if pattern[idx]:
+                pygame.draw.rect(temp_surface, transparent, (i, 0, pixel_size, pixel_size))
+        
+        # Borda inferior (serrilhada irregular vazada - padrão diferente)
+        for i in range(0, int(self.w), pixel_size):
+            idx = (i // pixel_size) % len(pattern)
+            if pattern[(idx + 3) % len(pattern)]:  # Offset para padrão diferente
+                pygame.draw.rect(temp_surface, transparent, (i, int(self.h) - pixel_size, pixel_size, pixel_size))
+        
+        # Borda esquerda (serrilhada irregular vazada)
+        for i in range(0, int(self.h), pixel_size):
+            idx = (i // pixel_size) % len(pattern)
+            if pattern[(idx + 1) % len(pattern)]:
+                pygame.draw.rect(temp_surface, transparent, (0, i, pixel_size, pixel_size))
+        
+        # Borda direita (serrilhada irregular vazada - padrão diferente)
+        for i in range(0, int(self.h), pixel_size):
+            idx = (i // pixel_size) % len(pattern)
+            if pattern[(idx + 5) % len(pattern)]:
+                pygame.draw.rect(temp_surface, transparent, (int(self.w) - pixel_size, i, pixel_size, pixel_size))
+        
+        # Desenhar a superfície temporária na posição final
+        surface.blit(temp_surface, (x, y))
+
     def draw(self, surface: pygame.Surface) -> None:
         """Render the boss and its effects."""
         offset_x, offset_y = 0, 0
@@ -742,10 +1106,14 @@ class Boss:
             offset_x = random.randint(-3, 3)
             offset_y = random.randint(-3, 3)
 
-        # Normal boss rendering (corpo vermelho)
-        pygame.draw.rect(
-            surface, (255, 0, 0), (self.x + offset_x, self.y + offset_y, self.w, self.h)
-        )
+        # Desenhar quadrados flutuantes ATRÁS do corpo principal
+        self._draw_floating_squares(surface, offset_x, offset_y, behind=True)
+
+        # Boss rendering com design pixelado
+        self._draw_pixelated_boss(surface, offset_x, offset_y)
+
+        # Desenhar quadrados flutuantes NA FRENTE do corpo principal
+        self._draw_floating_squares(surface, offset_x, offset_y, behind=False)
 
         # Desenhar o canhão usando a nova classe
         self.cannon.draw(surface, offset_x, offset_y)

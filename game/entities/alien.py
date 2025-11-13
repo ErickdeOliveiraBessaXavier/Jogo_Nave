@@ -14,17 +14,31 @@ class Alien:
         self.speed_y = 60
         self.dead = False
         self.shoot_timer = random.uniform(1.5, 3.0)
+        
+        # Atributos para controle por formação
+        self.formation_controlled = False
+        self.formation_index = 0
+        self.formation_angle = 0.0
 
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
     def update(self, dt: float) -> list[AlienBullet] | None:
-        # Movimento
+        # Se controlado por formação, não move automaticamente
+        if self.formation_controlled:
+            # Apenas atualiza timer de tiro (o disparo é gerenciado pela Formation)
+            self.shoot_timer -= dt
+            # Marcar como morto se sair muito da tela (segurança)
+            if self.y > Config.SCREEN_HEIGHT + 100 or self.y < -100:
+                self.dead = True
+            return None
+        
+        # Movimento normal (quando não está em formação)
         self.x += self.speed_x * dt
         self.y += self.speed_y * dt
 
-        # Inverter direÃ§Ã£o nas bordas
+        # Inverter direção nas bordas
         if self.x <= 0 or self.x + self.w >= Config.SCREEN_WIDTH:
             self.speed_x *= -1
 
@@ -40,14 +54,40 @@ class Alien:
         return None
 
     def draw(self, surface: pygame.Surface):
-        # Corpo principal
-        body_rect = pygame.Rect(self.x, self.y + 5, self.w, self.h - 10)
-        pygame.draw.rect(surface, colors.GREEN, body_rect, border_radius=5)
+        # Verificar se tem alpha definido (para formações com fade-in)
+        alpha = getattr(self, 'alpha', 255)
+        
+        if alpha < 255:
+            # Criar surface temporária com alpha para fade-in
+            temp_surface = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
+            temp_surface.fill((0, 0, 0, 0))  # Transparente
+            
+            # Desenhar na surface temporária
+            # Corpo principal
+            body_rect = pygame.Rect(0, 5, self.w, self.h - 10)
+            green_with_alpha = (*colors.GREEN, alpha)
+            pygame.draw.rect(temp_surface, green_with_alpha, body_rect, border_radius=5)
+            
+            # Cockpit
+            cockpit_rect = pygame.Rect(10, 0, self.w - 20, 10)
+            magenta_with_alpha = (*colors.MAGENTA, alpha)
+            white_with_alpha = (*colors.WHITE, alpha)
+            pygame.draw.ellipse(temp_surface, magenta_with_alpha, cockpit_rect)
+            pygame.draw.ellipse(temp_surface, white_with_alpha, cockpit_rect, 1)
+            
+            # Blit na posição final
+            surface.blit(temp_surface, (int(self.x), int(self.y)))
+        else:
+            # Desenho normal (sem alpha, mais rápido)
+            # Corpo principal
+            body_rect = pygame.Rect(self.x, self.y + 5, self.w, self.h - 10)
+            pygame.draw.rect(surface, colors.GREEN, body_rect, border_radius=5)
+            
+            # Cockpit
+            cockpit_rect = pygame.Rect(self.x + 10, self.y, self.w - 20, 10)
+            pygame.draw.ellipse(surface, colors.MAGENTA, cockpit_rect)
+            pygame.draw.ellipse(surface, colors.WHITE, cockpit_rect, 1)
 
-        # Cockpit
-        cockpit_rect = pygame.Rect(self.x + 10, self.y, self.w - 20, 10)
-        pygame.draw.ellipse(surface, colors.MAGENTA, cockpit_rect)
-        pygame.draw.ellipse(surface, colors.WHITE, cockpit_rect, 1)
 
     def get_points_value(self) -> int:
         return 150  # Pontos por destruir um alien
