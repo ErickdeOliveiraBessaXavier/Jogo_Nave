@@ -12,6 +12,7 @@ from ..entities.explosion import Explosion
 from ..entities.mine_explosion import MineExplosion
 from ..entities.powerup import PowerUp
 from ..entities.boss import Boss
+from ..entities.boss_square import BossSquare
 from ..entities.floating_score import FloatingScore
 from ..core.sound import sound_manager
 from ..entities.mini_ship_bullet import MiniShipBullet
@@ -507,4 +508,57 @@ class Collisions:
                 return True
         
         return False
-        return collected_kinds
+    
+    def bullets_vs_boss_squares(
+        self,
+        bullets: list[Bullet],
+        boss_squares: list[BossSquare],
+        explosions: list[Explosion],
+    ) -> int:
+        """
+        Colisão entre balas do jogador e quadrados do boss.
+        Os quadrados NÃO são destruídos, apenas geram explosão visual.
+        Retorna número de acertos para feedback visual/sonoro.
+        """
+        hit_count = 0
+        
+        for bullet in bullets[:]:
+            if bullet.dead:
+                continue
+                
+            bullet_rect = bullet.rect
+            
+            for square in boss_squares:
+                if square.dead:
+                    continue
+                    
+                square_rect = square.get_rect()
+                if bullet_rect.colliderect(square_rect):
+                    # Criar explosão no ponto de impacto
+                    explosions.append(Explosion(bullet.x, bullet.y, size=20))
+                    
+                    # Destruir apenas a bala
+                    bullet.dead = True
+                    hit_count += 1
+                    
+                    # Som de impacto (mesmo som de dano ao boss)
+                    sound_manager.play_boss_damage()
+                    break
+        
+        return hit_count
+    
+    def ship_vs_boss_squares(self, ship: Ship, boss_squares: list[BossSquare]) -> bool:
+        """
+        Colisão entre nave e quadrados do boss (indestrutíveis).
+        Os quadrados não são destruídos ao colidir.
+        """
+        if ship.invuln > 0:
+            return False
+        
+        ship_rect = ship.rect
+        
+        for square in boss_squares:
+            if ship_rect.colliderect(square.get_rect()):
+                return True
+        
+        return False

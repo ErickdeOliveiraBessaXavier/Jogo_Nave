@@ -125,7 +125,8 @@ class Config:
     # ========================================
     # VISUAL EFFECTS & ANIMATIONS
     # ========================================
-    WARP_SPEED_MULTIPLIER: float = 200.0
+    WARP_SPEED_MULTIPLIER: float = 30.0  # Velocidade do warp durante preparação
+    BOSS_WARP_SPEED_MULTIPLIER: float = 15.0  # Velocidade do warp durante luta com boss
 
     # Explosion effects
     EXPLOSION_DURATION: float = 0.8

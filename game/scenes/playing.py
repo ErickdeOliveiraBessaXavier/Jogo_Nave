@@ -148,13 +148,15 @@ class PlayingScene(Scene):
                     if spike_boss_lasers:
                         self.entity_manager.boss_lasers.extend(spike_boss_lasers)
                 else:
-                    lasers_fired, spawned_meteors = self.entity_manager.boss.update(
+                    lasers_fired, spawned_meteors, spawned_squares = self.entity_manager.boss.update(
                         slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery
                     )
                     if lasers_fired:
                         self.entity_manager.boss_lasers.extend(lasers_fired)
                     if spawned_meteors:
                         self.entity_manager.enemies.extend(spawned_meteors)
+                    if spawned_squares:
+                        self.entity_manager.boss_squares.extend(spawned_squares)
 
             self.entity_manager.cleanup()
             return
@@ -505,6 +507,17 @@ class PlayingScene(Scene):
         if self.collisions.ship_vs_spikes(self.ship, self.entity_manager.spikes, self.entity_manager.explosions):
             self._handle_ship_hit()
         
+        # Colisões com quadrados do boss (indestrutíveis)
+        if self.collisions.ship_vs_boss_squares(self.ship, self.entity_manager.boss_squares):
+            self._handle_ship_hit()
+        
+        # Balas vs quadrados do boss (gera explosão mas não destrói os quadrados)
+        self.collisions.bullets_vs_boss_squares(
+            self.entity_manager.bullets,
+            self.entity_manager.boss_squares,
+            self.entity_manager.explosions,
+        )
+        
         # Balas vs espinhos
         spike_score = self.collisions.bullets_vs_spikes(
             self.entity_manager.bullets,
@@ -733,7 +746,7 @@ class PlayingScene(Scene):
                 and not self.entity_manager.boss.dead
             )
             if boss_active:
-                speed_multiplier = Config.WARP_SPEED_MULTIPLIER
+                speed_multiplier = Config.BOSS_WARP_SPEED_MULTIPLIER
 
         self.r.background(
             self.game_surface, dt=1.0 / Config.FPS, speed_multiplier=speed_multiplier

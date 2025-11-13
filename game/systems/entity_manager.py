@@ -5,6 +5,7 @@ from ..entities.meteor import Meteor
 from ..entities.meteor_pool import MeteorPool
 from ..entities.alien import Alien
 from ..entities.boss import Boss
+from ..entities.boss_square import BossSquare
 from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
 from ..entities.spike_boss_laser import SpikeBossLaser
@@ -29,6 +30,7 @@ class EntityManager:
         self.enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy] = []
         self.alien_bullets: list[AlienBullet] = []
         self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
+        self.boss_squares: list[BossSquare] = []  # Quadrados lançados pelo boss
         self.eye_lasers: list[EyeLaser] = []
         self.explosions: list[Explosion] = []
         self.mine_explosions: list[MineExplosion] = []
@@ -93,13 +95,15 @@ class EntityManager:
                     self.spikes.extend(spawned_spikes)
                 if spike_boss_lasers:
                     self.boss_lasers.extend(spike_boss_lasers)  # type: ignore
-            # Boss normal retorna (List[BossLaser], List[Meteor])
+            # Boss normal retorna (List[BossLaser], List[Meteor], List[BossSquare])
             else:
-                lasers_fired, spawned_meteors = self.boss.update(dt, player_x, player_y)
+                lasers_fired, spawned_meteors, spawned_squares = self.boss.update(dt, player_x, player_y)
                 if lasers_fired:
                     self.boss_lasers.extend(lasers_fired)
                 if spawned_meteors:
                     self.enemies.extend(spawned_meteors)
+                if spawned_squares:
+                    self.boss_squares.extend(spawned_squares)
         for enemy in self.enemies:
             if isinstance(enemy, Alien):
                 shot = enemy.update(dt)
@@ -116,6 +120,15 @@ class EntityManager:
 
         self.alien_bullets.extend(new_alien_bullets)
         self.eye_lasers.extend(new_eye_lasers)
+        
+        # Atualizar quadrados do boss (obtém dimensões dinâmicas da tela)
+        screen = pygame.display.get_surface()
+        screen_width = screen.get_width() if screen else 1600
+        screen_height = screen.get_height() if screen else 900
+        for square in self.boss_squares[:]:
+            square.update(dt, screen_width, screen_height)
+            if square.dead:
+                self.boss_squares.remove(square)
 
     def draw(self, surface: pygame.Surface, player_x: float, player_y: float):
         """Desenha todas as entidades. EyeEnemy precisa da posição do jogador."""
@@ -126,6 +139,7 @@ class EntityManager:
             self.bullets,
             self.alien_bullets,
             self.boss_lasers,
+            self.boss_squares,  # Quadrados do boss
             self.eye_lasers,
             self.explosions,
             self.mine_explosions,
@@ -201,6 +215,7 @@ class EntityManager:
         self.bullets = [b for b in self.bullets if not b.dead]
         self.alien_bullets = [ab for ab in self.alien_bullets if not ab.dead]
         self.boss_lasers = [bl for bl in self.boss_lasers if not bl.dead]
+        self.boss_squares = [bs for bs in self.boss_squares if not bs.dead]
         self.eye_lasers = [el for el in self.eye_lasers if not el.dead]
         self.mini_ship_bullets = [vb for vb in self.mini_ship_bullets if not vb.dead]
         self.enemies = [
@@ -219,6 +234,7 @@ class EntityManager:
         self.bullets.clear()
         self.alien_bullets.clear()
         self.boss_lasers.clear()
+        self.boss_squares.clear()
         self.eye_lasers.clear()
         self.powerups.clear()
         self.floating_scores.clear()
@@ -239,6 +255,7 @@ class EntityManager:
         # self.bullets.clear()  # NÃO limpar balas do jogador
         self.alien_bullets.clear()
         self.boss_lasers.clear()
+        self.boss_squares.clear()
         self.eye_lasers.clear()
         self.floating_scores.clear()
         self.enemies.clear()
