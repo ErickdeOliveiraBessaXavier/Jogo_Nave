@@ -166,6 +166,14 @@ class LevelConfig:
         return invalid
 
 
+class LevelManager:
+    def __init__(self, initial_levels: dict[int, LevelConfig]):
+        self._levels = initial_levels  # Store initial fixed levels if needed, though get_level_config handles it
+        
+    def get_level(self, level_number: int) -> LevelConfig:
+        return get_level_config(level_number)
+
+
 # Níveis fixos (handcrafted) - Tutoriais e Bosses importantes
 FIXED_LEVELS: dict[int, LevelConfig] = {
     # Nível 1: Tutorial - Apenas meteoros, ritmo controlado

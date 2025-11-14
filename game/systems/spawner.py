@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Dict, Type, TypedDict, Tuple, List
 from ..core.time import Timer
 from ..core.config import Config, PowerUpType
 from ..entities.powerup import PowerUp
-from ..core.levels import LevelConfig
+from ..core.levels import LevelConfig, LevelManager
 from ..entities.formation import Formation, FormationPattern
 
 from ..entities.explosive_mine import ExplosiveMine
@@ -47,23 +47,25 @@ FORMATION_CONFIGS: Dict[str, FormationConfig] = {
 
 
 class EnemySpawner:
-    def __init__(self, config: LevelConfig, is_initial_level: bool = False):
-        self.config = config
+    def __init__(self, level_manager: LevelManager, is_initial_level: bool = False):
+        self.level_manager = level_manager
+        self.current_level_number = 1 # EnemySpawner starts at level 1
+        self.config = self.level_manager.get_level(self.current_level_number)
         self.stopped = False
 
         # Validar tipos de formação configurados
-        if config.formations_enabled and config.formation_types:
-            invalid_types = config.validate_formation_types(set(FORMATION_CONFIGS.keys()))
+        if self.config.formations_enabled and self.config.formation_types:
+            invalid_types = self.config.validate_formation_types(set(FORMATION_CONFIGS.keys()))
             if invalid_types:
-                print(f"WARNING: Level {config.level_number} has invalid formation types: {invalid_types}")
+                print(f"WARNING: Level {self.config.level_number} has invalid formation types: {invalid_types}")
                 print(f"Available types: {list(FORMATION_CONFIGS.keys())}")
                 # Filtrar tipos inválidos
-                config.formation_types = [t for t in config.formation_types if t in FORMATION_CONFIGS]
-                if not config.formation_types:
-                    print(f"WARNING: No valid formation types remain. Disabling formations for level {config.level_number}")
-                    config.formations_enabled = False
+                self.config.formation_types = [t for t in self.config.formation_types if t in FORMATION_CONFIGS]
+                if not self.config.formation_types:
+                    print(f"WARNING: No valid formation types remain. Disabling formations for level {self.config.level_number}")
+                    self.config.formations_enabled = False
                 else:
-                    print(f"Using valid types: {config.formation_types}")
+                    print(f"Using valid types: {self.config.formation_types}")
 
         # Sistema de intensidade gradual para spawn orgânico
         self.spawn_intensity = 0.0  # 0.0 = não spawna, 1.0 = taxa normal
@@ -274,9 +276,10 @@ class EnemySpawner:
     def stop(self) -> None:
         self.stopped = True
 
-    def set_level(self, config: LevelConfig) -> None:
+    def set_level(self, level_number: int) -> None:
         """Atualiza o spawner para uma nova fase."""
-        self.config = config
+        self.current_level_number = level_number
+        self.config = self.level_manager.get_level(self.current_level_number)
         self.stopped = False
 
         # Reiniciar warm-up para nova fase (transições suaves)

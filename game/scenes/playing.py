@@ -11,7 +11,7 @@ from ..systems.spawner import EnemySpawner, PowerUpSpawner
 from ..systems.collisions import Collisions
 from ..systems.entity_manager import EntityManager
 from ..entities.floating_score import FloatingScore
-from ..core.levels import get_level_config
+from ..core.levels import get_level_config, LevelManager
 from ..core.assets import get_font
 from ..core import colors
 from ..core.sound import sound_manager
@@ -25,15 +25,16 @@ if TYPE_CHECKING:
 
 
 class PlayingScene(Scene):
-    def __init__(self, app: "GameApp"):
+    def __init__(self, app: "GameApp", level_manager: LevelManager):
         super().__init__(app)
+        self.level_manager = level_manager
         self.r = Renderer()
         self.ship = Ship(Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT)
         self.ship.is_entering = True
         self.entity_manager = EntityManager()
 
         self.current_level_index = 0
-        self.level_config = get_level_config(self.current_level_index + 1)  # +1 pois níveis começam em 1
+        self.level_config = self.level_manager.get_level(self.current_level_index + 1)  # +1 pois níveis começam em 1
         self.enemies_destroyed_in_level = 0
         self.boss_fight_active = False
         self.pre_boss_transition = False
@@ -64,7 +65,7 @@ class PlayingScene(Scene):
 
         # Inicializar spawner com delay inicial apenas para fase 1
         is_initial_level = self.current_level_index == 0
-        self.enemy_spawner = EnemySpawner(self.level_config, is_initial_level)
+        self.enemy_spawner = EnemySpawner(self.level_manager, is_initial_level)
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
 
@@ -704,8 +705,8 @@ class PlayingScene(Scene):
         self.current_level_index += 1
         
         # Gerar próximo nível (sistema híbrido: fixo ou procedural)
-        self.level_config = get_level_config(self.current_level_index + 1)  # +1 pois níveis começam em 1
-        self.enemy_spawner.set_level(self.level_config)
+        self.level_config = self.level_manager.get_level(self.current_level_index + 1)  # +1 pois níveis começam em 1
+        self.enemy_spawner.set_level(self.current_level_index + 1)
         self.enemies_destroyed_in_level = 0
 
         # Usar método que preserva balas do jogador durante transições
@@ -714,7 +715,7 @@ class PlayingScene(Scene):
     def handle_event(self, event: pygame.event.Event):
         if self.game_over_sequence_active:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                self.app.states.switch(PlayingScene(self.app))
+                self.app.states.switch(PlayingScene(self.app, self.level_manager))
             return
 
         if event.type == pygame.KEYDOWN:
