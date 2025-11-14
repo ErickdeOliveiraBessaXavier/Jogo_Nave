@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Dict, Type, TypedDict, Tuple, List
 from ..core.time import Timer
 from ..core.config import Config, PowerUpType
 from ..entities.powerup import PowerUp
-from ..core.levels import LevelConfig, LevelManager
+from ..core.levels import LevelManager
 from ..entities.formation import Formation, FormationPattern
 
 from ..entities.explosive_mine import ExplosiveMine

@@ -11,7 +11,7 @@ from ..systems.spawner import EnemySpawner, PowerUpSpawner
 from ..systems.collisions import Collisions
 from ..systems.entity_manager import EntityManager
 from ..entities.floating_score import FloatingScore
-from ..core.levels import get_level_config, LevelManager
+from ..core.levels import LevelManager
 from ..core.assets import get_font
 from ..core import colors
 from ..core.sound import sound_manager
