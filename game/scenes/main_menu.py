@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from ..core.state import Scene
 from ..core.colors import WHITE, BLACK, GREEN, BRIGHT_GREEN
 from ..scenes.playing import PlayingScene
+from ..scenes.settings import SettingsScene
 from ..core.assets import get_font
 from ..core.config import Config
 from ..render.renderer import Renderer
@@ -17,7 +18,7 @@ class MainMenuScene(Scene):
         super().__init__(app)
         self.r = Renderer()
         self.font = get_font(48)
-        self.button_font = get_font(18)
+        self.button_font = get_font(22)
 
         self.title_text = self.font.render("Space Shooter", True, WHITE)
         self.title_rect = self.title_text.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 4))
@@ -30,13 +31,13 @@ class MainMenuScene(Scene):
         # Start Button
         self.start_button_rect = pygame.Rect(0, 0, 250, 60)
         self.start_button_rect.center = (Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2)
-        self.start_button_text = self.button_font.render("Começar", True, BLACK)
+        self.start_button_text = self.button_font.render("Start Game", True, BLACK)
         self.start_button_text_rect = self.start_button_text.get_rect(center=self.start_button_rect.center)
 
         # Settings Button
         self.settings_button_rect = pygame.Rect(0, 0, 250, 60)
         self.settings_button_rect.center = (Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2 + 80)
-        self.settings_button_text = self.button_font.render("Configurações", True, BLACK)
+        self.settings_button_text = self.button_font.render("Settings", True, BLACK)
         self.settings_button_text_rect = self.settings_button_text.get_rect(center=self.settings_button_rect.center)
         
         # Track hover state
@@ -48,7 +49,7 @@ class MainMenuScene(Scene):
             if self.start_button_rect.collidepoint(event.pos):
                 self.app.states.push(PlayingScene(self.app, self.app.level_manager))
             elif self.settings_button_rect.collidepoint(event.pos):
-                print("Settings button clicked!")
+                self.app.states.push(SettingsScene(self.app))
         
         elif event.type == pygame.MOUSEMOTION:
             self.start_button_hovered = self.start_button_rect.collidepoint(event.pos)

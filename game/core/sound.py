@@ -288,6 +288,12 @@ class SoundManager:
         if self.current_music == "boss":
             pygame.mixer.music.set_volume(self.boss_music_volume * self.master_volume)
 
+    def set_music_volume(self, volume: float):
+        """Define o volume da música de fundo (0.0 a 1.0)."""
+        self.music_volume = max(0.0, min(1.0, volume))
+        if self.current_music == "background":
+            pygame.mixer.music.set_volume(self.music_volume * self.master_volume)
+
     def get_volumes(self):
         """Mostra todos os volumes atuais."""
         print(f"📊 Volumes atuais:")
