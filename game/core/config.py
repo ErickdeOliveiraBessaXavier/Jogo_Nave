@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Tuple
 from enum import Enum
 
@@ -19,9 +19,9 @@ class Config:
     # ========================================
     # DISPLAY & PERFORMANCE SETTINGS
     # ========================================
-    FULLSCREEN: bool = True  # True para fullscreen, False para janela
-    SCREEN_WIDTH: int = 1600  # Maior = elementos menores (era 1000)
-    SCREEN_HEIGHT: int = 900  # Maior = elementos menores (era 600)
+    FULLSCREEN: bool = True
+    SCREEN_WIDTH: int = 1600
+    SCREEN_HEIGHT: int = 900
     FPS: int = 60
 
     # ========================================
@@ -38,7 +38,7 @@ class Config:
     BULLET_SPEED: float = 480.0
     FAST_METEOR_SPEED: float = 320.0  # meteoros pequenos
     SLOW_METEOR_SPEED: float = 25.0  # meteoros grandes
-    POWERUP_SPEED: int = 100
+    POWERUP_SPEED: float = 100.0  # CORRIGIDO: float para consistência
 
     # ========================================
     # METEOR SYSTEM
@@ -78,11 +78,11 @@ class Config:
     RAINBOW_DURATION: float = 15.0
     PIERCING_SHOT_DURATION: float = 7.0
     MINI_SHIPS_DURATION: float = 25.0
-    SPEED_ATTACK_MULTIPLIER: float = 2.0  # Multiplicador de velocidade de ataque
+    SPEED_ATTACK_MULTIPLIER: float = 2.0
     PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER: float = 1.5
 
     # Rarity system - chances devem somar 1.0
-    POWERUP_RARITY_CHANCES = {
+    POWERUP_RARITY_CHANCES: dict[PowerUpType, float] = field(default_factory=lambda: {
         PowerUpType.SHIELD: 0.20,  # 20% - Comum
         PowerUpType.DOUBLE_SHOT: 0.25,  # 25% - Comum
         PowerUpType.SPEED: 0.15,  # 15% - Incomum
@@ -91,7 +91,7 @@ class Config:
         PowerUpType.LIFE: 0.10,  # 10% - Raro
         PowerUpType.SCORE: 0.04,  # 4% - Épico
         PowerUpType.RAINBOW: 0.01,  # 1% - Lendário
-    }
+    })
 
     # ========================================
     # SCORING SYSTEM
@@ -108,25 +108,21 @@ class Config:
     INITIAL_GAME_DELAY: float = 5.0
 
     # Boss warning sequence
-    BOSS_PRE_WARNING_DELAY: float = 5.0  # Delay antes do warning
-    BOSS_WARNING_DURATION: float = 5.0  # Duração do warning ativo
-    BOSS_POST_WARNING_DELAY: float = 3.0  # Delay após warning antes do boss
+    BOSS_PRE_WARNING_DELAY: float = 5.0
+    BOSS_WARNING_DURATION: float = 5.0
+    BOSS_POST_WARNING_DELAY: float = 3.0
 
     # Music transition settings for boss warning
-    BOSS_MUSIC_FADE_OUT_START: float = 3.0  # Inicia fade-out 3s antes do warning
-    BOSS_MUSIC_FADE_OUT_DURATION: float = 2.0  # Tempo do fade-out da música normal
-    # Calculado dinamicamente: warning + delay pós-warning
-    BOSS_MUSIC_SILENCE_DURATION: float = BOSS_WARNING_DURATION + BOSS_POST_WARNING_DELAY  # 5.0 + 3.0 = 8.0
-    BOSS_MUSIC_FADE_IN_DURATION: float = 3.0  # Tempo do fade-in da música do boss
-    BOSS_MUSIC_FADE_IN_START_DELAY: float = (
-        1.0  # Delay antes do fade-in começar (quando boss aparece)
-    )
+    BOSS_MUSIC_FADE_OUT_START: float = 3.0
+    BOSS_MUSIC_FADE_OUT_DURATION: float = 2.0
+    BOSS_MUSIC_FADE_IN_DURATION: float = 3.0
+    BOSS_MUSIC_FADE_IN_START_DELAY: float = 1.0
 
     # ========================================
     # VISUAL EFFECTS & ANIMATIONS
     # ========================================
-    WARP_SPEED_MULTIPLIER: float = 30.0  # Velocidade do warp durante preparação
-    BOSS_WARP_SPEED_MULTIPLIER: float = 15.0  # Velocidade do warp durante luta com boss
+    WARP_SPEED_MULTIPLIER: float = 30.0
+    BOSS_WARP_SPEED_MULTIPLIER: float = 15.0
 
     # Explosion effects
     EXPLOSION_DURATION: float = 0.8
@@ -148,108 +144,16 @@ class Config:
     GAME_OVER_OVERLAY_ALPHA: int = 200  # 0-255
 
     # ========================================
-    # BOSS SYSTEM
+    # CLASSIC BOSS SYSTEM
     # ========================================
-    # Basic boss stats
     BOSS_HEALTH: int = 1000
     BOSS_FRENZY_THRESHOLD: float = 0.5
     BOSS_ENTRY_SPEED: float = 30.0
     BOSS_ENTRY_SHAKE_DURATION: float = 4.0
-
-    # ========================================
-    # SPIKE BOSS SYSTEM
-    # ========================================
-    # Basic stats
-    SPIKE_BOSS_HEALTH: int = 1200
-    SPIKE_BOSS_FRENZY_THRESHOLD: float = 0.5
-    SPIKE_BOSS_ENTRY_SPEED: float = 25.0
-    SPIKE_BOSS_SPEED: float = 80.0  # Velocidade horizontal normal
-    SPIKE_BOSS_FRENZY_SPEED: float = 520.0  # Velocidade no frenzy
-    SPIKE_BOSS_FRENZY_SHAKE_DURATION: float = 3.0
-    SPIKE_BOSS_FRENZY_PAUSE_DURATION: float = 2.0  # Tempo de pausa quando entra em frenzy
     
-    # Proximity attack (quando jogador se aproxima demais)
-    SPIKE_BOSS_PROXIMITY_DISTANCE: float = 250.0  # Distância mínima para ativar
-    SPIKE_BOSS_PROXIMITY_COOLDOWN: float = 3.0  # Tempo entre ataques de proximidade
-    SPIKE_BOSS_PROXIMITY_TELEGRAPH_DURATION: float = 0.8  # Duração do aviso antes do ataque
-    SPIKE_BOSS_PROXIMITY_WAVE_DURATION: float = 0.8  # Duração da onda visual
-    SPIKE_BOSS_PROXIMITY_WAVE_MAX_RADIUS: float = 280.0  # Raio máximo da onda
-    SPIKE_BOSS_PROXIMITY_DAMAGE: int = 1  # Dano se atingir o jogador
-    SPIKE_BOSS_PROXIMITY_WARNING_COLOR_NORMAL: Tuple[int, int, int] = (255, 255, 0)  # Amarelo (aviso)
-    SPIKE_BOSS_PROXIMITY_WARNING_COLOR_FRENZY: Tuple[int, int, int] = (255, 0, 0)  # Vermelho (aviso)
-    SPIKE_BOSS_PROXIMITY_WAVE_COLOR_NORMAL: Tuple[int, int, int] = (0, 255, 255)  # Ciano (onda)
-    SPIKE_BOSS_PROXIMITY_WAVE_COLOR_FRENZY: Tuple[int, int, int] = (255, 0, 0)  # Vermelho (onda)
-    SPIKE_BOSS_PROXIMITY_WAVE_INNER_COLOR_NORMAL: Tuple[int, int, int] = (255, 255, 255)  # Branco (centro)
-    SPIKE_BOSS_PROXIMITY_WAVE_INNER_COLOR_FRENZY: Tuple[int, int, int] = (255, 255, 0)  # Amarelo (centro)
-
-    # Mouth animation (boca abrindo e fechando)
-    SPIKE_BOSS_MOUTH_CYCLE_DURATION: float = 2.0  # Duração completa do ciclo (abrir + fechar)
-    SPIKE_BOSS_MOUTH_MAX_OPENING: int = 15  # Altura máxima que a boca abre
-    SPIKE_BOSS_BODY_STRETCH: int = 8  # Pixels que o corpo estica quando a boca abre
-
-    # Eye behavior (comportamento dos olhos)
-    SPIKE_BOSS_EYE_TRACK_DURATION: float = 2.5  # Tempo seguindo a nave
-    SPIKE_BOSS_EYE_FRENETIC_DURATION: float = 1.0  # Tempo olhando freneticamente
-    SPIKE_BOSS_EYE_FRENETIC_SPEED: float = 0.15  # Velocidade da mudança frenética (segundos)
-
-    # Giant laser attack (ataque de laser gigante no frenzy)
-    SPIKE_BOSS_LASER_COOLDOWN: float = 8.0  # Cooldown entre lasers
-    SPIKE_BOSS_LASER_CHARGE_TIME: float = 1.0  # Tempo de carregamento antes de disparar
-    SPIKE_BOSS_LASER_LIFETIME: float = 1.5  # Duração do laser
-
-    # Attack timing
-    SPIKE_BOSS_ATTACK_INTERVAL: Tuple[float, float] = (3.0, 5.0)  # Normal mode
-    SPIKE_BOSS_FRENZY_ATTACK_INTERVAL: Tuple[float, float] = (1.5, 2.5)  # Frenzy mode
-
-    # Spike spawn settings (quantidade de triângulos grudados criados por ataque)
-    SPIKE_BOSS_SPIKE_COUNT: Tuple[int, int] = (3, 5)  # Quantidade normal
-    SPIKE_BOSS_FRENZY_SPIKE_COUNT: Tuple[int, int] = (6, 9)  # Quantidade no frenzy
-
-    # ========================================
-    # SPIKE (PROJECTILE) SYSTEM
-    # ========================================
-    SPIKE_SIZE: int = 25  # Tamanho do triângulo
-    SPIKE_DAMAGE: int = 1
-    SPIKE_POINTS: int = 50  # Pontos ao destruir
-    SPIKE_WALL_SPACING: int = 5  # Espaçamento entre triângulos na parede
-    SPIKE_MAX_ATTACKING: int = 10  # Máximo de triângulos atacando simultaneamente
-    
-    # Sistema de ondas de ataque
-    SPIKE_WAVE_MIN_SIZE: int = 3  # Mínimo de triângulos por onda
-    SPIKE_WAVE_MAX_SIZE: int = 6  # Máximo de triângulos por onda
-    SPIKE_WAVE_INTERVAL: float = 4.0  # Pausa entre ondas (segundos)
-    SPIKE_FRENZY_WAVE_INTERVAL: float = 2.5  # Pausa entre ondas no frenzy
-    
-    # Comportamento de grudado na parede
-    SPIKE_MIN_ATTACH_TIME: float = 1.0  # Tempo mínimo grudado antes de atacar
-    SPIKE_MAX_ATTACH_TIME: float = 2.5  # Tempo máximo grudado antes de atacar
-    
-    # Tremor antes de soltar
-    SPIKE_TREMBLE_DURATION: float = 1.0  # Duração do tremor
-    SPIKE_MAX_TREMBLE: int = 5  # Intensidade máxima do tremor (pixels)
-    
-    # Míssil teleguiado
-    SPIKE_INITIAL_SPEED: float = 50.0  # Velocidade inicial base ao soltar
-    SPIKE_SPEED_VARIATION: float = 30.0  # Variação de velocidade (+/- pixels/s)
-    SPIKE_ACCELERATION: float = 200.0  # Aceleração do míssil
-    SPIKE_MAX_SPEED: float = 300.0  # Velocidade máxima base
-    SPIKE_MAX_SPEED_VARIATION: float = 50.0  # Variação na velocidade máxima
-    SPIKE_AIM_IMPRECISION: float = 100.0  # Imprecisão na mira (pixels)
-    SPIKE_ROTATION_SPEED_MIN: float = 8.0  # Velocidade mínima de rotação ao voar (rad/s) - giro rápido!
-    SPIKE_ROTATION_SPEED_MAX: float = 15.0  # Velocidade máxima de rotação ao voar (rad/s) - giro muito rápido!
-    
-    # Efeito de entrada (zoom-in)
-    SPIKE_SPAWN_ANIMATION_DURATION: float = 0.4  # Duração do zoom-in (segundos)
-    SPIKE_SPAWN_DELAY_MIN: float = 0.0  # Delay mínimo antes do spawn
-    SPIKE_SPAWN_DELAY_MAX: float = 2.0  # Delay máximo antes do spawn
-    
-    # Respawn e controle de lançamento
-    SPIKE_RESPAWN_TIME: float = 10.0  # Tempo para triângulo reaparecer após sair
-    SPIKE_LAUNCH_COOLDOWN: float = 0.2  # Intervalo mínimo entre lançamentos dentro da onda
-
     # Boss movement
-    BOSS_NORMAL_SPEED: float = 6.0  # Velocidade normal lateral
-    BOSS_FRENZY_SPEED: float = 8.0  # Velocidade no frenzy
+    BOSS_NORMAL_SPEED: float = 6.0
+    BOSS_FRENZY_SPEED: float = 8.0
     BOSS_FRENZY_SHAKE_DURATION: float = 3.0
 
     # Boss laser system
@@ -289,43 +193,210 @@ class Config:
     BOSS_SIDE_METEOR_AIM_SPREAD: float = 45.0  # Desvio lateral (±45°)
 
     # ========================================
+    # SPIKE BOSS SYSTEM
+    # ========================================
+    # Basic stats
+    SPIKE_BOSS_HEALTH: int = 1200
+    SPIKE_BOSS_FRENZY_THRESHOLD: float = 0.5
+    SPIKE_BOSS_ENTRY_SPEED: float = 25.0
+    SPIKE_BOSS_SPEED: float = 80.0
+    SPIKE_BOSS_FRENZY_SPEED: float = 520.0
+    SPIKE_BOSS_FRENZY_SHAKE_DURATION: float = 3.0
+    SPIKE_BOSS_FRENZY_PAUSE_DURATION: float = 2.0
+    
+    # Proximity attack
+    SPIKE_BOSS_PROXIMITY_DISTANCE: float = 250.0
+    SPIKE_BOSS_PROXIMITY_COOLDOWN: float = 3.0
+    SPIKE_BOSS_PROXIMITY_TELEGRAPH_DURATION: float = 0.8
+    SPIKE_BOSS_PROXIMITY_WAVE_DURATION: float = 0.8
+    SPIKE_BOSS_PROXIMITY_WAVE_MAX_RADIUS: float = 280.0
+    SPIKE_BOSS_PROXIMITY_DAMAGE: int = 1
+    SPIKE_BOSS_PROXIMITY_WARNING_COLOR_NORMAL: Tuple[int, int, int] = (255, 255, 0)
+    SPIKE_BOSS_PROXIMITY_WARNING_COLOR_FRENZY: Tuple[int, int, int] = (255, 0, 0)
+    SPIKE_BOSS_PROXIMITY_WAVE_COLOR_NORMAL: Tuple[int, int, int] = (0, 255, 255)
+    SPIKE_BOSS_PROXIMITY_WAVE_COLOR_FRENZY: Tuple[int, int, int] = (255, 0, 0)
+    SPIKE_BOSS_PROXIMITY_WAVE_INNER_COLOR_NORMAL: Tuple[int, int, int] = (255, 255, 255)
+    SPIKE_BOSS_PROXIMITY_WAVE_INNER_COLOR_FRENZY: Tuple[int, int, int] = (255, 255, 0)
+
+    # Mouth animation
+    SPIKE_BOSS_MOUTH_CYCLE_DURATION: float = 2.0
+    SPIKE_BOSS_MOUTH_MAX_OPENING: int = 15
+    SPIKE_BOSS_BODY_STRETCH: int = 8
+
+    # Eye behavior
+    SPIKE_BOSS_EYE_TRACK_DURATION: float = 2.5
+    SPIKE_BOSS_EYE_FRENETIC_DURATION: float = 1.0
+    SPIKE_BOSS_EYE_FRENETIC_SPEED: float = 0.15
+
+    # Giant laser attack
+    SPIKE_BOSS_LASER_COOLDOWN: float = 8.0
+    SPIKE_BOSS_LASER_CHARGE_TIME: float = 1.0
+    SPIKE_BOSS_LASER_LIFETIME: float = 1.5
+
+    # Attack timing
+    SPIKE_BOSS_ATTACK_INTERVAL: Tuple[float, float] = (3.0, 5.0)
+    SPIKE_BOSS_FRENZY_ATTACK_INTERVAL: Tuple[float, float] = (1.5, 2.5)
+
+    # Spike spawn settings
+    SPIKE_BOSS_SPIKE_COUNT: Tuple[int, int] = (3, 5)
+    SPIKE_BOSS_FRENZY_SPIKE_COUNT: Tuple[int, int] = (6, 9)
+
+    # ========================================
+    # SPIKE (PROJECTILE) SYSTEM
+    # ========================================
+    SPIKE_SIZE: int = 25
+    SPIKE_DAMAGE: int = 1
+    SPIKE_POINTS: int = 50
+    SPIKE_WALL_SPACING: int = 5
+    SPIKE_MAX_ATTACKING: int = 10
+    
+    # Sistema de ondas de ataque
+    SPIKE_WAVE_MIN_SIZE: int = 3
+    SPIKE_WAVE_MAX_SIZE: int = 6
+    SPIKE_WAVE_INTERVAL: float = 4.0
+    SPIKE_FRENZY_WAVE_INTERVAL: float = 2.5
+    
+    # Comportamento de grudado na parede
+    SPIKE_MIN_ATTACH_TIME: float = 1.0
+    SPIKE_MAX_ATTACH_TIME: float = 2.5
+    
+    # Tremor antes de soltar
+    SPIKE_TREMBLE_DURATION: float = 1.0
+    SPIKE_MAX_TREMBLE: int = 5
+    
+    # Míssil teleguiado
+    SPIKE_INITIAL_SPEED: float = 50.0
+    SPIKE_SPEED_VARIATION: float = 30.0
+    SPIKE_ACCELERATION: float = 200.0
+    SPIKE_MAX_SPEED: float = 300.0
+    SPIKE_MAX_SPEED_VARIATION: float = 50.0
+    SPIKE_AIM_IMPRECISION: float = 100.0
+    SPIKE_ROTATION_SPEED_MIN: float = 8.0  # rad/s
+    SPIKE_ROTATION_SPEED_MAX: float = 15.0  # rad/s
+    
+    # Efeito de entrada
+    SPIKE_SPAWN_ANIMATION_DURATION: float = 0.4
+    SPIKE_SPAWN_DELAY_MIN: float = 0.0
+    SPIKE_SPAWN_DELAY_MAX: float = 2.0
+    
+    # Respawn e controle
+    SPIKE_RESPAWN_TIME: float = 10.0
+    SPIKE_LAUNCH_COOLDOWN: float = 0.2
+
+    # ========================================
     # FORMATION SYSTEM
     # ========================================
-    # Formation spawn settings
-    FORMATION_SPAWN_INTERVAL: Tuple[float, float] = (10.0, 15.0)  # Min/max tempo entre formações
+    FORMATION_SPAWN_INTERVAL: Tuple[float, float] = (10.0, 15.0)
     
-    # Entry pattern settings - Curved path (Galaga-style)
-    FORMATION_ENTRY_CURVE_AMPLITUDE: float = 150.0  # Amplitude da curva lateral (reduzida de 250)
-    FORMATION_ENTRY_CURVE_FREQUENCY: float = 1.2  # Frequência da curva (mais loops)
-    FORMATION_ENTRY_TIME_OFFSET: float = 0.25  # Delay entre cada nave na fila
-    FORMATION_ENTRY_SPEED: float = 60.0  # Velocidade de descida (curved path) - REDUZIDA
-    FORMATION_ENTRY_CURVE_OFFSET_X: float = 100.0  # Offset inicial horizontal (reduzido de 150)
+    # Entry pattern settings - Curved path
+    FORMATION_ENTRY_CURVE_AMPLITUDE: float = 150.0
+    FORMATION_ENTRY_CURVE_FREQUENCY: float = 1.2
+    FORMATION_ENTRY_TIME_OFFSET: float = 0.25
+    FORMATION_ENTRY_SPEED: float = 60.0
+    FORMATION_ENTRY_CURVE_OFFSET_X: float = 100.0
     
-    # Entry pattern speeds - Outros padrões de entrada
-    FORMATION_ENTRY_LOOP_SPEED: float = 50.0  # Velocidade de descida (loop) - REDUZIDA
-    FORMATION_ENTRY_WAVE_SPEED: float = 65.0  # Velocidade de descida (wave) - REDUZIDA
-    FORMATION_ENTRY_FAN_SPEED: float = 40.0  # Velocidade de descida (fan) - REDUZIDA
-    FORMATION_ENTRY_DIAGONAL_SPEED: float = 55.0  # Velocidade de descida (diagonal) - REDUZIDA
+    # Entry pattern speeds
+    FORMATION_ENTRY_LOOP_SPEED: float = 50.0
+    FORMATION_ENTRY_WAVE_SPEED: float = 65.0
+    FORMATION_ENTRY_FAN_SPEED: float = 40.0
+    FORMATION_ENTRY_DIAGONAL_SPEED: float = 55.0
     
     # Pattern settings
-    FORMATION_PATTERN_DURATION: float = 8.0  # Tempo em cada padrão antes de transicionar
-    FORMATION_TRANSITION_DURATION: float = 2.0  # Tempo de transição entre padrões
+    FORMATION_PATTERN_DURATION: float = 8.0
+    FORMATION_TRANSITION_DURATION: float = 2.0
     
     # Pattern dimensions
     FORMATION_CIRCLE_RADIUS: float = 100.0
-    FORMATION_V_SPACING: float = 45.0  # Espaçamento entre inimigos no V
+    FORMATION_V_SPACING: float = 45.0
     FORMATION_SQUARE_SIZE: float = 180.0
     FORMATION_LINE_SPACING: float = 50.0
-    FORMATION_DRIFT_SPEED: float = 150.0  # Velocidade de movimento lateral
-    FORMATION_DESCENT_SPEED: float = 30.0  # Velocidade de descida após formar padrão
-    
+    FORMATION_DRIFT_SPEED: float = 150.0
+    FORMATION_DESCENT_SPEED: float = 30.0
+
     # ========================================
     # UI SETTINGS
     # ========================================
     WARNING_FONT_SIZE: int = 60
 
+    # ========================================
+    # COMPUTED PROPERTIES (não editáveis diretamente)
+    # ========================================
+    @property
+    def BOSS_MUSIC_SILENCE_DURATION(self) -> float:
+        """Duração calculada do silêncio musical durante aviso do boss."""
+        return self.BOSS_WARNING_DURATION + self.BOSS_POST_WARNING_DELAY
 
-# Validação: garantir que as chances de power-up somam 1.0
-_powerup_chances_sum = sum(Config.POWERUP_RARITY_CHANCES.values())
-assert abs(_powerup_chances_sum - 1.0) < 0.001, \
-    f"POWERUP_RARITY_CHANCES must sum to 1.0, got {_powerup_chances_sum:.4f}"
+    # ========================================
+    # VALIDATION METHODS
+    # ========================================
+    def validate(self) -> list[str]:
+        """
+        Valida as configurações e retorna lista de erros encontrados.
+        
+        Returns:
+            Lista de mensagens de erro (vazia se tudo OK)
+        """
+        errors: list[str] = []
+        
+        # Validar ranges (min <= max)
+        ranges_to_check: list[tuple[str, tuple[float, float]]] = [
+            ("FRAGMENT_COUNT_RANGE", self.FRAGMENT_COUNT_RANGE),
+            ("BOSS_CALM_ATTACK_INTERVAL", self.BOSS_CALM_ATTACK_INTERVAL),
+            ("BOSS_FRENZY_ATTACK_INTERVAL", self.BOSS_FRENZY_ATTACK_INTERVAL),
+            ("SPIKE_BOSS_ATTACK_INTERVAL", self.SPIKE_BOSS_ATTACK_INTERVAL),
+            ("SPIKE_BOSS_FRENZY_ATTACK_INTERVAL", self.SPIKE_BOSS_FRENZY_ATTACK_INTERVAL),
+            ("SPIKE_BOSS_SPIKE_COUNT", self.SPIKE_BOSS_SPIKE_COUNT),
+            ("SPIKE_BOSS_FRENZY_SPIKE_COUNT", self.SPIKE_BOSS_FRENZY_SPIKE_COUNT),
+            ("POWERUP_SPAWN_INTERVAL", self.POWERUP_SPAWN_INTERVAL),
+            ("FORMATION_SPAWN_INTERVAL", self.FORMATION_SPAWN_INTERVAL),
+        ]
+        
+        for name, (min_val, max_val) in ranges_to_check:
+            if min_val > max_val:
+                errors.append(f"{name}: min ({min_val}) > max ({max_val})")
+        
+        # Validar power-up chances (devem somar 1.0)
+        chances_sum = sum(self.POWERUP_RARITY_CHANCES.values())
+        if abs(chances_sum - 1.0) >= 0.001:
+            errors.append(
+                f"POWERUP_RARITY_CHANCES deve somar 1.0, mas soma {chances_sum:.4f}"
+            )
+        
+        # Validar thresholds (0.0 a 1.0)
+        thresholds = [
+            ("BOSS_FRENZY_THRESHOLD", self.BOSS_FRENZY_THRESHOLD),
+            ("SPIKE_BOSS_FRENZY_THRESHOLD", self.SPIKE_BOSS_FRENZY_THRESHOLD),
+        ]
+        
+        for name, value in thresholds:
+            if not (0.0 <= value <= 1.0):
+                errors.append(f"{name} deve estar entre 0.0 e 1.0, mas é {value}")
+        
+        # Validar valores positivos
+        positive_values = [
+            "FPS", "INITIAL_LIVES", "SCREEN_WIDTH", "SCREEN_HEIGHT",
+            "BOSS_HEALTH", "SPIKE_BOSS_HEALTH"
+        ]
+        
+        for name in positive_values:
+            value = getattr(self, name)
+            if value <= 0:
+                errors.append(f"{name} deve ser positivo, mas é {value}")
+        
+        return errors
+
+
+# ============================================================================
+# INSTÂNCIA GLOBAL E VALIDAÇÃO
+# ============================================================================
+
+# Criar instância global da config
+config = Config()
+
+# Validar na importação (desenvolvimento)
+_validation_errors = config.validate()
+if _validation_errors:
+    error_msg = "Erros encontrados na configuração:\n" + "\n".join(
+        f"  - {err}" for err in _validation_errors
+    )
+    raise ValueError(error_msg)

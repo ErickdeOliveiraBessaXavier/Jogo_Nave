@@ -9,111 +9,36 @@ from ..entities.eye_enemy import EyeEnemy
 from ..entities.spike_boss import SpikeBoss
 
 
-class ProceduralLevelGenerator:
-    """
-    Gerador de níveis procedurais com progressão de dificuldade.
-    
-    Usa fórmulas matemáticas para escalar dificuldade progressivamente:
-    - Spawn rate aumenta (tempo diminui)
-    - Mais tipos de inimigos aparecem
-    - Quantidade de inimigos para limpar aumenta
-    - Features (minas, formações) desbloqueadas progressivamente
-    """
-    
-    def __init__(self, seed: int | None = None):
-        """
-        Args:
-            seed: Semente para geração reproduzível (opcional)
-        """
-        self.seed = seed or random.randint(0, 999999)
-    
-    def generate_level(self, level_number: int) -> "LevelConfig":
-        """
-        Gera configuração procedural para um nível.
-        
-        Args:
-            level_number: Número do nível a gerar
-            
-        Returns:
-            LevelConfig gerado proceduralmente
-        """
-        # Usar seed + level_number para reproduzibilidade
-        random.seed(self.seed + level_number)
-        
-        # Calcular multiplicador de dificuldade (1.0 a ~3.0)
-        # Cresce logaritmicamente para não ficar impossível muito rápido
-        difficulty = 1.0 + (level_number * 0.15)
-        difficulty = min(difficulty, 3.0)  # Cap em 3x
-        
-        # Gerar configuração baseada na dificuldade
-        config = self._generate_config(level_number, difficulty)
-        
-        # Resetar seed para não afetar outros randoms
-        random.seed()
-        
-        return config
-    
-    def _generate_config(self, level_number: int, difficulty: float) -> "LevelConfig":
-        """Gera configuração baseada em dificuldade."""
-        
-        # 1. Calcular spawn times (diminui com dificuldade)
-        enemy_spawn_config: dict[Type[Meteor | Alien | ExplosiveMine | EyeEnemy], float] = {}
-        
-        # Meteoros sempre presentes
-        base_meteor_time = 1.2 / difficulty
-        enemy_spawn_config[Meteor] = base_meteor_time
-        
-        # Nível 2: Apenas Aliens (sem meteoros para focar em um tipo)
-        if level_number == 2:
-            enemy_spawn_config.clear()  # Limpar meteoros
-            base_alien_time = 2.5 / difficulty
-            enemy_spawn_config[Alien] = base_alien_time
-        # Nível 3+: Aliens começam a aparecer junto com meteoros
-        elif level_number >= 3:
-            base_alien_time = 2.5 / difficulty
-            enemy_spawn_config[Alien] = base_alien_time
-        
-        # Eyes aparecem a partir do nível 5
-        if level_number >= 5:
-            base_eye_time = 6.0 / difficulty
-            enemy_spawn_config[EyeEnemy] = base_eye_time
-        
-        # 2. Calcular quantos inimigos para limpar
-        # Fórmula: 150 + (nível * 30) com alguma variação
-        base_enemies = 25 + (level_number * 5)
-        variation = random.randint(-20, 20)
-        enemies_to_clear = max(10, base_enemies + variation)
-        
-        # 3. Features progressivas
-        mines_enabled = level_number >= 2 and random.random() < 0.6  # 60% chance após nível 2
-        formations_enabled = level_number >= 4  # Formações só após nível 4
-        
-        # 4. Tipos de formação disponíveis (mais tipos em níveis altos)
-        formation_types: list[str] | None = None
-        if formations_enabled:
-            all_formations = ["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"]
-            
-            if level_number >= 6:
-                # Níveis altos: todas as formações
-                formation_types = all_formations
-            else:
-                # Níveis médios: subset aleatório (3-4 formações)
-                num_formations = random.randint(3, 4)
-                formation_types = random.sample(all_formations, num_formations)
-        
-        return LevelConfig(
-            level_number=level_number,
-            enemy_spawn_config=enemy_spawn_config,
-            enemies_to_clear=enemies_to_clear,
-            boss_type=None,  # Procedural não gera bosses (são fixos)
-            mines_enabled=mines_enabled,
-            formations_enabled=formations_enabled,
-            formation_types=formation_types,
-        )
+# ============================================================================
+# CONSTANTES DE CONFIGURAÇÃO
+# ============================================================================
 
+class DifficultyConfig:
+    """Constantes para balanceamento de dificuldade."""
+    BASE_METEOR_SPAWN_TIME = 1.2
+    BASE_ALIEN_SPAWN_TIME = 2.5
+    BASE_EYE_SPAWN_TIME = 6.0
+    
+    MIN_ENEMIES_TO_CLEAR = 10
+    BASE_ENEMIES = 25
+    ENEMIES_PER_LEVEL = 5
+    ENEMY_VARIATION = 20
+    
+    DIFFICULTY_SCALING = 0.15
+    MAX_DIFFICULTY_MULTIPLIER = 3.0
+    
+    MINES_UNLOCK_LEVEL = 2
+    MINES_PROBABILITY = 0.6
+    FORMATIONS_UNLOCK_LEVEL = 4
+
+
+# ============================================================================
+# DATACLASS - DEFINIR ANTES DE USAR
+# ============================================================================
 
 @dataclass
 class LevelConfig:
+    """Configuração de um nível do jogo."""
     level_number: int
     enemy_spawn_config: dict[
         Type[Meteor | Alien | ExplosiveMine | EyeEnemy], float
@@ -166,15 +91,148 @@ class LevelConfig:
         return invalid
 
 
-class LevelManager:
-    def __init__(self, initial_levels: dict[int, LevelConfig]):
-        self._levels = initial_levels  # Store initial fixed levels if needed, though get_level_config handles it
+# ============================================================================
+# GERADOR PROCEDURAL
+# ============================================================================
+
+class ProceduralLevelGenerator:
+    """
+    Gerador de níveis procedurais com progressão de dificuldade.
+    
+    Usa fórmulas matemáticas para escalar dificuldade progressivamente:
+    - Spawn rate aumenta (tempo diminui)
+    - Mais tipos de inimigos aparecem
+    - Quantidade de inimigos para limpar aumenta
+    - Features (minas, formações) desbloqueadas progressivamente
+    """
+    
+    def __init__(self, seed: int | None = None):
+        """
+        Args:
+            seed: Semente para geração reproduzível (opcional)
+        """
+        self.seed = seed or random.randint(0, 999999)
+    
+    def generate_level(self, level_number: int) -> LevelConfig:
+        """
+        Gera configuração procedural para um nível.
         
-    def get_level(self, level_number: int) -> LevelConfig:
-        return get_level_config(level_number)
+        Args:
+            level_number: Número do nível a gerar
+            
+        Returns:
+            LevelConfig gerado proceduralmente
+        """
+        # Usar seed + level_number para reproduzibilidade
+        random.seed(self.seed + level_number)
+        
+        # Calcular multiplicador de dificuldade (1.0 a ~3.0)
+        # Cresce logaritmicamente para não ficar impossível muito rápido
+        difficulty = 1.0 + (level_number * DifficultyConfig.DIFFICULTY_SCALING)
+        difficulty = min(difficulty, DifficultyConfig.MAX_DIFFICULTY_MULTIPLIER)
+        
+        # Gerar configuração baseada na dificuldade
+        config = self._generate_config(level_number, difficulty)
+        
+        # Resetar seed para não afetar outros randoms
+        random.seed()
+        
+        return config
+    
+    def _generate_config(self, level_number: int, difficulty: float) -> LevelConfig:
+        """Gera configuração baseada em dificuldade."""
+        
+        # 1. Calcular spawn times (diminui com dificuldade)
+        enemy_spawn_config: dict[Type[Meteor | Alien | ExplosiveMine | EyeEnemy], float] = {}
+        
+        # Meteoros sempre presentes
+        base_meteor_time = DifficultyConfig.BASE_METEOR_SPAWN_TIME / difficulty
+        enemy_spawn_config[Meteor] = base_meteor_time
+        
+        # Nível 2: Foco em Aliens, mas mantém meteoros com spawn baixo
+        if level_number == 2:
+            base_alien_time = DifficultyConfig.BASE_ALIEN_SPAWN_TIME / difficulty
+            enemy_spawn_config[Alien] = base_alien_time
+            # Meteoros mais raros para focar em Aliens
+            enemy_spawn_config[Meteor] = base_meteor_time * 3.0
+            
+        # Nível 3+: Aliens começam a aparecer junto com meteoros
+        elif level_number >= 3:
+            base_alien_time = DifficultyConfig.BASE_ALIEN_SPAWN_TIME / difficulty
+            enemy_spawn_config[Alien] = base_alien_time
+        
+        # Eyes aparecem a partir do nível 5
+        if level_number >= 5:
+            base_eye_time = DifficultyConfig.BASE_EYE_SPAWN_TIME / difficulty
+            enemy_spawn_config[EyeEnemy] = base_eye_time
+        
+        # 2. Calcular quantos inimigos para limpar
+        # Fórmula: BASE + (nível * MULTIPLIER) com alguma variação
+        base_enemies = DifficultyConfig.BASE_ENEMIES + (
+            level_number * DifficultyConfig.ENEMIES_PER_LEVEL
+        )
+        variation = random.randint(
+            -DifficultyConfig.ENEMY_VARIATION, 
+            DifficultyConfig.ENEMY_VARIATION
+        )
+        enemies_to_clear = max(
+            DifficultyConfig.MIN_ENEMIES_TO_CLEAR, 
+            base_enemies + variation
+        )
+        
+        # 3. Features progressivas
+        mines_enabled = (
+            level_number >= DifficultyConfig.MINES_UNLOCK_LEVEL 
+            and random.random() < DifficultyConfig.MINES_PROBABILITY
+        )
+        formations_enabled = level_number >= DifficultyConfig.FORMATIONS_UNLOCK_LEVEL
+        
+        # 4. Tipos de formação disponíveis (mais tipos em níveis altos)
+        formation_types: list[str] | None = None
+        if formations_enabled:
+            all_formations = [
+                "spiral_circle", 
+                "spiral_v", 
+                "spiral_square", 
+                "full_cycle", 
+                "spiral_line"
+            ]
+            
+            if level_number >= 6:
+                # Níveis altos: todas as formações
+                formation_types = all_formations
+            else:
+                # Níveis médios: subset aleatório (3-4 formações)
+                num_formations = random.randint(3, 4)
+                formation_types = random.sample(all_formations, num_formations)
+        
+        config = LevelConfig(
+            level_number=level_number,
+            enemy_spawn_config=enemy_spawn_config,
+            enemies_to_clear=enemies_to_clear,
+            boss_type=None,  # Procedural não gera bosses (são fixos)
+            mines_enabled=mines_enabled,
+            formations_enabled=formations_enabled,
+            formation_types=formation_types,
+        )
+        
+        # Validar formações se habilitadas (opcional, comentado por enquanto)
+        # if config.formations_enabled and config.formation_types:
+        #     try:
+        #         from ..systems.formation_spawner import FORMATION_CONFIGS
+        #         invalid = config.validate_formation_types(set(FORMATION_CONFIGS.keys()))
+        #         if invalid:
+        #             print(f"⚠️ Aviso: Formações inválidas no nível {level_number}: {invalid}")
+        #     except ImportError:
+        #         pass  # FORMATION_CONFIGS não disponível
+        
+        return config
 
 
-# Níveis fixos (handcrafted) - Tutoriais e Bosses importantes
+# ============================================================================
+# NÍVEIS FIXOS (HANDCRAFTED)
+# ============================================================================
+
 FIXED_LEVELS: dict[int, LevelConfig] = {
     # Nível 1: Tutorial - Apenas meteoros, ritmo controlado
     1: LevelConfig(
@@ -213,6 +271,10 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
 }
 
 
+# ============================================================================
+# FUNÇÕES PÚBLICAS
+# ============================================================================
+
 # Gerador procedural (singleton)
 _procedural_generator = ProceduralLevelGenerator()
 
@@ -237,3 +299,18 @@ def get_level_config(level_number: int) -> LevelConfig:
     
     # Senão, gerar proceduralmente
     return _procedural_generator.generate_level(level_number)
+
+
+class LevelManager:
+    """Gerenciador de níveis do jogo."""
+    
+    def __init__(self, initial_levels: dict[int, LevelConfig] | None = None):
+        """
+        Args:
+            initial_levels: Níveis iniciais (opcional, não usado atualmente)
+        """
+        self._levels = initial_levels or {}
+        
+    def get_level(self, level_number: int) -> LevelConfig:
+        """Retorna a configuração de um nível."""
+        return get_level_config(level_number)
