@@ -1,6 +1,7 @@
 import pygame
 from .core.state import StateManager
 from .core.config import Config, set_screen_resolution
+from .core.assets import load_custom_cursor
 from .scenes.main_menu import MainMenuScene
 from .core.levels import LevelManager, FIXED_LEVELS
 from .core.input import Input
@@ -9,6 +10,9 @@ from .core.input import Input
 class GameApp:
     def __init__(self):
         pygame.init()
+        
+        # Carregar cursor customizado
+        load_custom_cursor()
         
         # Detectar resolução do monitor se estiver em fullscreen
         if Config.FULLSCREEN:

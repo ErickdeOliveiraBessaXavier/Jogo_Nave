@@ -118,7 +118,8 @@ class PausedScene(Scene):
         # Draw title
         pause_font = get_font(60)
         title = pause_font.render("PAUSADO", True, WHITE)
-        title_rect = title.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2 - 120))
+        title_rect = title.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 4))
+        
         surface.blit(title, title_rect)
 
         # Draw Continue Button

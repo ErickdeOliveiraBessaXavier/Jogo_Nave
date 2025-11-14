@@ -17,7 +17,7 @@ class MainMenuScene(Scene):
     def __init__(self, app: "GameApp"):
         super().__init__(app)
         self.r = Renderer()
-        self.font = get_font(48)
+        self.font = get_font(60)
         self.button_font = get_font(22)
 
         self.title_text = self.font.render("Space Shooter", True, WHITE)
