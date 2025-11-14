@@ -117,43 +117,13 @@ class Renderer:
             surface.blit(s, rect)
 
     def preparation(self, surface: pygame.Surface, remaining: float):
-        # tÃ­tulo e instruÃ§Ãµes resumidas
-        right = [
-            "CONTROLES:",
-            "A/D ou Setas - Mover",
-            "ESPACO - Atirar",
-            "P - Pausar | ESC - Sair",
-            "",
-            "METEOROS:",
-            "Pequenos: rapidos (menos pontos)",
-            "Grandes: lentos (mais pontos)",
-            "",
-            "POWER-UPS:",
-            "[+] Vida extra",
-            "[S] Escudo temporario",
-            "[2X] Tiro duplo",
-            "[V] Velocidade + Ataque rapido",
-            "[*] Pontos bonus",
-        ]
-        x, y = Config.SCREEN_WIDTH - 400, 20
-        for i, line in enumerate(right):
-            color = colors.WHITE
-            if line in ("CONTROLES:", "METEOROS:", "POWER-UPS:"):
-                if line == "CONTROLES:":
-                    color = colors.GREEN
-                elif line == "METEOROS:":
-                    color = colors.YELLOW
-                elif line == "POWER-UPS:":
-                    color = colors.CYAN
-            if not line:
-                continue
-            txt = self.font_small.render(line, True, color)
-            surface.blit(txt, (x, y + i * 18))
-
+        # Usar fonte do warning (60pt)
+        warning_font = get_font(Config.WARNING_FONT_SIZE)
+        
         # contador
-        ct = self.font_large.render(f"{int(remaining) + 1}", True, colors.RED)
+        ct = warning_font.render(f"{int(remaining) + 1}", True, colors.RED)
         crect = ct.get_rect(
-            center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT - 100)
+            center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2)
         )
         surface.blit(ct, crect)
 

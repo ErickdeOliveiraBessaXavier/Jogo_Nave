@@ -11,7 +11,7 @@ from ..systems.spawner import EnemySpawner, PowerUpSpawner
 from ..systems.collisions import Collisions
 from ..systems.entity_manager import EntityManager
 from ..entities.floating_score import FloatingScore
-from ..core.levels import LEVELS
+from ..core.levels import get_level_config
 from ..core.assets import get_font
 from ..core import colors
 from ..core.sound import sound_manager
@@ -33,7 +33,7 @@ class PlayingScene(Scene):
         self.entity_manager = EntityManager()
 
         self.current_level_index = 0
-        self.level_config = LEVELS[self.current_level_index]
+        self.level_config = get_level_config(self.current_level_index + 1)  # +1 pois níveis começam em 1
         self.enemies_destroyed_in_level = 0
         self.boss_fight_active = False
         self.pre_boss_transition = False
@@ -702,15 +702,11 @@ class PlayingScene(Scene):
     def _start_next_level(self):
         self.level_transition_active = False
         self.current_level_index += 1
-        if self.current_level_index < len(LEVELS):
-            self.level_config = LEVELS[self.current_level_index]
-            self.enemy_spawner.set_level(self.level_config)
-            self.enemies_destroyed_in_level = 0
-        else:
-            # Opcional: o que fazer quando todas as fases terminam?
-            # Por enquanto, apenas reinicia a última fase.
-            self.enemy_spawner.set_level(self.level_config)
-            self.enemies_destroyed_in_level = 0
+        
+        # Gerar próximo nível (sistema híbrido: fixo ou procedural)
+        self.level_config = get_level_config(self.current_level_index + 1)  # +1 pois níveis começam em 1
+        self.enemy_spawner.set_level(self.level_config)
+        self.enemies_destroyed_in_level = 0
 
         # Usar método que preserva balas do jogador durante transições
         self.entity_manager.clear_for_level_transition()
