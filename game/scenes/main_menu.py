@@ -31,7 +31,7 @@ class MainMenuScene(Scene):
         self.border_color = WHITE
 
         # Start Button
-        self.start_button_rect = pygame.Rect(0, 0, 250, 60)
+        self.start_button_rect = pygame.Rect(0, 0, 280, 60)
         self.start_button_rect.center = (
             Config.SCREEN_WIDTH // 2,
             Config.SCREEN_HEIGHT // 2,
@@ -42,7 +42,7 @@ class MainMenuScene(Scene):
         )
 
         # Settings Button
-        self.settings_button_rect = pygame.Rect(0, 0, 250, 60)
+        self.settings_button_rect = pygame.Rect(0, 0, 280, 60)
         self.settings_button_rect.center = (
             Config.SCREEN_WIDTH // 2,
             Config.SCREEN_HEIGHT // 2 + 80,
@@ -53,7 +53,7 @@ class MainMenuScene(Scene):
         )
 
         # Exit Button
-        self.exit_button_rect = pygame.Rect(0, 0, 250, 60)
+        self.exit_button_rect = pygame.Rect(0, 0, 280, 60)
         self.exit_button_rect.center = (
             Config.SCREEN_WIDTH // 2,
             Config.SCREEN_HEIGHT // 2 + 160,

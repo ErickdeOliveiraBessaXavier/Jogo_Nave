@@ -54,8 +54,20 @@ class GameApp:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+                elif event.type == pygame.KEYDOWN:
+                    # F12: Toggle fullscreen/windowed
+                    if event.key == pygame.K_F12:
+                        self._toggle_fullscreen()
+                    # ESC: Exit game
+                    elif event.key == pygame.K_ESCAPE:
+                        self.running = False
+                    else:
+                        # Pass other key events to current scene
+                        current_scene = self.states.current()
+                        if current_scene:
+                            current_scene.handle_event(event)
                 else:
-                    # Pass events to current scene
+                    # Pass other events to current scene
                     current_scene = self.states.current()
                     if current_scene:
                         current_scene.handle_event(event)
@@ -73,6 +85,30 @@ class GameApp:
             pygame.display.flip()
 
         pygame.quit()
+
+    def _toggle_fullscreen(self):
+        """Alterna entre modo fullscreen e janela."""
+        if self.screen.get_flags() & pygame.FULLSCREEN:
+            # Mudar para modo janela
+            set_screen_resolution(self.screen_width, self.screen_height)
+            self.screen = pygame.display.set_mode(
+                (self.screen_width, self.screen_height),
+                0  # Sem flag FULLSCREEN
+            )
+        else:
+            # Mudar para modo fullscreen
+            info = pygame.display.Info()
+            new_width = info.current_w
+            new_height = info.current_h
+            set_screen_resolution(new_width, new_height)
+            self.screen = pygame.display.set_mode(
+                (new_width, new_height),
+                pygame.FULLSCREEN
+            )
+            self.screen_width = new_width
+            self.screen_height = new_height
+        
+        pygame.display.set_caption("Space Shooter")
 
 
 def main():

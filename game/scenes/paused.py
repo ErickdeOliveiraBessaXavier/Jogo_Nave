@@ -23,7 +23,7 @@ class PausedScene(Scene):
         self.border_color = WHITE
 
         # Continue Button
-        self.continue_button_rect = pygame.Rect(0, 0, 250, 60)
+        self.continue_button_rect = pygame.Rect(0, 0, 280, 60)
         self.continue_button_rect.center = (
             Config.SCREEN_WIDTH // 2,
             Config.SCREEN_HEIGHT // 2 - 40,
@@ -34,7 +34,7 @@ class PausedScene(Scene):
         )
 
         # Settings Button
-        self.settings_button_rect = pygame.Rect(0, 0, 250, 60)
+        self.settings_button_rect = pygame.Rect(0, 0, 280, 60)
         self.settings_button_rect.center = (
             Config.SCREEN_WIDTH // 2,
             Config.SCREEN_HEIGHT // 2 + 40,
@@ -45,12 +45,12 @@ class PausedScene(Scene):
         )
 
         # Menu Button
-        self.menu_button_rect = pygame.Rect(0, 0, 250, 60)
+        self.menu_button_rect = pygame.Rect(0, 0, 280, 60)
         self.menu_button_rect.center = (
             Config.SCREEN_WIDTH // 2,
             Config.SCREEN_HEIGHT // 2 + 120,
         )
-        self.menu_button_text = self.button_font.render("Menu Principal", True, BLACK)
+        self.menu_button_text = self.button_font.render("Menu", True, BLACK)
         self.menu_button_text_rect = self.menu_button_text.get_rect(
             center=self.menu_button_rect.center
         )
@@ -118,7 +118,7 @@ class PausedScene(Scene):
         # Draw title
         pause_font = get_font(60)
         title = pause_font.render("PAUSADO", True, WHITE)
-        title_rect = title.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2 - 80))
+        title_rect = title.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2 - 120))
         surface.blit(title, title_rect)
 
         # Draw Continue Button
