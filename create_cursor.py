@@ -7,8 +7,8 @@ import os
 # Inicializar pygame
 pygame.init()
 
-# Criar uma superfície transparente para o cursor (16x16 pixels)
-cursor_size = 16
+# Criar uma superfície transparente para o cursor (36x36 pixels)
+cursor_size = 36
 cursor_surface = pygame.Surface((cursor_size, cursor_size), pygame.SRCALPHA)
 
 # Cores
@@ -16,9 +16,11 @@ green = (0, 255, 0, 255)      # Verde brilhante
 dark_green = (0, 180, 0, 255) # Verde escuro
 white = (255, 255, 255, 255)  # Branco
 
-# Desenhar um cursor em forma de seta em pixel art
+# Desenhar um cursor em forma de seta em pixel art (escalado 2.25x)
 # Pixel por pixel para criar um desenho em pixel art
-pixels = [
+scale = 2.25
+pixels = []
+base_pixels = [
     (0, 0), (1, 0),
     (0, 1), (1, 1), (2, 1),
     (0, 2), (1, 2), (2, 2), (3, 2),
@@ -26,6 +28,17 @@ pixels = [
     (0, 4), (1, 4),
     (1, 5), (2, 5),
 ]
+
+# Escalar os pixels
+for x, y in base_pixels:
+    for i in range(int(scale)):
+        for j in range(int(scale)):
+            px = int(x * scale) + i
+            py = int(y * scale) + j
+            if px < cursor_size and py < cursor_size:
+                pixels.append((px, py))
+
+pixels = list(set(pixels))
 
 # Desenhar a seta com verde
 for x, y in pixels:
