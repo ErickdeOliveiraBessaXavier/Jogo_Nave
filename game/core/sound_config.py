@@ -65,9 +65,12 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
     "base": "game/assets/sounds",
     # Música
     "music": {
-        "background": "music/background.mp3",
+        "background": [
+            "music/background.mp3",
+            "music/background_02.mp3",
+        ],
         "boss": "music/boss.mp3",
-        "spike_boss": "music/background_02.mp3",
+        "spike_boss": "music/spike_boss_theme.mp3",
     },
     # Efeitos sonoros
     "sfx": {

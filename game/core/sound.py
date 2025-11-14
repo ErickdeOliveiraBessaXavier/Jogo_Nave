@@ -4,9 +4,11 @@ import os
 import sys
 import threading
 import time
-from typing import Dict, List, cast, Any
+from typing import Dict, List, cast, Any, Union
 
 from .sound_config import VOLUME_CONFIG, CHANNEL_CONFIG, BEHAVIOR_CONFIG, SOUND_PATHS
+
+MusicPaths = Dict[str, Union[str, List[str]]]
 
 
 def get_resource_path(relative_path: str) -> str:
@@ -316,28 +318,42 @@ class SoundManager:
     # === MÉTODOS DE MÚSICA ===
 
     def play_background_music(self):
-        """Inicia a música de fundo com transição suave."""
-        music_paths = cast(Dict[str, str], SOUND_PATHS["music"])
-        music_path = get_resource_path(
-            os.path.join(str(SOUND_PATHS["base"]), music_paths["background"])
-        )
-        if os.path.exists(music_path) and self.current_music != "background":
-            self._transition_to_music(music_path, "background")
+        """Inicia a música de fundo com transição suave, escolhendo aleatoriamente da lista."""
+        music_paths_config = cast(MusicPaths, SOUND_PATHS["music"])
+        background_music_list = music_paths_config["background"]
+
+        if isinstance(background_music_list, list) and background_music_list:
+            # Escolher uma música aleatória da lista
+            chosen_music: str = random.choice(background_music_list)
+            music_path = get_resource_path(
+                os.path.join(str(SOUND_PATHS["base"]), chosen_music)
+            )
+            
+            # Usar o caminho do arquivo como identificador para evitar tocar a mesma música seguida
+            if os.path.exists(music_path) and self.current_music != chosen_music:
+                self._transition_to_music(music_path, chosen_music)
+        elif isinstance(background_music_list, str):
+            # Fallback para o caso de ser uma string única
+            music_path = get_resource_path(
+                os.path.join(str(SOUND_PATHS["base"]), background_music_list)
+            )
+            if os.path.exists(music_path) and self.current_music != "background":
+                self._transition_to_music(music_path, "background")
 
     def play_boss_music(self):
         """Inicia a música do boss com transição suave."""
-        music_paths = cast(Dict[str, str], SOUND_PATHS["music"])
+        music_paths = cast(MusicPaths, SOUND_PATHS["music"])
         music_path = get_resource_path(
-            os.path.join(str(SOUND_PATHS["base"]), music_paths["boss"])
+            os.path.join(str(SOUND_PATHS["base"]), str(music_paths["boss"]))
         )
         if os.path.exists(music_path) and self.current_music != "boss":
             self._transition_to_music(music_path, "boss")
 
     def play_spike_boss_music(self):
         """Inicia a música do spike boss com transição suave."""
-        music_paths = cast(Dict[str, str], SOUND_PATHS["music"])
+        music_paths = cast(MusicPaths, SOUND_PATHS["music"])
         music_path = get_resource_path(
-            os.path.join(str(SOUND_PATHS["base"]), music_paths["spike_boss"])
+            os.path.join(str(SOUND_PATHS["base"]), str(music_paths["spike_boss"]))
         )
         if os.path.exists(music_path) and self.current_music != "spike_boss":
             self._transition_to_music(music_path, "spike_boss")
