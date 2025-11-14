@@ -1,6 +1,7 @@
 import random
 from typing import TYPE_CHECKING, Dict, Type, TypedDict, Tuple, List
 
+
 # Moved Timer class definition here
 class Timer:
     def __init__(self, duration: float = 0.0):
@@ -28,6 +29,7 @@ class Timer:
             return 0.0
         return max(0.0, min(1.0, (self.duration - self.time) / self.duration))
 
+
 from ..core.config import Config, PowerUpType
 from ..entities.powerup import PowerUp
 from ..core.levels import LevelManager
@@ -42,6 +44,7 @@ if TYPE_CHECKING:
 
 class FormationConfig(TypedDict, total=False):
     """Configuração de um tipo de formação."""
+
     patterns: List[FormationPattern]
     count_range: Tuple[int, int]
     count_options: List[int]
@@ -66,7 +69,11 @@ FORMATION_CONFIGS: Dict[str, FormationConfig] = {
         "count_range": (5, 8),
     },
     "full_cycle": {
-        "patterns": [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE, FormationPattern.V_SHAPE],
+        "patterns": [
+            FormationPattern.SPIRAL_ENTRY,
+            FormationPattern.CIRCLE,
+            FormationPattern.V_SHAPE,
+        ],
         "count_options": [5, 7],  # V sempre com 5 ou 7 naves
     },
 }
@@ -75,20 +82,28 @@ FORMATION_CONFIGS: Dict[str, FormationConfig] = {
 class EnemySpawner:
     def __init__(self, level_manager: LevelManager, is_initial_level: bool = False):
         self.level_manager = level_manager
-        self.current_level_number = 1 # EnemySpawner starts at level 1
+        self.current_level_number = 1  # EnemySpawner starts at level 1
         self.config = self.level_manager.get_level(self.current_level_number)
         self.stopped = False
 
         # Validar tipos de formação configurados
         if self.config.formations_enabled and self.config.formation_types:
-            invalid_types = self.config.validate_formation_types(set(FORMATION_CONFIGS.keys()))
+            invalid_types = self.config.validate_formation_types(
+                set(FORMATION_CONFIGS.keys())
+            )
             if invalid_types:
-                print(f"WARNING: Level {self.config.level_number} has invalid formation types: {invalid_types}")
+                print(
+                    f"WARNING: Level {self.config.level_number} has invalid formation types: {invalid_types}"
+                )
                 print(f"Available types: {list(FORMATION_CONFIGS.keys())}")
                 # Filtrar tipos inválidos
-                self.config.formation_types = [t for t in self.config.formation_types if t in FORMATION_CONFIGS]
+                self.config.formation_types = [
+                    t for t in self.config.formation_types if t in FORMATION_CONFIGS
+                ]
                 if not self.config.formation_types:
-                    print(f"WARNING: No valid formation types remain. Disabling formations for level {self.config.level_number}")
+                    print(
+                        f"WARNING: No valid formation types remain. Disabling formations for level {self.config.level_number}"
+                    )
                     self.config.formations_enabled = False
                 else:
                     print(f"Using valid types: {self.config.formation_types}")
@@ -118,7 +133,7 @@ class EnemySpawner:
         # Timer para minas explosivas
         self.mine_spawn_timer = Timer(10.0)
         self.mine_spawn_timer.start()
-        
+
         # Timer para formações
         min_t, max_t = Config.FORMATION_SPAWN_INTERVAL
         self.formation_spawn_timer = Timer(random.uniform(min_t, max_t))
@@ -154,6 +169,7 @@ class EnemySpawner:
                     entity_manager.enemies.append(new_enemy)
                 else:
                     from ..entities.meteor import Meteor
+
                     if enemy_type == Meteor:
                         # Usar o pool para meteoros
                         entity_manager.spawn_meteor()
@@ -176,22 +192,30 @@ class EnemySpawner:
                             ExplosiveMine(y=-random.uniform(10, 100))
                         )  # Adiciona um delay aleatório no eixo y
                     self.mine_spawn_timer.start()
-        
+
         # Spawner de formações
         if self.config.formations_enabled:
             self.formation_spawn_timer.update(dt)
-            if self.formation_spawn_timer.done() and random.random() < self.spawn_intensity:
+            if (
+                self.formation_spawn_timer.done()
+                and random.random() < self.spawn_intensity
+            ):
                 # Criar formação
                 formation_type = self.config.get_random_formation_type()
                 if formation_type:
                     if formation_type not in FORMATION_CONFIGS:
                         # Warning: tipo de formação não existe
-                        print(f"WARNING: Formation type '{formation_type}' not found in FORMATION_CONFIGS. Skipping.")
+                        print(
+                            f"WARNING: Formation type '{formation_type}' not found in FORMATION_CONFIGS. Skipping."
+                        )
                     else:
                         # Buscar configuração do tipo de formação
                         config = FORMATION_CONFIGS[formation_type]
-                        patterns = config.get("patterns", [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE])
-                        
+                        patterns = config.get(
+                            "patterns",
+                            [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE],
+                        )
+
                         # Determinar contagem de naves
                         if "count_options" in config:
                             count = random.choice(config["count_options"])
@@ -200,7 +224,7 @@ class EnemySpawner:
                             count = random.randint(count_range[0], count_range[1])
                         else:
                             count = 5  # Fallback
-                        
+
                         # Calcular margem segura baseada no tipo de formação
                         # Evitar spawn próximo às bordas para formações não saírem da tela
                         if formation_type == "spiral_circle":
@@ -211,40 +235,48 @@ class EnemySpawner:
                         elif formation_type == "spiral_square":
                             safe_margin = Config.FORMATION_SQUARE_SIZE / 2
                         elif formation_type == "spiral_line":
-                            safe_margin = ((count - 1) * Config.FORMATION_LINE_SPACING) / 2
+                            safe_margin = (
+                                (count - 1) * Config.FORMATION_LINE_SPACING
+                            ) / 2
                         elif formation_type == "full_cycle":
                             # Usar margem do círculo (maior padrão)
                             safe_margin = Config.FORMATION_CIRCLE_RADIUS
                         else:
                             safe_margin = 200  # Fallback
-                        
+
                         # Garantir que safe_margin não ultrapasse metade da largura da tela
                         safe_margin = min(safe_margin, Config.SCREEN_WIDTH / 2 - 100)
-                        
+
                         # Tentar encontrar uma posição que não esteja muito próxima de outras formações
                         min_distance = 300  # Distância mínima entre formações (pixels)
                         max_attempts = 10  # Número máximo de tentativas
                         entry_x = None
-                        
+
                         for _ in range(max_attempts):
-                            candidate_x = random.randint(int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin))
-                            
+                            candidate_x = random.randint(
+                                int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
+                            )
+
                             # Verificar distância de todas as formações existentes
                             too_close = False
                             for existing_formation in entity_manager.formations:
-                                distance = abs(candidate_x - existing_formation.center_x)
+                                distance = abs(
+                                    candidate_x - existing_formation.center_x
+                                )
                                 if distance < min_distance:
                                     too_close = True
                                     break
-                            
+
                             if not too_close:
                                 entry_x = candidate_x
                                 break
-                        
+
                         # Se não encontrou posição boa após todas as tentativas, usar a última
                         if entry_x is None:
-                            entry_x = random.randint(int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin))
-                        
+                            entry_x = random.randint(
+                                int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
+                            )
+
                         # Calcular entry_y baseado no padrão para evitar que fique cortado no topo
                         # Considerar o raio/tamanho do padrão para definir posição segura
                         if formation_type in ["spiral_circle", "full_cycle"]:
@@ -256,16 +288,19 @@ class EnemySpawner:
                         else:
                             # V, linha e outros: margem padrão (reduzida)
                             entry_y = 80
-                        
+
                         from ..entities.alien import Alien
-                        new_formation = Formation(Alien, count, entry_x, entry_y, patterns)
+
+                        new_formation = Formation(
+                            Alien, count, entry_x, entry_y, patterns
+                        )
                         entity_manager.formations.append(new_formation)
-                    
+
                     # Reiniciar timer
                     min_t, max_t = Config.FORMATION_SPAWN_INTERVAL
                     self.formation_spawn_timer = Timer(random.uniform(min_t, max_t))
                     self.formation_spawn_timer.start()
-        
+
         # Timer separado para meteoros teleguiados (a cada 3 segundos)
         # Só funciona se a fase tem meteoros na lista de tipos
         from ..entities.meteor import Meteor

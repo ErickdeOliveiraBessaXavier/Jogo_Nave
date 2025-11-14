@@ -82,16 +82,18 @@ class Config:
     PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER: float = 1.5
 
     # Rarity system - chances devem somar 1.0
-    POWERUP_RARITY_CHANCES: dict[PowerUpType, float] = field(default_factory=lambda: {
-        PowerUpType.SHIELD: 0.20,  # 20% - Comum
-        PowerUpType.DOUBLE_SHOT: 0.25,  # 25% - Comum
-        PowerUpType.SPEED: 0.15,  # 15% - Incomum
-        PowerUpType.PIERCING_SHOT: 0.15,  # 15% - Raro
-        PowerUpType.MINI_SHIPS: 0.10,  # 10% - Raro
-        PowerUpType.LIFE: 0.10,  # 10% - Raro
-        PowerUpType.SCORE: 0.04,  # 4% - Épico
-        PowerUpType.RAINBOW: 0.01,  # 1% - Lendário
-    })
+    POWERUP_RARITY_CHANCES: dict[PowerUpType, float] = field(
+        default_factory=lambda: {
+            PowerUpType.SHIELD: 0.20,  # 20% - Comum
+            PowerUpType.DOUBLE_SHOT: 0.25,  # 25% - Comum
+            PowerUpType.SPEED: 0.15,  # 15% - Incomum
+            PowerUpType.PIERCING_SHOT: 0.15,  # 15% - Raro
+            PowerUpType.MINI_SHIPS: 0.10,  # 10% - Raro
+            PowerUpType.LIFE: 0.10,  # 10% - Raro
+            PowerUpType.SCORE: 0.04,  # 4% - Épico
+            PowerUpType.RAINBOW: 0.01,  # 1% - Lendário
+        }
+    )
 
     # ========================================
     # SCORING SYSTEM
@@ -150,7 +152,7 @@ class Config:
     BOSS_FRENZY_THRESHOLD: float = 0.5
     BOSS_ENTRY_SPEED: float = 30.0
     BOSS_ENTRY_SHAKE_DURATION: float = 4.0
-    
+
     # Boss movement
     BOSS_NORMAL_SPEED: float = 6.0
     BOSS_FRENZY_SPEED: float = 8.0
@@ -203,7 +205,7 @@ class Config:
     SPIKE_BOSS_FRENZY_SPEED: float = 520.0
     SPIKE_BOSS_FRENZY_SHAKE_DURATION: float = 3.0
     SPIKE_BOSS_FRENZY_PAUSE_DURATION: float = 2.0
-    
+
     # Proximity attack
     SPIKE_BOSS_PROXIMITY_DISTANCE: float = 250.0
     SPIKE_BOSS_PROXIMITY_COOLDOWN: float = 3.0
@@ -249,21 +251,21 @@ class Config:
     SPIKE_POINTS: int = 50
     SPIKE_WALL_SPACING: int = 5
     SPIKE_MAX_ATTACKING: int = 10
-    
+
     # Sistema de ondas de ataque
     SPIKE_WAVE_MIN_SIZE: int = 3
     SPIKE_WAVE_MAX_SIZE: int = 6
     SPIKE_WAVE_INTERVAL: float = 4.0
     SPIKE_FRENZY_WAVE_INTERVAL: float = 2.5
-    
+
     # Comportamento de grudado na parede
     SPIKE_MIN_ATTACH_TIME: float = 1.0
     SPIKE_MAX_ATTACH_TIME: float = 2.5
-    
+
     # Tremor antes de soltar
     SPIKE_TREMBLE_DURATION: float = 1.0
     SPIKE_MAX_TREMBLE: int = 5
-    
+
     # Míssil teleguiado
     SPIKE_INITIAL_SPEED: float = 50.0
     SPIKE_SPEED_VARIATION: float = 30.0
@@ -273,12 +275,12 @@ class Config:
     SPIKE_AIM_IMPRECISION: float = 100.0
     SPIKE_ROTATION_SPEED_MIN: float = 8.0  # rad/s
     SPIKE_ROTATION_SPEED_MAX: float = 15.0  # rad/s
-    
+
     # Efeito de entrada
     SPIKE_SPAWN_ANIMATION_DURATION: float = 0.4
     SPIKE_SPAWN_DELAY_MIN: float = 0.0
     SPIKE_SPAWN_DELAY_MAX: float = 2.0
-    
+
     # Respawn e controle
     SPIKE_RESPAWN_TIME: float = 10.0
     SPIKE_LAUNCH_COOLDOWN: float = 0.2
@@ -287,24 +289,24 @@ class Config:
     # FORMATION SYSTEM
     # ========================================
     FORMATION_SPAWN_INTERVAL: Tuple[float, float] = (10.0, 15.0)
-    
+
     # Entry pattern settings - Curved path
     FORMATION_ENTRY_CURVE_AMPLITUDE: float = 150.0
     FORMATION_ENTRY_CURVE_FREQUENCY: float = 1.2
     FORMATION_ENTRY_TIME_OFFSET: float = 0.25
     FORMATION_ENTRY_SPEED: float = 60.0
     FORMATION_ENTRY_CURVE_OFFSET_X: float = 100.0
-    
+
     # Entry pattern speeds
     FORMATION_ENTRY_LOOP_SPEED: float = 50.0
     FORMATION_ENTRY_WAVE_SPEED: float = 65.0
     FORMATION_ENTRY_FAN_SPEED: float = 40.0
     FORMATION_ENTRY_DIAGONAL_SPEED: float = 55.0
-    
+
     # Pattern settings
     FORMATION_PATTERN_DURATION: float = 8.0
     FORMATION_TRANSITION_DURATION: float = 2.0
-    
+
     # Pattern dimensions
     FORMATION_CIRCLE_RADIUS: float = 100.0
     FORMATION_V_SPACING: float = 45.0
@@ -332,57 +334,64 @@ class Config:
     def validate(self) -> list[str]:
         """
         Valida as configurações e retorna lista de erros encontrados.
-        
+
         Returns:
             Lista de mensagens de erro (vazia se tudo OK)
         """
         errors: list[str] = []
-        
+
         # Validar ranges (min <= max)
         ranges_to_check: list[tuple[str, tuple[float, float]]] = [
             ("FRAGMENT_COUNT_RANGE", self.FRAGMENT_COUNT_RANGE),
             ("BOSS_CALM_ATTACK_INTERVAL", self.BOSS_CALM_ATTACK_INTERVAL),
             ("BOSS_FRENZY_ATTACK_INTERVAL", self.BOSS_FRENZY_ATTACK_INTERVAL),
             ("SPIKE_BOSS_ATTACK_INTERVAL", self.SPIKE_BOSS_ATTACK_INTERVAL),
-            ("SPIKE_BOSS_FRENZY_ATTACK_INTERVAL", self.SPIKE_BOSS_FRENZY_ATTACK_INTERVAL),
+            (
+                "SPIKE_BOSS_FRENZY_ATTACK_INTERVAL",
+                self.SPIKE_BOSS_FRENZY_ATTACK_INTERVAL,
+            ),
             ("SPIKE_BOSS_SPIKE_COUNT", self.SPIKE_BOSS_SPIKE_COUNT),
             ("SPIKE_BOSS_FRENZY_SPIKE_COUNT", self.SPIKE_BOSS_FRENZY_SPIKE_COUNT),
             ("POWERUP_SPAWN_INTERVAL", self.POWERUP_SPAWN_INTERVAL),
             ("FORMATION_SPAWN_INTERVAL", self.FORMATION_SPAWN_INTERVAL),
         ]
-        
+
         for name, (min_val, max_val) in ranges_to_check:
             if min_val > max_val:
                 errors.append(f"{name}: min ({min_val}) > max ({max_val})")
-        
+
         # Validar power-up chances (devem somar 1.0)
         chances_sum = sum(self.POWERUP_RARITY_CHANCES.values())
         if abs(chances_sum - 1.0) >= 0.001:
             errors.append(
                 f"POWERUP_RARITY_CHANCES deve somar 1.0, mas soma {chances_sum:.4f}"
             )
-        
+
         # Validar thresholds (0.0 a 1.0)
         thresholds = [
             ("BOSS_FRENZY_THRESHOLD", self.BOSS_FRENZY_THRESHOLD),
             ("SPIKE_BOSS_FRENZY_THRESHOLD", self.SPIKE_BOSS_FRENZY_THRESHOLD),
         ]
-        
+
         for name, value in thresholds:
             if not (0.0 <= value <= 1.0):
                 errors.append(f"{name} deve estar entre 0.0 e 1.0, mas é {value}")
-        
+
         # Validar valores positivos
         positive_values = [
-            "FPS", "INITIAL_LIVES", "SCREEN_WIDTH", "SCREEN_HEIGHT",
-            "BOSS_HEALTH", "SPIKE_BOSS_HEALTH"
+            "FPS",
+            "INITIAL_LIVES",
+            "SCREEN_WIDTH",
+            "SCREEN_HEIGHT",
+            "BOSS_HEALTH",
+            "SPIKE_BOSS_HEALTH",
         ]
-        
+
         for name in positive_values:
             value = getattr(self, name)
             if value <= 0:
                 errors.append(f"{name} deve ser positivo, mas é {value}")
-        
+
         return errors
 
 

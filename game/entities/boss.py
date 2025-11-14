@@ -101,15 +101,19 @@ class Boss:
         self.cannon = BossCannon()
 
         # Sistema de quadrados flutuantes (seguem o boss com delay)
-        self.position_history: deque[tuple[float, float]] = deque(maxlen=30)  # Histórico de posições
+        self.position_history: deque[tuple[float, float]] = deque(
+            maxlen=30
+        )  # Histórico de posições
         self.floating_squares: List[dict[str, Any]] = []
         self._init_floating_squares()
-        
+
         # Animação de pulsação para os quadrados flutuantes
         self.squares_animation_timer = 0.0
-        
+
         # Sistema de lançamento sequencial de quadrados
-        self.square_launch_queue: List[dict[str, Any]] = []  # Fila de quadrados prontos para lançar
+        self.square_launch_queue: List[dict[str, Any]] = (
+            []
+        )  # Fila de quadrados prontos para lançar
         self.square_launch_timer = 0.0  # Timer para lançamento sequencial
         self.square_launch_delay = 0.15  # 150ms entre cada lançamento
 
@@ -117,37 +121,125 @@ class Boss:
         """Inicializa os quadrados flutuantes ao redor do boss."""
         # Criar mais quadrados (14) em posições diferentes ao redor do corpo principal
         configs: list[dict[str, int | float]] = [
-            {"offset_x": -40, "offset_y": -30, "size": 20, "delay": 5, "speed_var": 0.9},   # Esquerda superior
-            {"offset_x": 40, "offset_y": -30, "size": 20, "delay": 5, "speed_var": 1.1},    # Direita superior
-            {"offset_x": -50, "offset_y": 10, "size": 25, "delay": 10, "speed_var": 1.05},   # Esquerda meio
-            {"offset_x": 50, "offset_y": 10, "size": 25, "delay": 10, "speed_var": 0.95},    # Direita meio
-            {"offset_x": -35, "offset_y": 50, "size": 18, "delay": 15, "speed_var": 1.15},   # Esquerda inferior
-            {"offset_x": 35, "offset_y": 50, "size": 18, "delay": 15, "speed_var": 0.85},    # Direita inferior
-            {"offset_x": 0, "offset_y": -45, "size": 15, "delay": 8, "speed_var": 1.0},     # Topo centro
-            {"offset_x": 0, "offset_y": 65, "size": 22, "delay": 12, "speed_var": 1.08},     # Base centro
+            {
+                "offset_x": -40,
+                "offset_y": -30,
+                "size": 20,
+                "delay": 5,
+                "speed_var": 0.9,
+            },  # Esquerda superior
+            {
+                "offset_x": 40,
+                "offset_y": -30,
+                "size": 20,
+                "delay": 5,
+                "speed_var": 1.1,
+            },  # Direita superior
+            {
+                "offset_x": -50,
+                "offset_y": 10,
+                "size": 25,
+                "delay": 10,
+                "speed_var": 1.05,
+            },  # Esquerda meio
+            {
+                "offset_x": 50,
+                "offset_y": 10,
+                "size": 25,
+                "delay": 10,
+                "speed_var": 0.95,
+            },  # Direita meio
+            {
+                "offset_x": -35,
+                "offset_y": 50,
+                "size": 18,
+                "delay": 15,
+                "speed_var": 1.15,
+            },  # Esquerda inferior
+            {
+                "offset_x": 35,
+                "offset_y": 50,
+                "size": 18,
+                "delay": 15,
+                "speed_var": 0.85,
+            },  # Direita inferior
+            {
+                "offset_x": 0,
+                "offset_y": -45,
+                "size": 15,
+                "delay": 8,
+                "speed_var": 1.0,
+            },  # Topo centro
+            {
+                "offset_x": 0,
+                "offset_y": 65,
+                "size": 22,
+                "delay": 12,
+                "speed_var": 1.08,
+            },  # Base centro
             # Novos quadrados adicionais
-            {"offset_x": -60, "offset_y": -10, "size": 17, "delay": 7, "speed_var": 0.92},   # Esquerda lateral superior
-            {"offset_x": 60, "offset_y": -10, "size": 17, "delay": 7, "speed_var": 1.12},    # Direita lateral superior
-            {"offset_x": -25, "offset_y": 25, "size": 16, "delay": 9, "speed_var": 1.03},    # Esquerda meio-inferior
-            {"offset_x": 25, "offset_y": 25, "size": 16, "delay": 9, "speed_var": 0.97},     # Direita meio-inferior
-            {"offset_x": -15, "offset_y": -40, "size": 14, "delay": 6, "speed_var": 0.88},   # Esquerda-centro topo
-            {"offset_x": 15, "offset_y": -40, "size": 14, "delay": 6, "speed_var": 1.18},    # Direita-centro topo
+            {
+                "offset_x": -60,
+                "offset_y": -10,
+                "size": 17,
+                "delay": 7,
+                "speed_var": 0.92,
+            },  # Esquerda lateral superior
+            {
+                "offset_x": 60,
+                "offset_y": -10,
+                "size": 17,
+                "delay": 7,
+                "speed_var": 1.12,
+            },  # Direita lateral superior
+            {
+                "offset_x": -25,
+                "offset_y": 25,
+                "size": 16,
+                "delay": 9,
+                "speed_var": 1.03,
+            },  # Esquerda meio-inferior
+            {
+                "offset_x": 25,
+                "offset_y": 25,
+                "size": 16,
+                "delay": 9,
+                "speed_var": 0.97,
+            },  # Direita meio-inferior
+            {
+                "offset_x": -15,
+                "offset_y": -40,
+                "size": 14,
+                "delay": 6,
+                "speed_var": 0.88,
+            },  # Esquerda-centro topo
+            {
+                "offset_x": 15,
+                "offset_y": -40,
+                "size": 14,
+                "delay": 6,
+                "speed_var": 1.18,
+            },  # Direita-centro topo
         ]
-        
+
         for config in configs:
-            self.floating_squares.append({
-                "offset_x": float(config["offset_x"]),
-                "offset_y": float(config["offset_y"]),
-                "base_size": float(config["size"]),  # Tamanho base
-                "size": float(config["size"]),  # Tamanho atual (será animado)
-                "delay": int(config["delay"]),  # Frames de delay
-                "x": self.x + self.w / 2 + float(config["offset_x"]),
-                "y": self.y + self.h / 2 + float(config["offset_y"]),
-                "state": "following",  # Estados: "following", "preparing", "launched"
-                "rotation": 0.0,  # Ângulo de rotação
-                "prepare_timer": 0.0,  # Timer para animação de preparação
-                "speed_var": float(config["speed_var"]),  # Variação de velocidade (0.85 a 1.18)
-            })
+            self.floating_squares.append(
+                {
+                    "offset_x": float(config["offset_x"]),
+                    "offset_y": float(config["offset_y"]),
+                    "base_size": float(config["size"]),  # Tamanho base
+                    "size": float(config["size"]),  # Tamanho atual (será animado)
+                    "delay": int(config["delay"]),  # Frames de delay
+                    "x": self.x + self.w / 2 + float(config["offset_x"]),
+                    "y": self.y + self.h / 2 + float(config["offset_y"]),
+                    "state": "following",  # Estados: "following", "preparing", "launched"
+                    "rotation": 0.0,  # Ângulo de rotação
+                    "prepare_timer": 0.0,  # Timer para animação de preparação
+                    "speed_var": float(
+                        config["speed_var"]
+                    ),  # Variação de velocidade (0.85 a 1.18)
+                }
+            )
 
     def _update_orientation(self, player_x: float, player_y: float) -> None:
         """Update cannon orientation to face the player."""
@@ -554,35 +646,39 @@ class Boss:
             self.attack_timer = Timer(random.uniform(*Config.BOSS_CALM_ATTACK_INTERVAL))
         self.attack_timer.start()
 
-    def _launch_square_projectiles(self, player_x: float, player_y: float) -> List[BossSquare]:
+    def _launch_square_projectiles(
+        self, player_x: float, player_y: float
+    ) -> List[BossSquare]:
         """
         Launch one or more floating squares as projectiles towards the player.
         DEPRECATED: Use inline logic in update() instead.
         """
         # Este método não é mais usado - a lógica está inline no update()
         return []
-    
-    def _create_square_projectile(self, square: dict[str, Any], player_x: float, player_y: float) -> BossSquare:
+
+    def _create_square_projectile(
+        self, square: dict[str, Any], player_x: float, player_y: float
+    ) -> BossSquare:
         """Cria um projétil a partir de um quadrado flutuante."""
         # Posição inicial do quadrado
         start_x = square["x"]
         start_y = square["y"]
-        
+
         # Calcular direção para o jogador com imprecisão
         dx = player_x - start_x
         dy = player_y - start_y
         distance = math.sqrt(dx * dx + dy * dy)
-        
+
         if distance > 0:
             # Normalizar
             dx /= distance
             dy /= distance
-            
+
             # Adicionar imprecisão (±30 graus aproximadamente)
             inaccuracy = random.uniform(-0.5, 0.5)
             dx += inaccuracy
             dy += inaccuracy
-            
+
             # Normalizar novamente
             new_distance = math.sqrt(dx * dx + dy * dy)
             if new_distance > 0:
@@ -590,12 +686,12 @@ class Boss:
                 dy /= new_distance
         else:
             dx, dy = 0, 1  # Fallback: para baixo
-        
+
         # Velocidade do projétil
         speed = 250.0
         vx = dx * speed
         vy = dy * speed
-        
+
         # Criar projétil
         return BossSquare(start_x, start_y, vx, vy, square["base_size"])
 
@@ -634,36 +730,38 @@ class Boss:
                     delayed_pos = self.position_history[-delay_frames]
                     target_x = delayed_pos[0] + square["offset_x"]
                     target_y = delayed_pos[1] + square["offset_y"]
-                    
+
                     # Aplicar variação de velocidade individual para movimento mais orgânico
                     lerp_speed = base_lerp_speed * square["speed_var"]
-                    
+
                     # Interpolar suavemente entre posição atual e alvo (lerp)
                     square["x"] += (target_x - square["x"]) * lerp_speed * dt
                     square["y"] += (target_y - square["y"]) * lerp_speed * dt
-                
+
                 # Aplicar pulsação ao tamanho
                 square["size"] = square["base_size"] * pulse_scale
                 square["rotation"] = 0.0  # Sem rotação
-                
+
             elif square["state"] == "preparing":
                 # Quadrado está se preparando para ser lançado (girando no lugar)
                 square["prepare_timer"] += dt
-                square["rotation"] += dt * 720  # Gira 720 graus por segundo (2 rotações/seg)
-                
+                square["rotation"] += (
+                    dt * 720
+                )  # Gira 720 graus por segundo (2 rotações/seg)
+
                 # Pulsação mais rápida e intensa durante preparação
                 prepare_pulse = 1.0 + 0.4 * abs(math.sin(square["prepare_timer"] * 10))
                 square["size"] = square["base_size"] * prepare_pulse
-                
+
                 # Após 1 segundo de preparação, marca como pronto para lançamento
                 if square["prepare_timer"] >= 1.0:
                     square["state"] = "ready_to_launch"
-            
+
             elif square["state"] == "launching":
                 # Quadrado está na fila de lançamento, continua girando
                 square["prepare_timer"] += dt
                 square["rotation"] += dt * 720
-                
+
                 # Manter pulsação intensa
                 prepare_pulse = 1.0 + 0.4 * abs(math.sin(square["prepare_timer"] * 10))
                 square["size"] = square["base_size"] * prepare_pulse
@@ -681,23 +779,27 @@ class Boss:
             # Atualizar timer de lançamento sequencial
             if self.square_launch_queue:
                 self.square_launch_timer += dt
-                
+
                 # Lançar próximo quadrado da fila quando o timer completar
                 if self.square_launch_timer >= self.square_launch_delay:
                     square = self.square_launch_queue.pop(0)
-                    projectile = self._create_square_projectile(square, player_x, player_y)
+                    projectile = self._create_square_projectile(
+                        square, player_x, player_y
+                    )
                     spawned_squares.append(projectile)
-                    
+
                     # Resetar quadrado para seguir o boss novamente
                     square["state"] = "following"
                     square["prepare_timer"] = 0.0
                     square["rotation"] = 0.0
-                    
+
                     # Resetar timer para próximo lançamento
                     self.square_launch_timer = 0.0
-            
+
             # Adicionar quadrados prontos à fila de lançamento
-            ready_squares = [sq for sq in self.floating_squares if sq["state"] == "ready_to_launch"]
+            ready_squares = [
+                sq for sq in self.floating_squares if sq["state"] == "ready_to_launch"
+            ]
             if ready_squares:
                 for square in ready_squares:
                     # Marcar como "launching" para não adicionar novamente
@@ -719,14 +821,24 @@ class Boss:
             self.square_attack_timer.update(dt)
             if self.square_attack_timer.done():
                 # Apenas preparar novos quadrados se não houver nenhum em preparação/pronto/lançando
-                preparing_or_ready = [sq for sq in self.floating_squares if sq["state"] in ("preparing", "ready_to_launch", "launching")]
+                preparing_or_ready = [
+                    sq
+                    for sq in self.floating_squares
+                    if sq["state"] in ("preparing", "ready_to_launch", "launching")
+                ]
                 if not preparing_or_ready:
                     # Escolher 3-6 quadrados aleatórios para começar a preparar
-                    following_squares = [sq for sq in self.floating_squares if sq["state"] == "following"]
+                    following_squares = [
+                        sq for sq in self.floating_squares if sq["state"] == "following"
+                    ]
                     if following_squares:
-                        num_to_prepare = random.randint(3, min(6, len(following_squares)))
-                        squares_to_prepare = random.sample(following_squares, num_to_prepare)
-                        
+                        num_to_prepare = random.randint(
+                            3, min(6, len(following_squares))
+                        )
+                        squares_to_prepare = random.sample(
+                            following_squares, num_to_prepare
+                        )
+
                         for square in squares_to_prepare:
                             square["state"] = "preparing"
                             square["prepare_timer"] = 0.0
@@ -933,16 +1045,12 @@ class Boss:
             # Quadrados com índice par ficam atrás, ímpares na frente
             if (i % 2 == 0) != behind:
                 continue
-            
+
             # Calcular cor baseada no modo e estado
             if square["state"] in ("preparing", "launching"):
                 # Quadrado se preparando ou na fila de lançamento: cor amarela/laranja pulsante
                 pulse_intensity = 0.5 + 0.5 * abs(math.sin(square["prepare_timer"] * 8))
-                color = (
-                    255,
-                    int(200 * pulse_intensity),
-                    0
-                )
+                color = (255, int(200 * pulse_intensity), 0)
                 border_color: tuple[int, int, int] = (255, 255, 0)
             elif self.frenzy_mode:
                 # No frenzy, cores mais intensas e variadas
@@ -953,7 +1061,7 @@ class Boss:
                 color = (
                     int(base_red * intensity),
                     int(base_green * intensity),
-                    int(base_blue * intensity)
+                    int(base_blue * intensity),
                 )
                 r, g, b = color
                 border_color = (min(255, r + 50), min(255, g + 50), min(255, b + 50))
@@ -966,53 +1074,59 @@ class Boss:
                 color = (
                     int(base_red * intensity),
                     int(base_green * intensity),
-                    int(base_blue * intensity)
+                    int(base_blue * intensity),
                 )
                 r, g, b = color
                 border_color = (min(255, r + 50), min(255, g + 50), min(255, b + 50))
-            
+
             # Se o quadrado está girando, desenhar com rotação
             if square["rotation"] > 0:
-                self._draw_rotated_square(surface, square, color, border_color, offset_x, offset_y)
+                self._draw_rotated_square(
+                    surface, square, color, border_color, offset_x, offset_y
+                )
             else:
                 # Desenhar o quadrado normalmente
                 square_x = square["x"] - square["size"] / 2 + offset_x
                 square_y = square["y"] - square["size"] / 2 + offset_y
-                
+
                 pygame.draw.rect(
                     surface,
                     color,
-                    (int(square_x), int(square_y), square["size"], square["size"])
+                    (int(square_x), int(square_y), square["size"], square["size"]),
                 )
-                
+
                 # Desenhar borda mais clara
                 pygame.draw.rect(
                     surface,
                     border_color,
                     (int(square_x), int(square_y), square["size"], square["size"]),
-                    2
+                    2,
                 )
-    
+
     def _draw_rotated_square(
-        self, surface: pygame.Surface, square: dict[str, Any], 
-        color: tuple[int, int, int], border_color: tuple[int, int, int],
-        offset_x: float, offset_y: float
+        self,
+        surface: pygame.Surface,
+        square: dict[str, Any],
+        color: tuple[int, int, int],
+        border_color: tuple[int, int, int],
+        offset_x: float,
+        offset_y: float,
     ) -> None:
         """Desenha um quadrado rotacionado."""
         size = square["size"]
         center_x = square["x"] + offset_x
         center_y = square["y"] + offset_y
         angle_rad = math.radians(square["rotation"])
-        
+
         # Calcular os 4 cantos do quadrado rotacionado
         half_size = size / 2
         corners = [
             (-half_size, -half_size),
             (half_size, -half_size),
             (half_size, half_size),
-            (-half_size, half_size)
+            (-half_size, half_size),
         ]
-        
+
         # Rotacionar cada canto
         rotated_corners: list[tuple[float, float]] = []
         for cx, cy in corners:
@@ -1020,10 +1134,10 @@ class Boss:
             rx = cx * math.cos(angle_rad) - cy * math.sin(angle_rad)
             ry = cx * math.sin(angle_rad) + cy * math.cos(angle_rad)
             rotated_corners.append((center_x + rx, center_y + ry))
-        
+
         # Desenhar polígono preenchido
         pygame.draw.polygon(surface, color, rotated_corners)
-        
+
         # Desenhar borda
         pygame.draw.polygon(surface, border_color, rotated_corners, 2)
 
@@ -1053,49 +1167,63 @@ class Boss:
                 4,
             )
 
-    def _draw_pixelated_boss(self, surface: pygame.Surface, offset_x: float, offset_y: float) -> None:
+    def _draw_pixelated_boss(
+        self, surface: pygame.Surface, offset_x: float, offset_y: float
+    ) -> None:
         """Desenha o boss com bordas serrilhadas/pixeladas (efeito retro vazado)."""
         x = int(self.x + offset_x)
         y = int(self.y + offset_y)
-        
+
         # Criar superfície temporária com suporte a transparência
         temp_surface = pygame.Surface((int(self.w), int(self.h)), pygame.SRCALPHA)
-        
+
         # Corpo principal vermelho (preencher toda a superfície)
         main_red = (255, 0, 0, 255)
         temp_surface.fill(main_red)
-        
+
         # Criar efeito de borda serrilhada/pixelada TRANSPARENTE (vazado)
         pixel_size = 6
         transparent = (0, 0, 0, 0)  # Completamente transparente
-        
+
         # Padrão irregular para as bordas (assimétrico)
         pattern = [1, 1, 0, 1, 0, 1, 1, 0, 0, 1]  # Padrão irregular que se repete
-        
+
         # Borda superior (serrilhada irregular vazada)
         for i in range(0, int(self.w), pixel_size):
             idx = (i // pixel_size) % len(pattern)
             if pattern[idx]:
-                pygame.draw.rect(temp_surface, transparent, (i, 0, pixel_size, pixel_size))
-        
+                pygame.draw.rect(
+                    temp_surface, transparent, (i, 0, pixel_size, pixel_size)
+                )
+
         # Borda inferior (serrilhada irregular vazada - padrão diferente)
         for i in range(0, int(self.w), pixel_size):
             idx = (i // pixel_size) % len(pattern)
             if pattern[(idx + 3) % len(pattern)]:  # Offset para padrão diferente
-                pygame.draw.rect(temp_surface, transparent, (i, int(self.h) - pixel_size, pixel_size, pixel_size))
-        
+                pygame.draw.rect(
+                    temp_surface,
+                    transparent,
+                    (i, int(self.h) - pixel_size, pixel_size, pixel_size),
+                )
+
         # Borda esquerda (serrilhada irregular vazada)
         for i in range(0, int(self.h), pixel_size):
             idx = (i // pixel_size) % len(pattern)
             if pattern[(idx + 1) % len(pattern)]:
-                pygame.draw.rect(temp_surface, transparent, (0, i, pixel_size, pixel_size))
-        
+                pygame.draw.rect(
+                    temp_surface, transparent, (0, i, pixel_size, pixel_size)
+                )
+
         # Borda direita (serrilhada irregular vazada - padrão diferente)
         for i in range(0, int(self.h), pixel_size):
             idx = (i // pixel_size) % len(pattern)
             if pattern[(idx + 5) % len(pattern)]:
-                pygame.draw.rect(temp_surface, transparent, (int(self.w) - pixel_size, i, pixel_size, pixel_size))
-        
+                pygame.draw.rect(
+                    temp_surface,
+                    transparent,
+                    (int(self.w) - pixel_size, i, pixel_size, pixel_size),
+                )
+
         # Desenhar a superfície temporária na posição final
         surface.blit(temp_surface, (x, y))
 

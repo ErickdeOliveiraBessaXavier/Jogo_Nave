@@ -12,7 +12,16 @@ if TYPE_CHECKING:
 
 
 class Slider:
-    def __init__(self, x: int, y: int, w: int, h: int, min_val: float, max_val: float, initial_val: float):
+    def __init__(
+        self,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        min_val: float,
+        max_val: float,
+        initial_val: float,
+    ):
         self.rect: pygame.Rect = pygame.Rect(x, y, w, h)
         self.min_val: float = min_val
         self.max_val: float = max_val
@@ -43,7 +52,9 @@ class Slider:
         pygame.draw.rect(surface, GREEN, fill_rect, border_radius=5)
         # Draw the knob
         knob_x: int = self.rect.x + int(self.val * self.rect.w)
-        pygame.draw.circle(surface, WHITE, (knob_x, self.rect.centery), self.knob_radius)
+        pygame.draw.circle(
+            surface, WHITE, (knob_x, self.rect.centery), self.knob_radius
+        )
 
 
 class SettingsScene(Scene):
@@ -57,31 +68,63 @@ class SettingsScene(Scene):
         start_y = (Config.SCREEN_HEIGHT - total_height) // 2
 
         self.title_text = self.font.render("Settings", True, WHITE)
-        self.title_rect = self.title_text.get_rect(center=(Config.SCREEN_WIDTH // 2, start_y))
+        self.title_rect = self.title_text.get_rect(
+            center=(Config.SCREEN_WIDTH // 2, start_y)
+        )
 
         y_offset = start_y + 80
 
         # Music Slider
         self.music_label = self.label_font.render("Music Volume", True, WHITE)
-        self.music_label_rect = self.music_label.get_rect(center=(Config.SCREEN_WIDTH // 2, y_offset))
+        self.music_label_rect = self.music_label.get_rect(
+            center=(Config.SCREEN_WIDTH // 2, y_offset)
+        )
         y_offset += 40
-        self.music_slider = Slider(Config.SCREEN_WIDTH // 2 - 150, y_offset, 300, 20, 0, 1, sound_manager.music_volume)
-        
+        self.music_slider = Slider(
+            Config.SCREEN_WIDTH // 2 - 150,
+            y_offset,
+            300,
+            20,
+            0,
+            1,
+            sound_manager.music_volume,
+        )
+
         y_offset += 80
 
         # SFX Slider
         self.sfx_label = self.label_font.render("SFX Volume", True, WHITE)
-        self.sfx_label_rect = self.sfx_label.get_rect(center=(Config.SCREEN_WIDTH // 2, y_offset))
+        self.sfx_label_rect = self.sfx_label.get_rect(
+            center=(Config.SCREEN_WIDTH // 2, y_offset)
+        )
         y_offset += 40
-        self.sfx_slider = Slider(Config.SCREEN_WIDTH // 2 - 150, y_offset, 300, 20, 0, 1, sound_manager.sfx_volume)
+        self.sfx_slider = Slider(
+            Config.SCREEN_WIDTH // 2 - 150,
+            y_offset,
+            300,
+            20,
+            0,
+            1,
+            sound_manager.sfx_volume,
+        )
 
         y_offset += 80
 
         # Shot Slider
         self.shot_label = self.label_font.render("Shot Volume", True, WHITE)
-        self.shot_label_rect = self.shot_label.get_rect(center=(Config.SCREEN_WIDTH // 2, y_offset))
+        self.shot_label_rect = self.shot_label.get_rect(
+            center=(Config.SCREEN_WIDTH // 2, y_offset)
+        )
         y_offset += 40
-        self.shot_slider = Slider(Config.SCREEN_WIDTH // 2 - 150, y_offset, 300, 20, 0, 1, sound_manager.shot_volume_base)
+        self.shot_slider = Slider(
+            Config.SCREEN_WIDTH // 2 - 150,
+            y_offset,
+            300,
+            20,
+            0,
+            1,
+            sound_manager.shot_volume_base,
+        )
 
         y_offset += 100
 
@@ -89,7 +132,9 @@ class SettingsScene(Scene):
         self.back_button_rect = pygame.Rect(0, 0, 150, 50)
         self.back_button_rect.center = (Config.SCREEN_WIDTH // 2, y_offset)
         self.back_button_text = self.label_font.render("Back", True, BLACK)
-        self.back_button_text_rect = self.back_button_text.get_rect(center=self.back_button_rect.center)
+        self.back_button_text_rect = self.back_button_text.get_rect(
+            center=self.back_button_rect.center
+        )
         self.back_button_hovered = False
 
     def handle_event(self, event: pygame.event.Event):

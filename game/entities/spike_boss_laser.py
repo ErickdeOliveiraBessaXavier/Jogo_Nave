@@ -18,7 +18,7 @@ class SpikeBossLaser:
     Laser gigante disparado pelo SpikeBoss no modo frenzy.
     Similar ao EyeLaser mas com largura maior (mesma do boss).
     """
-    
+
     def __init__(
         self,
         x: float,
@@ -69,7 +69,7 @@ class SpikeBossLaser:
             if self.timer >= self.lifetime:
                 self.state = "dying"
                 self.w = 0
-                
+
                 # Criar partículas de morte ao longo do laser
                 num_particles = 30
                 for i in range(num_particles):
@@ -77,7 +77,7 @@ class SpikeBossLaser:
                     particle: DeathParticle = {
                         "pos": pygame.Vector2(
                             self.x + random.uniform(-self.max_w / 2, self.max_w / 2),
-                            y_pos
+                            y_pos,
                         ),
                         "vel": pygame.Vector2(
                             random.uniform(-150, 150), random.uniform(-100, 100)
@@ -132,7 +132,12 @@ class SpikeBossLaser:
             pygame.draw.rect(
                 glow_surface,
                 (255, 50, 50, glow_alpha // 3),
-                (int(self.x - self.w / 2 - 15), int(self.y), int(self.w + 30), int(self.target_y - self.y))
+                (
+                    int(self.x - self.w / 2 - 15),
+                    int(self.y),
+                    int(self.w + 30),
+                    int(self.target_y - self.y),
+                ),
             )
             surface.blit(glow_surface, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
 
@@ -143,7 +148,12 @@ class SpikeBossLaser:
             pygame.draw.rect(
                 glow_surface2,
                 (255, 100, 50, glow_alpha // 2),
-                (int(self.x - self.w / 2 - 8), int(self.y), int(self.w + 16), int(self.target_y - self.y))
+                (
+                    int(self.x - self.w / 2 - 8),
+                    int(self.y),
+                    int(self.w + 16),
+                    int(self.target_y - self.y),
+                ),
             )
             surface.blit(glow_surface2, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
 
@@ -152,16 +162,16 @@ class SpikeBossLaser:
                 int(self.x - self.w / 2),
                 int(self.y),
                 int(self.w),
-                int(self.target_y - self.y)
+                int(self.target_y - self.y),
             )
             pygame.draw.rect(surface, colors.RED, core_rect)
-            
+
             # Centro mais claro (amarelo)
             inner_rect = pygame.Rect(
                 int(self.x - self.w / 4),
                 int(self.y),
                 int(self.w / 2),
-                int(self.target_y - self.y)
+                int(self.target_y - self.y),
             )
             pygame.draw.rect(surface, colors.YELLOW, inner_rect)
 

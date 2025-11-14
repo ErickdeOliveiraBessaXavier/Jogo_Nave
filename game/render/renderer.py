@@ -53,7 +53,9 @@ class Renderer:
         self.font_large = get_font(32)
         self.starfield = StarField(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
 
-    def background(self, surface: pygame.Surface, dt: float, speed_multiplier: float = 1.0):
+    def background(
+        self, surface: pygame.Surface, dt: float, speed_multiplier: float = 1.0
+    ):
         surface.fill(colors.BLACK)
         self.starfield.update(dt, speed_multiplier)
         self.starfield.draw(surface)
@@ -119,7 +121,7 @@ class Renderer:
     def preparation(self, surface: pygame.Surface, remaining: float):
         # Usar fonte do warning (60pt)
         warning_font = get_font(Config.WARNING_FONT_SIZE)
-        
+
         # contador
         ct = warning_font.render(f"{int(remaining) + 1}", True, colors.RED)
         crect = ct.get_rect(

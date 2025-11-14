@@ -26,8 +26,8 @@ class Ship:
     COLOR_MAP: dict[str, Union[Tuple[int, int, int], Tuple[int, int, int, int]]] = {
         "W": (255, 255, 255),  # White
         "G": (150, 150, 150),  # Gray
-        "R": (255, 0, 0),      # Red (thruster)
-        " ": (0, 0, 0, 0),     # Transparent
+        "R": (255, 0, 0),  # Red (thruster)
+        " ": (0, 0, 0, 0),  # Transparent
     }
     PIXEL_SIZE = 5  # Size of each pixel in the sprite
 
@@ -104,7 +104,7 @@ class Ship:
                 y=self.y + self.h,
                 vx=random.uniform(-10, 10),
                 vy=random.uniform(100, 200),  # Mover para baixo mais rápido
-                lifetime=random.uniform(0.05, 0.15), # Vida mais curta
+                lifetime=random.uniform(0.05, 0.15),  # Vida mais curta
                 size=random.uniform(2, 4),
                 color=(255, random.randint(100, 200), 0),  # Cor de fogo
             )
@@ -119,7 +119,6 @@ class Ship:
                 particle["x"] += particle["vx"] * dt
                 particle["y"] += particle["vy"] * dt
                 particle["size"] -= 1 * dt  # Diminuir de tamanho
-
 
     def move(self, held_actions: set[str], dt: float):
         current_speed = self.speed * (1.5 if self.speed_boost_timer > 0 else 1.0)
@@ -139,7 +138,7 @@ class Ship:
 
         self.x += move_vec.x * current_speed * dt
         self.y += move_vec.y * current_speed * dt
-        
+
         self._keep_in_bounds()
 
     def _keep_in_bounds(self):
@@ -188,7 +187,11 @@ class Ship:
                 if color:
                     pixel_x = self.x + col_idx * self.PIXEL_SIZE + shake_x
                     pixel_y = self.y + row_idx * self.PIXEL_SIZE + shake_y
-                    pygame.draw.rect(surface, color, (pixel_x, pixel_y, self.PIXEL_SIZE, self.PIXEL_SIZE))
+                    pygame.draw.rect(
+                        surface,
+                        color,
+                        (pixel_x, pixel_y, self.PIXEL_SIZE, self.PIXEL_SIZE),
+                    )
 
         # Desenhar partículas de entrada (acima da nave)
         for p in self.entry_particles:
