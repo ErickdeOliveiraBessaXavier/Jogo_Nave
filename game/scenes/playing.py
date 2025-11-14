@@ -11,13 +11,13 @@ from ..systems.spawner import EnemySpawner, PowerUpSpawner
 from ..systems.collisions import Collisions
 from ..systems.entity_manager import EntityManager
 from ..entities.floating_score import FloatingScore
-from ..core.levels import LevelManager
-from ..core.sound import sound_manager
+from ..core.levels import get_level_config
 from ..core.assets import get_font
 from ..core import colors
+from ..core.sound import sound_manager
+from ..entities.mini_ship import MiniShip
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.guided_meteor import GuidedMeteor
-from ..entities.mini_ship import MiniShip
 from ..entities.spike_boss_laser import SpikeBossLaser
 
 if TYPE_CHECKING:
@@ -25,16 +25,15 @@ if TYPE_CHECKING:
 
 
 class PlayingScene(Scene):
-    def __init__(self, app: "GameApp", level_manager: LevelManager):
+    def __init__(self, app: "GameApp"):
         super().__init__(app)
         self.r = Renderer()
         self.ship = Ship(Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT)
         self.ship.is_entering = True
         self.entity_manager = EntityManager()
 
-        self.level_manager = level_manager
-        self.level_config = self.level_manager.get_current_config()
-        
+        self.current_level_index = 0
+        self.level_config = get_level_config(self.current_level_index + 1)  # +1 pois níveis começam em 1
         self.enemies_destroyed_in_level = 0
         self.boss_fight_active = False
         self.pre_boss_transition = False
@@ -64,7 +63,7 @@ class PlayingScene(Scene):
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
         # Inicializar spawner com delay inicial apenas para fase 1
-        is_initial_level = self.level_manager.current_level_index == 0
+        is_initial_level = self.current_level_index == 0
         self.enemy_spawner = EnemySpawner(self.level_config, is_initial_level)
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
@@ -702,16 +701,12 @@ class PlayingScene(Scene):
 
     def _start_next_level(self):
         self.level_transition_active = False
-        if not self.level_manager.is_last_level():
-            self.level_manager.start_next_level()
-            self.level_config = self.level_manager.get_current_config()
-            self.enemy_spawner.set_level(self.level_config)
-            self.enemies_destroyed_in_level = 0
-        else:
-            # Opcional: o que fazer quando todas as fases terminam?
-            # Por enquanto, apenas reinicia a última fase.
-            self.enemy_spawner.set_level(self.level_config)
-            self.enemies_destroyed_in_level = 0
+        self.current_level_index += 1
+        
+        # Gerar próximo nível (sistema híbrido: fixo ou procedural)
+        self.level_config = get_level_config(self.current_level_index + 1)  # +1 pois níveis começam em 1
+        self.enemy_spawner.set_level(self.level_config)
+        self.enemies_destroyed_in_level = 0
 
         # Usar método que preserva balas do jogador durante transições
         self.entity_manager.clear_for_level_transition()
@@ -719,7 +714,7 @@ class PlayingScene(Scene):
     def handle_event(self, event: pygame.event.Event):
         if self.game_over_sequence_active:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                self.app.states.switch(PlayingScene(self.app, self.app.level_manager))
+                self.app.states.switch(PlayingScene(self.app))
             return
 
         if event.type == pygame.KEYDOWN:

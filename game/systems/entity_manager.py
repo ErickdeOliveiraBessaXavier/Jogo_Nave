@@ -262,8 +262,6 @@ class EntityManager:
         self.explosions.clear()
         self.mine_explosions.clear()
         self.boss = None
-        self.mini_ships.clear()
-        self.mini_ship_bullets.clear()
         self.formations.clear()
         self.meteor_pool.clear_active()  # Limpar meteoros ativos do pool
         # NÃO limpar bullet_pool aqui para manter balas do jogador
