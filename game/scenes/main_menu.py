@@ -52,9 +52,21 @@ class MainMenuScene(Scene):
             center=self.settings_button_rect.center
         )
 
+        # Exit Button
+        self.exit_button_rect = pygame.Rect(0, 0, 250, 60)
+        self.exit_button_rect.center = (
+            Config.SCREEN_WIDTH // 2,
+            Config.SCREEN_HEIGHT // 2 + 160,
+        )
+        self.exit_button_text = self.button_font.render("Exit Game", True, BLACK)
+        self.exit_button_text_rect = self.exit_button_text.get_rect(
+            center=self.exit_button_rect.center
+        )
+
         # Track hover state
         self.start_button_hovered = False
         self.settings_button_hovered = False
+        self.exit_button_hovered = False
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -62,12 +74,15 @@ class MainMenuScene(Scene):
                 self.app.states.push(PlayingScene(self.app, self.app.level_manager))
             elif self.settings_button_rect.collidepoint(event.pos):
                 self.app.states.push(SettingsScene(self.app))
+            elif self.exit_button_rect.collidepoint(event.pos):
+                self.app.running = False
 
         elif event.type == pygame.MOUSEMOTION:
             self.start_button_hovered = self.start_button_rect.collidepoint(event.pos)
             self.settings_button_hovered = self.settings_button_rect.collidepoint(
                 event.pos
             )
+            self.exit_button_hovered = self.exit_button_rect.collidepoint(event.pos)
 
     def update(self, dt: float):
         self.r.starfield.update(dt)
@@ -100,3 +115,13 @@ class MainMenuScene(Scene):
             surface, self.border_color, self.settings_button_rect, 2, border_radius=10
         )
         surface.blit(self.settings_button_text, self.settings_button_text_rect)
+
+        # Draw Exit Button
+        exit_color = (
+            self.button_hover_color if self.exit_button_hovered else self.button_color
+        )
+        pygame.draw.rect(surface, exit_color, self.exit_button_rect, border_radius=10)
+        pygame.draw.rect(
+            surface, self.border_color, self.exit_button_rect, 2, border_radius=10
+        )
+        surface.blit(self.exit_button_text, self.exit_button_text_rect)

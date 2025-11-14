@@ -1,7 +1,6 @@
 import pygame
 from .core.state import StateManager
-from .core.config import Config
-from .core.screen_resolver import set_runtime_resolution
+from .core.config import Config, set_screen_resolution
 from .scenes.main_menu import MainMenuScene
 from .core.levels import LevelManager, FIXED_LEVELS
 from .core.input import Input
@@ -22,8 +21,8 @@ class GameApp:
             screen_width = Config.SCREEN_WIDTH
             screen_height = Config.SCREEN_HEIGHT
         
-        # Registrar resolução no resolver para ser acessada onde necessário
-        set_runtime_resolution(screen_width, screen_height)
+        # Atualizar Config com a resolução detectada/configurada
+        set_screen_resolution(screen_width, screen_height)
         
         # Armazenar resolução para uso em outras classes
         self.screen_width = screen_width

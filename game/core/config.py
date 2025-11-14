@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Tuple
+from typing import Tuple, Any
 from enum import Enum
 
 
@@ -400,12 +400,53 @@ class Config:
 # ============================================================================
 
 # Criar instância global da config
-config = Config()
+_config_instance = Config()
+
+# Variáveis para armazenar resolução em tempo de execução
+_runtime_screen_width = _config_instance.SCREEN_WIDTH
+_runtime_screen_height = _config_instance.SCREEN_HEIGHT
+
+
+class ConfigProxy:
+    """Proxy que retorna valores dinâmicos para SCREEN_WIDTH e SCREEN_HEIGHT."""
+    
+    def __init__(self, config_instance: "Config") -> None:
+        self._config = config_instance
+    
+    def __getattr__(self, name: str) -> Any:
+        if name == "SCREEN_WIDTH":
+            return _runtime_screen_width
+        elif name == "SCREEN_HEIGHT":
+            return _runtime_screen_height
+        else:
+            return getattr(self._config, name)
+    
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "_config":
+            super().__setattr__(name, value)
+        else:
+            raise AttributeError(f"Config é imutável. Não é possível alterar {name}")
+
+
+def set_screen_resolution(width: int, height: int):
+    """Atualiza a resolução da tela em tempo de execução."""
+    global _runtime_screen_width, _runtime_screen_height
+    _runtime_screen_width = width
+    _runtime_screen_height = height
+
+
+# Envolver a instância com o proxy
+config = ConfigProxy(_config_instance)
 
 # Validar na importação (desenvolvimento)
-_validation_errors = config.validate()
+_validation_errors = _config_instance.validate()
 if _validation_errors:
     error_msg = "Erros encontrados na configuração:\n" + "\n".join(
         f"  - {err}" for err in _validation_errors
     )
     raise ValueError(error_msg)
+
+
+# IMPORTANTE: Reatribuir Config para que ele aponte para o proxy
+# Isso permite que "from config import Config" use a versão dinâmica
+Config = config  # type: ignore
