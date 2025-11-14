@@ -26,26 +26,38 @@ class PausedScene(Scene):
         self.continue_button_rect = pygame.Rect(0, 0, 250, 60)
         self.continue_button_rect.center = (
             Config.SCREEN_WIDTH // 2,
-            Config.SCREEN_HEIGHT // 2 + 20,
+            Config.SCREEN_HEIGHT // 2 - 40,
         )
-        self.continue_button_text = self.button_font.render("Continue", True, BLACK)
+        self.continue_button_text = self.button_font.render("Continuar", True, BLACK)
         self.continue_button_text_rect = self.continue_button_text.get_rect(
             center=self.continue_button_rect.center
+        )
+
+        # Settings Button
+        self.settings_button_rect = pygame.Rect(0, 0, 250, 60)
+        self.settings_button_rect.center = (
+            Config.SCREEN_WIDTH // 2,
+            Config.SCREEN_HEIGHT // 2 + 40,
+        )
+        self.settings_button_text = self.button_font.render("Configurações", True, BLACK)
+        self.settings_button_text_rect = self.settings_button_text.get_rect(
+            center=self.settings_button_rect.center
         )
 
         # Menu Button
         self.menu_button_rect = pygame.Rect(0, 0, 250, 60)
         self.menu_button_rect.center = (
             Config.SCREEN_WIDTH // 2,
-            Config.SCREEN_HEIGHT // 2 + 100,
+            Config.SCREEN_HEIGHT // 2 + 120,
         )
-        self.menu_button_text = self.button_font.render("Main Menu", True, BLACK)
+        self.menu_button_text = self.button_font.render("Menu Principal", True, BLACK)
         self.menu_button_text_rect = self.menu_button_text.get_rect(
             center=self.menu_button_rect.center
         )
 
         # Track hover state
         self.continue_button_hovered = False
+        self.settings_button_hovered = False
         self.menu_button_hovered = False
 
     def update(self, dt: float):
@@ -73,6 +85,11 @@ class PausedScene(Scene):
                     from .playing import PlayingScene
                     self.app.states.switch(PlayingScene(self.app, self.app.level_manager))
             
+            elif self.settings_button_rect.collidepoint(event.pos):
+                # Abre as configurações
+                from .settings import SettingsScene
+                self.app.states.push(SettingsScene(self.app))
+            
             elif self.menu_button_rect.collidepoint(event.pos):
                 # Volta para o menu principal
                 from .main_menu import MainMenuScene
@@ -83,6 +100,7 @@ class PausedScene(Scene):
         
         elif event.type == pygame.MOUSEMOTION:
             self.continue_button_hovered = self.continue_button_rect.collidepoint(event.pos)
+            self.settings_button_hovered = self.settings_button_rect.collidepoint(event.pos)
             self.menu_button_hovered = self.menu_button_rect.collidepoint(event.pos)
 
     def render(self, surface: pygame.Surface):
@@ -117,6 +135,20 @@ class PausedScene(Scene):
         )
         surface.blit(self.continue_button_text, self.continue_button_text_rect)
 
+        # Draw Settings Button
+        settings_color = (
+            self.button_hover_color
+            if self.settings_button_hovered
+            else self.button_color
+        )
+        pygame.draw.rect(
+            surface, settings_color, self.settings_button_rect, border_radius=10
+        )
+        pygame.draw.rect(
+            surface, self.border_color, self.settings_button_rect, 2, border_radius=10
+        )
+        surface.blit(self.settings_button_text, self.settings_button_text_rect)
+
         # Draw Menu Button
         menu_color = (
             self.button_hover_color if self.menu_button_hovered else self.button_color
@@ -129,6 +161,6 @@ class PausedScene(Scene):
 
         # Draw hint text
         hint_font = get_font(14)
-        hint_text = hint_font.render("Press P to continue", True, WHITE)
+        hint_text = hint_font.render("Pressione P para continuar", True, WHITE)
         hint_rect = hint_text.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT - 40))
         surface.blit(hint_text, hint_rect)

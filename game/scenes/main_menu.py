@@ -36,7 +36,7 @@ class MainMenuScene(Scene):
             Config.SCREEN_WIDTH // 2,
             Config.SCREEN_HEIGHT // 2,
         )
-        self.start_button_text = self.button_font.render("Start Game", True, BLACK)
+        self.start_button_text = self.button_font.render("Iniciar Jogo", True, BLACK)
         self.start_button_text_rect = self.start_button_text.get_rect(
             center=self.start_button_rect.center
         )
@@ -47,7 +47,7 @@ class MainMenuScene(Scene):
             Config.SCREEN_WIDTH // 2,
             Config.SCREEN_HEIGHT // 2 + 80,
         )
-        self.settings_button_text = self.button_font.render("Settings", True, BLACK)
+        self.settings_button_text = self.button_font.render("Configurações", True, BLACK)
         self.settings_button_text_rect = self.settings_button_text.get_rect(
             center=self.settings_button_rect.center
         )
@@ -58,7 +58,7 @@ class MainMenuScene(Scene):
             Config.SCREEN_WIDTH // 2,
             Config.SCREEN_HEIGHT // 2 + 160,
         )
-        self.exit_button_text = self.button_font.render("Exit Game", True, BLACK)
+        self.exit_button_text = self.button_font.render("Sair", True, BLACK)
         self.exit_button_text_rect = self.exit_button_text.get_rect(
             center=self.exit_button_rect.center
         )
