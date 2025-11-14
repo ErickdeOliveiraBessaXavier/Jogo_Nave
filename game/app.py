@@ -1,6 +1,7 @@
 import pygame
 from .core.state import StateManager
 from .core.config import Config
+from .core.screen_resolver import set_runtime_resolution
 from .scenes.main_menu import MainMenuScene
 from .core.levels import LevelManager, FIXED_LEVELS
 from .core.input import Input
@@ -9,9 +10,32 @@ from .core.input import Input
 class GameApp:
     def __init__(self):
         pygame.init()
+        
+        # Detectar resolução do monitor se estiver em fullscreen
+        if Config.FULLSCREEN:
+            # Obter informações do display
+            info = pygame.display.Info()
+            screen_width = info.current_w
+            screen_height = info.current_h
+        else:
+            # Usar resolução configurada
+            screen_width = Config.SCREEN_WIDTH
+            screen_height = Config.SCREEN_HEIGHT
+        
+        # Registrar resolução no resolver para ser acessada onde necessário
+        set_runtime_resolution(screen_width, screen_height)
+        
+        # Armazenar resolução para uso em outras classes
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        
+        # Criar display com fullscreen se ativado
+        flags = pygame.FULLSCREEN if Config.FULLSCREEN else 0
         self.screen = pygame.display.set_mode(
-            (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
+            (screen_width, screen_height),
+            flags
         )
+        
         pygame.display.set_caption("Space Shooter")
         self.clock = pygame.time.Clock()
         self.running = True
