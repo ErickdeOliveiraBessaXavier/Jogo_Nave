@@ -91,6 +91,12 @@ class PlayingScene(Scene):
         self.state = "preparing"
         self.preparation_time_left = Config.PREPARATION_TIME
 
+    def enter(self):
+        pygame.mouse.set_visible(False)
+
+    def exit(self):
+        pygame.mouse.set_visible(True)
+
     def update(self, dt: float):
         if self.state == "preparing":
             self.preparation_time_left -= dt
@@ -662,8 +668,13 @@ class PlayingScene(Scene):
             self.entity_manager.boss = self.level_config.boss_type(
                 Config.SCREEN_WIDTH / 2 - 50, 50
             )
-            # Iniciar fade-in da música do boss quando ele aparecer
-            sound_manager.play_boss_music()
+            
+            from ..entities.spike_boss import SpikeBoss
+            if isinstance(self.entity_manager.boss, SpikeBoss):
+                sound_manager.play_spike_boss_music()
+            else:
+                sound_manager.play_boss_music()
+
             self.boss_music_started = True
 
     def _end_boss_fight(self):

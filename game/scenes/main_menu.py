@@ -68,6 +68,9 @@ class MainMenuScene(Scene):
         self.settings_button_hovered = False
         self.exit_button_hovered = False
 
+    def enter(self):
+        pygame.mouse.set_visible(True)
+
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.MOUSEBUTTONDOWN:
             if self.start_button_rect.collidepoint(event.pos):

@@ -60,6 +60,9 @@ class PausedScene(Scene):
         self.settings_button_hovered = False
         self.menu_button_hovered = False
 
+    def enter(self):
+        pygame.mouse.set_visible(True)
+
     def update(self, dt: float):
         # Não atualiza nada durante a pausa
         pass

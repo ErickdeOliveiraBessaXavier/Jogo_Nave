@@ -67,6 +67,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
     "music": {
         "background": "music/background.mp3",
         "boss": "music/boss.mp3",
+        "spike_boss": "music/background_02.mp3",
     },
     # Efeitos sonoros
     "sfx": {

@@ -333,6 +333,15 @@ class SoundManager:
         if os.path.exists(music_path) and self.current_music != "boss":
             self._transition_to_music(music_path, "boss")
 
+    def play_spike_boss_music(self):
+        """Inicia a música do spike boss com transição suave."""
+        music_paths = cast(Dict[str, str], SOUND_PATHS["music"])
+        music_path = get_resource_path(
+            os.path.join(str(SOUND_PATHS["base"]), music_paths["spike_boss"])
+        )
+        if os.path.exists(music_path) and self.current_music != "spike_boss":
+            self._transition_to_music(music_path, "spike_boss")
+
     def _transition_to_music(self, music_path: str, music_type: str):
         """Realiza transição suave entre músicas."""
         # Cancela transição anterior se existir

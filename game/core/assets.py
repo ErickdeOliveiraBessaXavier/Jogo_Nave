@@ -27,10 +27,10 @@ def load_custom_cursor() -> None:
         if CURSOR_PATH.exists():
             # Carregar a imagem do cursor
             cursor_image = pygame.image.load(str(CURSOR_PATH))
-            # Converter para escala apropriada se necessário
-            cursor_image = pygame.transform.scale(cursor_image, (16, 16))
-            # Definir o cursor (hotspot no canto superior esquerdo)
-            cursor = pygame.cursors.Cursor((0, 0), cursor_image)
+            # O cursor já está no tamanho correto (36x36)
+            # Definir o cursor (hotspot no centro)
+            hotspot = (cursor_image.get_width() // 2, cursor_image.get_height() // 2)
+            cursor = pygame.cursors.Cursor(hotspot, cursor_image)
             pygame.mouse.set_cursor(cursor)
         else:
             print(f"⚠️ Cursor não encontrado em {CURSOR_PATH}")

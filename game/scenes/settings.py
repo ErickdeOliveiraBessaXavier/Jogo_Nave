@@ -34,8 +34,16 @@ class Slider:
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(event.pos):
+            knob_x = self.rect.x + int(self.val * self.rect.w)
+            knob_y = self.rect.centery
+            distance = ((event.pos[0] - knob_x) ** 2 + (event.pos[1] - knob_y) ** 2) ** 0.5
+            if distance <= self.knob_radius:
                 self.dragging = True
+            elif self.rect.collidepoint(event.pos):
+                # Jump the knob to the clicked position
+                self.val = (event.pos[0] - self.rect.x) / self.rect.w
+                self.val = max(0.0, min(1.0, self.val))
+                self.dragging = True # Allow dragging from the new position
         elif event.type == pygame.MOUSEBUTTONUP:
             self.dragging = False
         elif event.type == pygame.MOUSEMOTION:
@@ -60,14 +68,14 @@ class Slider:
 class SettingsScene(Scene):
     def __init__(self, app: "GameApp"):
         super().__init__(app)
-        self.font = get_font(48)
+        self.font = get_font(60)
         self.label_font = get_font(24)
 
         # Layout calculations
         total_height = 400  # Approximate total height of all elements
         start_y = (Config.SCREEN_HEIGHT - total_height) // 2
 
-        self.title_text = self.font.render("Settings", True, WHITE)
+        self.title_text = self.font.render("Configurações", True, WHITE)
         self.title_rect = self.title_text.get_rect(
             center=(Config.SCREEN_WIDTH // 2, start_y)
         )
@@ -136,6 +144,9 @@ class SettingsScene(Scene):
             center=self.back_button_rect.center
         )
         self.back_button_hovered = False
+
+    def enter(self):
+        pygame.mouse.set_visible(True)
 
     def handle_event(self, event: pygame.event.Event):
         self.music_slider.handle_event(event)
