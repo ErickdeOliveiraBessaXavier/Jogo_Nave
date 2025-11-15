@@ -44,6 +44,7 @@ class SoundManager:
         self.music_volume: float = VOLUME_CONFIG["music"]
         self.boss_music_volume: float = VOLUME_CONFIG["boss_music"]
         self.boss_laser_volume: float = VOLUME_CONFIG["boss_laser"]
+        self.powerup_volume: float = VOLUME_CONFIG["powerup"]
 
         # Controle de tiros para evitar irritação
         self.shot_channel: pygame.mixer.Channel = pygame.mixer.Channel(
@@ -131,15 +132,20 @@ class SoundManager:
 
         self._sound_groups["explosions"] = explosion_sounds
 
-        # Carregar som de warning
-        warning_path = os.path.join(base_path, sfx_paths["ui"]["warning"])
-        if os.path.exists(warning_path):
-            try:
-                sound = pygame.mixer.Sound(warning_path)
-                sound.set_volume(self.sfx_volume * self.master_volume)
-                self._sounds["warning"] = sound
-            except pygame.error as e:
-                print(f"Erro ao carregar som {warning_path}: {e}")
+        # Carregar som de ui
+        ui_sounds = {
+            "warning": sfx_paths["ui"]["warning"],
+            "powerup": sfx_paths["ui"]["powerup"],
+        }
+        for key, path in ui_sounds.items():
+            sound_path = os.path.join(base_path, path)
+            if os.path.exists(sound_path):
+                try:
+                    sound = pygame.mixer.Sound(sound_path)
+                    sound.set_volume(self.sfx_volume * self.master_volume)
+                    self._sounds[key] = sound
+                except pygame.error as e:
+                    print(f"Erro ao carregar som {sound_path}: {e}")
 
         # Carregar sons do laser do boss
         laser_sounds = {
@@ -471,6 +477,13 @@ class SoundManager:
             self.warning_channel.stop()
             # Tocar no canal dedicado
             self.warning_channel.play(self._sounds["warning"])
+
+    def play_powerup(self):
+        """Toca o som de power-up."""
+        if "powerup" in self._sounds:
+            sound = self._sounds["powerup"]
+            sound.set_volume(self.powerup_volume * self.master_volume)
+            sound.play()
 
     def stop_warning(self):
         """Para especificamente o som de warning."""

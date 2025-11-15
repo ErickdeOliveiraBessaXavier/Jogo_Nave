@@ -27,6 +27,8 @@ class SoundType(Enum):
 
     # UI
     WARNING = "warning"
+    POWERUP = "powerup" # Adicionado
+
 
     # Música
     MUSIC_BACKGROUND = "music_background"
@@ -49,6 +51,7 @@ VOLUME_CONFIG: Dict[str, float] = {
     "boss_music": 0.8,  # Música do boss
     "shots": 0.2,  # Tiros específico
     "boss_laser": 0.35,  # Som do laser do boss (balanceado com música)
+    "powerup": 0.6, # Volume do power-up
 }
 
 # Configurações de canais
@@ -86,6 +89,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
         },
         "ui": {
             "warning": "sfx/ui/warning.mp3",
+            "powerup": "sfx/ui/powerUp.wav", # Adicionado
         },
     },
 }

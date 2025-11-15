@@ -564,6 +564,7 @@ class PlayingScene(Scene):
         )
         if collected_powerups:
             for kind in collected_powerups:
+                sound_manager.play_powerup()
                 if kind == "life":
                     self.lives += 1
                     self.ship.lives = self.lives
