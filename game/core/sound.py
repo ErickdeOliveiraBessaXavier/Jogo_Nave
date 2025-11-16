@@ -61,6 +61,20 @@ class MusicStateManager:
         return False
 
     def _execute_transition(self, new_state: MusicState):
+        # If we are currently paused and the new state is not SILENCE,
+        # we should resume the music that was playing before the pause.
+        # The music track itself should still be loaded in pygame.mixer.music.
+        if self.current_state == MusicState.PAUSED and new_state != MusicState.SILENCE:
+            self.sound_manager.resume_music_internal()
+            return
+
+        # If the new state is PAUSED, we explicitly pause.
+        if new_state == MusicState.PAUSED:
+            self.sound_manager.pause_music_internal()
+            return
+
+        # For all other transitions (from non-paused to a new state, or to SILENCE),
+        # we stop the current music and start the new one.
         if self.current_state != new_state:
             if new_state == MusicState.MENU:
                 self.sound_manager.play_menu_music_internal()
@@ -70,8 +84,6 @@ class MusicStateManager:
                 self.sound_manager.play_boss_music_internal()
             elif new_state == MusicState.SPIKE_BOSS:
                 self.sound_manager.play_spike_boss_music_internal()
-            elif new_state == MusicState.PAUSED:
-                self.sound_manager.pause_music_internal()
             elif new_state == MusicState.SILENCE:
                 self.sound_manager.stop_music_internal()
 
