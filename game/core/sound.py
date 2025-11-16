@@ -37,6 +37,13 @@ class MusicStateManager:
         self.previous_state: MusicState = MusicState.SILENCE
         self.context_stack: List[MusicState] = []
 
+    def reset(self):
+        """Resets the music state manager to its initial silent state."""
+        self.context_stack.clear()
+        self.current_state = MusicState.SILENCE
+        self.previous_state = MusicState.SILENCE
+        self.sound_manager.stop_music_internal() # Ensure music is stopped
+
     def transition_to(self, new_state: MusicState, force: bool = False) -> bool:
         if not force:
             if self._should_block_transition(new_state):
@@ -63,7 +70,6 @@ class MusicStateManager:
     def _execute_transition(self, new_state: MusicState):
         # If we are currently paused and the new state is not SILENCE,
         # we should resume the music that was playing before the pause.
-        # The music track itself should still be loaded in pygame.mixer.music.
         if self.current_state == MusicState.PAUSED and new_state != MusicState.SILENCE:
             self.sound_manager.resume_music_internal()
             return
@@ -73,8 +79,7 @@ class MusicStateManager:
             self.sound_manager.pause_music_internal()
             return
 
-        # For all other transitions (from non-paused to a new state, or to SILENCE),
-        # we stop the current music and start the new one.
+        # For all other transitions, play the appropriate music.
         if self.current_state != new_state:
             if new_state == MusicState.MENU:
                 self.sound_manager.play_menu_music_internal()

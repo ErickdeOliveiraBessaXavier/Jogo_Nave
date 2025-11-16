@@ -19,6 +19,7 @@ class PausedScene(Scene):
         self.previous_scene = previous_scene  # Armazena a cena anterior
         self.button_font = get_font(22)
         self.is_going_to_settings = False
+        self.is_exiting_to_menu = False
 
         # Button colors
         self.button_color = GREEN
@@ -71,10 +72,14 @@ class PausedScene(Scene):
     def enter(self):
         pygame.mouse.set_visible(True)
         self.is_going_to_settings = False  # Reset flag on entry
-        sound_manager.music_state_manager.push_context(MusicState.PAUSED)
+        self.is_exiting_to_menu = False  # Reset flag on entry
+        # Only push context if we are not already paused.
+        # This handles re-entry from a sub-scene like settings.
+        if sound_manager.music_state_manager.current_state != MusicState.PAUSED:
+            sound_manager.music_state_manager.push_context(MusicState.PAUSED)
 
     def exit(self):
-        if not self.is_going_to_settings:
+        if not self.is_going_to_settings and not self.is_exiting_to_menu:
             sound_manager.music_state_manager.pop_context()
 
     def update(self, dt: float):
@@ -116,7 +121,7 @@ class PausedScene(Scene):
             elif self.menu_button_rect.collidepoint(event.pos):
                 # Volta para o menu principal
                 from .main_menu import MainMenuScene
-
+                self.is_exiting_to_menu = True
                 # Remove todas as cenas e vai direto para o menu
                 self.app.states.pop()  # Remove PausedScene
                 self.app.states.pop()  # Remove PlayingScene
