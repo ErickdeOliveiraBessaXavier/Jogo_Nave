@@ -6,7 +6,14 @@ import threading
 import time
 from typing import Dict, List, cast, Any, Union
 
-from .sound_config import VOLUME_CONFIG, CHANNEL_CONFIG, BEHAVIOR_CONFIG, SOUND_PATHS
+from .sound_config import (
+    VOLUME_CONFIG,
+    CHANNEL_CONFIG,
+    BEHAVIOR_CONFIG,
+    SOUND_PATHS,
+    MusicState,
+    MUSIC_BEHAVIOR_CONFIG,
+)
 
 MusicPaths = Dict[str, Union[str, List[str]]]
 
@@ -21,6 +28,69 @@ def get_resource_path(relative_path: str) -> str:
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
+
+
+class MusicStateManager:
+    def __init__(self, sound_manager: "SoundManager"):
+        self.sound_manager = sound_manager
+        self.current_state: MusicState = MusicState.SILENCE
+        self.previous_state: MusicState = MusicState.SILENCE
+        self.context_stack: List[MusicState] = []
+
+    def transition_to(self, new_state: MusicState, force: bool = False) -> bool:
+        if not force:
+            if self._should_block_transition(new_state):
+                return False
+        self.previous_state = self.current_state
+        self._execute_transition(new_state)
+        self.current_state = new_state
+        return True
+
+    def _should_block_transition(self, new_state: MusicState) -> bool:
+        if not MUSIC_BEHAVIOR_CONFIG["prevent_menu_over_game"]:
+            return False
+        game_music_types = [MusicState.GAME, MusicState.BOSS, MusicState.SPIKE_BOSS]
+
+        is_game_music_active = self.current_state in game_music_types or (
+            self.sound_manager.music_paused
+            and self.previous_state in game_music_types
+        )
+
+        if new_state == MusicState.MENU and is_game_music_active:
+            return True
+        return False
+
+    def _execute_transition(self, new_state: MusicState):
+        if self.current_state != new_state:
+            if new_state == MusicState.MENU:
+                self.sound_manager.play_menu_music_internal()
+            elif new_state == MusicState.GAME:
+                self.sound_manager.play_background_music_internal()
+            elif new_state == MusicState.BOSS:
+                self.sound_manager.play_boss_music_internal()
+            elif new_state == MusicState.SPIKE_BOSS:
+                self.sound_manager.play_spike_boss_music_internal()
+            elif new_state == MusicState.PAUSED:
+                self.sound_manager.pause_music_internal()
+            elif new_state == MusicState.SILENCE:
+                self.sound_manager.stop_music_internal()
+
+    def push_context(self, context: MusicState):
+        self.context_stack.append(self.current_state)
+        self.transition_to(context)
+
+    def pop_context(self):
+        if self.context_stack:
+            previous = self.context_stack.pop()
+            self.transition_to(previous)
+
+    def pause_current(self):
+        if self.current_state not in [MusicState.SILENCE, MusicState.PAUSED]:
+            self.sound_manager.pause_music_internal()
+
+    def resume_current(self):
+        if self.current_state not in [MusicState.SILENCE]:
+            self.sound_manager.resume_music_internal()
 
 
 class SoundManager:
@@ -71,6 +141,9 @@ class SoundManager:
 
         # Carregar sons
         self._load_sounds()
+
+        # Gerenciador de estado da música
+        self.music_state_manager = MusicStateManager(self)
 
     def _load_sounds(self):
         """Carrega todos os sons do jogo usando as configurações de SOUND_PATHS."""
@@ -323,33 +396,43 @@ class SoundManager:
         """Para todos os sons."""
         pygame.mixer.stop()
 
-    # === MÉTODOS DE MÚSICA ===
+    # === MÉTODOS DE MÚSICA (CONTROLADOS PELO STATE MANAGER) ===
 
     def play_background_music(self):
-        """Inicia a música de fundo com transição suave, escolhendo aleatoriamente da lista."""
+        self.music_state_manager.transition_to(MusicState.GAME)
+
+    def play_boss_music(self):
+        self.music_state_manager.transition_to(MusicState.BOSS)
+
+    def play_spike_boss_music(self):
+        self.music_state_manager.transition_to(MusicState.SPIKE_BOSS)
+
+    def play_menu_music(self, force: bool = False):
+        self.music_state_manager.transition_to(MusicState.MENU, force=force)
+
+    def pause_music(self):
+        self.music_state_manager.pause_current()
+
+    def resume_music(self):
+        self.music_state_manager.resume_current()
+
+    def stop_music(self, force: bool = False):
+        self.music_state_manager.transition_to(MusicState.SILENCE, force=True)
+
+    # === MÉTODOS INTERNOS DE MÚSICA (CHAMADOS PELO STATE MANAGER) ===
+
+    def play_background_music_internal(self):
         music_paths_config = cast(MusicPaths, SOUND_PATHS["music"])
         background_music_list = music_paths_config["background"]
-
         if isinstance(background_music_list, list) and background_music_list:
-            # Escolher uma música aleatória da lista
-            chosen_music: str = random.choice(background_music_list)
+            chosen_music = random.choice(background_music_list)
             music_path = get_resource_path(
                 os.path.join(str(SOUND_PATHS["base"]), chosen_music)
             )
-
-            # Usar o caminho do arquivo como identificador para evitar tocar a mesma música seguida
             if os.path.exists(music_path) and self.current_music != chosen_music:
-                self._transition_to_music(music_path, chosen_music)
-        elif isinstance(background_music_list, str):
-            # Fallback para o caso de ser uma string única
-            music_path = get_resource_path(
-                os.path.join(str(SOUND_PATHS["base"]), background_music_list)
-            )
-            if os.path.exists(music_path) and self.current_music != "background":
                 self._transition_to_music(music_path, "background")
 
-    def play_boss_music(self):
-        """Inicia a música do boss com transição suave."""
+    def play_boss_music_internal(self):
         music_paths = cast(MusicPaths, SOUND_PATHS["music"])
         music_path = get_resource_path(
             os.path.join(str(SOUND_PATHS["base"]), str(music_paths["boss"]))
@@ -357,8 +440,7 @@ class SoundManager:
         if os.path.exists(music_path) and self.current_music != "boss":
             self._transition_to_music(music_path, "boss")
 
-    def play_spike_boss_music(self):
-        """Inicia a música do spike boss com transição suave."""
+    def play_spike_boss_music_internal(self):
         music_paths = cast(MusicPaths, SOUND_PATHS["music"])
         music_path = get_resource_path(
             os.path.join(str(SOUND_PATHS["base"]), str(music_paths["spike_boss"]))
@@ -366,8 +448,7 @@ class SoundManager:
         if os.path.exists(music_path) and self.current_music != "spike_boss":
             self._transition_to_music(music_path, "spike_boss")
 
-    def play_menu_music(self):
-        """Inicia a música do menu com transição suave."""
+    def play_menu_music_internal(self):
         music_paths = cast(MusicPaths, SOUND_PATHS["music"])
         music_path = get_resource_path(
             os.path.join(str(SOUND_PATHS["base"]), str(music_paths["menu"]))
@@ -375,12 +456,26 @@ class SoundManager:
         if os.path.exists(music_path) and self.current_music != "menu":
             self._transition_to_music(music_path, "menu")
 
+    def pause_music_internal(self):
+        if not self.music_paused:
+            pygame.mixer.music.pause()
+            self.music_paused = True
+
+    def resume_music_internal(self):
+        if self.music_paused:
+            pygame.mixer.music.unpause()
+            self.music_paused = False
+
+    def stop_music_internal(self):
+        pygame.mixer.music.stop()
+        self.current_music = None
+        self.music_paused = False
+
     def _transition_to_music(self, music_path: str, music_type: str):
         """Realiza transição suave entre músicas."""
         if self.transition_thread and self.transition_thread.is_alive():
-            # Stop current music immediately to start a new transition
             pygame.mixer.music.stop()
-            self.transition_thread.join() # Wait for the old thread to finish
+            self.transition_thread.join()
 
         self.transition_thread = threading.Thread(
             target=self._smooth_transition, args=(music_path, music_type), daemon=True
@@ -391,84 +486,39 @@ class SoundManager:
         """Executa a transição suave entre músicas."""
         with self.transition_lock:
             fade_duration = float(BEHAVIOR_CONFIG["music"]["fade_duration"])
-            fade_steps = 20  # Número de passos para o fade
-            step_duration = fade_duration / fade_steps
-
             try:
-                # Fase 1: Fade out da música atual (se houver)
                 if pygame.mixer.music.get_busy():
                     pygame.mixer.music.fadeout(int(fade_duration * 1000))
-                    time.sleep(fade_duration) # Wait for fadeout to complete
+                    time.sleep(fade_duration)
 
-                # Fase 2: Carrega e inicia nova música
                 pygame.mixer.music.load(music_path)
                 if music_type == "boss":
                     target_volume = self.boss_music_volume * self.master_volume
                 else:
                     target_volume = self.music_volume * self.master_volume
 
-                # Inicia com volume zero
                 pygame.mixer.music.set_volume(0)
-                pygame.mixer.music.play(-1)  # Loop infinito
+                pygame.mixer.music.play(-1)
 
-                # Fase 3: Fade in da nova música
+                fade_steps = 20
+                step_duration = fade_duration / fade_steps
                 for i in range(fade_steps):
                     volume = target_volume * (i + 1) / fade_steps
                     pygame.mixer.music.set_volume(volume)
                     time.sleep(step_duration)
 
-                # Garante volume final correto
                 pygame.mixer.music.set_volume(target_volume)
-
                 self.current_music = music_type
                 self.music_paused = False
-
             except pygame.error as e:
                 print(f"Erro na transição de música: {e}")
-                # Fallback: carrega diretamente sem transição
-                try:
-                    pygame.mixer.music.load(music_path)
-                    pygame.mixer.music.set_volume(self.music_volume * self.master_volume)
-                    pygame.mixer.music.play(-1)
-                    self.current_music = music_type
-                    self.music_paused = False
-                except pygame.error as fallback_error:
-                    print(f"Erro no fallback de música: {fallback_error}")
-
-    def stop_music_transitions(self):
-        """Para todas as transições de música em andamento."""
-        if self.transition_thread and self.transition_thread.is_alive():
-            # Não podemos forçar parar uma thread, mas podemos parar a música imediatamente
-            pygame.mixer.music.stop()
-            self.current_music = None
-
-    def pause_music(self):
-        """Pausa a música atual."""
-        if not self.music_paused:
-            pygame.mixer.music.pause()
-            self.music_paused = True
-            print("⏸️ Música pausada")
-
-    def resume_music(self):
-        """Resume a música pausada."""
-        if self.music_paused:
-            pygame.mixer.music.unpause()
-            self.music_paused = False
-            print("▶️ Música resumida")
-
-    def stop_music(self):
-        """Para a música atual."""
-        pygame.mixer.music.stop()
-        self.current_music = None
-        self.music_paused = False
-        print("⏹️ Música parada")
 
     def fade_out_music(self, duration: float | None = None):
         """Faz fade out suave da música atual."""
         if duration is None:
             duration = float(BEHAVIOR_CONFIG["music"]["fade_duration"])
 
-        fade_duration_ms = int(duration * 1000)  # Pygame espera milissegundos
+        fade_duration_ms = int(duration * 1000)
         pygame.mixer.music.fadeout(fade_duration_ms)
         self.current_music = None
         self.music_paused = False
@@ -476,9 +526,7 @@ class SoundManager:
     def play_warning(self):
         """Toca o som de aviso/warning."""
         if "warning" in self._sounds:
-            # Parar qualquer warning anterior
             self.warning_channel.stop()
-            # Tocar no canal dedicado
             self.warning_channel.play(self._sounds["warning"])
 
     def play_powerup(self):
@@ -494,12 +542,10 @@ class SoundManager:
 
     def stop_all_sfx(self):
         """Para todos os efeitos sonoros (não afeta a música)."""
-        # Parar canais específicos
         self.warning_channel.stop()
         self.shot_channel.stop()
         self.boss_laser_channel.stop()
         self.boss_laser_fire_channel.stop()
-        # Parar todos os outros sons
         for sound in self._sounds.values():
             sound.stop()
 

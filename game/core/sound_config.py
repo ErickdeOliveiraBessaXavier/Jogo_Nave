@@ -6,6 +6,22 @@ from enum import Enum
 from typing import Dict, Any, Union
 
 
+class MusicState(Enum):
+    MENU = "menu"
+    GAME = "game"
+    PAUSED = "paused"
+    BOSS = "boss"
+    SPIKE_BOSS = "spike_boss"
+    SILENCE = "silence"
+
+
+MUSIC_BEHAVIOR_CONFIG: Dict[str, Any] = {
+    "auto_resume_from_pause": True,
+    "prevent_menu_over_game": True,
+    "context_aware_transitions": True,
+}
+
+
 class SoundType(Enum):
     """Tipos de sons disponíveis."""
 

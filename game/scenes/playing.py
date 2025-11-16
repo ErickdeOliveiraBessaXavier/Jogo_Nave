@@ -15,6 +15,7 @@ from ..core.levels import LevelManager
 from ..core.assets import get_font
 from ..core import colors
 from ..core.sound import sound_manager
+from ..core.sound_config import MusicState
 from ..entities.mini_ship import MiniShip
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.guided_meteor import GuidedMeteor
@@ -56,9 +57,6 @@ class PlayingScene(Scene):
         self.level_transition_timer = 0.0
         self.level_transition_delay = Config.LEVEL_TRANSITION_DELAY  # segundos
 
-        # Iniciar música de fundo
-        sound_manager.play_background_music()
-
         self.screen_shake_timer = 0.0
         self.screen_shake_intensity = Config.SCREEN_SHAKE_NORMAL
         self.warning_timer = 0.0
@@ -93,6 +91,7 @@ class PlayingScene(Scene):
 
     def enter(self):
         pygame.mouse.set_visible(False)
+        sound_manager.music_state_manager.transition_to(MusicState.GAME)
 
     def exit(self):
         pygame.mouse.set_visible(True)
@@ -673,9 +672,9 @@ class PlayingScene(Scene):
             from ..entities.spike_boss import SpikeBoss
 
             if isinstance(self.entity_manager.boss, SpikeBoss):
-                sound_manager.play_spike_boss_music()
+                sound_manager.music_state_manager.transition_to(MusicState.SPIKE_BOSS)
             else:
-                sound_manager.play_boss_music()
+                sound_manager.music_state_manager.transition_to(MusicState.BOSS)
 
             self.boss_music_started = True
 
@@ -731,7 +730,7 @@ class PlayingScene(Scene):
         self.boss_music_started = False
 
         # Voltar para música normal
-        sound_manager.play_background_music()
+        sound_manager.music_state_manager.transition_to(MusicState.GAME)
         self._advance_to_next_level()
 
     def _advance_to_next_level(self):

@@ -9,6 +9,7 @@ from ..core.assets import get_font
 from ..core.config import Config
 from ..render.renderer import Renderer
 from ..core.sound import sound_manager
+from ..core.sound_config import MusicState
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -76,10 +77,10 @@ class MainMenuScene(Scene):
 
     def enter(self):
         pygame.mouse.set_visible(True)
-        sound_manager.play_menu_music()
+        sound_manager.music_state_manager.transition_to(MusicState.MENU)
 
     def exit(self):
-        sound_manager.fade_out_music()
+        pass
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.MOUSEBUTTONDOWN:

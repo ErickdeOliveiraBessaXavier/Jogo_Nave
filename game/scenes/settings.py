@@ -1,5 +1,5 @@
 import pygame
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from ..core.state import Scene
 from ..core.colors import WHITE, BLACK, GREEN, BRIGHT_GREEN, GRAY
@@ -9,6 +9,7 @@ from ..core.sound import sound_manager
 
 if TYPE_CHECKING:
     from ..app import GameApp
+    from .paused import PausedScene
 
 
 class Slider:
@@ -26,7 +27,7 @@ class Slider:
         self.min_val: float = min_val
         self.max_val: float = max_val
         self.val: float = initial_val
-        self.knob_radius: int = h 
+        self.knob_radius: int = h
         self.dragging: bool = False
         self.value_changed_this_frame: bool = False
 
@@ -39,7 +40,9 @@ class Slider:
         return flag
 
     def handle_event(self, event: pygame.event.Event):
-        self.value_changed_this_frame = False  # Reset flag at the start of event handling
+        self.value_changed_this_frame = (
+            False  # Reset flag at the start of event handling
+        )
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             knob_x = self.rect.x + int(self.val * self.rect.w)
@@ -82,8 +85,9 @@ class Slider:
 
 
 class SettingsScene(Scene):
-    def __init__(self, app: "GameApp"):
+    def __init__(self, app: "GameApp", paused_scene: Optional["PausedScene"] = None):
         super().__init__(app)
+        self.paused_scene = paused_scene
         self.font = get_font(60)
         self.label_font = get_font(24)
 
@@ -172,12 +176,14 @@ class SettingsScene(Scene):
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             if self.back_button_rect.collidepoint(event.pos):
+                if self.paused_scene:
+                    self.paused_scene.is_going_to_settings = False
                 self.app.states.pop()
         elif event.type == pygame.MOUSEMOTION:
             self.back_button_hovered = self.back_button_rect.collidepoint(event.pos)
             if self.back_button_hovered and not self.prev_back_button_hovered:
                 sound_manager.play_sound("button_hover")
-        
+
         self.prev_back_button_hovered = self.back_button_hovered
 
     def update(self, dt: float):
