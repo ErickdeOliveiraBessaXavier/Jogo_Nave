@@ -13,7 +13,7 @@ cursor_surface = pygame.Surface((cursor_size, cursor_size), pygame.SRCALPHA)
 
 # Cores
 white = (255, 255, 255, 255)
-outline_color = (100, 100, 100, 150) # Cinza semi-transparente
+outline_color = (100, 100, 100, 150)  # Cinza semi-transparente
 
 # Centro do cursor
 center = cursor_size // 2
@@ -21,18 +21,26 @@ center = cursor_size // 2
 # Desenhar o contorno/sombra primeiro
 # Linhas verticais
 pygame.draw.line(cursor_surface, outline_color, (center, 5), (center, center - 5), 3)
-pygame.draw.line(cursor_surface, outline_color, (center, center + 5), (center, cursor_size - 5), 3)
+pygame.draw.line(
+    cursor_surface, outline_color, (center, center + 5), (center, cursor_size - 5), 3
+)
 # Linhas horizontais
 pygame.draw.line(cursor_surface, outline_color, (5, center), (center - 5, center), 3)
-pygame.draw.line(cursor_surface, outline_color, (center + 5, center), (cursor_size - 5, center), 3)
+pygame.draw.line(
+    cursor_surface, outline_color, (center + 5, center), (cursor_size - 5, center), 3
+)
 
 # Desenhar as linhas brancas principais sobre o contorno
 # Linhas verticais
 pygame.draw.line(cursor_surface, white, (center, 4), (center, center - 6), 1)
-pygame.draw.line(cursor_surface, white, (center, center + 6), (center, cursor_size - 4), 1)
+pygame.draw.line(
+    cursor_surface, white, (center, center + 6), (center, cursor_size - 4), 1
+)
 # Linhas horizontais
 pygame.draw.line(cursor_surface, white, (4, center), (center - 6, center), 1)
-pygame.draw.line(cursor_surface, white, (center + 6, center), (cursor_size - 4, center), 1)
+pygame.draw.line(
+    cursor_surface, white, (center + 6, center), (cursor_size - 4, center), 1
+)
 
 # Ponto central
 pygame.draw.circle(cursor_surface, white, (center, center), 3)

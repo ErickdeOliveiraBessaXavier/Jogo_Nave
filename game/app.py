@@ -10,10 +10,10 @@ from .core.input import Input
 class GameApp:
     def __init__(self):
         pygame.init()
-        
+
         # Carregar cursor customizado
         load_custom_cursor()
-        
+
         # Detectar resolução do monitor se estiver em fullscreen
         if Config.FULLSCREEN:
             # Obter informações do display
@@ -24,21 +24,18 @@ class GameApp:
             # Usar resolução configurada
             screen_width = Config.SCREEN_WIDTH
             screen_height = Config.SCREEN_HEIGHT
-        
+
         # Atualizar Config com a resolução detectada/configurada
         set_screen_resolution(screen_width, screen_height)
-        
+
         # Armazenar resolução para uso em outras classes
         self.screen_width = screen_width
         self.screen_height = screen_height
-        
+
         # Criar display com fullscreen se ativado
         flags = pygame.FULLSCREEN if Config.FULLSCREEN else 0
-        self.screen = pygame.display.set_mode(
-            (screen_width, screen_height),
-            flags
-        )
-        
+        self.screen = pygame.display.set_mode((screen_width, screen_height), flags)
+
         pygame.display.set_caption("Space Shooter")
         self.clock = pygame.time.Clock()
         self.running = True

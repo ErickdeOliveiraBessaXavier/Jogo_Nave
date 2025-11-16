@@ -16,7 +16,7 @@ class PausedScene(Scene):
         self.r = Renderer()
         self.previous_scene = previous_scene  # Armazena a cena anterior
         self.button_font = get_font(22)
-        
+
         # Button colors
         self.button_color = GREEN
         self.button_hover_color = BRIGHT_GREEN
@@ -39,7 +39,9 @@ class PausedScene(Scene):
             Config.SCREEN_WIDTH // 2,
             Config.SCREEN_HEIGHT // 2 + 40,
         )
-        self.settings_button_text = self.button_font.render("Configurações", True, BLACK)
+        self.settings_button_text = self.button_font.render(
+            "Configurações", True, BLACK
+        )
         self.settings_button_text_rect = self.settings_button_text.get_rect(
             center=self.settings_button_rect.center
         )
@@ -77,8 +79,10 @@ class PausedScene(Scene):
                     # Fallback caso não tenha cena anterior
                     from .playing import PlayingScene
 
-                    self.app.states.switch(PlayingScene(self.app, self.app.level_manager))
-        
+                    self.app.states.switch(
+                        PlayingScene(self.app, self.app.level_manager)
+                    )
+
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if self.continue_button_rect.collidepoint(event.pos):
                 # Volta para a cena anterior
@@ -86,24 +90,33 @@ class PausedScene(Scene):
                     self.app.states.switch(self.previous_scene)
                 else:
                     from .playing import PlayingScene
-                    self.app.states.switch(PlayingScene(self.app, self.app.level_manager))
-            
+
+                    self.app.states.switch(
+                        PlayingScene(self.app, self.app.level_manager)
+                    )
+
             elif self.settings_button_rect.collidepoint(event.pos):
                 # Abre as configurações
                 from .settings import SettingsScene
+
                 self.app.states.push(SettingsScene(self.app))
-            
+
             elif self.menu_button_rect.collidepoint(event.pos):
                 # Volta para o menu principal
                 from .main_menu import MainMenuScene
+
                 # Remove todas as cenas e vai direto para o menu
                 self.app.states.pop()  # Remove PausedScene
                 self.app.states.pop()  # Remove PlayingScene
                 self.app.states.push(MainMenuScene(self.app))
-        
+
         elif event.type == pygame.MOUSEMOTION:
-            self.continue_button_hovered = self.continue_button_rect.collidepoint(event.pos)
-            self.settings_button_hovered = self.settings_button_rect.collidepoint(event.pos)
+            self.continue_button_hovered = self.continue_button_rect.collidepoint(
+                event.pos
+            )
+            self.settings_button_hovered = self.settings_button_rect.collidepoint(
+                event.pos
+            )
             self.menu_button_hovered = self.menu_button_rect.collidepoint(event.pos)
 
     def render(self, surface: pygame.Surface):
@@ -121,8 +134,10 @@ class PausedScene(Scene):
         # Draw title
         pause_font = get_font(60)
         title = pause_font.render("PAUSADO", True, WHITE)
-        title_rect = title.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 4))
-        
+        title_rect = title.get_rect(
+            center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 4)
+        )
+
         surface.blit(title, title_rect)
 
         # Draw Continue Button
@@ -166,5 +181,7 @@ class PausedScene(Scene):
         # Draw hint text
         hint_font = get_font(14)
         hint_text = hint_font.render("Pressione P para continuar", True, WHITE)
-        hint_rect = hint_text.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT - 40))
+        hint_rect = hint_text.get_rect(
+            center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT - 40)
+        )
         surface.blit(hint_text, hint_rect)

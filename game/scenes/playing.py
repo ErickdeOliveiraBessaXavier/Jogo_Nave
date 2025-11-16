@@ -669,8 +669,9 @@ class PlayingScene(Scene):
             self.entity_manager.boss = self.level_config.boss_type(
                 Config.SCREEN_WIDTH / 2 - 50, 50
             )
-            
+
             from ..entities.spike_boss import SpikeBoss
+
             if isinstance(self.entity_manager.boss, SpikeBoss):
                 sound_manager.play_spike_boss_music()
             else:

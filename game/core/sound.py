@@ -334,7 +334,7 @@ class SoundManager:
             music_path = get_resource_path(
                 os.path.join(str(SOUND_PATHS["base"]), chosen_music)
             )
-            
+
             # Usar o caminho do arquivo como identificador para evitar tocar a mesma música seguida
             if os.path.exists(music_path) and self.current_music != chosen_music:
                 self._transition_to_music(music_path, chosen_music)

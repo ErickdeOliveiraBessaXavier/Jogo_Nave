@@ -47,7 +47,9 @@ class MainMenuScene(Scene):
             Config.SCREEN_WIDTH // 2,
             Config.SCREEN_HEIGHT // 2 + 80,
         )
-        self.settings_button_text = self.button_font.render("Configurações", True, BLACK)
+        self.settings_button_text = self.button_font.render(
+            "Configurações", True, BLACK
+        )
         self.settings_button_text_rect = self.settings_button_text.get_rect(
             center=self.settings_button_rect.center
         )

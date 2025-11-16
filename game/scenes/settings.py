@@ -36,14 +36,16 @@ class Slider:
         if event.type == pygame.MOUSEBUTTONDOWN:
             knob_x = self.rect.x + int(self.val * self.rect.w)
             knob_y = self.rect.centery
-            distance = ((event.pos[0] - knob_x) ** 2 + (event.pos[1] - knob_y) ** 2) ** 0.5
+            distance = (
+                (event.pos[0] - knob_x) ** 2 + (event.pos[1] - knob_y) ** 2
+            ) ** 0.5
             if distance <= self.knob_radius:
                 self.dragging = True
             elif self.rect.collidepoint(event.pos):
                 # Jump the knob to the clicked position
                 self.val = (event.pos[0] - self.rect.x) / self.rect.w
                 self.val = max(0.0, min(1.0, self.val))
-                self.dragging = True # Allow dragging from the new position
+                self.dragging = True  # Allow dragging from the new position
         elif event.type == pygame.MOUSEBUTTONUP:
             self.dragging = False
         elif event.type == pygame.MOUSEMOTION:

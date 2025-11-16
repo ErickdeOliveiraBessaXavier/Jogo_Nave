@@ -17,5 +17,3 @@ def set_runtime_resolution(width: int, height: int) -> None:
 def get_detected_resolution() -> tuple[int, int]:
     """Retorna a resolução detectada do monitor."""
     return _detected_screen_width, _detected_screen_height
-
-

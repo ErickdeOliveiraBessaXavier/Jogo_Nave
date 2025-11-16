@@ -409,10 +409,10 @@ _runtime_screen_height = _config_instance.SCREEN_HEIGHT
 
 class ConfigProxy:
     """Proxy que retorna valores dinâmicos para SCREEN_WIDTH e SCREEN_HEIGHT."""
-    
+
     def __init__(self, config_instance: "Config") -> None:
         self._config = config_instance
-    
+
     def __getattr__(self, name: str) -> Any:
         if name == "SCREEN_WIDTH":
             return _runtime_screen_width
@@ -420,7 +420,7 @@ class ConfigProxy:
             return _runtime_screen_height
         else:
             return getattr(self._config, name)
-    
+
     def __setattr__(self, name: str, value: Any) -> None:
         if name == "_config":
             super().__setattr__(name, value)
