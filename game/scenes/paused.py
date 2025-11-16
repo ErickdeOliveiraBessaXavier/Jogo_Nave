@@ -5,6 +5,7 @@ from ..render.renderer import Renderer
 from ..core.config import Config
 from ..core.colors import BLACK, WHITE, GREEN, BRIGHT_GREEN
 from ..core.assets import get_font
+from ..core.sound import sound_manager
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -61,9 +62,18 @@ class PausedScene(Scene):
         self.continue_button_hovered = False
         self.settings_button_hovered = False
         self.menu_button_hovered = False
+        self.prev_continue_button_hovered = False
+        self.prev_settings_button_hovered = False
+        self.prev_menu_button_hovered = False
 
     def enter(self):
         pygame.mouse.set_visible(True)
+        sound_manager.pause_music()
+
+    def exit(self):
+        # Music is resumed only if returning to PlayingScene
+        # If going to MainMenuScene, MainMenuScene will handle its music
+        pass
 
     def update(self, dt: float):
         # Não atualiza nada durante a pausa
@@ -75,6 +85,7 @@ class PausedScene(Scene):
                 # Volta para a cena anterior (Playing) sem criar nova instância
                 if self.previous_scene:
                     self.app.states.switch(self.previous_scene)
+                    sound_manager.resume_music()
                 else:
                     # Fallback caso não tenha cena anterior
                     from .playing import PlayingScene
@@ -82,18 +93,21 @@ class PausedScene(Scene):
                     self.app.states.switch(
                         PlayingScene(self.app, self.app.level_manager)
                     )
+                    sound_manager.resume_music()
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if self.continue_button_rect.collidepoint(event.pos):
                 # Volta para a cena anterior
                 if self.previous_scene:
                     self.app.states.switch(self.previous_scene)
+                    sound_manager.resume_music()
                 else:
                     from .playing import PlayingScene
 
                     self.app.states.switch(
                         PlayingScene(self.app, self.app.level_manager)
                     )
+                    sound_manager.resume_music()
 
             elif self.settings_button_rect.collidepoint(event.pos):
                 # Abre as configurações
@@ -108,6 +122,7 @@ class PausedScene(Scene):
                 # Remove todas as cenas e vai direto para o menu
                 self.app.states.pop()  # Remove PausedScene
                 self.app.states.pop()  # Remove PlayingScene
+                sound_manager.stop_music() # Stop any game music before going to main menu
                 self.app.states.push(MainMenuScene(self.app))
 
         elif event.type == pygame.MOUSEMOTION:
@@ -118,6 +133,19 @@ class PausedScene(Scene):
                 event.pos
             )
             self.menu_button_hovered = self.menu_button_rect.collidepoint(event.pos)
+
+            # Play hover sound only when the state changes
+            if self.continue_button_hovered and not self.prev_continue_button_hovered:
+                sound_manager.play_sound("button_hover")
+            if self.settings_button_hovered and not self.prev_settings_button_hovered:
+                sound_manager.play_sound("button_hover")
+            if self.menu_button_hovered and not self.prev_menu_button_hovered:
+                sound_manager.play_sound("button_hover")
+
+        # Update previous hover states
+        self.prev_continue_button_hovered = self.continue_button_hovered
+        self.prev_settings_button_hovered = self.settings_button_hovered
+        self.prev_menu_button_hovered = self.menu_button_hovered
 
     def render(self, surface: pygame.Surface):
         # Renderiza a cena anterior primeiro (congelada)

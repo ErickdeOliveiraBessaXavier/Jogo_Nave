@@ -72,6 +72,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "music/background_02.mp3",
         ],
         "boss": "music/boss.mp3",
+        "menu": "music/menu-music.mp3",
         "spike_boss": "music/spike_boss_theme.mp3",
     },
     # Efeitos sonoros
@@ -88,7 +89,8 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
         },
         "ui": {
             "warning": "sfx/ui/warning.mp3",
-            "powerup": "sfx/ui/powerUp.wav",  # Adicionado
+            "powerup": "sfx/ui/powerUp.wav",
+            "button_hover": "sfx/ui/sound_hover.wav",
         },
     },
 }

@@ -8,6 +8,7 @@ from ..scenes.settings import SettingsScene
 from ..core.assets import get_font
 from ..core.config import Config
 from ..render.renderer import Renderer
+from ..core.sound import sound_manager
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -69,9 +70,16 @@ class MainMenuScene(Scene):
         self.start_button_hovered = False
         self.settings_button_hovered = False
         self.exit_button_hovered = False
+        self.prev_start_button_hovered = False
+        self.prev_settings_button_hovered = False
+        self.prev_exit_button_hovered = False
 
     def enter(self):
         pygame.mouse.set_visible(True)
+        sound_manager.play_menu_music()
+
+    def exit(self):
+        sound_manager.fade_out_music()
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -88,6 +96,19 @@ class MainMenuScene(Scene):
                 event.pos
             )
             self.exit_button_hovered = self.exit_button_rect.collidepoint(event.pos)
+
+            # Play hover sound only when the state changes
+            if self.start_button_hovered and not self.prev_start_button_hovered:
+                sound_manager.play_sound("button_hover")
+            if self.settings_button_hovered and not self.prev_settings_button_hovered:
+                sound_manager.play_sound("button_hover")
+            if self.exit_button_hovered and not self.prev_exit_button_hovered:
+                sound_manager.play_sound("button_hover")
+
+        # Update previous hover states
+        self.prev_start_button_hovered = self.start_button_hovered
+        self.prev_settings_button_hovered = self.settings_button_hovered
+        self.prev_exit_button_hovered = self.exit_button_hovered
 
     def update(self, dt: float):
         self.r.starfield.update(dt)

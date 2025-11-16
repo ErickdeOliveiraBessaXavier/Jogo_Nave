@@ -26,13 +26,21 @@ class Slider:
         self.min_val: float = min_val
         self.max_val: float = max_val
         self.val: float = initial_val
-        self.knob_radius: int = h // 2
+        self.knob_radius: int = h 
         self.dragging: bool = False
+        self.value_changed_this_frame: bool = False
 
     def get_value(self) -> float:
         return self.val
 
+    def get_and_reset_value_changed_flag(self) -> bool:
+        flag = self.value_changed_this_frame
+        self.value_changed_this_frame = False
+        return flag
+
     def handle_event(self, event: pygame.event.Event):
+        self.value_changed_this_frame = False  # Reset flag at the start of event handling
+
         if event.type == pygame.MOUSEBUTTONDOWN:
             knob_x = self.rect.x + int(self.val * self.rect.w)
             knob_y = self.rect.centery
@@ -43,15 +51,21 @@ class Slider:
                 self.dragging = True
             elif self.rect.collidepoint(event.pos):
                 # Jump the knob to the clicked position
-                self.val = (event.pos[0] - self.rect.x) / self.rect.w
-                self.val = max(0.0, min(1.0, self.val))
+                new_val = (event.pos[0] - self.rect.x) / self.rect.w
+                new_val = max(0.0, min(1.0, new_val))
+                if new_val != self.val:
+                    self.val = new_val
+                    self.value_changed_this_frame = True
                 self.dragging = True  # Allow dragging from the new position
         elif event.type == pygame.MOUSEBUTTONUP:
             self.dragging = False
         elif event.type == pygame.MOUSEMOTION:
             if self.dragging:
-                self.val = (event.pos[0] - self.rect.x) / self.rect.w
-                self.val = max(0.0, min(1.0, self.val))
+                new_val = (event.pos[0] - self.rect.x) / self.rect.w
+                new_val = max(0.0, min(1.0, new_val))
+                if new_val != self.val:
+                    self.val = new_val
+                    self.value_changed_this_frame = True
 
     def draw(self, surface: pygame.Surface):
         # Draw the slider bar
@@ -146,6 +160,7 @@ class SettingsScene(Scene):
             center=self.back_button_rect.center
         )
         self.back_button_hovered = False
+        self.prev_back_button_hovered = False
 
     def enter(self):
         pygame.mouse.set_visible(True)
@@ -160,10 +175,22 @@ class SettingsScene(Scene):
                 self.app.states.pop()
         elif event.type == pygame.MOUSEMOTION:
             self.back_button_hovered = self.back_button_rect.collidepoint(event.pos)
+            if self.back_button_hovered and not self.prev_back_button_hovered:
+                sound_manager.play_sound("button_hover")
+        
+        self.prev_back_button_hovered = self.back_button_hovered
 
     def update(self, dt: float):
+        if self.music_slider.get_and_reset_value_changed_flag():
+            sound_manager.play_sound("button_hover")
         sound_manager.set_music_volume(self.music_slider.get_value())
+
+        if self.sfx_slider.get_and_reset_value_changed_flag():
+            sound_manager.play_sound("button_hover")
         sound_manager.set_sfx_volume(self.sfx_slider.get_value())
+
+        if self.shot_slider.get_and_reset_value_changed_flag():
+            sound_manager.play_sound("button_hover")
         sound_manager.set_shot_volume(self.shot_slider.get_value())
 
     def render(self, surface: pygame.Surface):
