@@ -21,7 +21,7 @@ class DifficultyConfig:
     BASE_ALIEN_SPAWN_TIME = 2.5
     BASE_EYE_SPAWN_TIME = 6.0
 
-    MIN_ENEMIES_TO_CLEAR = 50
+    MIN_ENEMIES_TO_CLEAR = 80
     BASE_ENEMIES = 25
     ENEMIES_PER_LEVEL = 5
     ENEMY_VARIATION = 20
@@ -247,8 +247,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         enemy_spawn_config={
             Meteor: 0.6,
         },
-        boss_type=Boss,
-        enemies_to_clear=0,
+        enemies_to_clear=200,
     ),
     # Nível 3: Primeiro Boss - Mix de inimigos + Boss clássico
     3: LevelConfig(
