@@ -1,6 +1,6 @@
 import pygame
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -51,7 +51,7 @@ class StateManager:
         self._stack.append(scene)
         scene.enter()
 
-    def current(self) -> Scene:
+    def current(self) -> Optional[Scene]:
         if not self._stack:
             return None
         return self._stack[-1]

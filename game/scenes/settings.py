@@ -177,7 +177,7 @@ class SettingsScene(Scene):
         if event.type == pygame.MOUSEBUTTONDOWN:
             if self.back_button_rect.collidepoint(event.pos):
                 if self.paused_scene:
-                    self.paused_scene.is_going_to_settings = False
+                    self.paused_scene.go_to_settings = False
                 self.app.states.pop()
         elif event.type == pygame.MOUSEMOTION:
             self.back_button_hovered = self.back_button_rect.collidepoint(event.pos)
