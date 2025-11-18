@@ -55,3 +55,8 @@ class StateManager:
         if not self._stack:
             return None
         return self._stack[-1]
+
+    @property
+    def stack_length(self) -> int:
+        """Returns the number of scenes in the stack."""
+        return len(self._stack)

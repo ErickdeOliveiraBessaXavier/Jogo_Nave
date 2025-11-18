@@ -86,7 +86,7 @@ class PausedScene(Scene):
                 sound_manager.music_state_manager.transition_to(MusicState.MENU, force=True)
                 
                 # Pop until we get to the main menu
-                while len(self.app.states._stack) > 1:
+                while self.app.states.stack_length > 1:
                     self.app.states.pop()
 
 
