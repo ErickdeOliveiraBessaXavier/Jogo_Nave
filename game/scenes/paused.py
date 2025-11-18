@@ -52,7 +52,6 @@ class PausedScene(Scene):
         self.prev_menu_button_hovered = False
 
     def enter(self):
-        print("--- ENTERING PAUSED SCENE ---")
         pygame.mouse.set_visible(True)
         self.go_to_settings = False
         self.go_to_menu = False
@@ -146,4 +145,4 @@ class PausedScene(Scene):
         hint_font = get_font(14)
         hint_text = hint_font.render("Pressione P para continuar", True, WHITE)
         hint_rect = hint_text.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT - 40))
-        surface.blit(hint_text, hint_rect)
+        surface.blit(hint_text, hint_rect)1
