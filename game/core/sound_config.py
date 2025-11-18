@@ -9,7 +9,6 @@ from typing import Dict, Any, Union
 class MusicState(Enum):
     MENU = "menu"
     GAME = "game"
-    PAUSED = "paused"
     BOSS = "boss"
     SPIKE_BOSS = "spike_boss"
     SILENCE = "silence"

@@ -77,8 +77,7 @@ class MainMenuScene(Scene):
 
     def enter(self):
         pygame.mouse.set_visible(True)
-        sound_manager.music_state_manager.reset() # Reset music state manager
-        sound_manager.music_state_manager.transition_to(MusicState.MENU)
+        sound_manager.play_menu_music(force=True)
 
     def exit(self):
         pass

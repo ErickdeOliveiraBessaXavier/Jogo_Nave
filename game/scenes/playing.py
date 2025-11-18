@@ -760,6 +760,7 @@ class PlayingScene(Scene):
 
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_p:
+                print("--- Switching to PausedScene ---")
                 from .paused import PausedScene
 
                 self.app.states.switch(PausedScene(self.app, previous_scene=self))

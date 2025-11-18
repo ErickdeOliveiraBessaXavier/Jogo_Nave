@@ -1,6 +1,6 @@
 import pygame
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -28,24 +28,30 @@ class Scene(ABC):
 
 class StateManager:
     def __init__(self):
-        self._stack: list[Scene] = []
+        self._stack: List[Scene] = []
 
     def push(self, scene: Scene):
-        if self._stack:
-            self._stack[-1].exit()
+        """Pushes a new scene onto the stack without affecting the one below."""
         self._stack.append(scene)
         scene.enter()
 
     def pop(self):
+        """Pops the current scene and re-enters the one below."""
         if self._stack:
-            s = self._stack.pop()
-            s.exit()
+            scene = self._stack.pop()
+            scene.exit()
         if self._stack:
             self._stack[-1].enter()
 
     def switch(self, scene: Scene):
-        self.pop()
-        self.push(scene)
+        """Switches the current scene with a new one."""
+        if self._stack:
+            old_scene = self._stack.pop()
+            old_scene.exit()
+        self._stack.append(scene)
+        scene.enter()
 
     def current(self) -> Scene:
+        if not self._stack:
+            return None
         return self._stack[-1]
