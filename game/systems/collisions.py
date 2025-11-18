@@ -246,7 +246,7 @@ class Collisions:
         if ship.invuln > 0:
             return False
         for enemy in enemies[:]:
-            if ship.rect.colliderect(enemy.rect):
+            if enemy and ship.rect.colliderect(enemy.rect):
                 if isinstance(enemy, ExplosiveMine):
                     enemy.dead = True  # Explode immediately
                 else:

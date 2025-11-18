@@ -247,7 +247,8 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         enemy_spawn_config={
             Meteor: 0.6,
         },
-        enemies_to_clear=200,
+        boss_type=Boss,
+        enemies_to_clear=0,
     ),
     # Nível 3: Primeiro Boss - Mix de inimigos + Boss clássico
     3: LevelConfig(

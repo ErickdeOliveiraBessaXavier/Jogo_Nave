@@ -64,8 +64,6 @@ VOLUME_CONFIG: Dict[str, float] = {
     "music": 0.3,  # Música
     "boss_music": 0.8,  # Música do boss
     "shots": 0.2,  # Tiros específico
-    "boss_laser": 0.35,  # Som do laser do boss (balanceado com música)
-    "powerup": 0.6,  # Volume do power-up
 }
 
 # Configurações de canais

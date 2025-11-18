@@ -106,8 +106,6 @@ class SoundManager:
         self.sfx_volume: float = VOLUME_CONFIG["sfx"]
         self.music_volume: float = VOLUME_CONFIG["music"]
         self.boss_music_volume: float = VOLUME_CONFIG["boss_music"]
-        self.boss_laser_volume: float = VOLUME_CONFIG["boss_laser"]
-        self.powerup_volume: float = VOLUME_CONFIG["powerup"]
 
         # Controle de tiros para evitar irritação
         self.shot_channel: pygame.mixer.Channel = pygame.mixer.Channel(
@@ -225,7 +223,7 @@ class SoundManager:
             if os.path.exists(sound_path):
                 try:
                     sound = pygame.mixer.Sound(sound_path)
-                    sound.set_volume(self.boss_laser_volume * self.master_volume)
+                    sound.set_volume(self.sfx_volume * self.master_volume)
                     self._sounds[key] = sound
                 except pygame.error as e:
                     print(f"Erro ao carregar som {sound_path}: {e}")
@@ -290,7 +288,7 @@ class SoundManager:
 
             # Configurar volume balanceado do som do laser
             sound = self._sounds["boss_laser_charging"]
-            sound.set_volume(self.boss_laser_volume * self.master_volume)
+            sound.set_volume(self.sfx_volume * self.master_volume)
 
             # Tocar no canal dedicado
             self.boss_laser_channel.play(sound)
@@ -306,7 +304,7 @@ class SoundManager:
         if "boss_laser_fire" in self._sounds:
             # Volume ligeiramente mais alto para o disparo (momento de impacto)
             sound = self._sounds["boss_laser_fire"]
-            fire_volume = min(1.0, self.boss_laser_volume * 1.2)  # 20% mais alto
+            fire_volume = min(1.0, self.sfx_volume * 1.2)  # 20% mais alto
             sound.set_volume(fire_volume * self.master_volume)
             # Tocar no canal dedicado para controle
             self.boss_laser_fire_channel.play(sound)
@@ -365,9 +363,13 @@ class SoundManager:
             pygame.mixer.music.set_volume(self.boss_music_volume * self.master_volume)
 
     def set_music_volume(self, volume: float):
-        """Define o volume da música de fundo (0.0 a 1.0)."""
+        """Define o volume de todas as músicas (0.0 a 1.0)."""
         self.music_volume = max(0.0, min(1.0, volume))
-        if self.current_music == "background":
+        self.boss_music_volume = max(0.0, min(1.0, volume))
+
+        if self.current_music in ["boss", "spike_boss"]:
+            pygame.mixer.music.set_volume(self.boss_music_volume * self.master_volume)
+        elif self.current_music is not None:  # For "background" and "menu"
             pygame.mixer.music.set_volume(self.music_volume * self.master_volume)
 
     def get_volumes(self):
@@ -404,7 +406,6 @@ class SoundManager:
         self.music_state_manager.transition_to(MusicState.MENU, force=force)
 
     def pause_music(self):
-        print("--- Initiating music pause ---")
         self.music_state_manager.pause_current()
 
     def resume_music(self):
@@ -527,7 +528,7 @@ class SoundManager:
         """Toca o som de power-up."""
         if "powerup" in self._sounds:
             sound = self._sounds["powerup"]
-            sound.set_volume(self.powerup_volume * self.master_volume)
+            sound.set_volume(self.sfx_volume * self.master_volume)
             sound.play()
 
     def stop_warning(self):
