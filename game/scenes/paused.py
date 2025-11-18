@@ -68,19 +68,11 @@ class PausedScene(Scene):
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_p:
-            if self.previous_scene:
-                self.app.states.switch(self.previous_scene)
-            else:
-                from .playing import PlayingScene
-                self.app.states.switch(PlayingScene(self.app, self.app.level_manager))
+            self.app.states.pop()
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if self.continue_button_rect.collidepoint(event.pos):
-                if self.previous_scene:
-                    self.app.states.switch(self.previous_scene)
-                else:
-                    from .playing import PlayingScene
-                    self.app.states.switch(PlayingScene(self.app, self.app.level_manager))
+                self.app.states.pop()
 
             elif self.settings_button_rect.collidepoint(event.pos):
                 from .settings import SettingsScene
@@ -92,10 +84,11 @@ class PausedScene(Scene):
                 sound_manager.stop_music()
                 from ..core.sound_config import MusicState
                 sound_manager.music_state_manager.transition_to(MusicState.MENU, force=True)
-                from .main_menu import MainMenuScene
-                self.app.states.pop()  # Remove PausedScene
-                self.app.states.pop()  # Remove PlayingScene
-                self.app.states.push(MainMenuScene(self.app))
+                
+                # Pop until we get to the main menu
+                while len(self.app.states._stack) > 1:
+                    self.app.states.pop()
+
 
         elif event.type == pygame.MOUSEMOTION:
             self.continue_button_hovered = self.continue_button_rect.collidepoint(event.pos)
@@ -145,4 +138,4 @@ class PausedScene(Scene):
         hint_font = get_font(14)
         hint_text = hint_font.render("Pressione P para continuar", True, WHITE)
         hint_rect = hint_text.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT - 40))
-        surface.blit(hint_text, hint_rect)1
+        surface.blit(hint_text, hint_rect)

@@ -33,6 +33,7 @@ class PlayingScene(Scene):
         self.ship = Ship(Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT)
         self.ship.is_entering = True
         self.entity_manager = EntityManager()
+        self.first_entry = True
 
         self.current_level_index = 0
         self.level_config = self.level_manager.get_level(
@@ -91,7 +92,9 @@ class PlayingScene(Scene):
 
     def enter(self):
         pygame.mouse.set_visible(False)
-        sound_manager.music_state_manager.transition_to(MusicState.GAME)
+        if self.first_entry:
+            sound_manager.music_state_manager.transition_to(MusicState.GAME)
+            self.first_entry = False
 
     def exit(self):
         pygame.mouse.set_visible(True)
@@ -760,10 +763,8 @@ class PlayingScene(Scene):
 
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_p:
-                print("--- Switching to PausedScene ---")
                 from .paused import PausedScene
-
-                self.app.states.switch(PausedScene(self.app, previous_scene=self))
+                self.app.states.push(PausedScene(self.app, previous_scene=self))
 
             # Sistema de cheat code
             self._process_cheat_input(event)

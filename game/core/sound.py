@@ -35,11 +35,9 @@ class MusicStateManager:
         self.sound_manager = sound_manager
         self.current_state: MusicState = MusicState.SILENCE
         self.previous_state: MusicState = MusicState.SILENCE
-        self.context_stack: List[MusicState] = []
 
     def reset(self):
         """Resets the music state manager to its initial silent state."""
-        self.context_stack.clear()
         self.current_state = MusicState.SILENCE
         self.previous_state = MusicState.SILENCE
         self.sound_manager.stop_music_internal() # Ensure music is stopped
@@ -68,17 +66,6 @@ class MusicStateManager:
         return False
 
     def _execute_transition(self, new_state: MusicState):
-        # If we are currently paused and the new state is not SILENCE,
-        # we should resume the music that was playing before the pause.
-        if self.current_state == MusicState.PAUSED and new_state != MusicState.SILENCE:
-            self.sound_manager.resume_music_internal()
-            return
-
-        # If the new state is PAUSED, we explicitly pause.
-        if new_state == MusicState.PAUSED:
-            self.sound_manager.pause_music_internal()
-            return
-
         # For all other transitions, play the appropriate music.
         if self.current_state != new_state:
             if new_state == MusicState.MENU:
@@ -92,22 +79,11 @@ class MusicStateManager:
             elif new_state == MusicState.SILENCE:
                 self.sound_manager.stop_music_internal()
 
-    def push_context(self, context: MusicState):
-        self.context_stack.append(self.current_state)
-        self.transition_to(context)
-
-    def pop_context(self):
-        if self.context_stack:
-            previous = self.context_stack.pop()
-            self.transition_to(previous)
-
     def pause_current(self):
-        if self.current_state not in [MusicState.SILENCE, MusicState.PAUSED]:
-            self.sound_manager.pause_music_internal()
+        self.sound_manager.pause_music_internal()
 
     def resume_current(self):
-        if self.current_state not in [MusicState.SILENCE]:
-            self.sound_manager.resume_music_internal()
+        self.sound_manager.resume_music_internal()
 
 
 class SoundManager:
@@ -428,6 +404,7 @@ class SoundManager:
         self.music_state_manager.transition_to(MusicState.MENU, force=force)
 
     def pause_music(self):
+        print("--- Initiating music pause ---")
         self.music_state_manager.pause_current()
 
     def resume_music(self):
