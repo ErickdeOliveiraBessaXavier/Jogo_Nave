@@ -150,19 +150,26 @@ class StarField:
                 self._reset_star(s)
 
     def draw(self, surface: pygame.Surface):
+        import math
         for s in self.stars:
             c = (s["brightness"], s["brightness"], s["brightness"])
             center_x, center_y = int(s["x"]), int(s["y"])
-            half_size = s["size"]
-            
-            # Draw a diamond-shaped star
-            points = [
-                (center_x, center_y - half_size),  # Top
-                (center_x + half_size, center_y),  # Right
-                (center_x, center_y + half_size),  # Bottom
-                (center_x - half_size, center_y),  # Left
-            ]
-            pygame.draw.polygon(surface, c, points)
+            a = s["size"] * 4  # raio
+
+            # Asteroide suave com 4 cúspides (x = a * cos(t)^3, y = a * sin(t)^3)
+            points: list[tuple[float, float]] = []
+            t = 0.0
+            step = 0.05
+            while t < 2 * math.pi:
+                x = a * (math.cos(t) ** 3)
+                y = a * (math.sin(t) ** 3)
+                px = center_x + x
+                py = center_y + y
+                points.append((px, py))
+                t += step
+
+            if len(points) > 2:
+                pygame.draw.polygon(surface, c, points)
 
 
 
