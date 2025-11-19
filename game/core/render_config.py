@@ -1,5 +1,6 @@
 # game/core/render_config.py
 
+
 class RenderConfig:
     # Celestial Manager configurations
     CELESTIAL_NUM_BODIES = 2
@@ -12,7 +13,7 @@ class RenderConfig:
     CELESTIAL_SPEED_OFFSET = 20
     CELESTIAL_RESET_Y_MIN_MULTIPLIER = -1.5
     CELESTIAL_RESET_Y_MAX_MULTIPLIER = -0.5
-    CELESTIAL_MIN_GAP = 50 # Minimum horizontal gap between celestial bodies
+    CELESTIAL_MIN_GAP = 50  # Minimum horizontal gap between celestial bodies
 
     # Starfield configurations
     STARFIELD_NUM_STARS = 60

@@ -5,8 +5,8 @@ from typing import TypedDict, Optional, TYPE_CHECKING
 from pathlib import Path
 from ..core import colors
 from ..core.config import Config
-from ..core.assets import get_font, get_image # Added get_image
-from ..core.render_config import RenderConfig 
+from ..core.assets import get_font, get_image  # Added get_image
+from ..core.render_config import RenderConfig
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
@@ -53,11 +53,18 @@ class CelestialManager:
         image = pygame.transform.scale(original_image, (width, height))
 
         # Opacity based on size
-        alpha = int(RenderConfig.CELESTIAL_ALPHA_MIN + (scale - RenderConfig.CELESTIAL_SCALE_MIN) * (RenderConfig.CELESTIAL_ALPHA_MAX - RenderConfig.CELESTIAL_ALPHA_MIN) / (RenderConfig.CELESTIAL_SCALE_MAX - RenderConfig.CELESTIAL_SCALE_MIN))
+        alpha = int(
+            RenderConfig.CELESTIAL_ALPHA_MIN
+            + (scale - RenderConfig.CELESTIAL_SCALE_MIN)
+            * (RenderConfig.CELESTIAL_ALPHA_MAX - RenderConfig.CELESTIAL_ALPHA_MIN)
+            / (RenderConfig.CELESTIAL_SCALE_MAX - RenderConfig.CELESTIAL_SCALE_MIN)
+        )
         image.set_alpha(alpha)
         return image
 
-    def _get_random_x_position(self, width: int, current_body: Optional[CelestialBody] = None) -> float:
+    def _get_random_x_position(
+        self, width: int, current_body: Optional[CelestialBody] = None
+    ) -> float:
         """Generates a random x-position ensuring no overlap with existing bodies."""
         new_x = 0
         max_attempts = 10
@@ -65,11 +72,14 @@ class CelestialManager:
             test_x = random.uniform(0, self.w - width)
             overlap = False
             for existing_body in self.celestial_bodies:
-                if existing_body is current_body: # Don't check overlap with itself
+                if existing_body is current_body:  # Don't check overlap with itself
                     continue
                 min_gap = RenderConfig.CELESTIAL_MIN_GAP
-                if (test_x < existing_body["x"] + existing_body["image"].get_width() + min_gap and
-                    test_x + width + min_gap > existing_body["x"]):
+                if (
+                    test_x
+                    < existing_body["x"] + existing_body["image"].get_width() + min_gap
+                    and test_x + width + min_gap > existing_body["x"]
+                ):
                     overlap = True
                     break
             if not overlap:
@@ -77,11 +87,15 @@ class CelestialManager:
                 break
         return new_x
 
-    def _create_and_initialize_celestial_body(self, y_position: Optional[float] = None) -> CelestialBody:
+    def _create_and_initialize_celestial_body(
+        self, y_position: Optional[float] = None
+    ) -> CelestialBody:
         """Creates a new celestial body and initializes its properties."""
         image_path = random.choice(self.image_files)
-        
-        scale = random.uniform(RenderConfig.CELESTIAL_SCALE_MIN, RenderConfig.CELESTIAL_SCALE_MAX)
+
+        scale = random.uniform(
+            RenderConfig.CELESTIAL_SCALE_MIN, RenderConfig.CELESTIAL_SCALE_MAX
+        )
         image = self._generate_scaled_image(image_path, scale)
 
         x = self._get_random_x_position(image.get_width())
@@ -90,22 +104,40 @@ class CelestialManager:
             "image": image,
             "x": x,
             "y": y_position if y_position is not None else random.uniform(0, self.h),
-            "speed": random.uniform(RenderConfig.CELESTIAL_SPEED_BASE_MIN, RenderConfig.CELESTIAL_SPEED_BASE_MAX) * scale + RenderConfig.CELESTIAL_SPEED_OFFSET,
+            "speed": random.uniform(
+                RenderConfig.CELESTIAL_SPEED_BASE_MIN,
+                RenderConfig.CELESTIAL_SPEED_BASE_MAX,
+            )
+            * scale
+            + RenderConfig.CELESTIAL_SPEED_OFFSET,
             "scale": scale,
         }
         return body
 
-    def _reset_celestial_body(self, body: CelestialBody, y_position: Optional[float] = None):
+    def _reset_celestial_body(
+        self, body: CelestialBody, y_position: Optional[float] = None
+    ):
         """Resets the properties of an existing celestial body."""
         image_path = random.choice(self.image_files)
-        
-        scale = random.uniform(RenderConfig.CELESTIAL_SCALE_MIN, RenderConfig.CELESTIAL_SCALE_MAX)
+
+        scale = random.uniform(
+            RenderConfig.CELESTIAL_SCALE_MIN, RenderConfig.CELESTIAL_SCALE_MAX
+        )
         image = self._generate_scaled_image(image_path, scale)
 
         body["image"] = image
-        body["x"] = self._get_random_x_position(image.get_width(), current_body=body) # Pass current_body for overlap check
+        body["x"] = self._get_random_x_position(
+            image.get_width(), current_body=body
+        )  # Pass current_body for overlap check
         body["y"] = y_position if y_position is not None else random.uniform(0, self.h)
-        body["speed"] = random.uniform(RenderConfig.CELESTIAL_SPEED_BASE_MIN, RenderConfig.CELESTIAL_SPEED_BASE_MAX) * scale + RenderConfig.CELESTIAL_SPEED_OFFSET
+        body["speed"] = (
+            random.uniform(
+                RenderConfig.CELESTIAL_SPEED_BASE_MIN,
+                RenderConfig.CELESTIAL_SPEED_BASE_MAX,
+            )
+            * scale
+            + RenderConfig.CELESTIAL_SPEED_OFFSET
+        )
         body["scale"] = scale
 
     def update(self, dt: float, speed_multiplier: float = 1.0):
@@ -113,7 +145,13 @@ class CelestialManager:
             body["y"] += body["speed"] * dt * speed_multiplier
             if body["y"] > self.h:
                 # Reset the existing body instead of creating a new one
-                self._reset_celestial_body(body, y_position=random.uniform(self.h * RenderConfig.CELESTIAL_RESET_Y_MIN_MULTIPLIER, self.h * RenderConfig.CELESTIAL_RESET_Y_MAX_MULTIPLIER))
+                self._reset_celestial_body(
+                    body,
+                    y_position=random.uniform(
+                        self.h * RenderConfig.CELESTIAL_RESET_Y_MIN_MULTIPLIER,
+                        self.h * RenderConfig.CELESTIAL_RESET_Y_MAX_MULTIPLIER,
+                    ),
+                )
 
     def draw(self, surface: pygame.Surface):
         for body in self.celestial_bodies:
@@ -146,16 +184,23 @@ class StarField:
             pulse_speed = random.uniform(0.2, 1.2)  # lenta/quase fixa
         else:
             pulse_speed = random.uniform(1.3, 3.5)  # média/rápida
-        return Star({
-            "x": random.randint(0, self.w),
-            "y": random.randint(0, self.h),
-            "speed": random.uniform(RenderConfig.STARFIELD_SPEED_MIN, RenderConfig.STARFIELD_SPEED_MAX),
-            "size": random.choice([1, 1, 2, 3]),
-            "brightness": random.randint(RenderConfig.STARFIELD_BRIGHTNESS_MIN, RenderConfig.STARFIELD_BRIGHTNESS_MAX),
-            "phase": random.uniform(0, 2 * math.pi),
-            "pulse_speed": pulse_speed,
-            "color": color,
-        })
+        return Star(
+            {
+                "x": random.randint(0, self.w),
+                "y": random.randint(0, self.h),
+                "speed": random.uniform(
+                    RenderConfig.STARFIELD_SPEED_MIN, RenderConfig.STARFIELD_SPEED_MAX
+                ),
+                "size": random.choice([1, 1, 2, 3]),
+                "brightness": random.randint(
+                    RenderConfig.STARFIELD_BRIGHTNESS_MIN,
+                    RenderConfig.STARFIELD_BRIGHTNESS_MAX,
+                ),
+                "phase": random.uniform(0, 2 * math.pi),
+                "pulse_speed": pulse_speed,
+                "color": color,
+            }
+        )
 
     def _reset_star(self, star: Star):
         """Resets the properties of an existing star, including color and varied pulse speed."""
@@ -176,9 +221,13 @@ class StarField:
             pulse_speed = random.uniform(1.3, 3.5)  # média/rápida
         star["x"] = random.randint(0, self.w)
         star["y"] = -star["size"]  # Start above the screen
-        star["speed"] = random.uniform(RenderConfig.STARFIELD_SPEED_MIN, RenderConfig.STARFIELD_SPEED_MAX)
+        star["speed"] = random.uniform(
+            RenderConfig.STARFIELD_SPEED_MIN, RenderConfig.STARFIELD_SPEED_MAX
+        )
         star["size"] = random.choice([1, 1, 2, 3])
-        star["brightness"] = random.randint(RenderConfig.STARFIELD_BRIGHTNESS_MIN, RenderConfig.STARFIELD_BRIGHTNESS_MAX)
+        star["brightness"] = random.randint(
+            RenderConfig.STARFIELD_BRIGHTNESS_MIN, RenderConfig.STARFIELD_BRIGHTNESS_MAX
+        )
         star["phase"] = random.uniform(0, 2 * math.pi)
         star["pulse_speed"] = pulse_speed
         star["color"] = random.choice(star_colors)
@@ -187,12 +236,12 @@ class StarField:
         for s in self.stars:
             # Movimento vertical
             s["y"] += s["speed"] * dt * speed_multiplier
-            
+
             # Atualizar fase da animação
             s["phase"] += s["pulse_speed"] * dt
             if s["phase"] > 2 * math.pi:
                 s["phase"] -= 2 * math.pi
-            
+
             # Reset se sair da tela
             if s["y"] > self.h:
                 self._reset_star(s)
@@ -230,14 +279,17 @@ class StarField:
                     pygame.draw.polygon(surface, c, points)
 
 
-
 class Renderer:
     def __init__(self):
         self.font_small = get_font(12)
         self.font_medium = get_font(24)
         self.font_large = get_font(32)
         self.starfield = StarField(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
-        self.celestial_manager = CelestialManager(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT, n=RenderConfig.CELESTIAL_NUM_BODIES)
+        self.celestial_manager = CelestialManager(
+            Config.SCREEN_WIDTH,
+            Config.SCREEN_HEIGHT,
+            n=RenderConfig.CELESTIAL_NUM_BODIES,
+        )
 
     def background(
         self, surface: pygame.Surface, dt: float, speed_multiplier: float = 1.0
@@ -329,4 +381,3 @@ class Renderer:
                 halo, (0, 120, 255, 120), (radius + 3, radius + 3), radius, width=3
             )
             surface.blit(halo, (cx - radius - 3, cy - radius - 3))
-

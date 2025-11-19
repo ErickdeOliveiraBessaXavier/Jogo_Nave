@@ -766,6 +766,7 @@ class PlayingScene(Scene):
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_p:
                 from .paused import PausedScene
+
                 self.app.states.push(PausedScene(self.app, previous_scene=self))
 
             # Sistema de cheat code
@@ -793,9 +794,7 @@ class PlayingScene(Scene):
             if boss_active:
                 speed_multiplier = Config.BOSS_WARP_SPEED_MULTIPLIER
 
-        self.r.background(
-            self.game_surface, dt=dt, speed_multiplier=speed_multiplier
-        )
+        self.r.background(self.game_surface, dt=dt, speed_multiplier=speed_multiplier)
 
         self.entity_manager.draw(
             self.game_surface, self.ship.rect.centerx, self.ship.rect.centery

@@ -52,7 +52,7 @@ def load_custom_cursor() -> None:
     try:
         if CURSOR_PATH.exists():
             # Carregar a imagem do cursor
-            cursor_image = get_image(CURSOR_PATH) # Using the new get_image function
+            cursor_image = get_image(CURSOR_PATH)  # Using the new get_image function
             # O cursor já está no tamanho correto (36x36)
             # Definir o cursor (hotspot no centro)
             hotspot = (cursor_image.get_width() // 2, cursor_image.get_height() // 2)
@@ -62,4 +62,3 @@ def load_custom_cursor() -> None:
             print(f"⚠️ Cursor não encontrado em {CURSOR_PATH}")
     except Exception as e:
         print(f"❌ Erro ao carregar cursor: {e}")
-

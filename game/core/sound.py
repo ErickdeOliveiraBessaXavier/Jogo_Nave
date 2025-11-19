@@ -40,7 +40,7 @@ class MusicStateManager:
         """Resets the music state manager to its initial silent state."""
         self.current_state = MusicState.SILENCE
         self.previous_state = MusicState.SILENCE
-        self.sound_manager.stop_music_internal() # Ensure music is stopped
+        self.sound_manager.stop_music_internal()  # Ensure music is stopped
 
     def transition_to(self, new_state: MusicState, force: bool = False) -> bool:
         if not force:
@@ -57,8 +57,7 @@ class MusicStateManager:
         game_music_types = [MusicState.GAME, MusicState.BOSS, MusicState.SPIKE_BOSS]
 
         is_game_music_active = self.current_state in game_music_types or (
-            self.sound_manager.music_paused
-            and self.previous_state in game_music_types
+            self.sound_manager.music_paused and self.previous_state in game_music_types
         )
 
         if new_state == MusicState.MENU and is_game_music_active:

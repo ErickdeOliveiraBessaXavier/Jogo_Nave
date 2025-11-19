@@ -30,7 +30,7 @@ class SoundType(Enum):
     # Boss Laser
     BOSS_LASER_CHARGING = "boss_laser_charging"
     BOSS_LASER_FIRE = "boss_laser_fire"
-    SPIKE_BOSS_LASER = "spike_boss_laser" # Adicionado
+    SPIKE_BOSS_LASER = "spike_boss_laser"  # Adicionado
 
     # Explosões
     EXPLOSION_ASTEROID = "explosion_asteroid"
@@ -94,7 +94,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
         "shots": "sfx/shots/tiro_{}.wav",  # {} será substituído por 1,2,3
         "boss_laser_charging": "sfx/shots/som_laser_carregando.mp3",
         "boss_laser_fire": "sfx/shots/som_laser.mp3",
-        "spike_boss_laser": "sfx/shots/laser_spike_boss.wav", # Adicionado
+        "spike_boss_laser": "sfx/shots/laser_spike_boss.wav",  # Adicionado
         "explosions": {
             "asteroid": "sfx/explosions/explosão_asteroides_{}.wav",  # {} = 0,1,2,3
             "alien": "sfx/explosions/explosão_naves_alienigenas.wav",

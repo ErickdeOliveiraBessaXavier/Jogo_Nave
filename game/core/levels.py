@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Type
 import random
+import math
 from ..entities.meteor import Meteor
 from ..entities.alien import Alien
 from ..entities.boss import Boss
@@ -17,25 +18,132 @@ from ..entities.spike_boss import SpikeBoss
 class DifficultyConfig:
     """Constantes para balanceamento de dificuldade."""
 
-    BASE_METEOR_SPAWN_TIME = 1.2
-    BASE_ALIEN_SPAWN_TIME = 2.5
-    BASE_EYE_SPAWN_TIME = 6.0
+    BASE_METEOR_SPAWN_TIME: float = 1.2
+    BASE_ALIEN_SPAWN_TIME: float = 2.5
+    BASE_EYE_SPAWN_TIME: float = 6.0
 
-    MIN_ENEMIES_TO_CLEAR = 80
-    BASE_ENEMIES = 25
-    ENEMIES_PER_LEVEL = 5
-    ENEMY_VARIATION = 20
+    MIN_ENEMIES_TO_CLEAR: int = 80
+    BASE_ENEMIES: int = 25
+    ENEMIES_PER_LEVEL: int = 5
+    ENEMY_VARIATION: int = 20
 
-    DIFFICULTY_SCALING = 0.15
-    MAX_DIFFICULTY_MULTIPLIER = 3.0
+    DIFFICULTY_SCALING: float = 0.15
+    MAX_DIFFICULTY_MULTIPLIER: float = 3.0
 
-    MINES_UNLOCK_LEVEL = 2
-    MINES_PROBABILITY = 0.6
-    FORMATIONS_UNLOCK_LEVEL = 4
+    # Curvas de dificuldade configuráveis
+    SPAWN_RATE_CURVE: str = "logarithmic"  # "linear", "logarithmic", "exponential"
+    ENEMY_COUNT_CURVE: str = "linear"  # "linear", "square_root", "logarithmic"
+
+    MINES_UNLOCK_LEVEL: int = 2
+    MINES_PROBABILITY: float = 0.6
+    FORMATIONS_UNLOCK_LEVEL: int = 4
+
+    # Habilitar variedade de níveis com temas
+    LEVEL_VARIETY_ENABLED: bool = True  # True para usar sistema de temas
 
 
 # ============================================================================
-# DATACLASS - DEFINIR ANTES DE USAR
+# CURVAS DE DIFICULDADE
+# ============================================================================
+
+
+class DifficultyCurves:
+    """Diferentes curvas matemáticas para progressão de dificuldade."""
+
+    @staticmethod
+    def linear(level: int, base: float, scaling: float) -> float:
+        return base * (1.0 + level * scaling)
+
+    @staticmethod
+    def logarithmic(level: int, base: float, scaling: float) -> float:
+        return base * (1.0 + math.log1p(level) * scaling)
+
+    @staticmethod
+    def exponential(level: int, base: float, scaling: float) -> float:
+        return base * math.pow(1.0 + scaling, level)
+
+    @staticmethod
+    def square_root(level: int, base: float, scaling: float) -> float:
+        return base * (1.0 + math.sqrt(level) * scaling)
+
+    @staticmethod
+    def sigmoid(level: int, base: float, midpoint: int = 10) -> float:
+        x = (level - midpoint) / 3.0
+        sigmoid_value = 1.0 / (1.0 + math.exp(-x))
+        return base * (1.0 + sigmoid_value * 2.0)
+
+
+# ============================================================================
+# SISTEMA DE TEMAS DE NÍVEIS
+# ============================================================================
+
+
+@dataclass
+class LevelTheme:
+    """Define um 'tema' ou estilo de nível."""
+
+    name: str
+    description: str
+    enemy_weight: dict[str, float]  # "meteor", "alien", "eye" -> peso relativo
+    spawn_rate_multiplier: float  # Multiplica spawn rate (>1 = mais inimigos)
+    enemies_multiplier: float  # Multiplica quantidade para limpar
+    special_feature: str | None = None  # "mines_heavy", "formations_heavy", etc
+
+
+LEVEL_THEMES = {
+    "asteroid_field": LevelTheme(
+        name="Campo de Asteroides",
+        description="Muitos meteoros, poucos aliens",
+        enemy_weight={"meteor": 3.0, "alien": 0.5, "eye": 0.3},
+        spawn_rate_multiplier=1.3,
+        enemies_multiplier=1.2,
+        special_feature=None,
+    ),
+    "alien_invasion": LevelTheme(
+        name="Invasão Alienígena",
+        description="Predominância de aliens",
+        enemy_weight={"meteor": 0.5, "alien": 3.0, "eye": 1.0},
+        spawn_rate_multiplier=1.0,
+        enemies_multiplier=1.0,
+        special_feature=None,
+    ),
+    "eye_swarm": LevelTheme(
+        name="Enxame de Olhos",
+        description="Muitos Eye Enemies",
+        enemy_weight={"meteor": 0.3, "alien": 0.5, "eye": 3.0},
+        spawn_rate_multiplier=0.8,
+        enemies_multiplier=0.9,
+        special_feature=None,
+    ),
+    "minefield": LevelTheme(
+        name="Campo Minado",
+        description="Muitas minas explosivas",
+        enemy_weight={"meteor": 1.0, "alien": 1.0, "eye": 0.5},
+        spawn_rate_multiplier=1.0,
+        enemies_multiplier=1.0,
+        special_feature="mines_heavy",
+    ),
+    "formation_hell": LevelTheme(
+        name="Inferno de Formações",
+        description="Formações complexas constantemente",
+        enemy_weight={"meteor": 0.8, "alien": 2.0, "eye": 1.0},
+        spawn_rate_multiplier=0.9,
+        enemies_multiplier=0.85,
+        special_feature="formations_heavy",
+    ),
+    "balanced": LevelTheme(
+        name="Balanceado",
+        description="Mix equilibrado de tudo",
+        enemy_weight={"meteor": 1.0, "alien": 1.0, "eye": 1.0},
+        spawn_rate_multiplier=1.0,
+        enemies_multiplier=1.0,
+        special_feature=None,
+    ),
+}
+
+
+# ============================================================================
+# DATACLASS - LEVEL CONFIG
 # ============================================================================
 
 
@@ -48,12 +156,10 @@ class LevelConfig:
         Type[Meteor | Alien | ExplosiveMine | EyeEnemy], float
     ]  # Tipo -> tempo de spawn
     enemies_to_clear: int  # quantos inimigos para passar de fase
-    boss_type: Type[Boss | SpikeBoss] | None = (
-        None  # O tipo de classe do chefe (opcional)
-    )
-    mines_enabled: bool = False  # Se as minas estão habilitadas neste nível
-    formations_enabled: bool = False  # Se formações estão habilitadas neste nível
-    formation_types: list[str] | None = None  # Tipos de formação disponíveis
+    boss_type: Type[Boss | SpikeBoss] | None = None
+    mines_enabled: bool = False
+    formations_enabled: bool = False
+    formation_types: list[str] | None = None
 
     @property
     def enemy_types(self) -> list[Type[Meteor | Alien | ExplosiveMine | EyeEnemy]]:
@@ -114,72 +220,129 @@ class ProceduralLevelGenerator:
     """
 
     def __init__(self, seed: int | None = None):
-        """
-        Args:
-            seed: Semente para geração reproduzível (opcional)
-        """
         self.seed = seed or random.randint(0, 999999)
+        self.difficulty_curves = DifficultyCurves()
 
     def generate_level(self, level_number: int) -> LevelConfig:
-        """
-        Gera configuração procedural para um nível.
-
-        Args:
-            level_number: Número do nível a gerar
-
-        Returns:
-            LevelConfig gerado proceduralmente
-        """
-        # Usar seed + level_number para reproduzibilidade
+        """Gera configuração procedural para um nível."""
         random.seed(self.seed + level_number)
 
-        # Calcular multiplicador de dificuldade (1.0 a ~3.0)
-        # Cresce logaritmicamente para não ficar impossível muito rápido
-        difficulty = 1.0 + (level_number * DifficultyConfig.DIFFICULTY_SCALING)
-        difficulty = min(difficulty, DifficultyConfig.MAX_DIFFICULTY_MULTIPLIER)
+        # 1. Calcular dificuldade base usando curva configurada
+        difficulty = self._calculate_difficulty(level_number)
 
-        # Gerar configuração baseada na dificuldade
-        config = self._generate_config(level_number, difficulty)
+        # 2. Escolher tema do nível (se habilitado)
+        theme = None
+        if DifficultyConfig.LEVEL_VARIETY_ENABLED:
+            theme = self._choose_theme(level_number)
 
-        # Resetar seed para não afetar outros randoms
+        # 3. Gerar configuração
+        config = self._generate_config(level_number, difficulty, theme)
+
         random.seed()
-
         return config
 
-    def _generate_config(self, level_number: int, difficulty: float) -> LevelConfig:
-        """Gera configuração baseada em dificuldade."""
+    def _calculate_difficulty(self, level_number: int) -> float:
+        """Calcula multiplicador de dificuldade usando curva configurada."""
+        curve = DifficultyConfig.SPAWN_RATE_CURVE
+        scaling = DifficultyConfig.DIFFICULTY_SCALING
+        base = 1.0
 
-        # 1. Calcular spawn times (diminui com dificuldade)
+        if curve == "logarithmic":
+            difficulty = base + math.log1p(level_number) * scaling
+        elif curve == "exponential":
+            difficulty = math.pow(base + scaling, level_number * 0.5)
+        else:  # linear
+            difficulty = base + (level_number * scaling)
+
+        return min(difficulty, DifficultyConfig.MAX_DIFFICULTY_MULTIPLIER)
+
+    def _choose_theme(self, level_number: int) -> LevelTheme | None:
+        """Escolhe um tema baseado no nível."""
+        # Níveis iniciais: sempre balanceado
+        if level_number <= 2:
+            return LEVEL_THEMES["balanced"]
+
+        # A cada 3 níveis, chance de tema especial
+        if level_number % 3 == 0 and level_number >= 6:
+            special_themes = ["minefield", "formation_hell", "eye_swarm"]
+            available = [
+                t for t in special_themes if self._theme_available(t, level_number)
+            ]
+            if available:
+                theme_name = random.choice(available)
+                return LEVEL_THEMES[theme_name]
+
+        # Outros níveis: temas variados
+        standard_themes = ["asteroid_field", "alien_invasion", "balanced"]
+        if level_number >= 5:
+            standard_themes.append("eye_swarm")
+
+        theme_name = random.choice(standard_themes)
+        return LEVEL_THEMES[theme_name]
+
+    def _theme_available(self, theme_name: str, level_number: int) -> bool:
+        """Verifica se um tema está disponível neste nível."""
+        if theme_name == "minefield":
+            return level_number >= DifficultyConfig.MINES_UNLOCK_LEVEL
+        if theme_name == "formation_hell":
+            return level_number >= DifficultyConfig.FORMATIONS_UNLOCK_LEVEL
+        if theme_name == "eye_swarm":
+            return level_number >= 5
+        return True
+
+    def _generate_config(
+        self, level_number: int, difficulty: float, theme: LevelTheme | None
+    ) -> LevelConfig:
+        """Gera configuração baseada em dificuldade e tema."""
+
+        # Aplicar multiplicadores do tema (se houver)
+        spawn_multiplier = theme.spawn_rate_multiplier if theme else 1.0
+        enemies_multiplier = theme.enemies_multiplier if theme else 1.0
+
+        # 1. Calcular spawn times com pesos do tema
         enemy_spawn_config: dict[
             Type[Meteor | Alien | ExplosiveMine | EyeEnemy], float
         ] = {}
 
-        # Meteoros sempre presentes
-        base_meteor_time = DifficultyConfig.BASE_METEOR_SPAWN_TIME / difficulty
-        enemy_spawn_config[Meteor] = base_meteor_time
+        # Meteoros
+        meteor_weight = theme.enemy_weight.get("meteor", 1.0) if theme else 1.0
+        base_meteor_time = (
+            DifficultyConfig.BASE_METEOR_SPAWN_TIME / difficulty
+        ) / spawn_multiplier
+        enemy_spawn_config[Meteor] = base_meteor_time * (2.0 / meteor_weight)
 
-        # Nível 2: Foco em Aliens, mas mantém meteoros com spawn baixo
-        if level_number == 2:
-            base_alien_time = DifficultyConfig.BASE_ALIEN_SPAWN_TIME / difficulty
-            enemy_spawn_config[Alien] = base_alien_time
-            # Meteoros mais raros para focar em Aliens
-            enemy_spawn_config[Meteor] = base_meteor_time * 3.0
+        # Aliens (nível 2+)
+        if level_number >= 2:
+            alien_weight = theme.enemy_weight.get("alien", 1.0) if theme else 1.0
+            base_alien_time = (
+                DifficultyConfig.BASE_ALIEN_SPAWN_TIME / difficulty
+            ) / spawn_multiplier
+            enemy_spawn_config[Alien] = base_alien_time * (2.0 / alien_weight)
 
-        # Nível 3+: Aliens começam a aparecer junto com meteoros
-        elif level_number >= 3:
-            base_alien_time = DifficultyConfig.BASE_ALIEN_SPAWN_TIME / difficulty
-            enemy_spawn_config[Alien] = base_alien_time
-
-        # Eyes aparecem a partir do nível 5
+        # Eyes (nível 5+)
         if level_number >= 5:
-            base_eye_time = DifficultyConfig.BASE_EYE_SPAWN_TIME / difficulty
-            enemy_spawn_config[EyeEnemy] = base_eye_time
+            eye_weight = theme.enemy_weight.get("eye", 1.0) if theme else 1.0
+            base_eye_time = (
+                DifficultyConfig.BASE_EYE_SPAWN_TIME / difficulty
+            ) / spawn_multiplier
+            enemy_spawn_config[EyeEnemy] = base_eye_time * (2.0 / eye_weight)
 
-        # 2. Calcular quantos inimigos para limpar
-        # Fórmula: BASE + (nível * MULTIPLIER) com alguma variação
-        base_enemies = DifficultyConfig.BASE_ENEMIES + (
-            level_number * DifficultyConfig.ENEMIES_PER_LEVEL
-        )
+        # 2. Calcular quantidade de inimigos
+        curve = DifficultyConfig.ENEMY_COUNT_CURVE
+        if curve == "square_root":
+            base_enemies = DifficultyConfig.BASE_ENEMIES + int(
+                math.sqrt(level_number) * 15
+            )
+        elif curve == "logarithmic":
+            base_enemies = DifficultyConfig.BASE_ENEMIES + int(
+                math.log1p(level_number) * 20
+            )
+        else:  # linear
+            base_enemies = DifficultyConfig.BASE_ENEMIES + (
+                level_number * DifficultyConfig.ENEMIES_PER_LEVEL
+            )
+
+        base_enemies = int(base_enemies * enemies_multiplier)
         variation = random.randint(
             -DifficultyConfig.ENEMY_VARIATION, DifficultyConfig.ENEMY_VARIATION
         )
@@ -187,15 +350,20 @@ class ProceduralLevelGenerator:
             DifficultyConfig.MIN_ENEMIES_TO_CLEAR, base_enemies + variation
         )
 
-        # 3. Features progressivas
-        mines_enabled = (
-            level_number >= DifficultyConfig.MINES_UNLOCK_LEVEL
-            and random.random() < DifficultyConfig.MINES_PROBABILITY
-        )
-        formations_enabled = level_number >= DifficultyConfig.FORMATIONS_UNLOCK_LEVEL
+        # 3. Features baseadas no tema
+        mines_enabled = False
+        if level_number >= DifficultyConfig.MINES_UNLOCK_LEVEL:
+            if theme and theme.special_feature == "mines_heavy":
+                mines_enabled = True
+            else:
+                mines_enabled = random.random() < DifficultyConfig.MINES_PROBABILITY
 
-        # 4. Tipos de formação disponíveis (mais tipos em níveis altos)
-        formation_types: list[str] | None = None
+        formations_enabled = level_number >= DifficultyConfig.FORMATIONS_UNLOCK_LEVEL
+        if theme and theme.special_feature == "formations_heavy":
+            formations_enabled = True
+
+        # 4. Tipos de formação
+        formation_types = None
         if formations_enabled:
             all_formations = [
                 "spiral_circle",
@@ -205,40 +373,29 @@ class ProceduralLevelGenerator:
                 "spiral_line",
             ]
 
-            if level_number >= 6:
-                # Níveis altos: todas as formações
+            if theme and theme.special_feature == "formations_heavy":
+                formation_types = all_formations
+            elif level_number >= 6:
                 formation_types = all_formations
             else:
-                # Níveis médios: subset aleatório (3-4 formações)
                 num_formations = random.randint(3, 4)
                 formation_types = random.sample(all_formations, num_formations)
 
-        config = LevelConfig(
+        return LevelConfig(
             level_number=level_number,
             enemy_spawn_config=enemy_spawn_config,
             enemies_to_clear=enemies_to_clear,
-            boss_type=None,  # Procedural não gera bosses (são fixos)
+            boss_type=None,
             mines_enabled=mines_enabled,
             formations_enabled=formations_enabled,
             formation_types=formation_types,
         )
 
-        # Validar formações se habilitadas (opcional, comentado por enquanto)
-        # if config.formations_enabled and config.formation_types:
-        #     try:
-        #         from ..systems.formation_spawner import FORMATION_CONFIGS
-        #         invalid = config.validate_formation_types(set(FORMATION_CONFIGS.keys()))
-        #         if invalid:
-        #             print(f"⚠️ Aviso: Formações inválidas no nível {level_number}: {invalid}")
-        #     except ImportError:
-        #         pass  # FORMATION_CONFIGS não disponível
-
-        return config
-
 
 # ============================================================================
 # NÍVEIS FIXOS (HANDCRAFTED)
 # ============================================================================
+
 
 FIXED_LEVELS: dict[int, LevelConfig] = {
     # Nível 1: Tutorial - Apenas meteoros, ritmo controlado
@@ -280,6 +437,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
 # FUNÇÕES PÚBLICAS
 # ============================================================================
 
+
 # Gerador procedural (singleton)
 _procedural_generator = ProceduralLevelGenerator()
 
@@ -298,11 +456,9 @@ def get_level_config(level_number: int) -> LevelConfig:
     Returns:
         LevelConfig do nível (fixo ou procedural)
     """
-    # Se é um nível fixo, retornar ele
     if level_number in FIXED_LEVELS:
         return FIXED_LEVELS[level_number]
 
-    # Senão, gerar proceduralmente
     return _procedural_generator.generate_level(level_number)
 
 
@@ -319,3 +475,50 @@ class LevelManager:
     def get_level(self, level_number: int) -> LevelConfig:
         """Retorna a configuração de um nível."""
         return get_level_config(level_number)
+
+
+# ============================================================================
+# ESTATÍSTICAS E DEBUG
+# ============================================================================
+
+
+class LevelAnalyzer:
+    """Analisa e exibe estatísticas de níveis gerados."""
+
+    @staticmethod
+    def analyze_level(config: LevelConfig) -> dict[str, object]:
+        """Retorna estatísticas de um nível."""
+        stats: dict[str, object] = {
+            "level": config.level_number,
+            "enemies_to_clear": config.enemies_to_clear,
+            "enemy_types": len(config.enemy_types),
+            "avg_spawn_rate": sum(config.enemy_spawn_config.values())
+            / len(config.enemy_spawn_config),
+            "has_boss": config.boss_type is not None,
+            "mines": config.mines_enabled,
+            "formations": config.formations_enabled,
+        }
+        return stats
+
+    @staticmethod
+    def print_level_progression(
+        start: int, end: int, generator: ProceduralLevelGenerator
+    ):
+        """Imprime progressão de dificuldade para análise."""
+        print(f"\n{'='*70}")
+        print(f"ANÁLISE DE PROGRESSÃO: Níveis {start} a {end}")
+        print(f"{'='*70}\n")
+
+        for level_num in range(start, end + 1):
+            config = generator.generate_level(level_num)
+            stats = LevelAnalyzer.analyze_level(config)
+
+            print(
+                f"Nível {level_num:2d} | "
+                f"Inimigos: {stats['enemies_to_clear']:3d} | "
+                f"Tipos: {stats['enemy_types']} | "
+                f"Spawn: {stats['avg_spawn_rate']:.2f}s | "
+                f"{'[BOSS]' if stats['has_boss'] else '      '} "
+                f"{'[M]' if stats['mines'] else '   '} "
+                f"{'[F]' if stats['formations'] else '   '}"
+            )
