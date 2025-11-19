@@ -203,34 +203,11 @@ class StarField:
         )
 
     def _reset_star(self, star: Star):
-        """Resets the properties of an existing star, including color and varied pulse speed."""
-        star_colors = [
-            (255, 255, 255),
-            (180, 200, 255),
-            (255, 220, 180),
-            (255, 180, 180),
-            (255, 200, 120),
-        ]
-        # Proporção: 60% pulsantes rápidas/médias, 20% lentas/quase fixas, 20% totalmente fixas
-        r = random.random()
-        if r < 0.2:
-            pulse_speed = 0.0  # fixa
-        elif r < 0.4:
-            pulse_speed = random.uniform(0.2, 1.2)  # lenta/quase fixa
-        else:
-            pulse_speed = random.uniform(1.3, 3.5)  # média/rápida
+        """Resets the position and phase of an existing star, keeping other properties the same."""
         star["x"] = random.randint(0, self.w)
         star["y"] = -star["size"]  # Start above the screen
-        star["speed"] = random.uniform(
-            RenderConfig.STARFIELD_SPEED_MIN, RenderConfig.STARFIELD_SPEED_MAX
-        )
-        star["size"] = random.choice([1, 1, 2, 3])
-        star["brightness"] = random.randint(
-            RenderConfig.STARFIELD_BRIGHTNESS_MIN, RenderConfig.STARFIELD_BRIGHTNESS_MAX
-        )
         star["phase"] = random.uniform(0, 2 * math.pi)
-        star["pulse_speed"] = pulse_speed
-        star["color"] = random.choice(star_colors)
+        # Keep speed, size, brightness, pulse_speed, color unchanged
 
     def update(self, dt: float, speed_multiplier: float = 1.0):
         for s in self.stars:
