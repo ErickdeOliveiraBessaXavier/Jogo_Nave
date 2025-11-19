@@ -51,6 +51,7 @@ class CelestialManager:
         width = int(original_image.get_width() * scale)
         height = int(original_image.get_height() * scale)
         image = pygame.transform.scale(original_image, (width, height))
+        image = image.convert_alpha()  # Optimize for blitting
 
         # Opacity based on size
         alpha = int(
@@ -267,6 +268,7 @@ class Renderer:
             Config.SCREEN_HEIGHT,
             n=RenderConfig.CELESTIAL_NUM_BODIES,
         )
+        self.halo_cache: dict[int, pygame.Surface] = {}  # Cache for halo surfaces by radius
 
     def background(
         self, surface: pygame.Surface, dt: float, speed_multiplier: float = 1.0
@@ -353,8 +355,11 @@ class Renderer:
             cy = int(ship.y + ship.h / 2)
             radius = max(ship.w, ship.h) // 2 + 6
 
-            halo = pygame.Surface((radius * 2 + 6, radius * 2 + 6), pygame.SRCALPHA)
-            pygame.draw.circle(
-                halo, (0, 120, 255, 120), (radius + 3, radius + 3), radius, width=3
-            )
+            if radius not in self.halo_cache:
+                halo = pygame.Surface((radius * 2 + 6, radius * 2 + 6), pygame.SRCALPHA)
+                pygame.draw.circle(
+                    halo, (0, 120, 255, 120), (radius + 3, radius + 3), radius, width=3
+                )
+                self.halo_cache[radius] = halo
+            halo = self.halo_cache[radius]
             surface.blit(halo, (cx - radius - 3, cy - radius - 3))
