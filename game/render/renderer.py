@@ -164,11 +164,11 @@ class StarField:
                 self._reset_star(s)
 
     def draw(self, surface: pygame.Surface) -> None:
-        import math
+        TWO_PI: float = 2 * math.pi
         for s in self.stars:
-            pulse: float = 0.7 + 0.3 * (1 + math.sin(float(s["phase"])))
+            pulse: float = 0.7 + 0.3 * (1 + math.sin(s["phase"]))
             animated_size: float = s["size"] * pulse
-            brightness_pulse: float = 0.8 + 0.2 * (1 + math.sin(float(s["phase"])))
+            brightness_pulse: float = 0.8 + 0.2 * (1 + math.sin(s["phase"]))
             brightness: int = max(0, min(255, int(s["brightness"] * brightness_pulse)))
             c: tuple[int, int, int] = (brightness, brightness, brightness)
             center_x: int = int(s["x"])
@@ -182,12 +182,10 @@ class StarField:
                 points: list[tuple[float, float]] = []
                 step: float = 0.03 if s["size"] == 2 else 0.05
                 t: float = 0.0
-                while t < 2 * math.pi:
+                while t < TWO_PI:
                     x: float = a * (math.cos(t) ** 3)
                     y: float = a * (math.sin(t) ** 3)
-                    px: float = center_x + x
-                    py: float = center_y + y
-                    points.append((px, py))
+                    points.append((center_x + x, center_y + y))
                     t += step
                 if len(points) > 2:
                     pygame.draw.polygon(surface, c, points)
