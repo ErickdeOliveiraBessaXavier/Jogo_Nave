@@ -22,7 +22,7 @@ class Config:
     FULLSCREEN: bool = True
     SCREEN_WIDTH: int = 1600  # Largura padrão (será sobrescrita se fullscreen)
     SCREEN_HEIGHT: int = 900  # Altura padrão (será sobrescrita se fullscreen)
-    FPS: int = 60
+    FPS: int = 120
 
     # ========================================
     # BASIC GAMEPLAY SETTINGS
