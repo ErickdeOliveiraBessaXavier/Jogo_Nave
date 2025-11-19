@@ -100,6 +100,8 @@ class PlayingScene(Scene):
         pygame.mouse.set_visible(True)
 
     def update(self, dt: float):
+        self.last_dt = dt
+
         if self.state == "preparing":
             self.preparation_time_left -= dt
 
@@ -770,10 +772,10 @@ class PlayingScene(Scene):
             self._process_cheat_input(event)
 
     def render(self, surface: pygame.Surface):
-        # Definir a velocidade das estrelas com base no estado do jogo
+        # Usa o dt armazenado pela última chamada de update
+        dt = getattr(self, "last_dt", 1.0 / Config.FPS)
         speed_multiplier = 1.0
         if self.state == "preparing":
-            # Efeito de desaceleração na chegada
             progress = (
                 Config.PREPARATION_TIME - self.preparation_time_left
             ) / Config.PREPARATION_TIME
@@ -792,7 +794,7 @@ class PlayingScene(Scene):
                 speed_multiplier = Config.BOSS_WARP_SPEED_MULTIPLIER
 
         self.r.background(
-            self.game_surface, dt=1.0 / Config.FPS, speed_multiplier=speed_multiplier
+            self.game_surface, dt=dt, speed_multiplier=speed_multiplier
         )
 
         self.entity_manager.draw(

@@ -1,5 +1,6 @@
 import pygame
 import random
+import math
 from typing import TypedDict, Optional, TYPE_CHECKING
 from pathlib import Path
 from ..core import colors
@@ -17,6 +18,8 @@ class Star(TypedDict):
     speed: float
     size: int
     brightness: int
+    phase: float  # Fase da animação (0 a 2π)
+    pulse_speed: float  # Velocidade da pulsação
 
 
 class CelestialBody(TypedDict):
@@ -132,6 +135,8 @@ class StarField:
             "speed": random.uniform(RenderConfig.STARFIELD_SPEED_MIN, RenderConfig.STARFIELD_SPEED_MAX),
             "size": random.choice([1, 1, 2, 3]),
             "brightness": random.randint(RenderConfig.STARFIELD_BRIGHTNESS_MIN, RenderConfig.STARFIELD_BRIGHTNESS_MAX),
+            "phase": random.uniform(0, 2 * math.pi),
+            "pulse_speed": random.uniform(1.5, 3.5),
         })
 
     def _reset_star(self, star: Star):
@@ -141,40 +146,49 @@ class StarField:
         star["speed"] = random.uniform(RenderConfig.STARFIELD_SPEED_MIN, RenderConfig.STARFIELD_SPEED_MAX)
         star["size"] = random.choice([1, 1, 2, 3])
         star["brightness"] = random.randint(RenderConfig.STARFIELD_BRIGHTNESS_MIN, RenderConfig.STARFIELD_BRIGHTNESS_MAX)
+        star["phase"] = random.uniform(0, 2 * math.pi)
+        star["pulse_speed"] = random.uniform(1.5, 3.5)
 
     def update(self, dt: float, speed_multiplier: float = 1.0):
         for s in self.stars:
+            # Movimento vertical
             s["y"] += s["speed"] * dt * speed_multiplier
+            
+            # Atualizar fase da animação
+            s["phase"] += s["pulse_speed"] * dt
+            if s["phase"] > 2 * math.pi:
+                s["phase"] -= 2 * math.pi
+            
+            # Reset se sair da tela
             if s["y"] > self.h:
-                # Reset the existing star instead of creating a new one
                 self._reset_star(s)
 
-    def draw(self, surface: pygame.Surface):
+    def draw(self, surface: pygame.Surface) -> None:
         import math
         for s in self.stars:
-            c = (s["brightness"], s["brightness"], s["brightness"])
-            center_x, center_y = int(s["x"]), int(s["y"])
+            pulse: float = 0.7 + 0.3 * (1 + math.sin(float(s["phase"])))
+            animated_size: float = s["size"] * pulse
+            brightness_pulse: float = 0.8 + 0.2 * (1 + math.sin(float(s["phase"])))
+            brightness: int = max(0, min(255, int(s["brightness"] * brightness_pulse)))
+            c: tuple[int, int, int] = (brightness, brightness, brightness)
+            center_x: int = int(s["x"])
+            center_y: int = int(s["y"])
 
             if s["size"] <= 1:
-                # Estrelas pequenas: desenhar círculo simples com raio correto
-                pygame.draw.circle(surface, c, (center_x, center_y), s["size"])
+                radius: int = max(1, int(animated_size))
+                pygame.draw.circle(surface, c, (center_x, center_y), radius)
             else:
-                # Estrelas médias/grandes: asteroide suave com 4 cúspides
-                a = s["size"] * 1.2  # Raio proporcional ao tamanho
+                a: float = animated_size * 1.2
                 points: list[tuple[float, float]] = []
-                
-                # Step adaptativo: menor para estrelas menores (mais pontos)
-                step = 0.03 if s["size"] == 2 else 0.05
-                
-                t = 0.0
+                step: float = 0.03 if s["size"] == 2 else 0.05
+                t: float = 0.0
                 while t < 2 * math.pi:
-                    x = a * (math.cos(t) ** 3)
-                    y = a * (math.sin(t) ** 3)
-                    px = center_x + x
-                    py = center_y + y
+                    x: float = a * (math.cos(t) ** 3)
+                    y: float = a * (math.sin(t) ** 3)
+                    px: float = center_x + x
+                    py: float = center_y + y
                     points.append((px, py))
                     t += step
-
                 if len(points) > 2:
                     pygame.draw.polygon(surface, c, points)
 
