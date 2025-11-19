@@ -1,6 +1,7 @@
 import pygame
 import random
 from typing import TypedDict, Optional, TYPE_CHECKING
+from pathlib import Path
 from ..core import colors
 from ..core.config import Config
 from ..core.assets import get_font
@@ -15,6 +16,78 @@ class Star(TypedDict):
     speed: float
     size: int
     brightness: int
+
+
+class CelestialBody(TypedDict):
+    image: pygame.Surface
+    x: float
+    y: float
+    speed: float
+    scale: float
+
+
+class CelestialManager:
+    def __init__(self, w: int, h: int, n: int = 2): # Changed n from 3 to 2
+        self.w, self.h = w, h
+        self.celestial_bodies: list[CelestialBody] = []
+        self.image_files = self._load_image_files()
+        for _ in range(n):
+            self.celestial_bodies.append(self._create_celestial_body())
+
+    def _load_image_files(self) -> list[Path]:
+        image_dir = Path(__file__).resolve().parents[1] / "assets" / "images"
+        return list(image_dir.glob("*.png"))
+
+    def _create_celestial_body(self, y_position: Optional[float] = None) -> CelestialBody:
+        image_path = random.choice(self.image_files)
+        original_image = pygame.image.load(image_path).convert_alpha()
+
+        scale = random.uniform(0.1, 0.6) # Reduced max scale from 1.0 to 0.6
+        width = int(original_image.get_width() * scale)
+        height = int(original_image.get_height() * scale)
+        image = pygame.transform.scale(original_image, (width, height))
+
+        # Opacity based on size
+        alpha = int(50 + (scale - 0.1) * (255 - 50) / (0.6 - 0.1)) # Adjusted denominator for new max scale
+        image.set_alpha(alpha)
+
+        # Logic to ensure bodies don't spawn too close horizontally
+        new_x = 0
+        max_attempts = 10 # Prevent infinite loops
+        for _ in range(max_attempts):
+            new_x = random.uniform(0, self.w - width)
+            overlap = False
+            for existing_body in self.celestial_bodies:
+                # Check for horizontal overlap, considering a minimum gap
+                min_gap = 50 # Minimum horizontal gap between bodies
+                if (new_x < existing_body["x"] + existing_body["image"].get_width() + min_gap and
+                    new_x + width + min_gap > existing_body["x"]):
+                    overlap = True
+                    break
+            if not overlap:
+                break
+        # If after max_attempts, still overlaps, just use the last generated new_x (it's rare with n=2)
+
+
+        return {
+            "image": image,
+            "x": new_x,
+            "y": y_position if y_position is not None else random.uniform(0, self.h),
+            "speed": random.uniform(50, 150) * scale + 20,
+            "scale": scale,
+        }
+
+    def update(self, dt: float, speed_multiplier: float = 1.0):
+        for body in self.celestial_bodies:
+            body["y"] += body["speed"] * dt * speed_multiplier
+            if body["y"] > self.h:
+                index = self.celestial_bodies.index(body)
+                # Ensure objects start further above the screen to prevent "pop" effect
+                self.celestial_bodies[index] = self._create_celestial_body(y_position=random.uniform(-self.h * 1.5, -self.h * 0.5))
+
+    def draw(self, surface: pygame.Surface):
+        for body in self.celestial_bodies:
+            surface.blit(body["image"], (round(body["x"]), round(body["y"])))
 
 
 class StarField:
@@ -52,13 +125,16 @@ class Renderer:
         self.font_medium = get_font(24)
         self.font_large = get_font(32)
         self.starfield = StarField(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
+        self.celestial_manager = CelestialManager(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT, n=2)
 
     def background(
         self, surface: pygame.Surface, dt: float, speed_multiplier: float = 1.0
     ):
         surface.fill(colors.BLACK)
         self.starfield.update(dt, speed_multiplier)
+        self.celestial_manager.update(dt, speed_multiplier)
         self.starfield.draw(surface)
+        self.celestial_manager.draw(surface)
 
     def hud(
         self,
