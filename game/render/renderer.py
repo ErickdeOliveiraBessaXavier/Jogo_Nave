@@ -20,6 +20,7 @@ class Star(TypedDict):
     brightness: int
     phase: float  # Fase da animação (0 a 2π)
     pulse_speed: float  # Velocidade da pulsação
+    color: tuple[int, int, int]  # Cor da estrela
 
 
 class CelestialBody(TypedDict):
@@ -128,7 +129,23 @@ class StarField:
             self.stars.append(self._create_and_initialize_star())
 
     def _create_and_initialize_star(self) -> Star:
-        """Creates and initializes a new star."""
+        """Creates and initializes a new star with random color and varied pulse speed."""
+        star_colors = [
+            (255, 255, 255),  # branco
+            (180, 200, 255),  # azul claro
+            (255, 220, 180),  # amarelo
+            (255, 180, 180),  # vermelho
+            (255, 200, 120),  # laranja
+        ]
+        color = random.choice(star_colors)
+        # Proporção: 60% pulsantes rápidas/médias, 20% lentas/quase fixas, 20% totalmente fixas
+        r = random.random()
+        if r < 0.2:
+            pulse_speed = 0.0  # fixa
+        elif r < 0.4:
+            pulse_speed = random.uniform(0.2, 1.2)  # lenta/quase fixa
+        else:
+            pulse_speed = random.uniform(1.3, 3.5)  # média/rápida
         return Star({
             "x": random.randint(0, self.w),
             "y": random.randint(0, self.h),
@@ -136,18 +153,35 @@ class StarField:
             "size": random.choice([1, 1, 2, 3]),
             "brightness": random.randint(RenderConfig.STARFIELD_BRIGHTNESS_MIN, RenderConfig.STARFIELD_BRIGHTNESS_MAX),
             "phase": random.uniform(0, 2 * math.pi),
-            "pulse_speed": random.uniform(1.5, 3.5),
+            "pulse_speed": pulse_speed,
+            "color": color,
         })
 
     def _reset_star(self, star: Star):
-        """Resets the properties of an existing star."""
+        """Resets the properties of an existing star, including color and varied pulse speed."""
+        star_colors = [
+            (255, 255, 255),
+            (180, 200, 255),
+            (255, 220, 180),
+            (255, 180, 180),
+            (255, 200, 120),
+        ]
+        # Proporção: 60% pulsantes rápidas/médias, 20% lentas/quase fixas, 20% totalmente fixas
+        r = random.random()
+        if r < 0.2:
+            pulse_speed = 0.0  # fixa
+        elif r < 0.4:
+            pulse_speed = random.uniform(0.2, 1.2)  # lenta/quase fixa
+        else:
+            pulse_speed = random.uniform(1.3, 3.5)  # média/rápida
         star["x"] = random.randint(0, self.w)
         star["y"] = -star["size"]  # Start above the screen
         star["speed"] = random.uniform(RenderConfig.STARFIELD_SPEED_MIN, RenderConfig.STARFIELD_SPEED_MAX)
         star["size"] = random.choice([1, 1, 2, 3])
         star["brightness"] = random.randint(RenderConfig.STARFIELD_BRIGHTNESS_MIN, RenderConfig.STARFIELD_BRIGHTNESS_MAX)
         star["phase"] = random.uniform(0, 2 * math.pi)
-        star["pulse_speed"] = random.uniform(1.5, 3.5)
+        star["pulse_speed"] = pulse_speed
+        star["color"] = random.choice(star_colors)
 
     def update(self, dt: float, speed_multiplier: float = 1.0):
         for s in self.stars:
@@ -169,8 +203,13 @@ class StarField:
             pulse: float = 0.7 + 0.3 * (1 + math.sin(s["phase"]))
             animated_size: float = s["size"] * pulse
             brightness_pulse: float = 0.8 + 0.2 * (1 + math.sin(s["phase"]))
+            # Aplica brilho sobre a cor base
+            base_color = s["color"]
             brightness: int = max(0, min(255, int(s["brightness"] * brightness_pulse)))
-            c: tuple[int, int, int] = (brightness, brightness, brightness)
+            r = max(0, min(255, int(base_color[0] * (brightness / 255))))
+            g = max(0, min(255, int(base_color[1] * (brightness / 255))))
+            b = max(0, min(255, int(base_color[2] * (brightness / 255))))
+            c: tuple[int, int, int] = (r, g, b)
             center_x: int = int(s["x"])
             center_y: int = int(s["y"])
 
