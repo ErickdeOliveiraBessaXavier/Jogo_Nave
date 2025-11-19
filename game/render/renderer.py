@@ -152,7 +152,18 @@ class StarField:
     def draw(self, surface: pygame.Surface):
         for s in self.stars:
             c = (s["brightness"], s["brightness"], s["brightness"])
-            pygame.draw.circle(surface, c, (int(s["x"]), int(s["y"])), s["size"])
+            center_x, center_y = int(s["x"]), int(s["y"])
+            half_size = s["size"]
+            
+            # Draw a diamond-shaped star
+            points = [
+                (center_x, center_y - half_size),  # Top
+                (center_x + half_size, center_y),  # Right
+                (center_x, center_y + half_size),  # Bottom
+                (center_x - half_size, center_y),  # Left
+            ]
+            pygame.draw.polygon(surface, c, points)
+
 
 
 class Renderer:
