@@ -21,12 +21,38 @@ def get_font(size: int, path: str | Path | None = None) -> pygame.font.Font:
         return pygame.font.Font(None, size)
 
 
+@lru_cache(maxsize=128)
+def get_image(path: str | Path, alpha: bool = True) -> pygame.Surface:
+    """
+    Carrega e retorna uma imagem, com cache para evitar recarregar a mesma imagem.
+    Converte a imagem para ter um canal alpha se 'alpha' for True.
+    Retorna uma Surface vazia em caso de erro.
+    """
+    image_path = Path(path)
+    try:
+        image = pygame.image.load(str(image_path))
+        if alpha:
+            return image.convert_alpha()
+        else:
+            return image.convert()
+    except pygame.error as e:
+        print(f"❌ Erro ao carregar imagem {image_path}: {e}")
+        # Retorna uma Surface vazia em caso de erro de carregamento
+        return pygame.Surface((1, 1), pygame.SRCALPHA)
+    except FileNotFoundError:
+        print(f"⚠️ Imagem não encontrada: {image_path}")
+        return pygame.Surface((1, 1), pygame.SRCALPHA)
+    except Exception as e:
+        print(f"❌ Erro inesperado ao carregar imagem {image_path}: {e}")
+        return pygame.Surface((1, 1), pygame.SRCALPHA)
+
+
 def load_custom_cursor() -> None:
     """Carrega o cursor customizado em pixel art."""
     try:
         if CURSOR_PATH.exists():
             # Carregar a imagem do cursor
-            cursor_image = pygame.image.load(str(CURSOR_PATH))
+            cursor_image = get_image(CURSOR_PATH) # Using the new get_image function
             # O cursor já está no tamanho correto (36x36)
             # Definir o cursor (hotspot no centro)
             hotspot = (cursor_image.get_width() // 2, cursor_image.get_height() // 2)
@@ -36,3 +62,4 @@ def load_custom_cursor() -> None:
             print(f"⚠️ Cursor não encontrado em {CURSOR_PATH}")
     except Exception as e:
         print(f"❌ Erro ao carregar cursor: {e}")
+

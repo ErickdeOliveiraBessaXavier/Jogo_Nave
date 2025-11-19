@@ -64,6 +64,27 @@ class Ship:
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
+    @property
+    def is_invulnerable(self) -> bool:
+        return self.invuln > 0
+
+    def get_invulnerable_time(self) -> float:
+        return self.invuln / 1000.0
+
+    @property
+    def is_double_shot_active(self) -> bool:
+        return self.double_shot_timer > 0.0
+
+    def get_double_shot_time(self) -> float:
+        return self.double_shot_timer
+
+    @property
+    def is_speed_boost_active(self) -> bool:
+        return self.speed_boost_timer > 0.0
+
+    def get_speed_boost_time(self) -> float:
+        return self.speed_boost_timer
+
     def update(self, dt: float):
         if self.invuln > 0:
             self.invuln = max(0, self.invuln - dt * 1000)
