@@ -30,6 +30,7 @@ class SoundType(Enum):
     # Boss Laser
     BOSS_LASER_CHARGING = "boss_laser_charging"
     BOSS_LASER_FIRE = "boss_laser_fire"
+    SPIKE_BOSS_LASER = "spike_boss_laser" # Adicionado
 
     # Explosões
     EXPLOSION_ASTEROID = "explosion_asteroid"
@@ -62,7 +63,7 @@ VOLUME_CONFIG: Dict[str, float] = {
     "master": 0.5,  # Volume geral
     "sfx": 0.4,  # Efeitos sonoros
     "music": 0.3,  # Música
-    "boss_music": 0.8,  # Música do boss
+    "boss_music": 1.2,  # Música do boss
     "shots": 0.2,  # Tiros específico
 }
 
@@ -93,6 +94,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
         "shots": "sfx/shots/tiro_{}.wav",  # {} será substituído por 1,2,3
         "boss_laser_charging": "sfx/shots/som_laser_carregando.mp3",
         "boss_laser_fire": "sfx/shots/som_laser.mp3",
+        "spike_boss_laser": "sfx/shots/laser_spike_boss.wav", # Adicionado
         "explosions": {
             "asteroid": "sfx/explosions/explosão_asteroides_{}.wav",  # {} = 0,1,2,3
             "alien": "sfx/explosions/explosão_naves_alienigenas.wav",
@@ -117,11 +119,11 @@ BEHAVIOR_CONFIG: Dict[str, Dict[str, Union[bool, float]]] = {
     },
     "music": {
         "loop": True,
-        "fade_duration": 1.0,  # Duração do fade ao trocar música
+        "fade_duration": 0.5,  # Duração do fade ao trocar música
     },
     "boss_laser": {
         "duck_music": True,  # Reduzir música durante som do laser
-        "duck_volume": 0.6,  # Volume da música durante o laser (60% do normal)
+        "duck_volume": 0.3,  # Volume da música durante o laser (30% do normal)
         "fade_in": 0.1,  # Fade in suave para o som
         "fade_out": 0.2,  # Fade out suave para o som
     },

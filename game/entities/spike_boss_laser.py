@@ -39,7 +39,7 @@ class SpikeBossLaser:
         self.y = y
         self.target_y = target_y
         self.w = 0
-        self.max_w = width
+        self.max_w = width * 0.70
         self.dead = False
 
         self.lifetime = lifetime

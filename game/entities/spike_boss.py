@@ -105,8 +105,17 @@ class SpikeBoss:
         self.proximity_telegraph_active = False  # Fase de aviso
         self.proximity_telegraph_timer = 0.0
 
+    def can_take_damage(self) -> bool:
+        """Check if boss can currently take damage."""
+        if self.state == "entering":
+            return False
+        return not self.dead
+
     def take_damage(self, damage: int):
         """Recebe dano e verifica se entra em frenzy."""
+        if not self.can_take_damage():
+            return
+
         self.health -= damage
 
         # Verificar se morreu
@@ -496,9 +505,10 @@ class SpikeBoss:
                 boss_bottom_y = self.y + self.h
                 target_y = Config.SCREEN_HEIGHT
 
+                sound_manager.stop_boss_laser_charging()
                 # Som de laser (se disponível)
-                if hasattr(sound_manager, "play_boss_laser"):
-                    sound_manager.play_boss_laser()  # type: ignore
+                if hasattr(sound_manager, "play_spike_boss_laser"):
+                    sound_manager.play_spike_boss_laser()  # type: ignore
 
                 return SpikeBossLaser(
                     x=boss_center_x,
@@ -521,8 +531,16 @@ class SpikeBoss:
         # Iniciar carregamento do laser
         self.laser_charging = True
         self.laser_charge_timer = 0.0
+        sound_manager.play_boss_laser_charging()
 
         return None
+
+    def get_rect(self) -> pygame.Rect:
+        """Get the boss collision rectangle."""
+        if not self.can_take_damage():
+            # Return an empty rect if boss can't take damage
+            return pygame.Rect(-1000, -1000, 0, 0)
+        return pygame.Rect(self.x, self.y, self.w, self.h)
 
     def get_proximity_attack_data(self) -> tuple[bool, float, float, float] | None:
         """
