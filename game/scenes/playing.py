@@ -20,6 +20,8 @@ from ..entities.mini_ship import MiniShip
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.guided_meteor import GuidedMeteor
 from ..entities.spike_boss_laser import SpikeBossLaser
+from ..entities.bullet_pool import BulletPool  # Added import
+from ..entities.meteor_pool import MeteorPool  # Added import
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -69,6 +71,9 @@ class PlayingScene(Scene):
         self.enemy_spawner = EnemySpawner(self.level_manager, is_initial_level)
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
+
+        self.bullet_pool = BulletPool()  # Added bullet pool
+        self.meteor_pool = MeteorPool()  # Added meteor pool
 
         self.score = 0
         self.lives = Config.INITIAL_LIVES
@@ -213,7 +218,8 @@ class PlayingScene(Scene):
         if "hold_shoot" in held and self.shoot_cd == 0.0 and not boss_pausing:
             bullet_specs = self.ship.bullet_spawn()
             for x, y, is_piercing in bullet_specs:
-                self.entity_manager.spawn_bullet(x, y, piercing=is_piercing)
+                bullet = self.bullet_pool.get(x, y, damage=10, piercing=is_piercing)  # Use pool
+                self.entity_manager.bullets.append(bullet)  # Add to manager
             # Tocar som de tiro (varia entre os 3 sons automaticamente)
             sound_manager.play_shot()
             # Aplicar multiplicador de velocidade de ataque do power-up de velocidade
@@ -256,6 +262,9 @@ class PlayingScene(Scene):
         self._handle_collisions()
 
         self.entity_manager.cleanup()
+
+        self.bullet_pool.update(dt)  # Update pool to release dead bullets
+        self.meteor_pool.update(dt)  # Update pool to release dead meteors
 
         # Lógica de progressão de fase
         if self.pre_boss_transition:
