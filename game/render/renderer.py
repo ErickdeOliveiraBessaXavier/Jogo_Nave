@@ -154,22 +154,29 @@ class StarField:
         for s in self.stars:
             c = (s["brightness"], s["brightness"], s["brightness"])
             center_x, center_y = int(s["x"]), int(s["y"])
-            a = s["size"] * 4  # raio
 
-            # Asteroide suave com 4 cúspides (x = a * cos(t)^3, y = a * sin(t)^3)
-            points: list[tuple[float, float]] = []
-            t = 0.0
-            step = 0.05
-            while t < 2 * math.pi:
-                x = a * (math.cos(t) ** 3)
-                y = a * (math.sin(t) ** 3)
-                px = center_x + x
-                py = center_y + y
-                points.append((px, py))
-                t += step
+            if s["size"] <= 1:
+                # Estrelas pequenas: desenhar círculo simples com raio correto
+                pygame.draw.circle(surface, c, (center_x, center_y), s["size"])
+            else:
+                # Estrelas médias/grandes: asteroide suave com 4 cúspides
+                a = s["size"] * 1.2  # Raio proporcional ao tamanho
+                points: list[tuple[float, float]] = []
+                
+                # Step adaptativo: menor para estrelas menores (mais pontos)
+                step = 0.03 if s["size"] == 2 else 0.05
+                
+                t = 0.0
+                while t < 2 * math.pi:
+                    x = a * (math.cos(t) ** 3)
+                    y = a * (math.sin(t) ** 3)
+                    px = center_x + x
+                    py = center_y + y
+                    points.append((px, py))
+                    t += step
 
-            if len(points) > 2:
-                pygame.draw.polygon(surface, c, points)
+                if len(points) > 2:
+                    pygame.draw.polygon(surface, c, points)
 
 
 
