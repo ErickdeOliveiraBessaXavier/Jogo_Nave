@@ -169,7 +169,9 @@ class PlayingScene(Scene):
         if "hold_shoot" in held and self.shoot_cd == 0.0 and not boss_pausing:
             bullet_specs = self.ship.bullet_spawn()
             for x, y, is_piercing in bullet_specs:
-                bullet = self.bullet_pool.get(x, y, damage=10, piercing=is_piercing)  # Use pool
+                bullet = self.bullet_pool.get(
+                    x, y, damage=10, piercing=is_piercing
+                )  # Use pool
                 self.entity_manager.bullets.append(bullet)  # Add to manager
             # Tocar som de tiro (varia entre os 3 sons automaticamente)
             sound_manager.play_shot()

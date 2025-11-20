@@ -268,7 +268,9 @@ class Renderer:
             Config.SCREEN_HEIGHT,
             n=RenderConfig.CELESTIAL_NUM_BODIES,
         )
-        self.halo_cache: dict[int, pygame.Surface] = {}  # Cache for halo surfaces by radius
+        self.halo_cache: dict[int, pygame.Surface] = (
+            {}
+        )  # Cache for halo surfaces by radius
 
     def background(
         self, surface: pygame.Surface, dt: float, speed_multiplier: float = 1.0

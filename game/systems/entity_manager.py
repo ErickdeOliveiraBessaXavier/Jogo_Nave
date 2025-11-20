@@ -136,12 +136,14 @@ class EntityManager:
             if square.dead:
                 self.boss_squares.remove(square)
 
-    def update_for_game_over_slow_motion(self, dt: float, player_x: float, player_y: float):
+    def update_for_game_over_slow_motion(
+        self, dt: float, player_x: float, player_y: float
+    ):
         """
         Updates entities specifically for the game over slow motion sequence.
         This method consolidates the update logic previously found in PlayingScene.
         """
-        from typing import Any # Used for type hinting lists of varied entities
+        from typing import Any  # Used for type hinting lists of varied entities
         from ..entities.mini_ship import MiniShip
         from ..entities.eye_enemy import EyeEnemy
         from ..entities.guided_meteor import GuidedMeteor
@@ -157,10 +159,10 @@ class EntityManager:
             self.powerups,
             self.floating_scores,
             self.mini_ships,
-            self.spikes, # Include spikes in slow motion update
-            self.boss_squares, # Include boss squares
-            self.eye_lasers, # Include eye lasers
-            self.mini_ship_bullets # Include mini ship bullets
+            self.spikes,  # Include spikes in slow motion update
+            self.boss_squares,  # Include boss squares
+            self.eye_lasers,  # Include eye lasers
+            self.mini_ship_bullets,  # Include mini ship bullets
         ]
 
         # Update all entities in a generic way, handling specific types
@@ -174,10 +176,10 @@ class EntityManager:
                     entity.update(dt, [], [])
                 else:
                     entity.update(dt)
-        
+
         # Update formations, if any
         for formation in self.formations:
-            formation.update(dt) # Formations update their internal enemies
+            formation.update(dt)  # Formations update their internal enemies
 
         # Handle boss update specifically if present
         if self.boss:
@@ -191,12 +193,10 @@ class EntityManager:
                 if spawned_spikes:
                     self.spikes.extend(spawned_spikes)
                 if spike_boss_lasers:
-                    self.boss_lasers.extend(spike_boss_lasers) # type: ignore
-            else: # General Boss type
-                lasers_fired, spawned_meteors, spawned_squares = (
-                    self.boss.update(
-                        dt, player_x, player_y
-                    )
+                    self.boss_lasers.extend(spike_boss_lasers)  # type: ignore
+            else:  # General Boss type
+                lasers_fired, spawned_meteors, spawned_squares = self.boss.update(
+                    dt, player_x, player_y
                 )
                 if lasers_fired:
                     self.boss_lasers.extend(lasers_fired)
@@ -204,7 +204,7 @@ class EntityManager:
                     self.enemies.extend(spawned_meteors)
                 if spawned_squares:
                     self.boss_squares.extend(spawned_squares)
-        
+
         # Ensure cleanup is called after updates during game over for consistency
         self.cleanup()
 
