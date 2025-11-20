@@ -17,8 +17,6 @@ from ..core import colors
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..entities.mini_ship import MiniShip
-from ..entities.eye_enemy import EyeEnemy
-from ..entities.guided_meteor import GuidedMeteor
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.bullet_pool import BulletPool  # Added import
 from ..entities.meteor_pool import MeteorPool  # Added import
@@ -131,57 +129,10 @@ class PlayingScene(Scene):
             self.game_over_timer += dt
             slow_mo_dt = dt * 0.2
 
-            # Atualiza entidades em câmera lenta
-            from typing import Any
-
-            entity_lists: list[list[Any]] = [
-                self.entity_manager.enemies,
-                self.entity_manager.bullets,
-                self.entity_manager.alien_bullets,
-                self.entity_manager.boss_lasers,
-                self.entity_manager.explosions,
-                self.entity_manager.powerups,
-                self.entity_manager.floating_scores,
-                self.entity_manager.mini_ships,
-            ]
-            for entity_list in entity_lists:
-                for entity in entity_list:
-                    if isinstance(entity, (EyeEnemy, GuidedMeteor)):
-                        entity.update(
-                            slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery
-                        )
-                    elif isinstance(entity, MiniShip):
-                        entity.update(slow_mo_dt, [], [])
-                    else:
-                        entity.update(slow_mo_dt)
-            if self.entity_manager.boss:
-                from ..entities.spike_boss import SpikeBoss
-
-                if isinstance(self.entity_manager.boss, SpikeBoss):
-                    spawned_spikes, spike_boss_lasers = self.entity_manager.boss.update(
-                        slow_mo_dt,
-                        self.ship.rect.centerx,
-                        self.ship.rect.centery,
-                        self.entity_manager.spikes,
-                    )
-                    if spawned_spikes:
-                        self.entity_manager.spikes.extend(spawned_spikes)
-                    if spike_boss_lasers:
-                        self.entity_manager.boss_lasers.extend(spike_boss_lasers)
-                else:
-                    lasers_fired, spawned_meteors, spawned_squares = (
-                        self.entity_manager.boss.update(
-                            slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery
-                        )
-                    )
-                    if lasers_fired:
-                        self.entity_manager.boss_lasers.extend(lasers_fired)
-                    if spawned_meteors:
-                        self.entity_manager.enemies.extend(spawned_meteors)
-                    if spawned_squares:
-                        self.entity_manager.boss_squares.extend(spawned_squares)
-
-            self.entity_manager.cleanup()
+            # Atualiza entidades em câmera lenta através do Entity Manager
+            self.entity_manager.update_for_game_over_slow_motion(
+                slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery
+            )
             return
 
         # Timers

@@ -136,6 +136,78 @@ class EntityManager:
             if square.dead:
                 self.boss_squares.remove(square)
 
+    def update_for_game_over_slow_motion(self, dt: float, player_x: float, player_y: float):
+        """
+        Updates entities specifically for the game over slow motion sequence.
+        This method consolidates the update logic previously found in PlayingScene.
+        """
+        from typing import Any # Used for type hinting lists of varied entities
+        from ..entities.mini_ship import MiniShip
+        from ..entities.eye_enemy import EyeEnemy
+        from ..entities.guided_meteor import GuidedMeteor
+        from ..entities.spike_boss import SpikeBoss
+
+        # List of entity groups to update
+        entity_groups: list[list[Any]] = [
+            self.enemies,
+            self.bullets,
+            self.alien_bullets,
+            self.boss_lasers,
+            self.explosions,
+            self.powerups,
+            self.floating_scores,
+            self.mini_ships,
+            self.spikes, # Include spikes in slow motion update
+            self.boss_squares, # Include boss squares
+            self.eye_lasers, # Include eye lasers
+            self.mini_ship_bullets # Include mini ship bullets
+        ]
+
+        # Update all entities in a generic way, handling specific types
+        for entity_list in entity_groups:
+            for entity in entity_list:
+                if isinstance(entity, (EyeEnemy, GuidedMeteor)):
+                    entity.update(dt, player_x, player_y)
+                elif isinstance(entity, MiniShip):
+                    # MiniShip.update expects enemy_list and bullet_list,
+                    # but during game over slow-mo, they might not need complex interactions
+                    entity.update(dt, [], [])
+                else:
+                    entity.update(dt)
+        
+        # Update formations, if any
+        for formation in self.formations:
+            formation.update(dt) # Formations update their internal enemies
+
+        # Handle boss update specifically if present
+        if self.boss:
+            if isinstance(self.boss, SpikeBoss):
+                spawned_spikes, spike_boss_lasers = self.boss.update(
+                    dt,
+                    player_x,
+                    player_y,
+                    self.spikes,
+                )
+                if spawned_spikes:
+                    self.spikes.extend(spawned_spikes)
+                if spike_boss_lasers:
+                    self.boss_lasers.extend(spike_boss_lasers) # type: ignore
+            else: # General Boss type
+                lasers_fired, spawned_meteors, spawned_squares = (
+                    self.boss.update(
+                        dt, player_x, player_y
+                    )
+                )
+                if lasers_fired:
+                    self.boss_lasers.extend(lasers_fired)
+                if spawned_meteors:
+                    self.enemies.extend(spawned_meteors)
+                if spawned_squares:
+                    self.boss_squares.extend(spawned_squares)
+        
+        # Ensure cleanup is called after updates during game over for consistency
+        self.cleanup()
+
     def draw(self, surface: pygame.Surface, player_x: float, player_y: float):
         """Desenha todas as entidades. EyeEnemy precisa da posição do jogador."""
         from typing import Any
