@@ -131,6 +131,14 @@ LEVEL_THEMES = {
         enemies_multiplier=0.85,
         special_feature="formations_heavy",
     ),
+    "meteor_storm": LevelTheme(
+        name="Tempestade de Meteoros",
+        description="Apenas meteoros em volume extremo",
+        enemy_weight={"meteor": 10.0, "alien": 0.0, "eye": 0.0},
+        spawn_rate_multiplier=3.0,  # 3x mais meteoros por segundo
+        enemies_multiplier=2.5,     # 2.5x mais meteoros para limpar
+        special_feature="meteor_only",
+    ),
     "balanced": LevelTheme(
         name="Balanceado",
         description="Mix equilibrado de tudo",
@@ -262,6 +270,11 @@ class ProceduralLevelGenerator:
         if level_number <= 2:
             return LEVEL_THEMES["balanced"]
 
+        # A cada 5 níveis, chance de tempestade de meteoros (nível 8+)
+        if level_number >= 8 and level_number % 5 == 0:
+            if random.random() < 0.4:  # 40% de chance
+                return LEVEL_THEMES["meteor_storm"]
+
         # A cada 3 níveis, chance de tema especial
         if level_number % 3 == 0 and level_number >= 6:
             special_themes = ["minefield", "formation_hell", "eye_swarm"]
@@ -304,28 +317,36 @@ class ProceduralLevelGenerator:
             Type[Meteor | Alien | ExplosiveMine | EyeEnemy], float
         ] = {}
 
-        # Meteoros
-        meteor_weight = theme.enemy_weight.get("meteor", 1.0) if theme else 1.0
-        base_meteor_time = (
-            DifficultyConfig.BASE_METEOR_SPAWN_TIME / difficulty
-        ) / spawn_multiplier
-        enemy_spawn_config[Meteor] = base_meteor_time * (2.0 / meteor_weight)
-
-        # Aliens (nível 2+)
-        if level_number >= 2:
-            alien_weight = theme.enemy_weight.get("alien", 1.0) if theme else 1.0
-            base_alien_time = (
-                DifficultyConfig.BASE_ALIEN_SPAWN_TIME / difficulty
+        # Verificar se é fase especial "meteor_only"
+        if theme and theme.special_feature == "meteor_only":
+            # Apenas meteoros, spawn rate extremo
+            meteor_spawn_time = (
+                DifficultyConfig.BASE_METEOR_SPAWN_TIME / difficulty
+            ) / spawn_multiplier / 2.0  # Mesmo mais rápido
+            enemy_spawn_config[Meteor] = meteor_spawn_time
+        else:
+            # Meteoros
+            meteor_weight = theme.enemy_weight.get("meteor", 1.0) if theme else 1.0
+            base_meteor_time = (
+                DifficultyConfig.BASE_METEOR_SPAWN_TIME / difficulty
             ) / spawn_multiplier
-            enemy_spawn_config[Alien] = base_alien_time * (2.0 / alien_weight)
+            enemy_spawn_config[Meteor] = base_meteor_time * (2.0 / meteor_weight)
 
-        # Eyes (nível 5+)
-        if level_number >= 5:
-            eye_weight = theme.enemy_weight.get("eye", 1.0) if theme else 1.0
-            base_eye_time = (
-                DifficultyConfig.BASE_EYE_SPAWN_TIME / difficulty
-            ) / spawn_multiplier
-            enemy_spawn_config[EyeEnemy] = base_eye_time * (2.0 / eye_weight)
+            # Aliens (nível 2+)
+            if level_number >= 2:
+                alien_weight = theme.enemy_weight.get("alien", 1.0) if theme else 1.0
+                base_alien_time = (
+                    DifficultyConfig.BASE_ALIEN_SPAWN_TIME / difficulty
+                ) / spawn_multiplier
+                enemy_spawn_config[Alien] = base_alien_time * (2.0 / alien_weight)
+
+            # Eyes (nível 5+)
+            if level_number >= 5:
+                eye_weight = theme.enemy_weight.get("eye", 1.0) if theme else 1.0
+                base_eye_time = (
+                    DifficultyConfig.BASE_EYE_SPAWN_TIME / difficulty
+                ) / spawn_multiplier
+                enemy_spawn_config[EyeEnemy] = base_eye_time * (2.0 / eye_weight)
 
         # 2. Calcular quantidade de inimigos
         curve = DifficultyConfig.ENEMY_COUNT_CURVE
@@ -352,15 +373,22 @@ class ProceduralLevelGenerator:
 
         # 3. Features baseadas no tema
         mines_enabled = False
-        if level_number >= DifficultyConfig.MINES_UNLOCK_LEVEL:
-            if theme and theme.special_feature == "mines_heavy":
-                mines_enabled = True
-            else:
-                mines_enabled = random.random() < DifficultyConfig.MINES_PROBABILITY
+        formations_enabled = False
 
-        formations_enabled = level_number >= DifficultyConfig.FORMATIONS_UNLOCK_LEVEL
-        if theme and theme.special_feature == "formations_heavy":
-            formations_enabled = True
+        if theme and theme.special_feature == "meteor_only":
+            # Fase especial: apenas meteoros, sem features extras
+            pass
+        else:
+            # Configuração normal de features
+            if level_number >= DifficultyConfig.MINES_UNLOCK_LEVEL:
+                if theme and theme.special_feature == "mines_heavy":
+                    mines_enabled = True
+                else:
+                    mines_enabled = random.random() < DifficultyConfig.MINES_PROBABILITY
+
+            formations_enabled = level_number >= DifficultyConfig.FORMATIONS_UNLOCK_LEVEL
+            if theme and theme.special_feature == "formations_heavy":
+                formations_enabled = True
 
         # 4. Tipos de formação
         formation_types = None
