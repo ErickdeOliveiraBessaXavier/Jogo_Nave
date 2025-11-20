@@ -20,6 +20,7 @@ from ..entities.eye_enemy import EyeEnemy
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
 from ..core.config import Config
+from ..core.spatial_grid import SpatialGrid
 
 
 from ..entities.explosive_mine import ExplosiveMine
@@ -103,13 +104,24 @@ class Collisions:
         mini_ship_bullets: list[MiniShipBullet],
         enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         explosions: list[Explosion],
-    ):
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
 
+        # Build spatial grid for enemies
+        grid = SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy]()
+        for enemy in enemies:
+            grid.insert_from_rect(enemy)
+
         for b in mini_ship_bullets[:]:
-            for enemy in enemies[:]:
+            # Query potential collisions using spatial grid (expand by 10 pixels for safety)
+            query_x = b.rect.x - 10
+            query_y = b.rect.y - 10
+            query_w = b.rect.width + 20
+            query_h = b.rect.height + 20
+            potential_enemies = grid.query(query_x, query_y, query_w, query_h)
+            for enemy in potential_enemies:
                 if b.rect.colliderect(enemy.rect):
                     if b in mini_ship_bullets:
                         mini_ship_bullets.remove(b)
@@ -122,8 +134,8 @@ class Collisions:
                         if enemy in enemies:
                             enemies.remove(enemy)
 
-                        cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
-                        explosions.append(Explosion(cx, cy, size=enemy.w // 2))
+                        cx, cy = (enemy.rect.centerx, enemy.rect.centery)
+                        explosions.append(Explosion(cx, cy, size=enemy.rect.width // 2))
 
                         if isinstance(enemy, Meteor):
                             sound_manager.play_explosion_asteroid()
@@ -151,13 +163,24 @@ class Collisions:
         explosions: list[Explosion],
         mine_explosions: list[MineExplosion],
         ship: Ship,
-    ):
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
 
+        # Build spatial grid for enemies
+        grid = SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy]()
+        for enemy in enemies:
+            grid.insert_from_rect(enemy)
+
         for b in bullets[:]:
-            for enemy in enemies[:]:
+            # Query potential collisions using spatial grid (expand by 10 pixels for safety)
+            query_x = b.rect.x - 10
+            query_y = b.rect.y - 10
+            query_w = b.rect.width + 20
+            query_h = b.rect.height + 20
+            potential_enemies = grid.query(query_x, query_y, query_w, query_h)
+            for enemy in potential_enemies:
                 if b.rect.colliderect(enemy.rect):
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
@@ -245,7 +268,19 @@ class Collisions:
     ) -> bool:
         if ship.invuln > 0:
             return False
-        for enemy in enemies[:]:
+
+        # Build spatial grid for enemies
+        grid = SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy]()
+        for enemy in enemies:
+            grid.insert_from_rect(enemy)
+
+        # Query potential collisions with ship's rect (expand by 10 pixels)
+        query_x = ship.rect.x - 10
+        query_y = ship.rect.y - 10
+        query_w = ship.rect.width + 20
+        query_h = ship.rect.height + 20
+        potential_enemies = grid.query(query_x, query_y, query_w, query_h)
+        for enemy in potential_enemies:
             if enemy and ship.rect.colliderect(enemy.rect):
                 if isinstance(enemy, ExplosiveMine):
                     enemy.dead = True  # Explode immediately
@@ -370,8 +405,20 @@ class Collisions:
     ) -> int:
         """Colisão de balas das mini ships com Spikes."""
         score_gain = 0
+
+        # Build spatial grid for spikes
+        grid = SpatialGrid[Spike]()
+        for spike in spikes:
+            grid.insert_from_rect(spike)
+
         for b in mini_ship_bullets[:]:
-            for spike in spikes[:]:
+            # Query potential spikes (expand by 10 pixels)
+            query_x = b.rect.x - 10
+            query_y = b.rect.y - 10
+            query_w = b.rect.width + 20
+            query_h = b.rect.height + 20
+            potential_spikes = grid.query(query_x, query_y, query_w, query_h)
+            for spike in potential_spikes:
                 # Só colide se o spike estiver voando
                 if spike.state == "flying" and b.rect.colliderect(spike.rect):
                     mini_ship_bullets.remove(b)
@@ -420,8 +467,20 @@ class Collisions:
     ) -> int:
         """Verifica colisão entre balas e espinhos. Retorna pontos ganhos."""
         score_gain = 0
+
+        # Build spatial grid for spikes
+        grid = SpatialGrid[Spike]()
+        for spike in spikes:
+            grid.insert_from_rect(spike)
+
         for b in bullets[:]:
-            for spike in spikes[:]:
+            # Query potential spikes (expand by 10 pixels)
+            query_x = b.rect.x - 10
+            query_y = b.rect.y - 10
+            query_w = b.rect.width + 20
+            query_h = b.rect.height + 20
+            potential_spikes = grid.query(query_x, query_y, query_w, query_h)
+            for spike in potential_spikes:
                 if b.rect.colliderect(spike.rect):
                     # Remover bala
                     if not b.piercing and b in bullets:

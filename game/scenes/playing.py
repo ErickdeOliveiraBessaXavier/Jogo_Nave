@@ -73,8 +73,8 @@ class PlayingScene(Scene):
         self.bullet_pool = BulletPool()  # Added bullet pool
         self.meteor_pool = MeteorPool()  # Added meteor pool
 
-        self.score = 0
-        self.lives = Config.INITIAL_LIVES
+        self.score: int = 0
+        self.lives: int = Config.INITIAL_LIVES
         self.ship.lives = self.lives
         self.total_enemies_destroyed = 0
         self.shoot_cd = 0.0
@@ -308,6 +308,9 @@ class PlayingScene(Scene):
 
     def _handle_collisions(self):
         # Colisões com inimigos normais (não em formação)
+        gain: int = 0  # type: ignore
+        destroyed: int = 0
+        score_events: list[tuple[float, float, int]] = []
         gain, destroyed, score_events = self.collisions.bullets_vs_enemies(
             self.entity_manager.bullets,
             self.entity_manager.enemies,
@@ -319,6 +322,9 @@ class PlayingScene(Scene):
         # Colisões com inimigos em formações
         for formation in self.entity_manager.formations:
             formation_enemies = formation.get_enemies()
+            f_gain: int
+            f_destroyed: int
+            f_score_events: list[tuple[float, float, int]]
             f_gain, f_destroyed, f_score_events = self.collisions.bullets_vs_enemies(
                 self.entity_manager.bullets,
                 formation_enemies,
@@ -331,6 +337,9 @@ class PlayingScene(Scene):
             score_events.extend(f_score_events)
 
         # Mini ships vs inimigos normais
+        vector_gain: int
+        vector_destroyed: int
+        vector_score_events: list[tuple[float, float, int]]
         vector_gain, vector_destroyed, vector_score_events = (
             self.collisions.mini_ship_bullets_vs_enemies(
                 self.entity_manager.mini_ship_bullets,
@@ -345,6 +354,9 @@ class PlayingScene(Scene):
         # Mini ships vs inimigos em formações
         for formation in self.entity_manager.formations:
             formation_enemies = formation.get_enemies()
+            f_gain: int
+            f_destroyed: int
+            f_score_events: list[tuple[float, float, int]]
             f_gain, f_destroyed, f_score_events = (
                 self.collisions.mini_ship_bullets_vs_enemies(
                     self.entity_manager.mini_ship_bullets,
@@ -357,6 +369,10 @@ class PlayingScene(Scene):
             score_events.extend(f_score_events)
 
         # Explosões de minas vs inimigos normais
+        mine_gain: int
+        mine_destroyed: int
+        mine_score_events: list[tuple[float, float, int]]
+        ship_hit: bool
         mine_gain, mine_destroyed, mine_score_events, ship_hit = (
             self.collisions.check_mine_explosions(
                 self.entity_manager.enemies,
