@@ -310,7 +310,7 @@ class Collisions:
         if ship.invuln > 0:
             return False
         for laser in eye_lasers:
-            if ship.rect.clipline(laser.get_collision_line()):
+            if laser.w > 0 and ship.rect.clipline(laser.get_collision_line()):
                 return True
         return False
 
