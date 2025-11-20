@@ -187,10 +187,19 @@ class EnemySpawner:
                     num_mines = random.choices(
                         [2, 3, 5], weights=[0.50, 0.25, 0.10], k=1
                     )[0]
+                    min_distance = 60  # Distância mínima entre minas
+                    positions: list[int] = []
                     for _ in range(num_mines):
-                        entity_manager.enemies.append(
-                            ExplosiveMine(y=-random.uniform(10, 100))
-                        )  # Adiciona um delay aleatório no eixo y
+                        attempts = 0
+                        while attempts < 10:
+                            x = random.randint(20, Config.SCREEN_WIDTH - 20)
+                            if all(abs(x - px) > min_distance for px in positions):
+                                positions.append(x)
+                                entity_manager.enemies.append(
+                                    ExplosiveMine(x=x, y=-random.uniform(10, 100))
+                                )
+                                break
+                            attempts += 1
                     self.mine_spawn_timer.start()
 
         # Spawner de formações
