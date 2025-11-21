@@ -163,10 +163,13 @@ class EnemySpawner:
             timer.update(dt)
             if timer.done() and random.random() < self.spawn_intensity:
                 if enemy_type == EyeEnemy:
-                    x = random.randint(40, Config.SCREEN_WIDTH - 80)
-                    y = random.randint(40, 100)
-                    new_enemy = EyeEnemy(x, y)
-                    entity_manager.enemies.append(new_enemy)
+                    # Limitar o número de EyeEnemies na tela a 5
+                    eye_enemy_count = sum(isinstance(e, EyeEnemy) for e in entity_manager.enemies)
+                    if eye_enemy_count < 5:
+                        x = random.randint(40, Config.SCREEN_WIDTH - 80)
+                        y = random.randint(40, 100)
+                        new_enemy = EyeEnemy(x, y)
+                        entity_manager.enemies.append(new_enemy)
                 else:
                     from ..entities.meteor import Meteor
 

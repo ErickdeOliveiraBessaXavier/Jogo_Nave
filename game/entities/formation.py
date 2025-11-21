@@ -186,14 +186,17 @@ class Formation:
                 self.enemies.remove(enemy)
                 continue
 
-            # Atualizar timers internos do inimigo (como shoot_timer)
+            # Chamar update do inimigo para cuidar de animações e timers internos
+            if hasattr(enemy, "update"):
+                enemy.update(dt)
+
+            # A formação controla o disparo, não o inimigo individualmente
             # MAS só permitir tiro se a formação estiver completamente formada
             if (
                 hasattr(enemy, "shoot_timer")
                 and self.formation_complete
                 and not self.is_transitioning
             ):
-                enemy.shoot_timer -= dt
                 if enemy.shoot_timer <= 0:
                     from .alien_bullet import AlienBullet
 
