@@ -435,6 +435,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         },
         enemies_to_clear=200,
         formation_types=["spiral_circle", "spiral_v", "spiral_line"],
+        mines_enabled=True,
     ),
     # Nível 3: Primeiro Boss - Mix de inimigos + Boss clássico
     3: LevelConfig(

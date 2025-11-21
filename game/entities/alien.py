@@ -3,6 +3,7 @@ import random
 from ..core.config import Config
 from ..core.assets import get_image, BASE_DIR
 from .alien_bullet import AlienBullet
+from ..core.sprite_loader import sprite_loader
 
 
 class Alien:
@@ -14,7 +15,7 @@ class Alien:
     _animation_frames: list[pygame.Surface] | None = None
 
     @classmethod
-    def _load_animation_frames(cls) -> list[pygame.Surface]:
+    def load_animation_frames(cls) -> list[pygame.Surface]:
         """Carrega e redimensiona os sprites de animação uma vez."""
         if cls._animation_frames is not None:
             return cls._animation_frames
@@ -45,7 +46,7 @@ class Alien:
         self.formation_angle = 0.0
 
         # Carregar sprites de animação (usando cache)
-        self.animation_frames = self._load_animation_frames()
+        self.animation_frames = self.load_animation_frames()
         
         # Controle de animação
         self.current_frame = 0
@@ -114,3 +115,6 @@ class Alien:
 
     def get_points_value(self) -> int:
         return 150  # Pontos por destruir um alien
+
+# REGISTRAR no sistema de pré-carregamento (fora da classe)
+sprite_loader.register("Alien", Alien.load_animation_frames)

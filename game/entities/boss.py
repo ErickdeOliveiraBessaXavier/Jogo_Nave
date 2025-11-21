@@ -1409,4 +1409,3 @@ class Boss:
     def get_explosion_duration(self) -> float:
         """Return the explosion duration for this boss."""
         return Config.BOSS_EXPLOSION_DURATION
-        return Config.BOSS_EXPLOSION_DURATION

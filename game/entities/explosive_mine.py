@@ -3,10 +3,23 @@ import random
 from ..core.config import Config
 from ..core import colors
 from ..core.assets import get_image
-
+from ..core.sprite_loader import sprite_loader
 
 class ExplosiveMine:
+    # Cache de sprites
+    _normal_sprite: pygame.Surface | None = None
+    _explosion_sprite: pygame.Surface | None = None
+
+    @classmethod
+    def load_sprites(cls) -> None:
+        """Carrega os sprites da mina explosiva."""
+        if cls._normal_sprite is None:
+            cls._normal_sprite = get_image("game/assets/images/mines/minas_explosivas.png")
+        if cls._explosion_sprite is None:
+            cls._explosion_sprite = get_image("game/assets/images/mines/minas_explosivas_sprite_explosão.png")
+
     def __init__(self, x: float | None = None, y: float | None = None):
+        self.load_sprites()
         self.radius = 30  # Visual radius of the mine
         self.explosion_radius = (
             self.radius * 8
@@ -40,9 +53,11 @@ class ExplosiveMine:
         self.animation_timer = 0.0
         self.pulse_scale = 1.0
 
-        # Load sprites
-        self.normal_sprite = get_image("game/assets/images/mines/minas_explosivas.png")
-        self.explosion_sprite = get_image("game/assets/images/mines/minas_explosivas_sprite_explosão.png")
+        # Load sprites from cache
+        self.normal_sprite = self.__class__._normal_sprite
+        self.explosion_sprite = self.__class__._explosion_sprite
+
+        assert self.normal_sprite is not None, "Normal sprite for explosive mine not loaded"
         
         # Sprite dimensions
         self.sprite_width = self.normal_sprite.get_width()
@@ -124,6 +139,9 @@ class ExplosiveMine:
         else:
             current_sprite = self.normal_sprite
 
+        if current_sprite is None:
+            return
+
         # Apply pulsing effect to scale
         scale = self.pulse_scale if not self.is_exploding else 1.0
         
@@ -167,3 +185,6 @@ class ExplosiveMine:
 
     def get_points_value(self) -> int:
         return 250
+
+# REGISTRAR no sistema de pré-carregamento
+sprite_loader.register("ExplosiveMine", ExplosiveMine.load_sprites)

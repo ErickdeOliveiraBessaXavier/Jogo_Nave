@@ -39,6 +39,10 @@ class GameApp:
         # Carregar cursor customizado.
         load_custom_cursor()
 
+        # PRÉ-CARREGAR TODOS OS SPRITES (adicionar aqui)
+        from .core.sprite_loader import sprite_loader
+        sprite_loader.load_all()
+
         pygame.display.set_caption("Space Shooter")
         self.clock = pygame.time.Clock()
         self.running = True
@@ -54,32 +58,18 @@ class GameApp:
         while self.running:
             dt = self.clock.tick(Config.FPS) / 1000.0
 
-            # Lida com eventos. Com pygame.SCALED, as coordenadas do mouse
-            # em `event.pos` já são convertidas para a resolução base.
+            current_scene = self.states.current()
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        self.running = False
-                    else:
-                        current_scene = self.states.current()
-                        if current_scene:
-                            current_scene.handle_event(event)
-                else:
-                    current_scene = self.states.current()
-                    if current_scene:
-                        current_scene.handle_event(event)
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.running = False
+                elif current_scene:
+                    current_scene.handle_event(event)
 
-            # Atualiza a cena atual.
-            current_scene = self.states.current()
             if current_scene:
                 current_scene.update(dt)
-
-            # Renderiza a cena atual diretamente na tela principal.
-            # Não há mais necessidade de uma tela virtual ou escalonamento manual.
-            current_scene = self.states.current()
-            if current_scene:
                 current_scene.render(self.screen)
 
             pygame.display.flip()

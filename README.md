@@ -7,9 +7,11 @@ Um emocionante jogo de tiro espacial de progressão infinita, desenvolvido em Py
 - **Jogabilidade Infinita:** Sobreviva o máximo que puder contra ondas crescentes de inimigos.
 - **Inimigos Variados:** Enfrente meteoros, naves alienígenas, meteoros teleguiados e chefes desafiadores.
 - **Power-ups com Raridade:** Colete power-ups para ganhar vantagens, com um sistema de raridade que torna cada partida única:
-  - **Shield (40%):** Proteção temporária contra danos.
-  - **Double Shot (30%):** Aumenta seu poder de fogo com tiros duplos.
+  - **Shield (20%):** Proteção temporária contra danos.
+  - **Double Shot (25%):** Aumenta seu poder de fogo com tiros duplos.
   - **Speed Boost (15%):** Aumenta a velocidade de movimento da sua nave.
+  - **Piercing Shot (15%):** Seus tiros atravessam múltiplos inimigos.
+  - **Mini Ships (10%):** Adiciona duas pequenas naves auxiliares que disparam com você.
   - **Extra Life (10%):** Ganhe uma vida extra.
   - **Score Multiplier (4%):** Multiplique sua pontuação.
   - **Rainbow (1%):** Ativa todos os outros power-ups simultaneamente!

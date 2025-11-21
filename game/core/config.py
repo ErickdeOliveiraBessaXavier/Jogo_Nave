@@ -341,7 +341,7 @@ class Config:
         errors: list[str] = []
 
         # Validar ranges (min <= max)
-        ranges_to_check: list[tuple[str, tuple[float, float]]] = [
+        ranges_to_check: list[tuple[str, tuple[float | int, float | int]]] = [
             ("FRAGMENT_COUNT_RANGE", self.FRAGMENT_COUNT_RANGE),
             ("BOSS_CALM_ATTACK_INTERVAL", self.BOSS_CALM_ATTACK_INTERVAL),
             ("BOSS_FRENZY_ATTACK_INTERVAL", self.BOSS_FRENZY_ATTACK_INTERVAL),
