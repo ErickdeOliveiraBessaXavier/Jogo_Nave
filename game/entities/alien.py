@@ -1,13 +1,37 @@
 import pygame
 import random
 from ..core.config import Config
-from ..core import colors
+from ..core.assets import get_image, BASE_DIR
 from .alien_bullet import AlienBullet
 
 
 class Alien:
+    # Constantes para dimensões do alien
+    ALIEN_WIDTH = 75
+    ALIEN_HEIGHT = 58
+    
+    # Cache de sprites de animação (carregado uma vez)
+    _animation_frames: list[pygame.Surface] | None = None
+
+    @classmethod
+    def _load_animation_frames(cls) -> list[pygame.Surface]:
+        """Carrega e redimensiona os sprites de animação uma vez."""
+        if cls._animation_frames is not None:
+            return cls._animation_frames
+        
+        frames: list[pygame.Surface] = []
+        for i in range(1, 13):
+            path = BASE_DIR / "assets" / "images" / "Sprite_Nave_Inimiga_01" / f"nave_inimiga ({i}).png"
+            image = get_image(path)
+            # Redimensionar para o tamanho do alien
+            image = pygame.transform.scale(image, (cls.ALIEN_WIDTH, cls.ALIEN_HEIGHT))
+            frames.append(image)
+        
+        cls._animation_frames = frames
+        return frames
+
     def __init__(self):
-        self.w, self.h = 35, 25
+        self.w, self.h = self.ALIEN_WIDTH, self.ALIEN_HEIGHT
         self.x = random.randint(0, Config.SCREEN_WIDTH - self.w)
         self.y = -self.h
         self.speed_x = random.choice([-100, 100])
@@ -19,6 +43,14 @@ class Alien:
         self.formation_controlled = False
         self.formation_index = 0
         self.formation_angle = 0.0
+
+        # Carregar sprites de animação (usando cache)
+        self.animation_frames = self._load_animation_frames()
+        
+        # Controle de animação
+        self.current_frame = 0
+        self.animation_timer = 0.0
+        self.frame_duration = 0.1
 
     @property
     def rect(self) -> pygame.Rect:
@@ -32,6 +64,11 @@ class Alien:
             # Marcar como morto se sair muito da tela (segurança)
             if self.y > Config.SCREEN_HEIGHT + 100 or self.y < -100:
                 self.dead = True
+            # Atualizar animação
+            self.animation_timer += dt
+            if self.animation_timer >= self.frame_duration:
+                self.animation_timer = 0.0
+                self.current_frame = (self.current_frame + 1) % len(self.animation_frames)
             return None
 
         # Movimento normal (quando não está em formação)
@@ -51,42 +88,29 @@ class Alien:
         if self.shoot_timer <= 0:
             self.shoot_timer = random.uniform(2.0, 4.0)
             return [AlienBullet(self.x + self.w / 2, self.y + self.h)]
+
+        # Atualizar animação
+        self.animation_timer += dt
+        if self.animation_timer >= self.frame_duration:
+            self.animation_timer = 0.0
+            self.current_frame = (self.current_frame + 1) % len(self.animation_frames)
+
         return None
 
     def draw(self, surface: pygame.Surface):
         # Verificar se tem alpha definido (para formações com fade-in)
         alpha = getattr(self, "alpha", 255)
 
+        # Obter frame atual
+        image = self.animation_frames[self.current_frame]
+
+        # Aplicar alpha se necessário (para formações)
         if alpha < 255:
-            # Criar surface temporária com alpha para fade-in
-            temp_surface = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
-            temp_surface.fill((0, 0, 0, 0))  # Transparente
+            image = image.copy()
+            image.set_alpha(alpha)
 
-            # Desenhar na surface temporária
-            # Corpo principal
-            body_rect = pygame.Rect(0, 5, self.w, self.h - 10)
-            green_with_alpha = (*colors.GREEN, alpha)
-            pygame.draw.rect(temp_surface, green_with_alpha, body_rect, border_radius=5)
-
-            # Cockpit
-            cockpit_rect = pygame.Rect(10, 0, self.w - 20, 10)
-            magenta_with_alpha = (*colors.MAGENTA, alpha)
-            white_with_alpha = (*colors.WHITE, alpha)
-            pygame.draw.ellipse(temp_surface, magenta_with_alpha, cockpit_rect)
-            pygame.draw.ellipse(temp_surface, white_with_alpha, cockpit_rect, 1)
-
-            # Blit na posição final
-            surface.blit(temp_surface, (int(self.x), int(self.y)))
-        else:
-            # Desenho normal (sem alpha, mais rápido)
-            # Corpo principal
-            body_rect = pygame.Rect(self.x, self.y + 5, self.w, self.h - 10)
-            pygame.draw.rect(surface, colors.GREEN, body_rect, border_radius=5)
-
-            # Cockpit
-            cockpit_rect = pygame.Rect(self.x + 10, self.y, self.w - 20, 10)
-            pygame.draw.ellipse(surface, colors.MAGENTA, cockpit_rect)
-            pygame.draw.ellipse(surface, colors.WHITE, cockpit_rect, 1)
+        # Desenhar
+        surface.blit(image, (int(self.x), int(self.y)))
 
     def get_points_value(self) -> int:
         return 150  # Pontos por destruir um alien

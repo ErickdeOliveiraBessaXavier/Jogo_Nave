@@ -430,9 +430,11 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     1: LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            Meteor: 0.6,
+            #Meteor: 0.6,
+            Alien: 2.5,
         },
         enemies_to_clear=200,
+        formation_types=["spiral_circle", "spiral_v", "spiral_line"],
     ),
     # Nível 3: Primeiro Boss - Mix de inimigos + Boss clássico
     3: LevelConfig(
