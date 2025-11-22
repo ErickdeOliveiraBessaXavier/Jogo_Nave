@@ -18,8 +18,6 @@ from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..entities.mini_ship import MiniShip
 from ..entities.spike_boss_laser import SpikeBossLaser
-from ..entities.bullet_pool import BulletPool  # Added import
-from ..entities.meteor_pool import MeteorPool  # Added import
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -64,12 +62,9 @@ class PlayingScene(Scene):
         self.warning_font = get_font(Config.WARNING_FONT_SIZE)
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
-        self.bullet_pool = BulletPool()  # Added bullet pool
-        self.meteor_pool = MeteorPool()  # Added meteor pool
-
         # Inicializar spawner com delay inicial apenas para fase 1
         is_initial_level = self.current_level_index == 0
-        self.enemy_spawner = EnemySpawner(self.level_manager, self.meteor_pool, is_initial_level)
+        self.enemy_spawner = EnemySpawner(self.level_manager, self.entity_manager.meteor_pool, is_initial_level)
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
 
@@ -169,10 +164,9 @@ class PlayingScene(Scene):
         if "hold_shoot" in held and self.shoot_cd == 0.0 and not boss_pausing:
             bullet_specs = self.ship.bullet_spawn()
             for x, y, is_piercing in bullet_specs:
-                bullet = self.bullet_pool.get(
+                self.entity_manager.spawn_bullet(
                     x, y, damage=10, piercing=is_piercing
-                )  # Use pool
-                self.entity_manager.bullets.append(bullet)  # Add to manager
+                )
             # Tocar som de tiro (varia entre os 3 sons automaticamente)
             sound_manager.play_shot()
             # Aplicar multiplicador de velocidade de ataque do power-up de velocidade
@@ -215,9 +209,6 @@ class PlayingScene(Scene):
         self._handle_collisions()
 
         self.entity_manager.cleanup()
-
-        self.bullet_pool.update(dt)  # Update pool to release dead bullets
-        self.meteor_pool.update(dt)  # Update pool to release dead meteors
 
         # Lógica de progressão de fase
         if self.pre_boss_transition:

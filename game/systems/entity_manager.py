@@ -314,7 +314,7 @@ class EntityManager:
         ]
         self.explosions = [e for e in self.explosions if not e.finished()]
         self.mine_explosions = [me for me in self.mine_explosions if not me.finished()]
-        self.powerups = [p for p in self.powerups if not p.is_off_screen()]
+        self.powerups = [p for p in self.powerups if not p.dead]
         self.floating_scores = [fs for fs in self.floating_scores if not fs.is_dead()]
         self.formations = [
             f for f in self.formations if not f.dead

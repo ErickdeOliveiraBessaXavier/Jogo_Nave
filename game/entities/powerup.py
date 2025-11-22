@@ -33,6 +33,7 @@ class PowerUp:
         # Animação/pulsação
         self.animation_timer = 0.0
         self.pulse_scale = 1.0
+        self.dead = False
 
     def _select_random_powerup(self) -> PowerUpType:
         """Seleciona um power-up aleatório baseado no sistema de raridade"""

@@ -42,8 +42,6 @@ class Collisions:
 
         for enemy in enemies[:]:
             if isinstance(enemy, ExplosiveMine) and enemy.dead:
-                if enemy in enemies:
-                    enemies.remove(enemy)
                 cx, cy = (enemy.x, enemy.y)
                 explosion_radius = enemy.explosion_radius
                 mine_explosions.append(MineExplosion(cx, cy, size=explosion_radius))
@@ -129,8 +127,7 @@ class Collisions:
                     else:
                         if isinstance(enemy, EyeEnemy):
                             enemy.destroy()
-                        if enemy in enemies:
-                            enemy.dead = True
+                        enemy.dead = True
 
                         cx, cy = (enemy.rect.centerx, enemy.rect.centery)
                         explosions.append(Explosion(cx, cy, size=enemy.rect.width // 2))
@@ -185,8 +182,7 @@ class Collisions:
                     else:
                         if isinstance(enemy, EyeEnemy):
                             enemy.destroy()
-                        if enemy in enemies:
-                            enemy.dead = True
+                        enemy.dead = True
 
                         cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
                         explosions.append(Explosion(cx, cy, size=enemy.w // 2))
@@ -341,7 +337,7 @@ class Collisions:
         score_gain = 0
         for b in mini_ship_bullets[:]:
             if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
-                mini_ship_bullets.remove(b)
+                b.dead = True
                 boss.take_damage(b.damage)
                 sound_manager.play_boss_damage()
                 explosions.append(Explosion(b.x, b.y, size=15))
@@ -373,7 +369,7 @@ class Collisions:
         score_gain = 0
         for b in mini_ship_bullets[:]:
             if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
-                mini_ship_bullets.remove(b)
+                b.dead = True
                 boss.take_damage(b.damage)
                 sound_manager.play_boss_damage()
                 explosions.append(Explosion(b.x, b.y, size=15))
@@ -418,8 +414,8 @@ class Collisions:
             for spike in potential_spikes:
                 # Só colide se o spike estiver voando
                 if spike.state == "flying" and b.rect.colliderect(spike.rect):
-                    mini_ship_bullets.remove(b)
-                    spikes.remove(spike)
+                    b.dead = True
+                    spike.dead = True
                     explosions.append(
                         Explosion(spike.center_x, spike.center_y, size=15)
                     )
@@ -436,7 +432,7 @@ class Collisions:
         collected_kinds: list[str] = []
         for p in powerups[:]:
             if ship.rect.colliderect(p.rect):
-                powerups.remove(p)
+                p.dead = True
                 kind = getattr(p, "kind", "shield")
                 collected_kinds.append(kind)
         return collected_kinds
@@ -480,12 +476,10 @@ class Collisions:
             for spike in potential_spikes:
                 if b.rect.colliderect(spike.rect):
                     # Remover bala
-                    if not b.piercing and b in bullets:
+                    if not b.piercing:
                         b.dead = True
 
                     # Destruir espinho
-                    if spike in spikes:
-                        spikes.remove(spike)
                     spike.dead = True
 
                     # Explosão pequena no centro do spike
