@@ -64,14 +64,14 @@ class PlayingScene(Scene):
         self.warning_font = get_font(Config.WARNING_FONT_SIZE)
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
-        # Inicializar spawner com delay inicial apenas para fase 1
-        is_initial_level = self.current_level_index == 0
-        self.enemy_spawner = EnemySpawner(self.level_manager, is_initial_level)
-        self.powerup_spawner = PowerUpSpawner()
-        self.collisions = Collisions()
-
         self.bullet_pool = BulletPool()  # Added bullet pool
         self.meteor_pool = MeteorPool()  # Added meteor pool
+
+        # Inicializar spawner com delay inicial apenas para fase 1
+        is_initial_level = self.current_level_index == 0
+        self.enemy_spawner = EnemySpawner(self.level_manager, self.meteor_pool, is_initial_level)
+        self.powerup_spawner = PowerUpSpawner()
+        self.collisions = Collisions()
 
         self.score: int = 0
         self.lives: int = Config.INITIAL_LIVES

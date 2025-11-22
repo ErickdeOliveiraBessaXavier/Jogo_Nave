@@ -81,8 +81,7 @@ class Collisions:
                 if isinstance(enemy, ExplosiveMine):
                     enemy.take_damage(enemy.health)  # Trigger chain reaction
                 else:
-                    if enemy in enemies:
-                        enemies.remove(enemy)
+                    enemy.dead = True
                     explosions.append(Explosion(enemy_cx, enemy_cy, size=enemy.w // 2))
 
         # Check player collision
@@ -123,8 +122,7 @@ class Collisions:
             potential_enemies = grid.query(query_x, query_y, query_w, query_h)
             for enemy in potential_enemies:
                 if b.rect.colliderect(enemy.rect):
-                    if b in mini_ship_bullets:
-                        mini_ship_bullets.remove(b)
+                    b.dead = True
 
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
@@ -132,7 +130,7 @@ class Collisions:
                         if isinstance(enemy, EyeEnemy):
                             enemy.destroy()
                         if enemy in enemies:
-                            enemies.remove(enemy)
+                            enemy.dead = True
 
                         cx, cy = (enemy.rect.centerx, enemy.rect.centery)
                         explosions.append(Explosion(cx, cy, size=enemy.rect.width // 2))
@@ -188,7 +186,7 @@ class Collisions:
                         if isinstance(enemy, EyeEnemy):
                             enemy.destroy()
                         if enemy in enemies:
-                            enemies.remove(enemy)
+                            enemy.dead = True
 
                         cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
                         explosions.append(Explosion(cx, cy, size=enemy.w // 2))
@@ -211,7 +209,7 @@ class Collisions:
                             if fragments:
                                 enemies.extend(fragments)
                     if not b.piercing:
-                        bullets.remove(b)
+                        b.dead = True
                         break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
@@ -226,7 +224,7 @@ class Collisions:
         for b in bullets[:]:
             if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
                 if not b.piercing:
-                    bullets.remove(b)
+                    b.dead = True
                 boss.take_damage(b.damage)
                 # Tocar som de dano no boss
                 sound_manager.play_boss_damage()
@@ -287,8 +285,7 @@ class Collisions:
                 else:
                     if isinstance(enemy, EyeEnemy):
                         enemy.destroy()
-                    if enemy in enemies:
-                        enemies.remove(enemy)
+                    enemy.dead = True
                 explosions.append(
                     Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
                 )
@@ -302,7 +299,7 @@ class Collisions:
             return False
         for bullet in alien_bullets[:]:
             if ship.rect.colliderect(bullet.rect):
-                alien_bullets.remove(bullet)
+                bullet.dead = True
                 return True
         return False
 
@@ -484,7 +481,7 @@ class Collisions:
                 if b.rect.colliderect(spike.rect):
                     # Remover bala
                     if not b.piercing and b in bullets:
-                        bullets.remove(b)
+                        b.dead = True
 
                     # Destruir espinho
                     if spike in spikes:
@@ -516,7 +513,7 @@ class Collisions:
         for b in bullets[:]:
             if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
                 if not b.piercing:
-                    bullets.remove(b)
+                    b.dead = True
                 boss.take_damage(b.damage)
                 sound_manager.play_boss_damage()
                 explosions.append(Explosion(b.x, b.y, size=15))

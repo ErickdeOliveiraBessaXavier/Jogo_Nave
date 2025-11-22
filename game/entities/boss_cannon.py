@@ -5,6 +5,7 @@ import pygame
 from ..core.config import Config
 from .boss_laser import BossLaser
 from .meteor import Meteor
+from .meteor_pool import MeteorPool
 from .guided_meteor import GuidedMeteor
 
 
@@ -51,6 +52,7 @@ class BossAttackSystem:
         boss_h: float,
         target_x: float,
         target_y: float,
+        meteor_pool: MeteorPool,
     ) -> "Meteor":
         """Spawns a meteor aimed at the player's position with some inaccuracy."""
         # Posição de spawn (a partir do boss)
@@ -77,7 +79,7 @@ class BossAttackSystem:
         base_speed = 200
 
         # Cria o meteoro com velocidade direcionada (com imprecisão)
-        meteor = Meteor(
+        meteor = meteor_pool.get(
             size=random.randint(15, 25),
             x=spawn_x,
             y=spawn_y,
@@ -95,6 +97,7 @@ class BossAttackSystem:
         boss_h: float,
         player_x: float,
         player_y: float,
+        meteor_pool: MeteorPool,
     ) -> List["Meteor"]:
         """Spawns meteors from both sides of the boss in an arc motion towards the player."""
         meteors: List["Meteor"] = []
@@ -139,7 +142,7 @@ class BossAttackSystem:
                 curved_left_dx = curved_left_dx / curved_length
                 curved_left_dy = curved_left_dy / curved_length
 
-            left_meteor = Meteor(
+            left_meteor = meteor_pool.get(
                 size=random.randint(20, 30),
                 x=left_spawn_x,
                 y=spawn_y,
@@ -180,7 +183,7 @@ class BossAttackSystem:
                 curved_right_dx = curved_right_dx / curved_length
                 curved_right_dy = curved_right_dy / curved_length
 
-            right_meteor = Meteor(
+            right_meteor = meteor_pool.get(
                 size=random.randint(20, 30),
                 x=right_spawn_x,
                 y=spawn_y,

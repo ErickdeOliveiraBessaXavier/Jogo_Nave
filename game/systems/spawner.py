@@ -35,8 +35,9 @@ from ..entities.powerup import PowerUp
 from ..core.levels import LevelManager
 from ..entities.formation import Formation, FormationPattern
 
-from ..entities.explosive_mine import ExplosiveMine
+from ..entities.meteor_pool import MeteorPool
 from ..entities.eye_enemy import EyeEnemy
+from ..entities.explosive_mine import ExplosiveMine
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -80,8 +81,9 @@ FORMATION_CONFIGS: Dict[str, FormationConfig] = {
 
 
 class EnemySpawner:
-    def __init__(self, level_manager: LevelManager, is_initial_level: bool = False):
+    def __init__(self, level_manager: LevelManager, meteor_pool: MeteorPool, is_initial_level: bool = False):
         self.level_manager = level_manager
+        self.meteor_pool = meteor_pool
         self.current_level_number = 1  # EnemySpawner starts at level 1
         self.config = self.level_manager.get_level(self.current_level_number)
         self.stopped = False
@@ -175,7 +177,8 @@ class EnemySpawner:
 
                     if enemy_type == Meteor:
                         # Usar o pool para meteoros
-                        entity_manager.spawn_meteor()
+                        meteor = self.meteor_pool.get()
+                        entity_manager.enemies.append(meteor)
                     else:
                         # Outros inimigos normalmente
                         new_enemy = enemy_type()  # type: ignore[misc]

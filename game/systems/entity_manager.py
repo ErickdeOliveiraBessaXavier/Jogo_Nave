@@ -107,7 +107,8 @@ class EntityManager:
                 if lasers_fired:
                     self.boss_lasers.extend(lasers_fired)
                 if spawned_meteors:
-                    self.enemies.extend(spawned_meteors)
+                    for meteor in spawned_meteors:
+                        self.enemies.append(meteor)
                 if spawned_squares:
                     self.boss_squares.extend(spawned_squares)
         for enemy in self.enemies:
@@ -290,7 +291,17 @@ class EntityManager:
         return bullet
 
     def cleanup(self):
+        # Liberar bullets dead ao pool
+        for b in self.bullets:
+            if b.dead:
+                self.bullet_pool.release(b)
         self.bullets = [b for b in self.bullets if not b.dead]
+
+        # Liberar meteoros dead ao pool
+        for e in self.enemies:
+            if isinstance(e, Meteor) and e.dead:
+                self.meteor_pool.release(e)
+
         self.alien_bullets = [ab for ab in self.alien_bullets if not ab.dead]
         self.boss_lasers = [bl for bl in self.boss_lasers if not bl.dead]
         self.boss_squares = [bs for bs in self.boss_squares if not bs.dead]
