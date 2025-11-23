@@ -81,17 +81,26 @@ class Config:
     SPEED_ATTACK_MULTIPLIER: float = 2.0
     PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER: float = 1.5
 
-    # Rarity system - chances devem somar 1.0
+    # Rarity system - Sistema de raridade para power-ups (chances devem somar 1.0)
     POWERUP_RARITY_CHANCES: dict[PowerUpType, float] = field(
         default_factory=lambda: {
-            PowerUpType.SHIELD: 0.20,  # 20% - Comum
-            PowerUpType.DOUBLE_SHOT: 0.25,  # 25% - Comum
-            PowerUpType.SPEED: 0.15,  # 15% - Incomum
-            PowerUpType.PIERCING_SHOT: 0.15,  # 15% - Raro
-            PowerUpType.MINI_SHIPS: 0.10,  # 10% - Raro
-            PowerUpType.LIFE: 0.10,  # 10% - Raro
-            PowerUpType.SCORE: 0.04,  # 4% - Épico
-            PowerUpType.RAINBOW: 0.01,  # 1% - Lendário
+            # 🔵 COMUM (45% total) - Power-ups básicos e frequentes
+            PowerUpType.SHIELD: 0.20,        # 20% - Escudo básico
+            PowerUpType.DOUBLE_SHOT: 0.25,   # 25% - Tiro duplo
+            
+            # 🟢 INCOMUM (15% total) - Power-ups situacionais
+            PowerUpType.SPEED: 0.15,         # 15% - Velocidade aumentada
+            
+            # 🟠 RARO (35% total) - Power-ups poderosos mas raros
+            PowerUpType.PIERCING_SHOT: 0.15, # 15% - Tiro perfurante
+            PowerUpType.MINI_SHIPS: 0.10,    # 10% - Naves auxiliares
+            PowerUpType.LIFE: 0.10,          # 10% - Vida extra
+            
+            # 🟣 ÉPICO (4% total) - Power-ups muito valiosos
+            PowerUpType.SCORE: 0.04,         # 4% - Multiplicador de pontos
+            
+            # 🟡 LENDÁRIO (1% total) - Power-ups ultra-raros
+            PowerUpType.RAINBOW: 0.01,       # 1% - Power-up especial
         }
     )
 

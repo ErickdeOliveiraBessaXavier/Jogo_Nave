@@ -171,6 +171,7 @@ class LevelConfig:
     formations_enabled: bool = False
     formation_types: list[str] | None = None
     theme_name: str | None = None  # Para UI mostrar "Invasão Alienígena!"
+    score_multiplier: float = 1.0  # Multiplicador de pontuação para o nível
 
     @property
     def enemy_types(self) -> list[Type[Meteor | Alien | ExplosiveMine | EyeEnemy]]:
@@ -316,6 +317,14 @@ class ProceduralLevelGenerator:
         """Garante que o tempo de spawn não seja menor que o mínimo."""
         return max(DifficultyConfig.MIN_SPAWN_TIME, time)
 
+    def _calculate_score_multiplier(self, level_number: int) -> float:
+        """Calcula o multiplicador de pontuação baseado no nível."""
+        # Multiplicador cresce logaritmicamente com o nível
+        # Nível 1: 1.0x, Nível 10: ~2.0x, Nível 20: ~2.5x, etc.
+        base_multiplier = 1.0
+        level_bonus = math.log1p(level_number) * 0.3  # Crescimento logarítmico
+        return base_multiplier + level_bonus
+
     def _generate_config(
         self, level_number: int, difficulty: float, theme: LevelTheme | None, rng: random.Random
     ) -> LevelConfig:
@@ -453,6 +462,7 @@ class ProceduralLevelGenerator:
             formations_enabled=formations_enabled,
             formation_types=formation_types,
             theme_name=theme.name if theme else LEVEL_THEMES["balanced"].name,
+            score_multiplier=self._calculate_score_multiplier(level_number),
         )
 
 
@@ -476,6 +486,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         #mines_enabled=True,
         #boss_type=Boss,
         theme_name="Tutorial",
+        score_multiplier=1.0,
         
     ),
     # Nível 3: Primeiro Boss - Mix de inimigos + Boss clássico
@@ -489,6 +500,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         boss_type=Boss,
         mines_enabled=True,
         theme_name="Chefe Inicial",
+        score_multiplier=1.2,
     ),
     # Nível 7: Boss Spike - Desafio avançado com todas as features
     7: LevelConfig(
@@ -503,6 +515,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v", "spiral_line"],
         theme_name="Chefe Avançado",
+        score_multiplier=1.6,
     ),
 }
 
@@ -551,7 +564,7 @@ def _apply_difficulty_to_fixed_level(config: LevelConfig, preset: DifficultyPres
     
     # Criar nova config com valores ajustados
     adjusted_spawn_config = {
-        enemy_type: spawn_time / settings["spawn_rate_multiplier"]
+        enemy_type: max(DifficultyConfig.MIN_SPAWN_TIME, spawn_time / settings["spawn_rate_multiplier"])
         for enemy_type, spawn_time in config.enemy_spawn_config.items()
     }
     
@@ -585,9 +598,9 @@ class LevelManager:
         """
         self._levels = initial_levels or {}
 
-    def get_level(self, level_number: int) -> LevelConfig:
-        """Retorna a configuração de um nível."""
-        return get_level_config(level_number)
+    def get_level(self, level_number: int, difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL) -> LevelConfig:
+        """Retorna a configuração de um nível com dificuldade aplicada."""
+        return get_level_config(level_number, difficulty_preset)
 
 
 # ============================================================================

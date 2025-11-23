@@ -75,7 +75,7 @@ class PlayingScene(Scene):
 
         # Inicializar spawner com delay inicial apenas para fase 1
         is_initial_level = self.current_level_index == 0
-        self.enemy_spawner = EnemySpawner(self.level_manager, self.entity_manager.meteor_pool, is_initial_level)
+        self.enemy_spawner = EnemySpawner(self.level_manager, self.entity_manager.meteor_pool, is_initial_level, self.difficulty_preset)
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
 
@@ -86,9 +86,10 @@ class PlayingScene(Scene):
         # Vidas iniciais
         self.lives: int = settings["lives"]
         
-        # Multiplicadores de dano serão aplicados nas entidades
-        # (necessário modificar Player, Enemy, etc.)
-
+        # Armazenar multiplicadores para uso em colisões e dano
+        self.player_damage_multiplier = settings["player_damage_multiplier"]
+        self.enemy_health_multiplier = settings["enemy_health_multiplier"]
+        
         self.score: int = 0
         self.ship.lives = self.lives
         self.total_enemies_destroyed = 0
@@ -392,8 +393,10 @@ class PlayingScene(Scene):
             self._handle_ship_hit()
 
         for x, y, pts in score_events:
-            self.entity_manager.floating_scores.append(FloatingScore(x, y, pts))
-        self.score += gain
+            # Aplicar multiplicador de pontuação do nível
+            adjusted_pts = int(pts * self.level_config.score_multiplier)
+            self.entity_manager.floating_scores.append(FloatingScore(x, y, adjusted_pts))
+        self.score += int(gain * self.level_config.score_multiplier)
         self.total_enemies_destroyed += destroyed
         self.enemies_destroyed_in_level += destroyed
 

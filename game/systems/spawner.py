@@ -1,5 +1,6 @@
 import random
 from typing import TYPE_CHECKING, Dict, Type, TypedDict, Tuple, List
+from ..core.difficulty import DifficultyPreset
 
 
 # Moved Timer class definition here
@@ -81,11 +82,12 @@ FORMATION_CONFIGS: Dict[str, FormationConfig] = {
 
 
 class EnemySpawner:
-    def __init__(self, level_manager: LevelManager, meteor_pool: MeteorPool, is_initial_level: bool = False):
+    def __init__(self, level_manager: LevelManager, meteor_pool: MeteorPool, is_initial_level: bool = False, difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL):
         self.level_manager = level_manager
         self.meteor_pool = meteor_pool
+        self.difficulty_preset = difficulty_preset
         self.current_level_number = 1  # EnemySpawner starts at level 1
-        self.config = self.level_manager.get_level(self.current_level_number)
+        self.config = self.level_manager.get_level(self.current_level_number, self.difficulty_preset)
         self.stopped = False
 
         # Validar tipos de formação configurados
@@ -355,7 +357,7 @@ class EnemySpawner:
     def set_level(self, level_number: int) -> None:
         """Atualiza o spawner para uma nova fase."""
         self.current_level_number = level_number
-        self.config = self.level_manager.get_level(self.current_level_number)
+        self.config = self.level_manager.get_level(self.current_level_number, self.difficulty_preset)
         self.stopped = False
 
         # Reiniciar warm-up para nova fase (transições suaves)
