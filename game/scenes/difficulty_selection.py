@@ -28,10 +28,11 @@ class DifficultySelectionScene(Scene):
             DifficultyPreset.NIGHTMARE: RED,
         }
 
-        self.setup_ui()
         self.difficulty_buttons: Dict[DifficultyPreset, Dict[str, Any]] = {}
         self.selected_difficulty: DifficultyPreset | None = None
         self.hovered_difficulty: DifficultyPreset | None = None
+
+        self.setup_ui()
 
     def setup_ui(self):
         """Configura elementos da interface."""
