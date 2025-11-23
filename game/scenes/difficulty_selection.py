@@ -1,5 +1,5 @@
 import pygame
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Any
 from ..core.state import Scene
 from ..core.colors import WHITE, BLACK, GREEN, YELLOW, ORANGE, RED
 from ..core.assets import get_font
@@ -29,8 +29,9 @@ class DifficultySelectionScene(Scene):
         }
 
         self.setup_ui()
-        self.selected_difficulty = None
-        self.hovered_difficulty = None
+        self.difficulty_buttons: Dict[DifficultyPreset, Dict[str, Any]] = {}
+        self.selected_difficulty: DifficultyPreset | None = None
+        self.hovered_difficulty: DifficultyPreset | None = None
 
     def setup_ui(self):
         """Configura elementos da interface."""
@@ -116,6 +117,10 @@ class DifficultySelectionScene(Scene):
     def start_game(self):
         """Inicia o jogo com a dificuldade selecionada."""
         from ..scenes.playing import PlayingScene
+
+        # Validar dificuldade selecionada
+        if self.selected_difficulty is None:
+            return  # Não deveria acontecer, mas previne erro
 
         # Armazenar dificuldade no app
         self.app.selected_difficulty = self.selected_difficulty

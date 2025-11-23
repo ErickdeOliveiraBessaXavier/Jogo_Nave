@@ -1,8 +1,8 @@
 from enum import Enum
-from typing import TypedDict
+from typing import TypedDict, NotRequired
 
 
-class DifficultySettingsDict(TypedDict, total=False):
+class DifficultySettingsDict(TypedDict):
     """Estrutura das configurações de dificuldade."""
     name: str
     description: str
@@ -12,7 +12,7 @@ class DifficultySettingsDict(TypedDict, total=False):
     player_damage_multiplier: float
     lives: int
     rewards_multiplier: float
-    special_rules: list[str]  # Optional, only for NIGHTMARE
+    special_rules: NotRequired[list[str]]  # Optional, only for NIGHTMARE
 
 
 class DifficultyPreset(Enum):

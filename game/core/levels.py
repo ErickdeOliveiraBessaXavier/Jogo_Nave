@@ -327,7 +327,6 @@ class ProceduralLevelGenerator:
 
         # Multiplicadores do preset
         preset_spawn_mult = self.difficulty_settings["spawn_rate_multiplier"]
-        preset_enemies_mult = 1.0  # Ajustar enemies_to_clear baseado no preset
 
         # Multiplicador final combinado
         spawn_multiplier = theme_spawn_mult * preset_spawn_mult
