@@ -22,6 +22,7 @@ from ..entities.eye_laser import EyeLaser
 from ..entities.formation import Formation
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
+from ..core.spatial_grid import SpatialGrid
 
 
 class EntityManager:
@@ -43,6 +44,20 @@ class EntityManager:
         self.spikes: list[Spike] = []  # Lista para espinhos do SpikeBoss
         self.meteor_pool = MeteorPool(initial_size=100)  # Pool de meteoros
         self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
+        self.enemy_spatial_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy] = SpatialGrid()  # Grid espacial para inimigos
+
+    def rebuild_enemy_grid(self):
+        """Reconstrói a grid espacial com TODOS os inimigos (normais + formações)."""
+        self.enemy_spatial_grid.clear()  # Limpar grid anterior
+        
+        # Inserir inimigos normais
+        for enemy in self.enemies:
+            self.enemy_spatial_grid.insert_from_rect(enemy)
+        
+        # Inserir inimigos de formações
+        for formation in self.formations:
+            for enemy in formation.get_enemies():
+                self.enemy_spatial_grid.insert_from_rect(enemy)
 
     def update(self, dt: float, player_x: float, player_y: float):
         new_alien_bullets: list[AlienBullet] = []
@@ -136,6 +151,9 @@ class EntityManager:
             square.update(dt, screen_width, screen_height)
             if square.dead:
                 self.boss_squares.remove(square)
+
+        # Reconstruir grid espacial com todos os inimigos
+        self.rebuild_enemy_grid()
 
     def update_for_game_over_slow_motion(
         self, dt: float, player_x: float, player_y: float

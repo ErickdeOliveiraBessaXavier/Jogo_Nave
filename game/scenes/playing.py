@@ -298,66 +298,37 @@ class PlayingScene(Scene):
                     print("⚔️ GOD MODE DESATIVADO - Invulnerabilidade desligada!")
 
     def _handle_collisions(self):
-        # Colisões com inimigos normais (não em formação)
-        gain: int = 0  # type: ignore
+        # A grid JÁ FOI CONSTRUÍDA no entity_manager.update()
+        enemy_grid = self.entity_manager.enemy_spatial_grid
+        
+        # Colisões com TODOS os inimigos (normais + formações) usando grid única
+        gain: int = 0
         destroyed: int = 0
         score_events: list[tuple[float, float, int]] = []
         gain, destroyed, score_events = self.collisions.bullets_vs_enemies(
             self.entity_manager.bullets,
-            self.entity_manager.enemies,
             self.entity_manager.explosions,
             self.entity_manager.mine_explosions,
             self.ship,
+            enemy_grid,
+            self.entity_manager.enemies,  # Para adicionar fragments
         )
 
-        # Colisões com inimigos em formações
-        for formation in self.entity_manager.formations:
-            formation_enemies = formation.get_enemies()
-            f_gain: int
-            f_destroyed: int
-            f_score_events: list[tuple[float, float, int]]
-            f_gain, f_destroyed, f_score_events = self.collisions.bullets_vs_enemies(
-                self.entity_manager.bullets,
-                formation_enemies,
-                self.entity_manager.explosions,
-                self.entity_manager.mine_explosions,
-                self.ship,
-            )
-            gain += f_gain
-            destroyed += f_destroyed
-            score_events.extend(f_score_events)
-
-        # Mini ships vs inimigos normais
+        # Mini ships vs TODOS os inimigos usando a mesma grid
         vector_gain: int
         vector_destroyed: int
         vector_score_events: list[tuple[float, float, int]]
         vector_gain, vector_destroyed, vector_score_events = (
             self.collisions.mini_ship_bullets_vs_enemies(
                 self.entity_manager.mini_ship_bullets,
-                self.entity_manager.enemies,
                 self.entity_manager.explosions,
+                enemy_grid,
+                self.entity_manager.enemies,  # Para adicionar fragments
             )
         )
         gain += vector_gain
         destroyed += vector_destroyed
         score_events.extend(vector_score_events)
-
-        # Mini ships vs inimigos em formações
-        for formation in self.entity_manager.formations:
-            formation_enemies = formation.get_enemies()
-            f_gain: int
-            f_destroyed: int
-            f_score_events: list[tuple[float, float, int]]
-            f_gain, f_destroyed, f_score_events = (
-                self.collisions.mini_ship_bullets_vs_enemies(
-                    self.entity_manager.mini_ship_bullets,
-                    formation_enemies,
-                    self.entity_manager.explosions,
-                )
-            )
-            gain += f_gain
-            destroyed += f_destroyed
-            score_events.extend(f_score_events)
 
         # Explosões de minas vs inimigos normais
         mine_gain: int
@@ -447,20 +418,11 @@ class PlayingScene(Scene):
             )
             self.score += spike_gain
 
-        # Colisão da nave com inimigos normais
+        # Colisão da nave com TODOS os inimigos usando grid única
         if self.collisions.ship_vs_enemies(
-            self.ship, self.entity_manager.enemies, self.entity_manager.explosions
+            self.ship, self.entity_manager.explosions, enemy_grid
         ):
             self._handle_ship_hit()
-
-        # Colisão da nave com inimigos em formações
-        for formation in self.entity_manager.formations:
-            formation_enemies = formation.get_enemies()
-            if self.collisions.ship_vs_enemies(
-                self.ship, formation_enemies, self.entity_manager.explosions
-            ):
-                self._handle_ship_hit()
-                break  # Só precisa acertar uma vez
 
         if self.entity_manager.boss:
             from ..entities.spike_boss import SpikeBoss

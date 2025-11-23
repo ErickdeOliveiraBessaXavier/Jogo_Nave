@@ -99,17 +99,15 @@ class Collisions:
     def mini_ship_bullets_vs_enemies(
         self,
         mini_ship_bullets: list[MiniShipBullet],
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         explosions: list[Explosion],
+        enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],  # Para adicionar fragments
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
 
-        # Build spatial grid for enemies
-        grid = SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy]()
-        for enemy in enemies:
-            grid.insert_from_rect(enemy)
+        # Usar grid existente
 
         for b in mini_ship_bullets[:]:
             # Query potential collisions using spatial grid (expand by 10 pixels for safety)
@@ -117,7 +115,7 @@ class Collisions:
             query_y = b.rect.y - 10
             query_w = b.rect.width + 20
             query_h = b.rect.height + 20
-            potential_enemies = grid.query(query_x, query_y, query_w, query_h)
+            potential_enemies = enemy_grid.query(query_x, query_y, query_w, query_h)
             for enemy in potential_enemies:
                 if b.rect.colliderect(enemy.rect):
                     b.dead = True
@@ -154,19 +152,17 @@ class Collisions:
     def bullets_vs_enemies(
         self,
         bullets: list[Bullet],
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         explosions: list[Explosion],
         mine_explosions: list[MineExplosion],
         ship: Ship,
+        enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],  # Para adicionar fragments
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
 
-        # Build spatial grid for enemies
-        grid = SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy]()
-        for enemy in enemies:
-            grid.insert_from_rect(enemy)
+        # Usar grid existente em vez de criar nova
 
         for b in bullets[:]:
             # Query potential collisions using spatial grid (expand by 10 pixels for safety)
@@ -174,7 +170,7 @@ class Collisions:
             query_y = b.rect.y - 10
             query_w = b.rect.width + 20
             query_h = b.rect.height + 20
-            potential_enemies = grid.query(query_x, query_y, query_w, query_h)
+            potential_enemies = enemy_grid.query(query_x, query_y, query_w, query_h)
             for enemy in potential_enemies:
                 if b.rect.colliderect(enemy.rect):
                     if isinstance(enemy, ExplosiveMine):
@@ -257,23 +253,20 @@ class Collisions:
     def ship_vs_enemies(
         self,
         ship: Ship,
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         explosions: list[Explosion],
+        enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
     ) -> bool:
         if ship.invuln > 0:
             return False
 
-        # Build spatial grid for enemies
-        grid = SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy]()
-        for enemy in enemies:
-            grid.insert_from_rect(enemy)
+        # Usar grid existente
 
         # Query potential collisions with ship's rect (expand by 10 pixels)
         query_x = ship.rect.x - 10
         query_y = ship.rect.y - 10
         query_w = ship.rect.width + 20
         query_h = ship.rect.height + 20
-        potential_enemies = grid.query(query_x, query_y, query_w, query_h)
+        potential_enemies = enemy_grid.query(query_x, query_y, query_w, query_h)
         for enemy in potential_enemies:
             if enemy and ship.rect.colliderect(enemy.rect):
                 if isinstance(enemy, ExplosiveMine):
