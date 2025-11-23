@@ -1,4 +1,19 @@
 from enum import Enum
+from typing import TypedDict
+
+
+class DifficultySettingsDict(TypedDict, total=False):
+    """Estrutura das configurações de dificuldade."""
+    name: str
+    description: str
+    difficulty_scaling: float
+    spawn_rate_multiplier: float
+    enemy_health_multiplier: float
+    player_damage_multiplier: float
+    lives: int
+    rewards_multiplier: float
+    special_rules: list[str]  # Optional, only for NIGHTMARE
+
 
 class DifficultyPreset(Enum):
     """Presets de dificuldade para o jogador escolher."""
@@ -12,7 +27,7 @@ class DifficultyPreset(Enum):
 class DifficultySettings:
     """Configurações específicas por preset de dificuldade."""
     
-    PRESETS = {
+    PRESETS: dict[DifficultyPreset, DifficultySettingsDict] = {
         DifficultyPreset.CASUAL: {
             "name": "Casual",
             "description": "Relaxe e aproveite a jornada",
@@ -57,6 +72,6 @@ class DifficultySettings:
     }
     
     @classmethod
-    def get_settings(cls, preset: DifficultyPreset) -> dict:
+    def get_settings(cls, preset: DifficultyPreset) -> DifficultySettingsDict:
         """Retorna configurações para um preset."""
         return cls.PRESETS[preset]

@@ -7,6 +7,7 @@ from ..core import colors
 from ..core.config import Config
 from ..core.assets import get_font, get_image  # Added get_image
 from ..core.render_config import RenderConfig
+from ..core.difficulty import DifficultyPreset, DifficultySettings
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
@@ -306,6 +307,7 @@ class Renderer:
             'lives': None,
             'level': None,
             'enemies': None,
+            'difficulty': None,
         }
         
         self._hud_values: dict[str, Optional[int]] = {
@@ -313,6 +315,7 @@ class Renderer:
             'lives': None,
             'level': None,
             'enemies': None,
+            'difficulty': None,
         }
         # === FIM DO CACHE ===
         
@@ -378,6 +381,7 @@ class Renderer:
         enemies_destroyed: int,
         ship: Optional["Ship"] = None,
         level_number: int = 1,
+        difficulty_preset: Optional["DifficultyPreset"] = None,
     ):
         # Renderizar com cache (só re-renderiza se valores mudaram)
         s = self._render_text_cached(
@@ -399,10 +403,27 @@ class Renderer:
         surface.blit(lvl, (10, 44))
         surface.blit(e, (10, 78))
         
+        # Indicador de dificuldade
+        if difficulty_preset is not None:
+            settings = DifficultySettings.get_settings(difficulty_preset)
+            difficulty_color = {
+                DifficultyPreset.CASUAL: colors.GREEN,
+                DifficultyPreset.NORMAL: colors.YELLOW,
+                DifficultyPreset.HARDCORE: colors.ORANGE,
+                DifficultyPreset.NIGHTMARE: colors.RED,
+            }.get(difficulty_preset, colors.WHITE)
+            
+            diff_text = self._render_text_cached(
+                'difficulty', hash(difficulty_preset), 
+                f"Dificuldade: {settings['name']}", 
+                self.font_small, difficulty_color
+            )
+            surface.blit(diff_text, (10, 102))
+        
         # --- efeitos ativos (se ship for informado) ---
         # Este código permanece IGUAL (não precisa cache, é dinâmico)
         if ship is not None:
-            y = 110
+            y = 126 if difficulty_preset is not None else 110
 
             def line(txt: str, color: tuple[int, int, int] = colors.GREEN):
                 nonlocal y

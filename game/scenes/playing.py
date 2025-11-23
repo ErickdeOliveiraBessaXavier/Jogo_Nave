@@ -10,7 +10,8 @@ from ..systems.spawner import EnemySpawner, PowerUpSpawner
 from ..systems.collisions import Collisions
 from ..systems.entity_manager import EntityManager
 from ..entities.floating_score import FloatingScore
-from ..core.levels import LevelManager
+from ..core.levels import LevelManager, get_level_config
+from ..core.difficulty import DifficultyPreset, DifficultySettings
 from ..core.assets import get_font
 from ..core import colors
 from ..core.sound import sound_manager
@@ -23,18 +24,29 @@ if TYPE_CHECKING:
 
 
 class PlayingScene(Scene):
-    def __init__(self, app: "GameApp", level_manager: LevelManager):
+    def __init__(
+        self, 
+        app: "GameApp", 
+        level_manager: LevelManager,
+        difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL
+    ):
         super().__init__(app)
         self.level_manager = level_manager
+        self.difficulty_preset = difficulty_preset
+        self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
+        
         self.r = Renderer()
         self.ship = Ship(Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT)
         self.ship.is_entering = True
         self.entity_manager = EntityManager()
         self.first_entry = True
 
+        # Aplicar configurações de dificuldade após criar a nave
+        self._apply_difficulty_settings()
+
         self.current_level_index = 0
-        self.level_config = self.level_manager.get_level(
-            self.current_level_index + 1
+        self.level_config = get_level_config(
+            self.current_level_index + 1, self.difficulty_preset
         )  # +1 pois níveis começam em 1
         self.enemies_destroyed_in_level = 0
         self.boss_fight_active = False
@@ -67,8 +79,17 @@ class PlayingScene(Scene):
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
 
+    def _apply_difficulty_settings(self):
+        """Aplica configurações globais do preset de dificuldade."""
+        settings = self.difficulty_settings
+        
+        # Vidas iniciais
+        self.lives: int = settings["lives"]
+        
+        # Multiplicadores de dano serão aplicados nas entidades
+        # (necessário modificar Player, Enemy, etc.)
+
         self.score: int = 0
-        self.lives: int = Config.INITIAL_LIVES
         self.ship.lives = self.lives
         self.total_enemies_destroyed = 0
         self.shoot_cd = 0.0
@@ -687,8 +708,8 @@ class PlayingScene(Scene):
         self.current_level_index += 1
 
         # Gerar próximo nível (sistema híbrido: fixo ou procedural)
-        self.level_config = self.level_manager.get_level(
-            self.current_level_index + 1
+        self.level_config = get_level_config(
+            self.current_level_index + 1, self.difficulty_preset
         )  # +1 pois níveis começam em 1
         self.enemy_spawner.set_level(self.current_level_index + 1)
         self.enemies_destroyed_in_level = 0
@@ -699,7 +720,7 @@ class PlayingScene(Scene):
     def handle_event(self, event: pygame.event.Event):
         if self.game_over_sequence_active:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                self.app.states.switch(PlayingScene(self.app, self.level_manager))
+                self.app.states.switch(PlayingScene(self.app, self.level_manager, self.difficulty_preset))
             return
 
         if event.type == pygame.KEYDOWN:
@@ -746,6 +767,7 @@ class PlayingScene(Scene):
             self.total_enemies_destroyed,
             self.ship,
             self.level_config.level_number,
+            self.difficulty_preset,
         )
 
         shake_offset = (0, 0)

@@ -5,6 +5,7 @@ from .core.assets import load_custom_cursor
 from .scenes.main_menu import MainMenuScene
 from .core.levels import LevelManager, FIXED_LEVELS
 from .core.input import Input
+from .core.difficulty import DifficultyPreset
 
 
 class GameApp:
@@ -50,6 +51,9 @@ class GameApp:
         self.states: StateManager = StateManager()
         self.level_manager = LevelManager(FIXED_LEVELS)
         self.input: Input = Input()
+        
+        # Dificuldade selecionada (padrão: normal)
+        self.selected_difficulty = DifficultyPreset.NORMAL
 
         # Inicia com o menu principal.
         self.states.push(MainMenuScene(self))
@@ -63,8 +67,9 @@ class GameApp:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
-                elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    self.running = False
+                # Removido: ESC global que fechava o jogo
+                # elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                #     self.running = False
                 elif current_scene:
                     current_scene.handle_event(event)
 

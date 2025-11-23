@@ -8,6 +8,7 @@ from ..entities.boss import Boss
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.spike_boss import SpikeBoss
+from .difficulty import DifficultyPreset, DifficultySettings
 
 
 # ============================================================================
@@ -231,9 +232,11 @@ class ProceduralLevelGenerator:
     - Features (minas, formações) desbloqueadas progressivamente
     """
 
-    def __init__(self, seed: int | None = None):
+    def __init__(self, seed: int | None = None, difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL):
         self.seed = seed or random.randint(0, 999999)
         self.difficulty_curves = DifficultyCurves()
+        self.difficulty_preset = difficulty_preset
+        self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
 
     def generate_level(self, level_number: int) -> LevelConfig:
         """Gera configuração procedural para um nível."""
@@ -256,7 +259,7 @@ class ProceduralLevelGenerator:
     def _calculate_difficulty(self, level_number: int) -> float:
         """Calcula multiplicador de dificuldade usando curva configurada."""
         curve = DifficultyConfig.SPAWN_RATE_CURVE
-        scaling = DifficultyConfig.DIFFICULTY_SCALING
+        scaling = self.difficulty_settings["difficulty_scaling"]
         base = 1.0
 
         if curve == "logarithmic":
@@ -319,8 +322,16 @@ class ProceduralLevelGenerator:
         """Gera configuração baseada em dificuldade e tema."""
 
         # Aplicar multiplicadores do tema (se houver)
-        spawn_multiplier = theme.spawn_rate_multiplier if theme else 1.0
-        enemies_multiplier = theme.enemies_multiplier if theme else 1.0
+        theme_spawn_mult = theme.spawn_rate_multiplier if theme else 1.0
+        theme_enemies_mult = theme.enemies_multiplier if theme else 1.0
+
+        # Multiplicadores do preset
+        preset_spawn_mult = self.difficulty_settings["spawn_rate_multiplier"]
+        preset_enemies_mult = 1.0  # Ajustar enemies_to_clear baseado no preset
+
+        # Multiplicador final combinado
+        spawn_multiplier = theme_spawn_mult * preset_spawn_mult
+        enemies_multiplier = theme_enemies_mult
 
         # 1. Calcular spawn times com pesos do tema
         enemy_spawn_config: dict[
@@ -380,6 +391,15 @@ class ProceduralLevelGenerator:
             )
 
         base_enemies = int(base_enemies * enemies_multiplier)
+        
+        # Aplicar variação baseada na dificuldade (mais inimigos em hardcore/nightmare)
+        if self.difficulty_preset == DifficultyPreset.HARDCORE:
+            base_enemies = int(base_enemies * 1.2)
+        elif self.difficulty_preset == DifficultyPreset.NIGHTMARE:
+            base_enemies = int(base_enemies * 1.5)
+        elif self.difficulty_preset == DifficultyPreset.CASUAL:
+            base_enemies = int(base_enemies * 0.8)
+        
         variation = rng.randint(
             -DifficultyConfig.ENEMY_VARIATION, DifficultyConfig.ENEMY_VARIATION
         )
@@ -493,28 +513,67 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
 # ============================================================================
 
 
-# Gerador procedural (singleton)
-_procedural_generator = ProceduralLevelGenerator()
+# Geradores procedurais por dificuldade (singleton)
+_procedural_generators: dict[DifficultyPreset, ProceduralLevelGenerator] = {}
 
 
-def get_level_config(level_number: int) -> LevelConfig:
+def get_level_config(level_number: int, difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL) -> LevelConfig:
     """
-    Retorna a configuração de um nível.
+    Retorna a configuração de um nível com dificuldade aplicada.
 
     Sistema Híbrido:
-    - Se o nível está em FIXED_LEVELS, retorna a versão handcrafted
+    - Se o nível está em FIXED_LEVELS, retorna a versão handcrafted ajustada
     - Caso contrário, gera proceduralmente
 
     Args:
         level_number: Número do nível desejado (1+)
+        difficulty_preset: Preset de dificuldade a aplicar
 
     Returns:
-        LevelConfig do nível (fixo ou procedural)
+        LevelConfig do nível (fixo ou procedural) com dificuldade aplicada
     """
     if level_number in FIXED_LEVELS:
-        return FIXED_LEVELS[level_number]
+        config = FIXED_LEVELS[level_number]
+        # Aplicar modificadores do preset aos níveis fixos também
+        return _apply_difficulty_to_fixed_level(config, difficulty_preset)
+    
+    # Obter ou criar gerador para este preset
+    if difficulty_preset not in _procedural_generators:
+        _procedural_generators[difficulty_preset] = ProceduralLevelGenerator(
+            difficulty_preset=difficulty_preset
+        )
+    
+    return _procedural_generators[difficulty_preset].generate_level(level_number)
 
-    return _procedural_generator.generate_level(level_number)
+
+def _apply_difficulty_to_fixed_level(config: LevelConfig, preset: DifficultyPreset) -> LevelConfig:
+    """Aplica multiplicadores de dificuldade a níveis fixos."""
+    settings = DifficultySettings.get_settings(preset)
+    
+    # Criar nova config com valores ajustados
+    adjusted_spawn_config = {
+        enemy_type: spawn_time / settings["spawn_rate_multiplier"]
+        for enemy_type, spawn_time in config.enemy_spawn_config.items()
+    }
+    
+    adjusted_enemies = config.enemies_to_clear
+    if preset == DifficultyPreset.HARDCORE:
+        adjusted_enemies = int(adjusted_enemies * 1.2)
+    elif preset == DifficultyPreset.NIGHTMARE:
+        adjusted_enemies = int(adjusted_enemies * 1.5)
+    elif preset == DifficultyPreset.CASUAL:
+        adjusted_enemies = int(adjusted_enemies * 0.8)
+    
+    return LevelConfig(
+        level_number=config.level_number,
+        enemy_spawn_config=adjusted_spawn_config,
+        enemies_to_clear=adjusted_enemies,
+        boss_type=config.boss_type,
+        mines_enabled=config.mines_enabled,
+        formations_enabled=config.formations_enabled,
+        formation_types=config.formation_types,
+        theme_name=config.theme_name,
+    )
 
 
 class LevelManager:

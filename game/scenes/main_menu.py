@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING
 
 from ..core.state import Scene
 from ..core.colors import WHITE, BLACK, GREEN, BRIGHT_GREEN
-from ..scenes.playing import PlayingScene
 from ..scenes.settings import SettingsScene
+from ..scenes.difficulty_selection import DifficultySelectionScene
 from ..core.assets import get_font
 from ..core.config import Config
 from ..render.renderer import Renderer
@@ -85,7 +85,7 @@ class MainMenuScene(Scene):
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.MOUSEBUTTONDOWN:
             if self.start_button_rect.collidepoint(event.pos):
-                self.app.states.push(PlayingScene(self.app, self.app.level_manager))
+                self.app.states.push(DifficultySelectionScene(self.app))
             elif self.settings_button_rect.collidepoint(event.pos):
                 self.app.states.push(SettingsScene(self.app))
             elif self.exit_button_rect.collidepoint(event.pos):
