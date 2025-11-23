@@ -29,6 +29,8 @@ class CelestialBody(TypedDict):
     y: float
     speed: float
     scale: float
+    # === NOVO: Rastrear qual imagem está sendo usada ===
+    image_path: Path
 
 
 class CelestialManager:
@@ -36,6 +38,9 @@ class CelestialManager:
         self.w, self.h = w, h
         self.celestial_bodies: list[CelestialBody] = []
         self.image_files = self._load_image_files()
+        # === NOVO: Controle de imagens já usadas ===
+        self._used_images: set[Path] = set()
+        # === FIM ===
         # Initialize the pool with 'n' celestial bodies
         for _ in range(n):
             self.celestial_bodies.append(self._create_and_initialize_celestial_body())
@@ -88,11 +93,30 @@ class CelestialManager:
                 break
         return new_x
 
+    def _get_available_image(self) -> Path:
+        """
+        Retorna uma imagem disponível que não está sendo usada por outros corpos celestiais.
+        
+        Se não houver imagens suficientes disponíveis, permite alguma duplicata.
+        """
+        # Imagens disponíveis (não usadas)
+        available_images = [img for img in self.image_files if img not in self._used_images]
+        
+        if available_images:
+            # Há imagens disponíveis, escolher uma aleatoriamente
+            return random.choice(available_images)
+        else:
+            # Não há imagens suficientes, escolher qualquer uma (permite duplicata)
+            return random.choice(self.image_files)
+
     def _create_and_initialize_celestial_body(
         self, y_position: Optional[float] = None
     ) -> CelestialBody:
         """Creates a new celestial body and initializes its properties."""
-        image_path = random.choice(self.image_files)
+        # === MODIFICADO: Usar imagem disponível ===
+        image_path = self._get_available_image()
+        self._used_images.add(image_path)  # Registrar como usada
+        # === FIM ===
 
         scale = random.uniform(
             RenderConfig.CELESTIAL_SCALE_MIN, RenderConfig.CELESTIAL_SCALE_MAX
@@ -112,6 +136,8 @@ class CelestialManager:
             * scale
             + RenderConfig.CELESTIAL_SPEED_OFFSET,
             "scale": scale,
+            # === NOVO: Armazenar caminho da imagem ===
+            "image_path": image_path,
         }
         return body
 
@@ -119,7 +145,15 @@ class CelestialManager:
         self, body: CelestialBody, y_position: Optional[float] = None
     ):
         """Resets the properties of an existing celestial body."""
-        image_path = random.choice(self.image_files)
+        # === MODIFICADO: Liberar imagem antiga e escolher nova disponível ===
+        # Liberar a imagem antiga
+        if "image_path" in body:
+            self._used_images.discard(body["image_path"])
+        
+        # Escolher nova imagem disponível
+        image_path = self._get_available_image()
+        self._used_images.add(image_path)  # Registrar como usada
+        # === FIM ===
 
         scale = random.uniform(
             RenderConfig.CELESTIAL_SCALE_MIN, RenderConfig.CELESTIAL_SCALE_MAX
@@ -127,6 +161,9 @@ class CelestialManager:
         image = self._generate_scaled_image(image_path, scale)
 
         body["image"] = image
+        # === NOVO: Atualizar caminho da imagem ===
+        body["image_path"] = image_path
+        # === FIM ===
         body["x"] = self._get_random_x_position(
             image.get_width(), current_body=body
         )  # Pass current_body for overlap check
@@ -262,6 +299,23 @@ class Renderer:
         self.font_small = get_font(12)
         self.font_medium = get_font(24)
         self.font_large = get_font(32)
+        
+        # === NOVO: Sistema de cache de textos ===
+        self._hud_cache: dict[str, Optional[pygame.Surface]] = {
+            'score': None,      # Surface renderizada
+            'lives': None,
+            'level': None,
+            'enemies': None,
+        }
+        
+        self._hud_values: dict[str, Optional[int]] = {
+            'score': None,        # Último valor renderizado (None = nunca renderizado)
+            'lives': None,
+            'level': None,
+            'enemies': None,
+        }
+        # === FIM DO CACHE ===
+        
         self.starfield = StarField(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
         self.celestial_manager = CelestialManager(
             Config.SCREEN_WIDTH,
@@ -281,6 +335,41 @@ class Renderer:
         self.starfield.draw(surface)
         self.celestial_manager.draw(surface)
 
+    def _render_text_cached(
+        self, 
+        cache_key: str, 
+        current_value: int, 
+        text_template: str, 
+        font: pygame.font.Font,
+        color: tuple[int, int, int]
+    ) -> pygame.Surface:
+        """
+        Renderiza texto com cache.
+        
+        Só re-renderiza se o valor mudou desde a última vez.
+        
+        Args:
+            cache_key: Chave no dicionário de cache ('score', 'lives', etc)
+            current_value: Valor atual (ex: score atual)
+            text_template: Template do texto (ex: "Pontos: {}")
+            font: Fonte pygame
+            color: Cor do texto
+            
+        Returns:
+            Surface com o texto renderizado (do cache ou recém-criado)
+        """
+        # Verificar se valor mudou ou se nunca foi renderizado
+        if self._hud_values[cache_key] != current_value:
+            # Valor mudou ou nunca foi renderizado, re-renderizar
+            text = text_template.format(current_value)
+            self._hud_cache[cache_key] = font.render(text, True, color)
+            self._hud_values[cache_key] = current_value
+        
+        # Retornar surface cacheada (sempre deve existir após verificação acima)
+        surface = self._hud_cache[cache_key]
+        assert surface is not None, f"Cache surface for {cache_key} should not be None"
+        return surface
+
     def hud(
         self,
         surface: pygame.Surface,
@@ -290,17 +379,28 @@ class Renderer:
         ship: Optional["Ship"] = None,
         level_number: int = 1,
     ):
-        s = self.font_medium.render(f"Pontos: {score}", True, colors.WHITE)
-        l = self.font_medium.render(f"Vidas: {lives}", True, colors.WHITE)
-        lvl = self.font_medium.render(f"Fase: {level_number}", True, colors.WHITE)
-        e = self.font_small.render(f"Inimigos: {enemies_destroyed}", True, colors.WHITE)
-
+        # Renderizar com cache (só re-renderiza se valores mudaram)
+        s = self._render_text_cached(
+            'score', score, "Pontos: {}", self.font_medium, colors.WHITE
+        )
+        l = self._render_text_cached(
+            'lives', lives, "Vidas: {}", self.font_medium, colors.WHITE
+        )
+        lvl = self._render_text_cached(
+            'level', level_number, "Fase: {}", self.font_medium, colors.WHITE
+        )
+        e = self._render_text_cached(
+            'enemies', enemies_destroyed, "Inimigos: {}", self.font_small, colors.WHITE
+        )
+        
+        # Desenhar textos (mesmas posições)
         surface.blit(s, (10, 10))
         surface.blit(l, (Config.SCREEN_WIDTH - l.get_width() - 10, 10))
         surface.blit(lvl, (10, 44))
         surface.blit(e, (10, 78))
-
+        
         # --- efeitos ativos (se ship for informado) ---
+        # Este código permanece IGUAL (não precisa cache, é dinâmico)
         if ship is not None:
             y = 110
 

@@ -5,7 +5,7 @@ class RenderConfig:
     # Celestial Manager configurations
     CELESTIAL_NUM_BODIES = 2
     CELESTIAL_SCALE_MIN = 0.1
-    CELESTIAL_SCALE_MAX = 0.4
+    CELESTIAL_SCALE_MAX = 0.3
     CELESTIAL_ALPHA_MIN = 50
     CELESTIAL_ALPHA_MAX = 200
     CELESTIAL_SPEED_BASE_MIN = 50
