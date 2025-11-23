@@ -90,8 +90,8 @@ class SoundManager:
 
     def __init__(self):
         # Inicializar o mixer do pygame
-        pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=512)
-        pygame.mixer.init()
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
 
         # Configurar número de canais
         pygame.mixer.set_num_channels(CHANNEL_CONFIG["max_channels"])
