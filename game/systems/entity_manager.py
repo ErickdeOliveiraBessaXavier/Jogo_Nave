@@ -19,10 +19,17 @@ from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.eye_laser import EyeLaser
+from ..entities.guided_meteor import GuidedMeteor
+from ..entities.explosive_mine import ExplosiveMine
+from ..entities.mini_ship import MiniShip
+from ..entities.mini_ship_bullet import MiniShipBullet
+from ..entities.eye_enemy import EyeEnemy
+from ..entities.eye_laser import EyeLaser
 from ..entities.formation import Formation
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
 from ..core.spatial_grid import SpatialGrid
+from .explosion_pool import ExplosionPool
 
 
 class EntityManager:
@@ -33,7 +40,6 @@ class EntityManager:
         self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
         self.boss_squares: list[BossSquare] = []  # Quadrados lançados pelo boss
         self.eye_lasers: list[EyeLaser] = []
-        self.explosions: list[Explosion] = []
         self.mine_explosions: list[MineExplosion] = []
         self.powerups: list[PowerUp] = []
         self.floating_scores: list[FloatingScore] = []
@@ -45,6 +51,20 @@ class EntityManager:
         self.meteor_pool = MeteorPool(initial_size=100)  # Pool de meteoros
         self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
         self.enemy_spatial_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy] = SpatialGrid()  # Grid espacial para inimigos
+        self.explosion_pool = ExplosionPool(initial_size=50)  # Pool de explosões
+
+    def spawn_explosion(self, x: float, y: float, size: int = 30) -> Explosion:
+        """
+        Spawna uma explosão usando o pool.
+        
+        Args:
+            x, y: Posição da explosão
+            size: Tamanho da explosão
+            
+        Returns:
+            Explosão criada ou reutilizada do pool
+        """
+        return self.explosion_pool.get(x, y, size)
 
     def rebuild_enemy_grid(self):
         """Reconstrói a grid espacial com TODOS os inimigos (normais + formações)."""
@@ -79,8 +99,8 @@ class EntityManager:
             bl.update(dt)
         for el in self.eye_lasers:
             el.update(dt)
-        for e in self.explosions:
-            e.update(dt)
+        # Update explosões do pool
+        self.explosion_pool.update(dt)
         for me in self.mine_explosions:
             me.update(dt)
         for p in self.powerups:
@@ -174,7 +194,6 @@ class EntityManager:
             self.bullets,
             self.alien_bullets,
             self.boss_lasers,
-            self.explosions,
             self.powerups,
             self.floating_scores,
             self.mini_ships,
@@ -238,7 +257,6 @@ class EntityManager:
             self.boss_lasers,
             self.boss_squares,  # Quadrados do boss
             self.eye_lasers,
-            self.explosions,
             self.mine_explosions,
             self.powerups,
             self.floating_scores,
@@ -249,6 +267,9 @@ class EntityManager:
 
         if self.boss:
             entity_lists.append([self.boss])
+
+        # Desenhar explosões do pool
+        self.explosion_pool.draw_all(surface)
 
         for entity_list in entity_lists:
             for entity in entity_list:
@@ -330,7 +351,6 @@ class EntityManager:
             for e in self.enemies
             if not e.dead and not (isinstance(e, ExplosiveMine) and e.is_off_screen())
         ]
-        self.explosions = [e for e in self.explosions if not e.finished()]
         self.mine_explosions = [me for me in self.mine_explosions if not me.finished()]
         self.powerups = [p for p in self.powerups if not p.dead]
         self.floating_scores = [fs for fs in self.floating_scores if not fs.is_dead()]
@@ -348,7 +368,6 @@ class EntityManager:
         self.powerups.clear()
         self.floating_scores.clear()
         self.enemies.clear()
-        self.explosions.clear()
         self.mine_explosions.clear()
         self.boss = None
         self.mini_ships.clear()
@@ -357,6 +376,7 @@ class EntityManager:
         self.spikes.clear()
         self.meteor_pool.clear_active()  # Limpar meteoros ativos do pool
         self.bullet_pool.clear_active()  # Limpar balas ativas do pool
+        self.explosion_pool.clear_active()  # Limpar explosões ativas do pool
 
     def clear_for_level_transition(self):
         """Limpa entidades para transição de fase, mas preserva balas do jogador."""
@@ -368,10 +388,10 @@ class EntityManager:
         self.eye_lasers.clear()
         self.floating_scores.clear()
         self.enemies.clear()
-        self.explosions.clear()
         self.mine_explosions.clear()
         self.boss = None
         self.formations.clear()
         self.meteor_pool.clear_active()  # Limpar meteoros ativos do pool
         # NÃO limpar bullet_pool aqui para manter balas do jogador
+        self.explosion_pool.clear_active()  # Limpar explosões ativas do pool
         self.spikes.clear()

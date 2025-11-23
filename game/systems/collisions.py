@@ -1,5 +1,9 @@
 import pygame
 import math
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .entity_manager import EntityManager
 from ..entities.ship import Ship
 from ..entities.meteor import Meteor
 from ..entities.alien import Alien
@@ -34,6 +38,7 @@ class Collisions:
         mine_explosions: list[MineExplosion],
         explosions: list[Explosion],
         ship: Ship,
+        entity_manager: "EntityManager",  # <-- ADICIONAR
     ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
         score_gain = 0
         destroyed_count = 0
@@ -46,7 +51,7 @@ class Collisions:
                 explosion_radius = enemy.explosion_radius
                 mine_explosions.append(MineExplosion(cx, cy, size=explosion_radius))
                 if self.handle_mine_explosion(
-                    cx, cy, explosion_radius, enemies, ship, explosions
+                    cx, cy, explosion_radius, enemies, ship, explosions, entity_manager
                 ):
                     ship_hit = True
                 sound_manager.play_explosion_boss()  # Som de explosão grande
@@ -64,6 +69,7 @@ class Collisions:
         enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         ship: Ship,
         explosions: list[Explosion],
+        entity_manager: "EntityManager",  # <-- ADICIONAR
     ) -> bool:
         ship_hit = False
         for enemy in enemies[:]:
@@ -80,7 +86,8 @@ class Collisions:
                     enemy.take_damage(enemy.health)  # Trigger chain reaction
                 else:
                     enemy.dead = True
-                    explosions.append(Explosion(enemy_cx, enemy_cy, size=enemy.w // 2))
+                    # Nova forma
+                    entity_manager.spawn_explosion(enemy_cx, enemy_cy, size=enemy.w // 2)
 
         # Check player collision
         if ship.invuln <= 0:
@@ -90,9 +97,8 @@ class Collisions:
 
             dist_sq = (ship_cx - explosion_x) ** 2 + (ship_cy - explosion_y) ** 2
             if dist_sq < (explosion_radius + ship_r) ** 2:
-                explosions.append(
-                    Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
-                )
+                # Nova forma
+                entity_manager.spawn_explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
                 ship_hit = True
         return ship_hit
 
@@ -102,6 +108,7 @@ class Collisions:
         explosions: list[Explosion],
         enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
         enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],  # Para adicionar fragments
+        entity_manager: "EntityManager",  # <-- ADICIONAR
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
         destroyed_count = 0
@@ -128,7 +135,8 @@ class Collisions:
                         enemy.dead = True
 
                         cx, cy = (enemy.rect.centerx, enemy.rect.centery)
-                        explosions.append(Explosion(cx, cy, size=enemy.rect.width // 2))
+                        # Nova forma
+                        entity_manager.spawn_explosion(cx, cy, size=enemy.rect.width // 2)
 
                         if isinstance(enemy, Meteor):
                             sound_manager.play_explosion_asteroid()
@@ -157,6 +165,7 @@ class Collisions:
         ship: Ship,
         enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
         enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],  # Para adicionar fragments
+        entity_manager: "EntityManager",  # <-- NOVO
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
         destroyed_count = 0
@@ -181,7 +190,8 @@ class Collisions:
                         enemy.dead = True
 
                         cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
-                        explosions.append(Explosion(cx, cy, size=enemy.w // 2))
+                        # Nova forma: usar pool
+                        entity_manager.spawn_explosion(cx, cy, size=enemy.w // 2)
 
                         # Tocar som de explosão baseado no tipo de inimigo
                         if isinstance(enemy, Meteor):
@@ -211,6 +221,7 @@ class Collisions:
         boss: Boss,
         explosions: list[Explosion],
         floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
     ) -> int:
         score_gain = 0
         for b in bullets[:]:
@@ -220,7 +231,7 @@ class Collisions:
                 boss.take_damage(b.damage)
                 # Tocar som de dano no boss
                 sound_manager.play_boss_damage()
-                explosions.append(Explosion(b.x, b.y, size=15))
+                entity_manager.spawn_explosion(b.x, b.y, size=15)
 
                 # Não dar pontos por acertar o boss, apenas ao derrotá-lo
                 if boss.dead:
@@ -235,18 +246,14 @@ class Collisions:
                         )
                     )
                     score_gain += Config.BOSS_DEFEAT_SCORE
-                    explosions.append(
-                        Explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
-                    )
+                    entity_manager.spawn_explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
         return score_gain
 
-    def ship_vs_boss(self, ship: Ship, boss: Boss, explosions: list[Explosion]) -> bool:
+    def ship_vs_boss(self, ship: Ship, boss: Boss, explosions: list[Explosion], entity_manager: "EntityManager") -> bool:
         if ship.invuln > 0:
             return False
         if ship.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
-            explosions.append(
-                Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
-            )
+            entity_manager.spawn_explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
             return True
         return False
 
@@ -255,6 +262,7 @@ class Collisions:
         ship: Ship,
         explosions: list[Explosion],
         enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        entity_manager: "EntityManager",
     ) -> bool:
         if ship.invuln > 0:
             return False
@@ -275,9 +283,7 @@ class Collisions:
                     if isinstance(enemy, EyeEnemy):
                         enemy.destroy()
                     enemy.dead = True
-                explosions.append(
-                    Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
-                )
+                entity_manager.spawn_explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
                 return True
         return False
 
@@ -325,6 +331,7 @@ class Collisions:
         boss: Boss,
         explosions: list[Explosion],
         floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com Boss normal."""
         score_gain = 0
@@ -333,7 +340,7 @@ class Collisions:
                 b.dead = True
                 boss.take_damage(b.damage)
                 sound_manager.play_boss_damage()
-                explosions.append(Explosion(b.x, b.y, size=15))
+                entity_manager.spawn_explosion(b.x, b.y, size=15)
 
                 if boss.dead:
                     from ..core.config import Config
@@ -346,9 +353,7 @@ class Collisions:
                         )
                     )
                     score_gain += Config.BOSS_DEFEAT_SCORE
-                    explosions.append(
-                        Explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
-                    )
+                    entity_manager.spawn_explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
         return score_gain
 
     def mini_ship_bullets_vs_spike_boss(
@@ -357,6 +362,7 @@ class Collisions:
         boss: SpikeBoss,
         explosions: list[Explosion],
         floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com SpikeBoss."""
         score_gain = 0
@@ -365,7 +371,7 @@ class Collisions:
                 b.dead = True
                 boss.take_damage(b.damage)
                 sound_manager.play_boss_damage()
-                explosions.append(Explosion(b.x, b.y, size=15))
+                entity_manager.spawn_explosion(b.x, b.y, size=15)
 
                 if boss.dead:
                     from ..core.config import Config
@@ -378,9 +384,7 @@ class Collisions:
                         )
                     )
                     score_gain += Config.BOSS_DEFEAT_SCORE
-                    explosions.append(
-                        Explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
-                    )
+                    entity_manager.spawn_explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
         return score_gain
 
     def mini_ship_bullets_vs_spikes(
@@ -388,6 +392,7 @@ class Collisions:
         mini_ship_bullets: list[MiniShipBullet],
         spikes: list[Spike],
         explosions: list[Explosion],
+        entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com Spikes."""
         score_gain = 0
@@ -409,9 +414,7 @@ class Collisions:
                 if spike.state == "flying" and b.rect.colliderect(spike.rect):
                     b.dead = True
                     spike.dead = True
-                    explosions.append(
-                        Explosion(spike.center_x, spike.center_y, size=15)
-                    )
+                    entity_manager.spawn_explosion(spike.center_x, spike.center_y, size=15)
                     sound_manager.play_explosion_alien()
                     score_gain += Config.SPIKE_POINTS
                     break
@@ -431,7 +434,7 @@ class Collisions:
         return collected_kinds
 
     def ship_vs_spikes(
-        self, ship: Ship, spikes: list[Spike], explosions: list[Explosion]
+        self, ship: Ship, spikes: list[Spike], explosions: list[Explosion], entity_manager: "EntityManager"
     ) -> bool:
         """Verifica colisão entre nave e espinhos."""
         if ship.invuln > 0:
@@ -441,7 +444,7 @@ class Collisions:
                 # Destruir o espinho ao acertar a nave
                 spike.dead = True
                 # Criar explosão no local do spike
-                explosions.append(Explosion(spike.center_x, spike.center_y, size=15))
+                entity_manager.spawn_explosion(spike.center_x, spike.center_y, size=15)
                 return True
         return False
 
@@ -450,6 +453,7 @@ class Collisions:
         bullets: list[Bullet],
         spikes: list[Spike],
         explosions: list[Explosion],
+        entity_manager: "EntityManager",
     ) -> int:
         """Verifica colisão entre balas e espinhos. Retorna pontos ganhos."""
         score_gain = 0
@@ -476,9 +480,7 @@ class Collisions:
                     spike.dead = True
 
                     # Explosão pequena no centro do spike
-                    explosions.append(
-                        Explosion(spike.center_x, spike.center_y, size=15)
-                    )
+                    entity_manager.spawn_explosion(spike.center_x, spike.center_y, size=15)
 
                     # Som
                     sound_manager.play_explosion_asteroid()
@@ -494,6 +496,7 @@ class Collisions:
         boss: SpikeBoss,
         explosions: list[Explosion],
         floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas com SpikeBoss."""
         score_gain = 0
@@ -503,7 +506,7 @@ class Collisions:
                     b.dead = True
                 boss.take_damage(b.damage)
                 sound_manager.play_boss_damage()
-                explosions.append(Explosion(b.x, b.y, size=15))
+                entity_manager.spawn_explosion(b.x, b.y, size=15)
 
                 # Pontos ao derrotar
                 if boss.dead:
@@ -517,13 +520,11 @@ class Collisions:
                         )
                     )
                     score_gain += Config.BOSS_DEFEAT_SCORE
-                    explosions.append(
-                        Explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
-                    )
+                    entity_manager.spawn_explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
         return score_gain
 
     def ship_vs_spike_boss(
-        self, ship: Ship, boss: SpikeBoss, explosions: list[Explosion]
+        self, ship: Ship, boss: SpikeBoss, explosions: list[Explosion], entity_manager: "EntityManager"
     ) -> bool:
         """Colisão entre nave e SpikeBoss."""
         if ship.invuln > 0:
@@ -531,9 +532,7 @@ class Collisions:
 
         # Colisão com o corpo do boss
         if ship.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
-            explosions.append(
-                Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
-            )
+            entity_manager.spawn_explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
             return True
 
         # Colisão com onda de proximidade
@@ -549,9 +548,7 @@ class Collisions:
 
             # Se a nave está dentro da onda
             if distance <= wave_radius:
-                explosions.append(
-                    Explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=20)
-                )
+                entity_manager.spawn_explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=20)
                 return True
 
         return False
@@ -561,6 +558,7 @@ class Collisions:
         bullets: list[Bullet],
         boss_squares: list[BossSquare],
         explosions: list[Explosion],
+        entity_manager: "EntityManager",
     ) -> int:
         """
         Colisão entre balas do jogador e quadrados do boss.
@@ -582,7 +580,7 @@ class Collisions:
                 square_rect = square.get_rect()
                 if bullet_rect.colliderect(square_rect):
                     # Criar explosão no ponto de impacto
-                    explosions.append(Explosion(bullet.x, bullet.y, size=20))
+                    entity_manager.spawn_explosion(bullet.x, bullet.y, size=20)
 
                     # Destruir apenas a bala
                     bullet.dead = True
