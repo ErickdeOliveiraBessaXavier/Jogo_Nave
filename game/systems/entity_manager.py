@@ -29,7 +29,7 @@ from ..entities.formation import Formation
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
 from ..core.spatial_grid import SpatialGrid
-from .explosion_pool import ExplosionPool
+from ..entities.explosion_pool import ExplosionPool
 
 
 class EntityManager:
@@ -218,6 +218,9 @@ class EntityManager:
         # Update formations, if any
         for formation in self.formations:
             formation.update(dt)  # Formations update their internal enemies
+
+        # Update explosões do pool (para mostrar explosão da nave no game over)
+        self.explosion_pool.update(dt)
 
         # Handle boss update specifically if present
         if self.boss:
