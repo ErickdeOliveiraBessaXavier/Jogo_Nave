@@ -185,8 +185,10 @@ class PlayingScene(Scene):
         if "hold_shoot" in held and self.shoot_cd == 0.0 and not boss_pausing:
             bullet_specs = self.ship.bullet_spawn()
             for x, y, is_piercing in bullet_specs:
+                base_damage = 10
+                adjusted_damage = int(base_damage * self.player_damage_multiplier)
                 self.entity_manager.spawn_bullet(
-                    x, y, damage=10, piercing=is_piercing
+                    x, y, damage=adjusted_damage, piercing=is_piercing
                 )
             # Tocar som de tiro (varia entre os 3 sons automaticamente)
             sound_manager.play_shot()

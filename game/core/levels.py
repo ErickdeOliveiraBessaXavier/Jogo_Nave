@@ -585,6 +585,7 @@ def _apply_difficulty_to_fixed_level(config: LevelConfig, preset: DifficultyPres
         formations_enabled=config.formations_enabled,
         formation_types=config.formation_types,
         theme_name=config.theme_name,
+        score_multiplier=config.score_multiplier,
     )
 
 
