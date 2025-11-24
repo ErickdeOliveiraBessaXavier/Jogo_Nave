@@ -658,7 +658,7 @@ class PlayerProfile:
                 # Timestamps
                 if 'profile_created' in data:
                     self.profile_created = datetime.fromisoformat(data['profile_created'])
-                if 'last_played' in data:
+                if 'last_played' in data and data['last_played']:
                     self.last_played = datetime.fromisoformat(data['last_played'])
 
                 # Level stats
@@ -740,6 +740,30 @@ class PlayerProfile:
 
         with open(self.profile_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+
+    def reset(self):
+        """Reseta completamente o perfil do jogador."""
+        # Encerrar sessão atual se existir
+        if self.current_session:
+            self.end_session()
+
+        # Redefinir todos os atributos para valores iniciais
+        self.level_stats = {}
+        self.total_playtime = 0.0
+        self.highest_level_reached = 1
+        self.total_deaths = 0
+        self.total_score = 0
+        self.current_session = None
+        self.session_history = []
+        self.level_adjustments = {}
+        self.preferred_difficulty = None
+        self.profile_created = datetime.now()
+        self.last_played = None
+
+        # Salvar o perfil resetado
+        self.save()
+
+        print("Perfil do jogador resetado com sucesso!")
 
 
 class ProfileVisualizer:

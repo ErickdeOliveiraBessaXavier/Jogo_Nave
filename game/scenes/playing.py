@@ -45,6 +45,33 @@ class PlayingScene(Scene):
 
         # Aplicar configurações de dificuldade após criar a nave
         self._apply_difficulty_settings()
+        self.enemies_destroyed_in_level = 0
+        self.boss_fight_active = False
+        self.pre_boss_transition = False
+        self.pre_boss_timer = 0.0
+        self.warning_sound_played = False  # Flag para controlar o som de warning
+
+        # Sistema de warning em 3 estágios
+        self.warning_stage = 0  # 0=idle, 1=pre-delay, 2=warning-active, 3=post-delay
+        self.warning_stage_timer = 0.0
+
+        # Music transition control
+        self.music_fade_started = False
+        self.boss_music_started = False
+
+        # Level transition control
+        self.level_transition_active = False
+        self.level_transition_timer = 0.0
+        self.level_transition_delay = Config.LEVEL_TRANSITION_DELAY  # segundos
+
+        self.screen_shake_timer = 0.0
+        self.screen_shake_intensity = Config.SCREEN_SHAKE_NORMAL
+        self.warning_timer = 0.0
+        self.warning_font = get_font(Config.WARNING_FONT_SIZE)
+        # Meta-progression system
+        from pathlib import Path
+        self.player_profile = PlayerProfile(Path("player_profile.json"))
+        self.player_profile.start_session()
 
         self.current_level_index = 0
         self.level_config = self._get_adjusted_level_config(self.current_level_index + 1)
@@ -78,16 +105,6 @@ class PlayingScene(Scene):
         self.enemy_spawner = EnemySpawner(self.level_manager, self.entity_manager.meteor_pool, is_initial_level, self.difficulty_preset)
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
-
-        # Meta-progression system
-        from pathlib import Path
-        self.player_profile = PlayerProfile(Path("player_profile.json"))
-        self.player_profile.start_session()
-
-        # Level timing
-        self.level_start_time = 0.0
-        self.level_damage_taken = 0
-        self.level_powerups_collected = 0
 
     def _apply_difficulty_settings(self):
         """Aplica configurações globais do preset de dificuldade."""

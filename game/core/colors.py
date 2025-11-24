@@ -5,6 +5,7 @@ Color = Tuple[int, int, int]
 BLACK: Color = (0, 0, 0)
 WHITE: Color = (255, 255, 255)
 RED: Color = (255, 60, 60)
+BRIGHT_RED: Color = (255, 120, 120)
 YELLOW: Color = (255, 230, 120)
 BLUE: Color = (90, 150, 255)
 GREEN: Color = (80, 220, 120)
