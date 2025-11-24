@@ -38,7 +38,7 @@ class PlayingScene(Scene):
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
         
         self.r = Renderer()
-        self.ship = Ship(Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT)
+        self.ship = Ship(Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT + 100)  # Start 100 pixels below the screen
         self.ship.is_entering = True
         self.entity_manager = EntityManager()
         self.first_entry = True
@@ -158,7 +158,7 @@ class PlayingScene(Scene):
 
             # Mover a nave para a posição inicial de forma suave
             target_y = Config.SCREEN_HEIGHT - 80
-            initial_y = Config.SCREEN_HEIGHT
+            initial_y = Config.SCREEN_HEIGHT + 100  # Match the ship's initial y position
 
             if self.preparation_time_left > 0:
                 elapsed_time = Config.PREPARATION_TIME - self.preparation_time_left

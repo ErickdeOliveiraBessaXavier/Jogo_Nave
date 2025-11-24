@@ -169,7 +169,7 @@ class Ship:
             self.y = 0
         if self.x + self.w > Config.SCREEN_WIDTH:
             self.x = Config.SCREEN_WIDTH - self.w
-        if self.y + self.h > Config.SCREEN_HEIGHT:
+        if self.y + self.h > Config.SCREEN_HEIGHT and not self.is_entering:  # Allow going below screen during entry
             self.y = Config.SCREEN_HEIGHT - self.h
 
     def bullet_spawn(self) -> list[tuple[float, float, bool]]:
