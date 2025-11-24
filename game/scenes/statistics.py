@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING, Callable, List, Any
+from typing import Optional, TYPE_CHECKING, Callable, List
 from enum import Enum
 import pygame
 
@@ -335,7 +335,7 @@ class StatisticsScene(Scene):
         y = self.content_rect.y + 30
         
         # Skill Level Badge
-        ProfileVisualizer._render_skill_badge(
+        ProfileVisualizer.render_skill_badge(
             surface, 
             summary['skill_level'], 
             x, 
@@ -368,7 +368,7 @@ class StatisticsScene(Scene):
             self.content_rect.height - (graph_y - self.content_rect.y) - 20
         )
         graph_font = get_font(14)
-        ProfileVisualizer._render_performance_graph(
+        ProfileVisualizer.render_performance_graph(
             surface,
             self.profile,
             graph_rect.x,

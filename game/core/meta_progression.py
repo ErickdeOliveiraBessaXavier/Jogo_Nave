@@ -920,20 +920,6 @@ class ProfileVisualizer:
             surface.blit(label, (x - 40, label_y - 10))
 
     @staticmethod
-    def _get_performance_color(clear_rate: float) -> tuple[int, int, int]:
-        """Retorna cor baseada em clear rate."""
-        from ..core import colors
-
-        if clear_rate < 0.3:
-            return colors.RED
-        elif clear_rate < 0.5:
-            return colors.ORANGE
-        elif clear_rate < 0.7:
-            return colors.YELLOW
-        else:
-            return colors.GREEN
-
-    @staticmethod
     def render_level_preview(
         surface: pygame.Surface,
         profile: PlayerProfile,
@@ -988,3 +974,15 @@ class ProfileVisualizer:
             text = font.render(line, True, colors.WHITE)
             surface.blit(text, (x + 10, y_offset))
             y_offset += 22
+
+    @staticmethod
+    def _get_performance_color(clear_rate: float) -> Tuple[int, int, int]:
+        """Retorna cor baseada na taxa de sucesso."""
+        if clear_rate < 0.3:
+            return (255, 0, 0)      # Vermelho - struggling
+        elif clear_rate < 0.5:
+            return (255, 165, 0)    # Laranja - learning
+        elif clear_rate < 0.8:
+            return (0, 255, 0)      # Verde - comfortable
+        else:
+            return (0, 191, 255)    # Azul - dominating
