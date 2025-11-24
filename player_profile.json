@@ -1,12 +1,51 @@
 {
   "version": "1.0",
   "profile_created": "2025-11-24T11:10:30.454297",
-  "last_played": null,
-  "total_playtime": 0.0,
+  "last_played": "2025-11-24T13:01:38.212116",
+  "total_playtime": 7.292598,
   "highest_level_reached": 1,
-  "total_deaths": 0,
+  "total_deaths": 1,
   "total_score": 0,
-  "level_stats": {},
-  "level_adjustments": {},
-  "session_history": []
+  "level_stats": {
+    "1": {
+      "level_number": 1,
+      "attempts": 1,
+      "clears": 0,
+      "deaths": 1,
+      "total_time": 0.0,
+      "best_time": null,
+      "worst_time": 0.0,
+      "total_score": 0,
+      "best_score": 0,
+      "total_enemies_killed": 0,
+      "total_damage_taken": 0,
+      "total_powerups_collected": 0,
+      "recent_attempts": [
+        {
+          "timestamp": "2025-11-24T13:01:40.628720",
+          "cleared": false,
+          "cause": "game_over"
+        }
+      ],
+      "first_played": "2025-11-24T13:01:38.212116",
+      "last_played": "2025-11-24T13:01:38.212116",
+      "current_win_streak": 0,
+      "best_win_streak": 0
+    }
+  },
+  "level_adjustments": {
+    "1": 0.75
+  },
+  "session_history": [
+    {
+      "start_time": "2025-11-24T13:01:33.338839",
+      "end_time": "2025-11-24T13:01:40.631437",
+      "levels_attempted": [
+        1
+      ],
+      "deaths": 1,
+      "score": 0,
+      "powerups_collected": 0
+    }
+  ]
 }

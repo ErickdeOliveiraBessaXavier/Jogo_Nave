@@ -16,36 +16,36 @@ class ChargingParticle(TypedDict):
 
 class EyeEnemy:
     def __init__(self, x: float, y: float):
-        self.w = 40
-        self.h = 40
-        self.x = x
-        self.y = -self.h  # Start off-screen
-        self.target_y = y
-        self.health = 20
-        self.speed_x = 75
-        self.dead = False
+        self.w: int = 40
+        self.h: int = 40
+        self.x: float = x
+        self.y: float = -self.h  # Start off-screen
+        self.target_y: float = y
+        self.health: int = 20
+        self.speed_x: float = 75
+        self.dead: bool = False
 
-        self.state = "entering"  # entering, moving, aiming, charging, firing, waiting
-        self.timer = random.uniform(1.0, 3.0)  # Time until next action
+        self.state: str = "entering"  # entering, moving, aiming, charging, firing, waiting
+        self.timer: float = random.uniform(1.0, 3.0)  # Time until next action
 
-        self.aim_duration = 1.0
-        self.charge_duration = 1.5
+        self.aim_duration: float = 1.0
+        self.charge_duration: float = 1.5
         self.active_laser: EyeLaser | None = None
         self.locked_player_pos: tuple[float, float] | None = None
 
         self.charging_particles: List[ChargingParticle] = []
 
         # Aiming line properties
-        self.aim_dash_length = Config.BOSS_AIM_DASH_LENGTH
-        self.aim_gap_length = Config.BOSS_AIM_GAP_LENGTH
+        self.aim_dash_length: int = Config.BOSS_AIM_DASH_LENGTH
+        self.aim_gap_length: int = Config.BOSS_AIM_GAP_LENGTH
         # Torna o tracejado mais longo e o espaço menor
         self.aim_dash_length = 15  # valor maior para traço
         self.aim_gap_length = 15  # valor menor para espaço
-        self.aim_distance = 400
+        self.aim_distance: int = 400
 
-        self.aim_anim_offset = 0.0  # Para animar a linha de mira
-        self.aim_anim_base_speed = 120
-        self.aim_anim_charge_speed = 320  # velocidade maior para "charging"
+        self.aim_anim_offset: float = 0.0  # Para animar a linha de mira
+        self.aim_anim_base_speed: int = 120
+        self.aim_anim_charge_speed: int = 320  # velocidade maior para "charging"
 
     @property
     def rect(self) -> pygame.Rect:

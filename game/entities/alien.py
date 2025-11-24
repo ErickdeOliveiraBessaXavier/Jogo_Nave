@@ -32,6 +32,28 @@ class Alien:
         return frames
 
     def __init__(self):
+        self.w: int
+        self.h: int
+        self.x: float
+        self.y: float
+        self.speed_x: float
+        self.speed_y: float
+        self.dead: bool
+        self.shoot_timer: float
+
+        # Atributos para controle por formação
+        self.formation_controlled: bool
+        self.formation_index: int
+        self.formation_angle: float
+
+        # Carregar sprites de animação (usando cache)
+        self.animation_frames: list[pygame.Surface]
+        
+        # Controle de animação
+        self.current_frame: int
+        self.animation_timer: float
+        self.frame_duration: float
+
         self.w, self.h = self.ALIEN_WIDTH, self.ALIEN_HEIGHT
         self.x = random.randint(0, Config.SCREEN_WIDTH - self.w)
         self.y = -self.h

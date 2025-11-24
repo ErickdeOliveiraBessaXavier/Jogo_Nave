@@ -669,6 +669,8 @@ class PlayerProfile:
                     for key, value in stats_data.items():
                         if key in ['first_played', 'last_played'] and value:
                             setattr(stats, key, datetime.fromisoformat(value))
+                        elif key == 'best_time' and value is None:
+                            setattr(stats, key, float('inf'))  # Carregar null como inf
                         else:
                             setattr(stats, key, value)
 
@@ -708,6 +710,8 @@ class PlayerProfile:
             for key, value in stats.__dict__.items():
                 if isinstance(value, datetime):
                     stats_dict[key] = value.isoformat()
+                elif key == 'best_time' and value == float('inf'):
+                    stats_dict[key] = None  # Salvar inf como null
                 else:
                     stats_dict[key] = value
             level_stats_data[str(level_num)] = stats_dict

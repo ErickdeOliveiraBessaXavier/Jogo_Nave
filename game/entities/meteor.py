@@ -16,6 +16,29 @@ class Meteor:
         vy: float | None = None,
     ):
         # tamanho base
+        self.size: int
+        self.w: int
+        self.h: int
+
+        # posição
+        self.x: float
+        self.y: float
+
+        # velocidade
+        self.vx: float
+        self.vy: float
+
+        # rotação (maiores rodam mais devagar)
+        self.rotation: float
+        self.rotation_speed: float
+
+        # forma irregular + cor
+        self._base_points: List[Tuple[float, float]]
+        self.color_intensity: float
+        self.dead: bool
+        self.active: bool  # Para o Pool Pattern
+
+        # tamanho base
         self.size = (
             size
             if size is not None

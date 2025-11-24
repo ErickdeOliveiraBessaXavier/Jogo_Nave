@@ -20,6 +20,42 @@ class ExplosiveMine:
 
     def __init__(self, x: float | None = None, y: float | None = None):
         self.load_sprites()
+        self.radius: int
+        self.explosion_radius: int
+        self.x: float
+        self.y: float
+        self.health: int
+        self.max_health: int
+        self.speed: int
+        self.dead: bool
+        # Armazenar cores como tuplas explícitas
+        self.color: tuple[int, int, int]
+        self.outline_color: tuple[int, int, int]
+
+        self.shake_timer: float
+        self.shake_intensity: int
+        self.rotation_angle: float
+        self.rotation_speed: float
+        self.flash_timer: float
+        self.flash_interval: float
+        self.pre_explosion_timer: float
+        self.is_exploding: bool
+
+        # Pulsing animation
+        self.animation_timer: float
+        self.pulse_scale: float
+
+        # Load sprites from cache
+        self.normal_sprite: pygame.Surface
+        self.explosion_sprite: pygame.Surface
+        
+        # Sprite dimensions
+        self.sprite_width: int
+        self.sprite_height: int
+        
+        # Scale factor to fit the visual radius
+        self.scale: float
+
         self.radius = 30  # Visual radius of the mine
         self.explosion_radius = (
             self.radius * 8
@@ -54,10 +90,14 @@ class ExplosiveMine:
         self.pulse_scale = 1.0
 
         # Load sprites from cache
-        self.normal_sprite = self.__class__._normal_sprite
-        self.explosion_sprite = self.__class__._explosion_sprite
+        normal_temp = self.__class__._normal_sprite
+        explosion_temp = self.__class__._explosion_sprite
 
-        assert self.normal_sprite is not None, "Normal sprite for explosive mine not loaded"
+        assert normal_temp is not None, "Normal sprite for explosive mine not loaded"
+        assert explosion_temp is not None, "Explosion sprite for explosive mine not loaded"
+
+        self.normal_sprite = normal_temp
+        self.explosion_sprite = explosion_temp
         
         # Sprite dimensions
         self.sprite_width = self.normal_sprite.get_width()
@@ -138,9 +178,6 @@ class ExplosiveMine:
             current_sprite = self.explosion_sprite
         else:
             current_sprite = self.normal_sprite
-
-        if current_sprite is None:
-            return
 
         # Apply pulsing effect to scale
         scale = self.pulse_scale if not self.is_exploding else 1.0
