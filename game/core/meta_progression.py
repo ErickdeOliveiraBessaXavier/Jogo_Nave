@@ -668,7 +668,7 @@ class PlayerProfile:
                 data: Dict[str, Any] = json.load(f)
 
                 # Validate basic structure
-                if not isinstance(data, dict) or 'level_stats' not in data:
+                if 'level_stats' not in data:
                     raise ValueError("Invalid profile structure")
 
                 # Dados básicos
@@ -684,11 +684,12 @@ class PlayerProfile:
                     self.last_played = datetime.fromisoformat(data['last_played'])
 
                 # Level stats
-                level_stats_raw = data.get('level_stats', {})
-                if isinstance(level_stats_raw, dict):
-                    for level_num_str, stats_data in level_stats_raw.items():
-                        if not isinstance(stats_data, dict):
-                            continue
+                level_stats_raw: Dict[str, Dict[str, Any]] = data.get('level_stats', {})
+                # if isinstance(level_stats_raw, dict): # Unnecessary isinstance call
+                for level_num_str, stats_data_raw in level_stats_raw.items():
+                        # if not isinstance(stats_data_raw, dict): # Unnecessary isinstance call
+                            # continue
+                        stats_data: Dict[str, Any] = stats_data_raw
                         try:
                             level_num = int(level_num_str)
                             stats = LevelPerformance(level_number=level_num)
@@ -721,34 +722,50 @@ class PlayerProfile:
 
                 # Ajustes
                 level_adjustments_raw = data.get('level_adjustments', {})
-                if isinstance(level_adjustments_raw, dict):
-                    self.level_adjustments = {
-                        int(k): v for k, v in level_adjustments_raw.items()
-                        if isinstance(v, (int, float))
-                    }
+                # if isinstance(level_adjustments_raw, dict): # Unnecessary isinstance call
+                self.level_adjustments = {
+                    int(k): v for k, v in level_adjustments_raw.items()
+                    if isinstance(v, (int, float))
+                }
 
                 # Sessões
-                session_history_raw = data.get('session_history', [])
-                if isinstance(session_history_raw, list):
-                    for session_data in session_history_raw:
-                        if not isinstance(session_data, dict) or not isinstance(session_data.get('start_time'), str):
+                session_history_raw: List[Dict[str, Any]] = data.get('session_history', [])
+                # if isinstance(session_history_raw, list): # Unnecessary isinstance call
+                for session_data_raw in session_history_raw:
+                        if session_data_raw.get('start_time') is None:
                             continue
+                        session_data: Dict[str, Any] = session_data_raw
                         try:
+                            # Ensure start_time is a string before passing to fromisoformat
+                            start_time_str = session_data.get('start_time')
+                            if not isinstance(start_time_str, str):
+                                print(f"Skipping corrupt session data due to invalid start_time type.")
+                                continue
+
                             session = SessionStats(
-                                start_time=datetime.fromisoformat(session_data['start_time'])
+                                start_time=datetime.fromisoformat(start_time_str)
                             )
                             
-                            end_time = session_data.get('end_time')
-                            if isinstance(end_time, str):
-                                session.end_time = datetime.fromisoformat(end_time)
+                            end_time_str = session_data.get('end_time')
+                            if isinstance(end_time_str, str):
+                                session.end_time = datetime.fromisoformat(end_time_str)
 
-                            session.levels_attempted = session_data.get('levels_attempted', [])
-                            session.deaths = int(session_data.get('deaths', 0))
-                            session.score = int(session_data.get('score', 0))
-                            session.powerups_collected = int(session_data.get('powerups_collected', 0))
+                            # Explicitly check types for other fields
+                            levels_attempted_raw = session_data.get('levels_attempted', [])
+                            session.levels_attempted = [int(lvl) for lvl in levels_attempted_raw if isinstance(lvl, (int, float))]
+
+                            deaths_raw = session_data.get('deaths', 0)
+                            session.deaths = int(deaths_raw) if isinstance(deaths_raw, (int, float)) else 0
+
+                            score_raw = session_data.get('score', 0)
+                            session.score = int(score_raw) if isinstance(score_raw, (int, float)) else 0
+
+                            powerups_collected_raw = session_data.get('powerups_collected', 0)
+                            session.powerups_collected = int(powerups_collected_raw) if isinstance(powerups_collected_raw, (int, float)) else 0
+
                             self.session_history.append(session)
-                        except (ValueError, TypeError, KeyError):
-                            print(f"Skipping corrupt session data.")
+                        except (ValueError, TypeError, KeyError) as ve:
+                            print(f"Skipping corrupt session data: {ve}")
                             continue
 
                 # Limit session history after loading
