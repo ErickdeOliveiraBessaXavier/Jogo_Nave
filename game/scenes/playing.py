@@ -1,6 +1,7 @@
 import pygame
 import random
 import math
+import time
 from typing import TYPE_CHECKING
 from ..core.state import Scene
 from ..core.config import Config
@@ -10,7 +11,7 @@ from ..systems.spawner import EnemySpawner, PowerUpSpawner
 from ..systems.collisions import Collisions
 from ..systems.entity_manager import EntityManager
 from ..entities.floating_score import FloatingScore
-from ..core.levels import LevelManager, get_level_config
+from ..core.levels import LevelManager, get_level_config, LevelConfig
 from ..core.difficulty import DifficultyPreset, DifficultySettings
 from ..core.assets import get_font
 from ..core import colors
@@ -18,6 +19,7 @@ from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..entities.mini_ship import MiniShip
 from ..entities.spike_boss_laser import SpikeBossLaser
+from ..core.meta_progression import PlayerProfile
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -45,9 +47,7 @@ class PlayingScene(Scene):
         self._apply_difficulty_settings()
 
         self.current_level_index = 0
-        self.level_config = get_level_config(
-            self.current_level_index + 1, self.difficulty_preset
-        )  # +1 pois níveis começam em 1
+        self.level_config = self._get_adjusted_level_config(self.current_level_index + 1)
         self.enemies_destroyed_in_level = 0
         self.boss_fight_active = False
         self.pre_boss_transition = False
@@ -79,6 +79,16 @@ class PlayingScene(Scene):
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
 
+        # Meta-progression system
+        from pathlib import Path
+        self.player_profile = PlayerProfile(Path("player_profile.json"))
+        self.player_profile.start_session()
+
+        # Level timing
+        self.level_start_time = 0.0
+        self.level_damage_taken = 0
+        self.level_powerups_collected = 0
+
     def _apply_difficulty_settings(self):
         """Aplica configurações globais do preset de dificuldade."""
         settings = self.difficulty_settings
@@ -109,6 +119,11 @@ class PlayingScene(Scene):
         self.state = "preparing"
         self.preparation_time_left = Config.PREPARATION_TIME
 
+    def _get_adjusted_level_config(self, level_number: int) -> LevelConfig:
+        """Obtém configuração de nível ajustada pelo meta-progression."""
+        base_config = get_level_config(level_number, self.difficulty_preset)
+        return self.player_profile.get_adjusted_config(base_config)
+
     def enter(self):
         pygame.mouse.set_visible(False)
         if self.first_entry:
@@ -137,6 +152,15 @@ class PlayingScene(Scene):
                 self.ship.y = target_y
                 self.state = "playing"
                 self.ship.is_entering = False
+
+                # Meta-progression: Record level attempt
+                self.player_profile.record_attempt(self.current_level_index + 1)
+                self.level_start_time = 0.0  # Will be set in update
+                self.level_damage_taken = 0
+                self.level_powerups_collected = 0
+
+        if self.state == "playing" and self.level_start_time == 0.0:
+            self.level_start_time = time.time()
 
             self.ship.update(dt)  # Atualiza animações da nave (ex: propulsores)
             return
@@ -393,6 +417,8 @@ class PlayingScene(Scene):
 
         if ship_hit:
             self._handle_ship_hit()
+            # Meta-progression: Track damage taken
+            self.level_damage_taken += 1
 
         for x, y, pts in score_events:
             # Aplicar multiplicador de pontuação do nível
@@ -494,12 +520,12 @@ class PlayingScene(Scene):
             self._handle_ship_hit()
 
         # Verificar colisão com laser do SpikeBoss (filtrando SpikeBossLaser)
-        spike_boss_lasers = [
+        spike_boss_lasers: list[SpikeBossLaser] = [
             laser
             for laser in self.entity_manager.boss_lasers
             if isinstance(laser, SpikeBossLaser)
         ]
-        if self.collisions.spike_boss_laser_vs_ship(self.ship, spike_boss_lasers):
+        if spike_boss_lasers and self.collisions.spike_boss_laser_vs_ship(self.ship, spike_boss_lasers):
             self._handle_ship_hit()
 
         # Colisões com espinhos (SpikeBoss)
@@ -585,6 +611,9 @@ class PlayingScene(Scene):
                     self.entity_manager.mini_ships.append(MiniShip(self.ship, "right"))
                     self.score += Config.POWERUP_SCORE_BONUS * 2
 
+                # Meta-progression: Track powerup collection
+                self.level_powerups_collected += 1
+
     def _handle_ship_hit(self):
         # God mode: ignorar dano
         if self.god_mode:
@@ -596,6 +625,9 @@ class PlayingScene(Scene):
         self.ship.lives = self.lives
         if self.lives > 0:
             self.ship.invuln = Config.INVULN_TIME * 1000
+
+            # Meta-progression: Record death (but not game over)
+            self.player_profile.record_death(self.current_level_index + 1, "collision")
         else:
             self.game_over_sequence_active = True
             self.game_over_timer = 0.0
@@ -608,6 +640,10 @@ class PlayingScene(Scene):
             )
             self.screen_shake_timer = 0.5
             self.screen_shake_intensity = Config.SCREEN_SHAKE_GAME_OVER
+
+            # Meta-progression: Record death and end session
+            self.player_profile.record_death(self.current_level_index + 1, "game_over")
+            self.player_profile.end_session()
 
     def _check_level_progression(self):
         if self.enemies_destroyed_in_level >= self.level_config.enemies_to_clear:
@@ -704,6 +740,18 @@ class PlayingScene(Scene):
         self._advance_to_next_level()
 
     def _advance_to_next_level(self):
+        # Meta-progression: Record level clear
+        if self.level_start_time > 0:
+            clear_time = time.time() - self.level_start_time
+            self.player_profile.record_clear(
+                level_number=self.current_level_index + 1,
+                time_taken=clear_time,
+                score=self.score,
+                enemies_killed=self.total_enemies_destroyed,
+                damage_taken=self.level_damage_taken,
+                powerups_collected=self.level_powerups_collected
+            )
+
         if not self.level_transition_active:
             self.level_transition_active = True
             self.level_transition_timer = 0.0
@@ -713,11 +761,17 @@ class PlayingScene(Scene):
         self.current_level_index += 1
 
         # Gerar próximo nível (sistema híbrido: fixo ou procedural)
-        self.level_config = get_level_config(
-            self.current_level_index + 1, self.difficulty_preset
-        )  # +1 pois níveis começam em 1
+        self.level_config = self._get_adjusted_level_config(self.current_level_index + 1)
         self.enemy_spawner.set_level(self.current_level_index + 1)
         self.enemies_destroyed_in_level = 0
+
+        # Reset level tracking
+        self.level_start_time = 0.0
+        self.level_damage_taken = 0
+        self.level_powerups_collected = 0
+
+        # Meta-progression: Record attempt for new level
+        self.player_profile.record_attempt(self.current_level_index + 1)
 
         # Usar método que preserva balas do jogador durante transições
         self.entity_manager.clear_for_level_transition()

@@ -10,6 +10,7 @@ from ..core.state import Scene
 from ..core.colors import WHITE, BLACK, GREEN, BRIGHT_GREEN, RED, DARK_RED, BLUE
 from ..scenes.settings import SettingsScene
 from ..scenes.difficulty_selection import DifficultySelectionScene
+from ..scenes.statistics import StatisticsScene
 from ..core.assets import get_font
 from ..core.config import Config
 from ..render.renderer import Renderer
@@ -34,6 +35,7 @@ class AnimationConfig:
 
 class MenuStrings:
     START_GAME = "Iniciar Jogo"
+    STATISTICS = "Estatísticas"
     SETTINGS = "Configurações"
     EXIT = "Sair"
     TITLE = "Space Shooter"
@@ -41,8 +43,9 @@ class MenuStrings:
 
 class ButtonIndices:
     START_BUTTON = 0
-    SETTINGS_BUTTON = 1
-    EXIT_BUTTON = 2
+    STATISTICS_BUTTON = 1
+    SETTINGS_BUTTON = 2
+    EXIT_BUTTON = 3
 
 
 class ButtonState(Enum):
@@ -176,6 +179,7 @@ class MainMenuScene(Scene):
         """Creates button instances with their actions."""
         button_configs = [
             (MenuStrings.START_GAME, GREEN, BRIGHT_GREEN, lambda: self.app.states.push(DifficultySelectionScene(self.app))),
+            (MenuStrings.STATISTICS, GREEN, BRIGHT_GREEN, lambda: self.app.states.push(StatisticsScene(self.app))),
             (MenuStrings.SETTINGS, GREEN, BRIGHT_GREEN, lambda: self.app.states.push(SettingsScene(self.app))),
             (MenuStrings.EXIT, DARK_RED, RED, lambda: setattr(self.app, 'running', False)),
         ]
