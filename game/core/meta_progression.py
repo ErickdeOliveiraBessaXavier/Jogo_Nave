@@ -857,26 +857,21 @@ class ProfileVisualizer:
     """Cria visualizações das estatísticas do jogador."""
 
     @staticmethod
-    def render_statistics_screen(surface: pygame.Surface, profile: PlayerProfile):
-        """Renderiza tela completa de estatísticas."""
-        from ..core import colors
-        from ..core.config import Config
-        from ..core.assets import get_font
+    def render_geral_card(surface: pygame.Surface, profile: PlayerProfile, rect: pygame.Rect):
+        """Renderiza o conteúdo do card de performance geral."""
+        from ..core import colors, assets
 
         summary = profile.get_statistics_summary()
-
-        # Título
-        title_font = get_font(48)
-        title = title_font.render("Estatísticas do Jogador", True, colors.WHITE)
-        surface.blit(title, (50, 30))
-
-        # Skill level com badge
-        y = 100
-        ProfileVisualizer._render_skill_badge(surface, summary['skill_level'], 50, y)
+        
+        # Skill Badge
+        badge_font = assets.get_font(28)
+        ProfileVisualizer._render_skill_badge(surface, summary['skill_level'], rect.x, rect.y, badge_font)
 
         # Estatísticas principais
-        y = 200
-        stats_font = get_font(24)
+        stats_font = assets.get_font(18)
+        start_y = rect.y + 80
+        line_height = 28
+        
         stats = [
             f"Nível Mais Alto: {summary['highest_level']}",
             f"Tempo Total: {summary['total_playtime_hours']:.1f}h",
@@ -885,48 +880,80 @@ class ProfileVisualizer:
             f"Taxa de Sucesso: {summary['avg_clear_rate']:.0%}",
         ]
 
-        for stat in stats:
+        for i, stat in enumerate(stats):
             text = stats_font.render(stat, True, colors.WHITE)
-            surface.blit(text, (50, y))
-            y += 35
+            surface.blit(text, (rect.x + 20, start_y + i * line_height))
 
-        # Tendência
-        y += 20
-        trend_text = {
-            'improving': ('📈 Em Ascensão!', colors.GREEN),
-            'stable': ('➡️ Estável', colors.YELLOW),
-            'declining': ('📉 Desafiador Ultimamente', colors.ORANGE)
-        }
-        text, color = trend_text.get(summary['overall_trend'], ('', colors.WHITE))
-        trend_surf = stats_font.render(text, True, color)
-        surface.blit(trend_surf, (50, y))
+    @staticmethod
+    def _wrap_text(text: str, font: pygame.font.Font, max_width: int) -> List[str]:
+        """Quebra texto em múltiplas linhas para caber na largura."""
+        words = text.split(' ')
+        lines: List[str] = []
+        current_line: List[str] = []
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            if font.size(test_line)[0] <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        return lines
 
-        # Recomendações
-        y += 60
-        rec_font = get_font(18)
-        rec_title = get_font(24).render("Recomendações", True, colors.YELLOW)
-        surface.blit(rec_title, (50, y))
-        y += 35
+    @staticmethod
+    def render_recomendacoes_card(surface: pygame.Surface, profile: PlayerProfile, rect: pygame.Rect):
+        """Renderiza o conteúdo do card de recomendações."""
+        from ..core import colors, assets
 
-        for rec in summary['recommendations'][:5]:  # Máximo 5
-            rec_surf = rec_font.render(rec, True, colors.WHITE)
-            surface.blit(rec_surf, (70, y))
-            y += 28
+        summary = profile.get_statistics_summary()
+        rec_font = assets.get_font(16)
+        y = rect.y
+        line_height = 25
+        padding = 10
 
-        # Gráfico de performance
+        for rec in summary['recommendations'][:5]:
+            lines = ProfileVisualizer._wrap_text(rec, rec_font, rect.width - padding * 2)
+            for line in lines:
+                rec_surf = rec_font.render(line, True, colors.WHITE)
+                surface.blit(rec_surf, (rect.x + padding, y))
+                y += line_height
+                if y > rect.bottom - line_height:
+                    return # Stop if content overflows card
+    
+    @staticmethod
+    def render_graph_card(surface: pygame.Surface, profile: PlayerProfile, rect: pygame.Rect):
+        """Renderiza o gráfico de performance dentro de um card."""
+        from ..core import assets
         ProfileVisualizer._render_performance_graph(
             surface, profile,
-            x=50, y=Config.SCREEN_HEIGHT - 250,
-            width=Config.SCREEN_WIDTH - 100, height=200
+            x=rect.x, y=rect.y,
+            width=rect.width, height=rect.height,
+            font=assets.get_font(14)
         )
 
     @staticmethod
-    def _render_skill_badge(surface: pygame.Surface, skill_level: str, x: int, y: int):
+    def render_level_details_list(surface: pygame.Surface, profile: PlayerProfile):
+        """Renderiza a lista de detalhes de cada nível."""
+        y_offset = 10
+        sorted_levels = sorted(profile.level_stats.keys())
+
+        for level_num in sorted_levels:
+            ProfileVisualizer.render_level_preview(
+                surface, profile, level_num,
+                x=10, y=y_offset
+            )
+            y_offset += 130 # Altura do preview + espaçamento
+
+    @staticmethod
+    def _render_skill_badge(surface: pygame.Surface, skill_level: str, x: int, y: int, font: pygame.font.Font):
         """Renderiza badge de skill level."""
         from ..core import colors
-        import pygame
 
-        # Cores por nível
         badge_colors = {
             'Novato': (100, 100, 100),
             'Aprendiz': (139, 69, 19),
@@ -935,78 +962,55 @@ class ProfileVisualizer:
             'Veterano': (75, 0, 130),
             'Mestre': (255, 0, 255)
         }
-
         color = badge_colors.get(skill_level, colors.WHITE)
 
-        # Desenhar badge
         pygame.draw.circle(surface, color, (x + 40, y + 40), 40, 3)
-
-        # Texto
-        from ..core.assets import get_font
-        font = get_font(28)
+        
         text = font.render(skill_level, True, color)
-        text_rect = text.get_rect(center=(x + 120, y + 40))
+        text_rect = text.get_rect(center=(x + 150, y + 40))
         surface.blit(text, text_rect)
 
     @staticmethod
     def _render_performance_graph(
         surface: pygame.Surface,
         profile: PlayerProfile,
-        x: int, y: int, width: int, height: int
+        x: int, y: int, width: int, height: int,
+        font: pygame.font.Font
     ):
         """Renderiza gráfico de performance ao longo dos níveis."""
         from ..core import colors
-        import pygame
-        from ..core.assets import get_font
 
         if not profile.level_stats:
             return
 
-        # Preparar dados
         levels = sorted(profile.level_stats.keys())
-        max_level = max(levels)
+        max_level = max(levels) if levels else 1
 
-        # Desenhar eixos
-        pygame.draw.line(surface, colors.WHITE, (x, y + height), (x + width, y + height), 2)
-        pygame.draw.line(surface, colors.WHITE, (x, y), (x, y + height), 2)
+        pygame.draw.line(surface, colors.GRAY, (x, y + height), (x + width, y + height), 2)
+        pygame.draw.line(surface, colors.GRAY, (x, y), (x, y + height), 2)
 
-        # Título
-        title_font = get_font(20)
-        title = title_font.render("Taxa de Sucesso por Nível", True, colors.WHITE)
-        surface.blit(title, (x, y - 30))
-
-        # Plotar pontos
         if len(levels) > 1:
             points: List[Tuple[float, float]] = []
             for level_num in levels:
                 stats = profile.level_stats[level_num]
-                # Posição X proporcional ao número do nível
                 px = x + (level_num / max_level) * width
-                # Posição Y proporcional à clear rate (invertido)
                 py = y + height - (stats.clear_rate * height)
                 points.append((px, py))
-
-                # Desenhar ponto
                 color = ProfileVisualizer._get_performance_color(stats.clear_rate)
                 pygame.draw.circle(surface, color, (int(px), int(py)), 5)
 
-            # Conectar pontos com linha
             if len(points) > 1:
                 pygame.draw.lines(surface, colors.BLUE, False, points, 2)
 
-        # Labels dos eixos
-        label_font = get_font(14)
-        # Eixo X
         for i in range(0, max_level + 1, max(1, max_level // 10)):
             label_x = x + (i / max_level) * width
-            label = label_font.render(str(i), True, colors.WHITE)
-            surface.blit(label, (label_x - 10, y + height + 5))
+            label = font.render(str(i), True, colors.WHITE)
+            surface.blit(label, (label_x - 5, y + height + 5))
 
-        # Eixo Y
         for i in range(0, 101, 25):
             label_y = y + height - (i / 100 * height)
-            label = label_font.render(f"{i}%", True, colors.WHITE)
-            surface.blit(label, (x - 45, label_y - 10))
+            label = font.render(f"{i}%", True, colors.WHITE)
+            surface.blit(label, (x - 40, label_y - 10))
 
     @staticmethod
     def _get_performance_color(clear_rate: float) -> tuple[int, int, int]:

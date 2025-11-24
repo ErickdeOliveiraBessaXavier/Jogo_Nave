@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING, Callable, List
+from typing import Optional, TYPE_CHECKING, Callable, List, Any
 import pygame
 
 if TYPE_CHECKING:
@@ -15,11 +15,11 @@ from ..core.state import Scene
 class Button:
     """Um botão de UI simples."""
 
-    def __init__(self, rect: pygame.Rect, text: str, on_click: Callable[[], None]):
+    def __init__(self, rect: pygame.Rect, text: str, on_click: Callable[[], None], text_color: Color = colors.WHITE, font_size: int = 24):
         self.rect = rect
         self.on_click = on_click
-        self.font = get_font(24)
-        self.text_surf = self.font.render(text, True, colors.WHITE)
+        self.font = get_font(font_size)
+        self.text_surf = self.font.render(text, True, text_color)
         self.text_rect = self.text_surf.get_rect(center=self.rect.center)
         self.hovered = False
 
@@ -58,15 +58,14 @@ class ConfirmationDialog:
             self.line_rects.append(rect)
             current_y += line.get_height() + 10
 
-        self.yes_button = Button(pygame.Rect(0, 0, 100, 40), "Sim", self._on_yes_click)
-        self.yes_button.rect.center = (Config.SCREEN_WIDTH // 2 - 60, Config.SCREEN_HEIGHT // 2 + 40)
-        self.yes_button.text_surf = get_font(24).render("Sim", True, colors.BLACK)
-        self.yes_button.text_rect = self.yes_button.text_surf.get_rect(center=self.yes_button.rect.center)
-
-        self.no_button = Button(pygame.Rect(0, 0, 100, 40), "Não", self._on_no_click)
-        self.no_button.rect.center = (Config.SCREEN_WIDTH // 2 + 60, Config.SCREEN_HEIGHT // 2 + 40)
-        self.no_button.text_surf = get_font(24).render("Não", True, colors.BLACK)
-        self.no_button.text_rect = self.no_button.text_surf.get_rect(center=self.no_button.rect.center)
+        self.yes_button = Button(
+            pygame.Rect(Config.SCREEN_WIDTH // 2 - 110, Config.SCREEN_HEIGHT // 2 + 20, 100, 40),
+            "Sim", self._on_yes_click, text_color=colors.BLACK
+        )
+        self.no_button = Button(
+            pygame.Rect(Config.SCREEN_WIDTH // 2 + 10, Config.SCREEN_HEIGHT // 2 + 20, 100, 40),
+            "Não", self._on_no_click, text_color=colors.BLACK
+        )
 
         self.box_rect = pygame.Rect(Config.SCREEN_WIDTH // 2 - 250, Config.SCREEN_HEIGHT // 2 - 100, 500, 200)
         self.overlay = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
@@ -99,6 +98,63 @@ class ConfirmationDialog:
         self.no_button.render(surface, colors.RED, colors.BRIGHT_RED)
 
 
+class Card:
+    """Um contêiner retangular para agrupar elementos de UI."""
+
+    def __init__(self, rect: pygame.Rect, title: str, title_font_size: int = 28, padding: int = 15):
+        self.rect = rect
+        self.title = title
+        self.padding = padding
+        self.title_font = get_font(title_font_size)
+        self.title_surf = self.title_font.render(self.title, True, colors.YELLOW)
+        self.title_rect = self.title_surf.get_rect(topleft=(self.rect.x + padding, self.rect.y + padding))
+        self.content_rect = pygame.Rect(
+            self.rect.x + padding,
+            self.title_rect.bottom + 10,
+            self.rect.width - 2 * padding,
+            self.rect.height - (self.title_rect.bottom - self.rect.y) - padding
+        )
+
+    def render(self, surface: pygame.Surface) -> None:
+        """Renderiza o card e seu título."""
+        pygame.draw.rect(surface, colors.DARK_GRAY, self.rect, border_radius=12)
+        pygame.draw.rect(surface, colors.GRAY, self.rect, 2, border_radius=12)
+        surface.blit(self.title_surf, self.title_rect)
+
+
+class ScrollableCard(Card):
+    """Um card com conteúdo que pode ser rolado verticalmente."""
+
+    def __init__(self, rect: pygame.Rect, title: str, content_height: int, **kwargs: Any):
+        super().__init__(rect, title, **kwargs)
+        self.content_height = content_height
+        self.scroll_y = 0
+        self.scroll_speed = 30
+        self.visible_content_surf = pygame.Surface(self.content_rect.size)
+        self.full_content_surf = pygame.Surface((self.content_rect.width, content_height))
+
+    def handle_event(self, event: pygame.event.Event) -> None:
+        if not self.rect.collidepoint(pygame.mouse.get_pos()):
+            return
+        if event.type == pygame.MOUSEWHEEL:
+            self.scroll_y += event.y * self.scroll_speed
+            self.clamp_scroll()
+
+    def clamp_scroll(self) -> None:
+        """Garante que o scroll permaneça dentro dos limites."""
+        max_scroll = self.content_height - self.content_rect.height
+        self.scroll_y = max(0, min(self.scroll_y, max_scroll))
+
+    def render_content(self, surface: pygame.Surface) -> None:
+        """Renderiza o conteúdo rolável."""
+        self.visible_content_surf.blit(self.full_content_surf, (0, -self.scroll_y))
+        surface.blit(self.visible_content_surf, self.content_rect.topleft)
+
+    def render(self, surface: pygame.Surface) -> None:
+        super().render(surface)
+        self.render_content(surface)
+
+
 class StatisticsScene(Scene):
     """Cena de estatísticas do jogador."""
 
@@ -106,20 +162,82 @@ class StatisticsScene(Scene):
         super().__init__(game_app)
         self.profile: Optional[PlayerProfile] = None
         self.dialog: Optional[ConfirmationDialog] = None
+        self.cards: List[Card] = []
+        self.scrollable_card: Optional[ScrollableCard] = None
+
+        self._init_layout()
 
         self.reset_button = Button(
-            pygame.Rect(0, 0, 350, 50),
+            pygame.Rect(0, 0, 200, 50),
             "Resetar Perfil",
-            self.show_confirmation
+            self.show_confirmation,
+            text_color=colors.BLACK
         )
-        self.reset_button.rect.center = (Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT - 100)
-        self.reset_button.text_rect = self.reset_button.text_surf.get_rect(
-            center=self.reset_button.rect.center
+        self.back_button = Button(
+            pygame.Rect(0, 0, 200, 50),
+            "Voltar",
+            self.app.states.pop,
+            text_color=colors.BLACK
         )
+        # Posicionar botões no rodapé
+        margin_bottom = 40
+        button_y = Config.SCREEN_HEIGHT - margin_bottom - self.reset_button.rect.height
+        self.reset_button.rect.bottomright = (Config.SCREEN_WIDTH - 30, button_y)
+        self.back_button.rect.bottomleft = (30, button_y)
+
+    def _init_layout(self):
+        """Inicializa o layout em colunas com cards."""
+        margin = 30
+        top_y = 100
+        bottom_y = Config.SCREEN_HEIGHT - 120
+        col_width = (Config.SCREEN_WIDTH - 3 * margin) // 2
+        col1_x = margin
+        col2_x = margin * 2 + col_width
+
+        # Coluna 1
+        card1_h = 250
+        self.cards.append(Card(pygame.Rect(col1_x, top_y, col_width, card1_h), "Performance Geral"))
+
+        card2_h = bottom_y - (top_y + card1_h + margin)
+        self.cards.append(Card(pygame.Rect(col1_x, top_y + card1_h + margin, col_width, card2_h), "Recomendações"))
+
+        # Coluna 2
+        card3_h = 300
+        self.cards.append(Card(pygame.Rect(col2_x, top_y, col_width, card3_h), "Taxa de Sucesso por Nível"))
+
+        card4_h = bottom_y - (top_y + card3_h + margin)
+        # A altura do conteúdo será definida dinamicamente
+        self.scrollable_card = ScrollableCard(
+            pygame.Rect(col2_x, top_y + card3_h + margin, col_width, card4_h),
+            "Estatísticas por Nível", content_height=100
+        )
+        self.cards.append(self.scrollable_card)
 
     def enter(self) -> None:
         super().enter()
         self.load_profile()
+        self._update_scrollable_content()
+
+    def _update_scrollable_content(self):
+        """Atualiza o conteúdo e a altura do card rolável."""
+        if not self.profile or not self.scrollable_card:
+            return
+        
+        # Estimar altura do conteúdo
+        num_levels = len(self.profile.level_stats)
+        content_height = max(self.scrollable_card.content_rect.height, num_levels * 130 + 20)
+        
+        self.scrollable_card.content_height = content_height
+        self.scrollable_card.full_content_surf = pygame.Surface(
+            (self.scrollable_card.content_rect.width, content_height)
+        )
+        self.scrollable_card.full_content_surf.fill(colors.DARK_GRAY)
+        
+        # Renderizar o conteúdo no surf de conteúdo completo
+        ProfileVisualizer.render_level_details_list(
+            self.scrollable_card.full_content_surf,
+            self.profile
+        )
 
     def load_profile(self) -> None:
         from pathlib import Path
@@ -128,15 +246,15 @@ class StatisticsScene(Scene):
 
     def update(self, dt: float) -> None:
         keys = pygame.key.get_pressed()
-        if not self.dialog and (keys[pygame.K_ESCAPE] or keys[pygame.K_RETURN]):
+        if not self.dialog and keys[pygame.K_ESCAPE]:
             self.app.states.pop()
 
         if self.dialog:
             self.dialog.update()
         else:
             self.reset_button.update()
+            self.back_button.update()
 
-        # Auto-save profile if needed
         if self.profile:
             self.profile.auto_save()
 
@@ -145,33 +263,60 @@ class StatisticsScene(Scene):
             self.dialog.handle_event(event)
         else:
             self.reset_button.handle_event(event)
+            self.back_button.handle_event(event)
+            if self.scrollable_card:
+                self.scrollable_card.handle_event(event)
 
     def render(self, surface: pygame.Surface) -> None:
         surface.fill(colors.BLACK)
 
+        # Título da cena
+        title_font = get_font(48)
+        title_surf = title_font.render("Estatísticas", True, colors.WHITE)
+        title_rect = title_surf.get_rect(center=(Config.SCREEN_WIDTH // 2, 50))
+        surface.blit(title_surf, title_rect)
+
         if not self.profile:
             font = get_font(24)
             text = font.render("Erro ao carregar perfil!", True, colors.RED)
-            surface.blit(text, (50, 50))
+            surface.blit(text, (50, 150))
             return
 
-        ProfileVisualizer.render_statistics_screen(surface, self.profile)
+        # Renderizar cards
+        for card in self.cards:
+            card.render(surface)
 
+        # Renderizar conteúdo dos cards com clipping
+        # Card 1: Geral
+        surface.set_clip(self.cards[0].content_rect)
+        ProfileVisualizer.render_geral_card(surface, self.profile, self.cards[0].content_rect)
+        surface.set_clip(None)
+
+        # Card 2: Recomendações
+        surface.set_clip(self.cards[1].content_rect)
+        ProfileVisualizer.render_recomendacoes_card(surface, self.profile, self.cards[1].content_rect)
+        surface.set_clip(None)
+
+        # Card 3: Gráfico
+        surface.set_clip(self.cards[2].content_rect)
+        ProfileVisualizer.render_graph_card(surface, self.profile, self.cards[2].content_rect)
+        surface.set_clip(None)
+
+        # Renderizar botões
         self.reset_button.render(surface, colors.RED, colors.BRIGHT_RED)
-
-        font = get_font(16)
-        instructions = font.render("Pressione ESC ou ENTER para voltar", True, colors.GRAY)
-        surface.blit(instructions, (50, Config.SCREEN_HEIGHT - 30))
-
+        self.back_button.render(surface, colors.GRAY, colors.BRIGHT_GRAY)
+        
+        # Renderizar diálogo de confirmação por último
         if self.dialog:
             self.dialog.render(surface)
 
     def show_confirmation(self) -> None:
         self.dialog = ConfirmationDialog(
-            ["Tem certeza que deseja", "resetar seu perfil?"],
+            ["Tem certeza que deseja", "resetar seu perfil?", "Todo o progresso será perdido."],
             self.reset_profile,
             self.close_confirmation
         )
+
 
     def close_confirmation(self) -> None:
         self.dialog = None
