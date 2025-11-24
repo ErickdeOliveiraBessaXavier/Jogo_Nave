@@ -126,12 +126,6 @@ class PlayingScene(Scene):
         self.cheat_buffer = ""  # Buffer para sequência de teclas
         self.god_mode = False  # Modo invulnerável
 
-        # Sequência de Game Over
-        self.game_over_sequence_active = False
-        self.game_over_timer = 0.0
-        self.game_over_font_title = get_font(80)
-        self.game_over_font_subtitle = get_font(30)
-
         # Estado de preparação
         self.state = "preparing"
         self.preparation_time_left = Config.PREPARATION_TIME
@@ -185,16 +179,6 @@ class PlayingScene(Scene):
             self.level_start_time = time.time()
 
             self.ship.update(dt)  # Atualiza animações da nave (ex: propulsores)
-            return
-
-        if self.game_over_sequence_active:
-            self.game_over_timer += dt
-            slow_mo_dt = dt * 0.2
-
-            # Atualiza entidades em câmera lenta através do Entity Manager
-            self.entity_manager.update_for_game_over_slow_motion(
-                slow_mo_dt, self.ship.rect.centerx, self.ship.rect.centery
-            )
             return
 
         # Timers
@@ -641,7 +625,7 @@ class PlayingScene(Scene):
         if self.god_mode:
             return
 
-        if self.ship.invuln > 0 or self.game_over_sequence_active:
+        if self.ship.invuln > 0:
             return
         self.lives -= 1
         self.ship.lives = self.lives
@@ -651,17 +635,9 @@ class PlayingScene(Scene):
             # Meta-progression: Record death (but not game over)
             self.player_profile.record_death(self.current_level_index + 1, "collision")
         else:
-            self.game_over_sequence_active = True
-            self.game_over_timer = 0.0
-            self.ship.visible = False
-            # Tocar som de explosão da nave
-            sound_manager.play_ship_explosion()
-            # Nova forma
-            self.entity_manager.spawn_explosion(
-                self.ship.rect.centerx, self.ship.rect.centery, size=100
-            )
-            self.screen_shake_timer = 0.5
-            self.screen_shake_intensity = Config.SCREEN_SHAKE_GAME_OVER
+            # Switch to GameOverScene
+            from .game_over import GameOverScene
+            self.app.states.switch(GameOverScene(self.app, self.score, self))
 
             # Meta-progression: Record death and end session
             self.player_profile.record_death(self.current_level_index + 1, "game_over")
@@ -799,11 +775,6 @@ class PlayingScene(Scene):
         self.entity_manager.clear_for_level_transition()
 
     def handle_event(self, event: pygame.event.Event):
-        if self.game_over_sequence_active:
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                self.app.states.switch(PlayingScene(self.app, self.level_manager, self.difficulty_preset))
-            return
-
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_p:
                 from .paused import PausedScene
@@ -869,56 +840,6 @@ class PlayingScene(Scene):
                 center=(Config.SCREEN_WIDTH / 2, Config.SCREEN_HEIGHT / 2)
             )
             surface.blit(warning_text, text_rect)
-
-        if self.game_over_sequence_active:
-            progress = min(
-                1.0, self.game_over_timer / Config.GAME_OVER_FADE_DURATION
-            )  # Duração do fade-in principal
-
-            overlay = pygame.Surface(
-                (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
-            )
-            overlay_alpha = int(
-                progress * Config.GAME_OVER_OVERLAY_ALPHA
-            )  # Um pouco mais escuro
-            overlay.fill((0, 0, 0, overlay_alpha))
-
-            # Renderiza "GAME OVER"
-            text_alpha = int(progress * 255)
-            title_text = self.game_over_font_title.render(
-                "GAME OVER", True, (255, 255, 255)
-            )
-            title_text.set_alpha(text_alpha)
-            title_rect = title_text.get_rect(
-                center=(Config.SCREEN_WIDTH / 2, Config.SCREEN_HEIGHT / 2 - 40)
-            )
-
-            surface.blit(overlay, (0, 0))
-            surface.blit(title_text, title_rect)
-
-            # Renderiza pontuação e instrução de reinício após um atraso
-            restart_delay = Config.GAME_OVER_RESTART_DELAY  # segundos
-            if self.game_over_timer > restart_delay:
-                sub_progress = min(1.0, (self.game_over_timer - restart_delay) / 1.0)
-                sub_alpha = int(sub_progress * 255)
-
-                score_text = self.game_over_font_subtitle.render(
-                    f"Score: {self.score}", True, (255, 255, 255)
-                )
-                score_text.set_alpha(sub_alpha)
-                score_rect = score_text.get_rect(
-                    center=(Config.SCREEN_WIDTH / 2, Config.SCREEN_HEIGHT / 2 + 50)
-                )
-                surface.blit(score_text, score_rect)
-
-                restart_text = self.game_over_font_subtitle.render(
-                    "Pressione R para reiniciar", True, (255, 255, 255)
-                )
-                restart_text.set_alpha(sub_alpha)
-                restart_rect = restart_text.get_rect(
-                    center=(Config.SCREEN_WIDTH / 2, Config.SCREEN_HEIGHT / 2 + 100)
-                )
-                surface.blit(restart_text, restart_rect)
 
         if self.state == "preparing":
             self.r.preparation(surface, self.preparation_time_left)
