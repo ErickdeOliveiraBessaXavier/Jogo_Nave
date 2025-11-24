@@ -544,7 +544,8 @@ def get_level_config(level_number: int, difficulty_preset: DifficultyPreset = Di
     Returns:
         LevelConfig do nível (fixo ou procedural) com dificuldade aplicada
     """
-    if level_number in FIXED_LEVELS:
+    # Para Hardcore e Nightmare, o nível 1 é sempre procedural (sem tutorial)
+    if level_number in FIXED_LEVELS and not (level_number == 1 and difficulty_preset in [DifficultyPreset.HARDCORE, DifficultyPreset.NIGHTMARE]):
         config = FIXED_LEVELS[level_number]
         # Aplicar modificadores do preset aos níveis fixos também
         return _apply_difficulty_to_fixed_level(config, difficulty_preset)
