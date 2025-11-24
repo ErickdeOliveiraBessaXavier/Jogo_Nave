@@ -136,6 +136,10 @@ class StatisticsScene(Scene):
         else:
             self.reset_button.update()
 
+        # Auto-save profile if needed
+        if self.profile:
+            self.profile.auto_save()
+
     def handle_event(self, event: pygame.event.Event) -> None:
         if self.dialog:
             self.dialog.handle_event(event)

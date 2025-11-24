@@ -2,7 +2,7 @@ import pygame
 import random
 import math
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from ..core.state import Scene
 from ..core.config import Config
 from ..render.renderer import Renderer
@@ -136,6 +136,11 @@ class PlayingScene(Scene):
         self.state = "preparing"
         self.preparation_time_left = Config.PREPARATION_TIME
 
+        # Meta-progression tracking
+        self.level_start_time: Optional[float] = None
+        self.level_damage_taken = 0
+        self.level_powerups_collected = 0
+
     def _get_adjusted_level_config(self, level_number: int) -> LevelConfig:
         """Obtém configuração de nível ajustada pelo meta-progression."""
         base_config = get_level_config(level_number, self.difficulty_preset)
@@ -172,11 +177,11 @@ class PlayingScene(Scene):
 
                 # Meta-progression: Record level attempt
                 self.player_profile.record_attempt(self.current_level_index + 1)
-                self.level_start_time = 0.0  # Will be set in update
+                self.level_start_time = None  # Reset to None instead of 0.0
                 self.level_damage_taken = 0
                 self.level_powerups_collected = 0
 
-        if self.state == "playing" and self.level_start_time == 0.0:
+        if self.state == "playing" and self.level_start_time is None:
             self.level_start_time = time.time()
 
             self.ship.update(dt)  # Atualiza animações da nave (ex: propulsores)
@@ -758,7 +763,7 @@ class PlayingScene(Scene):
 
     def _advance_to_next_level(self):
         # Meta-progression: Record level clear
-        if self.level_start_time > 0:
+        if self.level_start_time is not None:
             clear_time = time.time() - self.level_start_time
             self.player_profile.record_clear(
                 level_number=self.current_level_index + 1,
@@ -783,7 +788,7 @@ class PlayingScene(Scene):
         self.enemies_destroyed_in_level = 0
 
         # Reset level tracking
-        self.level_start_time = 0.0
+        self.level_start_time = None  # Reset to None instead of 0.0
         self.level_damage_taken = 0
         self.level_powerups_collected = 0
 

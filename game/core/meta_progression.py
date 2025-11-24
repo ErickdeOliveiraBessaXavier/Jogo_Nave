@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from enum import Enum
 import pygame
+import time
 
 from ..core.difficulty import DifficultyPreset
 from ..core.levels import LevelConfig
@@ -49,7 +50,7 @@ class LevelPerformance:
 
     # Tempo
     total_time: float = 0.0
-    best_time: float = float('inf')
+    best_time: Optional[float] = None  # Changed from float('inf') to None
     worst_time: float = 0.0
 
     # Score
@@ -124,7 +125,7 @@ class LevelPerformance:
         if self.clear_rate > 0.9 and self.attempts >= 3:
             # Verificar consistência de tempos
             if self.clears >= 2:
-                time_consistency = self.best_time / self.avg_time
+                time_consistency = self.best_time / self.avg_time if self.best_time else 1.0
                 if time_consistency > 0.8:  # Tempos consistentes
                     return PerformanceState.DOMINATING
 
@@ -445,6 +446,8 @@ class DifficultyAdjuster:
 class PlayerProfile:
     """Perfil completo do jogador com meta-progression."""
 
+    MAX_SESSION_HISTORY = 50  # Limit session history to last 50 sessions
+
     def __init__(self, profile_path: Path):
         self.profile_path = profile_path
 
@@ -469,6 +472,10 @@ class PlayerProfile:
         self.profile_created: datetime = datetime.now()
         self.last_played: Optional[datetime] = None
 
+        # Save optimization
+        self._dirty = False
+        self._last_save = time.time()
+
         self.load()
 
     def start_session(self):
@@ -480,8 +487,20 @@ class PlayerProfile:
         if self.current_session:
             self.current_session.end_time = datetime.now()
             self.session_history.append(self.current_session)
+            # Limit session history
+            if len(self.session_history) > self.MAX_SESSION_HISTORY:
+                self.session_history = self.session_history[-self.MAX_SESSION_HISTORY:]
             self.total_playtime += self.current_session.duration
             self.current_session = None
+            self.save()  # Save on session end
+
+    def _mark_dirty(self):
+        """Mark profile as having unsaved changes."""
+        self._dirty = True
+
+    def auto_save(self):
+        """Auto-save if dirty and enough time has passed."""
+        if self._dirty and (time.time() - self._last_save) > 30:
             self.save()
 
     def record_attempt(self, level_number: int):
@@ -494,9 +513,7 @@ class PlayerProfile:
         stats.attempts += 1
         stats.last_played = datetime.now()
         self.last_played = datetime.now()
-
-        if self.current_session:
-            self.current_session.levels_attempted.append(level_number)
+        self._mark_dirty()
 
     def record_clear(
         self,
@@ -517,7 +534,8 @@ class PlayerProfile:
 
         # Tempo
         stats.total_time += time_taken
-        stats.best_time = min(stats.best_time, time_taken)
+        if stats.best_time is None or time_taken < stats.best_time:
+            stats.best_time = time_taken
         stats.worst_time = max(stats.worst_time, time_taken)
 
         # Score
@@ -552,7 +570,7 @@ class PlayerProfile:
             self.current_session.score += score
             self.current_session.powerups_collected += powerups_collected
 
-        self.save()
+        self._mark_dirty()
 
     def record_death(self, level_number: int, cause: str = 'unknown'):
         """Registra morte em um nível."""
@@ -575,7 +593,7 @@ class PlayerProfile:
         if self.current_session:
             self.current_session.deaths += 1
 
-        self.save()
+        self._mark_dirty()
 
     def get_adjusted_config(self, base_config: LevelConfig) -> LevelConfig:
         """
@@ -606,7 +624,7 @@ class PlayerProfile:
         # Salvar novo ajuste
         if new_adjustment != previous_adjustment:
             self.level_adjustments[level_num] = new_adjustment
-            self.save()
+            self._mark_dirty()
 
             # Log para debug
             direction = "mais fácil" if new_adjustment < 1.0 else "mais difícil"
@@ -647,7 +665,11 @@ class PlayerProfile:
 
         try:
             with open(self.profile_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+                data: Dict[str, Any] = json.load(f)
+
+                # Validate basic structure
+                if not isinstance(data, dict) or 'level_stats' not in data:
+                    raise ValueError("Invalid profile structure")
 
                 # Dados básicos
                 self.total_playtime = data.get('total_playtime', 0.0)
@@ -656,47 +678,86 @@ class PlayerProfile:
                 self.total_score = data.get('total_score', 0)
 
                 # Timestamps
-                if 'profile_created' in data:
+                if 'profile_created' in data and isinstance(data['profile_created'], str):
                     self.profile_created = datetime.fromisoformat(data['profile_created'])
-                if 'last_played' in data and data['last_played']:
+                if data.get('last_played') and isinstance(data['last_played'], str):
                     self.last_played = datetime.fromisoformat(data['last_played'])
 
                 # Level stats
-                for level_num, stats_data in data.get('level_stats', {}).items():
-                    stats = LevelPerformance(level_number=int(level_num))
+                level_stats_raw = data.get('level_stats', {})
+                if isinstance(level_stats_raw, dict):
+                    for level_num_str, stats_data in level_stats_raw.items():
+                        if not isinstance(stats_data, dict):
+                            continue
+                        try:
+                            level_num = int(level_num_str)
+                            stats = LevelPerformance(level_number=level_num)
 
-                    # Restaurar campos
-                    for key, value in stats_data.items():
-                        if key in ['first_played', 'last_played'] and value:
-                            setattr(stats, key, datetime.fromisoformat(value))
-                        elif key == 'best_time' and value is None:
-                            setattr(stats, key, float('inf'))  # Carregar null como inf
-                        else:
-                            setattr(stats, key, value)
+                            # Restore fields explicitly for type safety
+                            stats.attempts = int(stats_data.get('attempts', 0))
+                            stats.clears = int(stats_data.get('clears', 0))
+                            stats.deaths = int(stats_data.get('deaths', 0))
+                            stats.total_time = float(stats_data.get('total_time', 0.0))
+                            stats.best_time = float(stats_data['best_time']) if isinstance(stats_data.get('best_time'), (int, float)) else None
+                            stats.worst_time = float(stats_data.get('worst_time', 0.0))
+                            stats.total_score = int(stats_data.get('total_score', 0))
+                            stats.best_score = int(stats_data.get('best_score', 0))
+                            stats.total_enemies_killed = int(stats_data.get('total_enemies_killed', 0))
+                            stats.total_damage_taken = int(stats_data.get('total_damage_taken', 0))
+                            stats.total_powerups_collected = int(stats_data.get('total_powerups_collected', 0))
+                            stats.recent_attempts = stats_data.get('recent_attempts', [])
+                            stats.current_win_streak = int(stats_data.get('current_win_streak', 0))
+                            stats.best_win_streak = int(stats_data.get('best_win_streak', 0))
 
-                    self.level_stats[int(level_num)] = stats
+                            if 'first_played' in stats_data and isinstance(stats_data['first_played'], str):
+                                stats.first_played = datetime.fromisoformat(stats_data['first_played'])
+                            if 'last_played' in stats_data and isinstance(stats_data['last_played'], str):
+                                stats.last_played = datetime.fromisoformat(stats_data['last_played'])
+                            
+                            self.level_stats[level_num] = stats
+                        except (ValueError, TypeError, KeyError):
+                            print(f"Skipping corrupt level data for level {level_num_str}")
+                            continue
 
                 # Ajustes
-                self.level_adjustments = {
-                    int(k): v for k, v in data.get('level_adjustments', {}).items()
-                }
+                level_adjustments_raw = data.get('level_adjustments', {})
+                if isinstance(level_adjustments_raw, dict):
+                    self.level_adjustments = {
+                        int(k): v for k, v in level_adjustments_raw.items()
+                        if isinstance(v, (int, float))
+                    }
 
                 # Sessões
-                for session_data in data.get('session_history', []):
-                    session = SessionStats(
-                        start_time=datetime.fromisoformat(session_data['start_time'])
-                    )
-                    if session_data.get('end_time'):
-                        session.end_time = datetime.fromisoformat(session_data['end_time'])
-                    session.levels_attempted = session_data.get('levels_attempted', [])
-                    session.deaths = session_data.get('deaths', 0)
-                    session.score = session_data.get('score', 0)
-                    session.powerups_collected = session_data.get('powerups_collected', 0)
-                    self.session_history.append(session)
+                session_history_raw = data.get('session_history', [])
+                if isinstance(session_history_raw, list):
+                    for session_data in session_history_raw:
+                        if not isinstance(session_data, dict) or not isinstance(session_data.get('start_time'), str):
+                            continue
+                        try:
+                            session = SessionStats(
+                                start_time=datetime.fromisoformat(session_data['start_time'])
+                            )
+                            
+                            end_time = session_data.get('end_time')
+                            if isinstance(end_time, str):
+                                session.end_time = datetime.fromisoformat(end_time)
+
+                            session.levels_attempted = session_data.get('levels_attempted', [])
+                            session.deaths = int(session_data.get('deaths', 0))
+                            session.score = int(session_data.get('score', 0))
+                            session.powerups_collected = int(session_data.get('powerups_collected', 0))
+                            self.session_history.append(session)
+                        except (ValueError, TypeError, KeyError):
+                            print(f"Skipping corrupt session data.")
+                            continue
+
+                # Limit session history after loading
+                if len(self.session_history) > self.MAX_SESSION_HISTORY:
+                    self.session_history = self.session_history[-self.MAX_SESSION_HISTORY:]
 
         except Exception as e:
-            print(f"⚠️ Erro ao carregar perfil: {e}")
-            print("Criando novo perfil...")
+            print(f"⚠️ Erro ao carregar perfil: {e}. Resetando perfil...")
+            self.reset()  # Reset on corrupt load
 
     def save(self):
         """Salva perfil no disco."""
@@ -710,8 +771,8 @@ class PlayerProfile:
             for key, value in stats.__dict__.items():
                 if isinstance(value, datetime):
                     stats_dict[key] = value.isoformat()
-                elif key == 'best_time' and value == float('inf'):
-                    stats_dict[key] = None  # Salvar inf como null
+                elif key == 'best_time' and value is None:
+                    stats_dict[key] = None  # Save None as null
                 else:
                     stats_dict[key] = value
             level_stats_data[str(level_num)] = stats_dict
@@ -745,6 +806,9 @@ class PlayerProfile:
         with open(self.profile_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
+        self._dirty = False
+        self._last_save = time.time()
+
     def reset(self):
         """Reseta completamente o perfil do jogador."""
         # Encerrar sessão atual se existir
@@ -763,6 +827,8 @@ class PlayerProfile:
         self.preferred_difficulty = None
         self.profile_created = datetime.now()
         self.last_played = None
+        self._dirty = False
+        self._last_save = time.time()
 
         # Salvar o perfil resetado
         self.save()
@@ -987,7 +1053,7 @@ class ProfileVisualizer:
         lines = [
             f"Tentativas: {stats.attempts}",
             f"Taxa de Sucesso: {stats.clear_rate:.0%}",
-            f"Melhor Tempo: {stats.best_time:.1f}s" if stats.best_time != float('inf') else "Melhor Tempo: --",
+            f"Melhor Tempo: {stats.best_time:.1f}s" if stats.best_time is not None else "Melhor Tempo: --",
         ]
 
         for line in lines:
