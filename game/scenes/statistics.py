@@ -1,4 +1,5 @@
 from typing import Optional, TYPE_CHECKING, Callable, List, Any
+from enum import Enum
 import pygame
 
 if TYPE_CHECKING:
@@ -98,61 +99,58 @@ class ConfirmationDialog:
         self.no_button.render(surface, colors.RED, colors.BRIGHT_RED)
 
 
-class Card:
-    """Um contêiner retangular para agrupar elementos de UI."""
+class StatTab(Enum):
+    """Abas disponíveis na tela de estatísticas."""
+    OVERVIEW = "Visão Geral"
+    LEVELS = "Níveis"
+    HISTORY = "Histórico"
+    ACHIEVEMENTS = "Conquistas"
 
-    def __init__(self, rect: pygame.Rect, title: str, title_font_size: int = 28, padding: int = 15):
-        self.rect = rect
-        self.title = title
-        self.padding = padding
-        self.title_font = get_font(title_font_size)
-        self.title_surf = self.title_font.render(self.title, True, colors.YELLOW)
-        self.title_rect = self.title_surf.get_rect(topleft=(self.rect.x + padding, self.rect.y + padding))
-        self.content_rect = pygame.Rect(
-            self.rect.x + padding,
-            self.title_rect.bottom + 10,
-            self.rect.width - 2 * padding,
-            self.rect.height - (self.title_rect.bottom - self.rect.y) - padding
-        )
 
+class TabButton:
+    """Botão de aba."""
+    
+    def __init__(self, x: int, y: int, width: int, height: int, tab: StatTab):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.tab = tab
+        self.font = get_font(20)
+        self.text_surf = self.font.render(tab.value, True, colors.WHITE)
+        self.text_rect = self.text_surf.get_rect(center=self.rect.center)
+        self.active = False
+        self.hovered = False
+    
+    def handle_event(self, event: pygame.event.Event) -> bool:
+        """Retorna True se foi clicado."""
+        if event.type == pygame.MOUSEBUTTONDOWN and self.rect.collidepoint(event.pos):
+            return True
+        return False
+    
+    def update(self) -> None:
+        self.hovered = self.rect.collidepoint(pygame.mouse.get_pos())
+    
     def render(self, surface: pygame.Surface) -> None:
-        """Renderiza o card e seu título."""
-        pygame.draw.rect(surface, colors.DARK_GRAY, self.rect, border_radius=12)
-        pygame.draw.rect(surface, colors.GRAY, self.rect, 2, border_radius=12)
-        surface.blit(self.title_surf, self.title_rect)
-
-
-class ScrollableCard(Card):
-    """Um card com conteúdo que pode ser rolado verticalmente."""
-
-    def __init__(self, rect: pygame.Rect, title: str, content_height: int, **kwargs: Any):
-        super().__init__(rect, title, **kwargs)
-        self.content_height = content_height
-        self.scroll_y = 0
-        self.scroll_speed = 30
-        self.visible_content_surf = pygame.Surface(self.content_rect.size)
-        self.full_content_surf = pygame.Surface((self.content_rect.width, content_height))
-
-    def handle_event(self, event: pygame.event.Event) -> None:
-        if not self.rect.collidepoint(pygame.mouse.get_pos()):
-            return
-        if event.type == pygame.MOUSEWHEEL:
-            self.scroll_y += event.y * self.scroll_speed
-            self.clamp_scroll()
-
-    def clamp_scroll(self) -> None:
-        """Garante que o scroll permaneça dentro dos limites."""
-        max_scroll = self.content_height - self.content_rect.height
-        self.scroll_y = max(0, min(self.scroll_y, max_scroll))
-
-    def render_content(self, surface: pygame.Surface) -> None:
-        """Renderiza o conteúdo rolável."""
-        self.visible_content_surf.blit(self.full_content_surf, (0, -self.scroll_y))
-        surface.blit(self.visible_content_surf, self.content_rect.topleft)
-
-    def render(self, surface: pygame.Surface) -> None:
-        super().render(surface)
-        self.render_content(surface)
+        # Cor baseada no estado
+        if self.active:
+            bg_color = colors.DARK_GRAY
+            border_color = colors.YELLOW
+            text_color = colors.YELLOW
+        elif self.hovered:
+            bg_color = (60, 60, 60)
+            border_color = colors.WHITE
+            text_color = colors.WHITE
+        else:
+            bg_color = (40, 40, 40)
+            border_color = colors.GRAY
+            text_color = colors.GRAY
+        
+        # Desenhar fundo
+        pygame.draw.rect(surface, bg_color, self.rect, border_top_left_radius=8, border_top_right_radius=8)
+        pygame.draw.rect(surface, border_color, self.rect, 2, border_top_left_radius=8, border_top_right_radius=8)
+        
+        # Desenhar texto
+        text_surf = self.font.render(self.tab.value, True, text_color)
+        text_rect = text_surf.get_rect(center=self.rect.center)
+        surface.blit(text_surf, text_rect)
 
 
 class StatisticsScene(Scene):
@@ -162,82 +160,77 @@ class StatisticsScene(Scene):
         super().__init__(game_app)
         self.profile: Optional[PlayerProfile] = None
         self.dialog: Optional[ConfirmationDialog] = None
-        self.cards: List[Card] = []
-        self.scrollable_card: Optional[ScrollableCard] = None
-
+        
+        # Sistema de abas
+        self.current_tab = StatTab.OVERVIEW
+        self.tab_buttons: List[TabButton] = []
+        self.content_rect = pygame.Rect(0, 0, 0, 0)  # Definido em _init_layout
+        
         self._init_layout()
-
+        
+        # Botões de ação
         self.reset_button = Button(
             pygame.Rect(0, 0, 200, 50),
             "Resetar Perfil",
             self.show_confirmation,
-            text_color=colors.BLACK
+            text_color=colors.WHITE
         )
         self.back_button = Button(
             pygame.Rect(0, 0, 200, 50),
             "Voltar",
             self.app.states.pop,
-            text_color=colors.BLACK
+            text_color=colors.WHITE
         )
+        
         # Posicionar botões no rodapé
         margin_bottom = 40
-        button_y = Config.SCREEN_HEIGHT - margin_bottom - self.reset_button.rect.height
+        button_y = Config.SCREEN_HEIGHT - margin_bottom
         self.reset_button.rect.bottomright = (Config.SCREEN_WIDTH - 30, button_y)
         self.back_button.rect.bottomleft = (30, button_y)
 
     def _init_layout(self):
-        """Inicializa o layout em colunas com cards."""
+        """Inicializa o layout com sistema de abas."""
         margin = 30
-        top_y = 100
-        bottom_y = Config.SCREEN_HEIGHT - 120
-        col_width = (Config.SCREEN_WIDTH - 3 * margin) // 2
-        col1_x = margin
-        col2_x = margin * 2 + col_width
-
-        # Coluna 1
-        card1_h = 250
-        self.cards.append(Card(pygame.Rect(col1_x, top_y, col_width, card1_h), "Performance Geral"))
-
-        card2_h = bottom_y - (top_y + card1_h + margin)
-        self.cards.append(Card(pygame.Rect(col1_x, top_y + card1_h + margin, col_width, card2_h), "Recomendações"))
-
-        # Coluna 2
-        card3_h = 300
-        self.cards.append(Card(pygame.Rect(col2_x, top_y, col_width, card3_h), "Taxa de Sucesso por Nível"))
-
-        card4_h = bottom_y - (top_y + card3_h + margin)
-        # A altura do conteúdo será definida dinamicamente
-        self.scrollable_card = ScrollableCard(
-            pygame.Rect(col2_x, top_y + card3_h + margin, col_width, card4_h),
-            "Estatísticas por Nível", content_height=100
+        tab_bar_y = 100
+        tab_height = 50
+        tab_spacing = 10
+        
+        # Calcular largura das abas
+        num_tabs = len(StatTab)
+        available_width = Config.SCREEN_WIDTH - 2 * margin
+        tab_width = (available_width - (num_tabs - 1) * tab_spacing) // num_tabs
+        
+        # Criar botões de aba
+        for i, tab in enumerate(StatTab):
+            x = margin + i * (tab_width + tab_spacing)
+            tab_button = TabButton(x, tab_bar_y, tab_width, tab_height, tab)
+            self.tab_buttons.append(tab_button)
+        
+        # Definir primeiro como ativo
+        if self.tab_buttons:
+            self.tab_buttons[0].active = True
+        
+        # Área de conteúdo (abaixo das abas)
+        content_y = tab_bar_y + tab_height
+        content_height = Config.SCREEN_HEIGHT - content_y - 100
+        self.content_rect = pygame.Rect(
+            margin,
+            content_y,
+            Config.SCREEN_WIDTH - 2 * margin,
+            content_height
         )
-        self.cards.append(self.scrollable_card)
+
+    def _switch_tab(self, new_tab: StatTab) -> None:
+        """Muda para uma nova aba."""
+        self.current_tab = new_tab
+        
+        # Atualizar estado ativo dos botões
+        for tab_button in self.tab_buttons:
+            tab_button.active = (tab_button.tab == new_tab)
 
     def enter(self) -> None:
         super().enter()
         self.load_profile()
-        self._update_scrollable_content()
-
-    def _update_scrollable_content(self):
-        """Atualiza o conteúdo e a altura do card rolável."""
-        if not self.profile or not self.scrollable_card:
-            return
-        
-        # Estimar altura do conteúdo
-        num_levels = len(self.profile.level_stats)
-        content_height = max(self.scrollable_card.content_rect.height, num_levels * 130 + 20)
-        
-        self.scrollable_card.content_height = content_height
-        self.scrollable_card.full_content_surf = pygame.Surface(
-            (self.scrollable_card.content_rect.width, content_height)
-        )
-        self.scrollable_card.full_content_surf.fill(colors.DARK_GRAY)
-        
-        # Renderizar o conteúdo no surf de conteúdo completo
-        ProfileVisualizer.render_level_details_list(
-            self.scrollable_card.full_content_surf,
-            self.profile
-        )
 
     def load_profile(self) -> None:
         from pathlib import Path
@@ -254,6 +247,10 @@ class StatisticsScene(Scene):
         else:
             self.reset_button.update()
             self.back_button.update()
+            
+            # Atualizar botões de aba
+            for tab_button in self.tab_buttons:
+                tab_button.update()
 
         if self.profile:
             self.profile.auto_save()
@@ -261,11 +258,16 @@ class StatisticsScene(Scene):
     def handle_event(self, event: pygame.event.Event) -> None:
         if self.dialog:
             self.dialog.handle_event(event)
-        else:
-            self.reset_button.handle_event(event)
-            self.back_button.handle_event(event)
-            if self.scrollable_card:
-                self.scrollable_card.handle_event(event)
+            return
+        
+        # Verificar cliques nas abas
+        for tab_button in self.tab_buttons:
+            if tab_button.handle_event(event):
+                self._switch_tab(tab_button.tab)
+                return
+        
+        self.reset_button.handle_event(event)
+        self.back_button.handle_event(event)
 
     def render(self, surface: pygame.Surface) -> None:
         surface.fill(colors.BLACK)
@@ -282,27 +284,14 @@ class StatisticsScene(Scene):
             surface.blit(text, (50, 150))
             return
 
-        # Renderizar cards
-        for card in self.cards:
-            card.render(surface)
+        # Renderizar abas
+        for tab_button in self.tab_buttons:
+            tab_button.render(surface)
+        
+        # Renderizar conteúdo da aba atual
+        self._render_tab_content(surface)
 
-        # Renderizar conteúdo dos cards com clipping
-        # Card 1: Geral
-        surface.set_clip(self.cards[0].content_rect)
-        ProfileVisualizer.render_geral_card(surface, self.profile, self.cards[0].content_rect)
-        surface.set_clip(None)
-
-        # Card 2: Recomendações
-        surface.set_clip(self.cards[1].content_rect)
-        ProfileVisualizer.render_recomendacoes_card(surface, self.profile, self.cards[1].content_rect)
-        surface.set_clip(None)
-
-        # Card 3: Gráfico
-        surface.set_clip(self.cards[2].content_rect)
-        ProfileVisualizer.render_graph_card(surface, self.profile, self.cards[2].content_rect)
-        surface.set_clip(None)
-
-        # Renderizar botões
+        # Renderizar botões de ação
         self.reset_button.render(surface, colors.RED, colors.BRIGHT_RED)
         self.back_button.render(surface, colors.GRAY, colors.BRIGHT_GRAY)
         
@@ -310,13 +299,168 @@ class StatisticsScene(Scene):
         if self.dialog:
             self.dialog.render(surface)
 
+    def _render_tab_content(self, surface: pygame.Surface) -> None:
+        """Renderiza o conteúdo da aba atual."""
+        # Desenhar fundo da área de conteúdo
+        pygame.draw.rect(surface, colors.DARK_GRAY, self.content_rect, border_bottom_left_radius=12, border_bottom_right_radius=12)
+        pygame.draw.rect(surface, colors.GRAY, self.content_rect, 2, border_bottom_left_radius=12, border_bottom_right_radius=12)
+        
+        # Definir clipping para não desenhar fora da área
+        content_area_clone = self.content_rect.copy()
+        content_area_clone.inflate_ip(-20, -20)
+        surface.set_clip(content_area_clone)
+        
+        if self.current_tab == StatTab.OVERVIEW:
+            self._render_overview_tab(surface)
+        elif self.current_tab == StatTab.LEVELS:
+            self._render_levels_tab(surface)
+        elif self.current_tab == StatTab.HISTORY:
+            self._render_history_tab(surface)
+        elif self.current_tab == StatTab.ACHIEVEMENTS:
+            self._render_achievements_tab(surface)
+        
+        # Limpar clipping
+        surface.set_clip(None)
+
+    def _render_overview_tab(self, surface: pygame.Surface) -> None:
+        """Renderiza aba de visão geral."""
+        if not self.profile:
+            return
+        
+        summary = self.profile.get_statistics_summary()
+        font_text = get_font(20)
+        badge_font = get_font(28)
+        
+        x = self.content_rect.x + 30
+        y = self.content_rect.y + 30
+        
+        # Skill Level Badge
+        ProfileVisualizer._render_skill_badge(
+            surface, 
+            summary['skill_level'], 
+            x, 
+            y,
+            badge_font
+        )
+        
+        # Estatísticas principais
+        stats_y = y
+        stats_x = x + 250
+        stats = [
+            f"Nível Mais Alto: {summary['highest_level']}",
+            f"Tempo Total: {summary['total_playtime_hours']:.1f}h",
+            f"Mortes: {self.profile.total_deaths}",
+            f"Pontuação Total: {self.profile.total_score:,}",
+            f"Taxa de Sucesso: {summary['avg_clear_rate']:.0%}",
+        ]
+        
+        for stat in stats:
+            text_surf = font_text.render(stat, True, colors.WHITE)
+            surface.blit(text_surf, (stats_x, stats_y))
+            stats_y += 35
+        
+        # Gráfico
+        graph_y = self.content_rect.y + 200
+        graph_rect = pygame.Rect(
+            x,
+            graph_y,
+            self.content_rect.width - 60,
+            self.content_rect.height - (graph_y - self.content_rect.y) - 20
+        )
+        graph_font = get_font(14)
+        ProfileVisualizer._render_performance_graph(
+            surface,
+            self.profile,
+            graph_rect.x,
+            graph_rect.y,
+            graph_rect.width,
+            graph_rect.height,
+            graph_font
+        )
+
+    def _render_levels_tab(self, surface: pygame.Surface) -> None:
+        """Renderiza aba de níveis."""
+        if not self.profile:
+            return
+        
+        font = get_font(18)
+        x = self.content_rect.x + 20
+        y = self.content_rect.y + 20
+        
+        # Listar níveis jogados
+        sorted_levels = sorted(self.profile.level_stats.keys())
+        if not sorted_levels:
+            text_surf = font.render("Nenhum nível jogado ainda.", True, colors.GRAY)
+            surface.blit(text_surf, (x, y))
+            return
+
+        for level_num in sorted_levels:
+            stats = self.profile.level_stats[level_num]
+            
+            text = f"Nível {level_num}: {stats.attempts} tentativas, {stats.clear_rate:.0%} sucesso"
+            text_surf = font.render(text, True, colors.WHITE)
+            surface.blit(text_surf, (x, y))
+            y += 30
+            
+            if y > self.content_rect.bottom - 40:
+                text_surf = font.render("...", True, colors.GRAY)
+                surface.blit(text_surf, (x, y))
+                break
+
+    def _render_history_tab(self, surface: pygame.Surface) -> None:
+        """Renderiza aba de histórico."""
+        if not self.profile:
+            return
+        
+        font_title = get_font(22)
+        font_text = get_font(16)
+        
+        x = self.content_rect.x + 20
+        y = self.content_rect.y + 20
+        
+        title = font_title.render("Últimas Sessões", True, colors.YELLOW)
+        surface.blit(title, (x, y))
+        y += 40
+
+        if not self.profile.session_history:
+            text_surf = font_text.render("Nenhuma sessão gravada.", True, colors.GRAY)
+            surface.blit(text_surf, (x, y))
+            return
+        
+        # Mostrar últimas 10 sessões
+        for session in reversed(self.profile.session_history[-10:]):
+            duration_mins = session.duration / 60
+            text = f"Duração: {duration_mins:.1f}min | Mortes: {session.deaths} | Score: {session.score}"
+            text_surf = font_text.render(text, True, colors.WHITE)
+            surface.blit(text_surf, (x, y))
+            y += 28
+            
+            if y > self.content_rect.bottom - 40:
+                text_surf = font_text.render("...", True, colors.GRAY)
+                surface.blit(text_surf, (x,y))
+                break
+
+    def _render_achievements_tab(self, surface: pygame.Surface) -> None:
+        """Renderiza aba de conquistas."""
+        font_title = get_font(22)
+        font_text = get_font(18)
+        
+        x = self.content_rect.x + 20
+        y = self.content_rect.y + 20
+        
+        title = font_title.render("Conquistas (Em breve!)", True, colors.YELLOW)
+        surface.blit(title, (x, y))
+        y += 50
+        
+        text = font_text.render("Sistema de conquistas será implementado em breve.", True, colors.GRAY)
+        surface.blit(text, (x, y))
+
     def show_confirmation(self) -> None:
         self.dialog = ConfirmationDialog(
             ["Tem certeza que deseja", "resetar seu perfil?", "Todo o progresso será perdido."],
             self.reset_profile,
             self.close_confirmation
         )
-
 
     def close_confirmation(self) -> None:
         self.dialog = None

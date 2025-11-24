@@ -857,100 +857,7 @@ class ProfileVisualizer:
     """Cria visualizações das estatísticas do jogador."""
 
     @staticmethod
-    def render_geral_card(surface: pygame.Surface, profile: PlayerProfile, rect: pygame.Rect):
-        """Renderiza o conteúdo do card de performance geral."""
-        from ..core import colors, assets
-
-        summary = profile.get_statistics_summary()
-        
-        # Skill Badge
-        badge_font = assets.get_font(28)
-        ProfileVisualizer._render_skill_badge(surface, summary['skill_level'], rect.x, rect.y, badge_font)
-
-        # Estatísticas principais
-        stats_font = assets.get_font(18)
-        start_y = rect.y + 80
-        line_height = 28
-        
-        stats = [
-            f"Nível Mais Alto: {summary['highest_level']}",
-            f"Tempo Total: {summary['total_playtime_hours']:.1f}h",
-            f"Mortes: {summary['total_deaths']}",
-            f"Pontuação Total: {summary['total_score']:,}",
-            f"Taxa de Sucesso: {summary['avg_clear_rate']:.0%}",
-        ]
-
-        for i, stat in enumerate(stats):
-            text = stats_font.render(stat, True, colors.WHITE)
-            surface.blit(text, (rect.x + 20, start_y + i * line_height))
-
-    @staticmethod
-    def _wrap_text(text: str, font: pygame.font.Font, max_width: int) -> List[str]:
-        """Quebra texto em múltiplas linhas para caber na largura."""
-        words = text.split(' ')
-        lines: List[str] = []
-        current_line: List[str] = []
-        
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            if font.size(test_line)[0] <= max_width:
-                current_line.append(word)
-            else:
-                if current_line:
-                    lines.append(' '.join(current_line))
-                current_line = [word]
-        
-        if current_line:
-            lines.append(' '.join(current_line))
-        
-        return lines
-
-    @staticmethod
-    def render_recomendacoes_card(surface: pygame.Surface, profile: PlayerProfile, rect: pygame.Rect):
-        """Renderiza o conteúdo do card de recomendações."""
-        from ..core import colors, assets
-
-        summary = profile.get_statistics_summary()
-        rec_font = assets.get_font(16)
-        y = rect.y
-        line_height = 25
-        padding = 10
-
-        for rec in summary['recommendations'][:5]:
-            lines = ProfileVisualizer._wrap_text(rec, rec_font, rect.width - padding * 2)
-            for line in lines:
-                rec_surf = rec_font.render(line, True, colors.WHITE)
-                surface.blit(rec_surf, (rect.x + padding, y))
-                y += line_height
-                if y > rect.bottom - line_height:
-                    return # Stop if content overflows card
-    
-    @staticmethod
-    def render_graph_card(surface: pygame.Surface, profile: PlayerProfile, rect: pygame.Rect):
-        """Renderiza o gráfico de performance dentro de um card."""
-        from ..core import assets
-        ProfileVisualizer._render_performance_graph(
-            surface, profile,
-            x=rect.x, y=rect.y,
-            width=rect.width, height=rect.height,
-            font=assets.get_font(14)
-        )
-
-    @staticmethod
-    def render_level_details_list(surface: pygame.Surface, profile: PlayerProfile):
-        """Renderiza a lista de detalhes de cada nível."""
-        y_offset = 10
-        sorted_levels = sorted(profile.level_stats.keys())
-
-        for level_num in sorted_levels:
-            ProfileVisualizer.render_level_preview(
-                surface, profile, level_num,
-                x=10, y=y_offset
-            )
-            y_offset += 130 # Altura do preview + espaçamento
-
-    @staticmethod
-    def _render_skill_badge(surface: pygame.Surface, skill_level: str, x: int, y: int, font: pygame.font.Font):
+    def render_skill_badge(surface: pygame.Surface, skill_level: str, x: int, y: int, font: pygame.font.Font):
         """Renderiza badge de skill level."""
         from ..core import colors
 
@@ -971,7 +878,7 @@ class ProfileVisualizer:
         surface.blit(text, text_rect)
 
     @staticmethod
-    def _render_performance_graph(
+    def render_performance_graph(
         surface: pygame.Surface,
         profile: PlayerProfile,
         x: int, y: int, width: int, height: int,
