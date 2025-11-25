@@ -263,36 +263,41 @@ class StarField:
                 self._reset_star(s)
 
     def draw(self, surface: pygame.Surface) -> None:
-        TWO_PI: float = 2 * math.pi
+        """Desenha as estrelas com otimizações de performance."""
         for s in self.stars:
+            # Calcular pulso (reutilizar cálculo)
             pulse: float = 0.7 + 0.3 * (1 + math.sin(s["phase"]))
             animated_size: float = s["size"] * pulse
             brightness_pulse: float = 0.8 + 0.2 * (1 + math.sin(s["phase"]))
-            # Aplica brilho sobre a cor base
+
+            # Calcular cor com brilho
             base_color = s["color"]
             brightness: int = max(0, min(255, int(s["brightness"] * brightness_pulse)))
             r = max(0, min(255, int(base_color[0] * (brightness / 255))))
             g = max(0, min(255, int(base_color[1] * (brightness / 255))))
             b = max(0, min(255, int(base_color[2] * (brightness / 255))))
             c: tuple[int, int, int] = (r, g, b)
+
             center_x: int = int(s["x"])
             center_y: int = int(s["y"])
 
             if s["size"] <= 1:
+                # Estrela pequena: círculo simples
                 radius: int = max(1, int(animated_size))
                 pygame.draw.circle(surface, c, (center_x, center_y), radius)
             else:
-                a: float = animated_size * 1.2
-                points: list[tuple[float, float]] = []
-                step: float = 0.03 if s["size"] == 2 else 0.05
-                t: float = 0.0
-                while t < TWO_PI:
-                    x: float = a * (math.cos(t) ** 3)
-                    y: float = a * (math.sin(t) ** 3)
-                    points.append((center_x + x, center_y + y))
-                    t += step
-                if len(points) > 2:
-                    pygame.draw.polygon(surface, c, points)
+                # Estrela grande: OTIMIZADO - usar múltiplos círculos em vez de polígono complexo
+                # Isso evita ~100+ chamadas de cos/sin por frame por estrela
+                base_radius = int(animated_size)
+                # Círculo principal
+                pygame.draw.circle(surface, c, (center_x, center_y), base_radius)
+                # Círculos menores para efeito "asteroide" (mais eficiente que polígono)
+                if base_radius > 2:
+                    offset = base_radius // 2
+                    pygame.draw.circle(surface, c, (center_x - offset, center_y - offset), base_radius // 3)
+                    pygame.draw.circle(surface, c, (center_x + offset, center_y - offset), base_radius // 3)
+                    pygame.draw.circle(surface, c, (center_x - offset, center_y + offset), base_radius // 3)
+                    pygame.draw.circle(surface, c, (center_x + offset, center_y + offset), base_radius // 3)
 
 
 class Renderer:
@@ -329,6 +334,14 @@ class Renderer:
             {}
         )  # Cache for halo surfaces by radius
         self.MAX_HALO_CACHE_SIZE = 10  # Limitar tamanho do cache
+
+        # === NOVO: Sistema de medição de FPS ===
+        self.fps_counter = 0
+        self.fps_timer = 0.0
+        self.current_fps = 0.0
+        self.frame_times: list[float] = []
+        self.max_frame_times = 60  # Manter histórico dos últimos 60 frames
+        # === FIM DO SISTEMA DE FPS ===
 
     def background(
         self, surface: pygame.Surface, dt: float, speed_multiplier: float = 1.0
@@ -492,3 +505,35 @@ class Renderer:
                 self.halo_cache[radius] = halo
             halo = self.halo_cache[radius]
             surface.blit(halo, (cx - radius - 3, cy - radius - 3))
+
+    def update_fps(self, dt: float):
+        """Atualiza o contador de FPS e calcula métricas de performance."""
+        self.fps_counter += 1
+        self.fps_timer += dt
+        self.frame_times.append(dt)
+        
+        # Manter apenas os últimos frames
+        if len(self.frame_times) > self.max_frame_times:
+            self.frame_times.pop(0)
+        
+        # Atualizar FPS a cada segundo
+        if self.fps_timer >= 1.0:
+            self.current_fps = self.fps_counter / self.fps_timer
+            self.fps_counter = 0
+            self.fps_timer = 0.0
+
+    def get_fps_stats(self) -> dict[str, float]:
+        """Retorna estatísticas de FPS e performance."""
+        if not self.frame_times:
+            return {"fps": 0.0, "avg_frame_time": 0.0, "max_frame_time": 0.0, "min_frame_time": 0.0}
+        
+        avg_frame_time = sum(self.frame_times) / len(self.frame_times)
+        max_frame_time = max(self.frame_times)
+        min_frame_time = min(self.frame_times)
+        
+        return {
+            "fps": self.current_fps,
+            "avg_frame_time": avg_frame_time * 1000,  # em ms
+            "max_frame_time": max_frame_time * 1000,  # em ms
+            "min_frame_time": min_frame_time * 1000,  # em ms
+        }

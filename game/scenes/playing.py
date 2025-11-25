@@ -83,6 +83,9 @@ class PlayingScene(Scene):
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
 
+        # Debug/Performance flags
+        self.show_fps = False  # Pressione F3 para mostrar/ocultar FPS
+
     def _apply_difficulty_settings(self):
         """Aplica configurações globais do preset de dificuldade."""
         settings = self.difficulty_settings
@@ -762,6 +765,11 @@ class PlayingScene(Scene):
 
                 self.app.states.push(PausedScene(self.app, previous_scene=self))
 
+            # Sistema de debug: mostrar/ocultar FPS com F3
+            elif event.key == pygame.K_F3:
+                self.show_fps = not self.show_fps
+                print(f"Debug FPS: {'ATIVADO' if self.show_fps else 'DESATIVADO'}")
+
             # Sistema de cheat code
             self._process_cheat_input(event)
 
@@ -793,6 +801,10 @@ class PlayingScene(Scene):
             self.game_surface, self.ship.rect.centerx, self.ship.rect.centery
         )
         self.ship.draw(self.game_surface)
+        
+        # Atualizar FPS
+        self.r.update_fps(dt)
+        
         self.r.hud(
             self.game_surface,
             self.score,
@@ -802,6 +814,13 @@ class PlayingScene(Scene):
             self.level_config.level_number,
             self.difficulty_preset,
         )
+
+        # Mostrar FPS se ativado (F3)
+        if self.show_fps:
+            fps_stats = self.r.get_fps_stats()
+            fps_text = f"FPS: {fps_stats['fps']:.1f} | Avg: {fps_stats['avg_frame_time']:.1f}ms | Max: {fps_stats['max_frame_time']:.1f}ms"
+            fps_surface = self.r.font_small.render(fps_text, True, colors.YELLOW)
+            self.game_surface.blit(fps_surface, (10, Config.SCREEN_HEIGHT - 30))
 
         shake_offset = (0, 0)
         if self.screen_shake_timer > 0:
