@@ -286,18 +286,21 @@ class StarField:
                 radius: int = max(1, int(animated_size))
                 pygame.draw.circle(surface, c, (center_x, center_y), radius)
             else:
-                # Estrela grande: OTIMIZADO - usar múltiplos círculos em vez de polígono complexo
-                # Isso evita ~100+ chamadas de cos/sin por frame por estrela
-                base_radius = int(animated_size)
-                # Círculo principal
-                pygame.draw.circle(surface, c, (center_x, center_y), base_radius)
-                # Círculos menores para efeito "asteroide" (mais eficiente que polígono)
-                if base_radius > 2:
-                    offset = base_radius // 2
-                    pygame.draw.circle(surface, c, (center_x - offset, center_y - offset), base_radius // 3)
-                    pygame.draw.circle(surface, c, (center_x + offset, center_y - offset), base_radius // 3)
-                    pygame.draw.circle(surface, c, (center_x - offset, center_y + offset), base_radius // 3)
-                    pygame.draw.circle(surface, c, (center_x + offset, center_y + offset), base_radius // 3)
+                # Estrela grande: forma asteroide usando trigonometria (mais bonita)
+                # Loop para criar pontos da forma asteroide
+                points: list[tuple[float, float]] = []
+                t = 0.0
+                TWO_PI = 2 * math.pi
+                step = TWO_PI / 100  # ~100 iterações para suavidade
+                a = animated_size  # tamanho base da estrela
+                
+                while t < TWO_PI:
+                    x = a * (math.cos(t) ** 3)
+                    y = a * (math.sin(t) ** 3)
+                    points.append((center_x + x, center_y + y))
+                    t += step
+                
+                pygame.draw.polygon(surface, c, points)
 
 
 class Renderer:
