@@ -180,9 +180,6 @@ class PlayingScene(Scene):
         if self.ship.mini_ships_timer == 0.0 and self.entity_manager.mini_ships:
             self.entity_manager.mini_ships.clear()
 
-        held = self.app.input.poll_held()
-        self.ship.move(held, dt)
-
         # Verificar se o boss está em pausa do frenzy
         boss_pausing = False
         if self.entity_manager.boss:
@@ -191,20 +188,25 @@ class PlayingScene(Scene):
             if isinstance(self.entity_manager.boss, SpikeBoss):
                 boss_pausing = self.entity_manager.boss.is_pausing_game()
 
-        # Tiro contínuo com tecla segurada
-        if "hold_shoot" in held and self.shoot_cd == 0.0 and not boss_pausing:
-            bullet_specs = self.ship.bullet_spawn()
-            for x, y, is_piercing in bullet_specs:
-                base_damage = 10
-                adjusted_damage = int(base_damage * self.player_damage_multiplier)
-                self.entity_manager.spawn_bullet(
-                    x, y, damage=adjusted_damage, piercing=is_piercing
-                )
-            # Tocar som de tiro (varia entre os 3 sons automaticamente)
-            sound_manager.play_shot()
-            # Aplicar multiplicador de velocidade de ataque do power-up de velocidade
-            cooldown = Config.SHOOT_COOLDOWN / self.ship.attack_speed_multiplier
-            self.shoot_cd = cooldown
+        # Bloquear movimento e tiro durante entrada da nave
+        if not self.ship.is_entering:
+            held = self.app.input.poll_held()
+            self.ship.move(held, dt)
+
+            # Tiro contínuo com tecla segurada
+            if "hold_shoot" in held and self.shoot_cd == 0.0 and not boss_pausing:
+                bullet_specs = self.ship.bullet_spawn()
+                for x, y, is_piercing in bullet_specs:
+                    base_damage = 10
+                    adjusted_damage = int(base_damage * self.player_damage_multiplier)
+                    self.entity_manager.spawn_bullet(
+                        x, y, damage=adjusted_damage, piercing=is_piercing
+                    )
+                # Tocar som de tiro (varia entre os 3 sons automaticamente)
+                sound_manager.play_shot()
+                # Aplicar multiplicador de velocidade de ataque do power-up de velocidade
+                cooldown = Config.SHOOT_COOLDOWN / self.ship.attack_speed_multiplier
+                self.shoot_cd = cooldown
 
         # Se boss está em pausa, só atualiza o boss (com tremor)
         if boss_pausing:
