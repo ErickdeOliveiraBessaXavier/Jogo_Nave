@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Dict, Any
 from ..core.state import Scene
 from ..core.colors import WHITE, BLACK, GREEN, YELLOW, ORANGE, RED
 from ..core.assets import get_font
-from ..core.config import Config
+from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
 from ..core.sound import sound_manager
 
@@ -37,11 +37,9 @@ class DifficultySelectionScene(Scene):
     def setup_ui(self):
         """Configura elementos da interface."""
         center_x = Config.SCREEN_WIDTH // 2
-        
+
         # Título
-        self.title_text = self.title_font.render(
-            "Selecione a Dificuldade", True, WHITE
-        )
+        self.title_text = self.title_font.render("Selecione a Dificuldade", True, WHITE)
         self.title_rect = self.title_text.get_rect(center=(center_x, 80))
 
         # Configurações dos botões
@@ -49,21 +47,25 @@ class DifficultySelectionScene(Scene):
         button_height = 90
         spacing = 20  # Espaçamento entre botões
         num_buttons = len(DifficultyPreset)
-        
+
         # Calcular altura total dos botões
-        total_buttons_height = (button_height * num_buttons) + (spacing * (num_buttons - 1))
-        
+        total_buttons_height = (button_height * num_buttons) + (
+            spacing * (num_buttons - 1)
+        )
+
         # Centralizar verticalmente na tela (considerando o título)
-        available_height = Config.SCREEN_HEIGHT - 160  # Espaço disponível (título + margem)
+        available_height = (
+            Config.SCREEN_HEIGHT - 160
+        )  # Espaço disponível (título + margem)
         start_y = 120 + (available_height - total_buttons_height) // 2
-        
+
         # Criar botões para cada dificuldade
         self.difficulty_buttons = {}
-        
+
         for i, preset in enumerate(DifficultyPreset):
             settings = DifficultySettings.get_settings(preset)
             button_y = start_y + (i * (button_height + spacing))
-            
+
             # Retângulo do botão centralizado horizontalmente
             button_rect = pygame.Rect(0, 0, button_width, button_height)
             button_rect.centerx = center_x
@@ -71,9 +73,7 @@ class DifficultySelectionScene(Scene):
 
             # Textos
             name_text = self.button_font.render(settings["name"], True, BLACK)
-            desc_text = self.desc_font.render(
-                settings["description"], True, BLACK
-            )
+            desc_text = self.desc_font.render(settings["description"], True, BLACK)
 
             # Informações extras
             lives_text = self.desc_font.render(
@@ -128,11 +128,13 @@ class DifficultySelectionScene(Scene):
 
         # Criar e empurrar a cena de jogo
         self.app.states.pop()  # Remove difficulty selection
-        self.app.states.push(PlayingScene(
-            self.app,
-            self.app.level_manager,
-            difficulty_preset=self.selected_difficulty
-        ))
+        self.app.states.push(
+            PlayingScene(
+                self.app,
+                self.app.level_manager,
+                difficulty_preset=self.selected_difficulty,
+            )
+        )
 
     def update(self, dt: float):
         pass
@@ -172,11 +174,8 @@ class DifficultySelectionScene(Scene):
             surface.blit(button_data["lives_text"], lives_rect)
 
         # Instrução
-        hint_text = self.desc_font.render(
-            "ESC para voltar", True, WHITE
-        )
+        hint_text = self.desc_font.render("ESC para voltar", True, WHITE)
         hint_rect = hint_text.get_rect(
-            centerx=Config.SCREEN_WIDTH // 2,
-            bottom=Config.SCREEN_HEIGHT - 30
+            centerx=Config.SCREEN_WIDTH // 2, bottom=Config.SCREEN_HEIGHT - 30
         )
         surface.blit(hint_text, hint_rect)

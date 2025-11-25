@@ -15,7 +15,11 @@ Exemplo:
 import pygame
 import time
 import json
-import psutil
+
+try:
+    import psutil  # type: ignore
+except ImportError:
+    psutil = None
 import os
 import argparse
 from typing import Dict, List, Any
@@ -41,23 +45,24 @@ class PerformanceMonitor:
         self.entity_stats_history: List[Dict[str, Any]] = []
         self.frame_times: List[float] = []
 
-    def update(self, dt: float, renderer, entity_manager):
+    def update(self, dt: float, renderer: Any, entity_manager: Any) -> None:
         """Atualiza as métricas de performance."""
         self.frame_count += 1
         self.frame_times.append(dt)
 
         # Coletar FPS
-        if hasattr(renderer, 'get_fps_stats'):
+        if hasattr(renderer, "get_fps_stats"):
             fps_stats = renderer.get_fps_stats()
-            self.fps_history.append(fps_stats['fps'])
+            self.fps_history.append(fps_stats["fps"])
 
         # Coletar uso de memória
-        process = psutil.Process(os.getpid())
-        memory_mb = process.memory_info().rss / 1024 / 1024
-        self.memory_history.append(memory_mb)
+        if psutil is not None:
+            process = psutil.Process(os.getpid())
+            memory_mb = process.memory_info().rss / 1024 / 1024
+            self.memory_history.append(memory_mb)
 
         # Coletar estatísticas de entidades
-        if hasattr(entity_manager, 'get_stats'):
+        if hasattr(entity_manager, "get_stats"):
             entity_stats = entity_manager.get_stats()
             self.entity_stats_history.append(entity_stats)
 
@@ -88,7 +93,9 @@ class PerformanceMonitor:
         max_frame_time = max(self.frame_times) * 1000  # ms
 
         # Estatísticas de entidades (última coleta)
-        entity_stats = self.entity_stats_history[-1] if self.entity_stats_history else {}
+        entity_stats = (
+            self.entity_stats_history[-1] if self.entity_stats_history else {}
+        )
 
         return {
             "duration_seconds": time.time() - self.start_time,
@@ -107,17 +114,27 @@ class PerformanceMonitor:
                 "maximum": round(max_memory, 2),
             },
             "entity_stats": entity_stats,
-            "performance_rating": self._calculate_performance_rating(avg_fps, max_frame_time),
+            "performance_rating": self._calculate_performance_rating(
+                avg_fps, max_frame_time
+            ),
         }
 
-    def _calculate_performance_rating(self, avg_fps: float, max_frame_time: float) -> str:
+    def _calculate_performance_rating(
+        self, avg_fps: float, max_frame_time: float
+    ) -> str:
         """Calcula uma classificação de performance baseada nas métricas."""
         target_fps = 60.0
         max_acceptable_frame_time = 16.67  # ~60 FPS
 
-        if avg_fps >= target_fps * 0.95 and max_frame_time <= max_acceptable_frame_time * 1.2:
+        if (
+            avg_fps >= target_fps * 0.95
+            and max_frame_time <= max_acceptable_frame_time * 1.2
+        ):
             return "EXCELENTE"
-        elif avg_fps >= target_fps * 0.85 and max_frame_time <= max_acceptable_frame_time * 1.5:
+        elif (
+            avg_fps >= target_fps * 0.85
+            and max_frame_time <= max_acceptable_frame_time * 1.5
+        ):
             return "BOM"
         elif avg_fps >= target_fps * 0.7:
             return "ACEITÁVEL"
@@ -127,6 +144,11 @@ class PerformanceMonitor:
 
 class AutomatedGameApp(GameApp):
     """Versão automatizada do jogo para testes de performance."""
+
+    ship: Any
+    config: Any
+    input: Any
+    states: Any
 
     def __init__(self, difficulty: DifficultyPreset, test_duration: float):
         super().__init__()
@@ -140,7 +162,9 @@ class AutomatedGameApp(GameApp):
 
     def run_performance_test(self) -> Dict[str, Any]:
         """Executa o teste de performance."""
-        print(f"🚀 Iniciando teste de performance ({self.test_duration}s) - Dificuldade: {self.difficulty.name}")
+        print(
+            f"🚀 Iniciando teste de performance ({self.test_duration}s) - Dificuldade: {self.difficulty.name}"
+        )
         print("⏹️  Pressione Ctrl+C para interromper antecipadamente")
 
         # Inicializar jogo
@@ -165,7 +189,7 @@ class AutomatedGameApp(GameApp):
                             running = False
 
                 # Simular entrada automática (manter nave no centro)
-                if self.auto_pilot and hasattr(self.states.current, 'ship'):
+                if self.auto_pilot and hasattr(self.states.current, "ship"):
                     ship = self.states.current.ship
                     # Manter nave no centro horizontal
                     center_x = self.config.SCREEN_WIDTH // 2
@@ -188,8 +212,12 @@ class AutomatedGameApp(GameApp):
                     current_scene.update(dt)
 
                     # Coletar métricas (apenas para PlayingScene)
-                    if hasattr(current_scene, 'r') and hasattr(current_scene, 'entity_manager'):
-                        self.monitor.update(dt, current_scene.r, current_scene.entity_manager)
+                    if hasattr(current_scene, "r") and hasattr(
+                        current_scene, "entity_manager"
+                    ):
+                        self.monitor.update(
+                            dt, current_scene.r, current_scene.entity_manager
+                        )
 
                     # Renderizar
                     current_scene.render(self.screen)
@@ -211,24 +239,24 @@ def main():
         "--duration",
         type=float,
         default=30.0,
-        help="Duração do teste em segundos (padrão: 30)"
+        help="Duração do teste em segundos (padrão: 30)",
     )
     parser.add_argument(
         "--difficulty",
         choices=[d.name.lower() for d in DifficultyPreset],
         default="normal",
-        help="Dificuldade do teste (padrão: normal)"
+        help="Dificuldade do teste (padrão: normal)",
     )
     parser.add_argument(
         "--output",
         type=str,
         default="performance_results.json",
-        help="Arquivo de saída para os resultados (padrão: performance_results.json)"
+        help="Arquivo de saída para os resultados (padrão: performance_results.json)",
     )
     parser.add_argument(
         "--no-display",
         action="store_true",
-        help="Executar sem interface gráfica (modo headless)"
+        help="Executar sem interface gráfica (modo headless)",
     )
 
     args = parser.parse_args()
@@ -247,13 +275,13 @@ def main():
         results = app.run_performance_test()
 
         # Salvar resultados
-        with open(args.output, 'w', encoding='utf-8') as f:
+        with open(args.output, "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
 
         # Exibir resumo
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print("📊 RESULTADOS DO TESTE DE PERFORMANCE")
-        print("="*50)
+        print("=" * 50)
         print(f"⏱️  Duração: {results['duration_seconds']:.1f}s")
         print(f"🎮 Frames: {results['total_frames']}")
         print(f"🎯 FPS Médio: {results['fps']['average']:.1f}")
@@ -267,9 +295,11 @@ def main():
         print(f"\n💾 Resultados salvos em: {args.output}")
 
         # Avisos de performance
-        if results['fps']['minimum'] < 30:
-            print("⚠️  AVISO: FPS mínimo muito baixo! Verifique gargalos de performance.")
-        if results['frame_time_ms']['maximum'] > 50:
+        if results["fps"]["minimum"] < 30:
+            print(
+                "⚠️  AVISO: FPS mínimo muito baixo! Verifique gargalos de performance."
+            )
+        if results["frame_time_ms"]["maximum"] > 50:
             print("⚠️  AVISO: Frame time máximo muito alto! Possível stuttering.")
 
     except Exception as e:

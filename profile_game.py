@@ -17,6 +17,7 @@ import io
 import sys
 import os
 import argparse
+from typing import List, Tuple
 
 # Adicionar o diretório do jogo ao path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -51,22 +52,24 @@ def profile_game(duration: float = 10.0, output_file: str = "profile_results.pro
 
         # Analisar e exibir top 20 funções mais custosas
         s = io.StringIO()
-        ps = pstats.Stats(profiler, stream=s).sort_stats('cumulative')
+        ps = pstats.Stats(profiler, stream=s).sort_stats("cumulative")
         ps.print_stats(20)
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🔬 TOP 20 FUNÇÕES MAIS CUSTOSAS (tempo cumulativo)")
-        print("="*60)
+        print("=" * 60)
         print(s.getvalue())
 
         # Salvar análise em arquivo de texto
-        analysis_file = output_file.replace('.prof', '_analysis.txt')
-        with open(analysis_file, 'w', encoding='utf-8') as f:
+        analysis_file = output_file.replace(".prof", "_analysis.txt")
+        with open(analysis_file, "w", encoding="utf-8") as f:
             f.write("ANÁLISE DE PERFORMANCE - JOGO NAVE\n")
-            f.write("="*50 + "\n\n")
+            f.write("=" * 50 + "\n\n")
             f.write(f"Duração do teste: {duration}s\n")
             f.write(f"FPS Médio: {results['fps']['average']:.1f}\n")
-            f.write(f"Frame Time Médio: {results['frame_time_ms']['average']:.2f}ms\n\n")
+            f.write(
+                f"Frame Time Médio: {results['frame_time_ms']['average']:.2f}ms\n\n"
+            )
             f.write("TOP 20 FUNÇÕES MAIS CUSTOSAS:\n")
             f.write("-" * 30 + "\n")
             f.write(s.getvalue())
@@ -75,47 +78,53 @@ def profile_game(duration: float = 10.0, output_file: str = "profile_results.pro
         print(f"📄 Análise salva em: {analysis_file}")
 
         # Recomendações baseadas nos resultados
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("💡 RECOMENDAÇÕES PARA OTIMIZAÇÃO")
-        print("="*60)
+        print("=" * 60)
 
         # Analisar funções críticas
-        stats = pstats.Stats(profiler)
-        stats.sort_stats('cumulative')
+        stats: pstats.Stats = pstats.Stats(profiler)
+        stats.sort_stats("cumulative")
 
         # Obter as 10 funções mais custosas
-        top_functions = []
+        top_functions: List[Tuple[Tuple[str, int, str], float]] = []
         for func in stats.fcn_list[:10]:
-            cc, nc, tt, ct, callers = stats.stats[func]
+            _, _, _, ct, _ = stats.stats[func]
             top_functions.append((func, ct))
 
         # Procurar por funções suspeitas
-        collision_time = 0
-        render_time = 0
-        update_time = 0
+        collision_time: float = 0
+        render_time: float = 0
+        update_time: float = 0
 
         for func, cum_time in top_functions:
             func_name = str(func[2])
-            if 'collision' in func_name.lower():
+            if "collision" in func_name.lower():
                 collision_time += cum_time
-            elif 'render' in func_name.lower() or 'draw' in func_name.lower():
+            elif "render" in func_name.lower() or "draw" in func_name.lower():
                 render_time += cum_time
-            elif 'update' in func_name.lower():
+            elif "update" in func_name.lower():
                 update_time += cum_time
 
         total_profiled_time = sum(ct for _, ct in top_functions)
 
         if collision_time > total_profiled_time * 0.3:
-            print("⚠️  ALTO: Colisões consomem muito tempo. Considere otimizar spatial grid.")
+            print(
+                "⚠️  ALTO: Colisões consomem muito tempo. Considere otimizar spatial grid."
+            )
         if render_time > total_profiled_time * 0.4:
-            print("⚠️  ALTO: Renderização consome muito tempo. Verifique cache de texturas.")
+            print(
+                "⚠️  ALTO: Renderização consome muito tempo. Verifique cache de texturas."
+            )
         if update_time > total_profiled_time * 0.3:
             print("⚠️  ALTO: Updates consomem muito tempo. Otimize loops de entidades.")
 
-        if results['fps']['average'] < 50:
+        if results["fps"]["average"] < 50:
             print("🎯 PRIORIDADE: FPS baixo. Foco em otimizações gerais.")
-        elif results['frame_time_ms']['maximum'] > 30:
-            print("🎯 PRIORIDADE: Stuttering detectado. Verifique picos de performance.")
+        elif results["frame_time_ms"]["maximum"] > 30:
+            print(
+                "🎯 PRIORIDADE: Stuttering detectado. Verifique picos de performance."
+            )
 
     except Exception as e:
         print(f"❌ Erro durante profiling: {e}")
@@ -130,13 +139,13 @@ def main():
         "--duration",
         type=float,
         default=10.0,
-        help="Duração do profiling em segundos (padrão: 10)"
+        help="Duração do profiling em segundos (padrão: 10)",
     )
     parser.add_argument(
         "--output",
         type=str,
         default="profile_results.prof",
-        help="Arquivo de saída para os dados de profiling (padrão: profile_results.prof)"
+        help="Arquivo de saída para os dados de profiling (padrão: profile_results.prof)",
     )
 
     args = parser.parse_args()

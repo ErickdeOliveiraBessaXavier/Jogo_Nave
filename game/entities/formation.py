@@ -3,7 +3,7 @@ import math
 import random
 from enum import Enum
 from typing import List, Type, Any, Tuple, cast
-from ..core.config import Config
+from ..core.config import config as Config
 
 
 class FormationPattern(Enum):

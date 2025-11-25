@@ -3,7 +3,7 @@ from typing import List, Tuple, TypedDict
 
 import pygame
 
-from ..core.config import Config
+from ..core.config import config as Config
 
 
 class DeathParticle(TypedDict):

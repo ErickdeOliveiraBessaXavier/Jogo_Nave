@@ -1,9 +1,10 @@
 import pygame
 import random
-from ..core.config import Config
+from ..core.config import config as Config
 from ..core import colors
 from ..core.assets import get_image
 from ..core.sprite_loader import sprite_loader
+
 
 class ExplosiveMine:
     # Cache de sprites
@@ -14,9 +15,13 @@ class ExplosiveMine:
     def load_sprites(cls) -> None:
         """Carrega os sprites da mina explosiva."""
         if cls._normal_sprite is None:
-            cls._normal_sprite = get_image("game/assets/images/mines/minas_explosivas.png")
+            cls._normal_sprite = get_image(
+                "game/assets/images/mines/minas_explosivas.png"
+            )
         if cls._explosion_sprite is None:
-            cls._explosion_sprite = get_image("game/assets/images/mines/minas_explosivas_sprite_explosão.png")
+            cls._explosion_sprite = get_image(
+                "game/assets/images/mines/minas_explosivas_sprite_explosão.png"
+            )
 
     def __init__(self, x: float | None = None, y: float | None = None):
         self.load_sprites()
@@ -48,11 +53,11 @@ class ExplosiveMine:
         # Load sprites from cache
         self.normal_sprite: pygame.Surface
         self.explosion_sprite: pygame.Surface
-        
+
         # Sprite dimensions
         self.sprite_width: int
         self.sprite_height: int
-        
+
         # Scale factor to fit the visual radius
         self.scale: float
 
@@ -94,15 +99,17 @@ class ExplosiveMine:
         explosion_temp = self.__class__._explosion_sprite
 
         assert normal_temp is not None, "Normal sprite for explosive mine not loaded"
-        assert explosion_temp is not None, "Explosion sprite for explosive mine not loaded"
+        assert (
+            explosion_temp is not None
+        ), "Explosion sprite for explosive mine not loaded"
 
         self.normal_sprite = normal_temp
         self.explosion_sprite = explosion_temp
-        
+
         # Sprite dimensions
         self.sprite_width = self.normal_sprite.get_width()
         self.sprite_height = self.normal_sprite.get_height()
-        
+
         # Scale factor to fit the visual radius
         target_size = self.radius * 2  # 40 pixels diameter
         self.scale = target_size / self.sprite_width
@@ -181,14 +188,22 @@ class ExplosiveMine:
 
         # Apply pulsing effect to scale
         scale = self.pulse_scale if not self.is_exploding else 1.0
-        
+
         # Get the scaled sprite
         if scale != 1.0:
             scaled_width = int(self.sprite_width * self.scale * scale)
             scaled_height = int(self.sprite_height * self.scale * scale)
-            final_sprite = pygame.transform.scale(current_sprite, (scaled_width, scaled_height))
+            final_sprite = pygame.transform.scale(
+                current_sprite, (scaled_width, scaled_height)
+            )
         else:
-            final_sprite = pygame.transform.scale(current_sprite, (int(self.sprite_width * self.scale), int(self.sprite_height * self.scale)))
+            final_sprite = pygame.transform.scale(
+                current_sprite,
+                (
+                    int(self.sprite_width * self.scale),
+                    int(self.sprite_height * self.scale),
+                ),
+            )
 
         # Apply rotation if not exploding
         if not self.is_exploding:
@@ -222,6 +237,7 @@ class ExplosiveMine:
 
     def get_points_value(self) -> int:
         return 250
+
 
 # REGISTRAR no sistema de pré-carregamento
 sprite_loader.register("ExplosiveMine", ExplosiveMine.load_sprites)

@@ -1,7 +1,7 @@
 import random
 import pygame
 from typing import Optional
-from ..core.config import Config, PowerUpType
+from ..core.config import config as Config, PowerUpType
 from ..core.assets import get_font
 from ..core.colors import (
     POWERUP_LIFE,

@@ -1,6 +1,6 @@
 import random
 from typing import TYPE_CHECKING, Dict, Type, TypedDict, Tuple, List, Protocol, cast
-from ..core.config import Config, PowerUpType
+from ..core.config import config as Config, PowerUpType
 from ..core.time import Timer
 from ..core.difficulty import DifficultyPreset
 from ..entities.powerup import PowerUp
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 class EnemyWithHealth(Protocol):
     """Protocol para inimigos que têm atributo health."""
+
     health: int
     dead: bool
     active: bool
@@ -59,13 +60,22 @@ FORMATION_CONFIGS: Dict[str, FormationConfig] = {
 
 
 class EnemySpawner:
-    def __init__(self, level_manager: LevelManager, meteor_pool: MeteorPool, is_initial_level: bool = False, difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL, enemy_health_multiplier: float = 1.0):
+    def __init__(
+        self,
+        level_manager: LevelManager,
+        meteor_pool: MeteorPool,
+        is_initial_level: bool = False,
+        difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
+        enemy_health_multiplier: float = 1.0,
+    ):
         self.level_manager = level_manager
         self.meteor_pool = meteor_pool
         self.difficulty_preset = difficulty_preset
         self.enemy_health_multiplier = enemy_health_multiplier
         self.current_level_number = 1  # EnemySpawner starts at level 1
-        self.config = self.level_manager.get_level(self.current_level_number, self.difficulty_preset)
+        self.config = self.level_manager.get_level(
+            self.current_level_number, self.difficulty_preset
+        )
         self.stopped = False
 
         # Validar tipos de formação configurados
@@ -146,12 +156,16 @@ class EnemySpawner:
             if timer.done() and random.random() < self.spawn_intensity:
                 if enemy_type == EyeEnemy:
                     # Limitar o número de EyeEnemies na tela a 5
-                    eye_enemy_count = sum(isinstance(e, EyeEnemy) for e in entity_manager.enemies)
+                    eye_enemy_count = sum(
+                        isinstance(e, EyeEnemy) for e in entity_manager.enemies
+                    )
                     if eye_enemy_count < 5:
                         x = random.randint(40, Config.SCREEN_WIDTH - 80)
                         y = random.randint(40, 100)
                         new_enemy = EyeEnemy(x, y)
-                        new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
+                        new_enemy.health = int(
+                            new_enemy.health * self.enemy_health_multiplier
+                        )
                         entity_manager.enemies.append(new_enemy)
                 else:
                     from ..entities.meteor import Meteor
@@ -159,12 +173,16 @@ class EnemySpawner:
                     if enemy_type == Meteor:
                         # Usar o pool para meteoros
                         meteor = self.meteor_pool.get()
-                        meteor.health = int(meteor.health * self.enemy_health_multiplier)
+                        meteor.health = int(
+                            meteor.health * self.enemy_health_multiplier
+                        )
                         entity_manager.enemies.append(meteor)
                     else:
                         # Outros inimigos normalmente
                         new_enemy = cast(EnemyWithHealth, enemy_type())
-                        new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
+                        new_enemy.health = int(
+                            new_enemy.health * self.enemy_health_multiplier
+                        )
                         entity_manager.enemies.append(new_enemy)  # type: ignore[arg-type]
                 timer.start()  # Reiniciar timer
 
@@ -338,7 +356,9 @@ class EnemySpawner:
     def set_level(self, level_number: int) -> None:
         """Atualiza o spawner para uma nova fase."""
         self.current_level_number = level_number
-        self.config = self.level_manager.get_level(self.current_level_number, self.difficulty_preset)
+        self.config = self.level_manager.get_level(
+            self.current_level_number, self.difficulty_preset
+        )
         self.stopped = False
 
         # Reiniciar warm-up para nova fase (transições suaves)

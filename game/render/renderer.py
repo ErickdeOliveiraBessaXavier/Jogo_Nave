@@ -4,7 +4,7 @@ import math
 from typing import TypedDict, Optional, TYPE_CHECKING
 from pathlib import Path
 from ..core import colors
-from ..core.config import Config
+from ..core.config import config as Config
 from ..core.assets import get_font, get_image  # Added get_image
 from ..core.render_config import RenderConfig
 from ..core.difficulty import DifficultyPreset, DifficultySettings
@@ -97,12 +97,14 @@ class CelestialManager:
     def _get_available_image(self) -> Path:
         """
         Retorna uma imagem disponível que não está sendo usada por outros corpos celestiais.
-        
+
         Se não houver imagens suficientes disponíveis, permite alguma duplicata.
         """
         # Imagens disponíveis (não usadas)
-        available_images = [img for img in self.image_files if img not in self._used_images]
-        
+        available_images = [
+            img for img in self.image_files if img not in self._used_images
+        ]
+
         if available_images:
             # Há imagens disponíveis, escolher uma aleatoriamente
             return random.choice(available_images)
@@ -150,7 +152,7 @@ class CelestialManager:
         # Liberar a imagem antiga
         if "image_path" in body:
             self._used_images.discard(body["image_path"])
-        
+
         # Escolher nova imagem disponível
         image_path = self._get_available_image()
         self._used_images.add(image_path)  # Registrar como usada
@@ -293,13 +295,13 @@ class StarField:
                 TWO_PI = 2 * math.pi
                 step = TWO_PI / 100  # ~100 iterações para suavidade
                 a = animated_size  # tamanho base da estrela
-                
+
                 while t < TWO_PI:
                     x = a * (math.cos(t) ** 3)
                     y = a * (math.sin(t) ** 3)
                     points.append((center_x + x, center_y + y))
                     t += step
-                
+
                 pygame.draw.polygon(surface, c, points)
 
 
@@ -308,25 +310,25 @@ class Renderer:
         self.font_small = get_font(12)
         self.font_medium = get_font(24)
         self.font_large = get_font(32)
-        
+
         # === NOVO: Sistema de cache de textos ===
         self._hud_cache: dict[str, Optional[pygame.Surface]] = {
-            'score': None,      # Surface renderizada
-            'lives': None,
-            'level': None,
-            'enemies': None,
-            'difficulty': None,
+            "score": None,  # Surface renderizada
+            "lives": None,
+            "level": None,
+            "enemies": None,
+            "difficulty": None,
         }
-        
+
         self._hud_values: dict[str, Optional[int]] = {
-            'score': None,        # Último valor renderizado (None = nunca renderizado)
-            'lives': None,
-            'level': None,
-            'enemies': None,
-            'difficulty': None,
+            "score": None,  # Último valor renderizado (None = nunca renderizado)
+            "lives": None,
+            "level": None,
+            "enemies": None,
+            "difficulty": None,
         }
         # === FIM DO CACHE ===
-        
+
         self.starfield = StarField(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
         self.celestial_manager = CelestialManager(
             Config.SCREEN_WIDTH,
@@ -356,25 +358,25 @@ class Renderer:
         self.celestial_manager.draw(surface)
 
     def _render_text_cached(
-        self, 
-        cache_key: str, 
-        current_value: int, 
-        text_template: str, 
+        self,
+        cache_key: str,
+        current_value: int,
+        text_template: str,
         font: pygame.font.Font,
-        color: tuple[int, int, int]
+        color: tuple[int, int, int],
     ) -> pygame.Surface:
         """
         Renderiza texto com cache.
-        
+
         Só re-renderiza se o valor mudou desde a última vez.
-        
+
         Args:
             cache_key: Chave no dicionário de cache ('score', 'lives', etc)
             current_value: Valor atual (ex: score atual)
             text_template: Template do texto (ex: "Pontos: {}")
             font: Fonte pygame
             color: Cor do texto
-            
+
         Returns:
             Surface com o texto renderizado (do cache ou recém-criado)
         """
@@ -384,7 +386,7 @@ class Renderer:
             text = text_template.format(current_value)
             self._hud_cache[cache_key] = font.render(text, True, color)
             self._hud_values[cache_key] = current_value
-        
+
         # Retornar surface cacheada (sempre deve existir após verificação acima)
         surface = self._hud_cache[cache_key]
         assert surface is not None, f"Cache surface for {cache_key} should not be None"
@@ -402,24 +404,24 @@ class Renderer:
     ):
         # Renderizar com cache (só re-renderiza se valores mudaram)
         s = self._render_text_cached(
-            'score', score, "Pontos: {}", self.font_medium, colors.WHITE
+            "score", score, "Pontos: {}", self.font_medium, colors.WHITE
         )
         l = self._render_text_cached(
-            'lives', lives, "Vidas: {}", self.font_medium, colors.WHITE
+            "lives", lives, "Vidas: {}", self.font_medium, colors.WHITE
         )
         lvl = self._render_text_cached(
-            'level', level_number, "Fase: {}", self.font_medium, colors.WHITE
+            "level", level_number, "Fase: {}", self.font_medium, colors.WHITE
         )
         e = self._render_text_cached(
-            'enemies', enemies_destroyed, "Inimigos: {}", self.font_small, colors.WHITE
+            "enemies", enemies_destroyed, "Inimigos: {}", self.font_small, colors.WHITE
         )
-        
+
         # Desenhar textos (mesmas posições)
         surface.blit(s, (10, 10))
         surface.blit(l, (Config.SCREEN_WIDTH - l.get_width() - 10, 10))
         surface.blit(lvl, (10, 44))
         surface.blit(e, (10, 78))
-        
+
         # Indicador de dificuldade
         if difficulty_preset is not None:
             settings = DifficultySettings.get_settings(difficulty_preset)
@@ -429,15 +431,16 @@ class Renderer:
                 DifficultyPreset.HARDCORE: colors.ORANGE,
                 DifficultyPreset.NIGHTMARE: colors.RED,
             }.get(difficulty_preset, colors.WHITE)
-            
+
             diff_text = self._render_text_cached(
-                'difficulty', 
+                "difficulty",
                 hash(difficulty_preset.name),  # Usar hash do nome para consistência
-                f"Dificuldade: {settings['name']}", 
-                self.font_small, difficulty_color
+                f"Dificuldade: {settings['name']}",
+                self.font_small,
+                difficulty_color,
             )
             surface.blit(diff_text, (10, 102))
-        
+
         # --- efeitos ativos (se ship for informado) ---
         # Este código permanece IGUAL (não precisa cache, é dinâmico)
         if ship is not None:
@@ -500,7 +503,7 @@ class Renderer:
                 # Limitar tamanho do cache
                 if len(self.halo_cache) >= self.MAX_HALO_CACHE_SIZE:
                     self.halo_cache.clear()
-                
+
                 halo = pygame.Surface((radius * 2 + 6, radius * 2 + 6), pygame.SRCALPHA)
                 pygame.draw.circle(
                     halo, (0, 120, 255, 120), (radius + 3, radius + 3), radius, width=3
@@ -514,11 +517,11 @@ class Renderer:
         self.fps_counter += 1
         self.fps_timer += dt
         self.frame_times.append(dt)
-        
+
         # Manter apenas os últimos frames
         if len(self.frame_times) > self.max_frame_times:
             self.frame_times.pop(0)
-        
+
         # Atualizar FPS a cada segundo
         if self.fps_timer >= 1.0:
             self.current_fps = self.fps_counter / self.fps_timer
@@ -528,12 +531,17 @@ class Renderer:
     def get_fps_stats(self) -> dict[str, float]:
         """Retorna estatísticas de FPS e performance."""
         if not self.frame_times:
-            return {"fps": 0.0, "avg_frame_time": 0.0, "max_frame_time": 0.0, "min_frame_time": 0.0}
-        
+            return {
+                "fps": 0.0,
+                "avg_frame_time": 0.0,
+                "max_frame_time": 0.0,
+                "min_frame_time": 0.0,
+            }
+
         avg_frame_time = sum(self.frame_times) / len(self.frame_times)
         max_frame_time = max(self.frame_times)
         min_frame_time = min(self.frame_times)
-        
+
         return {
             "fps": self.current_fps,
             "avg_frame_time": avg_frame_time * 1000,  # em ms

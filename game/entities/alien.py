@@ -1,6 +1,6 @@
 import pygame
 import random
-from ..core.config import Config
+from ..core.config import config as Config
 from ..core.assets import get_image, BASE_DIR
 from .alien_bullet import AlienBullet
 from ..core.sprite_loader import sprite_loader
@@ -10,7 +10,7 @@ class Alien:
     # Constantes para dimensões do alien
     ALIEN_WIDTH = 75
     ALIEN_HEIGHT = 58
-    
+
     # Cache de sprites de animação (carregado uma vez)
     _animation_frames: list[pygame.Surface] | None = None
 
@@ -19,15 +19,21 @@ class Alien:
         """Carrega e redimensiona os sprites de animação uma vez."""
         if cls._animation_frames is not None:
             return cls._animation_frames
-        
+
         frames: list[pygame.Surface] = []
         for i in range(1, 13):
-            path = BASE_DIR / "assets" / "images" / "Sprite_Nave_Inimiga_01" / f"nave_inimiga ({i}).png"
+            path = (
+                BASE_DIR
+                / "assets"
+                / "images"
+                / "Sprite_Nave_Inimiga_01"
+                / f"nave_inimiga ({i}).png"
+            )
             image = get_image(path)
             # Redimensionar para o tamanho do alien
             image = pygame.transform.scale(image, (cls.ALIEN_WIDTH, cls.ALIEN_HEIGHT))
             frames.append(image)
-        
+
         cls._animation_frames = frames
         return frames
 
@@ -48,7 +54,7 @@ class Alien:
 
         # Carregar sprites de animação (usando cache)
         self.animation_frames: list[pygame.Surface]
-        
+
         # Controle de animação
         self.current_frame: int
         self.animation_timer: float
@@ -61,7 +67,7 @@ class Alien:
         self.speed_y = 60
         self.dead = False
         self.shoot_timer = random.uniform(1.5, 3.0)
-        
+
         # Vida do alien
         self.health: int = 15
 
@@ -72,7 +78,7 @@ class Alien:
 
         # Carregar sprites de animação (usando cache)
         self.animation_frames = self.load_animation_frames()
-        
+
         # Controle de animação
         self.current_frame = 0
         self.animation_timer = 0.0
@@ -94,7 +100,9 @@ class Alien:
             self.animation_timer += dt
             if self.animation_timer >= self.frame_duration:
                 self.animation_timer = 0.0
-                self.current_frame = (self.current_frame + 1) % len(self.animation_frames)
+                self.current_frame = (self.current_frame + 1) % len(
+                    self.animation_frames
+                )
             return None
 
         # Movimento normal (quando não está em formação)
@@ -140,6 +148,7 @@ class Alien:
 
     def get_points_value(self) -> int:
         return 150  # Pontos por destruir um alien
+
 
 # REGISTRAR no sistema de pré-carregamento (fora da classe)
 sprite_loader.register("Alien", Alien.load_animation_frames)

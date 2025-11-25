@@ -85,22 +85,18 @@ class Config:
     POWERUP_RARITY_CHANCES: dict[PowerUpType, float] = field(
         default_factory=lambda: {
             # 🔵 COMUM (45% total) - Power-ups básicos e frequentes
-            PowerUpType.SHIELD: 0.20,        # 20% - Escudo básico
-            PowerUpType.DOUBLE_SHOT: 0.25,   # 25% - Tiro duplo
-            
+            PowerUpType.SHIELD: 0.20,  # 20% - Escudo básico
+            PowerUpType.DOUBLE_SHOT: 0.25,  # 25% - Tiro duplo
             # 🟢 INCOMUM (15% total) - Power-ups situacionais
-            PowerUpType.SPEED: 0.15,         # 15% - Velocidade aumentada
-            
+            PowerUpType.SPEED: 0.15,  # 15% - Velocidade aumentada
             # 🟠 RARO (35% total) - Power-ups poderosos mas raros
-            PowerUpType.PIERCING_SHOT: 0.15, # 15% - Tiro perfurante
-            PowerUpType.MINI_SHIPS: 0.10,    # 10% - Naves auxiliares
-            PowerUpType.LIFE: 0.10,          # 10% - Vida extra
-            
+            PowerUpType.PIERCING_SHOT: 0.15,  # 15% - Tiro perfurante
+            PowerUpType.MINI_SHIPS: 0.10,  # 10% - Naves auxiliares
+            PowerUpType.LIFE: 0.10,  # 10% - Vida extra
             # 🟣 ÉPICO (4% total) - Power-ups muito valiosos
-            PowerUpType.SCORE: 0.04,         # 4% - Multiplicador de pontos
-            
+            PowerUpType.SCORE: 0.04,  # 4% - Multiplicador de pontos
             # 🟡 LENDÁRIO (1% total) - Power-ups ultra-raros
-            PowerUpType.RAINBOW: 0.01,       # 1% - Power-up especial
+            PowerUpType.RAINBOW: 0.01,  # 1% - Power-up especial
         }
     )
 
@@ -454,8 +450,3 @@ if _validation_errors:
         f"  - {err}" for err in _validation_errors
     )
     raise ValueError(error_msg)
-
-
-# IMPORTANTE: Reatribuir Config para que ele aponte para o proxy
-# Isso permite que "from config import Config" use a versão dinâmica
-Config = config  # type: ignore

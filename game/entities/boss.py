@@ -6,7 +6,7 @@ from collections import deque
 import pygame
 
 from ..core import colors
-from ..core.config import Config
+from ..core.config import config as Config
 from ..core.time import Timer
 from ..core.sound import sound_manager
 from .boss_laser import BossLaser

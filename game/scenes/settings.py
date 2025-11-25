@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Optional
 from ..core.state import Scene
 from ..core.colors import WHITE, BLACK, GREEN, BRIGHT_GREEN, GRAY
 from ..core.assets import get_font
-from ..core.config import Config
+from ..core.config import config as Config
 from ..core.sound import sound_manager
 
 if TYPE_CHECKING:

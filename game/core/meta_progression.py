@@ -13,16 +13,18 @@ from ..core.levels import LevelConfig
 
 class PerformanceState(Enum):
     """Estados de performance do jogador."""
-    STRUGGLING = "struggling"      # Dificuldade excessiva
-    LEARNING = "learning"          # Progresso normal
-    COMFORTABLE = "comfortable"     # Zona de conforto
-    DOMINATING = "dominating"      # Fácil demais
+
+    STRUGGLING = "struggling"  # Dificuldade excessiva
+    LEARNING = "learning"  # Progresso normal
+    COMFORTABLE = "comfortable"  # Zona de conforto
+    DOMINATING = "dominating"  # Fácil demais
     INCONSISTENT = "inconsistent"  # Resultados variados
 
 
 @dataclass
 class SessionStats:
     """Estatísticas de uma sessão de jogo."""
+
     start_time: datetime
     end_time: Optional[datetime] = None
     levels_attempted: List[int] = field(default_factory=lambda: [])
@@ -41,6 +43,7 @@ class SessionStats:
 @dataclass
 class LevelPerformance:
     """Estatísticas detalhadas de performance em um nível."""
+
     level_number: int
 
     # Contadores básicos
@@ -107,8 +110,12 @@ class LevelPerformance:
         first_half = self.recent_attempts[:mid]
         second_half = self.recent_attempts[mid:]
 
-        first_success_rate = sum(1 for a in first_half if a.get('cleared', False)) / len(first_half)
-        second_success_rate = sum(1 for a in second_half if a.get('cleared', False)) / len(second_half)
+        first_success_rate = sum(
+            1 for a in first_half if a.get("cleared", False)
+        ) / len(first_half)
+        second_success_rate = sum(
+            1 for a in second_half if a.get("cleared", False)
+        ) / len(second_half)
 
         return second_success_rate - first_success_rate
 
@@ -125,13 +132,17 @@ class LevelPerformance:
         if self.clear_rate > 0.9 and self.attempts >= 3:
             # Verificar consistência de tempos
             if self.clears >= 2:
-                time_consistency = self.best_time / self.avg_time if self.best_time else 1.0
+                time_consistency = (
+                    self.best_time / self.avg_time if self.best_time else 1.0
+                )
                 if time_consistency > 0.8:  # Tempos consistentes
                     return PerformanceState.DOMINATING
 
         # Performance inconsistente
         if len(self.recent_attempts) >= 5:
-            recent_variance = sum(1 for a in self.recent_attempts if a.get('cleared', False))
+            recent_variance = sum(
+                1 for a in self.recent_attempts if a.get("cleared", False)
+            )
             if 0.2 < recent_variance / len(self.recent_attempts) < 0.8:
                 return PerformanceState.INCONSISTENT
 
@@ -147,12 +158,12 @@ class PerformanceAnalyzer:
     """Analisa padrões de performance e sugere ajustes."""
 
     # Configuração de sensibilidade
-    STRUGGLE_THRESHOLD = 0.35       # Clear rate abaixo disso = struggling
-    DOMINATE_THRESHOLD = 0.85       # Clear rate acima disso = dominating
-    MIN_ATTEMPTS_FOR_ANALYSIS = 3   # Mínimo de tentativas para análise
+    STRUGGLE_THRESHOLD = 0.35  # Clear rate abaixo disso = struggling
+    DOMINATE_THRESHOLD = 0.85  # Clear rate acima disso = dominating
+    MIN_ATTEMPTS_FOR_ANALYSIS = 3  # Mínimo de tentativas para análise
 
-    RECENT_ATTEMPTS_WINDOW = 10     # Quantas tentativas recentes considerar
-    IMPROVEMENT_THRESHOLD = 0.2     # Melhoria mínima para considerar progresso
+    RECENT_ATTEMPTS_WINDOW = 10  # Quantas tentativas recentes considerar
+    IMPROVEMENT_THRESHOLD = 0.2  # Melhoria mínima para considerar progresso
 
     @staticmethod
     def analyze_level_performance(stats: LevelPerformance) -> Dict[str, Any]:
@@ -164,16 +175,16 @@ class PerformanceAnalyzer:
         """
         if stats.attempts < PerformanceAnalyzer.MIN_ATTEMPTS_FOR_ANALYSIS:
             return {
-                'state': PerformanceState.LEARNING,
-                'adjustment': 1.0,  # Sem ajuste
-                'confidence': 'low',
-                'reason': 'Dados insuficientes'
+                "state": PerformanceState.LEARNING,
+                "adjustment": 1.0,  # Sem ajuste
+                "confidence": "low",
+                "reason": "Dados insuficientes",
             }
 
         state = stats.get_performance_state()
         adjustment = 1.0
-        confidence = 'medium'
-        reason = ''
+        confidence = "medium"
+        reason = ""
 
         # Análise baseada no estado
         if state == PerformanceState.STRUGGLING:
@@ -181,49 +192,49 @@ class PerformanceAnalyzer:
             if stats.improvement_trend > PerformanceAnalyzer.IMPROVEMENT_THRESHOLD:
                 # Jogador está melhorando, dar mais tempo
                 adjustment = 0.95  # Facilitar sutilmente (5%)
-                confidence = 'low'
-                reason = 'Lutando mas melhorando - ajuste mínimo'
+                confidence = "low"
+                reason = "Lutando mas melhorando - ajuste mínimo"
             else:
                 # Sem melhoria, facilitar mais
                 adjustment = 0.85  # Facilitar moderadamente (15%)
-                confidence = 'high'
-                reason = f'Clear rate baixo ({stats.clear_rate:.0%}) sem melhoria'
+                confidence = "high"
+                reason = f"Clear rate baixo ({stats.clear_rate:.0%}) sem melhoria"
 
         elif state == PerformanceState.DOMINATING:
             # Verificar se é consistente
             if stats.current_win_streak >= 3:
                 adjustment = 1.15  # Dificultar (15%)
-                confidence = 'high'
-                reason = f'Dominando ({stats.clear_rate:.0%}) com {stats.current_win_streak} vitórias consecutivas'
+                confidence = "high"
+                reason = f"Dominando ({stats.clear_rate:.0%}) com {stats.current_win_streak} vitórias consecutivas"
             else:
                 adjustment = 1.08  # Dificultar levemente (8%)
-                confidence = 'medium'
-                reason = f'Clear rate alto ({stats.clear_rate:.0%})'
+                confidence = "medium"
+                reason = f"Clear rate alto ({stats.clear_rate:.0%})"
 
         elif state == PerformanceState.INCONSISTENT:
             # Manter estável, pode ser o nível que é inconsistente
             adjustment = 1.0
-            confidence = 'low'
-            reason = 'Performance inconsistente - mantendo dificuldade'
+            confidence = "low"
+            reason = "Performance inconsistente - mantendo dificuldade"
 
         elif state == PerformanceState.COMFORTABLE:
             # Sweet spot! Não mexer
             adjustment = 1.0
-            confidence = 'high'
-            reason = f'Performance ideal ({stats.clear_rate:.0%})'
+            confidence = "high"
+            reason = f"Performance ideal ({stats.clear_rate:.0%})"
 
         return {
-            'state': state,
-            'adjustment': adjustment,
-            'confidence': confidence,
-            'reason': reason,
-            'clear_rate': stats.clear_rate,
-            'attempts': stats.attempts,
-            'trend': stats.improvement_trend
+            "state": state,
+            "adjustment": adjustment,
+            "confidence": confidence,
+            "reason": reason,
+            "clear_rate": stats.clear_rate,
+            "attempts": stats.attempts,
+            "trend": stats.improvement_trend,
         }
 
     @staticmethod
-    def analyze_global_performance(profile: 'PlayerProfile') -> Dict[str, Any]:
+    def analyze_global_performance(profile: "PlayerProfile") -> Dict[str, Any]:
         """
         Análise global do perfil do jogador.
 
@@ -231,10 +242,10 @@ class PerformanceAnalyzer:
         """
         if not profile.level_stats:
             return {
-                'skill_level': 'Novato',
-                'overall_trend': 'neutral',
-                'avg_clear_rate': 0.0,
-                'recommendations': []
+                "skill_level": "Novato",
+                "overall_trend": "neutral",
+                "avg_clear_rate": 0.0,
+                "recommendations": [],
             }
 
         # Calcular métricas globais
@@ -244,18 +255,18 @@ class PerformanceAnalyzer:
 
         # Determinar skill level
         skill_level = PerformanceAnalyzer._determine_skill_level(
-            profile.highest_level_reached,
-            avg_clear_rate,
-            profile.total_playtime
+            profile.highest_level_reached, avg_clear_rate, profile.total_playtime
         )
 
         # Analisar tendência geral
         recent_levels = sorted(profile.level_stats.keys())[-5:]  # Últimos 5 níveis
         if len(recent_levels) >= 3:
-            recent_clear_rates = [profile.level_stats[lv].clear_rate for lv in recent_levels]
+            recent_clear_rates = [
+                profile.level_stats[lv].clear_rate for lv in recent_levels
+            ]
             overall_trend = PerformanceAnalyzer._calculate_trend(recent_clear_rates)
         else:
-            overall_trend = 'neutral'
+            overall_trend = "neutral"
 
         # Gerar recomendações
         recommendations = PerformanceAnalyzer._generate_recommendations(
@@ -263,41 +274,43 @@ class PerformanceAnalyzer:
         )
 
         return {
-            'skill_level': skill_level,
-            'overall_trend': overall_trend,
-            'avg_clear_rate': avg_clear_rate,
-            'total_playtime_hours': profile.total_playtime / 3600,
-            'recommendations': recommendations
+            "skill_level": skill_level,
+            "overall_trend": overall_trend,
+            "avg_clear_rate": avg_clear_rate,
+            "total_playtime_hours": profile.total_playtime / 3600,
+            "recommendations": recommendations,
         }
 
     @staticmethod
-    def _determine_skill_level(highest_level: int, clear_rate: float, playtime: float) -> str:
+    def _determine_skill_level(
+        highest_level: int, clear_rate: float, playtime: float
+    ) -> str:
         """Determina skill level baseado em múltiplos fatores."""
         # Sistema de pontos ponderado
         level_points = min(highest_level * 2, 50)  # Max 50 pontos
-        clear_rate_points = clear_rate * 30        # Max 30 pontos
+        clear_rate_points = clear_rate * 30  # Max 30 pontos
         experience_points = min(playtime / 3600 * 5, 20)  # Max 20 pontos (1pt/12min)
 
         total_points = level_points + clear_rate_points + experience_points
 
         if total_points < 20:
-            return 'Novato'
+            return "Novato"
         elif total_points < 40:
-            return 'Aprendiz'
+            return "Aprendiz"
         elif total_points < 60:
-            return 'Intermediário'
+            return "Intermediário"
         elif total_points < 80:
-            return 'Avançado'
+            return "Avançado"
         elif total_points < 90:
-            return 'Veterano'
+            return "Veterano"
         else:
-            return 'Mestre'
+            return "Mestre"
 
     @staticmethod
     def _calculate_trend(values: List[float]) -> str:
         """Calcula tendência de uma série de valores."""
         if len(values) < 2:
-            return 'neutral'
+            return "neutral"
 
         # Regressão linear simples
         n = len(values)
@@ -308,37 +321,44 @@ class PerformanceAnalyzer:
         denominator = sum((i - x_avg) ** 2 for i in range(n))
 
         if denominator == 0:
-            return 'neutral'
+            return "neutral"
 
         slope = numerator / denominator
 
         if slope > 0.05:
-            return 'improving'
+            return "improving"
         elif slope < -0.05:
-            return 'declining'
+            return "declining"
         else:
-            return 'stable'
+            return "stable"
 
     @staticmethod
-    def _generate_recommendations(profile: 'PlayerProfile', skill_level: str, trend: str) -> List[str]:
+    def _generate_recommendations(
+        profile: "PlayerProfile", skill_level: str, trend: str
+    ) -> List[str]:
         """Gera recomendações personalizadas."""
         recommendations: List[str] = []
 
         # Recomendações baseadas em skill level
-        if skill_level in ['Novato', 'Aprendiz']:
-            recommendations.append("💡 Dica: Colete power-ups de escudo para sobreviver mais tempo")
+        if skill_level in ["Novato", "Aprendiz"]:
+            recommendations.append(
+                "💡 Dica: Colete power-ups de escudo para sobreviver mais tempo"
+            )
             recommendations.append("🎯 Foque em desviar antes de atirar")
 
         # Recomendações baseadas em tendência
-        if trend == 'declining':
-            recommendations.append("⚠️ Notamos dificuldade recente. Considere fazer uma pausa!")
+        if trend == "declining":
+            recommendations.append(
+                "⚠️ Notamos dificuldade recente. Considere fazer uma pausa!"
+            )
             recommendations.append("🔄 Tente revisitar níveis anteriores para praticar")
-        elif trend == 'improving':
+        elif trend == "improving":
             recommendations.append("📈 Excelente progresso! Continue assim!")
 
         # Recomendações baseadas em padrões específicos
         struggling_levels = [
-            lv for lv, stats in profile.level_stats.items()
+            lv
+            for lv, stats in profile.level_stats.items()
             if stats.attempts >= 5 and stats.clear_rate < 0.3
         ]
 
@@ -355,8 +375,8 @@ class DifficultyAdjuster:
     """Aplica ajustes adaptativos à configuração de níveis."""
 
     # Limites de ajuste para evitar extremos
-    MIN_ADJUSTMENT = 0.75   # Máximo 25% mais fácil
-    MAX_ADJUSTMENT = 1.25   # Máximo 25% mais difícil
+    MIN_ADJUSTMENT = 0.75  # Máximo 25% mais fácil
+    MAX_ADJUSTMENT = 1.25  # Máximo 25% mais difícil
 
     # Velocidade de ajuste (quão rápido o sistema adapta)
     ADJUSTMENT_SPEED = 0.5  # 50% do ajuste sugerido por tentativa
@@ -365,7 +385,7 @@ class DifficultyAdjuster:
     def apply_adjustment(
         base_config: LevelConfig,
         analysis: Dict[str, Any],
-        previous_adjustment: float = 1.0
+        previous_adjustment: float = 1.0,
     ) -> tuple[LevelConfig, float]:
         """
         Aplica ajuste adaptativo à configuração do nível.
@@ -378,25 +398,29 @@ class DifficultyAdjuster:
         Returns:
             Tupla com (config ajustada, novo multiplicador)
         """
-        suggested_adjustment = analysis['adjustment']
-        confidence = analysis['confidence']
+        suggested_adjustment = analysis["adjustment"]
+        confidence = analysis["confidence"]
 
         # Suavizar ajuste baseado em confiança
-        if confidence == 'low':
+        if confidence == "low":
             adjustment_factor = 0.3  # Apenas 30% do ajuste sugerido
-        elif confidence == 'medium':
+        elif confidence == "medium":
             adjustment_factor = 0.6  # 60% do ajuste sugerido
         else:  # high
             adjustment_factor = 1.0  # Ajuste completo
 
         # Interpolar entre ajuste anterior e novo ajuste
         target_adjustment = suggested_adjustment * adjustment_factor
-        new_adjustment = previous_adjustment + (target_adjustment - previous_adjustment) * DifficultyAdjuster.ADJUSTMENT_SPEED
+        new_adjustment = (
+            previous_adjustment
+            + (target_adjustment - previous_adjustment)
+            * DifficultyAdjuster.ADJUSTMENT_SPEED
+        )
 
         # Aplicar limites
         new_adjustment = max(
             DifficultyAdjuster.MIN_ADJUSTMENT,
-            min(DifficultyAdjuster.MAX_ADJUSTMENT, new_adjustment)
+            min(DifficultyAdjuster.MAX_ADJUSTMENT, new_adjustment),
         )
 
         # Se o ajuste é muito próximo de 1.0, não aplicar
@@ -405,8 +429,7 @@ class DifficultyAdjuster:
 
         # Aplicar ajuste à configuração
         adjusted_config = DifficultyAdjuster._apply_to_config(
-            base_config,
-            new_adjustment
+            base_config, new_adjustment
         )
 
         return adjusted_config, new_adjustment
@@ -489,7 +512,7 @@ class PlayerProfile:
             self.session_history.append(self.current_session)
             # Limit session history
             if len(self.session_history) > self.MAX_SESSION_HISTORY:
-                self.session_history = self.session_history[-self.MAX_SESSION_HISTORY:]
+                self.session_history = self.session_history[-self.MAX_SESSION_HISTORY :]
             self.total_playtime += self.current_session.duration
             self.current_session = None
             self.save()  # Save on session end
@@ -522,7 +545,7 @@ class PlayerProfile:
         score: int,
         enemies_killed: int,
         damage_taken: int,
-        powerups_collected: int
+        powerups_collected: int,
     ):
         """Registra clear detalhado de um nível."""
         stats = self.level_stats[level_number]
@@ -550,13 +573,13 @@ class PlayerProfile:
 
         # Histórico recente
         attempt_data: Dict[str, Any] = {
-            'timestamp': datetime.now().isoformat(),
-            'cleared': True,
-            'time': time_taken,
-            'score': score,
-            'enemies': enemies_killed,
-            'damage': damage_taken,
-            'powerups': powerups_collected
+            "timestamp": datetime.now().isoformat(),
+            "cleared": True,
+            "time": time_taken,
+            "score": score,
+            "enemies": enemies_killed,
+            "damage": damage_taken,
+            "powerups": powerups_collected,
         }
         stats.recent_attempts.append(attempt_data)
         if len(stats.recent_attempts) > PerformanceAnalyzer.RECENT_ATTEMPTS_WINDOW:
@@ -572,7 +595,7 @@ class PlayerProfile:
 
         self._mark_dirty()
 
-    def record_death(self, level_number: int, cause: str = 'unknown'):
+    def record_death(self, level_number: int, cause: str = "unknown"):
         """Registra morte em um nível."""
         stats = self.level_stats[level_number]
         stats.deaths += 1
@@ -581,9 +604,9 @@ class PlayerProfile:
 
         # Histórico recente
         attempt_data: Dict[str, Any] = {
-            'timestamp': datetime.now().isoformat(),
-            'cleared': False,
-            'cause': cause
+            "timestamp": datetime.now().isoformat(),
+            "cleared": False,
+            "cause": cause,
         }
         stats.recent_attempts.append(attempt_data)
         if len(stats.recent_attempts) > PerformanceAnalyzer.RECENT_ATTEMPTS_WINDOW:
@@ -616,9 +639,7 @@ class PlayerProfile:
 
         # Aplicar novo ajuste
         adjusted_config, new_adjustment = DifficultyAdjuster.apply_adjustment(
-            base_config,
-            analysis,
-            previous_adjustment
+            base_config, analysis, previous_adjustment
         )
 
         # Salvar novo ajuste
@@ -628,7 +649,9 @@ class PlayerProfile:
 
             # Log para debug
             direction = "mais fácil" if new_adjustment < 1.0 else "mais difícil"
-            print(f"[Meta-Progression] Level {level_num} ajustado {abs(new_adjustment - 1.0) * 100:.0f}% {direction}")
+            print(
+                f"[Meta-Progression] Level {level_num} ajustado {abs(new_adjustment - 1.0) * 100:.0f}% {direction}"
+            )
             print(f"  Motivo: {analysis['reason']}")
 
         return adjusted_config
@@ -639,23 +662,23 @@ class PlayerProfile:
             return "Novato"
 
         analysis = PerformanceAnalyzer.analyze_global_performance(self)
-        return analysis['skill_level']
+        return analysis["skill_level"]
 
     def get_statistics_summary(self) -> Dict[str, Any]:
         """Retorna resumo completo de estatísticas."""
         analysis = PerformanceAnalyzer.analyze_global_performance(self)
 
         return {
-            'skill_level': analysis['skill_level'],
-            'highest_level': self.highest_level_reached,
-            'total_playtime_hours': self.total_playtime / 3600,
-            'total_deaths': self.total_deaths,
-            'total_score': self.total_score,
-            'avg_clear_rate': analysis['avg_clear_rate'],
-            'overall_trend': analysis['overall_trend'],
-            'levels_played': len(self.level_stats),
-            'recommendations': analysis['recommendations'],
-            'sessions_played': len(self.session_history)
+            "skill_level": analysis["skill_level"],
+            "highest_level": self.highest_level_reached,
+            "total_playtime_hours": self.total_playtime / 3600,
+            "total_deaths": self.total_deaths,
+            "total_score": self.total_score,
+            "avg_clear_rate": analysis["avg_clear_rate"],
+            "overall_trend": analysis["overall_trend"],
+            "levels_played": len(self.level_stats),
+            "recommendations": analysis["recommendations"],
+            "sessions_played": len(self.session_history),
         }
 
     def load(self):
@@ -664,113 +687,162 @@ class PlayerProfile:
             return
 
         try:
-            with open(self.profile_path, 'r', encoding='utf-8') as f:
+            with open(self.profile_path, "r", encoding="utf-8") as f:
                 data: Dict[str, Any] = json.load(f)
 
                 # Validate basic structure
-                if 'level_stats' not in data:
+                if "level_stats" not in data:
                     raise ValueError("Invalid profile structure")
 
                 # Dados básicos
-                self.total_playtime = data.get('total_playtime', 0.0)
-                self.highest_level_reached = data.get('highest_level_reached', 1)
-                self.total_deaths = data.get('total_deaths', 0)
-                self.total_score = data.get('total_score', 0)
+                self.total_playtime = data.get("total_playtime", 0.0)
+                self.highest_level_reached = data.get("highest_level_reached", 1)
+                self.total_deaths = data.get("total_deaths", 0)
+                self.total_score = data.get("total_score", 0)
 
                 # Timestamps
-                if 'profile_created' in data and isinstance(data['profile_created'], str):
-                    self.profile_created = datetime.fromisoformat(data['profile_created'])
-                if data.get('last_played') and isinstance(data['last_played'], str):
-                    self.last_played = datetime.fromisoformat(data['last_played'])
+                if "profile_created" in data and isinstance(
+                    data["profile_created"], str
+                ):
+                    self.profile_created = datetime.fromisoformat(
+                        data["profile_created"]
+                    )
+                if data.get("last_played") and isinstance(data["last_played"], str):
+                    self.last_played = datetime.fromisoformat(data["last_played"])
 
                 # Level stats
-                level_stats_raw: Dict[str, Dict[str, Any]] = data.get('level_stats', {})
+                level_stats_raw: Dict[str, Dict[str, Any]] = data.get("level_stats", {})
                 # if isinstance(level_stats_raw, dict): # Unnecessary isinstance call
                 for level_num_str, stats_data_raw in level_stats_raw.items():
-                        # if not isinstance(stats_data_raw, dict): # Unnecessary isinstance call
-                            # continue
-                        stats_data: Dict[str, Any] = stats_data_raw
-                        try:
-                            level_num = int(level_num_str)
-                            stats = LevelPerformance(level_number=level_num)
+                    # if not isinstance(stats_data_raw, dict): # Unnecessary isinstance call
+                    # continue
+                    stats_data: Dict[str, Any] = stats_data_raw
+                    try:
+                        level_num = int(level_num_str)
+                        stats = LevelPerformance(level_number=level_num)
 
-                            # Restore fields explicitly for type safety
-                            stats.attempts = int(stats_data.get('attempts', 0))
-                            stats.clears = int(stats_data.get('clears', 0))
-                            stats.deaths = int(stats_data.get('deaths', 0))
-                            stats.total_time = float(stats_data.get('total_time', 0.0))
-                            stats.best_time = float(stats_data['best_time']) if isinstance(stats_data.get('best_time'), (int, float)) else None
-                            stats.worst_time = float(stats_data.get('worst_time', 0.0))
-                            stats.total_score = int(stats_data.get('total_score', 0))
-                            stats.best_score = int(stats_data.get('best_score', 0))
-                            stats.total_enemies_killed = int(stats_data.get('total_enemies_killed', 0))
-                            stats.total_damage_taken = int(stats_data.get('total_damage_taken', 0))
-                            stats.total_powerups_collected = int(stats_data.get('total_powerups_collected', 0))
-                            stats.recent_attempts = stats_data.get('recent_attempts', [])
-                            stats.current_win_streak = int(stats_data.get('current_win_streak', 0))
-                            stats.best_win_streak = int(stats_data.get('best_win_streak', 0))
+                        # Restore fields explicitly for type safety
+                        stats.attempts = int(stats_data.get("attempts", 0))
+                        stats.clears = int(stats_data.get("clears", 0))
+                        stats.deaths = int(stats_data.get("deaths", 0))
+                        stats.total_time = float(stats_data.get("total_time", 0.0))
+                        stats.best_time = (
+                            float(stats_data["best_time"])
+                            if isinstance(stats_data.get("best_time"), (int, float))
+                            else None
+                        )
+                        stats.worst_time = float(stats_data.get("worst_time", 0.0))
+                        stats.total_score = int(stats_data.get("total_score", 0))
+                        stats.best_score = int(stats_data.get("best_score", 0))
+                        stats.total_enemies_killed = int(
+                            stats_data.get("total_enemies_killed", 0)
+                        )
+                        stats.total_damage_taken = int(
+                            stats_data.get("total_damage_taken", 0)
+                        )
+                        stats.total_powerups_collected = int(
+                            stats_data.get("total_powerups_collected", 0)
+                        )
+                        stats.recent_attempts = stats_data.get("recent_attempts", [])
+                        stats.current_win_streak = int(
+                            stats_data.get("current_win_streak", 0)
+                        )
+                        stats.best_win_streak = int(
+                            stats_data.get("best_win_streak", 0)
+                        )
 
-                            if 'first_played' in stats_data and isinstance(stats_data['first_played'], str):
-                                stats.first_played = datetime.fromisoformat(stats_data['first_played'])
-                            if 'last_played' in stats_data and isinstance(stats_data['last_played'], str):
-                                stats.last_played = datetime.fromisoformat(stats_data['last_played'])
-                            
-                            self.level_stats[level_num] = stats
-                        except (ValueError, TypeError, KeyError):
-                            print(f"Skipping corrupt level data for level {level_num_str}")
-                            continue
+                        if "first_played" in stats_data and isinstance(
+                            stats_data["first_played"], str
+                        ):
+                            stats.first_played = datetime.fromisoformat(
+                                stats_data["first_played"]
+                            )
+                        if "last_played" in stats_data and isinstance(
+                            stats_data["last_played"], str
+                        ):
+                            stats.last_played = datetime.fromisoformat(
+                                stats_data["last_played"]
+                            )
+
+                        self.level_stats[level_num] = stats
+                    except (ValueError, TypeError, KeyError):
+                        print(f"Skipping corrupt level data for level {level_num_str}")
+                        continue
 
                 # Ajustes
-                level_adjustments_raw = data.get('level_adjustments', {})
+                level_adjustments_raw = data.get("level_adjustments", {})
                 # if isinstance(level_adjustments_raw, dict): # Unnecessary isinstance call
                 self.level_adjustments = {
-                    int(k): v for k, v in level_adjustments_raw.items()
+                    int(k): v
+                    for k, v in level_adjustments_raw.items()
                     if isinstance(v, (int, float))
                 }
 
                 # Sessões
-                session_history_raw: List[Dict[str, Any]] = data.get('session_history', [])
+                session_history_raw: List[Dict[str, Any]] = data.get(
+                    "session_history", []
+                )
                 # if isinstance(session_history_raw, list): # Unnecessary isinstance call
                 for session_data_raw in session_history_raw:
-                        if session_data_raw.get('start_time') is None:
-                            continue
-                        session_data: Dict[str, Any] = session_data_raw
-                        try:
-                            # Ensure start_time is a string before passing to fromisoformat
-                            start_time_str = session_data.get('start_time')
-                            if not isinstance(start_time_str, str):
-                                print(f"Skipping corrupt session data due to invalid start_time type.")
-                                continue
-
-                            session = SessionStats(
-                                start_time=datetime.fromisoformat(start_time_str)
+                    if session_data_raw.get("start_time") is None:
+                        continue
+                    session_data: Dict[str, Any] = session_data_raw
+                    try:
+                        # Ensure start_time is a string before passing to fromisoformat
+                        start_time_str = session_data.get("start_time")
+                        if not isinstance(start_time_str, str):
+                            print(
+                                f"Skipping corrupt session data due to invalid start_time type."
                             )
-                            
-                            end_time_str = session_data.get('end_time')
-                            if isinstance(end_time_str, str):
-                                session.end_time = datetime.fromisoformat(end_time_str)
-
-                            # Explicitly check types for other fields
-                            levels_attempted_raw = session_data.get('levels_attempted', [])
-                            session.levels_attempted = [int(lvl) for lvl in levels_attempted_raw if isinstance(lvl, (int, float))]
-
-                            deaths_raw = session_data.get('deaths', 0)
-                            session.deaths = int(deaths_raw) if isinstance(deaths_raw, (int, float)) else 0
-
-                            score_raw = session_data.get('score', 0)
-                            session.score = int(score_raw) if isinstance(score_raw, (int, float)) else 0
-
-                            powerups_collected_raw = session_data.get('powerups_collected', 0)
-                            session.powerups_collected = int(powerups_collected_raw) if isinstance(powerups_collected_raw, (int, float)) else 0
-
-                            self.session_history.append(session)
-                        except (ValueError, TypeError, KeyError) as ve:
-                            print(f"Skipping corrupt session data: {ve}")
                             continue
+
+                        session = SessionStats(
+                            start_time=datetime.fromisoformat(start_time_str)
+                        )
+
+                        end_time_str = session_data.get("end_time")
+                        if isinstance(end_time_str, str):
+                            session.end_time = datetime.fromisoformat(end_time_str)
+
+                        # Explicitly check types for other fields
+                        levels_attempted_raw = session_data.get("levels_attempted", [])
+                        session.levels_attempted = [
+                            int(lvl)
+                            for lvl in levels_attempted_raw
+                            if isinstance(lvl, (int, float))
+                        ]
+
+                        deaths_raw = session_data.get("deaths", 0)
+                        session.deaths = (
+                            int(deaths_raw)
+                            if isinstance(deaths_raw, (int, float))
+                            else 0
+                        )
+
+                        score_raw = session_data.get("score", 0)
+                        session.score = (
+                            int(score_raw) if isinstance(score_raw, (int, float)) else 0
+                        )
+
+                        powerups_collected_raw = session_data.get(
+                            "powerups_collected", 0
+                        )
+                        session.powerups_collected = (
+                            int(powerups_collected_raw)
+                            if isinstance(powerups_collected_raw, (int, float))
+                            else 0
+                        )
+
+                        self.session_history.append(session)
+                    except (ValueError, TypeError, KeyError) as ve:
+                        print(f"Skipping corrupt session data: {ve}")
+                        continue
 
                 # Limit session history after loading
                 if len(self.session_history) > self.MAX_SESSION_HISTORY:
-                    self.session_history = self.session_history[-self.MAX_SESSION_HISTORY:]
+                    self.session_history = self.session_history[
+                        -self.MAX_SESSION_HISTORY :
+                    ]
 
         except Exception as e:
             print(f"⚠️ Erro ao carregar perfil: {e}. Resetando perfil...")
@@ -788,7 +860,7 @@ class PlayerProfile:
             for key, value in stats.__dict__.items():
                 if isinstance(value, datetime):
                     stats_dict[key] = value.isoformat()
-                elif key == 'best_time' and value is None:
+                elif key == "best_time" and value is None:
                     stats_dict[key] = None  # Save None as null
                 else:
                     stats_dict[key] = value
@@ -798,29 +870,29 @@ class PlayerProfile:
         session_history_data: List[Dict[str, Any]] = []
         for session in self.session_history:
             session_dict: Dict[str, Any] = {
-                'start_time': session.start_time.isoformat(),
-                'end_time': session.end_time.isoformat() if session.end_time else None,
-                'levels_attempted': session.levels_attempted,
-                'deaths': session.deaths,
-                'score': session.score,
-                'powerups_collected': session.powerups_collected
+                "start_time": session.start_time.isoformat(),
+                "end_time": session.end_time.isoformat() if session.end_time else None,
+                "levels_attempted": session.levels_attempted,
+                "deaths": session.deaths,
+                "score": session.score,
+                "powerups_collected": session.powerups_collected,
             }
             session_history_data.append(session_dict)
 
         data: Dict[str, Any] = {
-            'version': '1.0',
-            'profile_created': self.profile_created.isoformat(),
-            'last_played': self.last_played.isoformat() if self.last_played else None,
-            'total_playtime': self.total_playtime,
-            'highest_level_reached': self.highest_level_reached,
-            'total_deaths': self.total_deaths,
-            'total_score': self.total_score,
-            'level_stats': level_stats_data,
-            'level_adjustments': {str(k): v for k, v in self.level_adjustments.items()},
-            'session_history': session_history_data
+            "version": "1.0",
+            "profile_created": self.profile_created.isoformat(),
+            "last_played": self.last_played.isoformat() if self.last_played else None,
+            "total_playtime": self.total_playtime,
+            "highest_level_reached": self.highest_level_reached,
+            "total_deaths": self.total_deaths,
+            "total_score": self.total_score,
+            "level_stats": level_stats_data,
+            "level_adjustments": {str(k): v for k, v in self.level_adjustments.items()},
+            "session_history": session_history_data,
         }
 
-        with open(self.profile_path, 'w', encoding='utf-8') as f:
+        with open(self.profile_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
         self._dirty = False
@@ -857,22 +929,28 @@ class ProfileVisualizer:
     """Cria visualizações das estatísticas do jogador."""
 
     @staticmethod
-    def render_skill_badge(surface: pygame.Surface, skill_level: str, x: int, y: int, font: pygame.font.Font):
+    def render_skill_badge(
+        surface: pygame.Surface,
+        skill_level: str,
+        x: int,
+        y: int,
+        font: pygame.font.Font,
+    ):
         """Renderiza badge de skill level."""
         from ..core import colors
 
         badge_colors = {
-            'Novato': (100, 100, 100),
-            'Aprendiz': (139, 69, 19),
-            'Intermediário': (192, 192, 192),
-            'Avançado': (255, 215, 0),
-            'Veterano': (75, 0, 130),
-            'Mestre': (255, 0, 255)
+            "Novato": (100, 100, 100),
+            "Aprendiz": (139, 69, 19),
+            "Intermediário": (192, 192, 192),
+            "Avançado": (255, 215, 0),
+            "Veterano": (75, 0, 130),
+            "Mestre": (255, 0, 255),
         }
         color = badge_colors.get(skill_level, colors.WHITE)
 
         pygame.draw.circle(surface, color, (x + 40, y + 40), 40, 3)
-        
+
         text = font.render(skill_level, True, color)
         text_rect = text.get_rect(center=(x + 150, y + 40))
         surface.blit(text, text_rect)
@@ -881,8 +959,11 @@ class ProfileVisualizer:
     def render_performance_graph(
         surface: pygame.Surface,
         profile: PlayerProfile,
-        x: int, y: int, width: int, height: int,
-        font: pygame.font.Font
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        font: pygame.font.Font,
     ):
         """Renderiza gráfico de performance ao longo dos níveis."""
         from ..core import colors
@@ -893,7 +974,9 @@ class ProfileVisualizer:
         levels = sorted(profile.level_stats.keys())
         max_level = max(levels) if levels else 1
 
-        pygame.draw.line(surface, colors.GRAY, (x, y + height), (x + width, y + height), 2)
+        pygame.draw.line(
+            surface, colors.GRAY, (x, y + height), (x + width, y + height), 2
+        )
         pygame.draw.line(surface, colors.GRAY, (x, y), (x, y + height), 2)
 
         if len(levels) > 1:
@@ -924,7 +1007,8 @@ class ProfileVisualizer:
         surface: pygame.Surface,
         profile: PlayerProfile,
         level_number: int,
-        x: int, y: int
+        x: int,
+        y: int,
     ):
         """Renderiza preview de um nível com estatísticas."""
         from ..core import colors
@@ -955,10 +1039,10 @@ class ProfileVisualizer:
             PerformanceState.LEARNING: colors.YELLOW,
             PerformanceState.COMFORTABLE: colors.GREEN,
             PerformanceState.DOMINATING: colors.BLUE,
-            PerformanceState.INCONSISTENT: colors.ORANGE
+            PerformanceState.INCONSISTENT: colors.ORANGE,
         }
-        state_text = analysis['state'].value.capitalize()
-        state_color = state_colors.get(analysis['state'], colors.WHITE)
+        state_text = analysis["state"].value.capitalize()
+        state_color = state_colors.get(analysis["state"], colors.WHITE)
         text = font.render(f"Status: {state_text}", True, state_color)
         surface.blit(text, (x + 10, y_offset))
         y_offset += 25
@@ -967,7 +1051,11 @@ class ProfileVisualizer:
         lines = [
             f"Tentativas: {stats.attempts}",
             f"Taxa de Sucesso: {stats.clear_rate:.0%}",
-            f"Melhor Tempo: {stats.best_time:.1f}s" if stats.best_time is not None else "Melhor Tempo: --",
+            (
+                f"Melhor Tempo: {stats.best_time:.1f}s"
+                if stats.best_time is not None
+                else "Melhor Tempo: --"
+            ),
         ]
 
         for line in lines:
@@ -979,10 +1067,10 @@ class ProfileVisualizer:
     def _get_performance_color(clear_rate: float) -> Tuple[int, int, int]:
         """Retorna cor baseada na taxa de sucesso."""
         if clear_rate < 0.3:
-            return (255, 0, 0)      # Vermelho - struggling
+            return (255, 0, 0)  # Vermelho - struggling
         elif clear_rate < 0.5:
-            return (255, 165, 0)    # Laranja - learning
+            return (255, 165, 0)  # Laranja - learning
         elif clear_rate < 0.8:
-            return (0, 255, 0)      # Verde - comfortable
+            return (0, 255, 0)  # Verde - comfortable
         else:
-            return (0, 191, 255)    # Azul - dominating
+            return (0, 191, 255)  # Azul - dominating

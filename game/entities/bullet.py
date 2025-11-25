@@ -1,5 +1,5 @@
 import pygame
-from ..core.config import Config
+from ..core.config import config as Config
 from ..core import colors
 
 

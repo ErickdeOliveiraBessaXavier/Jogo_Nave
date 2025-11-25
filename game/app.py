@@ -1,6 +1,6 @@
 import pygame
 from .core.state import StateManager
-from .core.config import Config, set_screen_resolution
+from .core.config import config as Config, set_screen_resolution
 from .core.assets import load_custom_cursor
 from .scenes.main_menu import MainMenuScene
 from .core.levels import LevelManager, FIXED_LEVELS
@@ -42,6 +42,7 @@ class GameApp:
 
         # PRÉ-CARREGAR TODOS OS SPRITES (adicionar aqui)
         from .core.sprite_loader import sprite_loader
+
         sprite_loader.load_all()
 
         pygame.display.set_caption("Space Shooter")
@@ -51,7 +52,7 @@ class GameApp:
         self.states: StateManager = StateManager()
         self.level_manager = LevelManager(FIXED_LEVELS)
         self.input: Input = Input()
-        
+
         # Dificuldade selecionada (padrão: normal)
         self.selected_difficulty = DifficultyPreset.NORMAL
 

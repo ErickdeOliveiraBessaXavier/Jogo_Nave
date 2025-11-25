@@ -4,7 +4,7 @@ import math
 import time
 from typing import TYPE_CHECKING, Optional
 from ..core.state import Scene
-from ..core.config import Config
+from ..core.config import config as Config
 from ..render.renderer import Renderer
 from ..entities.ship import Ship
 from ..systems.spawner import EnemySpawner, PowerUpSpawner
@@ -27,18 +27,20 @@ if TYPE_CHECKING:
 
 class PlayingScene(Scene):
     def __init__(
-        self, 
-        app: "GameApp", 
+        self,
+        app: "GameApp",
         level_manager: LevelManager,
-        difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL
+        difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
     ):
         super().__init__(app)
         self.level_manager = level_manager
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
-        self.last_dt = 1.0 / Config.FPS        
+        self.last_dt = 1.0 / Config.FPS
         self.r = Renderer()
-        self.ship = Ship(Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT + 100)  # Start 100 pixels below the screen
+        self.ship = Ship(
+            Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT + 100
+        )  # Start 100 pixels below the screen
         self.ship.is_entering = True
         self.entity_manager = EntityManager()
         self.first_entry = True
@@ -70,16 +72,25 @@ class PlayingScene(Scene):
         self.warning_font = get_font(Config.WARNING_FONT_SIZE)
         # Meta-progression system
         from pathlib import Path
+
         self.player_profile = PlayerProfile(Path("player_profile.json"))
         self.player_profile.start_session()
 
         self.current_level_index = 0
-        self.level_config = self._get_adjusted_level_config(self.current_level_index + 1)
+        self.level_config = self._get_adjusted_level_config(
+            self.current_level_index + 1
+        )
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
         # Inicializar spawner com delay inicial apenas para fase 1
         is_initial_level = self.current_level_index == 0
-        self.enemy_spawner = EnemySpawner(self.level_manager, self.entity_manager.meteor_pool, is_initial_level, self.difficulty_preset, self.enemy_health_multiplier)
+        self.enemy_spawner = EnemySpawner(
+            self.level_manager,
+            self.entity_manager.meteor_pool,
+            is_initial_level,
+            self.difficulty_preset,
+            self.enemy_health_multiplier,
+        )
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
 
@@ -89,14 +100,14 @@ class PlayingScene(Scene):
     def _apply_difficulty_settings(self):
         """Aplica configurações globais do preset de dificuldade."""
         settings = self.difficulty_settings
-        
+
         # Vidas iniciais
         self.lives: int = settings["lives"]
-        
+
         # Armazenar multiplicadores para uso em colisões e dano
         self.player_damage_multiplier = settings["player_damage_multiplier"]
         self.enemy_health_multiplier = settings["enemy_health_multiplier"]
-        
+
         self.score: int = 0
         self.ship.lives = self.lives
         self.total_enemies_destroyed = 0
@@ -137,7 +148,9 @@ class PlayingScene(Scene):
 
             # Mover a nave para a posição inicial de forma suave
             target_y = Config.SCREEN_HEIGHT - 80
-            initial_y = Config.SCREEN_HEIGHT + 100  # Match the ship's initial y position
+            initial_y = (
+                Config.SCREEN_HEIGHT + 100
+            )  # Match the ship's initial y position
 
             if self.preparation_time_left > 0:
                 elapsed_time = Config.PREPARATION_TIME - self.preparation_time_left
@@ -236,7 +249,7 @@ class PlayingScene(Scene):
                 self.ship.rect.centerx,
                 self.ship.rect.centery,
             )
-            
+
             # Não spawnar power-ups no Nightmare (regra especial)
             special_rules = self.difficulty_settings.get("special_rules", [])
             if "no_powerups" not in special_rules:
@@ -305,7 +318,7 @@ class PlayingScene(Scene):
 
     def _all_animations_finished(self) -> bool:
         return (
-            self.entity_manager.explosion_pool.get_stats()['active'] == 0
+            self.entity_manager.explosion_pool.get_stats()["active"] == 0
             # Remover balas do jogador da verificação para permitir transições durante tiros
             # and not self.entity_manager.bullets
             and not self.entity_manager.alien_bullets
@@ -342,7 +355,7 @@ class PlayingScene(Scene):
     def _handle_collisions(self):
         # A grid JÁ FOI CONSTRUÍDA no entity_manager.update()
         enemy_grid = self.entity_manager.enemy_spatial_grid
-        
+
         # Colisões com TODOS os inimigos (normais + formações) usando grid única
         gain: int = 0
         destroyed: int = 0
@@ -413,9 +426,19 @@ class PlayingScene(Scene):
 
         for x, y, pts in score_events:
             # Aplicar multiplicadores de pontuação: nível E dificuldade
-            adjusted_pts = int(pts * self.level_config.score_multiplier * self.difficulty_settings["rewards_multiplier"])
-            self.entity_manager.floating_scores.append(FloatingScore(x, y, adjusted_pts))
-        self.score += int(gain * self.level_config.score_multiplier * self.difficulty_settings["rewards_multiplier"])
+            adjusted_pts = int(
+                pts
+                * self.level_config.score_multiplier
+                * self.difficulty_settings["rewards_multiplier"]
+            )
+            self.entity_manager.floating_scores.append(
+                FloatingScore(x, y, adjusted_pts)
+            )
+        self.score += int(
+            gain
+            * self.level_config.score_multiplier
+            * self.difficulty_settings["rewards_multiplier"]
+        )
         self.total_enemies_destroyed += destroyed
         self.enemies_destroyed_in_level += destroyed
 
@@ -465,9 +488,7 @@ class PlayingScene(Scene):
             self.score += spike_gain
 
         # Colisão da nave com TODOS os inimigos usando grid única
-        if self.collisions.ship_vs_enemies(
-            self.ship, enemy_grid, self.entity_manager
-        ):
+        if self.collisions.ship_vs_enemies(self.ship, enemy_grid, self.entity_manager):
             self._handle_ship_hit()
 
         if self.entity_manager.boss:
@@ -510,7 +531,9 @@ class PlayingScene(Scene):
             for laser in self.entity_manager.boss_lasers
             if isinstance(laser, SpikeBossLaser)
         ]
-        if spike_boss_lasers and self.collisions.spike_boss_laser_vs_ship(self.ship, spike_boss_lasers):
+        if spike_boss_lasers and self.collisions.spike_boss_laser_vs_ship(
+            self.ship, spike_boss_lasers
+        ):
             self._handle_ship_hit()
 
         # Colisões com espinhos (SpikeBoss)
@@ -543,12 +566,12 @@ class PlayingScene(Scene):
         collected_powerups = self.collisions.ship_vs_powerups(
             self.ship, self.entity_manager.powerups
         )
-        
+
         # Verificar regras especiais da dificuldade
         special_rules = self.difficulty_settings.get("special_rules", [])
         if "no_powerups" in special_rules:
             collected_powerups = []  # Ignorar todos os power-ups
-        
+
         if collected_powerups:
             for kind in collected_powerups:
                 sound_manager.play_powerup()
@@ -620,6 +643,7 @@ class PlayingScene(Scene):
         else:
             # Switch to GameOverScene
             from .game_over import GameOverScene
+
             self.app.states.switch(GameOverScene(self.app, self.score, self))
 
             # Meta-progression: Record death and end session
@@ -656,9 +680,7 @@ class PlayingScene(Scene):
         sound_manager.stop_all_sfx()
 
         if self.level_config.boss_type:
-            boss = self.level_config.boss_type(
-                Config.SCREEN_WIDTH / 2 - 50, 50
-            )
+            boss = self.level_config.boss_type(Config.SCREEN_WIDTH / 2 - 50, 50)
             # Aplicar multiplicador de health da dificuldade
             boss.health = int(boss.health * self.enemy_health_multiplier)
             self.entity_manager.boss = boss
@@ -696,7 +718,9 @@ class PlayingScene(Scene):
             ex = boss_center[0] + radius * math.cos(rad_angle)
             ey = boss_center[1] + radius * math.sin(rad_angle)
             # Nova forma
-            self.entity_manager.spawn_explosion(ex, ey, size=Config.BOSS_EXPLOSION_SMALL_SIZE)
+            self.entity_manager.spawn_explosion(
+                ex, ey, size=Config.BOSS_EXPLOSION_SMALL_SIZE
+            )
 
         # Explosão central maior
         # Nova forma
@@ -708,7 +732,9 @@ class PlayingScene(Scene):
         for spike in self.entity_manager.spikes[:]:
             # Criar pequenas explosões onde os spikes estavam
             if spike.state != "respawning":
-                self.entity_manager.spawn_explosion(spike.center_x, spike.center_y, size=15)
+                self.entity_manager.spawn_explosion(
+                    spike.center_x, spike.center_y, size=15
+                )
         self.entity_manager.spikes.clear()
 
         self.entity_manager.boss = None
@@ -733,7 +759,7 @@ class PlayingScene(Scene):
                 score=self.score,
                 enemies_killed=self.total_enemies_destroyed,
                 damage_taken=self.level_damage_taken,
-                powerups_collected=self.level_powerups_collected
+                powerups_collected=self.level_powerups_collected,
             )
 
         if not self.level_transition_active:
@@ -745,7 +771,9 @@ class PlayingScene(Scene):
         self.current_level_index += 1
 
         # Gerar próximo nível (sistema híbrido: fixo ou procedural)
-        self.level_config = self._get_adjusted_level_config(self.current_level_index + 1)
+        self.level_config = self._get_adjusted_level_config(
+            self.current_level_index + 1
+        )
         self.enemy_spawner.set_level(self.current_level_index + 1)
         self.enemies_destroyed_in_level = 0
 
@@ -803,10 +831,10 @@ class PlayingScene(Scene):
             self.game_surface, self.ship.rect.centerx, self.ship.rect.centery
         )
         self.ship.draw(self.game_surface)
-        
+
         # Atualizar FPS
         self.r.update_fps(dt)
-        
+
         self.r.hud(
             self.game_surface,
             self.score,

@@ -1,6 +1,6 @@
 import pygame
 import math
-from ..core.config import Config
+from ..core.config import config as Config
 from ..core.colors import LIGHT_BLUE
 from .ship import Ship
 from .mini_ship_bullet import MiniShipBullet

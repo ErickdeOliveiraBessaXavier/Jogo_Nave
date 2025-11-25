@@ -1,7 +1,7 @@
 import math
 import pygame
 from typing import Tuple
-from ..core.config import Config
+from ..core.config import config as Config
 from ..core import colors
 from .meteor import Meteor
 

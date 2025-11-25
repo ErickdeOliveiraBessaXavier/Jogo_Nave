@@ -1,6 +1,6 @@
 import pygame
 import random
-from ..core.config import Config
+from ..core.config import config as Config
 from typing import Tuple, TypedDict, Union
 
 
@@ -169,7 +169,9 @@ class Ship:
             self.y = 0
         if self.x + self.w > Config.SCREEN_WIDTH:
             self.x = Config.SCREEN_WIDTH - self.w
-        if self.y + self.h > Config.SCREEN_HEIGHT and not self.is_entering:  # Allow going below screen during entry
+        if (
+            self.y + self.h > Config.SCREEN_HEIGHT and not self.is_entering
+        ):  # Allow going below screen during entry
             self.y = Config.SCREEN_HEIGHT - self.h
 
     def bullet_spawn(self) -> list[tuple[float, float, bool]]:

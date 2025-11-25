@@ -12,7 +12,7 @@ from ..scenes.settings import SettingsScene
 from ..scenes.difficulty_selection import DifficultySelectionScene
 from ..scenes.statistics import StatisticsScene
 from ..core.assets import get_font
-from ..core.config import Config
+from ..core.config import config as Config
 from ..render.renderer import Renderer
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
@@ -56,7 +56,15 @@ class ButtonState(Enum):
 
 
 class Button:
-    def __init__(self, text: str, rect: pygame.Rect, font: Any, color: tuple[int, int, int], hover_color: tuple[int, int, int], action: Callable[[], None]):
+    def __init__(
+        self,
+        text: str,
+        rect: pygame.Rect,
+        font: Any,
+        color: tuple[int, int, int],
+        hover_color: tuple[int, int, int],
+        action: Callable[[], None],
+    ):
         self.text = text
         self.rect = rect
         self.font = font
@@ -73,17 +81,24 @@ class Button:
     def _create_char_data(self):
         btn_char_renders = [self.font.render(char, True, BLACK) for char in self.text]
         self.text_width = sum(char.get_width() for char in btn_char_renders)
-        
+
         text_start_x = self.rect.centerx - (self.text_width / 2)
         text_current_x = text_start_x
 
         for char_render in btn_char_renders:
-            char_base_rect = char_render.get_rect(topleft=(text_current_x, self.rect.centery - char_render.get_height() / 2))
-            self.chars.append({
-                'render': char_render,
-                'base_rect': char_base_rect,
-                'rect': char_base_rect.copy()
-            })
+            char_base_rect = char_render.get_rect(
+                topleft=(
+                    text_current_x,
+                    self.rect.centery - char_render.get_height() / 2,
+                )
+            )
+            self.chars.append(
+                {
+                    "render": char_render,
+                    "base_rect": char_base_rect,
+                    "rect": char_base_rect.copy(),
+                }
+            )
             text_current_x += char_render.get_width()
 
     def update_hover(self, mouse_pos: tuple[int, int]):
@@ -95,25 +110,41 @@ class Button:
         else:
             self.state = ButtonState.NORMAL
 
-    def update_animation(self, time_ms: float, anim_speed: float, phase_shift: float, anim_range: float):
+    def update_animation(
+        self, time_ms: float, anim_speed: float, phase_shift: float, anim_range: float
+    ):
         for i, char_data in enumerate(self.chars):
             if self.state in (ButtonState.HOVERED, ButtonState.FOCUSED):
                 sine_wave = math.sin(
                     (time_ms / 1000.0 * anim_speed * 2) + (i * phase_shift)
                 )
-                char_data['rect'].y = int(
-                    char_data['base_rect'].y + sine_wave * anim_range
+                char_data["rect"].y = int(
+                    char_data["base_rect"].y + sine_wave * anim_range
                 )
             else:
-                char_data['rect'].y = char_data['base_rect'].y
+                char_data["rect"].y = char_data["base_rect"].y
 
-    def render(self, surface: pygame.Surface, border_color: tuple[int, int, int], scale_factor: float):
-        color = self.hover_color if self.state in (ButtonState.HOVERED, ButtonState.FOCUSED) else self.color
+    def render(
+        self,
+        surface: pygame.Surface,
+        border_color: tuple[int, int, int],
+        scale_factor: float,
+    ):
+        color = (
+            self.hover_color
+            if self.state in (ButtonState.HOVERED, ButtonState.FOCUSED)
+            else self.color
+        )
 
         if self.state == ButtonState.HOVERED:
-            scaled_rect = pygame.Rect(0, 0, int(self.rect.width * scale_factor), int(self.rect.height * scale_factor))
+            scaled_rect = pygame.Rect(
+                0,
+                0,
+                int(self.rect.width * scale_factor),
+                int(self.rect.height * scale_factor),
+            )
             scaled_rect.center = self.rect.center
-            
+
             pygame.draw.rect(surface, color, scaled_rect, border_radius=12)
             pygame.draw.rect(surface, border_color, scaled_rect, 2, border_radius=12)
 
@@ -121,24 +152,27 @@ class Button:
             start_x = scaled_rect.centerx - (self.text_width / 2)
             current_x = start_x
             for char_data in self.chars:
-                char_pos = (current_x, char_data['rect'].y)
-                surface.blit(char_data['render'], char_pos)
-                current_x += char_data['render'].get_width()
+                char_pos = (current_x, char_data["rect"].y)
+                surface.blit(char_data["render"], char_pos)
+                current_x += char_data["render"].get_width()
         else:
             pygame.draw.rect(surface, color, self.rect, border_radius=10)
             pygame.draw.rect(surface, border_color, self.rect, 2, border_radius=10)
-            
-            text_rect = self.font.render(self.text, True, BLACK).get_rect(center=self.rect.center)
+
+            text_rect = self.font.render(self.text, True, BLACK).get_rect(
+                center=self.rect.center
+            )
             surface.blit(self.font.render(self.text, True, BLACK), text_rect)
 
 
 class MainMenuScene(Scene):
     """
     Main menu scene for the Space Shooter game.
-    
+
     Handles the display and interaction of the main menu, including title animation,
     button interactions, and navigation to other scenes.
     """
+
     def __init__(self, app: "GameApp"):
         super().__init__(app)
         self.r = Renderer()
@@ -168,20 +202,42 @@ class MainMenuScene(Scene):
 
         for char_render in char_renders:
             base_rect = char_render.get_rect(topleft=(current_x, base_y))
-            self.title_chars.append({
-                'render': char_render,
-                'base_rect': base_rect,
-                'rect': base_rect.copy()
-            })
+            self.title_chars.append(
+                {
+                    "render": char_render,
+                    "base_rect": base_rect,
+                    "rect": base_rect.copy(),
+                }
+            )
             current_x += char_render.get_width()
 
     def _create_buttons(self):
         """Creates button instances with their actions."""
         button_configs = [
-            (MenuStrings.START_GAME, GREEN, BRIGHT_GREEN, lambda: self.app.states.push(DifficultySelectionScene(self.app))),
-            (MenuStrings.STATISTICS, GREEN, BRIGHT_GREEN, lambda: self.app.states.push(StatisticsScene(self.app))),
-            (MenuStrings.SETTINGS, GREEN, BRIGHT_GREEN, lambda: self.app.states.push(SettingsScene(self.app))),
-            (MenuStrings.EXIT, DARK_RED, RED, lambda: setattr(self.app, 'running', False)),
+            (
+                MenuStrings.START_GAME,
+                GREEN,
+                BRIGHT_GREEN,
+                lambda: self.app.states.push(DifficultySelectionScene(self.app)),
+            ),
+            (
+                MenuStrings.STATISTICS,
+                GREEN,
+                BRIGHT_GREEN,
+                lambda: self.app.states.push(StatisticsScene(self.app)),
+            ),
+            (
+                MenuStrings.SETTINGS,
+                GREEN,
+                BRIGHT_GREEN,
+                lambda: self.app.states.push(SettingsScene(self.app)),
+            ),
+            (
+                MenuStrings.EXIT,
+                DARK_RED,
+                RED,
+                lambda: setattr(self.app, "running", False),
+            ),
         ]
 
         for i, (text, color, hover_color, action) in enumerate(button_configs):
@@ -193,11 +249,19 @@ class MainMenuScene(Scene):
             button = Button(text, rect, self.button_font, color, hover_color, action)
             self.buttons.append(button)
 
-    def _calculate_wave_offset(self, time_ms: float, index: int, amplitude: float, speed: Optional[float] = None) -> int:
+    def _calculate_wave_offset(
+        self,
+        time_ms: float,
+        index: int,
+        amplitude: float,
+        speed: Optional[float] = None,
+    ) -> int:
         """Calculates offset based on sine wave for animation."""
         if speed is None:
             speed = AnimationConfig.TITLE_ANIM_SPEED
-        sine_wave = math.sin((time_ms / 1000.0 * speed) + (index * AnimationConfig.TITLE_PHASE_SHIFT))
+        sine_wave = math.sin(
+            (time_ms / 1000.0 * speed) + (index * AnimationConfig.TITLE_PHASE_SHIFT)
+        )
         return int(sine_wave * amplitude)
 
     def enter(self):
@@ -221,13 +285,20 @@ class MainMenuScene(Scene):
             for button in self.buttons:
                 prev_state = button.state
                 button.update_hover(event.pos)
-                if button.state == ButtonState.HOVERED and prev_state != ButtonState.HOVERED:
+                if (
+                    button.state == ButtonState.HOVERED
+                    and prev_state != ButtonState.HOVERED
+                ):
                     sound_manager.play_sound("button_hover")
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_DOWN:
-                self.focused_button_index = (self.focused_button_index + 1) % len(self.buttons)
+                self.focused_button_index = (self.focused_button_index + 1) % len(
+                    self.buttons
+                )
             elif event.key == pygame.K_UP:
-                self.focused_button_index = (self.focused_button_index - 1) % len(self.buttons)
+                self.focused_button_index = (self.focused_button_index - 1) % len(
+                    self.buttons
+                )
             elif event.key == pygame.K_RETURN:
                 self.buttons[self.focused_button_index].action()
                 sound_manager.play_sound("button_click")
@@ -235,7 +306,7 @@ class MainMenuScene(Scene):
                 self.app.running = False
             # Update focused states
             for i, button in enumerate(self.buttons):
-                button.focused = (i == self.focused_button_index)
+                button.focused = i == self.focused_button_index
 
     def update(self, dt: float):
         """Updates scene logic."""
@@ -244,11 +315,20 @@ class MainMenuScene(Scene):
 
         # Animate title
         for i, char_data in enumerate(self.title_chars):
-            char_data['rect'].y = char_data['base_rect'].y + self._calculate_wave_offset(time_ms, i, AnimationConfig.TITLE_ANIM_RANGE)
-        
+            char_data["rect"].y = char_data[
+                "base_rect"
+            ].y + self._calculate_wave_offset(
+                time_ms, i, AnimationConfig.TITLE_ANIM_RANGE
+            )
+
         # Animate buttons
         for button in self.buttons:
-            button.update_animation(time_ms, AnimationConfig.TITLE_ANIM_SPEED, AnimationConfig.TITLE_PHASE_SHIFT, AnimationConfig.BUTTON_ANIM_RANGE)
+            button.update_animation(
+                time_ms,
+                AnimationConfig.TITLE_ANIM_SPEED,
+                AnimationConfig.TITLE_PHASE_SHIFT,
+                AnimationConfig.BUTTON_ANIM_RANGE,
+            )
 
     def render(self, surface: pygame.Surface):
         """Renders the scene."""
@@ -257,9 +337,13 @@ class MainMenuScene(Scene):
 
         # Render title
         for char_data in self.title_chars:
-            surface.blit(char_data['render'], char_data['rect'])
+            surface.blit(char_data["render"], char_data["rect"])
 
         # Render buttons
         for button in self.buttons:
-            border_color = self.focused_border_color if button.state == ButtonState.FOCUSED else self.border_color
+            border_color = (
+                self.focused_border_color
+                if button.state == ButtonState.FOCUSED
+                else self.border_color
+            )
             button.render(surface, border_color, AnimationConfig.BUTTON_SCALE_FACTOR)

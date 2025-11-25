@@ -45,17 +45,19 @@ class EntityManager:
         self.spikes: list[Spike] = []  # Lista para espinhos do SpikeBoss
         self.meteor_pool = MeteorPool(initial_size=100)  # Pool de meteoros
         self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
-        self.enemy_spatial_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy] = SpatialGrid()  # Grid espacial para inimigos
+        self.enemy_spatial_grid: SpatialGrid[
+            Meteor | Alien | ExplosiveMine | EyeEnemy
+        ] = SpatialGrid()  # Grid espacial para inimigos
         self.explosion_pool = ExplosionPool(initial_size=50)  # Pool de explosões
 
     def spawn_explosion(self, x: float, y: float, size: int = 30) -> Explosion:
         """
         Spawna uma explosão usando o pool.
-        
+
         Args:
             x, y: Posição da explosão
             size: Tamanho da explosão
-            
+
         Returns:
             Explosão criada ou reutilizada do pool
         """
@@ -64,11 +66,11 @@ class EntityManager:
     def rebuild_enemy_grid(self):
         """Reconstrói a grid espacial com TODOS os inimigos (normais + formações)."""
         self.enemy_spatial_grid.clear()  # Limpar grid anterior
-        
+
         # Inserir inimigos normais
         for enemy in self.enemies:
             self.enemy_spatial_grid.insert_from_rect(enemy)
-        
+
         # Inserir inimigos de formações
         for formation in self.formations:
             for enemy in formation.get_enemies():
@@ -383,7 +385,7 @@ class EntityManager:
             if bullet.dead:
                 self.bullet_pool.release(bullet)
         self.bullets = [b for b in self.bullets if not b.dead]
-        
+
         self.alien_bullets.clear()
         self.boss_lasers.clear()
         self.boss_squares.clear()
@@ -404,6 +406,6 @@ class EntityManager:
             "bullets": len(self.bullets),
             "enemies": len(self.enemies),
             "formations": len(self.formations),
-            "explosions_active": self.explosion_pool.get_stats()['active'],
-            "grid_stats": self.enemy_spatial_grid.get_statistics()
+            "explosions_active": self.explosion_pool.get_stats()["active"],
+            "grid_stats": self.enemy_spatial_grid.get_statistics(),
         }

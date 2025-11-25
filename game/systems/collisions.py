@@ -84,7 +84,9 @@ class Collisions:
                 else:
                     enemy.dead = True
                     # Nova forma
-                    entity_manager.spawn_explosion(enemy_cx, enemy_cy, size=enemy.w // 2)
+                    entity_manager.spawn_explosion(
+                        enemy_cx, enemy_cy, size=enemy.w // 2
+                    )
 
         # Check player collision
         if ship.invuln <= 0:
@@ -95,7 +97,9 @@ class Collisions:
             dist_sq = (ship_cx - explosion_x) ** 2 + (ship_cy - explosion_y) ** 2
             if dist_sq < (explosion_radius + ship_r) ** 2:
                 # Nova forma
-                entity_manager.spawn_explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
+                entity_manager.spawn_explosion(
+                    ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
+                )
                 ship_hit = True
         return ship_hit
 
@@ -103,7 +107,9 @@ class Collisions:
         self,
         mini_ship_bullets: list[MiniShipBullet],
         enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],  # Para adicionar fragments
+        enemies: list[
+            Meteor | Alien | ExplosiveMine | EyeEnemy
+        ],  # Para adicionar fragments
         entity_manager: "EntityManager",  # <-- ADICIONAR
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
@@ -132,7 +138,9 @@ class Collisions:
 
                         cx, cy = (enemy.rect.centerx, enemy.rect.centery)
                         # Nova forma
-                        entity_manager.spawn_explosion(cx, cy, size=enemy.rect.width // 2)
+                        entity_manager.spawn_explosion(
+                            cx, cy, size=enemy.rect.width // 2
+                        )
 
                         if isinstance(enemy, Meteor):
                             sound_manager.play_explosion_asteroid()
@@ -159,7 +167,9 @@ class Collisions:
         mine_explosions: list[MineExplosion],
         ship: Ship,
         enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],  # Para adicionar fragments
+        enemies: list[
+            Meteor | Alien | ExplosiveMine | EyeEnemy
+        ],  # Para adicionar fragments
         entity_manager: "EntityManager",  # <-- NOVO
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
@@ -230,7 +240,7 @@ class Collisions:
                 # Não dar pontos por acertar o boss, apenas ao derrotá-lo
                 if boss.dead:
                     # Dar pontuação fixa de 10.000 ao derrotar o boss
-                    from ..core.config import Config
+                    from ..core.config import config as Config
 
                     floating_scores.append(
                         FloatingScore(
@@ -240,14 +250,20 @@ class Collisions:
                         )
                     )
                     score_gain += Config.BOSS_DEFEAT_SCORE
-                    entity_manager.spawn_explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
+                    entity_manager.spawn_explosion(
+                        boss.x + boss.w / 2, boss.y + boss.h / 2, size=100
+                    )
         return score_gain
 
-    def ship_vs_boss(self, ship: Ship, boss: Boss, entity_manager: "EntityManager") -> bool:
+    def ship_vs_boss(
+        self, ship: Ship, boss: Boss, entity_manager: "EntityManager"
+    ) -> bool:
         if ship.invuln > 0:
             return False
         if ship.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
-            entity_manager.spawn_explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
+            entity_manager.spawn_explosion(
+                ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
+            )
             return True
         return False
 
@@ -276,7 +292,9 @@ class Collisions:
                     if isinstance(enemy, EyeEnemy):
                         enemy.destroy()
                     enemy.dead = True
-                entity_manager.spawn_explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
+                entity_manager.spawn_explosion(
+                    ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
+                )
                 return True
         return False
 
@@ -335,7 +353,7 @@ class Collisions:
                 entity_manager.spawn_explosion(b.x, b.y, size=15)
 
                 if boss.dead:
-                    from ..core.config import Config
+                    from ..core.config import config as Config
 
                     floating_scores.append(
                         FloatingScore(
@@ -345,7 +363,9 @@ class Collisions:
                         )
                     )
                     score_gain += Config.BOSS_DEFEAT_SCORE
-                    entity_manager.spawn_explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
+                    entity_manager.spawn_explosion(
+                        boss.x + boss.w / 2, boss.y + boss.h / 2, size=100
+                    )
         return score_gain
 
     def mini_ship_bullets_vs_spike_boss(
@@ -365,7 +385,7 @@ class Collisions:
                 entity_manager.spawn_explosion(b.x, b.y, size=15)
 
                 if boss.dead:
-                    from ..core.config import Config
+                    from ..core.config import config as Config
 
                     floating_scores.append(
                         FloatingScore(
@@ -375,7 +395,9 @@ class Collisions:
                         )
                     )
                     score_gain += Config.BOSS_DEFEAT_SCORE
-                    entity_manager.spawn_explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
+                    entity_manager.spawn_explosion(
+                        boss.x + boss.w / 2, boss.y + boss.h / 2, size=100
+                    )
         return score_gain
 
     def mini_ship_bullets_vs_spikes(
@@ -404,7 +426,9 @@ class Collisions:
                 if spike.state == "flying" and b.rect.colliderect(spike.rect):
                     b.dead = True
                     spike.dead = True
-                    entity_manager.spawn_explosion(spike.center_x, spike.center_y, size=15)
+                    entity_manager.spawn_explosion(
+                        spike.center_x, spike.center_y, size=15
+                    )
                     sound_manager.play_explosion_alien()
                     score_gain += Config.SPIKE_POINTS
                     break
@@ -469,7 +493,9 @@ class Collisions:
                     spike.dead = True
 
                     # Explosão pequena no centro do spike
-                    entity_manager.spawn_explosion(spike.center_x, spike.center_y, size=15)
+                    entity_manager.spawn_explosion(
+                        spike.center_x, spike.center_y, size=15
+                    )
 
                     # Som
                     sound_manager.play_explosion_asteroid()
@@ -498,7 +524,7 @@ class Collisions:
 
                 # Pontos ao derrotar
                 if boss.dead:
-                    from ..core.config import Config
+                    from ..core.config import config as Config
 
                     floating_scores.append(
                         FloatingScore(
@@ -508,7 +534,9 @@ class Collisions:
                         )
                     )
                     score_gain += Config.BOSS_DEFEAT_SCORE
-                    entity_manager.spawn_explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
+                    entity_manager.spawn_explosion(
+                        boss.x + boss.w / 2, boss.y + boss.h / 2, size=100
+                    )
         return score_gain
 
     def ship_vs_spike_boss(
@@ -520,7 +548,9 @@ class Collisions:
 
         # Colisão com o corpo do boss
         if ship.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
-            entity_manager.spawn_explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=30)
+            entity_manager.spawn_explosion(
+                ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
+            )
             return True
 
         # Colisão com onda de proximidade
@@ -536,7 +566,9 @@ class Collisions:
 
             # Se a nave está dentro da onda
             if distance <= wave_radius:
-                entity_manager.spawn_explosion(ship.x + ship.w / 2, ship.y + ship.h / 2, size=20)
+                entity_manager.spawn_explosion(
+                    ship.x + ship.w / 2, ship.y + ship.h / 2, size=20
+                )
                 return True
 
         return False

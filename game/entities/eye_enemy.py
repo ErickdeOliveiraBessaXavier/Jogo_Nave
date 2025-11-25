@@ -2,7 +2,7 @@ import pygame
 import random
 import math
 from typing import List, Tuple, TypedDict
-from ..core.config import Config
+from ..core.config import config as Config
 from ..core import colors
 from .eye_laser import EyeLaser
 
@@ -25,7 +25,9 @@ class EyeEnemy:
         self.speed_x: float = 75
         self.dead: bool = False
 
-        self.state: str = "entering"  # entering, moving, aiming, charging, firing, waiting
+        self.state: str = (
+            "entering"  # entering, moving, aiming, charging, firing, waiting
+        )
         self.timer: float = random.uniform(1.0, 3.0)  # Time until next action
 
         self.aim_duration: float = 1.0

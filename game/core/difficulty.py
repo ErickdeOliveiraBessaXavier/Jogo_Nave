@@ -4,6 +4,7 @@ from typing import TypedDict, NotRequired
 
 class DifficultySettingsDict(TypedDict):
     """Estrutura das configurações de dificuldade."""
+
     name: str
     description: str
     difficulty_scaling: float
@@ -17,7 +18,7 @@ class DifficultySettingsDict(TypedDict):
 
 class DifficultyPreset(Enum):
     """Presets de dificuldade para o jogador escolher."""
-    
+
     CASUAL = "casual"
     NORMAL = "normal"
     HARDCORE = "hardcore"
@@ -26,17 +27,17 @@ class DifficultyPreset(Enum):
 
 class DifficultySettings:
     """Configurações específicas por preset de dificuldade."""
-    
+
     PRESETS: dict[DifficultyPreset, DifficultySettingsDict] = {
         DifficultyPreset.CASUAL: {
             "name": "Casual",
             "description": "Relaxe e aproveite a jornada",
-            "difficulty_scaling": 0.10,      # Dificuldade sobe mais devagar
-            "spawn_rate_multiplier": 0.75,   # Menos inimigos por segundo
+            "difficulty_scaling": 0.10,  # Dificuldade sobe mais devagar
+            "spawn_rate_multiplier": 0.75,  # Menos inimigos por segundo
             "enemy_health_multiplier": 0.8,  # Inimigos mais fracos
-            "player_damage_multiplier": 1.3, # Jogador mais forte
-            "lives": 5,                      # Mais vidas
-            "rewards_multiplier": 0.8,       # Menos recompensas
+            "player_damage_multiplier": 1.3,  # Jogador mais forte
+            "lives": 5,  # Mais vidas
+            "rewards_multiplier": 0.8,  # Menos recompensas
         },
         DifficultyPreset.NORMAL: {
             "name": "Normal",
@@ -70,7 +71,7 @@ class DifficultySettings:
             "special_rules": ["permadeath", "no_powerups"],
         },
     }
-    
+
     @classmethod
     def get_settings(cls, preset: DifficultyPreset) -> DifficultySettingsDict:
         """Retorna configurações para um preset."""

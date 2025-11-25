@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Optional
 
 from ..core.state import Scene
 from ..render.renderer import Renderer
-from ..core.config import Config
+from ..core.config import config as Config
 from ..core.colors import BLACK, WHITE, GREEN, BRIGHT_GREEN
 from ..core.assets import get_font
 from ..core.sound import sound_manager

@@ -5,7 +5,7 @@ from typing import List, Tuple, Optional
 import pygame
 
 from ..core import colors
-from ..core.config import Config
+from ..core.config import config as Config
 from ..core.sound import sound_manager
 from .spike import Spike
 from .spike_boss_laser import SpikeBossLaser

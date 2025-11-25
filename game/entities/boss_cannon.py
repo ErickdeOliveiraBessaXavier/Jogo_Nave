@@ -2,7 +2,7 @@ import math
 import random
 from typing import Tuple, List
 import pygame
-from ..core.config import Config
+from ..core.config import config as Config
 from .boss_laser import BossLaser
 from .meteor import Meteor
 from .meteor_pool import MeteorPool

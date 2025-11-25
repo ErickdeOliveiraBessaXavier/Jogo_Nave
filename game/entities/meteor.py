@@ -2,7 +2,7 @@ import random
 import math
 import pygame
 from typing import List, Tuple
-from ..core.config import Config
+from ..core.config import config as Config
 from ..core import colors
 
 
@@ -87,7 +87,7 @@ class Meteor:
         self.color_intensity = 1.0 - ratio * 0.3
         self.dead = False
         self.active = True  # Para o Pool Pattern
-        
+
         # Vida baseada no tamanho (meteoros maiores = mais vida)
         self.health: int = int(10 + (self.size / Config.MAX_METEOR_SIZE) * 40)
 
@@ -159,7 +159,7 @@ class Meteor:
         self.color_intensity = 1.0 - ratio * 0.3
         self.dead = False
         self.active = True
-        
+
         # Vida baseada no tamanho
         self.health = int(10 + (self.size / Config.MAX_METEOR_SIZE) * 40)
 

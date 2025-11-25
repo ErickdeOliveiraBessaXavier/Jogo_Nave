@@ -1,7 +1,7 @@
 import pygame
 import random
 import math
-from ..core.config import Config
+from ..core.config import config as Config
 
 
 class Explosion:

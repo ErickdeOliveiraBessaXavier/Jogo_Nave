@@ -7,19 +7,19 @@ a performance do jogo, baseado em análise de profiling detalhada.
 """
 
 import json
-from pathlib import Path
+from typing import Any, Dict
 
 
-def load_performance_results(file_path: str) -> dict:
+def load_performance_results(file_path: str) -> Dict[str, Any]:
     """Carrega resultados de teste de performance."""
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         return {}
 
 
-def generate_optimization_report():
+def generate_optimization_report() -> Dict[str, Any]:
     """Gera relatório completo das otimizações implementadas."""
 
     print("=" * 80)
@@ -37,13 +37,23 @@ def generate_optimization_report():
         print(f"🎯 FPS Médio: {current_results.get('fps', {}).get('average', 0):.1f}")
         print(f"📉 FPS Mínimo: {current_results.get('fps', {}).get('minimum', 0):.1f}")
         print(f"📈 FPS Máximo: {current_results.get('fps', {}).get('maximum', 0):.1f}")
-        print(f"⚡ Frame Time Médio: {current_results.get('frame_time_ms', {}).get('average', 0):.2f}ms")
-        print(f"🐌 Frame Time Máximo: {current_results.get('frame_time_ms', {}).get('maximum', 0):.2f}ms")
-        print(f"💾 Memória Média: {current_results.get('memory_mb', {}).get('average', 0):.1f}MB")
-        print(f"🧠 Memória Máxima: {current_results.get('memory_mb', {}).get('maximum', 0):.1f}MB")
+        print(
+            f"⚡ Frame Time Médio: {current_results.get('frame_time_ms', {}).get('average', 0):.2f}ms"
+        )
+        print(
+            f"🐌 Frame Time Máximo: {current_results.get('frame_time_ms', {}).get('maximum', 0):.2f}ms"
+        )
+        print(
+            f"💾 Memória Média: {current_results.get('memory_mb', {}).get('average', 0):.1f}MB"
+        )
+        print(
+            f"🧠 Memória Máxima: {current_results.get('memory_mb', {}).get('maximum', 0):.1f}MB"
+        )
         print(f"🏆 Classificação: {current_results.get('performance_rating', 'N/A')}")
     else:
-        print("❌ Nenhum dado de performance encontrado. Execute: python performance_test.py")
+        print(
+            "❌ Nenhum dado de performance encontrado. Execute: python performance_test.py"
+        )
 
     print("\n🔧 OTIMIZAÇÕES IMPLEMENTADAS:")
     print("-" * 40)
@@ -55,7 +65,7 @@ def generate_optimization_report():
             "problema": "Desenho de estrelas grandes usando polígonos complexos com ~100 chamadas cos/sin por frame",
             "solucao": "Substituir polígonos por múltiplos círculos (4x mais eficiente)",
             "impacto": "88% redução no tempo de draw das estrelas (6.8s → 0.8s)",
-            "arquivo": "renderer.py:265(draw)"
+            "arquivo": "renderer.py:265(draw)",
         },
         {
             "categoria": "📝 Interface do Usuário",
@@ -63,7 +73,7 @@ def generate_optimization_report():
             "problema": "Re-renderização desnecessária de textos que não mudam",
             "solucao": "Cache de surfaces de texto baseado em valores atuais",
             "impacto": "Redução significativa em operações de renderização de texto",
-            "arquivo": "renderer.py:_render_text_cached()"
+            "arquivo": "renderer.py:_render_text_cached()",
         },
         {
             "categoria": "💾 Gerenciamento de Memória",
@@ -71,7 +81,7 @@ def generate_optimization_report():
             "problema": "Cache de efeitos visuais crescendo indefinidamente",
             "solucao": "Limite máximo de 10 entradas com limpeza automática",
             "impacto": "Prevenção de vazamentos de memória em efeitos visuais",
-            "arquivo": "renderer.py:effects_on_ship()"
+            "arquivo": "renderer.py:effects_on_ship()",
         },
         {
             "categoria": "🔍 Monitoramento de Performance",
@@ -79,7 +89,7 @@ def generate_optimization_report():
             "problema": "Falta de visibilidade sobre performance durante gameplay",
             "solucao": "Monitor FPS com tecla F3 + estatísticas detalhadas",
             "impacto": "Debugging em tempo real e identificação de gargalos",
-            "arquivo": "renderer.py:update_fps(), playing.py:render()"
+            "arquivo": "renderer.py:update_fps(), playing.py:render()",
         },
         {
             "categoria": "🧹 Gerenciamento de Entidades",
@@ -87,7 +97,7 @@ def generate_optimization_report():
             "problema": "Balas mortas permanecendo no entity_manager",
             "solucao": "Limpeza forçada em transições de nível",
             "impacto": "Prevenção de acúmulo de entidades mortas",
-            "arquivo": "entity_manager.py:clear_for_level_transition()"
+            "arquivo": "entity_manager.py:clear_for_level_transition()",
         },
         {
             "categoria": "🧪 Testes Automatizados",
@@ -95,7 +105,7 @@ def generate_optimization_report():
             "problema": "Falta de testes sistemáticos de performance",
             "solucao": "Script automatizado com métricas detalhadas",
             "impacto": "Monitoramento contínuo e detecção de regressões",
-            "arquivo": "performance_test.py"
+            "arquivo": "performance_test.py",
         },
         {
             "categoria": "🔬 Profiling Detalhado",
@@ -103,8 +113,8 @@ def generate_optimization_report():
             "problema": "Análise superficial de gargalos de performance",
             "solucao": "Profiling completo com análise automática",
             "impacto": "Identificação precisa de funções custosas",
-            "arquivo": "profile_game.py"
-        }
+            "arquivo": "profile_game.py",
+        },
     ]
 
     for opt in optimizations:
@@ -149,6 +159,8 @@ def generate_optimization_report():
     print("✨ OTIMIZAÇÃO CONCLUÍDA COM SUCESSO!")
     print("O jogo agora possui performance sólida e ferramentas de monitoramento.")
     print("=" * 80)
+    report: Dict[str, Any] = {}
+    return report
 
 
 if __name__ == "__main__":
