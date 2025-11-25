@@ -87,6 +87,9 @@ class Meteor:
         self.color_intensity = 1.0 - ratio * 0.3
         self.dead = False
         self.active = True  # Para o Pool Pattern
+        
+        # Vida baseada no tamanho (meteoros maiores = mais vida)
+        self.health: int = int(10 + (self.size / Config.MAX_METEOR_SIZE) * 40)
 
     def _generate_irregular_shape(self) -> List[Tuple[float, float]]:
         pts: List[Tuple[float, float]] = []
@@ -156,6 +159,9 @@ class Meteor:
         self.color_intensity = 1.0 - ratio * 0.3
         self.dead = False
         self.active = True
+        
+        # Vida baseada no tamanho
+        self.health = int(10 + (self.size / Config.MAX_METEOR_SIZE) * 40)
 
     @property
     def rect(self) -> pygame.Rect:

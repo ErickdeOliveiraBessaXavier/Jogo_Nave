@@ -75,34 +75,11 @@ class PlayingScene(Scene):
 
         self.current_level_index = 0
         self.level_config = self._get_adjusted_level_config(self.current_level_index + 1)
-        self.enemies_destroyed_in_level = 0
-        self.boss_fight_active = False
-        self.pre_boss_transition = False
-        self.pre_boss_timer = 0.0
-        self.warning_sound_played = False  # Flag para controlar o som de warning
-
-        # Sistema de warning em 3 estágios
-        self.warning_stage = 0  # 0=idle, 1=pre-delay, 2=warning-active, 3=post-delay
-        self.warning_stage_timer = 0.0
-
-        # Music transition control
-        self.music_fade_started = False
-        self.boss_music_started = False
-
-        # Level transition control
-        self.level_transition_active = False
-        self.level_transition_timer = 0.0
-        self.level_transition_delay = Config.LEVEL_TRANSITION_DELAY  # segundos
-
-        self.screen_shake_timer = 0.0
-        self.screen_shake_intensity = Config.SCREEN_SHAKE_NORMAL
-        self.warning_timer = 0.0
-        self.warning_font = get_font(Config.WARNING_FONT_SIZE)
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
         # Inicializar spawner com delay inicial apenas para fase 1
         is_initial_level = self.current_level_index == 0
-        self.enemy_spawner = EnemySpawner(self.level_manager, self.entity_manager.meteor_pool, is_initial_level, self.difficulty_preset)
+        self.enemy_spawner = EnemySpawner(self.level_manager, self.entity_manager.meteor_pool, is_initial_level, self.difficulty_preset, self.enemy_health_multiplier)
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
 
@@ -254,7 +231,11 @@ class PlayingScene(Scene):
                 self.ship.rect.centerx,
                 self.ship.rect.centery,
             )
-            self.powerup_spawner.update(dt, self.entity_manager.powerups)
+            
+            # Não spawnar power-ups no Nightmare (regra especial)
+            special_rules = self.difficulty_settings.get("special_rules", [])
+            if "no_powerups" not in special_rules:
+                self.powerup_spawner.update(dt, self.entity_manager.powerups)
 
         self.entity_manager.update(dt, self.ship.rect.centerx, self.ship.rect.centery)
 
@@ -277,6 +258,9 @@ class PlayingScene(Scene):
             self._check_level_progression()
         elif self.entity_manager.boss and self.entity_manager.boss.dead:
             self._end_boss_fight()
+
+        # Auto-save profile periodically
+        self.player_profile.auto_save()
 
     def _update_warning_system(self, dt: float):
         """Atualiza o sistema de warning em 3 estágios."""
@@ -427,10 +411,10 @@ class PlayingScene(Scene):
             self.level_damage_taken += 1
 
         for x, y, pts in score_events:
-            # Aplicar multiplicador de pontuação do nível
-            adjusted_pts = int(pts * self.level_config.score_multiplier)
+            # Aplicar multiplicadores de pontuação: nível E dificuldade
+            adjusted_pts = int(pts * self.level_config.score_multiplier * self.difficulty_settings["rewards_multiplier"])
             self.entity_manager.floating_scores.append(FloatingScore(x, y, adjusted_pts))
-        self.score += int(gain * self.level_config.score_multiplier)
+        self.score += int(gain * self.level_config.score_multiplier * self.difficulty_settings["rewards_multiplier"])
         self.total_enemies_destroyed += destroyed
         self.enemies_destroyed_in_level += destroyed
 
@@ -566,6 +550,12 @@ class PlayingScene(Scene):
         collected_powerups = self.collisions.ship_vs_powerups(
             self.ship, self.entity_manager.powerups
         )
+        
+        # Verificar regras especiais da dificuldade
+        special_rules = self.difficulty_settings.get("special_rules", [])
+        if "no_powerups" in special_rules:
+            collected_powerups = []  # Ignorar todos os power-ups
+        
         if collected_powerups:
             for kind in collected_powerups:
                 sound_manager.play_powerup()
@@ -673,9 +663,12 @@ class PlayingScene(Scene):
         sound_manager.stop_all_sfx()
 
         if self.level_config.boss_type:
-            self.entity_manager.boss = self.level_config.boss_type(
+            boss = self.level_config.boss_type(
                 Config.SCREEN_WIDTH / 2 - 50, 50
             )
+            # Aplicar multiplicador de health da dificuldade
+            boss.health = int(boss.health * self.enemy_health_multiplier)
+            self.entity_manager.boss = boss
 
             from ..entities.spike_boss import SpikeBoss
 

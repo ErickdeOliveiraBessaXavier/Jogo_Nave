@@ -61,6 +61,9 @@ class Alien:
         self.speed_y = 60
         self.dead = False
         self.shoot_timer = random.uniform(1.5, 3.0)
+        
+        # Vida do alien
+        self.health: int = 15
 
         # Atributos para controle por formação
         self.formation_controlled = False
