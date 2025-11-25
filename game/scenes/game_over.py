@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 from ..core.state import Scene
 from typing import TYPE_CHECKING
 from ..core.state import Scene
-from ..render.renderer import Renderer
 from ..core.config import Config
 from ..core.assets import get_font
 from ..core.sound import sound_manager
@@ -18,7 +17,7 @@ class GameOverScene(Scene):
         super().__init__(app)
         self.score = score
         self.playing_scene = playing_scene # Reference to the playing scene for rendering
-        self.r = Renderer()
+        self.r = playing_scene.r  # Reusar o MESMO renderer da cena de jogo
 
         self.game_over_timer = 0.0
         self.game_over_font_title = get_font(80)
