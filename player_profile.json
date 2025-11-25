@@ -2,16 +2,16 @@
   "version": "1.0",
   "profile_created": "2025-11-24T22:55:51.325418",
   "last_played": "2025-11-25T13:41:57.581512",
-  "total_playtime": 172.91216799999998,
+  "total_playtime": 218.35869899999997,
   "highest_level_reached": 1,
-  "total_deaths": 20,
+  "total_deaths": 23,
   "total_score": 0,
   "level_stats": {
     "1": {
       "level_number": 1,
       "attempts": 18,
       "clears": 0,
-      "deaths": 20,
+      "deaths": 23,
       "total_time": 0.0,
       "best_time": null,
       "worst_time": 0.0,
@@ -21,21 +21,6 @@
       "total_damage_taken": 0,
       "total_powerups_collected": 0,
       "recent_attempts": [
-        {
-          "timestamp": "2025-11-24T23:12:48.236161",
-          "cleared": false,
-          "cause": "game_over"
-        },
-        {
-          "timestamp": "2025-11-24T23:14:49.533739",
-          "cleared": false,
-          "cause": "game_over"
-        },
-        {
-          "timestamp": "2025-11-24T23:15:22.585679",
-          "cleared": false,
-          "cause": "game_over"
-        },
         {
           "timestamp": "2025-11-24T23:16:17.158515",
           "cleared": false,
@@ -70,6 +55,21 @@
           "timestamp": "2025-11-25T13:42:09.738564",
           "cleared": false,
           "cause": "collision"
+        },
+        {
+          "timestamp": "2025-11-25T13:42:25.700500",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2025-11-25T13:42:34.903910",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2025-11-25T13:42:38.080028",
+          "cleared": false,
+          "cause": "game_over"
         }
       ],
       "first_played": "2025-11-24T22:56:04.131342",
@@ -199,6 +199,14 @@
       "end_time": "2025-11-25T13:36:14.630011",
       "levels_attempted": [],
       "deaths": 3,
+      "score": 0,
+      "powerups_collected": 0
+    },
+    {
+      "start_time": "2025-11-25T13:41:52.633497",
+      "end_time": "2025-11-25T13:42:38.080028",
+      "levels_attempted": [],
+      "deaths": 5,
       "score": 0,
       "powerups_collected": 0
     }
