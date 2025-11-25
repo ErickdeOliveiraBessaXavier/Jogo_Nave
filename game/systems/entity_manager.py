@@ -19,17 +19,12 @@ from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.eye_laser import EyeLaser
-from ..entities.guided_meteor import GuidedMeteor
-from ..entities.explosive_mine import ExplosiveMine
-from ..entities.mini_ship import MiniShip
-from ..entities.mini_ship_bullet import MiniShipBullet
-from ..entities.eye_enemy import EyeEnemy
-from ..entities.eye_laser import EyeLaser
 from ..entities.formation import Formation
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
 from ..core.spatial_grid import SpatialGrid
 from ..entities.explosion_pool import ExplosionPool
+from typing import Dict, Any
 
 
 class EntityManager:
@@ -383,8 +378,12 @@ class EntityManager:
 
     def clear_for_level_transition(self):
         """Limpa entidades para transição de fase, mas preserva balas do jogador."""
-        # Preservar balas do jogador durante transições
-        # self.bullets.clear()  # NÃO limpar balas do jogador
+        # Balas do jogador são mantidas, mas limpamos as inativas do pool
+        for bullet in self.bullets[:]:
+            if bullet.dead:
+                self.bullet_pool.release(bullet)
+        self.bullets = [b for b in self.bullets if not b.dead]
+        
         self.alien_bullets.clear()
         self.boss_lasers.clear()
         self.boss_squares.clear()
@@ -398,3 +397,13 @@ class EntityManager:
         # NÃO limpar bullet_pool aqui para manter balas do jogador
         self.explosion_pool.clear_active()  # Limpar explosões ativas do pool
         self.spikes.clear()
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Retorna estatísticas de performance para debug."""
+        return {
+            "bullets": len(self.bullets),
+            "enemies": len(self.enemies),
+            "formations": len(self.formations),
+            "explosions_active": self.explosion_pool.get_stats()['active'],
+            "grid_stats": self.enemy_spatial_grid.get_statistics()
+        }

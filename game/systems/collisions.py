@@ -12,7 +12,6 @@ from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
 from ..entities.eye_laser import EyeLaser
 from ..entities.spike_boss_laser import SpikeBossLaser
-from ..entities.explosion import Explosion
 from ..entities.mine_explosion import MineExplosion
 from ..entities.powerup import PowerUp
 from ..entities.boss import Boss
@@ -36,7 +35,6 @@ class Collisions:
         self,
         enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         mine_explosions: list[MineExplosion],
-        explosions: list[Explosion],
         ship: Ship,
         entity_manager: "EntityManager",  # <-- ADICIONAR
     ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
@@ -51,7 +49,7 @@ class Collisions:
                 explosion_radius = enemy.explosion_radius
                 mine_explosions.append(MineExplosion(cx, cy, size=explosion_radius))
                 if self.handle_mine_explosion(
-                    cx, cy, explosion_radius, enemies, ship, explosions, entity_manager
+                    cx, cy, explosion_radius, enemies, ship, entity_manager
                 ):
                     ship_hit = True
                 sound_manager.play_explosion_boss()  # Som de explosão grande
@@ -68,7 +66,6 @@ class Collisions:
         explosion_radius: int,
         enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         ship: Ship,
-        explosions: list[Explosion],
         entity_manager: "EntityManager",  # <-- ADICIONAR
     ) -> bool:
         ship_hit = False
@@ -105,7 +102,6 @@ class Collisions:
     def mini_ship_bullets_vs_enemies(
         self,
         mini_ship_bullets: list[MiniShipBullet],
-        explosions: list[Explosion],
         enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
         enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],  # Para adicionar fragments
         entity_manager: "EntityManager",  # <-- ADICIONAR
@@ -160,7 +156,6 @@ class Collisions:
     def bullets_vs_enemies(
         self,
         bullets: list[Bullet],
-        explosions: list[Explosion],
         mine_explosions: list[MineExplosion],
         ship: Ship,
         enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
@@ -219,7 +214,6 @@ class Collisions:
         self,
         bullets: list[Bullet],
         boss: Boss,
-        explosions: list[Explosion],
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -249,7 +243,7 @@ class Collisions:
                     entity_manager.spawn_explosion(boss.x + boss.w / 2, boss.y + boss.h / 2, size=100)
         return score_gain
 
-    def ship_vs_boss(self, ship: Ship, boss: Boss, explosions: list[Explosion], entity_manager: "EntityManager") -> bool:
+    def ship_vs_boss(self, ship: Ship, boss: Boss, entity_manager: "EntityManager") -> bool:
         if ship.invuln > 0:
             return False
         if ship.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
@@ -260,7 +254,6 @@ class Collisions:
     def ship_vs_enemies(
         self,
         ship: Ship,
-        explosions: list[Explosion],
         enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
         entity_manager: "EntityManager",
     ) -> bool:
@@ -329,7 +322,6 @@ class Collisions:
         self,
         mini_ship_bullets: list[MiniShipBullet],
         boss: Boss,
-        explosions: list[Explosion],
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -360,7 +352,6 @@ class Collisions:
         self,
         mini_ship_bullets: list[MiniShipBullet],
         boss: SpikeBoss,
-        explosions: list[Explosion],
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -391,7 +382,6 @@ class Collisions:
         self,
         mini_ship_bullets: list[MiniShipBullet],
         spikes: list[Spike],
-        explosions: list[Explosion],
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com Spikes."""
@@ -434,7 +424,7 @@ class Collisions:
         return collected_kinds
 
     def ship_vs_spikes(
-        self, ship: Ship, spikes: list[Spike], explosions: list[Explosion], entity_manager: "EntityManager"
+        self, ship: Ship, spikes: list[Spike], entity_manager: "EntityManager"
     ) -> bool:
         """Verifica colisão entre nave e espinhos."""
         if ship.invuln > 0:
@@ -452,7 +442,6 @@ class Collisions:
         self,
         bullets: list[Bullet],
         spikes: list[Spike],
-        explosions: list[Explosion],
         entity_manager: "EntityManager",
     ) -> int:
         """Verifica colisão entre balas e espinhos. Retorna pontos ganhos."""
@@ -494,7 +483,6 @@ class Collisions:
         self,
         bullets: list[Bullet],
         boss: SpikeBoss,
-        explosions: list[Explosion],
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -524,7 +512,7 @@ class Collisions:
         return score_gain
 
     def ship_vs_spike_boss(
-        self, ship: Ship, boss: SpikeBoss, explosions: list[Explosion], entity_manager: "EntityManager"
+        self, ship: Ship, boss: SpikeBoss, entity_manager: "EntityManager"
     ) -> bool:
         """Colisão entre nave e SpikeBoss."""
         if ship.invuln > 0:
@@ -557,7 +545,6 @@ class Collisions:
         self,
         bullets: list[Bullet],
         boss_squares: list[BossSquare],
-        explosions: list[Explosion],
         entity_manager: "EntityManager",
     ) -> int:
         """

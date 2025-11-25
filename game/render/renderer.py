@@ -328,6 +328,7 @@ class Renderer:
         self.halo_cache: dict[int, pygame.Surface] = (
             {}
         )  # Cache for halo surfaces by radius
+        self.MAX_HALO_CACHE_SIZE = 10  # Limitar tamanho do cache
 
     def background(
         self, surface: pygame.Surface, dt: float, speed_multiplier: float = 1.0
@@ -414,7 +415,8 @@ class Renderer:
             }.get(difficulty_preset, colors.WHITE)
             
             diff_text = self._render_text_cached(
-                'difficulty', hash(difficulty_preset), 
+                'difficulty', 
+                hash(difficulty_preset.name),  # Usar hash do nome para consistência
                 f"Dificuldade: {settings['name']}", 
                 self.font_small, difficulty_color
             )
@@ -479,6 +481,10 @@ class Renderer:
             radius = max(ship.w, ship.h) // 2 + 6
 
             if radius not in self.halo_cache:
+                # Limitar tamanho do cache
+                if len(self.halo_cache) >= self.MAX_HALO_CACHE_SIZE:
+                    self.halo_cache.clear()
+                
                 halo = pygame.Surface((radius * 2 + 6, radius * 2 + 6), pygame.SRCALPHA)
                 pygame.draw.circle(
                     halo, (0, 120, 255, 120), (radius + 3, radius + 3), radius, width=3

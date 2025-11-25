@@ -36,7 +36,7 @@ class PlayingScene(Scene):
         self.level_manager = level_manager
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
-        
+        self.last_dt = 1.0 / Config.FPS        
         self.r = Renderer()
         self.ship = Ship(Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT + 100)  # Start 100 pixels below the screen
         self.ship.is_entering = True
@@ -344,7 +344,6 @@ class PlayingScene(Scene):
         score_events: list[tuple[float, float, int]] = []
         gain, destroyed, score_events = self.collisions.bullets_vs_enemies(
             self.entity_manager.bullets,
-            [],  # explosions (not used anymore)
             self.entity_manager.mine_explosions,
             self.ship,
             enemy_grid,
@@ -359,7 +358,6 @@ class PlayingScene(Scene):
         vector_gain, vector_destroyed, vector_score_events = (
             self.collisions.mini_ship_bullets_vs_enemies(
                 self.entity_manager.mini_ship_bullets,
-                [],  # explosions (not used anymore)
                 enemy_grid,
                 self.entity_manager.enemies,  # Para adicionar fragments
                 self.entity_manager,  # <-- ADICIONAR
@@ -378,7 +376,6 @@ class PlayingScene(Scene):
             self.collisions.check_mine_explosions(
                 self.entity_manager.enemies,
                 self.entity_manager.mine_explosions,
-                [],  # explosions (not used anymore)
                 self.ship,
                 self.entity_manager,
             )
@@ -394,7 +391,6 @@ class PlayingScene(Scene):
                 self.collisions.check_mine_explosions(
                     formation_enemies,
                     self.entity_manager.mine_explosions,
-                    [],  # explosions (not used anymore)
                     self.ship,
                     self.entity_manager,
                 )
@@ -426,7 +422,6 @@ class PlayingScene(Scene):
                 score_gain = self.collisions.bullets_vs_spike_boss(
                     self.entity_manager.bullets,
                     self.entity_manager.boss,
-                    [],  # explosions (not used anymore)
                     self.entity_manager.floating_scores,
                     self.entity_manager,
                 )
@@ -434,7 +429,6 @@ class PlayingScene(Scene):
                 mini_ship_boss_gain = self.collisions.mini_ship_bullets_vs_spike_boss(
                     self.entity_manager.mini_ship_bullets,
                     self.entity_manager.boss,
-                    [],  # explosions (not used anymore)
                     self.entity_manager.floating_scores,
                     self.entity_manager,
                 )
@@ -443,7 +437,6 @@ class PlayingScene(Scene):
                 score_gain = self.collisions.bullets_vs_boss(
                     self.entity_manager.bullets,
                     self.entity_manager.boss,  # type: ignore
-                    [],  # explosions (not used anymore)
                     self.entity_manager.floating_scores,
                     self.entity_manager,
                 )
@@ -451,7 +444,6 @@ class PlayingScene(Scene):
                 mini_ship_boss_gain = self.collisions.mini_ship_bullets_vs_boss(
                     self.entity_manager.mini_ship_bullets,
                     self.entity_manager.boss,  # type: ignore
-                    [],  # explosions (not used anymore)
                     self.entity_manager.floating_scores,
                     self.entity_manager,
                 )
@@ -463,14 +455,13 @@ class PlayingScene(Scene):
             spike_gain = self.collisions.mini_ship_bullets_vs_spikes(
                 self.entity_manager.mini_ship_bullets,
                 self.entity_manager.spikes,
-                [],  # explosions (not used anymore)
                 self.entity_manager,
             )
             self.score += spike_gain
 
         # Colisão da nave com TODOS os inimigos usando grid única
         if self.collisions.ship_vs_enemies(
-            self.ship, [], enemy_grid, self.entity_manager
+            self.ship, enemy_grid, self.entity_manager
         ):
             self._handle_ship_hit()
 
@@ -480,14 +471,13 @@ class PlayingScene(Scene):
             # Verificar tipo de boss para colisão apropriada
             if isinstance(self.entity_manager.boss, SpikeBoss):
                 if self.collisions.ship_vs_spike_boss(
-                    self.ship, self.entity_manager.boss, [], self.entity_manager
+                    self.ship, self.entity_manager.boss, self.entity_manager
                 ):
                     self._handle_ship_hit()
             else:
                 if self.collisions.ship_vs_boss(
                     self.ship,
                     self.entity_manager.boss,  # type: ignore
-                    [],  # explosions (not used anymore)
                     self.entity_manager,
                 ):
                     self._handle_ship_hit()
@@ -520,7 +510,7 @@ class PlayingScene(Scene):
 
         # Colisões com espinhos (SpikeBoss)
         if self.collisions.ship_vs_spikes(
-            self.ship, self.entity_manager.spikes, [], self.entity_manager
+            self.ship, self.entity_manager.spikes, self.entity_manager
         ):
             self._handle_ship_hit()
 
@@ -534,7 +524,6 @@ class PlayingScene(Scene):
         self.collisions.bullets_vs_boss_squares(
             self.entity_manager.bullets,
             self.entity_manager.boss_squares,
-            [],  # explosions (not used anymore)
             self.entity_manager,
         )
 
@@ -542,7 +531,6 @@ class PlayingScene(Scene):
         spike_score = self.collisions.bullets_vs_spikes(
             self.entity_manager.bullets,
             self.entity_manager.spikes,
-            [],  # explosions (not used anymore)
             self.entity_manager,
         )
         self.score += spike_score
@@ -779,7 +767,7 @@ class PlayingScene(Scene):
 
     def render(self, surface: pygame.Surface):
         # Usa o dt armazenado pela última chamada de update
-        dt = getattr(self, "last_dt", 1.0 / Config.FPS)
+        dt = self.last_dt
         speed_multiplier = 1.0
         if self.state == "preparing":
             progress = (
