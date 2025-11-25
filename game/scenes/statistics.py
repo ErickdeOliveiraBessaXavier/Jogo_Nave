@@ -49,26 +49,49 @@ class ConfirmationDialog:
         self.font = get_font(24)
 
         self.lines = [self.font.render(line, True, colors.WHITE) for line in question_lines]
-        total_height = sum(line.get_height() for line in self.lines) + (len(self.lines) - 1) * 10
-        start_y = Config.SCREEN_HEIGHT // 2 - 50 - total_height // 2
 
+        # Calculate text height
+        text_height = sum(line.get_height() for line in self.lines) + (len(self.lines) - 1) * 10
+
+        # Button dimensions
+        button_width = 140
+        button_height = 48
+        button_font_size = 28
+
+        # Spacing
+        top_padding = 40
+        text_button_spacing = 20
+        bottom_padding = 24
+
+        # Calculate total content height
+        total_content_height = top_padding + text_height + text_button_spacing + button_height + bottom_padding
+
+        # Box dimensions
+        box_width = max(400, max(line.get_width() for line in self.lines) + 60)
+        box_height = max(160, total_content_height)
+        box_x = Config.SCREEN_WIDTH // 2 - box_width // 2
+        box_y = Config.SCREEN_HEIGHT // 2 - box_height // 2
+        self.box_rect = pygame.Rect(box_x, box_y, box_width, box_height)
+
+        # Position text lines
         self.line_rects: List[pygame.Rect] = []
-        current_y = start_y
+        current_y = box_y + top_padding
         for line in self.lines:
-            rect = line.get_rect(center=(Config.SCREEN_WIDTH // 2, current_y + line.get_height() // 2))
+            rect = line.get_rect(center=(self.box_rect.centerx, current_y + line.get_height() // 2))
             self.line_rects.append(rect)
             current_y += line.get_height() + 10
 
+        # Position buttons at the bottom
+        button_y = box_y + box_height - bottom_padding - button_height
         self.yes_button = Button(
-            pygame.Rect(Config.SCREEN_WIDTH // 2 - 110, Config.SCREEN_HEIGHT // 2 + 20, 100, 40),
-            "Sim", self._on_yes_click, text_color=colors.BLACK
+            pygame.Rect(self.box_rect.centerx - button_width - 10, button_y, button_width, button_height),
+            "Sim", self._on_yes_click, text_color=colors.BLACK, font_size=button_font_size
         )
         self.no_button = Button(
-            pygame.Rect(Config.SCREEN_WIDTH // 2 + 10, Config.SCREEN_HEIGHT // 2 + 20, 100, 40),
-            "Não", self._on_no_click, text_color=colors.BLACK
+            pygame.Rect(self.box_rect.centerx + 10, button_y, button_width, button_height),
+            "Não", self._on_no_click, text_color=colors.BLACK, font_size=button_font_size
         )
 
-        self.box_rect = pygame.Rect(Config.SCREEN_WIDTH // 2 - 250, Config.SCREEN_HEIGHT // 2 - 100, 500, 200)
         self.overlay = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
         self.overlay.set_alpha(128)
         self.overlay.fill(colors.BLACK)
@@ -168,25 +191,21 @@ class StatisticsScene(Scene):
         
         self._init_layout()
         
-        # Botões de ação
+        # Botões de ação já posicionados corretamente no rodapé
+        margin_bottom = 40
+        button_y = Config.SCREEN_HEIGHT - margin_bottom
         self.reset_button = Button(
-            pygame.Rect(0, 0, 200, 50),
-            "Resetar Perfil",
+            pygame.Rect(Config.SCREEN_WIDTH - 230, button_y - 50, 200, 50),
+            "Resetar",
             self.show_confirmation,
             text_color=colors.WHITE
         )
         self.back_button = Button(
-            pygame.Rect(0, 0, 200, 50),
+            pygame.Rect(30, button_y - 50, 200, 50),
             "Voltar",
             self.app.states.pop,
             text_color=colors.WHITE
         )
-        
-        # Posicionar botões no rodapé
-        margin_bottom = 40
-        button_y = Config.SCREEN_HEIGHT - margin_bottom
-        self.reset_button.rect.bottomright = (Config.SCREEN_WIDTH - 30, button_y)
-        self.back_button.rect.bottomleft = (30, button_y)
 
     def _init_layout(self):
         """Inicializa o layout com sistema de abas."""
