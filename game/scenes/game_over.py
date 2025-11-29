@@ -82,6 +82,7 @@ class GameOverScene(Scene):
             self.game_surface,
             self.playing_scene.ship.rect.centerx,
             self.playing_scene.ship.rect.centery,
+            enemy_visible=True,  # Sempre visível no game over
         )
         self.playing_scene.ship.draw(self.game_surface)
         self.r.hud(

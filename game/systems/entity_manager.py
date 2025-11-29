@@ -246,7 +246,7 @@ class EntityManager:
         # Ensure cleanup is called after updates during game over for consistency
         self.cleanup()
 
-    def draw(self, surface: pygame.Surface, player_x: float, player_y: float):
+    def draw(self, surface: pygame.Surface, player_x: float, player_y: float, enemy_visible: bool = True):
         """Desenha todas as entidades. EyeEnemy precisa da posição do jogador."""
         from typing import Any
 
@@ -276,11 +276,12 @@ class EntityManager:
                 entity.draw(surface)
 
         # Desenhar inimigos (EyeEnemy precisa da posição do jogador)
-        for enemy in self.enemies:
-            if isinstance(enemy, EyeEnemy):
-                enemy.draw(surface, player_x, player_y)
-            else:
-                enemy.draw(surface)
+        if enemy_visible:
+            for enemy in self.enemies:
+                if isinstance(enemy, EyeEnemy):
+                    enemy.draw(surface, player_x, player_y)
+                else:
+                    enemy.draw(surface)
 
         # Desenhar formações
         for formation in self.formations:

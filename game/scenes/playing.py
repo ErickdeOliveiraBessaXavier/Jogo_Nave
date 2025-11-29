@@ -97,6 +97,14 @@ class PlayingScene(Scene):
         # Debug/Performance flags
         self.show_fps = False  # Pressione F3 para mostrar/ocultar FPS
 
+        # Sistema de limpeza de inimigos restantes
+        self.enemy_cleanup_active = False  # Se o timer de limpeza está ativo
+        self.enemy_cleanup_timer = 0.0  # Timer para limpeza dos inimigos restantes
+        self.enemy_cleanup_duration = 20.0  # 15 segundos para limpeza
+        self.enemy_blink_timer = 0.0  # Timer para efeito de piscar
+        self.enemy_blink_interval = 0.2  # Intervalo de piscar (200ms)
+        self.enemy_visible = True  # Controle de visibilidade para piscar
+
     def _apply_difficulty_settings(self):
         """Aplica configurações globais do preset de dificuldade."""
         settings = self.difficulty_settings
@@ -273,6 +281,32 @@ class PlayingScene(Scene):
             self._update_warning_system(dt)
 
         elif not self.boss_fight_active and not self.level_transition_active:
+            # Atualizar timer de limpeza de inimigos se ativo
+            if self.enemy_cleanup_active:
+                self.enemy_cleanup_timer += dt
+                
+                # Sistema de piscar: começa nos últimos 5 segundos
+                time_remaining = self.enemy_cleanup_duration - self.enemy_cleanup_timer
+                if time_remaining <= 5.0:
+                    # Piscar acelera conforme o tempo vai acabando
+                    blink_min = 0.05  # 50ms
+                    blink_max = 0.4   # 400ms
+                    # Interpolação: quanto menos tempo, menor o intervalo
+                    t = max(0.0, min(1.0, time_remaining / 5.0))
+                    self.enemy_blink_interval = blink_min + (blink_max - blink_min) * t
+                    self.enemy_blink_timer += dt
+                    if self.enemy_blink_timer >= self.enemy_blink_interval:
+                        self.enemy_blink_timer = 0.0
+                        self.enemy_visible = not self.enemy_visible
+                
+                # Se timer expirou, marcar todos os inimigos como mortos
+                if self.enemy_cleanup_timer >= self.enemy_cleanup_duration:
+                    print(f"⏰ TEMPO ESGOTADO! Removendo {len(self.entity_manager.enemies)} inimigos restantes automaticamente...")
+                    # Marcar todos os inimigos restantes como mortos
+                    for enemy in self.entity_manager.enemies[:]:
+                        enemy.dead = True
+                    self.entity_manager.enemies.clear()
+            
             self._check_level_progression()
         elif self.entity_manager.boss and self.entity_manager.boss.dead:
             self._end_boss_fight()
@@ -653,7 +687,18 @@ class PlayingScene(Scene):
     def _check_level_progression(self):
         if self.enemies_destroyed_in_level >= self.level_config.enemies_to_clear:
             self.enemy_spawner.stop()
-            if not self.entity_manager.enemies:
+            
+            # Iniciar limpeza de inimigos restantes se ainda houver inimigos
+            if self.entity_manager.enemies and not self.enemy_cleanup_active:
+                self.enemy_cleanup_active = True
+                self.enemy_cleanup_timer = 0.0
+                print(f"🧹 SISTEMA DE LIMPEZA ATIVADO! {len(self.entity_manager.enemies)} inimigos restantes terão 15 segundos para serem derrotados...")
+            elif not self.entity_manager.enemies or (
+                self.enemy_cleanup_active and 
+                self.enemy_cleanup_timer >= self.enemy_cleanup_duration
+            ):
+                # Todos os inimigos foram limpos ou timer expirou
+                self.enemy_cleanup_active = False
                 if self.level_config.boss_type:
                     self.pre_boss_transition = True
                 else:
@@ -781,6 +826,12 @@ class PlayingScene(Scene):
         self.level_start_time = None  # Reset to None instead of 0.0
         self.level_damage_taken = 0
         self.level_powerups_collected = 0
+        
+        # Reset enemy cleanup system
+        self.enemy_cleanup_active = False
+        self.enemy_cleanup_timer = 0.0
+        self.enemy_blink_timer = 0.0
+        self.enemy_visible = True
 
         # Meta-progression: Record attempt for new level
         self.player_profile.record_attempt(self.current_level_index + 1)
@@ -828,7 +879,7 @@ class PlayingScene(Scene):
         self.r.background(self.game_surface, dt=dt, speed_multiplier=speed_multiplier)
 
         self.entity_manager.draw(
-            self.game_surface, self.ship.rect.centerx, self.ship.rect.centery
+            self.game_surface, self.ship.rect.centerx, self.ship.rect.centery, self.enemy_visible
         )
         self.ship.draw(self.game_surface)
 

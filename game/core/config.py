@@ -159,8 +159,8 @@ class Config:
     BOSS_ENTRY_SHAKE_DURATION: float = 4.0
 
     # Boss movement
-    BOSS_NORMAL_SPEED: float = 6.0
-    BOSS_FRENZY_SPEED: float = 8.0
+    BOSS_NORMAL_SPEED: float = 4.0  # Reduzido de 6.0 para 4.0
+    BOSS_FRENZY_SPEED: float = 6.0  # Reduzido de 8.0 para 6.0
     BOSS_FRENZY_SHAKE_DURATION: float = 3.0
 
     # Boss laser system
