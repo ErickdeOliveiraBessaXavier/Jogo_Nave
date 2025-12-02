@@ -9,6 +9,8 @@ import time
 
 from ..core.difficulty import DifficultyPreset
 from ..core.levels import LevelConfig
+from ..core.upgrades import UpgradeType
+from ..core.upgrades_config import UPGRADE_SLOT_COUNT, DEFAULT_UNLOCKED
 
 
 class PerformanceState(Enum):
@@ -491,6 +493,16 @@ class PlayerProfile:
         # Preferências detectadas
         self.preferred_difficulty: Optional[DifficultyPreset] = None
 
+        # Aprimoramentos (ativos)
+        # Armazenamos como nomes de enum para JSON estável
+        self.unlocked_upgrades: set[UpgradeType] = set(DEFAULT_UNLOCKED)
+        self.upgrade_loadout: list[Optional[UpgradeType]] = [None] * UPGRADE_SLOT_COUNT
+
+        # Teclas para ativar aprimoramentos (padrão: K_1, K_2)
+        self.upgrade_keybindings: list[int] = [pygame.K_1, pygame.K_2][
+            :UPGRADE_SLOT_COUNT
+        ]
+
         # Timestamps
         self.profile_created: datetime = datetime.now()
         self.last_played: Optional[datetime] = None
@@ -838,6 +850,69 @@ class PlayerProfile:
                         print(f"Skipping corrupt session data: {ve}")
                         continue
 
+                # Aprimoramentos: unlocked + loadout (migração segura)
+                try:
+                    unlocked_raw = data.get("unlocked_upgrades")
+                    if isinstance(unlocked_raw, list):
+                        parsed: set[UpgradeType] = set()
+                        for name in unlocked_raw:
+                            try:
+                                parsed.add(UpgradeType[name])
+                            except Exception:
+                                continue
+                        # Se vazio, usar defaults
+                        self.unlocked_upgrades = parsed or set(DEFAULT_UNLOCKED)
+                    else:
+                        self.unlocked_upgrades = set(DEFAULT_UNLOCKED)
+
+                    loadout_raw = data.get("upgrade_loadout")
+                    if isinstance(loadout_raw, list):
+                        slots = []
+                        for item in loadout_raw[:UPGRADE_SLOT_COUNT]:
+                            if item is None:
+                                slots.append(None)
+                                continue
+                            try:
+                                slots.append(UpgradeType[item])
+                            except Exception:
+                                slots.append(None)
+                        # Completar tamanho de slots
+                        while len(slots) < UPGRADE_SLOT_COUNT:
+                            slots.append(None)
+                        self.upgrade_loadout = slots
+                    else:
+                        self.upgrade_loadout = [None] * UPGRADE_SLOT_COUNT
+                except Exception:
+                    # Em caso de erro, usar defaults
+                    self.unlocked_upgrades = set(DEFAULT_UNLOCKED)
+                    self.upgrade_loadout = [None] * UPGRADE_SLOT_COUNT
+
+                    # Keybindings (migração segura)
+                    try:
+                        keybindings_raw = data.get("upgrade_keybindings")
+                        if isinstance(keybindings_raw, list):
+                            keys = []
+                            for key in keybindings_raw[:UPGRADE_SLOT_COUNT]:
+                                if (
+                                    isinstance(key, int) and 0 <= key <= 1000000
+                                ):  # Valid pygame key range
+                                    keys.append(key)
+                                else:
+                                    keys.append([pygame.K_1, pygame.K_2][len(keys)])
+                            # Complete slot count
+                            defaults = [pygame.K_1, pygame.K_2]
+                            while len(keys) < UPGRADE_SLOT_COUNT:
+                                keys.append(defaults[len(keys)])
+                            self.upgrade_keybindings = keys
+                        else:
+                            self.upgrade_keybindings = [pygame.K_1, pygame.K_2][
+                                :UPGRADE_SLOT_COUNT
+                            ]
+                    except Exception:
+                        self.upgrade_keybindings = [pygame.K_1, pygame.K_2][
+                            :UPGRADE_SLOT_COUNT
+                        ]
+
                 # Limit session history after loading
                 if len(self.session_history) > self.MAX_SESSION_HISTORY:
                     self.session_history = self.session_history[
@@ -879,6 +954,15 @@ class PlayerProfile:
             }
             session_history_data.append(session_dict)
 
+        # Serialização dos aprimoramentos
+        unlocked_serialized = [
+            u.name for u in sorted(self.unlocked_upgrades, key=lambda x: x.name)
+        ]
+        loadout_serialized = [
+            u.name if u is not None else None for u in self.upgrade_loadout
+        ]
+        keybindings_serialized = self.upgrade_keybindings.copy()
+
         data: Dict[str, Any] = {
             "version": "1.0",
             "profile_created": self.profile_created.isoformat(),
@@ -890,6 +974,9 @@ class PlayerProfile:
             "level_stats": level_stats_data,
             "level_adjustments": {str(k): v for k, v in self.level_adjustments.items()},
             "session_history": session_history_data,
+            "unlocked_upgrades": unlocked_serialized,
+            "upgrade_loadout": loadout_serialized,
+            "upgrade_keybindings": keybindings_serialized,
         }
 
         with open(self.profile_path, "w", encoding="utf-8") as f:
@@ -914,6 +1001,9 @@ class PlayerProfile:
         self.session_history = []
         self.level_adjustments = {}
         self.preferred_difficulty = None
+        self.unlocked_upgrades = set(DEFAULT_UNLOCKED)
+        self.upgrade_loadout = [None] * UPGRADE_SLOT_COUNT
+        self.upgrade_keybindings = [pygame.K_1, pygame.K_2][:UPGRADE_SLOT_COUNT]
         self.profile_created = datetime.now()
         self.last_played = None
         self._dirty = False

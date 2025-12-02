@@ -20,6 +20,8 @@ from ..core.sound_config import MusicState
 from ..entities.mini_ship import MiniShip
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..core.meta_progression import PlayerProfile
+from ..core.upgrades import create_upgrade, ActiveUpgrade
+from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -105,6 +107,10 @@ class PlayingScene(Scene):
         self.enemy_blink_interval = 0.2  # Intervalo de piscar (200ms)
         self.enemy_visible = True  # Controle de visibilidade para piscar
 
+        # Aprimoramentos ativos (slots)
+        self.upgrade_slots: list[ActiveUpgrade | None] = []
+        self._init_upgrades_from_profile()
+
     def _apply_difficulty_settings(self):
         """Aplica configurações globais do preset de dificuldade."""
         settings = self.difficulty_settings
@@ -185,6 +191,9 @@ class PlayingScene(Scene):
         # Timers
         self.shoot_cd = max(0.0, self.shoot_cd - dt)
         self.warning_timer = max(0.0, self.warning_timer - dt)
+
+        # Atualizar upgrades (cooldown/duração)
+        self._update_upgrades(dt)
 
         if self.entity_manager.boss and self.entity_manager.boss.state == "entering":
             self.screen_shake_timer = 0.1  # Keep shaking while boss is entering
@@ -284,13 +293,13 @@ class PlayingScene(Scene):
             # Atualizar timer de limpeza de inimigos se ativo
             if self.enemy_cleanup_active:
                 self.enemy_cleanup_timer += dt
-                
+
                 # Sistema de piscar: começa nos últimos 5 segundos
                 time_remaining = self.enemy_cleanup_duration - self.enemy_cleanup_timer
                 if time_remaining <= 5.0:
                     # Piscar acelera conforme o tempo vai acabando
                     blink_min = 0.05  # 50ms
-                    blink_max = 0.4   # 400ms
+                    blink_max = 0.4  # 400ms
                     # Interpolação: quanto menos tempo, menor o intervalo
                     t = max(0.0, min(1.0, time_remaining / 5.0))
                     self.enemy_blink_interval = blink_min + (blink_max - blink_min) * t
@@ -298,15 +307,17 @@ class PlayingScene(Scene):
                     if self.enemy_blink_timer >= self.enemy_blink_interval:
                         self.enemy_blink_timer = 0.0
                         self.enemy_visible = not self.enemy_visible
-                
+
                 # Se timer expirou, marcar todos os inimigos como mortos
                 if self.enemy_cleanup_timer >= self.enemy_cleanup_duration:
-                    print(f"⏰ TEMPO ESGOTADO! Removendo {len(self.entity_manager.enemies)} inimigos restantes automaticamente...")
+                    print(
+                        f"⏰ TEMPO ESGOTADO! Removendo {len(self.entity_manager.enemies)} inimigos restantes automaticamente..."
+                    )
                     # Marcar todos os inimigos restantes como mortos
                     for enemy in self.entity_manager.enemies[:]:
                         enemy.dead = True
                     self.entity_manager.enemies.clear()
-            
+
             self._check_level_progression()
         elif self.entity_manager.boss and self.entity_manager.boss.dead:
             self._end_boss_fight()
@@ -667,6 +678,16 @@ class PlayingScene(Scene):
 
         if self.ship.invuln > 0:
             return
+
+        # Verificar se o escudo pode absorver o dano
+        if self.ship.has_shield:
+            self.ship.shield_hp -= 1
+            if self.ship.shield_hp <= 0:
+                self.ship.shield_timer = 0.0
+            # Som de escudo absorvendo dano
+            sound_manager.play_powerup()  # Usar som existente temporariamente
+            return
+
         self.lives -= 1
         self.ship.lives = self.lives
         if self.lives > 0:
@@ -687,15 +708,17 @@ class PlayingScene(Scene):
     def _check_level_progression(self):
         if self.enemies_destroyed_in_level >= self.level_config.enemies_to_clear:
             self.enemy_spawner.stop()
-            
+
             # Iniciar limpeza de inimigos restantes se ainda houver inimigos
             if self.entity_manager.enemies and not self.enemy_cleanup_active:
                 self.enemy_cleanup_active = True
                 self.enemy_cleanup_timer = 0.0
-                print(f"🧹 SISTEMA DE LIMPEZA ATIVADO! {len(self.entity_manager.enemies)} inimigos restantes terão 15 segundos para serem derrotados...")
+                print(
+                    f"🧹 SISTEMA DE LIMPEZA ATIVADO! {len(self.entity_manager.enemies)} inimigos restantes terão 15 segundos para serem derrotados..."
+                )
             elif not self.entity_manager.enemies or (
-                self.enemy_cleanup_active and 
-                self.enemy_cleanup_timer >= self.enemy_cleanup_duration
+                self.enemy_cleanup_active
+                and self.enemy_cleanup_timer >= self.enemy_cleanup_duration
             ):
                 # Todos os inimigos foram limpos ou timer expirou
                 self.enemy_cleanup_active = False
@@ -826,7 +849,7 @@ class PlayingScene(Scene):
         self.level_start_time = None  # Reset to None instead of 0.0
         self.level_damage_taken = 0
         self.level_powerups_collected = 0
-        
+
         # Reset enemy cleanup system
         self.enemy_cleanup_active = False
         self.enemy_cleanup_timer = 0.0
@@ -854,6 +877,22 @@ class PlayingScene(Scene):
             # Sistema de cheat code
             self._process_cheat_input(event)
 
+            # Ativar upgrades (quando jogando)
+            if self.state == "playing" and not self.ship.is_entering:
+                # Use keybindings from player profile
+                try:
+                    keybinds = self.player_profile.upgrade_keybindings
+                    if len(keybinds) >= 1 and event.key == keybinds[0]:
+                        self._activate_upgrade_slot(0)
+                    elif len(keybinds) >= 2 and event.key == keybinds[1]:
+                        self._activate_upgrade_slot(1)
+                except Exception:
+                    # Fallback to defaults
+                    if event.key == pygame.K_1:
+                        self._activate_upgrade_slot(0)
+                    elif event.key == pygame.K_2 and UPGRADE_SLOT_COUNT >= 2:
+                        self._activate_upgrade_slot(1)
+
     def render(self, surface: pygame.Surface):
         # Usa o dt armazenado pela última chamada de update
         dt = self.last_dt
@@ -879,7 +918,10 @@ class PlayingScene(Scene):
         self.r.background(self.game_surface, dt=dt, speed_multiplier=speed_multiplier)
 
         self.entity_manager.draw(
-            self.game_surface, self.ship.rect.centerx, self.ship.rect.centery, self.enemy_visible
+            self.game_surface,
+            self.ship.rect.centerx,
+            self.ship.rect.centery,
+            self.enemy_visible,
         )
         self.ship.draw(self.game_surface)
 
@@ -895,6 +937,9 @@ class PlayingScene(Scene):
             self.level_config.level_number,
             self.difficulty_preset,
         )
+
+        # HUD de aprimoramentos (na game_surface)
+        self._render_upgrades_hud(self.game_surface)
 
         # Mostrar FPS se ativado (F3)
         if self.show_fps:
@@ -924,3 +969,158 @@ class PlayingScene(Scene):
 
         if self.state == "preparing":
             self.r.preparation(surface, self.preparation_time_left)
+
+    # ===================== Upgrades (helpers) =====================
+    def _init_upgrades_from_profile(self):
+        # Cria instâncias por slot baseado no profile
+        self.upgrade_slots = []
+        if not hasattr(self, "player_profile"):
+            self.upgrade_slots = [None] * UPGRADE_SLOT_COUNT
+            return
+        for t in self.player_profile.upgrade_loadout[:UPGRADE_SLOT_COUNT]:
+            if t is None:
+                self.upgrade_slots.append(None)
+            else:
+                try:
+                    self.upgrade_slots.append(create_upgrade(t))
+                except Exception:
+                    self.upgrade_slots.append(None)
+
+    def _build_upgrade_ctx(self):
+        # Objeto simples com atributos esperados pelo upgrade
+        ctx = type(
+            "UpgradeCtx",
+            (),
+            {
+                "ship": self.ship,
+                "entity_manager": self.entity_manager,
+                "difficulty_settings": self.difficulty_settings,
+                "sound_manager": sound_manager,
+                "scene": self,
+            },
+        )()
+        return ctx
+
+    def _update_upgrades(self, dt: float):
+        if not self.upgrade_slots:
+            return
+        from typing import Any as _Any
+
+        ctx: _Any = self._build_upgrade_ctx()
+        for upg in self.upgrade_slots:
+            if upg is not None:
+                upg.update(dt, ctx)
+
+    def _activate_upgrade_slot(self, idx: int):
+        if idx < 0 or idx >= len(self.upgrade_slots):
+            return
+        upg = self.upgrade_slots[idx]
+        if upg is None:
+            return
+        from typing import Any as _Any
+
+        ctx: _Any = self._build_upgrade_ctx()
+        try:
+            upg.activate(ctx)
+        except Exception:
+            pass
+
+    def _render_upgrades_hud(self, surface: pygame.Surface):
+        import pygame as _pg
+        from ..core import colors as _colors
+
+        if not self.upgrade_slots:
+            return
+
+        # Criar surface semi-transparente para os slots
+        font = get_font(20)
+        font_small = get_font(12)
+        pad = 8
+        slot_w, slot_h = 50, 50  # Menores: de 64x64 para 50x50
+        x = Config.SCREEN_WIDTH - pad - slot_w
+        y = 44  # Abaixo do texto "Vidas" (que está em y=10)
+
+        for i, upg in enumerate(self.upgrade_slots):
+            # Criar surface temporária com alpha
+            slot_surface = _pg.Surface((slot_w, slot_h), _pg.SRCALPHA)
+
+            # Fundo semi-transparente (30, 30, 30) com alpha 180
+            _pg.draw.rect(
+                slot_surface, (30, 30, 30, 180), (0, 0, slot_w, slot_h), border_radius=8
+            )
+            _pg.draw.rect(
+                slot_surface,
+                (*_colors.WHITE, 200),
+                (0, 0, slot_w, slot_h),
+                2,
+                border_radius=8,
+            )
+
+            # Nome da tecla vinculada no canto superior esquerdo
+            try:
+                keycode = self.player_profile.upgrade_keybindings[i]
+                key_label = _pg.key.name(keycode).upper()
+            except Exception:
+                key_label = str(i + 1)
+            label = font_small.render(key_label, True, _colors.WHITE)
+            slot_surface.blit(label, (4, 2))
+
+            if upg is None:
+                none_txt = font_small.render("--", True, _colors.GRAY)
+                slot_surface.blit(none_txt, (slot_w // 2 - 8, slot_h // 2 - 6))
+                surface.blit(slot_surface, (x - i * (slot_w + 6), y))
+                continue
+
+            ui = upg.get_ui_state()  # type: ignore
+
+            # Ícone no centro (símbolos ASCII/simples baseados no tipo)
+            icon_map = {
+                "Shield Burst": "S",  # S de Shield
+                "Heal": "H",  # H de Heal
+                "EMP": "E",  # E de EMP
+            }
+            icon = icon_map.get(str(ui["name"]), "?")
+            icon_txt = font.render(icon, True, _colors.CYAN)
+            icon_rect = icon_txt.get_rect(center=(slot_w // 2, slot_h // 2))
+            slot_surface.blit(icon_txt, icon_rect)
+
+            # Cooldown overlay (barra circular ou overlay semi-transparente)
+            cd_left = (
+                float(ui["cooldown_left"])
+                if ui.get("cooldown_left") is not None
+                else 0.0
+            )
+            cd_base = float(ui["cooldown"]) if ui.get("cooldown") is not None else 1.0
+            if cd_left > 0.0:
+                pct = max(0.0, min(1.0, cd_left / cd_base))
+                bar_h = 4
+                _pg.draw.rect(
+                    slot_surface,
+                    (120, 120, 120, 150),
+                    (2, slot_h - bar_h - 2, slot_w - 4, bar_h),
+                    border_radius=2,
+                )
+                bar_w = int((slot_w - 4) * pct)
+                _pg.draw.rect(
+                    slot_surface,
+                    (80, 180, 255, 200),
+                    (2, slot_h - bar_h - 2, bar_w, bar_h),
+                    border_radius=2,
+                )
+
+            # Cargas (canto inferior direito)
+            charges = ui.get("charges_left")
+            if charges is not None:
+                c_txt = font_small.render(f"{charges}", True, _colors.WHITE)
+                c_rect = c_txt.get_rect()
+                c_rect.bottomright = (slot_w - 3, slot_h - 3)
+                slot_surface.blit(c_txt, c_rect)
+
+            # Renderizar slot na posição correta
+            slot_x = x - i * (slot_w + 6)
+            surface.blit(slot_surface, (slot_x, y))
+
+            # Borda verde quando ativo (renderizada diretamente na surface principal)
+            if ui["active"]:
+                rect = _pg.Rect(slot_x, y, slot_w, slot_h)
+                _pg.draw.rect(surface, _colors.GREEN, rect, 3, border_radius=8)

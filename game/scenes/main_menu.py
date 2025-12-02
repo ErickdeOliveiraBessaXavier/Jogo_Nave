@@ -11,6 +11,7 @@ from ..core.colors import WHITE, BLACK, GREEN, BRIGHT_GREEN, RED, DARK_RED, BLUE
 from ..scenes.settings import SettingsScene
 from ..scenes.difficulty_selection import DifficultySelectionScene
 from ..scenes.statistics import StatisticsScene
+from ..scenes.upgrades_selection import UpgradesSelectionScene
 from ..core.assets import get_font
 from ..core.config import config as Config
 from ..render.renderer import Renderer
@@ -36,6 +37,7 @@ class AnimationConfig:
 class MenuStrings:
     START_GAME = "Iniciar Jogo"
     STATISTICS = "Estatísticas"
+    UPGRADES = "Aprimoramentos"
     SETTINGS = "Configurações"
     EXIT = "Sair"
     TITLE = "Space Shooter"
@@ -225,6 +227,12 @@ class MainMenuScene(Scene):
                 GREEN,
                 BRIGHT_GREEN,
                 lambda: self.app.states.push(StatisticsScene(self.app)),
+            ),
+            (
+                MenuStrings.UPGRADES,
+                GREEN,
+                BRIGHT_GREEN,
+                lambda: self.app.states.push(UpgradesSelectionScene(self.app)),
             ),
             (
                 MenuStrings.SETTINGS,

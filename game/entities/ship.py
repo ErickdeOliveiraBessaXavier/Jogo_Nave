@@ -51,6 +51,10 @@ class Ship:
         self.entry_particles: list[ParticleDict] = []
         self.thruster_particles: list[ParticleDict] = []
 
+        # Shield system (from upgrades)
+        self.shield_timer: float = 0.0
+        self.shield_hp: int = 0  # Hits the shield can absorb
+
     @property
     def attack_speed_multiplier(self) -> float:
         """Retorna o multiplicador de velocidade de ataque baseado nos power-ups ativos."""
@@ -70,6 +74,15 @@ class Ship:
 
     def get_invulnerable_time(self) -> float:
         return self.invuln / 1000.0
+
+    @property
+    def has_shield(self) -> bool:
+        return self.shield_timer > 0.0 and self.shield_hp > 0
+
+    def activate_shield(self, duration: float, shield_hp: int = 1) -> None:
+        """Ativa escudo que absorve dano por uma duração."""
+        self.shield_timer = max(self.shield_timer, duration)
+        self.shield_hp = max(self.shield_hp, shield_hp)
 
     @property
     def is_double_shot_active(self) -> bool:
@@ -93,6 +106,11 @@ class Ship:
         self.speed_boost_timer = max(0.0, self.speed_boost_timer - dt)
         self.piercing_shot_timer = max(0.0, self.piercing_shot_timer - dt)
         self.mini_ships_timer = max(0.0, self.mini_ships_timer - dt)
+
+        # Update shield timer
+        self.shield_timer = max(0.0, self.shield_timer - dt)
+        if self.shield_timer <= 0.0:
+            self.shield_hp = 0
 
         # Atualizar partículas de entrada
         if self.is_entering:
@@ -194,6 +212,24 @@ class Ship:
         # Desenhar partículas de thruster (atrás da nave)
         for p in self.thruster_particles:
             pygame.draw.circle(surface, p["color"], (p["x"], p["y"]), p["size"])
+
+        # Desenhar escudo (se ativo)
+        if self.has_shield:
+            import time
+
+            # Efeito pulsante
+            pulse = abs((time.time() * 4) % 2 - 1)  # Oscila entre 0 e 1
+            base_radius = max(self.w, self.h) / 2 + 8
+            radius = int(base_radius + pulse * 4)
+            center_x = int(self.x + self.w / 2)
+            center_y = int(self.y + self.h / 2)
+
+            # Círculo azul semi-transparente (desenhar múltiplas camadas para simular transparência)
+            shield_color = (100, 150, 255)
+            for i in range(3):
+                pygame.draw.circle(
+                    surface, shield_color, (center_x, center_y), radius - i, 2
+                )
 
         # Calcular tremor
         shake_x, shake_y = 0, 0

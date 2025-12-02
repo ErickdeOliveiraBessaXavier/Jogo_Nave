@@ -201,6 +201,7 @@ class SoundManager:
             "warning": sfx_paths["ui"]["warning"],
             "powerup": sfx_paths["ui"]["powerup"],
             "button_hover": sfx_paths["ui"]["button_hover"],
+            "upgrade_activate": sfx_paths["ui"]["upgrade_activate"],
         }
         for key, path in ui_sounds.items():
             sound_path = os.path.join(base_path, path)
@@ -347,6 +348,16 @@ class SoundManager:
         """Toca som de explosão da nave do jogador."""
         if "ship_explosion" in self._sounds:
             self._sounds["ship_explosion"].play()
+
+    def play_upgrade_activate(self):
+        """Toca som de ativação de aprimoramento."""
+        if "upgrade_activate" in self._sounds:
+            self._sounds["upgrade_activate"].play()
+
+    def play_upgrade_denied(self):
+        """Toca som de negação de aprimoramento (reutiliza hover para MVP)."""
+        if "button_hover" in self._sounds:
+            self._sounds["button_hover"].play()
 
     def play_sound(self, sound_name: str):
         """Toca um som específico pelo nome."""

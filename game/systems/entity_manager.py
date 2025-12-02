@@ -24,12 +24,14 @@ from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
 from ..core.spatial_grid import SpatialGrid
 from ..entities.explosion_pool import ExplosionPool
+from ..entities.emp_wave import EMPWave
 from typing import Dict, Any
 
 
 class EntityManager:
     def __init__(self):
         self.bullets: list[Bullet] = []
+        self.emp_waves: list[EMPWave] = []  # Ondas visuais do EMP
         self.enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy] = []
         self.alien_bullets: list[AlienBullet] = []
         self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
@@ -63,6 +65,10 @@ class EntityManager:
         """
         return self.explosion_pool.get(x, y, size)
 
+    def spawn_emp_wave(self, center_x: float, center_y: float) -> None:
+        """Spawna uma onda visual de EMP."""
+        self.emp_waves.append(EMPWave(center_x, center_y))
+
     def rebuild_enemy_grid(self):
         """Reconstrói a grid espacial com TODOS os inimigos (normais + formações)."""
         self.enemy_spatial_grid.clear()  # Limpar grid anterior
@@ -80,9 +86,62 @@ class EntityManager:
         new_alien_bullets: list[AlienBullet] = []
         new_eye_lasers: list[EyeLaser] = []
 
+        # Atualizar ondas EMP (efeito visual)
+        for wave in self.emp_waves[:]:
+            wave.update(dt)
+            if wave.dead:
+                self.emp_waves.remove(wave)
+
+        # Efeito EMP: desaceleração localizada pela onda com linger
+        slow_active = getattr(self, "emp_active", False)
+        slow_factor = getattr(self, "emp_slow_factor", 1.0) if slow_active else 1.0
+
+        def emp_mul_for(entity: Any) -> float:
+            if not slow_active:
+                # Ainda pode ter linger timer
+                linger = getattr(entity, "emp_linger_timer", 0.0)
+                if linger > 0.0:
+                    return float(slow_factor)
+                return 1.0
+
+            # Obter posição da entidade
+            rect = getattr(entity, "rect", None)
+            if rect is not None:
+                ex = rect.centerx
+                ey = rect.centery
+            else:
+                ex = getattr(entity, "x", 0.0)
+                ey = getattr(entity, "y", 0.0)
+
+            # Verificar se está sendo afetada pela onda agora
+            for wave in self.emp_waves:
+                if wave.is_affecting_position(float(ex), float(ey), dt):
+                    # Resetar/ativar timer de linger
+                    try:
+                        from ..core.upgrades_config import EMP_LINGER_DURATION
+
+                        setattr(entity, "emp_linger_timer", float(EMP_LINGER_DURATION))
+                    except Exception:
+                        setattr(entity, "emp_linger_timer", 3.0)
+                    return float(slow_factor)
+
+            # Não está na onda, verificar linger
+            linger = getattr(entity, "emp_linger_timer", 0.0)
+            if linger > 0.0:
+                return float(slow_factor)
+            return 1.0
+
+        # Atualizar timers de linger em todos
+        def update_linger(entity: Any, dt: float) -> None:
+            linger = getattr(entity, "emp_linger_timer", 0.0)
+            if linger > 0.0:
+                setattr(entity, "emp_linger_timer", max(0.0, linger - dt))
+
         # Atualizar formações
         for formation in self.formations[:]:
-            bullets_from_formation = formation.update(dt)
+            update_linger(formation, dt)
+            mul = emp_mul_for(formation)
+            bullets_from_formation = formation.update(dt * mul)
             if bullets_from_formation:
                 new_alien_bullets.extend(bullets_from_formation)
 
@@ -119,7 +178,9 @@ class EntityManager:
             1 for spike in self.spikes if spike.state in ("trembling", "flying")
         )
         for spike in self.spikes:
-            spike.update(dt, player_x, player_y, attacking_count)
+            update_linger(spike, dt)
+            mul = emp_mul_for(spike)
+            spike.update(dt * mul, player_x, player_y, attacking_count)
 
         if self.boss:
             # SpikeBoss retorna (List[Spike], List[SpikeBossLaser])
@@ -144,18 +205,20 @@ class EntityManager:
                 if spawned_squares:
                     self.boss_squares.extend(spawned_squares)
         for enemy in self.enemies:
+            update_linger(enemy, dt)
+            mul = emp_mul_for(enemy)
             if isinstance(enemy, Alien):
-                shot = enemy.update(dt)
+                shot = enemy.update(dt * mul)
                 if shot:
                     new_alien_bullets.extend(shot)
             elif isinstance(enemy, EyeEnemy):
-                shot = enemy.update(dt, player_x, player_y)
+                shot = enemy.update(dt * mul, player_x, player_y)
                 if shot:
                     new_eye_lasers.extend(shot)
             elif isinstance(enemy, GuidedMeteor):
-                enemy.update(dt, player_x, player_y)
+                enemy.update(dt * mul, player_x, player_y)
             else:
-                enemy.update(dt)
+                enemy.update(dt * mul)
 
         self.alien_bullets.extend(new_alien_bullets)
         self.eye_lasers.extend(new_eye_lasers)
@@ -246,7 +309,13 @@ class EntityManager:
         # Ensure cleanup is called after updates during game over for consistency
         self.cleanup()
 
-    def draw(self, surface: pygame.Surface, player_x: float, player_y: float, enemy_visible: bool = True):
+    def draw(
+        self,
+        surface: pygame.Surface,
+        player_x: float,
+        player_y: float,
+        enemy_visible: bool = True,
+    ):
         """Desenha todas as entidades. EyeEnemy precisa da posição do jogador."""
         from typing import Any
 
@@ -270,6 +339,10 @@ class EntityManager:
 
         # Desenhar explosões do pool
         self.explosion_pool.draw_all(surface)
+
+        # Desenhar ondas EMP (efeito visual)
+        for wave in self.emp_waves:
+            wave.draw(surface)
 
         for entity_list in entity_lists:
             for entity in entity_list:

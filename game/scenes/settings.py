@@ -6,6 +6,9 @@ from ..core.colors import WHITE, BLACK, GREEN, BRIGHT_GREEN, GRAY
 from ..core.assets import get_font
 from ..core.config import config as Config
 from ..core.sound import sound_manager
+from ..core.meta_progression import PlayerProfile
+from ..core.upgrades_config import UPGRADE_SLOT_COUNT
+from pathlib import Path
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -90,9 +93,16 @@ class SettingsScene(Scene):
         self.paused_scene = paused_scene
         self.font = get_font(60)
         self.label_font = get_font(24)
+        self.small_font = get_font(18)
+
+        # Player profile for keybindings
+        self.player_profile = PlayerProfile(Path("player_profile.json"))
+
+        # Keybinding state
+        self.waiting_for_key: Optional[int] = None  # Which slot is waiting for rebind
 
         # Layout calculations
-        total_height = 400  # Approximate total height of all elements
+        total_height = 550  # Increased for upgrade keybindings
         start_y = (Config.SCREEN_HEIGHT - total_height) // 2
 
         self.title_text = self.font.render("Configurações", True, WHITE)
@@ -166,6 +176,27 @@ class SettingsScene(Scene):
         self.back_button_hovered = False
         self.prev_back_button_hovered = False
 
+        # Upgrade Keybindings
+        y_offset = self.back_button_rect.bottom + 40
+        self.keybind_title = self.label_font.render(
+            "Teclas de Aprimoramentos", True, WHITE
+        )
+        self.keybind_title_rect = self.keybind_title.get_rect(
+            center=(Config.SCREEN_WIDTH // 2, y_offset)
+        )
+        y_offset += 40
+        self.keybind_buttons: list[pygame.Rect] = []
+        self.keybind_texts: list[pygame.Surface] = []
+        for i in range(UPGRADE_SLOT_COUNT):
+            rect = pygame.Rect(0, 0, 240, 40)
+            rect.center = (Config.SCREEN_WIDTH // 2, y_offset + i * 60)
+            self.keybind_buttons.append(rect)
+            key_name = pygame.key.name(
+                self.player_profile.upgrade_keybindings[i]
+            ).upper()
+            label = self.small_font.render(f"Slot {i+1}: {key_name}", True, BLACK)
+            self.keybind_texts.append(label)
+
     def enter(self):
         pygame.mouse.set_visible(True)
 
@@ -179,10 +210,32 @@ class SettingsScene(Scene):
                 if self.paused_scene:
                     self.paused_scene.go_to_settings = False
                 self.app.states.pop()
+            else:
+                # Check keybinding buttons
+                for i, rect in enumerate(self.keybind_buttons):
+                    if rect.collidepoint(event.pos):
+                        sound_manager.play_sound("button_hover")
+                        self.waiting_for_key = i
+                        break
         elif event.type == pygame.MOUSEMOTION:
             self.back_button_hovered = self.back_button_rect.collidepoint(event.pos)
             if self.back_button_hovered and not self.prev_back_button_hovered:
                 sound_manager.play_sound("button_hover")
+
+        # Capture next key for rebinding
+        if event.type == pygame.KEYDOWN and self.waiting_for_key is not None:
+            new_key = event.key
+            # Avoid binding ESC to prevent locking out settings
+            if new_key != pygame.K_ESCAPE:
+                self.player_profile.upgrade_keybindings[self.waiting_for_key] = new_key
+                self.player_profile.save()
+                # Update button label
+                key_name = pygame.key.name(new_key).upper()
+                self.keybind_texts[self.waiting_for_key] = self.small_font.render(
+                    f"Slot {self.waiting_for_key+1}: {key_name}", True, BLACK
+                )
+                sound_manager.play_sound("button_hover")
+            self.waiting_for_key = None
 
         self.prev_back_button_hovered = self.back_button_hovered
 
@@ -218,3 +271,13 @@ class SettingsScene(Scene):
         pygame.draw.rect(surface, back_color, self.back_button_rect, border_radius=10)
         pygame.draw.rect(surface, WHITE, self.back_button_rect, 2, border_radius=10)
         surface.blit(self.back_button_text, self.back_button_text_rect)
+
+        # Draw keybinding section
+        surface.blit(self.keybind_title, self.keybind_title_rect)
+        for i, rect in enumerate(self.keybind_buttons):
+            color = (80, 80, 80) if (self.waiting_for_key == i) else (60, 60, 60)
+            pygame.draw.rect(surface, color, rect, border_radius=8)
+            pygame.draw.rect(surface, WHITE, rect, 2, border_radius=8)
+            text = self.keybind_texts[i]
+            text_rect = text.get_rect(center=rect.center)
+            surface.blit(text, text_rect)
