@@ -16,6 +16,10 @@ class UpgradeType(Enum):
     HEAL = auto()
     EMP = auto()
 
+class UpgradeCategory(Enum):
+    DEFENSIVE = auto()
+    UTILITY = auto()
+    OFFENSIVE = auto()
 
 class UpgradeContext(Protocol):
     """Contexto necessário para upgrades operarem.
@@ -46,6 +50,7 @@ class UpgradeMeta:
     name: str
     desc: str
     icon_id: str
+    category: UpgradeCategory
     base_cooldown: float
     base_duration: float
     base_charges: Optional[int]  # None = ilimitado por fase
@@ -295,6 +300,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         name="Shield Burst",
         desc="Ativa um escudo temporário que absorve dano.",
         icon_id="shield_burst",
+        category=UpgradeCategory.DEFENSIVE,
         base_cooldown=45.0,
         base_duration=7.0,
         base_charges=None,
@@ -304,6 +310,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         name="Heal",
         desc="Restaura 1 vida, respeitando o limite máximo.",
         icon_id="heal",
+        category=UpgradeCategory.DEFENSIVE,
         base_cooldown=60.0,
         base_duration=0.0,
         base_charges=2,
@@ -313,6 +320,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         name="EMP",
         desc="Onda que desacelera inimigos por curto período.",
         icon_id="emp",
+        category=UpgradeCategory.UTILITY,
         base_cooldown=50.0,
         base_duration=3.0,  # mais lento por mais tempo
         base_charges=None,

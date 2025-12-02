@@ -249,7 +249,7 @@ class MainMenuScene(Scene):
         ]
 
         for i, (text, color, hover_color, action) in enumerate(button_configs):
-            rect = pygame.Rect(0, 0, 280, 60)
+            rect = pygame.Rect(0, 0, 380, 60)
             rect.center = (
                 Config.SCREEN_WIDTH // 2,
                 Config.SCREEN_HEIGHT // 2 + i * AnimationConfig.BUTTON_SPACING,

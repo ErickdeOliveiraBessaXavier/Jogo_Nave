@@ -513,6 +513,19 @@ class PlayerProfile:
 
         self.load()
 
+    def equip_upgrade(self, upgrade_type: Optional[UpgradeType], slot_index: int):
+        """Equipa ou desequipa um aprimoramento em um slot específico."""
+        if 0 <= slot_index < UPGRADE_SLOT_COUNT:
+            self.upgrade_loadout[slot_index] = upgrade_type
+            self._mark_dirty()
+
+    def get_equipped_slot(self, upgrade_type: UpgradeType) -> Optional[int]:
+        """Retorna o índice do slot onde um aprimoramento está equipado, ou None."""
+        try:
+            return self.upgrade_loadout.index(upgrade_type)
+        except ValueError:
+            return None
+
     def start_session(self):
         """Inicia uma nova sessão de jogo."""
         self.current_session = SessionStats(start_time=datetime.now())
