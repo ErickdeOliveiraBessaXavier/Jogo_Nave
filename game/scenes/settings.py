@@ -1,9 +1,9 @@
 import pygame
-from typing import TYPE_CHECKING, Optional, Dict, Any, List
+from typing import TYPE_CHECKING, Optional, Dict, Any
 from pathlib import Path
 
 from ..core.state import Scene
-from ..core.colors import WHITE, BLACK, GRAY, BLUE, YELLOW, Color
+from ..core.colors import WHITE, BLACK, GRAY, BLUE, Color
 from ..core.assets import get_font
 from ..render.renderer import Renderer
 from ..core.sound import sound_manager
@@ -35,7 +35,7 @@ class SettingsScene(Scene):
             "shot": sound_manager.shot_volume_base,
         }
         self.dragging_slider: Optional[str] = None
-        self.waiting_for_key: Optional[int] = None
+        # Removido: lógica de alterar hotkeys
 
         # Layout
         self.layout_rects: Dict[str, Any] = {}
@@ -66,19 +66,12 @@ class SettingsScene(Scene):
         )
         self.layout_rects["controls_card"] = controls_card_rect
 
-        keybind_buttons: List[pygame.Rect] = []
-        btn_w = controls_card_rect.width - 40
-        btn_h = 50
-        y_offset = controls_card_rect.y + 80
-        for i in range(UPGRADE_SLOT_COUNT):
-            rect = pygame.Rect(
-                controls_card_rect.x + 20, y_offset + i * (btn_h + pad), btn_w, btn_h
-            )
-            keybind_buttons.append(rect)
-        self.layout_rects["keybind_buttons"] = keybind_buttons
+        # Removido: botões para alterar hotkeys
 
         # Botão de Voltar
         self.layout_rects["back_button"] = pygame.Rect(pad, screen_h - 60, 150, 40)
+        # Botão de Salvar
+        self.layout_rects["save_button"] = pygame.Rect(pad + 170, screen_h - 60, 150, 40)
 
     def enter(self):
         pygame.mouse.set_visible(True)
@@ -89,15 +82,6 @@ class SettingsScene(Scene):
         self.player_profile.save()
 
     def handle_event(self, event: pygame.event.Event):
-        if self.waiting_for_key is not None:
-            if event.type == pygame.KEYDOWN:
-                if event.key != pygame.K_ESCAPE:
-                    self.player_profile.upgrade_keybindings[
-                        self.waiting_for_key
-                    ] = event.key
-                self.waiting_for_key = None
-            return
-
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.app.states.pop()
 
@@ -105,6 +89,11 @@ class SettingsScene(Scene):
             pos = event.pos
             if self.layout_rects["back_button"].collidepoint(pos):
                 self.app.states.pop()
+                return
+
+            # Botão de Salvar
+            if self.layout_rects["save_button"].collidepoint(pos):
+                self.player_profile.save()
                 return
 
             # Sliders
@@ -115,12 +104,6 @@ class SettingsScene(Scene):
                     new_val = (pos[0] - rect.x) / rect.w
                     self.sliders[key] = max(0.0, min(1.0, new_val))
                     self._update_volume(key)
-                    return
-
-            # Keybindings
-            for i, rect in enumerate(self.layout_rects["keybind_buttons"]):
-                if rect.collidepoint(pos):
-                    self.waiting_for_key = i
                     return
 
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
@@ -164,6 +147,8 @@ class SettingsScene(Scene):
 
         # Botão Voltar
         self._draw_button(surface, self.layout_rects["back_button"], "Voltar", GRAY)
+        # Botão Salvar
+        self._draw_button(surface, self.layout_rects["save_button"], "Salvar", BLUE)
 
     def _draw_button(
         self, surface: pygame.Surface, rect: pygame.Rect, text: str, color: Color
@@ -231,22 +216,17 @@ class SettingsScene(Scene):
         card_rect = self.layout_rects["controls_card"]
         self._draw_card(surface, card_rect, "Controles")
 
-        for i, rect in enumerate(self.layout_rects["keybind_buttons"]):
-            is_waiting = self.waiting_for_key == i
-            is_hovered = rect.collidepoint(pygame.mouse.get_pos())
-
-            if is_waiting:
-                bg_color = YELLOW
-                text_color = BLACK
-                key_text = "Pressione uma tecla..."
-            else:
-                bg_color = tuple(min(c + 20, 255) for c in (40,40,40)) if is_hovered else (40,40,40)
-                text_color = WHITE
-                key_name = pygame.key.name(
-                    self.player_profile.upgrade_keybindings[i]
-                ).upper()
-                key_text = f"Aprimoramento {i + 1}: {key_name}"
-
+        # Exibe apenas os atalhos fixos (1, 2, ...)
+        pad = 20
+        btn_w = card_rect.width - 40
+        btn_h = 50
+        for i in range(UPGRADE_SLOT_COUNT):
+            rect = pygame.Rect(
+                card_rect.x + 20, card_rect.y + 80 + i * (btn_h + pad), btn_w, btn_h
+            )
+            bg_color = (40,40,40)
+            text_color = WHITE
+            key_text = f"Aprimoramento {i + 1}: {i + 1}"
             pygame.draw.rect(surface, bg_color, rect, border_radius=8)
             pygame.draw.rect(surface, WHITE, rect, 1, border_radius=8)
             text_surf = self.item_font.render(key_text, True, text_color)

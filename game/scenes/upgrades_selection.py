@@ -53,7 +53,7 @@ class UpgradesSelectionScene(Scene):
         self.header_font = get_font(28)
         self.tab_font = get_font(22)
         self.item_font = get_font(18)
-        self.small_font = get_font(14)
+        self.small_font = get_font(12)
         self.tiny_font = get_font(12)
 
         # Ícone de bloqueado

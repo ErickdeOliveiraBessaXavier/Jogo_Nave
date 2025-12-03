@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "profile_created": "2025-12-03T17:20:27.360373",
+  "profile_created": "2025-12-03T17:41:32.762218",
   "last_played": null,
   "total_playtime": 0.0,
   "highest_level_reached": 1,
@@ -15,11 +15,11 @@
     "SHIELD_BURST"
   ],
   "upgrade_loadout": [
-    "SHIELD_BURST",
-    null
+    "HEAL",
+    "SHIELD_BURST"
   ],
   "upgrade_keybindings": [
-    49,
-    50
+    112,
+    117
   ]
 }
