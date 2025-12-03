@@ -15,8 +15,8 @@
     "SHIELD_BURST"
   ],
   "upgrade_loadout": [
-    null,
-    null
+    "HEAL",
+    "SHIELD_BURST"
   ],
   "upgrade_keybindings": [
     49,
