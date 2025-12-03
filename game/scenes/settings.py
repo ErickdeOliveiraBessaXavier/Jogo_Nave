@@ -70,12 +70,9 @@ class SettingsScene(Scene):
 
         # Botão de Voltar
         self.layout_rects["back_button"] = pygame.Rect(pad, screen_h - 60, 150, 40)
-        # Botão de Salvar
-        self.layout_rects["save_button"] = pygame.Rect(pad + 170, screen_h - 60, 150, 40)
 
     def enter(self):
         pygame.mouse.set_visible(True)
-        self.waiting_for_key = None
         self.dragging_slider = None
 
     def exit(self):
@@ -89,11 +86,6 @@ class SettingsScene(Scene):
             pos = event.pos
             if self.layout_rects["back_button"].collidepoint(pos):
                 self.app.states.pop()
-                return
-
-            # Botão de Salvar
-            if self.layout_rects["save_button"].collidepoint(pos):
-                self.player_profile.save()
                 return
 
             # Sliders
@@ -147,8 +139,6 @@ class SettingsScene(Scene):
 
         # Botão Voltar
         self._draw_button(surface, self.layout_rects["back_button"], "Voltar", GRAY)
-        # Botão Salvar
-        self._draw_button(surface, self.layout_rects["save_button"], "Salvar", BLUE)
 
     def _draw_button(
         self, surface: pygame.Surface, rect: pygame.Rect, text: str, color: Color

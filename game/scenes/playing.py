@@ -1090,7 +1090,11 @@ class PlayingScene(Scene):
                 "Heal": "H",  # H de Heal
                 "EMP": "E",  # E de EMP
             }
-            icon = icon_map.get(str(ui["name"]), "?")
+            # Usar mapeamento; caso não exista, usar inicial do nome
+            name_str = str(ui.get("name", ""))
+            icon = icon_map.get(name_str)
+            if not icon:
+                icon = name_str[:1].upper() if name_str else "?"
             icon_txt = font.render(icon, True, _colors.CYAN)
             icon_rect = icon_txt.get_rect(center=(slot_w // 2, slot_h // 2))
             slot_surface.blit(icon_txt, icon_rect)
