@@ -868,7 +868,8 @@ class PlayerProfile:
                     unlocked_raw = data.get("unlocked_upgrades")
                     if isinstance(unlocked_raw, list):
                         parsed: set[UpgradeType] = set()
-                        for name in unlocked_raw:
+                        from typing import cast
+                        for name in cast(List[Any], unlocked_raw):
                             try:
                                 parsed.add(UpgradeType[name])
                             except Exception:
@@ -880,8 +881,9 @@ class PlayerProfile:
 
                     loadout_raw = data.get("upgrade_loadout")
                     if isinstance(loadout_raw, list):
-                        slots = []
-                        for item in loadout_raw[:UPGRADE_SLOT_COUNT]:
+                        from typing import Optional, cast
+                        slots: List[Optional[UpgradeType]] = []
+                        for item in cast(List[Any], loadout_raw)[:UPGRADE_SLOT_COUNT]:
                             if item is None:
                                 slots.append(None)
                                 continue
@@ -904,8 +906,9 @@ class PlayerProfile:
                     try:
                         keybindings_raw = data.get("upgrade_keybindings")
                         if isinstance(keybindings_raw, list):
-                            keys = []
-                            for key in keybindings_raw[:UPGRADE_SLOT_COUNT]:
+                            from typing import cast
+                            keys: List[int] = []
+                            for key in cast(List[Any], keybindings_raw)[:UPGRADE_SLOT_COUNT]:
                                 if (
                                     isinstance(key, int) and 0 <= key <= 1000000
                                 ):  # Valid pygame key range
@@ -913,7 +916,7 @@ class PlayerProfile:
                                 else:
                                     keys.append([pygame.K_1, pygame.K_2][len(keys)])
                             # Complete slot count
-                            defaults = [pygame.K_1, pygame.K_2]
+                            defaults: List[int] = [pygame.K_1, pygame.K_2]
                             while len(keys) < UPGRADE_SLOT_COUNT:
                                 keys.append(defaults[len(keys)])
                             self.upgrade_keybindings = keys
