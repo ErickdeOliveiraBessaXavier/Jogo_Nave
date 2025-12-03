@@ -911,19 +911,22 @@ class SpikeBoss:
 
     def _draw_health_bar(self, surface: pygame.Surface, x: int, y: int):
         """Desenha barra de vida acima do boss."""
-        bar_width = self.w
+        # Largura da barra baseada na vida máxima (proporcional)
+        bar_max_width = min(240, self.w * 2)  # Limita a largura máxima
         bar_height = 8
-        bar_x = x
+
+        # Centralizar a barra em relação ao boss
+        bar_x = x + (self.w - bar_max_width) / 2
         bar_y = y - 20
 
-        # Fundo
+        # Fundo (vermelho escuro)
         pygame.draw.rect(
-            surface, colors.DARK_GRAY, (bar_x, bar_y, bar_width, bar_height)
+            surface, colors.DARK_RED, (bar_x, bar_y, bar_max_width, bar_height)
         )
 
         # Vida atual
         health_ratio = self.health / self.max_health
-        health_width = int(bar_width * health_ratio)
+        health_width = int(bar_max_width * health_ratio)
         health_color = (
             colors.GREEN
             if health_ratio > 0.5
@@ -935,5 +938,5 @@ class SpikeBoss:
 
         # Borda
         pygame.draw.rect(
-            surface, colors.WHITE, (bar_x, bar_y, bar_width, bar_height), width=1
+            surface, colors.WHITE, (bar_x, bar_y, bar_max_width, bar_height), width=1
         )

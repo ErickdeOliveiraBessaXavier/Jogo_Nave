@@ -751,6 +751,7 @@ class PlayingScene(Scene):
             boss = self.level_config.boss_type(Config.SCREEN_WIDTH / 2 - 50, 50)
             # Aplicar multiplicador de health da dificuldade
             boss.health = int(boss.health * self.enemy_health_multiplier)
+            boss.max_health = boss.health  # Atualizar max_health também
             self.entity_manager.boss = boss
 
             from ..entities.spike_boss import SpikeBoss

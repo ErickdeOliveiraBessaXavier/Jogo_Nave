@@ -179,7 +179,11 @@ class StatisticsScene(Scene):
                 border_color = colors.GRAY
 
             pygame.draw.rect(
-                surface, bg_color, rect, border_top_left_radius=8, border_top_right_radius=8
+                surface,
+                bg_color,
+                rect,
+                border_top_left_radius=8,
+                border_top_right_radius=8,
             )
             pygame.draw.rect(
                 surface,
@@ -224,7 +228,7 @@ class StatisticsScene(Scene):
         # Card: Resumo
         card_rect = pygame.Rect(area.x, y, area.width, 150)
         self._draw_card_background(surface, card_rect)
-        
+
         # Título do Card
         header = self.header_font.render("Resumo do Piloto", True, colors.WHITE)
         surface.blit(header, (card_rect.x + 15, card_rect.y + 10))
@@ -242,7 +246,10 @@ class StatisticsScene(Scene):
             col = i % 2
             row = i // 2
             stat_surf = self.item_font.render(stat, True, colors.WHITE)
-            surface.blit(stat_surf, (card_rect.x + 20 + col * (area.width/2), stats_y + row * 35))
+            surface.blit(
+                stat_surf,
+                (card_rect.x + 20 + col * (area.width / 2), stats_y + row * 35),
+            )
 
         # Card: Recomendações
         recom_y = card_rect.bottom + 20
@@ -251,7 +258,7 @@ class StatisticsScene(Scene):
 
         header = self.header_font.render("Recomendações", True, colors.WHITE)
         surface.blit(header, (recom_rect.x + 15, recom_rect.y + 10))
-        
+
         recom_y_inner = recom_rect.y + 50
         if summary["recommendations"]:
             for recom in summary["recommendations"]:
@@ -259,20 +266,23 @@ class StatisticsScene(Scene):
                 surface.blit(recom_surf, (recom_rect.x + 20, recom_y_inner))
                 recom_y_inner += 25
         else:
-            recom_surf = self.small_font.render("Nenhuma recomendação no momento. Continue jogando!", True, colors.GRAY)
+            recom_surf = self.small_font.render(
+                "Nenhuma recomendação no momento. Continue jogando!", True, colors.GRAY
+            )
             surface.blit(recom_surf, (recom_rect.x + 20, recom_y_inner))
-
 
     def _render_levels_tab(self, surface: pygame.Surface, area: pygame.Rect):
         if not self.profile:
             return
-            
+
         header = self.header_font.render("Performance por Nível", True, colors.WHITE)
         surface.blit(header, (area.x, area.y))
-        
+
         y = area.y + 50
         if not self.profile.level_stats:
-            text = self.item_font.render("Nenhum nível jogado ainda.", True, colors.GRAY)
+            text = self.item_font.render(
+                "Nenhum nível jogado ainda.", True, colors.GRAY
+            )
             surface.blit(text, (area.x, y))
             return
 
@@ -297,13 +307,20 @@ class StatisticsScene(Scene):
                 PerformanceState.INCONSISTENT: (255, 165, 0),
             }
             bar_color = state_colors.get(state, colors.GRAY)
-            pygame.draw.rect(surface, bar_color, (card_rect.x, card_rect.y, 10, card_rect.height), border_radius=8)
+            pygame.draw.rect(
+                surface,
+                bar_color,
+                (card_rect.x, card_rect.y, 10, card_rect.height),
+                border_radius=8,
+            )
 
             # Informações
             level_text = self.item_font.render(f"Nível {level_num}", True, colors.WHITE)
             surface.blit(level_text, (card_rect.x + 25, card_rect.y + 10))
 
-            info_text_1 = f"Tentativas: {stats.attempts} | Sucesso: {stats.clear_rate:.0%}"
+            info_text_1 = (
+                f"Tentativas: {stats.attempts} | Sucesso: {stats.clear_rate:.0%}"
+            )
             info_surf_1 = self.small_font.render(info_text_1, True, colors.GRAY)
             surface.blit(info_surf_1, (card_rect.x + 25, card_rect.y + 40))
 
@@ -311,7 +328,7 @@ class StatisticsScene(Scene):
                 info_text_2 = f"Melhor tempo: {stats.best_time:.1f}s | Melhor pontuação: {stats.best_score:,}"
                 info_surf_2 = self.small_font.render(info_text_2, True, colors.GRAY)
                 surface.blit(info_surf_2, (card_rect.x + 250, card_rect.y + 40))
-            
+
             y += card_rect.height + 15
 
     def _draw_card_background(self, surface: pygame.Surface, rect: pygame.Rect):

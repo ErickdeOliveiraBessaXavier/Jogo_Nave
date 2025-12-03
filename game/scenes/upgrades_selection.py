@@ -54,8 +54,8 @@ class UpgradesSelectionScene(Scene):
 
         # Organizar upgrades por categoria
         self.all_upgrades = sorted(list_all_upgrades_meta(), key=lambda u: u.name)
-        self.categorized_upgrades: Dict[UpgradeCategory, List[UpgradeMeta]] = defaultdict(
-            list
+        self.categorized_upgrades: Dict[UpgradeCategory, List[UpgradeMeta]] = (
+            defaultdict(list)
         )
         for upg in self.all_upgrades:
             self.categorized_upgrades[upg.category].append(upg)
@@ -313,9 +313,11 @@ class UpgradesSelectionScene(Scene):
             y_offset = details_rect.y + 60 + len(desc_lines) * 20 + 20
             attrs: List[Optional[str]] = [
                 f"Cooldown: {selected_upgrade.base_cooldown}s",
-                f"Duração: {selected_upgrade.base_duration}s"
-                if selected_upgrade.base_duration > 0
-                else None,
+                (
+                    f"Duração: {selected_upgrade.base_duration}s"
+                    if selected_upgrade.base_duration > 0
+                    else None
+                ),
                 f"Cargas: {selected_upgrade.base_charges or '∞'}",
             ]
             for attr in filter(None, attrs):

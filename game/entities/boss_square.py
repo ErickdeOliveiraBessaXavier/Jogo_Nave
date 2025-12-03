@@ -15,7 +15,19 @@ class BossSquare:
     - Causes damage on collision with player
     """
 
-    def __init__(self, x: float, y: float, vx: float, vy: float, size: float):
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        vx: float,
+        vy: float,
+        size: float,
+        is_orbital: bool = False,
+        orbit_radius: float = 0,
+        orbit_angle: float = 0,
+        orbit_speed: float = 0,
+        speed_var: float = 1.0,
+    ):
         """
         Initialize a boss square projectile.
 
@@ -25,6 +37,11 @@ class BossSquare:
             vx: X velocity
             vy: Y velocity
             size: Base size of the square
+            is_orbital: Whether this square orbits around the boss
+            orbit_radius: Orbital radius if is_orbital
+            orbit_angle: Initial orbital angle if is_orbital
+            orbit_speed: Orbital speed if is_orbital
+            speed_var: Speed variation for lerp if is_orbital
         """
         self.x = x
         self.y = y
@@ -34,13 +51,22 @@ class BossSquare:
         self.size = size
         self.dead = False
 
+        # Orbital attributes
+        self.is_orbital = is_orbital
+        self.orbit_radius = orbit_radius
+        self.orbit_angle = orbit_angle
+        self.orbit_speed = orbit_speed
+        self.speed_var = speed_var
+        self.state = "orbiting" if is_orbital else "flying"
+        self.prepare_timer = 0.0
+
         # Animation
         self.animation_timer = 0.0
         self.rotation = 0.0  # Rotação contínua
 
         # Growth effect - aumenta conforme se move
         self.growth_timer = 0.0
-        self.max_growth_scale = 2.5  # Crescimento máximo (2.5x do tamanho inicial)
+        self.max_growth_scale = 4.5  # Crescimento máximo (2.5x do tamanho inicial)
         self.growth_duration = 2.0  # Tempo para atingir tamanho máximo (segundos)
 
     def update(
@@ -54,40 +80,53 @@ class BossSquare:
             screen_width: Current screen width (for boundary check)
             screen_height: Current screen height (for boundary check)
         """
-        # Move
-        self.x += self.vx * dt
-        self.y += self.vy * dt
+        # Move only if not orbital
+        if not self.is_orbital:
+            self.x += self.vx * dt
+            self.y += self.vy * dt
 
-        # Rotação contínua
-        self.rotation += dt * 360  # Gira 360 graus por segundo
+        # Handle rotation based on state
+        if self.state == "preparing":
+            self.rotation += dt * 720  # Gira 720 graus por segundo
+        elif self.state == "orbiting":
+            self.rotation = 0.0  # Sem rotação própria
+        else:
+            self.rotation += dt * 360  # Rotação contínua para projéteis
 
-        # Efeito de crescimento progressivo
-        self.growth_timer += dt
-        growth_progress = min(self.growth_timer / self.growth_duration, 1.0)
-        # Curva de crescimento suave (ease-out)
-        growth_scale = 1.0 + (self.max_growth_scale - 1.0) * (
-            1.0 - (1.0 - growth_progress) ** 2
-        )
+        # Efeito de crescimento progressivo (only for projectiles)
+        if not self.is_orbital:
+            self.growth_timer += dt
+            growth_progress = min(self.growth_timer / self.growth_duration, 1.0)
+            # Curva de crescimento suave (ease-out)
+            growth_scale = 1.0 + (self.max_growth_scale - 1.0) * (
+                1.0 - (1.0 - growth_progress) ** 2
+            )
+        else:
+            growth_scale = 1.0  # No growth for orbital
 
-        # Pulsation animation (same as power-ups)
+        # Pulsation animation
         self.animation_timer += dt * 5
-        pulse_scale = 1.0 + 0.2 * abs(
-            pygame.math.Vector2(1, 0).rotate(self.animation_timer * 57.3).x
-        )
+        if self.state == "preparing":
+            pulse_scale = 1.0 + 0.4 * abs(math.sin(self.prepare_timer * 10))
+            self.prepare_timer += dt
+        else:
+            pulse_scale = 1.0 + 0.2 * abs(
+                pygame.math.Vector2(1, 0).rotate(self.animation_timer * 57.3).x
+            )
 
         # Combina crescimento com pulsação
         self.size = self.base_size * growth_scale * pulse_scale
 
-        # Remove if off-screen (margem muito grande para garantir que saia completamente)
-        # Considerando tamanho do quadrado + pulsação + rotação + crescimento
-        margin = 300  # Aumentado devido ao crescimento
-        if (
-            self.x < -margin
-            or self.x > screen_width + margin
-            or self.y < -margin
-            or self.y > screen_height + margin
-        ):
-            self.dead = True
+        # Remove if off-screen (only for projectiles)
+        if not self.is_orbital:
+            margin = 300  # Aumentado devido ao crescimento
+            if (
+                self.x < -margin
+                or self.x > screen_width + margin
+                or self.y < -margin
+                or self.y > screen_height + margin
+            ):
+                self.dead = True
 
     def draw(self, surface: pygame.Surface) -> None:
         """Draw the square projectile with rotation."""

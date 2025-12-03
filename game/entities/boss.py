@@ -41,8 +41,8 @@ class Boss:
         self, x: float, y: float, health: int = Config.BOSS_HEALTH, hit_score: int = 50
     ):
         # Position and size
-        self.w = 100
-        self.h = 80
+        self.w = 150  # 100 * 1.5
+        self.h = 120  # 80 * 1.5
         self.x = x
         self.y = -self.h
         self.target_y = y
@@ -104,142 +104,62 @@ class Boss:
         self.position_history: deque[tuple[float, float]] = deque(
             maxlen=30
         )  # Histórico de posições
-        self.floating_squares: List[dict[str, Any]] = []
+        self.floating_squares: List[BossSquare] = []
         self._init_floating_squares()
 
         # Animação de pulsação para os quadrados flutuantes
         self.squares_animation_timer = 0.0
 
         # Sistema de lançamento sequencial de quadrados
-        self.square_launch_queue: List[dict[str, Any]] = (
+        self.square_launch_queue: List[BossSquare] = (
             []
         )  # Fila de quadrados prontos para lançar
         self.square_launch_timer = 0.0  # Timer para lançamento sequencial
         self.square_launch_delay = 0.15  # 150ms entre cada lançamento
 
     def _init_floating_squares(self) -> None:
-        """Inicializa os quadrados flutuantes ao redor do boss."""
-        # Criar mais quadrados (14) em posições diferentes ao redor do corpo principal
-        configs: list[dict[str, int | float]] = [
-            {
-                "offset_x": -40,
-                "offset_y": -30,
-                "size": 20,
-                "delay": 5,
-                "speed_var": 0.9,
-            },  # Esquerda superior
-            {
-                "offset_x": 40,
-                "offset_y": -30,
-                "size": 20,
-                "delay": 5,
-                "speed_var": 1.1,
-            },  # Direita superior
-            {
-                "offset_x": -50,
-                "offset_y": 10,
-                "size": 25,
-                "delay": 10,
-                "speed_var": 1.05,
-            },  # Esquerda meio
-            {
-                "offset_x": 50,
-                "offset_y": 10,
-                "size": 25,
-                "delay": 10,
-                "speed_var": 0.95,
-            },  # Direita meio
-            {
-                "offset_x": -35,
-                "offset_y": 50,
-                "size": 18,
-                "delay": 15,
-                "speed_var": 1.15,
-            },  # Esquerda inferior
-            {
-                "offset_x": 35,
-                "offset_y": 50,
-                "size": 18,
-                "delay": 15,
-                "speed_var": 0.85,
-            },  # Direita inferior
-            {
-                "offset_x": 0,
-                "offset_y": -45,
-                "size": 15,
-                "delay": 8,
-                "speed_var": 1.0,
-            },  # Topo centro
-            {
-                "offset_x": 0,
-                "offset_y": 65,
-                "size": 22,
-                "delay": 12,
-                "speed_var": 1.08,
-            },  # Base centro
-            # Novos quadrados adicionais
-            {
-                "offset_x": -60,
-                "offset_y": -10,
-                "size": 17,
-                "delay": 7,
-                "speed_var": 0.92,
-            },  # Esquerda lateral superior
-            {
-                "offset_x": 60,
-                "offset_y": -10,
-                "size": 17,
-                "delay": 7,
-                "speed_var": 1.12,
-            },  # Direita lateral superior
-            {
-                "offset_x": -25,
-                "offset_y": 25,
-                "size": 16,
-                "delay": 9,
-                "speed_var": 1.03,
-            },  # Esquerda meio-inferior
-            {
-                "offset_x": 25,
-                "offset_y": 25,
-                "size": 16,
-                "delay": 9,
-                "speed_var": 0.97,
-            },  # Direita meio-inferior
-            {
-                "offset_x": -15,
-                "offset_y": -40,
-                "size": 14,
-                "delay": 6,
-                "speed_var": 0.88,
-            },  # Esquerda-centro topo
-            {
-                "offset_x": 15,
-                "offset_y": -40,
-                "size": 14,
-                "delay": 6,
-                "speed_var": 1.18,
-            },  # Direita-centro topo
-        ]
+        """Inicializa os quadrados flutuantes orbitando ao redor do boss."""
+        import random
 
-        for config in configs:
-            self.floating_squares.append(
-                {
-                    "offset_x": float(config["offset_x"]),
-                    "offset_y": float(config["offset_y"]),
-                    "base_size": float(config["size"]),  # Tamanho base
-                    "size": float(config["size"]),  # Tamanho atual (será animado)
-                    "delay": int(config["delay"]),  # Frames de delay
-                    "x": self.x + self.w / 2 + float(config["offset_x"]),
-                    "y": self.y + self.h / 2 + float(config["offset_y"]),
-                    "state": "following",  # Estados: "following", "preparing", "launched"
-                    "rotation": 0.0,  # Ângulo de rotação
-                    "prepare_timer": 0.0,  # Timer para animação de preparação
-                    "speed_var": float(
-                        config["speed_var"]
-                    ),  # Variação de velocidade (0.85 a 1.18)
-                }
+        # Criar 14 quadrados em órbitas ao redor do boss
+        num_squares = 14
+
+        for _ in range(num_squares):
+            # Distância orbital aleatória (raio da órbita)
+            orbit_radius = random.uniform(60, 120)
+
+            # Ângulo inicial aleatório (posição na órbita)
+            orbit_angle = random.uniform(0, 360)
+
+            # Velocidade angular aleatória (velocidade de rotação)
+            # Positivo = sentido horário, negativo = anti-horário
+            orbit_speed = random.choice(
+                [
+                    random.uniform(30, 60),  # Horário rápido
+                    random.uniform(15, 30),  # Horário lento
+                    random.uniform(-60, -30),  # Anti-horário rápido
+                    random.uniform(-30, -15),  # Anti-horário lento
+                ]
             )
+
+            # Tamanho aleatório
+            size = random.uniform(14, 25)
+
+            # Criar BossSquare orbital
+            square = BossSquare(
+                x=0,
+                y=0,
+                vx=0,
+                vy=0,
+                size=size,
+                is_orbital=True,
+                orbit_radius=orbit_radius,
+                orbit_angle=orbit_angle,
+                orbit_speed=orbit_speed,
+                speed_var=random.uniform(0.85, 1.18),
+            )
+
+            self.floating_squares.append(square)
 
     def _update_orientation(self, player_x: float, player_y: float) -> None:
         """Update cannon orientation to face the player."""
@@ -657,12 +577,12 @@ class Boss:
         return []
 
     def _create_square_projectile(
-        self, square: dict[str, Any], player_x: float, player_y: float
+        self, square: BossSquare, player_x: float, player_y: float
     ) -> BossSquare:
         """Cria um projétil a partir de um quadrado flutuante."""
         # Posição inicial do quadrado
-        start_x = square["x"]
-        start_y = square["y"]
+        start_x = square.x
+        start_y = square.y
 
         # Calcular direção para o jogador com imprecisão
         dx = player_x - start_x
@@ -693,7 +613,7 @@ class Boss:
         vy = dy * speed
 
         # Criar projétil
-        return BossSquare(start_x, start_y, vx, vy, square["base_size"])
+        return BossSquare(start_x, start_y, vx, vy, square.base_size)
 
     def update(
         self, dt: float, player_x: float, player_y: float | None = None
@@ -720,51 +640,51 @@ class Boss:
         )
 
         # Atualizar posições e estados dos quadrados flutuantes
-        base_lerp_speed = 7.0  # Velocidade base das mini_ships
         for square in self.floating_squares:
-            if square["state"] == "following":
-                # Quadrado segue o boss normalmente com velocidade variada
-                delay_frames = square["delay"]
-                if len(self.position_history) > delay_frames:
-                    # Pegar posição alvo do histórico
-                    delayed_pos = self.position_history[-delay_frames]
-                    target_x = delayed_pos[0] + square["offset_x"]
-                    target_y = delayed_pos[1] + square["offset_y"]
+            if square.state == "orbiting":
+                # Atualizar ângulo orbital
+                square.orbit_angle += square.orbit_speed * dt
 
-                    # Aplicar variação de velocidade individual para movimento mais orgânico
-                    lerp_speed = base_lerp_speed * square["speed_var"]
+                # Manter ângulo entre 0 e 360
+                square.orbit_angle %= 360
 
-                    # Interpolar suavemente entre posição atual e alvo (lerp)
-                    square["x"] += (target_x - square["x"]) * lerp_speed * dt
-                    square["y"] += (target_y - square["y"]) * lerp_speed * dt
+                # Calcular posição alvo com base no ângulo orbital
+                angle_rad = math.radians(square.orbit_angle)
+                target_x = center_x + math.cos(angle_rad) * square.orbit_radius
+                target_y = center_y + math.sin(angle_rad) * square.orbit_radius
+
+                # Aplicar lerp para suavizar o movimento (efeito de delay/arrasto)
+                lerp_speed = 7.0 * square.speed_var  # Usa velocidade variada
+                square.x += (target_x - square.x) * lerp_speed * dt
+                square.y += (target_y - square.y) * lerp_speed * dt
 
                 # Aplicar pulsação ao tamanho
-                square["size"] = square["base_size"] * pulse_scale
-                square["rotation"] = 0.0  # Sem rotação
+                square.size = square.base_size * pulse_scale
+                square.rotation = 0.0  # Sem rotação própria
 
-            elif square["state"] == "preparing":
+            elif square.state == "preparing":
                 # Quadrado está se preparando para ser lançado (girando no lugar)
-                square["prepare_timer"] += dt
-                square["rotation"] += (
+                square.prepare_timer += dt
+                square.rotation += (
                     dt * 720
                 )  # Gira 720 graus por segundo (2 rotações/seg)
 
                 # Pulsação mais rápida e intensa durante preparação
-                prepare_pulse = 1.0 + 0.4 * abs(math.sin(square["prepare_timer"] * 10))
-                square["size"] = square["base_size"] * prepare_pulse
+                prepare_pulse = 1.0 + 0.4 * abs(math.sin(square.prepare_timer * 10))
+                square.size = square.base_size * prepare_pulse
 
                 # Após 1 segundo de preparação, marca como pronto para lançamento
-                if square["prepare_timer"] >= 1.0:
-                    square["state"] = "ready_to_launch"
+                if square.prepare_timer >= 1.0:
+                    square.state = "ready_to_launch"
 
-            elif square["state"] == "launching":
+            elif square.state == "launching":
                 # Quadrado está na fila de lançamento, continua girando
-                square["prepare_timer"] += dt
-                square["rotation"] += dt * 720
+                square.prepare_timer += dt
+                square.rotation += dt * 720
 
                 # Manter pulsação intensa
-                prepare_pulse = 1.0 + 0.4 * abs(math.sin(square["prepare_timer"] * 10))
-                square["size"] = square["base_size"] * prepare_pulse
+                prepare_pulse = 1.0 + 0.4 * abs(math.sin(square.prepare_timer * 10))
+                square.size = square.base_size * prepare_pulse
 
         # Update orientation to face player
         if player_y is not None:
@@ -788,22 +708,22 @@ class Boss:
                     )
                     spawned_squares.append(projectile)
 
-                    # Resetar quadrado para seguir o boss novamente
-                    square["state"] = "following"
-                    square["prepare_timer"] = 0.0
-                    square["rotation"] = 0.0
+                    # Resetar quadrado para orbitar o boss novamente
+                    square.state = "orbiting"
+                    square.prepare_timer = 0.0
+                    square.rotation = 0.0
 
                     # Resetar timer para próximo lançamento
                     self.square_launch_timer = 0.0
 
             # Adicionar quadrados prontos à fila de lançamento
             ready_squares = [
-                sq for sq in self.floating_squares if sq["state"] == "ready_to_launch"
+                sq for sq in self.floating_squares if sq.state == "ready_to_launch"
             ]
             if ready_squares:
                 for square in ready_squares:
                     # Marcar como "launching" para não adicionar novamente
-                    square["state"] = "launching"
+                    square.state = "launching"
                     self.square_launch_queue.append(square)
 
         # Atualiza o timer de ataque de quadrados no modo frenético
@@ -824,24 +744,24 @@ class Boss:
                 preparing_or_ready = [
                     sq
                     for sq in self.floating_squares
-                    if sq["state"] in ("preparing", "ready_to_launch", "launching")
+                    if sq.state in ("preparing", "ready_to_launch", "launching")
                 ]
                 if not preparing_or_ready:
                     # Escolher 3-6 quadrados aleatórios para começar a preparar
-                    following_squares = [
-                        sq for sq in self.floating_squares if sq["state"] == "following"
+                    orbiting_squares = [
+                        sq for sq in self.floating_squares if sq.state == "orbiting"
                     ]
-                    if following_squares:
+                    if orbiting_squares:
                         num_to_prepare = random.randint(
-                            3, min(6, len(following_squares))
+                            3, min(6, len(orbiting_squares))
                         )
                         squares_to_prepare = random.sample(
-                            following_squares, num_to_prepare
+                            orbiting_squares, num_to_prepare
                         )
 
                         for square in squares_to_prepare:
-                            square["state"] = "preparing"
-                            square["prepare_timer"] = 0.0
+                            square.state = "preparing"
+                            square.prepare_timer = 0.0
 
                 # Timer para próximo ciclo
                 self.square_attack_timer.start(random.uniform(2.0, 3.5))
@@ -1047,9 +967,9 @@ class Boss:
                 continue
 
             # Calcular cor baseada no modo e estado
-            if square["state"] in ("preparing", "launching"):
+            if square.state in ("preparing", "launching"):
                 # Quadrado se preparando ou na fila de lançamento: cor amarela/laranja pulsante
-                pulse_intensity = 0.5 + 0.5 * abs(math.sin(square["prepare_timer"] * 8))
+                pulse_intensity = 0.5 + 0.5 * abs(math.sin(square.prepare_timer * 8))
                 color = (255, int(200 * pulse_intensity), 0)
                 border_color: tuple[int, int, int] = (255, 255, 0)
             elif self.frenzy_mode:
@@ -1080,43 +1000,43 @@ class Boss:
                 border_color = (min(255, r + 50), min(255, g + 50), min(255, b + 50))
 
             # Se o quadrado está girando, desenhar com rotação
-            if square["rotation"] > 0:
+            if square.rotation > 0:
                 self._draw_rotated_square(
                     surface, square, color, border_color, offset_x, offset_y
                 )
             else:
                 # Desenhar o quadrado normalmente
-                square_x = square["x"] - square["size"] / 2 + offset_x
-                square_y = square["y"] - square["size"] / 2 + offset_y
+                square_x = square.x - square.size / 2 + offset_x
+                square_y = square.y - square.size / 2 + offset_y
 
                 pygame.draw.rect(
                     surface,
                     color,
-                    (int(square_x), int(square_y), square["size"], square["size"]),
+                    (int(square_x), int(square_y), square.size, square.size),
                 )
 
                 # Desenhar borda mais clara
                 pygame.draw.rect(
                     surface,
                     border_color,
-                    (int(square_x), int(square_y), square["size"], square["size"]),
+                    (int(square_x), int(square_y), square.size, square.size),
                     2,
                 )
 
     def _draw_rotated_square(
         self,
         surface: pygame.Surface,
-        square: dict[str, Any],
+        square: BossSquare,
         color: tuple[int, int, int],
         border_color: tuple[int, int, int],
         offset_x: float,
         offset_y: float,
     ) -> None:
         """Desenha um quadrado rotacionado."""
-        size = square["size"]
-        center_x = square["x"] + offset_x
-        center_y = square["y"] + offset_y
-        angle_rad = math.radians(square["rotation"])
+        size = square.size
+        center_x = square.x + offset_x
+        center_y = square.y + offset_y
+        angle_rad = math.radians(square.rotation)
 
         # Calcular os 4 cantos do quadrado rotacionado
         half_size = size / 2
@@ -1361,9 +1281,24 @@ class Boss:
         """Draw boss health bar."""
         if self.health > 0:
             health_ratio = self.health / self.max_health
-            bar_width = self.w * health_ratio
-            pygame.draw.rect(surface, (255, 0, 0), (self.x, self.y - 20, self.w, 10))
-            pygame.draw.rect(surface, (0, 255, 0), (self.x, self.y - 20, bar_width, 10))
+
+            # Largura da barra baseada na vida máxima (proporcional)
+            bar_max_width = min(200, self.w * 2)  # Limita a largura máxima
+            bar_width = bar_max_width * health_ratio
+            bar_height = 10
+
+            # Centralizar a barra em relação ao boss
+            bar_x = self.x + (self.w - bar_max_width) / 2
+            bar_y = self.y - 20
+
+            # Barra vermelha (fundo)
+            pygame.draw.rect(
+                surface, (255, 0, 0), (bar_x, bar_y, bar_max_width, bar_height)
+            )
+            # Barra verde (vida atual)
+            pygame.draw.rect(
+                surface, (0, 255, 0), (bar_x, bar_y, bar_width, bar_height)
+            )
 
     def can_take_damage(self) -> bool:
         """Check if boss can currently take damage."""

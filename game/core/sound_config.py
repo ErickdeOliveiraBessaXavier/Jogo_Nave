@@ -63,7 +63,7 @@ VOLUME_CONFIG: Dict[str, float] = {
     "master": 0.5,  # Volume geral
     "sfx": 0.4,  # Efeitos sonoros
     "music": 0.3,  # Música
-    "boss_music": 1.2,  # Música do boss
+    "boss_music": 2.5,  # Música do boss
     "shots": 0.2,  # Tiros específico
 }
 
@@ -121,12 +121,6 @@ BEHAVIOR_CONFIG: Dict[str, Dict[str, Union[bool, float]]] = {
     "music": {
         "loop": True,
         "fade_duration": 0.5,  # Duração do fade ao trocar música
-    },
-    "boss_laser": {
-        "duck_music": True,  # Reduzir música durante som do laser
-        "duck_volume": 0.3,  # Volume da música durante o laser (30% do normal)
-        "fade_in": 0.1,  # Fade in suave para o som
-        "fade_out": 0.2,  # Fade out suave para o som
     },
 }
 

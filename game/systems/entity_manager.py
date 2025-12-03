@@ -204,8 +204,11 @@ class EntityManager:
                         self.enemies.append(meteor)
                 if spawned_squares:
                     self.boss_squares.extend(spawned_squares)
+                # Add orbital squares to boss_squares for collision detection
+                for square in self.boss.floating_squares:
+                    if square not in self.boss_squares:
+                        self.boss_squares.append(square)
         for enemy in self.enemies:
-            update_linger(enemy, dt)
             mul = emp_mul_for(enemy)
             if isinstance(enemy, Alien):
                 shot = enemy.update(dt * mul)

@@ -16,10 +16,12 @@ class UpgradeType(Enum):
     HEAL = auto()
     EMP = auto()
 
+
 class UpgradeCategory(Enum):
     DEFENSIVE = auto()
     UTILITY = auto()
     OFFENSIVE = auto()
+
 
 class UpgradeContext(Protocol):
     """Contexto necessário para upgrades operarem.

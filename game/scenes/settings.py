@@ -44,7 +44,9 @@ class SettingsScene(Scene):
         pad = 20
 
         # Card de Áudio
-        audio_card_rect = pygame.Rect(pad, 100, screen_w / 2 - 1.5 * pad, screen_h - 180)
+        audio_card_rect = pygame.Rect(
+            pad, 100, screen_w / 2 - 1.5 * pad, screen_h - 180
+        )
         self.layout_rects["audio_card"] = audio_card_rect
 
         self.layout_rects["sliders"] = {}
@@ -88,9 +90,9 @@ class SettingsScene(Scene):
         if self.waiting_for_key is not None:
             if event.type == pygame.KEYDOWN:
                 if event.key != pygame.K_ESCAPE:
-                    self.player_profile.upgrade_keybindings[
-                        self.waiting_for_key
-                    ] = event.key
+                    self.player_profile.upgrade_keybindings[self.waiting_for_key] = (
+                        event.key
+                    )
                 self.waiting_for_key = None
             return
 
@@ -205,12 +207,14 @@ class SettingsScene(Scene):
             knob_rect = pygame.Rect(0, 0, 10, rect.height + 10)
             knob_rect.center = (knob_x, rect.centery)
             pygame.draw.rect(surface, WHITE, knob_rect, border_radius=3)
-            
+
             # Valor em %
             percent_text = f"{int(val * 100)}%"
             percent_surf = self.small_font.render(percent_text, True, GRAY)
-            surface.blit(percent_surf, (rect.right + 15, rect.centery - percent_surf.get_height()/2))
-
+            surface.blit(
+                percent_surf,
+                (rect.right + 15, rect.centery - percent_surf.get_height() / 2),
+            )
 
     def _draw_controls_card(self, surface: pygame.Surface):
         card_rect = self.layout_rects["controls_card"]
@@ -225,7 +229,11 @@ class SettingsScene(Scene):
                 text_color = BLACK
                 key_text = "Pressione uma tecla..."
             else:
-                bg_color = tuple(min(c + 20, 255) for c in (40,40,40)) if is_hovered else (40,40,40)
+                bg_color = (
+                    tuple(min(c + 20, 255) for c in (40, 40, 40))
+                    if is_hovered
+                    else (40, 40, 40)
+                )
                 text_color = WHITE
                 key_name = pygame.key.name(
                     self.player_profile.upgrade_keybindings[i]
