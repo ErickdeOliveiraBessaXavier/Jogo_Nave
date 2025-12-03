@@ -39,6 +39,9 @@ class GameOverScene(Scene):
         self.playing_scene.screen_shake_timer = 0.5
         self.playing_scene.screen_shake_intensity = Config.SCREEN_SHAKE_GAME_OVER
 
+        # Botão para voltar ao menu principal
+        self.back_to_menu_button = pygame.Rect(20, Config.SCREEN_HEIGHT - 60, 320, 40)
+
     def update(self, dt: float):
         self.game_over_timer += dt
         slow_mo_dt = dt * 0.2
@@ -62,6 +65,23 @@ class GameOverScene(Scene):
                     self.playing_scene.difficulty_preset,
                 )
             )
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # Voltar ao menu principal
+            if self.back_to_menu_button.collidepoint(event.pos):
+                try:
+                    from typing import cast
+                    from .main_menu import MainMenu  # type: ignore
+                    menu_scene = cast(Scene, MainMenu(self.app))
+                    self.app.states.switch(menu_scene)
+                except Exception:
+                    # Fallback: tentar classe alternativa se o nome for diferente
+                    try:
+                        from .main_menu import MainMenuScene  # type: ignore
+                        from typing import cast
+                        menu_scene2 = cast(Scene, MainMenuScene(self.app))
+                        self.app.states.switch(menu_scene2)
+                    except Exception:
+                        pass
 
     def render(self, surface: pygame.Surface):
         # Render the frozen game state first
@@ -158,3 +178,13 @@ class GameOverScene(Scene):
                 center=(Config.SCREEN_WIDTH / 2, Config.SCREEN_HEIGHT / 2 + 100)
             )
             surface.blit(restart_text, restart_rect)
+
+            # Desenhar botão "Voltar ao Menu"
+            is_hovered = self.back_to_menu_button.collidepoint(pygame.mouse.get_pos())
+            bg_color = (60, 60, 60) if is_hovered else (40, 40, 40)
+            pygame.draw.rect(surface, bg_color, self.back_to_menu_button, border_radius=8)
+            pygame.draw.rect(surface, (255, 255, 255), self.back_to_menu_button, 2, border_radius=8)
+            btn_font = get_font(20)
+            btn_text = btn_font.render("Voltar ao Menu", True, (255, 255, 255))
+            btn_rect = btn_text.get_rect(center=self.back_to_menu_button.center)
+            surface.blit(btn_text, btn_rect)

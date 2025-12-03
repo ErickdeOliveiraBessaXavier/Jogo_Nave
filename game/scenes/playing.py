@@ -883,16 +883,27 @@ class PlayingScene(Scene):
                 # Use keybindings from player profile
                 try:
                     keybinds = self.player_profile.upgrade_keybindings
-                    if len(keybinds) >= 1 and event.key == keybinds[0]:
-                        self._activate_upgrade_slot(0)
-                    elif len(keybinds) >= 2 and event.key == keybinds[1]:
-                        self._activate_upgrade_slot(1)
+                    for i, keycode in enumerate(keybinds[:UPGRADE_SLOT_COUNT]):
+                        if event.key == keycode:
+                            self._activate_upgrade_slot(i)
+                            break
                 except Exception:
-                    # Fallback to defaults
-                    if event.key == pygame.K_1:
-                        self._activate_upgrade_slot(0)
-                    elif event.key == pygame.K_2 and UPGRADE_SLOT_COUNT >= 2:
-                        self._activate_upgrade_slot(1)
+                    # Fallback to defaults (1-9)
+                    default_keys = [
+                        pygame.K_1,
+                        pygame.K_2,
+                        pygame.K_3,
+                        pygame.K_4,
+                        pygame.K_5,
+                        pygame.K_6,
+                        pygame.K_7,
+                        pygame.K_8,
+                        pygame.K_9,
+                    ]
+                    for i, keycode in enumerate(default_keys[:UPGRADE_SLOT_COUNT]):
+                        if event.key == keycode:
+                            self._activate_upgrade_slot(i)
+                            break
 
     def render(self, surface: pygame.Surface):
         # Usa o dt armazenado pela última chamada de update
@@ -1080,7 +1091,11 @@ class PlayingScene(Scene):
                 "Heal": "H",  # H de Heal
                 "EMP": "E",  # E de EMP
             }
-            icon = icon_map.get(str(ui["name"]), "?")
+            # Usar mapeamento; caso não exista, usar inicial do nome
+            name_str = str(ui.get("name", ""))
+            icon = icon_map.get(name_str)
+            if not icon:
+                icon = name_str[:1].upper() if name_str else "?"
             icon_txt = font.render(icon, True, _colors.CYAN)
             icon_rect = icon_txt.get_rect(center=(slot_w // 2, slot_h // 2))
             slot_surface.blit(icon_txt, icon_rect)

@@ -1,10 +1,11 @@
 import pygame
-from typing import TYPE_CHECKING, Optional, Dict, Any, List
+from typing import TYPE_CHECKING, Optional, Dict, Any
 from pathlib import Path
 
 from ..core.state import Scene
-from ..core.colors import WHITE, BLACK, GRAY, BLUE, YELLOW, Color
+from ..core.colors import WHITE, BLACK, GRAY, BLUE, Color
 from ..core.assets import get_font
+from ..render.renderer import Renderer
 from ..core.sound import sound_manager
 from ..core.meta_progression import PlayerProfile
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
@@ -19,6 +20,7 @@ class SettingsScene(Scene):
     def __init__(self, app: "GameApp"):
         super().__init__(app)
         self.player_profile = PlayerProfile(Path("player_profile.json"))
+        self.r = Renderer()
 
         # Fonts
         self.title_font = get_font(40)
@@ -33,7 +35,7 @@ class SettingsScene(Scene):
             "shot": sound_manager.shot_volume_base,
         }
         self.dragging_slider: Optional[str] = None
-        self.waiting_for_key: Optional[int] = None
+        # Removido: lógica de alterar hotkeys
 
         # Layout
         self.layout_rects: Dict[str, Any] = {}
@@ -42,11 +44,11 @@ class SettingsScene(Scene):
     def _calculate_layout(self):
         screen_w, screen_h = self.app.screen.get_size()
         pad = 20
+        gap = 30  # Gap entre os cards
 
         # Card de Áudio
-        audio_card_rect = pygame.Rect(
-            pad, 100, screen_w / 2 - 1.5 * pad, screen_h - 180
-        )
+        audio_card_width = (screen_w - 2 * pad - gap) / 2
+        audio_card_rect = pygame.Rect(pad, 100, audio_card_width, screen_h - 180)
         self.layout_rects["audio_card"] = audio_card_rect
 
         self.layout_rects["sliders"] = {}
@@ -60,42 +62,23 @@ class SettingsScene(Scene):
 
         # Card de Controles
         controls_card_rect = pygame.Rect(
-            screen_w / 2 - 0.5 * pad, 100, screen_w / 2 - 1.5 * pad, screen_h - 180
+            pad + audio_card_width + gap, 100, audio_card_width, screen_h - 180
         )
         self.layout_rects["controls_card"] = controls_card_rect
 
-        keybind_buttons: List[pygame.Rect] = []
-        btn_w = controls_card_rect.width - 40
-        btn_h = 50
-        y_offset = controls_card_rect.y + 80
-        for i in range(UPGRADE_SLOT_COUNT):
-            rect = pygame.Rect(
-                controls_card_rect.x + 20, y_offset + i * (btn_h + pad), btn_w, btn_h
-            )
-            keybind_buttons.append(rect)
-        self.layout_rects["keybind_buttons"] = keybind_buttons
+        # Removido: botões para alterar hotkeys
 
         # Botão de Voltar
         self.layout_rects["back_button"] = pygame.Rect(pad, screen_h - 60, 150, 40)
 
     def enter(self):
         pygame.mouse.set_visible(True)
-        self.waiting_for_key = None
         self.dragging_slider = None
 
     def exit(self):
         self.player_profile.save()
 
     def handle_event(self, event: pygame.event.Event):
-        if self.waiting_for_key is not None:
-            if event.type == pygame.KEYDOWN:
-                if event.key != pygame.K_ESCAPE:
-                    self.player_profile.upgrade_keybindings[self.waiting_for_key] = (
-                        event.key
-                    )
-                self.waiting_for_key = None
-            return
-
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.app.states.pop()
 
@@ -113,12 +96,6 @@ class SettingsScene(Scene):
                     new_val = (pos[0] - rect.x) / rect.w
                     self.sliders[key] = max(0.0, min(1.0, new_val))
                     self._update_volume(key)
-                    return
-
-            # Keybindings
-            for i, rect in enumerate(self.layout_rects["keybind_buttons"]):
-                if rect.collidepoint(pos):
-                    self.waiting_for_key = i
                     return
 
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
@@ -143,10 +120,14 @@ class SettingsScene(Scene):
             sound_manager.set_shot_volume(volume)
 
     def update(self, dt: float):
-        pass  # A lógica está toda no handle_event
+        # Atualiza o fundo animado para não ficar estático
+        if hasattr(self, "r"):
+            self.r.starfield.update(dt)
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
+        # Fundo com o mesmo estilo de upgrades_selection
+        self.r.starfield.draw(surface)
 
         # Título
         title_surf = self.title_font.render("Configurações", True, WHITE)
@@ -176,7 +157,7 @@ class SettingsScene(Scene):
         )
 
     def _draw_card(self, surface: pygame.Surface, rect: pygame.Rect, title: str):
-        pygame.draw.rect(surface, (20, 20, 20), rect, border_radius=8)
+        # Apenas a borda, sem fundo
         pygame.draw.rect(surface, GRAY, rect, 1, border_radius=8)
         title_surf = self.header_font.render(title, True, WHITE)
         surface.blit(title_surf, (rect.x + 15, rect.y + 15))
@@ -186,6 +167,10 @@ class SettingsScene(Scene):
         self._draw_card(surface, card_rect, "Áudio")
 
         labels = {"music": "Música", "sfx": "Efeitos (SFX)", "shot": "Tiros"}
+
+        # Criar clipping para o card
+        clip_rect = card_rect.inflate(-10, -10)
+        surface.set_clip(clip_rect)
 
         for key, rect in self.layout_rects["sliders"].items():
             # Label
@@ -207,39 +192,31 @@ class SettingsScene(Scene):
             knob_rect = pygame.Rect(0, 0, 10, rect.height + 10)
             knob_rect.center = (knob_x, rect.centery)
             pygame.draw.rect(surface, WHITE, knob_rect, border_radius=3)
-
-            # Valor em %
+            
+            # Valor em % (ajustado para não extrapolar)
             percent_text = f"{int(val * 100)}%"
             percent_surf = self.small_font.render(percent_text, True, GRAY)
-            surface.blit(
-                percent_surf,
-                (rect.right + 15, rect.centery - percent_surf.get_height() / 2),
-            )
+            percent_x = min(rect.right + 10, card_rect.right - percent_surf.get_width() - 10)
+            surface.blit(percent_surf, (percent_x, rect.centery - percent_surf.get_height()/2))
+
+        surface.set_clip(None)
+
 
     def _draw_controls_card(self, surface: pygame.Surface):
         card_rect = self.layout_rects["controls_card"]
         self._draw_card(surface, card_rect, "Controles")
 
-        for i, rect in enumerate(self.layout_rects["keybind_buttons"]):
-            is_waiting = self.waiting_for_key == i
-            is_hovered = rect.collidepoint(pygame.mouse.get_pos())
-
-            if is_waiting:
-                bg_color = YELLOW
-                text_color = BLACK
-                key_text = "Pressione uma tecla..."
-            else:
-                bg_color = (
-                    tuple(min(c + 20, 255) for c in (40, 40, 40))
-                    if is_hovered
-                    else (40, 40, 40)
-                )
-                text_color = WHITE
-                key_name = pygame.key.name(
-                    self.player_profile.upgrade_keybindings[i]
-                ).upper()
-                key_text = f"Aprimoramento {i + 1}: {key_name}"
-
+        # Exibe apenas os atalhos fixos (1, 2, ...)
+        pad = 20
+        btn_w = card_rect.width - 40
+        btn_h = 50
+        for i in range(UPGRADE_SLOT_COUNT):
+            rect = pygame.Rect(
+                card_rect.x + 20, card_rect.y + 80 + i * (btn_h + pad), btn_w, btn_h
+            )
+            bg_color = (40,40,40)
+            text_color = WHITE
+            key_text = f"Aprimoramento {i + 1}: {i + 1}"
             pygame.draw.rect(surface, bg_color, rect, border_radius=8)
             pygame.draw.rect(surface, WHITE, rect, 1, border_radius=8)
             text_surf = self.item_font.render(key_text, True, text_color)

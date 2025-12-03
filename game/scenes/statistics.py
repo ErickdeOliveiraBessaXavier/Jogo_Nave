@@ -7,6 +7,7 @@ if TYPE_CHECKING:
 
 from ..core import colors
 from ..core.assets import get_font
+from ..render.renderer import Renderer
 from ..core.meta_progression import PlayerProfile, PerformanceState
 from ..core.state import Scene
 
@@ -26,6 +27,7 @@ class StatisticsScene(Scene):
         super().__init__(game_app)
         self.profile: Optional[PlayerProfile] = None
         self.dialog: Optional[ConfirmationDialog] = None
+        self.r = Renderer()
 
         # Fonts
         self.title_font = get_font(40)
@@ -81,6 +83,9 @@ class StatisticsScene(Scene):
             self.profile.save()
 
     def update(self, dt: float):
+        # Atualiza fundo animado
+        self.r.starfield.update(dt)
+
         if self.dialog:
             self.dialog.update()
         if self.profile:
@@ -112,6 +117,8 @@ class StatisticsScene(Scene):
 
     def render(self, surface: pygame.Surface):
         surface.fill(colors.BLACK)
+        # Fundo com mesma lógica das outras cenas
+        self.r.starfield.draw(surface)
 
         # Título
         title_surf = self.title_font.render("Estatísticas", True, colors.WHITE)
@@ -337,7 +344,7 @@ class StatisticsScene(Scene):
 
     def show_confirmation(self):
         self.dialog = ConfirmationDialog(
-            ["Tem certeza?", "Todo o progresso será perdido."],
+            ["Tem certeza?", "Todo o progresso", "será perdido."],
             self.reset_profile,
             self.close_confirmation,
         )

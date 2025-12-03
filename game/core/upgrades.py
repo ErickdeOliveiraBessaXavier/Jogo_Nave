@@ -299,7 +299,7 @@ UPGRADES_REGISTRY: Dict[UpgradeType, Callable[[], ActiveUpgrade]] = {}
 UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     UpgradeType.SHIELD_BURST: UpgradeMeta(
         type=UpgradeType.SHIELD_BURST,
-        name="Shield Burst",
+        name="Shield",
         desc="Ativa um escudo temporário que absorve dano.",
         icon_id="shield_burst",
         category=UpgradeCategory.DEFENSIVE,
