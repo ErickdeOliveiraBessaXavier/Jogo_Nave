@@ -1,4 +1,5 @@
 import pygame
+import time
 from typing import TYPE_CHECKING, List, Optional, Dict, Tuple
 from collections import defaultdict
 from pathlib import Path
@@ -6,7 +7,7 @@ from dataclasses import dataclass, field
 
 from ..core.state import Scene
 from ..core.colors import WHITE, BLACK, GRAY, GREEN, BLUE, YELLOW, RED
-from ..core.assets import get_font
+from ..core.assets import get_font, get_image, BASE_DIR
 from ..core.upgrades import (
     list_all_upgrades_meta,
     UpgradeCategory,
@@ -55,6 +56,10 @@ class UpgradesSelectionScene(Scene):
         self.small_font = get_font(14)
         self.tiny_font = get_font(12)
 
+        # Ícone de bloqueado
+        icon_path = BASE_DIR / "assets" / "images" / "icons" / "icon_bloqueado.png"
+        self.locked_icon = get_image(icon_path)
+
         # Perfil do Jogador
         self.player_profile = PlayerProfile(Path("player_profile.json"))
         
@@ -79,6 +84,11 @@ class UpgradesSelectionScene(Scene):
         self.dragging_upgrade: Optional[UpgradeMeta] = None
         self.drag_offset: Tuple[int, int] = (0, 0)
         self.drag_source_slot: Optional[int] = None  # Se veio da grid direita
+        
+        # Shake effect para slots bloqueados
+        self.shaking_slot: Optional[int] = None
+        self.shake_start_time: float = 0.0
+        self.shake_duration: float = 0.3  # segundos
         
         # Tooltip
         self.hovered_upgrade: Optional[UpgradeMeta] = None
@@ -124,16 +134,22 @@ class UpgradesSelectionScene(Scene):
             left_w + pad, header_y, right_w - pad * 2, 40
         )
 
-        # === LADO DIREITO - GRID 2x2 ===
-        slot_size = 150
-        slot_padding = 25
-        grid_2x2_start_x = left_w + (right_w - (2 * slot_size + slot_padding)) // 2
-        grid_2x2_start_y = header_y + 80
+        # === LADO DIREITO - GRID 3x3 ===
+        cols = 3
+        rows = 3
+        slot_gap = 25
+        inner_left = left_w + pad
+        inner_width = right_w - pad * 2
 
-        for row in range(2):
-            for col in range(2):
-                x = grid_2x2_start_x + col * (slot_size + slot_padding)
-                y = grid_2x2_start_y + row * (slot_size + slot_padding)
+        # Tamanho do slot calculado para ocupar toda a largura disponível
+        slot_size = max(40, (inner_width - (cols - 1) * slot_gap) // cols)
+        grid_start_x = inner_left
+        grid_start_y = header_y + 80
+
+        for row in range(rows):
+            for col in range(cols):
+                x = grid_start_x + col * (slot_size + slot_gap)
+                y = grid_start_y + row * (slot_size + slot_gap)
                 slot_rect = pygame.Rect(x, y, slot_size, slot_size)
                 self.layout.active_slots.append(slot_rect)
 
@@ -241,6 +257,22 @@ class UpgradesSelectionScene(Scene):
                 dropped_in_slot = False
                 for i, slot_rect in enumerate(self.layout.active_slots):
                     if slot_rect.collidepoint(pos):
+                        # Se tentar soltar em slot bloqueado, tremer
+                        if i >= UPGRADE_SLOT_COUNT:
+                            self.shaking_slot = i
+                            self.shake_start_time = time.time()
+                            continue
+
+                        # Se o slot de destino tem um upgrade e a origem também é um slot
+                        target_upgrade = self.player_profile.upgrade_loadout[i] if i < len(self.player_profile.upgrade_loadout) else None
+                        if target_upgrade and self.drag_source_slot is not None:
+                            # Trocar upgrades entre slots
+                            source_upgrade = self.dragging_upgrade.type
+                            self.player_profile.equip_upgrade(target_upgrade, self.drag_source_slot)
+                            self.player_profile.equip_upgrade(source_upgrade, i)
+                            dropped_in_slot = True
+                            break
+                        
                         # Remover de outros slots se já estiver equipado
                         for slot_idx in range(UPGRADE_SLOT_COUNT):
                             if self.player_profile.upgrade_loadout[slot_idx] == self.dragging_upgrade.type:
@@ -284,6 +316,11 @@ class UpgradesSelectionScene(Scene):
 
     def update(self, dt: float):
         self.r.starfield.update(dt)
+        
+        # Limpar shake se o tempo expirou
+        if self.shaking_slot is not None:
+            if time.time() - self.shake_start_time >= self.shake_duration:
+                self.shaking_slot = None
         
         # Atualizar hover state
         mouse_pos = pygame.mouse.get_pos()
@@ -411,7 +448,20 @@ class UpgradesSelectionScene(Scene):
                 equipped_type = None
             else:
                 equipped_type = self.player_profile.upgrade_loadout[i]
-            is_hovered = self.hovered_slot_idx == i
+            locked = i >= UPGRADE_SLOT_COUNT
+            is_hovered = (self.hovered_slot_idx == i) and (not locked)
+            
+            # Aplicar shake effect se este slot está tremendo
+            draw_rect = slot_rect.copy()
+            if self.shaking_slot == i:
+                elapsed = time.time() - self.shake_start_time
+                progress = elapsed / self.shake_duration
+                if progress < 1.0:
+                    # Onda senoidal para movimento suave
+                    import math
+                    shake_intensity = 8 * (1.0 - progress)  # Diminui com o tempo
+                    shake_offset = int(shake_intensity * math.sin(progress * 20))
+                    draw_rect.x += shake_offset
 
             # Background
             if equipped_type:
@@ -419,20 +469,20 @@ class UpgradesSelectionScene(Scene):
             else:
                 bg_color = (30, 30, 30) if not is_hovered else (40, 40, 40)
             
-            border_color = YELLOW if is_hovered else GRAY
+            border_color = YELLOW if is_hovered else (80, 80, 80) if locked else GRAY
             border_style = 2 if equipped_type else 1
             
-            pygame.draw.rect(surface, bg_color, slot_rect, border_radius=10)
+            pygame.draw.rect(surface, bg_color, draw_rect, border_radius=10)
             
-            # Borda tracejada para slots vazios
-            if not equipped_type:
-                self._draw_dashed_rect(surface, slot_rect, border_color)
+            # Borda tracejada para slots vazios (não bloqueados)
+            if not equipped_type and not locked:
+                self._draw_dashed_rect(surface, draw_rect, border_color)
             else:
-                pygame.draw.rect(surface, border_color, slot_rect, border_style, border_radius=10)
+                pygame.draw.rect(surface, border_color, draw_rect, border_style, border_radius=10)
 
-            # Label do slot
-            slot_label = self.small_font.render(f"SLOT {i+1}", True, GRAY)
-            surface.blit(slot_label, (slot_rect.x + 10, slot_rect.y + 5))
+            # Label do slot (sem texto 'BLOQUEADO')
+            slot_label = self.small_font.render(f"SLOT {i+1}", True, (120, 120, 120) if locked else GRAY)
+            surface.blit(slot_label, (draw_rect.x + 10, draw_rect.y + 5))
 
             # Conteúdo do slot
             if equipped_type:
@@ -442,7 +492,7 @@ class UpgradesSelectionScene(Scene):
                 )
                 if upgrade_meta:
                     # Ícone
-                    icon_center = (slot_rect.centerx, slot_rect.centery - 10)
+                    icon_center = (draw_rect.centerx, draw_rect.centery - 10)
                     pygame.draw.circle(surface, GREEN, icon_center, 30)
                     
                     initial = upgrade_meta.name[0].upper()
@@ -460,26 +510,36 @@ class UpgradesSelectionScene(Scene):
                     surface.blit(
                         name_text,
                         (
-                            slot_rect.centerx - name_text.get_width() // 2,
-                            slot_rect.bottom - 25,
-                        ),
-                    )
-            else:
-                empty_text = self.item_font.render("VAZIO", True, (60, 60, 60))
-                surface.blit(
-                    empty_text,
-                    (
-                        slot_rect.centerx - empty_text.get_width() // 2,
-                        slot_rect.centery - empty_text.get_height() // 2,
+                            draw_rect.centerx - name_text.get_width() // 2,
+                            draw_rect.bottom - 25,
                     ),
                 )
+            else:
+                if locked:
+                    # Desenhar ícone de bloqueado centralizado
+                    icon_size = min(draw_rect.width, draw_rect.height) // 2
+                    icon_scaled = pygame.transform.scale(self.locked_icon, (icon_size, icon_size))
+                    icon_x = draw_rect.centerx - icon_size // 2
+                    icon_y = draw_rect.centery - icon_size // 2
+                    surface.blit(icon_scaled, (icon_x, icon_y))
+                else:
+                    empty_text = self.item_font.render("VAZIO", True, (60, 60, 60))
+                    surface.blit(
+                        empty_text,
+                        (
+                            draw_rect.centerx - empty_text.get_width() // 2,
+                            draw_rect.centery - empty_text.get_height() // 2,
+                        ),
+                    )
 
     def _draw_back_button(self, surface: pygame.Surface):
         """Desenha o botão de voltar."""
         back_rect = self.layout.back_button
-        pygame.draw.rect(surface, (50, 50, 50), back_rect, border_radius=5)
-        pygame.draw.rect(surface, WHITE, back_rect, 2, border_radius=5)
-        back_text = self.item_font.render("< VOLTAR", True, WHITE)
+        is_hovered = back_rect.collidepoint(pygame.mouse.get_pos())
+        bg_color = tuple(min(c + 20, 255) for c in GRAY) if is_hovered else GRAY
+        pygame.draw.rect(surface, bg_color, back_rect, border_radius=8)
+        pygame.draw.rect(surface, WHITE, back_rect, 2, border_radius=8)
+        back_text = self.item_font.render("Voltar", True, WHITE)
         surface.blit(
             back_text,
             (

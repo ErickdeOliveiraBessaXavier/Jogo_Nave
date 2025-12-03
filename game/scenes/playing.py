@@ -882,16 +882,27 @@ class PlayingScene(Scene):
                 # Use keybindings from player profile
                 try:
                     keybinds = self.player_profile.upgrade_keybindings
-                    if len(keybinds) >= 1 and event.key == keybinds[0]:
-                        self._activate_upgrade_slot(0)
-                    elif len(keybinds) >= 2 and event.key == keybinds[1]:
-                        self._activate_upgrade_slot(1)
+                    for i, keycode in enumerate(keybinds[:UPGRADE_SLOT_COUNT]):
+                        if event.key == keycode:
+                            self._activate_upgrade_slot(i)
+                            break
                 except Exception:
-                    # Fallback to defaults
-                    if event.key == pygame.K_1:
-                        self._activate_upgrade_slot(0)
-                    elif event.key == pygame.K_2 and UPGRADE_SLOT_COUNT >= 2:
-                        self._activate_upgrade_slot(1)
+                    # Fallback to defaults (1-9)
+                    default_keys = [
+                        pygame.K_1,
+                        pygame.K_2,
+                        pygame.K_3,
+                        pygame.K_4,
+                        pygame.K_5,
+                        pygame.K_6,
+                        pygame.K_7,
+                        pygame.K_8,
+                        pygame.K_9,
+                    ]
+                    for i, keycode in enumerate(default_keys[:UPGRADE_SLOT_COUNT]):
+                        if event.key == keycode:
+                            self._activate_upgrade_slot(i)
+                            break
 
     def render(self, surface: pygame.Surface):
         # Usa o dt armazenado pela última chamada de update
