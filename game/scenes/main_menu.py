@@ -32,6 +32,11 @@ class AnimationConfig:
     BUTTON_ANIM_RANGE = 5
     BUTTON_SCALE_FACTOR = 1.1
     BUTTON_SPACING = 80
+    MENU_X_RATIO = 0.5  # Horizontal position as ratio of screen width (0.5 = center)
+    MENU_Y_RATIO = 0.5  # Vertical position as ratio of screen height (0.5 = center)
+    TITLE_TOP_MARGIN = 20  # Margin from top of menu container to title
+    BUTTONS_TOP_MARGIN = 200  # Margin from title bottom to first button
+    TITLE_HEIGHT = 60  # Approximate height of title text
 
 
 class MenuStrings:
@@ -184,6 +189,10 @@ class MainMenuScene(Scene):
         self.focused_border_color = BLUE
         self.focused_button_index = 0
 
+        # Menu container position - temporary, will be adjusted
+        self.menu_x = int(Config.SCREEN_WIDTH * AnimationConfig.MENU_X_RATIO)
+        self.menu_y = 0  # Temporary
+
         # Title animation
         self.title_chars: List[CharDict] = []
         self._create_title_chars()
@@ -192,6 +201,48 @@ class MainMenuScene(Scene):
         self.buttons: List[Button] = []
         self._create_buttons()
 
+        # Calculate actual menu bounds and center vertically
+        self._center_menu_vertically()
+
+    def _center_menu_vertically(self):
+        """Calculates the actual bounds of the menu and adjusts menu_y to center it vertically."""
+        # Collect all Y positions
+        all_y: List[int] = []
+        
+        # Title positions
+        for char_data in self.title_chars:
+            all_y.append(char_data["base_rect"].top)
+            all_y.append(char_data["base_rect"].bottom)
+        
+        # Button positions
+        for button in self.buttons:
+            all_y.append(button.rect.top)
+            all_y.append(button.rect.bottom)
+        
+        if all_y:
+            menu_top = min(all_y)
+            menu_bottom = max(all_y)
+            menu_height = menu_bottom - menu_top
+            
+            # Center the menu vertically
+            self.menu_y = (Config.SCREEN_HEIGHT - menu_height) // 2
+            
+            # Adjust all positions by the new menu_y offset
+            offset = self.menu_y - menu_top
+            
+            # Adjust title positions
+            for char_data in self.title_chars:
+                char_data["base_rect"].y += offset
+                char_data["rect"].y += offset
+            
+            # Adjust button positions
+            for button in self.buttons:
+                button.rect.y += offset
+                # Adjust button's internal char positions
+                for char in button.chars:
+                    char["base_rect"].y += offset
+                    char["rect"].y += offset
+
     def _create_title_chars(self):
         """Creates character data for title animation."""
         title_string = MenuStrings.TITLE
@@ -199,7 +250,7 @@ class MainMenuScene(Scene):
         total_width = sum(char_render.get_width() for char_render in char_renders)
 
         start_x = (Config.SCREEN_WIDTH - total_width) // 2
-        base_y = Config.SCREEN_HEIGHT // 4
+        base_y = self.menu_y + AnimationConfig.TITLE_TOP_MARGIN
         current_x = start_x
 
         for char_render in char_renders:
@@ -215,6 +266,13 @@ class MainMenuScene(Scene):
 
     def _create_buttons(self):
         """Creates button instances with their actions."""
+        buttons_y_start = (
+            self.menu_y
+            + AnimationConfig.TITLE_TOP_MARGIN
+            + AnimationConfig.TITLE_HEIGHT
+            + AnimationConfig.BUTTONS_TOP_MARGIN
+        )
+
         button_configs = [
             (
                 MenuStrings.START_GAME,
@@ -251,8 +309,8 @@ class MainMenuScene(Scene):
         for i, (text, color, hover_color, action) in enumerate(button_configs):
             rect = pygame.Rect(0, 0, 380, 60)
             rect.center = (
-                Config.SCREEN_WIDTH // 2,
-                Config.SCREEN_HEIGHT // 2 + i * AnimationConfig.BUTTON_SPACING,
+                self.menu_x,
+                buttons_y_start + i * AnimationConfig.BUTTON_SPACING,
             )
             button = Button(text, rect, self.button_font, color, hover_color, action)
             self.buttons.append(button)

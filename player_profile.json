@@ -1,17 +1,17 @@
 {
   "version": "1.0",
-  "profile_created": "2025-12-03T17:57:04.656384",
-  "last_played": "2025-12-03T18:01:44.661126",
-  "total_playtime": 16.481064,
+  "profile_created": "2025-12-03T20:07:08.812164",
+  "last_played": "2025-12-03T20:07:21.591664",
+  "total_playtime": 7.503649,
   "highest_level_reached": 1,
-  "total_deaths": 2,
+  "total_deaths": 1,
   "total_score": 0,
   "level_stats": {
     "1": {
       "level_number": 1,
-      "attempts": 2,
+      "attempts": 1,
       "clears": 0,
-      "deaths": 2,
+      "deaths": 1,
       "total_time": 0.0,
       "best_time": null,
       "worst_time": 0.0,
@@ -22,37 +22,22 @@
       "total_powerups_collected": 0,
       "recent_attempts": [
         {
-          "timestamp": "2025-12-03T18:00:33.964096",
-          "cleared": false,
-          "cause": "game_over"
-        },
-        {
-          "timestamp": "2025-12-03T18:01:47.539156",
+          "timestamp": "2025-12-03T20:07:24.241190",
           "cleared": false,
           "cause": "game_over"
         }
       ],
-      "first_played": "2025-12-03T18:00:30.221426",
-      "last_played": "2025-12-03T18:01:44.661126",
+      "first_played": "2025-12-03T20:07:21.591657",
+      "last_played": "2025-12-03T20:07:21.591664",
       "current_win_streak": 0,
       "best_win_streak": 0
     }
   },
-  "level_adjustments": {
-    "1": 0.75
-  },
+  "level_adjustments": {},
   "session_history": [
     {
-      "start_time": "2025-12-03T18:00:25.291960",
-      "end_time": "2025-12-03T18:00:33.964096",
-      "levels_attempted": [],
-      "deaths": 1,
-      "score": 0,
-      "powerups_collected": 0
-    },
-    {
-      "start_time": "2025-12-03T18:01:39.730228",
-      "end_time": "2025-12-03T18:01:47.539156",
+      "start_time": "2025-12-03T20:07:16.737563",
+      "end_time": "2025-12-03T20:07:24.241212",
       "levels_attempted": [],
       "deaths": 1,
       "score": 0,
@@ -65,8 +50,8 @@
     "SHIELD_BURST"
   ],
   "upgrade_loadout": [
-    "SHIELD_BURST",
-    "HEAL"
+    null,
+    null
   ],
   "upgrade_keybindings": [
     49,
