@@ -229,38 +229,43 @@ class StatisticsScene(Scene):
         card_rect = pygame.Rect(area.x, y, area.width, 220)
         self._draw_card_background(surface, card_rect)
 
-        # Título do Card
-        header = self.header_font.render("Resumo do Piloto", True, colors.WHITE)
+        # Título do Card - em azul para destaque
+        header = self.header_font.render("Resumo do Piloto", True, colors.BLUE)
         surface.blit(header, (card_rect.x + 15, card_rect.y + 10))
 
-        # Conteúdo do card
+        # Conteúdo do card - labels em cinza, valores em azul
         stats_y = card_rect.y + 50
-        stats = [
-            f"Nível Mais Alto: {summary['highest_level']}",
-            f"Tempo Total de Jogo: {summary['total_playtime_hours']:.1f}h",
-            f"Mortes Totais: {self.profile.total_deaths}",
-            f"Pontuação Total: {self.profile.total_score:,}",
-            f"Taxa de Sucesso Média: {summary['avg_clear_rate']:.0%}",
-            f"Estrelas Coletadas: {self.profile.stars_collected}",
-            f"Estrelas Gastas: {self.profile.stars_spent}",
-            f"Estrelas Disponíveis: {self.profile.available_stars}",
-            f"Slots Desbloqueados: {self.profile.unlocked_slots}/9",
+        stats_data = [
+            ("Nível Mais Alto:", f"{summary['highest_level']}"),
+            ("Tempo Total de Jogo:", f"{summary['total_playtime_hours']:.1f}h"),
+            ("Mortes Totais:", f"{self.profile.total_deaths}"),
+            ("Pontuação Total:", f"{self.profile.total_score:,}"),
+            ("Taxa de Sucesso Média:", f"{summary['avg_clear_rate']:.0%}"),
+            ("Estrelas Coletadas:", f"{self.profile.stars_collected}"),
+            ("Estrelas Gastas:", f"{self.profile.stars_spent}"),
+            ("Estrelas Disponíveis:", f"{self.profile.available_stars}"),
+            ("Slots Desbloqueados:", f"{self.profile.unlocked_slots}/9"),
         ]
-        for i, stat in enumerate(stats):
+        for i, (label, value) in enumerate(stats_data):
             col = i % 2
             row = i // 2
-            stat_surf = self.item_font.render(stat, True, colors.GRAY)
-            surface.blit(
-                stat_surf,
-                (card_rect.x + 20 + col * (area.width / 2), stats_y + row * 35),
-            )
+            x_pos = card_rect.x + 20 + col * (area.width / 2)
+            y_pos = stats_y + row * 35
+            
+            # Label em cinza
+            label_surf = self.item_font.render(label, True, colors.GRAY)
+            surface.blit(label_surf, (x_pos, y_pos))
+            
+            # Valor em azul ao lado do label
+            value_surf = self.item_font.render(f" {value}", True, colors.BLUE)
+            surface.blit(value_surf, (x_pos + label_surf.get_width(), y_pos))
 
         # Card: Recomendações
         recom_y = card_rect.bottom + 20
         recom_rect = pygame.Rect(area.x, recom_y, area.width, area.bottom - recom_y)
         self._draw_card_background(surface, recom_rect)
 
-        header = self.header_font.render("Recomendações", True, colors.WHITE)
+        header = self.header_font.render("Recomendações", True, colors.BLUE)
         surface.blit(header, (recom_rect.x + 15, recom_rect.y + 10))
 
         recom_y_inner = recom_rect.y + 50
@@ -279,7 +284,7 @@ class StatisticsScene(Scene):
         if not self.profile:
             return
 
-        header = self.header_font.render("Performance por Nível", True, colors.WHITE)
+        header = self.header_font.render("Performance por Nível", True, colors.BLUE)
         surface.blit(header, (area.x, area.y))
 
         y = area.y + 50

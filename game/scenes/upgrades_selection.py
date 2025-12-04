@@ -48,11 +48,11 @@ class UpgradesSelectionScene(Scene):
         super().__init__(app)
         self.r = Renderer()
         
-        # Fonts
+        # Fonts (consistentes com settings/statistics)
         self.title_font = get_font(40)
         self.header_font = get_font(24)
         self.item_font = get_font(20)
-        self.small_font = get_font(16)
+        self.small_font = get_font(14)
         self.tiny_font = get_font(14)
 
         # Ícone de bloqueado
@@ -395,14 +395,13 @@ class UpgradesSelectionScene(Scene):
             is_selected = i == self.selected_category_idx
             rect = self.layout.tab_buttons[i]
 
-            bg_color = (50, 50, 100) if is_selected else (30, 30, 30)
+            # Somente borda para consistência visual
             border_color = colors.BLUE if is_selected else colors.GRAY
-            
-            pygame.draw.rect(surface, bg_color, rect, border_radius=8)
             pygame.draw.rect(surface, border_color, rect, 2, border_radius=8)
 
             tab_label_text = cat.upper() if isinstance(cat, str) else cat.name.upper()
-            text = self.item_font.render(tab_label_text, True, colors.WHITE)
+            text_color = colors.WHITE if is_selected else colors.GRAY
+            text = self.item_font.render(tab_label_text, True, text_color)
             surface.blit(
                 text,
                 (
