@@ -296,6 +296,14 @@ class Collisions:
                 entity_manager.spawn_explosion(
                     ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
                 )
+                # Tocar som de colisão apropriado baseado no tipo de inimigo
+                if isinstance(enemy, Meteor):
+                    sound_manager.play_explosion_asteroid()
+                elif isinstance(enemy, Alien):
+                    sound_manager.play_explosion_alien()
+                else:
+                    # ExplosiveMine, EyeEnemy e outros
+                    sound_manager.play_explosion_alien()
                 return True
         return False
 
