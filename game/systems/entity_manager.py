@@ -25,6 +25,7 @@ from ..entities.spike_boss import SpikeBoss
 from ..core.spatial_grid import SpatialGrid
 from ..entities.explosion_pool import ExplosionPool
 from ..entities.emp_wave import EMPWave
+from ..entities.star import Star
 from typing import Dict, Any
 
 
@@ -39,6 +40,7 @@ class EntityManager:
         self.eye_lasers: list[EyeLaser] = []
         self.mine_explosions: list[MineExplosion] = []
         self.powerups: list[PowerUp] = []
+        self.stars: list[Star] = []  # Estrelas coletáveis
         self.floating_scores: list[FloatingScore] = []
         self.boss: Boss | SpikeBoss | None = None
         self.mini_ships: list[MiniShip] = []
@@ -161,6 +163,8 @@ class EntityManager:
             me.update(dt)
         for p in self.powerups:
             p.update(dt)
+        for star in self.stars:
+            star.update(dt)
         for fs in self.floating_scores:
             fs.update(dt)
 
@@ -331,6 +335,7 @@ class EntityManager:
             self.eye_lasers,
             self.mine_explosions,
             self.powerups,
+            self.stars,  # Estrelas coletáveis
             self.floating_scores,
             self.mini_ship_bullets,
             self.mini_ships,
@@ -430,6 +435,7 @@ class EntityManager:
         ]
         self.mine_explosions = [me for me in self.mine_explosions if not me.finished()]
         self.powerups = [p for p in self.powerups if not p.dead]
+        self.stars = [s for s in self.stars if not s.dead]  # Limpar estrelas coletadas
         self.floating_scores = [fs for fs in self.floating_scores if not fs.is_dead()]
         self.formations = [
             f for f in self.formations if not f.dead
@@ -443,6 +449,7 @@ class EntityManager:
         self.boss_squares.clear()
         self.eye_lasers.clear()
         self.powerups.clear()
+        self.stars.clear()  # Limpar estrelas
         self.floating_scores.clear()
         self.enemies.clear()
         self.mine_explosions.clear()

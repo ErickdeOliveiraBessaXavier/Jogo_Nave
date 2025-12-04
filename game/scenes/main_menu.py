@@ -355,6 +355,7 @@ class MainMenuScene(Scene):
                     button.state == ButtonState.HOVERED
                     and prev_state != ButtonState.HOVERED
                 ):
+                    # Reproduzir som de hover (reinicia se já estiver tocando)
                     sound_manager.play_sound("button_hover")
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_DOWN:

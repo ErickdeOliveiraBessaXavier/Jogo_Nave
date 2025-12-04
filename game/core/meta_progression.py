@@ -10,7 +10,7 @@ import time
 from ..core.difficulty import DifficultyPreset
 from ..core.levels import LevelConfig
 from ..core.upgrades import UpgradeType
-from ..core.upgrades_config import UPGRADE_SLOT_COUNT, DEFAULT_UNLOCKED
+from ..core.upgrades_config import UPGRADE_SLOT_COUNT, DEFAULT_UNLOCKED, INITIAL_UNLOCKED_SLOTS
 
 
 class PerformanceState(Enum):
@@ -497,6 +497,11 @@ class PlayerProfile:
         # Armazenamos como nomes de enum para JSON estável
         self.unlocked_upgrades: set[UpgradeType] = set(DEFAULT_UNLOCKED)
         self.upgrade_loadout: list[Optional[UpgradeType]] = [None] * UPGRADE_SLOT_COUNT
+        
+        # Sistema de estrelas (moedas)
+        self.stars_collected: int = 0  # Total de estrelas coletadas
+        self.stars_spent: int = 0  # Total de estrelas gastas
+        self.unlocked_slots: int = 4  # Número de slots desbloqueados (começa com 4)
 
         # Teclas para ativar aprimoramentos (1-9), limitadas por UPGRADE_SLOT_COUNT
         default_keys: list[int] = [
@@ -534,6 +539,61 @@ class PlayerProfile:
             return self.upgrade_loadout.index(upgrade_type)
         except ValueError:
             return None
+    
+    def add_stars(self, amount: int) -> None:
+        """Adiciona estrelas ao perfil do jogador."""
+        self.stars_collected += amount
+        self._mark_dirty()
+    
+    @property
+    def available_stars(self) -> int:
+        """Retorna o número de estrelas disponíveis (coletadas - gastas)."""
+        return self.stars_collected - self.stars_spent
+    
+    def can_unlock_slot(self, slot_index: int) -> bool:
+        """Verifica se o jogador pode desbloquear um slot específico."""
+        from .upgrades_config import SLOT_UNLOCK_COSTS
+        
+        if slot_index < 0 or slot_index >= len(SLOT_UNLOCK_COSTS):
+            return False
+        
+        # Já está desbloqueado
+        if slot_index < self.unlocked_slots:
+            return True
+        
+        # Precisa desbloquear slots anteriores primeiro
+        if slot_index != self.unlocked_slots:
+            return False
+        
+        # Verifica se tem estrelas suficientes
+        cost = SLOT_UNLOCK_COSTS[slot_index]
+        return self.available_stars >= cost
+    
+    def unlock_slot(self, slot_index: int) -> bool:
+        """
+        Desbloqueia um slot de upgrade.
+        
+        Returns:
+            bool: True se desbloqueou com sucesso, False caso contrário
+        """
+        from .upgrades_config import SLOT_UNLOCK_COSTS
+        
+        if not self.can_unlock_slot(slot_index):
+            return False
+        
+        cost = SLOT_UNLOCK_COSTS[slot_index]
+        self.stars_spent += cost
+        self.unlocked_slots = slot_index + 1
+        self._mark_dirty()
+        return True
+    
+    def get_slot_cost(self, slot_index: int) -> int:
+        """Retorna o custo em estrelas para desbloquear um slot."""
+        from .upgrades_config import SLOT_UNLOCK_COSTS
+        
+        if slot_index < 0 or slot_index >= len(SLOT_UNLOCK_COSTS):
+            return 0
+        return SLOT_UNLOCK_COSTS[slot_index]
 
     def start_session(self):
         """Inicia uma nova sessão de jogo."""
@@ -733,6 +793,11 @@ class PlayerProfile:
                 self.highest_level_reached = data.get("highest_level_reached", 1)
                 self.total_deaths = data.get("total_deaths", 0)
                 self.total_score = data.get("total_score", 0)
+
+                # Star collection system
+                self.stars_collected = data.get("stars_collected", 0)
+                self.stars_spent = data.get("stars_spent", 0)
+                self.unlocked_slots = data.get("unlocked_slots", INITIAL_UNLOCKED_SLOTS)
 
                 # Timestamps
                 if "profile_created" in data and isinstance(
@@ -1041,6 +1106,9 @@ class PlayerProfile:
             "unlocked_upgrades": unlocked_serialized,
             "upgrade_loadout": loadout_serialized,
             "upgrade_keybindings": keybindings_serialized,
+            "stars_collected": self.stars_collected,
+            "stars_spent": self.stars_spent,
+            "unlocked_slots": self.unlocked_slots,
         }
 
         with open(self.profile_path, "w", encoding="utf-8") as f:

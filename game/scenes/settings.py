@@ -8,7 +8,6 @@ from ..core.assets import get_font
 from ..render.renderer import Renderer
 from ..core.sound import sound_manager
 from ..core.meta_progression import PlayerProfile
-from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -204,26 +203,38 @@ class SettingsScene(Scene):
 
     def _draw_controls_card(self, surface: pygame.Surface):
         card_rect = self.layout_rects["controls_card"]
-        self._draw_card(surface, card_rect, "Controles")
+        self._draw_card(surface, card_rect, "Instruções")
 
-        # Exibe apenas os atalhos fixos (1, 2, ...)
-        pad = 20
-        btn_w = card_rect.width - 40
-        btn_h = 50
-        for i in range(UPGRADE_SLOT_COUNT):
-            rect = pygame.Rect(
-                card_rect.x + 20, card_rect.y + 80 + i * (btn_h + pad), btn_w, btn_h
-            )
-            bg_color = (40,40,40)
-            text_color = WHITE
-            key_text = f"Aprimoramento {i + 1}: {i + 1}"
-            pygame.draw.rect(surface, bg_color, rect, border_radius=8)
-            pygame.draw.rect(surface, WHITE, rect, 1, border_radius=8)
-            text_surf = self.item_font.render(key_text, True, text_color)
-            surface.blit(
-                text_surf,
-                (
-                    rect.centerx - text_surf.get_width() / 2,
-                    rect.centery - text_surf.get_height() / 2,
-                ),
-            )
+        # Criar clipping para o card
+        clip_rect = card_rect.inflate(-10, -10)
+        surface.set_clip(clip_rect)
+
+        instructions = [
+            "CONTROLES:",
+            "• WASD ou Setas: Mover nave",
+            "• Espaço: Atirar",
+            "• P: Pausar jogo",
+            "• ESC: Voltar/Menu",
+            "",
+            "OBJETIVO:",
+            "• Derrote o boss final",
+            "• Colete power-ups",
+            "• Sobreviva o máximo possível",
+            "",
+            "DICAS:",
+            "• Use os aprimoramentos",
+            "• Evite os projéteis inimigos",
+            "• Colete moedas para upgrades"
+        ]
+
+        y_offset = card_rect.y + 60
+        for line in instructions:
+            if line == "":
+                y_offset += 10
+                continue
+            color = BLUE if ":" in line else WHITE
+            text_surf = self.small_font.render(line, True, color)
+            surface.blit(text_surf, (card_rect.x + 20, y_offset))
+            y_offset += 25
+
+        surface.set_clip(None)

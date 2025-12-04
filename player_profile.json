@@ -1,60 +1,42 @@
 {
   "version": "1.0",
-  "profile_created": "2025-12-03T20:07:08.812164",
-  "last_played": "2025-12-03T20:07:21.591664",
-  "total_playtime": 7.503649,
+  "profile_created": "2025-12-03T21:04:59.291645",
+  "last_played": null,
+  "total_playtime": 0.0,
   "highest_level_reached": 1,
-  "total_deaths": 1,
+  "total_deaths": 0,
   "total_score": 0,
-  "level_stats": {
-    "1": {
-      "level_number": 1,
-      "attempts": 1,
-      "clears": 0,
-      "deaths": 1,
-      "total_time": 0.0,
-      "best_time": null,
-      "worst_time": 0.0,
-      "total_score": 0,
-      "best_score": 0,
-      "total_enemies_killed": 0,
-      "total_damage_taken": 0,
-      "total_powerups_collected": 0,
-      "recent_attempts": [
-        {
-          "timestamp": "2025-12-03T20:07:24.241190",
-          "cleared": false,
-          "cause": "game_over"
-        }
-      ],
-      "first_played": "2025-12-03T20:07:21.591657",
-      "last_played": "2025-12-03T20:07:21.591664",
-      "current_win_streak": 0,
-      "best_win_streak": 0
-    }
-  },
+  "level_stats": {},
   "level_adjustments": {},
-  "session_history": [
-    {
-      "start_time": "2025-12-03T20:07:16.737563",
-      "end_time": "2025-12-03T20:07:24.241212",
-      "levels_attempted": [],
-      "deaths": 1,
-      "score": 0,
-      "powerups_collected": 0
-    }
-  ],
+  "session_history": [],
   "unlocked_upgrades": [
     "EMP",
     "HEAL",
     "SHIELD_BURST"
   ],
   "upgrade_loadout": [
+    "SHIELD_BURST",
+    null,
+    "EMP",
+    null,
+    null,
+    null,
+    null,
     null,
     null
   ],
   "upgrade_keybindings": [
     49,
-    50
-  ]
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57
+  ],
+  "stars_collected": 1,
+  "stars_spent": 0,
+  "unlocked_slots": 4
 }

@@ -22,6 +22,7 @@ from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
+from ..entities.star import Star
 from ..core.config import Config
 from ..core.spatial_grid import SpatialGrid
 
@@ -446,6 +447,19 @@ class Collisions:
                 kind = getattr(p, "kind", "shield")
                 collected_kinds.append(kind)
         return collected_kinds
+
+    def ship_vs_stars(
+        self,
+        ship: Ship,
+        stars: list[Star],
+    ) -> int:
+        """Verifica colisão entre nave e estrelas. Retorna quantidade coletada."""
+        collected = 0
+        for star in stars[:]:
+            if ship.rect.colliderect(star.get_rect()):
+                star.dead = True
+                collected += 1
+        return collected
 
     def ship_vs_spikes(
         self, ship: Ship, spikes: list[Spike], entity_manager: "EntityManager"

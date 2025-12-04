@@ -68,6 +68,13 @@ class GameOverScene(Scene):
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             # Voltar ao menu principal
             if self.back_to_menu_button.collidepoint(event.pos):
+                # Parar música atual e transitar para música do menu
+                sound_manager.stop_music()
+                from ..core.sound_config import MusicState
+                sound_manager.music_state_manager.transition_to(
+                    MusicState.MENU, force=True
+                )
+                
                 try:
                     from typing import cast
                     from .main_menu import MainMenu  # type: ignore

@@ -233,6 +233,19 @@ class UpgradesSelectionScene(Scene):
             # Iniciar Drag: Upgrade da grid 2x2 (slots ativos)
             for i, slot_rect in enumerate(self.layout.active_slots):
                 if slot_rect.collidepoint(pos):
+                    # Se o slot está bloqueado, tentar desbloquear
+                    if i >= self.player_profile.unlocked_slots:
+                        if self.player_profile.can_unlock_slot(i):
+                            # Desbloquear slot
+                            if self.player_profile.unlock_slot(i):
+                                # Som de sucesso ou feedback visual
+                                pass
+                        else:
+                            # Não tem estrelas suficientes, tremer
+                            self.shaking_slot = i
+                            self.shake_start_time = time.time()
+                        return
+                    
                     # Proteção contra índice fora do range
                     if i >= len(self.player_profile.upgrade_loadout):
                         equipped_type = None
@@ -258,7 +271,7 @@ class UpgradesSelectionScene(Scene):
                 for i, slot_rect in enumerate(self.layout.active_slots):
                     if slot_rect.collidepoint(pos):
                         # Se tentar soltar em slot bloqueado, tremer
-                        if i >= UPGRADE_SLOT_COUNT:
+                        if i >= self.player_profile.unlocked_slots:
                             self.shaking_slot = i
                             self.shake_start_time = time.time()
                             continue
@@ -436,10 +449,14 @@ class UpgradesSelectionScene(Scene):
         header_text = self.header_font.render("APRIMORAMENTOS", True, WHITE)
         surface.blit(header_text, (header_rect.x, header_rect.y))
         
-        # Contador de slots
+        # Contador de slots e estrelas
         equipped_count = sum(1 for u in self.player_profile.upgrade_loadout if u is not None)
-        counter_text = self.item_font.render(f"{equipped_count}/{UPGRADE_SLOT_COUNT}", True, GRAY)
+        counter_text = self.item_font.render(f"{equipped_count}/{self.player_profile.unlocked_slots}", True, GRAY)
         surface.blit(counter_text, (header_rect.right - counter_text.get_width(), header_rect.y + 5))
+        
+        # Mostrar estrelas disponíveis
+        stars_text = self.small_font.render(f"⭐ {self.player_profile.available_stars} estrelas", True, YELLOW)
+        surface.blit(stars_text, (header_rect.x, header_rect.y + 30))
 
         # Slots
         for i, slot_rect in enumerate(self.layout.active_slots):
@@ -448,7 +465,7 @@ class UpgradesSelectionScene(Scene):
                 equipped_type = None
             else:
                 equipped_type = self.player_profile.upgrade_loadout[i]
-            locked = i >= UPGRADE_SLOT_COUNT
+            locked = i >= self.player_profile.unlocked_slots
             is_hovered = (self.hovered_slot_idx == i) and (not locked)
             
             # Aplicar shake effect se este slot está tremendo
@@ -480,8 +497,14 @@ class UpgradesSelectionScene(Scene):
             else:
                 pygame.draw.rect(surface, border_color, draw_rect, border_style, border_radius=10)
 
-            # Label do slot (sem texto 'BLOQUEADO')
-            slot_label = self.small_font.render(f"SLOT {i+1}", True, (120, 120, 120) if locked else GRAY)
+            # Label do slot com custo se bloqueado
+            if locked:
+                cost = self.player_profile.get_slot_cost(i)
+                can_unlock = self.player_profile.can_unlock_slot(i)
+                cost_color = GREEN if can_unlock else RED
+                slot_label = self.small_font.render(f"⭐ {cost}", True, cost_color)
+            else:
+                slot_label = self.small_font.render(f"SLOT {i+1}", True, GRAY)
             surface.blit(slot_label, (draw_rect.x + 10, draw_rect.y + 5))
 
             # Conteúdo do slot

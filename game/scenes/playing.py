@@ -96,6 +96,10 @@ class PlayingScene(Scene):
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
 
+        # Star spawning
+        self.star_spawn_timer = 0.0
+        self.star_spawn_interval = 15.0  # Spawna uma estrela a cada 15 segundos
+
         # Debug/Performance flags
         self.show_fps = False  # Pressione F3 para mostrar/ocultar FPS
 
@@ -271,6 +275,18 @@ class PlayingScene(Scene):
             special_rules = self.difficulty_settings.get("special_rules", [])
             if "no_powerups" not in special_rules:
                 self.powerup_spawner.update(dt, self.entity_manager.powerups)
+
+            # Spawnar estrelas periodicamente
+            self.star_spawn_timer += dt
+            if self.star_spawn_timer >= self.star_spawn_interval:
+                self.star_spawn_timer = 0.0
+                # Spawnar estrela na parte superior da tela
+                import random
+                from ..entities.star import Star
+                x = random.uniform(50, Config.SCREEN_WIDTH - 50)
+                y = -30
+                star = Star(x, y)
+                self.entity_manager.stars.append(star)
 
         self.entity_manager.update(dt, self.ship.rect.centerx, self.ship.rect.centery)
 
@@ -611,6 +627,14 @@ class PlayingScene(Scene):
         collected_powerups = self.collisions.ship_vs_powerups(
             self.ship, self.entity_manager.powerups
         )
+
+        # Verificar colisão com estrelas
+        collected_stars = self.collisions.ship_vs_stars(
+            self.ship, self.entity_manager.stars
+        )
+        if collected_stars > 0:
+            self.player_profile.add_stars(collected_stars)
+            sound_manager.play_powerup()  # Som temporário, pode criar um específico depois
 
         # Verificar regras especiais da dificuldade
         special_rules = self.difficulty_settings.get("special_rules", [])
@@ -1044,6 +1068,12 @@ class PlayingScene(Scene):
         if not self.upgrade_slots:
             return
 
+        # Filtrar apenas slots com upgrades ativos (não None)
+        active_slots = [(i, upg) for i, upg in enumerate(self.upgrade_slots) if upg is not None]
+        
+        if not active_slots:
+            return
+
         # Criar surface semi-transparente para os slots
         font = get_font(20)
         font_small = get_font(12)
@@ -1052,7 +1082,7 @@ class PlayingScene(Scene):
         x = Config.SCREEN_WIDTH - pad - slot_w
         y = 44  # Abaixo do texto "Vidas" (que está em y=10)
 
-        for i, upg in enumerate(self.upgrade_slots):
+        for display_index, (i, upg) in enumerate(active_slots):
             # Criar surface temporária com alpha
             slot_surface = _pg.Surface((slot_w, slot_h), _pg.SRCALPHA)
 
@@ -1076,12 +1106,6 @@ class PlayingScene(Scene):
                 key_label = str(i + 1)
             label = font_small.render(key_label, True, _colors.WHITE)
             slot_surface.blit(label, (4, 2))
-
-            if upg is None:
-                none_txt = font_small.render("--", True, _colors.GRAY)
-                slot_surface.blit(none_txt, (slot_w // 2 - 8, slot_h // 2 - 6))
-                surface.blit(slot_surface, (x - i * (slot_w + 6), y))
-                continue
 
             ui = upg.get_ui_state()  # type: ignore
 
@@ -1132,8 +1156,8 @@ class PlayingScene(Scene):
                 c_rect.bottomright = (slot_w - 3, slot_h - 3)
                 slot_surface.blit(c_txt, c_rect)
 
-            # Renderizar slot na posição correta
-            slot_x = x - i * (slot_w + 6)
+            # Renderizar slot na posição correta (usar display_index para posicionamento)
+            slot_x = x - display_index * (slot_w + 6)
             surface.blit(slot_surface, (slot_x, y))
 
             # Borda verde quando ativo (renderizada diretamente na surface principal)
