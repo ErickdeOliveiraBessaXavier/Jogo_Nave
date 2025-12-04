@@ -60,6 +60,11 @@ class UpgradesSelectionScene(Scene):
         icon_path = BASE_DIR / "assets" / "images" / "icons" / "icon_bloqueado.png"
         self.locked_icon = get_image(icon_path)
 
+        # Ícone de estrela (moeda)
+        star_path = BASE_DIR / "assets" / "images" / "icons" / "icon_star.png"
+        self.star_icon = get_image(star_path)
+        self.star_icon_small = pygame.transform.scale(self.star_icon, (20, 20))
+
         # Perfil do Jogador
         self.player_profile = PlayerProfile(Path("player_profile.json"))
         
@@ -454,9 +459,11 @@ class UpgradesSelectionScene(Scene):
         counter_text = self.item_font.render(f"{equipped_count}/{self.player_profile.unlocked_slots}", True, GRAY)
         surface.blit(counter_text, (header_rect.right - counter_text.get_width(), header_rect.y + 5))
         
-        # Mostrar estrelas disponíveis
-        stars_text = self.small_font.render(f"⭐ {self.player_profile.available_stars} estrelas", True, YELLOW)
-        surface.blit(stars_text, (header_rect.x, header_rect.y + 30))
+        # Mostrar estrelas disponíveis com ícone
+        star_y = header_rect.y + 30
+        surface.blit(self.star_icon_small, (header_rect.x, star_y))
+        stars_text = self.small_font.render(str(self.player_profile.available_stars), True, YELLOW)
+        surface.blit(stars_text, (header_rect.x + 24, star_y + (20 - stars_text.get_height()) // 2))
 
         # Slots
         for i, slot_rect in enumerate(self.layout.active_slots):
@@ -497,15 +504,30 @@ class UpgradesSelectionScene(Scene):
             else:
                 pygame.draw.rect(surface, border_color, draw_rect, border_style, border_radius=10)
 
-            # Label do slot com custo se bloqueado
+            # Label do slot com custo se bloqueado (com ícone de estrela)
             if locked:
                 cost = self.player_profile.get_slot_cost(i)
                 can_unlock = self.player_profile.can_unlock_slot(i)
                 cost_color = GREEN if can_unlock else RED
-                slot_label = self.small_font.render(f"⭐ {cost}", True, cost_color)
+
+                label_x = draw_rect.x + 10
+                label_y = draw_rect.y + 5
+
+                # "Custo:" texto
+                custo_text = self.small_font.render("Custo:", True, cost_color)
+                surface.blit(custo_text, (label_x, label_y))
+
+                # Ícone estrela
+                icon_x = label_x + custo_text.get_width() + 6
+                icon_y = label_y + (custo_text.get_height() - 20) // 2
+                surface.blit(self.star_icon_small, (icon_x, icon_y))
+
+                # Quantidade + sufixo
+                qty_text = self.small_font.render(f" {cost} estrela(s)", True, cost_color)
+                surface.blit(qty_text, (icon_x + 22, label_y))
             else:
                 slot_label = self.small_font.render(f"SLOT {i+1}", True, GRAY)
-            surface.blit(slot_label, (draw_rect.x + 10, draw_rect.y + 5))
+                surface.blit(slot_label, (draw_rect.x + 10, draw_rect.y + 5))
 
             # Conteúdo do slot
             if equipped_type:

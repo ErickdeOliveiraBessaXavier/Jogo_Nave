@@ -1,15 +1,17 @@
 """Star (Estrela) - Moeda coletável para desbloquear slots de upgrades."""
 
 import pygame
-import math
+# math not needed anymore
 import random
+from ..core.assets import get_image, BASE_DIR
+from ..core.config import config as Config
 
 
 class Star:
     """
     Estrela coletável que serve como moeda para desbloquear slots.
     
-    Visual similar ao starfield mas maior e mais chamativo.
+    Usa a imagem icon_star.png com efeitos de rotação e pulsação.
     """
 
     def __init__(self, x: float, y: float):
@@ -20,31 +22,27 @@ class Star:
             x: Posição x inicial
             y: Posição y inicial
         """
+        # Tamanho e posição seguindo mesma lógica do PowerUp
+        self.w, self.h = Config.POWERUP_SIZE, Config.POWERUP_SIZE
         self.x = x
         self.y = y
-        self.base_size = random.uniform(15, 25)
-        self.size = self.base_size
+        self.speed = Config.POWERUP_SPEED
+        self.rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+
+        # Carregar imagem
+        icon_path = BASE_DIR / "assets" / "images" / "icons" / "icon_star.png"
+        self.base_image = get_image(icon_path)
+        self.current_image = self.base_image
+
         self.dead = False
-        
-        # Movimento
-        self.vy = random.uniform(20, 40)  # Velocidade para baixo
-        self.vx = random.uniform(-10, 10)  # Pequena variação horizontal
-        
-        # Animação de pulsação
+
+        # Animação/pulsação (igual ao PowerUp)
         self.animation_timer = 0.0
-        self.pulse_speed = random.uniform(3, 5)
-        
-        # Rotação
+        self.pulse_scale = 1.0
+
+        # Rotação da imagem da estrela
         self.rotation = random.uniform(0, 360)
         self.rotation_speed = random.uniform(-180, 180)  # graus por segundo
-        
-        # Brilho/glow
-        self.glow_radius = self.base_size * 2
-        self.glow_intensity = random.uniform(0.6, 1.0)
-        
-        # Cor amarela/dourada
-        self.base_color = (255, 255, 100)
-        self.glow_color = (255, 255, 150, 150)  # com alpha
         
     def update(self, dt: float, screen_width: int = 1600, screen_height: int = 900) -> None:
         """
@@ -55,19 +53,21 @@ class Star:
             screen_width: Largura da tela
             screen_height: Altura da tela
         """
-        # Movimento
-        self.x += self.vx * dt
-        self.y += self.vy * dt
-        
-        # Rotação
+        # Movimento (igual ao PowerUp)
+        self.y += self.speed * dt
+        self.rect.topleft = (int(self.x), int(self.y))
+
+        # Rotação da estrela (imagem interna)
         self.rotation += self.rotation_speed * dt
         self.rotation %= 360
-        
-        # Animação de pulsação
-        self.animation_timer += dt * self.pulse_speed
-        pulse = 1.0 + 0.3 * math.sin(self.animation_timer * math.pi * 2)
-        self.size = self.base_size * pulse
-        self.glow_radius = self.base_size * 2 * pulse
+        # Animação de pulsação (igual ao PowerUp)
+        self.animation_timer += dt * 5
+        self.pulse_scale = 1.0 + 0.2 * abs(
+            pygame.math.Vector2(1, 0).rotate(self.animation_timer * 57.3).x
+        )
+
+        # Atualizar imagem com rotação (sem escala na estrela)
+        self.current_image = pygame.transform.rotate(self.base_image, -self.rotation)
         
         # Remove se sair da tela
         margin = 100
@@ -80,7 +80,7 @@ class Star:
     
     def draw(self, surface: pygame.Surface) -> None:
         """
-        Desenha a estrela com efeito de brilho.
+        Desenha a estrela usando a imagem icon_star.png com rotação e pulsação.
         
         Args:
             surface: Superfície do Pygame para desenhar
@@ -88,52 +88,39 @@ class Star:
         if self.dead:
             return
         
-        # Desenhar glow (círculo semi-transparente)
-        glow_surf = pygame.Surface((int(self.glow_radius * 2), int(self.glow_radius * 2)), pygame.SRCALPHA)
-        pygame.draw.circle(
-            glow_surf,
-            self.glow_color,
-            (int(self.glow_radius), int(self.glow_radius)),
-            int(self.glow_radius)
+        # Desenhar o fundo pulsante (igual ao PowerUp), usando elipse
+        pulse_size = int(min(self.w, self.h) * self.pulse_scale)
+        pulse_rect = pygame.Rect(
+            self.rect.centerx - pulse_size // 2,
+            self.rect.centery - pulse_size // 2,
+            pulse_size,
+            pulse_size,
         )
-        surface.blit(
-            glow_surf,
-            (int(self.x - self.glow_radius), int(self.y - self.glow_radius)),
-            special_flags=pygame.BLEND_ALPHA_SDL2
-        )
-        
-        # Desenhar estrela (estrela de 5 pontas)
-        points: list[tuple[float, float]] = []
-        num_points = 5
-        outer_radius = self.size
-        inner_radius = self.size * 0.4
-        
-        for i in range(num_points * 2):
-            angle = math.radians(self.rotation + (i * 360 / (num_points * 2)))
-            radius = outer_radius if i % 2 == 0 else inner_radius
-            px = self.x + radius * math.cos(angle)
-            py = self.y + radius * math.sin(angle)
-            points.append((px, py))
-        
-        # Desenhar estrela preenchida
-        pygame.draw.polygon(surface, self.base_color, points)
-        
-        # Desenhar borda branca para destaque
-        pygame.draw.polygon(surface, (255, 255, 255), points, 2)
-        
-        # Desenhar ponto central brilhante
-        pygame.draw.circle(surface, (255, 255, 255), (int(self.x), int(self.y)), max(3, int(self.size * 0.2)))
+
+        # Sombra
+        shadow_rect = pulse_rect.copy()
+        shadow_rect.x += 2
+        shadow_rect.y += 2
+        pygame.draw.ellipse(surface, (0, 0, 0, 128), shadow_rect)
+
+        # Fundo principal (amarelo dourado)
+        pygame.draw.ellipse(surface, pygame.Color(255, 220, 100), pulse_rect)
+        # Borda brilhante
+        pygame.draw.ellipse(surface, (255, 255, 255), pulse_rect, 2)
+
+        # Desenhar a imagem da estrela centralizada dentro do fundo
+        inner_size = int(pulse_size * 0.7)
+        star_img = pygame.transform.scale(self.base_image, (inner_size, inner_size))
+        star_img = pygame.transform.rotate(star_img, -self.rotation)
+        img_rect = star_img.get_rect(center=pulse_rect.center)
+        surface.blit(star_img, img_rect)
     
     def get_rect(self) -> pygame.Rect:
         """
         Retorna o retângulo de colisão da estrela.
         
         Returns:
-            pygame.Rect: Retângulo de colisão
+            pygame.Rect: Retângulo de colisão baseado na imagem atual
         """
-        return pygame.Rect(
-            self.x - self.size,
-            self.y - self.size,
-            self.size * 2,
-            self.size * 2
-        )
+        # Colisão baseada no retângulo atual
+        return self.rect.copy()

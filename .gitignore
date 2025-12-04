@@ -112,3 +112,5 @@ venv.bak/
 
 # VSCode
 .vscode/
+
+player_profile.json

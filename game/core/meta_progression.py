@@ -1146,6 +1146,12 @@ class PlayerProfile:
             pygame.K_8,
             pygame.K_9,
         ][:UPGRADE_SLOT_COUNT]
+        
+        # Resetar sistema de estrelas
+        self.stars_collected = 0
+        self.stars_spent = 0
+        self.unlocked_slots = INITIAL_UNLOCKED_SLOTS
+        
         self.profile_created = datetime.now()
         self.last_played = None
         self._dirty = False

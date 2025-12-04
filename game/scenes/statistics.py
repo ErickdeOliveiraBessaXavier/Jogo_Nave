@@ -232,8 +232,8 @@ class StatisticsScene(Scene):
         summary = self.profile.get_statistics_summary()
         y = area.y + 10
 
-        # Card: Resumo
-        card_rect = pygame.Rect(area.x, y, area.width, 150)
+        # Card: Resumo (aumentado para acomodar mais estatísticas)
+        card_rect = pygame.Rect(area.x, y, area.width, 200)
         self._draw_card_background(surface, card_rect)
 
         # Título do Card
@@ -248,6 +248,10 @@ class StatisticsScene(Scene):
             f"Mortes Totais: {self.profile.total_deaths}",
             f"Pontuação Total: {self.profile.total_score:,}",
             f"Taxa de Sucesso Média: {summary['avg_clear_rate']:.0%}",
+            f"Estrelas Coletadas: {self.profile.stars_collected}",
+            f"Estrelas Gastas: {self.profile.stars_spent}",
+            f"Estrelas Disponíveis: {self.profile.available_stars}",
+            f"Slots Desbloqueados: {self.profile.unlocked_slots}/9",
         ]
         for i, stat in enumerate(stats):
             col = i % 2
