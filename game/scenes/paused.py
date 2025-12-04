@@ -95,7 +95,7 @@ class PausedScene(Scene):
                 from .settings import SettingsScene
 
                 self.go_to_settings = True
-                self.app.states.push(SettingsScene(self.app))
+                self.app.states.push(SettingsScene(self.app, return_to_game=True))
 
             elif self.menu_button_rect.collidepoint(event.pos):
                 self.go_to_menu = True

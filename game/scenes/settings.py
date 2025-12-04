@@ -16,10 +16,11 @@ if TYPE_CHECKING:
 class SettingsScene(Scene):
     """Cena de configurações com design renovado."""
 
-    def __init__(self, app: "GameApp"):
+    def __init__(self, app: "GameApp", return_to_game: bool = False):
         super().__init__(app)
         self.player_profile = PlayerProfile(Path("player_profile.json"))
         self.r = Renderer()
+        self.return_to_game = return_to_game  # Se True, volta para o jogo
 
         # Fonts
         self.title_font = get_font(40)
@@ -240,7 +241,11 @@ class SettingsScene(Scene):
         surface.set_clip(None)
 
     def _return_to_menu(self):
-        """Retorna ao menu principal de forma segura."""
-        from .main_menu import MainMenuScene
-        # Usar switch para substituir toda a pilha pelo menu
-        self.app.states.switch(MainMenuScene(self.app))
+        """Retorna ao menu principal ou ao jogo, dependendo do contexto."""
+        if self.return_to_game:
+            # Se estava jogando, apenas remove a cena de configurações da pilha
+            self.app.states.pop()
+        else:
+            # Se veio do menu, substitui pela tela do menu
+            from .main_menu import MainMenuScene
+            self.app.states.switch(MainMenuScene(self.app))
