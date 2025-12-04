@@ -523,7 +523,7 @@ class UpgradesSelectionScene(Scene):
                 surface.blit(self.star_icon_small, (icon_x, icon_y))
 
                 # Quantidade + sufixo
-                qty_text = self.small_font.render(f" {cost} estrela(s)", True, cost_color)
+                qty_text = self.small_font.render(f"{cost}", True, cost_color)
                 surface.blit(qty_text, (icon_x + 22, label_y))
             else:
                 slot_label = self.small_font.render(f"SLOT {i+1}", True, GRAY)
