@@ -9,12 +9,12 @@ from .upgrades import UpgradeType
 UPGRADE_SLOT_COUNT: int = 9
 
 # Sistema de desbloqueio de slots com estrelas
-INITIAL_UNLOCKED_SLOTS = 4  # Slots inicialmente desbloqueados
+INITIAL_UNLOCKED_SLOTS = 2  # Slots inicialmente desbloqueados
 SLOT_UNLOCK_COSTS = [
     0,   # Slot 1 - gratuito
     0,   # Slot 2 - gratuito
-    0,   # Slot 3 - gratuito
-    0,   # Slot 4 - gratuito
+    3,   # Slot 3 - custa 3 estrelas
+    5,   # Slot 4 - custa 5 estrelas
     10,  # Slot 5 - custa 10 estrelas
     20,  # Slot 6 - custa 20 estrelas
     35,  # Slot 7 - custa 35 estrelas
