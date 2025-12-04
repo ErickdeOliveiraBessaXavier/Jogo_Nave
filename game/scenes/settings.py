@@ -1,6 +1,5 @@
 import pygame
 from typing import TYPE_CHECKING, Optional, Dict, Any
-from pathlib import Path
 
 from ..core.state import Scene
 from ..core.colors import WHITE, BLACK, GRAY, BLUE, Color
@@ -8,6 +7,7 @@ from ..core.assets import get_font
 from ..render.renderer import Renderer
 from ..core.sound import sound_manager
 from ..core.meta_progression import PlayerProfile
+from ..core.paths import get_profile_path
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -18,7 +18,7 @@ class SettingsScene(Scene):
 
     def __init__(self, app: "GameApp", return_to_game: bool = False):
         super().__init__(app)
-        self.player_profile = PlayerProfile(Path("player_profile.json"))
+        self.player_profile = PlayerProfile(get_profile_path())
         self.r = Renderer()
         self.return_to_game = return_to_game  # Se True, volta para o jogo
 

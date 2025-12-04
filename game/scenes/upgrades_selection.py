@@ -2,7 +2,6 @@ import pygame
 import time
 from typing import TYPE_CHECKING, List, Optional, Dict, Tuple
 from collections import defaultdict
-from pathlib import Path
 from dataclasses import dataclass, field
 
 from ..core.state import Scene
@@ -16,6 +15,7 @@ from ..core.upgrades import (
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 from ..render.renderer import Renderer
 from ..core.meta_progression import PlayerProfile
+from ..core.paths import get_profile_path
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -65,7 +65,7 @@ class UpgradesSelectionScene(Scene):
         self.star_icon_small = pygame.transform.scale(self.star_icon, (20, 20))
 
         # Perfil do Jogador
-        self.player_profile = PlayerProfile(Path("player_profile.json"))
+        self.player_profile = PlayerProfile(get_profile_path())
         
         # Garantir que o loadout tem exatamente UPGRADE_SLOT_COUNT slots
         while len(self.player_profile.upgrade_loadout) < UPGRADE_SLOT_COUNT:

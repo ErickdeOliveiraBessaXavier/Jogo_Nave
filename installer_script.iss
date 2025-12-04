@@ -11,7 +11,7 @@ AppVersion=1.0
 AppPublisher=Erick de Oliveira Bessa Xavier
 DefaultDirName={autopf}\Space Shooter
 DisableProgramGroupPage=yes
-UninstallDisplayIcon={app}\Jogo_Erick.exe
+UninstallDisplayIcon={app}\Space_Shooter.exe
 OutputDir=Output
 OutputBaseFilename=setup_spaceshooter
 Compression=lzma
@@ -19,15 +19,15 @@ SolidCompression=yes
 WizardStyle=modern
 
 [Files]
-Source: "dist\Jogo_Erick.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\Space_Shooter.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "game\assets\*"; DestDir: "{app}\game\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Space Shooter"; Filename: "{app}\Jogo_Erick.exe"
-Name: "{autodesktop}\Space Shooter"; Filename: "{app}\Jogo_Erick.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Space Shooter"; Filename: "{app}\Space_Shooter.exe"
+Name: "{autodesktop}\Space Shooter"; Filename: "{app}\Space_Shooter.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Jogo_Erick.exe"; Description: "{cm:LaunchProgram,Space Shooter}"; Flags: shellexec postinstall skipifdoesntexist
+Filename: "{app}\Space_Shooter.exe"; Description: "{cm:LaunchProgram,Space Shooter}"; Flags: shellexec postinstall skipifdoesntexist
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked

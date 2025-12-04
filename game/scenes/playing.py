@@ -20,6 +20,7 @@ from ..core.sound_config import MusicState
 from ..entities.mini_ship import MiniShip
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..core.meta_progression import PlayerProfile
+from ..core.paths import get_profile_path
 from ..core.upgrades import create_upgrade, ActiveUpgrade
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 
@@ -73,9 +74,7 @@ class PlayingScene(Scene):
         self.warning_timer = 0.0
         self.warning_font = get_font(Config.WARNING_FONT_SIZE)
         # Meta-progression system
-        from pathlib import Path
-
-        self.player_profile = PlayerProfile(Path("player_profile.json"))
+        self.player_profile = PlayerProfile(get_profile_path())
         self.player_profile.start_session()
 
         self.current_level_index = 0

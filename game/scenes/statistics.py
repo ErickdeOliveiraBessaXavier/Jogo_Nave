@@ -10,6 +10,7 @@ from ..core.assets import get_font
 from ..render.renderer import Renderer
 from ..core.meta_progression import PlayerProfile, PerformanceState
 from ..core.state import Scene
+from ..core.paths import get_profile_path
 
 
 class StatTab(Enum):
@@ -72,10 +73,8 @@ class StatisticsScene(Scene):
             self.current_tab = new_tab
 
     def enter(self):
-        from pathlib import Path
-
         super().enter()
-        self.profile = PlayerProfile(Path("player_profile.json"))
+        self.profile = PlayerProfile(get_profile_path())
         pygame.mouse.set_visible(True)
 
     def exit(self):

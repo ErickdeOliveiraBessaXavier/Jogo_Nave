@@ -1,42 +1,59 @@
-# 🚀 Jogo de Nave (Space Shooter)
+# 🚀 Space Shooter - Jogo de Nave Espacial
 
-Um emocionante jogo de tiro espacial de progressão infinita, desenvolvido em Python com a biblioteca Pygame. Desafie suas habilidades desviando de asteroides, destruindo naves alienígenas e enfrentando chefes poderosos para alcançar a maior pontuação possível.
+Um emocionante jogo de tiro espacial com progressão infinita, desenvolvido em Python com Pygame. Desafie suas habilidades evitando asteroides, destruindo naves alienígenas, enfrentando chefes poderosos e coletando poder-ups para alcançar a maior pontuação possível!
 
 ## ✨ Funcionalidades Principais
 
 - **Jogabilidade Infinita:** Sobreviva o máximo que puder contra ondas crescentes de inimigos.
-- **Inimigos Variados:** Enfrente meteoros, naves alienígenas, meteoros teleguiados e chefes desafiadores.
-- **Power-ups com Raridade:** Colete power-ups para ganhar vantagens, com um sistema de raridade que torna cada partida única:
+- **Sistema de Dificuldade Dinâmico:** O jogo se adapta automaticamente à sua performance.
+- **Inimigos Variados:**
+  - Meteoros simples
+  - Naves alienígenas
+  - Meteoros teleguiados
+  - Chefes desafiadores (Boss Spike, Boss Square, Boss Cannon)
+  - Mini naves inimigas
+
+- **Sistema de Poder-ups com Raridade:**
   - **Shield (20%):** Proteção temporária contra danos.
-  - **Double Shot (25%):** Aumenta seu poder de fogo com tiros duplos.
-  - **Speed Boost (15%):** Aumenta a velocidade de movimento da sua nave.
+  - **Double Shot (25%):** Tiros duplos para maior poder de fogo.
+  - **Speed Boost (15%):** Aumenta a velocidade de movimento.
   - **Piercing Shot (15%):** Seus tiros atravessam múltiplos inimigos.
-  - **Mini Ships (10%):** Adiciona duas pequenas naves auxiliares que disparam com você.
+  - **Mini Ships (10%):** Adiciona naves auxiliares que disparam com você.
   - **Extra Life (10%):** Ganhe uma vida extra.
   - **Score Multiplier (4%):** Multiplique sua pontuação.
-  - **Rainbow (1%):** Ativa todos os outros power-ups simultaneamente!
-- **Efeitos Visuais:** Inclui efeitos de explosão e "screen shake" para uma experiência mais imersiva.
-- **Sistema de Pontuação:** Sua pontuação aumenta ao destruir inimigos.
-- **Monitoramento de Performance:** Pressione F3 durante o jogo para ver métricas de FPS em tempo real.
-- **Testes Automatizados:** Framework completo para testes de performance e detecção de regressões.
+  - **Rainbow (1%):** Ativa todos os outros poder-ups simultaneamente!
+
+- **Sistema de Aprimoramentos:** Desbloqueie e configure aprimoramentos entre partidas
+- **Progressão Meta:** Rastreamento de estatísticas e conquistas ao longo do tempo
+- **Efeitos Visuais Imersivos:** Explosões, efeito de tela tremendo e partículas
+- **Sistema de Som Completo:** Música de fundo, efeitos sonoros e múltiplas faixas musicais
+- **Configurações Personalizáveis:** Ajuste volume de música, SFX e controles
+- **Monitoramento de Performance:** Pressione F3 durante o jogo para ver métricas de FPS em tempo real
 
 ## 🎮 Como Jogar
 
 ### Controles
 
-- **Setas direcionais** ou **WASD**: Mover a nave
-- **Espaço** ou **Clique esquerdo**: Atirar
-- **ESC**: Pausar o jogo
-- **F3**: Mostrar/ocultar informações de performance (FPS, frame time, etc.)
+- **WASD ou Setas Direcionais:** Mover a nave
+- **Espaço:** Atirar (mantenha pressionado para tiro contínuo)
+- **P:** Pausar/Despausar o jogo
+- **ESC:** Voltar/Sair
+- **F3:** Mostrar/ocultar informações de performance
 
 ### Pré-requisitos
 
 - Python 3.8 ou superior
-- Git
+- Git (opcional)
 
-### Instalação
+## 📥 Instalação
 
-Siga estes passos para configurar o ambiente de desenvolvimento e executar o jogo.
+### Opção 1: Executável (Recomendado para Usuários)
+
+1. Baixe o instalador `setup_spaceshooter.exe` na página de [Releases](https://github.com/ErickdeOliveiraBessaXavier/Jogo_Nave/releases)
+2. Execute o instalador e siga as instruções
+3. Clique em "Space Shooter" no menu Iniciar ou na Área de Trabalho para jogar
+
+### Opção 2: Executar do Código-fonte (Para Desenvolvedores)
 
 ```bash
 # 1. Clone o repositório
@@ -45,10 +62,11 @@ git clone https://github.com/ErickdeOliveiraBessaXavier/Jogo_Nave.git
 # 2. Navegue até o diretório do projeto
 cd Jogo_Nave
 
-# 3. (Opcional mas recomendado) Crie e ative um ambiente virtual
+# 3. (Recomendado) Crie um ambiente virtual
 # Em Windows
 python -m venv venv
 venv\Scripts\activate
+
 # Em macOS/Linux
 python3 -m venv venv
 source venv/bin/activate
@@ -60,70 +78,126 @@ pip install -r requirements.txt
 python run.py
 ```
 
-### Controles
-
-- **Setas Direcionais ou WASD:** Mover a nave.
-- **Barra de Espaço:** Atirar (mantenha pressionado para tiro contínuo).
-- **P:** Pausar e despausar o jogo.
-- **R:** Reiniciar o jogo na tela de "Game Over".
-- **ESC:** Sair do jogo.
-
 ## 🏗️ Estrutura do Projeto
 
-O projeto é organizado de forma modular para facilitar a manutenção e a adição de novas funcionalidades.
+O projeto é organizado de forma modular para facilitar manutenção e adição de novas funcionalidades:
 
 ```
 Jogo_Nave/
 ├── game/
-│   ├── assets/         # Contém fontes, sons e músicas
-│   ├── core/           # Lógica central (configurações, estado, som)
-│   ├── entities/       # Todas as entidades do jogo (jogador, inimigos, projéteis)
-│   ├── render/         # Lógica de renderização
-│   ├── scenes/         # Cenas do jogo (jogando, game over, pausa)
-│   └── systems/        # Sistemas de gerenciamento (colisões, spawns)
-├── requirements.txt    # Dependências do projeto
-└── run.py              # Ponto de entrada da aplicação
+│   ├── assets/              # Fontes, sons, imagens e ícones
+│   │   ├── cursors/         # Cursores personalizados
+│   │   ├── fonts/           # Arquivos de fonte TTF
+│   │   ├── images/          # Sprites e ícones
+│   │   └── sounds/          # Músicas e efeitos sonoros
+│   ├── core/                # Lógica central do jogo
+│   │   ├── assets.py        # Carregamento de recursos
+│   │   ├── config.py        # Configurações globais
+│   │   ├── difficulty.py    # Sistema de dificuldade
+│   │   ├── meta_progression.py  # Sistema de progressão e estatísticas
+│   │   ├── paths.py         # Gerenciamento de caminhos de arquivo
+│   │   ├── sound.py         # Sistema de som
+│   │   ├── upgrades.py      # Sistema de aprimoramentos
+│   │   └── state.py         # Gerenciador de cenas
+│   ├── entities/            # Todas as entidades do jogo
+│   │   ├── ship.py          # Nave do jogador
+│   │   ├── alien.py         # Inimigos alienígenas
+│   │   ├── bullet.py        # Projéteis
+│   │   ├── boss.py          # Chefes
+│   │   └── ...
+│   ├── render/              # Renderização
+│   │   └── renderer.py      # Engine de renderização
+│   ├── scenes/              # Cenas da aplicação
+│   │   ├── main_menu.py     # Menu principal
+│   │   ├── playing.py       # Cena de jogo
+│   │   ├── paused.py        # Tela de pausa
+│   │   ├── settings.py      # Configurações
+│   │   ├── statistics.py    # Estatísticas
+│   │   └── ...
+│   └── systems/             # Sistemas de gerenciamento
+│       ├── entity_manager.py    # Gerencia entidades
+│       ├── collisions.py        # Detecção de colisões
+│       └── spawner.py           # Spawner de inimigos
+├── requirements.txt         # Dependências Python
+├── run.py                   # Ponto de entrada
+├── Space_Shooter.spec       # Configuração PyInstaller
+├── installer_script.iss     # Script Inno Setup
+└── README.md                # Este arquivo
 ```
 
 ## 📊 Performance e Monitoramento
 
-O jogo inclui ferramentas avançadas de monitoramento de performance para garantir uma experiência suave:
+O jogo inclui ferramentas avançadas de monitoramento:
 
 ### Monitoramento em Tempo Real
-- Pressione **F3** durante o jogo para ver métricas de performance em tempo real
-- Exibe FPS atual, tempo médio de frame, e outras estatísticas importantes
+- Pressione **F3** durante o jogo para ver métricas de performance
+- Exibe FPS, tempo de frame, uso de memória e outras estatísticas
 
-### Testes Automatizados
+### Testes Automatizados (Desenvolvimento)
 ```bash
-# Executar teste de performance completo (30 segundos)
+# Executar teste de performance
 python performance_test.py --duration 30 --difficulty normal
 
-# Profiling detalhado com cProfile
+# Profiling detalhado
 python profile_game.py --duration 15
 
-# Ver relatório completo de otimizações
+# Gerar relatório de otimizações
 python optimization_report.py
 ```
 
-### Métricas de Performance
-- **FPS Médio:** ~63.5 (classificação: BOM)
-- **Frame Time:** ~15.7ms médio, 23ms máximo
-- **Memória:** ~228MB de uso médio
-- **Otimização:** 77% redução nas chamadas de função do sistema de renderização
-
-### Otimizações Implementadas
-- ✅ Cache inteligente de textos HUD
-- ✅ Otimização do sistema de estrelas (88% mais eficiente)
-- ✅ Limitação de cache de efeitos visuais
-- ✅ Limpeza adequada de entidades mortas
-- ✅ Sistema de profiling detalhado
-
 ## 🔧 Tecnologias Utilizadas
 
-- **Linguagem:** Python 3
+- **Linguagem:** Python 3.8+
 - **Biblioteca Gráfica:** Pygame
-- **Estrutura:** Código modularizado com gerenciamento de cenas e entidades.
+- **Construção:** PyInstaller
+- **Instalador:** Inno Setup
+- **Arquitetura:** Padrão de Cenas com Gerenciamento de Estado
+
+## 🐛 Solução de Problemas
+
+### Jogo não inicia após instalação
+- Tente reinstalar o jogo
+- Verifique se sua placa de vídeo suporta OpenGL
+- Consulte o arquivo de log em `%LOCALAPPDATA%\SpaceShooter\error.log`
+
+### Sons não funcionam
+- Verifique o volume nas configurações (ESC → Configurações)
+- Certifique-se de que seus alto-falantes estão ligados
+
+### Performance baixa
+- Reduza a qualidade gráfica nas configurações
+- Feche outros aplicativos em segundo plano
+- Verifique a temperatura do seu computador
+
+## 📈 Desenvolvimento Futuro
+
+- [ ] Mais tipos de inimigos
+- [ ] Novos poder-ups
+- [ ] Sistema de pontuação online
+- [ ] Melhorias gráficas
+- [ ] Mais faixas de música
+
+## 📝 Licença
+
+Este projeto é distribuído sob licença aberta. Sinta-se livre para usar, modificar e distribuir.
+
+## 🤝 Contribuições
+
+Contribuições são bem-vindas! Se você gostaria de contribuir:
+
+1. Faça um Fork do repositório
+2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
+3. Faça commit das suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Faça Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
+
+## 👨‍💻 Desenvolvedor
+
+**Erick de Oliveira Bessa Xavier**
+- GitHub: [@ErickdeOliveiraBessaXavier](https://github.com/ErickdeOliveiraBessaXavier)
 
 ---
 
-**Desenvolvido com ❤️ por [ErickdeOliveiraBessaXavier](https://github.com/ErickdeOliveiraBessaXavier)**
+**Desenvolvido com ❤️ em Python**
+
+Divirta-se jogando! 🎮
