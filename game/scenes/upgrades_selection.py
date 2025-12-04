@@ -6,7 +6,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 
 from ..core.state import Scene
-from ..core.colors import WHITE, BLACK, GRAY, GREEN, BLUE, YELLOW, RED
+from ..core import colors
 from ..core.assets import get_font, get_image, BASE_DIR
 from ..core.upgrades import (
     list_all_upgrades_meta,
@@ -50,11 +50,10 @@ class UpgradesSelectionScene(Scene):
         
         # Fonts
         self.title_font = get_font(40)
-        self.header_font = get_font(28)
-        self.tab_font = get_font(22)
-        self.item_font = get_font(18)
-        self.small_font = get_font(12)
-        self.tiny_font = get_font(12)
+        self.header_font = get_font(24)
+        self.item_font = get_font(20)
+        self.small_font = get_font(16)
+        self.tiny_font = get_font(14)
 
         # Ícone de bloqueado
         icon_path = BASE_DIR / "assets" / "images" / "icons" / "icon_bloqueado.png"
@@ -79,7 +78,10 @@ class UpgradesSelectionScene(Scene):
         self.categorized_upgrades: Dict[UpgradeCategory, List[UpgradeMeta]] = defaultdict(list)
         for upg in self.all_upgrades:
             self.categorized_upgrades[upg.category].append(upg)
-        self.categories = sorted(list(self.categorized_upgrades.keys()), key=lambda c: c.name)
+        # Adicionar aba 'All' para listar todos os upgrades
+        base_categories = sorted(list(self.categorized_upgrades.keys()), key=lambda c: c.name)
+        # Lista de categorias pode conter o rótulo "All" como str
+        self.categories: List[UpgradeCategory | str] = ["All"] + base_categories
 
         # Estado da UI - Tabs
         self.selected_category_idx = 0
@@ -167,7 +169,11 @@ class UpgradesSelectionScene(Scene):
         self.layout.visible_upgrades.clear()
         
         category = self.categories[self.selected_category_idx]
-        current_upgrades = self.categorized_upgrades[category]
+        if isinstance(category, str) and category.lower() == "all":
+            current_upgrades = self.all_upgrades
+        else:
+            # Garantir tipo UpgradeCategory para indexar corretamente
+            current_upgrades = self.categorized_upgrades[category]  # type: ignore[index]
         
         grid_area = self.layout.upgrade_grid_area
         cell_size = 80
@@ -318,7 +324,10 @@ class UpgradesSelectionScene(Scene):
             elif event.button == 5:  # Scroll para baixo
                 if self.layout.upgrade_grid_area.collidepoint(event.pos):
                     category = self.categories[self.selected_category_idx]
-                    current_upgrades = self.categorized_upgrades[category]
+                    if isinstance(category, str) and category.lower() == "all":
+                        current_upgrades = self.all_upgrades
+                    else:
+                        current_upgrades = self.categorized_upgrades[category]  # type: ignore[index]
                     
                     # Calcular max_scroll dinamicamente
                     grid_area = self.layout.upgrade_grid_area
@@ -359,11 +368,11 @@ class UpgradesSelectionScene(Scene):
                     break
 
     def render(self, surface: pygame.Surface):
-        surface.fill(BLACK)
+        surface.fill(colors.BLACK)
         self.r.starfield.draw(surface)
 
         # Título
-        title = self.title_font.render("Arsenal de Aprimoramentos", True, WHITE)
+        title = self.title_font.render("Arsenal de Aprimoramentos", True, colors.WHITE)
         surface.blit(title, (20, 20))
 
         # Desenhar elementos
@@ -387,12 +396,13 @@ class UpgradesSelectionScene(Scene):
             rect = self.layout.tab_buttons[i]
 
             bg_color = (50, 50, 100) if is_selected else (30, 30, 30)
-            border_color = BLUE if is_selected else GRAY
+            border_color = colors.BLUE if is_selected else colors.GRAY
             
             pygame.draw.rect(surface, bg_color, rect, border_radius=8)
             pygame.draw.rect(surface, border_color, rect, 2, border_radius=8)
 
-            text = self.tab_font.render(cat.name.upper(), True, WHITE)
+            tab_label_text = cat.upper() if isinstance(cat, str) else cat.name.upper()
+            text = self.item_font.render(tab_label_text, True, colors.WHITE)
             surface.blit(
                 text,
                 (
@@ -414,11 +424,11 @@ class UpgradesSelectionScene(Scene):
             if is_hovered and unlocked:
                 bg_color = (60, 60, 60)
             
-            border_color = GRAY
+            border_color = colors.GRAY
             if equipped:
-                border_color = YELLOW
+                border_color = colors.YELLOW
             elif not unlocked:
-                border_color = RED
+                border_color = colors.RED
             
             pygame.draw.rect(surface, bg_color, cell_rect, border_radius=6)
             pygame.draw.rect(surface, border_color, cell_rect, 2, border_radius=6)
@@ -426,12 +436,12 @@ class UpgradesSelectionScene(Scene):
             # Ícone (círculo colorido)
             icon_center = cell_rect.center
             icon_radius = 25
-            icon_color = GREEN if unlocked else (80, 80, 80)
+            icon_color = colors.GREEN if unlocked else (80, 80, 80)
             pygame.draw.circle(surface, icon_color, icon_center, icon_radius)
             
             # Letra inicial do nome
             initial = upgrade.name[0].upper()
-            initial_text = self.header_font.render(initial, True, WHITE if unlocked else (50, 50, 50))
+            initial_text = self.header_font.render(initial, True, colors.WHITE if unlocked else (50, 50, 50))
             surface.blit(
                 initial_text,
                 (
@@ -443,26 +453,26 @@ class UpgradesSelectionScene(Scene):
             # Indicador de equipado
             if equipped:
                 badge_rect = pygame.Rect(cell_rect.right - 20, cell_rect.y + 5, 15, 15)
-                pygame.draw.circle(surface, YELLOW, badge_rect.center, 7)
-                check_text = self.tiny_font.render("E", True, BLACK)
+                pygame.draw.circle(surface, colors.YELLOW, badge_rect.center, 7)
+                check_text = self.tiny_font.render("E", True, colors.BLACK)
                 surface.blit(check_text, (badge_rect.x + 3, badge_rect.y + 1))
 
     def _draw_active_slots(self, surface: pygame.Surface):
         """Desenha a grid 2x2 de slots ativos do lado direito."""
         # Header
         header_rect = self.layout.active_slots_header
-        header_text = self.header_font.render("APRIMORAMENTOS", True, WHITE)
+        header_text = self.header_font.render("APRIMORAMENTOS", True, colors.WHITE)
         surface.blit(header_text, (header_rect.x, header_rect.y))
         
         # Contador de slots e estrelas
         equipped_count = sum(1 for u in self.player_profile.upgrade_loadout if u is not None)
-        counter_text = self.item_font.render(f"{equipped_count}/{self.player_profile.unlocked_slots}", True, GRAY)
+        counter_text = self.item_font.render(f"{equipped_count}/{self.player_profile.unlocked_slots}", True, colors.GRAY)
         surface.blit(counter_text, (header_rect.right - counter_text.get_width(), header_rect.y + 5))
         
         # Mostrar estrelas disponíveis com ícone
         star_y = header_rect.y + 30
         surface.blit(self.star_icon_small, (header_rect.x, star_y))
-        stars_text = self.small_font.render(str(self.player_profile.available_stars), True, YELLOW)
+        stars_text = self.small_font.render(str(self.player_profile.available_stars), True, colors.YELLOW)
         surface.blit(stars_text, (header_rect.x + 24, star_y + (20 - stars_text.get_height()) // 2))
 
         # Slots
@@ -493,7 +503,7 @@ class UpgradesSelectionScene(Scene):
             else:
                 bg_color = (30, 30, 30) if not is_hovered else (40, 40, 40)
             
-            border_color = YELLOW if is_hovered else (80, 80, 80) if locked else GRAY
+            border_color = colors.YELLOW if is_hovered else (80, 80, 80) if locked else colors.GRAY
             border_style = 2 if equipped_type else 1
             
             pygame.draw.rect(surface, bg_color, draw_rect, border_radius=10)
@@ -508,7 +518,7 @@ class UpgradesSelectionScene(Scene):
             if locked:
                 cost = self.player_profile.get_slot_cost(i)
                 can_unlock = self.player_profile.can_unlock_slot(i)
-                cost_color = GREEN if can_unlock else RED
+                cost_color = colors.GREEN if can_unlock else colors.RED
 
                 label_x = draw_rect.x + 10
                 label_y = draw_rect.y + 5
@@ -526,7 +536,7 @@ class UpgradesSelectionScene(Scene):
                 qty_text = self.small_font.render(f"{cost}", True, cost_color)
                 surface.blit(qty_text, (icon_x + 22, label_y))
             else:
-                slot_label = self.small_font.render(f"SLOT {i+1}", True, GRAY)
+                slot_label = self.small_font.render(f"SLOT {i+1}", True, colors.GRAY)
                 surface.blit(slot_label, (draw_rect.x + 10, draw_rect.y + 5))
 
             # Conteúdo do slot
@@ -538,10 +548,10 @@ class UpgradesSelectionScene(Scene):
                 if upgrade_meta:
                     # Ícone
                     icon_center = (draw_rect.centerx, draw_rect.centery - 10)
-                    pygame.draw.circle(surface, GREEN, icon_center, 30)
+                    pygame.draw.circle(surface, colors.GREEN, icon_center, 30)
                     
                     initial = upgrade_meta.name[0].upper()
-                    initial_text = self.header_font.render(initial, True, WHITE)
+                    initial_text = self.header_font.render(initial, True, colors.WHITE)
                     surface.blit(
                         initial_text,
                         (
@@ -551,7 +561,7 @@ class UpgradesSelectionScene(Scene):
                     )
                     
                     # Nome
-                    name_text = self.small_font.render(upgrade_meta.name, True, YELLOW)
+                    name_text = self.small_font.render(upgrade_meta.name, True, colors.YELLOW)
                     surface.blit(
                         name_text,
                         (
@@ -581,10 +591,10 @@ class UpgradesSelectionScene(Scene):
         """Desenha o botão de voltar."""
         back_rect = self.layout.back_button
         is_hovered = back_rect.collidepoint(pygame.mouse.get_pos())
-        bg_color = tuple(min(c + 20, 255) for c in GRAY) if is_hovered else GRAY
+        bg_color = tuple(min(c + 20, 255) for c in colors.GRAY) if is_hovered else colors.GRAY
         pygame.draw.rect(surface, bg_color, back_rect, border_radius=8)
-        pygame.draw.rect(surface, WHITE, back_rect, 2, border_radius=8)
-        back_text = self.item_font.render("Voltar", True, WHITE)
+        pygame.draw.rect(surface, colors.WHITE, back_rect, 2, border_radius=8)
+        back_text = self.item_font.render("Voltar", True, colors.WHITE)
         surface.blit(
             back_text,
             (
@@ -614,12 +624,12 @@ class UpgradesSelectionScene(Scene):
         # Upgrade com transparência
         drag_surf = pygame.Surface((80, 80), pygame.SRCALPHA)
         pygame.draw.rect(drag_surf, (60, 60, 60, 200), drag_surf.get_rect(), border_radius=6)
-        pygame.draw.rect(drag_surf, (YELLOW[0], YELLOW[1], YELLOW[2], 220), drag_surf.get_rect(), 3, border_radius=6)
+        pygame.draw.rect(drag_surf, (colors.YELLOW[0], colors.YELLOW[1], colors.YELLOW[2], 220), drag_surf.get_rect(), 3, border_radius=6)
         
         # Ícone
-        pygame.draw.circle(drag_surf, GREEN, (40, 40), 25)
+        pygame.draw.circle(drag_surf, colors.GREEN, (40, 40), 25)
         initial = self.dragging_upgrade.name[0].upper()
-        initial_text = self.header_font.render(initial, True, WHITE)
+        initial_text = self.header_font.render(initial, True, colors.WHITE)
         drag_surf.blit(
             initial_text,
             (40 - initial_text.get_width() // 2, 40 - initial_text.get_height() // 2),
@@ -653,17 +663,17 @@ class UpgradesSelectionScene(Scene):
         # Background semi-transparente
         tooltip_surf = pygame.Surface((tooltip_w, tooltip_h), pygame.SRCALPHA)
         pygame.draw.rect(tooltip_surf, (20, 20, 30, 240), tooltip_surf.get_rect(), border_radius=8)
-        pygame.draw.rect(tooltip_surf, (WHITE[0], WHITE[1], WHITE[2], 220), tooltip_surf.get_rect(), 2, border_radius=8)
+        pygame.draw.rect(tooltip_surf, (colors.WHITE[0], colors.WHITE[1], colors.WHITE[2], 220), tooltip_surf.get_rect(), 2, border_radius=8)
         
         # Nome
-        name_text = self.item_font.render(upgrade.name, True, YELLOW)
+        name_text = self.item_font.render(upgrade.name, True, colors.YELLOW)
         tooltip_surf.blit(name_text, (10, 10))
         
         # Descrição
         desc_y = 40
         desc_lines = self._wrap_text(upgrade.desc, self.small_font, tooltip_w - 20)
         for line in desc_lines[:3]:  # Máximo 3 linhas
-            line_text = self.small_font.render(line, True, WHITE)
+            line_text = self.small_font.render(line, True, colors.WHITE)
             tooltip_surf.blit(line_text, (10, desc_y))
             desc_y += 18
         
@@ -676,7 +686,7 @@ class UpgradesSelectionScene(Scene):
         attrs.append(f"Cargas: {upgrade.base_charges or 'ilim'}")
         
         for attr in attrs:
-            attr_text = self.tiny_font.render(attr, True, GRAY)
+            attr_text = self.tiny_font.render(attr, True, colors.GRAY)
             tooltip_surf.blit(attr_text, (10, attr_y))
             attr_y += 15
         

@@ -7,7 +7,7 @@ from ..core.state import Scene
 from ..core.config import config as Config
 from ..render.renderer import Renderer
 from ..entities.ship import Ship
-from ..systems.spawner import EnemySpawner, PowerUpSpawner
+from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
 from ..systems.collisions import Collisions
 from ..systems.entity_manager import EntityManager
 from ..entities.floating_score import FloatingScore
@@ -96,9 +96,8 @@ class PlayingScene(Scene):
         self.powerup_spawner = PowerUpSpawner()
         self.collisions = Collisions()
 
-        # Star spawning
-        self.star_spawn_timer = 0.0
-        self.star_spawn_interval = 15.0  # Spawna uma estrela a cada 15 segundos
+        # Star spawner centralizado
+        self.star_spawner = StarSpawner()
 
         # Debug/Performance flags
         self.show_fps = False  # Pressione F3 para mostrar/ocultar FPS
@@ -276,17 +275,8 @@ class PlayingScene(Scene):
             if "no_powerups" not in special_rules:
                 self.powerup_spawner.update(dt, self.entity_manager.powerups)
 
-            # Spawnar estrelas periodicamente
-            self.star_spawn_timer += dt
-            if self.star_spawn_timer >= self.star_spawn_interval:
-                self.star_spawn_timer = 0.0
-                # Spawnar estrela na parte superior da tela
-                import random
-                from ..entities.star import Star
-                x = random.uniform(50, Config.SCREEN_WIDTH - 50)
-                y = -30
-                star = Star(x, y)
-                self.entity_manager.stars.append(star)
+            # Spawner de estrelas
+            self.star_spawner.update(dt, self.entity_manager.stars)
 
         self.entity_manager.update(dt, self.ship.rect.centerx, self.ship.rect.centery)
 
@@ -502,6 +492,9 @@ class PlayingScene(Scene):
         )
         self.total_enemies_destroyed += destroyed
         self.enemies_destroyed_in_level += destroyed
+        # Regra: spawnar estrela a cada N inimigos destruídos
+        if destroyed > 0:
+            self.star_spawner.add_kills(destroyed, self.entity_manager.stars)
 
         if self.entity_manager.boss:
             from ..entities.spike_boss import SpikeBoss

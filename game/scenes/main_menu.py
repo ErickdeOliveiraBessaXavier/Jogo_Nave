@@ -137,7 +137,7 @@ class Button:
         border_color: tuple[int, int, int],
         scale_factor: float,
     ):
-        color = (
+        text_color = (
             self.hover_color
             if self.state in (ButtonState.HOVERED, ButtonState.FOCUSED)
             else self.color
@@ -152,7 +152,7 @@ class Button:
             )
             scaled_rect.center = self.rect.center
 
-            pygame.draw.rect(surface, color, scaled_rect, border_radius=12)
+            # Apenas borda, sem fundo
             pygame.draw.rect(surface, border_color, scaled_rect, 2, border_radius=12)
 
             # Draw animated text
@@ -160,16 +160,19 @@ class Button:
             current_x = start_x
             for char_data in self.chars:
                 char_pos = (current_x, char_data["rect"].y)
-                surface.blit(char_data["render"], char_pos)
+                # Usar texto com cor apropriada
+                text_char = self.text[self.chars.index(char_data)]
+                colored_char = self.font.render(text_char, True, text_color)
+                surface.blit(colored_char, char_pos)
                 current_x += char_data["render"].get_width()
         else:
-            pygame.draw.rect(surface, color, self.rect, border_radius=10)
+            # Apenas borda, sem fundo
             pygame.draw.rect(surface, border_color, self.rect, 2, border_radius=10)
 
-            text_rect = self.font.render(self.text, True, BLACK).get_rect(
+            text_rect = self.font.render(self.text, True, text_color).get_rect(
                 center=self.rect.center
             )
-            surface.blit(self.font.render(self.text, True, BLACK), text_rect)
+            surface.blit(self.font.render(self.text, True, text_color), text_rect)
 
 
 class MainMenuScene(Scene):
@@ -307,10 +310,17 @@ class MainMenuScene(Scene):
         ]
 
         for i, (text, color, hover_color, action) in enumerate(button_configs):
-            rect = pygame.Rect(0, 0, 380, 60)
+            # Botão Exit menor que os demais
+            if i == len(button_configs) - 1:  # Último botão (Exit)
+                rect = pygame.Rect(0, 0, 280, 50)
+                # Adicionar espaçamento extra antes do botão Exit
+                extra_spacing = 30
+            else:
+                rect = pygame.Rect(0, 0, 380, 60)
+                extra_spacing = 0
             rect.center = (
                 self.menu_x,
-                buttons_y_start + i * AnimationConfig.BUTTON_SPACING,
+                buttons_y_start + i * AnimationConfig.BUTTON_SPACING + extra_spacing,
             )
             button = Button(text, rect, self.button_font, color, hover_color, action)
             self.buttons.append(button)

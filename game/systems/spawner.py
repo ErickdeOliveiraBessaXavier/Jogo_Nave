@@ -9,6 +9,7 @@ from ..entities.formation import Formation, FormationPattern
 from ..entities.meteor_pool import MeteorPool
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.explosive_mine import ExplosiveMine
+from ..entities.star import Star
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -405,3 +406,44 @@ class PowerUpSpawner:
             self._reset_timer()
 
         powerups[:] = [p for p in powerups if not p.is_off_screen()]
+
+
+class StarSpawner:
+    def __init__(self) -> None:
+        self._reset_timer()
+        self.kill_counter = 0
+        self.kill_threshold = getattr(Config, "STAR_SPAWN_KILL_THRESHOLD", 200)
+
+    def _reset_timer(self) -> None:
+        # Use intervalo configurável para estrelas
+        # Garantir tipo de intervalo seguro
+        default_interval: tuple[float, float] = (6.0, 10.0)
+        conf_interval = getattr(Config, "STAR_SPAWN_INTERVAL", default_interval)
+        try:
+            min_t, max_t = map(float, conf_interval)  # type: ignore[arg-type]
+            spawn_t = random.uniform(min_t, max_t)
+        except Exception:
+            try:
+                spawn_t = float(conf_interval)  # type: ignore[arg-type]
+            except Exception:
+                spawn_t = sum(default_interval) / 2.0
+        self.timer = Timer(spawn_t)
+        self.timer.start()
+
+    def update(self, dt: float, stars: List[Star]) -> None:
+        # Atualização do timer mantida, porém sem spawn por tempo.
+        # Regra atual: estrelas só aparecem após derrotar N inimigos.
+        self.timer.update(dt)
+
+    def add_kills(self, count: int, stars: List[Star]) -> None:
+        """Acumula abates e spawna uma estrela quando atingir o limiar.
+        Após spawn, reseta a contagem.
+        """
+        if count <= 0:
+            return
+        self.kill_counter += count
+        if self.kill_counter >= self.kill_threshold:
+            self.kill_counter = 0
+            x = random.randint(40, Config.SCREEN_WIDTH - 40)
+            y = -random.uniform(20, 100)
+            stars.append(Star(x, y))

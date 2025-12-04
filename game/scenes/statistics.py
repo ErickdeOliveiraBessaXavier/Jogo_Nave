@@ -175,23 +175,15 @@ class StatisticsScene(Scene):
             is_active = self.current_tab == tab
             is_hovered = rect.collidepoint(pygame.mouse.get_pos())
 
+            border_color = colors.GRAY
             if is_active:
-                bg_color = (40, 40, 80)
                 border_color = colors.BLUE
             elif is_hovered:
-                bg_color = (60, 60, 60)
                 border_color = colors.WHITE
-            else:
-                bg_color = (30, 30, 30)
-                border_color = colors.GRAY
 
-            pygame.draw.rect(
-                surface,
-                bg_color,
-                rect,
-                border_top_left_radius=8,
-                border_top_right_radius=8,
-            )
+            # Remove background fill for a cleaner look
+            # pygame.draw.rect(surface, bg_color, rect, ...)
+
             pygame.draw.rect(
                 surface,
                 border_color,
@@ -201,7 +193,8 @@ class StatisticsScene(Scene):
                 border_top_right_radius=8,
             )
 
-            text_surf = self.item_font.render(tab.value, True, colors.WHITE)
+            text_color = colors.WHITE if is_active or is_hovered else colors.GRAY
+            text_surf = self.item_font.render(tab.value, True, text_color)
             surface.blit(
                 text_surf,
                 (
@@ -212,7 +205,7 @@ class StatisticsScene(Scene):
 
     def _draw_tab_content(self, surface: pygame.Surface):
         content_rect = self.layout_rects["content_area"]
-        pygame.draw.rect(surface, (20, 20, 20), content_rect, border_radius=8)
+        # Apenas a borda, sem fundo
         pygame.draw.rect(surface, colors.GRAY, content_rect, 1, border_radius=8)
 
         # Clipping para garantir que o conteúdo não saia da área
@@ -233,7 +226,7 @@ class StatisticsScene(Scene):
         y = area.y + 10
 
         # Card: Resumo (aumentado para acomodar mais estatísticas)
-        card_rect = pygame.Rect(area.x, y, area.width, 200)
+        card_rect = pygame.Rect(area.x, y, area.width, 220)
         self._draw_card_background(surface, card_rect)
 
         # Título do Card
@@ -256,7 +249,7 @@ class StatisticsScene(Scene):
         for i, stat in enumerate(stats):
             col = i % 2
             row = i // 2
-            stat_surf = self.item_font.render(stat, True, colors.WHITE)
+            stat_surf = self.item_font.render(stat, True, colors.GRAY)
             surface.blit(
                 stat_surf,
                 (card_rect.x + 20 + col * (area.width / 2), stats_y + row * 35),
@@ -315,7 +308,7 @@ class StatisticsScene(Scene):
                 PerformanceState.LEARNING: colors.YELLOW,
                 PerformanceState.COMFORTABLE: colors.GREEN,
                 PerformanceState.DOMINATING: colors.BLUE,
-                PerformanceState.INCONSISTENT: (255, 165, 0),
+                PerformanceState.INCONSISTENT: colors.ORANGE,
             }
             bar_color = state_colors.get(state, colors.GRAY)
             pygame.draw.rect(
@@ -343,7 +336,7 @@ class StatisticsScene(Scene):
             y += card_rect.height + 15
 
     def _draw_card_background(self, surface: pygame.Surface, rect: pygame.Rect):
-        pygame.draw.rect(surface, (35, 35, 35), rect, border_radius=8)
+        # Apenas a borda, sem fundo, para consistência com settings.py
         pygame.draw.rect(surface, colors.GRAY, rect, 1, border_radius=8)
 
     def show_confirmation(self):
@@ -419,7 +412,7 @@ class ConfirmationDialog:
     def render(self, surface: pygame.Surface):
         surface.blit(self.overlay, (0, 0))
         # Caixa
-        pygame.draw.rect(surface, (20, 20, 20), self.box_rect, border_radius=12)
+        pygame.draw.rect(surface, colors.DARK_GRAY, self.box_rect, border_radius=12)
         pygame.draw.rect(surface, colors.WHITE, self.box_rect, 2, border_radius=12)
 
         # Texto
