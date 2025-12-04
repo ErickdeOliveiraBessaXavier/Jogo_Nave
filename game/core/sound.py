@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 from typing import Dict, List, cast, Any, Union
+from functools import wraps
 
 from .sound_config import (
     VOLUME_CONFIG,
@@ -28,6 +29,22 @@ def get_resource_path(relative_path: str) -> str:
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
+
+
+def require_audio(func):
+    """Decorador que verifica se o áudio está disponível antes de executar."""
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not getattr(self, 'audio_available', True):
+            return None
+        try:
+            return func(self, *args, **kwargs)
+        except pygame.error:
+            # Se ocorrer um erro de pygame, desabilitar áudio
+            if hasattr(self, 'audio_available'):
+                self.audio_available = False
+            return None
+    return wrapper
 
 
 class MusicStateManager:
@@ -89,9 +106,32 @@ class SoundManager:
     """Gerenciador de sons do jogo."""
 
     def __init__(self):
-        # Inicializar o mixer do pygame
-        if not pygame.mixer.get_init():
-            pygame.mixer.init()
+        self.audio_available = True
+        
+        # Inicializar o mixer do pygame com tratamento de erro
+        try:
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+        except pygame.error as e:
+            print(f"Aviso: Não foi possível inicializar o sistema de áudio: {e}")
+            print("O jogo continuará sem som.")
+            self.audio_available = False
+            # Inicializar variáveis mínimas necessárias
+            self._sounds: Dict[str, pygame.mixer.Sound] = {}
+            self._sound_groups: Dict[str, List[pygame.mixer.Sound]] = {}
+            self.master_volume: float = VOLUME_CONFIG["master"]
+            self.sfx_volume: float = VOLUME_CONFIG["sfx"]
+            self.music_volume: float = VOLUME_CONFIG["music"]
+            self.boss_music_multiplier: float = VOLUME_CONFIG["boss_music"]
+            self.last_shot_time: float = 0.0
+            self.shot_volume_base: float = VOLUME_CONFIG["shots"]
+            self.current_music: str | None = None
+            self.music_paused: bool = False
+            self.transition_thread: threading.Thread | None = None
+            self.transition_lock = threading.Lock()
+            self.original_music_volume: float = self.music_volume
+            self.music_state_manager = MusicStateManager(self)
+            return
 
         # Configurar número de canais
         pygame.mixer.set_num_channels(CHANNEL_CONFIG["max_channels"])
@@ -135,6 +175,7 @@ class SoundManager:
         # Gerenciador de estado da música
         self.music_state_manager = MusicStateManager(self)
 
+    @require_audio
     def _load_sounds(self):
         """Carrega todos os sons do jogo usando as configurações de SOUND_PATHS."""
         base_path = get_resource_path(str(SOUND_PATHS["base"]))
@@ -229,6 +270,7 @@ class SoundManager:
                 except pygame.error as e:
                     print(f"Erro ao carregar som {sound_path}: {e}")
 
+    @require_audio
     def play_shot(self):
         """Toca um som de tiro com técnicas anti-irritação."""
         if "shots" not in self._sound_groups or not self._sound_groups["shots"]:
@@ -260,27 +302,32 @@ class SoundManager:
 
         self.last_shot_time = current_time
 
+    @require_audio
     def play_explosion_asteroid(self):
         """Toca um som de explosão de asteroide aleatório."""
         if "explosions" in self._sound_groups and self._sound_groups["explosions"]:
             sound = random.choice(self._sound_groups["explosions"])
             sound.play()
 
+    @require_audio
     def play_explosion_alien(self):
         """Toca som de explosão de nave alienígena."""
         if "explosion_alien" in self._sounds:
             self._sounds["explosion_alien"].play()
 
+    @require_audio
     def play_explosion_boss(self):
         """Toca som de explosão do boss."""
         if "explosion_boss" in self._sounds:
             self._sounds["explosion_boss"].play()
 
+    @require_audio
     def play_boss_damage(self):
         """Toca som de dano no boss."""
         if "boss_damage" in self._sounds:
             self._sounds["boss_damage"].play()
 
+    @require_audio
     def play_boss_laser_charging(self):
         """Toca som de carregamento do laser do boss com controle de volume inteligente."""
         if "boss_laser_charging" in self._sounds:
@@ -294,12 +341,14 @@ class SoundManager:
             # Tocar no canal dedicado
             self.boss_laser_channel.play(sound)
 
+    @require_audio
     def stop_boss_laser_charging(self):
         """Para o som de carregamento do laser do boss e restaura música."""
         self.boss_laser_channel.stop()
         # Restaurar volume original da música
         self._duck_music(False)
 
+    @require_audio
     def play_boss_laser_fire(self):
         """Toca som de disparo do laser do boss com volume balanceado e controle."""
         if "boss_laser_fire" in self._sounds:
@@ -310,6 +359,7 @@ class SoundManager:
             # Tocar no canal dedicado para controle
             self.boss_laser_fire_channel.play(sound)
 
+    @require_audio
     def play_spike_boss_laser(self):
         """Toca som de disparo do laser do Spike Boss."""
         if "spike_boss_laser" in self._sounds:
@@ -317,10 +367,12 @@ class SoundManager:
             sound.set_volume(self.sfx_volume * self.master_volume)
             sound.play()
 
+    @require_audio
     def stop_boss_laser_fire(self):
         """Para o som de disparo do laser do boss."""
         self.boss_laser_fire_channel.stop()
 
+    @require_audio
     def _duck_music(self, duck: bool):
         """Controla o volume da música (ducking) para dar espaço aos efeitos do boss."""
         if not hasattr(pygame.mixer, "music") or not pygame.mixer.music.get_busy():
@@ -344,21 +396,25 @@ class SoundManager:
             final_volume = min(1.0, base_volume * self.master_volume)
             pygame.mixer.music.set_volume(final_volume)
 
+    @require_audio
     def play_ship_explosion(self):
         """Toca som de explosão da nave do jogador."""
         if "ship_explosion" in self._sounds:
             self._sounds["ship_explosion"].play()
 
+    @require_audio
     def play_upgrade_activate(self):
         """Toca som de ativação de aprimoramento."""
         if "upgrade_activate" in self._sounds:
             self._sounds["upgrade_activate"].play()
 
+    @require_audio
     def play_upgrade_denied(self):
         """Toca som de negação de aprimoramento (reutiliza hover para MVP)."""
         if "button_hover" in self._sounds:
             self._sounds["button_hover"].play()
 
+    @require_audio
     def play_sound(self, sound_name: str):
         """Toca um som específico pelo nome."""
         if sound_name in self._sounds:
@@ -398,12 +454,14 @@ class SoundManager:
         print(f"  🎼 Música: {self.music_volume:.1%}")
         print(f"  🔫 Tiros: {self.shot_volume_base:.1%}")
 
+    @require_audio
     def _update_all_volumes(self):
         """Atualiza o volume de todos os sons carregados."""
         final_volume = self.sfx_volume * self.master_volume
         for sound in self._sounds.values():
             sound.set_volume(final_volume)
 
+    @require_audio
     def stop_all(self):
         """Para todos os sons."""
         pygame.mixer.stop()
@@ -433,6 +491,7 @@ class SoundManager:
 
     # === MÉTODOS INTERNOS DE MÚSICA (CHAMADOS PELO STATE MANAGER) ===
 
+    @require_audio
     def play_background_music_internal(self):
         music_paths_config = cast(MusicPaths, SOUND_PATHS["music"])
         background_music_list = music_paths_config["background"]
@@ -444,6 +503,7 @@ class SoundManager:
             if os.path.exists(music_path) and self.current_music != chosen_music:
                 self._transition_to_music(music_path, "background")
 
+    @require_audio
     def play_boss_music_internal(self):
         music_paths = cast(MusicPaths, SOUND_PATHS["music"])
         music_path = get_resource_path(
@@ -452,6 +512,7 @@ class SoundManager:
         if os.path.exists(music_path) and self.current_music != "boss":
             self._transition_to_music(music_path, "boss")
 
+    @require_audio
     def play_spike_boss_music_internal(self):
         music_paths = cast(MusicPaths, SOUND_PATHS["music"])
         music_path = get_resource_path(
@@ -460,6 +521,7 @@ class SoundManager:
         if os.path.exists(music_path) and self.current_music != "spike_boss":
             self._transition_to_music(music_path, "spike_boss")
 
+    @require_audio
     def play_menu_music_internal(self):
         music_paths = cast(MusicPaths, SOUND_PATHS["music"])
         music_path = get_resource_path(
@@ -468,21 +530,25 @@ class SoundManager:
         if os.path.exists(music_path) and self.current_music != "menu":
             self._transition_to_music(music_path, "menu")
 
+    @require_audio
     def pause_music_internal(self):
         if not self.music_paused:
             pygame.mixer.music.pause()
             self.music_paused = True
 
+    @require_audio
     def resume_music_internal(self):
         if self.music_paused:
             pygame.mixer.music.unpause()
             self.music_paused = False
 
+    @require_audio
     def stop_music_internal(self):
         pygame.mixer.music.stop()
         self.current_music = None
         self.music_paused = False
 
+    @require_audio
     def _transition_to_music(self, music_path: str, music_type: str):
         """Realiza transição suave entre músicas."""
         if self.transition_thread and self.transition_thread.is_alive():
@@ -527,6 +593,7 @@ class SoundManager:
             except pygame.error as e:
                 print(f"Erro na transição de música: {e}")
 
+    @require_audio
     def fade_out_music(self, duration: float | None = None):
         """Faz fade out suave da música atual."""
         if duration is None:
@@ -537,6 +604,7 @@ class SoundManager:
         self.current_music = None
         self.music_paused = False
 
+    @require_audio
     def play_warning(self):
         """Toca o som de aviso/warning."""
         if "warning" in self._sounds:
