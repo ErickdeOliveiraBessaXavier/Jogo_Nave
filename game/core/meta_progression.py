@@ -501,7 +501,7 @@ class PlayerProfile:
         # Sistema de estrelas (moedas)
         self.stars_collected: int = 0  # Total de estrelas coletadas
         self.stars_spent: int = 0  # Total de estrelas gastas
-        self.unlocked_slots: int = 4  # Número de slots desbloqueados (começa com 4)
+        self.unlocked_slots: int = INITIAL_UNLOCKED_SLOTS  # Número de slots desbloqueados
 
         # Teclas para ativar aprimoramentos (1-9), limitadas por UPGRADE_SLOT_COUNT
         default_keys: list[int] = [

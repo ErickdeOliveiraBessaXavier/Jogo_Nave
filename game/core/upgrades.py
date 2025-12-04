@@ -10,6 +10,12 @@ try:
 except Exception:  # pragma: no cover - defensive fallback for isolated tests
     Config = None  # type: ignore
 
+try:
+    from .upgrades_config import EMP_BASE_DURATION
+    _emp_base_duration = EMP_BASE_DURATION
+except Exception:
+    _emp_base_duration = 10.0  # fallback
+
 
 class UpgradeType(Enum):
     SHIELD_BURST = auto()
@@ -324,7 +330,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         icon_id="emp",
         category=UpgradeCategory.UTILITY,
         base_cooldown=50.0,
-        base_duration=3.0,  # mais lento por mais tempo
+        base_duration=_emp_base_duration,
         base_charges=None,
     ),
 }

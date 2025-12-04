@@ -110,6 +110,11 @@ class PlayingScene(Scene):
         self.enemy_blink_interval = 0.2  # Intervalo de piscar (200ms)
         self.enemy_visible = True  # Controle de visibilidade para piscar
 
+        # Sistema de multiplicador de score
+        self.score_multiplier_timer = 0.0
+        self.score_multiplier_active = False
+        self.score_multiplier_value = 1.5
+
         # Aprimoramentos ativos (slots)
         self.upgrade_slots: list[ActiveUpgrade | None] = []
         self._init_upgrades_from_profile()
@@ -194,6 +199,13 @@ class PlayingScene(Scene):
         # Timers
         self.shoot_cd = max(0.0, self.shoot_cd - dt)
         self.warning_timer = max(0.0, self.warning_timer - dt)
+        
+        # Atualizar timer de multiplicador de score
+        if self.score_multiplier_active:
+            self.score_multiplier_timer -= dt
+            if self.score_multiplier_timer <= 0.0:
+                self.score_multiplier_timer = 0.0
+                self.score_multiplier_active = False
 
         # Atualizar upgrades (cooldown/duração)
         self._update_upgrades(dt)
@@ -482,14 +494,20 @@ class PlayingScene(Scene):
                 * self.level_config.score_multiplier
                 * self.difficulty_settings["rewards_multiplier"]
             )
+            # Aplicar multiplicador de score se ativo
+            if self.score_multiplier_active:
+                adjusted_pts = int(adjusted_pts * self.score_multiplier_value)
             self.entity_manager.floating_scores.append(
                 FloatingScore(x, y, adjusted_pts)
             )
-        self.score += int(
+        score_to_add = int(
             gain
             * self.level_config.score_multiplier
             * self.difficulty_settings["rewards_multiplier"]
         )
+        if self.score_multiplier_active:
+            score_to_add = int(score_to_add * self.score_multiplier_value)
+        self.score += score_to_add
         self.total_enemies_destroyed += destroyed
         self.enemies_destroyed_in_level += destroyed
         # Regra: spawnar estrela a cada N inimigos destruídos
@@ -530,6 +548,8 @@ class PlayingScene(Scene):
                     self.entity_manager,
                 )
                 score_gain += mini_ship_boss_gain
+            if self.score_multiplier_active:
+                score_gain = int(score_gain * self.score_multiplier_value)
             self.score += score_gain
 
         # Mini ships vs Spikes
@@ -539,6 +559,8 @@ class PlayingScene(Scene):
                 self.entity_manager.spikes,
                 self.entity_manager,
             )
+            if self.score_multiplier_active:
+                spike_gain = int(spike_gain * self.score_multiplier_value)
             self.score += spike_gain
 
         # Colisão da nave com TODOS os inimigos usando grid única
@@ -615,6 +637,8 @@ class PlayingScene(Scene):
             self.entity_manager.spikes,
             self.entity_manager,
         )
+        if self.score_multiplier_active:
+            spike_score = int(spike_score * self.score_multiplier_value)
         self.score += spike_score
 
         collected_powerups = self.collisions.ship_vs_powerups(
@@ -653,7 +677,9 @@ class PlayingScene(Scene):
                         self.ship.speed_boost_timer, Config.SPEED_BOOST_DURATION
                     )
                 elif kind == "score":
-                    self.score += Config.POWERUP_SCORE_BONUS
+                    # Ativar multiplicador de score por 15 segundos
+                    self.score_multiplier_timer = 15.0
+                    self.score_multiplier_active = True
                 elif kind == "piercing_shot":
                     self.ship.piercing_shot_timer = max(
                         self.ship.piercing_shot_timer, Config.PIERCING_SHOT_DURATION
@@ -683,7 +709,10 @@ class PlayingScene(Scene):
                     self.entity_manager.mini_ships.clear()
                     self.entity_manager.mini_ships.append(MiniShip(self.ship, "left"))
                     self.entity_manager.mini_ships.append(MiniShip(self.ship, "right"))
-                    self.score += Config.POWERUP_SCORE_BONUS * 2
+                    rainbow_score = Config.POWERUP_SCORE_BONUS * 2
+                    if self.score_multiplier_active:
+                        rainbow_score = int(rainbow_score * self.score_multiplier_value)
+                    self.score += rainbow_score
 
                 # Meta-progression: Track powerup collection
                 self.level_powerups_collected += 1
@@ -825,7 +854,10 @@ class PlayingScene(Scene):
 
         self.entity_manager.boss = None
         self.boss_fight_active = False
-        self.score += Config.BOSS_DEFEAT_SCORE
+        boss_score = Config.BOSS_DEFEAT_SCORE
+        if self.score_multiplier_active:
+            boss_score = int(boss_score * self.score_multiplier_value)
+        self.score += boss_score
 
         # Reset music transition flags for next boss
         self.music_fade_started = False
@@ -965,6 +997,10 @@ class PlayingScene(Scene):
             self.ship,
             self.level_config.level_number,
             self.difficulty_preset,
+            score_multiplier_active=self.score_multiplier_active,
+            score_multiplier_timer=self.score_multiplier_timer,
+            mini_ships_active=self.ship.mini_ships_timer > 0,
+            mini_ships_timer=self.ship.mini_ships_timer,
         )
 
         # HUD de aprimoramentos (na game_surface)

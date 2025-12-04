@@ -401,6 +401,10 @@ class Renderer:
         ship: Optional["Ship"] = None,
         level_number: int = 1,
         difficulty_preset: Optional["DifficultyPreset"] = None,
+        score_multiplier_active: bool = False,
+        score_multiplier_timer: float = 0.0,
+        mini_ships_active: bool = False,
+        mini_ships_timer: float = 0.0,
     ):
         # Renderizar com cache (só re-renderiza se valores mudaram)
         s = self._render_text_cached(
@@ -462,6 +466,14 @@ class Renderer:
                 line(f"[2X] Tiro Duplo: {ds_s:.1f}s", colors.GREEN)
             if sp_s > 0:
                 line(f"[V] Velocidade: {sp_s:.1f}s", colors.YELLOW)
+            
+            # Mostrar multiplicador de score se ativo
+            if score_multiplier_active and score_multiplier_timer > 0:
+                line(f"[x1.5] Score x1.5: {score_multiplier_timer:.1f}s", colors.YELLOW)
+            
+            # Mostrar mini ships se ativo
+            if mini_ships_active and mini_ships_timer > 0:
+                line(f"[M] Mini Ships: {mini_ships_timer:.1f}s", colors.CYAN)
 
     def overlay(self, surface: pygame.Surface, title: str, subtitle: str = ""):
         overlay = pygame.Surface(

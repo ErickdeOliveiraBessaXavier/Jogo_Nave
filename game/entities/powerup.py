@@ -1,6 +1,7 @@
 import random
 import pygame
-from typing import Optional
+import colorsys
+from typing import Optional, Tuple
 from ..core.config import config as Config, PowerUpType
 from ..core.assets import get_font
 from ..core.colors import (
@@ -75,7 +76,7 @@ class PowerUp:
             "shield": "[S]",
             "double_shot": "[2X]",
             "speed": "[V]",
-            "score": "[*]",
+            "score": "[x1.5]",
             "piercing_shot": "[P]",
             "mini_ships": "[M]",
             "rainbow": "[ALL]",
@@ -90,30 +91,46 @@ class PowerUp:
             pulse_size,
         )
 
-        # Sombra
-        shadow_rect = pulse_rect.copy()
-        shadow_rect.x += 2
-        shadow_rect.y += 2
-        pygame.draw.ellipse(surface, (0, 0, 0, 128), shadow_rect)
-
-        # Efeito especial para o power-up rainbow
-        if self.kind == "rainbow":
-            self._draw_rainbow_effect(surface, pulse_rect)
-        else:
-            # Fundo principal
-            pygame.draw.ellipse(
-                surface,
-                pygame.Color(color_map.get(self.kind, (255, 255, 255))),
-                pulse_rect,
+        # Criar superfície com alpha para blur/transparência
+        blur_surface = pygame.Surface((pulse_size, pulse_size), pygame.SRCALPHA)
+        
+        # Fundo cinza com opacidade 0.8 e blur simulado (múltiplas camadas)
+        for i in range(3):
+            alpha = int(204 - i * 20)  # 204 = 0.8 * 255, decrescendo para simular blur
+            size_offset = i * 2
+            blur_rect = pygame.Rect(
+                size_offset,
+                size_offset,
+                pulse_size - size_offset * 2,
+                pulse_size - size_offset * 2
             )
+            pygame.draw.ellipse(blur_surface, (50, 50, 50, alpha), blur_rect)
+        
+        # Blit na surface principal
+        surface.blit(blur_surface, (pulse_rect.x, pulse_rect.y))
 
-            # Borda brilhante
-            pygame.draw.ellipse(surface, (255, 255, 255), pulse_rect, 2)
+        # Determinar cor da borda e texto
+        if self.kind == "rainbow":
+            # Rainbow animado - cicla através das cores do arco-íris
+            hue = (self.animation_timer * 50) % 360
+            # Converter HSV para RGB
+            r, g, b = colorsys.hsv_to_rgb(hue / 360.0, 1.0, 1.0)
+            border_color = (int(r * 255), int(g * 255), int(b * 255))
+        else:
+            border_color = color_map.get(self.kind, (255, 255, 255))
 
-        # Desenha o texto
-        self._draw_text(surface, text_map.get(self.kind, "[?]"))
+        # Borda colorida com espessura maior para destaque
+        pygame.draw.ellipse(surface, border_color, pulse_rect, 3)
+        
+        # Borda interna mais fina e brilhante
+        inner_rect = pulse_rect.inflate(-6, -6)
+        pygame.draw.ellipse(surface, border_color, inner_rect, 1)
 
-    def _draw_text(self, surface: pygame.Surface, text: str):
+        # Desenha o texto - rainbow usa cor animada, outros usam branco
+        text_color = border_color if self.kind == "rainbow" else (255, 255, 255)
+        self._draw_text(surface, text_map.get(self.kind, "[?]"), text_color)
+
+    def _draw_text(self, surface: pygame.Surface, text: str, color: Tuple[int, int, int] = (255, 255, 255)):
         """Desenha texto simples para cada tipo de power-up"""
         try:
             # Usa o sistema de assets para carregar a fonte
@@ -122,8 +139,8 @@ class PowerUp:
             # Fallback para fonte padrão se get_font falhar
             font = pygame.font.Font(None, 16)
 
-        # Renderiza o texto
-        text_surface = font.render(text, True, (255, 255, 255))
+        # Renderiza o texto com a cor fornecida
+        text_surface = font.render(text, True, color)
 
         # Centraliza o texto no power-up usando o centro do círculo pulsante
         circle_center_x = self.rect.centerx
