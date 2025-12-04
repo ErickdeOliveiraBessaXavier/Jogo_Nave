@@ -96,7 +96,7 @@ class StatisticsScene(Scene):
             if self.dialog:
                 self.close_confirmation()
             else:
-                self.app.states.pop()
+                self._return_to_menu()
             return
 
         if self.dialog:
@@ -106,7 +106,7 @@ class StatisticsScene(Scene):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             pos = event.pos
             if self.layout_rects["back_button"].collidepoint(pos):
-                self.app.states.pop()
+                self._return_to_menu()
             elif self.layout_rects["reset_button"].collidepoint(pos):
                 self.show_confirmation()
             else:
@@ -114,6 +114,12 @@ class StatisticsScene(Scene):
                     if rect.collidepoint(pos):
                         self._switch_tab(list(StatTab)[i])
                         break
+
+    def _return_to_menu(self):
+        """Retorna ao menu principal de forma segura."""
+        from .main_menu import MainMenuScene
+        # Usar switch para substituir toda a pilha pelo menu
+        self.app.states.switch(MainMenuScene(self.app))
 
     def render(self, surface: pygame.Surface):
         surface.fill(colors.BLACK)

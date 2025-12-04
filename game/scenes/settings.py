@@ -79,12 +79,12 @@ class SettingsScene(Scene):
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self.app.states.pop()
+            self._return_to_menu()
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             pos = event.pos
             if self.layout_rects["back_button"].collidepoint(pos):
-                self.app.states.pop()
+                self._return_to_menu()
                 return
 
             # Sliders
@@ -238,3 +238,9 @@ class SettingsScene(Scene):
             y_offset += 25
 
         surface.set_clip(None)
+
+    def _return_to_menu(self):
+        """Retorna ao menu principal de forma segura."""
+        from .main_menu import MainMenuScene
+        # Usar switch para substituir toda a pilha pelo menu
+        self.app.states.switch(MainMenuScene(self.app))

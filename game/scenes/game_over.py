@@ -68,27 +68,20 @@ class GameOverScene(Scene):
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             # Voltar ao menu principal
             if self.back_to_menu_button.collidepoint(event.pos):
-                # Parar música atual e transitar para música do menu
-                sound_manager.stop_music()
-                from ..core.sound_config import MusicState
-                sound_manager.music_state_manager.transition_to(
-                    MusicState.MENU, force=True
-                )
-                
-                try:
-                    from typing import cast
-                    from .main_menu import MainMenu  # type: ignore
-                    menu_scene = cast(Scene, MainMenu(self.app))
-                    self.app.states.switch(menu_scene)
-                except Exception:
-                    # Fallback: tentar classe alternativa se o nome for diferente
-                    try:
-                        from .main_menu import MainMenuScene  # type: ignore
-                        from typing import cast
-                        menu_scene2 = cast(Scene, MainMenuScene(self.app))
-                        self.app.states.switch(menu_scene2)
-                    except Exception:
-                        pass
+                self._return_to_menu()
+
+    def _return_to_menu(self):
+        """Retorna ao menu principal de forma segura."""
+        # Parar música atual e transitar para música do menu
+        sound_manager.stop_music()
+        from ..core.sound_config import MusicState
+        sound_manager.music_state_manager.transition_to(
+            MusicState.MENU, force=True
+        )
+        
+        # Importar MainMenuScene e usar switch
+        from .main_menu import MainMenuScene
+        self.app.states.switch(MainMenuScene(self.app))
 
     def render(self, surface: pygame.Surface):
         # Render the frozen game state first
