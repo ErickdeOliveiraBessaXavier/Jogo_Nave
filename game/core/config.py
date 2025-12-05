@@ -94,13 +94,13 @@ class Config:
         default_factory=lambda: {
             # 🔵 COMUM (45% total) - Power-ups básicos e frequentes
             PowerUpType.SHIELD: 0.10,  # 20% - Escudo básico
-            PowerUpType.DOUBLE_SHOT: 0.25,  # 25% - Tiro duplo
+            PowerUpType.DOUBLE_SHOT: 0.22,  # 25% - Tiro duplo
             # 🟢 INCOMUM (15% total) - Power-ups situacionais
             PowerUpType.SPEED: 0.15,  # 15% - Velocidade aumentada
             # 🟠 RARO (35% total) - Power-ups poderosos mas raros
             PowerUpType.PIERCING_SHOT: 0.15,  # 15% - Tiro perfurante
-            PowerUpType.MINI_SHIPS: 0.20,  # 10% - Naves auxiliares
-            PowerUpType.LIFE: 0.10,  # 10% - Vida extra
+            PowerUpType.MINI_SHIPS: 0.17,  # 10% - Naves auxiliares
+            PowerUpType.LIFE: 0.05,  # 10% - Vida extra
             # 🟣 ÉPICO (4% total) - Power-ups muito valiosos
             PowerUpType.SCORE: 0.04,  # 4% - Multiplicador de pontos
             # 🟡 LENDÁRIO (1% total) - Power-ups ultra-raros
