@@ -166,6 +166,9 @@ class Config:
     BOSS_FRENZY_SPEED: float = 6.0  # Reduzido de 8.0 para 6.0
     BOSS_FRENZY_SHAKE_DURATION: float = 3.0
 
+    # Boss damage modifiers (nerf geral para todos os aprimoramentos)
+    BOSS_UPGRADE_DAMAGE_MULTIPLIER: float = 0.5  # Todos os aprimoramentos fazem 50% de dano em boss
+
     # Boss laser system
     LASER_DISTANCE: float = 800.0
     BOSS_LASER_LIFETIME: float = 2.0

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Type
+from typing import Type, Union
 from functools import lru_cache
 import random
 import math
@@ -246,6 +246,7 @@ class ProceduralLevelGenerator:
         self.difficulty_curves = DifficultyCurves()
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
+        self._difficulty_cache: dict[Union[int, str], float] = {}  # Cache for difficulty and score multiplier calculations
 
     # OPT #6: Cache últimos 50 níveis gerados para não recalcular
     @lru_cache(maxsize=50)
@@ -269,6 +270,10 @@ class ProceduralLevelGenerator:
 
     def _calculate_difficulty(self, level_number: int) -> float:
         """Calcula multiplicador de dificuldade usando curva configurada."""
+        # OPT #8: Cache difficulty calculations per level_number
+        if level_number in self._difficulty_cache:
+            return self._difficulty_cache[level_number]
+        
         curve = DifficultyConfig.SPAWN_RATE_CURVE
         scaling = self.difficulty_settings["difficulty_scaling"]
         base = 1.0
@@ -280,7 +285,12 @@ class ProceduralLevelGenerator:
         else:  # linear
             difficulty = base + (level_number * scaling)
 
-        return min(difficulty, DifficultyConfig.MAX_DIFFICULTY_MULTIPLIER)
+        difficulty = min(difficulty, DifficultyConfig.MAX_DIFFICULTY_MULTIPLIER)
+        
+        # Store in cache
+        self._difficulty_cache[level_number] = difficulty
+        
+        return difficulty
 
     def _choose_theme(self, level_number: int, rng: random.Random) -> LevelTheme | None:
         """Escolhe um tema baseado no nível."""
@@ -331,11 +341,21 @@ class ProceduralLevelGenerator:
 
     def _calculate_score_multiplier(self, level_number: int) -> float:
         """Calcula o multiplicador de pontuação baseado no nível."""
+        # OPT #9: Cache score multiplier calculations per level_number
+        cache_key = f"score_{level_number}"
+        if cache_key in self._difficulty_cache:
+            return self._difficulty_cache[cache_key]
+        
         # Multiplicador cresce logaritmicamente com o nível
         # Nível 1: 1.0x, Nível 10: ~2.0x, Nível 20: ~2.5x, etc.
         base_multiplier = 1.0
         level_bonus = math.log1p(level_number) * 0.3  # Crescimento logarítmico
-        return base_multiplier + level_bonus
+        multiplier = base_multiplier + level_bonus
+        
+        # Store in cache
+        self._difficulty_cache[cache_key] = multiplier
+        
+        return multiplier
 
     def _generate_config(
         self,

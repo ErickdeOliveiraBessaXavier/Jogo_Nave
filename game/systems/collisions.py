@@ -465,7 +465,10 @@ class Collisions:
             if b_rect.colliderect(boss_rect):  # Usa caches
                 if not b.piercing:
                     b.dead = True
-                boss.take_damage(b.damage)
+                # Apply damage modifier for all upgrades against boss
+                from ..core.config import config as Config
+                damage = int(b.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                boss.take_damage(damage)
                 # Tocar som de dano no boss
                 sound_manager.play_boss_damage()
                 entity_manager.spawn_explosion(b.x, b.y, size=15)
@@ -589,7 +592,10 @@ class Collisions:
         for b in mini_ship_bullets[:]:
             if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
                 b.dead = True
-                boss.take_damage(b.damage)
+                # Apply damage modifier for mini ship upgrades against boss
+                from ..core.config import config as Config
+                damage = int(b.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                boss.take_damage(damage)
                 sound_manager.play_boss_damage()
                 entity_manager.spawn_explosion(b.x, b.y, size=15)
 
@@ -621,7 +627,10 @@ class Collisions:
         for b in mini_ship_bullets[:]:
             if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
                 b.dead = True
-                boss.take_damage(b.damage)
+                # Apply damage modifier for mini ship upgrades against spike boss
+                from ..core.config import config as Config
+                damage = int(b.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                boss.take_damage(damage)
                 sound_manager.play_boss_damage()
                 entity_manager.spawn_explosion(b.x, b.y, size=15)
 
@@ -770,7 +779,10 @@ class Collisions:
             if b_rect.colliderect(boss_rect):  # Usa caches
                 if not b.piercing:
                     b.dead = True
-                boss.take_damage(b.damage)
+                # Apply damage modifier for all upgrades against spike boss
+                from ..core.config import config as Config
+                damage = int(b.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                boss.take_damage(damage)
                 sound_manager.play_boss_damage()
                 entity_manager.spawn_explosion(b.x, b.y, size=15)
 
@@ -967,7 +979,10 @@ class Collisions:
                     continue
 
                 laser.hit_enemies.add(boss_id)
-                boss.take_damage(laser.damage)
+                # Apply damage modifier for laser upgrade against boss
+                from ..core.config import config as Config
+                damage = int(laser.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                boss.take_damage(damage)
                 sound_manager.play_boss_damage()
 
                 # Explosão no ponto de impacto

@@ -11,15 +11,34 @@ _SHAPE_CACHE: dict[int, List[Tuple[float, float]]] = {}
 
 
 def _get_or_create_shape(size: int) -> List[Tuple[float, float]]:
-    """Retorna shape cacheado ou cria novo."""
+    """Retorna shape cacheado ou cria novo com irregularidade balanceada."""
     if size not in _SHAPE_CACHE:
         pts: List[Tuple[float, float]] = []
-        num = 6
-        for i in range(num):
-            ang = (2 * math.pi * i) / num
-            rv = random.uniform(0.6, 1.4)
-            r = size * rv
+        # Mais pontos para meteoros grandes
+        num_points = max(8, int(size / 3))
+        
+        # Gerar raios base para cada ponto
+        radii = []
+        for i in range(num_points):
+            # Variação moderada: 0.7 a 1.3
+            radii.append(random.uniform(0.7, 1.3))
+        
+        # Suavização leve para evitar picos extremos, mas mantendo variação
+        smoothed_radii = []
+        for i in range(num_points):
+            prev_r = radii[(i - 1) % num_points]
+            curr_r = radii[i]
+            next_r = radii[(i + 1) % num_points]
+            # Suavização leve: 10% anterior + 80% atual + 10% próximo
+            smooth_r = (prev_r * 0.1 + curr_r * 0.8 + next_r * 0.1)
+            smoothed_radii.append(smooth_r)
+        
+        # Criar pontos com raios suavizados
+        for i in range(num_points):
+            ang = (2 * math.pi * i) / num_points
+            r = size * smoothed_radii[i]
             pts.append((r * math.cos(ang), r * math.sin(ang)))
+        
         _SHAPE_CACHE[size] = pts
     return _SHAPE_CACHE[size]
 
