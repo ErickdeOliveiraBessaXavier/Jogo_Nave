@@ -12,6 +12,8 @@ class PowerUpType(Enum):
     RAINBOW = "rainbow"
     PIERCING_SHOT = "piercing_shot"
     MINI_SHIPS = "mini_ships"
+    COOLDOWN_HASTE = "cooldown_haste"  # Reduz tempo de recarga
+    TIME_STOP = "time_stop"  # Congela inimigos e projéteis
 
 
 @dataclass(frozen=True)
@@ -78,6 +80,9 @@ class Config:
     RAINBOW_DURATION: float = 15.0
     PIERCING_SHOT_DURATION: float = 7.0
     MINI_SHIPS_DURATION: float = 25.0
+    COOLDOWN_HASTE_DURATION: float = 10.0
+    COOLDOWN_HASTE_MULTIPLIER: float = 2.0
+    TIME_STOP_DURATION: float = 3.0
     SPEED_ATTACK_MULTIPLIER: float = 2.0
     PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER: float = 1.5
     EXPLOSIVE_SHOT_FIRE_RATE_PENALTY: float = (
@@ -100,6 +105,9 @@ class Config:
             PowerUpType.SCORE: 0.04,  # 4% - Multiplicador de pontos
             # 🟡 LENDÁRIO (1% total) - Power-ups ultra-raros
             PowerUpType.RAINBOW: 0.01,  # 1% - Power-up especial
+            # 🟠 NOVOS
+            PowerUpType.COOLDOWN_HASTE: 0.07,  # 7% - Reduz tempo de recarga
+            PowerUpType.TIME_STOP: 0.04,  # 4% - Congelamento total
         }
     )
 

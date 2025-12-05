@@ -119,7 +119,15 @@ class PlayingScene(Scene):
             "rainbow_duration": Config.RAINBOW_DURATION,
             "rainbow_duration_invuln": Config.RAINBOW_DURATION * 1000,
             "rainbow_score": Config.POWERUP_SCORE_BONUS * 2,
+            "cooldown_haste_duration": Config.COOLDOWN_HASTE_DURATION,
+            "cooldown_haste_multiplier": Config.COOLDOWN_HASTE_MULTIPLIER,
+            "time_stop_duration": Config.TIME_STOP_DURATION,
         }
+
+        # Timers de novos power-ups
+        self.cooldown_haste_timer = 0.0
+        self.time_stop_timer = 0.0
+        self.freeze_active = False
 
         # Sistema de limpeza de inimigos restantes
         self.enemy_cleanup_active = False  # Se o timer de limpeza está ativo
@@ -221,7 +229,20 @@ class PlayingScene(Scene):
             return
 
         # Timers
-        self.shoot_cd = max(0.0, self.shoot_cd - dt)
+        if self.cooldown_haste_timer > 0.0:
+            self.cooldown_haste_timer = max(
+                0.0, self.cooldown_haste_timer - dt
+            )
+        cooldown_mul = (
+            self._powerup_values["cooldown_haste_multiplier"]
+            if self.cooldown_haste_timer > 0.0
+            else 1.0
+        )
+
+        self.time_stop_timer = max(0.0, self.time_stop_timer - dt)
+        self.freeze_active = self.time_stop_timer > 0.0
+
+        self.shoot_cd = max(0.0, self.shoot_cd - dt * cooldown_mul)
         self.warning_timer = max(0.0, self.warning_timer - dt)
 
         # Atualizar timer de multiplicador de score
@@ -315,12 +336,13 @@ class PlayingScene(Scene):
             and not self.pre_boss_transition
             and not self.level_transition_active
         ):
-            self.enemy_spawner.update(
-                dt,
-                self.entity_manager,
-                self.ship.rect.centerx,
-                self.ship.rect.centery,
-            )
+            if not self.freeze_active:
+                self.enemy_spawner.update(
+                    dt,
+                    self.entity_manager,
+                    self.ship.rect.centerx,
+                    self.ship.rect.centery,
+                )
 
             # Não spawnar power-ups no Nightmare (regra especial)
             special_rules = self.difficulty_settings.get("special_rules", [])
@@ -330,7 +352,9 @@ class PlayingScene(Scene):
             # Spawner de estrelas
             self.star_spawner.update(dt, self.entity_manager.stars)
 
-        self.entity_manager.update(dt, self.ship.rect.centerx, self.ship.rect.centery)
+        self.entity_manager.update(
+            dt, self.ship.rect.centerx, self.ship.rect.centery, freeze_enemies=self.freeze_active
+        )
 
         # Processar colisões sempre (incluindo durante transições)
         self._handle_collisions()
@@ -858,6 +882,18 @@ class PlayingScene(Scene):
                     self.entity_manager.mini_ships.clear()
                     self.entity_manager.mini_ships.append(MiniShip(self.ship, "left"))
                     self.entity_manager.mini_ships.append(MiniShip(self.ship, "right"))
+                elif kind == "cooldown_haste":
+                    # Stack duration but keep multiplier consistent
+                    self.cooldown_haste_timer = max(
+                        self.cooldown_haste_timer,
+                        self._powerup_values["cooldown_haste_duration"],
+                    )
+                elif kind == "time_stop":
+                    self.time_stop_timer = max(
+                        self.time_stop_timer,
+                        self._powerup_values["time_stop_duration"],
+                    )
+                    self.freeze_active = True
                 elif kind == "rainbow":
                     self.lives += 1
                     self.ship.lives = self.lives

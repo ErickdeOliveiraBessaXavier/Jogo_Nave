@@ -142,8 +142,10 @@ class EntityManager:
         for spike in self.spikes:
             self.spike_spatial_grid.insert_from_rect(spike)
 
-    def update(self, dt: float, player_x: float, player_y: float):
+    def update(self, dt: float, player_x: float, player_y: float, freeze_enemies: bool = False):
         from typing import Any
+
+        enemy_dt = 0.0 if freeze_enemies else dt
 
         new_alien_bullets: list[AlienBullet] = []
         new_eye_lasers: list[EyeLaser] = []
@@ -222,7 +224,7 @@ class EntityManager:
         for formation in self.formations[:]:
             update_linger(formation, dt)
             mul = emp_mul_for(formation)
-            bullets_from_formation = formation.update(dt * mul)
+            bullets_from_formation = formation.update(enemy_dt * mul)
             if bullets_from_formation:
                 new_alien_bullets.extend(bullets_from_formation)
 
@@ -231,18 +233,19 @@ class EntityManager:
             enemy_list = self._cached_all_enemies if b.homing else None
             b.update(dt, enemy_list)
 
-        # Update bullets simples (consolidado)
-        from typing import Any
-
-        simple_bullets: list[Any] = [
-            *self.alien_bullets,
-            *self.mini_ship_bullets,
-            *self.boss_lasers,
-            *self.player_lasers,
-            *self.eye_lasers,
-        ]
-        for bullet in simple_bullets:
+        # Atualizar projéteis amigáveis (não congelam)
+        for bullet in self.mini_ship_bullets:
             bullet.update(dt)
+        for bullet in self.player_lasers:
+            bullet.update(dt)
+
+        # Atualizar projéteis inimigos (congelam)
+        for bullet in self.alien_bullets:
+            bullet.update(enemy_dt)
+        for bullet in self.boss_lasers:
+            bullet.update(enemy_dt)
+        for bullet in self.eye_lasers:
+            bullet.update(enemy_dt)
         # Update explosões do pool
         self.explosion_pool.update(dt)
         for me in self.mine_explosions:
@@ -266,13 +269,13 @@ class EntityManager:
         for spike in self.spikes:
             update_linger(spike, dt)
             mul = emp_mul_for(spike)
-            spike.update(dt * mul, player_x, player_y, attacking_count)
+            spike.update(enemy_dt * mul, player_x, player_y, attacking_count)
 
         if self.boss:
             # SpikeBoss retorna (List[Spike], List[SpikeBossLaser])
             if isinstance(self.boss, SpikeBoss):
                 spawned_spikes, spike_boss_lasers = self.boss.update(
-                    dt, player_x, player_y, self.spikes
+                    enemy_dt, player_x, player_y, self.spikes
                 )
                 if spawned_spikes:
                     self.spikes.extend(spawned_spikes)
@@ -281,7 +284,7 @@ class EntityManager:
             # Boss normal retorna (List[BossLaser], List[Meteor], List[BossSquare])
             else:
                 lasers_fired, spawned_meteors, spawned_squares = self.boss.update(
-                    dt, player_x, player_y
+                    enemy_dt, player_x, player_y
                 )
                 if lasers_fired:
                     self.boss_lasers.extend(lasers_fired)
@@ -296,18 +299,19 @@ class EntityManager:
                         self.boss_squares.append(square)
         for enemy in self.enemies:
             mul = emp_mul_for(enemy)
+            scaled_dt = enemy_dt * mul
             if isinstance(enemy, Alien):
-                shot = enemy.update(dt * mul)
+                shot = enemy.update(scaled_dt)
                 if shot:
                     new_alien_bullets.extend(shot)
             elif isinstance(enemy, EyeEnemy):
-                shot = enemy.update(dt * mul, player_x, player_y)
+                shot = enemy.update(scaled_dt, player_x, player_y)
                 if shot:
                     new_eye_lasers.extend(shot)
             elif isinstance(enemy, GuidedMeteor):
-                enemy.update(dt * mul, player_x, player_y)
+                enemy.update(scaled_dt, player_x, player_y)
             else:
-                enemy.update(dt * mul)
+                enemy.update(scaled_dt)
 
         self.alien_bullets.extend(new_alien_bullets)
         self.eye_lasers.extend(new_eye_lasers)
@@ -317,13 +321,13 @@ class EntityManager:
         screen_width = screen.get_width() if screen else 1600
         screen_height = screen.get_height() if screen else 900
         for square in self.boss_squares[:]:
-            square.update(dt, screen_width, screen_height)
+            square.update(enemy_dt, screen_width, screen_height)
             if square.dead:
                 self.boss_squares.remove(square)
 
         # Atualizar marcadores de bombardeio aéreo
         for marker in self.air_strike_markers[:]:
-            marker.update(dt)
+            marker.update(enemy_dt)
             if marker.dead:
                 # Quando o marcador termina, spawnar a bomba
                 self.spawn_air_strike_bomb(marker.target_x, marker.target_y)
@@ -331,7 +335,7 @@ class EntityManager:
 
         # Atualizar bombas de bombardeio aéreo
         for bomb in self.air_strike_bombs[:]:
-            bomb.update(dt)
+            bomb.update(enemy_dt)
             if bomb.dead:
                 self.air_strike_bombs.remove(bomb)
 

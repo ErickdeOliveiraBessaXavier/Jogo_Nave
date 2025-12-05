@@ -14,6 +14,8 @@ from ..core.colors import (
     POWERUP_RAINBOW,
     RAINBOW_COLORS,
     POWERUP_MINI_SHIPS,
+    POWERUP_COOLDOWN_HASTE,
+    POWERUP_TIME_STOP,
 )
 
 
@@ -69,6 +71,8 @@ class PowerUp:
             "piercing_shot": POWERUP_PIERCING_SHOT,
             "mini_ships": POWERUP_MINI_SHIPS,
             "rainbow": POWERUP_RAINBOW,
+            "cooldown_haste": POWERUP_COOLDOWN_HASTE,
+            "time_stop": POWERUP_TIME_STOP,
         }
 
         text_map = {
@@ -80,6 +84,8 @@ class PowerUp:
             "piercing_shot": "[P]",
             "mini_ships": "[M]",
             "rainbow": "[ALL]",
+            "cooldown_haste": "[CD]",
+            "time_stop": "[STOP]",
         }
 
         # Desenha o fundo do power-up com pulsação
