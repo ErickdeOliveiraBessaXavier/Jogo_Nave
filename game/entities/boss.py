@@ -120,9 +120,14 @@ class Boss:
     def _init_floating_squares(self) -> None:
         """Inicializa os quadrados flutuantes orbitando ao redor do boss."""
         import random
+        import math
 
         # Criar 14 quadrados em órbitas ao redor do boss
         num_squares = 14
+        
+        # Calcular posição inicial do boss (centro)
+        boss_center_x = self.x + self.w / 2
+        boss_center_y = self.y + self.h / 2
 
         for _ in range(num_squares):
             # Distância orbital aleatória (raio da órbita)
@@ -145,10 +150,15 @@ class Boss:
             # Tamanho aleatório
             size = random.uniform(14, 25)
 
-            # Criar BossSquare orbital
+            # Calcular posição inicial na órbita (para evitar bug visual)
+            angle_rad = math.radians(orbit_angle)
+            initial_x = boss_center_x + math.cos(angle_rad) * orbit_radius
+            initial_y = boss_center_y + math.sin(angle_rad) * orbit_radius
+
+            # Criar BossSquare orbital com posição inicial correta
             square = BossSquare(
-                x=0,
-                y=0,
+                x=initial_x,
+                y=initial_y,
                 vx=0,
                 vy=0,
                 size=size,
@@ -255,6 +265,10 @@ class Boss:
         self.pending_frenzy = False
         self.speed = Config.BOSS_FRENZY_SPEED
         self.frenzy_shake_timer = Config.BOSS_FRENZY_SHAKE_DURATION
+
+        # Acelerar órbita dos quadrados em modo frenzy
+        for square in self.floating_squares:
+            square.set_frenzy_mode(True)
 
         # Atualizar todos os timings para o modo frenzy
         self._update_frenzy_timings()

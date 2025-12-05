@@ -56,9 +56,11 @@ class BossSquare:
         self.orbit_radius = orbit_radius
         self.orbit_angle = orbit_angle
         self.orbit_speed = orbit_speed
+        self.orbit_speed_original = orbit_speed  # Store original speed for frenzy acceleration
         self.speed_var = speed_var
         self.state = "orbiting" if is_orbital else "flying"
         self.prepare_timer = 0.0
+        self.frenzy_orbit_multiplier = 1.0  # Multiplicador de velocidade de órbita em frenzy
 
         # Animation
         self.animation_timer = 0.0
@@ -68,6 +70,20 @@ class BossSquare:
         self.growth_timer = 0.0
         self.max_growth_scale = 4.5  # Crescimento máximo (2.5x do tamanho inicial)
         self.growth_duration = 2.0  # Tempo para atingir tamanho máximo (segundos)
+
+    def set_frenzy_mode(self, is_frenzy: bool) -> None:
+        """Set frenzy mode and adjust orbital speed.
+        
+        Args:
+            is_frenzy: True to activate frenzy mode (2x orbital speed), False to deactivate
+        """
+        if is_frenzy:
+            # Acelerar órbita em 2x durante frenzy
+            self.frenzy_orbit_multiplier = 2.0
+        else:
+            self.frenzy_orbit_multiplier = 1.0
+        # Atualizar velocidade de órbita baseado no multiplicador
+        self.orbit_speed = self.orbit_speed_original * self.frenzy_orbit_multiplier
 
     def update(
         self, dt: float, screen_width: int = 1600, screen_height: int = 900
