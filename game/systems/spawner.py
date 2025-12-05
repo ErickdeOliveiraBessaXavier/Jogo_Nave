@@ -399,11 +399,11 @@ class PowerUpSpawner:
 
     def _select_powerup_by_rarity(self) -> PowerUpType:
         """Seleciona power-up baseado na raridade individual de cada tipo."""
-        powerup_chances = Config.POWERUP_RARITY_CHANCES
+        powerup_weights = Config.POWERUP_WEIGHTS
 
         # Cria lista ponderada
-        powerup_types = list(powerup_chances.keys())
-        weights = list(powerup_chances.values())
+        powerup_types = list(powerup_weights.keys())
+        weights = list(powerup_weights.values())
 
         # Escolhe baseado nos pesos
         return random.choices(powerup_types, weights=weights)[0]

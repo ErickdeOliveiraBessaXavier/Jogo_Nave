@@ -89,25 +89,25 @@ class Config:
         0.5  # Tiros explosivos são 50% mais lentos
     )
 
-    # Rarity system - Sistema de raridade para power-ups (chances devem somar 1.0)
-    POWERUP_RARITY_CHANCES: dict[PowerUpType, float] = field(
+    # Rarity system - Sistema de raridade para power-ups (pesos inteiros, total pode ser qualquer)
+    POWERUP_WEIGHTS: dict[PowerUpType, int] = field(
         default_factory=lambda: {
             # 🔵 COMUM (45% total) - Power-ups básicos e frequentes
-            PowerUpType.SHIELD: 0.10,  # 20% - Escudo básico
-            PowerUpType.DOUBLE_SHOT: 0.22,  # 25% - Tiro duplo
+            PowerUpType.SHIELD: 10,  # 10 - Escudo básico
+            PowerUpType.DOUBLE_SHOT: 22,  # 22 - Tiro duplo
             # 🟢 INCOMUM (15% total) - Power-ups situacionais
-            PowerUpType.SPEED: 0.15,  # 15% - Velocidade aumentada
+            PowerUpType.SPEED: 15,  # 15 - Velocidade aumentada
             # 🟠 RARO (35% total) - Power-ups poderosos mas raros
-            PowerUpType.PIERCING_SHOT: 0.15,  # 15% - Tiro perfurante
-            PowerUpType.MINI_SHIPS: 0.17,  # 10% - Naves auxiliares
-            PowerUpType.LIFE: 0.05,  # 10% - Vida extra
+            PowerUpType.PIERCING_SHOT: 15,  # 15 - Tiro perfurante
+            PowerUpType.MINI_SHIPS: 17,  # 17 - Naves auxiliares
+            PowerUpType.LIFE: 5,  # 5 - Vida extra
             # 🟣 ÉPICO (4% total) - Power-ups muito valiosos
-            PowerUpType.SCORE: 0.04,  # 4% - Multiplicador de pontos
+            PowerUpType.SCORE: 4,  # 4 - Multiplicador de pontos
             # 🟡 LENDÁRIO (1% total) - Power-ups ultra-raros
-            PowerUpType.RAINBOW: 0.01,  # 1% - Power-up especial
+            PowerUpType.RAINBOW: 1,  # 1 - Power-up especial
             # 🟠 NOVOS
-            PowerUpType.COOLDOWN_HASTE: 0.07,  # 7% - Reduz tempo de recarga
-            PowerUpType.TIME_STOP: 0.04,  # 4% - Congelamento total
+            PowerUpType.COOLDOWN_HASTE: 7,  # 7 - Reduz tempo de recarga
+            PowerUpType.TIME_STOP: 4,  # 4 - Congelamento total
         }
     )
 
@@ -379,12 +379,13 @@ class Config:
             if min_val > max_val:
                 errors.append(f"{name}: min ({min_val}) > max ({max_val})")
 
-        # Validar power-up chances (devem somar 1.0)
-        chances_sum = sum(self.POWERUP_RARITY_CHANCES.values())
-        if abs(chances_sum - 1.0) >= 0.001:
-            errors.append(
-                f"POWERUP_RARITY_CHANCES deve somar 1.0, mas soma {chances_sum:.4f}"
-            )
+        # Validar power-up weights (devem ser inteiros positivos e soma > 0)
+        total_weight = sum(self.POWERUP_WEIGHTS.values())
+        if total_weight <= 0:
+            errors.append("POWERUP_WEIGHTS deve ter soma > 0")
+        for powerup_type, weight in self.POWERUP_WEIGHTS.items():
+            if not isinstance(weight, int) or weight <= 0:
+                errors.append(f"POWERUP_WEIGHTS[{powerup_type}] deve ser inteiro positivo, mas é {weight}")
 
         # Validar thresholds (0.0 a 1.0)
         thresholds = [

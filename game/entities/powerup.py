@@ -39,12 +39,16 @@ class PowerUp:
         self.dead = False
 
     def _select_random_powerup(self) -> PowerUpType:
-        """Seleciona um power-up aleatório baseado no sistema de raridade"""
-        rand_val = random.random()
-        cumulative = 0.0
+        """Seleciona um power-up aleatório baseado no sistema de pesos"""
+        total_weight = sum(Config.POWERUP_WEIGHTS.values())
+        if total_weight <= 0:
+            return PowerUpType.SHIELD  # Fallback
 
-        for powerup_type, chance in Config.POWERUP_RARITY_CHANCES.items():
-            cumulative += chance
+        rand_val = random.randint(1, total_weight)
+        cumulative = 0
+
+        for powerup_type, weight in Config.POWERUP_WEIGHTS.items():
+            cumulative += weight
             if rand_val <= cumulative:
                 return powerup_type
 
