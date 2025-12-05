@@ -24,6 +24,9 @@ import os
 import argparse
 from typing import Dict, List, Any
 import sys
+import cProfile
+import pstats
+from io import StringIO
 
 # Adicionar o diretório do jogo ao path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -86,11 +89,11 @@ class PerformanceMonitor:
         min_fps = min(self.fps_history)
         max_fps = max(self.fps_history)
 
-        avg_memory = sum(self.memory_history) / len(self.memory_history)
-        max_memory = max(self.memory_history)
+        avg_memory = sum(self.memory_history) / len(self.memory_history) if self.memory_history else 0.0
+        max_memory = max(self.memory_history) if self.memory_history else 0.0
 
-        avg_frame_time = sum(self.frame_times) / len(self.frame_times) * 1000  # ms
-        max_frame_time = max(self.frame_times) * 1000  # ms
+        avg_frame_time = sum(self.frame_times) / len(self.frame_times) * 1000 if self.frame_times else 0.0  # ms
+        max_frame_time = max(self.frame_times) * 1000 if self.frame_times else 0.0  # ms
 
         # Estatísticas de entidades (última coleta)
         entity_stats = (
@@ -172,6 +175,10 @@ class AutomatedGameApp(GameApp):
         playing_scene = PlayingScene(self, level_manager, self.difficulty)
         self.states.push(playing_scene)
 
+        # Iniciar profiling
+        profiler = cProfile.Profile()
+        profiler.enable()
+
         # Loop principal do teste
         clock = pygame.time.Clock()
         running = True
@@ -228,8 +235,19 @@ class AutomatedGameApp(GameApp):
         except KeyboardInterrupt:
             print("\n⏹️  Teste interrompido pelo usuário")
 
+        finally:
+            # Parar profiling
+            profiler.disable()
+
         # Obter resultados
         results = self.monitor.get_summary()
+
+        # Adicionar profiling aos resultados
+        s = StringIO()
+        ps = pstats.Stats(profiler, stream=s).sort_stats('cumulative')
+        ps.print_stats(20)  # Top 20 funções
+        results['profiling'] = s.getvalue()
+
         return results
 
 
@@ -293,6 +311,13 @@ def main():
         print(f"🧠 Memória Máxima: {results['memory_mb']['maximum']:.1f}MB")
         print(f"🏆 Classificação: {results['performance_rating']}")
         print(f"\n💾 Resultados salvos em: {args.output}")
+
+        # Exibir profiling
+        if 'profiling' in results:
+            print("\n" + "=" * 50)
+            print("🔍 PROFILING (Top 20 funções por tempo cumulativo)")
+            print("=" * 50)
+            print(results['profiling'])
 
         # Avisos de performance
         if results["fps"]["minimum"] < 30:

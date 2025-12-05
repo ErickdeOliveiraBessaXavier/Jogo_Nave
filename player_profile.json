@@ -1,13 +1,46 @@
 {
   "version": "1.0",
   "profile_created": "2025-12-05T02:05:10.178152",
-  "last_played": null,
+  "last_played": "2025-12-05T09:39:17.457550",
   "total_playtime": 0.0,
   "highest_level_reached": 1,
-  "total_deaths": 0,
+  "total_deaths": 2,
   "total_score": 0,
-  "level_stats": {},
-  "level_adjustments": {},
+  "level_stats": {
+    "1": {
+      "level_number": 1,
+      "attempts": 3,
+      "clears": 0,
+      "deaths": 2,
+      "total_time": 0.0,
+      "best_time": null,
+      "worst_time": 0.0,
+      "total_score": 0,
+      "best_score": 0,
+      "total_enemies_killed": 0,
+      "total_damage_taken": 0,
+      "total_powerups_collected": 0,
+      "recent_attempts": [
+        {
+          "timestamp": "2025-12-05T08:57:42.649865",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2025-12-05T08:57:45.649886",
+          "cleared": false,
+          "cause": "collision"
+        }
+      ],
+      "first_played": "2025-12-05T08:57:29.590751",
+      "last_played": "2025-12-05T09:39:17.457550",
+      "current_win_streak": 0,
+      "best_win_streak": 0
+    }
+  },
+  "level_adjustments": {
+    "1": 0.75
+  },
   "session_history": [],
   "unlocked_upgrades": [
     "AIR_STRIKE",
@@ -19,8 +52,8 @@
     "SHIELD_BURST"
   ],
   "upgrade_loadout": [
-    null,
-    null,
+    "HOMING_SHOT",
+    "AIR_STRIKE",
     null,
     null,
     null,

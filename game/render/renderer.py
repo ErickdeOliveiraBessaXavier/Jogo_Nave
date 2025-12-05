@@ -1,7 +1,7 @@
 import pygame
 import random
 import math
-from typing import TypedDict, Optional, TYPE_CHECKING
+from typing import TypedDict, Optional, TYPE_CHECKING, Any
 from pathlib import Path
 from ..core import colors
 from ..core.config import config as Config
@@ -41,6 +41,8 @@ class CelestialManager:
         self.image_files = self._load_image_files()
         # === NOVO: Controle de imagens já usadas ===
         self._used_images: set[Path] = set()
+        # === Cache para imagens escaladas ===
+        self.scaled_image_cache: dict[tuple[Path, float], pygame.Surface] = {}
         # === FIM ===
         # Initialize the pool with 'n' celestial bodies
         for _ in range(n):
@@ -51,7 +53,11 @@ class CelestialManager:
         return list(image_dir.glob("*.png"))
 
     def _generate_scaled_image(self, image_path: Path, scale: float) -> pygame.Surface:
-        """Loads, scales, and sets alpha for a celestial body image."""
+        """Loads, scales, and sets alpha for a celestial body image. Uses cache to avoid recomputation."""
+        cache_key = (image_path, scale)
+        if cache_key in self.scaled_image_cache:
+            return self.scaled_image_cache[cache_key]
+
         original_image = get_image(image_path)
 
         width = int(original_image.get_width() * scale)
@@ -67,6 +73,9 @@ class CelestialManager:
             / (RenderConfig.CELESTIAL_SCALE_MAX - RenderConfig.CELESTIAL_SCALE_MIN)
         )
         image.set_alpha(alpha)
+
+        # Cache the scaled image
+        self.scaled_image_cache[cache_key] = image
         return image
 
     def _get_random_x_position(
@@ -74,7 +83,7 @@ class CelestialManager:
     ) -> float:
         """Generates a random x-position ensuring no overlap with existing bodies."""
         new_x = 0
-        max_attempts = 10
+        max_attempts = 5  # Reduzido de 10 para performance
         for _ in range(max_attempts):
             test_x = random.uniform(0, self.w - width)
             overlap = False
@@ -200,10 +209,18 @@ class CelestialManager:
 
 
 class StarField:
+    TWO_PI = 2 * math.pi  # Constante de classe
+    
     def __init__(self, w: int, h: int, n: int = RenderConfig.STARFIELD_NUM_STARS):
         self.w, self.h = w, h
         self.stars: list[Star] = []
-        # Initialize the pool with 'n' stars
+        
+        # Pool de surfaces para reutilização
+        self.star_surface_pool: list[pygame.Surface] = []
+        self.POOL_SIZE = 100
+        self._pool_index = 0
+        self._initialize_surface_pool()
+        
         for _ in range(n):
             self.stars.append(self._create_and_initialize_star())
 
@@ -265,44 +282,69 @@ class StarField:
                 self._reset_star(s)
 
     def draw(self, surface: pygame.Surface) -> None:
-        """Desenha as estrelas com otimizações de performance."""
+        """Desenha as estrelas com cache de surfaces para performance."""
         for s in self.stars:
             # Calcular pulso (reutilizar cálculo)
             pulse: float = 0.7 + 0.3 * (1 + math.sin(s["phase"]))
             animated_size: float = s["size"] * pulse
             brightness_pulse: float = 0.8 + 0.2 * (1 + math.sin(s["phase"]))
 
-            # Calcular cor com brilho
+            # Calcular cor com brilho (otimizado)
             base_color = s["color"]
-            brightness: int = max(0, min(255, int(s["brightness"] * brightness_pulse)))
-            r = max(0, min(255, int(base_color[0] * (brightness / 255))))
-            g = max(0, min(255, int(base_color[1] * (brightness / 255))))
-            b = max(0, min(255, int(base_color[2] * (brightness / 255))))
+            factor = s["brightness"] * brightness_pulse / 255
+            r = int(max(0, min(255, base_color[0] * factor)))
+            g = int(max(0, min(255, base_color[1] * factor)))
+            b = int(max(0, min(255, base_color[2] * factor)))
             c: tuple[int, int, int] = (r, g, b)
 
             center_x: int = int(s["x"])
             center_y: int = int(s["y"])
 
             if s["size"] <= 1:
-                # Estrela pequena: círculo simples
-                radius: int = max(1, int(animated_size))
-                pygame.draw.circle(surface, c, (center_x, center_y), radius)
+                # Estrela pequena: usar cache
+                cache_key = ("small", s["size"], s["brightness"], c)
+                if cache_key not in self.star_surface_cache:
+                    radius: int = max(1, int(s["size"] * pulse))
+                    star_surf = pygame.Surface((radius * 2 + 2, radius * 2 + 2), pygame.SRCALPHA)
+                    pygame.draw.circle(star_surf, c, (radius + 1, radius + 1), radius)
+                    self.star_surface_cache[cache_key] = star_surf
+                    # Limitar cache
+                    if len(self.star_surface_cache) > self.MAX_CACHE_SIZE:
+                        # Remover entrada aleatória (simples LRU aproximado)
+                        self.star_surface_cache.pop(next(iter(self.star_surface_cache)))
+                cached_surf = self.star_surface_cache[cache_key]
+                radius = max(1, int(animated_size))
+                surface.blit(cached_surf, (center_x - radius - 1, center_y - radius - 1))
             else:
                 # Estrela grande: forma asteroide usando trigonometria (mais bonita)
-                # Loop para criar pontos da forma asteroide
-                points: list[tuple[float, float]] = []
-                t = 0.0
-                TWO_PI = 2 * math.pi
-                step = TWO_PI / 100  # ~100 iterações para suavidade
-                a = animated_size  # tamanho base da estrela
+                # Discretizar phase para cache
+                phase_discretized = int((s["phase"] % (2 * math.pi)) / (2 * math.pi) * 16)
+                cache_key = ("large", s["size"], phase_discretized, s["brightness"], c)
+                if cache_key not in self.star_surface_cache:
+                    # Loop para criar pontos da forma asteroide
+                    points: list[tuple[float, float]] = []
+                    t = 0.0
+                    TWO_PI = 2 * math.pi
+                    step = TWO_PI / 25  # Reduzido para 25 iterações
+                    a = s["size"] * pulse  # Usar s["size"] * pulse em vez de animated_size
 
-                while t < TWO_PI:
-                    x = a * (math.cos(t) ** 3)
-                    y = a * (math.sin(t) ** 3)
-                    points.append((center_x + x, center_y + y))
-                    t += step
+                    while t < TWO_PI:
+                        x = a * (math.cos(t) ** 3)
+                        y = a * (math.sin(t) ** 3)
+                        points.append((a + x, a + y))  # Centralizar em (a, a)
+                        t += step
 
-                pygame.draw.polygon(surface, c, points)
+                    # Criar surface
+                    size = int(a * 2 + 4)
+                    star_surf = pygame.Surface((size, size), pygame.SRCALPHA)
+                    pygame.draw.polygon(star_surf, c, points)
+                    self.star_surface_cache[cache_key] = star_surf
+                    # Limitar cache
+                    if len(self.star_surface_cache) > self.MAX_CACHE_SIZE:
+                        self.star_surface_cache.pop(next(iter(self.star_surface_cache)))
+                cached_surf = self.star_surface_cache[cache_key]
+                a = int(animated_size)
+                surface.blit(cached_surf, (center_x - a - 2, center_y - a - 2))
 
 
 class Renderer:
@@ -338,7 +380,7 @@ class Renderer:
         self.halo_cache: dict[int, pygame.Surface] = (
             {}
         )  # Cache for halo surfaces by radius
-        self.MAX_HALO_CACHE_SIZE = 10  # Limitar tamanho do cache
+        self.MAX_HALO_CACHE_SIZE = 30  # Limitar tamanho do cache
 
         # === NOVO: Sistema de medição de FPS ===
         self.fps_counter = 0
