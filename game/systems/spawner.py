@@ -1,5 +1,16 @@
 import random
-from typing import TYPE_CHECKING, Dict, Type, TypedDict, Tuple, List, Protocol, cast
+from typing import (
+    TYPE_CHECKING,
+    Dict,
+    Type,
+    TypedDict,
+    Tuple,
+    List,
+    Protocol,
+    cast,
+    Union,
+    Callable,
+)
 from ..core.config import config as Config, PowerUpType
 from ..core.time import Timer
 from ..core.difficulty import DifficultyPreset
@@ -111,8 +122,29 @@ class EnemySpawner:
             self.warm_up_timer = 0.0
             self.spawn_intensity = 1.0  # Já ativo
 
-        # Cache para posições de formações (otimização)
-        self._formation_positions_cache: List[float] = []
+        # Pré-calcular valores de formações para otimização
+        def margin_v(count: int) -> float:
+            return (count // 2) * Config.FORMATION_V_SPACING
+
+        def margin_line(count: int) -> float:
+            return ((count - 1) * Config.FORMATION_LINE_SPACING) / 2
+
+        self._formation_safe_margins: Dict[
+            str, Union[float, Callable[[int], float]]
+        ] = {
+            "spiral_circle": Config.FORMATION_CIRCLE_RADIUS,
+            "spiral_v": margin_v,
+            "spiral_square": Config.FORMATION_SQUARE_SIZE / 2,
+            "spiral_line": margin_line,
+            "full_cycle": Config.FORMATION_CIRCLE_RADIUS,
+        }
+        self._formation_entry_y: Dict[str, float] = {
+            "spiral_circle": float(Config.FORMATION_CIRCLE_RADIUS + 40),
+            "spiral_v": 80.0,
+            "spiral_square": float(Config.FORMATION_SQUARE_SIZE / 2 + 40),
+            "spiral_line": 80.0,
+            "full_cycle": float(Config.FORMATION_CIRCLE_RADIUS + 40),
+        }
 
         # Criar um timer para cada tipo de inimigo
         self.enemy_timers: Dict[Type[object], Timer] = {}
@@ -150,25 +182,23 @@ class EnemySpawner:
             self.warm_up_timer -= dt
             # Durante warm-up: intensidade 0% (nenhum spawn)
             self.spawn_intensity = 0.0
-            return  # Early exit - não processar timers durante warm-up
+            # CORRIGIDO: Não fazer early return - deixar timers atualizarem
         else:
             # Após warm-up: intensidade 100% (spawn normal)
             self.spawn_intensity = 1.0
 
         # Atualizar e verificar cada timer de inimigo
-        eye_enemy_count = None  # Lazy: calcular apenas se necessário
-
         for enemy_type, timer in self.enemy_timers.items():
             timer.update(dt)
             if timer.done() and random.random() < self.spawn_intensity:
                 if enemy_type == EyeEnemy:
-                    # Lazy count
-                    if eye_enemy_count is None:
-                        eye_enemy_count = sum(
-                            isinstance(e, EyeEnemy) for e in entity_manager.enemies
-                        )
+                    # CORRIGIDO: Sempre recalcular para evitar race condition
+                    # quando inimigos morrem entre frames
+                    current_eye_count = sum(
+                        isinstance(e, EyeEnemy) for e in entity_manager.enemies
+                    )
 
-                    if eye_enemy_count < 5:
+                    if current_eye_count < 5:
                         x = random.randint(40, Config.SCREEN_WIDTH - 80)
                         y = random.randint(40, 100)
                         new_enemy = EyeEnemy(x, y)
@@ -176,7 +206,6 @@ class EnemySpawner:
                             new_enemy.health * self.enemy_health_multiplier
                         )
                         entity_manager.enemies.append(new_enemy)
-                        eye_enemy_count += 1  # Incrementar contador local
                 else:
                     from ..entities.meteor import Meteor
 
@@ -226,56 +255,39 @@ class EnemySpawner:
                 self.formation_spawn_timer.done()
                 and random.random() < self.spawn_intensity
             ):
-                # Atualizar cache apenas quando necessário
-                self._formation_positions_cache = [
-                    f.center_x for f in entity_manager.formations
-                ]
                 # Criar formação
                 formation_type = self.config.get_random_formation_type()
                 if formation_type:
-                    if formation_type not in FORMATION_CONFIGS:
-                        # Warning: tipo de formação não existe
-                        print(
-                            f"WARNING: Formation type '{formation_type}' not found in FORMATION_CONFIGS. Skipping."
-                        )
+                    # Buscar configuração do tipo de formação
+                    config = FORMATION_CONFIGS[formation_type]
+                    patterns = config.get(
+                        "patterns",
+                        [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE],
+                    )
+
+                    # Determinar contagem de naves
+                    if "count_options" in config:
+                        count = random.choice(config["count_options"])
+                    elif "count_range" in config:
+                        count_range = config["count_range"]
+                        count = random.randint(count_range[0], count_range[1])
                     else:
-                        # Buscar configuração do tipo de formação
-                        config = FORMATION_CONFIGS[formation_type]
-                        patterns = config.get(
-                            "patterns",
-                            [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE],
-                        )
+                        count = 5  # Fallback
 
-                        # Determinar contagem de naves
-                        if "count_options" in config:
-                            count = random.choice(config["count_options"])
-                        elif "count_range" in config:
-                            count_range = config["count_range"]
-                            count = random.randint(count_range[0], count_range[1])
-                        else:
-                            count = 5  # Fallback
-
-                        # Calcular margem segura baseada no tipo de formação
-                        # Evitar spawn próximo às bordas para formações não saírem da tela
-                        if formation_type == "spiral_circle":
-                            safe_margin = Config.FORMATION_CIRCLE_RADIUS
-                        elif formation_type == "spiral_v":
-                            half = count // 2
-                            safe_margin = half * Config.FORMATION_V_SPACING
-                        elif formation_type == "spiral_square":
-                            safe_margin = Config.FORMATION_SQUARE_SIZE / 2
-                        elif formation_type == "spiral_line":
-                            safe_margin = (
-                                (count - 1) * Config.FORMATION_LINE_SPACING
-                            ) / 2
-                        elif formation_type == "full_cycle":
-                            # Usar margem do círculo (maior padrão)
-                            safe_margin = Config.FORMATION_CIRCLE_RADIUS
-                        else:
-                            safe_margin = 200  # Fallback
+                    # CORRIGIDO: Usar valores pré-calculados em vez de condicionais repetidos
+                    margin_value: Union[float, Callable[[int], float]] = self._formation_safe_margins.get(formation_type, 200)  # type: ignore
+                    if callable(margin_value):
+                        safe_margin = float(margin_value(count))
+                    else:
+                        safe_margin = float(margin_value)
 
                         # Garantir que safe_margin não ultrapasse metade da largura da tela
                         safe_margin = min(safe_margin, Config.SCREEN_WIDTH / 2 - 100)
+
+                        # CORRIGIDO: Calcular posições SEMPRE (não cachear para evitar desync)
+                        formation_positions = [
+                            f.center_x for f in entity_manager.formations
+                        ]
 
                         # Tentar encontrar uma posição que não esteja muito próxima de outras formações
                         min_distance = 300  # Distância mínima entre formações (pixels)
@@ -287,10 +299,10 @@ class EnemySpawner:
                                 int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
                             )
 
-                            # Verificar distância usando cache
+                            # Verificar distância contra posições atuais
                             too_close = any(
                                 abs(candidate_x - pos) < min_distance
-                                for pos in self._formation_positions_cache
+                                for pos in formation_positions
                             )
 
                             if not too_close:
@@ -304,16 +316,10 @@ class EnemySpawner:
                             )
 
                         # Calcular entry_y baseado no padrão para evitar que fique cortado no topo
-                        # Considerar o raio/tamanho do padrão para definir posição segura
-                        if formation_type in ["spiral_circle", "full_cycle"]:
-                            # Círculo precisa de margem = raio + segurança (reduzida)
-                            entry_y = Config.FORMATION_CIRCLE_RADIUS + 40
-                        elif formation_type == "spiral_square":
-                            # Quadrado precisa de margem = metade do lado + segurança (reduzida)
-                            entry_y = Config.FORMATION_SQUARE_SIZE / 2 + 40
-                        else:
-                            # V, linha e outros: margem padrão (reduzida)
-                            entry_y = 80
+                        # CORRIGIDO: Usar valores pré-calculados
+                        entry_y = float(
+                            self._formation_entry_y.get(formation_type, 80.0)
+                        )
 
                         from ..entities.alien import Alien
 

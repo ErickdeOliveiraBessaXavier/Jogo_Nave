@@ -105,6 +105,22 @@ class PlayingScene(Scene):
         )
         self._boss_type_cache = None  # Cache do tipo de boss
 
+        # Cache de regras especiais para otimização
+        self._special_rules = self.difficulty_settings.get("special_rules", [])
+        self._no_powerups_mode = "no_powerups" in self._special_rules
+
+        # Pré-calcular valores de power-ups para otimização
+        self._powerup_values = {
+            "shield_duration": Config.SHIELD_DURATION * 1000,
+            "double_shot_duration": Config.DOUBLE_SHOT_DURATION,
+            "speed_boost_duration": Config.SPEED_BOOST_DURATION,
+            "piercing_shot_duration": Config.PIERCING_SHOT_DURATION,
+            "mini_ships_duration": Config.MINI_SHIPS_DURATION,
+            "rainbow_duration": Config.RAINBOW_DURATION,
+            "rainbow_duration_invuln": Config.RAINBOW_DURATION * 1000,
+            "rainbow_score": Config.POWERUP_SCORE_BONUS * 2,
+        }
+
         # Sistema de limpeza de inimigos restantes
         self.enemy_cleanup_active = False  # Se o timer de limpeza está ativo
         self.enemy_cleanup_timer = 0.0  # Timer para limpeza dos inimigos restantes
@@ -507,9 +523,11 @@ class PlayingScene(Scene):
         destroyed += mine_destroyed
         score_events.extend(mine_score_events)
 
-        # Explosões de minas vs inimigos em formações
+        # NOVO: Processar formações uma única vez (consolidando 3 loops em 1)
         for formation in self.entity_manager.formations:
             formation_enemies = formation.get_enemies()
+
+            # Minas vs formação
             f_gain, f_destroyed, f_score_events, f_ship_hit = (
                 self.collisions.check_mine_explosions(
                     formation_enemies,
@@ -523,6 +541,32 @@ class PlayingScene(Scene):
             score_events.extend(f_score_events)
             if f_ship_hit:
                 ship_hit = True
+
+            # Explosive effects vs formação
+            if self.entity_manager.explosive_effects:
+                f_exp_gain, f_exp_destroyed, f_exp_score_events = (
+                    self.collisions.explosive_effects_vs_enemies(
+                        self.entity_manager.explosive_effects,
+                        formation_enemies,
+                        self.entity_manager,
+                    )
+                )
+                gain += f_exp_gain
+                destroyed += f_exp_destroyed
+                score_events.extend(f_exp_score_events)
+
+            # Air strike vs formação
+            if self.entity_manager.air_strike_bombs:
+                f_air_gain, f_air_destroyed, f_air_score_events = (
+                    self.collisions.air_strike_bombs_vs_enemies(
+                        self.entity_manager.air_strike_bombs,
+                        formation_enemies,
+                        self.entity_manager,
+                    )
+                )
+                gain += f_air_gain
+                destroyed += f_air_destroyed
+                score_events.extend(f_air_score_events)
 
         if ship_hit:
             self._handle_ship_hit()
@@ -542,20 +586,6 @@ class PlayingScene(Scene):
             destroyed += exp_destroyed
             score_events.extend(exp_score_events)
 
-            # Também verificar formações
-            for formation in self.entity_manager.formations:
-                formation_enemies = formation.get_enemies()
-                f_exp_gain, f_exp_destroyed, f_exp_score_events = (
-                    self.collisions.explosive_effects_vs_enemies(
-                        self.entity_manager.explosive_effects,
-                        formation_enemies,
-                        self.entity_manager,
-                    )
-                )
-                gain += f_exp_gain
-                destroyed += f_exp_destroyed
-                score_events.extend(f_exp_score_events)
-
         # Colisão das bombas de bombardeio aéreo vs inimigos
         if self.entity_manager.air_strike_bombs:
             air_gain, air_destroyed, air_score_events = (
@@ -568,20 +598,6 @@ class PlayingScene(Scene):
             gain += air_gain
             destroyed += air_destroyed
             score_events.extend(air_score_events)
-
-            # Também verificar formações
-            for formation in self.entity_manager.formations:
-                formation_enemies = formation.get_enemies()
-                f_air_gain, f_air_destroyed, f_air_score_events = (
-                    self.collisions.air_strike_bombs_vs_enemies(
-                        self.entity_manager.air_strike_bombs,
-                        formation_enemies,
-                        self.entity_manager,
-                    )
-                )
-                gain += f_air_gain
-                destroyed += f_air_destroyed
-                score_events.extend(f_air_score_events)
 
         for x, y, pts in score_events:
             # Usar multiplicador em cache
@@ -667,22 +683,65 @@ class PlayingScene(Scene):
         if self.collisions.ship_vs_enemies(self.ship, enemy_grid, self.entity_manager):
             self._handle_ship_hit()
 
-        if self.entity_manager.boss:
-            # Verificar tipo de boss para colisão apropriada
+        # CONSOLIDAÇÃO: Todas as colisões com boss em um bloco único
+        boss = self.entity_manager.boss
+        if boss:
+            score_gain = 0
+
+            # Projéteis vs Boss
+            if self._boss_type_cache == "spike":
+                from ..entities.spike_boss import SpikeBoss
+
+                spike_boss = cast(SpikeBoss, boss)
+                score_gain = self.collisions.bullets_vs_spike_boss(
+                    self.entity_manager.bullets,
+                    spike_boss,
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
+                score_gain += self.collisions.mini_ship_bullets_vs_spike_boss(
+                    self.entity_manager.mini_ship_bullets,
+                    spike_boss,
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
+            elif self._boss_type_cache == "normal":
+                score_gain = self.collisions.bullets_vs_boss(
+                    self.entity_manager.bullets,
+                    boss,  # type: ignore
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
+                score_gain += self.collisions.mini_ship_bullets_vs_boss(
+                    self.entity_manager.mini_ship_bullets,
+                    boss,  # type: ignore
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
+
+            # Lasers vs Boss (comum para ambos tipos)
+            score_gain += self.collisions.player_lasers_vs_boss(
+                self.entity_manager.player_lasers,
+                boss,  # type: ignore
+                self.entity_manager.floating_scores,
+                self.entity_manager,
+            )
+
+            if self.score_multiplier_active:
+                score_gain = int(score_gain * self.score_multiplier_value)
+            self.score += score_gain
+
+            # Nave vs Boss
             if self._boss_type_cache == "spike":
                 from ..entities.spike_boss import SpikeBoss
 
                 if self.collisions.ship_vs_spike_boss(
-                    self.ship,
-                    cast(SpikeBoss, self.entity_manager.boss),
-                    self.entity_manager,
+                    self.ship, cast(SpikeBoss, boss), self.entity_manager
                 ):
                     self._handle_ship_hit()
             elif self._boss_type_cache == "normal":
                 if self.collisions.ship_vs_boss(
-                    self.ship,
-                    self.entity_manager.boss,  # type: ignore
-                    self.entity_manager,
+                    self.ship, boss, self.entity_manager  # type: ignore
                 ):
                     self._handle_ship_hit()
 
@@ -755,9 +814,8 @@ class PlayingScene(Scene):
             self.player_profile.add_stars(collected_stars)
             sound_manager.play_powerup()  # Som temporário, pode criar um específico depois
 
-        # Verificar regras especiais da dificuldade
-        special_rules = self.difficulty_settings.get("special_rules", [])
-        if "no_powerups" in special_rules:
+        # Verificar regras especiais da dificuldade (usando cache)
+        if self._no_powerups_mode:
             collected_powerups = []  # Ignorar todos os power-ups
 
         if collected_powerups:
@@ -768,15 +826,17 @@ class PlayingScene(Scene):
                     self.ship.lives = self.lives
                 elif kind == "shield":
                     self.ship.invuln = max(
-                        self.ship.invuln, Config.SHIELD_DURATION * 1000
+                        self.ship.invuln, self._powerup_values["shield_duration"]
                     )
                 elif kind == "double_shot":
                     self.ship.double_shot_timer = max(
-                        self.ship.double_shot_timer, Config.DOUBLE_SHOT_DURATION
+                        self.ship.double_shot_timer,
+                        self._powerup_values["double_shot_duration"],
                     )
                 elif kind == "speed":
                     self.ship.speed_boost_timer = max(
-                        self.ship.speed_boost_timer, Config.SPEED_BOOST_DURATION
+                        self.ship.speed_boost_timer,
+                        self._powerup_values["speed_boost_duration"],
                     )
                 elif kind == "score":
                     # Ativar multiplicador de score por 15 segundos
@@ -784,11 +844,13 @@ class PlayingScene(Scene):
                     self.score_multiplier_active = True
                 elif kind == "piercing_shot":
                     self.ship.piercing_shot_timer = max(
-                        self.ship.piercing_shot_timer, Config.PIERCING_SHOT_DURATION
+                        self.ship.piercing_shot_timer,
+                        self._powerup_values["piercing_shot_duration"],
                     )
                 elif kind == "mini_ships":
                     self.ship.mini_ships_timer = max(
-                        self.ship.mini_ships_timer, Config.MINI_SHIPS_DURATION
+                        self.ship.mini_ships_timer,
+                        self._powerup_values["mini_ships_duration"],
                     )
                     self.entity_manager.mini_ships.clear()
                     self.entity_manager.mini_ships.append(MiniShip(self.ship, "left"))
@@ -797,21 +859,25 @@ class PlayingScene(Scene):
                     self.lives += 1
                     self.ship.lives = self.lives
                     self.ship.invuln = max(
-                        self.ship.invuln, Config.RAINBOW_DURATION * 1000
+                        self.ship.invuln,
+                        self._powerup_values["rainbow_duration_invuln"],
                     )
                     self.ship.double_shot_timer = max(
-                        self.ship.double_shot_timer, Config.RAINBOW_DURATION
+                        self.ship.double_shot_timer,
+                        self._powerup_values["rainbow_duration"],
                     )
                     self.ship.speed_boost_timer = max(
-                        self.ship.speed_boost_timer, Config.RAINBOW_DURATION
+                        self.ship.speed_boost_timer,
+                        self._powerup_values["rainbow_duration"],
                     )
                     self.ship.mini_ships_timer = max(
-                        self.ship.mini_ships_timer, Config.MINI_SHIPS_DURATION
+                        self.ship.mini_ships_timer,
+                        self._powerup_values["mini_ships_duration"],
                     )
                     self.entity_manager.mini_ships.clear()
                     self.entity_manager.mini_ships.append(MiniShip(self.ship, "left"))
                     self.entity_manager.mini_ships.append(MiniShip(self.ship, "right"))
-                    rainbow_score = Config.POWERUP_SCORE_BONUS * 2
+                    rainbow_score = self._powerup_values["rainbow_score"]
                     if self.score_multiplier_active:
                         rainbow_score = int(rainbow_score * self.score_multiplier_value)
                     self.score += rainbow_score

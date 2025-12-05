@@ -124,10 +124,16 @@ class EntityManager:
         for enemy in self.enemies:
             self.enemy_spatial_grid.insert_from_rect(enemy)
 
-        # Inserir inimigos de formações
-        for formation in self.formations:
-            for enemy in formation.get_enemies():
+        # Inserir inimigos de formações (reutilizar cache se disponível)
+        cached_formation_enemies = getattr(self, "_cached_formation_enemies", None)
+        if cached_formation_enemies:
+            for enemy in cached_formation_enemies:
                 self.enemy_spatial_grid.insert_from_rect(enemy)
+        else:
+            # Fallback se cache não estiver disponível
+            for formation in self.formations:
+                for enemy in formation.get_enemies():
+                    self.enemy_spatial_grid.insert_from_rect(enemy)
 
     def update(self, dt: float, player_x: float, player_y: float):
         from typing import Any
@@ -135,10 +141,15 @@ class EntityManager:
         new_alien_bullets: list[AlienBullet] = []
         new_eye_lasers: list[EyeLaser] = []
 
+        # OPT #4: Cache formation enemies UMA VEZ para reutilizar em rebuild_enemy_grid()
+        self._cached_formation_enemies: list[Any] = []
+
         # Cache de todos os inimigos (criar UMA VEZ)
         self._cached_all_enemies: list[Any] = list(self.enemies)
         for formation in self.formations:
-            self._cached_all_enemies.extend(formation.get_enemies())
+            formation_enemies = formation.get_enemies()
+            self._cached_formation_enemies.extend(formation_enemies)
+            self._cached_all_enemies.extend(formation_enemies)
         if self.boss:
             self._cached_all_enemies.append(self.boss)
 
@@ -154,9 +165,10 @@ class EntityManager:
             if effect.dead:
                 self.explosive_effects.remove(effect)
 
-        # Efeito EMP: desaceleração localizada pela onda com linger
+        # OPT #5: Cache EMP settings to avoid repeated getattr() calls
         slow_active = getattr(self, "emp_active", False)
         slow_factor = getattr(self, "emp_slow_factor", 1.0) if slow_active else 1.0
+        emp_waves = self.emp_waves  # Cache wave list reference
 
         def emp_mul_for(entity: Any) -> float:
             if not slow_active:
@@ -166,7 +178,7 @@ class EntityManager:
                     return float(slow_factor)
                 return 1.0
 
-            # Obter posição da entidade
+            # Obter posição da entidade (cache getattr result)
             rect = getattr(entity, "rect", None)
             if rect is not None:
                 ex = rect.centerx
@@ -175,8 +187,8 @@ class EntityManager:
                 ex = getattr(entity, "x", 0.0)
                 ey = getattr(entity, "y", 0.0)
 
-            # Verificar se está sendo afetada pela onda agora
-            for wave in self.emp_waves:
+            # Verificar se está sendo afetada pela onda agora (use cached wave list)
+            for wave in emp_waves:
                 if wave.is_affecting_position(float(ex), float(ey), dt):
                     # Resetar/ativar timer de linger
                     try:

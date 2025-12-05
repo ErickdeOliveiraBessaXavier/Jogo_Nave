@@ -25,7 +25,7 @@ class SpatialGrid(Generic[T]):
     Divides space into cells and stores objects in them based on their position.
     """
 
-    def __init__(self, cell_size: int = 64):
+    def __init__(self, cell_size: int = 200):
         if cell_size <= 0:
             raise ValueError("cell_size must be positive")
         self.cell_size = cell_size
@@ -86,9 +86,10 @@ class SpatialGrid(Generic[T]):
         cells = self._get_cells_for_rect(x, y, w, h)
         result: list[T] = []
         seen: set[int] = set()  # Store IDs instead of objects for faster hashing
+        grid = self.grid  # Cache grid reference to avoid repeated attribute lookups
         for cell in cells:
-            if cell in self.grid:
-                for obj in self.grid[cell]:
+            if cell in grid:
+                for obj in grid[cell]:
                     obj_id = id(obj)  # Much faster than hashing arbitrary objects
                     if obj_id not in seen:
                         seen.add(obj_id)
