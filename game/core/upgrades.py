@@ -12,6 +12,7 @@ except Exception:  # pragma: no cover - defensive fallback for isolated tests
 
 try:
     from .upgrades_config import EMP_BASE_DURATION
+
     _emp_base_duration = EMP_BASE_DURATION
 except Exception:
     _emp_base_duration = 10.0  # fallback
@@ -120,7 +121,7 @@ class ActiveUpgrade:
         if self.cooldown_left > 0.0:
             old_cooldown = self.cooldown_left
             self.cooldown_left = max(0.0, self.cooldown_left - dt)
-            
+
             # Se tem cargas e acabou o cooldown, recupera uma carga
             if old_cooldown > 0.0 and self.cooldown_left == 0.0:
                 if self.charges_left is not None and self.meta.base_charges is not None:
@@ -129,7 +130,7 @@ class ActiveUpgrade:
                         # Se ainda não recuperou todas as cargas, inicia novo cooldown
                         if self.charges_left < self.meta.base_charges:
                             self.cooldown_left = self.get_effective_cooldown(ctx)
-        
+
         if self.active:
             self.duration_left = max(0.0, self.duration_left - dt)
             if self.duration_left <= 0.0:
@@ -322,17 +323,18 @@ class HomingShotUpgrade(ActiveUpgrade):
         ship = getattr(ctx, "ship", None)
         if ship is None:
             return
-        
+
         duration = self.get_effective_duration(ctx)
-        
+
         try:
             from .upgrades_config import HOMING_SPEED_PENALTY, HOMING_FIRE_RATE_PENALTY
+
             speed_penalty = float(HOMING_SPEED_PENALTY)
             fire_rate_penalty = float(HOMING_FIRE_RATE_PENALTY)
         except Exception:
             speed_penalty = 0.75  # 75% da velocidade normal
             fire_rate_penalty = 1.2  # 20% mais lento para atirar
-        
+
         # Ativar modo de tiro teleguiado na nave
         if hasattr(ship, "activate_homing_shots"):
             try:
@@ -360,7 +362,7 @@ class HomingShotUpgrade(ActiveUpgrade):
         ship = getattr(ctx, "ship", None)
         if ship is None:
             return
-        
+
         # Desativar modo de tiro teleguiado
         try:
             if getattr(ship, "homing_shots_active", False):
@@ -375,21 +377,23 @@ class HomingShotUpgrade(ActiveUpgrade):
 
 class LaserShotUpgrade(ActiveUpgrade):
     """Upgrade que cria bolas elétricas girando ao redor da nave disparando lasers automaticamente."""
-    
+
     def allows_refresh(self) -> bool:
         return False  # Baseado em cargas, não permite refresh
-    
+
     def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
         """Ativa o sistema de bolas elétricas orbitais (3 bolas, 3 cargas cada)."""
         ship = getattr(ctx, "ship", None)
-        
+
         if ship is None:
             return
-        
+
         # Ativar sistema de lasers orbitais na nave (não usa mais duration)
         if hasattr(ship, "activate_orbital_lasers"):
             try:
-                ship.activate_orbital_lasers(0)  # Parâmetro ignorado, usa sistema de cargas
+                ship.activate_orbital_lasers(
+                    0
+                )  # Parâmetro ignorado, usa sistema de cargas
             except Exception:
                 pass
         else:
@@ -398,7 +402,7 @@ class LaserShotUpgrade(ActiveUpgrade):
                 setattr(ship, "orbital_lasers_active", True)
             except Exception:
                 pass
-    
+
     def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
         # Não precisa fazer nada - o sistema se desativa automaticamente quando as cargas acabam
         pass
@@ -406,20 +410,22 @@ class LaserShotUpgrade(ActiveUpgrade):
 
 class ExplosiveShotUpgrade(ActiveUpgrade):
     """Upgrade que faz cada tiro criar uma explosão ao acertar inimigos.
-    
+
     Comportamento especial:
     - 30 cargas iniciais (sempre disponível quando não em cooldown)
     - Cooldown só inicia quando todas as cargas são usadas
     - Após cooldown, volta a ter 30 cargas
     """
-    
+
     def __init__(self, meta: UpgradeMeta) -> None:
         super().__init__(meta)
-        self._waiting_for_charges_depleted = False  # Aguardando cargas acabarem para iniciar cooldown
-    
+        self._waiting_for_charges_depleted = (
+            False  # Aguardando cargas acabarem para iniciar cooldown
+        )
+
     def allows_refresh(self) -> bool:
         return False  # Baseado em cargas, não permite refresh
-    
+
     def can_activate(self, ctx: UpgradeContext) -> bool:
         # Não pode ativar se já está ativo (aguardando cargas acabarem)
         if self._waiting_for_charges_depleted:
@@ -428,30 +434,30 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
         if self.cooldown_left > 0.0:
             return False
         return self.additional_can_activate(ctx)
-    
+
     def activate(self, ctx: UpgradeContext) -> bool:
         if not self.can_activate(ctx):
             self.on_denied(ctx)
             return False
-        
+
         # NÃO aplica cooldown aqui - será aplicado quando cargas acabarem
         self._waiting_for_charges_depleted = True
         self.active = True
-        
+
         self.on_activate_effect(ctx, refreshed=False)
         self.on_after_activate(ctx)
         return True
-    
+
     def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
         """Ativa o sistema de tiros explosivos na nave."""
         ship = getattr(ctx, "ship", None)
-        
+
         if ship is None:
             return
-        
+
         # Ativar tiros explosivos com contagem de cargas (sempre 30)
         charges = self.meta.base_charges if self.meta.base_charges is not None else 30
-        
+
         if hasattr(ship, "activate_explosive_shots"):
             try:
                 ship.activate_explosive_shots(charges)
@@ -464,25 +470,25 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
                 setattr(ship, "explosive_shots_remaining", charges)
             except Exception:
                 pass
-    
+
     def update(self, dt: float, ctx: Optional[UpgradeContext] = None) -> None:
         # Atualizar cooldown normalmente
         if self.cooldown_left > 0.0:
             self.cooldown_left = max(0.0, self.cooldown_left - dt)
-        
+
         # Se está aguardando cargas acabarem, verificar se acabaram
         if self._waiting_for_charges_depleted and ctx is not None:
             ship = getattr(ctx, "ship", None)
             if ship is not None:
                 remaining = getattr(ship, "explosive_shots_remaining", 0)
                 is_active = getattr(ship, "explosive_shots_active", False)
-                
+
                 # Se cargas acabaram (ou sistema foi desativado), iniciar cooldown
                 if remaining <= 0 or not is_active:
                     self._waiting_for_charges_depleted = False
                     self.active = False
                     self.cooldown_left = self.get_effective_cooldown(ctx)
-    
+
     def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
         # Chamado quando sistema expira manualmente (não usado aqui)
         self._waiting_for_charges_depleted = False
@@ -491,103 +497,105 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
 
 class AirStrikeUpgrade(ActiveUpgrade):
     """Ultimate: Bombardeio Aéreo - Bombas caem em áreas aleatórias da tela.
-    
+
     Comportamento:
     - 10 bombas por ativação
     - Cada bomba tem um marcador visual antes de cair
     - Bombas explodem ao atingir o alvo, destruindo inimigos
     - 180s de cooldown
     """
-    
+
     def __init__(self, meta: UpgradeMeta) -> None:
         super().__init__(meta)
         self._bombs_remaining = 0
         self._spawn_timer = 0.0
         self._spawn_interval = 0.3  # Intervalo entre spawns de bombas
         self._is_spawning = False
-    
+
     def allows_refresh(self) -> bool:
         return False  # Ultimate não permite refresh
-    
+
     def can_activate(self, ctx: UpgradeContext) -> bool:
         if self._is_spawning:
             return False
         if self.cooldown_left > 0.0:
             return False
         return self.additional_can_activate(ctx)
-    
+
     def activate(self, ctx: UpgradeContext) -> bool:
         if not self.can_activate(ctx):
             self.on_denied(ctx)
             return False
-        
+
         self.active = True
         self._is_spawning = True
         self._bombs_remaining = self.meta.base_charges if self.meta.base_charges else 10
         self._spawn_timer = 0.0  # Primeira bomba spawna imediatamente
-        
+
         self.on_activate_effect(ctx, refreshed=False)
         self.on_after_activate(ctx)
         return True
-    
+
     def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
         """Inicia o bombardeio aéreo."""
         import pygame
-        
+
         entity_manager = getattr(ctx, "entity_manager", None)
         if entity_manager is None:
             return
-        
+
         # Obter dimensões da tela
         screen = pygame.display.get_surface()
         screen_width = screen.get_width() if screen else 1600
         screen_height = screen.get_height() if screen else 900
-        
+
         # Spawnar primeira bomba imediatamente
         self._spawn_bomb(entity_manager, screen_width, screen_height)
         self._bombs_remaining -= 1
-    
-    def _spawn_bomb(self, entity_manager: Any, screen_width: int, screen_height: int) -> None:
+
+    def _spawn_bomb(
+        self, entity_manager: Any, screen_width: int, screen_height: int
+    ) -> None:
         """Spawna uma bomba em posição aleatória."""
         import random
-        
+
         # Posição aleatória na área de jogo (evitar bordas)
         margin = 100
         target_x = random.uniform(margin, screen_width - margin)
         target_y = random.uniform(margin, screen_height - margin)
-        
+
         if hasattr(entity_manager, "spawn_air_strike"):
             entity_manager.spawn_air_strike(target_x, target_y)
-    
+
     def update(self, dt: float, ctx: Optional[UpgradeContext] = None) -> None:
         # Atualizar cooldown normalmente
         if self.cooldown_left > 0.0:
             self.cooldown_left = max(0.0, self.cooldown_left - dt)
-        
+
         # Se está spawnando bombas
         if self._is_spawning and ctx is not None:
             self._spawn_timer += dt
-            
+
             # Spawnar nova bomba se passou o intervalo
             if self._bombs_remaining > 0 and self._spawn_timer >= self._spawn_interval:
                 import pygame
-                
+
                 entity_manager = getattr(ctx, "entity_manager", None)
                 if entity_manager is not None:
                     screen = pygame.display.get_surface()
                     screen_width = screen.get_width() if screen else 1600
                     screen_height = screen.get_height() if screen else 900
-                    
+
                     self._spawn_bomb(entity_manager, screen_width, screen_height)
                     self._bombs_remaining -= 1
                     self._spawn_timer = 0.0
-            
+
             # Terminou de spawnar todas as bombas
             if self._bombs_remaining <= 0:
                 self._is_spawning = False
                 self.active = False
                 self.cooldown_left = self.get_effective_cooldown(ctx)
-    
+
     def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
         self._is_spawning = False
         self._bombs_remaining = 0

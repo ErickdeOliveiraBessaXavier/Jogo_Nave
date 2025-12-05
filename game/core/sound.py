@@ -18,7 +18,7 @@ from .sound_config import (
 
 MusicPaths = Dict[str, Union[str, List[str]]]
 
-F = TypeVar('F', bound=Callable[..., Any])
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 def get_resource_path(relative_path: str) -> str:
@@ -35,17 +35,19 @@ def get_resource_path(relative_path: str) -> str:
 
 def require_audio(func: F) -> F:
     """Decorador que verifica se o áudio está disponível antes de executar."""
+
     @wraps(func)
     def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
-        if not getattr(self, 'audio_available', True):
+        if not getattr(self, "audio_available", True):
             return None
         try:
             return func(self, *args, **kwargs)
         except pygame.error:
             # Se ocorrer um erro de pygame, desabilitar áudio
-            if hasattr(self, 'audio_available'):
+            if hasattr(self, "audio_available"):
                 self.audio_available = False
             return None
+
     return wrapper  # type: ignore
 
 
@@ -109,7 +111,7 @@ class SoundManager:
 
     def __init__(self):
         self.audio_available = True
-        
+
         # Inicializar o mixer do pygame com tratamento de erro
         try:
             if not pygame.mixer.get_init():

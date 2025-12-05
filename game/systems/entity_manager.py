@@ -40,7 +40,9 @@ class EntityManager:
     def __init__(self):
         self.bullets: list[Bullet] = []
         self.emp_waves: list[EMPWave] = []  # Ondas visuais do EMP
-        self.explosive_effects: list[ExplosiveEffect] = []  # Efeitos visuais de explosão de área
+        self.explosive_effects: list[ExplosiveEffect] = (
+            []
+        )  # Efeitos visuais de explosão de área
         self.enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy] = []
         self.alien_bullets: list[AlienBullet] = []
         self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
@@ -81,28 +83,36 @@ class EntityManager:
     def spawn_emp_wave(self, center_x: float, center_y: float) -> None:
         """Spawna uma onda visual de EMP."""
         self.emp_waves.append(EMPWave(center_x, center_y))
-    
+
     def spawn_explosive_effect(self, x: float, y: float, radius: float = 60.0) -> None:
         """Spawna um efeito visual de explosão de área (círculo branco semi-transparente)."""
         self.explosive_effects.append(ExplosiveEffect(x, y, radius=radius))
-    
+
     def spawn_air_strike(self, target_x: float, target_y: float) -> None:
         """Spawna um marcador e uma bomba para o bombardeio aéreo."""
         marker = AirStrikeMarker(target_x, target_y)
         self.air_strike_markers.append(marker)
         # A bomba será spawnada quando o marcador terminar
-    
+
     def spawn_air_strike_bomb(self, target_x: float, target_y: float) -> None:
         """Spawna uma bomba de bombardeio aéreo."""
         bomb = AirStrikeBomb(target_x, target_y)
         self.air_strike_bombs.append(bomb)
-    
+
     def spawn_player_laser(
-        self, x: float, y: float, target_x: float, target_y: float, damage: int = 50,
-        ship: Optional['Ship'] = None, ball_index: int = -1
+        self,
+        x: float,
+        y: float,
+        target_x: float,
+        target_y: float,
+        damage: int = 50,
+        ship: Optional["Ship"] = None,
+        ball_index: int = -1,
     ) -> PlayerLaser:
         """Spawna um laser do jogador."""
-        laser = PlayerLaser(x, y, target_x, target_y, damage=damage, ship=ship, ball_index=ball_index)
+        laser = PlayerLaser(
+            x, y, target_x, target_y, damage=damage, ship=ship, ball_index=ball_index
+        )
         self.player_lasers.append(laser)
         return laser
 
@@ -121,6 +131,7 @@ class EntityManager:
 
     def update(self, dt: float, player_x: float, player_y: float):
         from typing import Any
+
         new_alien_bullets: list[AlienBullet] = []
         new_eye_lasers: list[EyeLaser] = []
 
@@ -136,7 +147,7 @@ class EntityManager:
             wave.update(dt)
             if wave.dead:
                 self.emp_waves.remove(wave)
-        
+
         # Atualizar efeitos de explosão de área
         for effect in self.explosive_effects[:]:
             effect.update(dt)
@@ -200,10 +211,17 @@ class EntityManager:
         for b in self.bullets:
             enemy_list = self._cached_all_enemies if b.homing else None
             b.update(dt, enemy_list)
-        
+
         # Update bullets simples (consolidado)
         from typing import Any
-        simple_bullets: list[Any] = [*self.alien_bullets, *self.mini_ship_bullets, *self.boss_lasers, *self.player_lasers, *self.eye_lasers]
+
+        simple_bullets: list[Any] = [
+            *self.alien_bullets,
+            *self.mini_ship_bullets,
+            *self.boss_lasers,
+            *self.player_lasers,
+            *self.eye_lasers,
+        ]
         for bullet in simple_bullets:
             bullet.update(dt)
         # Update explosões do pool
@@ -291,7 +309,7 @@ class EntityManager:
                 # Quando o marcador termina, spawnar a bomba
                 self.spawn_air_strike_bomb(marker.target_x, marker.target_y)
                 self.air_strike_markers.remove(marker)
-        
+
         # Atualizar bombas de bombardeio aéreo
         for bomb in self.air_strike_bombs[:]:
             bomb.update(dt)
@@ -412,15 +430,15 @@ class EntityManager:
         # Desenhar ondas EMP (efeito visual)
         for wave in self.emp_waves:
             wave.draw(surface)
-        
+
         # Desenhar efeitos de explosão de área (círculos brancos)
         for effect in self.explosive_effects:
             effect.draw(surface)
-        
+
         # Desenhar marcadores de bombardeio aéreo
         for marker in self.air_strike_markers:
             marker.draw(surface)
-        
+
         # Desenhar bombas de bombardeio aéreo
         for bomb in self.air_strike_bombs:
             bomb.draw(surface)
@@ -486,63 +504,73 @@ class EntityManager:
         Returns:
             Bala criada ou reutilizada do pool
         """
-        bullet = self.bullet_pool.get(x=x, y=y, damage=damage, piercing=piercing, homing=homing, explosive=explosive, low_ammo=low_ammo)
-        
+        bullet = self.bullet_pool.get(
+            x=x,
+            y=y,
+            damage=damage,
+            piercing=piercing,
+            homing=homing,
+            explosive=explosive,
+            low_ammo=low_ammo,
+        )
+
         # Se é um tiro teleguiado, atribuir alvo inteligentemente
         if homing:
             target = self._assign_homing_target(bullet)
             if target:
                 bullet.assign_target(target)
-        
+
         self.bullets.append(bullet)
         return bullet
-    
+
     def _assign_homing_target(self, bullet: Bullet) -> Any:
         """Atribui um alvo individual para o tiro teleguiado."""
         # Coletar todos os inimigos disponíveis
         all_enemies: list[Any] = list(self.enemies)
-        
+
         for formation in self.formations:
-            if not getattr(formation, 'dead', True):
-                all_enemies.extend(getattr(formation, 'aliens', []))
-        
-        if self.boss and not getattr(self.boss, 'dead', True):
+            if not getattr(formation, "dead", True):
+                all_enemies.extend(getattr(formation, "aliens", []))
+
+        if self.boss and not getattr(self.boss, "dead", True):
             all_enemies.append(self.boss)
-        
+
         # Filtrar inimigos mortos
-        alive_enemies = [e for e in all_enemies if not getattr(e, 'dead', True)]
-        
+        alive_enemies = [e for e in all_enemies if not getattr(e, "dead", True)]
+
         if not alive_enemies:
             return None
-        
+
         # Contar quantos tiros teleguiados já estão mirando em cada inimigo
         target_counts: Dict[int, int] = {}
         for b in self.bullets:
-            if getattr(b, 'homing', False) and b.assigned_target_id is not None:
-                target_counts[b.assigned_target_id] = target_counts.get(b.assigned_target_id, 0) + 1
-        
+            if getattr(b, "homing", False) and b.assigned_target_id is not None:
+                target_counts[b.assigned_target_id] = (
+                    target_counts.get(b.assigned_target_id, 0) + 1
+                )
+
         # Encontrar o inimigo com menos tiros atribuídos
         best_target = None
         min_count: int = 999999
-        min_distance: float = float('inf')
-        
+        min_distance: float = float("inf")
+
         for enemy in alive_enemies:
             enemy_id = id(enemy)
             count: int = target_counts.get(enemy_id, 0)
-            
+
             # Calcular distância para critério de desempate
-            enemy_x = enemy.x + getattr(enemy, 'w', 0) / 2
-            enemy_y = enemy.y + getattr(enemy, 'h', 0) / 2
+            enemy_x = enemy.x + getattr(enemy, "w", 0) / 2
+            enemy_y = enemy.y + getattr(enemy, "h", 0) / 2
             dx = enemy_x - bullet.x
             dy = enemy_y - bullet.y
             distance = (dx * dx + dy * dy) ** 0.5
-            
+
             # Preferir inimigos com menos tiros, em caso de empate escolher o mais próximo
             if count < min_count or (count == min_count and distance < min_distance):
                 min_count = count
                 min_distance = distance
                 best_target = enemy
-        
+
         return best_target
 
     def cleanup(self):

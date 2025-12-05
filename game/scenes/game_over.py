@@ -75,12 +75,12 @@ class GameOverScene(Scene):
         # Parar música atual e transitar para música do menu
         sound_manager.stop_music()
         from ..core.sound_config import MusicState
-        sound_manager.music_state_manager.transition_to(
-            MusicState.MENU, force=True
-        )
-        
+
+        sound_manager.music_state_manager.transition_to(MusicState.MENU, force=True)
+
         # Importar MainMenuScene e usar switch
         from .main_menu import MainMenuScene
+
         self.app.states.switch(MainMenuScene(self.app))
 
     def render(self, surface: pygame.Surface):
@@ -182,8 +182,12 @@ class GameOverScene(Scene):
             # Desenhar botão "Voltar ao Menu"
             is_hovered = self.back_to_menu_button.collidepoint(pygame.mouse.get_pos())
             bg_color = (60, 60, 60) if is_hovered else (40, 40, 40)
-            pygame.draw.rect(surface, bg_color, self.back_to_menu_button, border_radius=8)
-            pygame.draw.rect(surface, (255, 255, 255), self.back_to_menu_button, 2, border_radius=8)
+            pygame.draw.rect(
+                surface, bg_color, self.back_to_menu_button, border_radius=8
+            )
+            pygame.draw.rect(
+                surface, (255, 255, 255), self.back_to_menu_button, 2, border_radius=8
+            )
             btn_font = get_font(20)
             btn_text = btn_font.render("Voltar ao Menu", True, (255, 255, 255))
             btn_rect = btn_text.get_rect(center=self.back_to_menu_button.center)

@@ -192,15 +192,18 @@ class SettingsScene(Scene):
             knob_rect = pygame.Rect(0, 0, 10, rect.height + 10)
             knob_rect.center = (knob_x, rect.centery)
             pygame.draw.rect(surface, WHITE, knob_rect, border_radius=3)
-            
+
             # Valor em % (ajustado para não extrapolar)
             percent_text = f"{int(val * 100)}%"
             percent_surf = self.small_font.render(percent_text, True, GRAY)
-            percent_x = min(rect.right + 10, card_rect.right - percent_surf.get_width() - 10)
-            surface.blit(percent_surf, (percent_x, rect.centery - percent_surf.get_height()/2))
+            percent_x = min(
+                rect.right + 10, card_rect.right - percent_surf.get_width() - 10
+            )
+            surface.blit(
+                percent_surf, (percent_x, rect.centery - percent_surf.get_height() / 2)
+            )
 
         surface.set_clip(None)
-
 
     def _draw_controls_card(self, surface: pygame.Surface):
         card_rect = self.layout_rects["controls_card"]
@@ -225,7 +228,7 @@ class SettingsScene(Scene):
             "DICAS:",
             "• Use os aprimoramentos",
             "• Evite os projéteis inimigos",
-            "• Colete moedas para upgrades"
+            "• Colete moedas para upgrades",
         ]
 
         y_offset = card_rect.y + 60
@@ -248,4 +251,5 @@ class SettingsScene(Scene):
         else:
             # Se veio do menu, substitui pela tela do menu
             from .main_menu import MainMenuScene
+
             self.app.states.switch(MainMenuScene(self.app))

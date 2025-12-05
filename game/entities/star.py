@@ -1,6 +1,7 @@
 """Star (Estrela) - Moeda coletável para desbloquear slots de upgrades."""
 
 import pygame
+
 # math not needed anymore
 import random
 from ..core.assets import get_image, BASE_DIR
@@ -10,14 +11,14 @@ from ..core.config import config as Config
 class Star:
     """
     Estrela coletável que serve como moeda para desbloquear slots.
-    
+
     Usa a imagem icon_star.png com efeitos de rotação e pulsação.
     """
 
     def __init__(self, x: float, y: float):
         """
         Inicializa uma estrela.
-        
+
         Args:
             x: Posição x inicial
             y: Posição y inicial
@@ -43,11 +44,13 @@ class Star:
         # Rotação da imagem da estrela
         self.rotation = random.uniform(0, 360)
         self.rotation_speed = random.uniform(-180, 180)  # graus por segundo
-        
-    def update(self, dt: float, screen_width: int = 1600, screen_height: int = 900) -> None:
+
+    def update(
+        self, dt: float, screen_width: int = 1600, screen_height: int = 900
+    ) -> None:
         """
         Atualiza posição e animação da estrela.
-        
+
         Args:
             dt: Delta time
             screen_width: Largura da tela
@@ -68,7 +71,7 @@ class Star:
 
         # Atualizar imagem com rotação (sem escala na estrela)
         self.current_image = pygame.transform.rotate(self.base_image, -self.rotation)
-        
+
         # Remove se sair da tela
         margin = 100
         if (
@@ -77,17 +80,17 @@ class Star:
             or self.y > screen_height + margin
         ):
             self.dead = True
-    
+
     def draw(self, surface: pygame.Surface) -> None:
         """
         Desenha a estrela usando a imagem icon_star.png com rotação e pulsação.
-        
+
         Args:
             surface: Superfície do Pygame para desenhar
         """
         if self.dead:
             return
-        
+
         # Desenhar o fundo pulsante (igual ao PowerUp), usando elipse
         pulse_size = int(min(self.w, self.h) * self.pulse_scale)
         pulse_rect = pygame.Rect(
@@ -114,11 +117,11 @@ class Star:
         star_img = pygame.transform.rotate(star_img, -self.rotation)
         img_rect = star_img.get_rect(center=pulse_rect.center)
         surface.blit(star_img, img_rect)
-    
+
     def get_rect(self) -> pygame.Rect:
         """
         Retorna o retângulo de colisão da estrela.
-        
+
         Returns:
             pygame.Rect: Retângulo de colisão baseado na imagem atual
         """

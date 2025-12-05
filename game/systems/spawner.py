@@ -157,15 +157,17 @@ class EnemySpawner:
 
         # Atualizar e verificar cada timer de inimigo
         eye_enemy_count = None  # Lazy: calcular apenas se necessário
-        
+
         for enemy_type, timer in self.enemy_timers.items():
             timer.update(dt)
             if timer.done() and random.random() < self.spawn_intensity:
                 if enemy_type == EyeEnemy:
                     # Lazy count
                     if eye_enemy_count is None:
-                        eye_enemy_count = sum(isinstance(e, EyeEnemy) for e in entity_manager.enemies)
-                    
+                        eye_enemy_count = sum(
+                            isinstance(e, EyeEnemy) for e in entity_manager.enemies
+                        )
+
                     if eye_enemy_count < 5:
                         x = random.randint(40, Config.SCREEN_WIDTH - 80)
                         y = random.randint(40, 100)
@@ -225,7 +227,9 @@ class EnemySpawner:
                 and random.random() < self.spawn_intensity
             ):
                 # Atualizar cache apenas quando necessário
-                self._formation_positions_cache = [f.center_x for f in entity_manager.formations]
+                self._formation_positions_cache = [
+                    f.center_x for f in entity_manager.formations
+                ]
                 # Criar formação
                 formation_type = self.config.get_random_formation_type()
                 if formation_type:
@@ -284,8 +288,10 @@ class EnemySpawner:
                             )
 
                             # Verificar distância usando cache
-                            too_close = any(abs(candidate_x - pos) < min_distance 
-                                           for pos in self._formation_positions_cache)
+                            too_close = any(
+                                abs(candidate_x - pos) < min_distance
+                                for pos in self._formation_positions_cache
+                            )
 
                             if not too_close:
                                 entry_x = candidate_x

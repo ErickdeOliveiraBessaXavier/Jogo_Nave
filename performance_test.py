@@ -89,10 +89,18 @@ class PerformanceMonitor:
         min_fps = min(self.fps_history)
         max_fps = max(self.fps_history)
 
-        avg_memory = sum(self.memory_history) / len(self.memory_history) if self.memory_history else 0.0
+        avg_memory = (
+            sum(self.memory_history) / len(self.memory_history)
+            if self.memory_history
+            else 0.0
+        )
         max_memory = max(self.memory_history) if self.memory_history else 0.0
 
-        avg_frame_time = sum(self.frame_times) / len(self.frame_times) * 1000 if self.frame_times else 0.0  # ms
+        avg_frame_time = (
+            sum(self.frame_times) / len(self.frame_times) * 1000
+            if self.frame_times
+            else 0.0
+        )  # ms
         max_frame_time = max(self.frame_times) * 1000 if self.frame_times else 0.0  # ms
 
         # Estatísticas de entidades (última coleta)
@@ -244,9 +252,9 @@ class AutomatedGameApp(GameApp):
 
         # Adicionar profiling aos resultados
         s = StringIO()
-        ps = pstats.Stats(profiler, stream=s).sort_stats('cumulative')
+        ps = pstats.Stats(profiler, stream=s).sort_stats("cumulative")
         ps.print_stats(20)  # Top 20 funções
-        results['profiling'] = s.getvalue()
+        results["profiling"] = s.getvalue()
 
         return results
 
@@ -313,11 +321,11 @@ def main():
         print(f"\n💾 Resultados salvos em: {args.output}")
 
         # Exibir profiling
-        if 'profiling' in results:
+        if "profiling" in results:
             print("\n" + "=" * 50)
             print("🔍 PROFILING (Top 20 funções por tempo cumulativo)")
             print("=" * 50)
-            print(results['profiling'])
+            print(results["profiling"])
 
         # Avisos de performance
         if results["fps"]["minimum"] < 30:

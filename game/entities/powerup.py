@@ -93,7 +93,7 @@ class PowerUp:
 
         # Criar superfície com alpha para blur/transparência
         blur_surface = pygame.Surface((pulse_size, pulse_size), pygame.SRCALPHA)
-        
+
         # Fundo cinza com opacidade 0.8 e blur simulado (múltiplas camadas)
         for i in range(3):
             alpha = int(204 - i * 20)  # 204 = 0.8 * 255, decrescendo para simular blur
@@ -102,10 +102,10 @@ class PowerUp:
                 size_offset,
                 size_offset,
                 pulse_size - size_offset * 2,
-                pulse_size - size_offset * 2
+                pulse_size - size_offset * 2,
             )
             pygame.draw.ellipse(blur_surface, (50, 50, 50, alpha), blur_rect)
-        
+
         # Blit na surface principal
         surface.blit(blur_surface, (pulse_rect.x, pulse_rect.y))
 
@@ -121,7 +121,7 @@ class PowerUp:
 
         # Borda colorida com espessura maior para destaque
         pygame.draw.ellipse(surface, border_color, pulse_rect, 3)
-        
+
         # Borda interna mais fina e brilhante
         inner_rect = pulse_rect.inflate(-6, -6)
         pygame.draw.ellipse(surface, border_color, inner_rect, 1)
@@ -130,7 +130,12 @@ class PowerUp:
         text_color = border_color if self.kind == "rainbow" else (255, 255, 255)
         self._draw_text(surface, text_map.get(self.kind, "[?]"), text_color)
 
-    def _draw_text(self, surface: pygame.Surface, text: str, color: Tuple[int, int, int] = (255, 255, 255)):
+    def _draw_text(
+        self,
+        surface: pygame.Surface,
+        text: str,
+        color: Tuple[int, int, int] = (255, 255, 255),
+    ):
         """Desenha texto simples para cada tipo de power-up"""
         try:
             # Usa o sistema de assets para carregar a fonte

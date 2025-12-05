@@ -117,6 +117,7 @@ class StatisticsScene(Scene):
     def _return_to_menu(self):
         """Retorna ao menu principal de forma segura."""
         from .main_menu import MainMenuScene
+
         # Usar switch para substituir toda a pilha pelo menu
         self.app.states.switch(MainMenuScene(self.app))
 
@@ -256,11 +257,11 @@ class StatisticsScene(Scene):
             row = i // 2
             x_pos = card_rect.x + 20 + col * (area.width / 2)
             y_pos = stats_y + row * 35
-            
+
             # Label em cinza
             label_surf = self.item_font.render(label, True, colors.GRAY)
             surface.blit(label_surf, (x_pos, y_pos))
-            
+
             # Valor em azul ao lado do label
             value_surf = self.item_font.render(f" {value}", True, colors.BLUE)
             surface.blit(value_surf, (x_pos + label_surf.get_width(), y_pos))
@@ -312,7 +313,9 @@ class StatisticsScene(Scene):
             num_lines = 3  # Nível, Tentativas, Sucesso
             if stats.best_time:
                 num_lines += 2  # Melhor tempo, Melhor pontuação
-            card_height = 20 + (num_lines * 25) + 10  # padding top + lines + padding bottom
+            card_height = (
+                20 + (num_lines * 25) + 10
+            )  # padding top + lines + padding bottom
             card_rect = pygame.Rect(area.x, y, area.width, card_height)
             self._draw_card_background(surface, card_rect)
 
@@ -336,41 +339,64 @@ class StatisticsScene(Scene):
             # Cada informação em sua própria linha
             line_y = card_rect.y + 15
             line_spacing = 25
-            
+
             # Linha 1: Nível
             level_label = self.item_font.render("Nível", True, colors.GRAY)
             level_value = self.item_font.render(str(level_num), True, colors.BLUE)
             surface.blit(level_label, (card_rect.x + 25, line_y))
-            surface.blit(level_value, (card_rect.x + 25 + level_label.get_width() + 5, line_y))
+            surface.blit(
+                level_value, (card_rect.x + 25 + level_label.get_width() + 5, line_y)
+            )
             line_y += line_spacing + 10  # Extra margin before line 2
 
             # Linha 2: Tentativas
             attempts_label = self.small_font.render("Tentativas:", True, colors.GRAY)
-            attempts_value = self.small_font.render(str(stats.attempts), True, colors.BLUE)
+            attempts_value = self.small_font.render(
+                str(stats.attempts), True, colors.BLUE
+            )
             surface.blit(attempts_label, (card_rect.x + 25, line_y))
-            surface.blit(attempts_value, (card_rect.x + 25 + attempts_label.get_width() + 5, line_y))
+            surface.blit(
+                attempts_value,
+                (card_rect.x + 25 + attempts_label.get_width() + 5, line_y),
+            )
             line_y += line_spacing
-            
+
             # Linha 3: Sucesso
             success_label = self.small_font.render("Sucesso:", True, colors.GRAY)
-            success_value = self.small_font.render(f"{stats.clear_rate:.0%}", True, colors.BLUE)
+            success_value = self.small_font.render(
+                f"{stats.clear_rate:.0%}", True, colors.BLUE
+            )
             surface.blit(success_label, (card_rect.x + 25, line_y))
-            surface.blit(success_value, (card_rect.x + 25 + success_label.get_width() + 5, line_y))
+            surface.blit(
+                success_value,
+                (card_rect.x + 25 + success_label.get_width() + 5, line_y),
+            )
             line_y += line_spacing
 
             if stats.best_time:
                 # Linha 4: Melhor tempo
                 time_label = self.small_font.render("Melhor tempo:", True, colors.GRAY)
-                time_value = self.small_font.render(f"{stats.best_time:.1f}s", True, colors.BLUE)
+                time_value = self.small_font.render(
+                    f"{stats.best_time:.1f}s", True, colors.BLUE
+                )
                 surface.blit(time_label, (card_rect.x + 25, line_y))
-                surface.blit(time_value, (card_rect.x + 25 + time_label.get_width() + 5, line_y))
+                surface.blit(
+                    time_value, (card_rect.x + 25 + time_label.get_width() + 5, line_y)
+                )
                 line_y += line_spacing
-                
+
                 # Linha 5: Melhor pontuação
-                score_label = self.small_font.render("Melhor pontuação:", True, colors.GRAY)
-                score_value = self.small_font.render(f"{stats.best_score:,}", True, colors.BLUE)
+                score_label = self.small_font.render(
+                    "Melhor pontuação:", True, colors.GRAY
+                )
+                score_value = self.small_font.render(
+                    f"{stats.best_score:,}", True, colors.BLUE
+                )
                 surface.blit(score_label, (card_rect.x + 25, line_y))
-                surface.blit(score_value, (card_rect.x + 25 + score_label.get_width() + 5, line_y))
+                surface.blit(
+                    score_value,
+                    (card_rect.x + 25 + score_label.get_width() + 5, line_y),
+                )
 
             y += card_rect.height + 15
 

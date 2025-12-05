@@ -11,10 +11,10 @@ UPGRADE_SLOT_COUNT: int = 9
 # Sistema de desbloqueio de slots com estrelas
 INITIAL_UNLOCKED_SLOTS = 2  # Slots inicialmente desbloqueados
 SLOT_UNLOCK_COSTS = [
-    0,   # Slot 1 - gratuito
-    0,   # Slot 2 - gratuito
-    3,   # Slot 3 - custa 3 estrelas
-    5,   # Slot 4 - custa 5 estrelas
+    0,  # Slot 1 - gratuito
+    0,  # Slot 2 - gratuito
+    3,  # Slot 3 - custa 3 estrelas
+    5,  # Slot 4 - custa 5 estrelas
     10,  # Slot 5 - custa 10 estrelas
     20,  # Slot 6 - custa 20 estrelas
     35,  # Slot 7 - custa 35 estrelas
@@ -42,7 +42,9 @@ EMP_LINGER_DURATION: float = (
 
 # Parâmetros de balanceamento do Tiro Teleguiado
 HOMING_SPEED_PENALTY: float = 0.75  # Nave fica a 75% da velocidade normal
-HOMING_FIRE_RATE_PENALTY: float = 1.2  # Leva 20% mais tempo para atirar (cadência reduzida)
+HOMING_FIRE_RATE_PENALTY: float = (
+    1.2  # Leva 20% mais tempo para atirar (cadência reduzida)
+)
 
 # Futuro: overrides por dificuldade ou progressão
 # Example structure (não usado no MVP):

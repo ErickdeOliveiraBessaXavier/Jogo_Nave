@@ -211,33 +211,33 @@ class MainMenuScene(Scene):
         """Calculates the actual bounds of the menu and adjusts menu_y to center it vertically."""
         # Collect all Y positions
         all_y: List[int] = []
-        
+
         # Title positions
         for char_data in self.title_chars:
             all_y.append(char_data["base_rect"].top)
             all_y.append(char_data["base_rect"].bottom)
-        
+
         # Button positions
         for button in self.buttons:
             all_y.append(button.rect.top)
             all_y.append(button.rect.bottom)
-        
+
         if all_y:
             menu_top = min(all_y)
             menu_bottom = max(all_y)
             menu_height = menu_bottom - menu_top
-            
+
             # Center the menu vertically
             self.menu_y = (Config.SCREEN_HEIGHT - menu_height) // 2
-            
+
             # Adjust all positions by the new menu_y offset
             offset = self.menu_y - menu_top
-            
+
             # Adjust title positions
             for char_data in self.title_chars:
                 char_data["base_rect"].y += offset
                 char_data["rect"].y += offset
-            
+
             # Adjust button positions
             for button in self.buttons:
                 button.rect.y += offset

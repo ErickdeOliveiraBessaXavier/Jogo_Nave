@@ -53,12 +53,28 @@ class BulletPool:
         # Procura uma bala inativa no pool
         for bullet in self.pool:
             if not bullet.active:
-                bullet.reset(x=x, y=y, damage=damage, piercing=piercing, homing=homing, explosive=explosive, low_ammo=low_ammo)
+                bullet.reset(
+                    x=x,
+                    y=y,
+                    damage=damage,
+                    piercing=piercing,
+                    homing=homing,
+                    explosive=explosive,
+                    low_ammo=low_ammo,
+                )
                 self.active.append(bullet)
                 return bullet
 
         # Se não houver disponível, cria nova
-        bullet = Bullet(x=x, y=y, damage=damage, piercing=piercing, homing=homing, explosive=explosive, low_ammo=low_ammo)
+        bullet = Bullet(
+            x=x,
+            y=y,
+            damage=damage,
+            piercing=piercing,
+            homing=homing,
+            explosive=explosive,
+            low_ammo=low_ammo,
+        )
         self.pool.append(bullet)
         self.active.append(bullet)
         return bullet

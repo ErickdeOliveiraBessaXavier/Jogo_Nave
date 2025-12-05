@@ -4,7 +4,7 @@ from typing import Set
 
 class ExplosiveEffect:
     """Efeito visual simples de explosão - círculo branco que expande e desaparece."""
-    
+
     def __init__(
         self,
         x: float,
@@ -20,65 +20,65 @@ class ExplosiveEffect:
         self.timer = 0.0
         self.dead = False
         self.damage = damage
-        
+
         # Rastrear inimigos já atingidos
         self.hit_enemies: Set[int] = set()
-    
+
     @property
     def damage_active(self) -> bool:
         """Retorna True se a zona de dano ainda está ativa."""
         return not self.dead and self.timer < self.lifetime * 0.8
-    
+
     @property
     def current_damage_radius(self) -> float:
         """Retorna o raio atual da zona de dano."""
         if not self.damage_active:
             return 0.0
-        
+
         # Expansão rápida no início
         progress = min(1.0, self.timer / (self.lifetime * 0.3))
         ease_out = 1 - (1 - progress) ** 3
         return self.max_radius * ease_out
-    
+
     def update(self, dt: float) -> None:
         self.timer += dt
         if self.timer >= self.lifetime:
             self.dead = True
-    
+
     def draw(self, surface: pygame.Surface) -> None:
         if self.dead:
             return
-        
+
         # Progresso da animação (0.0 a 1.0)
         progress = min(1.0, self.timer / self.lifetime)
-        
+
         # Expansão suave
         ease_out = 1 - (1 - progress) ** 3
         current_radius = int(self.max_radius * ease_out)
-        
+
         if current_radius <= 0:
             return
-        
+
         # Fade-out suave: começa opaco (255) e vai perdendo transparência
         alpha = int(255 * (1 - progress))
-        
+
         if alpha <= 0:
             return
-        
+
         # Criar surface para transparência
         surf_size = current_radius * 2 + 10
         effect_surface = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
         center = (surf_size // 2, surf_size // 2)
-        
+
         # Círculo branco preenchido com fade-out
         pygame.draw.circle(
             effect_surface,
             (255, 255, 255, alpha),
             center,
             current_radius,
-            0  # Preenchido
+            0,  # Preenchido
         )
-        
+
         # Desenhar na tela
         blit_x = int(self.x) - surf_size // 2
         blit_y = int(self.y) - surf_size // 2

@@ -7,6 +7,7 @@ if __name__ == "__main__":
         GameApp().run()
     except Exception as e:
         from game.core.paths import get_error_log_path
+
         error_log = get_error_log_path()
         with open(error_log, "w") as f:
             f.write(traceback.format_exc())

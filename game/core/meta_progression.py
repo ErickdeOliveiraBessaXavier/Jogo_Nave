@@ -10,7 +10,11 @@ import time
 from ..core.difficulty import DifficultyPreset
 from ..core.levels import LevelConfig
 from ..core.upgrades import UpgradeType
-from ..core.upgrades_config import UPGRADE_SLOT_COUNT, DEFAULT_UNLOCKED, INITIAL_UNLOCKED_SLOTS
+from ..core.upgrades_config import (
+    UPGRADE_SLOT_COUNT,
+    DEFAULT_UNLOCKED,
+    INITIAL_UNLOCKED_SLOTS,
+)
 
 
 class PerformanceState(Enum):
@@ -497,11 +501,13 @@ class PlayerProfile:
         # Armazenamos como nomes de enum para JSON estável
         self.unlocked_upgrades: set[UpgradeType] = set(DEFAULT_UNLOCKED)
         self.upgrade_loadout: list[Optional[UpgradeType]] = [None] * UPGRADE_SLOT_COUNT
-        
+
         # Sistema de estrelas (moedas)
         self.stars_collected: int = 0  # Total de estrelas coletadas
         self.stars_spent: int = 0  # Total de estrelas gastas
-        self.unlocked_slots: int = INITIAL_UNLOCKED_SLOTS  # Número de slots desbloqueados
+        self.unlocked_slots: int = (
+            INITIAL_UNLOCKED_SLOTS  # Número de slots desbloqueados
+        )
 
         # Teclas para ativar aprimoramentos (1-9), limitadas por UPGRADE_SLOT_COUNT
         default_keys: list[int] = [
@@ -539,58 +545,58 @@ class PlayerProfile:
             return self.upgrade_loadout.index(upgrade_type)
         except ValueError:
             return None
-    
+
     def add_stars(self, amount: int) -> None:
         """Adiciona estrelas ao perfil do jogador."""
         self.stars_collected += amount
         self._mark_dirty()
-    
+
     @property
     def available_stars(self) -> int:
         """Retorna o número de estrelas disponíveis (coletadas - gastas)."""
         return self.stars_collected - self.stars_spent
-    
+
     def can_unlock_slot(self, slot_index: int) -> bool:
         """Verifica se o jogador pode desbloquear um slot específico."""
         from .upgrades_config import SLOT_UNLOCK_COSTS
-        
+
         if slot_index < 0 or slot_index >= len(SLOT_UNLOCK_COSTS):
             return False
-        
+
         # Já está desbloqueado
         if slot_index < self.unlocked_slots:
             return True
-        
+
         # Precisa desbloquear slots anteriores primeiro
         if slot_index != self.unlocked_slots:
             return False
-        
+
         # Verifica se tem estrelas suficientes
         cost = SLOT_UNLOCK_COSTS[slot_index]
         return self.available_stars >= cost
-    
+
     def unlock_slot(self, slot_index: int) -> bool:
         """
         Desbloqueia um slot de upgrade.
-        
+
         Returns:
             bool: True se desbloqueou com sucesso, False caso contrário
         """
         from .upgrades_config import SLOT_UNLOCK_COSTS
-        
+
         if not self.can_unlock_slot(slot_index):
             return False
-        
+
         cost = SLOT_UNLOCK_COSTS[slot_index]
         self.stars_spent += cost
         self.unlocked_slots = slot_index + 1
         self._mark_dirty()
         return True
-    
+
     def get_slot_cost(self, slot_index: int) -> int:
         """Retorna o custo em estrelas para desbloquear um slot."""
         from .upgrades_config import SLOT_UNLOCK_COSTS
-        
+
         if slot_index < 0 or slot_index >= len(SLOT_UNLOCK_COSTS):
             return 0
         return SLOT_UNLOCK_COSTS[slot_index]
@@ -943,6 +949,7 @@ class PlayerProfile:
                     if isinstance(unlocked_raw, list):
                         parsed: set[UpgradeType] = set()
                         from typing import cast
+
                         for name in cast(List[Any], unlocked_raw):
                             try:
                                 parsed.add(UpgradeType[name])
@@ -956,6 +963,7 @@ class PlayerProfile:
                     loadout_raw = data.get("upgrade_loadout")
                     if isinstance(loadout_raw, list):
                         from typing import Optional, cast
+
                         slots: List[Optional[UpgradeType]] = []
                         for item in cast(List[Any], loadout_raw)[:UPGRADE_SLOT_COUNT]:
                             if item is None:
@@ -981,8 +989,11 @@ class PlayerProfile:
                         keybindings_raw = data.get("upgrade_keybindings")
                         if isinstance(keybindings_raw, list):
                             from typing import cast
+
                             keys: List[int] = []
-                            for key in cast(List[Any], keybindings_raw)[:UPGRADE_SLOT_COUNT]:
+                            for key in cast(List[Any], keybindings_raw)[
+                                :UPGRADE_SLOT_COUNT
+                            ]:
                                 if (
                                     isinstance(key, int) and 0 <= key <= 1000000
                                 ):  # Valid pygame key range
@@ -1146,12 +1157,12 @@ class PlayerProfile:
             pygame.K_8,
             pygame.K_9,
         ][:UPGRADE_SLOT_COUNT]
-        
+
         # Resetar sistema de estrelas
         self.stars_collected = 0
         self.stars_spent = 0
         self.unlocked_slots = INITIAL_UNLOCKED_SLOTS
-        
+
         self.profile_created = datetime.now()
         self.last_played = None
         self._dirty = False

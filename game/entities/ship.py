@@ -76,24 +76,36 @@ class Ship:
         # Shield system (from upgrades)
         self.shield_timer: float = 0.0
         self.shield_hp: int = 0  # Hits the shield can absorb
-        
+
         # Homing shots system (from upgrades)
         self.homing_shots_active: bool = False
         self.homing_shots_timer: float = 0.0
         self.homing_speed_penalty: float = 1.0
         self.homing_fire_rate_penalty: float = 1.0
         self.original_speed: float = self.speed
-        
+
         # Orbital lasers system (from upgrades)
         self.orbital_lasers_active: bool = False
         self.orbital_angle: float = 0.0  # Ângulo de rotação das bolas
-        self.orbital_laser_cooldowns: list[float] = [0.0, 0.0, 0.0]  # Cooldown independente para cada bola
-        self.orbital_laser_charges: list[int] = [0, 0, 0]  # Cargas restantes por bolinha
-        self.orbital_ball_fade: list[float] = [0.0, 0.0, 0.0]  # Timer de fade para cada bolinha (quando acaba)
+        self.orbital_laser_cooldowns: list[float] = [
+            0.0,
+            0.0,
+            0.0,
+        ]  # Cooldown independente para cada bola
+        self.orbital_laser_charges: list[int] = [
+            0,
+            0,
+            0,
+        ]  # Cargas restantes por bolinha
+        self.orbital_ball_fade: list[float] = [
+            0.0,
+            0.0,
+            0.0,
+        ]  # Timer de fade para cada bolinha (quando acaba)
         self.orbital_radius: float = 50.0  # Raio da órbita
         self.num_orbital_balls: int = 3  # Número de bolas orbitais
         self.orbital_charges_per_ball: int = 3  # Cargas por bolinha
-        
+
         # Explosive shots system (from upgrades)
         self.explosive_shots_active: bool = False
         self.explosive_shots_remaining: int = 0
@@ -102,16 +114,20 @@ class Ship:
     def attack_speed_multiplier(self) -> float:
         """Retorna o multiplicador de velocidade de ataque baseado nos power-ups ativos."""
         multiplier = 1.0
-        
+
         if self.speed_boost_timer > 0.0:
-            multiplier *= Config.SPEED_ATTACK_MULTIPLIER  # Usar configuração personalizada
+            multiplier *= (
+                Config.SPEED_ATTACK_MULTIPLIER
+            )  # Usar configuração personalizada
         if self.piercing_shot_timer > 0.0:
             multiplier *= Config.PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER
         if self.homing_shots_active:
             multiplier *= self.homing_fire_rate_penalty  # Penalidade de cadência
         if self.explosive_shots_active:
-            multiplier *= Config.EXPLOSIVE_SHOT_FIRE_RATE_PENALTY  # Tiros explosivos são mais lentos
-            
+            multiplier *= (
+                Config.EXPLOSIVE_SHOT_FIRE_RATE_PENALTY
+            )  # Tiros explosivos são mais lentos
+
         return multiplier
 
     @property
@@ -133,10 +149,15 @@ class Ship:
         """Ativa escudo que absorve dano por uma duração."""
         self.shield_timer = max(self.shield_timer, duration)
         self.shield_hp = max(self.shield_hp, shield_hp)
-    
-    def activate_homing_shots(self, duration: float, speed_penalty: float = 0.75, fire_rate_penalty: float = 0.8) -> None:
+
+    def activate_homing_shots(
+        self,
+        duration: float,
+        speed_penalty: float = 0.75,
+        fire_rate_penalty: float = 0.8,
+    ) -> None:
         """Ativa modo de tiros teleguiados com penalidades.
-        
+
         Args:
             duration: Duração do efeito em segundos
             speed_penalty: Multiplicador de velocidade de movimento (< 1.0 = mais lento)
@@ -148,24 +169,26 @@ class Ship:
         self.homing_fire_rate_penalty = fire_rate_penalty
         # Aplicar penalidade de velocidade
         self.speed = self.original_speed * speed_penalty
-    
+
     def activate_orbital_lasers(self, duration: float) -> None:
         """Ativa sistema de lasers orbitais com cargas por bolinha."""
         self.orbital_lasers_active = True
         self.orbital_angle = 0.0
         # Inicializar cargas e cooldowns para cada bolinha
-        self.orbital_laser_charges = [self.orbital_charges_per_ball for _ in range(self.num_orbital_balls)]
+        self.orbital_laser_charges = [
+            self.orbital_charges_per_ball for _ in range(self.num_orbital_balls)
+        ]
         self.orbital_ball_fade = [0.0 for _ in range(self.num_orbital_balls)]
         self.orbital_laser_cooldowns = [
-            random.uniform(ORBITAL_INITIAL_COOLDOWN_MIN, ORBITAL_INITIAL_COOLDOWN_MAX) 
+            random.uniform(ORBITAL_INITIAL_COOLDOWN_MIN, ORBITAL_INITIAL_COOLDOWN_MAX)
             for _ in range(self.num_orbital_balls)
         ]
-    
+
     def activate_explosive_shots(self, charges: int) -> None:
         """Ativa sistema de tiros explosivos com número limitado de cargas."""
         self.explosive_shots_active = True
         self.explosive_shots_remaining = charges
-    
+
     def consume_explosive_shot(self) -> bool:
         """Consome uma carga de tiro explosivo. Retorna True se ainda há cargas."""
         if self.explosive_shots_remaining > 0:
@@ -198,19 +221,19 @@ class Ship:
 
     def _get_enemy_center(self, enemy: Any) -> Optional[Tuple[float, float]]:
         """Calcula o centro de um inimigo independente do tipo."""
-        if hasattr(enemy, 'w') and hasattr(enemy, 'h'):
+        if hasattr(enemy, "w") and hasattr(enemy, "h"):
             return float(enemy.x + enemy.w / 2), float(enemy.y + enemy.h / 2)
-        elif hasattr(enemy, 'radius'):
+        elif hasattr(enemy, "radius"):
             return float(enemy.x), float(enemy.y)
         return None
 
     def _find_nearest_enemy(
-        self, from_x: float, from_y: float, entity_manager: 'EntityManager'
+        self, from_x: float, from_y: float, entity_manager: "EntityManager"
     ) -> Optional[Any]:
         """Encontra o inimigo mais próximo de uma posição."""
         nearest_enemy: Optional[Any] = None
-        nearest_dist = float('inf')
-        
+        nearest_dist = float("inf")
+
         # Buscar em todos os inimigos normais
         for enemy in entity_manager.enemies:
             center = self._get_enemy_center(enemy)
@@ -222,7 +245,7 @@ class Ship:
             if dist < nearest_dist:
                 nearest_dist = dist
                 nearest_enemy = enemy
-        
+
         # Buscar em formações
         for formation in entity_manager.formations:
             for enemy in formation.get_enemies():
@@ -235,7 +258,7 @@ class Ship:
                 if dist < nearest_dist:
                     nearest_dist = dist
                     nearest_enemy = enemy
-        
+
         # Verificar boss
         if entity_manager.boss is not None:
             boss = entity_manager.boss
@@ -244,7 +267,7 @@ class Ship:
             dist = math.sqrt(dx * dx + dy * dy)
             if dist < nearest_dist:
                 nearest_enemy = boss
-        
+
         return nearest_enemy
 
     def _update_timers(self, dt: float) -> None:
@@ -261,7 +284,7 @@ class Ship:
         self.shield_timer = max(0.0, self.shield_timer - dt)
         if self.shield_timer <= 0.0:
             self.shield_hp = 0
-        
+
         # Update homing shots timer
         if self.homing_shots_active:
             self.homing_shots_timer = max(0.0, self.homing_shots_timer - dt)
@@ -269,68 +292,73 @@ class Ship:
                 self.homing_shots_active = False
                 self.speed = self.original_speed
 
-    def _update_orbital_lasers(self, dt: float, entity_manager: Optional['EntityManager']) -> None:
+    def _update_orbital_lasers(
+        self, dt: float, entity_manager: Optional["EntityManager"]
+    ) -> None:
         """Atualiza o sistema de lasers orbitais baseado em cargas."""
         if not self.orbital_lasers_active:
             return
-        
+
         # Verificar se todas as bolinhas acabaram (cargas = 0 e fade completo)
         all_done = all(
-            charges <= 0 and fade <= 0.0 
+            charges <= 0 and fade <= 0.0
             for charges, fade in zip(self.orbital_laser_charges, self.orbital_ball_fade)
         )
         if all_done:
             self.orbital_lasers_active = False
             return
-            
+
         # Girar as bolas ao redor da nave
         self.orbital_angle += dt * ORBITAL_ROTATION_SPEED
-        
+
         # Atualizar fade das bolinhas que acabaram
         for i in range(self.num_orbital_balls):
             if self.orbital_laser_charges[i] <= 0 and self.orbital_ball_fade[i] > 0.0:
                 self.orbital_ball_fade[i] = max(0.0, self.orbital_ball_fade[i] - dt)
-        
+
         if entity_manager is None:
             return
-            
+
         # Processar cada bola independentemente
         for i in range(self.num_orbital_balls):
             # Pular bolinhas sem cargas
             if self.orbital_laser_charges[i] <= 0:
                 continue
-                
-            self.orbital_laser_cooldowns[i] = max(0.0, self.orbital_laser_cooldowns[i] - dt)
-            
+
+            self.orbital_laser_cooldowns[i] = max(
+                0.0, self.orbital_laser_cooldowns[i] - dt
+            )
+
             if self.orbital_laser_cooldowns[i] > 0.0:
                 continue
-                
+
             # Calcular posição desta bola específica
             angle = self.orbital_angle + (i * 2 * math.pi / self.num_orbital_balls)
             ball_x = self.x + self.w / 2 + math.cos(angle) * self.orbital_radius
             ball_y = self.y + self.h / 2 + math.sin(angle) * self.orbital_radius
-            
+
             # Encontrar inimigo mais próximo desta bola
             nearest_enemy = self._find_nearest_enemy(ball_x, ball_y, entity_manager)
-            
+
             # Spawnar laser se houver inimigo
             if nearest_enemy is not None:
                 target = self._get_enemy_center(nearest_enemy)
                 if target is not None:
                     entity_manager.spawn_player_laser(
-                        ball_x, ball_y, target[0], target[1], 
-                        ship=self, ball_index=i
+                        ball_x, ball_y, target[0], target[1], ship=self, ball_index=i
                     )
-                    
+
                     # Consumir carga
                     self.orbital_laser_charges[i] -= 1
-                    
+
                     # Se acabou as cargas, iniciar fade (1.5s de piscar)
                     if self.orbital_laser_charges[i] <= 0:
                         self.orbital_ball_fade[i] = 1.5
-            
+
             # Resetar cooldown desta bola
-            self.orbital_laser_cooldowns[i] = random.uniform(ORBITAL_COOLDOWN_MIN, ORBITAL_COOLDOWN_MAX)
+            self.orbital_laser_cooldowns[i] = random.uniform(
+                ORBITAL_COOLDOWN_MIN, ORBITAL_COOLDOWN_MAX
+            )
 
     def _update_particles(self, dt: float) -> None:
         """Atualiza o sistema de partículas."""
@@ -391,7 +419,7 @@ class Ship:
             if p["lifetime"] - dt > 0 and p["size"] - dt > 0
         ]
 
-    def update(self, dt: float, entity_manager: Optional['EntityManager'] = None):
+    def update(self, dt: float, entity_manager: Optional["EntityManager"] = None):
         self._update_timers(dt)
         self._update_orbital_lasers(dt, entity_manager)
         self._update_particles(dt)
@@ -431,22 +459,47 @@ class Ship:
 
     def bullet_spawn(self) -> list[tuple[float, float, bool, bool, bool, bool]]:
         """Retorna posições para spawn de balas.
-        
+
         Returns:
             Lista de tuplas (x, y, is_piercing, is_homing, is_explosive, is_low_ammo)
         """
         is_piercing = self.piercing_shot_timer > 0
         is_homing = self.homing_shots_active
-        is_explosive = self.explosive_shots_active and self.explosive_shots_remaining > 0
+        is_explosive = (
+            self.explosive_shots_active and self.explosive_shots_remaining > 0
+        )
         is_low_ammo = is_explosive and self.explosive_shots_remaining <= 5
-        
+
         if self.double_shot_timer > 0:
             return [
-                (self.x + self.w * 0.2 - 2.5, self.y, is_piercing, is_homing, is_explosive, is_low_ammo),
-                (self.x + self.w * 0.8 - 2.5, self.y, is_piercing, is_homing, is_explosive, is_low_ammo),
+                (
+                    self.x + self.w * 0.2 - 2.5,
+                    self.y,
+                    is_piercing,
+                    is_homing,
+                    is_explosive,
+                    is_low_ammo,
+                ),
+                (
+                    self.x + self.w * 0.8 - 2.5,
+                    self.y,
+                    is_piercing,
+                    is_homing,
+                    is_explosive,
+                    is_low_ammo,
+                ),
             ]
         else:
-            return [(self.x + self.w / 2 - 2.5, self.y, is_piercing, is_homing, is_explosive, is_low_ammo)]
+            return [
+                (
+                    self.x + self.w / 2 - 2.5,
+                    self.y,
+                    is_piercing,
+                    is_homing,
+                    is_explosive,
+                    is_low_ammo,
+                )
+            ]
 
     def draw(self, surface: pygame.Surface):
         if not self.visible:
@@ -499,20 +552,24 @@ class Ship:
         # Desenhar bolas elétricas orbitais
         if self.orbital_lasers_active:
             current_time = time.time()
-            
+
             # Desenhar cada bola orbital
             for i in range(self.num_orbital_balls):
                 charges = self.orbital_laser_charges[i]
                 fade = self.orbital_ball_fade[i]
-                
+
                 # Pular bolinhas completamente exauridas (sem fade restante)
                 if charges <= 0 and fade <= 0.0:
                     continue
-                
+
                 angle = self.orbital_angle + (i * 2 * math.pi / self.num_orbital_balls)
-                ball_x = int(self.x + self.w / 2 + math.cos(angle) * self.orbital_radius)
-                ball_y = int(self.y + self.h / 2 + math.sin(angle) * self.orbital_radius)
-                
+                ball_x = int(
+                    self.x + self.w / 2 + math.cos(angle) * self.orbital_radius
+                )
+                ball_y = int(
+                    self.y + self.h / 2 + math.sin(angle) * self.orbital_radius
+                )
+
                 # Se está em fade (última carga usada), piscar e diminuir
                 if charges <= 0 and fade > 0.0:
                     # Piscar rápido
@@ -521,10 +578,18 @@ class Ship:
                         # Cor vermelha piscante
                         fade_alpha = fade / 1.5  # 0.0 a 1.0
                         ball_radius = int(3 + fade_alpha * 3)
-                        pygame.draw.circle(surface, (255, 100, 100), (ball_x, ball_y), ball_radius + 2, 1)
-                        pygame.draw.circle(surface, (255, 150, 150), (ball_x, ball_y), ball_radius)
+                        pygame.draw.circle(
+                            surface,
+                            (255, 100, 100),
+                            (ball_x, ball_y),
+                            ball_radius + 2,
+                            1,
+                        )
+                        pygame.draw.circle(
+                            surface, (255, 150, 150), (ball_x, ball_y), ball_radius
+                        )
                     continue
-                
+
                 # Última carga - piscar amarelo/vermelho como aviso
                 if charges == 1:
                     blink = int(current_time * 6) % 2 == 0
@@ -532,13 +597,35 @@ class Ship:
                     ball_radius = int(4 + pulse * 2)
                     if blink:
                         # Amarelo/laranja aviso
-                        pygame.draw.circle(surface, (255, 180, 50), (ball_x, ball_y), ball_radius + 3, 1)
-                        pygame.draw.circle(surface, (255, 200, 100), (ball_x, ball_y), ball_radius + 2, 1)
-                        pygame.draw.circle(surface, (255, 220, 150), (ball_x, ball_y), ball_radius)
+                        pygame.draw.circle(
+                            surface,
+                            (255, 180, 50),
+                            (ball_x, ball_y),
+                            ball_radius + 3,
+                            1,
+                        )
+                        pygame.draw.circle(
+                            surface,
+                            (255, 200, 100),
+                            (ball_x, ball_y),
+                            ball_radius + 2,
+                            1,
+                        )
+                        pygame.draw.circle(
+                            surface, (255, 220, 150), (ball_x, ball_y), ball_radius
+                        )
                     else:
-                        pygame.draw.circle(surface, (255, 100, 50), (ball_x, ball_y), ball_radius + 2, 1)
-                        pygame.draw.circle(surface, (255, 150, 100), (ball_x, ball_y), ball_radius)
-                
+                        pygame.draw.circle(
+                            surface,
+                            (255, 100, 50),
+                            (ball_x, ball_y),
+                            ball_radius + 2,
+                            1,
+                        )
+                        pygame.draw.circle(
+                            surface, (255, 150, 100), (ball_x, ball_y), ball_radius
+                        )
+
                 # Cargas normais (2 ou 3)
                 else:
                     time_to_fire = self.orbital_laser_cooldowns[i]
@@ -547,16 +634,44 @@ class Ship:
                         pulse = abs((current_time * 12 + i) % 2 - 1)
                         ball_radius = int(4 + pulse * 2)
                         # Amarelo elétrico quando carregando
-                        pygame.draw.circle(surface, (255, 255, 100), (ball_x, ball_y), ball_radius + 4, 1)
-                        pygame.draw.circle(surface, (255, 255, 150), (ball_x, ball_y), ball_radius + 3, 1)
-                        pygame.draw.circle(surface, (255, 255, 200), (ball_x, ball_y), ball_radius + 1)
+                        pygame.draw.circle(
+                            surface,
+                            (255, 255, 100),
+                            (ball_x, ball_y),
+                            ball_radius + 4,
+                            1,
+                        )
+                        pygame.draw.circle(
+                            surface,
+                            (255, 255, 150),
+                            (ball_x, ball_y),
+                            ball_radius + 3,
+                            1,
+                        )
+                        pygame.draw.circle(
+                            surface, (255, 255, 200), (ball_x, ball_y), ball_radius + 1
+                        )
                     else:
                         pulse = abs((current_time * 6 + i) % 2 - 1)
                         ball_radius = int(4 + pulse * 2)
                         # Azul elétrico normal
-                        pygame.draw.circle(surface, (100, 200, 255), (ball_x, ball_y), ball_radius + 3, 1)
-                        pygame.draw.circle(surface, (150, 220, 255), (ball_x, ball_y), ball_radius + 2, 1)
-                        pygame.draw.circle(surface, (200, 240, 255), (ball_x, ball_y), ball_radius)
+                        pygame.draw.circle(
+                            surface,
+                            (100, 200, 255),
+                            (ball_x, ball_y),
+                            ball_radius + 3,
+                            1,
+                        )
+                        pygame.draw.circle(
+                            surface,
+                            (150, 220, 255),
+                            (ball_x, ball_y),
+                            ball_radius + 2,
+                            1,
+                        )
+                        pygame.draw.circle(
+                            surface, (200, 240, 255), (ball_x, ball_y), ball_radius
+                        )
 
         # Desenhar partículas de entrada (acima da nave)
         for p in self.entry_particles:

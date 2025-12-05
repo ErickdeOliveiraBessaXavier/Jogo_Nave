@@ -114,31 +114,31 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Verifica colisão contínua entre efeitos explosivos ativos e inimigos.
-        
+
         Isso permite que fragmentos de meteoros e novos inimigos que entrem
         na área de explosão sofram dano enquanto o efeito estiver ativo.
         """
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
-        
+
         for effect in explosive_effects:
             if not effect.damage_active:
                 continue
-            
+
             damage_radius = effect.current_damage_radius
             if damage_radius <= 0:
                 continue
-            
+
             for enemy in enemies[:]:
                 if enemy.dead:
                     continue
-                
+
                 # Verificar se já foi atingido por este efeito
                 enemy_id = id(enemy)
                 if enemy_id in effect.hit_enemies:
                     continue
-                
+
                 # Calcular distância
                 if isinstance(enemy, ExplosiveMine):
                     enemy_cx, enemy_cy = enemy.x, enemy.y
@@ -147,36 +147,40 @@ class Collisions:
                     enemy_cx = enemy.x + enemy.w / 2
                     enemy_cy = enemy.y + enemy.h / 2
                     enemy_r = enemy.w / 2
-                
+
                 dist_sq = (enemy_cx - effect.x) ** 2 + (enemy_cy - effect.y) ** 2
-                
+
                 # Verificar colisão
                 if dist_sq < (damage_radius + enemy_r) ** 2:
                     # Marcar como atingido
                     effect.hit_enemies.add(enemy_id)
-                    
+
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(2)
                     else:
                         if isinstance(enemy, EyeEnemy):
                             enemy.destroy()
                         enemy.dead = True
-                        
+
                         # Spawn explosion visual
-                        entity_manager.spawn_explosion(enemy_cx, enemy_cy, size=int(enemy.w // 2))
-                        
+                        entity_manager.spawn_explosion(
+                            enemy_cx, enemy_cy, size=int(enemy.w // 2)
+                        )
+
                         # Score
                         pts = enemy.get_points_value()
                         score_gain += pts
                         destroyed_count += 1
                         score_events.append((enemy_cx, enemy_cy, pts))
-                        
+
                         # Fragmentar meteoros
-                        if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
+                        if isinstance(enemy, Meteor) and hasattr(
+                            enemy, "spawn_fragments"
+                        ):
                             fragments = enemy.spawn_fragments()
                             if fragments:
                                 enemies.extend(fragments)
-        
+
         return score_gain, destroyed_count, score_events
 
     def air_strike_bombs_vs_enemies(
@@ -186,31 +190,31 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Verifica colisão entre explosões de bombas e inimigos.
-        
+
         Bombas que explodiram causam dano em área a todos os inimigos
         dentro do raio de explosão.
         """
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
-        
+
         for bomb in air_strike_bombs:
             if not bomb.exploding or not bomb.damage_active:
                 continue
-            
+
             damage_radius = bomb.explosion_radius
             if damage_radius <= 0:
                 continue
-            
+
             for enemy in enemies[:]:
                 if enemy.dead:
                     continue
-                
+
                 # Verificar se já foi atingido por esta bomba
                 enemy_id = id(enemy)
                 if enemy_id in bomb.hit_enemies:
                     continue
-                
+
                 # Calcular distância
                 if isinstance(enemy, ExplosiveMine):
                     enemy_cx, enemy_cy = enemy.x, enemy.y
@@ -219,36 +223,40 @@ class Collisions:
                     enemy_cx = enemy.x + enemy.w / 2
                     enemy_cy = enemy.y + enemy.h / 2
                     enemy_r = enemy.w / 2
-                
+
                 dist_sq = (enemy_cx - bomb.x) ** 2 + (enemy_cy - bomb.target_y) ** 2
-                
+
                 # Verificar colisão
                 if dist_sq < (damage_radius + enemy_r) ** 2:
                     # Marcar como atingido
                     bomb.hit_enemies.add(enemy_id)
-                    
+
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(5)  # Dano alto para minas
                     else:
                         if isinstance(enemy, EyeEnemy):
                             enemy.destroy()
                         enemy.dead = True
-                        
+
                         # Spawn explosion visual
-                        entity_manager.spawn_explosion(enemy_cx, enemy_cy, size=int(enemy.w // 2))
-                        
+                        entity_manager.spawn_explosion(
+                            enemy_cx, enemy_cy, size=int(enemy.w // 2)
+                        )
+
                         # Score
                         pts = enemy.get_points_value()
                         score_gain += pts
                         destroyed_count += 1
                         score_events.append((enemy_cx, enemy_cy, pts))
-                        
+
                         # Fragmentar meteoros
-                        if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
+                        if isinstance(enemy, Meteor) and hasattr(
+                            enemy, "spawn_fragments"
+                        ):
                             fragments = enemy.spawn_fragments()
                             if fragments:
                                 enemies.extend(fragments)
-        
+
         return score_gain, destroyed_count, score_events
 
     def mini_ship_bullets_vs_enemies(
@@ -363,55 +371,72 @@ class Collisions:
                             fragments = enemy.spawn_fragments()
                             if fragments:
                                 enemies.extend(fragments)
-                    
+
                     # Se é um tiro explosivo, causar dano em área
                     if b.explosive:
                         explosion_cx = b.x + b.w / 2
                         explosion_cy = b.y + b.h / 2
                         explosion_radius = 60  # Raio da explosão
-                        
+
                         # Criar efeito visual do círculo de área (branco semi-transparente)
-                        entity_manager.spawn_explosive_effect(explosion_cx, explosion_cy, radius=explosion_radius)
-                        
+                        entity_manager.spawn_explosive_effect(
+                            explosion_cx, explosion_cy, radius=explosion_radius
+                        )
+
                         # Criar explosão visual de partículas
-                        entity_manager.spawn_explosion(explosion_cx, explosion_cy, size=explosion_radius // 2)
-                        
+                        entity_manager.spawn_explosion(
+                            explosion_cx, explosion_cy, size=explosion_radius // 2
+                        )
+
                         # Tocar som de explosão
                         sound_manager.play_explosion_asteroid()
-                        
+
                         # Dano em área para inimigos próximos
                         area_query = enemy_grid.query(
                             explosion_cx - explosion_radius,
                             explosion_cy - explosion_radius,
                             explosion_radius * 2,
-                            explosion_radius * 2
+                            explosion_radius * 2,
                         )
                         for nearby_enemy in area_query:
                             if nearby_enemy.dead:
                                 continue
                             # Verificar distância real
-                            enemy_cx = nearby_enemy.x + getattr(nearby_enemy, 'w', 0) / 2
-                            enemy_cy = nearby_enemy.y + getattr(nearby_enemy, 'h', 0) / 2
-                            dist_sq = (enemy_cx - explosion_cx) ** 2 + (enemy_cy - explosion_cy) ** 2
-                            if dist_sq < explosion_radius ** 2:
+                            enemy_cx = (
+                                nearby_enemy.x + getattr(nearby_enemy, "w", 0) / 2
+                            )
+                            enemy_cy = (
+                                nearby_enemy.y + getattr(nearby_enemy, "h", 0) / 2
+                            )
+                            dist_sq = (enemy_cx - explosion_cx) ** 2 + (
+                                enemy_cy - explosion_cy
+                            ) ** 2
+                            if dist_sq < explosion_radius**2:
                                 if isinstance(nearby_enemy, ExplosiveMine):
                                     nearby_enemy.take_damage(2)  # Dano extra
                                 elif not nearby_enemy.dead:
                                     if isinstance(nearby_enemy, EyeEnemy):
                                         nearby_enemy.destroy()
                                     nearby_enemy.dead = True
-                                    ncx, ncy = (nearby_enemy.x + nearby_enemy.w / 2, nearby_enemy.y + nearby_enemy.h / 2)
-                                    entity_manager.spawn_explosion(ncx, ncy, size=nearby_enemy.w // 2)
+                                    ncx, ncy = (
+                                        nearby_enemy.x + nearby_enemy.w / 2,
+                                        nearby_enemy.y + nearby_enemy.h / 2,
+                                    )
+                                    entity_manager.spawn_explosion(
+                                        ncx, ncy, size=nearby_enemy.w // 2
+                                    )
                                     pts = nearby_enemy.get_points_value()
                                     score_gain += pts
                                     destroyed_count += 1
                                     score_events.append((ncx, ncy, pts))
-                                    
-                                    if isinstance(nearby_enemy, Meteor) and hasattr(nearby_enemy, "spawn_fragments"):
+
+                                    if isinstance(nearby_enemy, Meteor) and hasattr(
+                                        nearby_enemy, "spawn_fragments"
+                                    ):
                                         fragments = nearby_enemy.spawn_fragments()
                                         if fragments:
                                             enemies.extend(fragments)
-                    
+
                     if not b.piercing:
                         b.dead = True
                         break  # Bullet is gone, check next bullet
@@ -887,7 +912,7 @@ class Collisions:
                         if isinstance(enemy, EyeEnemy):
                             enemy.destroy()
                         enemy.dead = True
-                    
+
                     # Som apropriado baseado no tipo
                     if isinstance(enemy, Meteor):
                         sound_manager.play_explosion_asteroid()
@@ -895,8 +920,8 @@ class Collisions:
                         sound_manager.play_explosion_alien()
 
                     # Spawnar pequena explosão no ponto de impacto
-                    cx: float = enemy.x + getattr(enemy, 'w', 0) / 2
-                    cy: float = enemy.y + getattr(enemy, 'h', 0) / 2
+                    cx: float = enemy.x + getattr(enemy, "w", 0) / 2
+                    cy: float = enemy.y + getattr(enemy, "h", 0) / 2
                     entity_manager.spawn_explosion(cx, cy, size=20)
 
                     # Se morreu, adicionar pontos
@@ -944,6 +969,7 @@ class Collisions:
                 if boss.dead:
                     # Boss sempre dá pontos fixos ao morrer
                     from ..core.config import config as Config
+
                     pts: int = Config.BOSS_DEFEAT_SCORE
                     score_gain += pts
                     floating_scores.append(FloatingScore(cx, cy, pts))

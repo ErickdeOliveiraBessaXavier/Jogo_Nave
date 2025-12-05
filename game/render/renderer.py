@@ -211,17 +211,17 @@ class CelestialManager:
 class StarField:
     TWO_PI = 2 * math.pi  # Constante de classe
     MAX_STAR_SIZE = 24  # Tamanho máximo da surface do pool
-    
+
     def __init__(self, w: int, h: int, n: int = RenderConfig.STARFIELD_NUM_STARS):
         self.w, self.h = w, h
         self.stars: list[Star] = []
-        
+
         # Pool de surfaces para reutilização
         self.star_surface_pool: list[pygame.Surface] = []
         self.POOL_SIZE = 100
         self._pool_index = 0
         self._initialize_surface_pool()
-        
+
         for _ in range(n):
             self.stars.append(self._create_and_initialize_star())
 
@@ -229,7 +229,9 @@ class StarField:
         """Pré-cria surfaces para reutilização no pool."""
         # Size 3 (max) * 1.3 (max pulse) * 3 (curva cúbica) ≈ 12, *2 para margem segura
         for _ in range(self.POOL_SIZE):
-            star_surf = pygame.Surface((self.MAX_STAR_SIZE, self.MAX_STAR_SIZE), pygame.SRCALPHA)
+            star_surf = pygame.Surface(
+                (self.MAX_STAR_SIZE, self.MAX_STAR_SIZE), pygame.SRCALPHA
+            )
             self.star_surface_pool.append(star_surf)
 
     def _create_and_initialize_star(self) -> Star:
@@ -316,16 +318,18 @@ class StarField:
                 # Estrelas grandes: usar pool de surfaces
                 star_surf = self.star_surface_pool[self._pool_index]
                 self._pool_index = (self._pool_index + 1) % self.POOL_SIZE
-                
+
                 # Limpar surface
                 star_surf.fill((0, 0, 0, 0))
-                
+
                 # Calcular pontos do polígono
                 points: list[tuple[float, float]] = []
                 t = 0.0
                 step = self.TWO_PI / 20  # Reduzido para 20 pontos
                 a = animated_size
-                center_offset = self.MAX_STAR_SIZE // 2  # Centro da surface (24//2 = 12)
+                center_offset = (
+                    self.MAX_STAR_SIZE // 2
+                )  # Centro da surface (24//2 = 12)
 
                 while t < self.TWO_PI:
                     x = a * (math.cos(t) ** 3)
@@ -335,9 +339,11 @@ class StarField:
 
                 # Desenhar polígono na surface do pool
                 pygame.draw.polygon(star_surf, c, points)
-                
+
                 # Blitar na surface principal
-                surface.blit(star_surf, (center_x - center_offset, center_y - center_offset))
+                surface.blit(
+                    star_surf, (center_x - center_offset, center_y - center_offset)
+                )
 
 
 class Renderer:
@@ -503,20 +509,21 @@ class Renderer:
                 line(f"[2X] Tiro Duplo: {ds_s:.1f}s", colors.GREEN)
             if sp_s > 0:
                 line(f"[V] Velocidade: {sp_s:.1f}s", colors.YELLOW)
-            
+
             # Mostrar multiplicador de score se ativo
             if score_multiplier_active and score_multiplier_timer > 0:
                 line(f"[x1.5] Score x1.5: {score_multiplier_timer:.1f}s", colors.YELLOW)
-            
+
             # Mostrar mini ships se ativo
             if mini_ships_active and mini_ships_timer > 0:
                 line(f"[M] Mini Ships: {mini_ships_timer:.1f}s", colors.CYAN)
-            
+
             # Mostrar tiros explosivos restantes
             if explosive_shots_active and explosive_shots_remaining > 0:
                 # Piscar quando restarem 5 ou menos cargas
                 if explosive_shots_remaining <= 5:
                     import time as _time
+
                     blink = int(_time.time() * 4) % 2 == 0
                     color = colors.ORANGE if blink else colors.RED
                 else:

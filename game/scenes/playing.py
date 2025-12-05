@@ -2,7 +2,7 @@ import pygame
 import random
 import math
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 from ..core.state import Scene
 from ..core.config import config as Config
 from ..render.renderer import Renderer
@@ -98,8 +98,12 @@ class PlayingScene(Scene):
         # Star spawner centralizado
         self.star_spawner = StarSpawner()
 
-        # Debug/Performance flags
-        self.show_fps = False  # Pressione F3 para mostrar/ocultar FPS
+        # Cache de multiplicadores para otimização
+        self._base_score_multiplier = (
+            self.level_config.score_multiplier
+            * self.difficulty_settings["rewards_multiplier"]
+        )
+        self._boss_type_cache = None  # Cache do tipo de boss
 
         # Sistema de limpeza de inimigos restantes
         self.enemy_cleanup_active = False  # Se o timer de limpeza está ativo
@@ -192,13 +196,15 @@ class PlayingScene(Scene):
         if self.state == "playing" and self.level_start_time is None:
             self.level_start_time = time.time()
 
-            self.ship.update(dt, self.entity_manager)  # Atualiza animações da nave (ex: propulsores)
+            self.ship.update(
+                dt, self.entity_manager
+            )  # Atualiza animações da nave (ex: propulsores)
             return
 
         # Timers
         self.shoot_cd = max(0.0, self.shoot_cd - dt)
         self.warning_timer = max(0.0, self.warning_timer - dt)
-        
+
         # Atualizar timer de multiplicador de score
         if self.score_multiplier_active:
             self.score_multiplier_timer -= dt
@@ -226,11 +232,10 @@ class PlayingScene(Scene):
 
         # Verificar se o boss está em pausa do frenzy
         boss_pausing = False
-        if self.entity_manager.boss:
+        if self._boss_type_cache == "spike" and self.entity_manager.boss:
             from ..entities.spike_boss import SpikeBoss
 
-            if isinstance(self.entity_manager.boss, SpikeBoss):
-                boss_pausing = self.entity_manager.boss.is_pausing_game()
+            boss_pausing = cast(SpikeBoss, self.entity_manager.boss).is_pausing_game()
 
         # Bloquear movimento e tiro durante entrada da nave
         if not self.ship.is_entering:
@@ -240,12 +245,24 @@ class PlayingScene(Scene):
             # Tiro contínuo com tecla segurada
             if "hold_shoot" in held and self.shoot_cd == 0.0 and not boss_pausing:
                 bullet_specs = self.ship.bullet_spawn()
-                for x, y, is_piercing, is_homing, is_explosive, is_low_ammo in bullet_specs:
+                for (
+                    x,
+                    y,
+                    is_piercing,
+                    is_homing,
+                    is_explosive,
+                    is_low_ammo,
+                ) in bullet_specs:
                     base_damage = 10
                     adjusted_damage = int(base_damage * self.player_damage_multiplier)
                     self.entity_manager.spawn_bullet(
-                        x, y, damage=adjusted_damage, piercing=is_piercing, homing=is_homing, 
-                        explosive=is_explosive, low_ammo=is_low_ammo
+                        x,
+                        y,
+                        damage=adjusted_damage,
+                        piercing=is_piercing,
+                        homing=is_homing,
+                        explosive=is_explosive,
+                        low_ammo=is_low_ammo,
                     )
                     # Consumir carga de tiro explosivo se usado
                     if is_explosive:
@@ -260,17 +277,18 @@ class PlayingScene(Scene):
         if boss_pausing:
             from ..entities.spike_boss import SpikeBoss
 
-            if isinstance(self.entity_manager.boss, SpikeBoss):
-                spawned_spikes, spike_boss_lasers = self.entity_manager.boss.update(
-                    dt,
-                    self.ship.rect.centerx,
-                    self.ship.rect.centery,
-                    self.entity_manager.spikes,
-                )
-                if spawned_spikes:
-                    self.entity_manager.spikes.extend(spawned_spikes)
-                if spike_boss_lasers:
-                    self.entity_manager.boss_lasers.extend(spike_boss_lasers)
+            spawned_spikes, spike_boss_lasers = cast(
+                SpikeBoss, self.entity_manager.boss
+            ).update(
+                dt,
+                self.ship.rect.centerx,
+                self.ship.rect.centery,
+                self.entity_manager.spikes,
+            )
+            if spawned_spikes:
+                self.entity_manager.spikes.extend(spawned_spikes)  # type: ignore
+            if spike_boss_lasers:
+                self.entity_manager.boss_lasers.extend(spike_boss_lasers)  # type: ignore
             return  # Não atualiza nada mais
 
         if (
@@ -382,15 +400,20 @@ class PlayingScene(Scene):
             if self.warning_stage_timer >= Config.BOSS_POST_WARNING_DELAY:
                 self._start_boss_fight()
 
+    def _cache_boss_type(self):
+        """Cachear tipo de boss quando ele spawna"""
+        if self.entity_manager.boss:
+            from ..entities.spike_boss import SpikeBoss
+
+            self._boss_type_cache = (
+                "spike" if isinstance(self.entity_manager.boss, SpikeBoss) else "normal"
+            )
+        else:
+            self._boss_type_cache = None
+
     def _all_animations_finished(self) -> bool:
-        return (
-            self.entity_manager.explosion_pool.get_stats()["active"] == 0
-            # Remover balas do jogador da verificação para permitir transições durante tiros
-            # and not self.entity_manager.bullets
-            and not self.entity_manager.alien_bullets
-            and not self.entity_manager.boss_lasers
-            and not self.entity_manager.enemies
-        )
+        """Check if all animations (explosions) have finished for level transition."""
+        return not self.entity_manager.explosive_effects  # type: ignore
 
     def _process_cheat_input(self, event: pygame.event.Event):
         """
@@ -518,7 +541,7 @@ class PlayingScene(Scene):
             gain += exp_gain
             destroyed += exp_destroyed
             score_events.extend(exp_score_events)
-            
+
             # Também verificar formações
             for formation in self.entity_manager.formations:
                 formation_enemies = formation.get_enemies()
@@ -545,7 +568,7 @@ class PlayingScene(Scene):
             gain += air_gain
             destroyed += air_destroyed
             score_events.extend(air_score_events)
-            
+
             # Também verificar formações
             for formation in self.entity_manager.formations:
                 formation_enemies = formation.get_enemies()
@@ -561,25 +584,19 @@ class PlayingScene(Scene):
                 score_events.extend(f_air_score_events)
 
         for x, y, pts in score_events:
-            # Aplicar multiplicadores de pontuação: nível E dificuldade
-            adjusted_pts = int(
-                pts
-                * self.level_config.score_multiplier
-                * self.difficulty_settings["rewards_multiplier"]
-            )
-            # Aplicar multiplicador de score se ativo
+            # Usar multiplicador em cache
+            multiplier = self._base_score_multiplier
             if self.score_multiplier_active:
-                adjusted_pts = int(adjusted_pts * self.score_multiplier_value)
+                multiplier *= self.score_multiplier_value
+            adjusted_pts = int(pts * multiplier)
             self.entity_manager.floating_scores.append(
                 FloatingScore(x, y, adjusted_pts)
             )
-        score_to_add = int(
-            gain
-            * self.level_config.score_multiplier
-            * self.difficulty_settings["rewards_multiplier"]
-        )
+        # Usar multiplicador em cache
+        multiplier = self._base_score_multiplier
         if self.score_multiplier_active:
-            score_to_add = int(score_to_add * self.score_multiplier_value)
+            multiplier *= self.score_multiplier_value
+        score_to_add = int(gain * multiplier)
         self.score += score_to_add
         self.total_enemies_destroyed += destroyed
         self.enemies_destroyed_in_level += destroyed
@@ -588,25 +605,25 @@ class PlayingScene(Scene):
             self.star_spawner.add_kills(destroyed, self.entity_manager.stars)
 
         if self.entity_manager.boss:
-            from ..entities.spike_boss import SpikeBoss
+            score_gain = 0
+            if self._boss_type_cache == "spike":
+                from ..entities.spike_boss import SpikeBoss
 
-            # Verificar tipo de boss e usar colisão apropriada
-            if isinstance(self.entity_manager.boss, SpikeBoss):
                 score_gain = self.collisions.bullets_vs_spike_boss(
                     self.entity_manager.bullets,
-                    self.entity_manager.boss,
+                    cast(SpikeBoss, self.entity_manager.boss),
                     self.entity_manager.floating_scores,
                     self.entity_manager,
                 )
                 # Mini ships vs SpikeBoss
                 mini_ship_boss_gain = self.collisions.mini_ship_bullets_vs_spike_boss(
                     self.entity_manager.mini_ship_bullets,
-                    self.entity_manager.boss,
+                    cast(SpikeBoss, self.entity_manager.boss),
                     self.entity_manager.floating_scores,
                     self.entity_manager,
                 )
                 score_gain += mini_ship_boss_gain
-            else:
+            elif self._boss_type_cache == "normal":
                 score_gain = self.collisions.bullets_vs_boss(
                     self.entity_manager.bullets,
                     self.entity_manager.boss,  # type: ignore
@@ -621,7 +638,7 @@ class PlayingScene(Scene):
                     self.entity_manager,
                 )
                 score_gain += mini_ship_boss_gain
-            
+
             # Lasers do jogador vs Boss
             laser_boss_gain = self.collisions.player_lasers_vs_boss(
                 self.entity_manager.player_lasers,
@@ -630,7 +647,7 @@ class PlayingScene(Scene):
                 self.entity_manager,
             )
             score_gain += laser_boss_gain
-            
+
             if self.score_multiplier_active:
                 score_gain = int(score_gain * self.score_multiplier_value)
             self.score += score_gain
@@ -651,15 +668,17 @@ class PlayingScene(Scene):
             self._handle_ship_hit()
 
         if self.entity_manager.boss:
-            from ..entities.spike_boss import SpikeBoss
-
             # Verificar tipo de boss para colisão apropriada
-            if isinstance(self.entity_manager.boss, SpikeBoss):
+            if self._boss_type_cache == "spike":
+                from ..entities.spike_boss import SpikeBoss
+
                 if self.collisions.ship_vs_spike_boss(
-                    self.ship, self.entity_manager.boss, self.entity_manager
+                    self.ship,
+                    cast(SpikeBoss, self.entity_manager.boss),
+                    self.entity_manager,
                 ):
                     self._handle_ship_hit()
-            else:
+            elif self._boss_type_cache == "normal":
                 if self.collisions.ship_vs_boss(
                     self.ship,
                     self.entity_manager.boss,  # type: ignore
@@ -883,6 +902,8 @@ class PlayingScene(Scene):
             boss.max_health = boss.health  # Atualizar max_health também
             self.entity_manager.boss = boss
 
+            self._cache_boss_type()  # Cache do tipo de boss
+
             from ..entities.spike_boss import SpikeBoss
 
             if isinstance(self.entity_manager.boss, SpikeBoss):
@@ -937,6 +958,7 @@ class PlayingScene(Scene):
 
         self.entity_manager.boss = None
         self.boss_fight_active = False
+        self._boss_type_cache = None  # Limpar cache
         boss_score = Config.BOSS_DEFEAT_SCORE
         if self.score_multiplier_active:
             boss_score = int(boss_score * self.score_multiplier_value)
@@ -975,6 +997,13 @@ class PlayingScene(Scene):
         self.level_config = self._get_adjusted_level_config(
             self.current_level_index + 1
         )
+
+        # Recalcular multiplicador para o novo nível
+        self._base_score_multiplier = (
+            self.level_config.score_multiplier
+            * self.difficulty_settings["rewards_multiplier"]
+        )
+
         self.enemy_spawner.set_level(self.current_level_index + 1)
         self.enemies_destroyed_in_level = 0
 
@@ -1183,8 +1212,10 @@ class PlayingScene(Scene):
             return
 
         # Filtrar apenas slots com upgrades ativos (não None)
-        active_slots = [(i, upg) for i, upg in enumerate(self.upgrade_slots) if upg is not None]
-        
+        active_slots = [
+            (i, upg) for i, upg in enumerate(self.upgrade_slots) if upg is not None
+        ]
+
         if not active_slots:
             return
 
