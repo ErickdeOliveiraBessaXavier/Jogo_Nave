@@ -531,6 +531,10 @@ class PlayerProfile:
         self._dirty = False
         self._last_save = time.time()
 
+        # OPT #4: Cache global performance analysis
+        self._cached_global_stats: Optional[Dict[str, Any]] = None
+        self._stats_dirty = True
+
         self.load()
 
     def equip_upgrade(self, upgrade_type: Optional[UpgradeType], slot_index: int):
@@ -620,6 +624,15 @@ class PlayerProfile:
     def _mark_dirty(self):
         """Mark profile as having unsaved changes."""
         self._dirty = True
+        self._stats_dirty = True  # OPT #4: Invalidate cache when data changes
+        self._cached_global_stats = None
+
+    def get_global_stats(self) -> Dict[str, Any]:
+        """OPT #4: Get cached global stats, recalculate only if dirty."""
+        if self._cached_global_stats is None or self._stats_dirty:
+            self._cached_global_stats = PerformanceAnalyzer.analyze_global_performance(self)
+            self._stats_dirty = False
+        return self._cached_global_stats
 
     def auto_save(self):
         """Auto-save if dirty and enough time has passed."""
@@ -761,12 +774,12 @@ class PlayerProfile:
         if not self.level_stats:
             return "Novato"
 
-        analysis = PerformanceAnalyzer.analyze_global_performance(self)
+        analysis = self.get_global_stats()  # OPT #4: Use cached version
         return analysis["skill_level"]
 
     def get_statistics_summary(self) -> Dict[str, Any]:
         """Retorna resumo completo de estatísticas."""
-        analysis = PerformanceAnalyzer.analyze_global_performance(self)
+        analysis = self.get_global_stats()  # OPT #4: Use cached version
 
         return {
             "skill_level": analysis["skill_level"],

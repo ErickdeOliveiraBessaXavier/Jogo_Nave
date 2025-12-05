@@ -34,6 +34,16 @@ from ..entities.explosive_mine import ExplosiveMine
 
 
 class Collisions:
+    
+    @staticmethod
+    def get_collision_info(enemy: Meteor | Alien | ExplosiveMine | EyeEnemy) -> tuple[float, float, float]:
+        """OPT #6: Helper para calcular center_x, center_y, radius de qualquer inimigo.
+        
+        Retorna (center_x, center_y, radius) consolidando lógica de type checking.
+        """
+        if isinstance(enemy, ExplosiveMine):
+            return enemy.x, enemy.y, enemy.radius
+        return enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, enemy.w / 2
 
     def check_mine_explosions(
         self,
@@ -275,14 +285,16 @@ class Collisions:
         # Usar grid existente
 
         for b in mini_ship_bullets[:]:
+            # OPT #2 & #3: Cache rect para evitar múltiplos acessos
+            b_rect = b.rect
             # Query potential collisions using spatial grid (expand by 10 pixels for safety)
-            query_x = b.rect.x - 10
-            query_y = b.rect.y - 10
-            query_w = b.rect.width + 20
-            query_h = b.rect.height + 20
+            query_x = b_rect.x - 10
+            query_y = b_rect.y - 10
+            query_w = b_rect.width + 20
+            query_h = b_rect.height + 20
             potential_enemies = enemy_grid.query(query_x, query_y, query_w, query_h)
             for enemy in potential_enemies:
-                if b.rect.colliderect(enemy.rect):
+                if b_rect.colliderect(enemy.rect):  # Usa cache
                     b.dead = True
 
                     if isinstance(enemy, ExplosiveMine):
@@ -292,10 +304,11 @@ class Collisions:
                             enemy.destroy()
                         enemy.dead = True
 
-                        cx, cy = (enemy.rect.centerx, enemy.rect.centery)
+                        # OPT #4 & #6: Usar helper para calcular center
+                        cx, cy, _ = self.get_collision_info(enemy)
                         # Nova forma
                         entity_manager.spawn_explosion(
-                            cx, cy, size=enemy.rect.width // 2
+                            cx, cy, size=int(enemy.w // 2)
                         )
 
                         if isinstance(enemy, Meteor):
@@ -335,14 +348,16 @@ class Collisions:
         # Usar grid existente em vez de criar nova
 
         for b in bullets[:]:
+            # OPT #2 & #3: Cache rect para evitar múltiplos acessos
+            b_rect = b.rect
             # Query potential collisions using spatial grid (expand by 10 pixels for safety)
-            query_x = b.rect.x - 10
-            query_y = b.rect.y - 10
-            query_w = b.rect.width + 20
-            query_h = b.rect.height + 20
+            query_x = b_rect.x - 10
+            query_y = b_rect.y - 10
+            query_w = b_rect.width + 20
+            query_h = b_rect.height + 20
             potential_enemies = enemy_grid.query(query_x, query_y, query_w, query_h)
             for enemy in potential_enemies:
-                if b.rect.colliderect(enemy.rect):
+                if b_rect.colliderect(enemy.rect):  # Usa cache
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
                     else:
@@ -350,9 +365,10 @@ class Collisions:
                             enemy.destroy()
                         enemy.dead = True
 
-                        cx, cy = (enemy.x + enemy.w / 2, enemy.y + enemy.h / 2)
+                        # OPT #4 & #6: Usar helper para calcular center
+                        cx, cy, _ = self.get_collision_info(enemy)
                         # Nova forma: usar pool
-                        entity_manager.spawn_explosion(cx, cy, size=enemy.w // 2)
+                        entity_manager.spawn_explosion(cx, cy, size=int(enemy.w // 2))
 
                         # Tocar som de explosão baseado no tipo de inimigo
                         if isinstance(enemy, Meteor):
@@ -401,15 +417,10 @@ class Collisions:
                         for nearby_enemy in area_query:
                             if nearby_enemy.dead:
                                 continue
-                            # Verificar distância real
-                            enemy_cx = (
-                                nearby_enemy.x + getattr(nearby_enemy, "w", 0) / 2
-                            )
-                            enemy_cy = (
-                                nearby_enemy.y + getattr(nearby_enemy, "h", 0) / 2
-                            )
-                            dist_sq = (enemy_cx - explosion_cx) ** 2 + (
-                                enemy_cy - explosion_cy
+                            # OPT #4 & #6: Usar helper para calcular center
+                            ncx, ncy, _ = self.get_collision_info(nearby_enemy)
+                            dist_sq = (ncx - explosion_cx) ** 2 + (
+                                ncy - explosion_cy
                             ) ** 2
                             if dist_sq < explosion_radius**2:
                                 if isinstance(nearby_enemy, ExplosiveMine):
@@ -418,12 +429,8 @@ class Collisions:
                                     if isinstance(nearby_enemy, EyeEnemy):
                                         nearby_enemy.destroy()
                                     nearby_enemy.dead = True
-                                    ncx, ncy = (
-                                        nearby_enemy.x + nearby_enemy.w / 2,
-                                        nearby_enemy.y + nearby_enemy.h / 2,
-                                    )
                                     entity_manager.spawn_explosion(
-                                        ncx, ncy, size=nearby_enemy.w // 2
+                                        ncx, ncy, size=int(nearby_enemy.w // 2)
                                     )
                                     pts = nearby_enemy.get_points_value()
                                     score_gain += pts
@@ -450,8 +457,12 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         score_gain = 0
+        # OPT #2: Cache boss rect
+        boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
         for b in bullets[:]:
-            if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
+            # OPT #3: Cache bullet rect
+            b_rect = b.rect
+            if b_rect.colliderect(boss_rect):  # Usa caches
                 if not b.piercing:
                     b.dead = True
                 boss.take_damage(b.damage)
@@ -633,27 +644,24 @@ class Collisions:
     def mini_ship_bullets_vs_spikes(
         self,
         mini_ship_bullets: list[MiniShipBullet],
-        spikes: list[Spike],
+        spike_grid: SpatialGrid[Spike],  # OPT #1: Recebe grid pronta
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com Spikes."""
         score_gain = 0
 
-        # Build spatial grid for spikes
-        grid = SpatialGrid[Spike]()
-        for spike in spikes:
-            grid.insert_from_rect(spike)
-
+        # OPT #2 & #3: Cache rect para evitar múltiplos acessos
         for b in mini_ship_bullets[:]:
+            b_rect = b.rect  # Cache uma vez
             # Query potential spikes (expand by 10 pixels)
-            query_x = b.rect.x - 10
-            query_y = b.rect.y - 10
-            query_w = b.rect.width + 20
-            query_h = b.rect.height + 20
-            potential_spikes = grid.query(query_x, query_y, query_w, query_h)
+            query_x = b_rect.x - 10
+            query_y = b_rect.y - 10
+            query_w = b_rect.width + 20
+            query_h = b_rect.height + 20
+            potential_spikes = spike_grid.query(query_x, query_y, query_w, query_h)
             for spike in potential_spikes:
                 # Só colide se o spike estiver voando
-                if spike.state == "flying" and b.rect.colliderect(spike.rect):
+                if spike.state == "flying" and b_rect.colliderect(spike.rect):  # Usa cache
                     b.dead = True
                     spike.dead = True
                     entity_manager.spawn_explosion(
@@ -708,26 +716,23 @@ class Collisions:
     def bullets_vs_spikes(
         self,
         bullets: list[Bullet],
-        spikes: list[Spike],
+        spike_grid: SpatialGrid[Spike],  # OPT #1: Recebe grid pronta
         entity_manager: "EntityManager",
     ) -> int:
         """Verifica colisão entre balas e espinhos. Retorna pontos ganhos."""
         score_gain = 0
 
-        # Build spatial grid for spikes
-        grid = SpatialGrid[Spike]()
-        for spike in spikes:
-            grid.insert_from_rect(spike)
-
+        # OPT #2 & #3: Cache rect para evitar múltiplos acessos
         for b in bullets[:]:
+            b_rect = b.rect  # Cache uma vez
             # Query potential spikes (expand by 10 pixels)
-            query_x = b.rect.x - 10
-            query_y = b.rect.y - 10
-            query_w = b.rect.width + 20
-            query_h = b.rect.height + 20
-            potential_spikes = grid.query(query_x, query_y, query_w, query_h)
+            query_x = b_rect.x - 10
+            query_y = b_rect.y - 10
+            query_w = b_rect.width + 20
+            query_h = b_rect.height + 20
+            potential_spikes = spike_grid.query(query_x, query_y, query_w, query_h)
             for spike in potential_spikes:
-                if b.rect.colliderect(spike.rect):
+                if b_rect.colliderect(spike.rect):  # Usa cache
                     # Remover bala
                     if not b.piercing:
                         b.dead = True
@@ -757,8 +762,12 @@ class Collisions:
     ) -> int:
         """Colisão de balas com SpikeBoss."""
         score_gain = 0
+        # OPT #2: Cache boss rect
+        boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
         for b in bullets[:]:
-            if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
+            # OPT #3: Cache bullet rect
+            b_rect = b.rect
+            if b_rect.colliderect(boss_rect):  # Usa caches
                 if not b.piercing:
                     b.dead = True
                 boss.take_damage(b.damage)

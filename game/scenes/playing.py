@@ -129,6 +129,9 @@ class PlayingScene(Scene):
         self.enemy_blink_interval = 0.2  # Intervalo de piscar (200ms)
         self.enemy_visible = True  # Controle de visibilidade para piscar
 
+        # Debug FPS display (F3 toggle)
+        self.show_fps = False
+
         # Sistema de multiplicador de score
         self.score_multiplier_timer = 0.0
         self.score_multiplier_active = False
@@ -672,7 +675,7 @@ class PlayingScene(Scene):
         if self.entity_manager.spikes:
             spike_gain = self.collisions.mini_ship_bullets_vs_spikes(
                 self.entity_manager.mini_ship_bullets,
-                self.entity_manager.spikes,
+                self.entity_manager.spike_spatial_grid,  # OPT #1: Usa grid pronta
                 self.entity_manager,
             )
             if self.score_multiplier_active:
@@ -795,7 +798,7 @@ class PlayingScene(Scene):
         # Balas vs espinhos
         spike_score = self.collisions.bullets_vs_spikes(
             self.entity_manager.bullets,
-            self.entity_manager.spikes,
+            self.entity_manager.spike_spatial_grid,  # OPT #1: Usa grid pronta
             self.entity_manager,
         )
         if self.score_multiplier_active:
@@ -1320,17 +1323,11 @@ class PlayingScene(Scene):
 
             ui = upg.get_ui_state()  # type: ignore
 
-            # Ícone no centro (símbolos ASCII/simples baseados no tipo)
-            icon_map = {
-                "Shield Burst": "S",  # S de Shield
-                "Heal": "H",  # H de Heal
-                "EMP": "E",  # E de EMP
-            }
-            # Usar mapeamento; caso não exista, usar inicial do nome
+            # Ícone no centro (usando função centralizada de mapeamento)
+            from ..core.upgrades import get_upgrade_icon
             name_str = str(ui.get("name", ""))
-            icon = icon_map.get(name_str)
-            if not icon:
-                icon = name_str[:1].upper() if name_str else "?"
+            icon_id = str(ui.get("icon_id", "")) if ui.get("icon_id") else None
+            icon = get_upgrade_icon(name_str, icon_id)
             icon_txt = font.render(icon, True, _colors.CYAN)
             icon_rect = icon_txt.get_rect(center=(slot_w // 2, slot_h // 2))
             slot_surface.blit(icon_txt, icon_rect)

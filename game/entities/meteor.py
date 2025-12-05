@@ -6,6 +6,24 @@ from ..core.config import config as Config
 from ..core import colors
 
 
+# Cache global de shapes para reutilização (evita recalcular pontos irregulares)
+_SHAPE_CACHE: dict[int, List[Tuple[float, float]]] = {}
+
+
+def _get_or_create_shape(size: int) -> List[Tuple[float, float]]:
+    """Retorna shape cacheado ou cria novo."""
+    if size not in _SHAPE_CACHE:
+        pts: List[Tuple[float, float]] = []
+        num = 6
+        for i in range(num):
+            ang = (2 * math.pi * i) / num
+            rv = random.uniform(0.6, 1.4)
+            r = size * rv
+            pts.append((r * math.cos(ang), r * math.sin(ang)))
+        _SHAPE_CACHE[size] = pts
+    return _SHAPE_CACHE[size]
+
+
 class Meteor:
     def __init__(
         self,
@@ -83,7 +101,7 @@ class Meteor:
         self.rotation_speed = random.uniform(-3, 3) * (1.0 - ratio * 0.5)
 
         # forma irregular + cor
-        self._base_points: List[Tuple[float, float]] = self._generate_irregular_shape()
+        self._base_points: List[Tuple[float, float]] = _get_or_create_shape(self.size)
         self.color_intensity = 1.0 - ratio * 0.3
         self.dead = False
         self.active = True  # Para o Pool Pattern
@@ -155,7 +173,7 @@ class Meteor:
         self.rotation_speed = random.uniform(-3, 3) * (1.0 - ratio * 0.5)
 
         # forma irregular + cor
-        self._base_points = self._generate_irregular_shape()
+        self._base_points = _get_or_create_shape(self.size)
         self.color_intensity = 1.0 - ratio * 0.3
         self.dead = False
         self.active = True
@@ -230,26 +248,37 @@ class Meteor:
         cy = self.y + self.h / 2
 
         count = random.randint(*Config.FRAGMENT_COUNT_RANGE)
-        target_size = max(Config.MIN_METEOR_SIZE, int(self.size * 0.55))  # metade ~55%
+        target_size = max(Config.MIN_METEOR_SIZE, int(self.size * 0.55))
         frags: List[Meteor] = []
 
-        # Direção base aleatória; espalhe em cone
-        base_angle = random.uniform(0, 360)
-        half_spread = Config.FRAGMENT_SPREAD / 2
+        # Pré-calcular valores constantes para todos os fragmentos
+        base_angle_rad = math.radians(random.uniform(0, 360))
+        half_spread_rad = math.radians(Config.FRAGMENT_SPREAD / 2)
+        speed_boost = self.vy * Config.FRAGMENT_SPEED_BOOST
+        vy_base = self.vy * 0.2
+        size_offset_x = self.size * 0.5
+        size_offset_y = self.size * 0.3
 
         for _ in range(count):
-            # variação de tamanho (±20%), garantindo >= MIN
+            # variação de tamanho (±20%)
             s = max(Config.MIN_METEOR_SIZE, int(target_size * random.uniform(0.8, 1.2)))
 
-            # ângulo e velocidade
-            ang = math.radians(base_angle + random.uniform(-half_spread, half_spread))
-            speed = (self.vy * Config.FRAGMENT_SPEED_BOOST) * random.uniform(0.9, 1.25)
-            vx = math.cos(ang) * speed
-            vy = abs(math.sin(ang) * speed) + (self.vy * 0.2)  # tende a cair pra baixo
+            # ângulo relativo (apenas 1 random.uniform por fragmento)
+            angle_offset = random.uniform(-half_spread_rad, half_spread_rad)
+            ang = base_angle_rad + angle_offset
 
-            # ligeiro deslocamento pra não colidir imediatamente
-            fx = cx + math.cos(ang) * (self.size * 0.5) - s
-            fy = cy + math.sin(ang) * (self.size * 0.3) - s
+            # Calcular cos/sin uma única vez
+            cos_ang = math.cos(ang)
+            sin_ang = math.sin(ang)
+
+            # velocidade
+            speed = speed_boost * random.uniform(0.9, 1.25)
+            vx = cos_ang * speed
+            vy = abs(sin_ang * speed) + vy_base
+
+            # posição (reutilizar cos_ang, sin_ang)
+            fx = cx + cos_ang * size_offset_x - s
+            fy = cy + sin_ang * size_offset_y - s
 
             frags.append(Meteor(size=s, x=fx, y=fy, vx=vx, vy=vy))
         return frags

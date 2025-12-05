@@ -608,7 +608,7 @@ UPGRADES_REGISTRY: Dict[UpgradeType, Callable[[], ActiveUpgrade]] = {}
 UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     UpgradeType.SHIELD_BURST: UpgradeMeta(
         type=UpgradeType.SHIELD_BURST,
-        name="Shield",
+        name="SHLD",
         desc="Ativa um escudo temporário que absorve dano.",
         icon_id="shield_burst",
         category=UpgradeCategory.DEFENSIVE,
@@ -618,7 +618,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     ),
     UpgradeType.HEAL: UpgradeMeta(
         type=UpgradeType.HEAL,
-        name="Heal",
+        name="HEAL",
         desc="Restaura 1 vida, respeitando o limite máximo.",
         icon_id="heal",
         category=UpgradeCategory.DEFENSIVE,
@@ -638,7 +638,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     ),
     UpgradeType.HOMING_SHOT: UpgradeMeta(
         type=UpgradeType.HOMING_SHOT,
-        name="Tiro Teleg.",
+        name="HOM",
         desc="Tiros seguem inimigos automaticamente. Reduz velocidade da nave e cadência de tiro.",
         icon_id="homing_shot",
         category=UpgradeCategory.OFFENSIVE,
@@ -648,7 +648,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     ),
     UpgradeType.LASER_SHOT: UpgradeMeta(
         type=UpgradeType.LASER_SHOT,
-        name="Laser Orb",
+        name="LAS",
         desc="3 bolas elétricas orbitais, cada uma dispara 3 lasers automáticos.",
         icon_id="laser_shot",
         category=UpgradeCategory.OFFENSIVE,
@@ -658,7 +658,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     ),
     UpgradeType.EXPLOSIVE_SHOT: UpgradeMeta(
         type=UpgradeType.EXPLOSIVE_SHOT,
-        name="Tiro Expl.",
+        name="EXPL",
         desc="Cada tiro cria uma pequena explosão que elimina inimigos próximos.",
         icon_id="explosive_shot",
         category=UpgradeCategory.OFFENSIVE,
@@ -668,7 +668,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     ),
     UpgradeType.AIR_STRIKE: UpgradeMeta(
         type=UpgradeType.AIR_STRIKE,
-        name="Bombardeio",
+        name="AIR",
         desc="Ultimate: 10 bombas caem em áreas aleatórias destruindo tudo.",
         icon_id="air_strike",
         category=UpgradeCategory.OFFENSIVE,
@@ -729,3 +729,50 @@ def create_upgrade(upgrade_type: UpgradeType) -> ActiveUpgrade:
 
 def list_all_upgrades_meta() -> list[UpgradeMeta]:
     return list(UPGRADES_META.values())
+
+
+def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
+    """Retorna o caractere único do ícone, usando id ou nome como fallback."""
+
+    # 1) Preferir icon_id do UpgradeMeta (estável e neutro a língua)
+    if icon_id:
+        icon_id_map = {
+            "shield_burst": "S",
+            "heal": "H",
+            "emp": "E",
+            "homing_shot": "O",
+            "laser_shot": "L",
+            "explosive_shot": "X",
+            "air_strike": "A",
+        }
+        icon = icon_id_map.get(icon_id)
+        if icon:
+            return icon
+
+    # 2) Fallback por nome (EN)
+    icon_name_map = {
+        "Shield Burst": "S",
+        "Shield": "S",
+        "SHLD": "S",
+        "Heal": "H",
+        "HEAL": "H",
+        "EMP": "E",
+        "Homing Shot": "O",
+        "Homing": "O",
+        "HOM": "O",
+        "Laser Shot": "L",
+        "Laser": "L",
+        "LAS": "L",
+        "Explosive Shot": "X",
+        "Explosive": "X",
+        "EXPL": "X",
+        "Air Strike": "A",
+        "AIR": "A",
+    }
+
+    icon = icon_name_map.get(upgrade_name)
+    if icon:
+        return icon
+
+    # 3) Último recurso: primeira letra maiúscula
+    return upgrade_name[:1].upper() if upgrade_name else "?"

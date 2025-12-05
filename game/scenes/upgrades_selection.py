@@ -9,6 +9,7 @@ from ..core import colors
 from ..core.assets import get_font, get_image, BASE_DIR
 from ..core.upgrades import (
     list_all_upgrades_meta,
+    get_upgrade_icon,
     UpgradeCategory,
     UpgradeMeta,
 )
@@ -469,8 +470,8 @@ class UpgradesSelectionScene(Scene):
             icon_color = colors.GREEN if unlocked else (80, 80, 80)
             pygame.draw.circle(surface, icon_color, icon_center, icon_radius)
 
-            # Letra inicial do nome
-            initial = upgrade.name[0].upper()
+            # Letra inicial do nome (usando função centralizada)
+            initial = get_upgrade_icon(upgrade.name, upgrade.icon_id)
             initial_text = self.header_font.render(
                 initial, True, colors.WHITE if unlocked else (50, 50, 50)
             )
@@ -598,7 +599,7 @@ class UpgradesSelectionScene(Scene):
                     icon_center = (draw_rect.centerx, draw_rect.centery - 10)
                     pygame.draw.circle(surface, colors.GREEN, icon_center, 30)
 
-                    initial = upgrade_meta.name[0].upper()
+                    initial = get_upgrade_icon(upgrade_meta.name, upgrade_meta.icon_id)
                     initial_text = self.header_font.render(initial, True, colors.WHITE)
                     surface.blit(
                         initial_text,
@@ -692,7 +693,7 @@ class UpgradesSelectionScene(Scene):
 
         # Ícone
         pygame.draw.circle(drag_surf, colors.GREEN, (40, 40), 25)
-        initial = self.dragging_upgrade.name[0].upper()
+        initial = get_upgrade_icon(self.dragging_upgrade.name, self.dragging_upgrade.icon_id)
         initial_text = self.header_font.render(initial, True, colors.WHITE)
         drag_surf.blit(
             initial_text,

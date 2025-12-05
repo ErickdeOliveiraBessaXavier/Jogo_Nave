@@ -65,6 +65,7 @@ class EntityManager:
         self.enemy_spatial_grid: SpatialGrid[
             Meteor | Alien | ExplosiveMine | EyeEnemy
         ] = SpatialGrid()  # Grid espacial para inimigos
+        self.spike_spatial_grid: SpatialGrid[Spike] = SpatialGrid()  # OPT: Grid para spikes
         self.explosion_pool = ExplosionPool(initial_size=50)  # Pool de explosões
 
     def spawn_explosion(self, x: float, y: float, size: int = 30) -> Explosion:
@@ -116,9 +117,10 @@ class EntityManager:
         self.player_lasers.append(laser)
         return laser
 
-    def rebuild_enemy_grid(self):
-        """Reconstrói a grid espacial com TODOS os inimigos (normais + formações)."""
-        self.enemy_spatial_grid.clear()  # Limpar grid anterior
+    def rebuild_all_grids(self):
+        """OPT #1: Reconstrói todas as grids espaciais (inimigos + spikes)."""
+        # Grid de inimigos normais + formações
+        self.enemy_spatial_grid.clear()
 
         # Inserir inimigos normais
         for enemy in self.enemies:
@@ -134,6 +136,11 @@ class EntityManager:
             for formation in self.formations:
                 for enemy in formation.get_enemies():
                     self.enemy_spatial_grid.insert_from_rect(enemy)
+
+        # OPT #1: Grid de spikes (para evitar criar grid toda vez em collision checks)
+        self.spike_spatial_grid.clear()
+        for spike in self.spikes:
+            self.spike_spatial_grid.insert_from_rect(spike)
 
     def update(self, dt: float, player_x: float, player_y: float):
         from typing import Any
@@ -330,7 +337,7 @@ class EntityManager:
 
         # CRÍTICO: Cleanup ANTES de rebuild
         self.cleanup()
-        self.rebuild_enemy_grid()
+        self.rebuild_all_grids()  # OPT #1: Reconstrói todas as grids
 
     def update_for_game_over_slow_motion(
         self, dt: float, player_x: float, player_y: float

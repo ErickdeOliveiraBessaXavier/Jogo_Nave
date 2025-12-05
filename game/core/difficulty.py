@@ -1,5 +1,6 @@
 from enum import Enum
 from typing import TypedDict, NotRequired
+from functools import lru_cache
 
 
 class DifficultySettingsDict(TypedDict):
@@ -73,6 +74,7 @@ class DifficultySettings:
     }
 
     @classmethod
+    @lru_cache(maxsize=4)  # OPT #5: Cache 4 difficulty presets
     def get_settings(cls, preset: DifficultyPreset) -> DifficultySettingsDict:
         """Retorna configurações para um preset."""
         return cls.PRESETS[preset]

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Type
+from functools import lru_cache
 import random
 import math
 from ..entities.meteor import Meteor
@@ -14,6 +15,9 @@ from .difficulty import DifficultyPreset, DifficultySettings
 # ============================================================================
 # CONSTANTES DE CONFIGURAÇÃO
 # ============================================================================
+
+# OPT #7: Pre-calculate math lookup table for enemy counts (levels 1-100)
+_ENEMY_COUNT_TABLE = {i: int(math.log1p(i) * 20) for i in range(1, 101)}
 
 
 class DifficultyConfig:
@@ -243,6 +247,8 @@ class ProceduralLevelGenerator:
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
 
+    # OPT #6: Cache últimos 50 níveis gerados para não recalcular
+    @lru_cache(maxsize=50)
     def generate_level(self, level_number: int) -> LevelConfig:
         """Gera configuração procedural para um nível."""
         # Criar uma instância de Random com uma seed determinística para este nível
@@ -402,9 +408,13 @@ class ProceduralLevelGenerator:
                 math.sqrt(level_number) * 15
             )
         elif curve == "logarithmic":
-            base_enemies = DifficultyConfig.BASE_ENEMIES + int(
-                math.log1p(level_number) * 20
-            )
+            # OPT #7: Use pre-calculated lookup table for levels 1-100
+            if level_number <= 100:
+                base_enemies = DifficultyConfig.BASE_ENEMIES + _ENEMY_COUNT_TABLE[level_number]
+            else:
+                base_enemies = DifficultyConfig.BASE_ENEMIES + int(
+                    math.log1p(level_number) * 20
+                )
         else:  # linear
             base_enemies = DifficultyConfig.BASE_ENEMIES + (
                 level_number * DifficultyConfig.ENEMIES_PER_LEVEL
