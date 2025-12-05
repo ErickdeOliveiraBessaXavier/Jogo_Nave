@@ -27,6 +27,9 @@ DEFAULT_UNLOCKED: List[UpgradeType] = [
     UpgradeType.SHIELD_BURST,
     UpgradeType.HEAL,
     UpgradeType.EMP,
+    UpgradeType.HOMING_SHOT,
+    UpgradeType.LASER_SHOT,
+    UpgradeType.EXPLOSIVE_SHOT,
 ]
 
 # Parâmetros de balanceamento do EMP (tempo e intensidade)
@@ -35,6 +38,10 @@ EMP_BASE_DURATION: float = 10.0  # Tempo que o EMP fica ativo
 EMP_LINGER_DURATION: float = (
     8.0  # Tempo que o slow persiste após ser atingido pela onda
 )
+
+# Parâmetros de balanceamento do Tiro Teleguiado
+HOMING_SPEED_PENALTY: float = 0.75  # Nave fica a 75% da velocidade normal
+HOMING_FIRE_RATE_PENALTY: float = 1.2  # Leva 20% mais tempo para atirar (cadência reduzida)
 
 # Futuro: overrides por dificuldade ou progressão
 # Example structure (não usado no MVP):

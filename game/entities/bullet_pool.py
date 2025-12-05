@@ -32,6 +32,9 @@ class BulletPool:
         y: float,
         damage: int = 10,
         piercing: bool = False,
+        homing: bool = False,
+        explosive: bool = False,
+        low_ammo: bool = False,
     ) -> Bullet:
         """
         Obtém uma bala do pool, reutilizando uma inativa ou criando nova.
@@ -40,6 +43,9 @@ class BulletPool:
             x, y: Posição inicial da bala
             damage: Dano da bala
             piercing: Se a bala é perfurante
+            homing: Se a bala é teleguiada
+            explosive: Se a bala é explosiva
+            low_ammo: Se restam poucas cargas (efeito de piscar)
 
         Returns:
             Bala ativa e configurada
@@ -47,12 +53,12 @@ class BulletPool:
         # Procura uma bala inativa no pool
         for bullet in self.pool:
             if not bullet.active:
-                bullet.reset(x=x, y=y, damage=damage, piercing=piercing)
+                bullet.reset(x=x, y=y, damage=damage, piercing=piercing, homing=homing, explosive=explosive, low_ammo=low_ammo)
                 self.active.append(bullet)
                 return bullet
 
         # Se não houver disponível, cria nova
-        bullet = Bullet(x=x, y=y, damage=damage, piercing=piercing)
+        bullet = Bullet(x=x, y=y, damage=damage, piercing=piercing, homing=homing, explosive=explosive, low_ammo=low_ammo)
         self.pool.append(bullet)
         self.active.append(bullet)
         return bullet

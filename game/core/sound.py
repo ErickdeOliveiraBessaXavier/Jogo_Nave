@@ -4,7 +4,7 @@ import os
 import sys
 import threading
 import time
-from typing import Dict, List, cast, Any, Union
+from typing import Dict, List, cast, Any, Union, Callable, TypeVar
 from functools import wraps
 
 from .sound_config import (
@@ -17,6 +17,8 @@ from .sound_config import (
 )
 
 MusicPaths = Dict[str, Union[str, List[str]]]
+
+F = TypeVar('F', bound=Callable[..., Any])
 
 
 def get_resource_path(relative_path: str) -> str:
@@ -31,10 +33,10 @@ def get_resource_path(relative_path: str) -> str:
     return os.path.join(base_path, relative_path)
 
 
-def require_audio(func):
+def require_audio(func: F) -> F:
     """Decorador que verifica se o áudio está disponível antes de executar."""
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
         if not getattr(self, 'audio_available', True):
             return None
         try:
@@ -44,7 +46,7 @@ def require_audio(func):
             if hasattr(self, 'audio_available'):
                 self.audio_available = False
             return None
-    return wrapper
+    return wrapper  # type: ignore
 
 
 class MusicStateManager:
@@ -618,10 +620,12 @@ class SoundManager:
             sound.set_volume(self.sfx_volume * self.master_volume)
             sound.play()
 
+    @require_audio
     def stop_warning(self):
         """Para especificamente o som de warning."""
         self.warning_channel.stop()
 
+    @require_audio
     def stop_all_sfx(self):
         """Para todos os efeitos sonoros (não afeta a música)."""
         self.warning_channel.stop()

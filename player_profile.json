@@ -1,72 +1,20 @@
 {
   "version": "1.0",
-  "profile_created": "2025-12-04T02:30:37.041036",
-  "last_played": "2025-12-04T02:30:46.304962",
-  "total_playtime": 31.513923,
+  "profile_created": "2025-12-04T23:27:15.975307",
+  "last_played": null,
+  "total_playtime": 0.0,
   "highest_level_reached": 1,
-  "total_deaths": 5,
+  "total_deaths": 0,
   "total_score": 0,
-  "level_stats": {
-    "1": {
-      "level_number": 1,
-      "attempts": 1,
-      "clears": 0,
-      "deaths": 5,
-      "total_time": 0.0,
-      "best_time": null,
-      "worst_time": 0.0,
-      "total_score": 0,
-      "best_score": 0,
-      "total_enemies_killed": 0,
-      "total_damage_taken": 0,
-      "total_powerups_collected": 0,
-      "recent_attempts": [
-        {
-          "timestamp": "2025-12-04T02:30:49.971975",
-          "cleared": false,
-          "cause": "collision"
-        },
-        {
-          "timestamp": "2025-12-04T02:31:00.178542",
-          "cleared": false,
-          "cause": "collision"
-        },
-        {
-          "timestamp": "2025-12-04T02:31:04.147566",
-          "cleared": false,
-          "cause": "collision"
-        },
-        {
-          "timestamp": "2025-12-04T02:31:09.805933",
-          "cleared": false,
-          "cause": "collision"
-        },
-        {
-          "timestamp": "2025-12-04T02:31:12.868229",
-          "cleared": false,
-          "cause": "game_over"
-        }
-      ],
-      "first_played": "2025-12-04T02:30:46.304956",
-      "last_played": "2025-12-04T02:30:46.304962",
-      "current_win_streak": 0,
-      "best_win_streak": 0
-    }
-  },
+  "level_stats": {},
   "level_adjustments": {},
-  "session_history": [
-    {
-      "start_time": "2025-12-04T02:30:41.354325",
-      "end_time": "2025-12-04T02:31:12.868248",
-      "levels_attempted": [],
-      "deaths": 5,
-      "score": 0,
-      "powerups_collected": 0
-    }
-  ],
+  "session_history": [],
   "unlocked_upgrades": [
     "EMP",
+    "EXPLOSIVE_SHOT",
     "HEAL",
+    "HOMING_SHOT",
+    "LASER_SHOT",
     "SHIELD_BURST"
   ],
   "upgrade_loadout": [

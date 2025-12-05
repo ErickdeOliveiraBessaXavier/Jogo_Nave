@@ -192,7 +192,7 @@ class PlayingScene(Scene):
         if self.state == "playing" and self.level_start_time is None:
             self.level_start_time = time.time()
 
-            self.ship.update(dt)  # Atualiza animações da nave (ex: propulsores)
+            self.ship.update(dt, self.entity_manager)  # Atualiza animações da nave (ex: propulsores)
             return
 
         # Timers
@@ -220,7 +220,7 @@ class PlayingScene(Scene):
                 if self.level_transition_timer >= self.level_transition_delay:
                     self._start_next_level()
 
-        self.ship.update(dt)
+        self.ship.update(dt, self.entity_manager)
         if self.ship.mini_ships_timer == 0.0 and self.entity_manager.mini_ships:
             self.entity_manager.mini_ships.clear()
 
@@ -240,12 +240,16 @@ class PlayingScene(Scene):
             # Tiro contínuo com tecla segurada
             if "hold_shoot" in held and self.shoot_cd == 0.0 and not boss_pausing:
                 bullet_specs = self.ship.bullet_spawn()
-                for x, y, is_piercing in bullet_specs:
+                for x, y, is_piercing, is_homing, is_explosive, is_low_ammo in bullet_specs:
                     base_damage = 10
                     adjusted_damage = int(base_damage * self.player_damage_multiplier)
                     self.entity_manager.spawn_bullet(
-                        x, y, damage=adjusted_damage, piercing=is_piercing
+                        x, y, damage=adjusted_damage, piercing=is_piercing, homing=is_homing, 
+                        explosive=is_explosive, low_ammo=is_low_ammo
                     )
+                    # Consumir carga de tiro explosivo se usado
+                    if is_explosive:
+                        self.ship.consume_explosive_shot()
                 # Tocar som de tiro (varia entre os 3 sons automaticamente)
                 sound_manager.play_shot()
                 # Aplicar multiplicador de velocidade de ataque do power-up de velocidade
@@ -447,6 +451,22 @@ class PlayingScene(Scene):
         destroyed += vector_destroyed
         score_events.extend(vector_score_events)
 
+        # Lasers do jogador vs inimigos
+        laser_gain: int
+        laser_destroyed: int
+        laser_score_events: list[tuple[float, float, int]]
+        laser_gain, laser_destroyed, laser_score_events = (
+            self.collisions.player_lasers_vs_enemies(
+                self.entity_manager.player_lasers,
+                self.entity_manager.enemies,
+                self.entity_manager.floating_scores,
+                self.entity_manager,
+            )
+        )
+        gain += laser_gain
+        destroyed += laser_destroyed
+        score_events.extend(laser_score_events)
+
         # Explosões de minas vs inimigos normais
         mine_gain: int
         mine_destroyed: int
@@ -485,6 +505,33 @@ class PlayingScene(Scene):
             self._handle_ship_hit()
             # Meta-progression: Track damage taken
             self.level_damage_taken += 1
+
+        # Colisão contínua dos efeitos explosivos vs inimigos (para pegar fragmentos)
+        if self.entity_manager.explosive_effects:
+            exp_gain, exp_destroyed, exp_score_events = (
+                self.collisions.explosive_effects_vs_enemies(
+                    self.entity_manager.explosive_effects,
+                    self.entity_manager.enemies,
+                    self.entity_manager,
+                )
+            )
+            gain += exp_gain
+            destroyed += exp_destroyed
+            score_events.extend(exp_score_events)
+            
+            # Também verificar formações
+            for formation in self.entity_manager.formations:
+                formation_enemies = formation.get_enemies()
+                f_exp_gain, f_exp_destroyed, f_exp_score_events = (
+                    self.collisions.explosive_effects_vs_enemies(
+                        self.entity_manager.explosive_effects,
+                        formation_enemies,
+                        self.entity_manager,
+                    )
+                )
+                gain += f_exp_gain
+                destroyed += f_exp_destroyed
+                score_events.extend(f_exp_score_events)
 
         for x, y, pts in score_events:
             # Aplicar multiplicadores de pontuação: nível E dificuldade
@@ -547,6 +594,16 @@ class PlayingScene(Scene):
                     self.entity_manager,
                 )
                 score_gain += mini_ship_boss_gain
+            
+            # Lasers do jogador vs Boss
+            laser_boss_gain = self.collisions.player_lasers_vs_boss(
+                self.entity_manager.player_lasers,
+                self.entity_manager.boss,  # type: ignore
+                self.entity_manager.floating_scores,
+                self.entity_manager,
+            )
+            score_gain += laser_boss_gain
+            
             if self.score_multiplier_active:
                 score_gain = int(score_gain * self.score_multiplier_value)
             self.score += score_gain
@@ -1000,6 +1057,8 @@ class PlayingScene(Scene):
             score_multiplier_timer=self.score_multiplier_timer,
             mini_ships_active=self.ship.mini_ships_timer > 0,
             mini_ships_timer=self.ship.mini_ships_timer,
+            explosive_shots_active=self.ship.explosive_shots_active,
+            explosive_shots_remaining=self.ship.explosive_shots_remaining,
         )
 
         # HUD de aprimoramentos (na game_surface)

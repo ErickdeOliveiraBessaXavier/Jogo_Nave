@@ -21,6 +21,9 @@ class UpgradeType(Enum):
     SHIELD_BURST = auto()
     HEAL = auto()
     EMP = auto()
+    HOMING_SHOT = auto()
+    LASER_SHOT = auto()
+    EXPLOSIVE_SHOT = auto()
 
 
 class UpgradeCategory(Enum):
@@ -114,7 +117,18 @@ class ActiveUpgrade:
 
     def update(self, dt: float, ctx: Optional[UpgradeContext] = None) -> None:
         if self.cooldown_left > 0.0:
+            old_cooldown = self.cooldown_left
             self.cooldown_left = max(0.0, self.cooldown_left - dt)
+            
+            # Se tem cargas e acabou o cooldown, recupera uma carga
+            if old_cooldown > 0.0 and self.cooldown_left == 0.0:
+                if self.charges_left is not None and self.meta.base_charges is not None:
+                    if self.charges_left < self.meta.base_charges:
+                        self.charges_left += 1
+                        # Se ainda não recuperou todas as cargas, inicia novo cooldown
+                        if self.charges_left < self.meta.base_charges:
+                            self.cooldown_left = self.get_effective_cooldown(ctx)
+        
         if self.active:
             self.duration_left = max(0.0, self.duration_left - dt)
             if self.duration_left <= 0.0:
@@ -299,6 +313,181 @@ class EMPUpgrade(ActiveUpgrade):
             pass
 
 
+class HomingShotUpgrade(ActiveUpgrade):
+    def allows_refresh(self) -> bool:
+        return True
+
+    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+        ship = getattr(ctx, "ship", None)
+        if ship is None:
+            return
+        
+        duration = self.get_effective_duration(ctx)
+        
+        try:
+            from .upgrades_config import HOMING_SPEED_PENALTY, HOMING_FIRE_RATE_PENALTY
+            speed_penalty = float(HOMING_SPEED_PENALTY)
+            fire_rate_penalty = float(HOMING_FIRE_RATE_PENALTY)
+        except Exception:
+            speed_penalty = 0.75  # 75% da velocidade normal
+            fire_rate_penalty = 1.2  # 20% mais lento para atirar
+        
+        # Ativar modo de tiro teleguiado na nave
+        if hasattr(ship, "activate_homing_shots"):
+            try:
+                ship.activate_homing_shots(duration, speed_penalty, fire_rate_penalty)
+            except Exception:
+                pass
+        else:
+            # Fallback: definir flags na nave
+            try:
+                setattr(ship, "homing_shots_active", True)
+                setattr(ship, "homing_shots_timer", duration)
+                setattr(ship, "homing_speed_penalty", speed_penalty)
+                setattr(ship, "homing_fire_rate_penalty", fire_rate_penalty)
+                # Armazenar velocidade original para restaurar depois
+                if not hasattr(ship, "original_speed"):
+                    setattr(ship, "original_speed", getattr(ship, "speed", 5))
+                # Aplicar penalidade de velocidade
+                ship.speed = getattr(ship, "original_speed", 5) * speed_penalty
+            except Exception:
+                pass
+
+    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+        if not ctx:
+            return
+        ship = getattr(ctx, "ship", None)
+        if ship is None:
+            return
+        
+        # Desativar modo de tiro teleguiado
+        try:
+            if getattr(ship, "homing_shots_active", False):
+                setattr(ship, "homing_shots_active", False)
+                setattr(ship, "homing_shots_timer", 0.0)
+                # Restaurar velocidade original
+                if hasattr(ship, "original_speed"):
+                    ship.speed = getattr(ship, "original_speed", 5)
+        except Exception:
+            pass
+
+
+class LaserShotUpgrade(ActiveUpgrade):
+    """Upgrade que cria bolas elétricas girando ao redor da nave disparando lasers automaticamente."""
+    
+    def allows_refresh(self) -> bool:
+        return False  # Baseado em cargas, não permite refresh
+    
+    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+        """Ativa o sistema de bolas elétricas orbitais (3 bolas, 3 cargas cada)."""
+        ship = getattr(ctx, "ship", None)
+        
+        if ship is None:
+            return
+        
+        # Ativar sistema de lasers orbitais na nave (não usa mais duration)
+        if hasattr(ship, "activate_orbital_lasers"):
+            try:
+                ship.activate_orbital_lasers(0)  # Parâmetro ignorado, usa sistema de cargas
+            except Exception:
+                pass
+        else:
+            # Fallback: definir flags na nave
+            try:
+                setattr(ship, "orbital_lasers_active", True)
+            except Exception:
+                pass
+    
+    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+        # Não precisa fazer nada - o sistema se desativa automaticamente quando as cargas acabam
+        pass
+
+
+class ExplosiveShotUpgrade(ActiveUpgrade):
+    """Upgrade que faz cada tiro criar uma explosão ao acertar inimigos.
+    
+    Comportamento especial:
+    - 30 cargas iniciais (sempre disponível quando não em cooldown)
+    - Cooldown só inicia quando todas as cargas são usadas
+    - Após cooldown, volta a ter 30 cargas
+    """
+    
+    def __init__(self, meta: UpgradeMeta) -> None:
+        super().__init__(meta)
+        self._waiting_for_charges_depleted = False  # Aguardando cargas acabarem para iniciar cooldown
+    
+    def allows_refresh(self) -> bool:
+        return False  # Baseado em cargas, não permite refresh
+    
+    def can_activate(self, ctx: UpgradeContext) -> bool:
+        # Não pode ativar se já está ativo (aguardando cargas acabarem)
+        if self._waiting_for_charges_depleted:
+            return False
+        # Não pode ativar se está em cooldown
+        if self.cooldown_left > 0.0:
+            return False
+        return self.additional_can_activate(ctx)
+    
+    def activate(self, ctx: UpgradeContext) -> bool:
+        if not self.can_activate(ctx):
+            self.on_denied(ctx)
+            return False
+        
+        # NÃO aplica cooldown aqui - será aplicado quando cargas acabarem
+        self._waiting_for_charges_depleted = True
+        self.active = True
+        
+        self.on_activate_effect(ctx, refreshed=False)
+        self.on_after_activate(ctx)
+        return True
+    
+    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+        """Ativa o sistema de tiros explosivos na nave."""
+        ship = getattr(ctx, "ship", None)
+        
+        if ship is None:
+            return
+        
+        # Ativar tiros explosivos com contagem de cargas (sempre 30)
+        charges = self.meta.base_charges if self.meta.base_charges is not None else 30
+        
+        if hasattr(ship, "activate_explosive_shots"):
+            try:
+                ship.activate_explosive_shots(charges)
+            except Exception:
+                pass
+        else:
+            # Fallback: definir flags na nave
+            try:
+                setattr(ship, "explosive_shots_active", True)
+                setattr(ship, "explosive_shots_remaining", charges)
+            except Exception:
+                pass
+    
+    def update(self, dt: float, ctx: Optional[UpgradeContext] = None) -> None:
+        # Atualizar cooldown normalmente
+        if self.cooldown_left > 0.0:
+            self.cooldown_left = max(0.0, self.cooldown_left - dt)
+        
+        # Se está aguardando cargas acabarem, verificar se acabaram
+        if self._waiting_for_charges_depleted and ctx is not None:
+            ship = getattr(ctx, "ship", None)
+            if ship is not None:
+                remaining = getattr(ship, "explosive_shots_remaining", 0)
+                is_active = getattr(ship, "explosive_shots_active", False)
+                
+                # Se cargas acabaram (ou sistema foi desativado), iniciar cooldown
+                if remaining <= 0 or not is_active:
+                    self._waiting_for_charges_depleted = False
+                    self.active = False
+                    self.cooldown_left = self.get_effective_cooldown(ctx)
+    
+    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+        # Chamado quando sistema expira manualmente (não usado aqui)
+        self._waiting_for_charges_depleted = False
+        self.active = False
+
+
 # ===================== Registro e Fábrica ================================
 
 UPGRADES_REGISTRY: Dict[UpgradeType, Callable[[], ActiveUpgrade]] = {}
@@ -333,6 +522,36 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_duration=_emp_base_duration,
         base_charges=None,
     ),
+    UpgradeType.HOMING_SHOT: UpgradeMeta(
+        type=UpgradeType.HOMING_SHOT,
+        name="Tiro Teleg.",
+        desc="Tiros seguem inimigos automaticamente. Reduz velocidade da nave e cadência de tiro.",
+        icon_id="homing_shot",
+        category=UpgradeCategory.OFFENSIVE,
+        base_cooldown=80.0,
+        base_duration=7.0,
+        base_charges=None,
+    ),
+    UpgradeType.LASER_SHOT: UpgradeMeta(
+        type=UpgradeType.LASER_SHOT,
+        name="Laser Orbital",
+        desc="3 bolas elétricas orbitais, cada uma dispara 3 lasers automáticos.",
+        icon_id="laser_shot",
+        category=UpgradeCategory.OFFENSIVE,
+        base_cooldown=60.0,
+        base_duration=0.0,  # Não usa duração - baseado em cargas internas das bolinhas
+        base_charges=None,  # Uso ilimitado do upgrade (cargas são internas: 3 bolas × 3 tiros)
+    ),
+    UpgradeType.EXPLOSIVE_SHOT: UpgradeMeta(
+        type=UpgradeType.EXPLOSIVE_SHOT,
+        name="Tiro Explosivo",
+        desc="Cada tiro cria uma pequena explosão que elimina inimigos próximos.",
+        icon_id="explosive_shot",
+        category=UpgradeCategory.OFFENSIVE,
+        base_cooldown=90.0,
+        base_duration=0.0,  # Baseado em cargas, não em duração
+        base_charges=30,
+    ),
 }
 
 
@@ -348,11 +567,26 @@ def _factory_emp() -> ActiveUpgrade:
     return EMPUpgrade(UPGRADES_META[UpgradeType.EMP])
 
 
+def _factory_homing_shot() -> ActiveUpgrade:
+    return HomingShotUpgrade(UPGRADES_META[UpgradeType.HOMING_SHOT])
+
+
+def _factory_laser_shot() -> ActiveUpgrade:
+    return LaserShotUpgrade(UPGRADES_META[UpgradeType.LASER_SHOT])
+
+
+def _factory_explosive_shot() -> ActiveUpgrade:
+    return ExplosiveShotUpgrade(UPGRADES_META[UpgradeType.EXPLOSIVE_SHOT])
+
+
 UPGRADES_REGISTRY.update(
     {
         UpgradeType.SHIELD_BURST: _factory_shield,
         UpgradeType.HEAL: _factory_heal,
         UpgradeType.EMP: _factory_emp,
+        UpgradeType.HOMING_SHOT: _factory_homing_shot,
+        UpgradeType.LASER_SHOT: _factory_laser_shot,
+        UpgradeType.EXPLOSIVE_SHOT: _factory_explosive_shot,
     }
 )
 

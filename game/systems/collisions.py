@@ -10,6 +10,7 @@ from ..entities.alien import Alien
 from ..entities.bullet import Bullet
 from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
+from ..entities.player_laser import PlayerLaser
 from ..entities.eye_laser import EyeLaser
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.mine_explosion import MineExplosion
@@ -25,6 +26,7 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.star import Star
 from ..core.config import Config
 from ..core.spatial_grid import SpatialGrid
+from ..entities.explosive_effect import ExplosiveEffect
 
 
 from ..entities.explosive_mine import ExplosiveMine
@@ -103,6 +105,78 @@ class Collisions:
                 )
                 ship_hit = True
         return ship_hit
+
+    def explosive_effects_vs_enemies(
+        self,
+        explosive_effects: list[ExplosiveEffect],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Verifica colisão contínua entre efeitos explosivos ativos e inimigos.
+        
+        Isso permite que fragmentos de meteoros e novos inimigos que entrem
+        na área de explosão sofram dano enquanto o efeito estiver ativo.
+        """
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+        
+        for effect in explosive_effects:
+            if not effect.damage_active:
+                continue
+            
+            damage_radius = effect.current_damage_radius
+            if damage_radius <= 0:
+                continue
+            
+            for enemy in enemies[:]:
+                if enemy.dead:
+                    continue
+                
+                # Verificar se já foi atingido por este efeito
+                enemy_id = id(enemy)
+                if enemy_id in effect.hit_enemies:
+                    continue
+                
+                # Calcular distância
+                if isinstance(enemy, ExplosiveMine):
+                    enemy_cx, enemy_cy = enemy.x, enemy.y
+                    enemy_r = enemy.radius
+                else:
+                    enemy_cx = enemy.x + enemy.w / 2
+                    enemy_cy = enemy.y + enemy.h / 2
+                    enemy_r = enemy.w / 2
+                
+                dist_sq = (enemy_cx - effect.x) ** 2 + (enemy_cy - effect.y) ** 2
+                
+                # Verificar colisão
+                if dist_sq < (damage_radius + enemy_r) ** 2:
+                    # Marcar como atingido
+                    effect.hit_enemies.add(enemy_id)
+                    
+                    if isinstance(enemy, ExplosiveMine):
+                        enemy.take_damage(2)
+                    else:
+                        if isinstance(enemy, EyeEnemy):
+                            enemy.destroy()
+                        enemy.dead = True
+                        
+                        # Spawn explosion visual
+                        entity_manager.spawn_explosion(enemy_cx, enemy_cy, size=int(enemy.w // 2))
+                        
+                        # Score
+                        pts = enemy.get_points_value()
+                        score_gain += pts
+                        destroyed_count += 1
+                        score_events.append((enemy_cx, enemy_cy, pts))
+                        
+                        # Fragmentar meteoros
+                        if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
+                            fragments = enemy.spawn_fragments()
+                            if fragments:
+                                enemies.extend(fragments)
+        
+        return score_gain, destroyed_count, score_events
 
     def mini_ship_bullets_vs_enemies(
         self,
@@ -216,6 +290,55 @@ class Collisions:
                             fragments = enemy.spawn_fragments()
                             if fragments:
                                 enemies.extend(fragments)
+                    
+                    # Se é um tiro explosivo, causar dano em área
+                    if b.explosive:
+                        explosion_cx = b.x + b.w / 2
+                        explosion_cy = b.y + b.h / 2
+                        explosion_radius = 60  # Raio da explosão
+                        
+                        # Criar efeito visual do círculo de área (branco semi-transparente)
+                        entity_manager.spawn_explosive_effect(explosion_cx, explosion_cy, radius=explosion_radius)
+                        
+                        # Criar explosão visual de partículas
+                        entity_manager.spawn_explosion(explosion_cx, explosion_cy, size=explosion_radius // 2)
+                        
+                        # Tocar som de explosão
+                        sound_manager.play_explosion_asteroid()
+                        
+                        # Dano em área para inimigos próximos
+                        area_query = enemy_grid.query(
+                            explosion_cx - explosion_radius,
+                            explosion_cy - explosion_radius,
+                            explosion_radius * 2,
+                            explosion_radius * 2
+                        )
+                        for nearby_enemy in area_query:
+                            if nearby_enemy.dead:
+                                continue
+                            # Verificar distância real
+                            enemy_cx = nearby_enemy.x + getattr(nearby_enemy, 'w', 0) / 2
+                            enemy_cy = nearby_enemy.y + getattr(nearby_enemy, 'h', 0) / 2
+                            dist_sq = (enemy_cx - explosion_cx) ** 2 + (enemy_cy - explosion_cy) ** 2
+                            if dist_sq < explosion_radius ** 2:
+                                if isinstance(nearby_enemy, ExplosiveMine):
+                                    nearby_enemy.take_damage(2)  # Dano extra
+                                elif not nearby_enemy.dead:
+                                    if isinstance(nearby_enemy, EyeEnemy):
+                                        nearby_enemy.destroy()
+                                    nearby_enemy.dead = True
+                                    ncx, ncy = (nearby_enemy.x + nearby_enemy.w / 2, nearby_enemy.y + nearby_enemy.h / 2)
+                                    entity_manager.spawn_explosion(ncx, ncy, size=nearby_enemy.w // 2)
+                                    pts = nearby_enemy.get_points_value()
+                                    score_gain += pts
+                                    destroyed_count += 1
+                                    score_events.append((ncx, ncy, pts))
+                                    
+                                    if isinstance(nearby_enemy, Meteor) and hasattr(nearby_enemy, "spawn_fragments"):
+                                        fragments = nearby_enemy.spawn_fragments()
+                                        if fragments:
+                                            enemies.extend(fragments)
+                    
                     if not b.piercing:
                         b.dead = True
                         break  # Bullet is gone, check next bullet
@@ -648,3 +771,108 @@ class Collisions:
                 return True
 
         return False
+
+    def player_lasers_vs_enemies(
+        self,
+        player_lasers: list[PlayerLaser],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Colisão dos lasers do jogador com inimigos (atravessa múltiplos alvos)."""
+        score_gain: int = 0
+        destroyed_count: int = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        for laser in player_lasers:
+            if laser.w <= 0:  # Laser ainda não expandiu ou já retraiu
+                continue
+
+            line = laser.get_collision_line()
+
+            for enemy in enemies[:]:
+                if enemy.dead:
+                    continue
+
+                # Verificar se já atingiu este inimigo
+                enemy_id = id(enemy)
+                if enemy_id in laser.hit_enemies:
+                    continue
+
+                enemy_rect = enemy.rect
+                if enemy_rect.clipline(line):
+                    # Marcar inimigo como já atingido por este laser
+                    laser.hit_enemies.add(enemy_id)
+
+                    # Aplicar dano de acordo com o tipo de inimigo
+                    if isinstance(enemy, Meteor):
+                        enemy.dead = True  # Meteoros morrem instantaneamente
+                    elif isinstance(enemy, ExplosiveMine):
+                        enemy.take_damage(laser.damage)
+                    else:
+                        # Alien ou EyeEnemy
+                        if isinstance(enemy, EyeEnemy):
+                            enemy.destroy()
+                        enemy.dead = True
+                    
+                    # Som apropriado baseado no tipo
+                    if isinstance(enemy, Meteor):
+                        sound_manager.play_explosion_asteroid()
+                    else:
+                        sound_manager.play_explosion_alien()
+
+                    # Spawnar pequena explosão no ponto de impacto
+                    cx: float = enemy.x + getattr(enemy, 'w', 0) / 2
+                    cy: float = enemy.y + getattr(enemy, 'h', 0) / 2
+                    entity_manager.spawn_explosion(cx, cy, size=20)
+
+                    # Se morreu, adicionar pontos
+                    if enemy.dead:
+                        pts: int = enemy.get_points_value()
+                        score_gain += pts
+                        destroyed_count += 1
+                        score_events.append((cx, cy, pts))
+                        floating_scores.append(FloatingScore(cx, cy, pts))
+
+        return score_gain, destroyed_count, score_events
+
+    def player_lasers_vs_boss(
+        self,
+        player_lasers: list[PlayerLaser],
+        boss: Boss | SpikeBoss,
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+    ) -> int:
+        """Colisão dos lasers do jogador com o boss."""
+        score_gain: int = 0
+
+        for laser in player_lasers:
+            if laser.w <= 0:
+                continue
+
+            line = laser.get_collision_line()
+            boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
+
+            if boss_rect.clipline(line):
+                # Verificar se já atingiu o boss
+                boss_id = id(boss)
+                if boss_id in laser.hit_enemies:
+                    continue
+
+                laser.hit_enemies.add(boss_id)
+                boss.take_damage(laser.damage)
+                sound_manager.play_boss_damage()
+
+                # Explosão no ponto de impacto
+                cx: float = boss.x + boss.w / 2
+                cy: float = boss.y + boss.h / 2
+                entity_manager.spawn_explosion(cx, cy, size=30)
+
+                if boss.dead:
+                    # Boss sempre dá pontos fixos ao morrer
+                    from ..core.config import config as Config
+                    pts: int = Config.BOSS_DEFEAT_SCORE
+                    score_gain += pts
+                    floating_scores.append(FloatingScore(cx, cy, pts))
+
+        return score_gain

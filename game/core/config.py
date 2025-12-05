@@ -80,6 +80,7 @@ class Config:
     MINI_SHIPS_DURATION: float = 25.0
     SPEED_ATTACK_MULTIPLIER: float = 2.0
     PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER: float = 1.5
+    EXPLOSIVE_SHOT_FIRE_RATE_PENALTY: float = 0.5  # Tiros explosivos são 50% mais lentos
 
     # Rarity system - Sistema de raridade para power-ups (chances devem somar 1.0)
     POWERUP_RARITY_CHANCES: dict[PowerUpType, float] = field(

@@ -405,6 +405,8 @@ class Renderer:
         score_multiplier_timer: float = 0.0,
         mini_ships_active: bool = False,
         mini_ships_timer: float = 0.0,
+        explosive_shots_active: bool = False,
+        explosive_shots_remaining: int = 0,
     ):
         # Renderizar com cache (só re-renderiza se valores mudaram)
         s = self._render_text_cached(
@@ -474,6 +476,17 @@ class Renderer:
             # Mostrar mini ships se ativo
             if mini_ships_active and mini_ships_timer > 0:
                 line(f"[M] Mini Ships: {mini_ships_timer:.1f}s", colors.CYAN)
+            
+            # Mostrar tiros explosivos restantes
+            if explosive_shots_active and explosive_shots_remaining > 0:
+                # Piscar quando restarem 5 ou menos cargas
+                if explosive_shots_remaining <= 5:
+                    import time as _time
+                    blink = int(_time.time() * 4) % 2 == 0
+                    color = colors.ORANGE if blink else colors.RED
+                else:
+                    color = colors.ORANGE
+                line(f"[💥] Explosivos: {explosive_shots_remaining}", color)
 
     def overlay(self, surface: pygame.Surface, title: str, subtitle: str = ""):
         overlay = pygame.Surface(
