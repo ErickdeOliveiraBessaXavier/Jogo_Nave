@@ -24,6 +24,7 @@ class UpgradeType(Enum):
     HOMING_SHOT = auto()
     LASER_SHOT = auto()
     EXPLOSIVE_SHOT = auto()
+    AIR_STRIKE = auto()  # Ultimate: Bombardeio Aéreo
 
 
 class UpgradeCategory(Enum):
@@ -488,6 +489,111 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
         self.active = False
 
 
+class AirStrikeUpgrade(ActiveUpgrade):
+    """Ultimate: Bombardeio Aéreo - Bombas caem em áreas aleatórias da tela.
+    
+    Comportamento:
+    - 10 bombas por ativação
+    - Cada bomba tem um marcador visual antes de cair
+    - Bombas explodem ao atingir o alvo, destruindo inimigos
+    - 180s de cooldown
+    """
+    
+    def __init__(self, meta: UpgradeMeta) -> None:
+        super().__init__(meta)
+        self._bombs_remaining = 0
+        self._spawn_timer = 0.0
+        self._spawn_interval = 0.3  # Intervalo entre spawns de bombas
+        self._is_spawning = False
+    
+    def allows_refresh(self) -> bool:
+        return False  # Ultimate não permite refresh
+    
+    def can_activate(self, ctx: UpgradeContext) -> bool:
+        if self._is_spawning:
+            return False
+        if self.cooldown_left > 0.0:
+            return False
+        return self.additional_can_activate(ctx)
+    
+    def activate(self, ctx: UpgradeContext) -> bool:
+        if not self.can_activate(ctx):
+            self.on_denied(ctx)
+            return False
+        
+        self.active = True
+        self._is_spawning = True
+        self._bombs_remaining = self.meta.base_charges if self.meta.base_charges else 10
+        self._spawn_timer = 0.0  # Primeira bomba spawna imediatamente
+        
+        self.on_activate_effect(ctx, refreshed=False)
+        self.on_after_activate(ctx)
+        return True
+    
+    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+        """Inicia o bombardeio aéreo."""
+        import pygame
+        
+        entity_manager = getattr(ctx, "entity_manager", None)
+        if entity_manager is None:
+            return
+        
+        # Obter dimensões da tela
+        screen = pygame.display.get_surface()
+        screen_width = screen.get_width() if screen else 1600
+        screen_height = screen.get_height() if screen else 900
+        
+        # Spawnar primeira bomba imediatamente
+        self._spawn_bomb(entity_manager, screen_width, screen_height)
+        self._bombs_remaining -= 1
+    
+    def _spawn_bomb(self, entity_manager: Any, screen_width: int, screen_height: int) -> None:
+        """Spawna uma bomba em posição aleatória."""
+        import random
+        
+        # Posição aleatória na área de jogo (evitar bordas)
+        margin = 100
+        target_x = random.uniform(margin, screen_width - margin)
+        target_y = random.uniform(margin, screen_height - margin)
+        
+        if hasattr(entity_manager, "spawn_air_strike"):
+            entity_manager.spawn_air_strike(target_x, target_y)
+    
+    def update(self, dt: float, ctx: Optional[UpgradeContext] = None) -> None:
+        # Atualizar cooldown normalmente
+        if self.cooldown_left > 0.0:
+            self.cooldown_left = max(0.0, self.cooldown_left - dt)
+        
+        # Se está spawnando bombas
+        if self._is_spawning and ctx is not None:
+            self._spawn_timer += dt
+            
+            # Spawnar nova bomba se passou o intervalo
+            if self._bombs_remaining > 0 and self._spawn_timer >= self._spawn_interval:
+                import pygame
+                
+                entity_manager = getattr(ctx, "entity_manager", None)
+                if entity_manager is not None:
+                    screen = pygame.display.get_surface()
+                    screen_width = screen.get_width() if screen else 1600
+                    screen_height = screen.get_height() if screen else 900
+                    
+                    self._spawn_bomb(entity_manager, screen_width, screen_height)
+                    self._bombs_remaining -= 1
+                    self._spawn_timer = 0.0
+            
+            # Terminou de spawnar todas as bombas
+            if self._bombs_remaining <= 0:
+                self._is_spawning = False
+                self.active = False
+                self.cooldown_left = self.get_effective_cooldown(ctx)
+    
+    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+        self._is_spawning = False
+        self._bombs_remaining = 0
+        self.active = False
+
+
 # ===================== Registro e Fábrica ================================
 
 UPGRADES_REGISTRY: Dict[UpgradeType, Callable[[], ActiveUpgrade]] = {}
@@ -534,7 +640,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     ),
     UpgradeType.LASER_SHOT: UpgradeMeta(
         type=UpgradeType.LASER_SHOT,
-        name="Laser Orbital",
+        name="Laser Orb",
         desc="3 bolas elétricas orbitais, cada uma dispara 3 lasers automáticos.",
         icon_id="laser_shot",
         category=UpgradeCategory.OFFENSIVE,
@@ -544,13 +650,23 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     ),
     UpgradeType.EXPLOSIVE_SHOT: UpgradeMeta(
         type=UpgradeType.EXPLOSIVE_SHOT,
-        name="Tiro Explosivo",
+        name="Tiro Expl.",
         desc="Cada tiro cria uma pequena explosão que elimina inimigos próximos.",
         icon_id="explosive_shot",
         category=UpgradeCategory.OFFENSIVE,
         base_cooldown=90.0,
         base_duration=0.0,  # Baseado em cargas, não em duração
         base_charges=30,
+    ),
+    UpgradeType.AIR_STRIKE: UpgradeMeta(
+        type=UpgradeType.AIR_STRIKE,
+        name="Bombardeio",
+        desc="Ultimate: 10 bombas caem em áreas aleatórias destruindo tudo.",
+        icon_id="air_strike",
+        category=UpgradeCategory.OFFENSIVE,
+        base_cooldown=180.0,  # 3 minutos de cooldown
+        base_duration=0.0,
+        base_charges=30,  # 30 bombas por ativação
     ),
 }
 
@@ -579,6 +695,10 @@ def _factory_explosive_shot() -> ActiveUpgrade:
     return ExplosiveShotUpgrade(UPGRADES_META[UpgradeType.EXPLOSIVE_SHOT])
 
 
+def _factory_air_strike() -> ActiveUpgrade:
+    return AirStrikeUpgrade(UPGRADES_META[UpgradeType.AIR_STRIKE])
+
+
 UPGRADES_REGISTRY.update(
     {
         UpgradeType.SHIELD_BURST: _factory_shield,
@@ -587,6 +707,7 @@ UPGRADES_REGISTRY.update(
         UpgradeType.HOMING_SHOT: _factory_homing_shot,
         UpgradeType.LASER_SHOT: _factory_laser_shot,
         UpgradeType.EXPLOSIVE_SHOT: _factory_explosive_shot,
+        UpgradeType.AIR_STRIKE: _factory_air_strike,
     }
 )
 

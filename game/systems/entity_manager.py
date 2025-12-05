@@ -28,6 +28,8 @@ from ..entities.explosion_pool import ExplosionPool
 from ..entities.emp_wave import EMPWave
 from ..entities.star import Star
 from ..entities.explosive_effect import ExplosiveEffect
+from ..entities.air_strike_marker import AirStrikeMarker
+from ..entities.air_strike_bomb import AirStrikeBomb
 from typing import Dict, Any, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
@@ -54,6 +56,8 @@ class EntityManager:
         self.mini_ship_bullets: list[MiniShipBullet] = []
         self.formations: list[Formation] = []  # Nova lista para formações
         self.spikes: list[Spike] = []  # Lista para espinhos do SpikeBoss
+        self.air_strike_markers: list[AirStrikeMarker] = []  # Marcadores de bombardeio
+        self.air_strike_bombs: list[AirStrikeBomb] = []  # Bombas do bombardeio aéreo
         self.meteor_pool = MeteorPool(initial_size=100)  # Pool de meteoros
         self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
         self.enemy_spatial_grid: SpatialGrid[
@@ -81,6 +85,17 @@ class EntityManager:
     def spawn_explosive_effect(self, x: float, y: float, radius: float = 60.0) -> None:
         """Spawna um efeito visual de explosão de área (círculo branco semi-transparente)."""
         self.explosive_effects.append(ExplosiveEffect(x, y, radius=radius))
+    
+    def spawn_air_strike(self, target_x: float, target_y: float) -> None:
+        """Spawna um marcador e uma bomba para o bombardeio aéreo."""
+        marker = AirStrikeMarker(target_x, target_y)
+        self.air_strike_markers.append(marker)
+        # A bomba será spawnada quando o marcador terminar
+    
+    def spawn_air_strike_bomb(self, target_x: float, target_y: float) -> None:
+        """Spawna uma bomba de bombardeio aéreo."""
+        bomb = AirStrikeBomb(target_x, target_y)
+        self.air_strike_bombs.append(bomb)
     
     def spawn_player_laser(
         self, x: float, y: float, target_x: float, target_y: float, damage: int = 50,
@@ -276,6 +291,20 @@ class EntityManager:
             if square.dead:
                 self.boss_squares.remove(square)
 
+        # Atualizar marcadores de bombardeio aéreo
+        for marker in self.air_strike_markers[:]:
+            marker.update(dt)
+            if marker.dead:
+                # Quando o marcador termina, spawnar a bomba
+                self.spawn_air_strike_bomb(marker.target_x, marker.target_y)
+                self.air_strike_markers.remove(marker)
+        
+        # Atualizar bombas de bombardeio aéreo
+        for bomb in self.air_strike_bombs[:]:
+            bomb.update(dt)
+            if bomb.dead:
+                self.air_strike_bombs.remove(bomb)
+
         # Reconstruir grid espacial com todos os inimigos
         self.rebuild_enemy_grid()
 
@@ -393,6 +422,14 @@ class EntityManager:
         # Desenhar efeitos de explosão de área (círculos brancos)
         for effect in self.explosive_effects:
             effect.draw(surface)
+        
+        # Desenhar marcadores de bombardeio aéreo
+        for marker in self.air_strike_markers:
+            marker.draw(surface)
+        
+        # Desenhar bombas de bombardeio aéreo
+        for bomb in self.air_strike_bombs:
+            bomb.draw(surface)
 
         for entity_list in entity_lists:
             for entity in entity_list:
@@ -545,6 +582,8 @@ class EntityManager:
             f for f in self.formations if not f.dead
         ]  # Limpar formações mortas
         self.spikes = [s for s in self.spikes if not s.dead]  # Limpar spikes mortos
+        self.air_strike_markers = [m for m in self.air_strike_markers if not m.dead]
+        self.air_strike_bombs = [b for b in self.air_strike_bombs if not b.dead]
 
     def clear_all(self):
         self.bullets.clear()
@@ -558,6 +597,8 @@ class EntityManager:
         self.enemies.clear()
         self.mine_explosions.clear()
         self.explosive_effects.clear()  # Limpar efeitos de explosão de área
+        self.air_strike_markers.clear()  # Limpar marcadores de bombardeio
+        self.air_strike_bombs.clear()  # Limpar bombas de bombardeio
         self.boss = None
         self.mini_ships.clear()
         self.mini_ship_bullets.clear()
@@ -588,6 +629,8 @@ class EntityManager:
         # NÃO limpar bullet_pool aqui para manter balas do jogador
         self.explosion_pool.clear_active()  # Limpar explosões ativas do pool
         self.spikes.clear()
+        self.air_strike_markers.clear()  # Limpar marcadores de bombardeio
+        self.air_strike_bombs.clear()  # Limpar bombas de bombardeio
 
     def get_stats(self) -> Dict[str, Any]:
         """Retorna estatísticas de performance para debug."""

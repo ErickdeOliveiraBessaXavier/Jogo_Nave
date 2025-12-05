@@ -533,6 +533,33 @@ class PlayingScene(Scene):
                 destroyed += f_exp_destroyed
                 score_events.extend(f_exp_score_events)
 
+        # Colisão das bombas de bombardeio aéreo vs inimigos
+        if self.entity_manager.air_strike_bombs:
+            air_gain, air_destroyed, air_score_events = (
+                self.collisions.air_strike_bombs_vs_enemies(
+                    self.entity_manager.air_strike_bombs,
+                    self.entity_manager.enemies,
+                    self.entity_manager,
+                )
+            )
+            gain += air_gain
+            destroyed += air_destroyed
+            score_events.extend(air_score_events)
+            
+            # Também verificar formações
+            for formation in self.entity_manager.formations:
+                formation_enemies = formation.get_enemies()
+                f_air_gain, f_air_destroyed, f_air_score_events = (
+                    self.collisions.air_strike_bombs_vs_enemies(
+                        self.entity_manager.air_strike_bombs,
+                        formation_enemies,
+                        self.entity_manager,
+                    )
+                )
+                gain += f_air_gain
+                destroyed += f_air_destroyed
+                score_events.extend(f_air_score_events)
+
         for x, y, pts in score_events:
             # Aplicar multiplicadores de pontuação: nível E dificuldade
             adjusted_pts = int(

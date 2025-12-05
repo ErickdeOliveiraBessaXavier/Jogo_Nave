@@ -27,6 +27,7 @@ from ..entities.star import Star
 from ..core.config import Config
 from ..core.spatial_grid import SpatialGrid
 from ..entities.explosive_effect import ExplosiveEffect
+from ..entities.air_strike_bomb import AirStrikeBomb
 
 
 from ..entities.explosive_mine import ExplosiveMine
@@ -156,6 +157,78 @@ class Collisions:
                     
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(2)
+                    else:
+                        if isinstance(enemy, EyeEnemy):
+                            enemy.destroy()
+                        enemy.dead = True
+                        
+                        # Spawn explosion visual
+                        entity_manager.spawn_explosion(enemy_cx, enemy_cy, size=int(enemy.w // 2))
+                        
+                        # Score
+                        pts = enemy.get_points_value()
+                        score_gain += pts
+                        destroyed_count += 1
+                        score_events.append((enemy_cx, enemy_cy, pts))
+                        
+                        # Fragmentar meteoros
+                        if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
+                            fragments = enemy.spawn_fragments()
+                            if fragments:
+                                enemies.extend(fragments)
+        
+        return score_gain, destroyed_count, score_events
+
+    def air_strike_bombs_vs_enemies(
+        self,
+        air_strike_bombs: list[AirStrikeBomb],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Verifica colisão entre explosões de bombas e inimigos.
+        
+        Bombas que explodiram causam dano em área a todos os inimigos
+        dentro do raio de explosão.
+        """
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+        
+        for bomb in air_strike_bombs:
+            if not bomb.exploding or not bomb.damage_active:
+                continue
+            
+            damage_radius = bomb.explosion_radius
+            if damage_radius <= 0:
+                continue
+            
+            for enemy in enemies[:]:
+                if enemy.dead:
+                    continue
+                
+                # Verificar se já foi atingido por esta bomba
+                enemy_id = id(enemy)
+                if enemy_id in bomb.hit_enemies:
+                    continue
+                
+                # Calcular distância
+                if isinstance(enemy, ExplosiveMine):
+                    enemy_cx, enemy_cy = enemy.x, enemy.y
+                    enemy_r = enemy.radius
+                else:
+                    enemy_cx = enemy.x + enemy.w / 2
+                    enemy_cy = enemy.y + enemy.h / 2
+                    enemy_r = enemy.w / 2
+                
+                dist_sq = (enemy_cx - bomb.x) ** 2 + (enemy_cy - bomb.target_y) ** 2
+                
+                # Verificar colisão
+                if dist_sq < (damage_radius + enemy_r) ** 2:
+                    # Marcar como atingido
+                    bomb.hit_enemies.add(enemy_id)
+                    
+                    if isinstance(enemy, ExplosiveMine):
+                        enemy.take_damage(5)  # Dano alto para minas
                     else:
                         if isinstance(enemy, EyeEnemy):
                             enemy.destroy()
