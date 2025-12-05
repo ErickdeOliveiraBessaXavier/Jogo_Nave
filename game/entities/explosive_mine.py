@@ -147,8 +147,10 @@ class ExplosiveMine:
                 else:
                     self.color = colors.RED
                 self.flash_timer = 0.0
-            if self.pre_explosion_timer <= 0:
-                self.dead = True
+            
+            # IMPORTANTE: NÃO marcar dead aqui!
+            # O check_mine_explosions vai verificar pre_explosion_timer <= 0
+            # e criar a MineExplosion visual + marcar dead DEPOIS
 
             # Reset pulsing animation when exploding
             self.pulse_scale = 1.0

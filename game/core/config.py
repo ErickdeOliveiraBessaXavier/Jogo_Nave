@@ -80,8 +80,7 @@ class Config:
     RAINBOW_DURATION: float = 15.0
     PIERCING_SHOT_DURATION: float = 7.0
     MINI_SHIPS_DURATION: float = 25.0
-    COOLDOWN_HASTE_DURATION: float = 10.0
-    COOLDOWN_HASTE_MULTIPLIER: float = 2.0
+    COOLDOWN_HASTE_REDUCTION: float = 20.0  # Redução fixa em segundos
     TIME_STOP_DURATION: float = 3.0
     SPEED_ATTACK_MULTIPLIER: float = 2.0
     PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER: float = 1.5
@@ -106,7 +105,7 @@ class Config:
             # 🟡 LENDÁRIO (1% total) - Power-ups ultra-raros
             PowerUpType.RAINBOW: 1,  # 1 - Power-up especial
             # 🟠 NOVOS
-            PowerUpType.COOLDOWN_HASTE: 7,  # 7 - Reduz tempo de recarga
+            PowerUpType.COOLDOWN_HASTE: 80,  # 7 - Reduz tempo de recarga
             PowerUpType.TIME_STOP: 4,  # 4 - Congelamento total
         }
     )

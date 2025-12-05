@@ -182,27 +182,87 @@ class Collisions:
         enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         mine_explosions: list[MineExplosion],
         ship: Ship,
-        entity_manager: "EntityManager",  # <-- ADICIONAR
+        entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
+        """
+        Processa explosões de minas.
+
+        Fluxo:
+        1) Quando uma mina está explodindo E seu timer acabou, cria MineExplosion visual.
+        2) Processa explosões ativas usando raio máximo para causar dano.
+        
+        IMPORTANTE: Verificamos is_exploding + pre_explosion_timer <= 0 porque
+        a mina só fica dead=True quando o timer acaba internamente.
+        """
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
         ship_hit = False
 
+        # 1) Criar explosões para minas cujo timer de explosão acabou
         for enemy in enemies[:]:
-            if isinstance(enemy, ExplosiveMine) and enemy.dead:
-                cx, cy = (enemy.x, enemy.y)
-                explosion_radius = enemy.explosion_radius
-                mine_explosions.append(MineExplosion(cx, cy, size=explosion_radius))
-                if self.handle_mine_explosion(
-                    cx, cy, explosion_radius, enemies, ship, entity_manager
-                ):
-                    ship_hit = True
-                sound_manager.play_explosion_boss()  # Som de explosão grande
-                pts = enemy.get_points_value()
-                score_gain += pts
-                destroyed_count += 1
-                score_events.append((cx, cy, pts))
+            if isinstance(enemy, ExplosiveMine):
+                # Verificar se está explodindo E timer acabou (mas ainda não marcada dead)
+                # OU já está dead (timer acabou no update anterior)
+                should_explode = (
+                    (enemy.is_exploding and enemy.pre_explosion_timer <= 0 and not enemy.dead)
+                    or enemy.dead
+                )
+                if should_explode:
+                    cx, cy = (enemy.x, enemy.y)
+                    explosion_radius = enemy.explosion_radius
+
+                    mine_explosions.append(MineExplosion(cx, cy, size=explosion_radius))
+
+                    # Checar nave e limpar formações
+                    if self.handle_mine_explosion(
+                        cx, cy, explosion_radius, enemies, ship, entity_manager
+                    ):
+                        ship_hit = True
+
+                    sound_manager.play_explosion_boss()
+
+                    # Marcar como dead DEPOIS de criar explosão
+                    enemy.dead = True
+
+                    pts = enemy.get_points_value()
+                    score_gain += pts
+                    destroyed_count += 1
+                    score_events.append((cx, cy, pts))
+
+        # 2) Processar explosões ativas: dano usa raio máximo (visual cresce gradualmente)
+        for explosion in mine_explosions[:]:
+            if explosion.finished():
+                continue
+
+            explosion_radius = explosion.max_radius
+
+            explosion_x = explosion.x
+            explosion_y = explosion.y
+
+            for enemy in enemies[:]:
+                if enemy.dead:
+                    continue
+
+                if isinstance(enemy, ExplosiveMine):
+                    enemy_cx, enemy_cy = enemy.x, enemy.y
+                    enemy_r = enemy.radius
+                else:
+                    enemy_cx = enemy.x + enemy.w / 2
+                    enemy_cy = enemy.y + enemy.h / 2
+                    enemy_r = enemy.w / 2
+
+                dist_sq = (enemy_cx - explosion_x) ** 2 + (enemy_cy - explosion_y) ** 2
+
+                if dist_sq < (explosion_radius + enemy_r) ** 2:
+                    if isinstance(enemy, ExplosiveMine):
+                        enemy.take_damage(enemy.health)
+                    else:
+                        pts, score_event = self._destroy_enemy(enemy, enemies, entity_manager)
+                        score_gain += pts
+                        destroyed_count += 1
+                        score_events.append(score_event)
+
         return score_gain, destroyed_count, score_events, ship_hit
 
     def handle_mine_explosion(
@@ -212,31 +272,19 @@ class Collisions:
         explosion_radius: int,
         enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
         ship: Ship,
-        entity_manager: "EntityManager",  # <-- ADICIONAR
+        entity_manager: "EntityManager",
     ) -> bool:
-        ship_hit = False
-        for enemy in enemies[:]:
-            if isinstance(enemy, ExplosiveMine):
-                enemy_cx, enemy_cy = enemy.x, enemy.y
-                enemy_r = enemy.radius
-            else:
-                enemy_cx, enemy_cy = enemy.x + enemy.w / 2, enemy.y + enemy.h / 2
-                enemy_r = enemy.w / 2
+        """
+        Checa colisão da explosão de mina com a nave e limpa formações.
 
-            dist_sq = (enemy_cx - explosion_x) ** 2 + (enemy_cy - explosion_y) ** 2
-            if dist_sq < (explosion_radius + enemy_r) ** 2:
-                if isinstance(enemy, ExplosiveMine):
-                    enemy.take_damage(enemy.health)  # Trigger chain reaction
-                else:
-                    enemy.dead = True
-                    # Nova forma
-                    entity_manager.spawn_explosion(
-                        enemy_cx, enemy_cy, size=enemy.w // 2
-                    )
+        O dano aos inimigos é aplicado em check_mine_explosions
+        enquanto a animação está ativa (raio crescendo).
+        Retorna True se a nave foi atingida.
+        """
+        ship_hit = False
 
         # Remover inimigos mortos das formações (para marcar formação como dead)
         for formation in entity_manager.formations:
-            # Remover inimigos mortos da formação
             formation.enemies = [e for e in formation.enemies if not e.dead]
 
         # Check player collision
@@ -247,7 +295,6 @@ class Collisions:
 
             dist_sq = (ship_cx - explosion_x) ** 2 + (ship_cy - explosion_y) ** 2
             if dist_sq < (explosion_radius + ship_r) ** 2:
-                # Nova forma
                 entity_manager.spawn_explosion(
                     ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
                 )

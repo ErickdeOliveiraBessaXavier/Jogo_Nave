@@ -122,13 +122,11 @@ class PlayingScene(Scene):
             "rainbow_duration": Config.RAINBOW_DURATION,
             "rainbow_duration_invuln": Config.RAINBOW_DURATION * 1000,
             "rainbow_score": Config.POWERUP_SCORE_BONUS * 2,
-            "cooldown_haste_duration": Config.COOLDOWN_HASTE_DURATION,
-            "cooldown_haste_multiplier": Config.COOLDOWN_HASTE_MULTIPLIER,
+            "cooldown_haste_reduction": Config.COOLDOWN_HASTE_REDUCTION,
             "time_stop_duration": Config.TIME_STOP_DURATION,
         }
 
         # Timers de novos power-ups
-        self.cooldown_haste_timer = 0.0
         self.time_stop_timer = 0.0
         self.freeze_active = False
 
@@ -240,20 +238,11 @@ class PlayingScene(Scene):
             return
 
         # Timers
-        if self.cooldown_haste_timer > 0.0:
-            self.cooldown_haste_timer = max(
-                0.0, self.cooldown_haste_timer - dt
-            )
-        cooldown_mul = (
-            self._powerup_values["cooldown_haste_multiplier"]
-            if self.cooldown_haste_timer > 0.0
-            else 1.0
-        )
-
         self.time_stop_timer = max(0.0, self.time_stop_timer - dt)
         self.freeze_active = self.time_stop_timer > 0.0
 
-        self.shoot_cd = max(0.0, self.shoot_cd - dt * cooldown_mul)
+        # Cooldown de tiro NÃO é afetado pelo cooldown_haste (só aprimoramentos)
+        self.shoot_cd = max(0.0, self.shoot_cd - dt)
         self.warning_timer = max(0.0, self.warning_timer - dt)
 
         # Atualizar timer de multiplicador de score
@@ -954,11 +943,9 @@ class PlayingScene(Scene):
                     self.entity_manager.mini_ships.append(MiniShip(self.ship, "left"))
                     self.entity_manager.mini_ships.append(MiniShip(self.ship, "right"))
                 elif kind == "cooldown_haste":
-                    # Stack duration but keep multiplier consistent
-                    self.cooldown_haste_timer = max(
-                        self.cooldown_haste_timer,
-                        self._powerup_values["cooldown_haste_duration"],
-                    )
+                    # Reduz instantaneamente o cooldown de todos os upgrades ativos
+                    reduction = self._powerup_values["cooldown_haste_reduction"]
+                    self._apply_cooldown_reduction(reduction)
                 elif kind == "time_stop":
                     self.time_stop_timer = max(
                         self.time_stop_timer,
@@ -1372,6 +1359,14 @@ class PlayingScene(Scene):
         for upg in self.upgrade_slots:
             if upg is not None:
                 upg.update(dt, ctx)
+
+    def _apply_cooldown_reduction(self, reduction: float):
+        """Reduz instantaneamente o cooldown de todos os upgrades ativos."""
+        if not self.upgrade_slots:
+            return
+        for upg in self.upgrade_slots:
+            if upg is not None and upg.cooldown_left > 0:
+                upg.cooldown_left = max(0.0, upg.cooldown_left - reduction)
 
     def _activate_upgrade_slot(self, idx: int):
         if idx < 0 or idx >= len(self.upgrade_slots):
