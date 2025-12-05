@@ -45,6 +45,138 @@ class Collisions:
             return enemy.x, enemy.y, enemy.radius
         return enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, enemy.w / 2
 
+    def _destroy_enemy(
+        self,
+        enemy: Meteor | Alien | ExplosiveMine | EyeEnemy,
+        enemies_list: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        entity_manager: "EntityManager",
+        explosion_size: int | None = None,
+    ) -> tuple[int, tuple[float, float, int]]:
+        """Helper para destruição de inimigos com explosão, som e fragmentos.
+        
+        Centraliza lógica repetida em 8+ lugares.
+        Retorna (pontos, (cx, cy, pontos)) para score_events.
+        
+        Args:
+            explosion_size: Tamanho da explosão. Se None, usa w//2 ou radius.
+        """
+        # Calcular centro
+        cx, cy, _ = self.get_collision_info(enemy)
+        
+        # Marcar como morto
+        if isinstance(enemy, EyeEnemy):
+            enemy.destroy()
+        enemy.dead = True
+        
+        # Explosão visual - tamanho depende do tipo
+        if explosion_size is None:
+            if isinstance(enemy, ExplosiveMine):
+                explosion_size = enemy.radius
+            else:
+                explosion_size = int(enemy.w // 2)
+        entity_manager.spawn_explosion(cx, cy, size=explosion_size)
+        
+        # Som apropriado
+        if isinstance(enemy, Meteor):
+            sound_manager.play_explosion_asteroid()
+        else:
+            sound_manager.play_explosion_alien()
+        
+        # Pontos
+        pts = enemy.get_points_value()
+        
+        # Fragmentos (apenas meteoros)
+        if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
+            fragments = enemy.spawn_fragments()
+            if fragments:
+                enemies_list.extend(fragments)
+        
+        return pts, (cx, cy, pts)
+
+    def _apply_area_damage(
+        self,
+        source_x: float,
+        source_y: float,
+        damage_radius: float,
+        hit_tracking_set: set[int],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        entity_manager: "EntityManager",
+        damage_to_mine: int = 2,
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Helper para aplicar dano em área a inimigos.
+        
+        Usado por: explosive effects, air strike bombs, explosive bullets.
+        Retorna (score_gain, destroyed_count, score_events).
+        """
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        for enemy in enemies[:]:
+            if enemy.dead:
+                continue
+
+            enemy_id = id(enemy)
+            if enemy_id in hit_tracking_set:
+                continue
+
+            # Calcular distância
+            cx, cy, radius = self.get_collision_info(enemy)
+            dist_sq = (cx - source_x) ** 2 + (cy - source_y) ** 2
+
+            # Verificar colisão
+            if dist_sq < (damage_radius + radius) ** 2:
+                hit_tracking_set.add(enemy_id)
+
+                if isinstance(enemy, ExplosiveMine):
+                    enemy.take_damage(damage_to_mine)
+                else:
+                    pts, score_event = self._destroy_enemy(enemy, enemies, entity_manager)
+                    score_gain += pts
+                    destroyed_count += 1
+                    score_events.append(score_event)
+
+        return score_gain, destroyed_count, score_events
+
+    def _apply_boss_damage(
+        self,
+        projectiles: list[Bullet] | list[MiniShipBullet],
+        boss: Boss | SpikeBoss,
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+        is_piercing_allowed: bool = False,
+    ) -> int:
+        """Helper para dano unificado ao boss (normal ou spike).
+        
+        Centraliza lógica de 4 métodos idênticos.
+        Retorna score_gain.
+        """
+        score_gain = 0
+        boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
+        
+        for proj in projectiles[:]:
+            proj_rect = proj.rect
+            if proj_rect.colliderect(boss_rect):
+                # Destruir projétil se não for piercing
+                if not (is_piercing_allowed and getattr(proj, 'piercing', False)):
+                    proj.dead = True
+                
+                # Aplicar dano com multiplicador
+                from ..core.config import config as Config
+                damage = int(proj.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                boss.take_damage(damage)
+                sound_manager.play_boss_damage()
+                entity_manager.spawn_explosion(proj.x, proj.y, size=15)
+                
+                # Recompensa ao derrotar
+                if boss.dead:
+                    cx, cy = boss.x + boss.w / 2, boss.y + boss.h / 2
+                    floating_scores.append(FloatingScore(cx, cy, Config.BOSS_DEFEAT_SCORE))
+                    score_gain += Config.BOSS_DEFEAT_SCORE
+                    entity_manager.spawn_explosion(cx, cy, size=100)
+        
+        return score_gain
+
     def check_mine_explosions(
         self,
         enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
@@ -102,6 +234,11 @@ class Collisions:
                         enemy_cx, enemy_cy, size=enemy.w // 2
                     )
 
+        # Remover inimigos mortos das formações (para marcar formação como dead)
+        for formation in entity_manager.formations:
+            # Remover inimigos mortos da formação
+            formation.enemies = [e for e in formation.enemies if not e.dead]
+
         # Check player collision
         if ship.invuln <= 0:
             ship_cx = ship.x + ship.w / 2
@@ -140,56 +277,19 @@ class Collisions:
             if damage_radius <= 0:
                 continue
 
-            for enemy in enemies[:]:
-                if enemy.dead:
-                    continue
-
-                # Verificar se já foi atingido por este efeito
-                enemy_id = id(enemy)
-                if enemy_id in effect.hit_enemies:
-                    continue
-
-                # Calcular distância
-                if isinstance(enemy, ExplosiveMine):
-                    enemy_cx, enemy_cy = enemy.x, enemy.y
-                    enemy_r = enemy.radius
-                else:
-                    enemy_cx = enemy.x + enemy.w / 2
-                    enemy_cy = enemy.y + enemy.h / 2
-                    enemy_r = enemy.w / 2
-
-                dist_sq = (enemy_cx - effect.x) ** 2 + (enemy_cy - effect.y) ** 2
-
-                # Verificar colisão
-                if dist_sq < (damage_radius + enemy_r) ** 2:
-                    # Marcar como atingido
-                    effect.hit_enemies.add(enemy_id)
-
-                    if isinstance(enemy, ExplosiveMine):
-                        enemy.take_damage(2)
-                    else:
-                        if isinstance(enemy, EyeEnemy):
-                            enemy.destroy()
-                        enemy.dead = True
-
-                        # Spawn explosion visual
-                        entity_manager.spawn_explosion(
-                            enemy_cx, enemy_cy, size=int(enemy.w // 2)
-                        )
-
-                        # Score
-                        pts = enemy.get_points_value()
-                        score_gain += pts
-                        destroyed_count += 1
-                        score_events.append((enemy_cx, enemy_cy, pts))
-
-                        # Fragmentar meteoros
-                        if isinstance(enemy, Meteor) and hasattr(
-                            enemy, "spawn_fragments"
-                        ):
-                            fragments = enemy.spawn_fragments()
-                            if fragments:
-                                enemies.extend(fragments)
+            # Usar helper consolidado
+            gain, destroyed, events = self._apply_area_damage(
+                effect.x,
+                effect.y,
+                damage_radius,
+                effect.hit_enemies,
+                enemies,
+                entity_manager,
+                damage_to_mine=2,
+            )
+            score_gain += gain
+            destroyed_count += destroyed
+            score_events.extend(events)
 
         return score_gain, destroyed_count, score_events
 
@@ -216,56 +316,19 @@ class Collisions:
             if damage_radius <= 0:
                 continue
 
-            for enemy in enemies[:]:
-                if enemy.dead:
-                    continue
-
-                # Verificar se já foi atingido por esta bomba
-                enemy_id = id(enemy)
-                if enemy_id in bomb.hit_enemies:
-                    continue
-
-                # Calcular distância
-                if isinstance(enemy, ExplosiveMine):
-                    enemy_cx, enemy_cy = enemy.x, enemy.y
-                    enemy_r = enemy.radius
-                else:
-                    enemy_cx = enemy.x + enemy.w / 2
-                    enemy_cy = enemy.y + enemy.h / 2
-                    enemy_r = enemy.w / 2
-
-                dist_sq = (enemy_cx - bomb.x) ** 2 + (enemy_cy - bomb.target_y) ** 2
-
-                # Verificar colisão
-                if dist_sq < (damage_radius + enemy_r) ** 2:
-                    # Marcar como atingido
-                    bomb.hit_enemies.add(enemy_id)
-
-                    if isinstance(enemy, ExplosiveMine):
-                        enemy.take_damage(5)  # Dano alto para minas
-                    else:
-                        if isinstance(enemy, EyeEnemy):
-                            enemy.destroy()
-                        enemy.dead = True
-
-                        # Spawn explosion visual
-                        entity_manager.spawn_explosion(
-                            enemy_cx, enemy_cy, size=int(enemy.w // 2)
-                        )
-
-                        # Score
-                        pts = enemy.get_points_value()
-                        score_gain += pts
-                        destroyed_count += 1
-                        score_events.append((enemy_cx, enemy_cy, pts))
-
-                        # Fragmentar meteoros
-                        if isinstance(enemy, Meteor) and hasattr(
-                            enemy, "spawn_fragments"
-                        ):
-                            fragments = enemy.spawn_fragments()
-                            if fragments:
-                                enemies.extend(fragments)
+            # Usar helper consolidado
+            gain, destroyed, events = self._apply_area_damage(
+                bomb.x,
+                bomb.target_y,
+                damage_radius,
+                bomb.hit_enemies,
+                enemies,
+                entity_manager,
+                damage_to_mine=5,  # Dano alto para minas
+            )
+            score_gain += gain
+            destroyed_count += destroyed
+            score_events.extend(events)
 
         return score_gain, destroyed_count, score_events
 
@@ -282,6 +345,10 @@ class Collisions:
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
 
+        # Early return se lista vazia
+        if not mini_ship_bullets:
+            return 0, 0, []
+
         # Usar grid existente
 
         for b in mini_ship_bullets[:]:
@@ -293,6 +360,11 @@ class Collisions:
             query_w = b_rect.width + 20
             query_h = b_rect.height + 20
             potential_enemies = enemy_grid.query(query_x, query_y, query_w, query_h)
+            
+            # Early return se query vazia
+            if not potential_enemies:
+                continue
+
             for enemy in potential_enemies:
                 if b_rect.colliderect(enemy.rect):  # Usa cache
                     b.dead = True
@@ -300,33 +372,12 @@ class Collisions:
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
                     else:
-                        if isinstance(enemy, EyeEnemy):
-                            enemy.destroy()
-                        enemy.dead = True
-
-                        # OPT #4 & #6: Usar helper para calcular center
-                        cx, cy, _ = self.get_collision_info(enemy)
-                        # Nova forma
-                        entity_manager.spawn_explosion(
-                            cx, cy, size=int(enemy.w // 2)
-                        )
-
-                        if isinstance(enemy, Meteor):
-                            sound_manager.play_explosion_asteroid()
-                        else:
-                            sound_manager.play_explosion_alien()
-
-                        pts = enemy.get_points_value()
+                        # Usar helper consolidado
+                        pts, score_event = self._destroy_enemy(enemy, enemies, entity_manager)
                         score_gain += pts
                         destroyed_count += 1
-                        score_events.append((cx, cy, pts))
+                        score_events.append(score_event)
 
-                        if isinstance(enemy, Meteor) and hasattr(
-                            enemy, "spawn_fragments"
-                        ):
-                            fragments = enemy.spawn_fragments()
-                            if fragments:
-                                enemies.extend(fragments)
                     break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
@@ -345,7 +396,9 @@ class Collisions:
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
 
-        # Usar grid existente em vez de criar nova
+        # Early return se lista vazia
+        if not bullets:
+            return 0, 0, []
 
         for b in bullets[:]:
             # OPT #2 & #3: Cache rect para evitar múltiplos acessos
@@ -356,37 +409,21 @@ class Collisions:
             query_w = b_rect.width + 20
             query_h = b_rect.height + 20
             potential_enemies = enemy_grid.query(query_x, query_y, query_w, query_h)
+            
+            # Early return se query vazia
+            if not potential_enemies:
+                continue
+
             for enemy in potential_enemies:
                 if b_rect.colliderect(enemy.rect):  # Usa cache
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
                     else:
-                        if isinstance(enemy, EyeEnemy):
-                            enemy.destroy()
-                        enemy.dead = True
-
-                        # OPT #4 & #6: Usar helper para calcular center
-                        cx, cy, _ = self.get_collision_info(enemy)
-                        # Nova forma: usar pool
-                        entity_manager.spawn_explosion(cx, cy, size=int(enemy.w // 2))
-
-                        # Tocar som de explosão baseado no tipo de inimigo
-                        if isinstance(enemy, Meteor):
-                            sound_manager.play_explosion_asteroid()
-                        else:  # Se não é Meteor, é Alien
-                            sound_manager.play_explosion_alien()
-
-                        pts = enemy.get_points_value()
+                        # Usar helper consolidado
+                        pts, score_event = self._destroy_enemy(enemy, enemies, entity_manager)
                         score_gain += pts
                         destroyed_count += 1
-                        score_events.append((cx, cy, pts))
-
-                        if isinstance(enemy, Meteor) and hasattr(
-                            enemy, "spawn_fragments"
-                        ):
-                            fragments = enemy.spawn_fragments()
-                            if fragments:
-                                enemies.extend(fragments)
+                        score_events.append(score_event)
 
                     # Se é um tiro explosivo, causar dano em área
                     if b.explosive:
@@ -417,7 +454,7 @@ class Collisions:
                         for nearby_enemy in area_query:
                             if nearby_enemy.dead:
                                 continue
-                            # OPT #4 & #6: Usar helper para calcular center
+                            # Usar helper para calcular center
                             ncx, ncy, _ = self.get_collision_info(nearby_enemy)
                             dist_sq = (ncx - explosion_cx) ** 2 + (
                                 ncy - explosion_cy
@@ -426,23 +463,10 @@ class Collisions:
                                 if isinstance(nearby_enemy, ExplosiveMine):
                                     nearby_enemy.take_damage(2)  # Dano extra
                                 elif not nearby_enemy.dead:
-                                    if isinstance(nearby_enemy, EyeEnemy):
-                                        nearby_enemy.destroy()
-                                    nearby_enemy.dead = True
-                                    entity_manager.spawn_explosion(
-                                        ncx, ncy, size=int(nearby_enemy.w // 2)
-                                    )
-                                    pts = nearby_enemy.get_points_value()
+                                    pts, score_event = self._destroy_enemy(nearby_enemy, enemies, entity_manager)
                                     score_gain += pts
                                     destroyed_count += 1
-                                    score_events.append((ncx, ncy, pts))
-
-                                    if isinstance(nearby_enemy, Meteor) and hasattr(
-                                        nearby_enemy, "spawn_fragments"
-                                    ):
-                                        fragments = nearby_enemy.spawn_fragments()
-                                        if fragments:
-                                            enemies.extend(fragments)
+                                    score_events.append(score_event)
 
                     if not b.piercing:
                         b.dead = True
@@ -456,40 +480,7 @@ class Collisions:
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
-        score_gain = 0
-        # OPT #2: Cache boss rect
-        boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
-        for b in bullets[:]:
-            # OPT #3: Cache bullet rect
-            b_rect = b.rect
-            if b_rect.colliderect(boss_rect):  # Usa caches
-                if not b.piercing:
-                    b.dead = True
-                # Apply damage modifier for all upgrades against boss
-                from ..core.config import config as Config
-                damage = int(b.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
-                boss.take_damage(damage)
-                # Tocar som de dano no boss
-                sound_manager.play_boss_damage()
-                entity_manager.spawn_explosion(b.x, b.y, size=15)
-
-                # Não dar pontos por acertar o boss, apenas ao derrotá-lo
-                if boss.dead:
-                    # Dar pontuação fixa de 10.000 ao derrotar o boss
-                    from ..core.config import config as Config
-
-                    floating_scores.append(
-                        FloatingScore(
-                            boss.x + boss.w / 2,
-                            boss.y + boss.h / 2,
-                            Config.BOSS_DEFEAT_SCORE,
-                        )
-                    )
-                    score_gain += Config.BOSS_DEFEAT_SCORE
-                    entity_manager.spawn_explosion(
-                        boss.x + boss.w / 2, boss.y + boss.h / 2, size=100
-                    )
-        return score_gain
+        return self._apply_boss_damage(bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True)
 
     def ship_vs_boss(
         self, ship: Ship, boss: Boss, entity_manager: "EntityManager"
@@ -588,32 +579,7 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com Boss normal."""
-        score_gain = 0
-        for b in mini_ship_bullets[:]:
-            if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
-                b.dead = True
-                # Apply damage modifier for mini ship upgrades against boss
-                from ..core.config import config as Config
-                damage = int(b.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
-                boss.take_damage(damage)
-                sound_manager.play_boss_damage()
-                entity_manager.spawn_explosion(b.x, b.y, size=15)
-
-                if boss.dead:
-                    from ..core.config import config as Config
-
-                    floating_scores.append(
-                        FloatingScore(
-                            boss.x + boss.w / 2,
-                            boss.y + boss.h / 2,
-                            Config.BOSS_DEFEAT_SCORE,
-                        )
-                    )
-                    score_gain += Config.BOSS_DEFEAT_SCORE
-                    entity_manager.spawn_explosion(
-                        boss.x + boss.w / 2, boss.y + boss.h / 2, size=100
-                    )
-        return score_gain
+        return self._apply_boss_damage(mini_ship_bullets, boss, floating_scores, entity_manager, is_piercing_allowed=False)
 
     def mini_ship_bullets_vs_spike_boss(
         self,
@@ -623,32 +589,7 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com SpikeBoss."""
-        score_gain = 0
-        for b in mini_ship_bullets[:]:
-            if b.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
-                b.dead = True
-                # Apply damage modifier for mini ship upgrades against spike boss
-                from ..core.config import config as Config
-                damage = int(b.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
-                boss.take_damage(damage)
-                sound_manager.play_boss_damage()
-                entity_manager.spawn_explosion(b.x, b.y, size=15)
-
-                if boss.dead:
-                    from ..core.config import config as Config
-
-                    floating_scores.append(
-                        FloatingScore(
-                            boss.x + boss.w / 2,
-                            boss.y + boss.h / 2,
-                            Config.BOSS_DEFEAT_SCORE,
-                        )
-                    )
-                    score_gain += Config.BOSS_DEFEAT_SCORE
-                    entity_manager.spawn_explosion(
-                        boss.x + boss.w / 2, boss.y + boss.h / 2, size=100
-                    )
-        return score_gain
+        return self._apply_boss_damage(mini_ship_bullets, boss, floating_scores, entity_manager, is_piercing_allowed=False)
 
     def mini_ship_bullets_vs_spikes(
         self,
@@ -770,38 +711,7 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas com SpikeBoss."""
-        score_gain = 0
-        # OPT #2: Cache boss rect
-        boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
-        for b in bullets[:]:
-            # OPT #3: Cache bullet rect
-            b_rect = b.rect
-            if b_rect.colliderect(boss_rect):  # Usa caches
-                if not b.piercing:
-                    b.dead = True
-                # Apply damage modifier for all upgrades against spike boss
-                from ..core.config import config as Config
-                damage = int(b.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
-                boss.take_damage(damage)
-                sound_manager.play_boss_damage()
-                entity_manager.spawn_explosion(b.x, b.y, size=15)
-
-                # Pontos ao derrotar
-                if boss.dead:
-                    from ..core.config import config as Config
-
-                    floating_scores.append(
-                        FloatingScore(
-                            boss.x + boss.w / 2,
-                            boss.y + boss.h / 2,
-                            Config.BOSS_DEFEAT_SCORE,
-                        )
-                    )
-                    score_gain += Config.BOSS_DEFEAT_SCORE
-                    entity_manager.spawn_explosion(
-                        boss.x + boss.w / 2, boss.y + boss.h / 2, size=100
-                    )
-        return score_gain
+        return self._apply_boss_damage(bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True)
 
     def ship_vs_spike_boss(
         self, ship: Ship, boss: SpikeBoss, entity_manager: "EntityManager"
@@ -928,30 +838,14 @@ class Collisions:
                         enemy.dead = True  # Meteoros morrem instantaneamente
                     elif isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(laser.damage)
-                    else:
-                        # Alien ou EyeEnemy
-                        if isinstance(enemy, EyeEnemy):
-                            enemy.destroy()
-                        enemy.dead = True
-
-                    # Som apropriado baseado no tipo
-                    if isinstance(enemy, Meteor):
-                        sound_manager.play_explosion_asteroid()
-                    else:
-                        sound_manager.play_explosion_alien()
-
-                    # Spawnar pequena explosão no ponto de impacto
-                    cx: float = enemy.x + getattr(enemy, "w", 0) / 2
-                    cy: float = enemy.y + getattr(enemy, "h", 0) / 2
-                    entity_manager.spawn_explosion(cx, cy, size=20)
-
-                    # Se morreu, adicionar pontos
-                    if enemy.dead:
-                        pts: int = enemy.get_points_value()
-                        score_gain += pts
-                        destroyed_count += 1
-                        score_events.append((cx, cy, pts))
-                        floating_scores.append(FloatingScore(cx, cy, pts))
+                        continue  # Não usar _destroy_enemy para minas
+                    
+                    # Para inimigos normais, usar helper com explosion_size customizado
+                    pts, score_event = self._destroy_enemy(enemy, enemies, entity_manager, explosion_size=20)
+                    score_gain += pts
+                    destroyed_count += 1
+                    score_events.append(score_event)
+                    floating_scores.append(FloatingScore(*score_event))
 
         return score_gain, destroyed_count, score_events
 
@@ -992,10 +886,9 @@ class Collisions:
 
                 if boss.dead:
                     # Boss sempre dá pontos fixos ao morrer
-                    from ..core.config import config as Config
-
                     pts: int = Config.BOSS_DEFEAT_SCORE
                     score_gain += pts
                     floating_scores.append(FloatingScore(cx, cy, pts))
+                    entity_manager.spawn_explosion(cx, cy, size=100)
 
         return score_gain

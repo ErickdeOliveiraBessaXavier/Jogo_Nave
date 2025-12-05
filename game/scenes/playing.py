@@ -83,6 +83,9 @@ class PlayingScene(Scene):
         )
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
+        # Cache de configuração de nível (otimização)
+        self._cache_level_thresholds()
+
         # Inicializar spawner com delay inicial apenas para fase 1
         is_initial_level = self.current_level_index == 0
         self.enemy_spawner = EnemySpawner(
@@ -145,6 +148,9 @@ class PlayingScene(Scene):
         self.score_multiplier_active = False
         self.score_multiplier_value = 1.5
 
+        # Batching de floating scores para otimização
+        self.floating_score_batch_threshold = 60.0  # pixels
+
         # Aprimoramentos ativos (slots)
         self.upgrade_slots: list[ActiveUpgrade | None] = []
         self._init_upgrades_from_profile()
@@ -177,6 +183,11 @@ class PlayingScene(Scene):
         self.level_start_time: Optional[float] = None
         self.level_damage_taken = 0
         self.level_powerups_collected = 0
+
+    def _cache_level_thresholds(self):
+        """Pre-calcula valores usados em verificações frequentes."""
+        self.enemies_to_clear = self.level_config.enemies_to_clear
+        self.has_boss = bool(self.level_config.boss_type)
 
     def _get_adjusted_level_config(self, level_number: int) -> LevelConfig:
         """Obtém configuração de nível ajustada pelo meta-progression."""
@@ -484,6 +495,59 @@ class PlayingScene(Scene):
                 else:
                     print("⚔️ GOD MODE DESATIVADO - Invulnerabilidade desligada!")
 
+    def _batch_floating_scores(
+        self, 
+        score_events: list[tuple[float, float, int]], 
+        proximity_threshold: float = 60.0
+    ) -> list[tuple[float, float, int]]:
+        """
+        Agrupa score events próximos em um único evento somado.
+        
+        Args:
+            score_events: Lista de (x, y, pontos)
+            proximity_threshold: Distância máxima para considerar "próximo" (pixels)
+        
+        Returns:
+            Lista compactada de (x, y, pontos_somados)
+        """
+        if not score_events:
+            return []
+        
+        # Criar grupos de eventos próximos
+        batched: list[tuple[float, float, int]] = []
+        used = [False] * len(score_events)
+        
+        for i, (x1, y1, pts1) in enumerate(score_events):
+            if used[i]:
+                continue
+            
+            # Iniciar novo batch com este evento
+            batch_x = x1
+            batch_y = y1
+            batch_pts = pts1
+            batch_count = 1
+            used[i] = True
+            
+            # Procurar eventos próximos
+            for j, (x2, y2, pts2) in enumerate(score_events):
+                if used[j] or i == j:
+                    continue
+                
+                # Calcular distância euclidiana
+                dist = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+                
+                if dist <= proximity_threshold:
+                    # Adicionar ao batch (média ponderada da posição)
+                    batch_x = (batch_x * batch_count + x2) / (batch_count + 1)
+                    batch_y = (batch_y * batch_count + y2) / (batch_count + 1)
+                    batch_pts += pts2
+                    batch_count += 1
+                    used[j] = True
+            
+            batched.append((batch_x, batch_y, batch_pts))
+        
+        return batched
+
     def _handle_collisions(self):
         # A grid JÁ FOI CONSTRUÍDA no entity_manager.update()
         enemy_grid = self.entity_manager.enemy_spatial_grid
@@ -626,7 +690,13 @@ class PlayingScene(Scene):
             destroyed += air_destroyed
             score_events.extend(air_score_events)
 
-        for x, y, pts in score_events:
+        # Agrupar eventos próximos antes de criar floating scores
+        batched_events = self._batch_floating_scores(
+            score_events, 
+            proximity_threshold=self.floating_score_batch_threshold
+        )
+
+        for x, y, pts in batched_events:
             # Usar multiplicador em cache
             multiplier = self._base_score_multiplier
             if self.score_multiplier_active:
@@ -711,11 +781,12 @@ class PlayingScene(Scene):
             self._handle_ship_hit()
 
         # CONSOLIDAÇÃO: Todas as colisões com boss em um bloco único
+        # Lazy evaluation: só processa se boss existe E cache está validado
         boss = self.entity_manager.boss
-        if boss:
+        if boss and self._boss_type_cache:
             score_gain = 0
 
-            # Projéteis vs Boss
+            # Projéteis vs Boss (usando cache para evitar isinstance)
             if self._boss_type_cache == "spike":
                 from ..entities.spike_boss import SpikeBoss
 
@@ -959,23 +1030,27 @@ class PlayingScene(Scene):
             self.player_profile.end_session()
 
     def _check_level_progression(self):
-        if self.enemies_destroyed_in_level >= self.level_config.enemies_to_clear:
+        # Usar cache ao invés de acessar level_config toda vez
+        if self.enemies_destroyed_in_level >= self.enemies_to_clear:
             self.enemy_spawner.stop()
 
+            # Lazy evaluation: verificar presença de inimigos uma única vez
+            has_enemies = bool(self.entity_manager.enemies)
+            
             # Iniciar limpeza de inimigos restantes se ainda houver inimigos
-            if self.entity_manager.enemies and not self.enemy_cleanup_active:
+            if has_enemies and not self.enemy_cleanup_active:
                 self.enemy_cleanup_active = True
                 self.enemy_cleanup_timer = 0.0
                 print(
                     f"🧹 SISTEMA DE LIMPEZA ATIVADO! {len(self.entity_manager.enemies)} inimigos restantes terão 15 segundos para serem derrotados..."
                 )
-            elif not self.entity_manager.enemies or (
+            elif not has_enemies or (
                 self.enemy_cleanup_active
                 and self.enemy_cleanup_timer >= self.enemy_cleanup_duration
             ):
                 # Todos os inimigos foram limpos ou timer expirou
                 self.enemy_cleanup_active = False
-                if self.level_config.boss_type:
+                if self.has_boss:  # Cache ao invés de self.level_config.boss_type
                     self.pre_boss_transition = True
                 else:
                     self._advance_to_next_level()
@@ -1102,6 +1177,9 @@ class PlayingScene(Scene):
         self.level_config = self._get_adjusted_level_config(
             self.current_level_index + 1
         )
+
+        # Atualizar cache de nível (otimização)
+        self._cache_level_thresholds()
 
         # Recalcular multiplicador para o novo nível
         self._base_score_multiplier = (
