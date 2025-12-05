@@ -3,14 +3,16 @@ import random
 import math
 from typing import TypedDict, Optional, TYPE_CHECKING
 from pathlib import Path
-from ..core import colors
-from ..core.config import config as Config
-from ..core.assets import get_font, get_image  # Added get_image
-from ..core.render_config import RenderConfig
-from ..core.difficulty import DifficultyPreset, DifficultySettings
+from ..core.sprite_loader import sprite_loader
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
+
+from ..core import colors
+from ..core.config import config as Config
+from ..core.assets import get_font, get_image
+from ..core.render_config import RenderConfig
+from ..core.difficulty import DifficultyPreset, DifficultySettings
 
 
 class Star(TypedDict):
@@ -615,3 +617,19 @@ class Renderer:
             "max_frame_time": max_frame_time * 1000,  # em ms
             "min_frame_time": min_frame_time * 1000,  # em ms
         }
+
+
+# Função para pré-carregar imagens celestiais
+def preload_celestial_images():
+    """Pré-carrega todas as imagens celestiais para evitar delays."""
+    image_dir = Path(__file__).resolve().parents[1] / "assets" / "images"
+    image_files = list(image_dir.glob("*.png"))
+    for image_path in image_files:
+        try:
+            get_image(image_path)  # Carrega a imagem
+        except Exception as e:
+            print(f"Erro ao pré-carregar imagem celestial {image_path}: {e}")
+
+
+# Registra o loader de imagens celestiais
+sprite_loader.register("CelestialImages", preload_celestial_images)

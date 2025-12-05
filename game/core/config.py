@@ -384,8 +384,8 @@ class Config:
         if total_weight <= 0:
             errors.append("POWERUP_WEIGHTS deve ter soma > 0")
         for powerup_type, weight in self.POWERUP_WEIGHTS.items():
-            if not isinstance(weight, int) or weight <= 0:
-                errors.append(f"POWERUP_WEIGHTS[{powerup_type}] deve ser inteiro positivo, mas é {weight}")
+            if weight <= 0:
+                errors.append(f"POWERUP_WEIGHTS[{powerup_type}] deve ser positivo, mas é {weight}")
 
         # Validar thresholds (0.0 a 1.0)
         thresholds = [
