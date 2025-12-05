@@ -120,8 +120,16 @@ class EntityManager:
                 self.enemy_spatial_grid.insert_from_rect(enemy)
 
     def update(self, dt: float, player_x: float, player_y: float):
+        from typing import Any
         new_alien_bullets: list[AlienBullet] = []
         new_eye_lasers: list[EyeLaser] = []
+
+        # Cache de todos os inimigos (criar UMA VEZ)
+        self._cached_all_enemies: list[Any] = list(self.enemies)
+        for formation in self.formations:
+            self._cached_all_enemies.extend(formation.get_enemies())
+        if self.boss:
+            self._cached_all_enemies.append(self.boss)
 
         # Atualizar ondas EMP (efeito visual)
         for wave in self.emp_waves[:]:
@@ -188,27 +196,16 @@ class EntityManager:
             if bullets_from_formation:
                 new_alien_bullets.extend(bullets_from_formation)
 
-        # Atualizar balas do jogador (passando lista de inimigos para tiros teleguiados)
-        # Coletar todos os inimigos: normais + formações + boss
-        all_enemies: list[Meteor | Alien | GuidedMeteor | ExplosiveMine | EyeEnemy | Boss | SpikeBoss] = list(self.enemies)
-        for formation in self.formations:
-            all_enemies.extend(formation.get_enemies())
-        if self.boss:
-            all_enemies.append(self.boss)
-        
+        # Update bullets do jogador (usar cache)
         for b in self.bullets:
-            enemy_list: list[Meteor | Alien | GuidedMeteor | ExplosiveMine | EyeEnemy | Boss | SpikeBoss] | None = all_enemies if b.homing else None
+            enemy_list = self._cached_all_enemies if b.homing else None
             b.update(dt, enemy_list)
-        for ab in self.alien_bullets:
-            ab.update(dt)
-        for vb in self.mini_ship_bullets:
-            vb.update(dt)
-        for bl in self.boss_lasers:
-            bl.update(dt)
-        for pl in self.player_lasers:
-            pl.update(dt)
-        for el in self.eye_lasers:
-            el.update(dt)
+        
+        # Update bullets simples (consolidado)
+        from typing import Any
+        simple_bullets: list[Any] = [*self.alien_bullets, *self.mini_ship_bullets, *self.boss_lasers, *self.player_lasers, *self.eye_lasers]
+        for bullet in simple_bullets:
+            bullet.update(dt)
         # Update explosões do pool
         self.explosion_pool.update(dt)
         for me in self.mine_explosions:
@@ -220,13 +217,9 @@ class EntityManager:
         for fs in self.floating_scores:
             fs.update(dt)
 
-        # Coletar todos os inimigos (normais + formações) para as mini ships
-        all_enemies_for_mini_ships = list(self.enemies)
-        for formation in self.formations:
-            all_enemies_for_mini_ships.extend(formation.get_enemies())
-
+        # Mini ships (usar cache)
         for ms in self.mini_ships:
-            ms.update(dt, all_enemies_for_mini_ships, self.mini_ship_bullets)
+            ms.update(dt, self._cached_all_enemies, self.mini_ship_bullets)
 
         # Atualizar spikes (precisam da posição do jogador para míssil teleguiado)
         # Contar quantos triângulos estão atualmente atacando (trembling ou flying)
@@ -305,7 +298,8 @@ class EntityManager:
             if bomb.dead:
                 self.air_strike_bombs.remove(bomb)
 
-        # Reconstruir grid espacial com todos os inimigos
+        # CRÍTICO: Cleanup ANTES de rebuild
+        self.cleanup()
         self.rebuild_enemy_grid()
 
     def update_for_game_over_slow_motion(

@@ -111,6 +111,9 @@ class EnemySpawner:
             self.warm_up_timer = 0.0
             self.spawn_intensity = 1.0  # Já ativo
 
+        # Cache para posições de formações (otimização)
+        self._formation_positions_cache: List[float] = []
+
         # Criar um timer para cada tipo de inimigo
         self.enemy_timers: Dict[Type[object], Timer] = {}
         for enemy_type in self.config.enemy_types:
@@ -147,19 +150,22 @@ class EnemySpawner:
             self.warm_up_timer -= dt
             # Durante warm-up: intensidade 0% (nenhum spawn)
             self.spawn_intensity = 0.0
+            return  # Early exit - não processar timers durante warm-up
         else:
             # Após warm-up: intensidade 100% (spawn normal)
             self.spawn_intensity = 1.0
 
         # Atualizar e verificar cada timer de inimigo
+        eye_enemy_count = None  # Lazy: calcular apenas se necessário
+        
         for enemy_type, timer in self.enemy_timers.items():
             timer.update(dt)
             if timer.done() and random.random() < self.spawn_intensity:
                 if enemy_type == EyeEnemy:
-                    # Limitar o número de EyeEnemies na tela a 5
-                    eye_enemy_count = sum(
-                        isinstance(e, EyeEnemy) for e in entity_manager.enemies
-                    )
+                    # Lazy count
+                    if eye_enemy_count is None:
+                        eye_enemy_count = sum(isinstance(e, EyeEnemy) for e in entity_manager.enemies)
+                    
                     if eye_enemy_count < 5:
                         x = random.randint(40, Config.SCREEN_WIDTH - 80)
                         y = random.randint(40, 100)
@@ -168,6 +174,7 @@ class EnemySpawner:
                             new_enemy.health * self.enemy_health_multiplier
                         )
                         entity_manager.enemies.append(new_enemy)
+                        eye_enemy_count += 1  # Incrementar contador local
                 else:
                     from ..entities.meteor import Meteor
 
@@ -217,6 +224,8 @@ class EnemySpawner:
                 self.formation_spawn_timer.done()
                 and random.random() < self.spawn_intensity
             ):
+                # Atualizar cache apenas quando necessário
+                self._formation_positions_cache = [f.center_x for f in entity_manager.formations]
                 # Criar formação
                 formation_type = self.config.get_random_formation_type()
                 if formation_type:
@@ -274,15 +283,9 @@ class EnemySpawner:
                                 int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
                             )
 
-                            # Verificar distância de todas as formações existentes
-                            too_close = False
-                            for existing_formation in entity_manager.formations:
-                                distance = abs(
-                                    candidate_x - existing_formation.center_x
-                                )
-                                if distance < min_distance:
-                                    too_close = True
-                                    break
+                            # Verificar distância usando cache
+                            too_close = any(abs(candidate_x - pos) < min_distance 
+                                           for pos in self._formation_positions_cache)
 
                             if not too_close:
                                 entry_x = candidate_x

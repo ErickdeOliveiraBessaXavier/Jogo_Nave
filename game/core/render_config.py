@@ -16,7 +16,7 @@ class RenderConfig:
     CELESTIAL_MIN_GAP = 50  # Minimum horizontal gap between celestial bodies
 
     # Starfield configurations
-    STARFIELD_NUM_STARS = 40
+    STARFIELD_NUM_STARS = 30
     STARFIELD_SPEED_MIN = 30
     STARFIELD_SPEED_MAX = 150
     STARFIELD_BRIGHTNESS_MIN = 100

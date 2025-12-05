@@ -93,7 +93,7 @@ class Meteor:
 
     def _generate_irregular_shape(self) -> List[Tuple[float, float]]:
         pts: List[Tuple[float, float]] = []
-        num = max(6, min(12, 6 + (self.size - Config.MIN_METEOR_SIZE) // 3))
+        num = 6  # Reduzido de variável para 6 pontos fixos para otimização
         for i in range(num):
             ang = (2 * math.pi * i) / num
             rv = random.uniform(0.6, 1.4)
