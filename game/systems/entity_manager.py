@@ -116,10 +116,11 @@ class EntityManager:
         damage: int = 50,
         ship: Optional["Ship"] = None,
         ball_index: int = -1,
+        target_entity: Optional[Any] = None,
     ) -> PlayerLaser:
         """Spawna um laser do jogador."""
         laser = PlayerLaser(
-            x, y, target_x, target_y, damage=damage, ship=ship, ball_index=ball_index
+            x, y, target_x, target_y, damage=damage, ship=ship, ball_index=ball_index, target_entity=target_entity
         )
         self.player_lasers.append(laser)
         return laser

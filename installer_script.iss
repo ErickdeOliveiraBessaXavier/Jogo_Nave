@@ -11,7 +11,8 @@ AppVersion=1.0
 AppPublisher=Erick de Oliveira Bessa Xavier
 DefaultDirName={autopf}\Jogo de Nave Espacial
 DisableProgramGroupPage=yes
-UninstallDisplayIcon={app}\Jogo_Nave.exe
+UninstallDisplayIcon={app}\Space_Shooter.exe
+SetupIconFile=game\assets\icons\ship_icon.ico
 OutputDir=Output
 OutputBaseFilename=setup_jogo_nave
 Compression=lzma
@@ -19,15 +20,17 @@ SolidCompression=yes
 WizardStyle=modern
 
 [Files]
-Source: "dist\Jogo_Nave.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\Space_Shooter.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "game\assets\*"; DestDir: "{app}\game\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "player_profile.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "game\assets\icons\ship_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Jogo de Nave Espacial"; Filename: "{app}\Jogo_Nave.exe"
-Name: "{autodesktop}\Jogo de Nave Espacial"; Filename: "{app}\Jogo_Nave.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Jogo de Nave Espacial"; Filename: "{app}\Space_Shooter.exe"
+Name: "{autodesktop}\Jogo de Nave Espacial"; Filename: "{app}\Space_Shooter.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Jogo_Nave.exe"; Description: "{cm:LaunchProgram,Jogo de Nave Espacial}"; Flags: shellexec postinstall skipifdoesntexist
+Filename: "{app}\Space_Shooter.exe"; Description: "{cm:LaunchProgram,Jogo de Nave Espacial}"; Flags: shellexec postinstall skipifdoesntexist
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked

@@ -114,3 +114,24 @@ venv.bak/
 .vscode/
 
 player_profile.json
+
+# Build outputs and executables
+Output/
+*.exe
+*.msi
+*.dmg
+*.app
+*.deb
+*.rpm
+
+# Large files (>100MB)
+*.zip
+*.tar.gz
+*.7z
+*.rar
+
+# Game assets that might be large
+*.mp4
+*.avi
+*.mkv
+*.mov

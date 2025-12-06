@@ -64,6 +64,18 @@ class Ship:
         self.visible = True
         self.move_vec = pygame.math.Vector2(0, 0)
 
+        # Usar imagem da nave em vez de pixel art
+        try:
+            self.ship_image = pygame.image.load('game/assets/icons/ship_icon.png').convert_alpha()
+            # Redimensionar para o tamanho apropriado (manter proporções)
+            original_size = self.ship_image.get_size()
+            scale_factor = min(self.w / original_size[0], self.h / original_size[1])
+            new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
+            self.ship_image = pygame.transform.scale(self.ship_image, new_size)
+        except pygame.error:
+            # Fallback para pixel art se a imagem não carregar
+            self.ship_image = None
+
         # Power-ups
         self.double_shot_timer: float = 0.0
         self.speed_boost_timer: float = 0.0
@@ -345,7 +357,7 @@ class Ship:
                 target = self._get_enemy_center(nearest_enemy)
                 if target is not None:
                     entity_manager.spawn_player_laser(
-                        ball_x, ball_y, target[0], target[1], ship=self, ball_index=i
+                        ball_x, ball_y, target[0], target[1], ship=self, ball_index=i, target_entity=nearest_enemy
                     )
 
                     # Consumir carga
@@ -394,7 +406,7 @@ class Ship:
         # Gerar partículas de thruster
         for _ in range(PARTICLE_THRUSTER_COUNT):
             particle = ParticleDict(
-                x=self.x + self.w / 2 + random.uniform(-5, 5),
+                x=self.x + self.w / 2 - 2 + random.uniform(-5, 5),  # Mover 1 pixel para a esquerda
                 y=self.y + self.h,
                 vx=random.uniform(*PARTICLE_THRUSTER_VELOCITY_X),
                 vy=random.uniform(*PARTICLE_THRUSTER_VELOCITY_Y),
@@ -473,7 +485,7 @@ class Ship:
         if self.double_shot_timer > 0:
             return [
                 (
-                    self.x + self.w * 0.2 - 2.5,
+                    self.x + self.w * 0.2 - 2.5 - 1,  # Mover 1 pixel para a esquerda
                     self.y,
                     is_piercing,
                     is_homing,
@@ -481,7 +493,7 @@ class Ship:
                     is_low_ammo,
                 ),
                 (
-                    self.x + self.w * 0.8 - 2.5,
+                    self.x + self.w * 0.8 - 2.5 - 1,  # Mover 1 pixel para a esquerda
                     self.y,
                     is_piercing,
                     is_homing,
@@ -492,7 +504,7 @@ class Ship:
         else:
             return [
                 (
-                    self.x + self.w / 2 - 2.5,
+                    self.x + self.w / 2 - 2.5 - 1,  # Mover 1 pixel para a esquerda
                     self.y,
                     is_piercing,
                     is_homing,
@@ -534,20 +546,25 @@ class Ship:
             shake_x = random.randint(-2, 2)
             shake_y = random.randint(-2, 2)
 
-        # Desenha a nave como pixel art com o tremor
-        for row_idx, row in enumerate(self.PIXEL_ART_SPRITE):
-            for col_idx, char in enumerate(row):
-                color = self.COLOR_MAP.get(char)
-                if color and len(color) == 4 and color[3] == 0:  # Transparente
-                    continue
-                if color:
-                    pixel_x = self.x + col_idx * self.PIXEL_SIZE + shake_x
-                    pixel_y = self.y + row_idx * self.PIXEL_SIZE + shake_y
-                    pygame.draw.rect(
-                        surface,
-                        color,
-                        (pixel_x, pixel_y, self.PIXEL_SIZE, self.PIXEL_SIZE),
-                    )
+        # Desenhar a nave (usar imagem se disponível, senão pixel art)
+        if self.ship_image is not None:
+            # Usar imagem carregada
+            surface.blit(self.ship_image, (self.x + shake_x, self.y + shake_y))
+        else:
+            # Fallback para pixel art
+            for row_idx, row in enumerate(self.PIXEL_ART_SPRITE):
+                for col_idx, char in enumerate(row):
+                    color = self.COLOR_MAP.get(char)
+                    if color and len(color) == 4 and color[3] == 0:  # Transparente
+                        continue
+                    if color:
+                        pixel_x = self.x + col_idx * self.PIXEL_SIZE + shake_x
+                        pixel_y = self.y + row_idx * self.PIXEL_SIZE + shake_y
+                        pygame.draw.rect(
+                            surface,
+                            color,
+                            (pixel_x, pixel_y, self.PIXEL_SIZE, self.PIXEL_SIZE),
+                        )
 
         # Desenhar bolas elétricas orbitais
         if self.orbital_lasers_active:
