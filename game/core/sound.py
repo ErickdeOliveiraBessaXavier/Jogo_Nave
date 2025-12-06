@@ -258,6 +258,21 @@ class SoundManager:
                 except pygame.error as e:
                     print(f"Erro ao carregar som {sound_path}: {e}")
 
+        # Carregar sons de chuva de meteoros (AIR_STRIKE)
+        meteor_rain_sounds: List[pygame.mixer.Sound] = []
+        meteor_rain_pattern = sfx_paths["ui"].get("meteor_rain", "")
+        if meteor_rain_pattern:
+            for i in range(1, 5):  # 1, 2, 3, 4
+                sound_path = os.path.join(base_path, meteor_rain_pattern.format(i))
+                if os.path.exists(sound_path):
+                    try:
+                        sound = pygame.mixer.Sound(sound_path)
+                        sound.set_volume(self.sfx_volume * self.master_volume)
+                        meteor_rain_sounds.append(sound)
+                    except pygame.error as e:
+                        print(f"Erro ao carregar som {sound_path}: {e}")
+        self._sound_groups["meteor_rain"] = meteor_rain_sounds
+
         # Carregar sons do laser do boss
         laser_sounds = {
             "boss_laser_charging": sfx_paths["boss_laser_charging"],
@@ -311,6 +326,13 @@ class SoundManager:
         """Toca um som de explosão de asteroide aleatório."""
         if "explosions" in self._sound_groups and self._sound_groups["explosions"]:
             sound = random.choice(self._sound_groups["explosions"])
+            sound.play()
+
+    @require_audio
+    def play_meteor_rain(self):
+        """Toca um som de chuva de meteoros aleatório (AIR_STRIKE)."""
+        if "meteor_rain" in self._sound_groups and self._sound_groups["meteor_rain"]:
+            sound = random.choice(self._sound_groups["meteor_rain"])
             sound.play()
 
     @require_audio

@@ -37,7 +37,8 @@ if TYPE_CHECKING:
 
 
 class EntityManager:
-    def __init__(self):
+    def __init__(self, sound_manager: Optional[Any] = None):
+        self.sound_manager = sound_manager
         self.bullets: list[Bullet] = []
         self.emp_waves: list[EMPWave] = []  # Ondas visuais do EMP
         self.explosive_effects: list[ExplosiveEffect] = (
@@ -97,7 +98,13 @@ class EntityManager:
 
     def spawn_air_strike_bomb(self, target_x: float, target_y: float) -> None:
         """Spawna uma bomba de bombardeio aéreo."""
-        bomb = AirStrikeBomb(target_x, target_y)
+        # Callbacks para sons
+        on_explode = None
+        on_fall = None
+        if self.sound_manager:
+            on_explode = self.sound_manager.play_explosion_asteroid
+            on_fall = self.sound_manager.play_meteor_rain
+        bomb = AirStrikeBomb(target_x, target_y, on_explode=on_explode, on_fall=on_fall)
         self.air_strike_bombs.append(bomb)
 
     def spawn_player_laser(

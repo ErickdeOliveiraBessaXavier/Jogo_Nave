@@ -107,6 +107,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "powerup": "sfx/ui/powerUp.wav",
             "button_hover": "sfx/ui/sound_hover.wav",
             "upgrade_activate": "sfx/ui/Ativação_Aprimoramentos.wav",
+            "meteor_rain": "sfx/ui/som_chuva_meteoro_{}.wav",  # {} = 1,2,3,4
         },
     },
 }

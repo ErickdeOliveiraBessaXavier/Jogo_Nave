@@ -1,6 +1,6 @@
 import pygame
 import random
-from typing import Set
+from typing import Set, Optional, Callable
 
 
 class AirStrikeBomb:
@@ -13,12 +13,16 @@ class AirStrikeBomb:
         explosion_radius: float = 80.0,
         fall_speed: float = 800.0,
         damage: int = 100,
+        on_explode: Optional[Callable[[], None]] = None,
+        on_fall: Optional[Callable[[], None]] = None,
     ):
         self.target_x = target_x
         self.target_y = target_y
         self.explosion_radius = explosion_radius
         self.damage = damage
         self.fall_speed = fall_speed
+        self.on_explode = on_explode
+        self.on_fall = on_fall
 
         # Posição (começa acima da tela)
         self.x = target_x
@@ -28,6 +32,7 @@ class AirStrikeBomb:
         self.dead = False
         self.exploded = False
         self.state = "falling"  # "falling", "exploding", "done"
+        self._fall_sound_played = False  # Flag para tocar som de queda apenas uma vez
 
         # Animação
         self.explosion_timer = 0.0
@@ -69,10 +74,19 @@ class AirStrikeBomb:
             self.y += self.fall_speed * dt
             self.rotation += 150 * dt
 
+            # Tocar som de queda quando a bomba fica visível na tela
+            if not self._fall_sound_played and self.y > 0:
+                self._fall_sound_played = True
+                if self.on_fall:
+                    self.on_fall()
+
             if self.y >= self.target_y:
                 self.y = self.target_y
                 self.state = "exploding"
                 self.exploded = True
+                # Tocar som de explosão
+                if self.on_explode:
+                    self.on_explode()
 
         elif self.state == "exploding":
             self.explosion_timer += dt

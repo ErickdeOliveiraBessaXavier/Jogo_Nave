@@ -45,7 +45,7 @@ class PlayingScene(Scene):
             Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT + 100
         )  # Start 100 pixels below the screen
         self.ship.is_entering = True
-        self.entity_manager = EntityManager()
+        self.entity_manager = EntityManager(sound_manager=sound_manager)
         self.first_entry = True
 
         # Aplicar configurações de dificuldade após criar a nave
