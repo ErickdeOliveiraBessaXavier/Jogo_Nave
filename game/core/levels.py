@@ -525,7 +525,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # EyeEnemy: 5.0,
         },
         enemies_to_clear=200,
-        formations_enabled=True,
+        #formations_enabled=True,
         #formation_types=["spiral_circle", "spiral_v", "spiral_line"],
         #mines_enabled=True,
         #boss_type= SpikeBoss,
