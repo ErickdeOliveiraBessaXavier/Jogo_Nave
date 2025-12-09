@@ -9,6 +9,7 @@ from ..entities.boss import Boss
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.spike_boss import SpikeBoss
+from ..entities.square_minion_boss import SquareMinionBoss
 from .difficulty import DifficultyPreset, DifficultySettings
 
 
@@ -100,7 +101,7 @@ LEVEL_THEMES = {
     "asteroid_field": LevelTheme(
         name="Campo de Asteroides",
         description="Muitos meteoros, poucos aliens",
-        enemy_weight={"meteor": 3.0, "alien": 0.5, "eye": 0.3},
+        enemy_weight={"meteor": 3.0, "alien": 0.5, "eye": 0.3, "square_minion_boss": 0.1},
         spawn_rate_multiplier=1.3,
         enemies_multiplier=1.2,
         special_feature=None,
@@ -108,7 +109,7 @@ LEVEL_THEMES = {
     "alien_invasion": LevelTheme(
         name="Invasão Alienígena",
         description="Predominância de aliens",
-        enemy_weight={"meteor": 0.5, "alien": 3.0, "eye": 1.0},
+        enemy_weight={"meteor": 0.5, "alien": 3.0, "eye": 1.0, "square_minion_boss": 0.2},
         spawn_rate_multiplier=1.0,
         enemies_multiplier=1.0,
         special_feature=None,
@@ -116,7 +117,7 @@ LEVEL_THEMES = {
     "eye_swarm": LevelTheme(
         name="Enxame de Olhos",
         description="Muitos Eye Enemies",
-        enemy_weight={"meteor": 0.3, "alien": 0.5, "eye": 3.0},
+        enemy_weight={"meteor": 0.3, "alien": 0.5, "eye": 3.0, "square_minion_boss": 0.1},
         spawn_rate_multiplier=0.8,
         enemies_multiplier=0.9,
         special_feature=None,
@@ -124,7 +125,7 @@ LEVEL_THEMES = {
     "minefield": LevelTheme(
         name="Campo Minado",
         description="Muitas minas explosivas",
-        enemy_weight={"meteor": 1.0, "alien": 1.0, "eye": 0.5},
+        enemy_weight={"meteor": 1.0, "alien": 1.0, "eye": 0.5, "square_minion_boss": 0.1},
         spawn_rate_multiplier=1.0,
         enemies_multiplier=1.0,
         special_feature="mines_heavy",
@@ -132,7 +133,7 @@ LEVEL_THEMES = {
     "formation_hell": LevelTheme(
         name="Inferno de Formações",
         description="Formações complexas constantemente",
-        enemy_weight={"meteor": 0.8, "alien": 2.0, "eye": 1.0},
+        enemy_weight={"meteor": 0.8, "alien": 2.0, "eye": 1.0, "square_minion_boss": 0.2},
         spawn_rate_multiplier=0.9,
         enemies_multiplier=0.85,
         special_feature="formations_heavy",
@@ -140,7 +141,7 @@ LEVEL_THEMES = {
     "meteor_storm": LevelTheme(
         name="Tempestade de Meteoros",
         description="Apenas meteoros em volume extremo",
-        enemy_weight={"meteor": 10.0, "alien": 0.0, "eye": 0.0},
+        enemy_weight={"meteor": 10.0, "alien": 0.0, "eye": 0.0, "square_minion_boss": 0.0},
         spawn_rate_multiplier=2.0,  # 2x mais meteoros por segundo
         enemies_multiplier=1.8,  # 1.8x mais meteoros para limpar
         special_feature="meteor_only",
@@ -148,7 +149,7 @@ LEVEL_THEMES = {
     "balanced": LevelTheme(
         name="Balanceado",
         description="Mix equilibrado de tudo",
-        enemy_weight={"meteor": 1.0, "alien": 1.0, "eye": 1.0},
+        enemy_weight={"meteor": 1.0, "alien": 1.0, "eye": 1.0, "square_minion_boss": 0.1},
         spawn_rate_multiplier=1.0,
         enemies_multiplier=1.0,
         special_feature=None,
@@ -167,7 +168,7 @@ class LevelConfig:
 
     level_number: int
     enemy_spawn_config: dict[
-        Type[Meteor | Alien | ExplosiveMine | EyeEnemy], float
+        Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss], float
     ]  # Tipo -> tempo de spawn
     enemies_to_clear: int  # quantos inimigos para passar de fase
     boss_type: Type[Boss | SpikeBoss] | None = None
@@ -178,17 +179,17 @@ class LevelConfig:
     score_multiplier: float = 1.0  # Multiplicador de pontuação para o nível
 
     @property
-    def enemy_types(self) -> list[Type[Meteor | Alien | ExplosiveMine | EyeEnemy]]:
+    def enemy_types(self) -> list[Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]]:
         """Retorna lista de tipos de inimigos configurados."""
         return list(self.enemy_spawn_config.keys())
 
     def get_spawn_time(
-        self, enemy_type: Type[Meteor | Alien | ExplosiveMine | EyeEnemy]
+        self, enemy_type: Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]
     ) -> float:
         """Retorna o tempo de spawn para um tipo específico de inimigo."""
         return self.enemy_spawn_config.get(enemy_type, 1.0)
 
-    def get_random_enemy_type(self) -> Type[Meteor | Alien | ExplosiveMine | EyeEnemy]:
+    def get_random_enemy_type(self) -> Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]:
         """Retorna um tipo de inimigo aleatório da lista."""
         if not self.enemy_types:
             raise ValueError(f"Level {self.level_number} has no enemies configured!")
@@ -379,7 +380,7 @@ class ProceduralLevelGenerator:
 
         # 1. Calcular spawn times com pesos do tema
         enemy_spawn_config: dict[
-            Type[Meteor | Alien | ExplosiveMine | EyeEnemy], float
+            Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss], float
         ] = {}
 
         # Verificar se é fase especial "meteor_only"
@@ -419,6 +420,16 @@ class ProceduralLevelGenerator:
                 ) / spawn_multiplier
                 enemy_spawn_config[EyeEnemy] = self._clamp_spawn_time(
                     base_eye_time * (2.0 / eye_weight)
+                )
+
+            # Square Minion Boss (nível 3+)
+            if level_number >= 3:
+                square_weight = theme.enemy_weight.get("square_minion_boss", 0.1) if theme else 0.1
+                base_square_time = (
+                    8.0 / difficulty  # Spawn time base
+                ) / spawn_multiplier
+                enemy_spawn_config[SquareMinionBoss] = self._clamp_spawn_time(
+                    base_square_time * (2.0 / square_weight)
                 )
 
         # 2. Calcular quantidade de inimigos
@@ -521,6 +532,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         level_number=1,
         enemy_spawn_config={
             Meteor: 0.6,
+            # SquareMinionBoss: 1.0,  # Spawn lento para tutorial
             # Alien: 2.5,
             # EyeEnemy: 5.0,
         },

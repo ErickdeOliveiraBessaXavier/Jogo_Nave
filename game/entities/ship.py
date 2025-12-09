@@ -3,6 +3,7 @@ import random
 import math
 import time
 from ..core.config import config as Config
+from ..core.sound import sound_manager
 from typing import Tuple, TypedDict, Union, TYPE_CHECKING, Optional, Any
 
 if TYPE_CHECKING:
@@ -359,6 +360,9 @@ class Ship:
                     entity_manager.spawn_player_laser(
                         ball_x, ball_y, target[0], target[1], ship=self, ball_index=i, target_entity=nearest_enemy
                     )
+
+                    # Tocar som do laser
+                    sound_manager.play_laser_shot()
 
                     # Consumir carga
                     self.orbital_laser_charges[i] -= 1

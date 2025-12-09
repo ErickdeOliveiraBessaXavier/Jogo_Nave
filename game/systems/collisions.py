@@ -18,6 +18,7 @@ from ..entities.powerup import PowerUp
 from ..entities.boss import Boss
 from ..entities.boss_square import BossSquare
 from ..entities.floating_score import FloatingScore
+from ..entities.square_minion_boss import SquareMinionBoss
 from ..core.sound import sound_manager
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.eye_enemy import EyeEnemy
@@ -36,7 +37,7 @@ from ..entities.explosive_mine import ExplosiveMine
 class Collisions:
     
     @staticmethod
-    def get_collision_info(enemy: Meteor | Alien | ExplosiveMine | EyeEnemy) -> tuple[float, float, float]:
+    def get_collision_info(enemy: Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss) -> tuple[float, float, float]:
         """OPT #6: Helper para calcular center_x, center_y, radius de qualquer inimigo.
         
         Retorna (center_x, center_y, radius) consolidando lógica de type checking.
@@ -47,8 +48,8 @@ class Collisions:
 
     def _destroy_enemy(
         self,
-        enemy: Meteor | Alien | ExplosiveMine | EyeEnemy,
-        enemies_list: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        enemy: Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss,
+        enemies_list: list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss],
         entity_manager: "EntityManager",
         explosion_size: int | None = None,
     ) -> tuple[int, tuple[float, float, int]]:
@@ -130,6 +131,9 @@ class Collisions:
 
                 if isinstance(enemy, ExplosiveMine):
                     enemy.take_damage(damage_to_mine)
+                elif isinstance(enemy, SquareMinionBoss):
+                    # SquareMinionBoss não pode ser destruído por tiros
+                    pass  # Não faz nada - imune a tiros
                 else:
                     pts, score_event = self._destroy_enemy(enemy, enemies, entity_manager)
                     score_gain += pts
@@ -257,6 +261,9 @@ class Collisions:
                 if dist_sq < (explosion_radius + enemy_r) ** 2:
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(enemy.health)
+                    elif isinstance(enemy, SquareMinionBoss):
+                        # SquareMinionBoss não pode ser destruído por explosões
+                        pass  # Não faz nada - imune a explosões
                     else:
                         pts, score_event = self._destroy_enemy(enemy, enemies, entity_manager)
                         score_gain += pts
@@ -382,9 +389,9 @@ class Collisions:
     def mini_ship_bullets_vs_enemies(
         self,
         mini_ship_bullets: list[MiniShipBullet],
-        enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss],
         enemies: list[
-            Meteor | Alien | ExplosiveMine | EyeEnemy
+            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
         ],  # Para adicionar fragments
         entity_manager: "EntityManager",  # <-- ADICIONAR
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
@@ -413,11 +420,20 @@ class Collisions:
                 continue
 
             for enemy in potential_enemies:
-                if b_rect.colliderect(enemy.rect):  # Usa cache
+                # Handle both rect property and get_rect() method
+                enemy_rect = enemy.rect if hasattr(enemy, 'rect') else enemy.get_rect()
+                if b_rect.colliderect(enemy_rect):  # Usa cache
                     b.dead = True
 
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
+                    elif isinstance(enemy, SquareMinionBoss):
+                        # SquareMinionBoss não pode ser destruído por tiros, mas a bala sim
+                        # Criar explosão visual no ponto de impacto
+                        entity_manager.spawn_explosion(b.x, b.y, size=20)
+                        # Som de impacto (mesmo som de dano ao boss)
+                        sound_manager.play_boss_damage()
+                        pass  # Não faz nada - imune a tiros
                     else:
                         # Usar helper consolidado
                         pts, score_event = self._destroy_enemy(enemy, enemies, entity_manager)
@@ -433,9 +449,9 @@ class Collisions:
         bullets: list[Bullet],
         mine_explosions: list[MineExplosion],
         ship: Ship,
-        enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss],
         enemies: list[
-            Meteor | Alien | ExplosiveMine | EyeEnemy
+            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
         ],  # Para adicionar fragments
         entity_manager: "EntityManager",  # <-- NOVO
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
@@ -462,9 +478,20 @@ class Collisions:
                 continue
 
             for enemy in potential_enemies:
-                if b_rect.colliderect(enemy.rect):  # Usa cache
+                # Handle both rect property and get_rect() method
+                enemy_rect = enemy.rect if hasattr(enemy, 'rect') else enemy.get_rect()
+                if b_rect.colliderect(enemy_rect):  # Usa cache
+                    b.dead = True  # Bala sempre é destruída ao colidir
+                    
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
+                    elif isinstance(enemy, SquareMinionBoss):
+                        # SquareMinionBoss não pode ser destruído por tiros, mas a bala sim
+                        # Criar explosão visual no ponto de impacto
+                        entity_manager.spawn_explosion(b.x, b.y, size=20)
+                        # Som de impacto (mesmo som de dano ao boss)
+                        sound_manager.play_boss_damage()
+                        pass  # Não faz nada - imune a tiros
                     else:
                         # Usar helper consolidado
                         pts, score_event = self._destroy_enemy(enemy, enemies, entity_manager)
@@ -509,6 +536,9 @@ class Collisions:
                             if dist_sq < explosion_radius**2:
                                 if isinstance(nearby_enemy, ExplosiveMine):
                                     nearby_enemy.take_damage(2)  # Dano extra
+                                elif isinstance(nearby_enemy, SquareMinionBoss):
+                                    # SquareMinionBoss não pode ser destruído por explosões de área
+                                    pass  # Não faz nada - imune a explosões
                                 elif not nearby_enemy.dead:
                                     pts, score_event = self._destroy_enemy(nearby_enemy, enemies, entity_manager)
                                     score_gain += pts
@@ -544,7 +574,7 @@ class Collisions:
     def ship_vs_enemies(
         self,
         ship: Ship,
-        enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        enemy_grid: SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss],
         entity_manager: "EntityManager",
     ) -> bool:
         if ship.invuln > 0:
@@ -559,7 +589,9 @@ class Collisions:
         query_h = ship.rect.height + 20
         potential_enemies = enemy_grid.query(query_x, query_y, query_w, query_h)
         for enemy in potential_enemies:
-            if enemy and ship.rect.colliderect(enemy.rect):
+            # Handle both rect property and get_rect() method
+            enemy_rect = enemy.rect if hasattr(enemy, 'rect') else enemy.get_rect()
+            if enemy and ship.rect.colliderect(enemy_rect):
                 if isinstance(enemy, ExplosiveMine):
                     enemy.dead = True  # Explode immediately
                 else:
@@ -572,7 +604,7 @@ class Collisions:
                 # Tocar som de colisão apropriado baseado no tipo de inimigo
                 if isinstance(enemy, Meteor):
                     sound_manager.play_explosion_asteroid()
-                elif isinstance(enemy, Alien):
+                elif isinstance(enemy, (Alien, SquareMinionBoss)):
                     sound_manager.play_explosion_alien()
                 else:
                     # ExplosiveMine, EyeEnemy e outros
@@ -875,7 +907,8 @@ class Collisions:
                 if enemy_id in laser.hit_enemies:
                     continue
 
-                enemy_rect = enemy.rect
+                # Handle both rect property and get_rect() method
+                enemy_rect = enemy.rect if hasattr(enemy, 'rect') else enemy.get_rect()
                 if enemy_rect.clipline(line):
                     # Marcar inimigo como já atingido por este laser
                     laser.hit_enemies.add(enemy_id)
@@ -886,6 +919,9 @@ class Collisions:
                     elif isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(laser.damage)
                         continue  # Não usar _destroy_enemy para minas
+                    elif isinstance(enemy, SquareMinionBoss):
+                        # SquareMinionBoss não pode ser destruído por lasers
+                        pass  # Não faz nada - imune a lasers
                     
                     # Para inimigos normais, usar helper com explosion_size customizado
                     pts, score_event = self._destroy_enemy(enemy, enemies, entity_manager, explosion_size=20)

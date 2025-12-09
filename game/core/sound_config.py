@@ -26,6 +26,7 @@ class SoundType(Enum):
 
     # Tiros
     SHOT = "shot"
+    LASER_SHOT = "laser_shot"  # Som do laser do upgrade LASER_SHOT
 
     # Boss Laser
     BOSS_LASER_CHARGING = "boss_laser_charging"
@@ -108,6 +109,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "button_hover": "sfx/ui/sound_hover.wav",
             "upgrade_activate": "sfx/ui/Ativação_Aprimoramentos.wav",
             "meteor_rain": "sfx/ui/som_chuva_meteoro_{}.wav",  # {} = 1,2,3,4
+            "laser_shot": "sfx/ui/som_laser_raio.mp3",  # Som do laser do upgrade LASER_SHOT
         },
     },
 }

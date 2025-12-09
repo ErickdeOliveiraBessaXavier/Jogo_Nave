@@ -353,7 +353,8 @@ class PlayingScene(Scene):
             self.star_spawner.update(dt, self.entity_manager.stars)
 
         self.entity_manager.update(
-            dt, self.ship.rect.centerx, self.ship.rect.centery, freeze_enemies=self.freeze_active
+            dt, self.ship.rect.centerx, self.ship.rect.centery, freeze_enemies=self.freeze_active,
+            screen_width=Config.SCREEN_WIDTH, screen_height=Config.SCREEN_HEIGHT
         )
 
         # Processar colisões sempre (incluindo durante transições)

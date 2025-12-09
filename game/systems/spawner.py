@@ -21,6 +21,7 @@ from ..entities.meteor_pool import MeteorPool
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.star import Star
+from ..entities.square_minion_boss import SquareMinionBoss
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -218,11 +219,22 @@ class EnemySpawner:
                         entity_manager.enemies.append(meteor)
                     else:
                         # Outros inimigos normalmente
-                        new_enemy = cast(EnemyWithHealth, enemy_type())
-                        new_enemy.health = int(
-                            new_enemy.health * self.enemy_health_multiplier
-                        )
-                        entity_manager.enemies.append(new_enemy)  # type: ignore[arg-type]
+                        if enemy_type == SquareMinionBoss:
+                            # SquareMinionBoss precisa de posição do jogador
+                            if player_x is not None and player_y is not None:
+                                x = random.randint(40, Config.SCREEN_WIDTH - 80)
+                                y = -50  # Spawn acima da tela
+                                new_enemy = SquareMinionBoss(x, y, player_x, player_y)
+                                new_enemy.health = int(
+                                    new_enemy.health * self.enemy_health_multiplier
+                                )
+                                entity_manager.enemies.append(new_enemy)
+                        else:
+                            new_enemy = cast(EnemyWithHealth, enemy_type())
+                            new_enemy.health = int(
+                                new_enemy.health * self.enemy_health_multiplier
+                            )
+                            entity_manager.enemies.append(new_enemy)  # type: ignore[arg-type]
                 timer.start()  # Reiniciar timer
 
         # Spawner de minas

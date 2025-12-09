@@ -39,6 +39,7 @@ class StatisticsScene(Scene):
         # Sistema de abas
         self.current_tab = StatTab.OVERVIEW
         self.layout_rects: Dict[str, Any] = {}
+        self.scroll_y = 0  # Para rolagem na aba de níveis
         self._calculate_layout()
 
     def _calculate_layout(self):
@@ -113,6 +114,10 @@ class StatisticsScene(Scene):
                     if rect.collidepoint(pos):
                         self._switch_tab(list(StatTab)[i])
                         break
+
+        if event.type == pygame.MOUSEWHEEL:
+            if self.current_tab == StatTab.LEVELS:
+                self.scroll_y -= event.y * 20  # Ajusta a velocidade de rolagem
 
     def _return_to_menu(self):
         """Retorna ao menu principal de forma segura."""
@@ -302,12 +307,30 @@ class StatisticsScene(Scene):
             return
 
         sorted_levels = sorted(self.profile.level_stats.keys())
-        for level_num in sorted_levels:
-            if y > area.bottom - 40:
-                text = self.small_font.render("...", True, colors.GRAY)
-                surface.blit(text, (area.x, y))
-                break
 
+        # Calcular altura total do conteúdo
+        total_height = 0
+        for level_num in sorted_levels:
+            stats = self.profile.level_stats[level_num]
+            num_lines = 3  # Nível, Tentativas, Sucesso
+            if stats.best_time:
+                num_lines += 2  # Melhor tempo, Melhor pontuação
+            card_height = 20 + (num_lines * 25) + 10  # padding top + lines + padding bottom
+            total_height += card_height + 15  # + spacing
+
+        # Ajustar scroll_y
+        visible_height = area.height - 50  # subtrair espaço do header
+        if total_height > visible_height:
+            self.scroll_y = max(0, min(self.scroll_y, total_height - visible_height))
+        else:
+            self.scroll_y = 0
+
+        # Criar superfície de conteúdo
+        content_surface = pygame.Surface((area.width, max(total_height, visible_height)), pygame.SRCALPHA)
+
+        # Renderizar conteúdo na superfície
+        content_y = 0
+        for level_num in sorted_levels:
             stats = self.profile.level_stats[level_num]
             # Calculate card height based on content (each line is ~25px)
             num_lines = 3  # Nível, Tentativas, Sucesso
@@ -316,8 +339,8 @@ class StatisticsScene(Scene):
             card_height = (
                 20 + (num_lines * 25) + 10
             )  # padding top + lines + padding bottom
-            card_rect = pygame.Rect(area.x, y, area.width, card_height)
-            self._draw_card_background(surface, card_rect)
+            card_rect = pygame.Rect(0, content_y, area.width, card_height)
+            self._draw_card_background(content_surface, card_rect)
 
             # Cor baseada na performance
             state = stats.get_performance_state()
@@ -330,7 +353,7 @@ class StatisticsScene(Scene):
             }
             bar_color = state_colors.get(state, colors.GRAY)
             pygame.draw.rect(
-                surface,
+                content_surface,
                 bar_color,
                 (card_rect.x, card_rect.y, 10, card_rect.height),
                 border_radius=8,
@@ -343,8 +366,8 @@ class StatisticsScene(Scene):
             # Linha 1: Nível
             level_label = self.item_font.render("Nível", True, colors.GRAY)
             level_value = self.item_font.render(str(level_num), True, colors.BLUE)
-            surface.blit(level_label, (card_rect.x + 25, line_y))
-            surface.blit(
+            content_surface.blit(level_label, (card_rect.x + 25, line_y))
+            content_surface.blit(
                 level_value, (card_rect.x + 25 + level_label.get_width() + 5, line_y)
             )
             line_y += line_spacing + 10  # Extra margin before line 2
@@ -354,8 +377,8 @@ class StatisticsScene(Scene):
             attempts_value = self.small_font.render(
                 str(stats.attempts), True, colors.BLUE
             )
-            surface.blit(attempts_label, (card_rect.x + 25, line_y))
-            surface.blit(
+            content_surface.blit(attempts_label, (card_rect.x + 25, line_y))
+            content_surface.blit(
                 attempts_value,
                 (card_rect.x + 25 + attempts_label.get_width() + 5, line_y),
             )
@@ -366,8 +389,8 @@ class StatisticsScene(Scene):
             success_value = self.small_font.render(
                 f"{stats.clear_rate:.0%}", True, colors.BLUE
             )
-            surface.blit(success_label, (card_rect.x + 25, line_y))
-            surface.blit(
+            content_surface.blit(success_label, (card_rect.x + 25, line_y))
+            content_surface.blit(
                 success_value,
                 (card_rect.x + 25 + success_label.get_width() + 5, line_y),
             )
@@ -379,8 +402,8 @@ class StatisticsScene(Scene):
                 time_value = self.small_font.render(
                     f"{stats.best_time:.1f}s", True, colors.BLUE
                 )
-                surface.blit(time_label, (card_rect.x + 25, line_y))
-                surface.blit(
+                content_surface.blit(time_label, (card_rect.x + 25, line_y))
+                content_surface.blit(
                     time_value, (card_rect.x + 25 + time_label.get_width() + 5, line_y)
                 )
                 line_y += line_spacing
@@ -392,13 +415,16 @@ class StatisticsScene(Scene):
                 score_value = self.small_font.render(
                     f"{stats.best_score:,}", True, colors.BLUE
                 )
-                surface.blit(score_label, (card_rect.x + 25, line_y))
-                surface.blit(
+                content_surface.blit(score_label, (card_rect.x + 25, line_y))
+                content_surface.blit(
                     score_value,
                     (card_rect.x + 25 + score_label.get_width() + 5, line_y),
                 )
 
-            y += card_rect.height + 15
+            content_y += card_rect.height + 15
+
+        # Blitar a parte visível da superfície de conteúdo
+        surface.blit(content_surface, (area.x, area.y + 50), area=(0, self.scroll_y, area.width, visible_height))
 
     def _draw_card_background(self, surface: pygame.Surface, rect: pygame.Rect):
         # Apenas a borda, sem fundo, para consistência com settings.py

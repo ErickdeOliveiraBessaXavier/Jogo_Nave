@@ -247,6 +247,7 @@ class SoundManager:
             "powerup": sfx_paths["ui"]["powerup"],
             "button_hover": sfx_paths["ui"]["button_hover"],
             "upgrade_activate": sfx_paths["ui"]["upgrade_activate"],
+            "laser_shot": sfx_paths["ui"]["laser_shot"],  # Som do laser do upgrade LASER_SHOT
         }
         for key, path in ui_sounds.items():
             sound_path = os.path.join(base_path, path)
@@ -320,6 +321,12 @@ class SoundManager:
         self.shot_channel.play(sound)
 
         self.last_shot_time = current_time
+
+    @require_audio
+    def play_laser_shot(self):
+        """Toca som do laser do upgrade LASER_SHOT."""
+        if "laser_shot" in self._sounds:
+            self._sounds["laser_shot"].play()
 
     @require_audio
     def play_explosion_asteroid(self):

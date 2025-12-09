@@ -30,6 +30,8 @@ from ..entities.star import Star
 from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.air_strike_marker import AirStrikeMarker
 from ..entities.air_strike_bomb import AirStrikeBomb
+from ..entities.square_minion_boss import SquareMinionBoss
+from ..entities.square_minion_boss import SquareMinionBoss
 from typing import Dict, Any, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
@@ -44,7 +46,7 @@ class EntityManager:
         self.explosive_effects: list[ExplosiveEffect] = (
             []
         )  # Efeitos visuais de explosão de área
-        self.enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy] = []
+        self.enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss] = []
         self.alien_bullets: list[AlienBullet] = []
         self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
         self.player_lasers: list[PlayerLaser] = []  # Lasers do jogador
@@ -64,7 +66,7 @@ class EntityManager:
         self.meteor_pool = MeteorPool(initial_size=100)  # Pool de meteoros
         self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
         self.enemy_spatial_grid: SpatialGrid[
-            Meteor | Alien | ExplosiveMine | EyeEnemy
+            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
         ] = SpatialGrid()  # Grid espacial para inimigos
         self.spike_spatial_grid: SpatialGrid[Spike] = SpatialGrid()  # OPT: Grid para spikes
         self.explosion_pool = ExplosionPool(initial_size=50)  # Pool de explosões
@@ -150,7 +152,7 @@ class EntityManager:
         for spike in self.spikes:
             self.spike_spatial_grid.insert_from_rect(spike)
 
-    def update(self, dt: float, player_x: float, player_y: float, freeze_enemies: bool = False):
+    def update(self, dt: float, player_x: float, player_y: float, freeze_enemies: bool = False, screen_width: int = 1600, screen_height: int = 900):
         from typing import Any
 
         enemy_dt = 0.0 if freeze_enemies else dt
@@ -318,6 +320,8 @@ class EntityManager:
                     new_eye_lasers.extend(shot)
             elif isinstance(enemy, GuidedMeteor):
                 enemy.update(scaled_dt, player_x, player_y)
+            elif isinstance(enemy, SquareMinionBoss):
+                enemy.update(scaled_dt, screen_width, screen_height)
             else:
                 enemy.update(scaled_dt)
 
