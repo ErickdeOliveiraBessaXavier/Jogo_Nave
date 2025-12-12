@@ -490,9 +490,10 @@ class EntityManager:
                 else:
                     enemy.draw(surface)
 
-        # Desenhar formações
-        for formation in self.formations:
-            formation.draw(surface)
+        # Desenhar formações (respeitar enemy_visible)
+        if enemy_visible:
+            for formation in self.formations:
+                formation.draw(surface)
 
     def spawn_meteor(
         self,

@@ -393,13 +393,25 @@ class PlayingScene(Scene):
 
                 # Se timer expirou, marcar todos os inimigos como mortos
                 if self.enemy_cleanup_timer >= self.enemy_cleanup_duration:
+                    total_enemies = len(self.entity_manager.enemies)
+                    total_formations = sum(len(f.enemies) for f in self.entity_manager.formations)
+                    
                     print(
-                        f"⏰ TEMPO ESGOTADO! Removendo {len(self.entity_manager.enemies)} inimigos restantes automaticamente..."
+                        f"⏰ TEMPO ESGOTADO! Removendo {total_enemies} inimigos normais "
+                        f"e {total_formations} inimigos em formação automaticamente..."
                     )
-                    # Marcar todos os inimigos restantes como mortos
+                    
+                    # Limpar inimigos normais
                     for enemy in self.entity_manager.enemies[:]:
                         enemy.dead = True
                     self.entity_manager.enemies.clear()
+                    
+                    # Limpar formações também
+                    for formation in self.entity_manager.formations[:]:
+                        for enemy in formation.enemies:
+                            enemy.dead = True
+                        formation.dead = True
+                    self.entity_manager.formations.clear()
 
             self._check_level_progression()
         elif self.entity_manager.boss and self.entity_manager.boss.dead:

@@ -293,52 +293,52 @@ class EnemySpawner:
                     else:
                         safe_margin = float(margin_value)
 
-                        # Garantir que safe_margin não ultrapasse metade da largura da tela
-                        safe_margin = min(safe_margin, Config.SCREEN_WIDTH / 2 - 100)
+                    # Garantir que safe_margin não ultrapasse metade da largura da tela
+                    safe_margin = min(safe_margin, Config.SCREEN_WIDTH / 2 - 100)
 
-                        # CORRIGIDO: Calcular posições SEMPRE (não cachear para evitar desync)
-                        formation_positions = [
-                            f.center_x for f in entity_manager.formations
-                        ]
+                    # CORRIGIDO: Calcular posições SEMPRE (não cachear para evitar desync)
+                    formation_positions = [
+                        f.center_x for f in entity_manager.formations
+                    ]
 
-                        # Tentar encontrar uma posição que não esteja muito próxima de outras formações
-                        min_distance = 300  # Distância mínima entre formações (pixels)
-                        max_attempts = 10  # Número máximo de tentativas
-                        entry_x = None
+                    # Tentar encontrar uma posição que não esteja muito próxima de outras formações
+                    min_distance = 300  # Distância mínima entre formações (pixels)
+                    max_attempts = 10  # Número máximo de tentativas
+                    entry_x = None
 
-                        for _ in range(max_attempts):
-                            candidate_x = random.randint(
-                                int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
-                            )
-
-                            # Verificar distância contra posições atuais
-                            too_close = any(
-                                abs(candidate_x - pos) < min_distance
-                                for pos in formation_positions
-                            )
-
-                            if not too_close:
-                                entry_x = candidate_x
-                                break
-
-                        # Se não encontrou posição boa após todas as tentativas, usar a última
-                        if entry_x is None:
-                            entry_x = random.randint(
-                                int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
-                            )
-
-                        # Calcular entry_y baseado no padrão para evitar que fique cortado no topo
-                        # CORRIGIDO: Usar valores pré-calculados
-                        entry_y = float(
-                            self._formation_entry_y.get(formation_type, 80.0)
+                    for _ in range(max_attempts):
+                        candidate_x = random.randint(
+                            int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
                         )
 
-                        from ..entities.alien import Alien
-
-                        new_formation = Formation(
-                            Alien, count, entry_x, entry_y, patterns
+                        # Verificar distância contra posições atuais
+                        too_close = any(
+                            abs(candidate_x - pos) < min_distance
+                            for pos in formation_positions
                         )
-                        entity_manager.formations.append(new_formation)
+
+                        if not too_close:
+                            entry_x = candidate_x
+                            break
+
+                    # Se não encontrou posição boa após todas as tentativas, usar a última
+                    if entry_x is None:
+                        entry_x = random.randint(
+                            int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
+                        )
+
+                    # Calcular entry_y baseado no padrão para evitar que fique cortado no topo
+                    # CORRIGIDO: Usar valores pré-calculados
+                    entry_y = float(
+                        self._formation_entry_y.get(formation_type, 80.0)
+                    )
+
+                    from ..entities.alien import Alien
+
+                    new_formation = Formation(
+                        Alien, count, entry_x, entry_y, patterns
+                    )
+                    entity_manager.formations.append(new_formation)
 
                     # Reiniciar timer
                     min_t, max_t = Config.FORMATION_SPAWN_INTERVAL
