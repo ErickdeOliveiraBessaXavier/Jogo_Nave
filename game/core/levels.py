@@ -10,6 +10,7 @@ from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.spike_boss import SpikeBoss
 from ..entities.square_minion_boss import SquareMinionBoss
+from ..entities.slime_boss import SlimeBoss
 from .difficulty import DifficultyPreset, DifficultySettings
 
 
@@ -149,7 +150,7 @@ LEVEL_THEMES = {
     "balanced": LevelTheme(
         name="Balanceado",
         description="Mix equilibrado de tudo",
-        enemy_weight={"meteor": 1.0, "alien": 1.0, "eye": 1.0, "square_minion_boss": 0.1},
+        enemy_weight={"meteor": 1.0, "alien": 1.0, "eye": 1.0, "square_minion_boss": 0.1, "slime_boss": 0.05},
         spawn_rate_multiplier=1.0,
         enemies_multiplier=1.0,
         special_feature=None,
@@ -168,7 +169,7 @@ class LevelConfig:
 
     level_number: int
     enemy_spawn_config: dict[
-        Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss], float
+        Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | SlimeBoss], float
     ]  # Tipo -> tempo de spawn
     enemies_to_clear: int  # quantos inimigos para passar de fase
     boss_type: Type[Boss | SpikeBoss] | None = None
@@ -430,6 +431,16 @@ class ProceduralLevelGenerator:
                 ) / spawn_multiplier
                 enemy_spawn_config[SquareMinionBoss] = self._clamp_spawn_time(
                     base_square_time * (2.0 / square_weight)
+                )
+
+            # Slime Boss (nível 7+)
+            if level_number >= 7:
+                slime_weight = theme.enemy_weight.get("slime_boss", 0.05) if theme else 0.05
+                base_slime_time = (
+                    15.0 / difficulty  # Spawn time base (mais raro)
+                ) / spawn_multiplier
+                enemy_spawn_config[SlimeBoss] = self._clamp_spawn_time(
+                    base_slime_time * (2.0 / slime_weight)
                 )
 
         # 2. Calcular quantidade de inimigos
