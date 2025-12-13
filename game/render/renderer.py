@@ -3,6 +3,7 @@ import random
 import math
 from typing import TypedDict, Optional, TYPE_CHECKING
 from pathlib import Path
+from collections import OrderedDict
 from ..core.sprite_loader import sprite_loader
 
 if TYPE_CHECKING:
@@ -378,10 +379,8 @@ class Renderer:
             Config.SCREEN_HEIGHT,
             n=RenderConfig.CELESTIAL_NUM_BODIES,
         )
-        self.halo_cache: dict[int, pygame.Surface] = (
-            {}
-        )  # Cache for halo surfaces by radius
-        self.MAX_HALO_CACHE_SIZE = 30  # Limitar tamanho do cache
+        self.halo_cache: OrderedDict[int, pygame.Surface] = OrderedDict()
+        self.MAX_HALO_CACHE_SIZE = 30
 
         # === NOVO: Sistema de medição de FPS ===
         self.fps_counter = 0
@@ -569,10 +568,8 @@ class Renderer:
             radius = max(ship.w, ship.h) // 2 + 6
 
             if radius not in self.halo_cache:
-                # Limitar tamanho do cache
                 if len(self.halo_cache) >= self.MAX_HALO_CACHE_SIZE:
-                    self.halo_cache.clear()
-
+                    self.halo_cache.popitem(last=False)  # Remove oldest
                 halo = pygame.Surface((radius * 2 + 6, radius * 2 + 6), pygame.SRCALPHA)
                 pygame.draw.circle(
                     halo, (0, 120, 255, 120), (radius + 3, radius + 3), radius, width=3

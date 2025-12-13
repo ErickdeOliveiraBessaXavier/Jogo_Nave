@@ -61,6 +61,8 @@ class EntityManager:
         self.mini_ship_bullets: list[MiniShipBullet] = []
         self.formations: list[Formation] = []  # Nova lista para formações
         self.spikes: list[Spike] = []  # Lista para espinhos do SpikeBoss
+        self._grid_needs_rebuild = True
+
         self.air_strike_markers: list[AirStrikeMarker] = []  # Marcadores de bombardeio
         self.air_strike_bombs: list[AirStrikeBomb] = []  # Bombas do bombardeio aéreo
         self.meteor_pool = MeteorPool(initial_size=100)  # Pool de meteoros
@@ -70,6 +72,10 @@ class EntityManager:
         ] = SpatialGrid()  # Grid espacial para inimigos
         self.spike_spatial_grid: SpatialGrid[Spike] = SpatialGrid()  # OPT: Grid para spikes
         self.explosion_pool = ExplosionPool(initial_size=50)  # Pool de explosões
+
+    @property
+    def eye_enemy_count(self) -> int:
+        return sum(1 for e in self.enemies if isinstance(e, EyeEnemy))
 
     def spawn_explosion(self, x: float, y: float, size: int = 30) -> Explosion:
         """
@@ -129,6 +135,9 @@ class EntityManager:
 
     def rebuild_all_grids(self):
         """OPT #1: Reconstrói todas as grids espaciais (inimigos + spikes)."""
+        if not self._grid_needs_rebuild:
+            return
+
         # Grid de inimigos normais + formações
         self.enemy_spatial_grid.clear()
 
@@ -151,6 +160,8 @@ class EntityManager:
         self.spike_spatial_grid.clear()
         for spike in self.spikes:
             self.spike_spatial_grid.insert_from_rect(spike)
+
+        self._grid_needs_rebuild = False
 
     def update(self, dt: float, player_x: float, player_y: float, freeze_enemies: bool = False, screen_width: int = 1600, screen_height: int = 900):
         from typing import Any
@@ -642,6 +653,7 @@ class EntityManager:
         self.spikes = [s for s in self.spikes if not s.dead]  # Limpar spikes mortos
         self.air_strike_markers = [m for m in self.air_strike_markers if not m.dead]
         self.air_strike_bombs = [b for b in self.air_strike_bombs if not b.dead]
+        self._grid_needs_rebuild = True
 
     def clear_all(self):
         self.bullets.clear()

@@ -51,9 +51,6 @@ class Formation:
             entry_y: Posição Y inicial (geralmente acima da tela)
             patterns_sequence: Sequência de padrões (padrão: espiral -> círculo -> V)
         """
-        # Validação: count deve ser >= 1
-        if count < 1:
-            raise ValueError(f"Formation count must be >= 1, got {count}")
 
         self.enemy_type = enemy_type
         self.count = count

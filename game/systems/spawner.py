@@ -195,9 +195,7 @@ class EnemySpawner:
                 if enemy_type == EyeEnemy:
                     # CORRIGIDO: Sempre recalcular para evitar race condition
                     # quando inimigos morrem entre frames
-                    current_eye_count = sum(
-                        isinstance(e, EyeEnemy) for e in entity_manager.enemies
-                    )
+                    current_eye_count = entity_manager.eye_enemy_count
 
                     if current_eye_count < 5:
                         x = random.randint(40, Config.SCREEN_WIDTH - 80)

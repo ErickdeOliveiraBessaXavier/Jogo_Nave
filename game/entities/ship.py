@@ -11,15 +11,15 @@ if TYPE_CHECKING:
 
 
 # Constantes para configuração
-PARTICLE_ENTRY_COUNT = 3
-PARTICLE_THRUSTER_COUNT = 2
-PARTICLE_ENTRY_VELOCITY = (-80, 80)
-PARTICLE_ENTRY_LIFETIME = (0.2, 0.6)
-PARTICLE_ENTRY_SIZE = (1, 3)
-PARTICLE_THRUSTER_VELOCITY_X = (-10, 10)
-PARTICLE_THRUSTER_VELOCITY_Y = (100, 200)
-PARTICLE_THRUSTER_LIFETIME = (0.05, 0.15)
-PARTICLE_THRUSTER_SIZE = (2, 4)
+PARTICLE_ENTRY_COUNT = Config.PARTICLE_ENTRY_COUNT
+PARTICLE_THRUSTER_COUNT = Config.PARTICLE_THRUSTER_COUNT
+PARTICLE_ENTRY_VELOCITY = Config.PARTICLE_ENTRY_VELOCITY
+PARTICLE_ENTRY_LIFETIME = Config.PARTICLE_ENTRY_LIFETIME
+PARTICLE_ENTRY_SIZE = Config.PARTICLE_ENTRY_SIZE
+PARTICLE_THRUSTER_VELOCITY_X = Config.PARTICLE_THRUSTER_VELOCITY_X
+PARTICLE_THRUSTER_VELOCITY_Y = Config.PARTICLE_THRUSTER_VELOCITY_Y
+PARTICLE_THRUSTER_LIFETIME = Config.PARTICLE_THRUSTER_LIFETIME
+PARTICLE_THRUSTER_SIZE = Config.PARTICLE_THRUSTER_SIZE
 ORBITAL_ROTATION_SPEED = 2.0  # radianos/s
 ORBITAL_COOLDOWN_MIN = 5.0
 ORBITAL_COOLDOWN_MAX = 10.0
@@ -67,7 +67,9 @@ class Ship:
 
         # Usar imagem da nave em vez de pixel art
         try:
-            self.ship_image = pygame.image.load('game/assets/icons/ship_icon.png').convert_alpha()
+            from ..core.assets import get_image, BASE_DIR
+            icon_path = BASE_DIR / "assets" / "icons" / "ship_icon.png"
+            self.ship_image = get_image(icon_path).convert_alpha()
             # Redimensionar para o tamanho apropriado (manter proporções)
             original_size = self.ship_image.get_size()
             scale_factor = min(self.w / original_size[0], self.h / original_size[1])
