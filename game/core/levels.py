@@ -566,7 +566,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         },
         enemies_to_clear=250,
         boss_type=SpikeBoss,
-        mines_enabled=True,
+        #mines_enabled=True,
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v", "spiral_line"],
         theme_name="Chefe Avançado",
