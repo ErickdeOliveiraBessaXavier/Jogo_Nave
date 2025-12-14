@@ -68,7 +68,9 @@ class SquareMinionBoss:
         self.rotation = 0.0
         self.visible = True  # For blinking effect
 
-    def update(self, dt: float, screen_width: int = 1600, screen_height: int = 900) -> None:
+    def update(
+        self, dt: float, screen_width: int = 1600, screen_height: int = 900
+    ) -> None:
         """
         Update position and animation.
 
@@ -144,10 +146,10 @@ class SquareMinionBoss:
         pygame.draw.polygon(surface, color, rotated_corners)
         pygame.draw.polygon(surface, border_color, rotated_corners, 2)
 
-    def get_rect(self) -> pygame.Rect:
+    @property
+    def rect(self) -> pygame.Rect:
         """Get collision rectangle."""
-        half_size = self.size / 2
-        return pygame.Rect(self.x - half_size, self.y - half_size, self.size, self.size)
+        return pygame.Rect(int(self.x), int(self.y), int(self.size), int(self.size))
 
     def take_damage(self, damage: int = 1) -> None:
         """Take damage and check if dead."""

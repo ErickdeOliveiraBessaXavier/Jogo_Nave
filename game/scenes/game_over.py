@@ -1,8 +1,6 @@
 import pygame
 from typing import TYPE_CHECKING
 from ..core.state import Scene
-from typing import TYPE_CHECKING
-from ..core.state import Scene
 from ..core.config import config as Config
 from ..core.assets import get_font
 from ..core.sound import sound_manager

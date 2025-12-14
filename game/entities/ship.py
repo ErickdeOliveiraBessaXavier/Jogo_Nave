@@ -68,12 +68,16 @@ class Ship:
         # Usar imagem da nave em vez de pixel art
         try:
             from ..core.assets import get_image, BASE_DIR
+
             icon_path = BASE_DIR / "assets" / "icons" / "ship_icon.png"
             self.ship_image = get_image(icon_path).convert_alpha()
             # Redimensionar para o tamanho apropriado (manter proporções)
             original_size = self.ship_image.get_size()
             scale_factor = min(self.w / original_size[0], self.h / original_size[1])
-            new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
+            new_size = (
+                int(original_size[0] * scale_factor),
+                int(original_size[1] * scale_factor),
+            )
             self.ship_image = pygame.transform.scale(self.ship_image, new_size)
         except pygame.error:
             # Fallback para pixel art se a imagem não carregar
@@ -360,7 +364,13 @@ class Ship:
                 target = self._get_enemy_center(nearest_enemy)
                 if target is not None:
                     entity_manager.spawn_player_laser(
-                        ball_x, ball_y, target[0], target[1], ship=self, ball_index=i, target_entity=nearest_enemy
+                        ball_x,
+                        ball_y,
+                        target[0],
+                        target[1],
+                        ship=self,
+                        ball_index=i,
+                        target_entity=nearest_enemy,
                     )
 
                     # Tocar som do laser
@@ -412,7 +422,10 @@ class Ship:
         # Gerar partículas de thruster
         for _ in range(PARTICLE_THRUSTER_COUNT):
             particle = ParticleDict(
-                x=self.x + self.w / 2 - 2 + random.uniform(-5, 5),  # Mover 1 pixel para a esquerda
+                x=self.x
+                + self.w / 2
+                - 2
+                + random.uniform(-5, 5),  # Mover 1 pixel para a esquerda
                 y=self.y + self.h,
                 vx=random.uniform(*PARTICLE_THRUSTER_VELOCITY_X),
                 vy=random.uniform(*PARTICLE_THRUSTER_VELOCITY_Y),

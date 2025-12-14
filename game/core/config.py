@@ -174,7 +174,9 @@ class Config:
     BOSS_FRENZY_SHAKE_DURATION: float = 3.0
 
     # Boss damage modifiers (nerf geral para todos os aprimoramentos)
-    BOSS_UPGRADE_DAMAGE_MULTIPLIER: float = 0.5  # Todos os aprimoramentos fazem 50% de dano em boss
+    BOSS_UPGRADE_DAMAGE_MULTIPLIER: float = (
+        0.5  # Todos os aprimoramentos fazem 50% de dano em boss
+    )
 
     # Boss laser system
     LASER_DISTANCE: float = 800.0
@@ -401,7 +403,9 @@ class Config:
             errors.append("POWERUP_WEIGHTS deve ter soma > 0")
         for powerup_type, weight in self.POWERUP_WEIGHTS.items():
             if weight <= 0:
-                errors.append(f"POWERUP_WEIGHTS[{powerup_type}] deve ser positivo, mas é {weight}")
+                errors.append(
+                    f"POWERUP_WEIGHTS[{powerup_type}] deve ser positivo, mas é {weight}"
+                )
 
         # Validar thresholds (0.0 a 1.0)
         thresholds = [

@@ -247,7 +247,9 @@ class SoundManager:
             "powerup": sfx_paths["ui"]["powerup"],
             "button_hover": sfx_paths["ui"]["button_hover"],
             "upgrade_activate": sfx_paths["ui"]["upgrade_activate"],
-            "laser_shot": sfx_paths["ui"]["laser_shot"],  # Som do laser do upgrade LASER_SHOT
+            "laser_shot": sfx_paths["ui"][
+                "laser_shot"
+            ],  # Som do laser do upgrade LASER_SHOT
         }
         for key, path in ui_sounds.items():
             sound_path = os.path.join(base_path, path)
@@ -481,7 +483,7 @@ class SoundManager:
 
     def get_volumes(self):
         """Mostra todos os volumes atuais."""
-        print(f"📊 Volumes atuais:")
+        print("📊 Volumes atuais:")
         print(f"  🔊 Geral: {self.master_volume:.1%}")
         print(f"  🎵 Efeitos: {self.sfx_volume:.1%}")
         print(f"  🎼 Música: {self.music_volume:.1%}")

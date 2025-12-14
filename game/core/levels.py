@@ -101,7 +101,12 @@ LEVEL_THEMES = {
     "asteroid_field": LevelTheme(
         name="Campo de Asteroides",
         description="Muitos meteoros, poucos aliens",
-        enemy_weight={"meteor": 3.0, "alien": 0.5, "eye": 0.3, "square_minion_boss": 0.1},
+        enemy_weight={
+            "meteor": 3.0,
+            "alien": 0.5,
+            "eye": 0.3,
+            "square_minion_boss": 0.1,
+        },
         spawn_rate_multiplier=1.3,
         enemies_multiplier=1.2,
         special_feature=None,
@@ -109,7 +114,12 @@ LEVEL_THEMES = {
     "alien_invasion": LevelTheme(
         name="Invasão Alienígena",
         description="Predominância de aliens",
-        enemy_weight={"meteor": 0.5, "alien": 3.0, "eye": 1.0, "square_minion_boss": 0.2},
+        enemy_weight={
+            "meteor": 0.5,
+            "alien": 3.0,
+            "eye": 1.0,
+            "square_minion_boss": 0.2,
+        },
         spawn_rate_multiplier=1.0,
         enemies_multiplier=1.0,
         special_feature=None,
@@ -117,7 +127,12 @@ LEVEL_THEMES = {
     "eye_swarm": LevelTheme(
         name="Enxame de Olhos",
         description="Muitos Eye Enemies",
-        enemy_weight={"meteor": 0.3, "alien": 0.5, "eye": 3.0, "square_minion_boss": 0.1},
+        enemy_weight={
+            "meteor": 0.3,
+            "alien": 0.5,
+            "eye": 3.0,
+            "square_minion_boss": 0.1,
+        },
         spawn_rate_multiplier=0.8,
         enemies_multiplier=0.9,
         special_feature=None,
@@ -125,7 +140,12 @@ LEVEL_THEMES = {
     "minefield": LevelTheme(
         name="Campo Minado",
         description="Muitas minas explosivas",
-        enemy_weight={"meteor": 1.0, "alien": 1.0, "eye": 0.5, "square_minion_boss": 0.1},
+        enemy_weight={
+            "meteor": 1.0,
+            "alien": 1.0,
+            "eye": 0.5,
+            "square_minion_boss": 0.1,
+        },
         spawn_rate_multiplier=1.0,
         enemies_multiplier=1.0,
         special_feature="mines_heavy",
@@ -133,7 +153,12 @@ LEVEL_THEMES = {
     "formation_hell": LevelTheme(
         name="Inferno de Formações",
         description="Formações complexas constantemente",
-        enemy_weight={"meteor": 0.8, "alien": 2.0, "eye": 1.0, "square_minion_boss": 0.2},
+        enemy_weight={
+            "meteor": 0.8,
+            "alien": 2.0,
+            "eye": 1.0,
+            "square_minion_boss": 0.2,
+        },
         spawn_rate_multiplier=0.9,
         enemies_multiplier=0.85,
         special_feature="formations_heavy",
@@ -141,7 +166,12 @@ LEVEL_THEMES = {
     "meteor_storm": LevelTheme(
         name="Tempestade de Meteoros",
         description="Apenas meteoros em volume extremo",
-        enemy_weight={"meteor": 10.0, "alien": 0.0, "eye": 0.0, "square_minion_boss": 0.0},
+        enemy_weight={
+            "meteor": 10.0,
+            "alien": 0.0,
+            "eye": 0.0,
+            "square_minion_boss": 0.0,
+        },
         spawn_rate_multiplier=2.0,  # 2x mais meteoros por segundo
         enemies_multiplier=1.8,  # 1.8x mais meteoros para limpar
         special_feature="meteor_only",
@@ -149,7 +179,12 @@ LEVEL_THEMES = {
     "balanced": LevelTheme(
         name="Balanceado",
         description="Mix equilibrado de tudo",
-        enemy_weight={"meteor": 1.0, "alien": 1.0, "eye": 1.0, "square_minion_boss": 0.1},
+        enemy_weight={
+            "meteor": 1.0,
+            "alien": 1.0,
+            "eye": 1.0,
+            "square_minion_boss": 0.1,
+        },
         spawn_rate_multiplier=1.0,
         enemies_multiplier=1.0,
         special_feature=None,
@@ -179,17 +214,22 @@ class LevelConfig:
     score_multiplier: float = 1.0  # Multiplicador de pontuação para o nível
 
     @property
-    def enemy_types(self) -> list[Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]]:
+    def enemy_types(
+        self,
+    ) -> list[Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]]:
         """Retorna lista de tipos de inimigos configurados."""
         return list(self.enemy_spawn_config.keys())
 
     def get_spawn_time(
-        self, enemy_type: Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]
+        self,
+        enemy_type: Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss],
     ) -> float:
         """Retorna o tempo de spawn para um tipo específico de inimigo."""
         return self.enemy_spawn_config.get(enemy_type, 1.0)
 
-    def get_random_enemy_type(self) -> Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]:
+    def get_random_enemy_type(
+        self,
+    ) -> Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]:
         """Retorna um tipo de inimigo aleatório da lista."""
         if not self.enemy_types:
             raise ValueError(f"Level {self.level_number} has no enemies configured!")
@@ -247,7 +287,9 @@ class ProceduralLevelGenerator:
         self.difficulty_curves = DifficultyCurves()
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
-        self._difficulty_cache: dict[Union[int, str], float] = {}  # Cache for difficulty and score multiplier calculations
+        self._difficulty_cache: dict[Union[int, str], float] = (
+            {}
+        )  # Cache for difficulty and score multiplier calculations
 
     # OPT #6: Cache últimos 50 níveis gerados para não recalcular
     @lru_cache(maxsize=50)
@@ -274,7 +316,7 @@ class ProceduralLevelGenerator:
         # OPT #8: Cache difficulty calculations per level_number
         if level_number in self._difficulty_cache:
             return self._difficulty_cache[level_number]
-        
+
         curve = DifficultyConfig.SPAWN_RATE_CURVE
         scaling = self.difficulty_settings["difficulty_scaling"]
         base = 1.0
@@ -287,10 +329,10 @@ class ProceduralLevelGenerator:
             difficulty = base + (level_number * scaling)
 
         difficulty = min(difficulty, DifficultyConfig.MAX_DIFFICULTY_MULTIPLIER)
-        
+
         # Store in cache
         self._difficulty_cache[level_number] = difficulty
-        
+
         return difficulty
 
     def _choose_theme(self, level_number: int, rng: random.Random) -> LevelTheme | None:
@@ -346,16 +388,16 @@ class ProceduralLevelGenerator:
         cache_key = f"score_{level_number}"
         if cache_key in self._difficulty_cache:
             return self._difficulty_cache[cache_key]
-        
+
         # Multiplicador cresce logaritmicamente com o nível
         # Nível 1: 1.0x, Nível 10: ~2.0x, Nível 20: ~2.5x, etc.
         base_multiplier = 1.0
         level_bonus = math.log1p(level_number) * 0.3  # Crescimento logarítmico
         multiplier = base_multiplier + level_bonus
-        
+
         # Store in cache
         self._difficulty_cache[cache_key] = multiplier
-        
+
         return multiplier
 
     def _generate_config(
@@ -424,7 +466,9 @@ class ProceduralLevelGenerator:
 
             # Square Minion Boss (nível 3+)
             if level_number >= 3:
-                square_weight = theme.enemy_weight.get("square_minion_boss", 0.1) if theme else 0.1
+                square_weight = (
+                    theme.enemy_weight.get("square_minion_boss", 0.1) if theme else 0.1
+                )
                 base_square_time = (
                     8.0 / difficulty  # Spawn time base
                 ) / spawn_multiplier
@@ -441,7 +485,9 @@ class ProceduralLevelGenerator:
         elif curve == "logarithmic":
             # OPT #7: Use pre-calculated lookup table for levels 1-100
             if level_number <= 100:
-                base_enemies = DifficultyConfig.BASE_ENEMIES + _ENEMY_COUNT_TABLE[level_number]
+                base_enemies = (
+                    DifficultyConfig.BASE_ENEMIES + _ENEMY_COUNT_TABLE[level_number]
+                )
             else:
                 base_enemies = DifficultyConfig.BASE_ENEMIES + int(
                     math.log1p(level_number) * 20
@@ -537,10 +583,10 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # EyeEnemy: 5.0,
         },
         enemies_to_clear=200,
-        #formations_enabled=True,
-        #formation_types=["spiral_circle", "spiral_v", "spiral_line"],
-        #mines_enabled=True,
-        #boss_type= SpikeBoss,
+        # formations_enabled=True,
+        # formation_types=["spiral_circle", "spiral_v", "spiral_line"],
+        # mines_enabled=True,
+        # boss_type= SpikeBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),
@@ -566,7 +612,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         },
         enemies_to_clear=250,
         boss_type=SpikeBoss,
-        #mines_enabled=True,
+        # mines_enabled=True,
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v", "spiral_line"],
         theme_name="Chefe Avançado",

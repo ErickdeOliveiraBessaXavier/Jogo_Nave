@@ -124,7 +124,7 @@ class Boss:
 
         # Criar 14 quadrados em órbitas ao redor do boss
         num_squares = 14
-        
+
         # Calcular posição inicial do boss (centro)
         boss_center_x = self.x + self.w / 2
         boss_center_y = self.y + self.h / 2
@@ -559,7 +559,7 @@ class Boss:
                     sound_manager.stop_boss_laser_fire()
 
         if self.fire_timer.done() and all(
-            l.is_animation_finished() for l in self.fired_lasers
+            laser.is_animation_finished() for laser in self.fired_lasers
         ):
             self.state = "active"
             self._reset_attack_timer()

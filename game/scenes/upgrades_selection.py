@@ -693,7 +693,9 @@ class UpgradesSelectionScene(Scene):
 
         # Ícone
         pygame.draw.circle(drag_surf, colors.GREEN, (40, 40), 25)
-        initial = get_upgrade_icon(self.dragging_upgrade.name, self.dragging_upgrade.icon_id)
+        initial = get_upgrade_icon(
+            self.dragging_upgrade.name, self.dragging_upgrade.icon_id
+        )
         initial_text = self.header_font.render(initial, True, colors.WHITE)
         drag_surf.blit(
             initial_text,

@@ -315,7 +315,9 @@ class StatisticsScene(Scene):
             num_lines = 3  # Nível, Tentativas, Sucesso
             if stats.best_time:
                 num_lines += 2  # Melhor tempo, Melhor pontuação
-            card_height = 20 + (num_lines * 25) + 10  # padding top + lines + padding bottom
+            card_height = (
+                20 + (num_lines * 25) + 10
+            )  # padding top + lines + padding bottom
             total_height += card_height + 15  # + spacing
 
         # Ajustar scroll_y
@@ -326,7 +328,9 @@ class StatisticsScene(Scene):
             self.scroll_y = 0
 
         # Criar superfície de conteúdo
-        content_surface = pygame.Surface((area.width, max(total_height, visible_height)), pygame.SRCALPHA)
+        content_surface = pygame.Surface(
+            (area.width, max(total_height, visible_height)), pygame.SRCALPHA
+        )
 
         # Renderizar conteúdo na superfície
         content_y = 0
@@ -424,7 +428,11 @@ class StatisticsScene(Scene):
             content_y += card_rect.height + 15
 
         # Blitar a parte visível da superfície de conteúdo
-        surface.blit(content_surface, (area.x, area.y + 50), area=(0, self.scroll_y, area.width, visible_height))
+        surface.blit(
+            content_surface,
+            (area.x, area.y + 50),
+            area=(0, self.scroll_y, area.width, visible_height),
+        )
 
     def _draw_card_background(self, surface: pygame.Surface, rect: pygame.Rect):
         # Apenas a borda, sem fundo, para consistência com settings.py

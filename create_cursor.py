@@ -56,4 +56,4 @@ pygame.image.save(cursor_surface, cursor_path)
 
 print(f"✅ Cursor de mira criado com sucesso em: {cursor_path}")
 print(f"   Tamanho: {cursor_size}x{cursor_size} pixels")
-print(f"   Cor: Branco")
+print("   Cor: Branco")

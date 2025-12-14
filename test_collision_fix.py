@@ -10,15 +10,15 @@ Verifica que:
 import sys
 from pathlib import Path
 
+import pygame
+
 game_path = Path(__file__).parent
 sys.path.insert(0, str(game_path))
-
-import pygame
-from game.systems.collisions import Collisions
-from game.systems.entity_manager import EntityManager
-from game.entities.explosive_mine import ExplosiveMine
-from game.entities.mine_explosion import MineExplosion
-from game.entities.alien import Alien
+from game.systems.collisions import Collisions  # noqa: E402
+from game.systems.entity_manager import EntityManager  # noqa: E402
+from game.entities.explosive_mine import ExplosiveMine  # noqa: E402
+from game.entities.mine_explosion import MineExplosion  # noqa: E402
+from game.entities.alien import Alien  # noqa: E402
 
 pygame.init()
 screen = pygame.display.set_mode((1280, 720))
@@ -31,7 +31,9 @@ print("=" * 60)
 # TESTE 1: Verificar que MineExplosion funciona
 print("\n[TESTE 1] Criacao de MineExplosion")
 explosion = MineExplosion(640, 360, size=100)
-print(f"   Explosao criada: pos=({explosion.x}, {explosion.y}), max_radius={explosion.max_radius}")
+print(
+    f"   Explosao criada: pos=({explosion.x}, {explosion.y}), max_radius={explosion.max_radius}"
+)
 print(f"   Duracao: {explosion.duration:.3f}s")
 assert explosion.duration > 0.1, "Duracao muito curta!"
 print("   PASSED")
@@ -64,16 +66,24 @@ collisions = Collisions()
 print(f"   Collisions class loaded: {collisions.__class__.__name__}")
 
 # Verificar que metodos existem
-assert hasattr(collisions, 'check_mine_explosions'), "check_mine_explosions nao encontrado!"
-assert hasattr(collisions, 'handle_mine_explosion'), "handle_mine_explosion nao encontrado!"
-assert hasattr(collisions, '_destroy_enemy'), "_destroy_enemy nao encontrado!"
-print("   Metodos encontrados: check_mine_explosions, handle_mine_explosion, _destroy_enemy")
+assert hasattr(
+    collisions, "check_mine_explosions"
+), "check_mine_explosions nao encontrado!"
+assert hasattr(
+    collisions, "handle_mine_explosion"
+), "handle_mine_explosion nao encontrado!"
+assert hasattr(collisions, "_destroy_enemy"), "_destroy_enemy nao encontrado!"
+print(
+    "   Metodos encontrados: check_mine_explosions, handle_mine_explosion, _destroy_enemy"
+)
 print("   PASSED")
 
 # TESTE 5: Verificar que EntityManager tem mine_explosions
 print("\n[TESTE 5] Validar EntityManager")
 em = EntityManager()
-print(f"   EntityManager.mine_explosions: {type(em.mine_explosions).__name__} com {len(em.mine_explosions)} items")
+print(
+    f"   EntityManager.mine_explosions: {type(em.mine_explosions).__name__} com {len(em.mine_explosions)} items"
+)
 assert isinstance(em.mine_explosions, list), "mine_explosions deveria ser uma lista!"
 print("   PASSED")
 
@@ -105,11 +115,13 @@ try:
     ship = MockShip()
 
     # Primeira chamada: cria explosão e checa nave/formações
-    score_gain, destroyed_count, score_events, ship_hit = collisions.check_mine_explosions(
-        em.enemies,
-        em.mine_explosions,
-        ship,  # type: ignore
-        em,
+    score_gain, destroyed_count, score_events, ship_hit = (
+        collisions.check_mine_explosions(
+            em.enemies,
+            em.mine_explosions,
+            ship,  # type: ignore
+            em,
+        )
     )
 
     # Simular avanço da animação: raio atinge o máximo
@@ -137,12 +149,15 @@ try:
     print(f"   Explosoes criadas: {len(em.mine_explosions)}")
 
     assert len(em.mine_explosions) > 0, "Nenhuma explosao foi criada!"
-    assert destroyed_count >= 1, "O inimigo proximo deveria ter sido destruido pela explosao"
+    assert (
+        destroyed_count >= 1
+    ), "O inimigo proximo deveria ter sido destruido pela explosao"
     print("   PASSED")
-    
+
 except Exception as e:
     print(f"   FAILED: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 

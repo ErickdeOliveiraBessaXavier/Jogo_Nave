@@ -353,8 +353,12 @@ class PlayingScene(Scene):
             self.star_spawner.update(dt, self.entity_manager.stars)
 
         self.entity_manager.update(
-            dt, self.ship.rect.centerx, self.ship.rect.centery, freeze_enemies=self.freeze_active,
-            screen_width=Config.SCREEN_WIDTH, screen_height=Config.SCREEN_HEIGHT
+            dt,
+            self.ship.rect.centerx,
+            self.ship.rect.centery,
+            freeze_enemies=self.freeze_active,
+            screen_width=Config.SCREEN_WIDTH,
+            screen_height=Config.SCREEN_HEIGHT,
         )
 
         # Processar colisões sempre (incluindo durante transições)
@@ -394,18 +398,20 @@ class PlayingScene(Scene):
                 # Se timer expirou, marcar todos os inimigos como mortos
                 if self.enemy_cleanup_timer >= self.enemy_cleanup_duration:
                     total_enemies = len(self.entity_manager.enemies)
-                    total_formations = sum(len(f.enemies) for f in self.entity_manager.formations)
-                    
+                    total_formations = sum(
+                        len(f.enemies) for f in self.entity_manager.formations
+                    )
+
                     print(
                         f"⏰ TEMPO ESGOTADO! Removendo {total_enemies} inimigos normais "
                         f"e {total_formations} inimigos em formação automaticamente..."
                     )
-                    
+
                     # Limpar inimigos normais
                     for enemy in self.entity_manager.enemies[:]:
                         enemy.dead = True
                     self.entity_manager.enemies.clear()
-                    
+
                     # Limpar formações também
                     for formation in self.entity_manager.formations[:]:
                         for enemy in formation.enemies:
@@ -498,46 +504,46 @@ class PlayingScene(Scene):
                     print("⚔️ GOD MODE DESATIVADO - Invulnerabilidade desligada!")
 
     def _batch_floating_scores(
-        self, 
-        score_events: list[tuple[float, float, int]], 
-        proximity_threshold: float = 60.0
+        self,
+        score_events: list[tuple[float, float, int]],
+        proximity_threshold: float = 60.0,
     ) -> list[tuple[float, float, int]]:
         """
         Agrupa score events próximos em um único evento somado.
-        
+
         Args:
             score_events: Lista de (x, y, pontos)
             proximity_threshold: Distância máxima para considerar "próximo" (pixels)
-        
+
         Returns:
             Lista compactada de (x, y, pontos_somados)
         """
         if not score_events:
             return []
-        
+
         # Criar grupos de eventos próximos
         batched: list[tuple[float, float, int]] = []
         used = [False] * len(score_events)
-        
+
         for i, (x1, y1, pts1) in enumerate(score_events):
             if used[i]:
                 continue
-            
+
             # Iniciar novo batch com este evento
             batch_x = x1
             batch_y = y1
             batch_pts = pts1
             batch_count = 1
             used[i] = True
-            
+
             # Procurar eventos próximos
             for j, (x2, y2, pts2) in enumerate(score_events):
                 if used[j] or i == j:
                     continue
-                
+
                 # Calcular distância euclidiana
                 dist = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
-                
+
                 if dist <= proximity_threshold:
                     # Adicionar ao batch (média ponderada da posição)
                     batch_x = (batch_x * batch_count + x2) / (batch_count + 1)
@@ -545,9 +551,9 @@ class PlayingScene(Scene):
                     batch_pts += pts2
                     batch_count += 1
                     used[j] = True
-            
+
             batched.append((batch_x, batch_y, batch_pts))
-        
+
         return batched
 
     def _handle_collisions(self):
@@ -576,7 +582,7 @@ class PlayingScene(Scene):
                 self.entity_manager.mini_ship_bullets,
                 enemy_grid,
                 self.entity_manager.enemies,  # Para adicionar fragments
-                self.entity_manager,  # <-- ADICIONAR
+                self.entity_manager,  # <-- ADICIONADO
             )
         )
         gain += vector_gain
@@ -694,8 +700,7 @@ class PlayingScene(Scene):
 
         # Agrupar eventos próximos antes de criar floating scores
         batched_events = self._batch_floating_scores(
-            score_events, 
-            proximity_threshold=self.floating_score_batch_threshold
+            score_events, proximity_threshold=self.floating_score_batch_threshold
         )
 
         for x, y, pts in batched_events:
@@ -1036,7 +1041,7 @@ class PlayingScene(Scene):
 
             # Lazy evaluation: verificar presença de inimigos uma única vez
             has_enemies = bool(self.entity_manager.enemies)
-            
+
             # Iniciar limpeza de inimigos restantes se ainda houver inimigos
             if has_enemies and not self.enemy_cleanup_active:
                 self.enemy_cleanup_active = True
@@ -1447,6 +1452,7 @@ class PlayingScene(Scene):
 
             # Ícone no centro (usando função centralizada de mapeamento)
             from ..core.upgrades import get_upgrade_icon
+
             name_str = str(ui.get("name", ""))
             icon_id = str(ui.get("icon_id", "")) if ui.get("icon_id") else None
             icon = get_upgrade_icon(name_str, icon_id)

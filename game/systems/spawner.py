@@ -327,15 +327,11 @@ class EnemySpawner:
 
                     # Calcular entry_y baseado no padrão para evitar que fique cortado no topo
                     # CORRIGIDO: Usar valores pré-calculados
-                    entry_y = float(
-                        self._formation_entry_y.get(formation_type, 80.0)
-                    )
+                    entry_y = float(self._formation_entry_y.get(formation_type, 80.0))
 
                     from ..entities.alien import Alien
 
-                    new_formation = Formation(
-                        Alien, count, entry_x, entry_y, patterns
-                    )
+                    new_formation = Formation(Alien, count, entry_x, entry_y, patterns)
                     entity_manager.formations.append(new_formation)
 
                     # Reiniciar timer

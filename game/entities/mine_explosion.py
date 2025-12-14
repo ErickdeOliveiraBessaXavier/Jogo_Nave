@@ -26,17 +26,17 @@ class MineExplosion:
         progress = 1 - (self.time / self.duration)
         # Alpha diminui conforme expande
         alpha = int(200 * (1 - progress))
-        
+
         # Onda de choque simples: anel laranja expandindo
         radius = int(self.current_radius)
         if radius < 2:
             return
-            
+
         s = pygame.Surface((self.max_radius * 2, self.max_radius * 2), pygame.SRCALPHA)
         center = (self.max_radius, self.max_radius)
-        
+
         # Onda de choque preenchida - círculo laranja expandindo
         orange = (255, 140, 0, alpha)
         pygame.draw.circle(s, orange, center, radius)
-        
+
         screen.blit(s, (int(self.x) - self.max_radius, int(self.y) - self.max_radius))

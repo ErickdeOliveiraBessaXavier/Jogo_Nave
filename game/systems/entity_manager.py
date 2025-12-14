@@ -31,7 +31,6 @@ from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.air_strike_marker import AirStrikeMarker
 from ..entities.air_strike_bomb import AirStrikeBomb
 from ..entities.square_minion_boss import SquareMinionBoss
-from ..entities.square_minion_boss import SquareMinionBoss
 from typing import Dict, Any, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
@@ -46,7 +45,9 @@ class EntityManager:
         self.explosive_effects: list[ExplosiveEffect] = (
             []
         )  # Efeitos visuais de explosão de área
-        self.enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss] = []
+        self.enemies: list[
+            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
+        ] = []
         self.alien_bullets: list[AlienBullet] = []
         self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
         self.player_lasers: list[PlayerLaser] = []  # Lasers do jogador
@@ -70,7 +71,9 @@ class EntityManager:
         self.enemy_spatial_grid: SpatialGrid[
             Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
         ] = SpatialGrid()  # Grid espacial para inimigos
-        self.spike_spatial_grid: SpatialGrid[Spike] = SpatialGrid()  # OPT: Grid para spikes
+        self.spike_spatial_grid: SpatialGrid[Spike] = (
+            SpatialGrid()
+        )  # OPT: Grid para spikes
         self.explosion_pool = ExplosionPool(initial_size=50)  # Pool de explosões
 
     @property
@@ -128,7 +131,14 @@ class EntityManager:
     ) -> PlayerLaser:
         """Spawna um laser do jogador."""
         laser = PlayerLaser(
-            x, y, target_x, target_y, damage=damage, ship=ship, ball_index=ball_index, target_entity=target_entity
+            x,
+            y,
+            target_x,
+            target_y,
+            damage=damage,
+            ship=ship,
+            ball_index=ball_index,
+            target_entity=target_entity,
         )
         self.player_lasers.append(laser)
         return laser
@@ -163,7 +173,15 @@ class EntityManager:
 
         self._grid_needs_rebuild = False
 
-    def update(self, dt: float, player_x: float, player_y: float, freeze_enemies: bool = False, screen_width: int = 1600, screen_height: int = 900):
+    def update(
+        self,
+        dt: float,
+        player_x: float,
+        player_y: float,
+        freeze_enemies: bool = False,
+        screen_width: int = 1600,
+        screen_height: int = 900,
+    ):
         from typing import Any
 
         enemy_dt = 0.0 if freeze_enemies else dt

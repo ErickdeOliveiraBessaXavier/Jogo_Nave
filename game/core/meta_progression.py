@@ -630,7 +630,9 @@ class PlayerProfile:
     def get_global_stats(self) -> Dict[str, Any]:
         """OPT #4: Get cached global stats, recalculate only if dirty."""
         if self._cached_global_stats is None or self._stats_dirty:
-            self._cached_global_stats = PerformanceAnalyzer.analyze_global_performance(self)
+            self._cached_global_stats = PerformanceAnalyzer.analyze_global_performance(
+                self
+            )
             self._stats_dirty = False
         return self._cached_global_stats
 
@@ -910,7 +912,7 @@ class PlayerProfile:
                         start_time_str = session_data.get("start_time")
                         if not isinstance(start_time_str, str):
                             print(
-                                f"Skipping corrupt session data due to invalid start_time type."
+                                "Skipping corrupt session data due to invalid start_time type."
                             )
                             continue
 

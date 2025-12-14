@@ -5,7 +5,7 @@ if __name__ == "__main__":
         from game.app import GameApp
 
         GameApp().run()
-    except Exception as e:
+    except Exception:
         from game.core.paths import get_error_log_path
 
         error_log = get_error_log_path()

@@ -454,7 +454,7 @@ class Renderer:
         s = self._render_text_cached(
             "score", score, "Pontos: {}", self.font_medium, colors.WHITE
         )
-        l = self._render_text_cached(
+        lives_surf = self._render_text_cached(
             "lives", lives, "Vidas: {}", self.font_medium, colors.WHITE
         )
         lvl = self._render_text_cached(
@@ -466,7 +466,7 @@ class Renderer:
 
         # Desenhar textos (mesmas posições)
         surface.blit(s, (10, 10))
-        surface.blit(l, (Config.SCREEN_WIDTH - l.get_width() - 10, 10))
+        surface.blit(lives_surf, (Config.SCREEN_WIDTH - lives_surf.get_width() - 10, 10))
         surface.blit(lvl, (10, 44))
         surface.blit(e, (10, 78))
 

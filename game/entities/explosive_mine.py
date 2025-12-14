@@ -117,8 +117,8 @@ class ExplosiveMine:
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(
-            int(self.x) - self.radius,
-            int(self.y) - self.radius,
+            int(self.x - self.radius),
+            int(self.y - self.radius),
             self.radius * 2,
             self.radius * 2,
         )
@@ -147,7 +147,7 @@ class ExplosiveMine:
                 else:
                     self.color = colors.RED
                 self.flash_timer = 0.0
-            
+
             # IMPORTANTE: NÃO marcar dead aqui!
             # O check_mine_explosions vai verificar pre_explosion_timer <= 0
             # e criar a MineExplosion visual + marcar dead DEPOIS
