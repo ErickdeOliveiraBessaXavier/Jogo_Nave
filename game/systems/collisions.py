@@ -462,7 +462,7 @@ class Collisions:
                             enemy,
                             enemies,
                             entity_manager,
-                            explosion_size=15,  # Explosão padrão de bala
+                            explosion_size=None if isinstance(enemy, Meteor) else 15,  # Explosão proporcional para meteors
                         )
                         score_gain += pts
                         destroyed_count += 1
@@ -534,7 +534,7 @@ class Collisions:
                             enemy,
                             enemies,
                             entity_manager,
-                            explosion_size=15,  # Explosão padrão de bala
+                            explosion_size=None if isinstance(enemy, Meteor) else 15,  # Explosão proporcional para meteors
                         )
                         score_gain += pts
                         destroyed_count += 1
@@ -1005,7 +1005,7 @@ class Collisions:
 
                     # Para inimigos normais, usar helper com explosion_size customizado
                     pts, score_event = self._destroy_enemy(
-                        enemy, enemies, entity_manager, explosion_size=20
+                        enemy, enemies, entity_manager, explosion_size=None if isinstance(enemy, Meteor) else 20
                     )
                     score_gain += pts
                     destroyed_count += 1

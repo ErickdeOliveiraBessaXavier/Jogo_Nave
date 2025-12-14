@@ -10,6 +10,7 @@ from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.spike_boss import SpikeBoss
 from ..entities.square_minion_boss import SquareMinionBoss
+from ..entities.slime_boss import SlimeBoss
 from .difficulty import DifficultyPreset, DifficultySettings
 
 
@@ -582,11 +583,11 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # Alien: 2.5,
             # EyeEnemy: 5.0,
         },
-        enemies_to_clear=200,
+        enemies_to_clear=0,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_line"],
         # mines_enabled=True,
-        # boss_type= SpikeBoss,
+        boss_type=SlimeBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),
@@ -597,7 +598,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             Meteor: 0.5,
             Alien: 2.5,
         },
-        enemies_to_clear=300,
+        enemies_to_clear=0,
         boss_type=Boss,
         mines_enabled=True,
         theme_name="Chefe Inicial",
