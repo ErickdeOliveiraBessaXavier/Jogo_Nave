@@ -22,6 +22,7 @@ from ..entities.eye_laser import EyeLaser
 from ..entities.formation import Formation
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
+from ..entities.slime_boss import SlimeBoss
 from ..entities.player_laser import PlayerLaser
 from ..core.spatial_grid import SpatialGrid
 from ..entities.explosion_pool import ExplosionPool
@@ -57,7 +58,7 @@ class EntityManager:
         self.powerups: list[PowerUp] = []
         self.stars: list[Star] = []  # Estrelas coletáveis
         self.floating_scores: list[FloatingScore] = []
-        self.boss: Boss | SpikeBoss | None = None
+        self.boss: Boss | SpikeBoss | SlimeBoss | None = None
         self.mini_ships: list[MiniShip] = []
         self.mini_ship_bullets: list[MiniShipBullet] = []
         self.formations: list[Formation] = []  # Nova lista para formações

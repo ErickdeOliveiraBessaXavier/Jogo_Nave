@@ -466,10 +466,14 @@ class PlayingScene(Scene):
         """Cachear tipo de boss quando ele spawna"""
         if self.entity_manager.boss:
             from ..entities.spike_boss import SpikeBoss
+            from ..entities.slime_boss import SlimeBoss
 
-            self._boss_type_cache = (
-                "spike" if isinstance(self.entity_manager.boss, SpikeBoss) else "normal"
-            )
+            if isinstance(self.entity_manager.boss, SpikeBoss):
+                self._boss_type_cache = "spike"
+            elif isinstance(self.entity_manager.boss, SlimeBoss):
+                self._boss_type_cache = "slime"
+            else:
+                self._boss_type_cache = "normal"
         else:
             self._boss_type_cache = None
 
@@ -810,6 +814,22 @@ class PlayingScene(Scene):
                     self.entity_manager.floating_scores,
                     self.entity_manager,
                 )
+            elif self._boss_type_cache == "slime":
+                from ..entities.slime_boss import SlimeBoss
+
+                slime_boss = cast(SlimeBoss, boss)
+                score_gain = self.collisions.bullets_vs_boss(
+                    self.entity_manager.bullets,
+                    slime_boss,
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
+                score_gain += self.collisions.mini_ship_bullets_vs_boss(
+                    self.entity_manager.mini_ship_bullets,
+                    slime_boss,
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
             elif self._boss_type_cache == "normal":
                 score_gain = self.collisions.bullets_vs_boss(
                     self.entity_manager.bullets,
@@ -831,6 +851,16 @@ class PlayingScene(Scene):
                 self.entity_manager.floating_scores,
                 self.entity_manager,
             )
+
+            # Dano das gotas do SlimeBoss
+            if self._boss_type_cache == "slime":
+                from ..entities.slime_boss import SlimeBoss
+                slime_boss = cast(SlimeBoss, boss)
+                drip_damage = slime_boss.check_drip_damage(self.ship.rect)
+                if drip_damage > 0:
+                    self._handle_ship_hit()
+                    # Meta-progression: Track damage taken
+                    self.level_damage_taken += drip_damage
 
             if self.score_multiplier_active:
                 score_gain = int(score_gain * self.score_multiplier_value)

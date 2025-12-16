@@ -8,8 +8,9 @@ from ..core.sound import sound_manager
 from ..core.sprite_loader import sprite_loader
 from .boss import Boss
 from .boss_laser import BossLaser
-from .meteor import Meteor
 from .boss_square import BossSquare
+from .meteor import Meteor
+from .slime_drip import SlimeDrippingEffect
 
 
 class SlimeBoss(Boss):
@@ -110,16 +111,24 @@ class SlimeBoss(Boss):
         self.floating_squares = []
         self.position_history = deque(maxlen=30)
 
+        # Sistema de dripping slime
+        self.dripping_effect = SlimeDrippingEffect(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
+
     def _init_floating_squares(self) -> None:
         """SlimeBoss doesn't use floating squares."""
         pass
 
-    def update(self, dt: float, player_x: float, player_y: float | None = None) -> tuple[List[BossLaser], List[Meteor], List[BossSquare]]:
+    def update(self, dt: float, player_x: float, player_y: float | None = None) -> tuple[List[BossLaser], List[Meteor], List["BossSquare"]]:
         # Update animation always
         self._update_animation(dt)
-        
+
+        # Update dripping effect when active
+        if self.state == "active":
+            self.dripping_effect.update(dt, self.x, self.y, self.w, player_x)
+
         # Call parent update
-        return super().update(dt, player_x, player_y)
+        lasers, meteors, squares = super().update(dt, player_x, player_y)
+        return lasers, meteors, squares
 
     def can_take_damage(self) -> bool:
         return self.state != "entering" and not self.dead
@@ -198,6 +207,9 @@ class SlimeBoss(Boss):
             text_rect = text.get_rect(center=(rect.centerx, rect.centery))
             surface.blit(text, text_rect)
 
+        # Draw dripping effect
+        self.dripping_effect.draw(surface)
+
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), int(self.w), int(self.h))
@@ -255,3 +267,7 @@ class SlimeBoss(Boss):
         # Cache the mask
         self._mask_cache[self.current_frame] = mask
         return mask
+
+    def check_drip_damage(self, player_rect: pygame.Rect) -> int:
+        """Verifica se alguma gota acertou o jogador e retorna o dano."""
+        return self.dripping_effect.check_player_collision(player_rect)
