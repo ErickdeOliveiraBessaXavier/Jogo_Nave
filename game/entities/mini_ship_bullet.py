@@ -4,7 +4,7 @@ from ..core import colors
 
 
 class MiniShipBullet:
-    def __init__(self, x: float, y: float, vx: float, vy: float, damage: int = 5):
+    def __init__(self, x: float, y: float, vx: float, vy: float, damage: int = 5, piercing: bool = False):
         self.x = x
         self.y = y
         self.vx = vx
@@ -13,7 +13,7 @@ class MiniShipBullet:
         self.h = 4
         self.damage = damage
         self.dead = False
-        self.piercing = False  # Mini-ship bullets are not piercing by default
+        self.piercing = piercing  # Now configurable
 
     @property
     def rect(self) -> pygame.Rect:

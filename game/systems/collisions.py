@@ -24,6 +24,7 @@ from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
+from ..entities.slime_boss import SlimeBoss
 from ..entities.star import Star
 from ..core.config import Config
 from ..core.spatial_grid import SpatialGrid
@@ -152,14 +153,15 @@ class Collisions:
     def _apply_boss_damage(
         self,
         projectiles: list[Bullet] | list[MiniShipBullet],
-        boss: Boss | SpikeBoss,
+        boss: Boss | SpikeBoss | SlimeBoss,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
         is_piercing_allowed: bool = False,
     ) -> int:
-        """Helper para dano unificado ao boss (normal ou spike).
+        """Helper para dano unificado ao boss (normal, spike ou slime).
 
         Centraliza lógica de 4 métodos idênticos.
+        Usa pixel-perfect collision para SlimeBoss quando disponível.
         Retorna score_gain.
         """
         score_gain = 0
@@ -167,7 +169,46 @@ class Collisions:
 
         for proj in projectiles[:]:
             proj_rect = proj.rect
-            if proj_rect.colliderect(boss_rect):
+            
+            # Check for collision
+            collision_detected = False
+            
+            # Pixel-perfect collision for SlimeBoss
+            if isinstance(boss, SlimeBoss) and hasattr(boss, 'mask'):
+                # Fast distance check first (optimization)
+                proj_center_x = proj.x + proj.w / 2
+                proj_center_y = proj.y + proj.h / 2
+                boss_center_x = boss.x + boss.w / 2
+                boss_center_y = boss.y + boss.h / 2
+                
+                # Calculate squared distance for performance
+                dx = proj_center_x - boss_center_x
+                dy = proj_center_y - boss_center_y
+                distance_squared = dx * dx + dy * dy
+                
+                # Only do expensive mask check if projectile is reasonably close
+                # Use a threshold based on boss size (half boss width + projectile size)
+                proximity_threshold = (boss.w / 2 + max(proj.w, proj.h)) ** 2
+                
+                if distance_squared <= proximity_threshold:
+                    # Check rect collision first (additional optimization)
+                    if proj_rect.colliderect(boss_rect):
+                        # Convert projectile position to boss-relative coordinates
+                        proj_relative_x = int(proj.x - boss.x)
+                        proj_relative_y = int(proj.y - boss.y)
+                        
+                        # Check if projectile overlaps with boss mask
+                        if (0 <= proj_relative_x < boss.w and 0 <= proj_relative_y < boss.h):
+                            # Get projectile mask (assume circular for bullets)
+                            proj_mask = pygame.mask.Mask((proj.w, proj.h), fill=True)
+                            # Check overlap
+                            offset = (proj_relative_x, proj_relative_y)
+                            collision_detected = boss.mask.overlap(proj_mask, offset) is not None
+            else:
+                # Rectangular collision for other bosses
+                collision_detected = proj_rect.colliderect(boss_rect)
+            
+            if collision_detected:
                 # Destruir projétil se não for piercing
                 if not (is_piercing_allowed and getattr(proj, "piercing", False)):
                     proj.dead = True
@@ -445,7 +486,9 @@ class Collisions:
                     )
                 )
                 if b_rect.colliderect(enemy_rect):  # Usa cache
-                    b.dead = True
+                    # Destruir projétil se não for piercing
+                    if not b.piercing:
+                        b.dead = True
 
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
@@ -468,7 +511,8 @@ class Collisions:
                         destroyed_count += 1
                         score_events.append(score_event)
 
-                    break  # Bullet is gone, check next bullet
+                    if not b.piercing:
+                        break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
     def bullets_vs_enemies(
@@ -517,7 +561,9 @@ class Collisions:
                     )
                 )
                 if b_rect.colliderect(enemy_rect):  # Usa cache
-                    b.dead = True  # Bala sempre é destruída ao colidir
+                    # Destruir projétil se não for piercing
+                    if not b.piercing:
+                        b.dead = True
 
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
@@ -592,7 +638,6 @@ class Collisions:
                                     score_events.append(score_event)
 
                     if not b.piercing:
-                        b.dead = True
                         break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
@@ -608,15 +653,32 @@ class Collisions:
         )
 
     def ship_vs_boss(
-        self, ship: Ship, boss: Boss, entity_manager: "EntityManager"
+        self, ship: Ship, boss: Boss | SlimeBoss, entity_manager: "EntityManager"
     ) -> bool:
         if ship.invuln > 0:
             return False
-        if ship.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
-            entity_manager.spawn_explosion(
-                ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
-            )
-            return True
+        
+        boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
+        
+        # Pixel-perfect collision for SlimeBoss
+        if isinstance(boss, SlimeBoss) and hasattr(boss, 'mask'):
+            # Check rect collision first (optimization)
+            if ship.rect.colliderect(boss_rect):
+                # Check mask overlap
+                ship_mask = pygame.mask.from_surface(ship.ship_image) if hasattr(ship, 'ship_image') and ship.ship_image is not None else pygame.mask.Mask((ship.w, ship.h), fill=True)
+                offset = (int(ship.x - boss.x), int(ship.y - boss.y))
+                if boss.mask.overlap(ship_mask, offset) is not None:
+                    entity_manager.spawn_explosion(
+                        ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
+                    )
+                    return True
+        else:
+            # Rectangular collision for other bosses
+            if ship.rect.colliderect(boss_rect):
+                entity_manager.spawn_explosion(
+                    ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
+                )
+                return True
         return False
 
     def ship_vs_enemies(
@@ -720,7 +782,7 @@ class Collisions:
             boss,
             floating_scores,
             entity_manager,
-            is_piercing_allowed=False,
+            is_piercing_allowed=True,  # Allow piercing if bullets have piercing=True
         )
 
     def mini_ship_bullets_vs_spike_boss(
@@ -736,7 +798,7 @@ class Collisions:
             boss,
             floating_scores,
             entity_manager,
-            is_piercing_allowed=False,
+            is_piercing_allowed=True,  # Allow piercing if bullets have piercing=True
         )
 
     def mini_ship_bullets_vs_spikes(
@@ -762,7 +824,9 @@ class Collisions:
                 if spike.state == "flying" and b_rect.colliderect(
                     spike.rect
                 ):  # Usa cache
-                    b.dead = True
+                    # Destruir projétil se não for piercing
+                    if not b.piercing:
+                        b.dead = True
                     spike.dead = True
                     entity_manager.spawn_explosion(
                         spike.center_x, spike.center_y, size=15
@@ -927,8 +991,9 @@ class Collisions:
                     # Criar explosão no ponto de impacto
                     entity_manager.spawn_explosion(bullet.x, bullet.y, size=20)
 
-                    # Destruir apenas a bala
-                    bullet.dead = True
+                    # Destruir apenas a bala se não for piercing
+                    if not bullet.piercing:
+                        bullet.dead = True
                     hit_count += 1
 
                     # Som de impacto (mesmo som de dano ao boss)
@@ -1017,11 +1082,14 @@ class Collisions:
     def player_lasers_vs_boss(
         self,
         player_lasers: list[PlayerLaser],
-        boss: Boss | SpikeBoss,
+        boss: Boss | SpikeBoss | SlimeBoss,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
-        """Colisão dos lasers do jogador com o boss."""
+        """Colisão dos lasers do jogador com o boss.
+        
+        Usa pixel-perfect collision para SlimeBoss quando disponível.
+        """
         score_gain: int = 0
 
         for laser in player_lasers:
@@ -1031,7 +1099,65 @@ class Collisions:
             line = laser.get_collision_line()
             boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
 
-            if boss_rect.clipline(line):
+            collision_detected = False
+            
+            # Pixel-perfect collision for SlimeBoss
+            if isinstance(boss, SlimeBoss) and hasattr(boss, 'mask'):
+                # Fast proximity check first (optimization)
+                boss_center_x = boss.x + boss.w / 2
+                boss_center_y = boss.y + boss.h / 2
+                
+                # Calculate distance from boss center to laser line
+                start_pos, end_pos = line
+                # Simple distance from point to line segment (approximation)
+                dx = end_pos[0] - start_pos[0]
+                dy = end_pos[1] - start_pos[1]
+                length_squared = dx * dx + dy * dy
+                
+                if length_squared > 0:
+                    # Vector from start to boss center
+                    vx = boss_center_x - start_pos[0]
+                    vy = boss_center_y - start_pos[1]
+                    
+                    # Project point onto line
+                    t = max(0, min(1, (vx * dx + vy * dy) / length_squared))
+                    proj_x = start_pos[0] + t * dx
+                    proj_y = start_pos[1] + t * dy
+                    
+                    # Distance from boss center to projected point
+                    dist_dx = boss_center_x - proj_x
+                    dist_dy = boss_center_y - proj_y
+                    distance_squared = dist_dx * dist_dx + dist_dy * dist_dy
+                    
+                    # Only do expensive mask check if laser is reasonably close
+                    proximity_threshold = (boss.w / 2 + 50) ** 2  # 50 pixel buffer for laser width
+                    
+                    if distance_squared <= proximity_threshold:
+                        # Check rect collision first (additional optimization)
+                        if boss_rect.clipline(line):
+                            # For pixel-perfect, we need to check if the laser line intersects non-transparent pixels
+                            # This is more complex - for now, we'll use a simplified approach
+                            # Check multiple points along the laser line
+                            steps = 10  # Check 10 points along the line
+                            for i in range(steps + 1):
+                                t = i / steps
+                                check_x = start_pos[0] + t * (end_pos[0] - start_pos[0])
+                                check_y = start_pos[1] + t * (end_pos[1] - start_pos[1])
+                                
+                                # Convert to boss-relative coordinates
+                                relative_x = int(check_x - boss.x)
+                                relative_y = int(check_y - boss.y)
+                                
+                                # Check if point is within boss bounds and mask
+                                if (0 <= relative_x < boss.w and 0 <= relative_y < boss.h):
+                                    if boss.mask.get_at((relative_x, relative_y)):
+                                        collision_detected = True
+                                        break
+            else:
+                # Rectangular collision for other bosses
+                collision_detected = boss_rect.clipline(line)
+
+            if collision_detected:
                 # Verificar se já atingiu o boss
                 boss_id = id(boss)
                 if boss_id in laser.hit_enemies:

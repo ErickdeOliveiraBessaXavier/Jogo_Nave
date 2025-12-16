@@ -83,7 +83,7 @@ class MiniShip:
         vx = math.cos(angle) * bullet_speed
         vy = math.sin(angle) * bullet_speed
 
-        bullets.append(MiniShipBullet(self.x + self.w / 2, self.y, vx, vy))
+        bullets.append(MiniShipBullet(self.x + self.w / 2, self.y, vx, vy, piercing=self.player.piercing_shot_timer > 0))
 
     def draw(self, surface: pygame.Surface):
         should_blink = (

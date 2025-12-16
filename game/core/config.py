@@ -88,25 +88,25 @@ class Config:
         0.5  # Tiros explosivos são 50% mais lentos
     )
 
-    # Rarity system - Sistema de raridade para power-ups (pesos inteiros, total pode ser qualquer)
-    POWERUP_WEIGHTS: dict[PowerUpType, int] = field(
+    # Rarity system - Sistema de raridade para power-ups (porcentagens 0.0-100.0, soma deve ser 100.0)
+    POWERUP_RARITIES: dict[PowerUpType, float] = field(
         default_factory=lambda: {
             # 🔵 COMUM (45% total) - Power-ups básicos e frequentes
-            PowerUpType.SHIELD: 10,  # 10 - Escudo básico
-            PowerUpType.DOUBLE_SHOT: 22,  # 22 - Tiro duplo
+            PowerUpType.SHIELD: 5.8,  # 5.8% - Escudo básico
+            PowerUpType.DOUBLE_SHOT: 12.7,  # 12.7% - Tiro duplo
             # 🟢 INCOMUM (15% total) - Power-ups situacionais
-            PowerUpType.SPEED: 15,  # 15 - Velocidade aumentada
+            PowerUpType.SPEED: 8.7,  # 8.7% - Velocidade aumentada
             # 🟠 RARO (35% total) - Power-ups poderosos mas raros
-            PowerUpType.PIERCING_SHOT: 15,  # 15 - Tiro perfurante
-            PowerUpType.MINI_SHIPS: 17,  # 17 - Naves auxiliares
-            PowerUpType.LIFE: 5,  # 5 - Vida extra
+            PowerUpType.PIERCING_SHOT: 46.2,  # 46.2% - Tiro perfurante
+            PowerUpType.MINI_SHIPS: 9.8,  # 9.8% - Naves auxiliares
+            PowerUpType.LIFE: 2.9,  # 2.9% - Vida extra
             # 🟣 ÉPICO (4% total) - Power-ups muito valiosos
-            PowerUpType.SCORE: 4,  # 4 - Multiplicador de pontos
+            PowerUpType.SCORE: 2.3,  # 2.3% - Multiplicador de pontos
             # 🟡 LENDÁRIO (1% total) - Power-ups ultra-raros
-            PowerUpType.RAINBOW: 1,  # 1 - Power-up especial
+            PowerUpType.RAINBOW: 0.6,  # 0.6% - Power-up especial
             # 🟠 NOVOS
-            PowerUpType.COOLDOWN_HASTE: 80,  # 7 - Reduz tempo de recarga
-            PowerUpType.TIME_STOP: 4,  # 4 - Congelamento total
+            PowerUpType.COOLDOWN_HASTE: 8.7,  # 8.7% - Reduz tempo de recarga
+            PowerUpType.TIME_STOP: 2.3,  # 2.3% - Congelamento total
         }
     )
 
@@ -365,6 +365,12 @@ class Config:
         """Duração calculada do silêncio musical durante aviso do boss."""
         return self.BOSS_WARNING_DURATION + self.BOSS_POST_WARNING_DELAY
 
+    @property
+    def POWERUP_WEIGHTS(self) -> dict[PowerUpType, int]:
+        """Converte raridades em porcentagem para pesos inteiros (compatibilidade)."""
+        # Converte porcentagens para pesos (multiplica por 1000 para manter precisão)
+        return {k: int(v * 10) for k, v in self.POWERUP_RARITIES.items()}
+
     # ========================================
     # VALIDATION METHODS
     # ========================================
@@ -397,14 +403,14 @@ class Config:
             if min_val > max_val:
                 errors.append(f"{name}: min ({min_val}) > max ({max_val})")
 
-        # Validar power-up weights (devem ser inteiros positivos e soma > 0)
-        total_weight = sum(self.POWERUP_WEIGHTS.values())
-        if total_weight <= 0:
-            errors.append("POWERUP_WEIGHTS deve ter soma > 0")
-        for powerup_type, weight in self.POWERUP_WEIGHTS.items():
-            if weight <= 0:
+        # Validar power-up rarities (devem somar exatamente 100.0)
+        total_rarity = sum(self.POWERUP_RARITIES.values())
+        if not abs(total_rarity - 100.0) < 0.001:  # Tolerância para erros de arredondamento
+            errors.append(f"POWERUP_RARITIES deve somar exatamente 100.0, mas soma {total_rarity}")
+        for powerup_type, rarity in self.POWERUP_RARITIES.items():
+            if not (0.0 <= rarity <= 100.0):
                 errors.append(
-                    f"POWERUP_WEIGHTS[{powerup_type}] deve ser positivo, mas é {weight}"
+                    f"POWERUP_RARITIES[{powerup_type}] deve estar entre 0.0 e 100.0, mas é {rarity}"
                 )
 
         # Validar thresholds (0.0 a 1.0)
