@@ -281,6 +281,47 @@ class Config:
     SPIKE_BOSS_FRENZY_SPIKE_COUNT: Tuple[int, int] = (6, 9)
 
     # ========================================
+    # SLIME BOSS - DRIPPING SYSTEM
+    # ========================================
+    # Propriedades físicas das gotas
+    SLIME_DRIP_RADIUS_MIN: float = 25.0
+    SLIME_DRIP_RADIUS_MAX: float = 85.0
+    SLIME_DRIP_SPEED_X: Tuple[float, float] = (-12.0, 12.0)
+    SLIME_DRIP_SPEED_Y: Tuple[float, float] = (12.0, 30.0)
+    SLIME_DRIP_ANGLE_VELOCITY: Tuple[float, float] = (-3.0, 3.0)
+    SLIME_DRIP_RANGE: Tuple[float, float] = (300.0, 900.0)
+    SLIME_DRIP_GRAVITY: Tuple[float, float] = (0.18, 0.48)
+    SLIME_DRIP_SHRINK_RATE_BASE: float = 3.0
+    SLIME_DRIP_SHRINK_RATE_MULTIPLIER: float = 4.8
+    SLIME_DRIP_MIN_RADIUS: float = 4.0
+    
+    # Spawn e gameplay
+    SLIME_DRIP_MAX_ACTIVE: int = 15
+    SLIME_DRIP_SPAWN_INTERVAL: float = 0.3
+    SLIME_DRIP_DAMAGE: int = 1
+    SLIME_DRIP_SPAWN_CHANCE_DIRECTED: float = 0.8  # 80% direcionado
+    SLIME_DRIP_PREDICTION_TIME: float = 1.5
+    
+    # Poças no chão
+    SLIME_POOL_LIFETIME: float = 5.0
+    SLIME_POOL_MAX_ACTIVE: int = 8
+    SLIME_POOL_DAMAGE: int = 1
+    SLIME_POOL_DAMAGE_COOLDOWN: float = 0.5
+    SLIME_POOL_EXPANSION_TIME: float = 0.5
+    SLIME_POOL_FADE_TIME: float = 1.5
+    SLIME_POOL_RADIUS_MULTIPLIER: float = 1.5
+    
+    # Visual
+    SLIME_DRIP_COLORS: list[Tuple[int, int, int, int]] = field(
+        default_factory=lambda: [
+            (241, 187, 242, 180),
+            (96, 29, 115, 200),
+            (68, 18, 89, 220)
+        ]
+    )
+    SLIME_POOL_COLOR: Tuple[int, int, int, int] = (96, 29, 115, 150)
+
+    # ========================================
     # SPIKE (PROJECTILE) SYSTEM
     # ========================================
     SPIKE_SIZE: int = 25
@@ -356,6 +397,47 @@ class Config:
     # UI SETTINGS
     # ========================================
     WARNING_FONT_SIZE: int = 60
+
+    # ========================================
+    # SLIME BOSS - DRIPPING SYSTEM
+    # ========================================
+    # Propriedades físicas das gotas
+    SLIME_DRIP_RADIUS_MIN: float = 25.0  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_RADIUS_MAX: float = 85.0  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_SPEED_X: Tuple[float, float] = (-12.0, 12.0)  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_SPEED_Y: Tuple[float, float] = (12.0, 30.0)  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_ANGLE_VELOCITY: Tuple[float, float] = (-3.0, 3.0)  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_RANGE: Tuple[float, float] = (300.0, 900.0)  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_GRAVITY: Tuple[float, float] = (0.18, 0.48)  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_SHRINK_RATE_BASE: float = 3.0  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_SHRINK_RATE_MULTIPLIER: float = 4.8  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_MIN_RADIUS: float = 4.0  # pyright: ignore[reportConstantRedefinition]
+    
+    # Spawn e gameplay
+    SLIME_DRIP_MAX_ACTIVE: int = 15  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_SPAWN_INTERVAL: float = 0.3  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_DAMAGE: int = 1  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_SPAWN_CHANCE_DIRECTED: float = 0.8  # 80% direcionado  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_PREDICTION_TIME: float = 1.5  # pyright: ignore[reportConstantRedefinition]
+    
+    # Poças no chão
+    SLIME_POOL_LIFETIME: float = 5.0  # pyright: ignore[reportConstantRedefinition]
+    SLIME_POOL_MAX_ACTIVE: int = 8  # pyright: ignore[reportConstantRedefinition]
+    SLIME_POOL_DAMAGE: int = 1  # pyright: ignore[reportConstantRedefinition]
+    SLIME_POOL_DAMAGE_COOLDOWN: float = 0.5  # pyright: ignore[reportConstantRedefinition]
+    SLIME_POOL_EXPANSION_TIME: float = 0.5  # pyright: ignore[reportConstantRedefinition]
+    SLIME_POOL_FADE_TIME: float = 1.5  # pyright: ignore[reportConstantRedefinition]
+    SLIME_POOL_RADIUS_MULTIPLIER: float = 1.5  # pyright: ignore[reportConstantRedefinition]
+    
+    # Visual
+    SLIME_DRIP_COLORS: list[Tuple[int, int, int, int]] = field(  # pyright: ignore[reportConstantRedefinition]
+        default_factory=lambda: [
+            (241, 187, 242, 180),
+            (96, 29, 115, 200),
+            (68, 18, 89, 220)
+        ]
+    )
+    SLIME_POOL_COLOR: Tuple[int, int, int, int] = (96, 29, 115, 150)  # pyright: ignore[reportConstantRedefinition]
 
     # ========================================
     # COMPUTED PROPERTIES (não editáveis diretamente)
