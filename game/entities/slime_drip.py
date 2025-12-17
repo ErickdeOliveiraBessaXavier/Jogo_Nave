@@ -21,7 +21,7 @@ class SlimeDrip:
         # Movimento ondulado (amplitude do balanço lateral)
         self.angle: float = 0.0
         self.angle_velocity: float = random.uniform(*Config.SLIME_DRIP_ANGLE_VELOCITY)
-        self.wave_amplitude: float = random.uniform(5.0, 20.0)  # ✅ CORRIGIDO: 5-20 pixels de amplitude
+        self.wave_amplitude: float = random.uniform(5.0, 20.0)
         
         # Gravidade (aceleração aplicada diretamente a speed_y)
         self.gravity: float = random.uniform(*Config.SLIME_DRIP_GRAVITY)
@@ -51,31 +51,35 @@ class SlimeDrip:
         """Atualiza a física da gota (framerate-independent)."""
         if self.dead:
             return
-        
-        # Movimento lateral com limite nas bordas
-        if self.x < self.radius or self.x > self.effect_width - self.radius:
-            self.speed_x *= -1
-        
-        # ✅ CORRIGIDO: Aplicar gravidade diretamente à velocidade
+
+        # Aplicar gravidade diretamente à velocidade
         if self.y > self.radius:
             self.speed_y += self.gravity * dt  # Aceleração
             self.angle += self.angle_velocity * dt
-        
+
         # Diminuir tamanho quando estiver caindo
         if self.y > self.radius * 2:
-            shrink_rate = (Config.SLIME_DRIP_SHRINK_RATE_BASE + 
+            shrink_rate = (Config.SLIME_DRIP_SHRINK_RATE_BASE +
                           (self.radius / 80.0) * Config.SLIME_DRIP_SHRINK_RATE_MULTIPLIER)
             self.radius -= shrink_rate * dt
-        
-        # Movimento (framerate-independent)
-        self.x += self.speed_x * math.cos(self.angle) * self.wave_amplitude * dt  # ✅ CORRIGIDO
+
+        # Movimento base + oscilação senoidal separada
+        self.x += self.speed_x * dt
+        wave_offset = math.sin(self.angle) * self.wave_amplitude * dt
+        self.x += wave_offset
         self.y += self.speed_y * dt
-        
-        # ✅ CORRIGIDO: Bounds check completo (vertical E horizontal)
-        if (self.y > self.effect_height + 100 or 
+
+        # Bounce lateral nas bordas
+        if self.x < self.radius or self.x > self.effect_width - self.radius:
+            self.speed_x *= -1
+
+        # Bounds check completo (vertical E horizontal)
+        if (
+            self.y > self.effect_height + 100 or
             self.radius < self.min_radius or
-            self.x < -100 or 
-            self.x > self.effect_width + 100):
+            self.x < -100 or
+            self.x > self.effect_width + 100
+        ):
             self.dead = True
 
     def draw(self, surface: pygame.Surface, surface_pool: list[pygame.Surface], 
@@ -242,14 +246,16 @@ class SlimeDrippingEffect:
         self.spawn_timer: float = 0.0
         self.spawn_interval: float = Config.SLIME_DRIP_SPAWN_INTERVAL
         
-        # ✅ NOVO: Cache de surfaces para performance
+        # Cache de surfaces para performance
         self._surface_pool: list[pygame.Surface] = []
-        self._surface_pool_size: int = 20
+        self._surface_pool_size: int = max(10, int(Config.SLIME_DRIP_MAX_ACTIVE))
         self._surface_pool_index: int = 0
-        
-        # Pré-criar surfaces no pool (tamanho máximo: raio 85 * 2 = 170)
+
+        # Pool dinâmico baseado no maior raio
+        max_radius = int(Config.SLIME_DRIP_RADIUS_MAX)
+        surf_size = max_radius * 2
         for _ in range(self._surface_pool_size):
-            surf = pygame.Surface((170, 170), pygame.SRCALPHA)
+            surf = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
             self._surface_pool.append(surf)
         
         # Sistema de spawn inteligente
