@@ -297,7 +297,7 @@ class Config:
     
     # Spawn e gameplay
     SLIME_DRIP_MAX_ACTIVE: int = 15
-    SLIME_DRIP_SPAWN_INTERVAL: float = 0.3
+    SLIME_DRIP_SPAWN_INTERVAL: float = 0.2
     SLIME_DRIP_DAMAGE: int = 1
     SLIME_DRIP_SPAWN_CHANCE_DIRECTED: float = 0.8  # 80% direcionado
     SLIME_DRIP_PREDICTION_TIME: float = 1.5
