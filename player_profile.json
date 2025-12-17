@@ -1,17 +1,17 @@
 {
   "version": "1.0",
   "profile_created": "2025-12-13T13:45:01.404603",
-  "last_played": "2025-12-15T23:57:27.303105",
-  "total_playtime": 0.0,
+  "last_played": "2025-12-16T00:03:17.920508",
+  "total_playtime": 110.486104,
   "highest_level_reached": 2,
-  "total_deaths": 15,
+  "total_deaths": 20,
   "total_score": 21702,
   "level_stats": {
     "1": {
       "level_number": 1,
-      "attempts": 21,
+      "attempts": 22,
       "clears": 1,
-      "deaths": 15,
+      "deaths": 20,
       "total_time": 79.28504157066345,
       "best_time": 79.28504157066345,
       "worst_time": 79.28504157066345,
@@ -21,31 +21,6 @@
       "total_damage_taken": 0,
       "total_powerups_collected": 0,
       "recent_attempts": [
-        {
-          "timestamp": "2025-12-15T22:21:49.980952",
-          "cleared": false,
-          "cause": "collision"
-        },
-        {
-          "timestamp": "2025-12-15T22:27:07.039415",
-          "cleared": false,
-          "cause": "collision"
-        },
-        {
-          "timestamp": "2025-12-15T23:21:39.452026",
-          "cleared": false,
-          "cause": "collision"
-        },
-        {
-          "timestamp": "2025-12-15T23:22:33.319343",
-          "cleared": false,
-          "cause": "collision"
-        },
-        {
-          "timestamp": "2025-12-15T23:22:54.510480",
-          "cleared": false,
-          "cause": "collision"
-        },
         {
           "timestamp": "2025-12-15T23:28:06.120908",
           "cleared": false,
@@ -70,18 +45,52 @@
           "timestamp": "2025-12-15T23:33:44.937612",
           "cleared": false,
           "cause": "collision"
+        },
+        {
+          "timestamp": "2025-12-16T00:03:38.151107",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2025-12-16T00:03:43.769599",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2025-12-16T00:04:33.572433",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2025-12-16T00:05:00.079746",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2025-12-16T00:05:03.448133",
+          "cleared": false,
+          "cause": "game_over"
         }
       ],
       "first_played": "2025-12-14T12:59:04.637494",
-      "last_played": "2025-12-15T23:57:27.303100",
+      "last_played": "2025-12-16T00:03:17.920503",
       "current_win_streak": 0,
       "best_win_streak": 1
     }
   },
   "level_adjustments": {
-    "1": 0.8484375
+    "1": 0.8492187499999999
   },
-  "session_history": [],
+  "session_history": [
+    {
+      "start_time": "2025-12-16T00:03:12.962051",
+      "end_time": "2025-12-16T00:05:03.448155",
+      "levels_attempted": [],
+      "deaths": 5,
+      "score": 0,
+      "powerups_collected": 0
+    }
+  ],
   "unlocked_upgrades": [
     "AIR_STRIKE",
     "EMP",

@@ -408,7 +408,7 @@ class Config:
     SLIME_DRIP_SPEED_Y: Tuple[float, float] = (12.0, 30.0)  # pyright: ignore[reportConstantRedefinition]
     SLIME_DRIP_ANGLE_VELOCITY: Tuple[float, float] = (-3.0, 3.0)  # pyright: ignore[reportConstantRedefinition]
     SLIME_DRIP_RANGE: Tuple[float, float] = (300.0, 900.0)  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_GRAVITY: Tuple[float, float] = (0.18, 0.48)  # pyright: ignore[reportConstantRedefinition]
+    SLIME_DRIP_GRAVITY: Tuple[float, float] = (50.0, 150.0)  # pyright: ignore[reportConstantRedefinition]
     SLIME_DRIP_SHRINK_RATE_BASE: float = 3.0  # pyright: ignore[reportConstantRedefinition]
     SLIME_DRIP_SHRINK_RATE_MULTIPLIER: float = 4.8  # pyright: ignore[reportConstantRedefinition]
     SLIME_DRIP_MIN_RADIUS: float = 4.0  # pyright: ignore[reportConstantRedefinition]
