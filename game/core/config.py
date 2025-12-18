@@ -299,7 +299,7 @@ class Config:
     SLIME_DRIP_MAX_ACTIVE: int = 15
     SLIME_DRIP_SPAWN_INTERVAL: float = 0.2
     SLIME_DRIP_DAMAGE: int = 1
-    SLIME_DRIP_SPAWN_CHANCE_DIRECTED: float = 0.8  # 80% direcionado
+    SLIME_DRIP_SPAWN_CHANCE_DIRECTED: float = 0.6  # 60% direcionado (reduzido para menos previsível)
     SLIME_DRIP_PREDICTION_TIME: float = 1.5
     
     # Poças no chão
@@ -310,6 +310,18 @@ class Config:
     SLIME_POOL_EXPANSION_TIME: float = 0.5
     SLIME_POOL_FADE_TIME: float = 1.5
     SLIME_POOL_RADIUS_MULTIPLIER: float = 1.5
+    
+    # Physics improvements
+    SLIME_DRIP_FRICTION: float = 0.02  # Friction for lateral movement damping
+    SLIME_DRIP_MIN_SPAWN_DISTANCE: float = 60.0  # Minimum distance between drips
+    SLIME_DRIP_WAVE_AMPLITUDE: Tuple[float, float] = (5.0, 20.0)  # Wave amplitude range
+    SLIME_DRIP_GROUND_OFFSET: int = 50  # Distance from bottom for ground level
+    SLIME_DRIP_SPAWN_Y_OFFSET: int = 10  # Y offset from boss for spawn
+    SLIME_DRIP_MIN_POOL_RADIUS: float = 15.0  # Minimum radius to create pool
+    SLIME_DRIP_SURFACE_SIZE: int = 170  # Surface size for drip rendering (max_radius * 2)
+    SLIME_POOL_SURFACE_SIZE: int = 300  # Surface size for pool rendering
+    SLIME_DRIP_HIGHLIGHT_DISTANCE: float = 80.0  # Distance to highlight drips near player
+    SLIME_DRIP_HIGHLIGHT_COLOR: Tuple[int, int, int, int] = (255, 255, 100, 220)  # Yellow highlight
     
     # Visual
     SLIME_DRIP_COLORS: list[Tuple[int, int, int, int]] = field(

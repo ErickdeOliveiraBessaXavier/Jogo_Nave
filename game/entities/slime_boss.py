@@ -76,7 +76,7 @@ class SlimeBoss(Boss):
         cls._frames_loaded = True
         return frames
 
-    def __init__(self, x: float, y: float, health: int | None = None):
+    def __init__(self, x: float, y: float, health: int | None = None, difficulty_multiplier: float = 1.0):
         # Initialize base Boss to get full behavior
         super().__init__(x, y, health if health is not None else int(Config.BOSS_HEALTH * 1.2))
 
@@ -112,7 +112,7 @@ class SlimeBoss(Boss):
         self.position_history = deque(maxlen=30)
 
         # Sistema de dripping slime
-        self.dripping_effect = SlimeDrippingEffect(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
+        self.dripping_effect = SlimeDrippingEffect(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT, difficulty_multiplier)
 
     def _init_floating_squares(self) -> None:
         """SlimeBoss doesn't use floating squares."""
@@ -124,7 +124,7 @@ class SlimeBoss(Boss):
 
         # Update dripping effect when active
         if self.state == "active":
-            self.dripping_effect.update(dt, self.x, self.y, self.w, player_x)
+            self.dripping_effect.update(dt, self.x, self.y, self.w, player_x, player_y or 0)
 
         # Call parent update
         lasers, meteors, squares = super().update(dt, player_x, player_y)

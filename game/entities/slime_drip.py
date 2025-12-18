@@ -21,13 +21,13 @@ class SlimeDrip:
         # Movimento ondulado (amplitude do balanço lateral)
         self.angle: float = 0.0
         self.angle_velocity: float = random.uniform(*Config.SLIME_DRIP_ANGLE_VELOCITY)
-        self.wave_amplitude: float = random.uniform(5.0, 20.0)  # ✅ CORRIGIDO: 5-20 pixels de amplitude
+        self.wave_amplitude: float = random.uniform(*Config.SLIME_DRIP_WAVE_AMPLITUDE)
         
         # Gravidade (aceleração aplicada diretamente a speed_y)
         self.gravity: float = random.uniform(*Config.SLIME_DRIP_GRAVITY)
         
         # Propriedades do jogo
-        self.damage: int = Config.SLIME_DRIP_DAMAGE
+        self.damage: int = max(1, int(self.radius / 30) + 1)  # Dano proporcional ao tamanho
         self.dead: bool = False
         self.effect_width: int = effect_width
         self.effect_height: int = effect_height
@@ -56,9 +56,14 @@ class SlimeDrip:
         if self.x < self.radius or self.x > self.effect_width - self.radius:
             self.speed_x *= -1
         
-        # ✅ CORRIGIDO: Aplicar gravidade diretamente à velocidade
+        # Aplicar gravidade sempre (física consistente)
+        self.speed_y += self.gravity * dt
+        
+        # Aplicar friction ao movimento lateral para evitar oscilações infinitas
+        self.speed_x *= (1 - Config.SLIME_DRIP_FRICTION * dt)
+        
+        # Movimento ondulado (apenas quando visível)
         if self.y > self.radius:
-            self.speed_y += self.gravity * dt  # Aceleração
             self.angle += self.angle_velocity * dt
         
         # Diminuir tamanho quando estiver caindo
@@ -68,7 +73,7 @@ class SlimeDrip:
             self.radius -= shrink_rate * dt
         
         # Movimento (framerate-independent)
-        self.x += self.speed_x * math.cos(self.angle) * self.wave_amplitude * dt  # ✅ CORRIGIDO
+        self.x += self.speed_x * math.cos(self.angle) * self.wave_amplitude * dt
         self.y += self.speed_y * dt
         
         # ✅ CORRIGIDO: Bounds check completo (vertical E horizontal)
@@ -79,13 +84,14 @@ class SlimeDrip:
             self.dead = True
 
     def draw(self, surface: pygame.Surface, surface_pool: list[pygame.Surface], 
-             pool_index: int) -> int:
+             pool_index: int, player_x: Optional[float] = None, player_y: Optional[float] = None) -> int:
         """Desenha a gota usando pool de surfaces (otimizado).
         
         Args:
             surface: Surface principal onde desenhar
             surface_pool: Pool de surfaces para reutilizar
             pool_index: Índice atual no pool
+            player_x, player_y: Posição do jogador para highlight
         
         Returns:
             Próximo índice do pool (circular)
@@ -100,10 +106,19 @@ class SlimeDrip:
         # Limpar surface
         temp_surface.fill((0, 0, 0, 0))
         
+        # Verificar se deve highlight (próximo do jogador)
+        draw_color = self.color
+        if player_x is not None and player_y is not None:
+            dx = self.x - player_x
+            dy = self.y - player_y
+            distance_squared = dx * dx + dy * dy
+            if distance_squared < Config.SLIME_DRIP_HIGHLIGHT_DISTANCE ** 2:
+                draw_color = Config.SLIME_DRIP_HIGHLIGHT_COLOR
+        
         # Desenhar círculo
         radius_int = int(self.radius)
         center = (radius_int, radius_int)
-        pygame.draw.circle(temp_surface, self.color, center, radius_int)
+        pygame.draw.circle(temp_surface, draw_color, center, radius_int)
         
         # Blit apenas a região necessária
         draw_x = int(self.x - self.radius)
@@ -182,20 +197,33 @@ class SlimePool:
         if self.age >= self.lifetime:
             self.dead = True
     
-    def draw(self, surface: pygame.Surface) -> None:
-        """Desenha poça com transparência."""
+    def draw(self, surface: pygame.Surface, surface_pool: list[pygame.Surface], pool_index: int) -> int:
+        """Desenha poça com transparência usando pool de surfaces."""
         if self.dead or self.color[3] == 0:
-            return
+            return pool_index
         
-        # Surface temporária para transparência (poças são poucas, ok criar)
-        pool_size = int(self.radius * 2)
-        pool_surf = pygame.Surface((pool_size, pool_size), pygame.SRCALPHA)
+        temp_surface = surface_pool[pool_index]
+        next_index = (pool_index + 1) % len(surface_pool)
         
-        center = (int(self.radius), int(self.radius))
-        pygame.draw.circle(pool_surf, self.color, center, int(self.radius))
+        # Limpar surface
+        temp_surface.fill((0, 0, 0, 0))
         
-        surface.blit(pool_surf, (int(self.x - self.radius), 
-                                 int(self.y - self.radius)))
+        # Desenhar círculo no centro da surface temporária
+        surface_size = Config.SLIME_POOL_SURFACE_SIZE
+        center = (surface_size // 2, surface_size // 2)
+        pygame.draw.circle(temp_surface, self.color, center, int(self.radius))
+        
+        # Calcular área do círculo para blit otimizado
+        radius_int = int(self.radius)
+        half_size = surface_size // 2
+        area = (half_size - radius_int, half_size - radius_int, radius_int * 2, radius_int * 2)
+        
+        # Blit apenas a região necessária
+        draw_x = int(self.x - self.radius)
+        draw_y = int(self.y - self.radius)
+        surface.blit(temp_surface, (draw_x, draw_y), area=area)
+        
+        return next_index
     
     def can_damage(self) -> bool:
         """Verifica se pode causar dano (cooldown)."""
@@ -229,18 +257,19 @@ class SlimePool:
 class SlimeDrippingEffect:
     """Sistema que gerencia múltiplas gotas de slime e poças no chão."""
 
-    def __init__(self, effect_width: int, effect_height: int):
+    def __init__(self, effect_width: int, effect_height: int, difficulty_multiplier: float = 1.0):
         self.effect_width: int = effect_width
         self.effect_height: int = effect_height
+        self.difficulty_multiplier: float = difficulty_multiplier
         
         # Gotas e poças
         self.drips: list[SlimeDrip] = []
         self.pools: list[SlimePool] = []
         
-        # Spawn settings
-        self.max_drips: int = Config.SLIME_DRIP_MAX_ACTIVE
+        # Spawn settings (escalam com dificuldade)
+        self.max_drips: int = int(Config.SLIME_DRIP_MAX_ACTIVE * difficulty_multiplier)
         self.spawn_timer: float = 0.0
-        self.spawn_interval: float = Config.SLIME_DRIP_SPAWN_INTERVAL
+        self.spawn_interval: float = Config.SLIME_DRIP_SPAWN_INTERVAL / difficulty_multiplier
         
         # ✅ NOVO: Cache de surfaces para performance
         self._surface_pool: list[pygame.Surface] = []
@@ -249,29 +278,38 @@ class SlimeDrippingEffect:
         
         # Pré-criar surfaces no pool (tamanho máximo: raio 85 * 2 = 170)
         for _ in range(self._surface_pool_size):
-            surf = pygame.Surface((170, 170), pygame.SRCALPHA)
+            surf = pygame.Surface((Config.SLIME_DRIP_SURFACE_SIZE, Config.SLIME_DRIP_SURFACE_SIZE), pygame.SRCALPHA)
             self._surface_pool.append(surf)
+        
+        # Pool de surfaces para poças (tamanho fixo para otimização)
+        self._pool_surface_pool: list[pygame.Surface] = []
+        self._pool_surface_pool_size: int = 10
+        for _ in range(self._pool_surface_pool_size):
+            surf = pygame.Surface((Config.SLIME_POOL_SURFACE_SIZE, Config.SLIME_POOL_SURFACE_SIZE), pygame.SRCALPHA)
+            self._pool_surface_pool.append(surf)
+        self._pool_surface_pool_index: int = 0
         
         # Sistema de spawn inteligente
         self.player_last_x: Optional[float] = None
+        self.player_last_y: Optional[float] = None  # Para feedback visual
         self.player_velocity_x: float = 0.0
         self.prediction_time: float = Config.SLIME_DRIP_PREDICTION_TIME
         
         # Linha do chão (onde gotas viram poças)
-        self.ground_y: float = float(effect_height - 50)
+        self.ground_y: float = float(effect_height - Config.SLIME_DRIP_GROUND_OFFSET)
 
     def update(self, dt: float, boss_x: float, boss_y: float, 
-               boss_width: int, player_x: float) -> None:
+               boss_width: int, player_x: float, player_y: float) -> None:
         """Atualiza todas as gotas e poças.
         
-        ✅ CORRIGIDO: player_x agora é obrigatório (não Optional)
+        ✅ CORRIGIDO: player_x e player_y agora obrigatórios para feedback visual
         """
         # Atualizar gotas existentes
         for drip in self.drips[:]:
             drip.update(dt)
             
             # Criar poça quando gota atinge o chão
-            if not drip.dead and drip.y >= self.ground_y and drip.radius > 15:
+            if not drip.dead and drip.y >= self.ground_y and drip.radius > Config.SLIME_DRIP_MIN_POOL_RADIUS:
                 self._create_pool(drip.x, self.ground_y, drip.radius)
                 drip.dead = True
             elif drip.dead:
@@ -288,6 +326,22 @@ class SlimeDrippingEffect:
         if self.spawn_timer >= self.spawn_interval and len(self.drips) < self.max_drips:
             self.spawn_timer = 0
             self._spawn_drip(boss_x, boss_y, boss_width, player_x)
+        
+        # Armazenar posição do jogador para feedback visual
+        self.player_last_x = player_x
+        self.player_last_y = player_y
+
+    def _is_position_occupied(self, x: float, y: float) -> bool:
+        """Verifica se há gotas próximas à posição de spawn."""
+        min_distance_squared = Config.SLIME_DRIP_MIN_SPAWN_DISTANCE ** 2
+        for drip in self.drips:
+            if not drip.dead:
+                dx = drip.x - x
+                dy = drip.y - y
+                distance_squared = dx * dx + dy * dy
+                if distance_squared < min_distance_squared:
+                    return True
+        return False
 
     def _spawn_drip(self, boss_x: float, boss_y: float, boss_width: int, 
                     player_x: float) -> None:
@@ -315,14 +369,18 @@ class SlimeDrippingEffect:
             error_margin = random.uniform(-50, 50)
             target_x = predicted_x + error_margin
         
-        # 80% spawn direcionado, 20% aleatório
+        # 60% spawn direcionado, 40% aleatório (menos previsível)
         if random.random() < Config.SLIME_DRIP_SPAWN_CHANCE_DIRECTED:
             bias = random.uniform(0.6, 0.9)
             x = boss_center + (target_x - boss_center) * bias
         else:
             x = boss_x + random.uniform(0, boss_width)
         
-        y = boss_y - 10
+        # Verificar se há gotas próximas (evitar spawn empilhado)
+        if self._is_position_occupied(x, boss_y - Config.SLIME_DRIP_SPAWN_Y_OFFSET):
+            return  # Não spawnar se posição ocupada
+        
+        y = boss_y - Config.SLIME_DRIP_SPAWN_Y_OFFSET
         drip = SlimeDrip(x, y, self.effect_width, self.effect_height)
         self.drips.append(drip)
 
@@ -339,14 +397,20 @@ class SlimeDrippingEffect:
         """Desenha gotas e poças (usando pool de surfaces)."""
         # Desenhar poças PRIMEIRO (camada de fundo)
         for pool in self.pools:
-            pool.draw(surface)
+            self._pool_surface_pool_index = pool.draw(
+                surface,
+                self._pool_surface_pool,
+                self._pool_surface_pool_index
+            )
         
         # ✅ CORRIGIDO: Desenhar gotas usando pool
         for drip in self.drips:
             self._surface_pool_index = drip.draw(
                 surface,
                 self._surface_pool,
-                self._surface_pool_index
+                self._surface_pool_index,
+                self.player_last_x,
+                self.player_last_y
             )
 
     def check_player_collision(self, player_rect: pygame.Rect) -> int:
