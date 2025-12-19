@@ -318,12 +318,14 @@ class Config:
     SLIME_POOL_FADE_TIME: float = 1.5
     SLIME_POOL_RADIUS_MULTIPLIER: float = 1.5
     
-    # Visual - Trail
-    SLIME_DRIP_TRAIL_MIN_RADIUS: float = 15.0  # Raio mínimo para trail (gotas médias/grandes)
-    SLIME_DRIP_TRAIL_LENGTH: int = 8  # Mais segmentos = calda mais longa
-    SLIME_DRIP_TRAIL_SIZE_FACTOR_MIN: float = 0.2  # Calda fina na ponta
-    SLIME_DRIP_TRAIL_SIZE_FACTOR_MAX: float = 0.9  # Calda grossa na base
-    SLIME_DRIP_TRAIL_ALPHA_DECAY: float = 0.7  # Transparência progressiva
+    # Visual - Trail (Efeito "Pin de Mapa")
+    SLIME_DRIP_TRAIL_MIN_RADIUS: float = 15.0  # Raio mínimo para ter calda
+    SLIME_DRIP_TRAIL_LENGTH_MIN: int = 8  # Comprimento da calda para gotas pequenas
+    SLIME_DRIP_TRAIL_LENGTH_MAX: int = 20  # Comprimento da calda para gotas grandes
+    SLIME_DRIP_TRAIL_SIZE_FACTOR_MIN: float = 0.0  # Ponta da calda termina em 0
+    SLIME_DRIP_TRAIL_SIZE_FACTOR_MAX: float = 1.0  # Base da calda do mesmo tamanho da gota
+    SLIME_DRIP_TRAIL_ALPHA_DECAY: float = 0.5  # Calda desaparece mais rápido na ponta
+    SLIME_DRIP_TRAIL_CURVE_FACTOR: float = 1.5  # Controla a curva da "ponta" ( > 1 = mais pontudo)
     
     # Visual - Highlight (proximidade do jogador)
     SLIME_DRIP_HIGHLIGHT_DISTANCE: float = 80.0
@@ -331,7 +333,7 @@ class Config:
     SLIME_DRIP_HIGHLIGHT_PULSE_SPEED: float = 0.01  # Velocidade da pulsação
     
     # Visual - Surfaces (para pooling)
-    SLIME_DRIP_SURFACE_SIZE: int = 170  # max_radius * 2
+    SLIME_DRIP_SURFACE_SIZE: int = 200  # Increased to fit the trail
     SLIME_POOL_SURFACE_SIZE: int = 300
     
     # Visual - Cores
