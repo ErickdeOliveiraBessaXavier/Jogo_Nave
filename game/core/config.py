@@ -289,11 +289,13 @@ class Config:
     SLIME_DRIP_SPEED_X: Tuple[float, float] = (-12.0, 12.0)
     SLIME_DRIP_SPEED_Y: Tuple[float, float] = (12.0, 30.0)
     SLIME_DRIP_ANGLE_VELOCITY: Tuple[float, float] = (-3.0, 3.0)
-    SLIME_DRIP_RANGE: Tuple[float, float] = (300.0, 900.0)
-    SLIME_DRIP_GRAVITY: Tuple[float, float] = (0.18, 0.48)
-    SLIME_DRIP_SHRINK_RATE_BASE: float = 3.0
-    SLIME_DRIP_SHRINK_RATE_MULTIPLIER: float = 4.8
-    SLIME_DRIP_MIN_RADIUS: float = 4.0
+    SLIME_DRIP_GRAVITY: Tuple[float, float] = (200.0, 400.0)  # Aceleração forte
+    SLIME_DRIP_TERMINAL_VELOCITY: float = 800.0  # Velocidade máxima de queda
+    
+    # Física adicional
+    SLIME_DRIP_FRICTION: float = 0.98  # Multiplicador de fricção lateral (0.98 = 2% de perda por frame)
+    SLIME_DRIP_MIN_SPAWN_DISTANCE: float = 60.0  # Distância mínima entre gotas
+    SLIME_DRIP_WAVE_AMPLITUDE: Tuple[float, float] = (5.0, 20.0)  # Amplitude da onda lateral
     
     # Spawn e gameplay
     SLIME_DRIP_MAX_ACTIVE: int = 15
@@ -301,6 +303,11 @@ class Config:
     SLIME_DRIP_DAMAGE: int = 1
     SLIME_DRIP_SPAWN_CHANCE_DIRECTED: float = 0.6  # 60% direcionado (reduzido para menos previsível)
     SLIME_DRIP_PREDICTION_TIME: float = 1.5
+    
+    # Posicionamento
+    SLIME_DRIP_GROUND_OFFSET: int = 50  # Distância do fundo para o "chão"
+    SLIME_DRIP_SPAWN_Y_OFFSET: int = 10  # Offset Y do boss para spawn
+    SLIME_DRIP_MIN_POOL_RADIUS: float = 15.0  # Raio mínimo para criar poça
     
     # Poças no chão
     SLIME_POOL_LIFETIME: float = 5.0
@@ -311,19 +318,23 @@ class Config:
     SLIME_POOL_FADE_TIME: float = 1.5
     SLIME_POOL_RADIUS_MULTIPLIER: float = 1.5
     
-    # Physics improvements
-    SLIME_DRIP_FRICTION: float = 0.02  # Friction for lateral movement damping
-    SLIME_DRIP_MIN_SPAWN_DISTANCE: float = 60.0  # Minimum distance between drips
-    SLIME_DRIP_WAVE_AMPLITUDE: Tuple[float, float] = (5.0, 20.0)  # Wave amplitude range
-    SLIME_DRIP_GROUND_OFFSET: int = 50  # Distance from bottom for ground level
-    SLIME_DRIP_SPAWN_Y_OFFSET: int = 10  # Y offset from boss for spawn
-    SLIME_DRIP_MIN_POOL_RADIUS: float = 15.0  # Minimum radius to create pool
-    SLIME_DRIP_SURFACE_SIZE: int = 170  # Surface size for drip rendering (max_radius * 2)
-    SLIME_POOL_SURFACE_SIZE: int = 300  # Surface size for pool rendering
-    SLIME_DRIP_HIGHLIGHT_DISTANCE: float = 80.0  # Distance to highlight drips near player
-    SLIME_DRIP_HIGHLIGHT_COLOR: Tuple[int, int, int, int] = (255, 255, 100, 220)  # Yellow highlight
+    # Visual - Trail
+    SLIME_DRIP_TRAIL_MIN_RADIUS: float = 15.0  # Raio mínimo para trail (gotas médias/grandes)
+    SLIME_DRIP_TRAIL_LENGTH: int = 8  # Mais segmentos = calda mais longa
+    SLIME_DRIP_TRAIL_SIZE_FACTOR_MIN: float = 0.2  # Calda fina na ponta
+    SLIME_DRIP_TRAIL_SIZE_FACTOR_MAX: float = 0.9  # Calda grossa na base
+    SLIME_DRIP_TRAIL_ALPHA_DECAY: float = 0.7  # Transparência progressiva
     
-    # Visual
+    # Visual - Highlight (proximidade do jogador)
+    SLIME_DRIP_HIGHLIGHT_DISTANCE: float = 80.0
+    SLIME_DRIP_HIGHLIGHT_COLOR: Tuple[int, int, int, int] = (255, 255, 100, 220)
+    SLIME_DRIP_HIGHLIGHT_PULSE_SPEED: float = 0.01  # Velocidade da pulsação
+    
+    # Visual - Surfaces (para pooling)
+    SLIME_DRIP_SURFACE_SIZE: int = 170  # max_radius * 2
+    SLIME_POOL_SURFACE_SIZE: int = 300
+    
+    # Visual - Cores
     SLIME_DRIP_COLORS: list[Tuple[int, int, int, int]] = field(
         default_factory=lambda: [
             (241, 187, 242, 180),
@@ -332,6 +343,17 @@ class Config:
         ]
     )
     SLIME_POOL_COLOR: Tuple[int, int, int, int] = (96, 29, 115, 150)
+    
+    # Partículas de respingo (quando gota atinge o chão)
+    SLIME_SPLAT_PARTICLE_COUNT_MIN: int = 3
+    SLIME_SPLAT_PARTICLE_COUNT_MAX: int = 5
+    SLIME_SPLAT_PARTICLE_RADIUS_MIN: float = 3.0
+    SLIME_SPLAT_PARTICLE_RADIUS_MAX: float = 8.0
+    SLIME_SPLAT_PARTICLE_SPEED_X: Tuple[float, float] = (-50.0, 50.0)
+    SLIME_SPLAT_PARTICLE_SPEED_Y: Tuple[float, float] = (-30.0, -10.0)
+    SLIME_SPLAT_PARTICLE_LIFETIME: float = 0.4
+    SLIME_SPLAT_PARTICLE_GRAVITY: float = 0.2
+    SLIME_SPLAT_PARTICLE_COLOR: Tuple[int, int, int, int] = (200, 150, 220, 150)
 
     # ========================================
     # SPIKE (PROJECTILE) SYSTEM
@@ -409,48 +431,7 @@ class Config:
     # UI SETTINGS
     # ========================================
     WARNING_FONT_SIZE: int = 60
-
-    # ========================================
-    # SLIME BOSS - DRIPPING SYSTEM
-    # ========================================
-    # Propriedades físicas das gotas
-    SLIME_DRIP_RADIUS_MIN: float = 25.0  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_RADIUS_MAX: float = 85.0  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_SPEED_X: Tuple[float, float] = (-12.0, 12.0)  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_SPEED_Y: Tuple[float, float] = (12.0, 30.0)  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_ANGLE_VELOCITY: Tuple[float, float] = (-3.0, 3.0)  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_RANGE: Tuple[float, float] = (300.0, 900.0)  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_GRAVITY: Tuple[float, float] = (50.0, 150.0)  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_SHRINK_RATE_BASE: float = 3.0  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_SHRINK_RATE_MULTIPLIER: float = 4.8  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_MIN_RADIUS: float = 4.0  # pyright: ignore[reportConstantRedefinition]
     
-    # Spawn e gameplay
-    SLIME_DRIP_MAX_ACTIVE: int = 15  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_SPAWN_INTERVAL: float = 0.3  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_DAMAGE: int = 1  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_SPAWN_CHANCE_DIRECTED: float = 0.8  # 80% direcionado  # pyright: ignore[reportConstantRedefinition]
-    SLIME_DRIP_PREDICTION_TIME: float = 1.5  # pyright: ignore[reportConstantRedefinition]
-    
-    # Poças no chão
-    SLIME_POOL_LIFETIME: float = 5.0  # pyright: ignore[reportConstantRedefinition]
-    SLIME_POOL_MAX_ACTIVE: int = 8  # pyright: ignore[reportConstantRedefinition]
-    SLIME_POOL_DAMAGE: int = 1  # pyright: ignore[reportConstantRedefinition]
-    SLIME_POOL_DAMAGE_COOLDOWN: float = 0.5  # pyright: ignore[reportConstantRedefinition]
-    SLIME_POOL_EXPANSION_TIME: float = 0.5  # pyright: ignore[reportConstantRedefinition]
-    SLIME_POOL_FADE_TIME: float = 1.5  # pyright: ignore[reportConstantRedefinition]
-    SLIME_POOL_RADIUS_MULTIPLIER: float = 1.5  # pyright: ignore[reportConstantRedefinition]
-    
-    # Visual
-    SLIME_DRIP_COLORS: list[Tuple[int, int, int, int]] = field(  # pyright: ignore[reportConstantRedefinition]
-        default_factory=lambda: [
-            (241, 187, 242, 180),
-            (96, 29, 115, 200),
-            (68, 18, 89, 220)
-        ]
-    )
-    SLIME_POOL_COLOR: Tuple[int, int, int, int] = (96, 29, 115, 150)  # pyright: ignore[reportConstantRedefinition]
-
     # ========================================
     # COMPUTED PROPERTIES (não editáveis diretamente)
     # ========================================
