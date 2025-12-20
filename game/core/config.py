@@ -288,14 +288,12 @@ class Config:
     SLIME_DRIP_RADIUS_MAX: float = 85.0
     SLIME_DRIP_SPEED_X: Tuple[float, float] = (-12.0, 12.0)
     SLIME_DRIP_SPEED_Y: Tuple[float, float] = (12.0, 30.0)
-    SLIME_DRIP_ANGLE_VELOCITY: Tuple[float, float] = (-3.0, 3.0)
     SLIME_DRIP_GRAVITY: Tuple[float, float] = (200.0, 400.0)  # Aceleração forte
     SLIME_DRIP_TERMINAL_VELOCITY: float = 800.0  # Velocidade máxima de queda
     
     # Física adicional
     SLIME_DRIP_FRICTION: float = 0.98  # Multiplicador de fricção lateral (0.98 = 2% de perda por frame)
     SLIME_DRIP_MIN_SPAWN_DISTANCE: float = 60.0  # Distância mínima entre gotas
-    SLIME_DRIP_WAVE_AMPLITUDE: Tuple[float, float] = (5.0, 20.0)  # Amplitude da onda lateral
     
     # Spawn e gameplay
     SLIME_DRIP_MAX_ACTIVE: int = 15
@@ -317,15 +315,23 @@ class Config:
     SLIME_POOL_EXPANSION_TIME: float = 0.5
     SLIME_POOL_FADE_TIME: float = 1.5
     SLIME_POOL_RADIUS_MULTIPLIER: float = 1.5
+
+    # Particle Trail Settings
+    SLIME_DRIP_TRAIL_SPAWN_INTERVAL: float = 0.1
+    SLIME_DRIP_TRAIL_LIFETIME: float = 0.4
+    SLIME_DRIP_TRAIL_RADIUS_FACTOR: float = 0.8
     
-    # Visual - Trail (Efeito "Pin de Mapa")
-    SLIME_DRIP_TRAIL_MIN_RADIUS: float = 15.0  # Raio mínimo para ter calda
-    SLIME_DRIP_TRAIL_LENGTH_MIN: int = 8  # Comprimento da calda para gotas pequenas
-    SLIME_DRIP_TRAIL_LENGTH_MAX: int = 20  # Comprimento da calda para gotas grandes
-    SLIME_DRIP_TRAIL_SIZE_FACTOR_MIN: float = 0.0  # Ponta da calda termina em 0
-    SLIME_DRIP_TRAIL_SIZE_FACTOR_MAX: float = 1.0  # Base da calda do mesmo tamanho da gota
-    SLIME_DRIP_TRAIL_ALPHA_DECAY: float = 0.5  # Calda desaparece mais rápido na ponta
-    SLIME_DRIP_TRAIL_CURVE_FACTOR: float = 1.5  # Controla a curva da "ponta" ( > 1 = mais pontudo)
+    SLIME_DRIP_CURVE_STRENGTH: float = 240.0  # Intensidade do arco lateral (px/sec na progressão total)
+
+    # Sprites for trail (optional)
+    SLIME_DRIP_USE_SPRITES: bool = True
+    SLIME_DRIP_TRAIL_SPRITE_PATHS: list[str] = field(
+        default_factory=lambda: [
+            "game/assets/images/sprite_boss_03_slime/Ataque_Slime_Boss_Cor_01.png",
+            "game/assets/images/sprite_boss_03_slime/Ataque_Slime_Boss_Cor_02.png",
+            "game/assets/images/sprite_boss_03_slime/Ataque_Slime_Boss_Cor_03.png",
+        ]
+    )
     
     # Visual - Highlight (proximidade do jogador)
     SLIME_DRIP_HIGHLIGHT_DISTANCE: float = 80.0
@@ -333,7 +339,6 @@ class Config:
     SLIME_DRIP_HIGHLIGHT_PULSE_SPEED: float = 0.01  # Velocidade da pulsação
     
     # Visual - Surfaces (para pooling)
-    SLIME_DRIP_SURFACE_SIZE: int = 200  # Increased to fit the trail
     SLIME_POOL_SURFACE_SIZE: int = 300
     
     # Visual - Cores

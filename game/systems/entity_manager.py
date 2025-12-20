@@ -465,6 +465,7 @@ class EntityManager:
         player_x: float,
         player_y: float,
         enemy_visible: bool = True,
+        fps: float = 60.0
     ):
         """Desenha todas as entidades. EyeEnemy precisa da posição do jogador."""
         from typing import Any
@@ -486,9 +487,6 @@ class EntityManager:
             self.spikes,  # Adicionar spikes
         ]
 
-        if self.boss:
-            entity_lists.append([self.boss])
-
         # Desenhar explosões do pool
         self.explosion_pool.draw_all(surface)
 
@@ -507,6 +505,13 @@ class EntityManager:
         # Desenhar bombas de bombardeio aéreo
         for bomb in self.air_strike_bombs:
             bomb.draw(surface)
+
+        # Tratar o boss separadamente para passar o FPS
+        if self.boss:
+            if isinstance(self.boss, SlimeBoss):
+                self.boss.draw(surface, fps)
+            else:
+                self.boss.draw(surface)
 
         for entity_list in entity_lists:
             for entity in entity_list:

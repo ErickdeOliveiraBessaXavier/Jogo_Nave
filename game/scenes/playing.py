@@ -1308,11 +1308,13 @@ class PlayingScene(Scene):
 
         self.r.background(self.game_surface, dt=dt, speed_multiplier=speed_multiplier)
 
+        fps_stats = self.r.get_fps_stats()
         self.entity_manager.draw(
             self.game_surface,
             self.ship.rect.centerx,
             self.ship.rect.centery,
             self.enemy_visible,
+            fps=fps_stats.get('fps', 60.0)
         )
         self.ship.draw(self.game_surface)
 
@@ -1340,7 +1342,6 @@ class PlayingScene(Scene):
 
         # Mostrar FPS se ativado (F3)
         if self.show_fps:
-            fps_stats = self.r.get_fps_stats()
             fps_text = f"FPS: {fps_stats['fps']:.1f} | Avg: {fps_stats['avg_frame_time']:.1f}ms | Max: {fps_stats['max_frame_time']:.1f}ms"
             fps_surface = self.r.font_small.render(fps_text, True, colors.YELLOW)
             self.game_surface.blit(fps_surface, (10, Config.SCREEN_HEIGHT - 30))

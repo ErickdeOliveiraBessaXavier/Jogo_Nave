@@ -1,10 +1,26 @@
 import pygame
 import random
 import math
-from typing import Optional
-from collections import deque
+from typing import Optional, List, ClassVar, TypedDict
+
+
+class TrailParticle(TypedDict):
+    x: float
+    y: float
+    radius: float
+    initial_radius: float
+    alpha: float
+    initial_alpha: float
+    lifetime: float
+    max_lifetime: float
+
 from dataclasses import dataclass
 from ..core.config import config as Config
+
+
+def easeOutQuad(t: float) -> float:
+    """Easing function for smooth fade out."""
+    return 1 - (1 - t) * (1 - t)
 
 
 @dataclass
@@ -19,50 +35,129 @@ class SplatParticle:
     dead: bool = False
 
 
+class SlimeSpriteCache:
+    """Cache otimizado para sprites escalados do slime drip."""
+    
+    # Source sprites loaded once
+    _sprite_sources: ClassVar[List[pygame.Surface]] = []
+    # Cache of scaled sprites: key = (sprite_index, radius, alpha)
+    _scaled_sprites: ClassVar[dict[tuple[int, int, int], pygame.Surface]] = {}
+    
+    @classmethod
+    def initialize_sources(cls) -> bool:
+        """Load source sprites once. Returns True if successful."""
+        if cls._sprite_sources:
+            return True  # Already loaded
+        
+        try:
+            for path in Config.SLIME_DRIP_TRAIL_SPRITE_PATHS:
+                surf: pygame.Surface = pygame.image.load(path).convert_alpha()
+                cls._sprite_sources.append(surf)
+            return True
+        except Exception:
+            cls._sprite_sources.clear()
+            return False
+    
+    @classmethod
+    def get_sprite(cls, sprite_index: int, radius: int, alpha: int) -> Optional[pygame.Surface]:
+        """Get cached scaled sprite, quantizing alpha to optimize cache size."""
+        if not cls._sprite_sources:
+            return None
+
+        # Quantize alpha into buckets to reduce the number of cached surfaces.
+        alpha_bucket = (alpha // 25) * 25
+        key = (sprite_index, radius, alpha_bucket)
+
+        # Look for the bucketed sprite in the cache.
+        if key not in cls._scaled_sprites:
+            # Prune cache if it gets too large.
+            # This assumes Python 3.7+ where dicts maintain insertion order.
+            if len(cls._scaled_sprites) > 100:
+                items = list(cls._scaled_sprites.items())
+                cls._scaled_sprites = dict(items[50:]) # Keep the 50 most recent
+
+            try:
+                # Create the sprite using the bucketed alpha.
+                src = cls._sprite_sources[sprite_index % len(cls._sprite_sources)]
+                scaled_surface = pygame.transform.smoothscale(src, (radius * 2, radius * 2)).convert_alpha()
+                scaled_surface.set_alpha(alpha_bucket)
+                cls._scaled_sprites[key] = scaled_surface
+            except Exception:
+                return None # Failed to create sprite
+
+        cached_sprite = cls._scaled_sprites.get(key)
+        if not cached_sprite:
+            return None
+
+        # If the requested alpha is the same as the bucket, return the cached sprite directly.
+        if alpha == alpha_bucket:
+            return cached_sprite
+
+        # Otherwise, create a copy and apply the precise alpha value.
+        final_sprite = cached_sprite.copy()
+        final_sprite.set_alpha(alpha)
+        
+        return final_sprite
+    
+    @classmethod
+    def clear(cls) -> None:
+        """Limpa o cache de sprites e fontes."""
+        cls._sprite_sources.clear()
+        cls._scaled_sprites.clear()
+
+
 class SlimeDrip:
     """Gota de slime que cai do boss slime com física realista."""
 
     def __init__(self, x: float, y: float, effect_width: int, effect_height: int):
         # Propriedades físicas
         self.radius: float = random.uniform(Config.SLIME_DRIP_RADIUS_MIN, Config.SLIME_DRIP_RADIUS_MAX)
-        self.initial_radius: float = self.radius  # 🆕 Armazenar tamanho original
+        self.initial_radius: float = self.radius
         self.x: float = x
         self.y: float = y
+        self.start_y: float = y
+        self.curve: float = random.uniform(-1.0, 1.0) * random.uniform(0.5, 1.0)
         
         # Velocidades
         self.speed_x: float = random.uniform(*Config.SLIME_DRIP_SPEED_X)
         self.speed_y: float = random.uniform(*Config.SLIME_DRIP_SPEED_Y)
         
-        # Movimento ondulado
-        self.angle: float = 0.0
-        self.angle_velocity: float = random.uniform(*Config.SLIME_DRIP_ANGLE_VELOCITY)
-        self.wave_amplitude: float = random.uniform(*Config.SLIME_DRIP_WAVE_AMPLITUDE)
-        
         # Gravidade e terminal velocity
         self.gravity: float = random.uniform(*Config.SLIME_DRIP_GRAVITY)
-        self.terminal_velocity: float = Config.SLIME_DRIP_TERMINAL_VELOCITY  # 🆕
+        self.terminal_velocity: float = Config.SLIME_DRIP_TERMINAL_VELOCITY
         
         # Propriedades do jogo
-        self.damage: int = max(1, int(self.radius / 30) + 1)
+        self.damage: int = Config.SLIME_DRIP_DAMAGE + max(0, int(self.radius / 30))
         self.dead: bool = False
         self.effect_width: int = effect_width
         self.effect_height: int = effect_height
         
         # Visual
-        self.color: tuple[int, int, int, int] = random.choice(Config.SLIME_DRIP_COLORS)
+        self.sprite_index: int = random.randint(0, 2)
+        self.color: tuple[int, int, int, int] = Config.SLIME_DRIP_COLORS[self.sprite_index]
         
-        # Trail (calda)
-        radius_progress = (self.radius - Config.SLIME_DRIP_RADIUS_MIN) / (Config.SLIME_DRIP_RADIUS_MAX - Config.SLIME_DRIP_RADIUS_MIN)
-        trail_length = int(Config.SLIME_DRIP_TRAIL_LENGTH_MIN + radius_progress * (Config.SLIME_DRIP_TRAIL_LENGTH_MAX - Config.SLIME_DRIP_TRAIL_LENGTH_MIN))
-        self.trail_positions: deque[tuple[float, float]] = deque(maxlen=trail_length)
-        # 🆕 Pré-popular a calda com um formato inicial para ser visível desde o começo.
-        initial_stretch = self.initial_radius * 8.5  # O comprimento inicial da calda
-        if trail_length > 0:
-            for i in range(trail_length):
-                # Interpolar os pontos para criar uma linha vertical acima da gota
-                progress = i / (trail_length - 1) if trail_length > 1 else 1.0
-                offset_y = -initial_stretch * (1 - progress)  # Esticar para cima
-                self.trail_positions.append((x, y + offset_y))
+        # NEW: Lightweight particle trail
+        self.trail_particles: List[TrailParticle] = []
+        self.trail_spawn_timer: float = 0.0
+        self.trail_spawn_interval: float = Config.SLIME_DRIP_TRAIL_SPAWN_INTERVAL
+
+        # Load main sprite for the drip's head
+        self.main_sprite: Optional[pygame.Surface] = None
+        if Config.SLIME_DRIP_USE_SPRITES:
+            try:
+                if not SlimeSpriteCache.initialize_sources():
+                    raise Exception("Failed to load sprite sources")
+                
+                main_radius = int(self.radius)
+                main_alpha = 255  # Make main drip head fully opaque
+                self.main_sprite = SlimeSpriteCache.get_sprite(self.sprite_index, main_radius, main_alpha)
+            except Exception:
+                self.main_sprite = None
+
+    @classmethod
+    def clear_sprite_cache(cls) -> None:
+        """Clear sprite cache between levels to free memory."""
+        SlimeSpriteCache.clear()
 
     @property
     def rect(self) -> pygame.Rect:
@@ -84,133 +179,55 @@ class SlimeDrip:
         if self.x < self.radius or self.x > self.effect_width - self.radius:
             self.speed_x *= -1
         
-        # 🆕 Aplicar gravidade com terminal velocity
+        # Aplicar gravidade com terminal velocity
         self.speed_y += self.gravity * dt
-        self.speed_y = min(self.speed_y, self.terminal_velocity)  # Limitar velocidade máxima
+        self.speed_y = min(self.speed_y, self.terminal_velocity)
         
         # Aplicar friction ao movimento lateral
         self.speed_x *= Config.SLIME_DRIP_FRICTION
         
-        # Movimento ondulado (apenas quando visível)
-        if self.y > self.radius:
-            self.angle += self.angle_velocity * dt
-        
-        # ❌ REMOVIDO: Código de encolhimento (shrink_rate)
-        
         # Movimento (framerate-independent)
-        self.x += self.speed_x * math.cos(self.angle) * self.wave_amplitude * dt
+        self.x += self.speed_x * dt
         self.y += self.speed_y * dt
+
+        # Curvatura lateral leve: aumenta com o progresso da queda
+        fall_progress = max(0.0, min(1.0, (self.y - self.start_y) / max(1.0, self.effect_height)))
+        self.x += self.curve * Config.SLIME_DRIP_CURVE_STRENGTH * fall_progress * dt
         
-        # 🆕 Armazenar posições para trail (calda alongada)
-        # Quanto mais rápido cai, mais espaçado fica o trail
-        if self.radius >= Config.SLIME_DRIP_TRAIL_MIN_RADIUS:
-            self.trail_positions.append((self.x, self.y))
-        
+        # --- Update particle trail ---
+        # Update existing particles
+        for p in self.trail_particles[:]:
+            p['lifetime'] -= dt
+            if p['lifetime'] <= 0:
+                self.trail_particles.remove(p)
+            else:
+                # Fade out and shrink
+                life_pct = p['lifetime'] / p['max_lifetime']
+                p['alpha'] = p['initial_alpha'] * life_pct
+                p['radius'] = p['initial_radius'] * life_pct
+
+        # Spawn new particles
+        self.trail_spawn_timer += dt
+        if self.trail_spawn_timer >= self.trail_spawn_interval:
+            self.trail_spawn_timer = 0
+            max_lifetime = Config.SLIME_DRIP_TRAIL_LIFETIME
+            radius = self.radius * Config.SLIME_DRIP_TRAIL_RADIUS_FACTOR
+            self.trail_particles.append({
+                'x': self.x,
+                'y': self.y,
+                'radius': radius,
+                'initial_radius': radius,
+                'alpha': self.color[3],
+                'initial_alpha': self.color[3],
+                'lifetime': max_lifetime,
+                'max_lifetime': max_lifetime
+            })
+
         # Bounds check
         if (self.y > self.effect_height + 100 or
             self.x < -100 or 
             self.x > self.effect_width + 100):
             self.dead = True
-
-    def draw(self, surface: pygame.Surface, surface_pool: list[pygame.Surface], 
-         pool_index: int, player_x: Optional[float] = None, player_y: Optional[float] = None, 
-         ground_y: Optional[float] = None) -> int:
-        if self.dead:
-            return pool_index
-        
-        # Desenhar sombra (mantido)
-        if ground_y is not None:
-            distance_to_ground = max(0, ground_y - self.y)
-            if distance_to_ground < 500:
-                shadow_scale = 1.0 - (distance_to_ground / 500)
-                shadow_alpha = int(80 * shadow_scale)
-                shadow_radius = int(self.radius * 0.6 * (1 + shadow_scale * 0.5))
-                
-                if shadow_alpha > 10:
-                    shadow_color = (0, 0, 0, shadow_alpha)
-                    shadow_pos = (int(self.x), int(ground_y))
-                    shadow_rect = pygame.Rect(
-                        shadow_pos[0] - shadow_radius,
-                        shadow_pos[1] - shadow_radius // 2,
-                        shadow_radius * 2,
-                        shadow_radius
-                    )
-                    pygame.draw.ellipse(surface, shadow_color, shadow_rect)
-        
-        # Usar surface do pool
-        temp_surface = surface_pool[pool_index]
-        next_index = (pool_index + 1) % len(surface_pool)
-        temp_surface.fill((0, 0, 0, 0))
-        
-        # Centralizar a base da gota na parte inferior da surface para dar espaço para a calda
-        surface_w, surface_h = temp_surface.get_size()
-        center_x = surface_w // 2
-        # Deixar um pouco de espaço na parte inferior
-        center_y = int(surface_h - self.initial_radius - 10)
-        center = (center_x, center_y)
-
-        # 🎨 NOVO: Desenhar calda como um polígono único (formato "Pin de Mapa")
-        if len(self.trail_positions) > 2:
-            left_points: list[tuple[int, int]] = []
-            right_points: list[tuple[int, int]] = []
-            
-            # Calcular pontos da borda para cada segmento da calda
-            for i, (trail_x, trail_y) in enumerate(self.trail_positions):
-                if i % 2 != 0:  # Step skipping para reduzir cálculos
-                    continue
-                progress = ((i + 1) / len(self.trail_positions)) ** Config.SLIME_DRIP_TRAIL_CURVE_FACTOR
-                size_factor = (Config.SLIME_DRIP_TRAIL_SIZE_FACTOR_MIN + 
-                               progress * (Config.SLIME_DRIP_TRAIL_SIZE_FACTOR_MAX - 
-                                           Config.SLIME_DRIP_TRAIL_SIZE_FACTOR_MIN))
-                trail_radius = int(self.initial_radius * size_factor)
-
-                # Posição relativa ao novo centro na surface temporária
-                offset_x = int(trail_x - self.x)
-                offset_y = int(trail_y - self.y)
-                trail_pos = (center[0] + offset_x, center[1] + offset_y)
-                
-                if trail_radius > 1:
-                    left_points.append((trail_pos[0] - trail_radius, trail_pos[1]))
-                    right_points.append((trail_pos[0] + trail_radius, trail_pos[1]))
-
-            # Construir o polígono que conecta as bordas
-            if left_points and right_points:
-                polygon_points = left_points + right_points[::-1]
-                
-                trail_color = (self.color[0], self.color[1], self.color[2], 180)
-                pygame.draw.polygon(temp_surface, trail_color, polygon_points)
-
-        # Desenhar corpo principal da gota (círculo) por cima para garantir base redonda
-        radius_int = int(self.radius)
-        pygame.draw.circle(temp_surface, self.color, center, radius_int)
-        
-        # Highlight próximo do jogador (mantido)
-        if player_x is not None and player_y is not None:
-            # Check rápido de bounding box para otimização
-            if abs(self.x - player_x) > Config.SLIME_DRIP_HIGHLIGHT_DISTANCE + self.radius or \
-               abs(self.y - player_y) > Config.SLIME_DRIP_HIGHLIGHT_DISTANCE + self.radius:
-                pass  # Skip highlight se muito longe
-            else:
-                dx = self.x - player_x
-                dy = self.y - player_y
-                distance_squared = dx * dx + dy * dy
-                if distance_squared < Config.SLIME_DRIP_HIGHLIGHT_DISTANCE ** 2:
-                    pulse = (math.sin(pygame.time.get_ticks() * Config.SLIME_DRIP_HIGHLIGHT_PULSE_SPEED) + 1) / 2
-                    highlight_alpha = int(180 + pulse * 75)
-                    highlight_color = Config.SLIME_DRIP_HIGHLIGHT_COLOR[:3] + (highlight_alpha,)
-                    
-                    highlight_radius = int(self.radius * 0.4)
-                    pygame.draw.circle(temp_surface, highlight_color, center, highlight_radius)
-                    
-                    danger_radius = int(self.radius * 1.3)
-                    pygame.draw.circle(temp_surface, (255, 100, 100, 80), center, danger_radius, width=2)
-        
-        # Blit a surface inteira, centralizada na posição da gota
-        draw_x = int(self.x - center_x)
-        draw_y = int(self.y - center_y)
-        surface.blit(temp_surface, (draw_x, draw_y))
-        
-        return next_index
 
     def collides_with_player(self, player_rect: pygame.Rect) -> bool:
         """Verifica colisão circular com o jogador (otimizado com AABB)."""
@@ -254,9 +271,34 @@ class SlimePool:
         # Visual com alpha
         self.base_color: tuple[int, int, int, int] = Config.SLIME_POOL_COLOR
         self.color: tuple[int, int, int, int] = self.base_color
+        
+        # Splash particles integrated into pool
+        self.splash_particles: list[SplatParticle] = []
+        self._create_splash_particles()
+    
+    def _create_splash_particles(self) -> None:
+        """Create splash particles when pool is formed."""
+        num_particles = random.randint(Config.SLIME_SPLAT_PARTICLE_COUNT_MIN, Config.SLIME_SPLAT_PARTICLE_COUNT_MAX)
+        
+        for _ in range(num_particles):
+            # Mini-particle with lateral velocity
+            mini_radius = random.uniform(Config.SLIME_SPLAT_PARTICLE_RADIUS_MIN, Config.SLIME_SPLAT_PARTICLE_RADIUS_MAX)
+            mini_x = self.x + random.uniform(-20, 20)
+            mini_y = self.y - 5
+            
+            # Velocity: jumps laterally and slightly upward
+            speed_x = random.uniform(*Config.SLIME_SPLAT_PARTICLE_SPEED_X)
+            speed_y = random.uniform(*Config.SLIME_SPLAT_PARTICLE_SPEED_Y)  # Upward
+            
+            # Create light particle (using list for performance)
+            p = SplatParticle(
+                mini_x, mini_y, mini_radius, speed_x, speed_y,
+                Config.SLIME_SPLAT_PARTICLE_LIFETIME, 0.0, False
+            )
+            self.splash_particles.append(p)
     
     def update(self, dt: float) -> None:
-        """Atualiza poça (expande e evapora)."""
+        """Atualiza poça (expande e evapora) e partículas."""
         if self.dead:
             return
         
@@ -277,11 +319,25 @@ class SlimePool:
             self.color = (self.base_color[0], self.base_color[1], 
                          self.base_color[2], max(0, alpha))
         
+        # Update splash particles with easing
+        alive_particles: list[SplatParticle] = []
+        for particle in self.splash_particles:
+            particle.age += dt
+            if particle.age >= particle.lifetime:
+                particle.dead = True
+            else:
+                # Apply gravity
+                particle.speed_y += Config.SLIME_SPLAT_PARTICLE_GRAVITY * dt
+                particle.x += particle.speed_x * dt
+                particle.y += particle.speed_y * dt
+                alive_particles.append(particle)
+        self.splash_particles = alive_particles
+        
         # Morrer quando tempo acabar
         if self.age >= self.lifetime:
             self.dead = True
     
-    def draw(self, surface: pygame.Surface, surface_pool: list[pygame.Surface], pool_index: int) -> int:
+    def draw(self, surface: pygame.Surface, surface_pool: list[pygame.Surface], pool_index: int, fps: float = 60.0) -> int:
         """Desenha poça com transparência usando pool de surfaces."""
         if self.dead or self.color[3] == 0:
             return pool_index
@@ -315,6 +371,20 @@ class SlimePool:
         draw_x = int(self.x - draw_radius)
         draw_y = int(self.y - draw_radius)
         surface.blit(temp_surface, (draw_x, draw_y), area=area)
+        
+        # Optimization: Limit particles if FPS drops
+        if len(self.splash_particles) > 10 and fps < 58:
+            self.splash_particles = self.splash_particles[:10]
+
+        # Draw splash particles with easing
+        for particle in self.splash_particles:
+            if not particle.dead:
+                # Use easing for more realistic fade
+                life_progress = particle.age / particle.lifetime
+                eased_progress = easeOutQuad(life_progress)
+                alpha = int(Config.SLIME_SPLAT_PARTICLE_COLOR[3] * (1 - eased_progress))
+                color = Config.SLIME_SPLAT_PARTICLE_COLOR[:3] + (alpha,)
+                pygame.draw.circle(surface, color, (int(particle.x), int(particle.y)), int(particle.radius))
         
         return next_index
     
@@ -358,23 +428,15 @@ class SlimeDrippingEffect:
         # Gotas e poças
         self.drips: list[SlimeDrip] = []
         self.pools: list[SlimePool] = []
-        # Partículas de respingo (tipadas com dataclass para melhor verificação de tipos)
-        self.splat_particles: list[SplatParticle] = []
+        
+        # Spatial grid for collision optimization
+        self.grid_cell_size: int = 100
+        self.spatial_grid: dict[tuple[int, int], list[SlimeDrip]] = {}  # Added type annotation
         
         # Spawn settings (escalam com dificuldade)
         self.max_drips: int = int(Config.SLIME_DRIP_MAX_ACTIVE * difficulty_multiplier)
         self.spawn_timer: float = 0.0
         self.spawn_interval: float = Config.SLIME_DRIP_SPAWN_INTERVAL / difficulty_multiplier
-        
-        # ✅ NOVO: Cache de surfaces para performance
-        self._surface_pool: list[pygame.Surface] = []
-        self._surface_pool_size: int = 20
-        self._surface_pool_index: int = 0
-        
-        # Pré-criar surfaces no pool (tamanho máximo: raio 85 * 2 = 170)
-        for _ in range(self._surface_pool_size):
-            surf = pygame.Surface((Config.SLIME_DRIP_SURFACE_SIZE, Config.SLIME_DRIP_SURFACE_SIZE), pygame.SRCALPHA).convert_alpha()
-            self._surface_pool.append(surf)
         
         # Pool de surfaces para poças (tamanho fixo para otimização)
         self._pool_surface_pool: list[pygame.Surface] = []
@@ -391,7 +453,58 @@ class SlimeDrippingEffect:
         self.prediction_time: float = Config.SLIME_DRIP_PREDICTION_TIME
         
         # Linha do chão (onde gotas viram poças)
-        self.ground_y: float = float(effect_height - Config.SLIME_DRIP_GROUND_OFFSET)
+        self.ground_y: Optional[float] = float(effect_height - Config.SLIME_DRIP_GROUND_OFFSET)
+
+    def _get_grid_cell(self, x: float, y: float) -> tuple[int, int]:
+        """Get grid cell coordinates for a position."""
+        return (int(x // self.grid_cell_size), int(y // self.grid_cell_size))
+
+    def _add_drip_to_grid(self, drip: SlimeDrip) -> None:
+        """Add a drip to the spatial grid."""
+        cell = self._get_grid_cell(drip.x, drip.y)
+        self.spatial_grid.setdefault(cell, []).append(drip)
+
+    def _remove_drip_from_grid(self, drip: SlimeDrip) -> None:
+        """Remove a drip from the spatial grid."""
+        cell = self._get_grid_cell(drip.x, drip.y)
+        if cell in self.spatial_grid:
+            self.spatial_grid[cell] = [d for d in self.spatial_grid[cell] if d is not drip]
+            if not self.spatial_grid[cell]:
+                del self.spatial_grid[cell]
+
+    def _update_drip_grid_position(self, drip: SlimeDrip, old_x: float, old_y: float) -> None:
+        """Update drip's position in spatial grid if it moved to a different cell."""
+        old_cell = self._get_grid_cell(old_x, old_y)
+        new_cell = self._get_grid_cell(drip.x, drip.y)
+
+        if old_cell == new_cell:
+            return  # ✅ Early exit - não precisa fazer nada
+
+        # Usar remoção direta ao invés de list comprehension
+        if old_cell in self.spatial_grid:
+            try:
+                self.spatial_grid[old_cell].remove(drip)
+                if not self.spatial_grid[old_cell]:
+                    del self.spatial_grid[old_cell]
+            except ValueError:
+                pass  # Drip não estava na lista
+
+        # Adicionar à nova célula
+        self.spatial_grid.setdefault(new_cell, []).append(drip)
+
+    def _get_nearby_drips(self, x: float, y: float) -> list[SlimeDrip]:
+        """Get drips in the same cell and adjacent cells."""
+        center_cell = self._get_grid_cell(x, y)
+        nearby_drips: list[SlimeDrip] = []
+        
+        # Check 3x3 grid around center cell
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                cell = (center_cell[0] + dx, center_cell[1] + dy)
+                if cell in self.spatial_grid:
+                    nearby_drips.extend(self.spatial_grid[cell])
+        
+        return nearby_drips
 
     def update(self, dt: float, boss_x: float, boss_y: float,
                boss_width: int, player_x: float, player_y: float) -> None:
@@ -402,12 +515,17 @@ class SlimeDrippingEffect:
         # Atualizar gotas existentes
         alive_drips: list[SlimeDrip] = []
         for drip in self.drips:
+            old_x, old_y = drip.x, drip.y
             drip.update(dt)
+            # Update spatial grid position
+            self._update_drip_grid_position(drip, old_x, old_y)
+            
             # Criar poça quando gota atinge o chão
-            if not drip.dead and drip.y >= self.ground_y and drip.radius > Config.SLIME_DRIP_MIN_POOL_RADIUS:
+            if not drip.dead and self.ground_y is not None and drip.y >= self.ground_y and drip.radius > Config.SLIME_DRIP_MIN_POOL_RADIUS:
                 self._create_pool(drip.x, self.ground_y, drip.radius)
-                self._create_splat_particles(drip.x, self.ground_y, drip.radius)  # ✨ NOVO: Efeito de respingo
                 drip.dead = True
+                # Remove from grid when it becomes a pool
+                self._remove_drip_from_grid(drip)
 
             if not drip.dead:
                 alive_drips.append(drip)
@@ -415,19 +533,6 @@ class SlimeDrippingEffect:
 
         # Atualizar poças
         self.pools = [p for p in self.pools if (p.update(dt), not p.dead)[1]]
-
-        # ✨ NOVO: Atualizar partículas de respingo
-        alive_particles: list[SplatParticle] = []
-        for particle in self.splat_particles:
-            particle.age += dt
-            if particle.age >= particle.lifetime:
-                particle.dead = True
-            else:
-                particle.speed_y += Config.SLIME_SPLAT_PARTICLE_GRAVITY * dt
-                particle.x += particle.speed_x * dt
-                particle.y += particle.speed_y * dt
-                alive_particles.append(particle)
-        self.splat_particles = alive_particles
 
         # Spawn de novas gotas
         self.spawn_timer += dt
@@ -491,6 +596,8 @@ class SlimeDrippingEffect:
         y = boss_y - Config.SLIME_DRIP_SPAWN_Y_OFFSET
         drip = SlimeDrip(x, y, self.effect_width, self.effect_height)
         self.drips.append(drip)
+        # Add to spatial grid
+        self._add_drip_to_grid(drip)
 
     def _create_pool(self, x: float, y: float, drip_radius: float) -> None:
         """Cria uma poça no chão."""
@@ -501,68 +608,87 @@ class SlimeDrippingEffect:
         pool = SlimePool(x, y, drip_radius)
         self.pools.append(pool)
 
-    def _create_splat_particles(self, x: float, y: float, drip_radius: float) -> None:
-        """Cria partículas de respingo quando gota atinge o chão."""
-        num_particles = random.randint(Config.SLIME_SPLAT_PARTICLE_COUNT_MIN, Config.SLIME_SPLAT_PARTICLE_COUNT_MAX)
-        
-        for _ in range(num_particles):
-            # Mini-partícula com velocidade lateral
-            mini_radius = random.uniform(Config.SLIME_SPLAT_PARTICLE_RADIUS_MIN, Config.SLIME_SPLAT_PARTICLE_RADIUS_MAX)
-            mini_x = x + random.uniform(-20, 20)
-            mini_y = y - 5
-            
-            # Velocidade: salta lateralmente e um pouco para cima
-            speed_x = random.uniform(*Config.SLIME_SPLAT_PARTICLE_SPEED_X)
-            speed_y = random.uniform(*Config.SLIME_SPLAT_PARTICLE_SPEED_Y)  # Para cima
-            
-            # Criar partícula leve (usando lista para performance)
-            p = SplatParticle(
-                mini_x, mini_y, mini_radius, speed_x, speed_y,
-                Config.SLIME_SPLAT_PARTICLE_LIFETIME, 0.0, False
-            )
-            self.splat_particles.append(p)
-
-    def draw(self, surface: pygame.Surface) -> None:
-        """Desenha gotas e poças (usando pool de surfaces)."""
-        # ✨ NOVO: Desenhar partículas de respingo PRIMEIRO (camada mais baixa)
-        for particle in self.splat_particles:
-            if not particle.dead:
-                alpha = int(Config.SLIME_SPLAT_PARTICLE_COLOR[3] * (1 - particle.age / particle.lifetime))
-                color = Config.SLIME_SPLAT_PARTICLE_COLOR[:3] + (alpha,)
-                pygame.draw.circle(surface, color, (int(particle.x), int(particle.y)), int(particle.radius))
-        
-        # Desenhar poças
+    def draw(self, surface: pygame.Surface, fps: float = 60.0) -> None:
+        """Desenha gotas e poças, incluindo o novo rastro de partículas."""
+        # 1. Desenhar poças
         for pool in self.pools:
             self._pool_surface_pool_index = pool.draw(
                 surface,
                 self._pool_surface_pool,
-                self._pool_surface_pool_index
+                self._pool_surface_pool_index,
+                fps=fps
             )
         
-        # ✅ CORRIGIDO: Desenhar gotas usando pool
+        # 2. Desenhar gotas com o novo rastro de partículas
         for drip in self.drips:
-            self._surface_pool_index = drip.draw(
-                surface,
-                self._surface_pool,
-                self._surface_pool_index,
-                self.player_last_x,
-                self.player_last_y,
-                self.ground_y
-            )
+            if drip.dead:
+                continue
+            
+            # Desenhar sombra diretamente na surface principal
+            if self.ground_y is not None:
+                distance_to_ground = max(0, self.ground_y - drip.y)
+                if distance_to_ground < 500:
+                    shadow_scale = 1.0 - (distance_to_ground / 500)
+                    shadow_alpha = int(80 * shadow_scale)
+                    shadow_radius = int(drip.radius * 0.6 * (1 + shadow_scale * 0.5))
+                    
+                    if shadow_alpha > 10:
+                        shadow_color = (0, 0, 0, shadow_alpha)
+                        shadow_pos = (int(drip.x), int(self.ground_y))
+                        shadow_rect = pygame.Rect(
+                            shadow_pos[0] - shadow_radius,
+                            shadow_pos[1] - shadow_radius // 2,
+                            shadow_radius * 2,
+                            shadow_radius
+                        )
+                        pygame.draw.ellipse(surface, shadow_color, shadow_rect)
+            
+            # Desenhar o rastro de partículas (atrás da cabeça)
+            for particle in drip.trail_particles:
+                p_color = (*drip.color[:3], int(particle['alpha']))
+                pygame.draw.circle(surface, p_color, (int(particle['x']), int(particle['y'])), int(particle['radius']))
+
+            # Desenhar a cabeça da gota
+            if drip.main_sprite:
+                # O ponto de âncora é o centro da gota
+                draw_x = int(drip.x - drip.main_sprite.get_width() / 2)
+                draw_y = int(drip.y - drip.main_sprite.get_height() / 2)
+                surface.blit(drip.main_sprite, (draw_x, draw_y))
+            else:
+                # Fallback se não houver sprite
+                pygame.draw.circle(surface, drip.color, (int(drip.x), int(drip.y)), int(drip.radius))
+
+            # Adicionar highlight dinâmico se perto do jogador
+            if self.player_last_x is not None and self.player_last_y is not None:
+                dx, dy = drip.x - self.player_last_x, drip.y - self.player_last_y
+                if (dx*dx + dy*dy) < Config.SLIME_DRIP_HIGHLIGHT_DISTANCE ** 2:
+                    pulse = (math.sin(pygame.time.get_ticks() * Config.SLIME_DRIP_HIGHLIGHT_PULSE_SPEED) + 1) / 2
+                    highlight_alpha = int(180 + pulse * 75)
+                    highlight_color = (*Config.SLIME_DRIP_HIGHLIGHT_COLOR[:3], highlight_alpha)
+                    
+                    pygame.draw.circle(surface, highlight_color, (int(drip.x), int(drip.y)), int(drip.radius * 0.4))
+                    pygame.draw.circle(surface, (255, 100, 100, 80), (int(drip.x), int(drip.y)), int(drip.radius * 1.3), width=2)
 
     def check_player_collision(self, player_rect: pygame.Rect) -> int:
-        """Verifica colisões com gotas E poças. Retorna dano total."""
+        """Verifica colisões com gotas E poças usando spatial grid. Retorna dano total."""
         total_damage = 0
-        surviving_drips: list[SlimeDrip] = []
-
-        # Dano de gotas (remover ao colidir)
-        for drip in self.drips:
-            if drip.collides_with_player(player_rect):
+        
+        # Get player center for grid lookup
+        player_center_x = player_rect.centerx
+        player_center_y = player_rect.centery
+        
+        # Only check drips in nearby grid cells for performance.
+        nearby_drips = self._get_nearby_drips(player_center_x, player_center_y)
+        
+        # Dano de gotas (remover ao colidir).
+        for drip in nearby_drips:
+            if not drip.dead and drip.collides_with_player(player_rect):
                 total_damage += drip.damage
                 drip.dead = True
-            else:
-                surviving_drips.append(drip)
-        self.drips = surviving_drips
+                self._remove_drip_from_grid(drip)
+        
+        # A segunda verificação de colisão foi removida conforme otimização,
+        # confiando que a grid espacial é suficiente.
 
         # Dano de poças (dano contínuo com cooldown)
         for pool in self.pools:
@@ -576,7 +702,7 @@ class SlimeDrippingEffect:
         """Remove todas as gotas e poças."""
         self.drips.clear()
         self.pools.clear()
-        self.splat_particles.clear()  # ✨ NOVO: Limpar partículas também
+        self.spatial_grid.clear()  # Clear spatial grid
         self.spawn_timer = 0
         self.player_last_x = None
         self.player_last_y = None

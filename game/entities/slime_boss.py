@@ -173,7 +173,7 @@ class SlimeBoss(Boss):
             self.animation_timer = 0.0
             self.current_frame = (self.current_frame + 1) % len(self.animation_frames)
 
-    def draw(self, surface: pygame.Surface) -> None:
+    def draw(self, surface: pygame.Surface, fps: float = 60.0) -> None:
         import pygame  # Ensure pygame is available in local scope
         # Draw the slime sprite stretched to boss dimensions (with simple fallback)
         offset_x, offset_y = (0, 0)
@@ -208,7 +208,7 @@ class SlimeBoss(Boss):
             surface.blit(text, text_rect)
 
         # Draw dripping effect
-        self.dripping_effect.draw(surface)
+        self.dripping_effect.draw(surface, fps=fps)
 
     @property
     def rect(self) -> pygame.Rect:
