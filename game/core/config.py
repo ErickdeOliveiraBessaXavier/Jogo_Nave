@@ -297,7 +297,7 @@ class Config:
     
     # Spawn e gameplay
     SLIME_DRIP_MAX_ACTIVE: int = 15
-    SLIME_DRIP_SPAWN_INTERVAL: float = 0.2
+    SLIME_DRIP_SPAWN_INTERVAL: float = 0.3
     SLIME_DRIP_DAMAGE: int = 1
     SLIME_DRIP_SPAWN_CHANCE_DIRECTED: float = 0.6  # 60% direcionado (reduzido para menos previsível)
     SLIME_DRIP_PREDICTION_TIME: float = 1.5
@@ -322,6 +322,32 @@ class Config:
     SLIME_DRIP_TRAIL_RADIUS_FACTOR: float = 0.8
     
     SLIME_DRIP_CURVE_STRENGTH: float = 240.0  # Intensidade do arco lateral (px/sec na progressão total)
+    
+    # Rotation system - Sistema de rotação das gotas
+    SLIME_DRIP_ROTATION_SPEED_MIN: float = 0.5  # Velocidade mínima de rotação (rad/s)
+    SLIME_DRIP_ROTATION_SPEED_MAX: float = 2.0  # Velocidade máxima de rotação (rad/s)
+    SLIME_DRIP_ROTATION_DIRECTION_CHANCE: float = 0.5  # Chance de rotação no sentido horário (50%)
+    
+    # Guided drops system - Sistema de gotas teleguiadas
+    SLIME_DRIP_GUIDED_CHANCE: float = 0.15  # Chance de uma gota ser teleguiada (15%)
+    SLIME_DRIP_GUIDED_MAX_RADIUS: float = 35.0  # Raio máximo para gotas teleguiadas (sempre pequenas)
+    SLIME_DRIP_GUIDED_ACCELERATION: float = 150.0  # Aceleração lateral para teleguiamento (px/sec²)
+    SLIME_DRIP_GUIDED_MAX_SPEED: float = 200.0  # Velocidade máxima lateral para teleguiamento
+    SLIME_DRIP_GUIDED_ERROR_MARGIN: float = 30.0  # Margem de erro no teleguiamento (pixels) - REDUZIDO para mais precisão
+    SLIME_DRIP_GUIDED_START_DELAY: float = 0.5  # Delay antes de começar teleguiamento (segundos)
+    SLIME_DRIP_GUIDED_MAX_ACTIVE: int = 1  # Máximo de gotas teleguiadas ativas simultaneamente
+    SLIME_DRIP_GUIDED_SPAWN_FROM_EDGES: bool = True  # Gotas teleguiadas spawnam nas extremidades da tela
+    SLIME_DRIP_GUIDED_SPEED_MULTIPLIER: float = 0.6  # Multiplicador de velocidade (60% da velocidade normal)
+    SLIME_DRIP_GUIDED_SPRITE_PATH: str = "game/assets/images/sprite_boss_03_slime/Ataque_Slime_Boss_Cor_04_Teleguiado.png"  # Sprite específico para gotas teleguiadas
+    SLIME_DRIP_BOUNCE_ENABLED: bool = True  # Ativar sistema de bounce
+    SLIME_DRIP_BOUNCE_DAMPING: float = 0.6  # Multiplicador de velocidade no bounce (0.6 = 60% da velocidade)
+    SLIME_DRIP_BOUNCE_HEIGHT: float = 120.0  # Altura máxima do bounce em pixels
+    SLIME_DRIP_BOUNCE_MIN_VELOCITY: float = 30.0  # Velocidade mínima para bounce
+
+    # Sistema de repulsão entre gotas
+    SLIME_DRIP_REPULSION_ENABLED: bool = True
+    SLIME_DRIP_REPULSION_DISTANCE: float = 80.0  # Distância mínima entre gotas
+    SLIME_DRIP_REPULSION_FORCE: float = 200.0  # Força de repulsão (pixels/segundo²)
 
     # Sprites for trail (optional)
     SLIME_DRIP_USE_SPRITES: bool = True

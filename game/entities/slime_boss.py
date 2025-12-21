@@ -1,6 +1,6 @@
 import pygame
 import random
-from typing import List
+from typing import List, Optional, TYPE_CHECKING
 from collections import deque
 from ..core.assets import get_image, BASE_DIR
 from ..core.config import config as Config
@@ -11,6 +11,9 @@ from .boss_laser import BossLaser
 from .boss_square import BossSquare
 from .meteor import Meteor
 from .slime_drip import SlimeDrippingEffect
+
+if TYPE_CHECKING:
+    from ..systems.entity_manager import EntityManager
 
 
 class SlimeBoss(Boss):
@@ -84,8 +87,8 @@ class SlimeBoss(Boss):
         self.w = Config.SCREEN_WIDTH + 100  # +50px left +50px right margin
         self.h = 600  # Taller to not be flattened
 
-        # Position from left to right
-        self.x = 0
+        # Position centered on screen
+        self.x = Config.SCREEN_WIDTH / 2 - self.w / 2  # Center the boss horizontally
         self.target_y = -100  # Final position higher up, not too low
         self.y = -self.h  # More off-screen from the top
 
@@ -145,7 +148,7 @@ class SlimeBoss(Boss):
             sound_manager.play_boss_damage()
 
     def _update_active_state(self, dt: float) -> None:
-        """Move lateralmente 50px para esquerda e direita."""
+        """Move lateralmente 50px para esquerda e direita a partir da posição central."""
         # Velocidade de movimento
         speed = 50.0  # pixels/segundo (ajuste conforme necessário)
         if self.frenzy_mode:
@@ -157,10 +160,13 @@ class SlimeBoss(Boss):
         
         self.x += speed * dt * self.direction
         
-        # Inverter direção nos limites de 50px
-        if self.direction > 0 and self.x >= 50:
+        # Calcular posição central
+        center_x = Config.SCREEN_WIDTH / 2 - self.w / 2
+        
+        # Inverter direção nos limites de ±50px da posição central
+        if self.direction > 0 and self.x >= center_x + 50:
             self.direction = -1
-        elif self.direction < 0 and self.x <= -50:
+        elif self.direction < 0 and self.x <= center_x - 50:
             self.direction = 1
 
     def _update_animation(self, dt: float) -> None:
@@ -268,6 +274,11 @@ class SlimeBoss(Boss):
         self._mask_cache[self.current_frame] = mask
         return mask
 
-    def check_drip_damage(self, player_rect: pygame.Rect) -> int:
-        """Verifica se alguma gota acertou o jogador e retorna o dano."""
-        return self.dripping_effect.check_player_collision(player_rect)
+    def check_drip_damage(self, player_rect: pygame.Rect, entity_manager: Optional["EntityManager"] = None) -> int:
+        """Verifica se alguma gota acertou o jogador e retorna o dano.
+        
+        Args:
+            player_rect: Retângulo do jogador
+            entity_manager: EntityManager para spawnar efeitos de partículas (opcional)
+        """
+        return self.dripping_effect.check_player_collision(player_rect, entity_manager)

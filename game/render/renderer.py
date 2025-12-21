@@ -144,11 +144,7 @@ class CelestialManager:
             "image": image,
             "x": x,
             "y": y_position if y_position is not None else random.uniform(0, self.h),
-            "speed": random.uniform(
-                RenderConfig.CELESTIAL_SPEED_BASE_MIN,
-                RenderConfig.CELESTIAL_SPEED_BASE_MAX,
-            )
-            * scale
+            "speed": scale * RenderConfig.CELESTIAL_SPEED_BASE_MAX  # Corpos menores (mais distantes) são mais lentos
             + RenderConfig.CELESTIAL_SPEED_OFFSET,
             "scale": scale,
             # === NOVO: Armazenar caminho da imagem ===
@@ -183,14 +179,8 @@ class CelestialManager:
             image.get_width(), current_body=body
         )  # Pass current_body for overlap check
         body["y"] = y_position if y_position is not None else random.uniform(0, self.h)
-        body["speed"] = (
-            random.uniform(
-                RenderConfig.CELESTIAL_SPEED_BASE_MIN,
-                RenderConfig.CELESTIAL_SPEED_BASE_MAX,
-            )
-            * scale
-            + RenderConfig.CELESTIAL_SPEED_OFFSET
-        )
+        body["speed"] = scale * RenderConfig.CELESTIAL_SPEED_BASE_MAX  # Corpos menores (mais distantes) são mais lentos
+        + RenderConfig.CELESTIAL_SPEED_OFFSET
         body["scale"] = scale
 
     def update(self, dt: float, speed_multiplier: float = 1.0):

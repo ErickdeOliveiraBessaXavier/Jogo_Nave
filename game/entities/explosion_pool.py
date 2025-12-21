@@ -37,13 +37,14 @@ class ExplosionPool:
             explosion.particles.clear()
             self.available.append(explosion)
 
-    def get(self, x: float, y: float, size: int = 30) -> Explosion:
+    def get(self, x: float, y: float, size: int = 30, is_slime: bool = False) -> Explosion:
         """
         Obtém uma explosão do pool (reutiliza se possível).
 
         Args:
             x, y: Posição da explosão
             size: Tamanho da explosão
+            is_slime: Se é uma explosão de slime
 
         Returns:
             Explosão configurada e pronta para uso
@@ -53,12 +54,13 @@ class ExplosionPool:
             explosion = self.available.pop()
         else:
             # Pool vazio, criar nova (acontece raramente)
-            explosion = Explosion(0, 0, size=30)
+            explosion = Explosion(0, 0, size=30, is_slime=is_slime)
 
         # Reconfigurar explosão completamente (simula __init__)
         explosion.x = x
         explosion.y = y
         explosion.size = size
+        explosion.is_slime = is_slime
 
         # Recalcular tempo baseado no tamanho
         explosion.time = Config.EXPLOSION_DURATION * (size / 40)

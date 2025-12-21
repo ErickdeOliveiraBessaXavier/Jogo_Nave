@@ -856,7 +856,7 @@ class PlayingScene(Scene):
             if self._boss_type_cache == "slime":
                 from ..entities.slime_boss import SlimeBoss
                 slime_boss = cast(SlimeBoss, boss)
-                drip_damage = slime_boss.check_drip_damage(self.ship.rect)
+                drip_damage = slime_boss.check_drip_damage(self.ship.rect, self.entity_manager)
                 if drip_damage > 0:
                     self._handle_ship_hit()
                     # Meta-progression: Track damage taken

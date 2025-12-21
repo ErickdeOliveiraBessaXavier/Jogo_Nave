@@ -1,7 +1,11 @@
 import pygame
 import random
 import math
-from typing import Optional, List, ClassVar, TypedDict
+from typing import Optional, List, ClassVar, TypedDict, TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from ..systems.entity_manager import EntityManager
 
 
 class TrailParticle(TypedDict):
@@ -118,6 +122,26 @@ class SlimeDrip:
         self.start_y: float = y
         self.curve: float = random.uniform(-1.0, 1.0) * random.uniform(0.5, 1.0)
         
+        # Sistema de gotas teleguiadas
+        self.is_guided: bool = random.random() < Config.SLIME_DRIP_GUIDED_CHANCE
+        if self.is_guided:
+            # Gotas teleguiadas são sempre pequenas
+            self.radius = random.uniform(Config.SLIME_DRIP_RADIUS_MIN, Config.SLIME_DRIP_GUIDED_MAX_RADIUS)
+            self.initial_radius = self.radius
+            # Recalcular dano baseado no novo raio
+            self.damage = Config.SLIME_DRIP_DAMAGE + max(0, int(self.radius / 30))
+            
+            # Sistema de teleguiamento
+            self.guided_target_x: float = x + random.uniform(-Config.SLIME_DRIP_GUIDED_ERROR_MARGIN, Config.SLIME_DRIP_GUIDED_ERROR_MARGIN)
+            self.guided_timer: float = 0.0
+            self.guided_active: bool = False
+        
+        # Sistema de rotação
+        self.rotation_angle: float = random.uniform(0, 2 * math.pi)  # Ângulo inicial aleatório
+        self.rotation_speed: float = random.uniform(Config.SLIME_DRIP_ROTATION_SPEED_MIN, Config.SLIME_DRIP_ROTATION_SPEED_MAX)
+        # 50% chance de rotação no sentido horário ou anti-horário
+        self.rotation_direction: int = 1 if random.random() < Config.SLIME_DRIP_ROTATION_DIRECTION_CHANCE else -1
+        
         # Velocidades
         self.speed_x: float = random.uniform(*Config.SLIME_DRIP_SPEED_X)
         self.speed_y: float = random.uniform(*Config.SLIME_DRIP_SPEED_Y)
@@ -136,6 +160,10 @@ class SlimeDrip:
         self.sprite_index: int = random.randint(0, 2)
         self.color: tuple[int, int, int, int] = Config.SLIME_DRIP_COLORS[self.sprite_index]
         
+        # Bounce system - Sistema de quique
+        self.has_bounced: bool = False  # Se já quicou uma vez
+        self.can_create_pool: bool = False  # Só pode criar pool após bounce
+        
         # NEW: Lightweight particle trail
         self.trail_particles: List[TrailParticle] = []
         self.trail_spawn_timer: float = 0.0
@@ -145,12 +173,20 @@ class SlimeDrip:
         self.main_sprite: Optional[pygame.Surface] = None
         if Config.SLIME_DRIP_USE_SPRITES:
             try:
-                if not SlimeSpriteCache.initialize_sources():
-                    raise Exception("Failed to load sprite sources")
-                
                 main_radius = int(self.radius)
                 main_alpha = 255  # Make main drip head fully opaque
-                self.main_sprite = SlimeSpriteCache.get_sprite(self.sprite_index, main_radius, main_alpha)
+                
+                if self.is_guided:
+                    # Gotas teleguiadas usam sprite específico
+                    guided_sprite = pygame.image.load(Config.SLIME_DRIP_GUIDED_SPRITE_PATH).convert_alpha()
+                    # Escalar para o tamanho da gota
+                    scaled_size = (main_radius * 2, main_radius * 2)
+                    self.main_sprite = pygame.transform.smoothscale(guided_sprite, scaled_size)
+                else:
+                    # Gotas normais usam o cache de sprites
+                    if not SlimeSpriteCache.initialize_sources():
+                        raise Exception("Failed to load sprite sources")
+                    self.main_sprite = SlimeSpriteCache.get_sprite(self.sprite_index, main_radius, main_alpha)
             except Exception:
                 self.main_sprite = None
 
@@ -175,24 +211,71 @@ class SlimeDrip:
         if self.dead:
             return
         
-        # Movimento lateral com limite nas bordas
-        if self.x < self.radius or self.x > self.effect_width - self.radius:
-            self.speed_x *= -1
+        # Movimento lateral
+        if self.is_guided and self.guided_active:
+            # Sistema de teleguiamento para gotas especiais
+            # Calcular direção para o alvo com margem de erro
+            direction = 1.0 if self.guided_target_x > self.x else -1.0
+            
+            # Aplicar aceleração lateral para teleguiamento
+            self.speed_x += direction * Config.SLIME_DRIP_GUIDED_ACCELERATION * dt
+            self.speed_x = max(-Config.SLIME_DRIP_GUIDED_MAX_SPEED, min(Config.SLIME_DRIP_GUIDED_MAX_SPEED, self.speed_x))
+        else:
+            # Movimento lateral normal com limite nas bordas
+            if self.x < self.radius or self.x > self.effect_width - self.radius:
+                self.speed_x *= -1
+            
+            # Curvatura lateral leve para gotas normais
+            if not self.is_guided:
+                fall_progress = max(0.0, min(1.0, (self.y - self.start_y) / max(1.0, self.effect_height)))
+                self.x += self.curve * Config.SLIME_DRIP_CURVE_STRENGTH * fall_progress * dt
         
         # Aplicar gravidade com terminal velocity
         self.speed_y += self.gravity * dt
         self.speed_y = min(self.speed_y, self.terminal_velocity)
         
-        # Aplicar friction ao movimento lateral
-        self.speed_x *= Config.SLIME_DRIP_FRICTION
+        # Aplicar friction ao movimento lateral (menos friction para gotas teleguiadas)
+        friction = Config.SLIME_DRIP_FRICTION if not self.is_guided else 0.99
+        self.speed_x *= friction
         
         # Movimento (framerate-independent)
         self.x += self.speed_x * dt
         self.y += self.speed_y * dt
 
-        # Curvatura lateral leve: aumenta com o progresso da queda
-        fall_progress = max(0.0, min(1.0, (self.y - self.start_y) / max(1.0, self.effect_height)))
-        self.x += self.curve * Config.SLIME_DRIP_CURVE_STRENGTH * fall_progress * dt
+        # Ativar teleguiamento após delay inicial
+        if self.is_guided and not self.guided_active:
+            self.guided_timer += dt
+            if self.guided_timer >= Config.SLIME_DRIP_GUIDED_START_DELAY:
+                self.guided_active = True
+        
+        # Bounce system - Sistema de quique
+        if Config.SLIME_DRIP_BOUNCE_ENABLED and not self.has_bounced:
+            ground_y = self.effect_height - Config.SLIME_DRIP_GROUND_OFFSET
+            if self.y >= ground_y and self.speed_y > 0:
+                # Calcular multiplicador baseado no tamanho da gota
+                # Gotas menores têm bounce maior (mais leves)
+                size_multiplier = Config.SLIME_DRIP_RADIUS_MAX / self.radius
+                size_multiplier = max(1.0, min(3.0, size_multiplier))  # Limitar entre 1.0x e 3.0x
+                
+                # Calcular velocidade de bounce baseada na velocidade de impacto e tamanho
+                base_bounce = self.speed_y * Config.SLIME_DRIP_BOUNCE_DAMPING * size_multiplier
+                # O limite máximo também varia com o tamanho (gotas menores podem quicar mais alto)
+                max_bounce_height = Config.SLIME_DRIP_BOUNCE_HEIGHT * size_multiplier
+                bounce_velocity = min(base_bounce, max_bounce_height)
+                
+                # Só fazer bounce se a velocidade for suficiente
+                if bounce_velocity >= Config.SLIME_DRIP_BOUNCE_MIN_VELOCITY:
+                    self.speed_y = -bounce_velocity  # Bounce para cima
+                    self.has_bounced = True
+                    # Reset da posição para exatamente no chão
+                    self.y = ground_y
+                else:
+                    # Velocidade muito baixa, permitir criação de pool
+                    self.can_create_pool = True
+        
+        # Se já quicou e está caindo novamente, pode criar pool
+        if self.has_bounced and self.speed_y > 0:
+            self.can_create_pool = True
         
         # --- Update particle trail ---
         # Update existing particles
@@ -222,6 +305,11 @@ class SlimeDrip:
                 'lifetime': max_lifetime,
                 'max_lifetime': max_lifetime
             })
+
+        # Atualizar rotação (sempre ativa, bem leve)
+        self.rotation_angle += self.rotation_speed * self.rotation_direction * dt
+        # Manter ângulo entre 0 e 2π para evitar overflow
+        self.rotation_angle %= 2 * math.pi
 
         # Bounds check
         if (self.y > self.effect_height + 100 or
@@ -438,6 +526,9 @@ class SlimeDrippingEffect:
         self.spawn_timer: float = 0.0
         self.spawn_interval: float = Config.SLIME_DRIP_SPAWN_INTERVAL / difficulty_multiplier
         
+        # Controle de gotas teleguiadas
+        self.active_guided_drips: int = 0  # Contador de gotas teleguiadas ativas
+        
         # Pool de surfaces para poças (tamanho fixo para otimização)
         self._pool_surface_pool: list[pygame.Surface] = []
         self._pool_surface_pool_size: int = 10
@@ -506,6 +597,40 @@ class SlimeDrippingEffect:
         
         return nearby_drips
 
+    def _apply_repulsion_to_drip(self, drip: SlimeDrip, dt: float) -> None:
+        """Aplica força de repulsão entre gotas próximas."""
+        if drip.dead:
+            return
+        
+        # Obter gotas próximas usando o grid espacial
+        nearby_drips = self._get_nearby_drips(drip.x, drip.y)
+        
+        repulsion_distance_squared = Config.SLIME_DRIP_REPULSION_DISTANCE ** 2
+        
+        for other_drip in nearby_drips:
+            if other_drip is drip or other_drip.dead:
+                continue
+            
+            # Calcular distância
+            dx = drip.x - other_drip.x
+            dy = drip.y - other_drip.y
+            distance_squared = dx * dx + dy * dy
+            
+            # Aplicar repulsão apenas se estiverem muito próximas
+            if distance_squared < repulsion_distance_squared and distance_squared > 0:
+                distance = math.sqrt(distance_squared)
+                
+                # Força de repulsão inversamente proporcional à distância
+                force = Config.SLIME_DRIP_REPULSION_FORCE * (1.0 - distance / Config.SLIME_DRIP_REPULSION_DISTANCE)
+                
+                # Normalizar direção
+                nx = dx / distance
+                ny = dy / distance
+                
+                # Aplicar força de repulsão
+                drip.speed_x += nx * force * dt
+                drip.speed_y += ny * force * dt
+
     def update(self, dt: float, boss_x: float, boss_y: float,
                boss_width: int, player_x: float, player_y: float) -> None:
         """Atualiza todas as gotas e poças.
@@ -517,18 +642,33 @@ class SlimeDrippingEffect:
         for drip in self.drips:
             old_x, old_y = drip.x, drip.y
             drip.update(dt)
+            
+            # Aplicar repulsão entre gotas próximas
+            if Config.SLIME_DRIP_REPULSION_ENABLED:
+                self._apply_repulsion_to_drip(drip, dt)
+            
             # Update spatial grid position
             self._update_drip_grid_position(drip, old_x, old_y)
             
-            # Criar poça quando gota atinge o chão
-            if not drip.dead and self.ground_y is not None and drip.y >= self.ground_y and drip.radius > Config.SLIME_DRIP_MIN_POOL_RADIUS:
+            # Criar poça quando gota atinge o chão APÓS bounce
+            if (not drip.dead and self.ground_y is not None and 
+                drip.can_create_pool and drip.y >= self.ground_y and 
+                drip.radius > Config.SLIME_DRIP_MIN_POOL_RADIUS):
                 self._create_pool(drip.x, self.ground_y, drip.radius)
                 drip.dead = True
                 # Remove from grid when it becomes a pool
                 self._remove_drip_from_grid(drip)
+                # Decrementar contador se era teleguiada
+                if drip.is_guided:
+                    self.active_guided_drips = max(0, self.active_guided_drips - 1)
 
             if not drip.dead:
                 alive_drips.append(drip)
+            else:
+                # Decrementar contador se gota morreu (bounds check ou colisão)
+                if drip.is_guided:
+                    self.active_guided_drips = max(0, self.active_guided_drips - 1)
+        
         self.drips = alive_drips
 
         # Atualizar poças
@@ -595,9 +735,35 @@ class SlimeDrippingEffect:
         
         y = boss_y - Config.SLIME_DRIP_SPAWN_Y_OFFSET
         drip = SlimeDrip(x, y, self.effect_width, self.effect_height)
+        
+        # Verificar limite de gotas teleguiadas ativas
+        if drip.is_guided and self.active_guided_drips >= Config.SLIME_DRIP_GUIDED_MAX_ACTIVE:
+            return  # Não spawnar se já há muitas gotas teleguiadas
+        
+        # Configurar spawn especial para gotas teleguiadas
+        if drip.is_guided and Config.SLIME_DRIP_GUIDED_SPAWN_FROM_EDGES:
+            # Gotas teleguiadas spawnam nas extremidades da tela
+            # Escolher lado aleatoriamente (esquerda ou direita)
+            if random.random() < 0.5:
+                # Lado esquerdo
+                drip.x = -drip.radius  # Começar fora da tela à esquerda
+                drip.guided_target_x = player_x + random.uniform(-Config.SLIME_DRIP_GUIDED_ERROR_MARGIN, Config.SLIME_DRIP_GUIDED_ERROR_MARGIN)
+            else:
+                # Lado direito
+                drip.x = self.effect_width + drip.radius  # Começar fora da tela à direita
+                drip.guided_target_x = player_x + random.uniform(-Config.SLIME_DRIP_GUIDED_ERROR_MARGIN, Config.SLIME_DRIP_GUIDED_ERROR_MARGIN)
+            
+            # Gotas teleguiadas são mais lentas
+            drip.speed_y *= Config.SLIME_DRIP_GUIDED_SPEED_MULTIPLIER
+            drip.gravity *= Config.SLIME_DRIP_GUIDED_SPEED_MULTIPLIER
+        
         self.drips.append(drip)
         # Add to spatial grid
         self._add_drip_to_grid(drip)
+        
+        # Atualizar contador de gotas teleguiadas
+        if drip.is_guided:
+            self.active_guided_drips += 1
 
     def _create_pool(self, x: float, y: float, drip_radius: float) -> None:
         """Cria uma poça no chão."""
@@ -650,12 +816,14 @@ class SlimeDrippingEffect:
 
             # Desenhar a cabeça da gota
             if drip.main_sprite:
+                # Aplicar rotação ao sprite
+                rotated_sprite = pygame.transform.rotate(drip.main_sprite, math.degrees(drip.rotation_angle))
                 # O ponto de âncora é o centro da gota
-                draw_x = int(drip.x - drip.main_sprite.get_width() / 2)
-                draw_y = int(drip.y - drip.main_sprite.get_height() / 2)
-                surface.blit(drip.main_sprite, (draw_x, draw_y))
+                draw_x = int(drip.x - rotated_sprite.get_width() / 2)
+                draw_y = int(drip.y - rotated_sprite.get_height() / 2)
+                surface.blit(rotated_sprite, (draw_x, draw_y))
             else:
-                # Fallback se não houver sprite
+                # Fallback se não houver sprite (sem rotação)
                 pygame.draw.circle(surface, drip.color, (int(drip.x), int(drip.y)), int(drip.radius))
 
             # Adicionar highlight dinâmico se perto do jogador
@@ -669,8 +837,13 @@ class SlimeDrippingEffect:
                     pygame.draw.circle(surface, highlight_color, (int(drip.x), int(drip.y)), int(drip.radius * 0.4))
                     pygame.draw.circle(surface, (255, 100, 100, 80), (int(drip.x), int(drip.y)), int(drip.radius * 1.3), width=2)
 
-    def check_player_collision(self, player_rect: pygame.Rect) -> int:
-        """Verifica colisões com gotas E poças usando spatial grid. Retorna dano total."""
+    def check_player_collision(self, player_rect: pygame.Rect, entity_manager: Optional["EntityManager"] = None) -> int:
+        """Verifica colisões com gotas E poças usando spatial grid. Retorna dano total.
+        
+        Args:
+            player_rect: Retângulo do jogador
+            entity_manager: EntityManager para spawnar efeitos de partículas (opcional)
+        """
         total_damage = 0
         
         # Get player center for grid lookup
@@ -686,15 +859,32 @@ class SlimeDrippingEffect:
                 total_damage += drip.damage
                 drip.dead = True
                 self._remove_drip_from_grid(drip)
+                
+                # Spawn particle effect for drip collision
+                if entity_manager:
+                    entity_manager.spawn_explosion(drip.x, drip.y, size=int(drip.radius), is_slime=True)
+                
+                # Decrementar contador se era teleguiada
+                if drip.is_guided:
+                    self.active_guided_drips = max(0, self.active_guided_drips - 1)
         
         # A segunda verificação de colisão foi removida conforme otimização,
         # confiando que a grid espacial é suficiente.
 
         # Dano de poças (dano contínuo com cooldown)
-        for pool in self.pools:
-            if pool.collides_with_player(player_rect) and pool.can_damage():
-                total_damage += pool.damage
-                pool.reset_damage_cooldown()
+        for pool in self.pools[:]:  # Usar cópia para permitir remoção durante iteração
+            if pool.collides_with_player(player_rect):
+                if pool.can_damage():
+                    total_damage += pool.damage
+                    pool.reset_damage_cooldown()
+                    
+                    # Spawn particle effect for pool collision
+                    if entity_manager:
+                        entity_manager.spawn_explosion(pool.x, pool.y, size=int(pool.radius * 0.8), is_slime=True)
+                
+                # Pool disappears when player collides with it
+                pool.dead = True
+                self.pools.remove(pool)
 
         return total_damage
 
