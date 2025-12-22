@@ -214,7 +214,7 @@ class SlimeBoss(Boss):
             surface.blit(text, text_rect)
 
         # Draw dripping effect
-        self.dripping_effect.draw(surface, fps=fps)
+        self.dripping_effect.draw(surface)
 
     @property
     def rect(self) -> pygame.Rect:
@@ -281,4 +281,4 @@ class SlimeBoss(Boss):
             player_rect: Retângulo do jogador
             entity_manager: EntityManager para spawnar efeitos de partículas (opcional)
         """
-        return self.dripping_effect.check_player_collision(player_rect, entity_manager)
+        return self.dripping_effect.check_collisions(player_rect)

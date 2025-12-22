@@ -286,87 +286,11 @@ class Config:
     # Propriedades físicas das gotas
     SLIME_DRIP_RADIUS_MIN: float = 25.0
     SLIME_DRIP_RADIUS_MAX: float = 85.0
-    SLIME_DRIP_SPEED_X: Tuple[float, float] = (-12.0, 12.0)
-    SLIME_DRIP_SPEED_Y: Tuple[float, float] = (12.0, 30.0)
-    SLIME_DRIP_GRAVITY: Tuple[float, float] = (200.0, 400.0)  # Aceleração forte
-    SLIME_DRIP_TERMINAL_VELOCITY: float = 800.0  # Velocidade máxima de queda
-    
-    # Física adicional
-    SLIME_DRIP_FRICTION: float = 0.98  # Multiplicador de fricção lateral (0.98 = 2% de perda por frame)
-    SLIME_DRIP_MIN_SPAWN_DISTANCE: float = 60.0  # Distância mínima entre gotas
-    
+
     # Spawn e gameplay
     SLIME_DRIP_MAX_ACTIVE: int = 15
     SLIME_DRIP_SPAWN_INTERVAL: float = 0.3
-    SLIME_DRIP_DAMAGE: int = 1
-    SLIME_DRIP_SPAWN_CHANCE_DIRECTED: float = 0.6  # 60% direcionado (reduzido para menos previsível)
-    SLIME_DRIP_PREDICTION_TIME: float = 1.5
-    
-    # Posicionamento
-    SLIME_DRIP_GROUND_OFFSET: int = 50  # Distância do fundo para o "chão"
-    SLIME_DRIP_SPAWN_Y_OFFSET: int = 10  # Offset Y do boss para spawn
-    SLIME_DRIP_MIN_POOL_RADIUS: float = 15.0  # Raio mínimo para criar poça
-    
-    # Poças no chão
-    SLIME_POOL_LIFETIME: float = 5.0
-    SLIME_POOL_MAX_ACTIVE: int = 8
-    SLIME_POOL_DAMAGE: int = 1
-    SLIME_POOL_DAMAGE_COOLDOWN: float = 0.5
-    SLIME_POOL_EXPANSION_TIME: float = 0.5
-    SLIME_POOL_FADE_TIME: float = 1.5
-    SLIME_POOL_RADIUS_MULTIPLIER: float = 1.5
 
-    # Particle Trail Settings
-    SLIME_DRIP_TRAIL_SPAWN_INTERVAL: float = 0.1
-    SLIME_DRIP_TRAIL_LIFETIME: float = 0.4
-    SLIME_DRIP_TRAIL_RADIUS_FACTOR: float = 0.8
-    
-    SLIME_DRIP_CURVE_STRENGTH: float = 240.0  # Intensidade do arco lateral (px/sec na progressão total)
-    
-    # Rotation system - Sistema de rotação das gotas
-    SLIME_DRIP_ROTATION_SPEED_MIN: float = 0.5  # Velocidade mínima de rotação (rad/s)
-    SLIME_DRIP_ROTATION_SPEED_MAX: float = 2.0  # Velocidade máxima de rotação (rad/s)
-    SLIME_DRIP_ROTATION_DIRECTION_CHANCE: float = 0.5  # Chance de rotação no sentido horário (50%)
-    
-    # Guided drops system - Sistema de gotas teleguiadas
-    SLIME_DRIP_GUIDED_CHANCE: float = 0.15  # Chance de uma gota ser teleguiada (15%)
-    SLIME_DRIP_GUIDED_MAX_RADIUS: float = 35.0  # Raio máximo para gotas teleguiadas (sempre pequenas)
-    SLIME_DRIP_GUIDED_ACCELERATION: float = 150.0  # Aceleração lateral para teleguiamento (px/sec²)
-    SLIME_DRIP_GUIDED_MAX_SPEED: float = 200.0  # Velocidade máxima lateral para teleguiamento
-    SLIME_DRIP_GUIDED_ERROR_MARGIN: float = 30.0  # Margem de erro no teleguiamento (pixels) - REDUZIDO para mais precisão
-    SLIME_DRIP_GUIDED_START_DELAY: float = 0.5  # Delay antes de começar teleguiamento (segundos)
-    SLIME_DRIP_GUIDED_MAX_ACTIVE: int = 1  # Máximo de gotas teleguiadas ativas simultaneamente
-    SLIME_DRIP_GUIDED_SPAWN_FROM_EDGES: bool = True  # Gotas teleguiadas spawnam nas extremidades da tela
-    SLIME_DRIP_GUIDED_SPEED_MULTIPLIER: float = 0.6  # Multiplicador de velocidade (60% da velocidade normal)
-    SLIME_DRIP_GUIDED_SPRITE_PATH: str = "game/assets/images/sprite_boss_03_slime/Ataque_Slime_Boss_Cor_04_Teleguiado.png"  # Sprite específico para gotas teleguiadas
-    SLIME_DRIP_BOUNCE_ENABLED: bool = True  # Ativar sistema de bounce
-    SLIME_DRIP_BOUNCE_DAMPING: float = 0.6  # Multiplicador de velocidade no bounce (0.6 = 60% da velocidade)
-    SLIME_DRIP_BOUNCE_HEIGHT: float = 120.0  # Altura máxima do bounce em pixels
-    SLIME_DRIP_BOUNCE_MIN_VELOCITY: float = 30.0  # Velocidade mínima para bounce
-
-    # Sistema de repulsão entre gotas
-    SLIME_DRIP_REPULSION_ENABLED: bool = True
-    SLIME_DRIP_REPULSION_DISTANCE: float = 80.0  # Distância mínima entre gotas
-    SLIME_DRIP_REPULSION_FORCE: float = 200.0  # Força de repulsão (pixels/segundo²)
-
-    # Sprites for trail (optional)
-    SLIME_DRIP_USE_SPRITES: bool = True
-    SLIME_DRIP_TRAIL_SPRITE_PATHS: list[str] = field(
-        default_factory=lambda: [
-            "game/assets/images/sprite_boss_03_slime/Ataque_Slime_Boss_Cor_01.png",
-            "game/assets/images/sprite_boss_03_slime/Ataque_Slime_Boss_Cor_02.png",
-            "game/assets/images/sprite_boss_03_slime/Ataque_Slime_Boss_Cor_03.png",
-        ]
-    )
-    
-    # Visual - Highlight (proximidade do jogador)
-    SLIME_DRIP_HIGHLIGHT_DISTANCE: float = 80.0
-    SLIME_DRIP_HIGHLIGHT_COLOR: Tuple[int, int, int, int] = (255, 255, 100, 220)
-    SLIME_DRIP_HIGHLIGHT_PULSE_SPEED: float = 0.01  # Velocidade da pulsação
-    
-    # Visual - Surfaces (para pooling)
-    SLIME_POOL_SURFACE_SIZE: int = 300
-    
     # Visual - Cores
     SLIME_DRIP_COLORS: list[Tuple[int, int, int, int]] = field(
         default_factory=lambda: [
@@ -375,18 +299,6 @@ class Config:
             (68, 18, 89, 220)
         ]
     )
-    SLIME_POOL_COLOR: Tuple[int, int, int, int] = (96, 29, 115, 150)
-    
-    # Partículas de respingo (quando gota atinge o chão)
-    SLIME_SPLAT_PARTICLE_COUNT_MIN: int = 3
-    SLIME_SPLAT_PARTICLE_COUNT_MAX: int = 5
-    SLIME_SPLAT_PARTICLE_RADIUS_MIN: float = 3.0
-    SLIME_SPLAT_PARTICLE_RADIUS_MAX: float = 8.0
-    SLIME_SPLAT_PARTICLE_SPEED_X: Tuple[float, float] = (-50.0, 50.0)
-    SLIME_SPLAT_PARTICLE_SPEED_Y: Tuple[float, float] = (-30.0, -10.0)
-    SLIME_SPLAT_PARTICLE_LIFETIME: float = 0.4
-    SLIME_SPLAT_PARTICLE_GRAVITY: float = 0.2
-    SLIME_SPLAT_PARTICLE_COLOR: Tuple[int, int, int, int] = (200, 150, 220, 150)
 
     # ========================================
     # SPIKE (PROJECTILE) SYSTEM
