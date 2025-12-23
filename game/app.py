@@ -43,6 +43,7 @@ class GameApp:
         # Registrar sprites para pré-carregamento
         from .core.sprite_loader import sprite_loader
         from .entities.slime_boss import SlimeBoss
+
         sprite_loader.register("slime_boss", SlimeBoss.load_frames_for_preload)
 
         # PRÉ-CARREGAR TODOS OS SPRITES (adicionar aqui)

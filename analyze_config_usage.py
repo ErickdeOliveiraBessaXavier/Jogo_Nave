@@ -28,14 +28,16 @@ def extract_config_attributes(config_file_path: str) -> Set[str]:
     config_attrs = set()
 
     try:
-        with open(config_file_path, 'r', encoding='utf-8') as f:
+        with open(config_file_path, "r", encoding="utf-8") as f:
             tree = ast.parse(f.read())
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and node.name == 'Config':
+            if isinstance(node, ast.ClassDef) and node.name == "Config":
                 for item in node.body:
                     # Atributos com anotação de tipo (AnnAssign)
-                    if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                    if isinstance(item, ast.AnnAssign) and isinstance(
+                        item.target, ast.Name
+                    ):
                         config_attrs.add(item.target.id)
                     # Atributos sem anotação (Assign) - para casos como PARTICLE_ENTRY_COUNT = 3
                     elif isinstance(item, ast.Assign):
@@ -52,7 +54,9 @@ def extract_config_attributes(config_file_path: str) -> Set[str]:
     return config_attrs
 
 
-def find_config_references(project_root: str, config_attrs: Set[str]) -> Dict[str, List[str]]:
+def find_config_references(
+    project_root: str, config_attrs: Set[str]
+) -> Dict[str, List[str]]:
     """
     Busca por referências às configurações em todos os arquivos Python do projeto.
 
@@ -64,18 +68,20 @@ def find_config_references(project_root: str, config_attrs: Set[str]) -> Dict[st
         Dicionário mapeando nome da configuração para lista de arquivos onde é usada
     """
     references = {attr: [] for attr in config_attrs}
-    references['UNKNOWN'] = []  # Para referências que não correspondem a atributos conhecidos
+    references["UNKNOWN"] = (
+        []
+    )  # Para referências que não correspondem a atributos conhecidos
 
     # Padrão regex para encontrar Config.NOME_DA_CONFIG
-    pattern = re.compile(r'Config\.([A-Z_][A-Z0-9_]*)')
+    pattern = re.compile(r"Config\.([A-Z_][A-Z0-9_]*)")
 
     # Percorrer todos os arquivos .py, exceto __pycache__
-    for py_file in Path(project_root).rglob('*.py'):
-        if '__pycache__' in str(py_file):
+    for py_file in Path(project_root).rglob("*.py"):
+        if "__pycache__" in str(py_file):
             continue
 
         try:
-            with open(py_file, 'r', encoding='utf-8') as f:
+            with open(py_file, "r", encoding="utf-8") as f:
                 content = f.read()
 
             # Encontrar todas as referências
@@ -87,8 +93,8 @@ def find_config_references(project_root: str, config_attrs: Set[str]) -> Dict[st
                 else:
                     # Referência desconhecida
                     ref_info = f"{py_file.relative_to(project_root)}: Config.{match}"
-                    if ref_info not in references['UNKNOWN']:
-                        references['UNKNOWN'].append(ref_info)
+                    if ref_info not in references["UNKNOWN"]:
+                        references["UNKNOWN"].append(ref_info)
 
         except Exception as e:
             print(f"Erro ao processar {py_file}: {e}")
@@ -115,7 +121,9 @@ def generate_report(config_attrs: Set[str], references: Dict[str, List[str]]) ->
 
     # Configurações utilizadas
     used_configs = [attr for attr in config_attrs if references.get(attr)]
-    report_lines.append(f"CONFIGURAÇÕES UTILIZADAS ({len(used_configs)}/{len(config_attrs)}):")
+    report_lines.append(
+        f"CONFIGURAÇÕES UTILIZADAS ({len(used_configs)}/{len(config_attrs)}):"
+    )
     report_lines.append("-" * 50)
 
     if used_configs:
@@ -131,7 +139,9 @@ def generate_report(config_attrs: Set[str], references: Dict[str, List[str]]) ->
 
     # Configurações não utilizadas
     unused_configs = [attr for attr in config_attrs if not references.get(attr)]
-    report_lines.append(f"CONFIGURAÇÕES DEFINIDAS MAS NÃO UTILIZADAS ({len(unused_configs)}/{len(config_attrs)}):")
+    report_lines.append(
+        f"CONFIGURAÇÕES DEFINIDAS MAS NÃO UTILIZADAS ({len(unused_configs)}/{len(config_attrs)}):"
+    )
     report_lines.append("-" * 50)
 
     if unused_configs:
@@ -144,17 +154,19 @@ def generate_report(config_attrs: Set[str], references: Dict[str, List[str]]) ->
 
     # Problemas encontrados
     problems = []
-    unknown_refs = references.get('UNKNOWN', [])
+    unknown_refs = references.get("UNKNOWN", [])
 
     if unknown_refs:
         problems.append("REFERÊNCIAS DESCONHECIDAS ENCONTRADAS:")
-        problems.append("Essas referências usam 'Config.' mas o atributo não foi encontrado na classe Config:")
+        problems.append(
+            "Essas referências usam 'Config.' mas o atributo não foi encontrado na classe Config:"
+        )
         for ref in sorted(unknown_refs):
             problems.append(f"• {ref}")
         problems.append("")
 
     # Verificar se há propriedades computadas sendo acessadas incorretamente
-    computed_properties = {'BOSS_MUSIC_SILENCE_DURATION', 'POWERUP_WEIGHTS'}
+    computed_properties = {"BOSS_MUSIC_SILENCE_DURATION", "POWERUP_WEIGHTS"}
     incorrectly_used_computed = []
     for prop in computed_properties:
         if prop in config_attrs and references.get(prop):
@@ -162,7 +174,9 @@ def generate_report(config_attrs: Set[str], references: Dict[str, List[str]]) ->
 
     if incorrectly_used_computed:
         problems.append("PROPRIEDADES COMPUTADAS SENDO ACESSADAS DIRETAMENTE:")
-        problems.append("Estas são propriedades @property e devem ser acessadas sem 'Config.':")
+        problems.append(
+            "Estas são propriedades @property e devem ser acessadas sem 'Config.':"
+        )
         for prop in sorted(incorrectly_used_computed):
             problems.append(f"• {prop} (usada em: {', '.join(references[prop])})")
         problems.append("")
@@ -184,8 +198,12 @@ def generate_report(config_attrs: Set[str], references: Dict[str, List[str]]) ->
     usage_percentage = (used_count / total_configs * 100) if total_configs > 0 else 0
 
     report_lines.append(f"• Total de configurações definidas: {total_configs}")
-    report_lines.append(f"• Configurações utilizadas: {used_count} ({usage_percentage:.1f}%)")
-    report_lines.append(f"• Configurações não utilizadas: {unused_count} ({100 - usage_percentage:.1f}%)")
+    report_lines.append(
+        f"• Configurações utilizadas: {used_count} ({usage_percentage:.1f}%)"
+    )
+    report_lines.append(
+        f"• Configurações não utilizadas: {unused_count} ({100 - usage_percentage:.1f}%)"
+    )
     if unknown_refs:
         report_lines.append(f"• Referências desconhecidas: {len(unknown_refs)}")
 
@@ -224,7 +242,7 @@ def main():
 
     # Salvar relatório
     report_file = project_root / "config_usage_report.txt"
-    with open(report_file, 'w', encoding='utf-8') as f:
+    with open(report_file, "w", encoding="utf-8") as f:
         f.write(report)
 
     print(f"\nRelatório salvo em: {report_file}")

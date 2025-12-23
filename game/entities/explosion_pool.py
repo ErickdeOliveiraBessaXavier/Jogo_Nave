@@ -37,7 +37,14 @@ class ExplosionPool:
             explosion.particles.clear()
             self.available.append(explosion)
 
-    def get(self, x: float, y: float, size: int = 30, is_slime: bool = False, custom_color: tuple[int, int, int, int] | None = None) -> Explosion:
+    def get(
+        self,
+        x: float,
+        y: float,
+        size: int = 30,
+        is_slime: bool = False,
+        custom_color: tuple[int, int, int, int] | None = None,
+    ) -> Explosion:
         """
         Obtém uma explosão do pool (reutiliza se possível).
 

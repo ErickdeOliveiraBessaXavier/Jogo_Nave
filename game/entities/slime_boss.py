@@ -54,12 +54,12 @@ class SlimeBoss(Boss):
                 / "sprite_boss_03_slime"
                 / f"boss_3_gosma_sprite ({i}).png"
             )
-            
+
             # ✅ ADICIONAR VALIDAÇÃO AQUI:
             if not path.exists():
                 print(f"⚠️ SlimeBoss: Frame {i} não encontrado: {path}")
                 continue
-            
+
             try:
                 image = get_image(path)
                 frames.append(image)
@@ -69,7 +69,9 @@ class SlimeBoss(Boss):
 
         # ✅ ADICIONAR VALIDAÇÃO FINAL:
         if not frames:
-            print("❌ SlimeBoss: NENHUM frame foi carregado! Verifique o caminho dos sprites.")
+            print(
+                "❌ SlimeBoss: NENHUM frame foi carregado! Verifique o caminho dos sprites."
+            )
         elif len(frames) < 24:
             print(f"⚠️ SlimeBoss: Apenas {len(frames)}/24 frames foram carregados.")
         else:
@@ -79,9 +81,17 @@ class SlimeBoss(Boss):
         cls._frames_loaded = True
         return frames
 
-    def __init__(self, x: float, y: float, health: int | None = None, difficulty_multiplier: float = 1.0):
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        health: int | None = None,
+        difficulty_multiplier: float = 1.0,
+    ):
         # Initialize base Boss to get full behavior
-        super().__init__(x, y, health if health is not None else int(Config.BOSS_HEALTH * 1.2))
+        super().__init__(
+            x, y, health if health is not None else int(Config.BOSS_HEALTH * 1.2)
+        )
 
         # Make the boss span the entire screen width plus movement margins
         self.w = Config.SCREEN_WIDTH + 100  # +50px left +50px right margin
@@ -108,26 +118,34 @@ class SlimeBoss(Boss):
         self._mask_cache: dict[int, pygame.mask.Mask] = {}
         self._scaled_frame_cache: dict[int, pygame.Surface] = {}
         self._last_mask_size = (int(self.w), int(self.h))
-        self._mask_cache_max_size = 6  # Keep masks for last 6 frames to balance memory/performance
+        self._mask_cache_max_size = (
+            6  # Keep masks for last 6 frames to balance memory/performance
+        )
 
         # Disable floating squares for SlimeBoss
         self.floating_squares = []
         self.position_history = deque(maxlen=30)
 
         # Sistema de dripping slime
-        self.dripping_effect = SlimeDrippingEffect(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT, difficulty_multiplier)
+        self.dripping_effect = SlimeDrippingEffect(
+            Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT, difficulty_multiplier
+        )
 
     def _init_floating_squares(self) -> None:
         """SlimeBoss doesn't use floating squares."""
         pass
 
-    def update(self, dt: float, player_x: float, player_y: float | None = None) -> tuple[List[BossLaser], List[Meteor], List["BossSquare"]]:
+    def update(
+        self, dt: float, player_x: float, player_y: float | None = None
+    ) -> tuple[List[BossLaser], List[Meteor], List["BossSquare"]]:
         # Update animation always
         self._update_animation(dt)
 
         # Update dripping effect when active
         if self.state == "active":
-            self.dripping_effect.update(dt, self.x, self.y, self.w, player_x, player_y or 0)
+            self.dripping_effect.update(
+                dt, self.x, self.y, self.w, player_x, player_y or 0
+            )
 
         # Call parent update
         lasers, meteors, squares = super().update(dt, player_x, player_y)
@@ -153,16 +171,16 @@ class SlimeBoss(Boss):
         speed = 50.0  # pixels/segundo (ajuste conforme necessário)
         if self.frenzy_mode:
             speed *= 1.5  # 50% mais rápido no frenzy
-        
+
         # Mover horizontalmente
-        if not hasattr(self, 'direction'):
+        if not hasattr(self, "direction"):
             self.direction = 1  # 1 = direita, -1 = esquerda
-        
+
         self.x += speed * dt * self.direction
-        
+
         # Calcular posição central
         center_x = Config.SCREEN_WIDTH / 2 - self.w / 2
-        
+
         # Inverter direção nos limites de ±50px da posição central
         if self.direction > 0 and self.x >= center_x + 50:
             self.direction = -1
@@ -173,7 +191,7 @@ class SlimeBoss(Boss):
         """Update animation frame."""
         if not self.animation_frames or len(self.animation_frames) == 0:
             return  # Não atualizar se não há frames
-        
+
         self.animation_timer += dt
         if self.animation_timer >= self.animation_speed:
             self.animation_timer = 0.0
@@ -181,6 +199,7 @@ class SlimeBoss(Boss):
 
     def draw(self, surface: pygame.Surface, fps: float = 60.0) -> None:
         import pygame  # Ensure pygame is available in local scope
+
         # Draw the slime sprite stretched to boss dimensions (with simple fallback)
         offset_x, offset_y = (0, 0)
         if self.frenzy_shake_timer > 0:
@@ -190,24 +209,37 @@ class SlimeBoss(Boss):
         if self.animation_frames and len(self.animation_frames) > 0:
             try:
                 frame = self.animation_frames[self.current_frame]
-                scaled_frame = pygame.transform.smoothscale(frame, (int(self.w), int(self.h)))
-                surface.blit(scaled_frame, (int(self.x + offset_x), int(self.y + offset_y)))
+                scaled_frame = pygame.transform.smoothscale(
+                    frame, (int(self.w), int(self.h))
+                )
+                surface.blit(
+                    scaled_frame, (int(self.x + offset_x), int(self.y + offset_y))
+                )
             except Exception as e:
                 print(f"⚠️ SlimeBoss: Erro ao desenhar frame {self.current_frame}: {e}")
                 # Fallback
-                rect = pygame.Rect(int(self.x + offset_x), int(self.y + offset_y), int(self.w), int(self.h))
+                rect = pygame.Rect(
+                    int(self.x + offset_x),
+                    int(self.y + offset_y),
+                    int(self.w),
+                    int(self.h),
+                )
                 pygame.draw.rect(surface, (0, 255, 100), rect)
                 import pygame.font
+
                 font = pygame.font.Font(None, 48)
                 text = font.render("SLIME BOSS", True, (255, 255, 255))
                 text_rect = text.get_rect(center=(rect.centerx, rect.centery))
                 surface.blit(text, text_rect)
         else:
             # Fallback: retângulo vermelho
-            rect = pygame.Rect(int(self.x + offset_x), int(self.y + offset_y), int(self.w), int(self.h))
+            rect = pygame.Rect(
+                int(self.x + offset_x), int(self.y + offset_y), int(self.w), int(self.h)
+            )
             pygame.draw.rect(surface, (0, 255, 100), rect)  # Verde gosma
             # Desenhar texto "SLIME" no centro
             import pygame.font
+
             font = pygame.font.Font(None, 48)
             text = font.render("SLIME BOSS", True, (255, 255, 255))
             text_rect = text.get_rect(center=(rect.centerx, rect.centery))
@@ -224,17 +256,17 @@ class SlimeBoss(Boss):
     def mask(self) -> pygame.mask.Mask:
         """Generate pixel-perfect collision mask from current animation frame with dual caching."""
         current_size = (int(self.w), int(self.h))
-        
+
         # Clear cache if boss size changed
         if current_size != self._last_mask_size:
             self._mask_cache.clear()
             self._scaled_frame_cache.clear()
             self._last_mask_size = current_size
-        
+
         # Return cached mask if available
         if self.current_frame in self._mask_cache:
             return self._mask_cache[self.current_frame]
-        
+
         # Manage cache size - remove oldest entries if cache is full
         if len(self._mask_cache) >= self._mask_cache_max_size:
             # Remove the oldest frame (simple FIFO - could be improved with LRU)
@@ -242,10 +274,13 @@ class SlimeBoss(Boss):
             del self._mask_cache[oldest_frame]
             if oldest_frame in self._scaled_frame_cache:
                 del self._scaled_frame_cache[oldest_frame]
-        
+
         # Get or create scaled frame
         if self.current_frame not in self._scaled_frame_cache:
-            if not self.animation_frames or len(self.animation_frames) <= self.current_frame:
+            if (
+                not self.animation_frames
+                or len(self.animation_frames) <= self.current_frame
+            ):
                 # Fallback: create a dummy scaled surface
                 scaled_frame = pygame.Surface(current_size)
                 scaled_frame.fill((255, 255, 255, 255))  # White with alpha
@@ -255,28 +290,36 @@ class SlimeBoss(Boss):
                     # Scale the frame to boss dimensions
                     scaled_frame = pygame.transform.smoothscale(frame, current_size)
                 except Exception as e:
-                    print(f"⚠️ SlimeBoss: Erro ao escalonar frame {self.current_frame}: {e}")
+                    print(
+                        f"⚠️ SlimeBoss: Erro ao escalonar frame {self.current_frame}: {e}"
+                    )
                     # Fallback: create a dummy scaled surface
                     scaled_frame = pygame.Surface(current_size)
                     scaled_frame.fill((255, 255, 255, 255))
-            
+
             self._scaled_frame_cache[self.current_frame] = scaled_frame
-        
+
         # Create mask from cached scaled frame
         try:
-            mask = pygame.mask.from_surface(self._scaled_frame_cache[self.current_frame])
+            mask = pygame.mask.from_surface(
+                self._scaled_frame_cache[self.current_frame]
+            )
         except Exception as e:
-            print(f"⚠️ SlimeBoss: Erro ao criar máscara para frame {self.current_frame}: {e}")
+            print(
+                f"⚠️ SlimeBoss: Erro ao criar máscara para frame {self.current_frame}: {e}"
+            )
             # Fallback: rectangular mask
             mask = pygame.mask.Mask(current_size, fill=True)
-        
+
         # Cache the mask
         self._mask_cache[self.current_frame] = mask
         return mask
 
-    def check_drip_damage(self, player_rect: pygame.Rect, entity_manager: Optional["EntityManager"] = None) -> int:
+    def check_drip_damage(
+        self, player_rect: pygame.Rect, entity_manager: Optional["EntityManager"] = None
+    ) -> int:
         """Verifica se alguma gota acertou o jogador e retorna o dano.
-        
+
         Args:
             player_rect: Retângulo do jogador
             entity_manager: EntityManager para spawnar efeitos de partículas (opcional)

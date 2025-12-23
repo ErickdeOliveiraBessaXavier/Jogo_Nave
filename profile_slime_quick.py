@@ -57,7 +57,7 @@ def profile_slime_quick(drip_count: int = 50, duration: float = 3.0):
     # Análise dos resultados
     stats = pstats.Stats(profiler)
     stats.strip_dirs()
-    stats.sort_stats('cumulative')
+    stats.sort_stats("cumulative")
 
     print("\n📊 RESULTADOS:")
     print(f"Frames processados: {frames}")
@@ -67,10 +67,10 @@ def profile_slime_quick(drip_count: int = 50, duration: float = 3.0):
     stats.print_stats(15)
 
     print("\n🎯 ANÁLISE slime_drip.py:")
-    stats.print_stats('slime_drip')
+    stats.print_stats("slime_drip")
 
     print("\n🖌️ ANÁLISE pygame.draw:")
-    stats.print_stats('pygame.draw')
+    stats.print_stats("pygame.draw")
 
     # Identificar gargalos específicos
     print("\n🎯 DIAGNÓSTICO:")
@@ -81,7 +81,7 @@ def profile_slime_quick(drip_count: int = 50, duration: float = 3.0):
     for stat in stats.stats.items():
         filename, line, func = stat[0]
         cc, nc, tt, ct, callers = stat[1]
-        if 'slime_drip.py' in filename:
+        if "slime_drip.py" in filename:
             stats_dict[f"{filename}:{line}({func})"] = ct
 
     if stats_dict:
@@ -89,9 +89,9 @@ def profile_slime_quick(drip_count: int = 50, duration: float = 3.0):
         slowest_func = max(stats_dict.items(), key=lambda x: x[1])
         print(f"Função mais lenta: {slowest_func[0]} - {slowest_func[1]:.4f}s")
         # Verificar se é draw ou update
-        if 'draw' in slowest_func[0]:
+        if "draw" in slowest_func[0]:
             print("💡 RECOMENDAÇÃO: Otimizar sistema de rendering (culling/LOD)")
-        elif 'update' in slowest_func[0]:
+        elif "update" in slowest_func[0]:
             print("💡 RECOMENDAÇÃO: Investigar física/partículas")
         else:
             print("💡 RECOMENDAÇÃO: Investigar função específica")

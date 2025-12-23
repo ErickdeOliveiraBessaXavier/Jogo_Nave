@@ -5,7 +5,14 @@ from ..core.config import config as Config
 
 
 class Explosion:
-    def __init__(self, x: float, y: float, size: int = 20, is_slime: bool = False, custom_color: tuple[int, int, int, int] | None = None):
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        size: int = 20,
+        is_slime: bool = False,
+        custom_color: tuple[int, int, int, int] | None = None,
+    ):
         self.x, self.y = x, y
         self.time = Config.EXPLOSION_DURATION * (
             size / 40
@@ -49,29 +56,42 @@ class Explosion:
 
         for _, p in enumerate(self.particles):
             life_ratio = p[4] / max(self.time, 1e-6)
-            
+
             if self.custom_color is not None:
                 # Usar cor personalizada (para gotas de slime)
                 base_color = self.custom_color[:3]  # RGB da cor base
-                alpha = int(self.custom_color[3] * life_ratio) if len(self.custom_color) == 4 else 255
+                alpha = (
+                    int(self.custom_color[3] * life_ratio)
+                    if len(self.custom_color) == 4
+                    else 255
+                )
                 color = (*base_color, alpha)
             elif self.is_slime:
                 # Cores específicas para slime: #503959, #CCB0D9, #260259, #4D0DA6, #410B8C
                 slime_colors = [
-                    (80, 57, 89),    # #503959
-                    (204, 176, 217), # #CCB0D9
-                    (38, 2, 89),     # #260259
-                    (77, 13, 166),   # #4D0DA6
-                    (65, 11, 140)    # #410B8C
+                    (80, 57, 89),  # #503959
+                    (204, 176, 217),  # #CCB0D9
+                    (38, 2, 89),  # #260259
+                    (77, 13, 166),  # #4D0DA6
+                    (65, 11, 140),  # #410B8C
                 ]
                 # Interpolar entre as cores baseado na vida da partícula
                 color_index = int(life_ratio * (len(slime_colors) - 1))
                 next_index = min(color_index + 1, len(slime_colors) - 1)
                 t = (life_ratio * (len(slime_colors) - 1)) - color_index
-                
-                r = int(slime_colors[color_index][0] + t * (slime_colors[next_index][0] - slime_colors[color_index][0]))
-                g = int(slime_colors[color_index][1] + t * (slime_colors[next_index][1] - slime_colors[color_index][1]))
-                b = int(slime_colors[color_index][2] + t * (slime_colors[next_index][2] - slime_colors[color_index][2]))
+
+                r = int(
+                    slime_colors[color_index][0]
+                    + t * (slime_colors[next_index][0] - slime_colors[color_index][0])
+                )
+                g = int(
+                    slime_colors[color_index][1]
+                    + t * (slime_colors[next_index][1] - slime_colors[color_index][1])
+                )
+                b = int(
+                    slime_colors[color_index][2]
+                    + t * (slime_colors[next_index][2] - slime_colors[color_index][2])
+                )
                 color = (r, g, b)
             else:
                 # Cor muda de amarelo/laranja para vermelho/fumaça

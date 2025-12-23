@@ -855,8 +855,11 @@ class PlayingScene(Scene):
             # Dano das gotas do SlimeBoss
             if self._boss_type_cache == "slime":
                 from ..entities.slime_boss import SlimeBoss
+
                 slime_boss = cast(SlimeBoss, boss)
-                drip_damage = slime_boss.check_drip_damage(self.ship.rect, self.entity_manager)
+                drip_damage = slime_boss.check_drip_damage(
+                    self.ship.rect, self.entity_manager
+                )
                 if drip_damage > 0:
                     self._handle_ship_hit()
                     # Meta-progression: Track damage taken
@@ -1314,7 +1317,7 @@ class PlayingScene(Scene):
             self.ship.rect.centerx,
             self.ship.rect.centery,
             self.enemy_visible,
-            fps=fps_stats.get('fps', 60.0)
+            fps=fps_stats.get("fps", 60.0),
         )
         self.ship.draw(self.game_surface)
 

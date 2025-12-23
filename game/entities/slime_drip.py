@@ -31,7 +31,7 @@ class SlimeDripParticle:
         angle = random.uniform(0, 2 * 3.14159)  # Ângulo aleatório
         speed = random.uniform(
             Config.SLIME_DRIP_DETACH_PARTICLE_SPEED_MIN,
-            Config.SLIME_DRIP_DETACH_PARTICLE_SPEED_MAX
+            Config.SLIME_DRIP_DETACH_PARTICLE_SPEED_MAX,
         )
         self.vx: float = speed * math.cos(angle)
         self.vy: float = speed * math.sin(angle)
@@ -58,22 +58,14 @@ class SlimeDripParticle:
         if self.age >= self.lifetime or self.current_size <= 0.05:
             self.active = False
 
-    def draw(self, surface: pygame.Surface) -> None:
-        """Desenha a partícula como um círculo."""
-        if not self.active or self.current_size <= 0.05:
-            return
 
-        radius = max(1, int(self.current_size * 50))  # Raio baseado no tamanho
-        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), radius)
-
-    # REMOVIDO: draw() movido para batch rendering no pool
 from ..core.spatial_grid import SpatialGrid
-
 
 
 @dataclass
 class DripParams:
     """Parâmetros calculados para uma gota baseados em sua escala."""
+
     scale: float
     radius: float
     damage: int
@@ -81,38 +73,50 @@ class DripParams:
     speed_y: float
     gravity: float
     color: Tuple[int, int, int, int]
-    
+
     @classmethod
-    def generate(cls, scale: float | None = None) -> 'DripParams':
+    def generate(cls, scale: float | None = None) -> "DripParams":
         """Gera parâmetros aleatórios para uma gota."""
         if scale is None:
             scale = random.uniform(0.5, 1.5)
-        
+
         radius = Config.SLIME_DRIP_RADIUS_MAX * scale
         damage = max(1, int(scale * 2))
-        
+
         # Física melhorada: gotas maiores caem mais devagar (mais realista)
         # Usa raiz quadrada para suavizar o efeito
         size_factor = (scale / 1.0) ** 0.5
         base_speed = random.uniform(100.0, 300.0)
         speed_multiplier = 1.0 / size_factor  # Inversão: maior = mais lento
-        
+
         speed_x = random.uniform(-20.0, 20.0) * speed_multiplier
         speed_y = base_speed * speed_multiplier
         gravity = 200.0 * speed_multiplier
-        
+
         color = random.choice(Config.SLIME_DRIP_COLORS)
-        
+
         return cls(scale, radius, damage, speed_x, speed_y, gravity, color)
 
 
 class SlimeDrip:
     """Gota de slime com física e renderização otimizadas."""
-    
-    __slots__ = ('active', 'dead', 'x', 'y', 'params', 'speed_x', 'speed_y', 
-                 'effect_width', 'effect_height', '_cached_int_pos',
-                 'pulse_timer', 'pulse_radius',
-                 'detach_particles', 'detach_timer')
+
+    __slots__ = (
+        "active",
+        "dead",
+        "x",
+        "y",
+        "params",
+        "speed_x",
+        "speed_y",
+        "effect_width",
+        "effect_height",
+        "_cached_int_pos",
+        "pulse_timer",
+        "pulse_radius",
+        "detach_particles",
+        "detach_timer",
+    )
 
     def __init__(self):
         self.active: bool = False
@@ -125,7 +129,7 @@ class SlimeDrip:
         self.effect_height: int = 600
         self.params: DripParams = DripParams.generate()
         self._cached_int_pos: Tuple[int, int] = (0, 0)
-        
+
         # Sistema de pulso sutil
         self.pulse_timer: float = random.uniform(0, Config.SLIME_DRIP_PULSE_PERIOD)
         self.pulse_radius: float = self.params.radius
@@ -142,13 +146,13 @@ class SlimeDrip:
         self.y = y
         self.effect_width = effect_width
         self.effect_height = effect_height
-        
+
         # Gera novos parâmetros
         self.params = DripParams.generate()
         self.speed_x = self.params.speed_x
         self.speed_y = self.params.speed_y
         self._cached_int_pos = (int(x), int(y))
-        
+
         # Reset pulso
         self.pulse_timer = random.uniform(0, Config.SLIME_DRIP_PULSE_PERIOD)
         self.pulse_radius = self.params.radius
@@ -168,7 +172,7 @@ class SlimeDrip:
         # Movimento
         self.x += self.speed_x * dt
         self.y += self.speed_y * dt
-        
+
         # Cache posição inteira para renderização
         self._cached_int_pos = (int(self.x), int(self.y))
 
@@ -176,18 +180,29 @@ class SlimeDrip:
         self.pulse_timer += dt
         if self.pulse_timer >= Config.SLIME_DRIP_PULSE_PERIOD:
             self.pulse_timer = 0.0
-        
+
         # Calcula raio pulsante usando seno para movimento suave
         import math
-        pulse_ratio = (math.sin(self.pulse_timer / Config.SLIME_DRIP_PULSE_PERIOD * 2 * math.pi) + 1) / 2
-        self.pulse_radius = self.params.radius * (1.0 + Config.SLIME_DRIP_PULSE_AMPLITUDE * (pulse_ratio - 0.5) * 2)
+
+        pulse_ratio = (
+            math.sin(self.pulse_timer / Config.SLIME_DRIP_PULSE_PERIOD * 2 * math.pi)
+            + 1
+        ) / 2
+        self.pulse_radius = self.params.radius * (
+            1.0 + Config.SLIME_DRIP_PULSE_AMPLITUDE * (pulse_ratio - 0.5) * 2
+        )
 
         # Sistema de partículas desprendidas - produção contínua
         self.detach_timer += dt
-        if self.detach_timer >= Config.SLIME_DRIP_DETACH_PARTICLE_SPAWN_INTERVAL:  # Intervalo consistente
+        if (
+            self.detach_timer >= Config.SLIME_DRIP_DETACH_PARTICLE_SPAWN_INTERVAL
+        ):  # Intervalo consistente
             self.detach_timer = 0.0
             # Sempre spawnar partícula (produção contínua)
-            if len(self.detach_particles) < Config.SLIME_DRIP_DETACH_PARTICLE_MAX_PER_DRIP:
+            if (
+                len(self.detach_particles)
+                < Config.SLIME_DRIP_DETACH_PARTICLE_MAX_PER_DRIP
+            ):
                 self._spawn_detach_particle()
 
         # Atualizar partículas desprendidas
@@ -199,26 +214,13 @@ class SlimeDrip:
         margin = Config.SLIME_DRIP_DEATH_MARGIN
 
         # Morte imediata se sair da tela (sem timer de graça - gotas sempre caem)
-        if (self.y > self.effect_height + margin or 
-            self.x < -margin or 
-            self.x > self.effect_width + margin):
+        if (
+            self.y > self.effect_height + margin
+            or self.x < -margin
+            or self.x > self.effect_width + margin
+        ):
             self.dead = True
             self.active = False
-
-    def draw(self, surface: pygame.Surface) -> None:
-        """Desenha a gota como um círculo colorido com pulso sutil e partículas desprendidas."""
-        if not self.active or self.dead:
-            return
-
-        # Desenhar partículas desprendidas primeiro (atrás da gota)
-        for particle in self.detach_particles:
-            particle.draw(surface)
-
-        # Desenhar a gota principal
-        pygame.draw.circle(surface, self.params.color,
-                          self._cached_int_pos, int(self.pulse_radius))
-
-    # REMOVIDO: draw() movido para batch rendering no pool
 
     def collides_with_player(self, player_rect: pygame.Rect) -> bool:
         """Verifica colisão circular otimizada com o jogador."""
@@ -259,21 +261,32 @@ class SlimeDrip:
 class SlimeDripPool:
     """Pool Pattern otimizado para gotas de slime com spatial grid."""
 
-    def __init__(self, initial_size: int = 20):
+    def __init__(
+        self, initial_size: int = 20, effect_width: int = 1600, effect_height: int = 900
+    ):
         self.pool: List[SlimeDrip] = [SlimeDrip() for _ in range(initial_size)]
         self.active: List[SlimeDrip] = []
         self._pool_index: int = 0  # Índice para rotação circular no pool
-        
+
+        # Dimensões do efeito
+        self.effect_width: int = effect_width
+        self.effect_height: int = effect_height
+
         # Spatial grid para otimizar colisões
-        self.spatial_grid: SpatialGrid[SlimeDrip] = SpatialGrid(cell_size=Config.SLIME_DRIP_SPATIAL_GRID_CELL_SIZE)
+        self.spatial_grid: SpatialGrid[SlimeDrip] = SpatialGrid(
+            cell_size=Config.SLIME_DRIP_SPATIAL_GRID_CELL_SIZE
+        )
 
         # Sistema de partículas órfãs (partículas que sobreviveram à gota principal)
         self.orphan_particles: List[SlimeDripParticle] = []
+        self.max_orphan_particles: int = 200  # Limitar para performance
 
-    def get(self, x: float, y: float, effect_width: int, effect_height: int) -> SlimeDrip:
+    def get(
+        self, x: float, y: float, effect_width: int, effect_height: int
+    ) -> SlimeDrip:
         """Obtém uma gota do pool (busca circular otimizada)."""
         pool_size = len(self.pool)
-        
+
         # Busca circular a partir do último índice usado
         for i in range(pool_size):
             idx = (self._pool_index + i) % pool_size
@@ -283,7 +296,7 @@ class SlimeDripPool:
                 self.active.append(drip)
                 self._pool_index = (idx + 1) % pool_size
                 return drip
-        
+
         # Pool cheio: cria nova gota
         drip = SlimeDrip()
         drip.reset(x, y, effect_width, effect_height)
@@ -299,7 +312,7 @@ class SlimeDripPool:
             if particle.active:
                 self.orphan_particles.append(particle)
         drip.detach_particles.clear()
-        
+
         drip.active = False
         drip.dead = True
         if drip in self.active:
@@ -313,21 +326,31 @@ class SlimeDripPool:
             drip.update(dt)
             if drip.dead:
                 to_release.append(drip)
-        
+
         # Liberar gotas mortas
         for drip in to_release:
             self.release(drip)
-        
+
         # Atualizar partículas órfãs
         self.orphan_particles = [p for p in self.orphan_particles if p.active]
         for particle in self.orphan_particles:
             particle.update(dt)
             # Verificar se partícula órfã saiu da tela
             margin = Config.SLIME_DRIP_DEATH_MARGIN
-            if (particle.x < -margin or particle.x > 1600 + margin or
-                particle.y < -margin or particle.y > 900 + margin):
+            if (
+                particle.x < -margin
+                or particle.x > self.effect_width + margin
+                or particle.y < -margin
+                or particle.y > self.effect_height + margin
+            ):
                 particle.active = False
-        
+
+        # Limitar número de partículas órfãs para performance (manter apenas as mais recentes)
+        if len(self.orphan_particles) > self.max_orphan_particles:
+            # Remover as mais velhas (primeiras da lista)
+            excess = len(self.orphan_particles) - self.max_orphan_particles
+            self.orphan_particles = self.orphan_particles[excess:]
+
         # Reconstruir spatial grid se houver gotas ativas
         if self.active:
             self.spatial_grid.clear()
@@ -339,106 +362,163 @@ class SlimeDripPool:
             self.spatial_grid.insert_batch(batch_data)
 
     def draw(self, surface: pygame.Surface) -> None:
-        """Desenha as gotas usando batch rendering e culling para performance máxima."""
-        if not self.active:
+        """Desenha as gotas usando batch rendering otimizado e LOD para performance máxima."""
+        if not self.active and not self.orphan_particles:
             return
 
         # Culling básico: não desenhar gotas fora da tela + margem
         screen_width, screen_height = surface.get_size()
-        cull_margin = 100  # Margem extra para objetos se movendo
+        cull_margin = 150  # Margem maior para performance
+
+        # LOD thresholds
+        min_particle_size = 0.1  # Partículas muito pequenas são ignoradas
+        min_drip_size = 0.5  # Gotas muito pequenas são ignoradas
 
         # Batch rendering: coletar todos os círculos visíveis para desenhar de uma vez
-        circles_to_draw: List[Tuple[Tuple[int, int, int, int], Tuple[int, int], int]] = []  # Lista de (color, center, radius)
+        filled_circles: List[Tuple[Tuple[int, int, int, int], Tuple[int, int], int]] = (
+            []
+        )  # Gotas preenchidas
+        outline_circles: List[
+            Tuple[Tuple[int, int, int, int], Tuple[int, int], int]
+        ] = []  # Partículas órfãs (bordas apenas)
 
         for drip in self.active:
             if not drip.active or drip.dead:
                 continue
 
+            # LOD: pular gotas muito pequenas
+            if drip.params.radius < min_drip_size:
+                continue
+
             # Culling: pular gotas completamente fora da tela
             drip_x, drip_y = drip.x, drip.y
             drip_radius = drip.pulse_radius
-            if (drip_x + drip_radius < -cull_margin or
-                drip_x - drip_radius > screen_width + cull_margin or
-                drip_y + drip_radius < -cull_margin or
-                drip_y - drip_radius > screen_height + cull_margin):
+            if (
+                drip_x + drip_radius < -cull_margin
+                or drip_x - drip_radius > screen_width + cull_margin
+                or drip_y + drip_radius < -cull_margin
+                or drip_y - drip_radius > screen_height + cull_margin
+            ):
                 continue
 
-            # Adicionar a gota principal
+            # Adicionar a gota principal (preenchida)
             color: Tuple[int, int, int, int] = drip.params.color
             center: Tuple[int, int] = drip.get_cached_int_pos()
             radius: int = int(drip.pulse_radius)
-            circles_to_draw.append((color, center, radius))
+            filled_circles.append((color, center, radius))
 
-            # Adicionar partículas desprendidas (com culling individual)
+            # Adicionar partículas desprendidas (bordas apenas) - com LOD
             for particle in drip.detach_particles:
-                if (particle.active and particle.current_size > 0.05 and
-                    particle.x > -cull_margin and particle.x < screen_width + cull_margin and
-                    particle.y > -cull_margin and particle.y < screen_height + cull_margin):
+                if (
+                    particle.active
+                    and particle.current_size > min_particle_size
+                    and particle.x > -cull_margin
+                    and particle.x < screen_width + cull_margin
+                    and particle.y > -cull_margin
+                    and particle.y < screen_height + cull_margin
+                ):
                     particle_radius: int = max(1, int(particle.current_size * 50))
-                    particle_center: Tuple[int, int] = (int(particle.x), int(particle.y))
+                    particle_center: Tuple[int, int] = (
+                        int(particle.x),
+                        int(particle.y),
+                    )
                     particle_color: Tuple[int, int, int, int] = particle.color
-                    circles_to_draw.append((particle_color, particle_center, particle_radius))
+                    outline_circles.append(
+                        (particle_color, particle_center, particle_radius)
+                    )
 
-        # Adicionar partículas órfãs (com culling)
+        # Adicionar partículas órfãs (bordas apenas) - com LOD
         for particle in self.orphan_particles:
-            if (particle.active and particle.current_size > 0.05 and
-                particle.x > -cull_margin and particle.x < screen_width + cull_margin and
-                particle.y > -cull_margin and particle.y < screen_height + cull_margin):
+            if (
+                particle.active
+                and particle.current_size > min_particle_size
+                and particle.x > -cull_margin
+                and particle.x < screen_width + cull_margin
+                and particle.y > -cull_margin
+                and particle.y < screen_height + cull_margin
+            ):
                 particle_radius: int = max(1, int(particle.current_size * 50))
                 particle_center: Tuple[int, int] = (int(particle.x), int(particle.y))
                 particle_color: Tuple[int, int, int, int] = particle.color
-                circles_to_draw.append((particle_color, particle_center, particle_radius))
+                outline_circles.append(
+                    (particle_color, particle_center, particle_radius)
+                )
 
-        # Desenhar todos os círculos agrupados por cor para melhor performance
-        color_groups: dict[Tuple[int, int, int, int], List[Tuple[Tuple[int, int], int]]] = {}
-        for color, center, radius in circles_to_draw:
-            if color not in color_groups:
-                color_groups[color] = []
-            color_groups[color].append((center, radius))
+        # Desenhar círculos preenchidos (gotas principais) - super batch otimizado
+        if filled_circles:
+            # Super batch: agrupar por (cor, raio) para reduzir state changes drasticamente
+            super_groups: dict[
+                Tuple[Tuple[int, int, int, int], int], List[Tuple[int, int]]
+            ] = {}
+            for color, center, radius in filled_circles:
+                key = (color, radius)
+                if key not in super_groups:
+                    super_groups[key] = []
+                super_groups[key].append(center)
 
-        # Draw por cor (reduz chamadas de contexto OpenGL/state changes)
-        for color, circles in color_groups.items():
-            # Agrupar também por raio para reduzir ainda mais as chamadas
-            radius_groups: dict[int, List[Tuple[int, int]]] = {}
-            for center, radius in circles:
-                if radius not in radius_groups:
-                    radius_groups[radius] = []
-                radius_groups[radius].append(center)
+            # Draw super batched - uma chamada por combinação cor/raio
+            for (color, radius), centers in super_groups.items():
+                # Para muitos círculos, fazer em lotes menores para evitar overflow
+                batch_size = 100  # Aumentado para melhor performance
+                for i in range(0, len(centers), batch_size):
+                    batch_centers = centers[i : i + batch_size]
+                    for center in batch_centers:
+                        pygame.draw.circle(surface, color, center, radius)
 
-            # Draw por cor e raio (mínimas state changes)
-            for radius, centers in radius_groups.items():
-                for center in centers:
-                    pygame.draw.circle(surface, color, center, radius)
+        # Desenhar círculos com bordas apenas (partículas órfãs) - super batch otimizado
+        if outline_circles:
+            # Mesmo super batch para bordas
+            super_groups: dict[
+                Tuple[Tuple[int, int, int, int], int], List[Tuple[int, int]]
+            ] = {}
+            for color, center, radius in outline_circles:
+                key = (color, radius)
+                if key not in super_groups:
+                    super_groups[key] = []
+                super_groups[key].append(center)
 
-    def check_collisions(self, player_rect: pygame.Rect, entity_manager: Optional["EntityManager"] = None) -> int:
+            # Draw super batched com bordas
+            for (color, radius), centers in super_groups.items():
+                batch_size = 100
+                for i in range(0, len(centers), batch_size):
+                    batch_centers = centers[i : i + batch_size]
+                    for center in batch_centers:
+                        pygame.draw.circle(
+                            surface, color, center, radius, 1
+                        )  # width=1 para borda apenas
+
+    def check_collisions(
+        self, player_rect: pygame.Rect, entity_manager: Optional["EntityManager"] = None
+    ) -> int:
         """Verifica colisões usando spatial grid (muito mais rápido)."""
         if not self.active:
             return 0
-        
+
         # Query spatial grid para candidatos próximos
         candidates = self.spatial_grid.query_from_rect(player_rect)
-        
+
         total_damage = 0
         to_release: List[SlimeDrip] = []
-        
+
         for drip in candidates:
             if drip.collides_with_player(player_rect):
                 total_damage += drip.params.damage
-                
+
                 # Spawnar explosão usando a cor da gota
                 if entity_manager:
                     entity_manager.spawn_explosion(
-                        drip.x, drip.y, 
-                        size=int(drip.params.radius), 
-                        custom_color=drip.params.color
+                        drip.x,
+                        drip.y,
+                        size=int(drip.params.radius),
+                        custom_color=drip.params.color,
                     )
-                
+
                 to_release.append(drip)
-        
+
         # Liberar gotas que colidiram (agora transfere partículas automaticamente)
         for drip in to_release:
             self.release(drip)
-        
+
         return total_damage
 
     def clear_active(self) -> None:
@@ -460,33 +540,55 @@ class SlimeDripPool:
 class SlimeDrippingEffect:
     """Efeito de gotas de slime caindo do boss."""
 
-    __slots__ = ('effect_width', 'effect_height', 'drip_pool', 
-                 'spawn_timer', 'spawn_interval', 'max_drips')
+    __slots__ = (
+        "effect_width",
+        "effect_height",
+        "drip_pool",
+        "spawn_timer",
+        "spawn_interval",
+        "max_drips",
+    )
 
-    def __init__(self, effect_width: int, effect_height: int, 
-                 difficulty_multiplier: float = 1.0):
+    def __init__(
+        self, effect_width: int, effect_height: int, difficulty_multiplier: float = 1.0
+    ):
         self.effect_width = effect_width
         self.effect_height = effect_height
-        
+
         # Pool com tamanho inicial generoso
-        initial_pool_size = int(Config.SLIME_DRIP_MAX_ACTIVE * Config.SLIME_DRIP_POOL_SIZE_MULTIPLIER)
-        self.drip_pool = SlimeDripPool(initial_size=initial_pool_size)
-        
+        initial_pool_size = int(
+            Config.SLIME_DRIP_MAX_ACTIVE * Config.SLIME_DRIP_POOL_SIZE_MULTIPLIER
+        )
+        self.drip_pool = SlimeDripPool(
+            initial_size=initial_pool_size,
+            effect_width=effect_width,
+            effect_height=effect_height,
+        )
+
         # Spawn settings
         self.spawn_timer = 0.0
         self.spawn_interval = Config.SLIME_DRIP_SPAWN_INTERVAL / difficulty_multiplier
         self.max_drips = Config.SLIME_DRIP_MAX_ACTIVE
 
-    def update(self, dt: float, boss_x: float, boss_y: float,
-               boss_width: int, player_x: float, player_y: float) -> None:
+    def update(
+        self,
+        dt: float,
+        boss_x: float,
+        boss_y: float,
+        boss_width: int,
+        player_x: float,
+        player_y: float,
+    ) -> None:
         """Atualiza todas as gotas e spawna novas."""
         # Atualizar pool
         self.drip_pool.update(dt)
 
         # Spawn de novas gotas
         self.spawn_timer += dt
-        if (self.spawn_timer >= self.spawn_interval and
-            self.drip_pool.get_active_count() < self.max_drips):
+        if (
+            self.spawn_timer >= self.spawn_interval
+            and self.drip_pool.get_active_count() < self.max_drips
+        ):
             self.spawn_timer = 0.0
             self._spawn_drip(boss_x, boss_y, boss_width)
 
@@ -500,6 +602,8 @@ class SlimeDrippingEffect:
         """Desenha todas as gotas e rastros."""
         self.drip_pool.draw(surface)
 
-    def check_collisions(self, player_rect: pygame.Rect, entity_manager: Optional["EntityManager"] = None) -> int:
+    def check_collisions(
+        self, player_rect: pygame.Rect, entity_manager: Optional["EntityManager"] = None
+    ) -> int:
         """Verifica colisões com o jogador usando spatial grid."""
         return self.drip_pool.check_collisions(player_rect, entity_manager)

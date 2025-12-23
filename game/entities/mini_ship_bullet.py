@@ -4,7 +4,15 @@ from ..core import colors
 
 
 class MiniShipBullet:
-    def __init__(self, x: float, y: float, vx: float, vy: float, damage: int = 5, piercing: bool = False):
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        vx: float,
+        vy: float,
+        damage: int = 5,
+        piercing: bool = False,
+    ):
         self.x = x
         self.y = y
         self.vx = vx

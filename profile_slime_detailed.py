@@ -67,7 +67,9 @@ class SlimeProfiler:
 
         pygame.quit()
 
-    def _analyze_results(self, profiler: cProfile.Profile, frames: int, duration: float):
+    def _analyze_results(
+        self, profiler: cProfile.Profile, frames: int, duration: float
+    ):
         """Analisa e apresenta resultados do profiling."""
 
         # Criar string buffer para output
@@ -76,7 +78,7 @@ class SlimeProfiler:
         # Ordenar por tempo cumulativo
         stats = pstats.Stats(profiler, stream=s)
         stats.strip_dirs()
-        stats.sort_stats('cumulative')
+        stats.sort_stats("cumulative")
 
         print("\n📈 MÉTRICAS GERAIS:")
         print(f"   Frames processados: {frames}")
@@ -87,24 +89,24 @@ class SlimeProfiler:
         stats.print_stats(20)
 
         # Ordenar por tempo próprio (time)
-        stats.sort_stats('time')
+        stats.sort_stats("time")
         print("\n⚡ TOP 20 FUNÇÕES MAIS LENTAS (tempo próprio):")
         stats.print_stats(20)
 
         # Funções específicas do slime_drip
         print("\n🎯 ANÁLISE ESPECÍFICA - slime_drip.py:")
-        stats.print_stats('slime_drip')
+        stats.print_stats("slime_drip")
 
         # Funções de desenho
         print("\n🖌️ ANÁLISE ESPECÍFICA - Operações de Draw:")
-        stats.print_stats('draw')
+        stats.print_stats("draw")
 
         # Salvar relatório completo
         output_file = f"profile_report_{frames}_frames.txt"
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             stats = pstats.Stats(profiler, stream=f)
             stats.strip_dirs()
-            stats.sort_stats('cumulative')
+            stats.sort_stats("cumulative")
             stats.print_stats()
 
         print(f"\n💾 Relatório completo salvo em: {output_file}")
@@ -116,7 +118,7 @@ def main():
 
     # Testar com diferentes quantidades
     test_cases = [
-        (50, 5.0),   # 50 gotas, 5 segundos
+        (50, 5.0),  # 50 gotas, 5 segundos
         (100, 5.0),  # 100 gotas, 5 segundos
         (200, 5.0),  # 200 gotas, 5 segundos (stress test)
     ]

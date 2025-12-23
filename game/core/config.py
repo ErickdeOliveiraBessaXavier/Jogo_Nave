@@ -293,15 +293,20 @@ class Config:
     # SLIME_DRIP_SPLASH_RADIUS_MAX: float = 70.0  # (Sistema de splash não implementado)
 
     # Pool e otimização
-    SLIME_DRIP_POOL_SIZE_MULTIPLIER: int = 2  # Multiplicador para tamanho inicial do pool
+    SLIME_DRIP_POOL_SIZE_MULTIPLIER: int = (
+        2  # Multiplicador para tamanho inicial do pool
+    )
     SLIME_DRIP_SPATIAL_GRID_CELL_SIZE: int = 150  # Tamanho da célula do spatial grid
-
 
     # Sistema de partículas desprendidas
     # SLIME_DRIP_DETACH_PARTICLE_SPAWN_CHANCE: float = 0.3  # (Substituído por intervalo)
-    SLIME_DRIP_DETACH_PARTICLE_SPAWN_INTERVAL: float = 0.05  # Intervalo entre spawns (segundos) - para produção contínua
+    SLIME_DRIP_DETACH_PARTICLE_SPAWN_INTERVAL: float = (
+        0.05  # Intervalo entre spawns (segundos) - para produção contínua
+    )
     SLIME_DRIP_DETACH_PARTICLE_MAX_PER_DRIP: int = 20  # Máximo de partículas por gota
-    SLIME_DRIP_DETACH_PARTICLE_SIZE_START: float = 0.4  # Tamanho inicial relativo à gota
+    SLIME_DRIP_DETACH_PARTICLE_SIZE_START: float = (
+        0.4  # Tamanho inicial relativo à gota
+    )
     SLIME_DRIP_DETACH_PARTICLE_SIZE_END: float = 0.1  # Tamanho final (quando some)
     SLIME_DRIP_DETACH_PARTICLE_LIFETIME: float = 1.0  # Tempo de vida (segundos)
     SLIME_DRIP_DETACH_PARTICLE_SPEED_MIN: float = 20.0  # Velocidade mínima de movimento
@@ -320,7 +325,7 @@ class Config:
         default_factory=lambda: [
             (241, 187, 242, 180),
             (96, 29, 115, 200),
-            (68, 18, 89, 220)
+            (68, 18, 89, 220),
         ]
     )
 
@@ -400,7 +405,7 @@ class Config:
     # UI SETTINGS
     # ========================================
     WARNING_FONT_SIZE: int = 60
-    
+
     # ========================================
     # COMPUTED PROPERTIES (não editáveis diretamente)
     # ========================================
@@ -446,8 +451,12 @@ class Config:
 
         # Validar power-up rarities (devem somar exatamente 100.0)
         total_rarity = sum(self.POWERUP_RARITIES.values())
-        if not abs(total_rarity - 100.0) < 0.001:  # Tolerância para erros de arredondamento
-            errors.append(f"POWERUP_RARITIES deve somar exatamente 100.0, mas soma {total_rarity}")
+        if (
+            not abs(total_rarity - 100.0) < 0.001
+        ):  # Tolerância para erros de arredondamento
+            errors.append(
+                f"POWERUP_RARITIES deve somar exatamente 100.0, mas soma {total_rarity}"
+            )
         for powerup_type, rarity in self.POWERUP_RARITIES.items():
             if not (0.0 <= rarity <= 100.0):
                 errors.append(

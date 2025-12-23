@@ -42,7 +42,7 @@ class PerformanceProfiler:
 
         # Gera relatório simplificado
         stats = pstats.Stats(self.cpu_profiler)
-        stats.sort_stats('cumulative')
+        stats.sort_stats("cumulative")
 
         print("\n📊 TOP 20 FUNÇÕES MAIS LENTAS:")
         print("-" * 60)
@@ -82,7 +82,7 @@ class PerformanceProfiler:
             print(".2f")
 
             # Top 10 alocações
-            stats = last_snapshot.statistics('lineno')
+            stats = last_snapshot.statistics("lineno")
             print("\n📈 TOP 10 ALOCAÇÕES DE MEMÓRIA:")
             for stat in stats[:10]:
                 print(".1f")
@@ -91,6 +91,7 @@ class PerformanceProfiler:
 
     def measure_function_time(self, func_name: str):
         """Decorator para medir tempo de execução de funções."""
+
         def decorator(func: Callable) -> Callable:
             @wraps(func)
             def wrapper(*args, **kwargs):
@@ -104,7 +105,9 @@ class PerformanceProfiler:
                 self.function_times[func_name].append(elapsed)
 
                 return result
+
             return wrapper
+
         return decorator
 
     def record_frame_time(self, dt: float):
@@ -125,19 +128,19 @@ class PerformanceProfiler:
         fps_values = [1.0 / t for t in frame_times]
 
         return {
-            'fps_current': fps_values[-1] if fps_values else 0,
-            'fps_avg': sum(fps_values) / len(fps_values),
-            'fps_min': min(fps_values),
-            'fps_max': max(fps_values),
-            'frame_time_avg': sum(frame_times) / len(frame_times),
-            'frame_time_max': max(frame_times)
+            "fps_current": fps_values[-1] if fps_values else 0,
+            "fps_avg": sum(fps_values) / len(fps_values),
+            "fps_min": min(fps_values),
+            "fps_max": max(fps_values),
+            "frame_time_avg": sum(frame_times) / len(frame_times),
+            "frame_time_max": max(frame_times),
         }
 
     def print_performance_report(self):
         """Imprime relatório completo de performance."""
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("📊 RELATÓRIO DE PERFORMANCE")
-        print("="*80)
+        print("=" * 80)
 
         # FPS Stats
         fps_stats = self.get_fps_stats()
@@ -160,7 +163,7 @@ class PerformanceProfiler:
                     call_count = len(times)
                     print(".4f")
 
-        print("="*80)
+        print("=" * 80)
 
 
 # Instância global do profiler
@@ -169,14 +172,17 @@ profiler = PerformanceProfiler()
 
 def profile_function(func_name: str = None):
     """Decorator para profiling de funções."""
+
     def decorator(func: Callable) -> Callable:
         name = func_name or f"{func.__module__}.{func.__qualname__}"
         return profiler.measure_function_time(name)(func)
+
     return decorator
 
 
 def quick_profile(func: Callable) -> Callable:
     """Decorator simples para profiling rápido."""
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         start = time.perf_counter()
@@ -184,6 +190,7 @@ def quick_profile(func: Callable) -> Callable:
         end = time.perf_counter()
         print(".4f")
         return result
+
     return wrapper
 
 
@@ -202,7 +209,7 @@ def profile_slime_drip():
 
     # Simula alguns segundos de gameplay
     for i in range(300):  # ~5 segundos a 60 FPS
-        effect.update(1/60, 400, 300, 50, 400, 300)
+        effect.update(1 / 60, 400, 300, 50, 400, 300)
 
         if i % 60 == 0:  # A cada segundo
             profiler.take_memory_snapshot(f"Frame {i}")
@@ -230,7 +237,7 @@ def profile_entity_manager():
         manager.spawn_powerup(400, 300)
 
         # Update
-        manager.update(1/60)
+        manager.update(1 / 60)
 
         if i % 100 == 0:
             print(f"  Processado {i} frames...")
@@ -248,6 +255,7 @@ if __name__ == "__main__":
     print()
 
     import sys
+
     if len(sys.argv) > 1:
         command = sys.argv[1]
 

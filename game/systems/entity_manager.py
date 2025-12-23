@@ -81,7 +81,14 @@ class EntityManager:
     def eye_enemy_count(self) -> int:
         return sum(1 for e in self.enemies if isinstance(e, EyeEnemy))
 
-    def spawn_explosion(self, x: float, y: float, size: int = 30, is_slime: bool = False, custom_color: tuple[int, int, int, int] | None = None) -> Explosion:
+    def spawn_explosion(
+        self,
+        x: float,
+        y: float,
+        size: int = 30,
+        is_slime: bool = False,
+        custom_color: tuple[int, int, int, int] | None = None,
+    ) -> Explosion:
         """
         Spawna uma explosão usando o pool.
 
@@ -467,7 +474,7 @@ class EntityManager:
         player_x: float,
         player_y: float,
         enemy_visible: bool = True,
-        fps: float = 60.0
+        fps: float = 60.0,
     ):
         """Desenha todas as entidades. EyeEnemy precisa da posição do jogador."""
         from typing import Any

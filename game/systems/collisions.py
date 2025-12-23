@@ -169,45 +169,50 @@ class Collisions:
 
         for proj in projectiles[:]:
             proj_rect = proj.rect
-            
+
             # Check for collision
             collision_detected = False
-            
+
             # Pixel-perfect collision for SlimeBoss
-            if isinstance(boss, SlimeBoss) and hasattr(boss, 'mask'):
+            if isinstance(boss, SlimeBoss) and hasattr(boss, "mask"):
                 # Fast distance check first (optimization)
                 proj_center_x = proj.x + proj.w / 2
                 proj_center_y = proj.y + proj.h / 2
                 boss_center_x = boss.x + boss.w / 2
                 boss_center_y = boss.y + boss.h / 2
-                
+
                 # Calculate squared distance for performance
                 dx = proj_center_x - boss_center_x
                 dy = proj_center_y - boss_center_y
                 distance_squared = dx * dx + dy * dy
-                
+
                 # Only do expensive mask check if projectile is reasonably close
                 # Use a threshold based on boss size (half boss width + projectile size)
                 proximity_threshold = (boss.w / 2 + max(proj.w, proj.h)) ** 2
-                
+
                 if distance_squared <= proximity_threshold:
                     # Check rect collision first (additional optimization)
                     if proj_rect.colliderect(boss_rect):
                         # Convert projectile position to boss-relative coordinates
                         proj_relative_x = int(proj.x - boss.x)
                         proj_relative_y = int(proj.y - boss.y)
-                        
+
                         # Check if projectile overlaps with boss mask
-                        if (0 <= proj_relative_x < boss.w and 0 <= proj_relative_y < boss.h):
+                        if (
+                            0 <= proj_relative_x < boss.w
+                            and 0 <= proj_relative_y < boss.h
+                        ):
                             # Get projectile mask (assume circular for bullets)
                             proj_mask = pygame.mask.Mask((proj.w, proj.h), fill=True)
                             # Check overlap
                             offset = (proj_relative_x, proj_relative_y)
-                            collision_detected = boss.mask.overlap(proj_mask, offset) is not None
+                            collision_detected = (
+                                boss.mask.overlap(proj_mask, offset) is not None
+                            )
             else:
                 # Rectangular collision for other bosses
                 collision_detected = proj_rect.colliderect(boss_rect)
-            
+
             if collision_detected:
                 # Destruir projétil se não for piercing
                 if not (is_piercing_allowed and getattr(proj, "piercing", False)):
@@ -505,7 +510,9 @@ class Collisions:
                             enemy,
                             enemies,
                             entity_manager,
-                            explosion_size=None if isinstance(enemy, Meteor) else 15,  # Explosão proporcional para meteors
+                            explosion_size=(
+                                None if isinstance(enemy, Meteor) else 15
+                            ),  # Explosão proporcional para meteors
                         )
                         score_gain += pts
                         destroyed_count += 1
@@ -580,7 +587,9 @@ class Collisions:
                             enemy,
                             enemies,
                             entity_manager,
-                            explosion_size=None if isinstance(enemy, Meteor) else 15,  # Explosão proporcional para meteors
+                            explosion_size=(
+                                None if isinstance(enemy, Meteor) else 15
+                            ),  # Explosão proporcional para meteors
                         )
                         score_gain += pts
                         destroyed_count += 1
@@ -657,15 +666,19 @@ class Collisions:
     ) -> bool:
         if ship.invuln > 0:
             return False
-        
+
         boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
-        
+
         # Pixel-perfect collision for SlimeBoss
-        if isinstance(boss, SlimeBoss) and hasattr(boss, 'mask'):
+        if isinstance(boss, SlimeBoss) and hasattr(boss, "mask"):
             # Check rect collision first (optimization)
             if ship.rect.colliderect(boss_rect):
                 # Check mask overlap
-                ship_mask = pygame.mask.from_surface(ship.ship_image) if hasattr(ship, 'ship_image') and ship.ship_image is not None else pygame.mask.Mask((ship.w, ship.h), fill=True)
+                ship_mask = (
+                    pygame.mask.from_surface(ship.ship_image)
+                    if hasattr(ship, "ship_image") and ship.ship_image is not None
+                    else pygame.mask.Mask((ship.w, ship.h), fill=True)
+                )
                 offset = (int(ship.x - boss.x), int(ship.y - boss.y))
                 if boss.mask.overlap(ship_mask, offset) is not None:
                     entity_manager.spawn_explosion(
@@ -1070,7 +1083,10 @@ class Collisions:
 
                     # Para inimigos normais, usar helper com explosion_size customizado
                     pts, score_event = self._destroy_enemy(
-                        enemy, enemies, entity_manager, explosion_size=None if isinstance(enemy, Meteor) else 20
+                        enemy,
+                        enemies,
+                        entity_manager,
+                        explosion_size=None if isinstance(enemy, Meteor) else 20,
                     )
                     score_gain += pts
                     destroyed_count += 1
@@ -1087,7 +1103,7 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão dos lasers do jogador com o boss.
-        
+
         Usa pixel-perfect collision para SlimeBoss quando disponível.
         """
         score_gain: int = 0
@@ -1100,38 +1116,40 @@ class Collisions:
             boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
 
             collision_detected = False
-            
+
             # Pixel-perfect collision for SlimeBoss
-            if isinstance(boss, SlimeBoss) and hasattr(boss, 'mask'):
+            if isinstance(boss, SlimeBoss) and hasattr(boss, "mask"):
                 # Fast proximity check first (optimization)
                 boss_center_x = boss.x + boss.w / 2
                 boss_center_y = boss.y + boss.h / 2
-                
+
                 # Calculate distance from boss center to laser line
                 start_pos, end_pos = line
                 # Simple distance from point to line segment (approximation)
                 dx = end_pos[0] - start_pos[0]
                 dy = end_pos[1] - start_pos[1]
                 length_squared = dx * dx + dy * dy
-                
+
                 if length_squared > 0:
                     # Vector from start to boss center
                     vx = boss_center_x - start_pos[0]
                     vy = boss_center_y - start_pos[1]
-                    
+
                     # Project point onto line
                     t = max(0, min(1, (vx * dx + vy * dy) / length_squared))
                     proj_x = start_pos[0] + t * dx
                     proj_y = start_pos[1] + t * dy
-                    
+
                     # Distance from boss center to projected point
                     dist_dx = boss_center_x - proj_x
                     dist_dy = boss_center_y - proj_y
                     distance_squared = dist_dx * dist_dx + dist_dy * dist_dy
-                    
+
                     # Only do expensive mask check if laser is reasonably close
-                    proximity_threshold = (boss.w / 2 + 50) ** 2  # 50 pixel buffer for laser width
-                    
+                    proximity_threshold = (
+                        boss.w / 2 + 50
+                    ) ** 2  # 50 pixel buffer for laser width
+
                     if distance_squared <= proximity_threshold:
                         # Check rect collision first (additional optimization)
                         if boss_rect.clipline(line):
@@ -1143,13 +1161,16 @@ class Collisions:
                                 t = i / steps
                                 check_x = start_pos[0] + t * (end_pos[0] - start_pos[0])
                                 check_y = start_pos[1] + t * (end_pos[1] - start_pos[1])
-                                
+
                                 # Convert to boss-relative coordinates
                                 relative_x = int(check_x - boss.x)
                                 relative_y = int(check_y - boss.y)
-                                
+
                                 # Check if point is within boss bounds and mask
-                                if (0 <= relative_x < boss.w and 0 <= relative_y < boss.h):
+                                if (
+                                    0 <= relative_x < boss.w
+                                    and 0 <= relative_y < boss.h
+                                ):
                                     if boss.mask.get_at((relative_x, relative_y)):
                                         collision_detected = True
                                         break

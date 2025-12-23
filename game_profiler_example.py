@@ -18,7 +18,9 @@ from profiler import profiler
 try:
     from game.app import Game
 except ImportError:
-    print("❌ Não foi possível importar o jogo. Execute este script da pasta raiz do projeto.")
+    print(
+        "❌ Não foi possível importar o jogo. Execute este script da pasta raiz do projeto."
+    )
     sys.exit(1)
 
 
@@ -66,7 +68,9 @@ class ProfilingGame:
             if event.key == pygame.K_F1:
                 if not profiler.is_profiling:
                     profiler.start_cpu_profiling()
-                    print("🔍 CPU profiling INICIADO (pressione F1 novamente para parar)")
+                    print(
+                        "🔍 CPU profiling INICIADO (pressione F1 novamente para parar)"
+                    )
                 else:
                     profiler.stop_cpu_profiling("gameplay_profile.prof")
                     print("✅ CPU profiling FINALIZADO")
@@ -83,6 +87,7 @@ class ProfilingGame:
             # F4: Force garbage collection
             elif event.key == pygame.K_F4:
                 import gc
+
                 collected = gc.collect()
                 print(f"🗑️  Garbage collection: {collected} objetos coletados")
 
@@ -133,9 +138,11 @@ class ProfilingGame:
             if current_time - self.last_fps_update >= 5.0:  # A cada 5 segundos
                 fps_stats = profiler.get_fps_stats()
                 if fps_stats:
-                    print(f"📊 FPS: {fps_stats['fps_avg']:.1f} "
-                          f"(min: {fps_stats['fps_min']:.1f}, "
-                          f"max: {fps_stats['fps_max']:.1f})")
+                    print(
+                        f"📊 FPS: {fps_stats['fps_avg']:.1f} "
+                        f"(min: {fps_stats['fps_min']:.1f}, "
+                        f"max: {fps_stats['fps_max']:.1f})"
+                    )
                 self.last_fps_update = current_time
 
         self.cleanup()
@@ -158,10 +165,12 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Space Shooter com Profiling")
-    parser.add_argument("--no-profile", action="store_true",
-                       help="Desabilita profiling")
-    parser.add_argument("--duration", type=int, default=0,
-                       help="Duração em segundos (0 = até ESC)")
+    parser.add_argument(
+        "--no-profile", action="store_true", help="Desabilita profiling"
+    )
+    parser.add_argument(
+        "--duration", type=int, default=0, help="Duração em segundos (0 = até ESC)"
+    )
 
     args = parser.parse_args()
 
@@ -176,6 +185,7 @@ def main():
     except Exception as e:
         print(f"\n❌ Erro durante execução: {e}")
         import traceback
+
         traceback.print_exc()
     finally:
         if profiling_game.enable_profiling:
