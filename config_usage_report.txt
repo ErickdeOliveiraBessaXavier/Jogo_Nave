@@ -1,0 +1,695 @@
+================================================================================
+RELATÓRIO DE ANÁLISE DE CONFIGURAÇÕES
+================================================================================
+
+CONFIGURAÇÕES UTILIZADAS (186/187):
+--------------------------------------------------
+• BASE_POINTS
+  - game\entities\meteor.py
+
+• BOSS_AIM_BLINK_INTERVAL
+  - game\entities\boss.py
+
+• BOSS_AIM_BLINK_ON_DURATION
+  - game\entities\boss.py
+
+• BOSS_AIM_DASH_LENGTH
+  - game\entities\boss.py
+  - game\entities\eye_enemy.py
+
+• BOSS_AIM_GAP_LENGTH
+  - game\entities\boss.py
+  - game\entities\eye_enemy.py
+
+• BOSS_ANIMATION_SPEED_MULTIPLIER
+  - game\entities\boss.py
+
+• BOSS_CALM_ATTACK_INTERVAL
+  - game\entities\boss.py
+
+• BOSS_CHARGE_CIRCLE_MAX_RADIUS
+  - game\entities\boss.py
+
+• BOSS_CHARGE_DURATION
+  - game\entities\boss.py
+
+• BOSS_DEFEAT_SCORE
+  - game\scenes\playing.py
+  - game\systems\collisions.py
+
+• BOSS_ENTRY_SHAKE_DURATION
+  - game\scenes\playing.py
+
+• BOSS_ENTRY_SPEED
+  - game\entities\boss.py
+
+• BOSS_EXPLOSION_COUNT
+  - game\scenes\playing.py
+
+• BOSS_EXPLOSION_DURATION
+  - game\entities\boss.py
+
+• BOSS_EXPLOSION_LARGE_SIZE
+  - game\scenes\playing.py
+
+• BOSS_EXPLOSION_RADIUS
+  - game\scenes\playing.py
+
+• BOSS_EXPLOSION_SMALL_SIZE
+  - game\scenes\playing.py
+
+• BOSS_FRENZY_AIM_BLINK_INTERVAL
+  - game\entities\boss.py
+
+• BOSS_FRENZY_AIM_BLINK_ON_DURATION
+  - game\entities\boss.py
+
+• BOSS_FRENZY_ANIMATION_SPEED_MULTIPLIER
+  - game\entities\boss.py
+
+• BOSS_FRENZY_ATTACK_INTERVAL
+  - game\entities\boss.py
+
+• BOSS_FRENZY_CHARGE_DURATION
+  - game\entities\boss.py
+
+• BOSS_FRENZY_LASER_DELAY
+  - game\entities\boss.py
+
+• BOSS_FRENZY_LASER_LIFETIME
+  - game\entities\boss.py
+
+• BOSS_FRENZY_SHAKE_DURATION
+  - game\entities\boss.py
+
+• BOSS_FRENZY_SPEED
+  - game\entities\boss.py
+
+• BOSS_FRENZY_THRESHOLD
+  - game\entities\boss.py
+
+• BOSS_HEALTH
+  - game\entities\boss.py
+  - game\entities\slime_boss.py
+
+• BOSS_LASER_DELAY
+  - game\entities\boss.py
+
+• BOSS_LASER_LIFETIME
+  - game\entities\boss.py
+  - game\entities\boss_laser.py
+
+• BOSS_METEOR_AIM_SPREAD
+  - game\entities\boss_cannon.py
+
+• BOSS_MUSIC_FADE_OUT_DURATION
+  - game\scenes\playing.py
+
+• BOSS_MUSIC_FADE_OUT_START
+  - game\scenes\playing.py
+
+• BOSS_NORMAL_SPEED
+  - game\entities\boss.py
+
+• BOSS_POST_WARNING_DELAY
+  - game\scenes\playing.py
+
+• BOSS_PRE_WARNING_DELAY
+  - game\scenes\playing.py
+
+• BOSS_SIDE_METEOR_AIM_SPREAD
+  - game\entities\boss_cannon.py
+
+• BOSS_UPGRADE_DAMAGE_MULTIPLIER
+  - game\systems\collisions.py
+
+• BOSS_WARNING_DURATION
+  - game\scenes\playing.py
+
+• BOSS_WARP_SPEED_MULTIPLIER
+  - game\scenes\game_over.py
+  - game\scenes\playing.py
+
+• BULLET_SPEED
+  - game\entities\bullet.py
+  - game\entities\mini_ship.py
+
+• COOLDOWN_HASTE_REDUCTION
+  - game\scenes\playing.py
+
+• DIAGONAL_CHANCE
+  - game\entities\meteor.py
+
+• DOUBLE_SHOT_DURATION
+  - game\scenes\playing.py
+
+• EXPLOSION_DURATION
+  - game\entities\explosion.py
+  - game\entities\explosion_pool.py
+
+• EXPLOSIVE_SHOT_FIRE_RATE_PENALTY
+  - game\entities\ship.py
+
+• FAST_METEOR_SPEED
+  - game\entities\meteor.py
+
+• FORMATION_CIRCLE_RADIUS
+  - game\entities\formation.py
+  - game\systems\spawner.py
+
+• FORMATION_DESCENT_SPEED
+  - game\entities\formation.py
+
+• FORMATION_ENTRY_CURVE_AMPLITUDE
+  - game\entities\formation.py
+
+• FORMATION_ENTRY_CURVE_FREQUENCY
+  - game\entities\formation.py
+
+• FORMATION_ENTRY_CURVE_OFFSET_X
+  - game\entities\formation.py
+
+• FORMATION_ENTRY_DIAGONAL_SPEED
+  - game\entities\formation.py
+
+• FORMATION_ENTRY_FAN_SPEED
+  - game\entities\formation.py
+
+• FORMATION_ENTRY_LOOP_SPEED
+  - game\entities\formation.py
+
+• FORMATION_ENTRY_SPEED
+  - game\entities\formation.py
+
+• FORMATION_ENTRY_TIME_OFFSET
+  - game\entities\formation.py
+
+• FORMATION_ENTRY_WAVE_SPEED
+  - game\entities\formation.py
+
+• FORMATION_LINE_SPACING
+  - game\entities\formation.py
+  - game\systems\spawner.py
+
+• FORMATION_PATTERN_DURATION
+  - game\entities\formation.py
+
+• FORMATION_SPAWN_INTERVAL
+  - game\systems\spawner.py
+
+• FORMATION_SQUARE_SIZE
+  - game\entities\formation.py
+  - game\systems\spawner.py
+
+• FORMATION_TRANSITION_DURATION
+  - game\entities\formation.py
+
+• FORMATION_V_SPACING
+  - game\entities\formation.py
+  - game\systems\spawner.py
+
+• FPS
+  - game\app.py
+  - game\scenes\game_over.py
+  - game\scenes\playing.py
+
+• FRAGMENT_COUNT_RANGE
+  - game\entities\meteor.py
+
+• FRAGMENT_SPEED_BOOST
+  - game\entities\meteor.py
+
+• FRAGMENT_SPLIT_THRESHOLD
+  - game\entities\meteor.py
+
+• FRAGMENT_SPREAD
+  - game\entities\meteor.py
+
+• FULLSCREEN
+  - game\app.py
+
+• GAME_OVER_FADE_DURATION
+  - game\scenes\game_over.py
+
+• GAME_OVER_OVERLAY_ALPHA
+  - game\scenes\game_over.py
+
+• GAME_OVER_RESTART_DELAY
+  - game\scenes\game_over.py
+
+• GUIDED_METEOR_ACCELERATION
+  - game\entities\guided_meteor.py
+
+• GUIDED_METEOR_MAX_SPEED
+  - game\entities\guided_meteor.py
+
+• GUIDED_METEOR_NORMAL_PHASES_CHANCE
+  - game\systems\spawner.py
+
+• GUIDED_METEOR_TURN_RATE
+  - game\entities\guided_meteor.py
+
+• INITIAL_GAME_DELAY
+  - game\systems\spawner.py
+
+• INITIAL_LIVES
+  - game\entities\ship.py
+
+• INVULN_TIME
+  - game\scenes\playing.py
+
+• LASER_DISTANCE
+  - game\entities\boss_cannon.py
+
+• LEVEL_TRANSITION_DELAY
+  - game\scenes\playing.py
+  - game\systems\spawner.py
+
+• MAX_METEOR_SIZE
+  - game\entities\meteor.py
+
+• MINI_SHIPS_DURATION
+  - game\scenes\playing.py
+
+• MIN_METEOR_SIZE
+  - game\entities\guided_meteor.py
+  - game\entities\meteor.py
+
+• PARTICLE_ENTRY_COUNT
+  - game\entities\ship.py
+
+• PARTICLE_ENTRY_LIFETIME
+  - game\entities\ship.py
+
+• PARTICLE_ENTRY_SIZE
+  - game\entities\ship.py
+
+• PARTICLE_ENTRY_VELOCITY
+  - game\entities\ship.py
+
+• PARTICLE_THRUSTER_COUNT
+  - game\entities\ship.py
+
+• PARTICLE_THRUSTER_LIFETIME
+  - game\entities\ship.py
+
+• PARTICLE_THRUSTER_SIZE
+  - game\entities\ship.py
+
+• PARTICLE_THRUSTER_VELOCITY_X
+  - game\entities\ship.py
+
+• PARTICLE_THRUSTER_VELOCITY_Y
+  - game\entities\ship.py
+
+• PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER
+  - game\entities\ship.py
+
+• PIERCING_SHOT_DURATION
+  - game\scenes\playing.py
+
+• POWERUP_SCORE_BONUS
+  - game\scenes\playing.py
+
+• POWERUP_SIZE
+  - game\entities\powerup.py
+  - game\entities\star.py
+
+• POWERUP_SPAWN_INTERVAL
+  - game\systems\spawner.py
+
+• POWERUP_SPEED
+  - game\entities\powerup.py
+  - game\entities\star.py
+
+• PREPARATION_TIME
+  - game\scenes\playing.py
+
+• RAINBOW_DURATION
+  - game\scenes\playing.py
+
+• SCREEN_HEIGHT
+  - game\app.py
+  - game\entities\alien.py
+  - game\entities\alien_bullet.py
+  - game\entities\boss.py
+  - game\entities\bullet.py
+  - game\entities\explosive_mine.py
+  - game\entities\eye_enemy.py
+  - game\entities\formation.py
+  - game\entities\meteor.py
+  - game\entities\mini_ship_bullet.py
+  - game\entities\powerup.py
+  - game\entities\ship.py
+  - game\entities\slime_boss.py
+  - game\entities\spike.py
+  - game\entities\spike_boss.py
+  - game\render\renderer.py
+  - game\scenes\difficulty_selection.py
+  - game\scenes\game_over.py
+  - game\scenes\main_menu.py
+  - game\scenes\paused.py
+  - game\scenes\playing.py
+
+• SCREEN_SHAKE_BOSS_DEATH
+  - game\scenes\playing.py
+
+• SCREEN_SHAKE_BOSS_DEATH_DURATION
+  - game\scenes\playing.py
+
+• SCREEN_SHAKE_GAME_OVER
+  - game\scenes\game_over.py
+
+• SCREEN_SHAKE_NORMAL
+  - game\scenes\playing.py
+
+• SCREEN_WIDTH
+  - game\app.py
+  - game\entities\alien.py
+  - game\entities\boss.py
+  - game\entities\bullet.py
+  - game\entities\explosive_mine.py
+  - game\entities\eye_enemy.py
+  - game\entities\formation.py
+  - game\entities\meteor.py
+  - game\entities\mini_ship_bullet.py
+  - game\entities\powerup.py
+  - game\entities\ship.py
+  - game\entities\slime_boss.py
+  - game\entities\spike.py
+  - game\entities\spike_boss.py
+  - game\render\renderer.py
+  - game\scenes\difficulty_selection.py
+  - game\scenes\game_over.py
+  - game\scenes\main_menu.py
+  - game\scenes\paused.py
+  - game\scenes\playing.py
+  - game\systems\spawner.py
+
+• SHIELD_DURATION
+  - game\scenes\playing.py
+
+• SHOOT_COOLDOWN
+  - game\scenes\playing.py
+
+• SIZE_BONUS_MULTIPLIER
+  - game\entities\meteor.py
+
+• SLIME_DRIP_COLORS
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_DEATH_MARGIN
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_DETACH_PARTICLE_LIFETIME
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_DETACH_PARTICLE_MAX_PER_DRIP
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_DETACH_PARTICLE_SIZE_END
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_DETACH_PARTICLE_SIZE_START
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_DETACH_PARTICLE_SPAWN_INTERVAL
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_DETACH_PARTICLE_SPEED_MAX
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_DETACH_PARTICLE_SPEED_MIN
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_MAX_ACTIVE
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_POOL_SIZE_MULTIPLIER
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_PULSE_AMPLITUDE
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_PULSE_PERIOD
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_RADIUS_MAX
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_SPATIAL_GRID_CELL_SIZE
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_SPAWN_INTERVAL
+  - game\entities\slime_drip.py
+
+• SLOW_METEOR_SPEED
+  - game\entities\meteor.py
+
+• SPEED_ATTACK_MULTIPLIER
+  - game\entities\ship.py
+
+• SPEED_BOOST_DURATION
+  - game\scenes\playing.py
+
+• SPIKE_ACCELERATION
+  - game\entities\spike.py
+
+• SPIKE_AIM_IMPRECISION
+  - game\entities\spike.py
+
+• SPIKE_BOSS_BODY_STRETCH
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_ENTRY_SPEED
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_EYE_FRENETIC_DURATION
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_EYE_FRENETIC_SPEED
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_EYE_TRACK_DURATION
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_FRENZY_PAUSE_DURATION
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_FRENZY_SHAKE_DURATION
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_FRENZY_SPEED
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_FRENZY_THRESHOLD
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_HEALTH
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_LASER_CHARGE_TIME
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_LASER_COOLDOWN
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_LASER_LIFETIME
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_MOUTH_CYCLE_DURATION
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_MOUTH_MAX_OPENING
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_PROXIMITY_COOLDOWN
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_PROXIMITY_DISTANCE
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_PROXIMITY_TELEGRAPH_DURATION
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_PROXIMITY_WARNING_COLOR_FRENZY
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_PROXIMITY_WARNING_COLOR_NORMAL
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_PROXIMITY_WAVE_COLOR_FRENZY
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_PROXIMITY_WAVE_COLOR_NORMAL
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_PROXIMITY_WAVE_DURATION
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_PROXIMITY_WAVE_INNER_COLOR_FRENZY
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_PROXIMITY_WAVE_INNER_COLOR_NORMAL
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_PROXIMITY_WAVE_MAX_RADIUS
+  - game\entities\spike_boss.py
+
+• SPIKE_BOSS_SPEED
+  - game\entities\spike_boss.py
+
+• SPIKE_DAMAGE
+  - game\entities\spike.py
+
+• SPIKE_FRENZY_WAVE_INTERVAL
+  - game\entities\spike_boss.py
+
+• SPIKE_INITIAL_SPEED
+  - game\entities\spike.py
+
+• SPIKE_LAUNCH_COOLDOWN
+  - game\entities\spike_boss.py
+
+• SPIKE_MAX_ATTACH_TIME
+  - game\entities\spike.py
+  - game\entities\spike_boss.py
+
+• SPIKE_MAX_ATTACKING
+  - game\entities\spike.py
+
+• SPIKE_MAX_SPEED
+  - game\entities\spike.py
+
+• SPIKE_MAX_SPEED_VARIATION
+  - game\entities\spike.py
+
+• SPIKE_MAX_TREMBLE
+  - game\entities\spike.py
+
+• SPIKE_MIN_ATTACH_TIME
+  - game\entities\spike.py
+  - game\entities\spike_boss.py
+
+• SPIKE_POINTS
+  - game\entities\spike.py
+  - game\systems\collisions.py
+
+• SPIKE_RESPAWN_TIME
+  - game\entities\spike.py
+
+• SPIKE_ROTATION_SPEED_MAX
+  - game\entities\spike.py
+
+• SPIKE_ROTATION_SPEED_MIN
+  - game\entities\spike.py
+
+• SPIKE_SIZE
+  - game\entities\spike.py
+  - game\entities\spike_boss.py
+
+• SPIKE_SPAWN_ANIMATION_DURATION
+  - game\entities\spike.py
+
+• SPIKE_SPAWN_DELAY_MAX
+  - game\entities\spike.py
+
+• SPIKE_SPAWN_DELAY_MIN
+  - game\entities\spike.py
+
+• SPIKE_SPEED_VARIATION
+  - game\entities\spike.py
+
+• SPIKE_TREMBLE_DURATION
+  - game\entities\spike.py
+
+• SPIKE_WALL_SPACING
+  - game\entities\spike_boss.py
+
+• SPIKE_WAVE_INTERVAL
+  - game\entities\spike_boss.py
+
+• SPIKE_WAVE_MAX_SIZE
+  - game\entities\spike_boss.py
+
+• SPIKE_WAVE_MIN_SIZE
+  - game\entities\spike_boss.py
+
+• TIME_STOP_DURATION
+  - game\scenes\playing.py
+
+• WARNING_FONT_SIZE
+  - game\render\renderer.py
+  - game\scenes\playing.py
+
+• WARP_SPEED_MULTIPLIER
+  - game\scenes\playing.py
+
+CONFIGURAÇÕES DEFINIDAS MAS NÃO UTILIZADAS (1/187):
+--------------------------------------------------
+• POWERUP_RARITIES
+
+PROBLEMAS ENCONTRADOS:
+--------------------------------------------------
+REFERÊNCIAS DESCONHECIDAS ENCONTRADAS:
+Essas referências usam 'Config.' mas o atributo não foi encontrado na classe Config:
+• .venv\Lib\site-packages\pygbag\aio.py: Config.PKG_INDEXES
+• .venv\Lib\site-packages\pygbag\support\cpythonrc.py: Config.PKG_INDEXES
+• .venv\Lib\site-packages\pygbag\support\cpythonrc.py: Config.REPO_DATA
+• .venv\Lib\site-packages\pygbag\support\cross\aio\pep0723.py: Config.BLOCK_RE_722
+• .venv\Lib\site-packages\pygbag\support\cross\aio\pep0723.py: Config.BLOCK_RE_723
+• .venv\Lib\site-packages\pygbag\support\cross\aio\pep0723.py: Config.PKG_BASE_DEFAULT
+• .venv\Lib\site-packages\pygbag\support\cross\aio\pep0723.py: Config.PKG_INDEXES
+• .venv\Lib\site-packages\pygbag\support\cross\aio\pep0723.py: Config.READ_722
+• .venv\Lib\site-packages\pygbag\support\cross\aio\pep0723.py: Config.READ_723
+• .venv\Lib\site-packages\pygbag\support\cross\aio\pep0723.py: Config.REPO_DATA
+• analyze_config_usage.py: Config.NOME_DA_CONFIG
+• game\core\levels.py: Config.BASE_ALIEN_SPAWN_TIME
+• game\core\levels.py: Config.BASE_ENEMIES
+• game\core\levels.py: Config.BASE_EYE_SPAWN_TIME
+• game\core\levels.py: Config.BASE_METEOR_SPAWN_TIME
+• game\core\levels.py: Config.ENEMIES_PER_LEVEL
+• game\core\levels.py: Config.ENEMY_COUNT_CURVE
+• game\core\levels.py: Config.ENEMY_VARIATION
+• game\core\levels.py: Config.FORMATIONS_UNLOCK_LEVEL
+• game\core\levels.py: Config.LEVEL_VARIETY_ENABLED
+• game\core\levels.py: Config.MAX_DIFFICULTY_MULTIPLIER
+• game\core\levels.py: Config.MINES_PROBABILITY
+• game\core\levels.py: Config.MINES_UNLOCK_LEVEL
+• game\core\levels.py: Config.MIN_ENEMIES_TO_CLEAR
+• game\core\levels.py: Config.MIN_SPAWN_TIME
+• game\core\levels.py: Config.SPAWN_RATE_CURVE
+• game\entities\powerup.py: Config.POWERUP_WEIGHTS
+• game\render\renderer.py: Config.CELESTIAL_ALPHA_MAX
+• game\render\renderer.py: Config.CELESTIAL_ALPHA_MIN
+• game\render\renderer.py: Config.CELESTIAL_MIN_GAP
+• game\render\renderer.py: Config.CELESTIAL_NUM_BODIES
+• game\render\renderer.py: Config.CELESTIAL_RESET_Y_MAX_MULTIPLIER
+• game\render\renderer.py: Config.CELESTIAL_RESET_Y_MIN_MULTIPLIER
+• game\render\renderer.py: Config.CELESTIAL_SCALE_MAX
+• game\render\renderer.py: Config.CELESTIAL_SCALE_MIN
+• game\render\renderer.py: Config.CELESTIAL_SPEED_BASE_MAX
+• game\render\renderer.py: Config.CELESTIAL_SPEED_OFFSET
+• game\render\renderer.py: Config.STARFIELD_BRIGHTNESS_MAX
+• game\render\renderer.py: Config.STARFIELD_BRIGHTNESS_MIN
+• game\render\renderer.py: Config.STARFIELD_NUM_STARS
+• game\render\renderer.py: Config.STARFIELD_SPEED_MAX
+• game\render\renderer.py: Config.STARFIELD_SPEED_MIN
+• game\scenes\main_menu.py: Config.BUTTONS_TOP_MARGIN
+• game\scenes\main_menu.py: Config.BUTTON_ANIM_RANGE
+• game\scenes\main_menu.py: Config.BUTTON_SCALE_FACTOR
+• game\scenes\main_menu.py: Config.BUTTON_SPACING
+• game\scenes\main_menu.py: Config.MENU_X_RATIO
+• game\scenes\main_menu.py: Config.TITLE_ANIM_RANGE
+• game\scenes\main_menu.py: Config.TITLE_ANIM_SPEED
+• game\scenes\main_menu.py: Config.TITLE_HEIGHT
+• game\scenes\main_menu.py: Config.TITLE_PHASE_SHIFT
+• game\scenes\main_menu.py: Config.TITLE_TOP_MARGIN
+• game\systems\spawner.py: Config.POWERUP_WEIGHTS
+
+ESTATÍSTICAS:
+--------------------------------------------------
+• Total de configurações definidas: 187
+• Configurações utilizadas: 186 (99.5%)
+• Configurações não utilizadas: 1 (0.5%)
+• Referências desconhecidas: 53

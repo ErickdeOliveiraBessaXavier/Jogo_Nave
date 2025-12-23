@@ -81,7 +81,7 @@ class EntityManager:
     def eye_enemy_count(self) -> int:
         return sum(1 for e in self.enemies if isinstance(e, EyeEnemy))
 
-    def spawn_explosion(self, x: float, y: float, size: int = 30, is_slime: bool = False) -> Explosion:
+    def spawn_explosion(self, x: float, y: float, size: int = 30, is_slime: bool = False, custom_color: tuple[int, int, int, int] | None = None) -> Explosion:
         """
         Spawna uma explosão usando o pool.
 
@@ -89,11 +89,12 @@ class EntityManager:
             x, y: Posição da explosão
             size: Tamanho da explosão
             is_slime: Se é uma explosão de slime (usa cores específicas)
+            custom_color: Cor personalizada para a explosão (opcional)
 
         Returns:
             Explosão criada ou reutilizada do pool
         """
-        return self.explosion_pool.get(x, y, size, is_slime)
+        return self.explosion_pool.get(x, y, size, is_slime, custom_color)
 
     def spawn_emp_wave(self, center_x: float, center_y: float) -> None:
         """Spawna uma onda visual de EMP."""

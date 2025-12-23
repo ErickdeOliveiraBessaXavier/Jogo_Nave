@@ -281,4 +281,4 @@ class SlimeBoss(Boss):
             player_rect: Retângulo do jogador
             entity_manager: EntityManager para spawnar efeitos de partículas (opcional)
         """
-        return self.dripping_effect.check_collisions(player_rect)
+        return self.dripping_effect.check_collisions(player_rect, entity_manager)

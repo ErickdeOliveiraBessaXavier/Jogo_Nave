@@ -36,7 +36,7 @@ class Config:
     # ========================================
     # ENTITY MOVEMENT SPEEDS (pixels/second)
     # ========================================
-    SHIP_SPEED: float = 300.0
+    # SHIP_SPEED: float = 300.0  # (Não utilizado - nave usa sistema diferente)
     BULLET_SPEED: float = 480.0
     FAST_METEOR_SPEED: float = 320.0  # meteoros pequenos
     SLOW_METEOR_SPEED: float = 25.0  # meteoros grandes
@@ -48,18 +48,18 @@ class Config:
     # Basic meteor settings
     MIN_METEOR_SIZE: int = 12
     MAX_METEOR_SIZE: int = 55
-    METEOR_SPAWN_EVERY: float = 0.58  # seconds
+    # METEOR_SPAWN_EVERY: float = 0.58  # (Não utilizado - usa sistema diferente)
     DIAGONAL_CHANCE: float = 2
 
     # Fragmentation system
-    FRAGMENT_MIN_SIZE: int = 12
+    # FRAGMENT_MIN_SIZE: int = 12  # (Não utilizado)
     FRAGMENT_SPLIT_THRESHOLD: int = 28
     FRAGMENT_COUNT_RANGE: Tuple[int, int] = (2, 5)
     FRAGMENT_SPEED_BOOST: float = 1.25
     FRAGMENT_SPREAD: float = 260.0  # degrees
 
     # Guided meteors
-    GUIDED_METEOR_SPAWN_CHANCE: float = 0.5  # Chance no modo frenzy (50%)
+    # GUIDED_METEOR_SPAWN_CHANCE: float = 0.5  # (Não utilizado)
     GUIDED_METEOR_NORMAL_PHASES_CHANCE: float = 0.1  # Chance nas fases normais (10%)
     GUIDED_METEOR_MAX_SPEED: float = 250.0
     GUIDED_METEOR_ACCELERATION: float = 100.0
@@ -132,8 +132,7 @@ class Config:
     # Music transition settings for boss warning
     BOSS_MUSIC_FADE_OUT_START: float = 3.0
     BOSS_MUSIC_FADE_OUT_DURATION: float = 2.0
-    BOSS_MUSIC_FADE_IN_DURATION: float = 3.0
-    BOSS_MUSIC_FADE_IN_START_DELAY: float = 1.0
+    # (Fade in da música do boss não implementado)
 
     # ========================================
     # VISUAL EFFECTS & ANIMATIONS
@@ -200,9 +199,7 @@ class Config:
     BOSS_FRENZY_ANIMATION_SPEED_MULTIPLIER: float = 2.0
 
     # Boss visual effects - Normal mode
-    BOSS_CHARGE_PARTICLE_COUNT: int = 20
-    BOSS_CHARGE_PARTICLE_LIFETIME: float = 1.0
-    BOSS_CHARGE_PARTICLE_SIZE: Tuple[int, int] = (2, 6)
+    # (Sistema de partículas de carregamento não implementado)
 
     # Ship particles
     PARTICLE_ENTRY_COUNT = 3
@@ -216,7 +213,7 @@ class Config:
     PARTICLE_THRUSTER_SIZE = (2, 4)
 
     # Boss orbital squares
-    BOSS_ORBITAL_SQUARES_COUNT = 14
+    # (Sistema de quadrados orbitais não implementado)
     BOSS_AIM_BLINK_INTERVAL: int = 400
     BOSS_AIM_BLINK_ON_DURATION: int = 200
     BOSS_AIM_DASH_LENGTH: int = 20
@@ -249,7 +246,7 @@ class Config:
     SPIKE_BOSS_PROXIMITY_TELEGRAPH_DURATION: float = 0.8
     SPIKE_BOSS_PROXIMITY_WAVE_DURATION: float = 0.8
     SPIKE_BOSS_PROXIMITY_WAVE_MAX_RADIUS: float = 280.0
-    SPIKE_BOSS_PROXIMITY_DAMAGE: int = 1
+    # SPIKE_BOSS_PROXIMITY_DAMAGE: int = 1  # (Não utilizado)
     SPIKE_BOSS_PROXIMITY_WARNING_COLOR_NORMAL: Tuple[int, int, int] = (255, 255, 0)
     SPIKE_BOSS_PROXIMITY_WARNING_COLOR_FRENZY: Tuple[int, int, int] = (255, 0, 0)
     SPIKE_BOSS_PROXIMITY_WAVE_COLOR_NORMAL: Tuple[int, int, int] = (0, 255, 255)
@@ -273,23 +270,50 @@ class Config:
     SPIKE_BOSS_LASER_LIFETIME: float = 1.5
 
     # Attack timing
-    SPIKE_BOSS_ATTACK_INTERVAL: Tuple[float, float] = (3.0, 5.0)
-    SPIKE_BOSS_FRENZY_ATTACK_INTERVAL: Tuple[float, float] = (1.5, 2.5)
+    # SPIKE_BOSS_ATTACK_INTERVAL: Tuple[float, float] = (3.0, 5.0)  # (Não utilizado)
+    # SPIKE_BOSS_FRENZY_ATTACK_INTERVAL: Tuple[float, float] = (1.5, 2.5)  # (Não utilizado)
 
     # Spike spawn settings
-    SPIKE_BOSS_SPIKE_COUNT: Tuple[int, int] = (3, 5)
-    SPIKE_BOSS_FRENZY_SPIKE_COUNT: Tuple[int, int] = (6, 9)
+    # SPIKE_BOSS_SPIKE_COUNT: Tuple[int, int] = (3, 5)  # (Não utilizado)
+    # SPIKE_BOSS_FRENZY_SPIKE_COUNT: Tuple[int, int] = (6, 9)  # (Não utilizado)
 
     # ========================================
     # SLIME BOSS - DRIPPING SYSTEM
     # ========================================
     # Propriedades físicas das gotas
-    SLIME_DRIP_RADIUS_MIN: float = 25.0
+    # SLIME_DRIP_RADIUS_MIN: float = 25.0  # (Não utilizado)
     SLIME_DRIP_RADIUS_MAX: float = 85.0
 
     # Spawn e gameplay
     SLIME_DRIP_MAX_ACTIVE: int = 15
-    SLIME_DRIP_SPAWN_INTERVAL: float = 0.3
+    SLIME_DRIP_SPAWN_INTERVAL: float = 0.8
+    # SLIME_DRIP_FALL_SPEED_MIN: float = 5.0  # (Não utilizado)
+    # SLIME_DRIP_FALL_SPEED_MAX: float = 10.0  # (Não utilizado)
+    # SLIME_DRIP_SPLASH_RADIUS_MIN: float = 30.0  # (Sistema de splash não implementado)
+    # SLIME_DRIP_SPLASH_RADIUS_MAX: float = 70.0  # (Sistema de splash não implementado)
+
+    # Pool e otimização
+    SLIME_DRIP_POOL_SIZE_MULTIPLIER: int = 2  # Multiplicador para tamanho inicial do pool
+    SLIME_DRIP_SPATIAL_GRID_CELL_SIZE: int = 150  # Tamanho da célula do spatial grid
+
+
+    # Sistema de partículas desprendidas
+    # SLIME_DRIP_DETACH_PARTICLE_SPAWN_CHANCE: float = 0.3  # (Substituído por intervalo)
+    SLIME_DRIP_DETACH_PARTICLE_SPAWN_INTERVAL: float = 0.05  # Intervalo entre spawns (segundos) - para produção contínua
+    SLIME_DRIP_DETACH_PARTICLE_MAX_PER_DRIP: int = 20  # Máximo de partículas por gota
+    SLIME_DRIP_DETACH_PARTICLE_SIZE_START: float = 0.4  # Tamanho inicial relativo à gota
+    SLIME_DRIP_DETACH_PARTICLE_SIZE_END: float = 0.1  # Tamanho final (quando some)
+    SLIME_DRIP_DETACH_PARTICLE_LIFETIME: float = 1.0  # Tempo de vida (segundos)
+    SLIME_DRIP_DETACH_PARTICLE_SPEED_MIN: float = 20.0  # Velocidade mínima de movimento
+    SLIME_DRIP_DETACH_PARTICLE_SPEED_MAX: float = 60.0  # Velocidade máxima de movimento
+    # SLIME_DRIP_DETACH_PARTICLE_COUNT_MAX: int = 300  # (Limite global não implementado)
+
+    # Sistema de pulso
+    SLIME_DRIP_PULSE_PERIOD: float = 3.0  # Período completo do pulso (segundos)
+    SLIME_DRIP_PULSE_AMPLITUDE: float = 0.15  # Amplitude do pulso (15% de variação)
+
+    # Física e limites
+    SLIME_DRIP_DEATH_MARGIN: int = 100  # Margem para considerar gota morta (pixels)
 
     # Visual - Cores
     SLIME_DRIP_COLORS: list[Tuple[int, int, int, int]] = field(
@@ -369,7 +393,7 @@ class Config:
     FORMATION_V_SPACING: float = 45.0
     FORMATION_SQUARE_SIZE: float = 180.0
     FORMATION_LINE_SPACING: float = 80.0
-    FORMATION_DRIFT_SPEED: float = 150.0
+    # FORMATION_DRIFT_SPEED: float = 150.0  # (Não utilizado)
     FORMATION_DESCENT_SPEED: float = 30.0
 
     # ========================================
@@ -408,13 +432,10 @@ class Config:
             ("FRAGMENT_COUNT_RANGE", self.FRAGMENT_COUNT_RANGE),
             ("BOSS_CALM_ATTACK_INTERVAL", self.BOSS_CALM_ATTACK_INTERVAL),
             ("BOSS_FRENZY_ATTACK_INTERVAL", self.BOSS_FRENZY_ATTACK_INTERVAL),
-            ("SPIKE_BOSS_ATTACK_INTERVAL", self.SPIKE_BOSS_ATTACK_INTERVAL),
-            (
-                "SPIKE_BOSS_FRENZY_ATTACK_INTERVAL",
-                self.SPIKE_BOSS_FRENZY_ATTACK_INTERVAL,
-            ),
-            ("SPIKE_BOSS_SPIKE_COUNT", self.SPIKE_BOSS_SPIKE_COUNT),
-            ("SPIKE_BOSS_FRENZY_SPIKE_COUNT", self.SPIKE_BOSS_FRENZY_SPIKE_COUNT),
+            # SPIKE_BOSS_ATTACK_INTERVAL removido (não utilizado)
+            # SPIKE_BOSS_FRENZY_ATTACK_INTERVAL removido (não utilizado)
+            # SPIKE_BOSS_SPIKE_COUNT removido (não utilizado)
+            # SPIKE_BOSS_FRENZY_SPIKE_COUNT removido (não utilizado)
             ("POWERUP_SPAWN_INTERVAL", self.POWERUP_SPAWN_INTERVAL),
             ("FORMATION_SPAWN_INTERVAL", self.FORMATION_SPAWN_INTERVAL),
         ]

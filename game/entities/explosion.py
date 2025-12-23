@@ -5,13 +5,14 @@ from ..core.config import config as Config
 
 
 class Explosion:
-    def __init__(self, x: float, y: float, size: int = 20, is_slime: bool = False):
+    def __init__(self, x: float, y: float, size: int = 20, is_slime: bool = False, custom_color: tuple[int, int, int, int] | None = None):
         self.x, self.y = x, y
         self.time = Config.EXPLOSION_DURATION * (
             size / 40
         )  # Explosões maiores duram mais
         self.size = size
         self.is_slime = is_slime
+        self.custom_color = custom_color  # Cor personalizada para explosões de slime
         count = min(20 + size // 4, 40)
         self.particles: list[list[float]] = []
 
@@ -49,7 +50,12 @@ class Explosion:
         for _, p in enumerate(self.particles):
             life_ratio = p[4] / max(self.time, 1e-6)
             
-            if self.is_slime:
+            if self.custom_color is not None:
+                # Usar cor personalizada (para gotas de slime)
+                base_color = self.custom_color[:3]  # RGB da cor base
+                alpha = int(self.custom_color[3] * life_ratio) if len(self.custom_color) == 4 else 255
+                color = (*base_color, alpha)
+            elif self.is_slime:
                 # Cores específicas para slime: #503959, #CCB0D9, #260259, #4D0DA6, #410B8C
                 slime_colors = [
                     (80, 57, 89),    # #503959

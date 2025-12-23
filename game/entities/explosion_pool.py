@@ -37,7 +37,7 @@ class ExplosionPool:
             explosion.particles.clear()
             self.available.append(explosion)
 
-    def get(self, x: float, y: float, size: int = 30, is_slime: bool = False) -> Explosion:
+    def get(self, x: float, y: float, size: int = 30, is_slime: bool = False, custom_color: tuple[int, int, int, int] | None = None) -> Explosion:
         """
         Obtém uma explosão do pool (reutiliza se possível).
 
@@ -45,6 +45,7 @@ class ExplosionPool:
             x, y: Posição da explosão
             size: Tamanho da explosão
             is_slime: Se é uma explosão de slime
+            custom_color: Cor personalizada para a explosão (opcional)
 
         Returns:
             Explosão configurada e pronta para uso
@@ -61,6 +62,7 @@ class ExplosionPool:
         explosion.y = y
         explosion.size = size
         explosion.is_slime = is_slime
+        explosion.custom_color = custom_color
 
         # Recalcular tempo baseado no tamanho
         explosion.time = Config.EXPLOSION_DURATION * (size / 40)
@@ -97,6 +99,7 @@ class ExplosionPool:
             # Marcar como finalizada para não ser desenhada
             explosion.time = 0
             explosion.particles.clear()
+            explosion.custom_color = None  # Resetar cor personalizada
             self.available.append(explosion)
 
     def update(self, dt: float) -> None:
