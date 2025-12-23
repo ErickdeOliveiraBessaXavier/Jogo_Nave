@@ -1,17 +1,17 @@
 {
   "version": "1.0",
-  "profile_created": "2025-12-23T13:14:33.119133",
-  "last_played": "2025-12-23T13:14:40.123187",
-  "total_playtime": 0.0,
+  "profile_created": "2025-12-23T14:01:55.025742",
+  "last_played": "2025-12-23T14:02:02.100749",
+  "total_playtime": 72.324768,
   "highest_level_reached": 1,
-  "total_deaths": 0,
+  "total_deaths": 5,
   "total_score": 0,
   "level_stats": {
     "1": {
       "level_number": 1,
       "attempts": 1,
       "clears": 0,
-      "deaths": 0,
+      "deaths": 5,
       "total_time": 0.0,
       "best_time": null,
       "worst_time": 0.0,
@@ -20,15 +20,50 @@
       "total_enemies_killed": 0,
       "total_damage_taken": 0,
       "total_powerups_collected": 0,
-      "recent_attempts": [],
-      "first_played": "2025-12-23T13:14:40.123164",
-      "last_played": "2025-12-23T13:14:40.123185",
+      "recent_attempts": [
+        {
+          "timestamp": "2025-12-23T14:02:34.001977",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2025-12-23T14:02:42.380611",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2025-12-23T14:02:47.791057",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2025-12-23T14:02:54.388083",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2025-12-23T14:03:09.533093",
+          "cleared": false,
+          "cause": "game_over"
+        }
+      ],
+      "first_played": "2025-12-23T14:02:02.100742",
+      "last_played": "2025-12-23T14:02:02.100748",
       "current_win_streak": 0,
       "best_win_streak": 0
     }
   },
   "level_adjustments": {},
-  "session_history": [],
+  "session_history": [
+    {
+      "start_time": "2025-12-23T14:01:57.208348",
+      "end_time": "2025-12-23T14:03:09.533116",
+      "levels_attempted": [],
+      "deaths": 5,
+      "score": 0,
+      "powerups_collected": 0
+    }
+  ],
   "unlocked_upgrades": [
     "AIR_STRIKE",
     "EMP",

@@ -1,15 +1,12 @@
 import pygame
+import pygame.font
 import random
-from typing import List, Optional, TYPE_CHECKING
-from collections import deque
+from typing import Optional, TYPE_CHECKING, Any
 from ..core.assets import get_image, BASE_DIR
 from ..core.config import config as Config
 from ..core.sound import sound_manager
 from ..core.sprite_loader import sprite_loader
 from .boss import Boss
-from .boss_laser import BossLaser
-from .boss_square import BossSquare
-from .meteor import Meteor
 from .slime_drip import SlimeDrippingEffect
 
 if TYPE_CHECKING:
@@ -122,22 +119,14 @@ class SlimeBoss(Boss):
             6  # Keep masks for last 6 frames to balance memory/performance
         )
 
-        # Disable floating squares for SlimeBoss
-        self.floating_squares = []
-        self.position_history = deque(maxlen=30)
-
         # Sistema de dripping slime
         self.dripping_effect = SlimeDrippingEffect(
             Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT, difficulty_multiplier
         )
 
-    def _init_floating_squares(self) -> None:
-        """SlimeBoss doesn't use floating squares."""
-        pass
-
     def update(
         self, dt: float, player_x: float, player_y: float | None = None
-    ) -> tuple[List[BossLaser], List[Meteor], List["BossSquare"]]:
+    ) -> tuple[list[Any], list[Any], list[Any]]:
         # Update animation always
         self._update_animation(dt)
 
@@ -198,8 +187,6 @@ class SlimeBoss(Boss):
             self.current_frame = (self.current_frame + 1) % len(self.animation_frames)
 
     def draw(self, surface: pygame.Surface, fps: float = 60.0) -> None:
-        import pygame  # Ensure pygame is available in local scope
-
         # Draw the slime sprite stretched to boss dimensions (with simple fallback)
         offset_x, offset_y = (0, 0)
         if self.frenzy_shake_timer > 0:
@@ -225,8 +212,6 @@ class SlimeBoss(Boss):
                     int(self.h),
                 )
                 pygame.draw.rect(surface, (0, 255, 100), rect)
-                import pygame.font
-
                 font = pygame.font.Font(None, 48)
                 text = font.render("SLIME BOSS", True, (255, 255, 255))
                 text_rect = text.get_rect(center=(rect.centerx, rect.centery))
@@ -238,8 +223,6 @@ class SlimeBoss(Boss):
             )
             pygame.draw.rect(surface, (0, 255, 100), rect)  # Verde gosma
             # Desenhar texto "SLIME" no centro
-            import pygame.font
-
             font = pygame.font.Font(None, 48)
             text = font.render("SLIME BOSS", True, (255, 255, 255))
             text_rect = text.get_rect(center=(rect.centerx, rect.centery))

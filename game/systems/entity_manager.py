@@ -330,6 +330,9 @@ class EntityManager:
                     self.spikes.extend(spawned_spikes)
                 if spike_boss_lasers:
                     self.boss_lasers.extend(spike_boss_lasers)  # type: ignore
+            # SlimeBoss só tem ataque de drip interno, não spawna entidades externas
+            elif isinstance(self.boss, SlimeBoss):
+                self.boss.update(enemy_dt, player_x, player_y)
             # Boss normal retorna (List[BossLaser], List[Meteor], List[BossSquare])
             else:
                 lasers_fired, spawned_meteors, spawned_squares = self.boss.update(
