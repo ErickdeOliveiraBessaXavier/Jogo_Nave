@@ -1,0 +1,227 @@
+================================================================================
+RELATÓRIO DE ANÁLISE DE CORES
+================================================================================
+
+CORES UTILIZADAS (32/32):
+--------------------------------------------------
+• BLACK
+  - game\core\colors.py
+  - game\entities\spike_boss.py
+  - game\render\renderer.py
+  - game\scenes\difficulty_selection.py
+  - game\scenes\main_menu.py
+  - game\scenes\paused.py
+  - game\scenes\settings.py
+  - game\scenes\statistics.py
+  - game\scenes\upgrades_selection.py
+
+• BLUE
+  - game\core\colors.py
+  - game\core\meta_progression.py
+  - game\entities\player_laser.py
+  - game\render\renderer.py
+  - game\scenes\main_menu.py
+  - game\scenes\settings.py
+  - game\scenes\statistics.py
+  - game\scenes\upgrades_selection.py
+
+• BOSS_AIM_LINE
+  - game\core\colors.py
+  - game\entities\boss.py
+
+• BRIGHT_GRAY
+  - game\core\colors.py
+
+• BRIGHT_GREEN
+  - game\core\colors.py
+  - game\scenes\main_menu.py
+  - game\scenes\paused.py
+
+• BRIGHT_RED
+  - game\core\colors.py
+
+• CYAN
+  - game\core\colors.py
+  - game\entities\mini_ship_bullet.py
+  - game\entities\player_laser.py
+  - game\entities\spike_boss.py
+  - game\render\renderer.py
+  - game\scenes\playing.py
+
+• DARK_GRAY
+  - game\core\colors.py
+  - game\scenes\statistics.py
+
+• DARK_RED
+  - game\core\colors.py
+  - game\entities\meteor.py
+  - game\entities\spike.py
+  - game\entities\spike_boss.py
+  - game\entities\spike_boss_laser.py
+  - game\scenes\main_menu.py
+
+• GRAY
+  - game\core\colors.py
+  - game\core\meta_progression.py
+  - game\entities\spike_boss.py
+  - game\scenes\settings.py
+  - game\scenes\statistics.py
+  - game\scenes\upgrades_selection.py
+
+• GREEN
+  - game\core\colors.py
+  - game\core\meta_progression.py
+  - game\entities\bullet.py
+  - game\entities\guided_meteor.py
+  - game\entities\spike_boss.py
+  - game\render\renderer.py
+  - game\scenes\difficulty_selection.py
+  - game\scenes\main_menu.py
+  - game\scenes\paused.py
+  - game\scenes\playing.py
+  - game\scenes\statistics.py
+  - game\scenes\upgrades_selection.py
+
+• GUIDED_METEOR_GREEN
+  - game\core\colors.py
+  - game\entities\guided_meteor.py
+
+• LIGHT_BLUE
+  - game\core\colors.py
+  - game\entities\mini_ship.py
+
+• LIGHT_GRAY
+  - game\core\colors.py
+
+• LIGHT_ORANGE
+  - game\core\colors.py
+  - game\entities\meteor.py
+
+• MAGENTA
+  - game\core\colors.py
+  - game\entities\alien_bullet.py
+  - game\entities\eye_enemy.py
+  - game\entities\eye_laser.py
+
+• ORANGE
+  - game\core\colors.py
+  - game\core\meta_progression.py
+  - game\entities\boss_particles.py
+  - game\entities\explosive_mine.py
+  - game\render\renderer.py
+  - game\scenes\difficulty_selection.py
+  - game\scenes\statistics.py
+
+• POWERUP_COOLDOWN_HASTE
+  - game\core\colors.py
+  - game\entities\powerup.py
+
+• POWERUP_DOUBLE_SHOT
+  - game\core\colors.py
+  - game\entities\powerup.py
+
+• POWERUP_LIFE
+  - game\core\colors.py
+  - game\entities\powerup.py
+
+• POWERUP_MINI_SHIPS
+  - game\core\colors.py
+  - game\entities\powerup.py
+
+• POWERUP_PIERCING_SHOT
+  - game\core\colors.py
+  - game\entities\powerup.py
+
+• POWERUP_RAINBOW
+  - game\core\colors.py
+  - game\entities\powerup.py
+
+• POWERUP_SCORE
+  - game\core\colors.py
+  - game\entities\powerup.py
+
+• POWERUP_SHIELD
+  - game\core\colors.py
+  - game\entities\powerup.py
+
+• POWERUP_SPEED
+  - game\core\colors.py
+  - game\core\config.py
+  - game\entities\powerup.py
+  - game\entities\star.py
+
+• POWERUP_TIME_STOP
+  - game\core\colors.py
+  - game\entities\powerup.py
+
+• PURPLE
+  - game\core\colors.py
+  - game\entities\bullet.py
+  - game\entities\eye_enemy.py
+  - game\entities\eye_laser.py
+
+• RAINBOW_COLORS
+  - analyze_colors_usage.py
+  - game\core\colors.py
+  - game\entities\powerup.py
+
+• RED
+  - game\core\colors.py
+  - game\core\meta_progression.py
+  - game\entities\explosive_mine.py
+  - game\entities\eye_enemy.py
+  - game\entities\meteor.py
+  - game\entities\spike.py
+  - game\entities\spike_boss.py
+  - game\entities\spike_boss_laser.py
+  - game\render\renderer.py
+  - game\scenes\difficulty_selection.py
+  - game\scenes\main_menu.py
+  - game\scenes\playing.py
+  - game\scenes\statistics.py
+  - game\scenes\upgrades_selection.py
+
+• WHITE
+  - game\core\colors.py
+  - game\core\meta_progression.py
+  - game\entities\eye_laser.py
+  - game\entities\player_laser.py
+  - game\entities\spike.py
+  - game\entities\spike_boss.py
+  - game\entities\spike_boss_laser.py
+  - game\render\renderer.py
+  - game\scenes\difficulty_selection.py
+  - game\scenes\main_menu.py
+  - game\scenes\paused.py
+  - game\scenes\playing.py
+  - game\scenes\settings.py
+  - game\scenes\statistics.py
+  - game\scenes\upgrades_selection.py
+
+• YELLOW
+  - game\core\colors.py
+  - game\core\meta_progression.py
+  - game\entities\boss_particles.py
+  - game\entities\bullet.py
+  - game\entities\explosive_mine.py
+  - game\entities\meteor.py
+  - game\entities\spike.py
+  - game\entities\spike_boss.py
+  - game\entities\spike_boss_laser.py
+  - game\render\renderer.py
+  - game\scenes\difficulty_selection.py
+  - game\scenes\playing.py
+  - game\scenes\statistics.py
+  - game\scenes\upgrades_selection.py
+
+CORES DEFINIDAS MAS NÃO UTILIZADAS (0/32):
+--------------------------------------------------
+Todas as cores estão sendo utilizadas!
+
+NENHUM PROBLEMA ENCONTRADO!
+
+ESTATÍSTICAS:
+--------------------------------------------------
+• Total de cores definidas: 32
+• Cores utilizadas: 32 (100.0%)
+• Cores não utilizadas: 0 (0.0%)

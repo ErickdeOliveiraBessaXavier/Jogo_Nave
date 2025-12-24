@@ -220,10 +220,6 @@ class Config:
     BOSS_FRENZY_AIM_BLINK_INTERVAL: int = 200
     BOSS_FRENZY_AIM_BLINK_ON_DURATION: int = 100
 
-    # Boss meteor attacks
-    BOSS_METEOR_AIM_SPREAD: float = 30.0  # Desvio normal (±30°)
-    BOSS_SIDE_METEOR_AIM_SPREAD: float = 45.0  # Desvio lateral (±45°)
-
     # ========================================
     # SPIKE BOSS SYSTEM
     # ========================================
@@ -267,6 +263,14 @@ class Config:
     # ========================================
     # SLIME BOSS - DRIPPING SYSTEM
     # ========================================
+    # Basic stats
+    SLIME_BOSS_HEALTH: int = 1200
+
+    # Movement speeds
+    SLIME_BOSS_ENTRY_SPEED_SLOW: float = 100.0  # Dramatic initial entry
+    SLIME_BOSS_ENTRY_SPEED_FAST: float = 300.0  # Subsequent entries/leaving
+    SLIME_BOSS_LEAVING_SPEED: float = 300.0  # Leaving speed (same as fast entry)
+
     # Propriedades físicas das gotas
     SLIME_DRIP_RADIUS_MAX: float = 75.0
 
@@ -479,6 +483,10 @@ class Config:
             "SCREEN_HEIGHT",
             "BOSS_HEALTH",
             "SPIKE_BOSS_HEALTH",
+            "SLIME_BOSS_HEALTH",
+            "SLIME_BOSS_ENTRY_SPEED_SLOW",
+            "SLIME_BOSS_ENTRY_SPEED_FAST",
+            "SLIME_BOSS_LEAVING_SPEED",
         ]
 
         for name in positive_values:

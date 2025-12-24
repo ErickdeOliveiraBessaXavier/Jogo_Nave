@@ -91,7 +91,7 @@ class SlimeBoss:
         self.target_y = -100  # Final position higher up, not too low
 
         # Health and state
-        self.health = health if health is not None else int(Config.BOSS_HEALTH * 1.2)
+        self.health = health if health is not None else Config.SLIME_BOSS_HEALTH
         self.max_health = self.health
         self.dead = False
         self.state = "entering"
@@ -130,8 +130,9 @@ class SlimeBoss:
         self.stage2_completed = False
 
         # Velocidades de entrada/saída
-        self.slow_entry_speed = 100.0  # Entrada dramática inicial
-        self.fast_entry_speed = 300.0  # Entradas/saídas posteriores rápidas
+        self.slow_entry_speed = Config.SLIME_BOSS_ENTRY_SPEED_SLOW
+        self.fast_entry_speed = Config.SLIME_BOSS_ENTRY_SPEED_FAST
+        self.leaving_speed = Config.SLIME_BOSS_LEAVING_SPEED
         self.is_first_entry = True
 
     def update(
@@ -198,7 +199,7 @@ class SlimeBoss:
 
         # Handle retreating for stage 2
         if self.stage2_retreating:
-            self.y -= self.fast_entry_speed * dt  # Leaving rápido
+            self.y -= self.leaving_speed * dt  # Leaving rápido
             if self.y <= -self.h:
                 self.stage2_retreating = False
                 self.stage2_active = True

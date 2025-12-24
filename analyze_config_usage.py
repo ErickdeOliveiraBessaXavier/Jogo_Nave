@@ -9,7 +9,6 @@ Este script:
 """
 
 import ast
-import os
 import re
 from pathlib import Path
 from typing import Set, Dict, List
@@ -72,29 +71,38 @@ def find_config_references(
         []
     )  # Para referências que não correspondem a atributos conhecidos
 
-    # Padrão regex para encontrar Config.NOME_DA_CONFIG
-    pattern = re.compile(r"Config\.([A-Z_][A-Z0-9_]*)")
-
-    # Percorrer todos os arquivos .py, exceto __pycache__
+    # Percorrer todos os arquivos .py, exceto __pycache__ e .venv
     for py_file in Path(project_root).rglob("*.py"):
-        if "__pycache__" in str(py_file):
+        if "__pycache__" in str(py_file) or ".venv" in str(py_file):
             continue
 
         try:
             with open(py_file, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            # Encontrar todas as referências
-            matches = pattern.findall(content)
-            for match in matches:
-                if match in config_attrs:
-                    if str(py_file.relative_to(project_root)) not in references[match]:
-                        references[match].append(str(py_file.relative_to(project_root)))
-                else:
-                    # Referência desconhecida
-                    ref_info = f"{py_file.relative_to(project_root)}: Config.{match}"
-                    if ref_info not in references["UNKNOWN"]:
-                        references["UNKNOWN"].append(ref_info)
+            file_rel_path = str(py_file.relative_to(project_root))
+
+            # Para cada configuração conhecida, procurar por qualquer menção dela no arquivo
+            for config in config_attrs:
+                # Padrões para detectar uso da configuração:
+                # 1. Config.NOME_DA_CONFIG
+                # 2. from config import ... NOME_DA_CONFIG
+                # 3. Uso direto da configuração (após import)
+                # 4. Uso em dicionários, listas, etc.
+                patterns = [
+                    rf'Config\.({re.escape(config)})\b',  # Config.NOME_DA_CONFIG
+                    rf'from config import.*\b{re.escape(config)}\b',  # import direto
+                    rf'\b{re.escape(config)}\b',  # uso direto (mais permissivo)
+                ]
+
+                found = False
+                for pattern in patterns:
+                    if re.search(pattern, content):
+                        found = True
+                        break
+
+                if found and file_rel_path not in references[config]:
+                    references[config].append(file_rel_path)
 
         except Exception as e:
             print(f"Erro ao processar {py_file}: {e}")
