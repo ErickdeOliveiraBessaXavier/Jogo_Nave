@@ -583,11 +583,11 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # Alien: 2.5,
             # EyeEnemy: 5.0,
         },
-        enemies_to_clear=0,
+        enemies_to_clear=100,
         # formations_enabled=True,
-        # formation_types=["spiral_circle", "spiral_v", "spiral_line"],
+        # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
         # mines_enabled=True,
-        boss_type=SlimeBoss,
+        # boss_type=SlimeBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),
@@ -618,6 +618,22 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         formation_types=["spiral_circle", "spiral_v", "spiral_line"],
         theme_name="Chefe Avançado",
         score_multiplier=1.6,
+    ),
+
+        15: LevelConfig(
+        level_number=15,
+        enemy_spawn_config={
+            Meteor: 0.7,
+            Alien: 8.0,
+            EyeEnemy: 15.0,
+        },
+        enemies_to_clear=300,
+        boss_type=SlimeBoss,
+        # mines_enabled=True,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
+        theme_name="Chefe Avançado",
+        score_multiplier=1.8,
     ),
 }
 
