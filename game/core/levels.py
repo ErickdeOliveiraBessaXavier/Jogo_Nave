@@ -598,7 +598,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             Meteor: 0.5,
             Alien: 2.5,
         },
-        enemies_to_clear=0,
+        enemies_to_clear=300,
         boss_type=Boss,
         mines_enabled=True,
         theme_name="Chefe Inicial",
