@@ -406,6 +406,55 @@ class Collisions:
 
         return score_gain, destroyed_count, score_events
 
+    def explosive_effects_vs_boss(
+        self,
+        explosive_effects: list[ExplosiveEffect],
+        boss: Boss | SpikeBoss | SlimeBoss | None,
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+    ) -> int:
+        """Verifica colisão entre efeitos explosivos e boss."""
+        if not boss or boss.dead:
+            return 0
+
+        score_gain = 0
+
+        for effect in explosive_effects:
+            if not effect.damage_active:
+                continue
+
+            damage_radius = effect.current_damage_radius
+            if damage_radius <= 0:
+                continue
+
+            # Calcular distância entre efeito explosivo e boss
+            boss_center_x = boss.x + boss.w / 2
+            boss_center_y = boss.y + boss.h / 2
+            dx = effect.x - boss_center_x
+            dy = effect.y - boss_center_y
+            distance = (dx * dx + dy * dy) ** 0.5
+
+            if distance <= damage_radius:
+                # Boss atingido - aplicar dano
+                from ..core.config import config as Config
+                damage = int(effect.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                boss.take_damage(damage)
+                sound_manager.play_boss_damage()
+                entity_manager.spawn_explosion(boss_center_x, boss_center_y, size=30)
+
+                # Verificar se boss morreu
+                if boss.dead:
+                    score_gain += Config.BOSS_DEFEAT_SCORE
+                    floating_scores.append(
+                        FloatingScore(boss_center_x, boss_center_y, Config.BOSS_DEFEAT_SCORE)
+                    )
+                    entity_manager.spawn_explosion(boss_center_x, boss_center_y, size=100)
+
+                # Marcar efeito como já atingiu este boss
+                effect.hit_enemies.add(id(boss))
+
+        return score_gain
+
     def air_strike_bombs_vs_enemies(
         self,
         air_strike_bombs: list[AirStrikeBomb],
@@ -444,6 +493,55 @@ class Collisions:
             score_events.extend(events)
 
         return score_gain, destroyed_count, score_events
+
+    def air_strike_bombs_vs_boss(
+        self,
+        air_strike_bombs: list[AirStrikeBomb],
+        boss: Boss | SpikeBoss | SlimeBoss | None,
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+    ) -> int:
+        """Verifica colisão entre explosões de bombas e boss."""
+        if not boss or boss.dead:
+            return 0
+
+        score_gain = 0
+
+        for bomb in air_strike_bombs:
+            if not bomb.exploding or not bomb.damage_active:
+                continue
+
+            damage_radius = bomb.explosion_radius
+            if damage_radius <= 0:
+                continue
+
+            # Calcular distância entre bomba e boss
+            boss_center_x = boss.x + boss.w / 2
+            boss_center_y = boss.y + boss.h / 2
+            dx = bomb.x - boss_center_x
+            dy = bomb.target_y - boss_center_y
+            distance = (dx * dx + dy * dy) ** 0.5
+
+            if distance <= damage_radius:
+                # Boss atingido - aplicar dano
+                from ..core.config import config as Config
+                damage = int(bomb.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                boss.take_damage(damage)
+                sound_manager.play_boss_damage()
+                entity_manager.spawn_explosion(boss_center_x, boss_center_y, size=50)
+
+                # Verificar se boss morreu
+                if boss.dead:
+                    score_gain += Config.BOSS_DEFEAT_SCORE
+                    floating_scores.append(
+                        FloatingScore(boss_center_x, boss_center_y, Config.BOSS_DEFEAT_SCORE)
+                    )
+                    entity_manager.spawn_explosion(boss_center_x, boss_center_y, size=100)
+
+                # Marcar bomba como já atingiu este boss
+                bomb.hit_enemies.add(id(boss))
+
+        return score_gain
 
     def mini_ship_bullets_vs_enemies(
         self,
@@ -940,6 +1038,34 @@ class Collisions:
         """Colisão de balas com SpikeBoss."""
         return self._apply_boss_damage(
             bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True
+        )
+
+    def bullets_vs_slime_boss(
+        self,
+        bullets: list[Bullet],
+        boss: "SlimeBoss",
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+    ) -> int:
+        """Colisão de balas com SlimeBoss."""
+        return self._apply_boss_damage(
+            bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True
+        )
+
+    def mini_ship_bullets_vs_slime_boss(
+        self,
+        mini_ship_bullets: list[MiniShipBullet],
+        boss: "SlimeBoss",
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+    ) -> int:
+        """Colisão de balas das mini ships com SlimeBoss."""
+        return self._apply_boss_damage(
+            mini_ship_bullets,
+            boss,
+            floating_scores,
+            entity_manager,
+            is_piercing_allowed=True,  # Allow piercing if bullets have piercing=True
         )
 
     def ship_vs_spike_boss(

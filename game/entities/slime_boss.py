@@ -181,9 +181,20 @@ class SlimeBoss:
         else:
             self.entry_speed = self.fast_entry_speed
 
+        # Handle entering state
+        if self.state == "entering":
+            self.y += self.entry_speed * dt
+            if self.y >= self.target_y:
+                self.y = self.target_y
+                self.state = "active"
+
         # Marcar que primeira entrada terminou
         if self.is_first_entry and self.state == "active":
             self.is_first_entry = False
+
+        # Handle active state movement
+        if self.state == "active":
+            self._update_active_state(dt)
 
         # Handle retreating for stage 2
         if self.stage2_retreating:
