@@ -207,7 +207,7 @@ class LevelConfig:
         Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss], float
     ]  # Tipo -> tempo de spawn
     enemies_to_clear: int  # quantos inimigos para passar de fase
-    boss_type: Type[Boss | SpikeBoss] | None = None
+    boss_type: Type[Boss | SpikeBoss | SlimeBoss] | None = None
     mines_enabled: bool = False
     formations_enabled: bool = False
     formation_types: list[str] | None = None

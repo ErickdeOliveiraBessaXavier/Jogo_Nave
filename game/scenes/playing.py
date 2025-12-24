@@ -747,7 +747,10 @@ class PlayingScene(Scene):
                     self.entity_manager,
                 )
                 score_gain += mini_ship_boss_gain
-            elif self._boss_type_cache == "normal":
+            elif self._boss_type_cache == "slime":
+                # SlimeBoss não usa lasers ou squares, apenas dripping
+                score_gain = 0
+            else:  # self._boss_type_cache == "normal"
                 score_gain = self.collisions.bullets_vs_boss(
                     self.entity_manager.bullets,
                     self.entity_manager.boss,  # type: ignore
@@ -763,14 +766,15 @@ class PlayingScene(Scene):
                 )
                 score_gain += mini_ship_boss_gain
 
-            # Lasers do jogador vs Boss
-            laser_boss_gain = self.collisions.player_lasers_vs_boss(
-                self.entity_manager.player_lasers,
-                self.entity_manager.boss,  # type: ignore
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
-            score_gain += laser_boss_gain
+            # Lasers do jogador vs Boss (não aplicável ao SlimeBoss)
+            if self._boss_type_cache != "slime":
+                laser_boss_gain = self.collisions.player_lasers_vs_boss(
+                    self.entity_manager.player_lasers,
+                    self.entity_manager.boss,  # type: ignore
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
+                score_gain += laser_boss_gain
 
             if self.score_multiplier_active:
                 score_gain = int(score_gain * self.score_multiplier_value)
@@ -818,19 +822,9 @@ class PlayingScene(Scene):
                 from ..entities.slime_boss import SlimeBoss
 
                 slime_boss = cast(SlimeBoss, boss)
-                score_gain = self.collisions.bullets_vs_boss(
-                    self.entity_manager.bullets,
-                    slime_boss,
-                    self.entity_manager.floating_scores,
-                    self.entity_manager,
-                )
-                score_gain += self.collisions.mini_ship_bullets_vs_boss(
-                    self.entity_manager.mini_ship_bullets,
-                    slime_boss,
-                    self.entity_manager.floating_scores,
-                    self.entity_manager,
-                )
-            elif self._boss_type_cache == "normal":
+                # SlimeBoss não usa lasers ou squares, apenas dripping
+                score_gain = 0
+            else:  # self._boss_type_cache == "normal"
                 score_gain = self.collisions.bullets_vs_boss(
                     self.entity_manager.bullets,
                     boss,  # type: ignore
@@ -844,13 +838,14 @@ class PlayingScene(Scene):
                     self.entity_manager,
                 )
 
-            # Lasers vs Boss (comum para ambos tipos)
-            score_gain += self.collisions.player_lasers_vs_boss(
-                self.entity_manager.player_lasers,
-                boss,  # type: ignore
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
+            # Lasers vs Boss (não aplicável ao SlimeBoss)
+            if self._boss_type_cache != "slime":
+                score_gain += self.collisions.player_lasers_vs_boss(
+                    self.entity_manager.player_lasers,
+                    boss,  # type: ignore
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
 
             # Dano das gotas do SlimeBoss
             if self._boss_type_cache == "slime":

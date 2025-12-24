@@ -1,19 +1,17 @@
 import pygame
 import pygame.font
-import random
 from typing import Optional, TYPE_CHECKING, Any
 from ..core.assets import get_image, BASE_DIR
 from ..core.config import config as Config
 from ..core.sound import sound_manager
 from ..core.sprite_loader import sprite_loader
-from .boss import Boss
 from .slime_drip import SlimeDrippingEffect
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
 
 
-class SlimeBoss(Boss):
+class SlimeBoss:
     """Large horizontal slime boss that spans the screen width and slides side-to-side.
 
     Visuals use `game/assets/images/sprite_boss_03_slime.png` (scaled to boss size).
@@ -85,21 +83,19 @@ class SlimeBoss(Boss):
         health: int | None = None,
         difficulty_multiplier: float = 1.0,
     ):
-        # Initialize base Boss to get full behavior
-        super().__init__(
-            x, y, health if health is not None else int(Config.BOSS_HEALTH * 1.2)
-        )
-
-        # Make the boss span the entire screen width plus movement margins
+        # Position and size
         self.w = Config.SCREEN_WIDTH + 100  # +50px left +50px right margin
         self.h = 600  # Taller to not be flattened
-
-        # Position centered on screen
         self.x = Config.SCREEN_WIDTH / 2 - self.w / 2  # Center the boss horizontally
-        self.target_y = -100  # Final position higher up, not too low
         self.y = -self.h  # More off-screen from the top
+        self.target_y = -100  # Final position higher up, not too low
 
-        # No lateral movement, keep it spanning the screen
+        # Health and state
+        self.health = health if health is not None else int(Config.BOSS_HEALTH * 1.2)
+        self.max_health = self.health
+        self.dead = False
+        self.state = "entering"
+
         # Animation
         self.animation_frames = self.load_animation_frames()
 
@@ -124,21 +120,81 @@ class SlimeBoss(Boss):
             Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT, difficulty_multiplier
         )
 
+        # Sistema de estágios
+        self.stage = 1
+        self.stage2_timer = 0.0
+        self.stage2_duration = 15.0
+        self.stage2_active = False
+        self.stage2_retreating = False
+        self.waiting_for_drips = False
+        self.stage2_completed = False
+
+        # Velocidades de entrada/saída
+        self.slow_entry_speed = 100.0  # Entrada dramática inicial
+        self.fast_entry_speed = 300.0  # Entradas/saídas posteriores rápidas
+        self.is_first_entry = True
+
     def update(
         self, dt: float, player_x: float, player_y: float | None = None
     ) -> tuple[list[Any], list[Any], list[Any]]:
+        # Verificar mudança de estágio
+        if self.stage == 1 and self.health <= self.max_health * 0.75 and not self.waiting_for_drips and not self.stage2_completed:
+            self.waiting_for_drips = True
+            self.dripping_effect.set_spawn_enabled(False)
+
+        if self.waiting_for_drips and self.dripping_effect.drip_pool.get_active_count() == 0:
+            self.stage = 2
+            self.stage2_active = False
+            self.stage2_retreating = True
+            self.target_y = -self.h - 100  # Recuar para fora da tela
+            self.state = "retreating"  # Novo estado para recuo
+            self.waiting_for_drips = False
+            self.stage2_completed = True  # Marcar que stage 2 foi usado
+            self.dripping_effect.set_spawn_enabled(True)  # Enable for homing
+
         # Update animation always
         self._update_animation(dt)
 
-        # Update dripping effect when active
-        if self.state == "active":
-            self.dripping_effect.update(
-                dt, self.x, self.y, self.w, player_x, player_y or 0
-            )
+        # Update dripping effect always (active drips need to update even when waiting)
+        self.dripping_effect.update(
+            dt, self.x, self.y, self.w, player_x, player_y or 0
+        )
 
-        # Call parent update
-        lasers, meteors, squares = super().update(dt, player_x, player_y)
-        return lasers, meteors, squares
+        # Handle stage 2 logic
+        if self.stage == 2 and self.stage2_active:
+            self.stage2_timer += dt
+            if self.stage2_timer >= self.stage2_duration:
+                # Fim do estágio 2, voltar
+                self.stage = 1
+                self.stage2_active = False
+                self.target_y = -50  # Posição visível mas mais alta na tela
+                self.state = "entering"  # Entrar novamente
+                self.dripping_effect.set_homing_mode(False, 0, 0)
+                self.dripping_effect.set_spawn_enabled(True)  # Enable normal spawning
+            else:
+                # Modo homing ativo
+                self.dripping_effect.set_homing_mode(True, player_x, player_y or 0)
+
+        # Ajustar velocidade de entrada baseada se é primeira vez
+        if self.is_first_entry:
+            self.entry_speed = self.slow_entry_speed
+        else:
+            self.entry_speed = self.fast_entry_speed
+
+        # Marcar que primeira entrada terminou
+        if self.is_first_entry and self.state == "active":
+            self.is_first_entry = False
+
+        # Handle retreating for stage 2
+        if self.stage2_retreating:
+            self.y -= self.fast_entry_speed * dt  # Leaving rápido
+            if self.y <= -self.h:
+                self.stage2_retreating = False
+                self.stage2_active = True
+                self.stage2_timer = 0.0
+                self.dripping_effect.set_homing_mode(True, player_x, player_y or 0)
+
+        return [], [], []
 
     def can_take_damage(self) -> bool:
         return self.state != "entering" and not self.dead
@@ -158,8 +214,6 @@ class SlimeBoss(Boss):
         """Move lateralmente 50px para esquerda e direita a partir da posição central."""
         # Velocidade de movimento
         speed = 50.0  # pixels/segundo (ajuste conforme necessário)
-        if self.frenzy_mode:
-            speed *= 1.5  # 50% mais rápido no frenzy
 
         # Mover horizontalmente
         if not hasattr(self, "direction"):
@@ -189,8 +243,6 @@ class SlimeBoss(Boss):
     def draw(self, surface: pygame.Surface, fps: float = 60.0) -> None:
         # Draw the slime sprite stretched to boss dimensions (with simple fallback)
         offset_x, offset_y = (0, 0)
-        if self.frenzy_shake_timer > 0:
-            offset_x = random.randint(-3, 3)
 
         # ✅ VERIFICAR SE HÁ FRAMES ANTES DE USAR:
         if self.animation_frames and len(self.animation_frames) > 0:

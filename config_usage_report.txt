@@ -2,7 +2,7 @@
 RELATÓRIO DE ANÁLISE DE CONFIGURAÇÕES
 ================================================================================
 
-CONFIGURAÇÕES UTILIZADAS (186/187):
+CONFIGURAÇÕES UTILIZADAS (201/202):
 --------------------------------------------------
 • BASE_POINTS
   - game\entities\meteor.py
@@ -395,6 +395,9 @@ CONFIGURAÇÕES UTILIZADAS (186/187):
 • SIZE_BONUS_MULTIPLIER
   - game\entities\meteor.py
 
+• SLIME_DRIP_BOSS_SPAWN_Y_OFFSET
+  - game\entities\slime_drip.py
+
 • SLIME_DRIP_COLORS
   - game\entities\slime_drip.py
 
@@ -422,7 +425,49 @@ CONFIGURAÇÕES UTILIZADAS (186/187):
 • SLIME_DRIP_DETACH_PARTICLE_SPEED_MIN
   - game\entities\slime_drip.py
 
+• SLIME_DRIP_HOMING_ACCELERATION
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_HOMING_AIM_OFFSET
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_HOMING_BLEND_FACTOR
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_HOMING_DISENGAGE_DISTANCE
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_HOMING_DISENGAGE_TIME
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_HOMING_MAX_ACTIVE
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_HOMING_MAX_DURATION
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_HOMING_MAX_SPEED
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_HOMING_SCALE_MAX
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_HOMING_SCALE_MIN
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_HOMING_SPAWN_INTERVAL
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_HOMING_SPAWN_Y_OFFSET
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_HOMING_TARGET_UPDATE_INTERVAL
+  - game\entities\slime_drip.py
+
 • SLIME_DRIP_MAX_ACTIVE
+  - game\entities\slime_drip.py
+
+• SLIME_DRIP_MAX_ORPHAN_PARTICLES
   - game\entities\slime_drip.py
 
 • SLIME_DRIP_POOL_SIZE_MULTIPLIER
@@ -625,7 +670,7 @@ CONFIGURAÇÕES UTILIZADAS (186/187):
 • WARP_SPEED_MULTIPLIER
   - game\scenes\playing.py
 
-CONFIGURAÇÕES DEFINIDAS MAS NÃO UTILIZADAS (1/187):
+CONFIGURAÇÕES DEFINIDAS MAS NÃO UTILIZADAS (1/202):
 --------------------------------------------------
 • POWERUP_RARITIES
 
@@ -689,7 +734,7 @@ Essas referências usam 'Config.' mas o atributo não foi encontrado na classe C
 
 ESTATÍSTICAS:
 --------------------------------------------------
-• Total de configurações definidas: 187
-• Configurações utilizadas: 186 (99.5%)
+• Total de configurações definidas: 202
+• Configurações utilizadas: 201 (99.5%)
 • Configurações não utilizadas: 1 (0.5%)
 • Referências desconhecidas: 53

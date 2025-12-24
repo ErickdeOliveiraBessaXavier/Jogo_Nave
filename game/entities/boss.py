@@ -12,7 +12,6 @@ from ..core.sound import sound_manager
 from .boss_laser import BossLaser
 from .boss_cannon import BossCannon, BossAttackSystem
 from .boss_particles import BossParticleSystem
-from .meteor import Meteor
 from .boss_square import BossSquare
 
 
@@ -631,9 +630,8 @@ class Boss:
 
     def update(
         self, dt: float, player_x: float, player_y: float | None = None
-    ) -> tuple[List[BossLaser], List["Meteor"], List[BossSquare]]:
+    ) -> tuple[List[BossLaser], List[BossSquare]]:
         """Main update method - state machine."""
-        spawned_meteors: List["Meteor"] = []
         spawned_squares: List[BossSquare] = []
         lasers_fired: List[BossLaser] = []
         self.frenzy_shake_timer = max(0.0, self.frenzy_shake_timer - dt)
@@ -817,7 +815,7 @@ class Boss:
         elif self.state == "firing":
             self._update_firing_state(dt)
 
-        return (lasers_fired, spawned_meteors, spawned_squares)
+        return (lasers_fired, spawned_squares)
 
     def _draw_aiming_line(self, surface: pygame.Surface) -> None:
         """Draw the animated aiming line(s)."""

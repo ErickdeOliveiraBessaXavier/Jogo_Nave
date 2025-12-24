@@ -28,7 +28,7 @@ class SlimeDripParticle:
         self.age: float = 0.0
 
         # Movimento
-        angle = random.uniform(0, 2 * 3.14159)  # Ângulo aleatório
+        angle = random.uniform(0, 2 * math.pi)  # Ângulo aleatório
         speed = random.uniform(
             Config.SLIME_DRIP_DETACH_PARTICLE_SPEED_MIN,
             Config.SLIME_DRIP_DETACH_PARTICLE_SPEED_MAX,
@@ -116,6 +116,14 @@ class SlimeDrip:
         "pulse_radius",
         "detach_particles",
         "detach_timer",
+        "is_homing",
+        "homing_locked",  # NOVO: flag para indicar se travou a direção
+        "target_x",
+        "target_y",
+        "homing_speed",
+        "homing_timer",
+        "max_speed",
+        "acceleration",
     )
 
     def __init__(self):
@@ -137,6 +145,16 @@ class SlimeDrip:
         # Sistema de partículas desprendidas
         self.detach_particles: List[SlimeDripParticle] = []
         self.detach_timer: float = 0.0
+
+        # Modo homing
+        self.is_homing: bool = False
+        self.homing_locked: bool = False  # NOVO
+        self.target_x: float = 0.0
+        self.target_y: float = 0.0
+        self.homing_speed: float = 300.0
+        self.homing_timer: float = 0.0
+        self.max_speed: float = Config.SLIME_DRIP_HOMING_MAX_SPEED
+        self.acceleration: float = Config.SLIME_DRIP_HOMING_ACCELERATION
 
     def reset(self, x: float, y: float, effect_width: int, effect_height: int) -> None:
         """Reseta a gota para reutilização no pool."""
@@ -161,13 +179,47 @@ class SlimeDrip:
         self.detach_particles.clear()
         self.detach_timer = 0.0
 
+        # Reset homing
+        self.is_homing = False
+        self.homing_locked = False  # NOVO
+        self.target_x = 0.0
+        self.target_y = 0.0
+        self.homing_timer = 0.0
+
     def update(self, dt: float) -> None:
         """Atualiza física da gota."""
         if not self.active or self.dead:
             return
 
-        # Aplicar gravidade
-        self.speed_y += self.params.gravity * dt
+        # Aplicar gravidade ou homing
+        if self.is_homing:
+            # Timer para homing
+            self.homing_timer += dt
+            
+            # Verificar se deve destravar (por tempo ou distância)
+            if not self.homing_locked:
+                distance_to_target = math.sqrt(
+                    (self.target_x - self.x) ** 2 + (self.target_y - self.y) ** 2
+                )
+                
+                # Destravar se chegou perto OU se passou do tempo limite
+                if (distance_to_target <= Config.SLIME_DRIP_HOMING_DISENGAGE_DISTANCE or 
+                    self.homing_timer > Config.SLIME_DRIP_HOMING_DISENGAGE_TIME):
+                    self.homing_locked = True  # Trava a direção atual
+            
+            # Verificar timeout total
+            if self.homing_timer > Config.SLIME_DRIP_HOMING_MAX_DURATION:
+                self.dead = True
+                self.active = False
+                return
+            
+            # Se não travou ainda, continua perseguindo
+            if not self.homing_locked:
+                self._update_guidance(dt)
+            # Se travou, apenas continua com velocidade atual (não atualiza direção)
+        else:
+            # Gravidade normal
+            self.speed_y += self.params.gravity * dt
 
         # Movimento
         self.x += self.speed_x * dt
@@ -182,8 +234,6 @@ class SlimeDrip:
             self.pulse_timer = 0.0
 
         # Calcula raio pulsante usando seno para movimento suave
-        import math
-
         pulse_ratio = (
             math.sin(self.pulse_timer / Config.SLIME_DRIP_PULSE_PERIOD * 2 * math.pi)
             + 1
@@ -213,7 +263,7 @@ class SlimeDrip:
         # Verificação de limites - morte imediata se sair da tela
         margin = Config.SLIME_DRIP_DEATH_MARGIN
 
-        # Morte imediata se sair da tela (sem timer de graça - gotas sempre caem)
+        # Morte imediata se sair da tela (todas as gotas, incluindo homing)
         if (
             self.y > self.effect_height + margin
             or self.x < -margin
@@ -248,6 +298,27 @@ class SlimeDrip:
         particle = SlimeDripParticle(particle_x, particle_y, self.params.color)
         self.detach_particles.append(particle)
 
+    def _update_guidance(self, dt: float) -> None:
+        """Update the guidance system to steer towards target."""
+        # Calcular direção para o alvo
+        dx = self.target_x - self.x
+        dy = self.target_y - self.y
+        distance = math.sqrt(dx * dx + dy * dy)
+
+        if distance > 0:
+            # Direção desejada (normalizada)
+            desired_dx = dx / distance
+            desired_dy = dy / distance
+
+            # Acelerar em direção ao alvo
+            current_speed = math.sqrt(self.speed_x * self.speed_x + self.speed_y * self.speed_y)
+            target_speed = min(current_speed + self.acceleration * dt, self.max_speed)
+
+            # Aplicar nova velocidade com inércia/suavização
+            blend_factor = Config.SLIME_DRIP_HOMING_BLEND_FACTOR  # Quanto menor, mais suave (limita ângulo de rotação)
+            self.speed_x = self.speed_x * (1 - blend_factor) + desired_dx * target_speed * blend_factor
+            self.speed_y = self.speed_y * (1 - blend_factor) + desired_dy * target_speed * blend_factor
+
     def get_bounds(self) -> Tuple[float, float, float, float]:
         """Retorna bounds (x, y, w, h) para spatial grid."""
         r = self.params.radius
@@ -279,7 +350,7 @@ class SlimeDripPool:
 
         # Sistema de partículas órfãs (partículas que sobreviveram à gota principal)
         self.orphan_particles: List[SlimeDripParticle] = []
-        self.max_orphan_particles: int = 200  # Limitar para performance
+        self.max_orphan_particles: int = Config.SLIME_DRIP_MAX_ORPHAN_PARTICLES  # Limitar para performance
 
     def get(
         self, x: float, y: float, effect_width: int, effect_height: int
@@ -337,12 +408,7 @@ class SlimeDripPool:
             particle.update(dt)
             # Verificar se partícula órfã saiu da tela
             margin = Config.SLIME_DRIP_DEATH_MARGIN
-            if (
-                particle.x < -margin
-                or particle.x > self.effect_width + margin
-                or particle.y < -margin
-                or particle.y > self.effect_height + margin
-            ):
+            if self._is_out_of_bounds(particle.x, particle.y, margin):
                 particle.active = False
 
         # Limitar número de partículas órfãs para performance (manter apenas as mais recentes)
@@ -360,6 +426,15 @@ class SlimeDripPool:
                 x, y, w, h = bounds
                 batch_data.append((drip, x, y, w, h))
             self.spatial_grid.insert_batch(batch_data)
+
+    def _is_out_of_bounds(self, x: float, y: float, margin: int) -> bool:
+        """Verifica se posição está fora dos limites."""
+        return (
+            x < -margin
+            or x > self.effect_width + margin
+            or y < -margin
+            or y > self.effect_height + margin
+        )
 
     def draw(self, surface: pygame.Surface) -> None:
         """Desenha as gotas usando batch rendering otimizado e LOD para performance máxima."""
@@ -547,6 +622,12 @@ class SlimeDrippingEffect:
         "spawn_timer",
         "spawn_interval",
         "max_drips",
+        "homing_mode",
+        "homing_target_x",
+        "homing_target_y",
+        "spawn_enabled",
+        "target_update_timer",
+        "target_update_interval",
     )
 
     def __init__(
@@ -570,6 +651,18 @@ class SlimeDrippingEffect:
         self.spawn_interval = Config.SLIME_DRIP_SPAWN_INTERVAL / difficulty_multiplier
         self.max_drips = Config.SLIME_DRIP_MAX_ACTIVE
 
+        # Spawn control
+        self.spawn_enabled = True
+
+        # Homing mode
+        self.homing_mode = False
+        self.homing_target_x = 0.0
+        self.homing_target_y = 0.0
+
+        # Target update delay
+        self.target_update_timer = 0.0
+        self.target_update_interval = Config.SLIME_DRIP_HOMING_TARGET_UPDATE_INTERVAL  # Atualizar target a cada intervalo
+
     def update(
         self,
         dt: float,
@@ -583,20 +676,48 @@ class SlimeDrippingEffect:
         # Atualizar pool
         self.drip_pool.update(dt)
 
+        # Atualizar targets para homing com delay
+        if self.homing_mode:
+            self.target_update_timer += dt
+            if self.target_update_timer >= self.target_update_interval:
+                self.target_update_timer = 0.0
+                for drip in self.drip_pool.active:
+                    if drip.is_homing:
+                        # Atualizar target com imprecisão
+                        offset = Config.SLIME_DRIP_HOMING_AIM_OFFSET
+                        drip.target_x = player_x + random.uniform(-offset, offset)
+                        drip.target_y = player_y + random.uniform(-offset, offset)
+
         # Spawn de novas gotas
-        self.spawn_timer += dt
-        if (
-            self.spawn_timer >= self.spawn_interval
-            and self.drip_pool.get_active_count() < self.max_drips
-        ):
-            self.spawn_timer = 0.0
-            self._spawn_drip(boss_x, boss_y, boss_width)
+        if self.spawn_enabled:
+            self.spawn_timer += dt
+            if (
+                self.spawn_timer >= self.spawn_interval
+                and self.drip_pool.get_active_count() < self.max_drips
+            ):
+                self.spawn_timer = 0.0
+                self._spawn_drip(boss_x, boss_y, boss_width)
 
     def _spawn_drip(self, boss_x: float, boss_y: float, boss_width: int) -> None:
-        """Spawna uma gota aleatoriamente acima do boss."""
-        x = boss_x + random.uniform(0, boss_width)
-        y = boss_y - 50  # 50 pixels acima do boss
-        self.drip_pool.get(x, y, self.effect_width, self.effect_height)
+        """Spawna uma gota aleatoriamente acima do boss ou no topo se homing."""
+        if self.homing_mode:
+            x = random.uniform(0, self.effect_width)
+            y = Config.SLIME_DRIP_HOMING_SPAWN_Y_OFFSET  # Topo da tela
+        else:
+            x = boss_x + random.uniform(0, boss_width)
+            y = boss_y + Config.SLIME_DRIP_BOSS_SPAWN_Y_OFFSET  # pixels acima do boss
+        drip = self.drip_pool.get(x, y, self.effect_width, self.effect_height)
+        if self.homing_mode:
+            drip.is_homing = True
+            drip.target_x = self.homing_target_x
+            drip.target_y = self.homing_target_y
+            # Forçar tamanho pequeno para homing drips
+            drip.params.scale = random.uniform(
+                Config.SLIME_DRIP_HOMING_SCALE_MIN, Config.SLIME_DRIP_HOMING_SCALE_MAX
+            )
+            drip.params.radius = Config.SLIME_DRIP_RADIUS_MAX * drip.params.scale
+            drip.params.damage = max(1, int(drip.params.scale * 2))
+            drip.pulse_radius = drip.params.radius  # Atualizar para evitar blink
 
     def draw(self, surface: pygame.Surface) -> None:
         """Desenha todas as gotas e rastros."""
@@ -607,3 +728,21 @@ class SlimeDrippingEffect:
     ) -> int:
         """Verifica colisões com o jogador usando spatial grid."""
         return self.drip_pool.check_collisions(player_rect, entity_manager)
+
+    def set_homing_mode(self, enabled: bool, target_x: float, target_y: float) -> None:
+        """Ativa ou desativa o modo homing para as gotas."""
+        self.homing_mode = enabled
+        self.homing_target_x = target_x
+        self.homing_target_y = target_y
+        
+        # Atualizar parâmetros de spawn baseado no modo
+        if enabled:
+            self.max_drips = Config.SLIME_DRIP_HOMING_MAX_ACTIVE
+            self.spawn_interval = Config.SLIME_DRIP_HOMING_SPAWN_INTERVAL
+        else:
+            self.max_drips = Config.SLIME_DRIP_MAX_ACTIVE
+            self.spawn_interval = Config.SLIME_DRIP_SPAWN_INTERVAL
+
+    def set_spawn_enabled(self, enabled: bool) -> None:
+        """Ativa ou desativa o spawn de novas gotas."""
+        self.spawn_enabled = enabled

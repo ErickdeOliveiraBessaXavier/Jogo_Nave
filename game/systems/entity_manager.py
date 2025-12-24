@@ -333,16 +333,13 @@ class EntityManager:
             # SlimeBoss só tem ataque de drip interno, não spawna entidades externas
             elif isinstance(self.boss, SlimeBoss):
                 self.boss.update(enemy_dt, player_x, player_y)
-            # Boss normal retorna (List[BossLaser], List[Meteor], List[BossSquare])
-            else:
-                lasers_fired, spawned_meteors, spawned_squares = self.boss.update(
+            # Boss normal retorna (List[BossLaser], List[BossSquare])
+            else:  # isinstance(self.boss, Boss)
+                lasers_fired, spawned_squares = self.boss.update(
                     enemy_dt, player_x, player_y
                 )
                 if lasers_fired:
                     self.boss_lasers.extend(lasers_fired)
-                if spawned_meteors:
-                    for meteor in spawned_meteors:
-                        self.enemies.append(meteor)
                 if spawned_squares:
                     self.boss_squares.extend(spawned_squares)
                 # Add orbital squares to boss_squares for collision detection
@@ -407,8 +404,8 @@ class EntityManager:
         from typing import Any  # Used for type hinting lists of varied entities
         from ..entities.mini_ship import MiniShip
         from ..entities.eye_enemy import EyeEnemy
-        from ..entities.guided_meteor import GuidedMeteor
         from ..entities.spike_boss import SpikeBoss
+        from ..entities.slime_boss import SlimeBoss
 
         # List of entity groups to update
         entity_groups: list[list[Any]] = [
@@ -457,14 +454,14 @@ class EntityManager:
                     self.spikes.extend(spawned_spikes)
                 if spike_boss_lasers:
                     self.boss_lasers.extend(spike_boss_lasers)  # type: ignore
+            elif isinstance(self.boss, SlimeBoss):
+                self.boss.update(dt, player_x, player_y)
             else:  # General Boss type
-                lasers_fired, spawned_meteors, spawned_squares = self.boss.update(
+                lasers_fired, spawned_squares = self.boss.update(
                     dt, player_x, player_y
                 )
                 if lasers_fired:
                     self.boss_lasers.extend(lasers_fired)
-                if spawned_meteors:
-                    self.enemies.extend(spawned_meteors)
                 if spawned_squares:
                     self.boss_squares.extend(spawned_squares)
 
