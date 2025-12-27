@@ -1,12 +1,42 @@
 {
   "version": "1.0",
-  "profile_created": "2025-12-24T12:28:21.316044",
-  "last_played": null,
+  "profile_created": "2025-12-27T13:24:19.169223",
+  "last_played": "2025-12-27T13:24:29.789887",
   "total_playtime": 0.0,
-  "highest_level_reached": 1,
+  "highest_level_reached": 2,
   "total_deaths": 0,
-  "total_score": 0,
-  "level_stats": {},
+  "total_score": 20000,
+  "level_stats": {
+    "1": {
+      "level_number": 1,
+      "attempts": 1,
+      "clears": 1,
+      "deaths": 0,
+      "total_time": 106.79995083808899,
+      "best_time": 106.79995083808899,
+      "worst_time": 106.79995083808899,
+      "total_score": 20000,
+      "best_score": 20000,
+      "total_enemies_killed": 0,
+      "total_damage_taken": 33,
+      "total_powerups_collected": 0,
+      "recent_attempts": [
+        {
+          "timestamp": "2025-12-27T13:26:16.589866",
+          "cleared": true,
+          "time": 106.79995083808899,
+          "score": 20000,
+          "enemies": 0,
+          "damage": 33,
+          "powerups": 0
+        }
+      ],
+      "first_played": "2025-12-27T13:24:29.789877",
+      "last_played": "2025-12-27T13:24:29.789886",
+      "current_win_streak": 1,
+      "best_win_streak": 1
+    }
+  },
   "level_adjustments": {},
   "session_history": [],
   "unlocked_upgrades": [

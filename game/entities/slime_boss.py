@@ -2,7 +2,7 @@ import pygame
 import pygame.font
 from typing import Optional, TYPE_CHECKING, Any
 from ..core.assets import get_image, BASE_DIR
-from ..core.config import config as Config
+from ..core.config import config as Config, SlimeBossState, StageConfig
 from ..core.sound import sound_manager
 from ..core.sprite_loader import sprite_loader
 from .slime_drip import SlimeDrippingEffect
@@ -94,7 +94,15 @@ class SlimeBoss:
         self.health = health if health is not None else Config.SLIME_BOSS_HEALTH
         self.max_health = self.health
         self.dead = False
-        self.state = "entering"
+        self.current_state = SlimeBossState.ENTERING
+        self.stage_timer = 0.0
+        self.current_stage_config: StageConfig | None = None
+
+        # Entry speed
+        self.slow_entry_speed = Config.SLIME_BOSS_ENTRY_SPEED_SLOW
+        self.fast_entry_speed = Config.SLIME_BOSS_ENTRY_SPEED_FAST
+        self.is_first_entry = True
+        self.entry_speed = self.slow_entry_speed  # Initialize for ENTERING state
 
         # Animation
         self.animation_frames = self.load_animation_frames()
@@ -120,96 +128,48 @@ class SlimeBoss:
             Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT, difficulty_multiplier
         )
 
-        # Sistema de estágios
-        self.stage = 1
-        self.stage2_timer = 0.0
-        self.stage2_duration = 15.0
-        self.stage2_active = False
-        self.stage2_retreating = False
-        self.waiting_for_drips = False
-        self.stage2_completed = False
-
         # Velocidades de entrada/saída
-        self.slow_entry_speed = Config.SLIME_BOSS_ENTRY_SPEED_SLOW
-        self.fast_entry_speed = Config.SLIME_BOSS_ENTRY_SPEED_FAST
         self.leaving_speed = Config.SLIME_BOSS_LEAVING_SPEED
-        self.is_first_entry = True
 
-    def update(
-        self, dt: float, player_x: float, player_y: float | None = None
-    ) -> tuple[list[Any], list[Any], list[Any]]:
-        # Verificar mudança de estágio
-        if self.stage == 1 and self.health <= self.max_health * 0.75 and not self.waiting_for_drips and not self.stage2_completed:
-            self.waiting_for_drips = True
-            self.dripping_effect.set_spawn_enabled(False)
-
-        if self.waiting_for_drips and self.dripping_effect.drip_pool.get_active_count() == 0:
-            self.stage = 2
-            self.stage2_active = False
-            self.stage2_retreating = True
-            self.target_y = -self.h - 100  # Recuar para fora da tela
-            self.state = "retreating"  # Novo estado para recuo
-            self.waiting_for_drips = False
-            self.stage2_completed = True  # Marcar que stage 2 foi usado
-            self.dripping_effect.set_spawn_enabled(True)  # Enable for homing
-
-        # Update animation always
+    def update(self, dt: float, player_x: float, player_y: float | None = None) -> tuple[list[Any], list[Any], list[Any]]:
+        # Update animation
         self._update_animation(dt)
-
-        # Update dripping effect always (active drips need to update even when waiting)
-        self.dripping_effect.update(
-            dt, self.x, self.y, self.w, player_x, player_y or 0
-        )
-
-        # Handle stage 2 logic
-        if self.stage == 2 and self.stage2_active:
-            self.stage2_timer += dt
-            if self.stage2_timer >= self.stage2_duration:
-                # Fim do estágio 2, voltar
-                self.stage = 1
-                self.stage2_active = False
-                self.target_y = -50  # Posição visível mas mais alta na tela
-                self.state = "entering"  # Entrar novamente
-                self.dripping_effect.set_homing_mode(False, 0, 0)
-                self.dripping_effect.set_spawn_enabled(True)  # Enable normal spawning
-            else:
-                # Modo homing ativo
-                self.dripping_effect.set_homing_mode(True, player_x, player_y or 0)
-
-        # Ajustar velocidade de entrada baseada se é primeira vez
-        if self.is_first_entry:
-            self.entry_speed = self.slow_entry_speed
-        else:
-            self.entry_speed = self.fast_entry_speed
-
-        # Handle entering state
-        if self.state == "entering":
-            self.y += self.entry_speed * dt
-            if self.y >= self.target_y:
-                self.y = self.target_y
-                self.state = "active"
-
-        # Marcar que primeira entrada terminou
-        if self.is_first_entry and self.state == "active":
-            self.is_first_entry = False
-
-        # Handle active state movement
-        if self.state == "active":
-            self._update_active_state(dt)
-
-        # Handle retreating for stage 2
-        if self.stage2_retreating:
-            self.y -= self.leaving_speed * dt  # Leaving rápido
-            if self.y <= -self.h:
-                self.stage2_retreating = False
-                self.stage2_active = True
-                self.stage2_timer = 0.0
-                self.dripping_effect.set_homing_mode(True, player_x, player_y or 0)
-
+        
+        # Check transitions
+        next_state = self._check_transitions()
+        if next_state:
+            # Marcar próximo stage homing antes de retreating
+            if next_state == SlimeBossState.RETREATING:
+                if self.health / self.max_health > 0.20:
+                    self._next_homing_stage = SlimeBossState.STAGE_2_HOMING
+                else:
+                    self._next_homing_stage = SlimeBossState.STAGE_4_HOMING
+            self._transition_to_state(next_state)
+        
+        # Update based on current state
+        if self.current_state == SlimeBossState.ENTERING:
+            self._update_entering(dt)
+        elif self.current_state == SlimeBossState.RETREATING:
+            self._update_retreating(dt)
+        elif self.current_state in [SlimeBossState.STAGE_2_HOMING, SlimeBossState.STAGE_4_HOMING]:
+            self._update_stage_with_timer(dt, player_x, player_y or 0)
+            self._update_active_movement(dt)
+        elif self.current_state in [SlimeBossState.STAGE_1_NORMAL, SlimeBossState.STAGE_3_NORMAL, SlimeBossState.STAGE_5_FINAL]:
+            self._update_active_movement(dt)
+        
+        # Update dripping effect
+        self.dripping_effect.update(dt, self.x, self.y, self.w, player_x, player_y or 0)
+        
+        # Ajustar velocidade de entrada
+        if self.current_state == SlimeBossState.ENTERING:
+            self.entry_speed = self.slow_entry_speed if self.is_first_entry else self.fast_entry_speed
+            if self.current_state != SlimeBossState.ENTERING:
+                self.is_first_entry = False
+        
         return [], [], []
 
     def can_take_damage(self) -> bool:
-        return self.state != "entering" and not self.dead
+        return self.current_state != SlimeBossState.ENTERING and not self.dead
 
     def take_damage(self, amount: int) -> None:
         if not self.can_take_damage():
@@ -221,6 +181,9 @@ class SlimeBoss:
             sound_manager.play_explosion_boss()
         else:
             sound_manager.play_boss_damage()
+
+    def get_stage_info(self) -> str:
+        return f"{self.current_state.name} | Timer: {self.stage_timer:.1f}s | HP: {self.health}/{self.max_health}"
 
     def _update_active_state(self, dt: float) -> None:
         """Move lateralmente 50px para esquerda e direita a partir da posição central."""
@@ -251,6 +214,116 @@ class SlimeBoss:
         if self.animation_timer >= self.animation_speed:
             self.animation_timer = 0.0
             self.current_frame = (self.current_frame + 1) % len(self.animation_frames)
+
+    def _check_transitions(self) -> SlimeBossState | None:
+        health_pct = self.health / self.max_health
+        
+        # Stage 1 → Waiting (75% vida)
+        if self.current_state == SlimeBossState.STAGE_1_NORMAL and health_pct <= 0.75:
+            return SlimeBossState.WAITING_DRIPS
+        
+        # Waiting → Retreating (drips zeradas)
+        if self.current_state == SlimeBossState.WAITING_DRIPS:
+            if self.dripping_effect.drip_pool.get_active_count() == 0:
+                return SlimeBossState.RETREATING
+        
+        # Retreating → Próximo stage homing (saiu da tela)
+        if self.current_state == SlimeBossState.RETREATING and self.y <= -self.h:
+            if not hasattr(self, '_next_homing_stage'):
+                self._next_homing_stage = SlimeBossState.STAGE_2_HOMING
+            next_stage = self._next_homing_stage
+            self._next_homing_stage = None
+            return next_stage
+        
+        # Stage 2 Homing → Stage 3 (timeout)
+        if self.current_state == SlimeBossState.STAGE_2_HOMING:
+            if (self.current_stage_config and 
+                self.current_stage_config.duration is not None and 
+                self.stage_timer >= self.current_stage_config.duration):
+                return SlimeBossState.STAGE_3_NORMAL
+        
+        # Stage 3 → Waiting (20% vida)
+        if self.current_state == SlimeBossState.STAGE_3_NORMAL and health_pct <= 0.20:
+            return SlimeBossState.WAITING_DRIPS
+        
+        # Stage 4 Homing → Stage 5 (timeout)
+        if self.current_state == SlimeBossState.STAGE_4_HOMING:
+            if (self.current_stage_config and 
+                self.current_stage_config.duration is not None and 
+                self.stage_timer >= self.current_stage_config.duration):
+                return SlimeBossState.STAGE_5_FINAL
+        
+        return None
+
+    def _transition_to_state(self, new_state: SlimeBossState) -> None:
+        self.current_state = new_state
+        self.stage_timer = 0.0
+        
+        # Configurar stage específico
+        if new_state in Config.SLIME_BOSS_STAGES:
+            config = Config.SLIME_BOSS_STAGES[new_state]
+            self.current_stage_config = config
+            self.target_y = config.target_y
+            self.dripping_effect.max_drips = config.max_drips
+            self.dripping_effect.spawn_interval = config.spawn_interval
+            self.dripping_effect.set_homing_mode(
+                config.is_homing,
+                0, 0  # Will be updated in handlers
+            )
+            self.dripping_effect.set_spawn_enabled(True)
+        
+        # Estados especiais
+        if new_state == SlimeBossState.WAITING_DRIPS:
+            self.dripping_effect.set_spawn_enabled(False)
+        elif new_state == SlimeBossState.RETREATING:
+            self.target_y = -self.h - 100
+        elif new_state in [SlimeBossState.STAGE_2_HOMING, SlimeBossState.STAGE_4_HOMING]:
+            # Stay off-screen for homing phase
+            self.target_y = self.y
+        elif new_state in [SlimeBossState.STAGE_3_NORMAL, SlimeBossState.STAGE_5_FINAL]:
+            self.y = -self.h
+            self.target_y = 0
+
+    def _update_entering(self, dt: float) -> None:
+        self.y += self.entry_speed * dt
+        if self.y >= self.target_y:
+            self.y = self.target_y
+            self._transition_to_state(SlimeBossState.STAGE_1_NORMAL)
+
+    def _update_retreating(self, dt: float) -> None:
+        self.y -= self.leaving_speed * dt
+
+    def _update_stage_with_timer(self, dt: float, player_x: float, player_y: float) -> None:
+        # Handle entering animation for homing stages
+        if self.y < self.target_y:
+            self.y += self.entry_speed * dt
+            if self.y >= self.target_y:
+                self.y = self.target_y
+        
+        self.stage_timer += dt
+        if self.current_stage_config and self.current_stage_config.is_homing:
+            self.dripping_effect.set_homing_mode(True, player_x, player_y)
+
+    def _update_active_movement(self, dt: float) -> None:
+        if self.current_state == SlimeBossState.ENTERING:
+            return
+        
+        # Handle vertical movement if needed (for entering after homing phases)
+        if self.y < self.target_y:
+            self.y += self.entry_speed * dt
+            if self.y >= self.target_y:
+                self.y = self.target_y
+        
+        # Horizontal movement
+        speed = 50.0
+        if not hasattr(self, "direction"):
+            self.direction = 1
+        self.x += speed * dt * self.direction
+        center_x = Config.SCREEN_WIDTH / 2 - self.w / 2
+        if self.direction > 0 and self.x >= center_x + 50:
+            self.direction = -1
+        elif self.direction < 0 and self.x <= center_x - 50:
+            self.direction = 1
 
     def draw(self, surface: pygame.Surface, fps: float = 60.0) -> None:
         # Draw the slime sprite stretched to boss dimensions (with simple fallback)
@@ -294,6 +367,16 @@ class SlimeBoss:
 
         # Draw dripping effect
         self.dripping_effect.draw(surface)
+
+        # Draw health bar across the full screen width
+        bar_height = 20
+        bar_y = 0  # Top of the screen
+        # Background bar (full width, gray)
+        pygame.draw.rect(surface, (100, 100, 100), (0, bar_y, Config.SCREEN_WIDTH, bar_height))
+        # Health bar (green, proportional to health)
+        health_ratio = self.health / self.max_health
+        health_width = int(Config.SCREEN_WIDTH * health_ratio)
+        pygame.draw.rect(surface, (0, 255, 0), (0, bar_y, health_width, bar_height))
 
     @property
     def rect(self) -> pygame.Rect:

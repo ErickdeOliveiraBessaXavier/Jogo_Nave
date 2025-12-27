@@ -2,9 +2,9 @@ import pygame
 import random
 import math
 import time
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, Optional, cast, Any
 from ..core.state import Scene
-from ..core.config import config as Config
+from ..core.config import config as Config, SlimeBossState
 from ..render.renderer import Renderer
 from ..entities.ship import Ship
 from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
@@ -255,7 +255,11 @@ class PlayingScene(Scene):
         # Atualizar upgrades (cooldown/duração)
         self._update_upgrades(dt)
 
-        if self.entity_manager.boss and self.entity_manager.boss.state == "entering":
+        boss = cast(Any, self.entity_manager.boss)
+        if boss and (
+            getattr(boss, 'state', None) == "entering" or
+            getattr(boss, 'current_state', None) == SlimeBossState.ENTERING
+        ):
             self.screen_shake_timer = 0.1  # Keep shaking while boss is entering
         else:
             self.screen_shake_timer = max(0.0, self.screen_shake_timer - dt)

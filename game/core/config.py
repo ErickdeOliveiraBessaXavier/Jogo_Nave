@@ -1,6 +1,24 @@
+from enum import Enum, auto
 from dataclasses import dataclass, field
 from typing import Tuple, Any
-from enum import Enum
+
+class SlimeBossState(Enum):
+    ENTERING = auto()
+    STAGE_1_NORMAL = auto()
+    WAITING_DRIPS = auto()
+    RETREATING = auto()
+    STAGE_2_HOMING = auto()
+    STAGE_3_NORMAL = auto()
+    STAGE_4_HOMING = auto()
+    STAGE_5_FINAL = auto()
+
+@dataclass
+class StageConfig:
+    max_drips: int
+    spawn_interval: float
+    duration: float | None
+    is_homing: bool
+    target_y: float
 
 
 class PowerUpType(Enum):
@@ -270,6 +288,47 @@ class Config:
     SLIME_BOSS_ENTRY_SPEED_SLOW: float = 100.0  # Dramatic initial entry
     SLIME_BOSS_ENTRY_SPEED_FAST: float = 300.0  # Subsequent entries/leaving
     SLIME_BOSS_LEAVING_SPEED: float = 300.0  # Leaving speed (same as fast entry)
+
+    # Stage configurations
+    SLIME_BOSS_STAGES: dict[SlimeBossState, StageConfig] = field(
+        default_factory=lambda: {
+            SlimeBossState.STAGE_1_NORMAL: StageConfig(
+                max_drips=Config.SLIME_DRIP_MAX_ACTIVE,
+                spawn_interval=Config.SLIME_DRIP_SPAWN_INTERVAL,
+                duration=None,
+                is_homing=False,
+                target_y=-50
+            ),
+            SlimeBossState.STAGE_2_HOMING: StageConfig(
+                max_drips=Config.SLIME_DRIP_HOMING_MAX_ACTIVE,
+                spawn_interval=Config.SLIME_DRIP_HOMING_SPAWN_INTERVAL,
+                duration=15.0,
+                is_homing=True,
+                target_y=-50
+            ),
+            SlimeBossState.STAGE_3_NORMAL: StageConfig(
+                max_drips=int(Config.SLIME_DRIP_MAX_ACTIVE * 1.5),
+                spawn_interval=Config.SLIME_DRIP_SPAWN_INTERVAL * 0.8,
+                duration=None,
+                is_homing=False,
+                target_y=-50
+            ),
+            SlimeBossState.STAGE_4_HOMING: StageConfig(
+                max_drips=Config.SLIME_DRIP_HOMING_MAX_ACTIVE,
+                spawn_interval=Config.SLIME_DRIP_HOMING_SPAWN_INTERVAL,
+                duration=25.0,
+                is_homing=True,
+                target_y=-50
+            ),
+            SlimeBossState.STAGE_5_FINAL: StageConfig(
+                max_drips=int(Config.SLIME_DRIP_MAX_ACTIVE * 2.0),
+                spawn_interval=Config.SLIME_DRIP_SPAWN_INTERVAL * 0.6,
+                duration=None,
+                is_homing=False,
+                target_y=-50
+            ),
+        }
+    )
 
     # Propriedades físicas das gotas
     SLIME_DRIP_RADIUS_MAX: float = 75.0
