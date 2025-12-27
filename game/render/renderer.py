@@ -41,12 +41,22 @@ class CelestialManager:
     def __init__(self, w: int, h: int, n: int = RenderConfig.CELESTIAL_NUM_BODIES):
         self.w, self.h = w, h
         self.celestial_bodies: list[CelestialBody] = []
-        self.image_files = self._load_image_files()
+        self.image_files: list[Path] = self._load_image_files()
         # === NOVO: Controle de imagens já usadas ===
         self._used_images: set[Path] = set()
+        # Sistema de cooldown para evitar recorrência
+        self._recently_used: dict[Path, float] = {}  # image_path -> last_used_time
+        self._cooldown_time = 30.0  # 30 segundos de cooldown
+        self.current_time = 0.0  # Para rastrear tempo
         # === Cache para imagens escaladas ===
         self.scaled_image_cache: dict[tuple[Path, float], pygame.Surface] = {}
         # === FIM ===
+        # Timer para spawn orgânico
+        self.spawn_timer = 0.0
+        self.next_spawn_time = random.uniform(
+            RenderConfig.CELESTIAL_SPAWN_MIN_INTERVAL,
+            RenderConfig.CELESTIAL_SPAWN_MAX_INTERVAL
+        )
         # Initialize the pool with 'n' celestial bodies
         for _ in range(n):
             self.celestial_bodies.append(self._create_and_initialize_celestial_body())
@@ -106,31 +116,52 @@ class CelestialManager:
                 break
         return new_x
 
-    def _get_available_image(self) -> Path:
+    def _get_available_image(self, current_time: float) -> Path:
         """
-        Retorna uma imagem disponível que não está sendo usada por outros corpos celestiais.
+        Retorna uma imagem disponível que não está sendo usada por outros corpos celestiais
+        e não foi usada recentemente (cooldown).
 
-        Se não houver imagens suficientes disponíveis, permite alguma duplicata.
+        Prioriza imagens nunca usadas, depois imagens fora do cooldown.
         """
-        # Imagens disponíveis (não usadas)
+        # Primeiro, imagens disponíveis (não usadas atualmente)
         available_images = [
             img for img in self.image_files if img not in self._used_images
         ]
 
-        if available_images:
-            # Há imagens disponíveis, escolher uma aleatoriamente
-            return random.choice(available_images)
-        else:
-            # Não há imagens suficientes, escolher qualquer uma (permite duplicata)
+        if not available_images:
+            # Se não há nenhuma disponível, permitir duplicata (caso extremo)
             return random.choice(self.image_files)
+
+        # Separar em: nunca usadas vs recentemente usadas
+        never_used: list[Path] = []
+        recently_used: list[Path] = []
+
+        for img in available_images:
+            last_used = self._recently_used.get(img, 0.0)
+            if current_time - last_used >= self._cooldown_time:
+                never_used.append(img)
+            else:
+                recently_used.append(img)
+
+        # Priorizar imagens nunca usadas ou fora do cooldown
+        if never_used:
+            return random.choice(never_used)
+        elif recently_used:
+            # Se só há recentemente usadas, escolher a menos recente
+            recently_used.sort(key=lambda img: self._recently_used.get(img, 0.0))
+            return recently_used[0]  # A menos recente
+        else:
+            # Fallback (não deveria acontecer)
+            return random.choice(available_images)
 
     def _create_and_initialize_celestial_body(
         self, y_position: Optional[float] = None
     ) -> CelestialBody:
         """Creates a new celestial body and initializes its properties."""
         # === MODIFICADO: Usar imagem disponível ===
-        image_path = self._get_available_image()
+        image_path = self._get_available_image(self.current_time)
         self._used_images.add(image_path)  # Registrar como usada
+        self._recently_used[image_path] = self.current_time  # Marcar como recentemente usada
         # === FIM ===
 
         scale = random.uniform(
@@ -155,7 +186,7 @@ class CelestialManager:
 
     def _reset_celestial_body(
         self, body: CelestialBody, y_position: Optional[float] = None
-    ):
+    ) -> None:
         """Resets the properties of an existing celestial body."""
         # === MODIFICADO: Liberar imagem antiga e escolher nova disponível ===
         # Liberar a imagem antiga
@@ -163,8 +194,9 @@ class CelestialManager:
             self._used_images.discard(body["image_path"])
 
         # Escolher nova imagem disponível
-        image_path = self._get_available_image()
+        image_path = self._get_available_image(self.current_time)
         self._used_images.add(image_path)  # Registrar como usada
+        self._recently_used[image_path] = self.current_time  # Marcar como recentemente usada
         # === FIM ===
 
         scale = random.uniform(
@@ -186,20 +218,44 @@ class CelestialManager:
         )
         body["scale"] = scale
 
-    def update(self, dt: float, speed_multiplier: float = 1.0):
+    def update(self, dt: float, speed_multiplier: float = 1.0) -> None:
+        self.current_time += dt
+        
+        # Atualizar corpos existentes e remover os que saíram
+        remaining_bodies: list[CelestialBody] = []
+        removed_images: list[Path] = []
         for body in self.celestial_bodies:
             body["y"] += body["speed"] * dt * speed_multiplier
-            if body["y"] > self.h:
-                # Reset the existing body instead of creating a new one
-                self._reset_celestial_body(
-                    body,
-                    y_position=random.uniform(
-                        self.h * RenderConfig.CELESTIAL_RESET_Y_MIN_MULTIPLIER,
-                        self.h * RenderConfig.CELESTIAL_RESET_Y_MAX_MULTIPLIER,
-                    ),
+            if body["y"] <= self.h + 100:  # Ainda na tela
+                remaining_bodies.append(body)
+            else:
+                # Corpo saiu, liberar imagem e marcar como recentemente usada
+                if "image_path" in body:
+                    self._used_images.discard(body["image_path"])
+                    self._recently_used[body["image_path"]] = self.current_time
+                    removed_images.append(body["image_path"])
+        
+        self.celestial_bodies = remaining_bodies
+        
+        # Timer para spawn orgânico
+        self.spawn_timer += dt
+        if self.spawn_timer >= self.next_spawn_time and len(self.celestial_bodies) < RenderConfig.CELESTIAL_NUM_BODIES:
+            # Spawnar um novo corpo
+            new_body = self._create_and_initialize_celestial_body(
+                y_position=random.uniform(
+                    self.h * RenderConfig.CELESTIAL_RESET_Y_MIN_MULTIPLIER,
+                    self.h * RenderConfig.CELESTIAL_RESET_Y_MAX_MULTIPLIER,
                 )
+            )
+            self.celestial_bodies.append(new_body)
+            # Resetar timer
+            self.spawn_timer = 0.0
+            self.next_spawn_time = random.uniform(
+                RenderConfig.CELESTIAL_SPAWN_MIN_INTERVAL,
+                RenderConfig.CELESTIAL_SPAWN_MAX_INTERVAL
+            )
 
-    def draw(self, surface: pygame.Surface):
+    def draw(self, surface: pygame.Surface) -> None:
         for body in self.celestial_bodies:
             surface.blit(body["image"], (round(body["x"]), round(body["y"])))
 
@@ -221,7 +277,7 @@ class StarField:
         for _ in range(n):
             self.stars.append(self._create_and_initialize_star())
 
-    def _initialize_surface_pool(self):
+    def _initialize_surface_pool(self) -> None:
         """Pré-cria surfaces para reutilização no pool."""
         # Size 3 (max) * 1.3 (max pulse) * 3 (curva cúbica) ≈ 12, *2 para margem segura
         for _ in range(self.POOL_SIZE):
@@ -266,14 +322,14 @@ class StarField:
             }
         )
 
-    def _reset_star(self, star: Star):
+    def _reset_star(self, star: Star) -> None:
         """Resets the position and phase of an existing star, keeping other properties the same."""
         star["x"] = random.randint(0, self.w)
         star["y"] = -star["size"]  # Start above the screen
         star["phase"] = random.uniform(0, 2 * math.pi)
         # Keep speed, size, brightness, pulse_speed, color unchanged
 
-    def update(self, dt: float, speed_multiplier: float = 1.0):
+    def update(self, dt: float, speed_multiplier: float = 1.0) -> None:
         for s in self.stars:
             # Movimento vertical
             s["y"] += s["speed"] * dt * speed_multiplier
@@ -384,13 +440,14 @@ class Renderer:
         # === FIM DO SISTEMA DE FPS ===
 
     def background(
-        self, surface: pygame.Surface, dt: float, speed_multiplier: float = 1.0
+        self, surface: pygame.Surface, dt: float, speed_multiplier: float = 1.0, draw_celestials: bool = True
     ):
         surface.fill(colors.BLACK)
         self.starfield.update(dt, speed_multiplier)
-        self.celestial_manager.update(dt, speed_multiplier)
+        self.celestial_manager.update(dt, speed_multiplier)  # Sempre atualizar para que continuem se movendo
         self.starfield.draw(surface)
-        self.celestial_manager.draw(surface)
+        if draw_celestials:
+            self.celestial_manager.draw(surface)
 
     def _render_text_cached(
         self,

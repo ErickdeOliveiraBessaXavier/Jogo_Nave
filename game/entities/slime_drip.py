@@ -628,6 +628,12 @@ class SlimeDrippingEffect:
         "spawn_enabled",
         "target_update_timer",
         "target_update_interval",
+        
+        # NOVO: Sistema dual
+        "dual_mode",              # Flag para modo dual
+        "homing_spawn_timer",     # Timer separado para homing
+        "max_homing_drips",       # Máximo de homing no dual
+        "homing_spawn_interval_dual",  # Intervalo homing no dual
     )
 
     def __init__(
@@ -663,6 +669,12 @@ class SlimeDrippingEffect:
         self.target_update_timer = 0.0
         self.target_update_interval = Config.SLIME_DRIP_HOMING_TARGET_UPDATE_INTERVAL  # Atualizar target a cada intervalo
 
+        # NOVO: Sistema dual
+        self.dual_mode = False
+        self.homing_spawn_timer = 0.0
+        self.max_homing_drips = 0
+        self.homing_spawn_interval_dual = 1.0
+
     def update(
         self,
         dt: float,
@@ -676,25 +688,41 @@ class SlimeDrippingEffect:
         # Atualizar pool
         self.drip_pool.update(dt)
 
-        # Atualizar targets para homing com delay
-        if self.homing_mode:
+        # Atualizar targets para gotas homing existentes
+        if self.homing_mode or self.dual_mode:
             self.target_update_timer += dt
             if self.target_update_timer >= self.target_update_interval:
                 self.target_update_timer = 0.0
                 for drip in self.drip_pool.active:
                     if drip.is_homing:
-                        # Atualizar target com imprecisão
                         offset = Config.SLIME_DRIP_HOMING_AIM_OFFSET
                         drip.target_x = player_x + random.uniform(-offset, offset)
                         drip.target_y = player_y + random.uniform(-offset, offset)
 
-        # Spawn de novas gotas
-        if self.spawn_enabled:
+        if not self.spawn_enabled:
+            return
+
+        # MODO DUAL: Spawnar ambos os tipos
+        if self.dual_mode:
+            # 1. Spawnar drips normais (do boss)
             self.spawn_timer += dt
-            if (
-                self.spawn_timer >= self.spawn_interval
-                and self.drip_pool.get_active_count() < self.max_drips
-            ):
+            if (self.spawn_timer >= self.spawn_interval and 
+                self._count_normal_drips() < self.max_drips):
+                self.spawn_timer = 0.0
+                self._spawn_normal_drip(boss_x, boss_y, boss_width)
+            
+            # 2. Spawnar drips homing (do topo)
+            self.homing_spawn_timer += dt
+            if (self.homing_spawn_timer >= self.homing_spawn_interval_dual and 
+                self._count_homing_drips() < self.max_homing_drips):
+                self.homing_spawn_timer = 0.0
+                self._spawn_homing_drip(player_x, player_y)
+        
+        # MODO NORMAL/HOMING: Comportamento atual
+        else:
+            self.spawn_timer += dt
+            if (self.spawn_timer >= self.spawn_interval and 
+                self.drip_pool.get_active_count() < self.max_drips):
                 self.spawn_timer = 0.0
                 self._spawn_drip(boss_x, boss_y, boss_width)
 
@@ -718,6 +746,71 @@ class SlimeDrippingEffect:
             drip.params.radius = Config.SLIME_DRIP_RADIUS_MAX * drip.params.scale
             drip.params.damage = max(1, int(drip.params.scale * 2))
             drip.pulse_radius = drip.params.radius  # Atualizar para evitar blink
+
+    def _count_normal_drips(self) -> int:
+        """Conta quantas gotas normais estão ativas."""
+        return sum(1 for drip in self.drip_pool.active if not drip.is_homing)
+
+    def _count_homing_drips(self) -> int:
+        """Conta quantas gotas homing estão ativas."""
+        return sum(1 for drip in self.drip_pool.active if drip.is_homing)
+
+    def _spawn_normal_drip(self, boss_x: float, boss_y: float, boss_width: int) -> None:
+        """Spawna uma gota normal (caindo do boss)."""
+        x = boss_x + random.uniform(0, boss_width)
+        y = boss_y + Config.SLIME_DRIP_BOSS_SPAWN_Y_OFFSET
+        drip = self.drip_pool.get(x, y, self.effect_width, self.effect_height)
+        # Gota normal não tem homing
+        drip.is_homing = False
+
+    def _spawn_homing_drip(self, player_x: float, player_y: float) -> None:
+        """Spawna uma gota homing (do topo)."""
+        x = random.uniform(0, self.effect_width)
+        y = Config.SLIME_DRIP_HOMING_SPAWN_Y_OFFSET
+        drip = self.drip_pool.get(x, y, self.effect_width, self.effect_height)
+        
+        # Configurar homing
+        drip.is_homing = True
+        offset = Config.SLIME_DRIP_HOMING_AIM_OFFSET
+        drip.target_x = player_x + random.uniform(-offset, offset)
+        drip.target_y = player_y + random.uniform(-offset, offset)
+        
+        # Tamanho pequeno para homing
+        drip.params.scale = random.uniform(
+            Config.SLIME_DRIP_HOMING_SCALE_MIN, 
+            Config.SLIME_DRIP_HOMING_SCALE_MAX
+        )
+        drip.params.radius = Config.SLIME_DRIP_RADIUS_MAX * drip.params.scale
+        drip.params.damage = max(1, int(drip.params.scale * 2))
+        drip.pulse_radius = drip.params.radius
+
+    def set_dual_mode(
+        self, 
+        enabled: bool, 
+        max_normal: int, 
+        normal_interval: float,
+        max_homing: int, 
+        homing_interval: float,
+        target_x: float, 
+        target_y: float
+    ) -> None:
+        """Configura modo dual (drips normais + homing simultâneos)."""
+        self.dual_mode = enabled
+        
+        if enabled:
+            # Configurar limites separados
+            self.max_drips = max_normal
+            self.spawn_interval = normal_interval
+            self.max_homing_drips = max_homing
+            self.homing_spawn_interval_dual = homing_interval
+            
+            # Homing sempre ativo no dual
+            self.homing_mode = True
+            self.homing_target_x = target_x
+            self.homing_target_y = target_y
+        else:
+            # Resetar para modo single
+            self.homing_mode = False
 
     def draw(self, surface: pygame.Surface) -> None:
         """Desenha todas as gotas e rastros."""

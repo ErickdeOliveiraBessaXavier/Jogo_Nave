@@ -15,6 +15,10 @@ class RenderConfig:
     CELESTIAL_RESET_Y_MAX_MULTIPLIER = -0.5
     CELESTIAL_MIN_GAP = 150  # Minimum horizontal gap between celestial bodies
 
+    # Spawn timing for more organic appearance
+    CELESTIAL_SPAWN_MIN_INTERVAL = 8.0  # Minimum seconds between spawns
+    CELESTIAL_SPAWN_MAX_INTERVAL = 15.0  # Maximum seconds between spawns
+
     # Starfield configurations
     STARFIELD_NUM_STARS = 30
     STARFIELD_SPEED_MIN = 20

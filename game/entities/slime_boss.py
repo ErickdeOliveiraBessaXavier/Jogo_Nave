@@ -2,7 +2,7 @@ import pygame
 import pygame.font
 from typing import Optional, TYPE_CHECKING, Any
 from ..core.assets import get_image, BASE_DIR
-from ..core.config import config as Config, SlimeBossState, StageConfig
+from ..core.config import config as Config, SlimeBossState, StageConfig, SlimeDripMode
 from ..core.sound import sound_manager
 from ..core.sprite_loader import sprite_loader
 from .slime_drip import SlimeDrippingEffect
@@ -261,12 +261,30 @@ class SlimeBoss:
             config = Config.SLIME_BOSS_STAGES[new_state]
             self.current_stage_config = config
             self.target_y = config.target_y
-            self.dripping_effect.max_drips = config.max_drips
-            self.dripping_effect.spawn_interval = config.spawn_interval
-            self.dripping_effect.set_homing_mode(
-                config.is_homing,
-                0, 0  # Temporary coordinates, will be updated in _update_stage_with_timer
-            )
+            
+            # Verificar modo do stage
+            if config.drip_mode == SlimeDripMode.DUAL:
+                # MODO DUAL: Configurar ambos os tipos
+                self.dripping_effect.set_dual_mode(
+                    enabled=True,
+                    max_normal=config.max_drips,
+                    normal_interval=config.spawn_interval,
+                    max_homing=config.max_homing_drips,
+                    homing_interval=config.homing_spawn_interval,
+                    target_x=0,  # Será atualizado no update
+                    target_y=0
+                )
+            elif config.is_homing:
+                # MODO HOMING PURO
+                self.dripping_effect.set_homing_mode(True, 0, 0)
+                self.dripping_effect.max_drips = config.max_drips
+                self.dripping_effect.spawn_interval = config.spawn_interval
+            else:
+                # MODO NORMAL PURO
+                self.dripping_effect.set_homing_mode(False, 0, 0)
+                self.dripping_effect.max_drips = config.max_drips
+                self.dripping_effect.spawn_interval = config.spawn_interval
+            
             self.dripping_effect.set_spawn_enabled(True)
         
         # Estados especiais
@@ -306,7 +324,8 @@ class SlimeBoss:
         # Boss stays hidden during homing phases - no vertical movement
         
         self.stage_timer += dt
-        if self.current_stage_config and self.current_stage_config.is_homing:
+        if self.current_stage_config and (self.current_stage_config.is_homing or 
+                                          (self.current_stage_config.drip_mode == SlimeDripMode.DUAL)):
             self.dripping_effect.set_homing_mode(True, player_x, player_y)
 
     def _update_active_movement(self, dt: float) -> None:

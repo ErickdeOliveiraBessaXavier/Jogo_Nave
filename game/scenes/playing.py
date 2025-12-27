@@ -127,7 +127,7 @@ class PlayingScene(Scene):
         }
 
         # Timers de novos power-ups
-        self.time_stop_timer = 0.0
+        self.time_stop_timer: float = 0.0
         self.freeze_active = False
 
         # Sistema de limpeza de inimigos restantes
@@ -1320,6 +1320,7 @@ class PlayingScene(Scene):
         # Usa o dt armazenado pela última chamada de update
         dt = self.last_dt
         speed_multiplier = 1.0
+        boss_active = False  # Initialize to False
         if self.state == "preparing":
             progress = (
                 Config.PREPARATION_TIME - self.preparation_time_left
@@ -1338,7 +1339,7 @@ class PlayingScene(Scene):
             if boss_active:
                 speed_multiplier = Config.BOSS_WARP_SPEED_MULTIPLIER
 
-        self.r.background(self.game_surface, dt=dt, speed_multiplier=speed_multiplier)
+        self.r.background(self.game_surface, dt=dt, speed_multiplier=speed_multiplier, draw_celestials=not boss_active)
 
         fps_stats = self.r.get_fps_stats()
         self.entity_manager.draw(

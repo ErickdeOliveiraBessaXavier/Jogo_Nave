@@ -12,6 +12,11 @@ class SlimeBossState(Enum):
     STAGE_4_HOMING = auto()
     STAGE_5_FINAL = auto()
 
+class SlimeDripMode(Enum):
+    NORMAL = auto()      # Apenas drips normais
+    HOMING = auto()      # Apenas drips homing
+    DUAL = auto()        # Ambos simultaneamente
+
 @dataclass
 class StageConfig:
     max_drips: int
@@ -19,6 +24,11 @@ class StageConfig:
     duration: float | None
     is_homing: bool
     target_y: float
+    
+    # NOVO: Controles para modo dual
+    drip_mode: SlimeDripMode = SlimeDripMode.NORMAL
+    max_homing_drips: int = 0  # Máximo de homing quando dual
+    homing_spawn_interval: float = 1.0  # Intervalo homing quando dual
 
 
 class PowerUpType(Enum):
@@ -321,11 +331,17 @@ class Config:
                 target_y=-50
             ),
             SlimeBossState.STAGE_5_FINAL: StageConfig(
-                max_drips=int(15 * 2.0),  # SLIME_DRIP_MAX_ACTIVE * 2.0
-                spawn_interval=0.6 * 0.6,  # SLIME_DRIP_SPAWN_INTERVAL * 0.6
+                # Drips normais (caindo do boss)
+                max_drips=20,  # Menos que 2.0x para compensar homing
+                spawn_interval=0.5,  # Mais rápido
                 duration=None,
-                is_homing=False,
-                target_y=-50
+                is_homing=False,  # Legado
+                target_y=-50,
+                
+                # NOVO: Modo dual ativo
+                drip_mode=SlimeDripMode.DUAL,
+                max_homing_drips=8,  # Quantidade moderada de homing
+                homing_spawn_interval=1.5,  # Mais espaçados (menos frequentes)
             ),
         }
     )
