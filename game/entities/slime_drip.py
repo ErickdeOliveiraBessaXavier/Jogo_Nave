@@ -326,12 +326,22 @@ class SlimeDrip:
         self.speed_x += force_x * impulse_strength
         self.speed_y += force_y * impulse_strength
         
-        # Opcional: limitar velocidade máxima após repulsão
+        # Limitar velocidade máxima após repulsão
         max_speed = 500.0
         current_speed = math.sqrt(self.speed_x * self.speed_x + self.speed_y * self.speed_y)
         if current_speed > max_speed:
             self.speed_x = (self.speed_x / current_speed) * max_speed
             self.speed_y = (self.speed_y / current_speed) * max_speed
+        
+        # Garantir velocidade mínima para evitar que a gota pare completamente
+        min_speed = 50.0  # Velocidade mínima em pixels/segundo
+        if current_speed < min_speed and current_speed > 0:
+            # Manter a direção atual mas aumentar para velocidade mínima
+            self.speed_x = (self.speed_x / current_speed) * min_speed
+            self.speed_y = (self.speed_y / current_speed) * min_speed
+        elif current_speed == 0:
+            # Se estiver parada, dar um impulso para cima
+            self.speed_y = -min_speed
 
     def get_bounds(self) -> Tuple[float, float, float, float]:
         """Retorna bounds (x, y, w, h) para spatial grid."""
