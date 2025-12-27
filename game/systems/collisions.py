@@ -1167,28 +1167,24 @@ class Collisions:
 
                 drip_rect = drip.get_rect()
                 if bullet_rect.colliderect(drip_rect):
-                    # Aplicar força de repulsão à gota
-                    # Para balas normais, empurrar para baixo (oposto ao movimento para cima)
-                    # Para balas homing, usar direção baseada no movimento atual
-                    if bullet.homing and hasattr(bullet, 'target') and bullet.target:
-                        # Para balas homing, calcular direção baseada no alvo
-                        dx = bullet.target.x - bullet.x
-                        dy = bullet.target.y - bullet.y
-                        distance = math.sqrt(dx * dx + dy * dy)
-                        if distance > 0:
-                            repulsion_dir_x = dx / distance
-                            repulsion_dir_y = dy / distance
-                        else:
-                            repulsion_dir_x = 0.0
-                            repulsion_dir_y = 1.0  # Para baixo como fallback
+                    # Aplicar força de repulsão à gota baseada no movimento OPPOSTO ao atual
+                    # Calcular direção baseada na velocidade atual da gota
+                    current_speed_x = drip.speed_x
+                    current_speed_y = drip.speed_y
+                    current_speed_magnitude = math.sqrt(current_speed_x * current_speed_x + current_speed_y * current_speed_y)
+                    
+                    if current_speed_magnitude > 0:
+                        # Normalizar e inverter a direção do movimento atual
+                        repulsion_dir_x = -current_speed_x / current_speed_magnitude
+                        repulsion_dir_y = -current_speed_y / current_speed_magnitude
                     else:
-                        # Para balas normais, sempre empurrar para baixo
+                        # Se a gota estiver parada, usar direção para cima como padrão
                         repulsion_dir_x = 0.0
-                        repulsion_dir_y = 1.0  # Direção para baixo
+                        repulsion_dir_y = -1.0
                     
                     # Força de repulsão (ajustável)
-                    repulsion_strength = 600.0  # pixels/segundo²
-                    repulsion_duration = 0.12   # segundos
+                    repulsion_strength = 1.0  # Direção normalizada (será multiplicada dentro do apply_repulsion)
+                    repulsion_duration = 0.12   # segundos (não usado mais, mantido para compatibilidade)
                     
                     drip.apply_repulsion(
                         repulsion_dir_x * repulsion_strength,

@@ -124,9 +124,6 @@ class SlimeDrip:
         "homing_timer",
         "max_speed",
         "acceleration",
-        "repulsion_force_x",  # Força de repulsão X
-        "repulsion_force_y",  # Força de repulsão Y
-        "repulsion_timer",    # Timer para dissipar a força
     )
 
     def __init__(self):
@@ -159,11 +156,6 @@ class SlimeDrip:
         self.max_speed: float = Config.SLIME_DRIP_HOMING_MAX_SPEED
         self.acceleration: float = Config.SLIME_DRIP_HOMING_ACCELERATION
 
-        # Sistema de repulsão quando atingido por bala
-        self.repulsion_force_x: float = 0.0
-        self.repulsion_force_y: float = 0.0
-        self.repulsion_timer: float = 0.0
-
     def reset(self, x: float, y: float, effect_width: int, effect_height: int) -> None:
         """Reseta a gota para reutilização no pool."""
         self.active = True
@@ -193,11 +185,6 @@ class SlimeDrip:
         self.target_x = 0.0
         self.target_y = 0.0
         self.homing_timer = 0.0
-
-        # Reset repulsão
-        self.repulsion_force_x = 0.0
-        self.repulsion_force_y = 0.0
-        self.repulsion_timer = 0.0
 
     def update(self, dt: float) -> None:
         """Atualiza física da gota."""
@@ -233,19 +220,6 @@ class SlimeDrip:
         else:
             # Gravidade normal
             self.speed_y += self.params.gravity * dt
-
-        # Aplicar força de repulsão se ativa
-        if self.repulsion_timer > 0:
-            self.repulsion_timer -= dt
-            if self.repulsion_timer <= 0:
-                # Força dissipou completamente
-                self.repulsion_force_x = 0.0
-                self.repulsion_force_y = 0.0
-                self.repulsion_timer = 0.0
-            else:
-                # Aplicar força de repulsão à velocidade
-                self.speed_x += self.repulsion_force_x * dt
-                self.speed_y += self.repulsion_force_y * dt
 
         # Movimento
         self.x += self.speed_x * dt
@@ -347,9 +321,17 @@ class SlimeDrip:
 
     def apply_repulsion(self, force_x: float, force_y: float, duration: float = 0.2) -> None:
         """Aplica uma força de repulsão à gota quando atingida por uma bala."""
-        self.repulsion_force_x = force_x
-        self.repulsion_force_y = force_y
-        self.repulsion_timer = duration
+        # Aplicar impulso único à velocidade atual
+        impulse_strength = 150.0  # Velocidade adicional em pixels/segundo
+        self.speed_x += force_x * impulse_strength
+        self.speed_y += force_y * impulse_strength
+        
+        # Opcional: limitar velocidade máxima após repulsão
+        max_speed = 500.0
+        current_speed = math.sqrt(self.speed_x * self.speed_x + self.speed_y * self.speed_y)
+        if current_speed > max_speed:
+            self.speed_x = (self.speed_x / current_speed) * max_speed
+            self.speed_y = (self.speed_y / current_speed) * max_speed
 
     def get_bounds(self) -> Tuple[float, float, float, float]:
         """Retorna bounds (x, y, w, h) para spatial grid."""
