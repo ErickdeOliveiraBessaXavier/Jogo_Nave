@@ -293,36 +293,36 @@ class Config:
     SLIME_BOSS_STAGES: dict[SlimeBossState, StageConfig] = field(
         default_factory=lambda: {
             SlimeBossState.STAGE_1_NORMAL: StageConfig(
-                max_drips=Config.SLIME_DRIP_MAX_ACTIVE,
-                spawn_interval=Config.SLIME_DRIP_SPAWN_INTERVAL,
+                max_drips=15,  # SLIME_DRIP_MAX_ACTIVE
+                spawn_interval=0.6,  # SLIME_DRIP_SPAWN_INTERVAL
                 duration=None,
                 is_homing=False,
                 target_y=-50
             ),
             SlimeBossState.STAGE_2_HOMING: StageConfig(
-                max_drips=Config.SLIME_DRIP_HOMING_MAX_ACTIVE,
-                spawn_interval=Config.SLIME_DRIP_HOMING_SPAWN_INTERVAL,
+                max_drips=15,  # SLIME_DRIP_HOMING_MAX_ACTIVE
+                spawn_interval=0.5,  # SLIME_DRIP_HOMING_SPAWN_INTERVAL
                 duration=15.0,
                 is_homing=True,
                 target_y=-50
             ),
             SlimeBossState.STAGE_3_NORMAL: StageConfig(
-                max_drips=int(Config.SLIME_DRIP_MAX_ACTIVE * 1.5),
-                spawn_interval=Config.SLIME_DRIP_SPAWN_INTERVAL * 0.8,
+                max_drips=int(15 * 1.5),  # SLIME_DRIP_MAX_ACTIVE * 1.5
+                spawn_interval=0.6 * 0.8,  # SLIME_DRIP_SPAWN_INTERVAL * 0.8
                 duration=None,
                 is_homing=False,
                 target_y=-50
             ),
             SlimeBossState.STAGE_4_HOMING: StageConfig(
-                max_drips=Config.SLIME_DRIP_HOMING_MAX_ACTIVE,
-                spawn_interval=Config.SLIME_DRIP_HOMING_SPAWN_INTERVAL,
+                max_drips=15,  # SLIME_DRIP_HOMING_MAX_ACTIVE
+                spawn_interval=0.5,  # SLIME_DRIP_HOMING_SPAWN_INTERVAL
                 duration=25.0,
                 is_homing=True,
                 target_y=-50
             ),
             SlimeBossState.STAGE_5_FINAL: StageConfig(
-                max_drips=int(Config.SLIME_DRIP_MAX_ACTIVE * 2.0),
-                spawn_interval=Config.SLIME_DRIP_SPAWN_INTERVAL * 0.6,
+                max_drips=int(15 * 2.0),  # SLIME_DRIP_MAX_ACTIVE * 2.0
+                spawn_interval=0.6 * 0.6,  # SLIME_DRIP_SPAWN_INTERVAL * 0.6
                 duration=None,
                 is_homing=False,
                 target_y=-50

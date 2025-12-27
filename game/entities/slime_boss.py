@@ -97,6 +97,7 @@ class SlimeBoss:
         self.current_state = SlimeBossState.ENTERING
         self.stage_timer = 0.0
         self.current_stage_config: StageConfig | None = None
+        self._next_normal_stage: SlimeBossState | None = None
 
         # Entry speed
         self.slow_entry_speed = Config.SLIME_BOSS_ENTRY_SPEED_SLOW
@@ -159,12 +160,6 @@ class SlimeBoss:
         
         # Update dripping effect
         self.dripping_effect.update(dt, self.x, self.y, self.w, player_x, player_y or 0)
-        
-        # Ajustar velocidade de entrada
-        if self.current_state == SlimeBossState.ENTERING:
-            self.entry_speed = self.slow_entry_speed if self.is_first_entry else self.fast_entry_speed
-            if self.current_state != SlimeBossState.ENTERING:
-                self.is_first_entry = False
         
         return [], [], []
 
@@ -235,23 +230,25 @@ class SlimeBoss:
             self._next_homing_stage = None
             return next_stage
         
-        # Stage 2 Homing → Stage 3 (timeout)
+        # Stage 2 Homing → ENTERING (timeout)
         if self.current_state == SlimeBossState.STAGE_2_HOMING:
             if (self.current_stage_config and 
                 self.current_stage_config.duration is not None and 
                 self.stage_timer >= self.current_stage_config.duration):
-                return SlimeBossState.STAGE_3_NORMAL
+                self._next_normal_stage = SlimeBossState.STAGE_3_NORMAL
+                return SlimeBossState.ENTERING
         
         # Stage 3 → Waiting (20% vida)
         if self.current_state == SlimeBossState.STAGE_3_NORMAL and health_pct <= 0.20:
             return SlimeBossState.WAITING_DRIPS
         
-        # Stage 4 Homing → Stage 5 (timeout)
+        # Stage 4 Homing → ENTERING (timeout)
         if self.current_state == SlimeBossState.STAGE_4_HOMING:
             if (self.current_stage_config and 
                 self.current_stage_config.duration is not None and 
                 self.stage_timer >= self.current_stage_config.duration):
-                return SlimeBossState.STAGE_5_FINAL
+                self._next_normal_stage = SlimeBossState.STAGE_5_FINAL
+                return SlimeBossState.ENTERING
         
         return None
 
@@ -268,7 +265,7 @@ class SlimeBoss:
             self.dripping_effect.spawn_interval = config.spawn_interval
             self.dripping_effect.set_homing_mode(
                 config.is_homing,
-                0, 0  # Will be updated in handlers
+                0, 0  # Temporary coordinates, will be updated in _update_stage_with_timer
             )
             self.dripping_effect.set_spawn_enabled(True)
         
@@ -278,27 +275,35 @@ class SlimeBoss:
         elif new_state == SlimeBossState.RETREATING:
             self.target_y = -self.h - 100
         elif new_state in [SlimeBossState.STAGE_2_HOMING, SlimeBossState.STAGE_4_HOMING]:
-            # Stay off-screen for homing phase
-            self.target_y = self.y
+            # Boss stays hidden during homing phase
+            self.target_y = -self.h - 100  # Completely off-screen
         elif new_state in [SlimeBossState.STAGE_3_NORMAL, SlimeBossState.STAGE_5_FINAL]:
             self.y = -self.h
-            self.target_y = 0
+            self.target_y = -50  # Consistent with Stage 1
 
     def _update_entering(self, dt: float) -> None:
-        self.y += self.entry_speed * dt
+        # Use appropriate entry speed based on whether this is the first entry
+        speed = self.slow_entry_speed if self.is_first_entry else self.fast_entry_speed
+        
+        self.y += speed * dt
         if self.y >= self.target_y:
             self.y = self.target_y
-            self._transition_to_state(SlimeBossState.STAGE_1_NORMAL)
+            self.is_first_entry = False  # Mark that first entry is complete
+            
+            # Check if there's a stage defined after homing
+            if self._next_normal_stage:
+                next_stage = self._next_normal_stage
+                self._next_normal_stage = None
+                self._transition_to_state(next_stage)
+            else:
+                # Initial entry
+                self._transition_to_state(SlimeBossState.STAGE_1_NORMAL)
 
     def _update_retreating(self, dt: float) -> None:
         self.y -= self.leaving_speed * dt
 
     def _update_stage_with_timer(self, dt: float, player_x: float, player_y: float) -> None:
-        # Handle entering animation for homing stages
-        if self.y < self.target_y:
-            self.y += self.entry_speed * dt
-            if self.y >= self.target_y:
-                self.y = self.target_y
+        # Boss stays hidden during homing phases - no vertical movement
         
         self.stage_timer += dt
         if self.current_stage_config and self.current_stage_config.is_homing:
