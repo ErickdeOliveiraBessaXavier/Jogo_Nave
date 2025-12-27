@@ -25,6 +25,7 @@ from ..entities.eye_enemy import EyeEnemy
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
 from ..entities.slime_boss import SlimeBoss
+from ..entities.slime_drip import SlimeDrip
 from ..entities.star import Star
 from ..core.config import Config
 from ..core.spatial_grid import SpatialGrid
@@ -1129,6 +1130,74 @@ class Collisions:
                 if bullet_rect.colliderect(square_rect):
                     # Criar explosão no ponto de impacto
                     entity_manager.spawn_explosion(bullet.x, bullet.y, size=20)
+
+                    # Destruir apenas a bala se não for piercing
+                    if not bullet.piercing:
+                        bullet.dead = True
+                    hit_count += 1
+
+                    # Som de impacto (mesmo som de dano ao boss)
+                    sound_manager.play_boss_damage()
+                    break
+
+        return hit_count
+
+    def bullets_vs_slime_drips(
+        self,
+        bullets: list[Bullet],
+        slime_drips: list[SlimeDrip],
+        entity_manager: "EntityManager",
+    ) -> int:
+        """
+        Colisão entre balas do jogador e gotas de slime.
+        As gotas NÃO são destruídas, apenas geram explosão visual.
+        Retorna número de acertos para feedback visual/sonoro.
+        """
+        hit_count = 0
+
+        for bullet in bullets[:]:
+            if bullet.dead:
+                continue
+
+            bullet_rect = bullet.rect
+
+            for drip in slime_drips:
+                if drip.dead:
+                    continue
+
+                drip_rect = drip.get_rect()
+                if bullet_rect.colliderect(drip_rect):
+                    # Aplicar força de repulsão à gota
+                    # Para balas normais, empurrar para baixo (oposto ao movimento para cima)
+                    # Para balas homing, usar direção baseada no movimento atual
+                    if bullet.homing and hasattr(bullet, 'target') and bullet.target:
+                        # Para balas homing, calcular direção baseada no alvo
+                        dx = bullet.target.x - bullet.x
+                        dy = bullet.target.y - bullet.y
+                        distance = math.sqrt(dx * dx + dy * dy)
+                        if distance > 0:
+                            repulsion_dir_x = dx / distance
+                            repulsion_dir_y = dy / distance
+                        else:
+                            repulsion_dir_x = 0.0
+                            repulsion_dir_y = 1.0  # Para baixo como fallback
+                    else:
+                        # Para balas normais, sempre empurrar para baixo
+                        repulsion_dir_x = 0.0
+                        repulsion_dir_y = 1.0  # Direção para baixo
+                    
+                    # Força de repulsão (ajustável)
+                    repulsion_strength = 600.0  # pixels/segundo²
+                    repulsion_duration = 0.12   # segundos
+                    
+                    drip.apply_repulsion(
+                        repulsion_dir_x * repulsion_strength,
+                        repulsion_dir_y * repulsion_strength,
+                        repulsion_duration
+                    )
+
+                    # Criar explosão no ponto de impacto
+                    entity_manager.spawn_explosion(bullet.x, bullet.y, size=20, is_slime=True)
 
                     # Destruir apenas a bala se não for piercing
                     if not bullet.piercing:

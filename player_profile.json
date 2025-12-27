@@ -1,40 +1,36 @@
 {
   "version": "1.0",
-  "profile_created": "2025-12-27T14:44:14.593961",
-  "last_played": "2025-12-27T14:44:25.152763",
+  "profile_created": "2025-12-27T15:09:09.414538",
+  "last_played": "2025-12-27T15:09:24.187254",
   "total_playtime": 0.0,
-  "highest_level_reached": 2,
-  "total_deaths": 0,
-  "total_score": 20000,
+  "highest_level_reached": 1,
+  "total_deaths": 1,
+  "total_score": 0,
   "level_stats": {
     "1": {
       "level_number": 1,
       "attempts": 1,
-      "clears": 1,
-      "deaths": 0,
-      "total_time": 189.7533359527588,
-      "best_time": 189.7533359527588,
-      "worst_time": 189.7533359527588,
-      "total_score": 20000,
-      "best_score": 20000,
+      "clears": 0,
+      "deaths": 1,
+      "total_time": 0.0,
+      "best_time": null,
+      "worst_time": 0.0,
+      "total_score": 0,
+      "best_score": 0,
       "total_enemies_killed": 0,
-      "total_damage_taken": 109,
+      "total_damage_taken": 0,
       "total_powerups_collected": 0,
       "recent_attempts": [
         {
-          "timestamp": "2025-12-27T14:47:34.906122",
-          "cleared": true,
-          "time": 189.7533359527588,
-          "score": 20000,
-          "enemies": 0,
-          "damage": 109,
-          "powerups": 0
+          "timestamp": "2025-12-27T15:09:45.884273",
+          "cleared": false,
+          "cause": "collision"
         }
       ],
-      "first_played": "2025-12-27T14:44:25.152754",
-      "last_played": "2025-12-27T14:44:25.152762",
-      "current_win_streak": 1,
-      "best_win_streak": 1
+      "first_played": "2025-12-27T15:09:24.187246",
+      "last_played": "2025-12-27T15:09:24.187253",
+      "current_win_streak": 0,
+      "best_win_streak": 0
     }
   },
   "level_adjustments": {},

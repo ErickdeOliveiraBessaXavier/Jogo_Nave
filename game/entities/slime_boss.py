@@ -132,7 +132,7 @@ class SlimeBoss:
         # Velocidades de entrada/saída
         self.leaving_speed = Config.SLIME_BOSS_LEAVING_SPEED
 
-    def update(self, dt: float, player_x: float, player_y: float | None = None) -> tuple[list[Any], list[Any], list[Any]]:
+    def update(self, dt: float, player_x: float, player_y: float | None = None, entity_manager: Optional["EntityManager"] = None) -> tuple[list[Any], list[Any], list[Any]]:
         # Update animation
         self._update_animation(dt)
         
@@ -159,7 +159,7 @@ class SlimeBoss:
             self._update_active_movement(dt)
         
         # Update dripping effect
-        self.dripping_effect.update(dt, self.x, self.y, self.w, player_x, player_y or 0)
+        self.dripping_effect.update(dt, self.x, self.y, self.w, player_x, player_y or 0, entity_manager)
         
         return [], [], []
 

@@ -23,6 +23,7 @@ from ..entities.formation import Formation
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
 from ..entities.slime_boss import SlimeBoss
+from ..entities.slime_drip import SlimeDrip
 from ..entities.player_laser import PlayerLaser
 from ..core.spatial_grid import SpatialGrid
 from ..entities.explosion_pool import ExplosionPool
@@ -53,6 +54,7 @@ class EntityManager:
         self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
         self.player_lasers: list[PlayerLaser] = []  # Lasers do jogador
         self.boss_squares: list[BossSquare] = []  # Quadrados lançados pelo boss
+        self.slime_drips: list["SlimeDrip"] = []  # Gotas de slime do SlimeBoss
         self.eye_lasers: list[EyeLaser] = []
         self.mine_explosions: list[MineExplosion] = []
         self.powerups: list[PowerUp] = []
@@ -332,7 +334,7 @@ class EntityManager:
                     self.boss_lasers.extend(spike_boss_lasers)  # type: ignore
             # SlimeBoss só tem ataque de drip interno, não spawna entidades externas
             elif isinstance(self.boss, SlimeBoss):
-                self.boss.update(enemy_dt, player_x, player_y)
+                self.boss.update(enemy_dt, player_x, player_y, self)
             # Boss normal retorna (List[BossLaser], List[BossSquare])
             else:  # isinstance(self.boss, Boss)
                 lasers_fired, spawned_squares = self.boss.update(
@@ -346,6 +348,7 @@ class EntityManager:
                 for square in self.boss.floating_squares:
                     if square not in self.boss_squares:
                         self.boss_squares.append(square)
+
         for enemy in self.enemies:
             mul = emp_mul_for(enemy)
             scaled_dt = enemy_dt * mul
@@ -669,6 +672,7 @@ class EntityManager:
         self.boss_lasers = [bl for bl in self.boss_lasers if not bl.dead]
         self.player_lasers = [pl for pl in self.player_lasers if not pl.dead]
         self.boss_squares = [bs for bs in self.boss_squares if not bs.dead]
+        self.slime_drips = [sd for sd in self.slime_drips if not sd.dead]
         self.eye_lasers = [el for el in self.eye_lasers if not el.dead]
         self.mini_ship_bullets = [vb for vb in self.mini_ship_bullets if not vb.dead]
         self.enemies = [
@@ -693,6 +697,7 @@ class EntityManager:
         self.alien_bullets.clear()
         self.boss_lasers.clear()
         self.boss_squares.clear()
+        self.slime_drips.clear()
         self.eye_lasers.clear()
         self.powerups.clear()
         self.stars.clear()  # Limpar estrelas

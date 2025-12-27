@@ -391,7 +391,7 @@ class Config:
     # Homing system
     SLIME_DRIP_HOMING_MAX_SPEED: float = 180.0
     SLIME_DRIP_HOMING_ACCELERATION: float = 150.0
-    SLIME_DRIP_HOMING_BLEND_FACTOR: float = 1
+    SLIME_DRIP_HOMING_BLEND_FACTOR: float = 0.15  # Reduzido de 1.0 para suavizar mudanças de direção
     SLIME_DRIP_HOMING_AIM_OFFSET: float = 50.0
     SLIME_DRIP_HOMING_MAX_DURATION: float = 15.0
     SLIME_DRIP_HOMING_TARGET_UPDATE_INTERVAL: float = 0.4

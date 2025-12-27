@@ -959,6 +959,14 @@ class PlayingScene(Scene):
             self.entity_manager,
         )
 
+        # Balas vs gotas de slime (gera explosão mas não destrói as gotas)
+        if self._boss_type_cache == "slime":
+            self.collisions.bullets_vs_slime_drips(
+                self.entity_manager.bullets,
+                self.entity_manager.slime_drips,
+                self.entity_manager,
+            )
+
         # Balas vs espinhos
         spike_score = self.collisions.bullets_vs_spikes(
             self.entity_manager.bullets,

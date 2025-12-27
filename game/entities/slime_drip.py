@@ -124,6 +124,9 @@ class SlimeDrip:
         "homing_timer",
         "max_speed",
         "acceleration",
+        "repulsion_force_x",  # Força de repulsão X
+        "repulsion_force_y",  # Força de repulsão Y
+        "repulsion_timer",    # Timer para dissipar a força
     )
 
     def __init__(self):
@@ -156,6 +159,11 @@ class SlimeDrip:
         self.max_speed: float = Config.SLIME_DRIP_HOMING_MAX_SPEED
         self.acceleration: float = Config.SLIME_DRIP_HOMING_ACCELERATION
 
+        # Sistema de repulsão quando atingido por bala
+        self.repulsion_force_x: float = 0.0
+        self.repulsion_force_y: float = 0.0
+        self.repulsion_timer: float = 0.0
+
     def reset(self, x: float, y: float, effect_width: int, effect_height: int) -> None:
         """Reseta a gota para reutilização no pool."""
         self.active = True
@@ -185,6 +193,11 @@ class SlimeDrip:
         self.target_x = 0.0
         self.target_y = 0.0
         self.homing_timer = 0.0
+
+        # Reset repulsão
+        self.repulsion_force_x = 0.0
+        self.repulsion_force_y = 0.0
+        self.repulsion_timer = 0.0
 
     def update(self, dt: float) -> None:
         """Atualiza física da gota."""
@@ -220,6 +233,19 @@ class SlimeDrip:
         else:
             # Gravidade normal
             self.speed_y += self.params.gravity * dt
+
+        # Aplicar força de repulsão se ativa
+        if self.repulsion_timer > 0:
+            self.repulsion_timer -= dt
+            if self.repulsion_timer <= 0:
+                # Força dissipou completamente
+                self.repulsion_force_x = 0.0
+                self.repulsion_force_y = 0.0
+                self.repulsion_timer = 0.0
+            else:
+                # Aplicar força de repulsão à velocidade
+                self.speed_x += self.repulsion_force_x * dt
+                self.speed_y += self.repulsion_force_y * dt
 
         # Movimento
         self.x += self.speed_x * dt
@@ -319,10 +345,21 @@ class SlimeDrip:
             self.speed_x = self.speed_x * (1 - blend_factor) + desired_dx * target_speed * blend_factor
             self.speed_y = self.speed_y * (1 - blend_factor) + desired_dy * target_speed * blend_factor
 
+    def apply_repulsion(self, force_x: float, force_y: float, duration: float = 0.2) -> None:
+        """Aplica uma força de repulsão à gota quando atingida por uma bala."""
+        self.repulsion_force_x = force_x
+        self.repulsion_force_y = force_y
+        self.repulsion_timer = duration
+
     def get_bounds(self) -> Tuple[float, float, float, float]:
         """Retorna bounds (x, y, w, h) para spatial grid."""
         r = self.params.radius
         return (self.x - r, self.y - r, r * 2, r * 2)
+
+    def get_rect(self) -> pygame.Rect:
+        """Retorna um retângulo para colisão com bullets (similar ao BossSquare)."""
+        r = self.params.radius
+        return pygame.Rect(self.x - r, self.y - r, r * 2, r * 2)
 
     def get_cached_int_pos(self) -> Tuple[int, int]:
         """Retorna a posição inteira cacheada para renderização."""
@@ -683,6 +720,7 @@ class SlimeDrippingEffect:
         boss_width: int,
         player_x: float,
         player_y: float,
+        entity_manager: Optional["EntityManager"] = None,
     ) -> None:
         """Atualiza todas as gotas e spawna novas."""
         # Atualizar pool
@@ -709,14 +747,14 @@ class SlimeDrippingEffect:
             if (self.spawn_timer >= self.spawn_interval and 
                 self._count_normal_drips() < self.max_drips):
                 self.spawn_timer = 0.0
-                self._spawn_normal_drip(boss_x, boss_y, boss_width)
+                self._spawn_normal_drip(boss_x, boss_y, boss_width, entity_manager)
             
             # 2. Spawnar drips homing (do topo)
             self.homing_spawn_timer += dt
             if (self.homing_spawn_timer >= self.homing_spawn_interval_dual and 
                 self._count_homing_drips() < self.max_homing_drips):
                 self.homing_spawn_timer = 0.0
-                self._spawn_homing_drip(player_x, player_y)
+                self._spawn_homing_drip(player_x, player_y, entity_manager)
         
         # MODO NORMAL/HOMING: Comportamento atual
         else:
@@ -724,9 +762,9 @@ class SlimeDrippingEffect:
             if (self.spawn_timer >= self.spawn_interval and 
                 self.drip_pool.get_active_count() < self.max_drips):
                 self.spawn_timer = 0.0
-                self._spawn_drip(boss_x, boss_y, boss_width)
+                self._spawn_drip(boss_x, boss_y, boss_width, entity_manager)
 
-    def _spawn_drip(self, boss_x: float, boss_y: float, boss_width: int) -> None:
+    def _spawn_drip(self, boss_x: float, boss_y: float, boss_width: int, entity_manager: Optional["EntityManager"] = None) -> None:
         """Spawna uma gota aleatoriamente acima do boss ou no topo se homing."""
         if self.homing_mode:
             x = random.uniform(0, self.effect_width)
@@ -747,6 +785,10 @@ class SlimeDrippingEffect:
             drip.params.damage = max(1, int(drip.params.scale * 2))
             drip.pulse_radius = drip.params.radius  # Atualizar para evitar blink
 
+        # Adicionar ao entity_manager se fornecido
+        if entity_manager is not None:
+            entity_manager.slime_drips.append(drip)
+
     def _count_normal_drips(self) -> int:
         """Conta quantas gotas normais estão ativas."""
         return sum(1 for drip in self.drip_pool.active if not drip.is_homing)
@@ -755,7 +797,7 @@ class SlimeDrippingEffect:
         """Conta quantas gotas homing estão ativas."""
         return sum(1 for drip in self.drip_pool.active if drip.is_homing)
 
-    def _spawn_normal_drip(self, boss_x: float, boss_y: float, boss_width: int) -> None:
+    def _spawn_normal_drip(self, boss_x: float, boss_y: float, boss_width: int, entity_manager: Optional["EntityManager"] = None) -> None:
         """Spawna uma gota normal (caindo do boss)."""
         x = boss_x + random.uniform(0, boss_width)
         y = boss_y + Config.SLIME_DRIP_BOSS_SPAWN_Y_OFFSET
@@ -763,7 +805,11 @@ class SlimeDrippingEffect:
         # Gota normal não tem homing
         drip.is_homing = False
 
-    def _spawn_homing_drip(self, player_x: float, player_y: float) -> None:
+        # Adicionar ao entity_manager se fornecido
+        if entity_manager is not None:
+            entity_manager.slime_drips.append(drip)
+
+    def _spawn_homing_drip(self, player_x: float, player_y: float, entity_manager: Optional["EntityManager"] = None) -> None:
         """Spawna uma gota homing (do topo)."""
         x = random.uniform(0, self.effect_width)
         y = Config.SLIME_DRIP_HOMING_SPAWN_Y_OFFSET
@@ -783,6 +829,10 @@ class SlimeDrippingEffect:
         drip.params.radius = Config.SLIME_DRIP_RADIUS_MAX * drip.params.scale
         drip.params.damage = max(1, int(drip.params.scale * 2))
         drip.pulse_radius = drip.params.radius
+
+        # Adicionar ao entity_manager se fornecido
+        if entity_manager is not None:
+            entity_manager.slime_drips.append(drip)
 
     def set_dual_mode(
         self, 
