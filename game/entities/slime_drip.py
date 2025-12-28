@@ -124,6 +124,8 @@ class SlimeDrip:
         "homing_timer",
         "max_speed",
         "acceleration",
+        "slow_timer",  # Sistema de slow (lentidão) causado por balas
+        "slow_factor",  # Fator de multiplicação da velocidade (1.0 = normal, 0.0 = parado)
     )
 
     def __init__(self):
@@ -156,6 +158,10 @@ class SlimeDrip:
         self.max_speed: float = Config.SLIME_DRIP_HOMING_MAX_SPEED
         self.acceleration: float = Config.SLIME_DRIP_HOMING_ACCELERATION
 
+        # Sistema de slow (lentidão) causado por balas
+        self.slow_timer: float = 0.0  # Tempo restante de slow em segundos
+        self.slow_factor: float = 1.0  # Fator de multiplicação da velocidade (1.0 = normal, 0.0 = parado)
+
     def reset(self, x: float, y: float, effect_width: int, effect_height: int) -> None:
         """Reseta a gota para reutilização no pool."""
         self.active = True
@@ -185,6 +191,10 @@ class SlimeDrip:
         self.target_x = 0.0
         self.target_y = 0.0
         self.homing_timer = 0.0
+
+        # Reset slow
+        self.slow_timer = 0.0
+        self.slow_factor = 1.0
 
     def update(self, dt: float) -> None:
         """Atualiza física da gota."""
@@ -221,9 +231,18 @@ class SlimeDrip:
             # Gravidade normal
             self.speed_y += self.params.gravity * dt
 
-        # Movimento
-        self.x += self.speed_x * dt
-        self.y += self.speed_y * dt
+        # Aplicar slow (lentidão) se ativo
+        if self.slow_timer > 0:
+            self.slow_timer -= dt
+            if self.slow_timer < 0:
+                self.slow_timer = 0.0
+                self.slow_factor = 1.0  # Reset para velocidade normal
+        else:
+            self.slow_factor = 1.0  # Velocidade normal
+
+        # Movimento (aplicando slow)
+        self.x += self.speed_x * dt * self.slow_factor
+        self.y += self.speed_y * dt * self.slow_factor
 
         # Cache posição inteira para renderização
         self._cached_int_pos = (int(self.x), int(self.y))
@@ -319,29 +338,19 @@ class SlimeDrip:
             self.speed_x = self.speed_x * (1 - blend_factor) + desired_dx * target_speed * blend_factor
             self.speed_y = self.speed_y * (1 - blend_factor) + desired_dy * target_speed * blend_factor
 
-    def apply_repulsion(self, force_x: float, force_y: float, duration: float = 0.2) -> None:
-        """Aplica uma força de repulsão à gota quando atingida por uma bala."""
-        # Aplicar impulso único à velocidade atual
-        impulse_strength = 150.0  # Velocidade adicional em pixels/segundo
-        self.speed_x += force_x * impulse_strength
-        self.speed_y += force_y * impulse_strength
+    def apply_slow(self, slow_duration: float = 0.5, max_slow_duration: float = 2.0) -> None:
+        """Aplica slow (lentidão) à gota quando atingida por uma bala.
         
-        # Limitar velocidade máxima após repulsão
-        max_speed = 500.0
-        current_speed = math.sqrt(self.speed_x * self.speed_x + self.speed_y * self.speed_y)
-        if current_speed > max_speed:
-            self.speed_x = (self.speed_x / current_speed) * max_speed
-            self.speed_y = (self.speed_y / current_speed) * max_speed
+        Args:
+            slow_duration: Duração do slow em segundos (padrão 0.5s)
+            max_slow_duration: Duração máxima acumulada de slow (padrão 2.0s)
+        """
+        # Acumular slow, mas limitar ao máximo
+        self.slow_timer = min(self.slow_timer + slow_duration, max_slow_duration)
         
-        # Garantir velocidade mínima para evitar que a gota pare completamente
-        min_speed = 50.0  # Velocidade mínima em pixels/segundo
-        if current_speed < min_speed and current_speed > 0:
-            # Manter a direção atual mas aumentar para velocidade mínima
-            self.speed_x = (self.speed_x / current_speed) * min_speed
-            self.speed_y = (self.speed_y / current_speed) * min_speed
-        elif current_speed == 0:
-            # Se estiver parada, dar um impulso para cima
-            self.speed_y = -min_speed
+        # Calcular factor de slow baseado no tempo restante
+        # Slow começa em 0.3 (30% da velocidade) e vai voltando para 1.0
+        self.slow_factor = 0.3 + (0.7 * (1.0 - min(self.slow_timer / max_slow_duration, 1.0)))
 
     def get_bounds(self) -> Tuple[float, float, float, float]:
         """Retorna bounds (x, y, w, h) para spatial grid."""

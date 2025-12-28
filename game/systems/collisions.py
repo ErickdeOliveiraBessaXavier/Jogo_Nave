@@ -1167,30 +1167,9 @@ class Collisions:
 
                 drip_rect = drip.get_rect()
                 if bullet_rect.colliderect(drip_rect):
-                    # Aplicar força de repulsão à gota baseada no movimento OPPOSTO ao atual
-                    # Calcular direção baseada na velocidade atual da gota
-                    current_speed_x = drip.speed_x
-                    current_speed_y = drip.speed_y
-                    current_speed_magnitude = math.sqrt(current_speed_x * current_speed_x + current_speed_y * current_speed_y)
-                    
-                    if current_speed_magnitude > 0:
-                        # Normalizar e inverter a direção do movimento atual
-                        repulsion_dir_x = -current_speed_x / current_speed_magnitude
-                        repulsion_dir_y = -current_speed_y / current_speed_magnitude
-                    else:
-                        # Se a gota estiver parada, usar direção para cima como padrão
-                        repulsion_dir_x = 0.0
-                        repulsion_dir_y = -1.0
-                    
-                    # Força de repulsão (ajustável)
-                    repulsion_strength = 1.0  # Direção normalizada (será multiplicada dentro do apply_repulsion)
-                    repulsion_duration = 0.12   # segundos (não usado mais, mantido para compatibilidade)
-                    
-                    drip.apply_repulsion(
-                        repulsion_dir_x * repulsion_strength,
-                        repulsion_dir_y * repulsion_strength,
-                        repulsion_duration
-                    )
+                    # Aplicar slow (lentidão) à gota quando atingida por uma bala
+                    # Cada bala causa 0.5s de slow, acumulável até no máximo 2s
+                    drip.apply_slow(slow_duration=0.5, max_slow_duration=2.0)
 
                     # Criar explosão no ponto de impacto
                     entity_manager.spawn_explosion(bullet.x, bullet.y, size=20, is_slime=True)
