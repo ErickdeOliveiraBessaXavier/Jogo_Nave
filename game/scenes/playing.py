@@ -906,6 +906,12 @@ class PlayingScene(Scene):
                     self.ship, cast(SpikeBoss, boss), self.entity_manager
                 ):
                     self._handle_ship_hit()
+            elif self._boss_type_cache == "slime":
+                # SlimeBoss usa ship_vs_boss com pixel-perfect collision
+                if self.collisions.ship_vs_boss(
+                    self.ship, boss, self.entity_manager  # type: ignore
+                ):
+                    self._handle_ship_hit()
             elif self._boss_type_cache == "normal":
                 if self.collisions.ship_vs_boss(
                     self.ship, boss, self.entity_manager  # type: ignore

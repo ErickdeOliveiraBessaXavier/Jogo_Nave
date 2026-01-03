@@ -73,6 +73,11 @@ class Boss:
         # Manual charge progress tracking
         self.charge_progress = 0.0
 
+        # Aiming line animation
+        self.aim_anim_offset: float = 0.0
+        self.aim_anim_base_speed: float = 50.0  # Velocidade base da animação
+        self.aim_anim_charge_speed: float = 500.0  # Velocidade máxima durante charging
+
         # Visual effects - using new systems
         self.particle_system = BossParticleSystem()
         self.fired_lasers: List[BossLaser] = []
@@ -115,6 +120,10 @@ class Boss:
         )  # Fila de quadrados prontos para lançar
         self.square_launch_timer = 0.0  # Timer para lançamento sequencial
         self.square_launch_delay = 0.15  # 150ms entre cada lançamento
+
+        # Animação da borda pixelada
+        self.border_anim_offset: float = 0.0
+        self.border_anim_speed: float = 30.0  # Pixels por segundo
 
     def _init_floating_squares(self) -> None:
         """Inicializa os quadrados flutuantes orbitando ao redor do boss."""
@@ -178,12 +187,12 @@ class Boss:
         # Fazer o canhão mirar no jogador
         self.cannon.aim_at(player_x, player_y)
 
-        # Atualizar face_center e facing_direction para manter compatibilidade
-        self.face_center.x, self.face_center.y = self.cannon.get_position()
+        # Atualizar face_center para usar a ponta do cano (onde o laser sai)
+        self.face_center.x, self.face_center.y = self.cannon.get_barrel_tip_position()
         self.facing_direction = self.cannon.get_direction()
 
     def _get_face_position(self) -> tuple[float, float]:
-        """Get the position of the main face (facing the player)."""
+        """Get the position of the cannon barrel tip (where the laser fires from)."""
         return (self.face_center.x, self.face_center.y)
 
     def _get_face_normal(self) -> pygame.Vector2:
@@ -364,11 +373,9 @@ class Boss:
                 rotated_x = face_normal.x * cos_offset - face_normal.y * sin_offset
                 rotated_y = face_normal.x * sin_offset + face_normal.y * cos_offset
 
-                offset = (i - 1) * self.LASER_SPREAD_OFFSET  # -10, 0, +10
-                start_x = face_x + offset * math.cos(self.rotation_angle + math.pi / 2)
-                start_y = (
-                    face_y + offset * math.sin(self.rotation_angle + math.pi / 2) - 10
-                )  # Mais para cima
+                # Laser sai da ponta do canhão (face_x, face_y já é a ponta)
+                start_x = face_x
+                start_y = face_y
 
                 target_x = start_x + rotated_x * self.LASER_DISTANCE
                 target_y = start_y + rotated_y * self.LASER_DISTANCE
@@ -380,13 +387,12 @@ class Boss:
 
             return lasers
         else:
-            # Modo calmo: laser único
-            laser_start_y = face_y - 15  # Mais para cima (mesmo offset do modo frenzy)
+            # Modo calmo: laser único saindo da ponta do canhão
             target_x = face_x + face_normal.x * self.LASER_DISTANCE
-            target_y = laser_start_y + face_normal.y * self.LASER_DISTANCE
+            target_y = face_y + face_normal.y * self.LASER_DISTANCE
 
             return [
-                BossLaser(face_x, laser_start_y, target_x, target_y, lifetime=lifetime)
+                BossLaser(face_x, face_y, target_x, target_y, lifetime=lifetime)
             ]
 
     def _create_frenzy_lasers(
@@ -435,6 +441,9 @@ class Boss:
             1.0, self.charge_progress + accelerated_dt / self.charge_duration
         )
 
+        # Atualizar efeito de brilho do canhão
+        self.cannon.set_charging(True, self.charge_progress)
+
         self._generate_charging_particles()
         self._update_charging_particles(dt)  # Já usa accelerated_dt internamente
 
@@ -470,6 +479,9 @@ class Boss:
     def _update_converging_state(self, dt: float) -> List[BossLaser]:
         """Handle particle convergence and preparation for laser firing."""
         self._update_charging_particles(dt)
+
+        # Manter brilho máximo durante convergência
+        self.cannon.set_charging(True, 1.0)
 
         if not self.particle_system.charging_particles:
             # Criar partículas de desaparecimento do círculo
@@ -512,6 +524,10 @@ class Boss:
         """Handle the delay before firing lasers."""
         self.laser_delay_timer -= dt
 
+        # Manter brilho máximo durante preparação (piscar)
+        blink = (int(self.laser_delay_timer * 10) % 2) == 0
+        self.cannon.set_charging(True, 1.0 if blink else 0.7)
+
         # Continuar atualizando partículas de desaparecimento durante o delay
         self._update_circle_disappear_particles(dt)
 
@@ -548,6 +564,9 @@ class Boss:
     def _update_firing_state(self, dt: float) -> None:
         """Handle laser firing and cleanup."""
         self.fire_timer.update(dt)
+
+        # Desativar efeito de brilho do canhão durante o disparo
+        self.cannon.set_charging(False, 0.0)
 
         for laser in self.fired_lasers[:]:
             laser.update(dt)
@@ -815,28 +834,40 @@ class Boss:
         elif self.state == "firing":
             self._update_firing_state(dt)
 
+        # Atualizar animação da linha de mira (acelera gradualmente com o progresso)
+        if self.state in ("aiming", "charging", "converging", "preparing_to_fire"):
+            # Interpolar velocidade baseado no charge_progress
+            current_speed = self.aim_anim_base_speed + (
+                self.aim_anim_charge_speed - self.aim_anim_base_speed
+            ) * self.charge_progress
+            self.aim_anim_offset += dt * current_speed
+        else:
+            # Velocidade base quando não está carregando
+            self.aim_anim_offset += dt * self.aim_anim_base_speed
+
+        # Atualizar animação da borda pixelada (acelera no frenzy)
+        border_speed = self.border_anim_speed * (2.0 if self.frenzy_mode else 1.0)
+        self.border_anim_offset += dt * border_speed
+
         return (lasers_fired, spawned_squares)
 
     def _draw_aiming_line(self, surface: pygame.Surface) -> None:
         """Draw the animated aiming line(s)."""
-        if (
-            pygame.time.get_ticks() % self._get_aim_blink_interval()
-        ) < self._get_aim_blink_duration():
-            face_x, face_y = self._get_face_position()
-            face_normal = self._get_face_normal()
+        face_x, face_y = self._get_face_position()
+        face_normal = self._get_face_normal()
 
-            time_based_offset = (pygame.time.get_ticks() // 50) % (
-                Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
+        # Usar offset animado que acelera com o progresso do carregamento
+        total_cycle = Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
+        time_based_offset = int(self.aim_anim_offset) % total_cycle
+
+        if self.frenzy_mode:
+            # Modo frenzy: desenhar múltiplas linhas de mira
+            self._draw_frenzy_aiming_lines(
+                surface, face_x, face_y, face_normal, time_based_offset
             )
-
-            if self.frenzy_mode:
-                # Modo frenzy: desenhar múltiplas linhas de mira
-                self._draw_frenzy_aiming_lines(
-                    surface, face_x, face_y, face_normal, time_based_offset
-                )
-            else:
-                # Modo normal: desenhar linha única
-                self._draw_single_aiming_line(
+        else:
+            # Modo normal: desenhar linha única
+            self._draw_single_aiming_line(
                     surface, face_x, face_y, face_normal, time_based_offset
                 )
 
@@ -849,9 +880,7 @@ class Boss:
         time_based_offset: int,
     ) -> None:
         """Draw a single aiming line for normal mode."""
-        # Ajustar posição inicial para mais para cima (mesmo offset dos lasers)
-        line_start_y = face_y - 15
-
+        # Laser sai da base do canhão (face_x, face_y já é a posição correta)
         current_distance = time_based_offset - (
             Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
         )
@@ -864,11 +893,11 @@ class Boss:
                 actual_start_distance = max(0, start_distance)
                 actual_end_distance = min(self.LASER_DISTANCE, end_distance)
 
-                # Calcular posições reais da linha (usando posição Y ajustada)
+                # Calcular posições reais da linha
                 start_line_x = face_x + face_normal.x * actual_start_distance
-                start_line_y = line_start_y + face_normal.y * actual_start_distance
+                start_line_y = face_y + face_normal.y * actual_start_distance
                 end_line_x = face_x + face_normal.x * actual_end_distance
-                end_line_y = line_start_y + face_normal.y * actual_end_distance
+                end_line_y = face_y + face_normal.y * actual_end_distance
 
                 pygame.draw.line(
                     surface,
@@ -922,12 +951,9 @@ class Boss:
         rotated_y = face_normal.x * sin_offset + face_normal.y * cos_offset
         rotated_normal = pygame.Vector2(rotated_x, rotated_y)
 
-        # Calcular posição de início do laser (com offset lateral)
-        offset = (i - 1) * self.LASER_SPREAD_OFFSET  # -10, 0, +10
-        laser_start_x = face_x + offset * math.cos(self.rotation_angle + math.pi / 2)
-        laser_start_y = (
-            face_y + offset * math.sin(self.rotation_angle + math.pi / 2) - 15
-        )  # Mais para cima
+        # Laser sai da base do canhão (face_x, face_y já é a posição correta)
+        laser_start_x = face_x
+        laser_start_y = face_y
 
         # Cor e espessura diferentes para cada linha
         if i == 1:  # Laser central
@@ -1102,7 +1128,7 @@ class Boss:
     def _draw_pixelated_boss(
         self, surface: pygame.Surface, offset_x: float, offset_y: float
     ) -> None:
-        """Desenha o boss com bordas serrilhadas/pixeladas (efeito retro vazado)."""
+        """Desenha o boss com bordas serrilhadas/pixeladas animadas (efeito retro vazado)."""
         x = int(self.x + offset_x)
         y = int(self.y + offset_y)
 
@@ -1119,37 +1145,42 @@ class Boss:
 
         # Padrão irregular para as bordas (assimétrico)
         pattern = [1, 1, 0, 1, 0, 1, 1, 0, 0, 1]  # Padrão irregular que se repete
+        pattern_len = len(pattern)
 
-        # Borda superior (serrilhada irregular vazada)
+        # Calcular offset animado (em pixels)
+        anim_offset = int(self.border_anim_offset) % (pattern_len * pixel_size)
+        anim_idx_offset = anim_offset // pixel_size
+
+        # Borda superior (serrilhada irregular vazada - desliza para a direita)
         for i in range(0, int(self.w), pixel_size):
-            idx = (i // pixel_size) % len(pattern)
+            idx = ((i // pixel_size) + anim_idx_offset) % pattern_len
             if pattern[idx]:
                 pygame.draw.rect(
                     temp_surface, transparent, (i, 0, pixel_size, pixel_size)
                 )
 
-        # Borda inferior (serrilhada irregular vazada - padrão diferente)
+        # Borda inferior (serrilhada irregular vazada - desliza para a esquerda)
         for i in range(0, int(self.w), pixel_size):
-            idx = (i // pixel_size) % len(pattern)
-            if pattern[(idx + 3) % len(pattern)]:  # Offset para padrão diferente
+            idx = ((i // pixel_size) - anim_idx_offset + 3) % pattern_len
+            if pattern[idx]:
                 pygame.draw.rect(
                     temp_surface,
                     transparent,
                     (i, int(self.h) - pixel_size, pixel_size, pixel_size),
                 )
 
-        # Borda esquerda (serrilhada irregular vazada)
+        # Borda esquerda (serrilhada irregular vazada - desliza para baixo)
         for i in range(0, int(self.h), pixel_size):
-            idx = (i // pixel_size) % len(pattern)
-            if pattern[(idx + 1) % len(pattern)]:
+            idx = ((i // pixel_size) + anim_idx_offset + 1) % pattern_len
+            if pattern[idx]:
                 pygame.draw.rect(
                     temp_surface, transparent, (0, i, pixel_size, pixel_size)
                 )
 
-        # Borda direita (serrilhada irregular vazada - padrão diferente)
+        # Borda direita (serrilhada irregular vazada - desliza para cima)
         for i in range(0, int(self.h), pixel_size):
-            idx = (i // pixel_size) % len(pattern)
-            if pattern[(idx + 5) % len(pattern)]:
+            idx = ((i // pixel_size) - anim_idx_offset + 5) % pattern_len
+            if pattern[idx]:
                 pygame.draw.rect(
                     temp_surface,
                     transparent,
@@ -1166,6 +1197,8 @@ class Boss:
             offset_x = random.randint(-3, 3)
             offset_y = random.randint(-3, 3)
 
+        # Lasers são desenhados pelo entity_manager ANTES do boss
+
         # Desenhar quadrados flutuantes ATRÁS do corpo principal
         self._draw_floating_squares(surface, offset_x, offset_y, behind=True)
 
@@ -1178,46 +1211,11 @@ class Boss:
         # Desenhar o canhão usando a nova classe
         self.cannon.draw(surface, offset_x, offset_y)
 
-        # Desenhar indicação da face principal (pequeno retângulo na direção do
-        # jogador)
-        if hasattr(self, "face_center") and self.state != "entering":
-            face_x, face_y = self._get_face_position()
-            face_normal = self._get_face_normal()
-
-            # Pequeno retângulo indicando a face principal
-            face_rect_x = face_x + offset_x - self.FACE_INDICATOR_SIZE // 2
-            face_rect_y = face_y + offset_y - self.FACE_INDICATOR_SIZE // 2
-            pygame.draw.rect(
-                surface,
-                (255, 255, 255),
-                (
-                    int(face_rect_x),
-                    int(face_rect_y),
-                    self.FACE_INDICATOR_SIZE,
-                    self.FACE_INDICATOR_SIZE,
-                ),
-            )
-
-            # Linha pequena indicando direção
-            line_end_x = (
-                face_x + face_normal.x * self.FACE_DIRECTION_LINE_LENGTH + offset_x
-            )
-            line_end_y = (
-                face_y + face_normal.y * self.FACE_DIRECTION_LINE_LENGTH + offset_y
-            )
-            pygame.draw.line(
-                surface,
-                (255, 255, 255),
-                (face_x + offset_x, face_y + offset_y),
-                (int(line_end_x), int(line_end_y)),
-                2,
-            )
-
         # Health bar (except during entry)
         if self.state != "entering":
             self._draw_health_bar(surface)
 
-        # Aiming line
+        # Aiming line (desaparece antes do disparo)
         if self.state in ("aiming", "charging", "converging"):
             self._draw_aiming_line(surface)
 

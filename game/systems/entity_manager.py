@@ -483,10 +483,10 @@ class EntityManager:
         from typing import Any
 
         # Entidades que não precisam da posição do jogador
+        # boss_lasers removido daqui para ser desenhado antes do boss
         entity_lists: list[list[Any]] = [
             self.bullets,
             self.alien_bullets,
-            self.boss_lasers,
             self.player_lasers,  # Lasers do jogador
             self.boss_squares,  # Quadrados do boss
             self.eye_lasers,
@@ -517,6 +517,10 @@ class EntityManager:
         # Desenhar bombas de bombardeio aéreo
         for bomb in self.air_strike_bombs:
             bomb.draw(surface)
+
+        # Desenhar boss_lasers ANTES do boss (para aparecer abaixo)
+        for laser in self.boss_lasers:
+            laser.draw(surface)
 
         # Tratar o boss separadamente para passar o FPS
         if self.boss:

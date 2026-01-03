@@ -212,11 +212,11 @@ class Config:
 
     # Boss attack animations - Normal mode
     BOSS_CHARGE_DURATION: float = 1.0
-    BOSS_LASER_DELAY: float = 0.3
+    BOSS_LASER_DELAY: float = 0.5  # Delay após linha de mira sumir
 
     # Boss attack animations - Frenzy mode
     BOSS_FRENZY_CHARGE_DURATION: float = 0.5
-    BOSS_FRENZY_LASER_DELAY: float = 0.30
+    BOSS_FRENZY_LASER_DELAY: float = 0.4  # Delay após linha de mira sumir
 
     # Boss animation speed multipliers
     BOSS_ANIMATION_SPEED_MULTIPLIER: float = 1.0
