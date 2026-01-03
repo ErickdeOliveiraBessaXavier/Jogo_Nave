@@ -82,6 +82,7 @@ class BossSquare:
 
         # Animation
         self.animation_timer = 0.0
+        self.animation_offset = random.uniform(0, 10)  # Offset aleatório para dessincronizar animações
         self.rotation = 0.0  # Rotação contínua
 
         # Growth effect - aumenta conforme se move
@@ -94,6 +95,9 @@ class BossSquare:
         self.trail_spawn_timer = 0.0
         self.trail_spawn_interval = 0.025  # Spawna partícula a cada 25ms
         self.max_trail_particles = 18  # Limite de partículas por quadrado
+
+        # Animação da borda pixelada (compartilha timer com rotation para otimização)
+        self.border_anim_offset: float = random.uniform(0, 100)  # Offset aleatório inicial
 
     def set_frenzy_mode(self, is_frenzy: bool) -> None:
         """Set frenzy mode and adjust orbital speed.
@@ -128,10 +132,13 @@ class BossSquare:
         # Handle rotation based on state
         if self.state == "preparing":
             self.rotation += dt * 720  # Gira 720 graus por segundo
+            self.border_anim_offset += dt * 25  # Animação rápida
         elif self.state == "orbiting":
             self.rotation = 0.0  # Sem rotação própria
+            self.border_anim_offset += dt * 10  # Animação lenta
         else:
             self.rotation += dt * 360  # Rotação contínua para projéteis
+            self.border_anim_offset += dt * 15  # Animação média
 
         # Efeito de crescimento progressivo (only for projectiles)
         if not self.is_orbital:
@@ -150,8 +157,10 @@ class BossSquare:
             pulse_scale = 1.0 + 0.4 * abs(math.sin(self.prepare_timer * 10))
             self.prepare_timer += dt
         else:
+            # Usar offset para dessincronizar pulsação entre quadrados
+            anim_value = (self.animation_timer + self.animation_offset) * 57.3
             pulse_scale = 1.0 + 0.2 * abs(
-                pygame.math.Vector2(1, 0).rotate(self.animation_timer * 57.3).x
+                pygame.math.Vector2(1, 0).rotate(anim_value).x
             )
 
         # Combina crescimento com pulsação
@@ -223,10 +232,11 @@ class BossSquare:
                         (p.x - particle_size // 2, p.y - particle_size // 2),
                     )
 
-        # Calcular cor com intensidade alternada
+        # Calcular cor com intensidade alternada (usa offset para dessincronizar)
+        anim_value = (self.animation_timer + self.animation_offset) * 57.3
         intensity = int(
             128
-            + 127 * abs(pygame.math.Vector2(1, 0).rotate(self.animation_timer * 57.3).x)
+            + 127 * abs(pygame.math.Vector2(1, 0).rotate(anim_value).x)
         )
         color = (255, intensity, intensity)
         border_color = (255, 255, 255)
@@ -256,8 +266,60 @@ class BossSquare:
         # Desenhar polígono preenchido
         pygame.draw.polygon(surface, color, rotated_corners)
 
-        # Desenhar borda
-        pygame.draw.polygon(surface, border_color, rotated_corners, 2)
+        # Desenhar borda animada (efeito de quadradinhos deslizando)
+        self._draw_animated_border(surface, rotated_corners, border_color)
+
+    def _draw_animated_border(
+        self,
+        surface: pygame.Surface,
+        corners: list[tuple[float, float]],
+        border_color: tuple[int, int, int],
+    ) -> None:
+        """Desenha borda com efeito de quadradinhos deslizando (otimizado)."""
+        # Padrão simples para otimização
+        pattern = [1, 1, 0, 1, 0]  # Padrão menor para quadrados pequenos
+        pattern_len = len(pattern)
+        
+        # Tamanho do pixel baseado no tamanho do quadrado
+        pixel_size = max(2, int(self.size / 8))
+        half_pixel = pixel_size // 2
+        
+        # Offset animado
+        anim_idx = int(self.border_anim_offset / pixel_size) % pattern_len
+        
+        # Desenhar cada aresta com padrão animado
+        for i in range(4):
+            start = corners[i]
+            end = corners[(i + 1) % 4]
+            
+            # Calcular direção e comprimento da aresta
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            length = math.sqrt(dx * dx + dy * dy)
+            
+            if length < 1:
+                continue
+                
+            # Normalizar direção
+            dx /= length
+            dy /= length
+            
+            # Desenhar segmentos ao longo da aresta
+            num_segments = max(1, int(length / pixel_size))
+            for j in range(num_segments):
+                # Alternar visibilidade baseado no padrão animado
+                # Cada aresta tem offset diferente para criar efeito de rotação
+                idx = (j + anim_idx + i * 2) % pattern_len
+                if pattern[idx]:
+                    t = j / num_segments
+                    px = int(start[0] + dx * length * t)
+                    py = int(start[1] + dy * length * t)
+                    # Desenhar quadrado ao invés de círculo
+                    pygame.draw.rect(
+                        surface,
+                        border_color,
+                        (px - half_pixel, py - half_pixel, pixel_size, pixel_size),
+                    )
 
     def get_rect(self) -> pygame.Rect:
         """Get collision rectangle."""
