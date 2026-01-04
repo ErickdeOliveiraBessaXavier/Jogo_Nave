@@ -1,17 +1,17 @@
 {
   "version": "1.0",
-  "profile_created": "2026-01-04T12:43:45.834304",
-  "last_played": "2026-01-04T12:43:56.516241",
-  "total_playtime": 36.33323,
+  "profile_created": "2026-01-04T13:19:54.365846",
+  "last_played": "2026-01-04T13:20:05.883086",
+  "total_playtime": 0.0,
   "highest_level_reached": 1,
-  "total_deaths": 5,
+  "total_deaths": 1,
   "total_score": 0,
   "level_stats": {
     "1": {
       "level_number": 1,
       "attempts": 1,
       "clears": 0,
-      "deaths": 5,
+      "deaths": 1,
       "total_time": 0.0,
       "best_time": null,
       "worst_time": 0.0,
@@ -22,48 +22,19 @@
       "total_powerups_collected": 0,
       "recent_attempts": [
         {
-          "timestamp": "2026-01-04T12:44:09.623516",
+          "timestamp": "2026-01-04T13:20:19.679363",
           "cleared": false,
           "cause": "collision"
-        },
-        {
-          "timestamp": "2026-01-04T12:44:14.556744",
-          "cleared": false,
-          "cause": "collision"
-        },
-        {
-          "timestamp": "2026-01-04T12:44:17.581910",
-          "cleared": false,
-          "cause": "collision"
-        },
-        {
-          "timestamp": "2026-01-04T12:44:20.588236",
-          "cleared": false,
-          "cause": "collision"
-        },
-        {
-          "timestamp": "2026-01-04T12:44:23.881733",
-          "cleared": false,
-          "cause": "game_over"
         }
       ],
-      "first_played": "2026-01-04T12:43:56.516230",
-      "last_played": "2026-01-04T12:43:56.516239",
+      "first_played": "2026-01-04T13:20:05.883078",
+      "last_played": "2026-01-04T13:20:05.883086",
       "current_win_streak": 0,
       "best_win_streak": 0
     }
   },
   "level_adjustments": {},
-  "session_history": [
-    {
-      "start_time": "2026-01-04T12:43:47.548526",
-      "end_time": "2026-01-04T12:44:23.881756",
-      "levels_attempted": [],
-      "deaths": 5,
-      "score": 0,
-      "powerups_collected": 0
-    }
-  ],
+  "session_history": [],
   "unlocked_upgrades": [
     "AIR_STRIKE",
     "EMP",
