@@ -11,6 +11,7 @@ class MusicState(Enum):
     GAME = "game"
     BOSS = "boss"
     SPIKE_BOSS = "spike_boss"
+    SLIME_BOSS = "slime_boss"
     SILENCE = "silence"
 
 
@@ -89,6 +90,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
         "boss": "music/boss.mp3",
         "menu": "music/menu-music.mp3",
         "spike_boss": "music/spike_boss_theme.mp3",
+        "slime_boss": "music/Boss-Slime-Theme.mp3",
     },
     # Efeitos sonoros
     "sfx": {

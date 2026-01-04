@@ -75,7 +75,7 @@ class MusicStateManager:
     def _should_block_transition(self, new_state: MusicState) -> bool:
         if not MUSIC_BEHAVIOR_CONFIG["prevent_menu_over_game"]:
             return False
-        game_music_types = [MusicState.GAME, MusicState.BOSS, MusicState.SPIKE_BOSS]
+        game_music_types = [MusicState.GAME, MusicState.BOSS, MusicState.SPIKE_BOSS, MusicState.SLIME_BOSS]
 
         is_game_music_active = self.current_state in game_music_types or (
             self.sound_manager.music_paused and self.previous_state in game_music_types
@@ -96,6 +96,8 @@ class MusicStateManager:
                 self.sound_manager.play_boss_music_internal()
             elif new_state == MusicState.SPIKE_BOSS:
                 self.sound_manager.play_spike_boss_music_internal()
+            elif new_state == MusicState.SLIME_BOSS:
+                self.sound_manager.play_slime_boss_music_internal()
             elif new_state == MusicState.SILENCE:
                 self.sound_manager.stop_music_internal()
 
@@ -366,9 +368,6 @@ class SoundManager:
     def play_boss_laser_charging(self):
         """Toca som de carregamento do laser do boss com controle de volume inteligente."""
         if "boss_laser_charging" in self._sounds:
-            # Aplicar ducking na música (reduzir volume)
-            self._duck_music(True)
-
             # Configurar volume balanceado do som do laser
             sound = self._sounds["boss_laser_charging"]
             sound.set_volume(self.sfx_volume * self.master_volume)
@@ -378,10 +377,8 @@ class SoundManager:
 
     @require_audio
     def stop_boss_laser_charging(self):
-        """Para o som de carregamento do laser do boss e restaura música."""
+        """Para o som de carregamento do laser do boss."""
         self.boss_laser_channel.stop()
-        # Restaurar volume original da música
-        self._duck_music(False)
 
     @require_audio
     def play_boss_laser_fire(self):
@@ -416,7 +413,7 @@ class SoundManager:
         if duck:
             # Reduzir volume da música para 60% do normal
             base_volume = self.music_volume
-            if self.current_music in ["boss", "spike_boss"]:
+            if self.current_music in ["boss", "spike_boss", "slime_boss"]:
                 base_volume *= self.boss_music_multiplier
 
             duck_volume = base_volume * 0.6
@@ -425,7 +422,7 @@ class SoundManager:
         else:
             # Restaurar volume original da música
             base_volume = self.music_volume
-            if self.current_music in ["boss", "spike_boss"]:
+            if self.current_music in ["boss", "spike_boss", "slime_boss"]:
                 base_volume *= self.boss_music_multiplier
 
             final_volume = min(1.0, base_volume * self.master_volume)
@@ -473,7 +470,7 @@ class SoundManager:
         """Define o volume de todas as músicas (0.0 a 1.0)."""
         self.music_volume = max(0.0, min(1.0, volume))
 
-        if self.current_music in ["boss", "spike_boss"]:
+        if self.current_music in ["boss", "spike_boss", "slime_boss"]:
             # Aplicar multiplicador para a música do boss
             boss_volume = self.music_volume * self.boss_music_multiplier
             final_volume = min(1.0, boss_volume)  # Garantir que não passe de 1.0
@@ -511,6 +508,9 @@ class SoundManager:
 
     def play_spike_boss_music(self):
         self.music_state_manager.transition_to(MusicState.SPIKE_BOSS)
+
+    def play_slime_boss_music(self):
+        self.music_state_manager.transition_to(MusicState.SLIME_BOSS)
 
     def play_menu_music(self, force: bool = False):
         self.music_state_manager.transition_to(MusicState.MENU, force=force)
@@ -555,6 +555,15 @@ class SoundManager:
         )
         if os.path.exists(music_path) and self.current_music != "spike_boss":
             self._transition_to_music(music_path, "spike_boss")
+
+    @require_audio
+    def play_slime_boss_music_internal(self):
+        music_paths = cast(MusicPaths, SOUND_PATHS["music"])
+        music_path = get_resource_path(
+            os.path.join(str(SOUND_PATHS["base"]), str(music_paths["slime_boss"]))
+        )
+        if os.path.exists(music_path) and self.current_music != "slime_boss":
+            self._transition_to_music(music_path, "slime_boss")
 
     @require_audio
     def play_menu_music_internal(self):
@@ -607,7 +616,7 @@ class SoundManager:
                 pygame.mixer.music.load(music_path)
 
                 base_volume = self.music_volume
-                if music_type in ["boss", "spike_boss"]:
+                if music_type in ["boss", "spike_boss", "slime_boss"]:
                     base_volume *= self.boss_music_multiplier
 
                 target_volume = min(1.0, base_volume * self.master_volume)

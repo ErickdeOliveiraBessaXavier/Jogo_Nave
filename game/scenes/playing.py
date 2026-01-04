@@ -1084,6 +1084,9 @@ class PlayingScene(Scene):
         if self.ship.invuln > 0:
             return
 
+        # Som de colisão
+        sound_manager.play_boss_damage()
+
         # Verificar se o escudo pode absorver o dano
         if self.ship.has_shield:
             self.ship.shield_hp -= 1
@@ -1166,9 +1169,12 @@ class PlayingScene(Scene):
             self._cache_boss_type()  # Cache do tipo de boss
 
             from ..entities.spike_boss import SpikeBoss
+            from ..entities.slime_boss import SlimeBoss
 
             if isinstance(self.entity_manager.boss, SpikeBoss):
                 sound_manager.music_state_manager.transition_to(MusicState.SPIKE_BOSS)
+            elif isinstance(self.entity_manager.boss, SlimeBoss):
+                sound_manager.music_state_manager.transition_to(MusicState.SLIME_BOSS)
             else:
                 sound_manager.music_state_manager.transition_to(MusicState.BOSS)
 
