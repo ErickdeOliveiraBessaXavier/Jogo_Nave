@@ -293,6 +293,17 @@ class Config:
     # ========================================
     # Basic stats
     SLIME_BOSS_HEALTH: int = 1200
+    SLIME_BOSS_WIDTH_MARGIN: int = 100  # Extra width (50px each side)
+    SLIME_BOSS_HEIGHT: int = 600
+    SLIME_BOSS_ANIMATION_SPEED: float = 0.2
+
+    # Movement (Active State)
+    SLIME_BOSS_MOVE_SPEED: float = 50.0
+    SLIME_BOSS_MOVE_RANGE: int = 50
+
+    # Health Thresholds
+    SLIME_BOSS_THRESHOLD_STAGE_1: float = 0.75
+    SLIME_BOSS_THRESHOLD_STAGE_3: float = 0.20
 
     # Movement speeds
     SLIME_BOSS_ENTRY_SPEED_SLOW: float = 100.0  # Dramatic initial entry
@@ -303,40 +314,40 @@ class Config:
     SLIME_BOSS_STAGES: dict[SlimeBossState, StageConfig] = field(
         default_factory=lambda: {
             SlimeBossState.STAGE_1_NORMAL: StageConfig(
-                max_drips=15,  # SLIME_DRIP_MAX_ACTIVE
-                spawn_interval=0.6,  # SLIME_DRIP_SPAWN_INTERVAL
+                max_drips=18,  # SLIME_DRIP_MAX_ACTIVE
+                spawn_interval=0.5,  # SLIME_DRIP_SPAWN_INTERVAL
                 duration=None,
                 is_homing=False,
-                target_y=-50
+                target_y=-40
             ),
             SlimeBossState.STAGE_2_HOMING: StageConfig(
-                max_drips=15,  # SLIME_DRIP_HOMING_MAX_ACTIVE
-                spawn_interval=0.5,  # SLIME_DRIP_HOMING_SPAWN_INTERVAL
+                max_drips=18,  # SLIME_DRIP_HOMING_MAX_ACTIVE
+                spawn_interval=0.4,  # SLIME_DRIP_HOMING_SPAWN_INTERVAL
                 duration=15.0,
                 is_homing=True,
-                target_y=-50
+                target_y=-40
             ),
             SlimeBossState.STAGE_3_NORMAL: StageConfig(
-                max_drips=int(15 * 1.5),  # SLIME_DRIP_MAX_ACTIVE * 1.5
-                spawn_interval=0.6 * 0.8,  # SLIME_DRIP_SPAWN_INTERVAL * 0.8
+                max_drips=int(15 * 2.5),  # SLIME_DRIP_MAX_ACTIVE * 2.5
+                spawn_interval=0.4 * 0.8,  # SLIME_DRIP_SPAWN_INTERVAL * 0.8
                 duration=None,
                 is_homing=False,
-                target_y=-50
+                target_y=-40
             ),
             SlimeBossState.STAGE_4_HOMING: StageConfig(
-                max_drips=15,  # SLIME_DRIP_HOMING_MAX_ACTIVE
-                spawn_interval=0.5,  # SLIME_DRIP_HOMING_SPAWN_INTERVAL
-                duration=25.0,
+                max_drips=20,  # SLIME_DRIP_HOMING_MAX_ACTIVE
+                spawn_interval=0.3,  # SLIME_DRIP_HOMING_SPAWN_INTERVAL
+                duration=20.0,
                 is_homing=True,
-                target_y=-50
+                target_y=-30
             ),
             SlimeBossState.STAGE_5_FINAL: StageConfig(
                 # Drips normais (caindo do boss)
                 max_drips=20,  # Menos que 2.0x para compensar homing
-                spawn_interval=0.5,  # Mais rápido
+                spawn_interval=0.3,  # Mais rápido
                 duration=None,
                 is_homing=False,  # Legado
-                target_y=-50,
+                target_y=-40,
                 
                 # NOVO: Modo dual ativo
                 drip_mode=SlimeDripMode.DUAL,
