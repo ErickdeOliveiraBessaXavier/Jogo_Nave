@@ -24,7 +24,7 @@ def extract_color_definitions(colors_file_path: str) -> Set[str]:
     Returns:
         Conjunto com os nomes das cores definidas
     """
-    color_names = set()
+    color_names: Set[str] = set()
 
     try:
         with open(colors_file_path, "r", encoding="utf-8") as f:
@@ -77,7 +77,7 @@ def find_color_references(
     Returns:
         Dicionário mapeando nome da cor para lista de arquivos onde é usada
     """
-    references = {color: [] for color in color_names}
+    references: Dict[str, List[str]] = {color: [] for color in color_names}
     references["UNKNOWN"] = (
         []
     )  # Para referências que não correspondem a cores conhecidas
@@ -132,7 +132,7 @@ def generate_report(color_names: Set[str], references: Dict[str, List[str]]) -> 
     Returns:
         String com o relatório formatado
     """
-    report_lines = []
+    report_lines: List[str] = []
     report_lines.append("=" * 80)
     report_lines.append("RELATÓRIO DE ANÁLISE DE CORES")
     report_lines.append("=" * 80)
@@ -172,7 +172,7 @@ def generate_report(color_names: Set[str], references: Dict[str, List[str]]) -> 
         report_lines.append("")
 
     # Problemas encontrados
-    problems = []
+    problems: List[str] = []
     unknown_refs = references.get("UNKNOWN", [])
 
     if unknown_refs:

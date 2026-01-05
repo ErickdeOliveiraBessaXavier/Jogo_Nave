@@ -24,7 +24,7 @@ def extract_config_attributes(config_file_path: str) -> Set[str]:
     Returns:
         Conjunto com os nomes dos atributos da classe Config
     """
-    config_attrs = set()
+    config_attrs: Set[str] = set()
 
     try:
         with open(config_file_path, "r", encoding="utf-8") as f:
@@ -66,7 +66,7 @@ def find_config_references(
     Returns:
         Dicionário mapeando nome da configuração para lista de arquivos onde é usada
     """
-    references = {attr: [] for attr in config_attrs}
+    references: Dict[str, List[str]] = {attr: [] for attr in config_attrs}
     references["UNKNOWN"] = (
         []
     )  # Para referências que não correspondem a atributos conhecidos
@@ -121,7 +121,7 @@ def generate_report(config_attrs: Set[str], references: Dict[str, List[str]]) ->
     Returns:
         String com o relatório formatado
     """
-    report_lines = []
+    report_lines: List[str] = []
     report_lines.append("=" * 80)
     report_lines.append("RELATÓRIO DE ANÁLISE DE CONFIGURAÇÕES")
     report_lines.append("=" * 80)
@@ -161,7 +161,7 @@ def generate_report(config_attrs: Set[str], references: Dict[str, List[str]]) ->
         report_lines.append("")
 
     # Problemas encontrados
-    problems = []
+    problems: List[str] = []
     unknown_refs = references.get("UNKNOWN", [])
 
     if unknown_refs:
@@ -175,7 +175,7 @@ def generate_report(config_attrs: Set[str], references: Dict[str, List[str]]) ->
 
     # Verificar se há propriedades computadas sendo acessadas incorretamente
     computed_properties = {"BOSS_MUSIC_SILENCE_DURATION", "POWERUP_WEIGHTS"}
-    incorrectly_used_computed = []
+    incorrectly_used_computed: List[str] = []
     for prop in computed_properties:
         if prop in config_attrs and references.get(prop):
             incorrectly_used_computed.append(prop)
