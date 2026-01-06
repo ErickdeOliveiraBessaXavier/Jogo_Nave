@@ -116,6 +116,10 @@ class SlimeBoss:
         self.animation_timer = 0.0
         self.animation_speed = Config.SLIME_BOSS_ANIMATION_SPEED  # seconds per frame - slower animation
 
+        # Hit feedback (flash overlay)
+        self.hit_flash_timer = 0.0
+        self.hit_flash_duration = 0.15
+
         # Mask cache for pixel-perfect collision optimization (limited to recent frames)
         self._mask_cache: dict[int, pygame.mask.Mask] = {}
         self._scaled_frame_cache: dict[int, pygame.Surface] = {}
@@ -135,6 +139,10 @@ class SlimeBoss:
     def update(self, dt: float, player_x: float, player_y: float | None = None, entity_manager: Optional["EntityManager"] = None) -> tuple[list[Any], list[Any], list[Any]]:
         # Update animation
         self._update_animation(dt)
+
+        # Decay hit flash timer
+        if self.hit_flash_timer > 0.0:
+            self.hit_flash_timer = max(0.0, self.hit_flash_timer - dt)
         
         # Check transitions
         next_state = self._check_transitions()
@@ -170,6 +178,8 @@ class SlimeBoss:
         if not self.can_take_damage():
             return
         self.health -= amount
+        # Trigger brief hit flash
+        self.hit_flash_timer = self.hit_flash_duration
         if self.health <= 0:
             self.health = 0
             self.dead = True
@@ -352,6 +362,7 @@ class SlimeBoss:
     def draw(self, surface: pygame.Surface, fps: float = 60.0) -> None:
         # Draw the slime sprite stretched to boss dimensions (with simple fallback)
         offset_x, offset_y = (0, 0)
+        scaled_frame: pygame.Surface | None = None
 
         # ✅ VERIFICAR SE HÁ FRAMES ANTES DE USAR:
         if self.animation_frames and len(self.animation_frames) > 0:
@@ -392,15 +403,41 @@ class SlimeBoss:
         # Draw dripping effect
         self.dripping_effect.draw(surface)
 
-        # Draw health bar across the full screen width
-        bar_height = 20
-        bar_y = 0  # Top of the screen
-        # Background bar (full width, gray)
-        pygame.draw.rect(surface, (100, 100, 100), (0, bar_y, Config.SCREEN_WIDTH, bar_height))
-        # Health bar (green, proportional to health)
-        health_ratio = self.health / self.max_health
-        health_width = int(Config.SCREEN_WIDTH * health_ratio)
-        pygame.draw.rect(surface, (0, 255, 0), (0, bar_y, health_width, bar_height))
+        # Flash overlay on hit: draw outline from current frame's alpha mask
+        if self.hit_flash_timer > 0.0:
+            flash_intensity = self.hit_flash_timer / self.hit_flash_duration
+            alpha = max(0, min(255, int(220 * flash_intensity)))
+            flash_surface = pygame.Surface((int(self.w), int(self.h)), pygame.SRCALPHA)
+
+            if scaled_frame is not None:
+                try:
+                    mask = pygame.mask.from_surface(scaled_frame)
+                    outline = mask.outline()
+                    if len(outline) > 1:
+                        pygame.draw.lines(
+                            flash_surface,
+                            (255, 255, 255, alpha),
+                            True,
+                            outline,
+                            3,
+                        )
+                    else:
+                        flash_surface.fill((255, 255, 255, alpha))
+                except Exception as e:
+                    print(f"⚠️ SlimeBoss: Erro ao gerar outline do flash: {e}")
+                    flash_surface.fill((255, 255, 255, alpha))
+            else:
+                # Fallback: rect outline when no sprite frame
+                pygame.draw.rect(
+                    flash_surface,
+                    (255, 255, 255, alpha),
+                    pygame.Rect(0, 0, int(self.w), int(self.h)),
+                    width=3,
+                )
+
+            surface.blit(
+                flash_surface, (int(self.x + offset_x), int(self.y + offset_y))
+            )
 
     @property
     def rect(self) -> pygame.Rect:
