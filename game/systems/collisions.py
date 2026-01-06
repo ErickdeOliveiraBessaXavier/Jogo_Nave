@@ -227,14 +227,24 @@ class Collisions:
                 sound_manager.play_boss_damage()
                 entity_manager.spawn_explosion(proj.x, proj.y, size=15)
 
-                # Recompensa ao derrotar
+                # Recompensa e efeitos ao derrotar
                 if boss.dead:
                     cx, cy = boss.x + boss.w / 2, boss.y + boss.h / 2
-                    floating_scores.append(
-                        FloatingScore(cx, cy, Config.BOSS_DEFEAT_SCORE)
-                    )
-                    score_gain += Config.BOSS_DEFEAT_SCORE
-                    entity_manager.spawn_explosion(cx, cy, size=100)
+
+                    if isinstance(boss, SlimeBoss):
+                        if not getattr(boss, "death_sequence_started", False):
+                            boss.death_sequence_started = True
+                            entity_manager.trigger_slime_boss_death(boss)
+                            floating_scores.append(
+                                FloatingScore(cx, cy, Config.BOSS_DEFEAT_SCORE)
+                            )
+                            score_gain += Config.BOSS_DEFEAT_SCORE
+                    else:
+                        floating_scores.append(
+                            FloatingScore(cx, cy, Config.BOSS_DEFEAT_SCORE)
+                        )
+                        score_gain += Config.BOSS_DEFEAT_SCORE
+                        entity_manager.spawn_explosion(cx, cy, size=100)
 
         return score_gain
 

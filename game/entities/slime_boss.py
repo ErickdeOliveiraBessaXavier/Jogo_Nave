@@ -1,3 +1,4 @@
+import random
 import pygame
 import pygame.font
 from typing import Optional, TYPE_CHECKING, Any
@@ -120,6 +121,14 @@ class SlimeBoss:
         self.hit_flash_timer = 0.0
         self.hit_flash_duration = 0.15
 
+        # Death sequence guard
+        self.death_sequence_started = False
+
+        # Rage shake feedback
+        self.shake_timer = 0.0
+        self.shake_duration = 0.2
+        self.shake_magnitude = 8.0
+
         # Mask cache for pixel-perfect collision optimization (limited to recent frames)
         self._mask_cache: dict[int, pygame.mask.Mask] = {}
         self._scaled_frame_cache: dict[int, pygame.Surface] = {}
@@ -143,6 +152,10 @@ class SlimeBoss:
         # Decay hit flash timer
         if self.hit_flash_timer > 0.0:
             self.hit_flash_timer = max(0.0, self.hit_flash_timer - dt)
+
+        # Decay rage shake timer
+        if self.shake_timer > 0.0:
+            self.shake_timer = max(0.0, self.shake_timer - dt)
         
         # Check transitions
         next_state = self._check_transitions()
@@ -180,6 +193,14 @@ class SlimeBoss:
         self.health -= amount
         # Trigger brief hit flash
         self.hit_flash_timer = self.hit_flash_duration
+
+        # Occasionally trigger a short rage shake on heavy damage or low HP
+        if not self.dead and self.shake_timer == 0.0:
+            health_pct = self.health / self.max_health if self.max_health else 1.0
+            heavy_hit = amount >= 0.04 * self.max_health
+            low_health = health_pct <= 0.4 and random.random() < 0.35
+            if heavy_hit or low_health:
+                self.shake_timer = self.shake_duration
         if self.health <= 0:
             self.health = 0
             self.dead = True
@@ -362,6 +383,11 @@ class SlimeBoss:
     def draw(self, surface: pygame.Surface, fps: float = 60.0) -> None:
         # Draw the slime sprite stretched to boss dimensions (with simple fallback)
         offset_x, offset_y = (0, 0)
+
+        # Apply temporary shake when enraged/hit
+        if self.shake_timer > 0.0:
+            offset_x += random.uniform(-self.shake_magnitude, self.shake_magnitude)
+            offset_y += random.uniform(-self.shake_magnitude, self.shake_magnitude)
         scaled_frame: pygame.Surface | None = None
 
         # ✅ VERIFICAR SE HÁ FRAMES ANTES DE USAR:
@@ -421,11 +447,8 @@ class SlimeBoss:
                             outline,
                             3,
                         )
-                    else:
-                        flash_surface.fill((255, 255, 255, alpha))
                 except Exception as e:
                     print(f"⚠️ SlimeBoss: Erro ao gerar outline do flash: {e}")
-                    flash_surface.fill((255, 255, 255, alpha))
             else:
                 # Fallback: rect outline when no sprite frame
                 pygame.draw.rect(

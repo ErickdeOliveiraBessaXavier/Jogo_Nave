@@ -1,3 +1,4 @@
+import random
 import pygame
 from ..entities.bullet import Bullet
 from ..entities.bullet_pool import BulletPool
@@ -104,6 +105,29 @@ class EntityManager:
             Explosão criada ou reutilizada do pool
         """
         return self.explosion_pool.get(x, y, size, is_slime, custom_color)
+
+    def trigger_slime_boss_death(self, boss: SlimeBoss) -> None:
+        """Spawn a dramatic multi-explosion sequence for the Slime Boss death."""
+
+        cx = boss.x + boss.w / 2
+        cy = boss.y + boss.h / 2
+
+        # Central blast
+        self.spawn_explosion(cx, cy, size=140, is_slime=True)
+
+        # Large clustered blasts across the body
+        for _ in range(12):
+            ex = random.uniform(boss.x + boss.w * 0.1, boss.x + boss.w * 0.9)
+            ey = random.uniform(boss.y + boss.h * 0.15, boss.y + boss.h * 0.85)
+            size = random.randint(70, 120)
+            self.spawn_explosion(ex, ey, size=size, is_slime=True)
+
+        # Smaller follow-up blasts for lingering effect
+        for _ in range(8):
+            ex = random.uniform(boss.x, boss.x + boss.w)
+            ey = random.uniform(boss.y, boss.y + boss.h)
+            size = random.randint(40, 70)
+            self.spawn_explosion(ex, ey, size=size, is_slime=True)
 
     def spawn_emp_wave(self, center_x: float, center_y: float) -> None:
         """Spawna uma onda visual de EMP."""
