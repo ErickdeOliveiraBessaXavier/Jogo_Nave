@@ -84,8 +84,8 @@ class SlimeBoss:
         difficulty_multiplier: float = 1.0,
     ):
         # Position and size
-        self.w = Config.SCREEN_WIDTH + 100  # +50px left +50px right margin
-        self.h = 600  # Taller to not be flattened
+        self.w = Config.SCREEN_WIDTH + Config.SLIME_BOSS_WIDTH_MARGIN  # +50px left +50px right margin
+        self.h = Config.SLIME_BOSS_HEIGHT  # Taller to not be flattened
         self.x = Config.SCREEN_WIDTH / 2 - self.w / 2  # Center the boss horizontally
         self.y = -self.h  # More off-screen from the top
         self.target_y = -100  # Final position higher up, not too low
@@ -114,7 +114,7 @@ class SlimeBoss:
 
         self.current_frame = 0
         self.animation_timer = 0.0
-        self.animation_speed = 0.2  # seconds per frame - slower animation
+        self.animation_speed = Config.SLIME_BOSS_ANIMATION_SPEED  # seconds per frame - slower animation
 
         # Mask cache for pixel-perfect collision optimization (limited to recent frames)
         self._mask_cache: dict[int, pygame.mask.Mask] = {}
@@ -141,7 +141,7 @@ class SlimeBoss:
         if next_state:
             # Marcar próximo stage homing antes de retreating
             if next_state == SlimeBossState.RETREATING:
-                if self.health / self.max_health > 0.20:
+                if self.health / self.max_health > Config.SLIME_BOSS_THRESHOLD_STAGE_3:
                     self._next_homing_stage = SlimeBossState.STAGE_2_HOMING
                 else:
                     self._next_homing_stage = SlimeBossState.STAGE_4_HOMING
@@ -183,7 +183,7 @@ class SlimeBoss:
     def _update_active_state(self, dt: float) -> None:
         """Move lateralmente 50px para esquerda e direita a partir da posição central."""
         # Velocidade de movimento
-        speed = 50.0  # pixels/segundo (ajuste conforme necessário)
+        speed = Config.SLIME_BOSS_MOVE_SPEED  # pixels/segundo (ajuste conforme necessário)
 
         # Mover horizontalmente
         if not hasattr(self, "direction"):
@@ -195,9 +195,9 @@ class SlimeBoss:
         center_x = Config.SCREEN_WIDTH / 2 - self.w / 2
 
         # Inverter direção nos limites de ±50px da posição central
-        if self.direction > 0 and self.x >= center_x + 50:
+        if self.direction > 0 and self.x >= center_x + Config.SLIME_BOSS_MOVE_RANGE:
             self.direction = -1
-        elif self.direction < 0 and self.x <= center_x - 50:
+        elif self.direction < 0 and self.x <= center_x - Config.SLIME_BOSS_MOVE_RANGE:
             self.direction = 1
 
     def _update_animation(self, dt: float) -> None:
@@ -214,7 +214,7 @@ class SlimeBoss:
         health_pct = self.health / self.max_health
         
         # Stage 1 → Waiting (75% vida)
-        if self.current_state == SlimeBossState.STAGE_1_NORMAL and health_pct <= 0.75:
+        if self.current_state == SlimeBossState.STAGE_1_NORMAL and health_pct <= Config.SLIME_BOSS_THRESHOLD_STAGE_1:
             return SlimeBossState.WAITING_DRIPS
         
         # Waiting → Retreating (drips zeradas)
@@ -239,7 +239,7 @@ class SlimeBoss:
                 return SlimeBossState.ENTERING
         
         # Stage 3 → Waiting (20% vida)
-        if self.current_state == SlimeBossState.STAGE_3_NORMAL and health_pct <= 0.20:
+        if self.current_state == SlimeBossState.STAGE_3_NORMAL and health_pct <= Config.SLIME_BOSS_THRESHOLD_STAGE_3:
             return SlimeBossState.WAITING_DRIPS
         
         # Stage 4 Homing → ENTERING (timeout)
