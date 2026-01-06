@@ -132,6 +132,7 @@ class SlimeBoss:
         # Mask cache for pixel-perfect collision optimization (limited to recent frames)
         self._mask_cache: dict[int, pygame.mask.Mask] = {}
         self._scaled_frame_cache: dict[int, pygame.Surface] = {}
+        self._outline_cache: dict[int, list[tuple[int, int]]] = {}  # Cache for hit flash outlines
         self._last_mask_size = (int(self.w), int(self.h))
         self._mask_cache_max_size = (
             6  # Keep masks for last 6 frames to balance memory/performance
@@ -429,26 +430,31 @@ class SlimeBoss:
         # Draw dripping effect
         self.dripping_effect.draw(surface)
 
-        # Flash overlay on hit: draw outline from current frame's alpha mask
+        # Flash overlay on hit: draw outline from current frame's alpha mask (cached)
         if self.hit_flash_timer > 0.0:
             flash_intensity = self.hit_flash_timer / self.hit_flash_duration
             alpha = max(0, min(255, int(220 * flash_intensity)))
             flash_surface = pygame.Surface((int(self.w), int(self.h)), pygame.SRCALPHA)
 
             if scaled_frame is not None:
-                try:
-                    mask = pygame.mask.from_surface(scaled_frame)
-                    outline = mask.outline()
-                    if len(outline) > 1:
-                        pygame.draw.lines(
-                            flash_surface,
-                            (255, 255, 255, alpha),
-                            True,
-                            outline,
-                            3,
-                        )
-                except Exception as e:
-                    print(f"⚠️ SlimeBoss: Erro ao gerar outline do flash: {e}")
+                # Use cached outline if available
+                if self.current_frame not in self._outline_cache:
+                    try:
+                        mask = pygame.mask.from_surface(scaled_frame)
+                        self._outline_cache[self.current_frame] = mask.outline()
+                    except Exception as e:
+                        print(f"⚠️ SlimeBoss: Erro ao gerar outline do flash: {e}")
+                        self._outline_cache[self.current_frame] = []
+
+                outline = self._outline_cache[self.current_frame]
+                if len(outline) > 1:
+                    pygame.draw.lines(
+                        flash_surface,
+                        (255, 255, 255, alpha),
+                        True,
+                        outline,
+                        3,
+                    )
             else:
                 # Fallback: rect outline when no sprite frame
                 pygame.draw.rect(
@@ -475,6 +481,7 @@ class SlimeBoss:
         if current_size != self._last_mask_size:
             self._mask_cache.clear()
             self._scaled_frame_cache.clear()
+            self._outline_cache.clear()
             self._last_mask_size = current_size
 
         # Return cached mask if available

@@ -306,7 +306,7 @@ class Config:
     SLIME_BOSS_THRESHOLD_STAGE_3: float = 0.20
 
     # Movement speeds
-    SLIME_BOSS_ENTRY_SPEED_SLOW: float = 100.0  # Dramatic initial entry
+    SLIME_BOSS_ENTRY_SPEED_SLOW: float = 80.0  # Dramatic initial entry
     SLIME_BOSS_ENTRY_SPEED_FAST: float = 300.0  # Subsequent entries/leaving
     SLIME_BOSS_LEAVING_SPEED: float = 300.0  # Leaving speed (same as fast entry)
 
