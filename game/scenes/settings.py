@@ -2,7 +2,8 @@ import pygame
 from typing import TYPE_CHECKING, Optional, Dict, Any
 
 from ..core.state import Scene
-from ..core.colors import WHITE, BLACK, GRAY, BLUE, Color
+from ..core import colors
+from ..core.colors import CUSTOM_PURPLE, CUSTOM_GOLD, CUSTOM_DARK_BG
 from ..core.assets import get_font
 from ..render.renderer import Renderer
 from ..core.sound import sound_manager
@@ -125,12 +126,12 @@ class SettingsScene(Scene):
             self.r.starfield.update(dt)
 
     def render(self, surface: pygame.Surface):
-        surface.fill(BLACK)
+        surface.fill(CUSTOM_DARK_BG)
         # Fundo com o mesmo estilo de upgrades_selection
         self.r.starfield.draw(surface)
 
         # Título
-        title_surf = self.title_font.render("Configurações", True, WHITE)
+        title_surf = self.title_font.render("Configurações", True, CUSTOM_GOLD)
         surface.blit(title_surf, (20, 20))
 
         # Desenhar Cards
@@ -138,16 +139,20 @@ class SettingsScene(Scene):
         self._draw_controls_card(surface)
 
         # Botão Voltar
-        self._draw_button(surface, self.layout_rects["back_button"], "Voltar", GRAY)
+        self._draw_button(surface, self.layout_rects["back_button"], "Voltar", CUSTOM_PURPLE)
 
     def _draw_button(
-        self, surface: pygame.Surface, rect: pygame.Rect, text: str, color: Color
+        self, surface: pygame.Surface, rect: pygame.Rect, text: str, color: colors.Color
     ):
         is_hovered = rect.collidepoint(pygame.mouse.get_pos())
-        bg_color = tuple(min(c + 20, 255) for c in color) if is_hovered else color
-        pygame.draw.rect(surface, bg_color, rect, border_radius=8)
-        pygame.draw.rect(surface, WHITE, rect, 2, border_radius=8)
-        text_surf = self.item_font.render(text, True, WHITE)
+        # Inverter cores ao passar o mouse
+        if color == CUSTOM_PURPLE:
+            border_color = CUSTOM_GOLD if is_hovered else CUSTOM_PURPLE
+        else:
+            border_color = color
+        
+        pygame.draw.rect(surface, border_color, rect, 2, border_radius=8)
+        text_surf = self.item_font.render(text, True, colors.WHITE)
         surface.blit(
             text_surf,
             (
@@ -158,8 +163,8 @@ class SettingsScene(Scene):
 
     def _draw_card(self, surface: pygame.Surface, rect: pygame.Rect, title: str):
         # Apenas a borda, sem fundo
-        pygame.draw.rect(surface, GRAY, rect, 1, border_radius=8)
-        title_surf = self.header_font.render(title, True, WHITE)
+        pygame.draw.rect(surface, colors.GRAY, rect, 1, border_radius=8)
+        title_surf = self.header_font.render(title, True, CUSTOM_GOLD)
         surface.blit(title_surf, (rect.x + 15, rect.y + 15))
 
     def _draw_audio_card(self, surface: pygame.Surface):
@@ -174,7 +179,7 @@ class SettingsScene(Scene):
 
         for key, rect in self.layout_rects["sliders"].items():
             # Label
-            label_surf = self.item_font.render(labels[key], True, WHITE)
+            label_surf = self.item_font.render(labels[key], True, colors.WHITE)
             surface.blit(label_surf, (rect.x, rect.y - 30))
 
             # Slider
@@ -184,18 +189,18 @@ class SettingsScene(Scene):
             # Barra de preenchimento
             fill_width = val * rect.width
             fill_rect = pygame.Rect(rect.x, rect.y, fill_width, rect.height)
-            pygame.draw.rect(surface, BLUE, fill_rect, border_radius=10)
+            pygame.draw.rect(surface, CUSTOM_PURPLE, fill_rect, border_radius=10)
             # Borda
-            pygame.draw.rect(surface, GRAY, rect, 1, border_radius=10)
+            pygame.draw.rect(surface, colors.GRAY, rect, 1, border_radius=10)
             # Knob
             knob_x = rect.x + int(val * rect.w)
             knob_rect = pygame.Rect(0, 0, 10, rect.height + 10)
             knob_rect.center = (knob_x, rect.centery)
-            pygame.draw.rect(surface, WHITE, knob_rect, border_radius=3)
+            pygame.draw.rect(surface, CUSTOM_GOLD, knob_rect, border_radius=3)
 
             # Valor em % (ajustado para não extrapolar)
             percent_text = f"{int(val * 100)}%"
-            percent_surf = self.small_font.render(percent_text, True, GRAY)
+            percent_surf = self.small_font.render(percent_text, True, colors.GRAY)
             percent_x = min(
                 rect.right + 10, card_rect.right - percent_surf.get_width() - 10
             )
@@ -236,7 +241,7 @@ class SettingsScene(Scene):
             if line == "":
                 y_offset += 10
                 continue
-            color = BLUE if ":" in line else WHITE
+            color = CUSTOM_GOLD if ":" in line else colors.WHITE
             text_surf = self.small_font.render(line, True, color)
             surface.blit(text_surf, (card_rect.x + 20, y_offset))
             y_offset += 25

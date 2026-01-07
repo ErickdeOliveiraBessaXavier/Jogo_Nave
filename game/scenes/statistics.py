@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from ..app import GameApp
 
 from ..core import colors
+from ..core.colors import CUSTOM_PURPLE, CUSTOM_GOLD, CUSTOM_DARK_BG
 from ..core.assets import get_font
 from ..render.renderer import Renderer
 from ..core.meta_progression import PlayerProfile, PerformanceState
@@ -127,12 +128,12 @@ class StatisticsScene(Scene):
         self.app.states.switch(MainMenuScene(self.app))
 
     def render(self, surface: pygame.Surface):
-        surface.fill(colors.BLACK)
+        surface.fill(CUSTOM_DARK_BG)
         # Fundo com mesma lógica das outras cenas
         self.r.starfield.draw(surface)
 
         # Título
-        title_surf = self.title_font.render("Estatísticas", True, colors.WHITE)
+        title_surf = self.title_font.render("Estatísticas", True, CUSTOM_GOLD)
         surface.blit(title_surf, (20, 20))
 
         if not self.profile:
@@ -155,7 +156,7 @@ class StatisticsScene(Scene):
 
         # Botões de Ação
         self._draw_button(
-            surface, self.layout_rects["back_button"], "Voltar", colors.GRAY
+            surface, self.layout_rects["back_button"], "Voltar", CUSTOM_PURPLE
         )
         self._draw_button(
             surface, self.layout_rects["reset_button"], "Resetar", colors.RED
@@ -168,9 +169,15 @@ class StatisticsScene(Scene):
         self, surface: pygame.Surface, rect: pygame.Rect, text: str, color: colors.Color
     ):
         is_hovered = rect.collidepoint(pygame.mouse.get_pos())
-        bg_color = tuple(min(c + 20, 255) for c in color) if is_hovered else color
-        pygame.draw.rect(surface, bg_color, rect, border_radius=8)
-        pygame.draw.rect(surface, colors.WHITE, rect, 2, border_radius=8)
+        # Inverter cores ao passar o mouse
+        if color == CUSTOM_PURPLE:
+            border_color = CUSTOM_GOLD if is_hovered else CUSTOM_PURPLE
+        elif color == colors.RED:
+            border_color = colors.RED
+        else:
+            border_color = color
+        
+        pygame.draw.rect(surface, border_color, rect, 2, border_radius=8)
         text_surf = self.item_font.render(text, True, colors.WHITE)
         surface.blit(
             text_surf,
@@ -186,14 +193,8 @@ class StatisticsScene(Scene):
             is_active = self.current_tab == tab
             is_hovered = rect.collidepoint(pygame.mouse.get_pos())
 
-            border_color = colors.GRAY
-            if is_active:
-                border_color = colors.BLUE
-            elif is_hovered:
-                border_color = colors.WHITE
-
-            # Remove background fill for a cleaner look
-            # pygame.draw.rect(surface, bg_color, rect, ...)
+            border_color = CUSTOM_PURPLE if (is_active or is_hovered) else colors.GRAY
+            text_color = CUSTOM_GOLD if is_active else (CUSTOM_GOLD if is_hovered else colors.GRAY)
 
             pygame.draw.rect(
                 surface,
@@ -204,7 +205,6 @@ class StatisticsScene(Scene):
                 border_top_right_radius=8,
             )
 
-            text_color = colors.WHITE if is_active or is_hovered else colors.GRAY
             text_surf = self.item_font.render(tab.value, True, text_color)
             surface.blit(
                 text_surf,
@@ -241,7 +241,7 @@ class StatisticsScene(Scene):
         self._draw_card_background(surface, card_rect)
 
         # Título do Card - em azul para destaque
-        header = self.header_font.render("Resumo do Piloto", True, colors.BLUE)
+        header = self.header_font.render("Resumo do Piloto", True, CUSTOM_GOLD)
         surface.blit(header, (card_rect.x + 15, card_rect.y + 10))
 
         # Conteúdo do card - labels em cinza, valores em azul
@@ -268,7 +268,7 @@ class StatisticsScene(Scene):
             surface.blit(label_surf, (x_pos, y_pos))
 
             # Valor em azul ao lado do label
-            value_surf = self.item_font.render(f" {value}", True, colors.BLUE)
+            value_surf = self.item_font.render(f" {value}", True, CUSTOM_PURPLE)
             surface.blit(value_surf, (x_pos + label_surf.get_width(), y_pos))
 
         # Card: Recomendações
@@ -276,7 +276,7 @@ class StatisticsScene(Scene):
         recom_rect = pygame.Rect(area.x, recom_y, area.width, area.bottom - recom_y)
         self._draw_card_background(surface, recom_rect)
 
-        header = self.header_font.render("Recomendações", True, colors.BLUE)
+        header = self.header_font.render("Recomendações", True, CUSTOM_GOLD)
         surface.blit(header, (recom_rect.x + 15, recom_rect.y + 10))
 
         recom_y_inner = recom_rect.y + 50
@@ -295,7 +295,7 @@ class StatisticsScene(Scene):
         if not self.profile:
             return
 
-        header = self.header_font.render("Performance por Nível", True, colors.BLUE)
+        header = self.header_font.render("Performance por Nível", True, CUSTOM_GOLD)
         surface.blit(header, (area.x, area.y))
 
         y = area.y + 50
@@ -369,7 +369,7 @@ class StatisticsScene(Scene):
 
             # Linha 1: Nível
             level_label = self.item_font.render("Nível", True, colors.GRAY)
-            level_value = self.item_font.render(str(level_num), True, colors.BLUE)
+            level_value = self.item_font.render(str(level_num), True, CUSTOM_PURPLE)
             content_surface.blit(level_label, (card_rect.x + 25, line_y))
             content_surface.blit(
                 level_value, (card_rect.x + 25 + level_label.get_width() + 5, line_y)
@@ -379,7 +379,7 @@ class StatisticsScene(Scene):
             # Linha 2: Tentativas
             attempts_label = self.small_font.render("Tentativas:", True, colors.GRAY)
             attempts_value = self.small_font.render(
-                str(stats.attempts), True, colors.BLUE
+                str(stats.attempts), True, CUSTOM_PURPLE
             )
             content_surface.blit(attempts_label, (card_rect.x + 25, line_y))
             content_surface.blit(
@@ -391,7 +391,7 @@ class StatisticsScene(Scene):
             # Linha 3: Sucesso
             success_label = self.small_font.render("Sucesso:", True, colors.GRAY)
             success_value = self.small_font.render(
-                f"{stats.clear_rate:.0%}", True, colors.BLUE
+                f"{stats.clear_rate:.0%}", True, CUSTOM_PURPLE
             )
             content_surface.blit(success_label, (card_rect.x + 25, line_y))
             content_surface.blit(
@@ -404,7 +404,7 @@ class StatisticsScene(Scene):
                 # Linha 4: Melhor tempo
                 time_label = self.small_font.render("Melhor tempo:", True, colors.GRAY)
                 time_value = self.small_font.render(
-                    f"{stats.best_time:.1f}s", True, colors.BLUE
+                    f"{stats.best_time:.1f}s", True, CUSTOM_PURPLE
                 )
                 content_surface.blit(time_label, (card_rect.x + 25, line_y))
                 content_surface.blit(
@@ -417,7 +417,7 @@ class StatisticsScene(Scene):
                     "Melhor pontuação:", True, colors.GRAY
                 )
                 score_value = self.small_font.render(
-                    f"{stats.best_score:,}", True, colors.BLUE
+                    f"{stats.best_score:,}", True, CUSTOM_PURPLE
                 )
                 content_surface.blit(score_label, (card_rect.x + 25, line_y))
                 content_surface.blit(

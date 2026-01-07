@@ -292,7 +292,7 @@ class Config:
     # SLIME BOSS - DRIPPING SYSTEM
     # ========================================
     # Basic stats
-    SLIME_BOSS_HEALTH: int = 1200
+    SLIME_BOSS_HEALTH: int = 3200
     SLIME_BOSS_WIDTH_MARGIN: int = 100  # Extra width (50px each side)
     SLIME_BOSS_HEIGHT: int = 600
     SLIME_BOSS_ANIMATION_SPEED: float = 0.2

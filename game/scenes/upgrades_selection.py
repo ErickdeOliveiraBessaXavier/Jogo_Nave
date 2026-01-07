@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from ..core.state import Scene
 from ..core import colors
+from ..core.colors import CUSTOM_PURPLE, CUSTOM_GOLD, CUSTOM_DARK_BG
 from ..core.assets import get_font, get_image, BASE_DIR
 from ..core.upgrades import (
     list_all_upgrades_meta,
@@ -400,11 +401,11 @@ class UpgradesSelectionScene(Scene):
                     break
 
     def render(self, surface: pygame.Surface):
-        surface.fill(colors.BLACK)
+        surface.fill(CUSTOM_DARK_BG)
         self.r.starfield.draw(surface)
 
         # Título
-        title = self.title_font.render("Arsenal de Aprimoramentos", True, colors.WHITE)
+        title = self.title_font.render("Arsenal de Aprimoramentos", True, CUSTOM_GOLD)
         surface.blit(title, (20, 20))
 
         # Desenhar elementos
@@ -426,13 +427,15 @@ class UpgradesSelectionScene(Scene):
         for i, cat in enumerate(self.categories):
             is_selected = i == self.selected_category_idx
             rect = self.layout.tab_buttons[i]
+            is_hovered = rect.collidepoint(pygame.mouse.get_pos())
 
-            # Somente borda para consistência visual
-            border_color = colors.BLUE if is_selected else colors.GRAY
+            # Borda: CUSTOM_PURPLE se selecionado/hover, GRAY caso contrário
+            border_color = CUSTOM_PURPLE if (is_selected or is_hovered) else colors.GRAY
+            text_color = CUSTOM_GOLD if (is_selected or is_hovered) else colors.GRAY
+            
             pygame.draw.rect(surface, border_color, rect, 2, border_radius=8)
 
             tab_label_text = cat.upper() if isinstance(cat, str) else cat.name.upper()
-            text_color = colors.WHITE if is_selected else colors.GRAY
             text = self.item_font.render(tab_label_text, True, text_color)
             surface.blit(
                 text,
@@ -467,13 +470,13 @@ class UpgradesSelectionScene(Scene):
             # Ícone (círculo colorido)
             icon_center = cell_rect.center
             icon_radius = 25
-            icon_color = colors.GREEN if unlocked else (80, 80, 80)
+            icon_color = CUSTOM_PURPLE if unlocked else (80, 80, 80)
             pygame.draw.circle(surface, icon_color, icon_center, icon_radius)
 
             # Letra inicial do nome (usando função centralizada)
             initial = get_upgrade_icon(upgrade.name, upgrade.icon_id)
             initial_text = self.header_font.render(
-                initial, True, colors.WHITE if unlocked else (50, 50, 50)
+                initial, True, CUSTOM_GOLD if unlocked else (50, 50, 50)
             )
             surface.blit(
                 initial_text,
@@ -597,10 +600,10 @@ class UpgradesSelectionScene(Scene):
                 if upgrade_meta:
                     # Ícone
                     icon_center = (draw_rect.centerx, draw_rect.centery - 10)
-                    pygame.draw.circle(surface, colors.GREEN, icon_center, 30)
+                    pygame.draw.circle(surface, CUSTOM_PURPLE, icon_center, 30)
 
                     initial = get_upgrade_icon(upgrade_meta.name, upgrade_meta.icon_id)
-                    initial_text = self.header_font.render(initial, True, colors.WHITE)
+                    initial_text = self.header_font.render(initial, True, CUSTOM_GOLD)
                     surface.blit(
                         initial_text,
                         (
@@ -644,11 +647,11 @@ class UpgradesSelectionScene(Scene):
         """Desenha o botão de voltar."""
         back_rect = self.layout.back_button
         is_hovered = back_rect.collidepoint(pygame.mouse.get_pos())
-        bg_color = (
-            tuple(min(c + 20, 255) for c in colors.GRAY) if is_hovered else colors.GRAY
-        )
-        pygame.draw.rect(surface, bg_color, back_rect, border_radius=8)
-        pygame.draw.rect(surface, colors.WHITE, back_rect, 2, border_radius=8)
+        
+        # Apenas borda, sem preenchimento
+        border_color = CUSTOM_GOLD if is_hovered else CUSTOM_PURPLE
+        
+        pygame.draw.rect(surface, border_color, back_rect, 2, border_radius=8)
         back_text = self.item_font.render("Voltar", True, colors.WHITE)
         surface.blit(
             back_text,
@@ -692,11 +695,11 @@ class UpgradesSelectionScene(Scene):
         )
 
         # Ícone
-        pygame.draw.circle(drag_surf, colors.GREEN, (40, 40), 25)
+        pygame.draw.circle(drag_surf, CUSTOM_PURPLE, (40, 40), 25)
         initial = get_upgrade_icon(
             self.dragging_upgrade.name, self.dragging_upgrade.icon_id
         )
-        initial_text = self.header_font.render(initial, True, colors.WHITE)
+        initial_text = self.header_font.render(initial, True, CUSTOM_GOLD)
         drag_surf.blit(
             initial_text,
             (40 - initial_text.get_width() // 2, 40 - initial_text.get_height() // 2),

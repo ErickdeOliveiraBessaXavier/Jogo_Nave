@@ -1,7 +1,7 @@
 import pygame
 from typing import TYPE_CHECKING, Dict, Any
 from ..core.state import Scene
-from ..core.colors import WHITE, BLACK, GREEN, YELLOW, ORANGE, RED
+from ..core.colors import CUSTOM_GOLD, CUSTOM_DARK_BG, CUSTOM_PURPLE, BLACK, GREEN, YELLOW, ORANGE, RED
 from ..core.assets import get_font
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
@@ -39,7 +39,7 @@ class DifficultySelectionScene(Scene):
         center_x = Config.SCREEN_WIDTH // 2
 
         # Título
-        self.title_text = self.title_font.render("Selecione a Dificuldade", True, WHITE)
+        self.title_text = self.title_font.render("Selecione a Dificuldade", True, CUSTOM_GOLD)
         self.title_rect = self.title_text.get_rect(center=(center_x, 80))
 
         # Configurações dos botões
@@ -140,7 +140,7 @@ class DifficultySelectionScene(Scene):
         pass
 
     def render(self, surface: pygame.Surface):
-        surface.fill(BLACK)
+        surface.fill(CUSTOM_DARK_BG)
 
         # Título
         surface.blit(self.title_text, self.title_rect)
@@ -156,7 +156,7 @@ class DifficultySelectionScene(Scene):
 
             # Desenhar botão
             pygame.draw.rect(surface, color, rect, border_radius=10)
-            pygame.draw.rect(surface, WHITE, rect, 3, border_radius=10)
+            pygame.draw.rect(surface, CUSTOM_PURPLE, rect, 3, border_radius=10)
 
             # Textos - melhor alinhamento
             name_rect = button_data["name_text"].get_rect(
@@ -174,7 +174,7 @@ class DifficultySelectionScene(Scene):
             surface.blit(button_data["lives_text"], lives_rect)
 
         # Instrução
-        hint_text = self.desc_font.render("ESC para voltar", True, WHITE)
+        hint_text = self.desc_font.render("ESC para voltar", True, CUSTOM_GOLD)
         hint_rect = hint_text.get_rect(
             centerx=Config.SCREEN_WIDTH // 2, bottom=Config.SCREEN_HEIGHT - 30
         )

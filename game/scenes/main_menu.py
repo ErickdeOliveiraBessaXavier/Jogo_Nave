@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 from typing import TYPE_CHECKING, TypedDict, List, Callable, Any, Optional
 from enum import Enum
 
@@ -7,7 +8,7 @@ if TYPE_CHECKING:
     from ..app import GameApp
 
 from ..core.state import Scene
-from ..core.colors import WHITE, BLACK, GREEN, BRIGHT_GREEN, RED, DARK_RED, BLUE
+from ..core.colors import BLACK, CUSTOM_PURPLE, CUSTOM_DARK_BG, CUSTOM_GOLD
 from ..scenes.settings import SettingsScene
 from ..scenes.difficulty_selection import DifficultySelectionScene
 from ..scenes.statistics import StatisticsScene
@@ -17,6 +18,8 @@ from ..core.config import config as Config
 from ..render.renderer import Renderer
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
+from ..entities.meteor import Meteor
+from ..entities.explosion_pool import ExplosionPool
 
 
 class CharDict(TypedDict):
@@ -37,6 +40,12 @@ class AnimationConfig:
     TITLE_TOP_MARGIN = 20  # Margin from top of menu container to title
     BUTTONS_TOP_MARGIN = 200  # Margin from title bottom to first button
     TITLE_HEIGHT = 60  # Approximate height of title text
+
+
+class AutoPlayConfig:
+    """Configuração para o modo auto-play visual do menu."""
+    METEOR_SPAWN_RATE = 0.8  # Novos meteoros a cada X segundos
+    MAX_METEORS = 10  # Máximo de meteoros simultâneos
 
 
 class MenuStrings:
@@ -175,6 +184,70 @@ class Button:
             surface.blit(self.font.render(self.text, True, text_color), text_rect)
 
 
+class AutoPlay:
+    """Gerencia o modo auto-play visual com meteoros no menu."""
+
+    def __init__(self):
+        self.meteors: List[Meteor] = []
+        self.meteor_spawn_timer = 0.0
+        self.explosion_pool = ExplosionPool(initial_size=20)
+        self.meteors_destroyed = 0  # Counter para easter egg
+
+    def update(self, dt: float):
+        """Atualiza a lógica do auto-play."""
+        # Atualizar explosões
+        self.explosion_pool.update(dt)
+        
+        # Spawnar novos meteoros
+        self.meteor_spawn_timer += dt
+        if self.meteor_spawn_timer >= AutoPlayConfig.METEOR_SPAWN_RATE and len(self.meteors) < AutoPlayConfig.MAX_METEORS:
+            self._spawn_meteor()
+            self.meteor_spawn_timer = 0.0
+
+        # Atualizar e remover meteoros fora da tela
+        for meteor in self.meteors[:]:
+            meteor.update(dt)
+            if meteor.dead or meteor.y > Config.SCREEN_HEIGHT:
+                self.meteors.remove(meteor)
+
+    def _spawn_meteor(self):
+        """Spawna um novo meteoro."""
+        size = random.randint(Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE)
+        x = random.randint(0, Config.SCREEN_WIDTH - size * 2)
+        # Spawnar meteoros de cima (Y negativo)
+        y = -size * 3
+        meteor = Meteor(size=size, x=x, y=y)
+        self.meteors.append(meteor)
+
+    def destroy_meteor(self, meteor: Meteor):
+        """Destrói um meteoro e cria uma explosão."""
+        if meteor in self.meteors:
+            # Criar explosão no centro do meteoro
+            center_x = meteor.x + meteor.w / 2
+            center_y = meteor.y + meteor.h / 2
+            self.explosion_pool.get(center_x, center_y, size=meteor.size)
+            self.meteors.remove(meteor)
+            self.meteors_destroyed += 1  # Incrementar contador
+
+    def is_rainbow_mode(self) -> bool:
+        """Retorna True se atingiu 15 meteoros destruídos (easter egg)."""
+        return self.meteors_destroyed >= 15
+    def reset(self):
+        """Reseta o estado do auto-play."""
+        self.meteors_destroyed = 0
+        self.meteors.clear()
+        self.meteor_spawn_timer = 0.0
+        self.explosion_pool.clear_active()
+    def render(self, surface: pygame.Surface):
+        """Renderiza o auto-play visual (apenas meteoros e explosões)."""
+        # Renderizar explosões (abaixo dos meteoros)
+        self.explosion_pool.draw_all(surface)
+        
+        # Renderizar meteoros (acima das explosões)
+        for meteor in self.meteors:
+            meteor.draw(surface)
+
+
 class MainMenuScene(Scene):
     """
     Main menu scene for the Space Shooter game.
@@ -188,9 +261,12 @@ class MainMenuScene(Scene):
         self.r = Renderer()
         self.font = get_font(60)
         self.button_font = get_font(22)
-        self.border_color = WHITE
-        self.focused_border_color = BLUE
+        self.border_color = CUSTOM_PURPLE
+        self.focused_border_color = CUSTOM_GOLD
         self.focused_button_index = 0
+
+        # Auto-play visual
+        self.auto_play = AutoPlay()
 
         # Menu container position - temporary, will be adjusted
         self.menu_x = int(Config.SCREEN_WIDTH * AnimationConfig.MENU_X_RATIO)
@@ -249,7 +325,7 @@ class MainMenuScene(Scene):
     def _create_title_chars(self):
         """Creates character data for title animation."""
         title_string = MenuStrings.TITLE
-        char_renders = [self.font.render(char, True, WHITE) for char in title_string]
+        char_renders = [self.font.render(char, True, CUSTOM_GOLD) for char in title_string]
         total_width = sum(char_render.get_width() for char_render in char_renders)
 
         start_x = (Config.SCREEN_WIDTH - total_width) // 2
@@ -279,32 +355,32 @@ class MainMenuScene(Scene):
         button_configs = [
             (
                 MenuStrings.START_GAME,
-                GREEN,
-                BRIGHT_GREEN,
+                CUSTOM_GOLD,
+                CUSTOM_PURPLE,
                 lambda: self.app.states.push(DifficultySelectionScene(self.app)),
             ),
             (
                 MenuStrings.STATISTICS,
-                GREEN,
-                BRIGHT_GREEN,
+                CUSTOM_GOLD,
+                CUSTOM_PURPLE,
                 lambda: self.app.states.push(StatisticsScene(self.app)),
             ),
             (
                 MenuStrings.UPGRADES,
-                GREEN,
-                BRIGHT_GREEN,
+                CUSTOM_GOLD,
+                CUSTOM_PURPLE,
                 lambda: self.app.states.push(UpgradesSelectionScene(self.app)),
             ),
             (
                 MenuStrings.SETTINGS,
-                GREEN,
-                BRIGHT_GREEN,
+                CUSTOM_GOLD,
+                CUSTOM_PURPLE,
                 lambda: self.app.states.push(SettingsScene(self.app)),
             ),
             (
                 MenuStrings.EXIT,
-                DARK_RED,
-                RED,
+                CUSTOM_PURPLE,
+                CUSTOM_GOLD,
                 lambda: setattr(self.app, "running", False),
             ),
         ]
@@ -344,6 +420,8 @@ class MainMenuScene(Scene):
         """Called when entering the scene."""
         pygame.mouse.set_visible(True)
         sound_manager.music_state_manager.transition_to(MusicState.MENU)
+        # Resetar o auto-play ao entrar no menu
+        self.auto_play.reset()
 
     def exit(self):
         """Called when exiting the scene."""
@@ -352,11 +430,22 @@ class MainMenuScene(Scene):
     def handle_event(self, event: pygame.event.Event):
         """Handles user input events."""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            for button in self.buttons:
-                if button.rect.collidepoint(event.pos):
-                    button.action()
+            # Primeiro verificar cliques nos meteoros
+            meteor_clicked = False
+            for meteor in self.auto_play.meteors[:]:
+                if meteor.rect.collidepoint(event.pos):
+                    self.auto_play.destroy_meteor(meteor)
                     sound_manager.play_sound("button_click")
+                    meteor_clicked = True
                     break
+            
+            # Se não clicou em meteoro, verificar botões
+            if not meteor_clicked:
+                for button in self.buttons:
+                    if button.rect.collidepoint(event.pos):
+                        button.action()
+                        sound_manager.play_sound("button_click")
+                        break
         elif event.type == pygame.MOUSEMOTION:
             for button in self.buttons:
                 prev_state = button.state
@@ -388,6 +477,7 @@ class MainMenuScene(Scene):
     def update(self, dt: float):
         """Updates scene logic."""
         self.r.starfield.update(dt)
+        self.auto_play.update(dt)
         time_ms = pygame.time.get_ticks()
 
         # Animate title
@@ -409,12 +499,62 @@ class MainMenuScene(Scene):
 
     def render(self, surface: pygame.Surface):
         """Renders the scene."""
-        surface.fill(BLACK)
+        surface.fill(CUSTOM_DARK_BG)
         self.r.starfield.draw(surface)
+        
+        # Renderizar auto-play (meteoros e explosões) atrás do menu
+        self.auto_play.render(surface)
 
-        # Render title
-        for char_data in self.title_chars:
-            surface.blit(char_data["render"], char_data["rect"])
+        # Render title com efeito rainbow se easter egg ativado
+        if self.auto_play.is_rainbow_mode():
+            # Cores do arco-íris (HSV para RGB)
+            rainbow_colors = [
+                (255, 0, 0),      # Vermelho
+                (255, 127, 0),    # Laranja
+                (255, 255, 0),    # Amarelo
+                (0, 255, 0),      # Verde
+                (0, 0, 255),      # Azul
+                (75, 0, 130),     # Índigo
+                (148, 0, 211),    # Violeta
+            ]
+            
+            time_ms = pygame.time.get_ticks()
+            
+            for i, char_data in enumerate(self.title_chars):
+                # Deslocar cores baseado no tempo (cria efeito de "rainbow wave") - MAIS LENTO
+                color_offset = (time_ms / 200) % len(rainbow_colors)
+                base_color_index = int(color_offset)
+                next_color_index = (base_color_index + 1) % len(rainbow_colors)
+                
+                # Interpolação suave entre cores
+                blend_factor = color_offset - base_color_index
+                base_color = rainbow_colors[base_color_index]
+                next_color = rainbow_colors[next_color_index]
+                
+                # Interpolar RGB entre as duas cores
+                interpolated_color = (
+                    int(base_color[0] + (next_color[0] - base_color[0]) * blend_factor),
+                    int(base_color[1] + (next_color[1] - base_color[1]) * blend_factor),
+                    int(base_color[2] + (next_color[2] - base_color[2]) * blend_factor),
+                )
+                
+                # Adicionar pulsação/brilho usando seno - MAIS SUAVE
+                pulse = math.sin((time_ms / 1000) + i * 0.3) * 0.15 + 0.85
+                final_color = (
+                    int(interpolated_color[0] * pulse),
+                    int(interpolated_color[1] * pulse),
+                    int(interpolated_color[2] * pulse),
+                )
+                
+                # Renderizar letra com cor rainbow animada
+                colored_char = self.font.render(
+                    MenuStrings.TITLE[i], True, final_color
+                )
+                surface.blit(colored_char, char_data["rect"])
+        else:
+            # Render normal (sem rainbow)
+            for char_data in self.title_chars:
+                surface.blit(char_data["render"], char_data["rect"])
 
         # Render buttons
         for button in self.buttons:

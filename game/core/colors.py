@@ -24,6 +24,27 @@ BOSS_AIM_LINE: Color = (255, 100, 100)
 GUIDED_METEOR_GREEN: Color = (50, 255, 50)  # Verde brilhante para meteoros teleguiados
 PURPLE: Color = (200, 0, 255)
 
+# Paleta Monocromática
+MONO_WHITE: Color = (245, 245, 245)
+MONO_LIGHT_GRAY: Color = (200, 200, 200)
+MONO_MEDIUM_GRAY: Color = (128, 128, 128)
+MONO_DARK_GRAY: Color = (64, 64, 64)
+MONO_VERY_DARK_GRAY: Color = (32, 32, 32)
+
+# Paleta Customizada
+CUSTOM_PURPLE: Color = (70, 65, 217)  # #4641D9
+CUSTOM_DARK_BG: Color = (21, 28, 38)  # #151C26
+CUSTOM_GOLD: Color = (242, 182, 109)  # #F2B66D
+
+# Paleta Neon Retro
+NEON_PINK: Color = (255, 0, 127)
+NEON_CYAN: Color = (0, 255, 255)
+NEON_PURPLE: Color = (188, 0, 255)
+
+# Paleta Arcade Clássica
+ARCADE_YELLOW: Color = (255, 255, 0)
+ARCADE_ORANGE: Color = (255, 128, 0)
+
 # Cores dos power-ups
 POWERUP_LIFE: Color = (255, 50, 50)
 POWERUP_SHIELD: Color = (50, 50, 255)
