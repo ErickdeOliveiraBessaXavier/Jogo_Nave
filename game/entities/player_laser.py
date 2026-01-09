@@ -61,7 +61,7 @@ class PlayerLaser:
         self.target_x: float = target_x
         self.target_y: float = target_y
         self.damage: int = damage
-        self.w: float = 0
+        self.w: float = max_w * 0.3  # Começar com 30% da largura para colisão imediata
         self.max_w: int = max_w
         self.dead: bool = False
 
@@ -116,6 +116,11 @@ class PlayerLaser:
             return
 
         try:
+            # Verificar se o alvo está morto - parar de rastrear
+            if hasattr(self.target_entity, "dead") and self.target_entity.dead:
+                self.target_entity = None
+                return
+
             old_target_x, old_target_y = self.target_x, self.target_y
 
             # Otimização: usar hasattr uma única vez
@@ -227,7 +232,8 @@ class PlayerLaser:
         """Atualiza a largura do laser com suavização."""
         if self.timer < self.expand_time:
             progress = self.timer / self.expand_time
-            self.w = self.max_w * (1 - (1 - progress) ** 2)
+            # Expandir de 30% até 100% da largura máxima
+            self.w = self.max_w * (0.3 + 0.7 * (1 - (1 - progress) ** 2))
         elif self.timer < self.expand_time + self.hold_time:
             self.w = self.max_w
         else:

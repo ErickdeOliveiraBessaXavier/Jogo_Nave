@@ -200,17 +200,43 @@ class ActiveUpgrade:
 
 
 class ShieldBurstUpgrade(ActiveUpgrade):
+    def __init__(self, meta: UpgradeMeta) -> None:
+        super().__init__(meta)
+        self._monitoring_shield = False  # Flag para monitorar quando escudo é consumido
+
     def allows_refresh(self) -> bool:
-        # Permite renovar a duração se ativado novamente
+        # Não permite refresh - escudo não pode ser reativado enquanto ativo
+        return False
+
+    def can_activate(self, ctx: UpgradeContext) -> bool:
+        # Não pode ativar se já está monitorando um escudo ativo
+        if self._monitoring_shield:
+            return False
+        if self.cooldown_left > 0.0:
+            return False
+        return self.additional_can_activate(ctx)
+
+    def activate(self, ctx: UpgradeContext) -> bool:
+        if not self.can_activate(ctx):
+            self.on_denied(ctx)
+            return False
+
+        # NÃO aplicar cooldown aqui - será aplicado quando escudo for consumido
+        self._monitoring_shield = True
+        self.active = True
+
+        self.on_activate_effect(ctx, refreshed=False)
+        self.on_after_activate(ctx)
         return True
 
     def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
-        # Ativa escudo que absorve 1 hit de dano
+        # Ativa escudo que absorve 1 hit de dano (sem limite de tempo)
         ship = getattr(ctx, "ship", None)
         if ship is None:
             return
 
-        duration = self.get_effective_duration(ctx)
+        # Duração infinita (valor muito alto)
+        duration = 9999.0
         # Usar API de escudo da nave
         if hasattr(ship, "activate_shield"):
             try:
@@ -218,6 +244,28 @@ class ShieldBurstUpgrade(ActiveUpgrade):
                 return
             except Exception:
                 pass
+
+    def update(self, dt: float, ctx: Optional[UpgradeContext] = None) -> None:
+        # Atualizar cooldown normalmente
+        if self.cooldown_left > 0.0:
+            self.cooldown_left = max(0.0, self.cooldown_left - dt)
+
+        # Se está monitorando escudo, verificar se foi consumido
+        if self._monitoring_shield and ctx is not None:
+            ship = getattr(ctx, "ship", None)
+            if ship is not None:
+                has_shield = getattr(ship, "has_shield", False)
+                
+                # Se escudo foi consumido/desapareceu, iniciar cooldown
+                if not has_shield:
+                    self._monitoring_shield = False
+                    self.active = False
+                    self.cooldown_left = self.get_effective_cooldown(ctx)
+
+    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+        # Não usado - escudo expira quando consumido, não por timer
+        self._monitoring_shield = False
+        self.active = False
 
 
 class HealUpgrade(ActiveUpgrade):
@@ -646,11 +694,11 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     UpgradeType.SHIELD_BURST: UpgradeMeta(
         type=UpgradeType.SHIELD_BURST,
         name="SHLD",
-        desc="Ativa um escudo temporário que absorve dano.",
+        desc="Cria um escudo que absorve 1 hit de dano.",
         icon_id="shield_burst",
         category=UpgradeCategory.DEFENSIVE,
         base_cooldown=45.0,
-        base_duration=7.0,
+        base_duration=0.0,  # Não usa duração - baseado em consumo
         base_charges=None,
     ),
     UpgradeType.HEAL: UpgradeMeta(

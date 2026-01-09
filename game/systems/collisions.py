@@ -1252,26 +1252,25 @@ class Collisions:
                     laser.hit_enemies.add(enemy_id)
 
                     # Aplicar dano de acordo com o tipo de inimigo
-                    if isinstance(enemy, Meteor):
-                        enemy.dead = True  # Meteoros morrem instantaneamente
-                    elif isinstance(enemy, ExplosiveMine):
+                    if isinstance(enemy, ExplosiveMine):
+                        # Minas explosivas apenas sofrem dano, não são destruídas
                         enemy.take_damage(laser.damage)
-                        continue  # Não usar _destroy_enemy para minas
                     elif isinstance(enemy, SquareMinionBoss):
                         # SquareMinionBoss não pode ser destruído por lasers
                         pass  # Não faz nada - imune a lasers
-
-                    # Para inimigos normais, usar helper com explosion_size customizado
-                    pts, score_event = self._destroy_enemy(
-                        enemy,
-                        enemies,
-                        entity_manager,
-                        explosion_size=None if isinstance(enemy, Meteor) else 20,
-                    )
-                    score_gain += pts
-                    destroyed_count += 1
-                    score_events.append(score_event)
-                    floating_scores.append(FloatingScore(*score_event))
+                    else:
+                        # Para todos os outros inimigos (Meteoros, Aliens, EyeEnemies)
+                        # Usar helper com explosion_size customizado
+                        pts, score_event = self._destroy_enemy(
+                            enemy,
+                            enemies,
+                            entity_manager,
+                            explosion_size=None if isinstance(enemy, Meteor) else 20,
+                        )
+                        score_gain += pts
+                        destroyed_count += 1
+                        score_events.append(score_event)
+                        floating_scores.append(FloatingScore(*score_event))
 
         return score_gain, destroyed_count, score_events
 
