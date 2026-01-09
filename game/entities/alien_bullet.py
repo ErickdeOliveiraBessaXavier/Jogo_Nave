@@ -6,30 +6,66 @@ from ..core import colors
 class AlienBullet:
     def __init__(self, x: float, y: float):
         self.x, self.y = x, y
-        self.w, self.h = 4, 12
-        self.speed = 250
+        self.speed = Config.ALIEN_BULLET_SPEED
         self.dead = False
-        self.color = colors.MAGENTA
-        self.light_magenta = (255, 100, 255)
-        self.flash_timer = 0.0
-        self.flash_interval = 0.1
+        
+        # Cores para piscar
+        self.color_1 = colors.ALIEN_BULLET_GREEN_1
+        self.color_2 = colors.ALIEN_BULLET_GREEN_2
+        self.current_color = self.color_1
+        
+        # Animação de tamanho (pulsação)
+        self.min_radius = Config.ALIEN_BULLET_MIN_RADIUS
+        self.max_radius = Config.ALIEN_BULLET_MAX_RADIUS
+        self.current_radius = self.min_radius
+        self.pulse_timer = 0.0
+        self.pulse_speed = Config.ALIEN_BULLET_PULSE_SPEED
 
     @property
     def rect(self) -> pygame.Rect:
-        return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+        return pygame.Rect(
+            int(self.x) - self.current_radius,
+            int(self.y) - self.current_radius,
+            self.current_radius * 2,
+            self.current_radius * 2
+        )
 
     def update(self, dt: float):
         self.y += self.speed * dt
         if self.y > Config.SCREEN_HEIGHT:
             self.dead = True
 
-        self.flash_timer += dt
-        if self.flash_timer >= self.flash_interval:
-            if self.color == colors.MAGENTA:
-                self.color = self.light_magenta
-            else:
-                self.color = colors.MAGENTA
-            self.flash_timer = 0.0
+        # Atualizar pulsação de tamanho e cor
+        self.pulse_timer += dt
+        
+        # Ciclo de pulsação (aumenta e diminui)
+        import math
+        cycle = self.pulse_timer * self.pulse_speed
+        progress = (math.sin(cycle) + 1) / 2  # Valor entre 0 e 1
+        
+        # Calcular raio com pulsação
+        self.current_radius = self.min_radius + (self.max_radius - self.min_radius) * progress
+        
+        # Alternar cor a cada Config.ALIEN_BULLET_COLOR_CHANGE_INTERVAL (mais frenético)
+        change_interval = Config.ALIEN_BULLET_COLOR_CHANGE_INTERVAL
+        if (self.pulse_timer % (change_interval * 2)) < change_interval:
+            self.current_color = self.color_1
+        else:
+            self.current_color = self.color_2
 
     def draw(self, surface: pygame.Surface):
-        pygame.draw.rect(surface, self.color, self.rect)
+        # Desenhar círculo preenchido
+        pygame.draw.circle(
+            surface,
+            self.current_color,
+            (int(self.x), int(self.y)),
+            int(self.current_radius)
+        )
+        # Desenhar borda branca
+        pygame.draw.circle(
+            surface,
+            colors.WHITE,
+            (int(self.x), int(self.y)),
+            int(self.current_radius),
+            width=1
+        )

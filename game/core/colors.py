@@ -41,6 +41,10 @@ NEON_PINK: Color = (255, 0, 127)
 NEON_CYAN: Color = (0, 255, 255)
 NEON_PURPLE: Color = (188, 0, 255)
 
+# Cores do Alien Bullet
+ALIEN_BULLET_GREEN_1: Color = (37, 217, 166)    # #25D9A6
+ALIEN_BULLET_GREEN_2: Color = (115, 255, 215)     # #4ED94A
+
 # Paleta Arcade Clássica
 ARCADE_YELLOW: Color = (255, 255, 0)
 ARCADE_ORANGE: Color = (255, 128, 0)

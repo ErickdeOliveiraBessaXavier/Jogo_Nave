@@ -70,6 +70,38 @@ class Config:
     POWERUP_SPEED: float = 100.0  # CORRIGIDO: float para consistência
 
     # ========================================
+    # ALIEN BULLET SETTINGS
+    # ========================================
+    ALIEN_BULLET_SPEED: float = 200.0
+    ALIEN_BULLET_MIN_RADIUS: int = 5
+    ALIEN_BULLET_MAX_RADIUS: int = 8
+    ALIEN_BULLET_PULSE_SPEED: float = 4.0
+    ALIEN_BULLET_COLOR_CHANGE_INTERVAL: float = 0.2  # segundos
+
+    # ========================================
+    # ALIEN SETTINGS
+    # ========================================
+    # ========================================
+    # ALIEN SETTINGS
+    # ========================================
+    ALIEN_WIDTH: int = 75
+    ALIEN_HEIGHT: int = 58
+    ALIEN_SPEED_X_OPTIONS: list[int] = field(default_factory=lambda: [-100, 100])
+    ALIEN_SPEED_Y: float = 60.0
+    ALIEN_HEALTH: int = 15
+    ALIEN_ANIMATION_FRAME_DURATION: float = 0.1
+    ALIEN_DEATH_MARGIN: int = 100  # Margem de segurança para considerar morto
+    ALIEN_POINTS_VALUE: int = 150  # Pontos por destruir
+    ALIEN_SHOOT_PAUSE_DURATION: float = 0.5  # Tempo que fica parado antes de atirar
+    ALIEN_POST_SHOOT_COOLDOWN: float = 0.5  # Tempo para esperar após disparar antes de mover
+    ALIEN_SHOOT_INTERVAL_MIN: float = 1.0  # Intervalo mínimo entre tiros
+    ALIEN_SHOOT_INTERVAL_MAX: float = 4.0  # Intervalo máximo entre tiros
+    ALIEN_SHOOT_BURST_CHANCE: float = 0.3  # Chance de disparo em rajada (30%)
+    ALIEN_BURST_COUNT: int = 3  # Quantos tiros na rajada
+    ALIEN_BURST_INTERVAL: float = 1.0  # Intervalo entre tiros da rajada (1 segundo)
+    ALIEN_BURST_PAUSE_DURATION: float = 0.2  # Pausa antes de cada tiro da rajada
+
+    # ========================================
     # METEOR SYSTEM
     # ========================================
     # Basic meteor settings

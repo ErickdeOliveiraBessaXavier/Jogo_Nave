@@ -209,6 +209,33 @@ class EntityManager:
 
         self._grid_needs_rebuild = False
 
+    def _check_alien_collisions(self):
+        """Verifica colisões entre aliens e inverte suas direções."""
+        # Coletar apenas aliens vivos e não controlados por formação
+        aliens = [e for e in self.enemies if isinstance(e, Alien) and not e.dead and not e.formation_controlled]
+        
+        # Verificar colisões entre pares de aliens
+        for i in range(len(aliens)):
+            for j in range(i + 1, len(aliens)):
+                alien1 = aliens[i]
+                alien2 = aliens[j]
+                
+                # Verificar se os retângulos colidem
+                if alien1.rect.colliderect(alien2.rect):
+                    # Inverter direções horizontais de ambos
+                    alien1.speed_x *= -1
+                    alien2.speed_x *= -1
+                    
+                    # Separar aliens ligeiramente para evitar colisão contínua
+                    overlap_x = (alien1.w + alien2.w) / 2 - abs(alien1.x - alien2.x)
+                    if overlap_x > 0:
+                        if alien1.x < alien2.x:
+                            alien1.x -= overlap_x / 2
+                            alien2.x += overlap_x / 2
+                        else:
+                            alien1.x += overlap_x / 2
+                            alien2.x -= overlap_x / 2
+
     def update(
         self,
         dt: float,
@@ -390,6 +417,9 @@ class EntityManager:
                 enemy.update(scaled_dt, screen_width, screen_height)
             else:
                 enemy.update(scaled_dt)
+
+        # Verificar colisões entre aliens
+        self._check_alien_collisions()
 
         self.alien_bullets.extend(new_alien_bullets)
         self.eye_lasers.extend(new_eye_lasers)
