@@ -1,17 +1,17 @@
 {
   "version": "1.0",
-  "profile_created": "2026-01-05T23:25:54.764811",
-  "last_played": "2026-01-08T23:09:52.362612",
-  "total_playtime": 0.0,
+  "profile_created": "2026-01-09T01:41:05.045001",
+  "last_played": "2026-01-09T01:57:16.873445",
+  "total_playtime": 35.38822,
   "highest_level_reached": 1,
-  "total_deaths": 2,
+  "total_deaths": 6,
   "total_score": 0,
   "level_stats": {
     "1": {
       "level_number": 1,
-      "attempts": 11,
+      "attempts": 3,
       "clears": 0,
-      "deaths": 2,
+      "deaths": 6,
       "total_time": 0.0,
       "best_time": null,
       "worst_time": 0.0,
@@ -22,28 +22,58 @@
       "total_powerups_collected": 0,
       "recent_attempts": [
         {
-          "timestamp": "2026-01-08T22:26:17.952281",
+          "timestamp": "2026-01-09T01:46:26.806776",
           "cleared": false,
           "cause": "collision"
         },
         {
-          "timestamp": "2026-01-08T23:01:13.915870",
+          "timestamp": "2026-01-09T01:57:28.849826",
           "cleared": false,
           "cause": "collision"
+        },
+        {
+          "timestamp": "2026-01-09T01:57:33.152999",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2026-01-09T01:57:38.437427",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2026-01-09T01:57:43.425430",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2026-01-09T01:57:47.277127",
+          "cleared": false,
+          "cause": "game_over"
         }
       ],
-      "first_played": "2026-01-05T23:26:01.452527",
-      "last_played": "2026-01-08T23:09:52.362605",
+      "first_played": "2026-01-09T01:46:08.351740",
+      "last_played": "2026-01-09T01:57:16.873438",
       "current_win_streak": 0,
       "best_win_streak": 0
     }
   },
   "level_adjustments": {
-    "1": 0.8484375
+    "1": 0.75
   },
-  "session_history": [],
+  "session_history": [
+    {
+      "start_time": "2026-01-09T01:57:11.888929",
+      "end_time": "2026-01-09T01:57:47.277149",
+      "levels_attempted": [],
+      "deaths": 5,
+      "score": 0,
+      "powerups_collected": 0
+    }
+  ],
   "unlocked_upgrades": [
     "AIR_STRIKE",
+    "BLACK_HOLE",
     "EMP",
     "EXPLOSIVE_SHOT",
     "HEAL",
@@ -52,7 +82,7 @@
     "SHIELD_BURST"
   ],
   "upgrade_loadout": [
-    null,
+    "BLACK_HOLE",
     null,
     null,
     null,

@@ -33,6 +33,7 @@ from ..entities.star import Star
 from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.air_strike_marker import AirStrikeMarker
 from ..entities.air_strike_bomb import AirStrikeBomb
+from ..entities.black_hole import BlackHole
 from ..entities.square_minion_boss import SquareMinionBoss
 from typing import Dict, Any, TYPE_CHECKING, Optional
 
@@ -70,6 +71,7 @@ class EntityManager:
 
         self.air_strike_markers: list[AirStrikeMarker] = []  # Marcadores de bombardeio
         self.air_strike_bombs: list[AirStrikeBomb] = []  # Bombas do bombardeio aéreo
+        self.black_holes: list[BlackHole] = []  # Buracos negros
         self.meteor_pool = MeteorPool(initial_size=100)  # Pool de meteoros
         self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
         self.enemy_spatial_grid: SpatialGrid[
@@ -153,6 +155,12 @@ class EntityManager:
             on_fall = self.sound_manager.play_meteor_rain
         bomb = AirStrikeBomb(target_x, target_y, on_explode=on_explode, on_fall=on_fall)
         self.air_strike_bombs.append(bomb)
+
+    def spawn_black_hole(self, x: float, y: float, duration: float) -> None:
+        """Spawna um buraco negro."""
+        from ..entities.black_hole import BlackHole
+        black_hole = BlackHole(x, y, duration)
+        self.black_holes.append(black_hole)
 
     def spawn_player_laser(
         self,
@@ -447,6 +455,27 @@ class EntityManager:
             if bomb.dead:
                 self.air_strike_bombs.remove(bomb)
 
+        # Atualizar buracos negros
+        for black_hole in self.black_holes[:]:
+            black_hole.update(dt)
+            if black_hole.dead:
+                self.black_holes.remove(black_hole)
+                continue
+
+            # Aplicar gravidade a todos os inimigos
+            for enemy in self._cached_all_enemies[:]:
+                if getattr(enemy, 'dead', False):
+                    continue
+                
+                should_destroy = black_hole.apply_gravity_to_enemy(enemy, enemy_dt)
+                if should_destroy:
+                    # Destruir inimigo
+                    enemy.dead = True
+                    # Spawnar explosão
+                    enemy_x = getattr(enemy, 'x', 0) + getattr(enemy, 'w', 0) / 2
+                    enemy_y = getattr(enemy, 'y', 0) + getattr(enemy, 'h', 0) / 2
+                    self.spawn_explosion(enemy_x, enemy_y, size=30)
+
         # CRÍTICO: Cleanup ANTES de rebuild
         self.cleanup()
         self.rebuild_all_grids()  # OPT #1: Reconstrói todas as grids
@@ -571,6 +600,10 @@ class EntityManager:
         # Desenhar bombas de bombardeio aéreo
         for bomb in self.air_strike_bombs:
             bomb.draw(surface)
+
+        # Desenhar buracos negros (devem ser desenhados ANTES dos inimigos para criar efeito de sucção)
+        for black_hole in self.black_holes:
+            black_hole.draw(surface)
 
         # Desenhar boss_lasers ANTES do boss (para aparecer abaixo)
         for laser in self.boss_lasers:

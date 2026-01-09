@@ -31,6 +31,7 @@ DEFAULT_UNLOCKED: List[UpgradeType] = [
     UpgradeType.LASER_SHOT,
     UpgradeType.EXPLOSIVE_SHOT,
     UpgradeType.AIR_STRIKE,
+    UpgradeType.BLACK_HOLE,
 ]
 
 # Parâmetros de balanceamento do EMP (tempo e intensidade)

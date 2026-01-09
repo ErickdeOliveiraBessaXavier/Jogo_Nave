@@ -26,6 +26,7 @@ class UpgradeType(Enum):
     LASER_SHOT = auto()
     EXPLOSIVE_SHOT = auto()
     AIR_STRIKE = auto()  # Ultimate: Bombardeio Aéreo
+    BLACK_HOLE = auto()  # Ultimate: Buraco Negro
 
 
 class UpgradeCategory(Enum):
@@ -602,6 +603,42 @@ class AirStrikeUpgrade(ActiveUpgrade):
         self.active = False
 
 
+class BlackHoleUpgrade(ActiveUpgrade):
+    """Ultimate: Buraco Negro - Cria um buraco negro que suga e destrói todos os inimigos.
+
+    Comportamento:
+    - Cria um buraco negro no centro da tela
+    - Puxa todos os inimigos gradualmente para o centro
+    - Destrói inimigos que chegam próximos ao centro
+    - Dura 8 segundos
+    - 120s de cooldown (2 minutos)
+    """
+
+    def allows_refresh(self) -> bool:
+        return False  # Ultimate não permite refresh
+
+    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+        """Ativa o buraco negro."""
+        entity_manager = getattr(ctx, "entity_manager", None)
+        ship = getattr(ctx, "ship", None)
+        
+        if entity_manager is None or ship is None:
+            return
+
+        # Posição da nave (centro)
+        ship_center_x = ship.x + ship.w / 2
+        ship_center_y = ship.y + ship.h / 2
+
+        duration = self.get_effective_duration(ctx)
+
+        # Spawnar buraco negro na posição da nave
+        if hasattr(entity_manager, "spawn_black_hole"):
+            entity_manager.spawn_black_hole(ship_center_x, ship_center_y, duration)
+
+    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+        self.active = False
+
+
 # ===================== Registro e Fábrica ================================
 
 UPGRADES_REGISTRY: Dict[UpgradeType, Callable[[], ActiveUpgrade]] = {}
@@ -676,6 +713,16 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_duration=0.0,
         base_charges=30,  # 30 bombas por ativação
     ),
+    UpgradeType.BLACK_HOLE: UpgradeMeta(
+        type=UpgradeType.BLACK_HOLE,
+        name="HOLE",
+        desc="Ultimate: Buraco negro suga e destrói todos os inimigos na tela.",
+        icon_id="black_hole",
+        category=UpgradeCategory.OFFENSIVE,
+        base_cooldown=120.0,  # 2 minutos de cooldown
+        base_duration=8.0,  # Dura 8 segundos
+        base_charges=None,
+    ),
 }
 
 
@@ -707,6 +754,10 @@ def _factory_air_strike() -> ActiveUpgrade:
     return AirStrikeUpgrade(UPGRADES_META[UpgradeType.AIR_STRIKE])
 
 
+def _factory_black_hole() -> ActiveUpgrade:
+    return BlackHoleUpgrade(UPGRADES_META[UpgradeType.BLACK_HOLE])
+
+
 UPGRADES_REGISTRY.update(
     {
         UpgradeType.SHIELD_BURST: _factory_shield,
@@ -716,6 +767,7 @@ UPGRADES_REGISTRY.update(
         UpgradeType.LASER_SHOT: _factory_laser_shot,
         UpgradeType.EXPLOSIVE_SHOT: _factory_explosive_shot,
         UpgradeType.AIR_STRIKE: _factory_air_strike,
+        UpgradeType.BLACK_HOLE: _factory_black_hole,
     }
 )
 
@@ -744,6 +796,7 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
             "laser_shot": "L",
             "explosive_shot": "X",
             "air_strike": "A",
+            "black_hole": "B",
         }
         icon = icon_id_map.get(icon_id)
         if icon:
@@ -768,6 +821,8 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
         "EXPL": "X",
         "Air Strike": "A",
         "AIR": "A",
+        "Black Hole": "B",
+        "HOLE": "B",
     }
 
     icon = icon_name_map.get(upgrade_name)

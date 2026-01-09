@@ -1,0 +1,154 @@
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #0a0a1a;
+            overflow: hidden;
+        }
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = 800;
+        canvas.height = 800;
+        
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const blackHoleRadius = 80;
+        
+        // Partículas
+        const particles = [];
+        const numParticles = 300;
+        
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+            
+            reset() {
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 200 + Math.random() * 250;
+                this.x = centerX + Math.cos(angle) * distance;
+                this.y = centerY + Math.sin(angle) * distance;
+                this.size = Math.floor(Math.random() * 3) + 2;
+                this.baseSpeed = 0.2 + Math.random() * 0.3;
+                this.angle = angle;
+                this.orbitRadius = distance;
+                this.opacity = 0.3 + Math.random() * 0.7;
+                
+                // Cores pixel art para disco de acreção
+                const colors = [
+                    '#ff6b35', // laranja
+                    '#f7931e', // laranja claro
+                    '#ffd700', // dourado
+                    '#ff4500', // vermelho alaranjado
+                    '#ff8c00', // laranja escuro
+                    '#ffaa00'  // amarelo alaranjado
+                ];
+                this.color = colors[Math.floor(Math.random() * colors.length)];
+            }
+            
+            update() {
+                const dx = centerX - this.x;
+                const dy = centerY - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Aceleração mais suave e gradual
+                const distanceFactor = Math.max(0.3, distance / 400);
+                const accelerationFactor = 1 / distanceFactor;
+                
+                // Velocidade angular mais controlada
+                const angularSpeed = (1 / distance) * 20 * accelerationFactor;
+                this.angle += angularSpeed * this.baseSpeed;
+                
+                // Espiral bem mais suave
+                const spiralSpeed = this.baseSpeed * 0.1 * accelerationFactor;
+                this.orbitRadius -= spiralSpeed;
+                
+                // Nova posição orbital
+                this.x = centerX + Math.cos(this.angle) * this.orbitRadius;
+                this.y = centerY + Math.sin(this.angle) * this.orbitRadius;
+                
+                // Efeito de distorção próximo ao buraco negro
+                if (distance < 150) {
+                    this.opacity = Math.max(0.2, (distance / 150));
+                }
+                
+                // Resetar se ficar muito próximo do buraco negro
+                if (distance < blackHoleRadius + 20) {
+                    this.reset();
+                }
+            }
+            
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = this.opacity;
+                
+                // Desenho pixel art
+                const pixelSize = this.size;
+                ctx.fillRect(
+                    Math.floor(this.x), 
+                    Math.floor(this.y), 
+                    pixelSize, 
+                    pixelSize
+                );
+            }
+        }
+        
+        // Inicializar partículas
+        for (let i = 0; i < numParticles; i++) {
+            particles.push(new Particle());
+        }
+        
+        function drawBlackHole() {
+            // Buraco negro central (preto absoluto, sem bordas)
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, blackHoleRadius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Garantir preto absoluto com uma segunda camada
+            ctx.fillStyle = 'rgb(0, 0, 0)';
+            ctx.fill();
+        }
+        
+        function drawAccretionDisk() {
+            // Removido - sem anéis visuais
+        }
+        
+        function animate() {
+            // Fundo
+            ctx.fillStyle = '#0a0a1a';
+            ctx.globalAlpha = 0.3;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Disco de acreção sutil
+            drawAccretionDisk();
+            
+            // Atualizar e desenhar partículas
+            particles.forEach(particle => {
+                particle.update();
+                particle.draw();
+            });
+            
+            // Buraco negro por cima
+            drawBlackHole();
+            
+            requestAnimationFrame(animate);
+        }
+        
+        animate();
+    </script>
