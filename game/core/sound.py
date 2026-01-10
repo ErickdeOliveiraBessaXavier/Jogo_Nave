@@ -252,6 +252,7 @@ class SoundManager:
             "laser_shot": sfx_paths["ui"][
                 "laser_shot"
             ],  # Som do laser do upgrade LASER_SHOT
+            "black_hole": sfx_paths["ui"]["black_hole"],  # Som do buraco negro
         }
         for key, path in ui_sounds.items():
             sound_path = os.path.join(base_path, path)
@@ -445,6 +446,14 @@ class SoundManager:
         """Toca som de negação de aprimoramento (reutiliza hover para MVP)."""
         if "button_hover" in self._sounds:
             self._sounds["button_hover"].play()
+
+    @require_audio
+    def play_black_hole(self):
+        """Toca o som do buraco negro."""
+        if "black_hole" in self._sounds:
+            sound = self._sounds["black_hole"]
+            sound.set_volume(self.sfx_volume * self.master_volume * 1.2)
+            sound.play()
 
     @require_audio
     def play_sound(self, sound_name: str):

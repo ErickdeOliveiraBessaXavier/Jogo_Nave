@@ -3,6 +3,8 @@ import math
 import random
 from typing import Any, TypedDict
 
+from ..core.sound import sound_manager
+
 
 class Particle(TypedDict):
     """Estrutura de uma partícula do disco de acreção."""
@@ -25,6 +27,9 @@ class BlackHole:
         self.duration = duration  # Não usado, mas mantido para compatibilidade
         self.lifetime = 0.0
         self.dead = False
+        
+        # Tocar som do buraco negro
+        sound_manager.play_black_hole()
 
         # Movimento
         self.speed_y = -50.0  # Velocidade para cima (pixels/segundo)

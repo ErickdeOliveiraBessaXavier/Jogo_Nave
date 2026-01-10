@@ -88,6 +88,9 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "music/background_02.mp3",
             "music/Lost_Sector_Loop.mp3",
             "music/Starcruiser_Loop.mp3",
+            "music/Event_Horizon_Pulse.mp3",
+            "music/Rising_From_Restraint_War.mp3",
+            "music/Rising_From_Restraint.mp3"
         ],
         "boss": "music/boss.mp3",
         "menu": "music/menu-music.mp3",
@@ -114,6 +117,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "upgrade_activate": "sfx/ui/Ativação_Aprimoramentos.wav",
             "meteor_rain": "sfx/ui/som_chuva_meteoro_{}.wav",  # {} = 1,2,3,4
             "laser_shot": "sfx/ui/som_laser_raio.mp3",  # Som do laser do upgrade LASER_SHOT
+            "black_hole": "sfx/ui/Buraco_negro_Som.mp3",  # Som do buraco negro
         },
     },
 }
