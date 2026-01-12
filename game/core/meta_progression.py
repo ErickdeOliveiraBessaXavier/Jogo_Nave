@@ -970,8 +970,9 @@ class PlayerProfile:
                                 parsed.add(UpgradeType[name])
                             except Exception:
                                 continue
-                        # Se vazio, usar defaults
-                        self.unlocked_upgrades = parsed or set(DEFAULT_UNLOCKED)
+                        # Fazer merge com DEFAULT_UNLOCKED para adicionar novos upgrades
+                        # Isso garante que upgrades novos sejam automaticamente desbloqueados
+                        self.unlocked_upgrades = parsed.union(set(DEFAULT_UNLOCKED)) if parsed else set(DEFAULT_UNLOCKED)
                     else:
                         self.unlocked_upgrades = set(DEFAULT_UNLOCKED)
 

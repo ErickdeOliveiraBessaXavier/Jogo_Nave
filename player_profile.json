@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "profile_created": "2026-01-12T16:21:56.325642",
-  "last_played": "2026-01-12T17:01:16.383724",
+  "last_played": "2026-01-12T17:59:08.348862",
   "total_playtime": 182.944538,
   "highest_level_reached": 2,
   "total_deaths": 7,
@@ -9,7 +9,7 @@
   "level_stats": {
     "1": {
       "level_number": 1,
-      "attempts": 4,
+      "attempts": 5,
       "clears": 1,
       "deaths": 6,
       "total_time": 55.030808448791504,
@@ -62,7 +62,7 @@
         }
       ],
       "first_played": "2026-01-12T16:22:08.591442",
-      "last_played": "2026-01-12T17:01:16.383724",
+      "last_played": "2026-01-12T17:59:08.348862",
       "current_win_streak": 0,
       "best_win_streak": 1
     },
