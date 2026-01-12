@@ -178,7 +178,7 @@ class SquareMinionBoss:
             return
 
         # Desenhar partículas de trail primeiro (apenas em charging)
-        if self.state == "charging":
+        if self.state == "charging" and self.trail_particles:
             for p in self.trail_particles:
                 if p.alpha > 0:
                     # Cor vermelha/laranja com alpha
@@ -203,24 +203,28 @@ class SquareMinionBoss:
         color = (intensity, 0, 0)  # Red pulsating
         border_color = (255, 255, 255)
 
-        # Draw rotated square
-        center_x = self.x
-        center_y = self.y
+        # Pré-calcular valores para rotação (uma única vez)
         angle_rad = math.radians(self.rotation)
-
+        cos_angle = math.cos(angle_rad)
+        sin_angle = math.sin(angle_rad)
         half_size = self.size / 2
-        corners = [
+        
+        # Corners base (constantes)
+        base_corners = [
             (-half_size, -half_size),
             (half_size, -half_size),
             (half_size, half_size),
             (-half_size, half_size),
         ]
 
-        rotated_corners: list[tuple[float, float]] = []
-        for cx, cy in corners:
-            rx = cx * math.cos(angle_rad) - cy * math.sin(angle_rad)
-            ry = cx * math.sin(angle_rad) + cy * math.cos(angle_rad)
-            rotated_corners.append((center_x + rx, center_y + ry))
+        # Rotacionar corners usando list comprehension (mais rápido)
+        rotated_corners = [
+            (
+                self.x + cx * cos_angle - cy * sin_angle,
+                self.y + cx * sin_angle + cy * cos_angle
+            )
+            for cx, cy in base_corners
+        ]
 
         pygame.draw.polygon(surface, color, rotated_corners)
 
@@ -236,13 +240,13 @@ class SquareMinionBoss:
         """Desenha borda com efeito de quadradinhos deslizando (otimizado)."""
         # Padrão simples para otimização
         pattern = [1, 1, 0, 1, 0]
-        pattern_len = len(pattern)
+        pattern_len = 5
         
         # Tamanho do pixel baseado no tamanho do quadrado
         pixel_size = max(2, int(self.size / 8))
         half_pixel = pixel_size // 2
         
-        # Offset animado
+        # Offset animado (pré-calculado)
         anim_idx = int(self.border_anim_offset / pixel_size) % pattern_len
         
         # Desenhar cada aresta com padrão animado
@@ -253,22 +257,26 @@ class SquareMinionBoss:
             # Calcular direção e comprimento da aresta
             dx = end[0] - start[0]
             dy = end[1] - start[1]
-            length = math.sqrt(dx * dx + dy * dy)
+            length_sq = dx * dx + dy * dy
             
-            if length < 1:
+            if length_sq < 1:
                 continue
-                
-            # Normalizar direção
-            dx /= length
-            dy /= length
+            
+            length = math.sqrt(length_sq)
+            # Normalizar direção (uma única vez)
+            inv_length = 1.0 / length
+            dx *= inv_length
+            dy *= inv_length
             
             # Desenhar segmentos ao longo da aresta
             num_segments = max(1, int(length / pixel_size))
+            inv_segments = 1.0 / num_segments if num_segments > 0 else 0
+            
             for j in range(num_segments):
                 # Alternar visibilidade baseado no padrão animado
                 idx = (j + anim_idx + i * 2) % pattern_len
                 if pattern[idx]:
-                    t = j / num_segments
+                    t = j * inv_segments
                     px = int(start[0] + dx * length * t)
                     py = int(start[1] + dy * length * t)
                     # Desenhar quadrado ao invés de círculo

@@ -216,16 +216,18 @@ class Meteor:
             self.dead = True
 
     def _rotated_points(self) -> List[Tuple[int, int]]:
-        cr = math.cos(math.radians(self.rotation))
-        sr = math.sin(math.radians(self.rotation))
+        """Retorna pontos rotacionados (otimizado)."""
+        rad = math.radians(self.rotation)
+        cr = math.cos(rad)
+        sr = math.sin(rad)
         cx = self.x + self.w // 2
         cy = self.y + self.h // 2
-        out: List[Tuple[int, int]] = []
-        for px, py in self._base_points:
-            rx = px * cr - py * sr
-            ry = px * sr + py * cr
-            out.append((int(cx + rx), int(cy + ry)))
-        return out
+        
+        # List comprehension é mais rápido que loop com append
+        return [
+            (int(cx + px * cr - py * sr), int(cy + px * sr + py * cr))
+            for px, py in self._base_points
+        ]
 
     def draw(self, screen: pygame.Surface):
         points = self._rotated_points()
