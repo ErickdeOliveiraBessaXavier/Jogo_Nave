@@ -40,6 +40,13 @@ class AnimationConfig:
     TITLE_TOP_MARGIN = 20  # Margin from top of menu container to title
     BUTTONS_TOP_MARGIN = 200  # Margin from title bottom to first button
     TITLE_HEIGHT = 60  # Approximate height of title text
+    
+    # Animação de entrada
+    ENTRY_DURATION = 0.6  # Duração do fade-in up (segundos)
+    ENTRY_OFFSET_Y = 30  # Distância Y da animação de subida
+    TITLE_ENTRY_DELAY = 0.3  # Delay antes do título aparecer
+    BUTTON_ENTRY_DELAY = 0.6  # Delay antes do primeiro botão
+    BUTTON_STAGGER = 0.3  # Delay entre cada botão
 
 
 class AutoPlayConfig:
@@ -93,6 +100,10 @@ class Button:
         self.chars: List[CharDict] = []
         self.text_width = 0
         self._create_char_data()
+        
+        # Animação de entrada
+        self.entry_progress = 0.0  # 0.0 = não visível, 1.0 = completamente visível
+        self.entry_delay = 0.0  # Delay antes de começar a animar
 
     def _create_char_data(self):
         btn_char_renders = [self.font.render(char, True, BLACK) for char in self.text]
@@ -126,6 +137,15 @@ class Button:
         else:
             self.state = ButtonState.NORMAL
 
+    def update_entry(self, dt: float):
+        """Atualiza a animação de entrada do botão."""
+        if self.entry_delay > 0.0:
+            self.entry_delay -= dt
+            return
+        
+        if self.entry_progress < 1.0:
+            self.entry_progress = min(1.0, self.entry_progress + dt / AnimationConfig.ENTRY_DURATION)
+    
     def update_animation(
         self, time_ms: float, anim_speed: float, phase_shift: float, anim_range: float
     ):
@@ -146,11 +166,23 @@ class Button:
         border_color: tuple[int, int, int],
         scale_factor: float,
     ):
+        # Não renderizar se ainda não começou a animação
+        if self.entry_progress <= 0.0:
+            return
+        
+        # Calcular alpha e offset Y baseado no progresso
+        alpha = int(255 * self.entry_progress)
+        offset_y = int(AnimationConfig.ENTRY_OFFSET_Y * (1.0 - self.entry_progress))
+        
         text_color = (
             self.hover_color
             if self.state in (ButtonState.HOVERED, ButtonState.FOCUSED)
             else self.color
         )
+        
+        # Aplicar alpha nas cores
+        text_color = (text_color[0], text_color[1], text_color[2], alpha)
+        border_color_alpha = (border_color[0], border_color[1], border_color[2], alpha)
 
         if self.state == ButtonState.HOVERED:
             scaled_rect = pygame.Rect(
@@ -160,28 +192,41 @@ class Button:
                 int(self.rect.height * scale_factor),
             )
             scaled_rect.center = self.rect.center
+            scaled_rect.y += offset_y
 
             # Apenas borda, sem fundo
-            pygame.draw.rect(surface, border_color, scaled_rect, 2, border_radius=12)
+            # Criar surface temporária com alpha para a borda
+            temp_surface = pygame.Surface((scaled_rect.width + 4, scaled_rect.height + 4), pygame.SRCALPHA)
+            temp_rect = pygame.Rect(2, 2, scaled_rect.width, scaled_rect.height)
+            pygame.draw.rect(temp_surface, border_color_alpha, temp_rect, 2, border_radius=12)
+            surface.blit(temp_surface, (scaled_rect.x - 2, scaled_rect.y - 2))
 
             # Draw animated text
             start_x = scaled_rect.centerx - (self.text_width / 2)
             current_x = start_x
             for char_data in self.chars:
-                char_pos = (current_x, char_data["rect"].y)
+                char_pos = (current_x, char_data["rect"].y + offset_y)
                 # Usar texto com cor apropriada
                 text_char = self.text[self.chars.index(char_data)]
-                colored_char = self.font.render(text_char, True, text_color)
+                colored_char = self.font.render(text_char, True, text_color[:3])  # RGB sem alpha
+                colored_char.set_alpha(alpha)
                 surface.blit(colored_char, char_pos)
                 current_x += char_data["render"].get_width()
         else:
             # Apenas borda, sem fundo
-            pygame.draw.rect(surface, border_color, self.rect, 2, border_radius=10)
+            adjusted_rect = self.rect.copy()
+            adjusted_rect.y += offset_y
+            
+            # Criar surface temporária com alpha para a borda
+            temp_surface = pygame.Surface((adjusted_rect.width + 4, adjusted_rect.height + 4), pygame.SRCALPHA)
+            temp_rect = pygame.Rect(2, 2, adjusted_rect.width, adjusted_rect.height)
+            pygame.draw.rect(temp_surface, border_color_alpha, temp_rect, 2, border_radius=10)
+            surface.blit(temp_surface, (adjusted_rect.x - 2, adjusted_rect.y - 2))
 
-            text_rect = self.font.render(self.text, True, text_color).get_rect(
-                center=self.rect.center
-            )
-            surface.blit(self.font.render(self.text, True, text_color), text_rect)
+            text_surface = self.font.render(self.text, True, text_color[:3])  # RGB sem alpha
+            text_surface.set_alpha(alpha)
+            text_rect = text_surface.get_rect(center=adjusted_rect.center)
+            surface.blit(text_surface, text_rect)
 
 
 class AutoPlay:
@@ -282,6 +327,11 @@ class MainMenuScene(Scene):
 
         # Calculate actual menu bounds and center vertically
         self._center_menu_vertically()
+        
+        # Animação de entrada
+        self.entry_timer = 0.0
+        self.title_entry_progress = 0.0
+        self.is_entering = True
 
     def _center_menu_vertically(self):
         """Calculates the actual bounds of the menu and adjusts menu_y to center it vertically."""
@@ -399,6 +449,8 @@ class MainMenuScene(Scene):
                 buttons_y_start + i * AnimationConfig.BUTTON_SPACING + extra_spacing,
             )
             button = Button(text, rect, self.button_font, color, hover_color, action)
+            # Configurar delay de entrada (cada botão entra sequencialmente)
+            button.entry_delay = AnimationConfig.BUTTON_ENTRY_DELAY + (i * AnimationConfig.BUTTON_STAGGER)
             self.buttons.append(button)
 
     def _calculate_wave_offset(
@@ -422,6 +474,16 @@ class MainMenuScene(Scene):
         sound_manager.music_state_manager.transition_to(MusicState.MENU)
         # Resetar o auto-play ao entrar no menu
         self.auto_play.reset()
+        
+        # Resetar animação de entrada
+        self.entry_timer = 0.0
+        self.title_entry_progress = 0.0
+        self.is_entering = True
+        
+        # Resetar delays dos botões
+        for i, button in enumerate(self.buttons):
+            button.entry_progress = 0.0
+            button.entry_delay = AnimationConfig.BUTTON_ENTRY_DELAY + (i * AnimationConfig.BUTTON_STAGGER)
 
     def exit(self):
         """Called when exiting the scene."""
@@ -479,6 +541,24 @@ class MainMenuScene(Scene):
         self.r.starfield.update(dt)
         self.auto_play.update(dt)
         time_ms = pygame.time.get_ticks()
+        
+        # Atualizar animação de entrada
+        if self.is_entering:
+            self.entry_timer += dt
+            
+            # Atualizar progresso do título
+            if self.entry_timer >= AnimationConfig.TITLE_ENTRY_DELAY:
+                elapsed = self.entry_timer - AnimationConfig.TITLE_ENTRY_DELAY
+                self.title_entry_progress = min(1.0, elapsed / AnimationConfig.ENTRY_DURATION)
+            
+            # Atualizar progresso dos botões
+            for button in self.buttons:
+                button.update_entry(dt)
+            
+            # Verificar se animação terminou
+            all_buttons_visible = all(btn.entry_progress >= 1.0 for btn in self.buttons)
+            if self.title_entry_progress >= 1.0 and all_buttons_visible:
+                self.is_entering = False
 
         # Animate title
         for i, char_data in enumerate(self.title_chars):
@@ -505,6 +585,10 @@ class MainMenuScene(Scene):
         # Renderizar auto-play (meteoros e explosões) atrás do menu
         self.auto_play.render(surface)
 
+        # Calcular alpha e offset do título
+        title_alpha = int(255 * self.title_entry_progress)
+        title_offset_y = int(AnimationConfig.ENTRY_OFFSET_Y * (1.0 - self.title_entry_progress))
+        
         # Render title com efeito rainbow se easter egg ativado
         if self.auto_play.is_rainbow_mode():
             # Cores do arco-íris (HSV para RGB)
@@ -550,11 +634,16 @@ class MainMenuScene(Scene):
                 colored_char = self.font.render(
                     MenuStrings.TITLE[i], True, final_color
                 )
-                surface.blit(colored_char, char_data["rect"])
+                colored_char.set_alpha(title_alpha)
+                char_pos = (char_data["rect"].x, char_data["rect"].y + title_offset_y)
+                surface.blit(colored_char, char_pos)
         else:
             # Render normal (sem rainbow)
             for char_data in self.title_chars:
-                surface.blit(char_data["render"], char_data["rect"])
+                char_surface = char_data["render"].copy()
+                char_surface.set_alpha(title_alpha)
+                char_pos = (char_data["rect"].x, char_data["rect"].y + title_offset_y)
+                surface.blit(char_surface, char_pos)
 
         # Render buttons
         for button in self.buttons:

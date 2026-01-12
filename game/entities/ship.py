@@ -361,10 +361,16 @@ class Ship:
             
             # Se esta bola tem cargas, tentar disparar
             if self.orbital_laser_charges[i] > 0:
+                # Obter tamanho real do sprite para centralizar corretamente
+                if self.ship_image is not None:
+                    sprite_w, sprite_h = self.ship_image.get_size()
+                else:
+                    sprite_w, sprite_h = self.w, self.h
+                
                 # Calcular posição desta bola específica
                 angle = self.orbital_angle + (i * 2 * math.pi / self.num_orbital_balls)
-                ball_x = self.x + self.w / 2 + math.cos(angle) * self.orbital_radius
-                ball_y = self.y + self.h / 2 + math.sin(angle) * self.orbital_radius
+                ball_x = self.x + sprite_w / 2 + math.cos(angle) * self.orbital_radius
+                ball_y = self.y + sprite_h / 2 + math.sin(angle) * self.orbital_radius
 
                 # Encontrar inimigo mais próximo desta bola
                 nearest_enemy = self._find_nearest_enemy(ball_x, ball_y, entity_manager)
@@ -456,8 +462,7 @@ class Ship:
         for _ in range(PARTICLE_THRUSTER_COUNT):
             particle = ParticleDict(
                 x=self.x
-                + sprite_w / 2
-                - 2
+                + sprite_w / 2                
                 + random.uniform(-5, 5),  # Offset com variação para efeito natural
                 y=self.y + sprite_h,
                 vx=random.uniform(*PARTICLE_THRUSTER_VELOCITY_X),
@@ -534,11 +539,17 @@ class Ship:
         )
         is_low_ammo = is_explosive and self.explosive_shots_remaining <= 5
 
+        # Obter tamanho real do sprite (ou fallback para dimensões lógicas)
+        if self.ship_image is not None:
+            sprite_w, _ = self.ship_image.get_size()
+        else:
+            sprite_w = self.w
+
         # Offset de -3.5 para centralizar a bala no canhão da nave
         if self.double_shot_timer > 0:
             return [
                 (
-                    self.x + self.w * 0.2 - 3.5,
+                    self.x + sprite_w * 0.2 - 3.5,
                     self.y,
                     is_piercing,
                     is_homing,
@@ -546,7 +557,7 @@ class Ship:
                     is_low_ammo,
                 ),
                 (
-                    self.x + self.w * 0.8 - 3.5,
+                    self.x + sprite_w * 0.8 - 3.5,
                     self.y,
                     is_piercing,
                     is_homing,
@@ -557,7 +568,7 @@ class Ship:
         else:
             return [
                 (
-                    self.x + self.w / 2 - 3.5,
+                    self.x + sprite_w / 2 - 3.5,
                     self.y,
                     is_piercing,
                     is_homing,
@@ -617,6 +628,12 @@ class Ship:
         # Desenhar bolas elétricas orbitais
         if self.orbital_lasers_active:
             current_time = time.time()
+            
+            # Obter tamanho real do sprite para centralizar corretamente
+            if self.ship_image is not None:
+                sprite_w, sprite_h = self.ship_image.get_size()
+            else:
+                sprite_w, sprite_h = self.w, self.h
 
             # Desenhar cada bola orbital
             for i in range(self.num_orbital_balls):
@@ -651,10 +668,10 @@ class Ship:
                         shake_y = random.randint(-shake_intensity, shake_intensity)
                 
                 ball_x = int(
-                    self.x + self.w / 2 + math.cos(angle) * current_radius + shake_x
+                    self.x + sprite_w / 2 + math.cos(angle) * current_radius + shake_x
                 )
                 ball_y = int(
-                    self.y + self.h / 2 + math.sin(angle) * current_radius + shake_y
+                    self.y + sprite_h / 2 + math.sin(angle) * current_radius + shake_y
                 )
 
                 # Se está em fade (última carga usada), piscar e diminuir
