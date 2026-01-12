@@ -5,7 +5,6 @@ import time
 from typing import TYPE_CHECKING, Optional, cast, Any
 from ..core.state import Scene
 from ..core.config import config as Config, SlimeBossState
-from ..render.renderer import Renderer
 from ..entities.ship import Ship
 from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
 from ..systems.collisions import Collisions
@@ -40,7 +39,7 @@ class PlayingScene(Scene):
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
         self.last_dt = 1.0 / Config.FPS
-        self.r = Renderer()
+        self.r = app.renderer  # Usar renderer compartilhado
         self.ship = Ship(
             Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT + 100
         )  # Start 100 pixels below the screen

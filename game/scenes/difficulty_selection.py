@@ -1,5 +1,5 @@
 import pygame
-from typing import TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Dict, Any, Callable
 from ..core.state import Scene
 from ..core.colors import CUSTOM_GOLD, CUSTOM_DARK_BG, CUSTOM_PURPLE, BLACK, GREEN, YELLOW, ORANGE, RED
 from ..core.assets import get_font
@@ -11,11 +11,20 @@ if TYPE_CHECKING:
     from ..app import GameApp
 
 
-class DifficultySelectionScene(Scene):
-    """Cena para seleção de dificuldade antes de iniciar o jogo."""
+class DifficultySelectionView:
+    """View para seleção de dificuldade (pode ser usada dentro de outras cenas)."""
 
-    def __init__(self, app: "GameApp"):
-        super().__init__(app)
+    def __init__(self, on_select: Callable[[DifficultyPreset], None], on_back: Callable[[], None], renderer: Any = None):
+        """
+        Args:
+            on_select: Callback chamado quando uma dificuldade é selecionada
+            on_back: Callback chamado quando o usuário quer voltar
+            renderer: Renderer compartilhado (opcional)
+        """
+        self.on_select = on_select
+        self.on_back = on_back
+        self.renderer = renderer
+        
         self.title_font = get_font(48)
         self.button_font = get_font(20)
         self.desc_font = get_font(16)
@@ -31,6 +40,11 @@ class DifficultySelectionScene(Scene):
         self.difficulty_buttons: Dict[DifficultyPreset, Dict[str, Any]] = {}
         self.selected_difficulty: DifficultyPreset | None = None
         self.hovered_difficulty: DifficultyPreset | None = None
+        
+        # Animação de entrada
+        self.entry_progress = 0.0
+        self.is_entering = True
+        self.entry_duration = 0.4
 
         self.setup_ui()
 
@@ -87,17 +101,23 @@ class DifficultySelectionScene(Scene):
                 "lives_text": lives_text,
                 "color": self.difficulty_colors[preset],
             }
-
-    def enter(self):
-        pygame.mouse.set_visible(True)
+    
+    def reset(self):
+        """Reseta o estado da view para reiniciar animação."""
+        self.entry_progress = 0.0
+        self.is_entering = True
+        self.selected_difficulty = None
+        self.hovered_difficulty = None
 
     def handle_event(self, event: pygame.event.Event):
+        """Processa eventos da view."""
         if event.type == pygame.MOUSEBUTTONDOWN:
             for preset, button_data in self.difficulty_buttons.items():
                 if button_data["rect"].collidepoint(event.pos):
                     sound_manager.play_sound("button_click")
                     self.selected_difficulty = preset
-                    self.start_game()
+                    self.on_select(preset)
+                    return True  # Evento consumido
 
         elif event.type == pygame.MOUSEMOTION:
             prev_hovered = self.hovered_difficulty
@@ -113,18 +133,108 @@ class DifficultySelectionScene(Scene):
 
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                self.app.states.pop()  # Voltar ao menu
+                self.on_back()
+                return True  # Evento consumido
+        
+        return False  # Evento não consumido
 
-    def start_game(self):
+    def update(self, dt: float):
+        """Atualiza a lógica da view."""
+        if self.is_entering and self.entry_progress < 1.0:
+            self.entry_progress = min(1.0, self.entry_progress + dt / self.entry_duration)
+            if self.entry_progress >= 1.0:
+                self.is_entering = False
+
+    def render(self, surface: pygame.Surface):
+        """Renderiza a view."""
+        # Calcular alpha baseado no progresso
+        alpha = int(255 * self.entry_progress)
+        offset_y = int(30 * (1.0 - self.entry_progress))
+
+        # Título
+        title_surface = self.title_text.copy()
+        title_surface.set_alpha(alpha)
+        title_pos = (self.title_rect.x, self.title_rect.y + offset_y)
+        surface.blit(title_surface, title_pos)
+
+        # Botões de dificuldade
+        for preset, button_data in self.difficulty_buttons.items():
+            rect = button_data["rect"].copy()
+            rect.y += offset_y
+            color = button_data["color"]
+
+            # Efeito de hover
+            if preset == self.hovered_difficulty:
+                color = tuple(min(c + 40, 255) for c in color)
+
+            # Criar surface temporária para aplicar alpha
+            temp_surface = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+            
+            # Desenhar botão na surface temporária
+            pygame.draw.rect(temp_surface, (*color, alpha), temp_surface.get_rect(), border_radius=10)
+            pygame.draw.rect(temp_surface, (*CUSTOM_PURPLE, alpha), temp_surface.get_rect(), 3, border_radius=10)
+            
+            # Blit no surface principal
+            surface.blit(temp_surface, rect.topleft)
+
+            # Textos com alpha
+            name_surface = button_data["name_text"].copy()
+            name_surface.set_alpha(alpha)
+            name_rect = name_surface.get_rect(centerx=rect.centerx, top=rect.top + 10)
+            
+            desc_surface = button_data["desc_text"].copy()
+            desc_surface.set_alpha(alpha)
+            desc_rect = desc_surface.get_rect(centerx=rect.centerx, centery=rect.centery - 5)
+            
+            lives_surface = button_data["lives_text"].copy()
+            lives_surface.set_alpha(alpha)
+            lives_rect = lives_surface.get_rect(centerx=rect.centerx, bottom=rect.bottom - 10)
+
+            surface.blit(name_surface, name_rect)
+            surface.blit(desc_surface, desc_rect)
+            surface.blit(lives_surface, lives_rect)
+
+        # Instrução
+        hint_text = self.desc_font.render("ESC para voltar", True, CUSTOM_GOLD)
+        hint_surface = hint_text.copy()
+        hint_surface.set_alpha(alpha)
+        hint_rect = hint_surface.get_rect(
+            centerx=Config.SCREEN_WIDTH // 2, bottom=Config.SCREEN_HEIGHT - 30 + offset_y
+        )
+        surface.blit(hint_surface, hint_rect)
+
+
+class DifficultySelectionScene(Scene):
+    """Cena para seleção de dificuldade antes de iniciar o jogo (mantida para compatibilidade)."""
+
+    def __init__(self, app: "GameApp"):
+        super().__init__(app)
+        self.view = DifficultySelectionView(
+            on_select=self._on_difficulty_selected,
+            on_back=self._on_back
+        )
+
+    def _on_difficulty_selected(self, preset: DifficultyPreset):
+        """Callback quando uma dificuldade é selecionada."""
+        self.start_game(preset)
+
+    def _on_back(self):
+        """Callback quando o usuário quer voltar."""
+        self.app.states.pop()
+
+    def enter(self):
+        pygame.mouse.set_visible(True)
+        self.view.reset()
+
+    def handle_event(self, event: pygame.event.Event):
+        self.view.handle_event(event)
+
+    def start_game(self, preset: DifficultyPreset):
         """Inicia o jogo com a dificuldade selecionada."""
         from ..scenes.playing import PlayingScene
 
-        # Validar dificuldade selecionada
-        if self.selected_difficulty is None:
-            return  # Não deveria acontecer, mas previne erro
-
         # Armazenar dificuldade no app
-        self.app.selected_difficulty = self.selected_difficulty
+        self.app.selected_difficulty = preset
 
         # Criar e empurrar a cena de jogo
         self.app.states.pop()  # Remove difficulty selection
@@ -132,50 +242,13 @@ class DifficultySelectionScene(Scene):
             PlayingScene(
                 self.app,
                 self.app.level_manager,
-                difficulty_preset=self.selected_difficulty,
+                difficulty_preset=preset,
             )
         )
 
     def update(self, dt: float):
-        pass
+        self.view.update(dt)
 
     def render(self, surface: pygame.Surface):
         surface.fill(CUSTOM_DARK_BG)
-
-        # Título
-        surface.blit(self.title_text, self.title_rect)
-
-        # Botões de dificuldade (centralizados verticalmente)
-        for preset, button_data in self.difficulty_buttons.items():
-            rect = button_data["rect"]
-            color = button_data["color"]
-
-            # Efeito de hover
-            if preset == self.hovered_difficulty:
-                color = tuple(min(c + 40, 255) for c in color)
-
-            # Desenhar botão
-            pygame.draw.rect(surface, color, rect, border_radius=10)
-            pygame.draw.rect(surface, CUSTOM_PURPLE, rect, 3, border_radius=10)
-
-            # Textos - melhor alinhamento
-            name_rect = button_data["name_text"].get_rect(
-                centerx=rect.centerx, top=rect.top + 10
-            )
-            desc_rect = button_data["desc_text"].get_rect(
-                centerx=rect.centerx, centery=rect.centery - 5
-            )
-            lives_rect = button_data["lives_text"].get_rect(
-                centerx=rect.centerx, bottom=rect.bottom - 10
-            )
-
-            surface.blit(button_data["name_text"], name_rect)
-            surface.blit(button_data["desc_text"], desc_rect)
-            surface.blit(button_data["lives_text"], lives_rect)
-
-        # Instrução
-        hint_text = self.desc_font.render("ESC para voltar", True, CUSTOM_GOLD)
-        hint_rect = hint_text.get_rect(
-            centerx=Config.SCREEN_WIDTH // 2, bottom=Config.SCREEN_HEIGHT - 30
-        )
-        surface.blit(hint_text, hint_rect)
+        self.view.render(surface)

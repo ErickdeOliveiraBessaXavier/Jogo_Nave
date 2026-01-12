@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from ..core.state import Scene
 from ..core import colors
-from ..core.colors import CUSTOM_PURPLE, CUSTOM_GOLD, CUSTOM_DARK_BG
+from ..core.colors import CUSTOM_PURPLE, CUSTOM_GOLD, BLACK
 from ..core.assets import get_font, get_image, BASE_DIR
 from ..core.upgrades import (
     list_all_upgrades_meta,
@@ -15,7 +15,6 @@ from ..core.upgrades import (
     UpgradeMeta,
 )
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
-from ..render.renderer import Renderer
 from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_profile_path
 
@@ -52,7 +51,7 @@ class UpgradesSelectionScene(Scene):
 
     def __init__(self, app: "GameApp"):
         super().__init__(app)
-        self.r = Renderer()
+        self.r = app.renderer  # Usar renderer compartilhado
 
         # Fonts (consistentes com settings/statistics)
         self.title_font = get_font(40)
@@ -116,6 +115,17 @@ class UpgradesSelectionScene(Scene):
         # Layout
         self.layout = UILayout()
         self._calculate_layout()
+        
+        # Sistema de transição
+        self.transitioning = False
+        self.transition_progress = 0.0
+        self.transition_duration = 0.3
+        self.fade_out = False
+        
+        # Animação de entrada
+        self.entry_progress = 0.0
+        self.is_entering = True
+        self.entry_duration = 0.4
 
     def _calculate_layout(self):
         """Calcula as posições e tamanhos dos elementos da UI."""
@@ -220,6 +230,12 @@ class UpgradesSelectionScene(Scene):
         pygame.mouse.set_visible(True)
         self._calculate_layout()
         self._reset_selection()
+        
+        # Resetar animação de entrada
+        self.entry_progress = 0.0
+        self.is_entering = True
+        self.transitioning = False
+        self.fade_out = False
 
     def exit(self):
         self.player_profile.save()
@@ -369,13 +385,29 @@ class UpgradesSelectionScene(Scene):
 
     def _return_to_menu(self):
         """Retorna ao menu principal de forma segura."""
-        from .main_menu import MainMenuScene
-
-        # Usar switch para substituir toda a pilha pelo menu
-        self.app.states.switch(MainMenuScene(self.app))
+        # Iniciar transição de saída
+        self.fade_out = True
+        self.transitioning = True
+        self.transition_progress = 0.0
 
     def update(self, dt: float):
         self.r.starfield.update(dt)
+        
+        # Atualizar animação de entrada
+        if self.is_entering and self.entry_progress < 1.0:
+            self.entry_progress = min(1.0, self.entry_progress + dt / self.entry_duration)
+            if self.entry_progress >= 1.0:
+                self.is_entering = False
+        
+        # Atualizar transição de saída
+        if self.transitioning:
+            self.transition_progress += dt / self.transition_duration
+            
+            if self.transition_progress >= 1.0:
+                # Completou o fade out, voltar ao menu
+                from .main_menu import MainMenuScene
+                self.app.states.switch(MainMenuScene(self.app))
+                return
 
         # Limpar shake se o tempo expirou
         if self.shaking_slot is not None:
@@ -401,26 +433,55 @@ class UpgradesSelectionScene(Scene):
                     break
 
     def render(self, surface: pygame.Surface):
-        surface.fill(CUSTOM_DARK_BG)
+        surface.fill(BLACK)
         self.r.starfield.draw(surface)
+        
+        # Calcular alpha baseado nas transições
+        if self.transitioning:
+            alpha_mult = 1.0 - self.transition_progress if self.fade_out else self.transition_progress
+        elif self.is_entering:
+            alpha_mult = self.entry_progress
+        else:
+            alpha_mult = 1.0
+        
+        alpha = int(255 * alpha_mult)
+        offset_y = int(30 * (1.0 - alpha_mult))
 
         # Título
         title = self.title_font.render("Arsenal de Aprimoramentos", True, CUSTOM_GOLD)
-        surface.blit(title, (20, 20))
+        title.set_alpha(alpha)
+        surface.blit(title, (20, 20 + offset_y))
 
-        # Desenhar elementos
-        self._draw_tabs(surface)
-        self._draw_upgrade_grid(surface)
-        self._draw_active_slots(surface)
-        self._draw_back_button(surface)
+        # Criar surface temporária para aplicar alpha global
+        if alpha < 255:
+            temp_surface = pygame.Surface((surface.get_width(), surface.get_height()), pygame.SRCALPHA)
+            self._draw_tabs(temp_surface)
+            self._draw_upgrade_grid(temp_surface)
+            self._draw_active_slots(temp_surface)
+            self._draw_back_button(temp_surface)
+            
+            if self.dragging_upgrade:
+                self._draw_dragging_upgrade(temp_surface)
+            
+            if self.hovered_upgrade and not self.dragging_upgrade:
+                self._draw_tooltip(temp_surface)
+            
+            temp_surface.set_alpha(alpha)
+            surface.blit(temp_surface, (0, offset_y))
+        else:
+            # Desenhar elementos normalmente
+            self._draw_tabs(surface)
+            self._draw_upgrade_grid(surface)
+            self._draw_active_slots(surface)
+            self._draw_back_button(surface)
 
-        # Desenhar upgrade sendo arrastado (último para ficar por cima)
-        if self.dragging_upgrade:
-            self._draw_dragging_upgrade(surface)
+            # Desenhar upgrade sendo arrastado (último para ficar por cima)
+            if self.dragging_upgrade:
+                self._draw_dragging_upgrade(surface)
 
-        # Desenhar tooltip
-        if self.hovered_upgrade and not self.dragging_upgrade:
-            self._draw_tooltip(surface)
+            # Desenhar tooltip
+            if self.hovered_upgrade and not self.dragging_upgrade:
+                self._draw_tooltip(surface)
 
     def _draw_tabs(self, surface: pygame.Surface):
         """Desenha as abas de categorias."""

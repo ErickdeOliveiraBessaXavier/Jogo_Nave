@@ -57,6 +57,10 @@ class GameApp:
         self.level_manager = LevelManager(FIXED_LEVELS)
         self.input: Input = Input()
 
+        # Renderer compartilhado para manter starfield contínuo
+        from .render.renderer import Renderer
+        self.renderer = Renderer()
+
         # Dificuldade selecionada (padrão: normal)
         self.selected_difficulty = DifficultyPreset.NORMAL
 
