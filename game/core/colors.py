@@ -70,3 +70,13 @@ RAINBOW_COLORS = [
     (75, 0, 130),  # índigo
     (148, 0, 211),  # violeta
 ]
+
+# Cores das partículas do Black Hole (disco de acreção)
+BLACK_HOLE_PARTICLE_COLORS = [
+    (255, 107, 53),   # laranja
+    (247, 147, 30),   # laranja claro
+    (255, 215, 0),    # dourado
+    (255, 69, 0),     # vermelho alaranjado
+    (255, 140, 0),    # laranja escuro
+    (255, 170, 0),    # amarelo alaranjado
+]

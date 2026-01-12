@@ -49,12 +49,14 @@ class UpgradeContext(Protocol):
     - renderer/r: para efeitos visuais rápidos (opcional)
     - scene: referência opcional à cena PlayingScene (vidas, etc.)
     - dt: delta time, quando aplicável
+    - god_mode: flag booleana para ativar modo GOD (cooldowns reduzidos)
     """
 
     ship: Any
     entity_manager: Any
     difficulty_settings: Dict[str, Any]
     sound_manager: Any
+    god_mode: bool
     # Campos opcionais; usamos getattr com fallback
 
 
@@ -171,6 +173,10 @@ class ActiveUpgrade:
     def get_effective_cooldown(self, ctx: Optional[UpgradeContext]) -> float:
         cd = self.meta.base_cooldown
         try:
+            # Modo GOD: cooldown de apenas 1 segundo
+            if ctx and hasattr(ctx, "god_mode") and ctx.god_mode:
+                return 1.0
+            
             if ctx and hasattr(ctx, "difficulty_settings"):
                 rules: Any = ctx.difficulty_settings.get("special_rules", [])
                 if "no_powerups" in rules:

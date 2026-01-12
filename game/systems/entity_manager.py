@@ -460,21 +460,15 @@ class EntityManager:
             black_hole.update(dt)
             if black_hole.dead:
                 self.black_holes.remove(black_hole)
-                continue
 
-            # Aplicar gravidade a todos os inimigos
-            for enemy in self._cached_all_enemies[:]:
-                if getattr(enemy, 'dead', False):
-                    continue
-                
-                should_destroy = black_hole.apply_gravity_to_enemy(enemy, enemy_dt)
-                if should_destroy:
-                    # Destruir inimigo
-                    enemy.dead = True
-                    # Spawnar explosão
-                    enemy_x = getattr(enemy, 'x', 0) + getattr(enemy, 'w', 0) / 2
-                    enemy_y = getattr(enemy, 'y', 0) + getattr(enemy, 'h', 0) / 2
-                    self.spawn_explosion(enemy_x, enemy_y, size=30)
+        # Aplicar gravidade dos black holes
+        # Cada black hole processa todos os inimigos de uma vez (mais eficiente)
+        for black_hole in self.black_holes:
+            black_hole.process_all_enemies(
+                self._cached_all_enemies, 
+                enemy_dt,
+                spawn_explosion_callback=self.spawn_explosion
+            )
 
         # CRÍTICO: Cleanup ANTES de rebuild
         self.cleanup()

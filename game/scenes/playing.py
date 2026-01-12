@@ -506,6 +506,8 @@ class PlayingScene(Scene):
 
                 if self.god_mode:
                     print("🛡️ GOD MODE ATIVADO - Invulnerabilidade ligada!")
+                    # Reduzir cooldowns ativos para 1 segundo quando god_mode é ativado
+                    self._apply_god_mode_cooldowns()
                     if hasattr(sound_manager, "play_powerup"):
                         sound_manager.play_powerup()  # type: ignore
                 else:
@@ -1448,6 +1450,7 @@ class PlayingScene(Scene):
                 "difficulty_settings": self.difficulty_settings,
                 "sound_manager": sound_manager,
                 "scene": self,
+                "god_mode": self.god_mode,  # Adicionar god_mode ao contexto
             },
         )()
         return ctx
@@ -1469,6 +1472,15 @@ class PlayingScene(Scene):
         for upg in self.upgrade_slots:
             if upg is not None and upg.cooldown_left > 0:
                 upg.cooldown_left = max(0.0, upg.cooldown_left - reduction)
+
+    def _apply_god_mode_cooldowns(self):
+        """Reduz todos os cooldowns ativos para 1 segundo quando god_mode é ativado."""
+        if not self.upgrade_slots:
+            return
+        for upg in self.upgrade_slots:
+            if upg is not None and upg.cooldown_left > 0:
+                # Reduzir cooldown para 1 segundo (ou manter se já for menor)
+                upg.cooldown_left = min(upg.cooldown_left, 1.0)
 
     def _activate_upgrade_slot(self, idx: int):
         if idx < 0 or idx >= len(self.upgrade_slots):

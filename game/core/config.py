@@ -281,6 +281,21 @@ class Config:
     BOSS_FRENZY_AIM_BLINK_ON_DURATION: int = 100
 
     # ========================================
+    # BLACK HOLE SYSTEM
+    # ========================================
+    # Movement and physics
+    BLACK_HOLE_SPEED_Y: float = -50.0
+    BLACK_HOLE_INITIAL_CORE_RADIUS: float = 10.0
+    BLACK_HOLE_MAX_CORE_RADIUS: float = 60.0
+    BLACK_HOLE_GROWTH_RATE: float = 15.0
+    BLACK_HOLE_PARTICLE_COUNT: int = 90  # Otimizado para performance
+    BLACK_HOLE_PULL_SPEED: float = 300.0
+
+    # Radii
+    BLACK_HOLE_INITIAL_PULL_RADIUS: float = 250.0
+    BLACK_HOLE_MAX_PULL_RADIUS: float = 800.0
+
+    # ========================================
     # SPIKE BOSS SYSTEM
     # ========================================
     # Basic stats

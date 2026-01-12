@@ -579,7 +579,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         level_number=1,
         enemy_spawn_config={
             Meteor: 0.6,
-            # SquareMinionBoss: 1.0,  # Spawn lento para tutorial
+            SquareMinionBoss: 15.0,  # Spawn lento para tutorial
             # Alien: 2.5,
             # EyeEnemy: 5.0,
         },
@@ -598,6 +598,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         enemy_spawn_config={
             Meteor: 0.5,
             Alien: 2.5,
+            SquareMinionBoss: 15.0,            
         },
         enemies_to_clear=300,
         boss_type=Boss,
