@@ -6,14 +6,17 @@ Simulates health reduction to test state transitions.
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pygame
+
 pygame.init()
 pygame.display.set_mode((1, 1))  # Minimal display for image loading
 
 from game.entities.slime_boss import SlimeBoss
 from game.core.config import config as Config, SlimeBossState
+
 
 def test_transitions():
     """Test SlimeBoss state transitions by simulating health reduction."""
@@ -38,7 +41,15 @@ def test_transitions():
     target_health = boss.max_health * 0.75
     boss.health = target_health
     boss.update(0.1, 400.0, 300.0)  # Update to trigger transition check
-    print("Health:", boss.health, "/", boss.max_health, "(", boss.health/boss.max_health*100, "%)")
+    print(
+        "Health:",
+        boss.health,
+        "/",
+        boss.max_health,
+        "(",
+        boss.health / boss.max_health * 100,
+        "%)",
+    )
     print("State:", boss.current_state)
     print()
 
@@ -77,7 +88,15 @@ def test_transitions():
     target_health = boss.max_health * 0.20
     boss.health = target_health
     boss.update(0.1, 400.0, 300.0)
-    print("Health:", boss.health, "/", boss.max_health, "(", boss.health/boss.max_health*100, "%)")
+    print(
+        "Health:",
+        boss.health,
+        "/",
+        boss.max_health,
+        "(",
+        boss.health / boss.max_health * 100,
+        "%)",
+    )
     print("State:", boss.current_state)
     print()
 
@@ -119,6 +138,7 @@ def test_transitions():
     print()
 
     print("Test completed!")
+
 
 if __name__ == "__main__":
     test_transitions()

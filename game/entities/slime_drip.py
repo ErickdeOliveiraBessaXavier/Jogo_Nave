@@ -160,7 +160,9 @@ class SlimeDrip:
 
         # Sistema de slow (lentidão) causado por balas
         self.slow_timer: float = 0.0  # Tempo restante de slow em segundos
-        self.slow_factor: float = 1.0  # Fator de multiplicação da velocidade (1.0 = normal, 0.0 = parado)
+        self.slow_factor: float = (
+            1.0  # Fator de multiplicação da velocidade (1.0 = normal, 0.0 = parado)
+        )
 
     def reset(self, x: float, y: float, effect_width: int, effect_height: int) -> None:
         """Reseta a gota para reutilização no pool."""
@@ -205,24 +207,26 @@ class SlimeDrip:
         if self.is_homing:
             # Timer para homing
             self.homing_timer += dt
-            
+
             # Verificar se deve destravar (por tempo ou distância)
             if not self.homing_locked:
                 distance_to_target = math.sqrt(
                     (self.target_x - self.x) ** 2 + (self.target_y - self.y) ** 2
                 )
-                
+
                 # Destravar se chegou perto OU se passou do tempo limite
-                if (distance_to_target <= Config.SLIME_DRIP_HOMING_DISENGAGE_DISTANCE or 
-                    self.homing_timer > Config.SLIME_DRIP_HOMING_DISENGAGE_TIME):
+                if (
+                    distance_to_target <= Config.SLIME_DRIP_HOMING_DISENGAGE_DISTANCE
+                    or self.homing_timer > Config.SLIME_DRIP_HOMING_DISENGAGE_TIME
+                ):
                     self.homing_locked = True  # Trava a direção atual
-            
+
             # Verificar timeout total
             if self.homing_timer > Config.SLIME_DRIP_HOMING_MAX_DURATION:
                 self.dead = True
                 self.active = False
                 return
-            
+
             # Se não travou ainda, continua perseguindo
             if not self.homing_locked:
                 self._update_guidance(dt)
@@ -330,27 +334,41 @@ class SlimeDrip:
             desired_dy = dy / distance
 
             # Acelerar em direção ao alvo
-            current_speed = math.sqrt(self.speed_x * self.speed_x + self.speed_y * self.speed_y)
+            current_speed = math.sqrt(
+                self.speed_x * self.speed_x + self.speed_y * self.speed_y
+            )
             target_speed = min(current_speed + self.acceleration * dt, self.max_speed)
 
             # Aplicar nova velocidade com inércia/suavização
-            blend_factor = Config.SLIME_DRIP_HOMING_BLEND_FACTOR  # Quanto menor, mais suave (limita ângulo de rotação)
-            self.speed_x = self.speed_x * (1 - blend_factor) + desired_dx * target_speed * blend_factor
-            self.speed_y = self.speed_y * (1 - blend_factor) + desired_dy * target_speed * blend_factor
+            blend_factor = (
+                Config.SLIME_DRIP_HOMING_BLEND_FACTOR
+            )  # Quanto menor, mais suave (limita ângulo de rotação)
+            self.speed_x = (
+                self.speed_x * (1 - blend_factor)
+                + desired_dx * target_speed * blend_factor
+            )
+            self.speed_y = (
+                self.speed_y * (1 - blend_factor)
+                + desired_dy * target_speed * blend_factor
+            )
 
-    def apply_slow(self, slow_duration: float = 0.5, max_slow_duration: float = 2.0) -> None:
+    def apply_slow(
+        self, slow_duration: float = 0.5, max_slow_duration: float = 2.0
+    ) -> None:
         """Aplica slow (lentidão) à gota quando atingida por uma bala.
-        
+
         Args:
             slow_duration: Duração do slow em segundos (padrão 0.5s)
             max_slow_duration: Duração máxima acumulada de slow (padrão 2.0s)
         """
         # Acumular slow, mas limitar ao máximo
         self.slow_timer = min(self.slow_timer + slow_duration, max_slow_duration)
-        
+
         # Calcular factor de slow baseado no tempo restante
         # Slow começa em 0.3 (30% da velocidade) e vai voltando para 1.0
-        self.slow_factor = 0.3 + (0.7 * (1.0 - min(self.slow_timer / max_slow_duration, 1.0)))
+        self.slow_factor = 0.3 + (
+            0.7 * (1.0 - min(self.slow_timer / max_slow_duration, 1.0))
+        )
 
     def get_bounds(self) -> Tuple[float, float, float, float]:
         """Retorna bounds (x, y, w, h) para spatial grid."""
@@ -388,7 +406,9 @@ class SlimeDripPool:
 
         # Sistema de partículas órfãs (partículas que sobreviveram à gota principal)
         self.orphan_particles: List[SlimeDripParticle] = []
-        self.max_orphan_particles: int = Config.SLIME_DRIP_MAX_ORPHAN_PARTICLES  # Limitar para performance
+        self.max_orphan_particles: int = (
+            Config.SLIME_DRIP_MAX_ORPHAN_PARTICLES
+        )  # Limitar para performance
 
     def get(
         self, x: float, y: float, effect_width: int, effect_height: int
@@ -666,11 +686,10 @@ class SlimeDrippingEffect:
         "spawn_enabled",
         "target_update_timer",
         "target_update_interval",
-        
         # NOVO: Sistema dual
-        "dual_mode",              # Flag para modo dual
-        "homing_spawn_timer",     # Timer separado para homing
-        "max_homing_drips",       # Máximo de homing no dual
+        "dual_mode",  # Flag para modo dual
+        "homing_spawn_timer",  # Timer separado para homing
+        "max_homing_drips",  # Máximo de homing no dual
         "homing_spawn_interval_dual",  # Intervalo homing no dual
     )
 
@@ -705,7 +724,9 @@ class SlimeDrippingEffect:
 
         # Target update delay
         self.target_update_timer = 0.0
-        self.target_update_interval = Config.SLIME_DRIP_HOMING_TARGET_UPDATE_INTERVAL  # Atualizar target a cada intervalo
+        self.target_update_interval = (
+            Config.SLIME_DRIP_HOMING_TARGET_UPDATE_INTERVAL
+        )  # Atualizar target a cada intervalo
 
         # NOVO: Sistema dual
         self.dual_mode = False
@@ -745,27 +766,39 @@ class SlimeDrippingEffect:
         if self.dual_mode:
             # 1. Spawnar drips normais (do boss)
             self.spawn_timer += dt
-            if (self.spawn_timer >= self.spawn_interval and 
-                self._count_normal_drips() < self.max_drips):
+            if (
+                self.spawn_timer >= self.spawn_interval
+                and self._count_normal_drips() < self.max_drips
+            ):
                 self.spawn_timer = 0.0
                 self._spawn_normal_drip(boss_x, boss_y, boss_width, entity_manager)
-            
+
             # 2. Spawnar drips homing (do topo)
             self.homing_spawn_timer += dt
-            if (self.homing_spawn_timer >= self.homing_spawn_interval_dual and 
-                self._count_homing_drips() < self.max_homing_drips):
+            if (
+                self.homing_spawn_timer >= self.homing_spawn_interval_dual
+                and self._count_homing_drips() < self.max_homing_drips
+            ):
                 self.homing_spawn_timer = 0.0
                 self._spawn_homing_drip(player_x, player_y, entity_manager)
-        
+
         # MODO NORMAL/HOMING: Comportamento atual
         else:
             self.spawn_timer += dt
-            if (self.spawn_timer >= self.spawn_interval and 
-                self.drip_pool.get_active_count() < self.max_drips):
+            if (
+                self.spawn_timer >= self.spawn_interval
+                and self.drip_pool.get_active_count() < self.max_drips
+            ):
                 self.spawn_timer = 0.0
                 self._spawn_drip(boss_x, boss_y, boss_width, entity_manager)
 
-    def _spawn_drip(self, boss_x: float, boss_y: float, boss_width: int, entity_manager: Optional["EntityManager"] = None) -> None:
+    def _spawn_drip(
+        self,
+        boss_x: float,
+        boss_y: float,
+        boss_width: int,
+        entity_manager: Optional["EntityManager"] = None,
+    ) -> None:
         """Spawna uma gota aleatoriamente acima do boss ou no topo se homing."""
         if self.homing_mode:
             x = random.uniform(0, self.effect_width)
@@ -798,7 +831,13 @@ class SlimeDrippingEffect:
         """Conta quantas gotas homing estão ativas."""
         return sum(1 for drip in self.drip_pool.active if drip.is_homing)
 
-    def _spawn_normal_drip(self, boss_x: float, boss_y: float, boss_width: int, entity_manager: Optional["EntityManager"] = None) -> None:
+    def _spawn_normal_drip(
+        self,
+        boss_x: float,
+        boss_y: float,
+        boss_width: int,
+        entity_manager: Optional["EntityManager"] = None,
+    ) -> None:
         """Spawna uma gota normal (caindo do boss)."""
         x = boss_x + random.uniform(0, boss_width)
         y = boss_y + Config.SLIME_DRIP_BOSS_SPAWN_Y_OFFSET
@@ -810,22 +849,26 @@ class SlimeDrippingEffect:
         if entity_manager is not None:
             entity_manager.slime_drips.append(drip)
 
-    def _spawn_homing_drip(self, player_x: float, player_y: float, entity_manager: Optional["EntityManager"] = None) -> None:
+    def _spawn_homing_drip(
+        self,
+        player_x: float,
+        player_y: float,
+        entity_manager: Optional["EntityManager"] = None,
+    ) -> None:
         """Spawna uma gota homing (do topo)."""
         x = random.uniform(0, self.effect_width)
         y = Config.SLIME_DRIP_HOMING_SPAWN_Y_OFFSET
         drip = self.drip_pool.get(x, y, self.effect_width, self.effect_height)
-        
+
         # Configurar homing
         drip.is_homing = True
         offset = Config.SLIME_DRIP_HOMING_AIM_OFFSET
         drip.target_x = player_x + random.uniform(-offset, offset)
         drip.target_y = player_y + random.uniform(-offset, offset)
-        
+
         # Tamanho pequeno para homing
         drip.params.scale = random.uniform(
-            Config.SLIME_DRIP_HOMING_SCALE_MIN, 
-            Config.SLIME_DRIP_HOMING_SCALE_MAX
+            Config.SLIME_DRIP_HOMING_SCALE_MIN, Config.SLIME_DRIP_HOMING_SCALE_MAX
         )
         drip.params.radius = Config.SLIME_DRIP_RADIUS_MAX * drip.params.scale
         drip.params.damage = max(1, int(drip.params.scale * 2))
@@ -836,25 +879,25 @@ class SlimeDrippingEffect:
             entity_manager.slime_drips.append(drip)
 
     def set_dual_mode(
-        self, 
-        enabled: bool, 
-        max_normal: int, 
+        self,
+        enabled: bool,
+        max_normal: int,
         normal_interval: float,
-        max_homing: int, 
+        max_homing: int,
         homing_interval: float,
-        target_x: float, 
-        target_y: float
+        target_x: float,
+        target_y: float,
     ) -> None:
         """Configura modo dual (drips normais + homing simultâneos)."""
         self.dual_mode = enabled
-        
+
         if enabled:
             # Configurar limites separados
             self.max_drips = max_normal
             self.spawn_interval = normal_interval
             self.max_homing_drips = max_homing
             self.homing_spawn_interval_dual = homing_interval
-            
+
             # Homing sempre ativo no dual
             self.homing_mode = True
             self.homing_target_x = target_x
@@ -878,7 +921,7 @@ class SlimeDrippingEffect:
         self.homing_mode = enabled
         self.homing_target_x = target_x
         self.homing_target_y = target_y
-        
+
         # Atualizar parâmetros de spawn baseado no modo
         if enabled:
             self.max_drips = Config.SLIME_DRIP_HOMING_MAX_ACTIVE

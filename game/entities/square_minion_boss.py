@@ -8,8 +8,9 @@ from typing import List
 
 class TrailParticle:
     """Partícula simples para efeito de cauda - otimizada."""
-    __slots__ = ('x', 'y', 'size', 'life', 'alpha')
-    
+
+    __slots__ = ("x", "y", "size", "life", "alpha")
+
     def __init__(self, x: float, y: float, size: float):
         self.x = x
         self.y = y
@@ -79,7 +80,9 @@ class SquareMinionBoss:
 
         # Animation
         self.animation_timer = 0.0
-        self.animation_offset = random.uniform(0, 10)  # Offset aleatório para dessincronizar
+        self.animation_offset = random.uniform(
+            0, 10
+        )  # Offset aleatório para dessincronizar
         self.rotation = 0.0
         self.visible = True  # For blinking effect
 
@@ -131,19 +134,17 @@ class SquareMinionBoss:
                     offset_x = random.uniform(-self.size * 0.3, self.size * 0.3)
                     offset_y = random.uniform(-self.size * 0.3, self.size * 0.3)
                     particle = TrailParticle(
-                        self.x + offset_x,
-                        self.y + offset_y,
-                        self.size * 0.4
+                        self.x + offset_x, self.y + offset_y, self.size * 0.4
                     )
                     self.trail_particles.append(particle)
-            
+
             # Atualizar partículas existentes
             decay_rate = 2.0
             for p in self.trail_particles:
                 p.life -= dt * decay_rate
                 p.alpha = int(255 * max(0, p.life))
                 p.size *= 0.97
-            
+
             # Remover partículas mortas
             self.trail_particles = [p for p in self.trail_particles if p.life > 0]
         else:
@@ -197,9 +198,7 @@ class SquareMinionBoss:
 
         # Color: Red for enemy
         anim_value = (self.animation_timer + self.animation_offset) * 57.3
-        intensity = int(
-            128 + 127 * abs(pygame.math.Vector2(1, 0).rotate(anim_value).x)
-        )
+        intensity = int(128 + 127 * abs(pygame.math.Vector2(1, 0).rotate(anim_value).x))
         color = (intensity, 0, 0)  # Red pulsating
         border_color = (255, 255, 255)
 
@@ -208,7 +207,7 @@ class SquareMinionBoss:
         cos_angle = math.cos(angle_rad)
         sin_angle = math.sin(angle_rad)
         half_size = self.size / 2
-        
+
         # Corners base (constantes)
         base_corners = [
             (-half_size, -half_size),
@@ -221,7 +220,7 @@ class SquareMinionBoss:
         rotated_corners = [
             (
                 self.x + cx * cos_angle - cy * sin_angle,
-                self.y + cx * sin_angle + cy * cos_angle
+                self.y + cx * sin_angle + cy * cos_angle,
             )
             for cx, cy in base_corners
         ]
@@ -241,37 +240,37 @@ class SquareMinionBoss:
         # Padrão simples para otimização
         pattern = [1, 1, 0, 1, 0]
         pattern_len = 5
-        
+
         # Tamanho do pixel baseado no tamanho do quadrado
         pixel_size = max(2, int(self.size / 8))
         half_pixel = pixel_size // 2
-        
+
         # Offset animado (pré-calculado)
         anim_idx = int(self.border_anim_offset / pixel_size) % pattern_len
-        
+
         # Desenhar cada aresta com padrão animado
         for i in range(4):
             start = corners[i]
             end = corners[(i + 1) % 4]
-            
+
             # Calcular direção e comprimento da aresta
             dx = end[0] - start[0]
             dy = end[1] - start[1]
             length_sq = dx * dx + dy * dy
-            
+
             if length_sq < 1:
                 continue
-            
+
             length = math.sqrt(length_sq)
             # Normalizar direção (uma única vez)
             inv_length = 1.0 / length
             dx *= inv_length
             dy *= inv_length
-            
+
             # Desenhar segmentos ao longo da aresta
             num_segments = max(1, int(length / pixel_size))
             inv_segments = 1.0 / num_segments if num_segments > 0 else 0
-            
+
             for j in range(num_segments):
                 # Alternar visibilidade baseado no padrão animado
                 idx = (j + anim_idx + i * 2) % pattern_len

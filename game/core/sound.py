@@ -75,7 +75,12 @@ class MusicStateManager:
     def _should_block_transition(self, new_state: MusicState) -> bool:
         if not MUSIC_BEHAVIOR_CONFIG["prevent_menu_over_game"]:
             return False
-        game_music_types = [MusicState.GAME, MusicState.BOSS, MusicState.SPIKE_BOSS, MusicState.SLIME_BOSS]
+        game_music_types = [
+            MusicState.GAME,
+            MusicState.BOSS,
+            MusicState.SPIKE_BOSS,
+            MusicState.SLIME_BOSS,
+        ]
 
         is_game_music_active = self.current_state in game_music_types or (
             self.sound_manager.music_paused and self.previous_state in game_music_types

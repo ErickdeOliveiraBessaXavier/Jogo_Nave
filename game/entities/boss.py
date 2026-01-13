@@ -391,9 +391,7 @@ class Boss:
             target_x = face_x + face_normal.x * self.LASER_DISTANCE
             target_y = face_y + face_normal.y * self.LASER_DISTANCE
 
-            return [
-                BossLaser(face_x, face_y, target_x, target_y, lifetime=lifetime)
-            ]
+            return [BossLaser(face_x, face_y, target_x, target_y, lifetime=lifetime)]
 
     def _create_frenzy_lasers(
         self, face_x: float, face_y: float, lifetime: float
@@ -837,9 +835,11 @@ class Boss:
         # Atualizar animação da linha de mira (acelera gradualmente com o progresso)
         if self.state in ("aiming", "charging", "converging", "preparing_to_fire"):
             # Interpolar velocidade baseado no charge_progress
-            current_speed = self.aim_anim_base_speed + (
-                self.aim_anim_charge_speed - self.aim_anim_base_speed
-            ) * self.charge_progress
+            current_speed = (
+                self.aim_anim_base_speed
+                + (self.aim_anim_charge_speed - self.aim_anim_base_speed)
+                * self.charge_progress
+            )
             self.aim_anim_offset += dt * current_speed
         else:
             # Velocidade base quando não está carregando
@@ -868,8 +868,8 @@ class Boss:
         else:
             # Modo normal: desenhar linha única
             self._draw_single_aiming_line(
-                    surface, face_x, face_y, face_normal, time_based_offset
-                )
+                surface, face_x, face_y, face_normal, time_based_offset
+            )
 
     def _draw_single_aiming_line(
         self,

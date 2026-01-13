@@ -90,6 +90,7 @@ class PausedScene(Scene):
 
                 # Voltar ao menu principal usando switch
                 from .main_menu import MainMenuScene
+
                 self.app.states.switch(MainMenuScene(self.app))
 
         elif event.type == pygame.MOUSEMOTION:

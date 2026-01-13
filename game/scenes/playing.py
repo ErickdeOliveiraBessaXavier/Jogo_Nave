@@ -256,8 +256,8 @@ class PlayingScene(Scene):
 
         boss = cast(Any, self.entity_manager.boss)
         if boss and (
-            getattr(boss, 'state', None) == "entering" or
-            getattr(boss, 'current_state', None) == SlimeBossState.ENTERING
+            getattr(boss, "state", None) == "entering"
+            or getattr(boss, "current_state", None) == SlimeBossState.ENTERING
         ):
             self.screen_shake_timer = 0.1  # Keep shaking while boss is entering
         else:
@@ -1396,7 +1396,12 @@ class PlayingScene(Scene):
             if boss_active:
                 speed_multiplier = Config.BOSS_WARP_SPEED_MULTIPLIER
 
-        self.r.background(self.game_surface, dt=dt, speed_multiplier=speed_multiplier, draw_celestials=not boss_active)
+        self.r.background(
+            self.game_surface,
+            dt=dt,
+            speed_multiplier=speed_multiplier,
+            draw_celestials=not boss_active,
+        )
 
         fps_stats = self.r.get_fps_stats()
         self.entity_manager.draw(

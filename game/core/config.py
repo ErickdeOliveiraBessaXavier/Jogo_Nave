@@ -2,6 +2,7 @@ from enum import Enum, auto
 from dataclasses import dataclass, field
 from typing import Tuple, Any
 
+
 class SlimeBossState(Enum):
     ENTERING = auto()
     STAGE_1_NORMAL = auto()
@@ -12,10 +13,12 @@ class SlimeBossState(Enum):
     STAGE_4_HOMING = auto()
     STAGE_5_FINAL = auto()
 
+
 class SlimeDripMode(Enum):
-    NORMAL = auto()      # Apenas drips normais
-    HOMING = auto()      # Apenas drips homing
-    DUAL = auto()        # Ambos simultaneamente
+    NORMAL = auto()  # Apenas drips normais
+    HOMING = auto()  # Apenas drips homing
+    DUAL = auto()  # Ambos simultaneamente
+
 
 @dataclass
 class StageConfig:
@@ -24,7 +27,7 @@ class StageConfig:
     duration: float | None
     is_homing: bool
     target_y: float
-    
+
     # NOVO: Controles para modo dual
     drip_mode: SlimeDripMode = SlimeDripMode.NORMAL
     max_homing_drips: int = 0  # Máximo de homing quando dual
@@ -93,7 +96,9 @@ class Config:
     ALIEN_DEATH_MARGIN: int = 100  # Margem de segurança para considerar morto
     ALIEN_POINTS_VALUE: int = 150  # Pontos por destruir
     ALIEN_SHOOT_PAUSE_DURATION: float = 0.5  # Tempo que fica parado antes de atirar
-    ALIEN_POST_SHOOT_COOLDOWN: float = 0.5  # Tempo para esperar após disparar antes de mover
+    ALIEN_POST_SHOOT_COOLDOWN: float = (
+        0.5  # Tempo para esperar após disparar antes de mover
+    )
     ALIEN_SHOOT_INTERVAL_MIN: float = 1.0  # Intervalo mínimo entre tiros
     ALIEN_SHOOT_INTERVAL_MAX: float = 4.0  # Intervalo máximo entre tiros
     ALIEN_SHOOT_BURST_CHANCE: float = 0.3  # Chance de disparo em rajada (30%)
@@ -365,28 +370,28 @@ class Config:
                 spawn_interval=0.5,  # SLIME_DRIP_SPAWN_INTERVAL
                 duration=None,
                 is_homing=False,
-                target_y=-40
+                target_y=-40,
             ),
             SlimeBossState.STAGE_2_HOMING: StageConfig(
                 max_drips=18,  # SLIME_DRIP_HOMING_MAX_ACTIVE
                 spawn_interval=0.4,  # SLIME_DRIP_HOMING_SPAWN_INTERVAL
                 duration=15.0,
                 is_homing=True,
-                target_y=-40
+                target_y=-40,
             ),
             SlimeBossState.STAGE_3_NORMAL: StageConfig(
                 max_drips=int(15 * 2.5),  # SLIME_DRIP_MAX_ACTIVE * 2.5
                 spawn_interval=0.4 * 0.8,  # SLIME_DRIP_SPAWN_INTERVAL * 0.8
                 duration=None,
                 is_homing=False,
-                target_y=-40
+                target_y=-40,
             ),
             SlimeBossState.STAGE_4_HOMING: StageConfig(
                 max_drips=20,  # SLIME_DRIP_HOMING_MAX_ACTIVE
                 spawn_interval=0.3,  # SLIME_DRIP_HOMING_SPAWN_INTERVAL
                 duration=20.0,
                 is_homing=True,
-                target_y=-30
+                target_y=-30,
             ),
             SlimeBossState.STAGE_5_FINAL: StageConfig(
                 # Drips normais (caindo do boss)
@@ -395,7 +400,6 @@ class Config:
                 duration=None,
                 is_homing=False,  # Legado
                 target_y=-40,
-                
                 # NOVO: Modo dual ativo
                 drip_mode=SlimeDripMode.DUAL,
                 max_homing_drips=8,  # Quantidade moderada de homing
@@ -449,7 +453,9 @@ class Config:
     # Homing system
     SLIME_DRIP_HOMING_MAX_SPEED: float = 180.0
     SLIME_DRIP_HOMING_ACCELERATION: float = 150.0
-    SLIME_DRIP_HOMING_BLEND_FACTOR: float = 0.15  # Reduzido de 1.0 para suavizar mudanças de direção
+    SLIME_DRIP_HOMING_BLEND_FACTOR: float = (
+        0.15  # Reduzido de 1.0 para suavizar mudanças de direção
+    )
     SLIME_DRIP_HOMING_AIM_OFFSET: float = 50.0
     SLIME_DRIP_HOMING_MAX_DURATION: float = 15.0
     SLIME_DRIP_HOMING_TARGET_UPDATE_INTERVAL: float = 0.4

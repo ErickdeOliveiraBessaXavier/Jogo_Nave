@@ -147,10 +147,10 @@ class EntityManager:
         screen = pygame.display.get_surface()
         screen_width = screen.get_width() if screen else 1600
         screen_height = screen.get_height() if screen else 900
-        
+
         clamped_target_x = max(40, min(screen_width - 40, target_x))
         clamped_target_y = max(60, min(screen_height - 40, target_y))
-        
+
         # Criar a bomba diretamente
         self.spawn_air_strike_bomb(clamped_target_x, clamped_target_y)
 
@@ -168,27 +168,37 @@ class EntityManager:
     def spawn_black_hole(self, x: float, y: float, duration: float) -> None:
         """Spawna um buraco negro."""
         from ..entities.black_hole import BlackHole
+
         black_hole = BlackHole(x, y, duration)
         self.black_holes.append(black_hole)
 
     def spawn_cannon_tower(self, x: float, y: float) -> None:
         """Spawna uma torre de canhão."""
         tower = CannonTower(x, y)  # Criar sem callback primeiro
-        
+
         # Definir callback agora que temos a torre
         def on_fire_mine(target_x: float, target_y: float) -> None:
-            self._spawn_cannon_mine(x + 30, y, target_x, target_y, tower)  # Centro da torre
-        
+            self._spawn_cannon_mine(
+                x + 30, y, target_x, target_y, tower
+            )  # Centro da torre
+
         tower.on_fire_mine = on_fire_mine  # Atribuir callback
         self.cannon_towers.append(tower)
 
-    def _spawn_cannon_mine(self, launch_x: float, launch_y: float, target_x: float, target_y: float, tower: CannonTower) -> None:
+    def _spawn_cannon_mine(
+        self,
+        launch_x: float,
+        launch_y: float,
+        target_x: float,
+        target_y: float,
+        tower: CannonTower,
+    ) -> None:
         """Spawna uma mina de canhão."""
         # Callback para som de explosão
         on_explode = None
         if self.sound_manager:
             on_explode = self.sound_manager.play_explosion_asteroid
-            
+
         mine = CannonMine(target_x, target_y, launch_x, launch_y, on_explode=on_explode)
         self.cannon_mines.append(mine)
         tower.register_mine(mine)  # Registrar mina na torre
@@ -251,20 +261,24 @@ class EntityManager:
     def _check_alien_collisions(self):
         """Verifica colisões entre aliens e inverte suas direções."""
         # Coletar apenas aliens vivos e não controlados por formação
-        aliens = [e for e in self.enemies if isinstance(e, Alien) and not e.dead and not e.formation_controlled]
-        
+        aliens = [
+            e
+            for e in self.enemies
+            if isinstance(e, Alien) and not e.dead and not e.formation_controlled
+        ]
+
         # Verificar colisões entre pares de aliens
         for i in range(len(aliens)):
             for j in range(i + 1, len(aliens)):
                 alien1 = aliens[i]
                 alien2 = aliens[j]
-                
+
                 # Verificar se os retângulos colidem
                 if alien1.rect.colliderect(alien2.rect):
                     # Inverter direções horizontais de ambos
                     alien1.speed_x *= -1
                     alien2.speed_x *= -1
-                    
+
                     # Separar aliens ligeiramente para evitar colisão contínua
                     overlap_x = (alien1.w + alien2.w) / 2 - abs(alien1.x - alien2.x)
                     if overlap_x > 0:
@@ -500,9 +514,9 @@ class EntityManager:
         # Cada black hole processa todos os inimigos de uma vez (mais eficiente)
         for black_hole in self.black_holes:
             black_hole.process_all_enemies(
-                self._cached_all_enemies, 
+                self._cached_all_enemies,
                 enemy_dt,
-                spawn_explosion_callback=self.spawn_explosion
+                spawn_explosion_callback=self.spawn_explosion,
             )
 
         # CRÍTICO: Cleanup ANTES de rebuild
@@ -574,9 +588,7 @@ class EntityManager:
             elif isinstance(self.boss, SlimeBoss):
                 self.boss.update(dt, player_x, player_y)
             else:  # General Boss type
-                lasers_fired, spawned_squares = self.boss.update(
-                    dt, player_x, player_y
-                )
+                lasers_fired, spawned_squares = self.boss.update(dt, player_x, player_y)
                 if lasers_fired:
                     self.boss_lasers.extend(lasers_fired)
                 if spawned_squares:
@@ -815,8 +827,12 @@ class EntityManager:
         ]  # Limpar formações mortas
         self.spikes = [s for s in self.spikes if not s.dead]  # Limpar spikes mortos
         self.air_strike_bombs = [b for b in self.air_strike_bombs if not b.dead]
-        self.cannon_towers = [t for t in self.cannon_towers if not t.dead]  # Limpar torres mortas
-        self.cannon_mines = [m for m in self.cannon_mines if not m.dead]  # Limpar minas mortas
+        self.cannon_towers = [
+            t for t in self.cannon_towers if not t.dead
+        ]  # Limpar torres mortas
+        self.cannon_mines = [
+            m for m in self.cannon_mines if not m.dead
+        ]  # Limpar minas mortas
         self._grid_needs_rebuild = True
 
     def clear_all(self):
@@ -866,13 +882,13 @@ class EntityManager:
         self.explosion_pool.clear_active()  # Limpar explosões ativas do pool
         self.spikes.clear()
         self.air_strike_bombs.clear()  # Limpar bombas de bombardeio
-        
+
         # PRESERVAR torres e minas de upgrades ativos:
         # Torres de canhão são mantidas pois fazem parte do sistema de upgrades
         # Minas ativas das torres também são preservadas para continuidade
         # self.cannon_towers.clear()  # REMOVIDO - preservar torres de upgrade
         # self.cannon_mines.clear()   # REMOVIDO - preservar minas ativas
-        
+
         # Apenas limpar minas mortas e torres mortas (cleanup normal)
         self.cannon_towers = [tower for tower in self.cannon_towers if not tower.dead]
         self.cannon_mines = [mine for mine in self.cannon_mines if not mine.dead]

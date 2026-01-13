@@ -36,13 +36,22 @@ def extract_color_definitions(colors_file_path: str) -> Set[str]:
                 for target in node.targets:
                     if isinstance(target, ast.Name):
                         # Verificar se é uma cor (verificar se o valor é uma tupla de 3 inteiros)
-                        if isinstance(node.value, ast.Tuple) and len(node.value.elts) == 3:
+                        if (
+                            isinstance(node.value, ast.Tuple)
+                            and len(node.value.elts) == 3
+                        ):
                             # Verificar se todos os elementos são inteiros
-                            if all(isinstance(elt, ast.Constant) and isinstance(elt.value, int)
-                                   for elt in node.value.elts):
+                            if all(
+                                isinstance(elt, ast.Constant)
+                                and isinstance(elt.value, int)
+                                for elt in node.value.elts
+                            ):
                                 color_names.add(target.id)
                         # Também aceitar RAINBOW_COLORS que é uma lista
-                        elif isinstance(node.value, ast.List) and target.id == "RAINBOW_COLORS":
+                        elif (
+                            isinstance(node.value, ast.List)
+                            and target.id == "RAINBOW_COLORS"
+                        ):
                             color_names.add(target.id)
 
             # Procurar por AnnAssign nodes (atribuições com anotações de tipo)
@@ -50,11 +59,16 @@ def extract_color_definitions(colors_file_path: str) -> Set[str]:
                 # Verificar se é uma cor (verificar se o valor é uma tupla de 3 inteiros)
                 if isinstance(node.value, ast.Tuple) and len(node.value.elts) == 3:
                     # Verificar se todos os elementos são inteiros
-                    if all(isinstance(elt, ast.Constant) and isinstance(elt.value, int)
-                           for elt in node.value.elts):
+                    if all(
+                        isinstance(elt, ast.Constant) and isinstance(elt.value, int)
+                        for elt in node.value.elts
+                    ):
                         color_names.add(node.target.id)
                 # Também aceitar RAINBOW_COLORS que é uma lista
-                elif isinstance(node.value, ast.List) and node.target.id == "RAINBOW_COLORS":
+                elif (
+                    isinstance(node.value, ast.List)
+                    and node.target.id == "RAINBOW_COLORS"
+                ):
                     color_names.add(node.target.id)
 
     except Exception as e:
@@ -101,9 +115,9 @@ def find_color_references(
                 # 3. Uso direto da cor (após import)
                 # 4. Uso em dicionários, listas, etc.
                 patterns = [
-                    rf'colors\.{re.escape(color)}\b',  # colors.COLOR_NAME
-                    rf'from colors import.*\b{re.escape(color)}\b',  # import direto
-                    rf'\b{re.escape(color)}\b',  # uso direto (mais permissivo)
+                    rf"colors\.{re.escape(color)}\b",  # colors.COLOR_NAME
+                    rf"from colors import.*\b{re.escape(color)}\b",  # import direto
+                    rf"\b{re.escape(color)}\b",  # uso direto (mais permissivo)
                 ]
 
                 found = False
@@ -140,9 +154,7 @@ def generate_report(color_names: Set[str], references: Dict[str, List[str]]) -> 
 
     # Cores utilizadas
     used_colors = [color for color in color_names if references.get(color)]
-    report_lines.append(
-        f"CORES UTILIZADAS ({len(used_colors)}/{len(color_names)}):"
-    )
+    report_lines.append(f"CORES UTILIZADAS ({len(used_colors)}/{len(color_names)}):")
     report_lines.append("-" * 50)
 
     if used_colors:
@@ -201,9 +213,7 @@ def generate_report(color_names: Set[str], references: Dict[str, List[str]]) -> 
     usage_percentage = (used_count / total_colors * 100) if total_colors > 0 else 0
 
     report_lines.append(f"• Total de cores definidas: {total_colors}")
-    report_lines.append(
-        f"• Cores utilizadas: {used_count} ({usage_percentage:.1f}%)"
-    )
+    report_lines.append(f"• Cores utilizadas: {used_count} ({usage_percentage:.1f}%)")
     report_lines.append(
         f"• Cores não utilizadas: {unused_count} ({100 - usage_percentage:.1f}%)"
     )

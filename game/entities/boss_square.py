@@ -8,8 +8,9 @@ from typing import List
 
 class TrailParticle:
     """Partícula simples para efeito de cauda - otimizada."""
-    __slots__ = ('x', 'y', 'size', 'life', 'alpha')
-    
+
+    __slots__ = ("x", "y", "size", "life", "alpha")
+
     def __init__(self, x: float, y: float, size: float):
         self.x = x
         self.y = y
@@ -82,7 +83,9 @@ class BossSquare:
 
         # Animation
         self.animation_timer = 0.0
-        self.animation_offset = random.uniform(0, 10)  # Offset aleatório para dessincronizar animações
+        self.animation_offset = random.uniform(
+            0, 10
+        )  # Offset aleatório para dessincronizar animações
         self.rotation = 0.0  # Rotação contínua
 
         # Growth effect - aumenta conforme se move
@@ -97,7 +100,9 @@ class BossSquare:
         self.max_trail_particles = 18  # Limite de partículas por quadrado
 
         # Animação da borda pixelada (compartilha timer com rotation para otimização)
-        self.border_anim_offset: float = random.uniform(0, 100)  # Offset aleatório inicial
+        self.border_anim_offset: float = random.uniform(
+            0, 100
+        )  # Offset aleatório inicial
 
     def set_frenzy_mode(self, is_frenzy: bool) -> None:
         """Set frenzy mode and adjust orbital speed.
@@ -180,17 +185,17 @@ class BossSquare:
                     particle = TrailParticle(
                         self.x + offset_x,
                         self.y + offset_y,
-                        self.size * 0.4  # Partícula começa menor que o quadrado
+                        self.size * 0.4,  # Partícula começa menor que o quadrado
                     )
                     self.trail_particles.append(particle)
-            
+
             # Atualizar partículas existentes
             decay_rate = 2.0  # Velocidade de decay (menor = mais longo)
             for p in self.trail_particles:
                 p.life -= dt * decay_rate
                 p.alpha = int(255 * max(0, p.life))
                 p.size *= 0.97  # Encolhe mais devagar
-            
+
             # Remover partículas mortas
             self.trail_particles = [p for p in self.trail_particles if p.life > 0]
         else:
@@ -234,10 +239,7 @@ class BossSquare:
 
         # Calcular cor com intensidade alternada (usa offset para dessincronizar)
         anim_value = (self.animation_timer + self.animation_offset) * 57.3
-        intensity = int(
-            128
-            + 127 * abs(pygame.math.Vector2(1, 0).rotate(anim_value).x)
-        )
+        intensity = int(128 + 127 * abs(pygame.math.Vector2(1, 0).rotate(anim_value).x))
         color = (255, intensity, intensity)
         border_color = (255, 255, 255)
 
@@ -279,31 +281,31 @@ class BossSquare:
         # Padrão simples para otimização
         pattern = [1, 1, 0, 1, 0]  # Padrão menor para quadrados pequenos
         pattern_len = len(pattern)
-        
+
         # Tamanho do pixel baseado no tamanho do quadrado
         pixel_size = max(2, int(self.size / 8))
         half_pixel = pixel_size // 2
-        
+
         # Offset animado
         anim_idx = int(self.border_anim_offset / pixel_size) % pattern_len
-        
+
         # Desenhar cada aresta com padrão animado
         for i in range(4):
             start = corners[i]
             end = corners[(i + 1) % 4]
-            
+
             # Calcular direção e comprimento da aresta
             dx = end[0] - start[0]
             dy = end[1] - start[1]
             length = math.sqrt(dx * dx + dy * dy)
-            
+
             if length < 1:
                 continue
-                
+
             # Normalizar direção
             dx /= length
             dy /= length
-            
+
             # Desenhar segmentos ao longo da aresta
             num_segments = max(1, int(length / pixel_size))
             for j in range(num_segments):

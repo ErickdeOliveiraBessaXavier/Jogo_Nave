@@ -90,7 +90,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "music/Starcruiser_Loop.mp3",
             "music/Event_Horizon_Pulse.mp3",
             "music/Rising_From_Restraint_War.mp3",
-            "music/Rising_From_Restraint.mp3"
+            "music/Rising_From_Restraint.mp3",
         ],
         "boss": "music/boss.mp3",
         "menu": "music/menu-music.mp3",

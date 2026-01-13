@@ -59,6 +59,7 @@ class GameApp:
 
         # Renderer compartilhado para manter starfield contínuo
         from .render.renderer import Renderer
+
         self.renderer = Renderer()
 
         # Dificuldade selecionada (padrão: normal)

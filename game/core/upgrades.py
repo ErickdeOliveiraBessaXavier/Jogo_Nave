@@ -71,7 +71,9 @@ class UpgradeMeta:
     base_cooldown: float
     base_duration: float
     base_charges: Optional[int]  # None = ilimitado por fase
-    slot_weight: int = 1  # Peso em slots (1-5): quanto mais forte o upgrade, mais pesado
+    slot_weight: int = (
+        1  # Peso em slots (1-5): quanto mais forte o upgrade, mais pesado
+    )
 
 
 class ActiveUpgrade:
@@ -178,7 +180,7 @@ class ActiveUpgrade:
             # Modo GOD: cooldown de apenas 1 segundo
             if ctx and hasattr(ctx, "god_mode") and ctx.god_mode:
                 return 1.0
-            
+
             if ctx and hasattr(ctx, "difficulty_settings"):
                 rules: Any = ctx.difficulty_settings.get("special_rules", [])
                 if "no_powerups" in rules:
@@ -263,7 +265,7 @@ class ShieldBurstUpgrade(ActiveUpgrade):
             ship = getattr(ctx, "ship", None)
             if ship is not None:
                 has_shield = getattr(ship, "has_shield", False)
-                
+
                 # Se escudo foi consumido/desapareceu, iniciar cooldown
                 if not has_shield:
                     self._monitoring_shield = False
@@ -677,7 +679,7 @@ class BlackHoleUpgrade(ActiveUpgrade):
         """Ativa o buraco negro."""
         entity_manager = getattr(ctx, "entity_manager", None)
         ship = getattr(ctx, "ship", None)
-        
+
         if entity_manager is None or ship is None:
             return
 
@@ -717,6 +719,7 @@ class CannonTowerUpgrade(ActiveUpgrade):
 
         # Obter dimensões da tela
         import pygame
+
         screen = pygame.display.get_surface()
         screen_width = screen.get_width() if screen else 1600
         screen_height = screen.get_height() if screen else 900

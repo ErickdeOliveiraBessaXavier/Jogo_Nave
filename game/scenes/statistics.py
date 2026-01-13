@@ -45,16 +45,17 @@ class StatisticsView:
         self.current_tab = StatTab.OVERVIEW
         self.layout_rects: Dict[str, Any] = {}
         self.scroll_y = 0  # Para rolagem na aba de níveis
-        
+
         # Animação de entrada
         self.entry_progress = 0.0
         self.is_entering = True
         self.entry_duration = 0.4
-        
+
         self._calculate_layout()
 
     def _calculate_layout(self):
         from ..core.config import config as Config
+
         screen_w, screen_h = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
         pad = 20
         top_offset = 100
@@ -96,10 +97,12 @@ class StatisticsView:
     def update(self, dt: float):
         """Atualiza a lógica da view."""
         if self.is_entering and self.entry_progress < 1.0:
-            self.entry_progress = min(1.0, self.entry_progress + dt / self.entry_duration)
+            self.entry_progress = min(
+                1.0, self.entry_progress + dt / self.entry_duration
+            )
             if self.entry_progress >= 1.0:
                 self.is_entering = False
-        
+
         if self.dialog:
             self.dialog.update()
         if self.profile:
@@ -136,7 +139,7 @@ class StatisticsView:
             if self.current_tab == StatTab.LEVELS:
                 self.scroll_y -= event.y * 20  # Ajusta a velocidade de rolagem
                 return True
-        
+
         return False
 
     def render(self, surface: pygame.Surface):
@@ -171,22 +174,37 @@ class StatisticsView:
 
         # Botões de Ação com alpha
         self._draw_button(
-            surface, self.layout_rects["back_button"], "Voltar", CUSTOM_PURPLE, alpha, offset_y
+            surface,
+            self.layout_rects["back_button"],
+            "Voltar",
+            CUSTOM_PURPLE,
+            alpha,
+            offset_y,
         )
         self._draw_button(
-            surface, self.layout_rects["reset_button"], "Resetar", colors.RED, alpha, offset_y
+            surface,
+            self.layout_rects["reset_button"],
+            "Resetar",
+            colors.RED,
+            alpha,
+            offset_y,
         )
 
         if self.dialog:
             self.dialog.render(surface)
 
     def _draw_button(
-        self, surface: pygame.Surface, rect: pygame.Rect, text: str, 
-        color: colors.Color, alpha: int = 255, offset_y: int = 0
+        self,
+        surface: pygame.Surface,
+        rect: pygame.Rect,
+        text: str,
+        color: colors.Color,
+        alpha: int = 255,
+        offset_y: int = 0,
     ):
         adjusted_rect = rect.copy()
         adjusted_rect.y += offset_y
-        
+
         is_hovered = adjusted_rect.collidepoint(pygame.mouse.get_pos())
         # Inverter cores ao passar o mouse
         if color == CUSTOM_PURPLE:
@@ -195,13 +213,17 @@ class StatisticsView:
             border_color = colors.RED
         else:
             border_color = color
-        
+
         # Criar surface temporária para aplicar alpha
-        temp_surface = pygame.Surface((adjusted_rect.width + 4, adjusted_rect.height + 4), pygame.SRCALPHA)
+        temp_surface = pygame.Surface(
+            (adjusted_rect.width + 4, adjusted_rect.height + 4), pygame.SRCALPHA
+        )
         temp_rect = pygame.Rect(2, 2, adjusted_rect.width, adjusted_rect.height)
-        pygame.draw.rect(temp_surface, (*border_color, alpha), temp_rect, 2, border_radius=8)
+        pygame.draw.rect(
+            temp_surface, (*border_color, alpha), temp_rect, 2, border_radius=8
+        )
         surface.blit(temp_surface, (adjusted_rect.x - 2, adjusted_rect.y - 2))
-        
+
         text_surf = self.item_font.render(text, True, colors.WHITE)
         text_surf.set_alpha(alpha)
         surface.blit(
@@ -216,15 +238,21 @@ class StatisticsView:
         for i, tab in enumerate(StatTab):
             rect = self.layout_rects["tab_buttons"][i].copy()
             rect.y += offset_y
-            
+
             is_active = self.current_tab == tab
             is_hovered = rect.collidepoint(pygame.mouse.get_pos())
 
             border_color = CUSTOM_PURPLE if (is_active or is_hovered) else colors.GRAY
-            text_color = CUSTOM_GOLD if is_active else (CUSTOM_GOLD if is_hovered else colors.GRAY)
+            text_color = (
+                CUSTOM_GOLD
+                if is_active
+                else (CUSTOM_GOLD if is_hovered else colors.GRAY)
+            )
 
             # Criar surface temporária para aplicar alpha
-            temp_surface = pygame.Surface((rect.width + 4, rect.height + 4), pygame.SRCALPHA)
+            temp_surface = pygame.Surface(
+                (rect.width + 4, rect.height + 4), pygame.SRCALPHA
+            )
             temp_rect = pygame.Rect(2, 2, rect.width, rect.height)
             pygame.draw.rect(
                 temp_surface,
@@ -246,13 +274,23 @@ class StatisticsView:
                 ),
             )
 
-    def _draw_tab_content(self, surface: pygame.Surface, alpha: int = 255, offset_y: int = 0):
+    def _draw_tab_content(
+        self, surface: pygame.Surface, alpha: int = 255, offset_y: int = 0
+    ):
         content_rect = self.layout_rects["content_area"].copy()
         content_rect.y += offset_y
-        
+
         # Apenas a borda, sem fundo
-        temp_surface = pygame.Surface((content_rect.width + 2, content_rect.height + 2), pygame.SRCALPHA)
-        pygame.draw.rect(temp_surface, (*colors.GRAY, alpha), pygame.Rect(1, 1, content_rect.width, content_rect.height), 1, border_radius=8)
+        temp_surface = pygame.Surface(
+            (content_rect.width + 2, content_rect.height + 2), pygame.SRCALPHA
+        )
+        pygame.draw.rect(
+            temp_surface,
+            (*colors.GRAY, alpha),
+            pygame.Rect(1, 1, content_rect.width, content_rect.height),
+            1,
+            border_radius=8,
+        )
         surface.blit(temp_surface, (content_rect.x - 1, content_rect.y - 1))
 
         # Clipping para garantir que o conteúdo não saia da área
@@ -266,7 +304,9 @@ class StatisticsView:
 
         surface.set_clip(None)
 
-    def _render_overview_tab(self, surface: pygame.Surface, area: pygame.Rect, alpha: int = 255):
+    def _render_overview_tab(
+        self, surface: pygame.Surface, area: pygame.Rect, alpha: int = 255
+    ):
         if not self.profile:
             return
         summary = self.profile.get_statistics_summary()
@@ -333,7 +373,9 @@ class StatisticsView:
             recom_surf.set_alpha(alpha)
             surface.blit(recom_surf, (recom_rect.x + 20, recom_y_inner))
 
-    def _render_levels_tab(self, surface: pygame.Surface, area: pygame.Rect, alpha: int = 255):
+    def _render_levels_tab(
+        self, surface: pygame.Surface, area: pygame.Rect, alpha: int = 255
+    ):
         if not self.profile:
             return
 
@@ -483,7 +525,7 @@ class StatisticsView:
 
         # Aplicar alpha à superfície de conteúdo
         content_surface.set_alpha(alpha)
-        
+
         # Blitar a parte visível da superfície de conteúdo
         surface.blit(
             content_surface,
@@ -491,10 +533,20 @@ class StatisticsView:
             area=(0, self.scroll_y, area.width, visible_height),
         )
 
-    def _draw_card_background(self, surface: pygame.Surface, rect: pygame.Rect, alpha: int = 255):
+    def _draw_card_background(
+        self, surface: pygame.Surface, rect: pygame.Rect, alpha: int = 255
+    ):
         # Apenas a borda, sem fundo, para consistência com settings.py
-        temp_surface = pygame.Surface((rect.width + 2, rect.height + 2), pygame.SRCALPHA)
-        pygame.draw.rect(temp_surface, (*colors.GRAY, alpha), pygame.Rect(1, 1, rect.width, rect.height), 1, border_radius=8)
+        temp_surface = pygame.Surface(
+            (rect.width + 2, rect.height + 2), pygame.SRCALPHA
+        )
+        pygame.draw.rect(
+            temp_surface,
+            (*colors.GRAY, alpha),
+            pygame.Rect(1, 1, rect.width, rect.height),
+            1,
+            border_radius=8,
+        )
         surface.blit(temp_surface, (rect.x - 1, rect.y - 1))
 
     def show_confirmation(self):
@@ -520,7 +572,7 @@ class StatisticsScene(Scene):
         super().__init__(game_app)
         self.r = game_app.renderer  # Usar renderer compartilhado
         self.view = StatisticsView(on_back=self._on_back, renderer=self.r)
-        
+
         # Sistema de transição
         self.transitioning = False
         self.transition_progress = 0.0
@@ -545,17 +597,18 @@ class StatisticsScene(Scene):
 
     def update(self, dt: float):
         self.r.starfield.update(dt)
-        
+
         # Atualizar transição
         if self.transitioning:
             self.transition_progress += dt / self.transition_duration
-            
+
             if self.transition_progress >= 1.0:
                 # Completou o fade out, voltar ao menu
                 from .main_menu import MainMenuScene
+
                 self.app.states.switch(MainMenuScene(self.app))
                 return
-        
+
         self.view.update(dt)
 
     def handle_event(self, event: pygame.event.Event):
@@ -564,12 +617,18 @@ class StatisticsScene(Scene):
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
         self.r.starfield.draw(surface)
-        
+
         # Aplicar fade de transição
         if self.transitioning:
-            alpha_mult = 1.0 - self.transition_progress if self.fade_out else self.transition_progress
+            alpha_mult = (
+                1.0 - self.transition_progress
+                if self.fade_out
+                else self.transition_progress
+            )
             # Criar surface temporária para aplicar fade
-            temp_surface = pygame.Surface((surface.get_width(), surface.get_height()), pygame.SRCALPHA)
+            temp_surface = pygame.Surface(
+                (surface.get_width(), surface.get_height()), pygame.SRCALPHA
+            )
             self.view.render(temp_surface)
             temp_surface.set_alpha(int(255 * alpha_mult))
             surface.blit(temp_surface, (0, 0))

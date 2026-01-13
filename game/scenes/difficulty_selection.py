@@ -1,7 +1,16 @@
 import pygame
 from typing import TYPE_CHECKING, Dict, Any, Callable
 from ..core.state import Scene
-from ..core.colors import CUSTOM_GOLD, CUSTOM_DARK_BG, CUSTOM_PURPLE, BLACK, GREEN, YELLOW, ORANGE, RED
+from ..core.colors import (
+    CUSTOM_GOLD,
+    CUSTOM_DARK_BG,
+    CUSTOM_PURPLE,
+    BLACK,
+    GREEN,
+    YELLOW,
+    ORANGE,
+    RED,
+)
 from ..core.assets import get_font
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
@@ -14,7 +23,12 @@ if TYPE_CHECKING:
 class DifficultySelectionView:
     """View para seleção de dificuldade (pode ser usada dentro de outras cenas)."""
 
-    def __init__(self, on_select: Callable[[DifficultyPreset], None], on_back: Callable[[], None], renderer: Any = None):
+    def __init__(
+        self,
+        on_select: Callable[[DifficultyPreset], None],
+        on_back: Callable[[], None],
+        renderer: Any = None,
+    ):
         """
         Args:
             on_select: Callback chamado quando uma dificuldade é selecionada
@@ -24,7 +38,7 @@ class DifficultySelectionView:
         self.on_select = on_select
         self.on_back = on_back
         self.renderer = renderer
-        
+
         self.title_font = get_font(48)
         self.button_font = get_font(20)
         self.desc_font = get_font(16)
@@ -40,7 +54,7 @@ class DifficultySelectionView:
         self.difficulty_buttons: Dict[DifficultyPreset, Dict[str, Any]] = {}
         self.selected_difficulty: DifficultyPreset | None = None
         self.hovered_difficulty: DifficultyPreset | None = None
-        
+
         # Animação de entrada
         self.entry_progress = 0.0
         self.is_entering = True
@@ -53,7 +67,9 @@ class DifficultySelectionView:
         center_x = Config.SCREEN_WIDTH // 2
 
         # Título
-        self.title_text = self.title_font.render("Selecione a Dificuldade", True, CUSTOM_GOLD)
+        self.title_text = self.title_font.render(
+            "Selecione a Dificuldade", True, CUSTOM_GOLD
+        )
         self.title_rect = self.title_text.get_rect(center=(center_x, 80))
 
         # Configurações dos botões
@@ -101,7 +117,7 @@ class DifficultySelectionView:
                 "lives_text": lives_text,
                 "color": self.difficulty_colors[preset],
             }
-    
+
     def reset(self):
         """Reseta o estado da view para reiniciar animação."""
         self.entry_progress = 0.0
@@ -135,13 +151,15 @@ class DifficultySelectionView:
             if event.key == pygame.K_ESCAPE:
                 self.on_back()
                 return True  # Evento consumido
-        
+
         return False  # Evento não consumido
 
     def update(self, dt: float):
         """Atualiza a lógica da view."""
         if self.is_entering and self.entry_progress < 1.0:
-            self.entry_progress = min(1.0, self.entry_progress + dt / self.entry_duration)
+            self.entry_progress = min(
+                1.0, self.entry_progress + dt / self.entry_duration
+            )
             if self.entry_progress >= 1.0:
                 self.is_entering = False
 
@@ -169,11 +187,19 @@ class DifficultySelectionView:
 
             # Criar surface temporária para aplicar alpha
             temp_surface = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-            
+
             # Desenhar botão na surface temporária
-            pygame.draw.rect(temp_surface, (*color, alpha), temp_surface.get_rect(), border_radius=10)
-            pygame.draw.rect(temp_surface, (*CUSTOM_PURPLE, alpha), temp_surface.get_rect(), 3, border_radius=10)
-            
+            pygame.draw.rect(
+                temp_surface, (*color, alpha), temp_surface.get_rect(), border_radius=10
+            )
+            pygame.draw.rect(
+                temp_surface,
+                (*CUSTOM_PURPLE, alpha),
+                temp_surface.get_rect(),
+                3,
+                border_radius=10,
+            )
+
             # Blit no surface principal
             surface.blit(temp_surface, rect.topleft)
 
@@ -181,14 +207,18 @@ class DifficultySelectionView:
             name_surface = button_data["name_text"].copy()
             name_surface.set_alpha(alpha)
             name_rect = name_surface.get_rect(centerx=rect.centerx, top=rect.top + 10)
-            
+
             desc_surface = button_data["desc_text"].copy()
             desc_surface.set_alpha(alpha)
-            desc_rect = desc_surface.get_rect(centerx=rect.centerx, centery=rect.centery - 5)
-            
+            desc_rect = desc_surface.get_rect(
+                centerx=rect.centerx, centery=rect.centery - 5
+            )
+
             lives_surface = button_data["lives_text"].copy()
             lives_surface.set_alpha(alpha)
-            lives_rect = lives_surface.get_rect(centerx=rect.centerx, bottom=rect.bottom - 10)
+            lives_rect = lives_surface.get_rect(
+                centerx=rect.centerx, bottom=rect.bottom - 10
+            )
 
             surface.blit(name_surface, name_rect)
             surface.blit(desc_surface, desc_rect)
@@ -199,7 +229,8 @@ class DifficultySelectionView:
         hint_surface = hint_text.copy()
         hint_surface.set_alpha(alpha)
         hint_rect = hint_surface.get_rect(
-            centerx=Config.SCREEN_WIDTH // 2, bottom=Config.SCREEN_HEIGHT - 30 + offset_y
+            centerx=Config.SCREEN_WIDTH // 2,
+            bottom=Config.SCREEN_HEIGHT - 30 + offset_y,
         )
         surface.blit(hint_surface, hint_rect)
 
@@ -210,8 +241,7 @@ class DifficultySelectionScene(Scene):
     def __init__(self, app: "GameApp"):
         super().__init__(app)
         self.view = DifficultySelectionView(
-            on_select=self._on_difficulty_selected,
-            on_back=self._on_back
+            on_select=self._on_difficulty_selected, on_back=self._on_back
         )
 
     def _on_difficulty_selected(self, preset: DifficultyPreset):

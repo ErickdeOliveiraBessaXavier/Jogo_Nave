@@ -540,7 +540,7 @@ class PlayerProfile:
     def get_total_equipped_weight(self) -> int:
         """Retorna o peso total de todos os upgrades equipados."""
         from .upgrades import UPGRADES_META
-        
+
         total_weight = 0
         for upgrade_type in self.upgrade_loadout:
             if upgrade_type is not None:
@@ -548,27 +548,27 @@ class PlayerProfile:
                 if meta:
                     total_weight += meta.slot_weight
         return total_weight
-    
+
     def can_equip_upgrade(self, upgrade_type: UpgradeType, slot_index: int) -> bool:
         """
         Verifica se pode equipar um upgrade considerando o peso total.
-        
+
         Returns:
             bool: True se pode equipar, False caso contrário
         """
         from .upgrades import UPGRADES_META
-        
+
         # Verificar se o slot está desbloqueado
         if slot_index >= self.unlocked_slots:
             return False
-        
+
         # Obter peso do novo upgrade
         meta = UPGRADES_META.get(upgrade_type)
         if not meta:
             return False
-        
+
         new_weight = meta.slot_weight
-        
+
         # Calcular peso atual sem o item do slot de destino
         current_weight = 0
         for i, equipped_type in enumerate(self.upgrade_loadout):
@@ -576,7 +576,7 @@ class PlayerProfile:
                 equipped_meta = UPGRADES_META.get(equipped_type)
                 if equipped_meta:
                     current_weight += equipped_meta.slot_weight
-        
+
         # Verificar se o peso total não excede o limite
         return (current_weight + new_weight) <= self.unlocked_slots
 
@@ -1015,7 +1015,11 @@ class PlayerProfile:
                                 continue
                         # Fazer merge com DEFAULT_UNLOCKED para adicionar novos upgrades
                         # Isso garante que upgrades novos sejam automaticamente desbloqueados
-                        self.unlocked_upgrades = parsed.union(set(DEFAULT_UNLOCKED)) if parsed else set(DEFAULT_UNLOCKED)
+                        self.unlocked_upgrades = (
+                            parsed.union(set(DEFAULT_UNLOCKED))
+                            if parsed
+                            else set(DEFAULT_UNLOCKED)
+                        )
                     else:
                         self.unlocked_upgrades = set(DEFAULT_UNLOCKED)
 

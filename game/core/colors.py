@@ -42,8 +42,8 @@ NEON_CYAN: Color = (0, 255, 255)
 NEON_PURPLE: Color = (188, 0, 255)
 
 # Cores do Alien Bullet
-ALIEN_BULLET_GREEN_1: Color = (37, 217, 166)    # #25D9A6
-ALIEN_BULLET_GREEN_2: Color = (115, 255, 215)     # #4ED94A
+ALIEN_BULLET_GREEN_1: Color = (37, 217, 166)  # #25D9A6
+ALIEN_BULLET_GREEN_2: Color = (115, 255, 215)  # #4ED94A
 
 # Paleta Arcade Clássica
 ARCADE_YELLOW: Color = (255, 255, 0)
@@ -73,10 +73,10 @@ RAINBOW_COLORS = [
 
 # Cores das partículas do Black Hole (disco de acreção)
 BLACK_HOLE_PARTICLE_COLORS = [
-    (255, 107, 53),   # laranja
-    (247, 147, 30),   # laranja claro
-    (255, 215, 0),    # dourado
-    (255, 69, 0),     # vermelho alaranjado
-    (255, 140, 0),    # laranja escuro
-    (255, 170, 0),    # amarelo alaranjado
+    (255, 107, 53),  # laranja
+    (247, 147, 30),  # laranja claro
+    (255, 215, 0),  # dourado
+    (255, 69, 0),  # vermelho alaranjado
+    (255, 140, 0),  # laranja escuro
+    (255, 170, 0),  # amarelo alaranjado
 ]

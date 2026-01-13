@@ -207,7 +207,9 @@ class Meteor:
     def update(self, dt: float):
         self.x += self.vx * dt
         self.y += self.vy * dt
-        self.rotation += self.rotation_speed * dt  # FIX: multiplicar por dt para suavidade
+        self.rotation += (
+            self.rotation_speed * dt
+        )  # FIX: multiplicar por dt para suavidade
         if (
             (self.y > Config.SCREEN_HEIGHT)
             or (self.x < -self.w)
@@ -223,7 +225,7 @@ class Meteor:
         # Manter precisão float até a conversão final
         cx = self.x + self.w * 0.5
         cy = self.y + self.h * 0.5
-        
+
         # List comprehension com arredondamento ao invés de truncamento
         return [
             (round(cx + px * cr - py * sr), round(cy + px * sr + py * cr))

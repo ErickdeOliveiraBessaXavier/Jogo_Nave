@@ -90,9 +90,9 @@ def find_config_references(
                 # 3. Uso direto da configuração (após import)
                 # 4. Uso em dicionários, listas, etc.
                 patterns = [
-                    rf'Config\.({re.escape(config)})\b',  # Config.NOME_DA_CONFIG
-                    rf'from config import.*\b{re.escape(config)}\b',  # import direto
-                    rf'\b{re.escape(config)}\b',  # uso direto (mais permissivo)
+                    rf"Config\.({re.escape(config)})\b",  # Config.NOME_DA_CONFIG
+                    rf"from config import.*\b{re.escape(config)}\b",  # import direto
+                    rf"\b{re.escape(config)}\b",  # uso direto (mais permissivo)
                 ]
 
                 found = False

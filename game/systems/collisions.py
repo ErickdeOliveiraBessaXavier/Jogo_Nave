@@ -449,6 +449,7 @@ class Collisions:
             if distance <= damage_radius:
                 # Boss atingido - aplicar dano
                 from ..core.config import config as Config
+
                 damage = int(effect.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
                 boss.take_damage(damage)
                 sound_manager.play_boss_damage()
@@ -458,9 +459,13 @@ class Collisions:
                 if boss.dead:
                     score_gain += Config.BOSS_DEFEAT_SCORE
                     floating_scores.append(
-                        FloatingScore(boss_center_x, boss_center_y, Config.BOSS_DEFEAT_SCORE)
+                        FloatingScore(
+                            boss_center_x, boss_center_y, Config.BOSS_DEFEAT_SCORE
+                        )
                     )
-                    entity_manager.spawn_explosion(boss_center_x, boss_center_y, size=100)
+                    entity_manager.spawn_explosion(
+                        boss_center_x, boss_center_y, size=100
+                    )
 
                 # Marcar efeito como já atingiu este boss
                 effect.hit_enemies.add(id(boss))
@@ -534,13 +539,13 @@ class Collisions:
                 score_gain += gain
                 destroyed_count += destroyed
                 score_events.extend(events)
-            
+
             # Verificar colisão para ativação de minas armadas
             if not mine.dead and mine.state == MineState.ARMED:
                 for enemy in enemies:
                     if enemy.dead:
                         continue
-                    
+
                     if mine.check_enemy_collision(enemy):
                         break  # Mina explodiu, sair do loop de inimigos
 
@@ -562,46 +567,51 @@ class Collisions:
         for mine in cannon_mines:
             if mine.dead:
                 continue
-            
+
             damage_info = mine.damage_info
             if damage_info.radius <= 0:
                 continue
-            
+
             # Verificar se boss está dentro do raio de explosão
             boss_id = id(boss)
             hit_set = mine.hit_tracking_set
             if boss_id in hit_set:
                 continue  # Já atingiu este boss
-            
+
             # Calcular distância entre explosão da mina e boss
             boss_center_x = boss.x + boss.w / 2
             boss_center_y = boss.y + boss.h / 2
             dx = damage_info.x - boss_center_x
             dy = damage_info.y - boss_center_y
             distance = (dx * dx + dy * dy) ** 0.5
-            
+
             if distance <= damage_info.radius:
                 # Boss atingido - aplicar dano
                 from ..core.config import config as Config
+
                 try:
                     from ..core.sound import sound_manager
                 except Exception:
                     sound_manager = None  # Fallback caso não tenha som
-                    
+
                 damage = int(damage_info.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
                 boss.take_damage(damage)
                 if sound_manager:
                     sound_manager.play_boss_damage()
                 entity_manager.spawn_explosion(boss_center_x, boss_center_y, size=50)
-                
+
                 # Verificar se boss morreu
                 if boss.dead:
                     score_gain += Config.BOSS_DEFEAT_SCORE
                     floating_scores.append(
-                        FloatingScore(boss_center_x, boss_center_y, Config.BOSS_DEFEAT_SCORE)
+                        FloatingScore(
+                            boss_center_x, boss_center_y, Config.BOSS_DEFEAT_SCORE
+                        )
                     )
-                    entity_manager.spawn_explosion(boss_center_x, boss_center_y, size=100)
-                
+                    entity_manager.spawn_explosion(
+                        boss_center_x, boss_center_y, size=100
+                    )
+
                 # Marcar mina como já atingiu este boss
                 hit_set.add(boss_id)
 
@@ -638,6 +648,7 @@ class Collisions:
             if distance <= damage_radius:
                 # Boss atingido - aplicar dano
                 from ..core.config import config as Config
+
                 damage = int(bomb.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
                 boss.take_damage(damage)
                 sound_manager.play_boss_damage()
@@ -647,9 +658,13 @@ class Collisions:
                 if boss.dead:
                     score_gain += Config.BOSS_DEFEAT_SCORE
                     floating_scores.append(
-                        FloatingScore(boss_center_x, boss_center_y, Config.BOSS_DEFEAT_SCORE)
+                        FloatingScore(
+                            boss_center_x, boss_center_y, Config.BOSS_DEFEAT_SCORE
+                        )
                     )
-                    entity_manager.spawn_explosion(boss_center_x, boss_center_y, size=100)
+                    entity_manager.spawn_explosion(
+                        boss_center_x, boss_center_y, size=100
+                    )
 
                 # Marcar bomba como já atingiu este boss
                 bomb.hit_enemies.add(id(boss))
@@ -1284,7 +1299,9 @@ class Collisions:
                     drip.apply_slow(slow_duration=0.5, max_slow_duration=2.0)
 
                     # Criar explosão no ponto de impacto
-                    entity_manager.spawn_explosion(bullet.x, bullet.y, size=20, is_slime=True)
+                    entity_manager.spawn_explosion(
+                        bullet.x, bullet.y, size=20, is_slime=True
+                    )
 
                     # Destruir apenas a bala se não for piercing
                     if not bullet.piercing:

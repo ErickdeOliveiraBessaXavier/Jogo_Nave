@@ -334,11 +334,11 @@ class Ship:
             # Atualizar animação de entrada
             if self.orbital_ball_entry[i] > 0.0:
                 self.orbital_ball_entry[i] = max(0.0, self.orbital_ball_entry[i] - dt)
-            
+
             # Atualizar tremor após disparo
             if self.orbital_ball_shake[i] > 0.0:
                 self.orbital_ball_shake[i] = max(0.0, self.orbital_ball_shake[i] - dt)
-            
+
             # Atualizar fade quando acabam as cargas
             if self.orbital_laser_charges[i] <= 0 and self.orbital_ball_fade[i] > 0.0:
                 self.orbital_ball_fade[i] = max(0.0, self.orbital_ball_fade[i] - dt)
@@ -358,7 +358,7 @@ class Ship:
         attempts = 0
         while attempts < self.num_orbital_balls:
             i = self.orbital_current_ball
-            
+
             # Se esta bola tem cargas, tentar disparar
             if self.orbital_laser_charges[i] > 0:
                 # Obter tamanho real do sprite para centralizar corretamente
@@ -366,7 +366,7 @@ class Ship:
                     sprite_w, sprite_h = self.ship_image.get_size()
                 else:
                     sprite_w, sprite_h = self.w, self.h
-                
+
                 # Calcular posição desta bola específica
                 angle = self.orbital_angle + (i * 2 * math.pi / self.num_orbital_balls)
                 ball_x = self.x + sprite_w / 2 + math.cos(angle) * self.orbital_radius
@@ -379,7 +379,11 @@ class Ship:
                 if nearest_enemy is not None:
                     target = self._get_enemy_center(nearest_enemy)
                     # Verificar se o alvo está dentro dos limites da tela (ou perto)
-                    if target is not None and -50 < target[0] < Config.SCREEN_WIDTH + 50 and -50 < target[1] < Config.SCREEN_HEIGHT + 50:
+                    if (
+                        target is not None
+                        and -50 < target[0] < Config.SCREEN_WIDTH + 50
+                        and -50 < target[1] < Config.SCREEN_HEIGHT + 50
+                    ):
                         entity_manager.spawn_player_laser(
                             ball_x,
                             ball_y,
@@ -392,11 +396,11 @@ class Ship:
 
                         # Tocar som do laser
                         sound_manager.play_laser_shot()
-                        
+
                         # Ativar tremor na bolinha que disparou (0.8s = duração do laser)
                         self.orbital_ball_shake[i] = 0.8
 
-                        # 
+                        #
                         # Consumir carga
                         self.orbital_laser_charges[i] -= 1
 
@@ -405,20 +409,26 @@ class Ship:
                             self.orbital_ball_fade[i] = 1.5
 
                         # Avançar para próxima bola na sequência
-                        self.orbital_current_ball = (self.orbital_current_ball + 1) % self.num_orbital_balls
+                        self.orbital_current_ball = (
+                            self.orbital_current_ball + 1
+                        ) % self.num_orbital_balls
 
                         # Resetar cooldown global para próximo disparo
                         self.orbital_global_cooldown = random.uniform(
                             ORBITAL_COOLDOWN_MIN, ORBITAL_COOLDOWN_MAX
                         )
                         return
-                
+
                 # Se não há alvo válido, avançar para próxima bola
-                self.orbital_current_ball = (self.orbital_current_ball + 1) % self.num_orbital_balls
+                self.orbital_current_ball = (
+                    self.orbital_current_ball + 1
+                ) % self.num_orbital_balls
                 attempts += 1
             else:
                 # Esta bola não tem cargas, avançar para próxima
-                self.orbital_current_ball = (self.orbital_current_ball + 1) % self.num_orbital_balls
+                self.orbital_current_ball = (
+                    self.orbital_current_ball + 1
+                ) % self.num_orbital_balls
                 attempts += 1
 
     def _update_particles(self, dt: float) -> None:
@@ -428,7 +438,7 @@ class Ship:
             sprite_w, sprite_h = self.ship_image.get_size()
         else:
             sprite_w, sprite_h = self.w, self.h
-        
+
         # Partículas de entrada
         if self.is_entering:
             for _ in range(PARTICLE_ENTRY_COUNT):
@@ -462,7 +472,7 @@ class Ship:
         for _ in range(PARTICLE_THRUSTER_COUNT):
             particle = ParticleDict(
                 x=self.x
-                + sprite_w / 2                
+                + sprite_w / 2
                 + random.uniform(-5, 5),  # Offset com variação para efeito natural
                 y=self.y + sprite_h,
                 vx=random.uniform(*PARTICLE_THRUSTER_VELOCITY_X),
@@ -592,7 +602,7 @@ class Ship:
         if self.has_shield:
             # Efeito pulsante
             pulse = abs((time.time() * 4) % 2 - 1)  # Oscila entre 0 e 1
-            
+
             # Calcular centro baseado no tamanho real do sprite (se existir)
             if self.ship_image is not None:
                 sprite_w, sprite_h = self.ship_image.get_size()
@@ -605,7 +615,7 @@ class Ship:
                 center_x = int(self.x + self.w / 2)
                 center_y = int(self.y + self.h / 2)
                 base_radius = max(self.w, self.h) / 2 + 8
-            
+
             radius = int(base_radius + pulse * 4)
 
             # Círculo azul semi-transparente (desenhar múltiplas camadas para simular transparência)
@@ -628,7 +638,7 @@ class Ship:
         # Desenhar bolas elétricas orbitais
         if self.orbital_lasers_active:
             current_time = time.time()
-            
+
             # Obter tamanho real do sprite para centralizar corretamente
             if self.ship_image is not None:
                 sprite_w, sprite_h = self.ship_image.get_size()
@@ -647,7 +657,7 @@ class Ship:
                     continue
 
                 angle = self.orbital_angle + (i * 2 * math.pi / self.num_orbital_balls)
-                
+
                 # Calcular posição com animação de entrada
                 if entry > 0.0:
                     # Durante entrada: interpolar do centro da nave até posição orbital
@@ -657,7 +667,7 @@ class Ship:
                     current_radius = self.orbital_radius * entry_progress
                 else:
                     current_radius = self.orbital_radius
-                
+
                 # Adicionar tremor se estiver tremendo
                 shake_x, shake_y = 0, 0
                 if shake > 0.0:
@@ -666,7 +676,7 @@ class Ship:
                     if shake_intensity > 0:
                         shake_x = random.randint(-shake_intensity, shake_intensity)
                         shake_y = random.randint(-shake_intensity, shake_intensity)
-                
+
                 ball_x = int(
                     self.x + sprite_w / 2 + math.cos(angle) * current_radius + shake_x
                 )
@@ -733,8 +743,11 @@ class Ship:
                 # Cargas normais (2 ou 3)
                 else:
                     # Verificar se esta bola é a próxima a disparar
-                    is_ready_to_fire = (self.orbital_current_ball == i and self.orbital_global_cooldown < 1.0)
-                    
+                    is_ready_to_fire = (
+                        self.orbital_current_ball == i
+                        and self.orbital_global_cooldown < 1.0
+                    )
+
                     # Durante entrada, usar cor diferente (pulsação suave)
                     if entry > 0.0:
                         entry_alpha = 1.0 - (entry / 0.9)
@@ -775,7 +788,10 @@ class Ship:
                             1,
                         )
                         pygame.draw.circle(
-                            surface, (255, 255, 255), (ball_x, ball_y), ball_radius + 1  # Núcleo branco
+                            surface,
+                            (255, 255, 255),
+                            (ball_x, ball_y),
+                            ball_radius + 1,  # Núcleo branco
                         )
                     else:
                         pulse = abs((current_time * 6 + i) % 2 - 1)
@@ -796,7 +812,10 @@ class Ship:
                             1,
                         )
                         pygame.draw.circle(
-                            surface, (200, 240, 255), (ball_x, ball_y), ball_radius  # Cor dos sparks
+                            surface,
+                            (200, 240, 255),
+                            (ball_x, ball_y),
+                            ball_radius,  # Cor dos sparks
                         )
 
         # Desenhar partículas de entrada (acima da nave)

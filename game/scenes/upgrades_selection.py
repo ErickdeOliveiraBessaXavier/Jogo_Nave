@@ -48,8 +48,14 @@ class UILayout:
 
 class FloatingMessage:
     """Mensagem flutuante similar ao FloatingScore para feedback visual."""
-    
-    def __init__(self, x: float, y: float, message: str, color: Tuple[int, int, int] = (255, 100, 100)):
+
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        message: str,
+        color: Tuple[int, int, int] = (255, 100, 100),
+    ):
         self.x = x
         self.y = y
         self.message = message
@@ -58,41 +64,42 @@ class FloatingMessage:
         self.lifetime = 90  # Frames (1.5 segundos a 60fps)
         self.initial_lifetime = self.lifetime
         self.dy = -1.0  # Velocidade de subida
-        
+
         # Font para a mensagem
         self.font = get_font(20)
-        
+
         # Efeito de fade e movimento
         self.fade_start = 30  # Começar fade nos últimos 30 frames
-    
+
     def update(self, dt: float) -> None:
         """Atualiza posição e fade da mensagem."""
         self.y += self.dy
         self.lifetime -= 1
-        
+
         # Calcular alpha baseado no lifetime
         if self.lifetime <= self.fade_start:
             fade_progress = self.lifetime / self.fade_start
             self.alpha = max(0, int(255 * fade_progress))
         else:
             self.alpha = 255
-    
+
     def draw(self, surface: pygame.Surface) -> None:
         """Desenha a mensagem na tela."""
         if self.alpha <= 0:
             return
-            
+
         # Renderizar texto com alpha
         text_surf = self.font.render(self.message, True, self.color)
         text_surf.set_alpha(self.alpha)
-        
+
         # Centralizar horizontalmente
         text_rect = text_surf.get_rect(center=(int(self.x), int(self.y)))
         surface.blit(text_surf, text_rect)
-    
+
     def is_dead(self) -> bool:
         """Retorna True se a mensagem deve ser removida."""
         return self.lifetime <= 0
+
 
 class UpgradesSelectionScene(Scene):
     """Cena de seleção de aprimoramentos com drag-and-drop e grid 2x2."""
@@ -150,7 +157,9 @@ class UpgradesSelectionScene(Scene):
         self.dragging_upgrade: Optional[UpgradeMeta] = None
         self.drag_offset: Tuple[int, int] = (0, 0)
         self.drag_source_slot: Optional[int] = None  # Se veio da grid direita
-        self.drag_invalid_target: bool = False  # Se o drop atual seria inválido por peso
+        self.drag_invalid_target: bool = (
+            False  # Se o drop atual seria inválido por peso
+        )
 
         # Shake effect para slots bloqueados
         self.shaking_slot: Optional[int] = None
@@ -164,16 +173,16 @@ class UpgradesSelectionScene(Scene):
         # Layout
         self.layout = UILayout()
         self._calculate_layout()
-        
+
         # Sistema de mensagens flutuantes
         self.floating_messages: List[FloatingMessage] = []
-        
+
         # Sistema de transição
         self.transitioning = False
         self.transition_progress = 0.0
         self.transition_duration = 0.3
         self.fade_out = False
-        
+
         # Animação de entrada
         self.entry_progress = 0.0
         self.is_entering = True
@@ -282,7 +291,7 @@ class UpgradesSelectionScene(Scene):
         pygame.mouse.set_visible(True)
         self._calculate_layout()
         self._reset_selection()
-        
+
         # Resetar animação de entrada
         self.entry_progress = 0.0
         self.is_entering = True
@@ -329,11 +338,16 @@ class UpgradesSelectionScene(Scene):
                 if slot_rect.collidepoint(pos):
                     # Verificar se slot está bloqueado por estrelas
                     locked_by_stars = i >= self.player_profile.unlocked_slots
-                    
+
                     # Verificar se slot está bloqueado por peso (sem upgrade equipado)
-                    slot_consumed_by_weight = i >= (len(self.layout.active_slots) - total_equipped_weight)
-                    has_equipped = i < len(self.player_profile.upgrade_loadout) and self.player_profile.upgrade_loadout[i] is not None
-                    
+                    slot_consumed_by_weight = i >= (
+                        len(self.layout.active_slots) - total_equipped_weight
+                    )
+                    has_equipped = (
+                        i < len(self.player_profile.upgrade_loadout)
+                        and self.player_profile.upgrade_loadout[i] is not None
+                    )
+
                     # Se o slot está bloqueado por estrelas, tentar desbloquear
                     if locked_by_stars:
                         if self.player_profile.can_unlock_slot(i):
@@ -346,7 +360,7 @@ class UpgradesSelectionScene(Scene):
                             self.shaking_slot = i
                             self.shake_start_time = time.time()
                         return
-                    
+
                     # Se slot está consumido por peso mas não tem upgrade, não pode interagir
                     if slot_consumed_by_weight and not has_equipped:
                         return
@@ -391,26 +405,41 @@ class UpgradesSelectionScene(Scene):
                         can_equip = False
                         if self.drag_source_slot is not None:
                             # Temporariamente remover do slot de origem para verificar
-                            original_upgrade = self.player_profile.upgrade_loadout[self.drag_source_slot]
-                            self.player_profile.upgrade_loadout[self.drag_source_slot] = None
-                            can_equip = self.player_profile.can_equip_upgrade(self.dragging_upgrade.type, i)
-                            self.player_profile.upgrade_loadout[self.drag_source_slot] = original_upgrade
+                            original_upgrade = self.player_profile.upgrade_loadout[
+                                self.drag_source_slot
+                            ]
+                            self.player_profile.upgrade_loadout[
+                                self.drag_source_slot
+                            ] = None
+                            can_equip = self.player_profile.can_equip_upgrade(
+                                self.dragging_upgrade.type, i
+                            )
+                            self.player_profile.upgrade_loadout[
+                                self.drag_source_slot
+                            ] = original_upgrade
                         else:
-                            can_equip = self.player_profile.can_equip_upgrade(self.dragging_upgrade.type, i)
-                        
+                            can_equip = self.player_profile.can_equip_upgrade(
+                                self.dragging_upgrade.type, i
+                            )
+
                         if not can_equip:
                             # Shake effect e som de erro
                             self.shaking_slot = i
                             self.shake_start_time = time.time()
-                            
+
                             # Adicionar mensagem flutuante "Sem espaço"
                             slot_center = slot_rect.center
                             self.floating_messages.append(
-                                FloatingMessage(slot_center[0], slot_center[1] - 20, "Sem espaço", (255, 100, 100))
+                                FloatingMessage(
+                                    slot_center[0],
+                                    slot_center[1] - 20,
+                                    "Sem espaço",
+                                    (255, 100, 100),
+                                )
                             )
-                            
+
                             try:
-                                if hasattr(self.app, 'sound_manager'):
+                                if hasattr(self.app, "sound_manager"):
                                     self.app.sound_manager.play_upgrade_denied()  # type: ignore
                             except:
                                 pass
@@ -488,20 +517,23 @@ class UpgradesSelectionScene(Scene):
 
     def update(self, dt: float):
         self.r.starfield.update(dt)
-        
+
         # Atualizar animação de entrada
         if self.is_entering and self.entry_progress < 1.0:
-            self.entry_progress = min(1.0, self.entry_progress + dt / self.entry_duration)
+            self.entry_progress = min(
+                1.0, self.entry_progress + dt / self.entry_duration
+            )
             if self.entry_progress >= 1.0:
                 self.is_entering = False
-        
+
         # Atualizar transição de saída
         if self.transitioning:
             self.transition_progress += dt / self.transition_duration
-            
+
             if self.transition_progress >= 1.0:
                 # Completou o fade out, voltar ao menu
                 from .main_menu import MainMenuScene
+
                 self.app.states.switch(MainMenuScene(self.app))
                 return
 
@@ -510,7 +542,7 @@ class UpgradesSelectionScene(Scene):
             message.update(dt)
             if message.is_dead():
                 self.floating_messages.remove(message)
-        
+
         # Limpar shake se o tempo expirou
         if self.shaking_slot is not None:
             if time.time() - self.shake_start_time >= self.shake_duration:
@@ -545,22 +577,28 @@ class UpgradesSelectionScene(Scene):
                     # Slot bloqueado por estrelas ou sem peso suficiente = inválido
                     if i >= self.player_profile.unlocked_slots:
                         self.drag_invalid_target = True
-                    elif not self.player_profile.can_equip_upgrade(self.dragging_upgrade.type, i):
+                    elif not self.player_profile.can_equip_upgrade(
+                        self.dragging_upgrade.type, i
+                    ):
                         self.drag_invalid_target = True
                     break
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
         self.r.starfield.draw(surface)
-        
+
         # Calcular alpha baseado nas transições
         if self.transitioning:
-            alpha_mult = 1.0 - self.transition_progress if self.fade_out else self.transition_progress
+            alpha_mult = (
+                1.0 - self.transition_progress
+                if self.fade_out
+                else self.transition_progress
+            )
         elif self.is_entering:
             alpha_mult = self.entry_progress
         else:
             alpha_mult = 1.0
-        
+
         alpha = int(255 * alpha_mult)
         offset_y = int(30 * (1.0 - alpha_mult))
 
@@ -571,20 +609,22 @@ class UpgradesSelectionScene(Scene):
 
         # Criar surface temporária para aplicar alpha global
         if alpha < 255:
-            temp_surface = pygame.Surface((surface.get_width(), surface.get_height()), pygame.SRCALPHA)
+            temp_surface = pygame.Surface(
+                (surface.get_width(), surface.get_height()), pygame.SRCALPHA
+            )
             self._draw_tabs(temp_surface)
             self._draw_upgrade_grid(temp_surface)
             self._draw_active_slots(temp_surface)
             self._draw_back_button(temp_surface)
-            
+
             if self.dragging_upgrade:
                 self._draw_dragging_upgrade(temp_surface)
-            
+
             if self.hovered_upgrade and not self.dragging_upgrade:
                 self._draw_tooltip(temp_surface)
-            
+
             self._draw_floating_messages(temp_surface)
-            
+
             temp_surface.set_alpha(alpha)
             surface.blit(temp_surface, (0, offset_y))
         else:
@@ -601,7 +641,7 @@ class UpgradesSelectionScene(Scene):
             # Desenhar tooltip
             if self.hovered_upgrade and not self.dragging_upgrade:
                 self._draw_tooltip(surface)
-            
+
             # Desenhar mensagens flutuantes
             self._draw_floating_messages(surface)
 
@@ -615,7 +655,7 @@ class UpgradesSelectionScene(Scene):
             # Borda: CUSTOM_PURPLE se selecionado/hover, GRAY caso contrário
             border_color = CUSTOM_PURPLE if (is_selected or is_hovered) else colors.GRAY
             text_color = CUSTOM_GOLD if (is_selected or is_hovered) else colors.GRAY
-            
+
             pygame.draw.rect(surface, border_color, rect, 2, border_radius=8)
 
             tab_label_text = cat.upper() if isinstance(cat, str) else cat.name.upper()
@@ -675,22 +715,21 @@ class UpgradesSelectionScene(Scene):
                 pygame.draw.circle(surface, colors.YELLOW, badge_rect.center, 7)
                 check_text = self.tiny_font.render("E", True, colors.BLACK)
                 surface.blit(check_text, (badge_rect.x + 3, badge_rect.y + 1))
-            
+
             # Mostrar peso do upgrade (canto inferior direito)
             weight_text = self.tiny_font.render(
-                f"{upgrade.slot_weight}", True, colors.WHITE if unlocked else colors.GRAY
+                f"{upgrade.slot_weight}",
+                True,
+                colors.WHITE if unlocked else colors.GRAY,
             )
             weight_bg = pygame.Rect(
                 cell_rect.right - weight_text.get_width() - 8,
                 cell_rect.bottom - weight_text.get_height() - 5,
                 weight_text.get_width() + 6,
-                weight_text.get_height() + 4
+                weight_text.get_height() + 4,
             )
             pygame.draw.rect(surface, (20, 20, 20), weight_bg, border_radius=3)
-            surface.blit(
-                weight_text,
-                (weight_bg.x + 3, weight_bg.y + 2)
-            )
+            surface.blit(weight_text, (weight_bg.x + 3, weight_bg.y + 2))
 
     def _draw_active_slots(self, surface: pygame.Surface):
         """Desenha a grid 2x2 de slots ativos do lado direito."""
@@ -722,43 +761,52 @@ class UpgradesSelectionScene(Scene):
 
         # Slots
         total_equipped_weight = self.player_profile.get_total_equipped_weight()
-        
+
         # Se estamos arrastando um upgrade de um slot equipado, temporariamente excluir seu peso
         if self.dragging_upgrade and self.drag_source_slot is not None:
             total_equipped_weight -= self.dragging_upgrade.slot_weight
             total_equipped_weight = max(0, total_equipped_weight)  # Nunca negativo
-        
+
         # Calcular quais slots vazios devem aparecer bloqueados por peso
         # Primeiro, identificar slots vazios desbloqueados
         empty_slots: List[int] = []
         for idx in range(len(self.layout.active_slots)):
-            if idx >= len(self.player_profile.upgrade_loadout) or self.player_profile.upgrade_loadout[idx] is None:
-                if idx < self.player_profile.unlocked_slots:  # Só considerar slots desbloqueados
+            if (
+                idx >= len(self.player_profile.upgrade_loadout)
+                or self.player_profile.upgrade_loadout[idx] is None
+            ):
+                if (
+                    idx < self.player_profile.unlocked_slots
+                ):  # Só considerar slots desbloqueados
                     empty_slots.append(idx)
-        
+
         # Calcular quantos slots ainda estão disponíveis para novos upgrades
         slots_disponiveis = self.player_profile.unlocked_slots - total_equipped_weight
         slots_disponiveis = max(0, slots_disponiveis)  # Nunca negativo
-        
+
         # Bloquear os slots vazios que excedem a disponibilidade
         # Se temos 7 slots vazios e 2 disponíveis, bloqueamos os últimos 5
         num_slots_a_bloquear = max(0, len(empty_slots) - slots_disponiveis)
-        slots_to_block_by_weight: set[int] = set(empty_slots[-num_slots_a_bloquear:]) if num_slots_a_bloquear > 0 else set()
-        
+        slots_to_block_by_weight: set[int] = (
+            set(empty_slots[-num_slots_a_bloquear:])
+            if num_slots_a_bloquear > 0
+            else set()
+        )
+
         for i, slot_rect in enumerate(self.layout.active_slots):
             # Proteção contra índice fora do range
             if i >= len(self.player_profile.upgrade_loadout):
                 equipped_type = None
             else:
                 equipped_type = self.player_profile.upgrade_loadout[i]
-            
+
             # Determinar se slot está bloqueado por estrelas
             locked_by_stars = i >= self.player_profile.unlocked_slots
-            
+
             # Determinar se slot está "ocupado" visualmente pelo peso
             # Apenas slots vazios podem estar bloqueados por peso
             slot_consumed_by_weight = i in slots_to_block_by_weight
-            
+
             # Considerar hover apenas se não estiver bloqueado por estrelas
             is_hovered = (self.hovered_slot_idx == i) and (not locked_by_stars)
 
@@ -782,14 +830,20 @@ class UpgradesSelectionScene(Scene):
                 bg_color = (30, 30, 30) if not is_hovered else (40, 40, 40)
 
             border_color = (
-                colors.YELLOW if is_hovered else (80, 80, 80) if locked_by_stars else colors.GRAY
+                colors.YELLOW
+                if is_hovered
+                else (80, 80, 80) if locked_by_stars else colors.GRAY
             )
             border_style = 2 if equipped_type else 1
 
             pygame.draw.rect(surface, bg_color, draw_rect, border_radius=10)
 
             # Borda tracejada para slots vazios (não bloqueados por estrelas nem por peso)
-            if not equipped_type and not locked_by_stars and not slot_consumed_by_weight:
+            if (
+                not equipped_type
+                and not locked_by_stars
+                and not slot_consumed_by_weight
+            ):
                 self._draw_dashed_rect(surface, draw_rect, border_color)
             else:
                 pygame.draw.rect(
@@ -857,7 +911,7 @@ class UpgradesSelectionScene(Scene):
                             draw_rect.bottom - 25,
                         ),
                     )
-                    
+
                     # Peso (canto inferior direito)
                     weight_text = self.tiny_font.render(
                         f"{upgrade_meta.slot_weight}", True, colors.WHITE
@@ -866,13 +920,10 @@ class UpgradesSelectionScene(Scene):
                         draw_rect.right - weight_text.get_width() - 8,
                         draw_rect.bottom - weight_text.get_height() - 5,
                         weight_text.get_width() + 6,
-                        weight_text.get_height() + 4
+                        weight_text.get_height() + 4,
                     )
                     pygame.draw.rect(surface, (20, 20, 20), weight_bg, border_radius=3)
-                    surface.blit(
-                        weight_text,
-                        (weight_bg.x + 3, weight_bg.y + 2)
-                    )
+                    surface.blit(weight_text, (weight_bg.x + 3, weight_bg.y + 2))
             else:
                 if locked_by_stars:
                     # Desenhar ícone de bloqueado por estrelas centralizado
@@ -910,10 +961,10 @@ class UpgradesSelectionScene(Scene):
         """Desenha o botão de voltar."""
         back_rect = self.layout.back_button
         is_hovered = back_rect.collidepoint(pygame.mouse.get_pos())
-        
+
         # Apenas borda, sem preenchimento
         border_color = CUSTOM_GOLD if is_hovered else CUSTOM_PURPLE
-        
+
         pygame.draw.rect(surface, border_color, back_rect, 2, border_radius=8)
         back_text = self.item_font.render("Voltar", True, colors.WHITE)
         surface.blit(
@@ -946,7 +997,7 @@ class UpgradesSelectionScene(Scene):
 
         # Upgrade com transparência (vermelho se inválido)
         drag_surf = pygame.Surface((80, 80), pygame.SRCALPHA)
-        
+
         # Cor de fundo e borda dependem se o drop é válido
         if self.drag_invalid_target:
             bg_color = (80, 40, 40, 200)  # Vermelho escuro
@@ -956,10 +1007,8 @@ class UpgradesSelectionScene(Scene):
             bg_color = (60, 60, 60, 200)  # Cinza normal
             border_color = (colors.YELLOW[0], colors.YELLOW[1], colors.YELLOW[2], 220)
             icon_color = CUSTOM_PURPLE
-        
-        pygame.draw.rect(
-            drag_surf, bg_color, drag_surf.get_rect(), border_radius=6
-        )
+
+        pygame.draw.rect(drag_surf, bg_color, drag_surf.get_rect(), border_radius=6)
         pygame.draw.rect(
             drag_surf,
             border_color,
@@ -1117,7 +1166,7 @@ class UpgradesSelectionScene(Scene):
         if current_line:
             lines.append(current_line.strip())
         return lines
-    
+
     def _draw_floating_messages(self, surface: pygame.Surface) -> None:
         """Desenha todas as mensagens flutuantes."""
         for message in self.floating_messages:

@@ -55,7 +55,7 @@ class CelestialManager:
         self.spawn_timer = 0.0
         self.next_spawn_time = random.uniform(
             RenderConfig.CELESTIAL_SPAWN_MIN_INTERVAL,
-            RenderConfig.CELESTIAL_SPAWN_MAX_INTERVAL
+            RenderConfig.CELESTIAL_SPAWN_MAX_INTERVAL,
         )
         # Initialize the pool with 'n' celestial bodies
         for _ in range(n):
@@ -161,7 +161,9 @@ class CelestialManager:
         # === MODIFICADO: Usar imagem disponível ===
         image_path = self._get_available_image(self.current_time)
         self._used_images.add(image_path)  # Registrar como usada
-        self._recently_used[image_path] = self.current_time  # Marcar como recentemente usada
+        self._recently_used[image_path] = (
+            self.current_time
+        )  # Marcar como recentemente usada
         # === FIM ===
 
         scale = random.uniform(
@@ -196,7 +198,9 @@ class CelestialManager:
         # Escolher nova imagem disponível
         image_path = self._get_available_image(self.current_time)
         self._used_images.add(image_path)  # Registrar como usada
-        self._recently_used[image_path] = self.current_time  # Marcar como recentemente usada
+        self._recently_used[image_path] = (
+            self.current_time
+        )  # Marcar como recentemente usada
         # === FIM ===
 
         scale = random.uniform(
@@ -220,7 +224,7 @@ class CelestialManager:
 
     def update(self, dt: float, speed_multiplier: float = 1.0) -> None:
         self.current_time += dt
-        
+
         # Atualizar corpos existentes e remover os que saíram
         remaining_bodies: list[CelestialBody] = []
         removed_images: list[Path] = []
@@ -234,12 +238,15 @@ class CelestialManager:
                     self._used_images.discard(body["image_path"])
                     self._recently_used[body["image_path"]] = self.current_time
                     removed_images.append(body["image_path"])
-        
+
         self.celestial_bodies = remaining_bodies
-        
+
         # Timer para spawn orgânico
         self.spawn_timer += dt
-        if self.spawn_timer >= self.next_spawn_time and len(self.celestial_bodies) < RenderConfig.CELESTIAL_NUM_BODIES:
+        if (
+            self.spawn_timer >= self.next_spawn_time
+            and len(self.celestial_bodies) < RenderConfig.CELESTIAL_NUM_BODIES
+        ):
             # Spawnar um novo corpo
             new_body = self._create_and_initialize_celestial_body(
                 y_position=random.uniform(
@@ -252,7 +259,7 @@ class CelestialManager:
             self.spawn_timer = 0.0
             self.next_spawn_time = random.uniform(
                 RenderConfig.CELESTIAL_SPAWN_MIN_INTERVAL,
-                RenderConfig.CELESTIAL_SPAWN_MAX_INTERVAL
+                RenderConfig.CELESTIAL_SPAWN_MAX_INTERVAL,
             )
 
     def draw(self, surface: pygame.Surface) -> None:
@@ -440,11 +447,17 @@ class Renderer:
         # === FIM DO SISTEMA DE FPS ===
 
     def background(
-        self, surface: pygame.Surface, dt: float, speed_multiplier: float = 1.0, draw_celestials: bool = True
+        self,
+        surface: pygame.Surface,
+        dt: float,
+        speed_multiplier: float = 1.0,
+        draw_celestials: bool = True,
     ):
         surface.fill(colors.BLACK)
         self.starfield.update(dt, speed_multiplier)
-        self.celestial_manager.update(dt, speed_multiplier)  # Sempre atualizar para que continuem se movendo
+        self.celestial_manager.update(
+            dt, speed_multiplier
+        )  # Sempre atualizar para que continuem se movendo
         self.starfield.draw(surface)
         if draw_celestials:
             self.celestial_manager.draw(surface)

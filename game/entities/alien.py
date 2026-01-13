@@ -27,7 +27,9 @@ class Alien:
             )
             image = get_image(path)
             # Redimensionar para o tamanho do alien
-            image = pygame.transform.scale(image, (Config.ALIEN_WIDTH, Config.ALIEN_HEIGHT))
+            image = pygame.transform.scale(
+                image, (Config.ALIEN_WIDTH, Config.ALIEN_HEIGHT)
+            )
             frames.append(image)
 
         cls._animation_frames = frames
@@ -41,13 +43,12 @@ class Alien:
         self.speed_y = Config.ALIEN_SPEED_Y
         self.dead = False
         self.health = Config.ALIEN_HEALTH
-        
+
         # Timers de tiro
         self.shoot_timer: float = random.uniform(
-            Config.ALIEN_SHOOT_INTERVAL_MIN,
-            Config.ALIEN_SHOOT_INTERVAL_MAX
+            Config.ALIEN_SHOOT_INTERVAL_MIN, Config.ALIEN_SHOOT_INTERVAL_MAX
         )
-        
+
         # Atributos para controle por formação
         self.formation_controlled = False
         self.formation_index = 0
@@ -58,11 +59,13 @@ class Alien:
         self.is_paused = False
         self.should_shoot = False
         self.post_shoot_cooldown: float = 0.0
-        
+
         # Sistema de rajada
         self.burst_shots_remaining: int = 0  # Quantos tiros faltam na rajada
         self.burst_shot_timer: float = 0.0  # Timer para o próximo tiro da rajada
-        self.is_burst_mode: bool = False  # Se está em modo rajada (fica parado durante toda sequência)
+        self.is_burst_mode: bool = (
+            False  # Se está em modo rajada (fica parado durante toda sequência)
+        )
 
         # Animação
         self.animation_frames = self.load_animation_frames()
@@ -80,7 +83,10 @@ class Alien:
             # Apenas atualiza timer de tiro (o disparo é gerenciado pela Formation)
             self.shoot_timer -= dt
             # Marcar como morto se sair muito da tela (segurança)
-            if self.y > Config.SCREEN_HEIGHT + Config.ALIEN_DEATH_MARGIN or self.y < -Config.ALIEN_DEATH_MARGIN:
+            if (
+                self.y > Config.SCREEN_HEIGHT + Config.ALIEN_DEATH_MARGIN
+                or self.y < -Config.ALIEN_DEATH_MARGIN
+            ):
                 self.dead = True
             # Atualizar animação
             self.animation_timer += dt
@@ -97,13 +103,17 @@ class Alien:
             if self.pause_timer <= 0:
                 self.is_paused = False
                 # Não disparar aqui - deixar o sistema de burst_shot_timer gerenciar
-        
+
         # Atualizar cooldown após disparar
         if self.post_shoot_cooldown > 0:
             self.post_shoot_cooldown -= dt
-        
+
         # Movimento normal (quando não está em formação e não está pausado ou em cooldown ou em burst)
-        if not self.is_paused and self.post_shoot_cooldown <= 0 and not self.is_burst_mode:
+        if (
+            not self.is_paused
+            and self.post_shoot_cooldown <= 0
+            and not self.is_burst_mode
+        ):
             self.x += self.speed_x * dt
             self.y += self.speed_y * dt
 
@@ -117,7 +127,11 @@ class Alien:
 
         # Atirar
         self.shoot_timer -= dt
-        if self.shoot_timer <= 0 and not self.is_paused and self.burst_shots_remaining == 0:
+        if (
+            self.shoot_timer <= 0
+            and not self.is_paused
+            and self.burst_shots_remaining == 0
+        ):
             # Decidir se será rajada ou tiro único
             self.is_burst_mode = random.random() < Config.ALIEN_SHOOT_BURST_CHANCE
             if self.is_burst_mode:
@@ -126,13 +140,15 @@ class Alien:
             else:
                 # Modo tiro único: 1 tiro
                 self.burst_shots_remaining = 1
-            
+
             # Iniciar primeira pausa (0.5s para ambos)
             self.is_paused = True
             self.pause_timer = 0.5
-            self.burst_shot_timer = 0.0  # Primeiro tiro acontece imediatamente após a pausa
-            self.shoot_timer = float('inf')
-        
+            self.burst_shot_timer = (
+                0.0  # Primeiro tiro acontece imediatamente após a pausa
+            )
+            self.shoot_timer = float("inf")
+
         # Gerenciar tiros da rajada/sequência
         if self.burst_shots_remaining > 0 and not self.is_paused:
             self.burst_shot_timer -= dt
@@ -140,7 +156,7 @@ class Alien:
                 # Hora de atirar
                 self.should_shoot = True
                 self.burst_shots_remaining -= 1
-                
+
                 if self.burst_shots_remaining > 0:
                     # Ainda há tiros na sequência
                     if self.is_burst_mode:
@@ -155,10 +171,9 @@ class Alien:
                     self.is_burst_mode = False
                     # Resetar timer normal
                     self.shoot_timer = random.uniform(
-                        Config.ALIEN_SHOOT_INTERVAL_MIN,
-                        Config.ALIEN_SHOOT_INTERVAL_MAX
+                        Config.ALIEN_SHOOT_INTERVAL_MIN, Config.ALIEN_SHOOT_INTERVAL_MAX
                     )
-        
+
         # Criar bala se deve disparar
         bullets = None
         if self.should_shoot:

@@ -40,7 +40,7 @@ class AnimationConfig:
     TITLE_TOP_MARGIN = 20  # Margin from top of menu container to title
     BUTTONS_TOP_MARGIN = 200  # Margin from title bottom to first button
     TITLE_HEIGHT = 60  # Approximate height of title text
-    
+
     # Animação de entrada
     ENTRY_DURATION = 0.6  # Duração do fade-in up (segundos)
     ENTRY_OFFSET_Y = 30  # Distância Y da animação de subida
@@ -51,12 +51,14 @@ class AnimationConfig:
 
 class AutoPlayConfig:
     """Configuração para o modo auto-play visual do menu."""
+
     METEOR_SPAWN_RATE = 0.8  # Novos meteoros a cada X segundos
     MAX_METEORS = 10  # Máximo de meteoros simultâneos
 
 
 class MenuView(Enum):
     """Estados/Views possíveis do menu."""
+
     MAIN = 0
     DIFFICULTY_SELECTION = 1
 
@@ -106,7 +108,7 @@ class Button:
         self.chars: List[CharDict] = []
         self.text_width = 0
         self._create_char_data()
-        
+
         # Animação de entrada
         self.entry_progress = 0.0  # 0.0 = não visível, 1.0 = completamente visível
         self.entry_delay = 0.0  # Delay antes de começar a animar
@@ -148,10 +150,12 @@ class Button:
         if self.entry_delay > 0.0:
             self.entry_delay -= dt
             return
-        
+
         if self.entry_progress < 1.0:
-            self.entry_progress = min(1.0, self.entry_progress + dt / AnimationConfig.ENTRY_DURATION)
-    
+            self.entry_progress = min(
+                1.0, self.entry_progress + dt / AnimationConfig.ENTRY_DURATION
+            )
+
     def update_animation(
         self, time_ms: float, anim_speed: float, phase_shift: float, anim_range: float
     ):
@@ -175,17 +179,17 @@ class Button:
         # Não renderizar se ainda não começou a animação
         if self.entry_progress <= 0.0:
             return
-        
+
         # Calcular alpha e offset Y baseado no progresso
         alpha = int(255 * self.entry_progress)
         offset_y = int(AnimationConfig.ENTRY_OFFSET_Y * (1.0 - self.entry_progress))
-        
+
         text_color = (
             self.hover_color
             if self.state in (ButtonState.HOVERED, ButtonState.FOCUSED)
             else self.color
         )
-        
+
         # Aplicar alpha nas cores
         text_color = (text_color[0], text_color[1], text_color[2], alpha)
         border_color_alpha = (border_color[0], border_color[1], border_color[2], alpha)
@@ -202,9 +206,13 @@ class Button:
 
             # Apenas borda, sem fundo
             # Criar surface temporária com alpha para a borda
-            temp_surface = pygame.Surface((scaled_rect.width + 4, scaled_rect.height + 4), pygame.SRCALPHA)
+            temp_surface = pygame.Surface(
+                (scaled_rect.width + 4, scaled_rect.height + 4), pygame.SRCALPHA
+            )
             temp_rect = pygame.Rect(2, 2, scaled_rect.width, scaled_rect.height)
-            pygame.draw.rect(temp_surface, border_color_alpha, temp_rect, 2, border_radius=12)
+            pygame.draw.rect(
+                temp_surface, border_color_alpha, temp_rect, 2, border_radius=12
+            )
             surface.blit(temp_surface, (scaled_rect.x - 2, scaled_rect.y - 2))
 
             # Draw animated text
@@ -214,7 +222,9 @@ class Button:
                 char_pos = (current_x, char_data["rect"].y + offset_y)
                 # Usar texto com cor apropriada
                 text_char = self.text[self.chars.index(char_data)]
-                colored_char = self.font.render(text_char, True, text_color[:3])  # RGB sem alpha
+                colored_char = self.font.render(
+                    text_char, True, text_color[:3]
+                )  # RGB sem alpha
                 colored_char.set_alpha(alpha)
                 surface.blit(colored_char, char_pos)
                 current_x += char_data["render"].get_width()
@@ -222,14 +232,20 @@ class Button:
             # Apenas borda, sem fundo
             adjusted_rect = self.rect.copy()
             adjusted_rect.y += offset_y
-            
+
             # Criar surface temporária com alpha para a borda
-            temp_surface = pygame.Surface((adjusted_rect.width + 4, adjusted_rect.height + 4), pygame.SRCALPHA)
+            temp_surface = pygame.Surface(
+                (adjusted_rect.width + 4, adjusted_rect.height + 4), pygame.SRCALPHA
+            )
             temp_rect = pygame.Rect(2, 2, adjusted_rect.width, adjusted_rect.height)
-            pygame.draw.rect(temp_surface, border_color_alpha, temp_rect, 2, border_radius=10)
+            pygame.draw.rect(
+                temp_surface, border_color_alpha, temp_rect, 2, border_radius=10
+            )
             surface.blit(temp_surface, (adjusted_rect.x - 2, adjusted_rect.y - 2))
 
-            text_surface = self.font.render(self.text, True, text_color[:3])  # RGB sem alpha
+            text_surface = self.font.render(
+                self.text, True, text_color[:3]
+            )  # RGB sem alpha
             text_surface.set_alpha(alpha)
             text_rect = text_surface.get_rect(center=adjusted_rect.center)
             surface.blit(text_surface, text_rect)
@@ -248,10 +264,13 @@ class AutoPlay:
         """Atualiza a lógica do auto-play."""
         # Atualizar explosões
         self.explosion_pool.update(dt)
-        
+
         # Spawnar novos meteoros
         self.meteor_spawn_timer += dt
-        if self.meteor_spawn_timer >= AutoPlayConfig.METEOR_SPAWN_RATE and len(self.meteors) < AutoPlayConfig.MAX_METEORS:
+        if (
+            self.meteor_spawn_timer >= AutoPlayConfig.METEOR_SPAWN_RATE
+            and len(self.meteors) < AutoPlayConfig.MAX_METEORS
+        ):
             self._spawn_meteor()
             self.meteor_spawn_timer = 0.0
 
@@ -283,17 +302,19 @@ class AutoPlay:
     def is_rainbow_mode(self) -> bool:
         """Retorna True se atingiu 15 meteoros destruídos (easter egg)."""
         return self.meteors_destroyed >= 15
+
     def reset(self):
         """Reseta o estado do auto-play."""
         self.meteors_destroyed = 0
         self.meteors.clear()
         self.meteor_spawn_timer = 0.0
         self.explosion_pool.clear_active()
+
     def render(self, surface: pygame.Surface):
         """Renderiza o auto-play visual (apenas meteoros e explosões)."""
         # Renderizar explosões (abaixo dos meteoros)
         self.explosion_pool.draw_all(surface)
-        
+
         # Renderizar meteoros (acima das explosões)
         for meteor in self.meteors:
             meteor.draw(surface)
@@ -325,12 +346,12 @@ class MainMenuScene(Scene):
         self.transition_progress = 0.0
         self.transition_duration = 0.3
         self.fade_out = False  # True = fade out, False = fade in
-        
+
         # View de seleção de dificuldade
         self.difficulty_view = DifficultySelectionView(
             on_select=self._on_difficulty_selected,
             on_back=self._on_difficulty_back,
-            renderer=self.r
+            renderer=self.r,
         )
 
         # Menu container position - temporary, will be adjusted
@@ -347,7 +368,7 @@ class MainMenuScene(Scene):
 
         # Calculate actual menu bounds and center vertically
         self._center_menu_vertically()
-        
+
         # Animação de entrada
         self.entry_timer = 0.0
         self.title_entry_progress = 0.0
@@ -401,10 +422,10 @@ class MainMenuScene(Scene):
     def _on_difficulty_selected(self, preset: DifficultyPreset):
         """Callback quando uma dificuldade é selecionada."""
         from ..scenes.playing import PlayingScene
-        
+
         # Armazenar dificuldade no app
         self.app.selected_difficulty = preset
-        
+
         # Criar e empurrar a cena de jogo
         self.app.states.pop()  # Remove menu
         self.app.states.push(
@@ -424,7 +445,9 @@ class MainMenuScene(Scene):
     def _create_title_chars(self):
         """Creates character data for title animation."""
         title_string = MenuStrings.TITLE
-        char_renders = [self.font.render(char, True, CUSTOM_GOLD) for char in title_string]
+        char_renders = [
+            self.font.render(char, True, CUSTOM_GOLD) for char in title_string
+        ]
         total_width = sum(char_render.get_width() for char_render in char_renders)
 
         start_x = (Config.SCREEN_WIDTH - total_width) // 2
@@ -499,7 +522,9 @@ class MainMenuScene(Scene):
             )
             button = Button(text, rect, self.button_font, color, hover_color, action)
             # Configurar delay de entrada (cada botão entra sequencialmente)
-            button.entry_delay = AnimationConfig.BUTTON_ENTRY_DELAY + (i * AnimationConfig.BUTTON_STAGGER)
+            button.entry_delay = AnimationConfig.BUTTON_ENTRY_DELAY + (
+                i * AnimationConfig.BUTTON_STAGGER
+            )
             self.buttons.append(button)
 
     def _calculate_wave_offset(
@@ -523,16 +548,18 @@ class MainMenuScene(Scene):
         sound_manager.music_state_manager.transition_to(MusicState.MENU)
         # Resetar o auto-play ao entrar no menu
         self.auto_play.reset()
-        
+
         # Resetar animação de entrada
         self.entry_timer = 0.0
         self.title_entry_progress = 0.0
         self.is_entering = True
-        
+
         # Resetar delays dos botões
         for i, button in enumerate(self.buttons):
             button.entry_progress = 0.0
-            button.entry_delay = AnimationConfig.BUTTON_ENTRY_DELAY + (i * AnimationConfig.BUTTON_STAGGER)
+            button.entry_delay = AnimationConfig.BUTTON_ENTRY_DELAY + (
+                i * AnimationConfig.BUTTON_STAGGER
+            )
 
     def exit(self):
         """Called when exiting the scene."""
@@ -543,12 +570,12 @@ class MainMenuScene(Scene):
         # Não processar eventos durante transição
         if self.transitioning:
             return
-        
+
         # Delegar eventos para a view ativa
         if self.current_view == MenuView.DIFFICULTY_SELECTION:
             self.difficulty_view.handle_event(event)
             return
-        
+
         # View MAIN (menu principal)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             # Primeiro verificar cliques nos meteoros
@@ -559,7 +586,7 @@ class MainMenuScene(Scene):
                     sound_manager.play_sound("button_click")
                     meteor_clicked = True
                     break
-            
+
             # Se não clicou em meteoro, verificar botões
             if not meteor_clicked:
                 for button in self.buttons:
@@ -600,15 +627,15 @@ class MainMenuScene(Scene):
         self.r.starfield.update(dt)
         self.auto_play.update(dt)
         time_ms = pygame.time.get_ticks()
-        
+
         # Atualizar transição
         if self.transitioning:
             self.transition_progress += dt / self.transition_duration
-            
+
             if self.transition_progress >= 1.0:
                 self.transition_progress = 1.0
                 self.transitioning = False
-                
+
                 # Trocar view e inverter direção do fade
                 if self.fade_out:
                     # Completou fade out, trocar view
@@ -623,14 +650,16 @@ class MainMenuScene(Scene):
                         self.is_entering = True
                         for i, button in enumerate(self.buttons):
                             button.entry_progress = 0.0
-                            button.entry_delay = AnimationConfig.BUTTON_ENTRY_DELAY + (i * AnimationConfig.BUTTON_STAGGER)
-                    
+                            button.entry_delay = AnimationConfig.BUTTON_ENTRY_DELAY + (
+                                i * AnimationConfig.BUTTON_STAGGER
+                            )
+
                     # Iniciar fade in
                     self.fade_out = False
                     self.transitioning = True
                     self.transition_progress = 0.0
                 # else: Completou fade in, transição terminada
-        
+
         # Atualizar view ativa
         if self.current_view == MenuView.DIFFICULTY_SELECTION:
             self.difficulty_view.update(dt)
@@ -638,18 +667,22 @@ class MainMenuScene(Scene):
             # Atualizar animação de entrada
             if self.is_entering:
                 self.entry_timer += dt
-                
+
                 # Atualizar progresso do título
                 if self.entry_timer >= AnimationConfig.TITLE_ENTRY_DELAY:
                     elapsed = self.entry_timer - AnimationConfig.TITLE_ENTRY_DELAY
-                    self.title_entry_progress = min(1.0, elapsed / AnimationConfig.ENTRY_DURATION)
-                
+                    self.title_entry_progress = min(
+                        1.0, elapsed / AnimationConfig.ENTRY_DURATION
+                    )
+
                 # Atualizar progresso dos botões
                 for button in self.buttons:
                     button.update_entry(dt)
-                
+
                 # Verificar se animação terminou
-                all_buttons_visible = all(btn.entry_progress >= 1.0 for btn in self.buttons)
+                all_buttons_visible = all(
+                    btn.entry_progress >= 1.0 for btn in self.buttons
+                )
                 if self.title_entry_progress >= 1.0 and all_buttons_visible:
                     self.is_entering = False
 
@@ -674,7 +707,7 @@ class MainMenuScene(Scene):
         """Renders the scene."""
         surface.fill(BLACK)
         self.r.starfield.draw(surface)
-        
+
         # Renderizar auto-play (meteoros e explosões) atrás do menu
         self.auto_play.render(surface)
 
@@ -691,7 +724,9 @@ class MainMenuScene(Scene):
         if self.current_view == MenuView.DIFFICULTY_SELECTION:
             # Criar surface temporária para aplicar fade
             if alpha_mult < 1.0:
-                temp_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA)
+                temp_surface = pygame.Surface(
+                    (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+                )
                 self.difficulty_view.render(temp_surface)
                 temp_surface.set_alpha(int(255 * alpha_mult))
                 surface.blit(temp_surface, (0, 0))
@@ -700,41 +735,52 @@ class MainMenuScene(Scene):
         else:  # MenuView.MAIN
             # Calcular alpha e offset do título
             title_alpha = int(255 * self.title_entry_progress * alpha_mult)
-            title_offset_y = int(AnimationConfig.ENTRY_OFFSET_Y * (1.0 - self.title_entry_progress))
-            
+            title_offset_y = int(
+                AnimationConfig.ENTRY_OFFSET_Y * (1.0 - self.title_entry_progress)
+            )
+
             # Render title com efeito rainbow se easter egg ativado
             if self.auto_play.is_rainbow_mode():
                 # Cores do arco-íris (HSV para RGB)
                 rainbow_colors = [
-                    (255, 0, 0),      # Vermelho
-                    (255, 127, 0),    # Laranja
-                    (255, 255, 0),    # Amarelo
-                    (0, 255, 0),      # Verde
-                    (0, 0, 255),      # Azul
-                    (75, 0, 130),     # Índigo
-                    (148, 0, 211),    # Violeta
+                    (255, 0, 0),  # Vermelho
+                    (255, 127, 0),  # Laranja
+                    (255, 255, 0),  # Amarelo
+                    (0, 255, 0),  # Verde
+                    (0, 0, 255),  # Azul
+                    (75, 0, 130),  # Índigo
+                    (148, 0, 211),  # Violeta
                 ]
-                
+
                 time_ms = pygame.time.get_ticks()
-                
+
                 for i, char_data in enumerate(self.title_chars):
                     # Deslocar cores baseado no tempo (cria efeito de "rainbow wave") - MAIS LENTO
                     color_offset = (time_ms / 200) % len(rainbow_colors)
                     base_color_index = int(color_offset)
                     next_color_index = (base_color_index + 1) % len(rainbow_colors)
-                    
+
                     # Interpolação suave entre cores
                     blend_factor = color_offset - base_color_index
                     base_color = rainbow_colors[base_color_index]
                     next_color = rainbow_colors[next_color_index]
-                    
+
                     # Interpolar RGB entre as duas cores
                     interpolated_color = (
-                        int(base_color[0] + (next_color[0] - base_color[0]) * blend_factor),
-                        int(base_color[1] + (next_color[1] - base_color[1]) * blend_factor),
-                        int(base_color[2] + (next_color[2] - base_color[2]) * blend_factor),
+                        int(
+                            base_color[0]
+                            + (next_color[0] - base_color[0]) * blend_factor
+                        ),
+                        int(
+                            base_color[1]
+                            + (next_color[1] - base_color[1]) * blend_factor
+                        ),
+                        int(
+                            base_color[2]
+                            + (next_color[2] - base_color[2]) * blend_factor
+                        ),
                     )
-                    
+
                     # Adicionar pulsação/brilho usando seno - MAIS SUAVE
                     pulse = math.sin((time_ms / 1000) + i * 0.3) * 0.15 + 0.85
                     final_color = (
@@ -742,20 +788,26 @@ class MainMenuScene(Scene):
                         int(interpolated_color[1] * pulse),
                         int(interpolated_color[2] * pulse),
                     )
-                    
+
                     # Renderizar letra com cor rainbow animada
                     colored_char = self.font.render(
                         MenuStrings.TITLE[i], True, final_color
                     )
                     colored_char.set_alpha(title_alpha)
-                    char_pos = (char_data["rect"].x, char_data["rect"].y + title_offset_y)
+                    char_pos = (
+                        char_data["rect"].x,
+                        char_data["rect"].y + title_offset_y,
+                    )
                     surface.blit(colored_char, char_pos)
             else:
                 # Render normal (sem rainbow)
                 for char_data in self.title_chars:
                     char_surface = char_data["render"].copy()
                     char_surface.set_alpha(title_alpha)
-                    char_pos = (char_data["rect"].x, char_data["rect"].y + title_offset_y)
+                    char_pos = (
+                        char_data["rect"].x,
+                        char_data["rect"].y + title_offset_y,
+                    )
                     surface.blit(char_surface, char_pos)
 
             # Render buttons com fade de transição
@@ -763,13 +815,15 @@ class MainMenuScene(Scene):
                 # Modificar temporariamente o entry_progress para aplicar fade de transição
                 original_progress = button.entry_progress
                 button.entry_progress = button.entry_progress * alpha_mult
-                
+
                 border_color = (
                     self.focused_border_color
                     if button.state == ButtonState.FOCUSED
                     else self.border_color
                 )
-                button.render(surface, border_color, AnimationConfig.BUTTON_SCALE_FACTOR)
-                
+                button.render(
+                    surface, border_color, AnimationConfig.BUTTON_SCALE_FACTOR
+                )
+
                 # Restaurar progresso original
                 button.entry_progress = original_progress
