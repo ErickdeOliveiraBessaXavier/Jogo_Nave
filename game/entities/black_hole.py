@@ -166,6 +166,11 @@ class BlackHole:
             if getattr(enemy, 'dead', False):
                 continue
             
+            # Verificar se é um boss - bosses são imunes ao buraco negro
+            enemy_class_name = enemy.__class__.__name__
+            if enemy_class_name in ('Boss', 'SlimeBoss', 'SpikeBoss'):
+                continue
+            
             # Calcular distância ao buraco negro
             enemy_x = getattr(enemy, 'x', 0) + getattr(enemy, 'w', 0) / 2
             enemy_y = getattr(enemy, 'y', 0) + getattr(enemy, 'h', 0) / 2

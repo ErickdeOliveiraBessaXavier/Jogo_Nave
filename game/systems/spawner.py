@@ -14,6 +14,7 @@ from typing import (
 from ..core.config import config as Config, PowerUpType
 from ..core.time import Timer
 from ..core.difficulty import DifficultyPreset
+from ..core.levels import DifficultyConfig
 from ..entities.powerup import PowerUp
 from ..core.levels import LevelManager
 from ..entities.formation import Formation, FormationPattern
@@ -167,6 +168,81 @@ class EnemySpawner:
         min_t, max_t = Config.FORMATION_SPAWN_INTERVAL
         self.formation_spawn_timer = Timer(random.uniform(min_t, max_t))
         self.formation_spawn_timer.start()
+    
+    def _count_enemies_by_type(self, entity_manager: "EntityManager") -> dict[str, int]:
+        """Conta inimigos por tipo que estão ativos na tela."""
+        counts = {
+            "meteor": 0,
+            "alien": 0,
+            "eye": 0,
+            "square_minion": 0,
+            "total": 0
+        }
+        
+        from ..entities.meteor import Meteor
+        from ..entities.alien import Alien
+        
+        for enemy in entity_manager.enemies:
+            if not getattr(enemy, 'dead', False):
+                counts["total"] += 1
+                if isinstance(enemy, Meteor):
+                    counts["meteor"] += 1
+                elif isinstance(enemy, Alien):
+                    counts["alien"] += 1
+                elif isinstance(enemy, EyeEnemy):
+                    counts["eye"] += 1
+                elif isinstance(enemy, SquareMinionBoss):
+                    counts["square_minion"] += 1
+        
+        return counts
+    
+    def _should_spawn_enemy(self, enemy_type: type, entity_manager: "EntityManager") -> bool:
+        """Verifica se deve spawnar um inimigo baseado em limites e controle adaptativo."""
+        if not DifficultyConfig.ADAPTIVE_SPAWN_ENABLED:
+            return True
+        
+        counts = self._count_enemies_by_type(entity_manager)
+        
+        # Verificar limite total absoluto
+        if counts["total"] >= DifficultyConfig.MAX_TOTAL_ENEMIES_ON_SCREEN:
+            return False
+        
+        # Verificar limites por tipo
+        from ..entities.meteor import Meteor
+        from ..entities.alien import Alien
+        
+        if enemy_type == Meteor:
+            if counts["meteor"] >= DifficultyConfig.MAX_METEORS_ON_SCREEN:
+                return False
+            # Reduzir spawn se próximo do limite
+            threshold = int(DifficultyConfig.MAX_METEORS_ON_SCREEN * DifficultyConfig.SPAWN_REDUCTION_THRESHOLD)
+            if counts["meteor"] >= threshold:
+                return random.random() < 0.5  # 50% de chance
+        
+        elif enemy_type == Alien:
+            if counts["alien"] >= DifficultyConfig.MAX_ALIENS_ON_SCREEN:
+                return False
+            threshold = int(DifficultyConfig.MAX_ALIENS_ON_SCREEN * DifficultyConfig.SPAWN_REDUCTION_THRESHOLD)
+            if counts["alien"] >= threshold:
+                return random.random() < 0.5
+        
+        elif enemy_type == EyeEnemy:
+            if counts["eye"] >= DifficultyConfig.MAX_EYES_ON_SCREEN:
+                return False
+        
+        elif enemy_type == SquareMinionBoss:
+            if counts["square_minion"] >= DifficultyConfig.MAX_SQUARE_MINIONS_ON_SCREEN:
+                return False
+        
+        # Redução gradual se total está alto
+        total_threshold = int(DifficultyConfig.MAX_TOTAL_ENEMIES_ON_SCREEN * DifficultyConfig.SPAWN_REDUCTION_THRESHOLD)
+        if counts["total"] >= total_threshold:
+            # Redução proporcional
+            ratio = (counts["total"] - total_threshold) / (DifficultyConfig.MAX_TOTAL_ENEMIES_ON_SCREEN - total_threshold)
+            spawn_chance = 1.0 - (ratio * 0.7)  # Até 70% de redução
+            return random.random() < spawn_chance
+        
+        return True
 
     def update(
         self,
@@ -192,19 +268,19 @@ class EnemySpawner:
         for enemy_type, timer in self.enemy_timers.items():
             timer.update(dt)
             if timer.done() and random.random() < self.spawn_intensity:
+                # Verificar se deve spawnar (controle adaptativo)
+                if not self._should_spawn_enemy(enemy_type, entity_manager):
+                    timer.start()  # Reiniciar timer mesmo sem spawnar
+                    continue
+                
                 if enemy_type == EyeEnemy:
-                    # CORRIGIDO: Sempre recalcular para evitar race condition
-                    # quando inimigos morrem entre frames
-                    current_eye_count = entity_manager.eye_enemy_count
-
-                    if current_eye_count < 5:
-                        x = random.randint(40, Config.SCREEN_WIDTH - 80)
-                        y = random.randint(40, 100)
-                        new_enemy = EyeEnemy(x, y)
-                        new_enemy.health = int(
-                            new_enemy.health * self.enemy_health_multiplier
-                        )
-                        entity_manager.enemies.append(new_enemy)
+                    x = random.randint(40, Config.SCREEN_WIDTH - 80)
+                    y = random.randint(40, 100)
+                    new_enemy = EyeEnemy(x, y)
+                    new_enemy.health = int(
+                        new_enemy.health * self.enemy_health_multiplier
+                    )
+                    entity_manager.enemies.append(new_enemy)
                 else:
                     from ..entities.meteor import Meteor
 

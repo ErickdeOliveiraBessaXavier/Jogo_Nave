@@ -14,6 +14,10 @@ class DeathParticle(TypedDict):
 
 
 class EyeLaser:
+    # Superfícies compartilhadas por todas as instâncias para evitar criação
+    _glow_surface_cache = None
+    _screen_size = None
+    
     def __init__(
         self,
         x: float,
@@ -41,6 +45,7 @@ class EyeLaser:
 
         # Efeito de pulsação
         self.pulse_timer = 0.0
+        self.pulse_value = 0.0  # Cache do valor de pulsação
 
     def get_collision_line(self) -> tuple[tuple[float, float], tuple[float, float]]:
         return (self.x, self.y), (self.target_x, self.target_y)
@@ -48,6 +53,9 @@ class EyeLaser:
     def update(self, dt: float):
         self.timer += dt
         self.pulse_timer += dt * 8  # Velocidade da pulsação
+        
+        # Pré-calcular pulsação para evitar cálculos no draw
+        self.pulse_value = abs(pygame.math.Vector2(1, 0).rotate(self.pulse_timer * 360).x)
 
         if self.state == "alive":
             if self.timer >= self.lifetime:
@@ -98,55 +106,80 @@ class EyeLaser:
             self.w = max(0, self.w)
 
         elif self.state == "dying":
-            for p in self.death_particles[:]:
+            # Atualizar partículas mais eficientemente
+            alive_particles: List[DeathParticle] = []
+            for p in self.death_particles:
                 p["pos"] += p["vel"] * dt
                 p["lifespan"] -= dt
                 p["size"] -= 3 * dt
-                if p["lifespan"] <= 0 or p["size"] <= 0:
-                    self.death_particles.remove(p)
-
+                if p["lifespan"] > 0 and p["size"] > 0:
+                    alive_particles.append(p)
+            
+            self.death_particles = alive_particles
             if not self.death_particles:
                 self.dead = True
 
     def draw(self, surface: pygame.Surface):
         if self.state == "alive" and self.w > 0:
-            # Efeito de pulsação na intensidade do brilho
-            pulse = abs(pygame.math.Vector2(1, 0).rotate(self.pulse_timer * 360).x)
-            glow_alpha = int(80 + 80 * pulse)  # Varia entre 80 e 160
-
-            # Camada de brilho externo (maior)
-            glow_surface = pygame.Surface(
-                (surface.get_width(), surface.get_height()), pygame.SRCALPHA
-            )
-            pygame.draw.line(
-                glow_surface,
-                (255, 100, 255, glow_alpha // 2),
-                (self.x, self.y),
-                (self.target_x, self.target_y),
-                int(self.w) + 8,
-            )
-            surface.blit(glow_surface, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
-
-            # Camada de brilho médio
-            glow_surface2 = pygame.Surface(
-                (surface.get_width(), surface.get_height()), pygame.SRCALPHA
-            )
-            pygame.draw.line(
-                glow_surface2,
-                (255, 150, 255, glow_alpha),
-                (self.x, self.y),
-                (self.target_x, self.target_y),
-                int(self.w) + 4,
-            )
-            surface.blit(glow_surface2, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
-
-            # Núcleo do laser (branco brilhante)
+            # Pré-calcular valores
+            start_x, start_y = int(self.x), int(self.y)
+            end_x, end_y = int(self.target_x), int(self.target_y)
+            width = int(self.w)
+            
+            # Efeito de pulsação otimizado (pré-calculado no update)
+            glow_alpha = int(80 + 80 * self.pulse_value)
+            
+            # Calcular área necessária para o laser
+            min_x = min(start_x, end_x) - 20
+            min_y = min(start_y, end_y) - 20
+            max_x = max(start_x, end_x) + 20
+            max_y = max(start_y, end_y) + 20
+            
+            # Garantir que está dentro dos limites da tela
+            min_x = max(0, min_x)
+            min_y = max(0, min_y)
+            max_x = min(surface.get_width(), max_x)
+            max_y = min(surface.get_height(), max_y)
+            
+            glow_w = max_x - min_x
+            glow_h = max_y - min_y
+            
+            if glow_w > 0 and glow_h > 0:
+                # Criar superfície menor apenas para a área do laser
+                glow_surface = pygame.Surface((glow_w, glow_h), pygame.SRCALPHA)
+                
+                # Ajustar coordenadas relativas à superfície menor
+                local_start = (start_x - min_x, start_y - min_y)
+                local_end = (end_x - min_x, end_y - min_y)
+                
+                # Camada de brilho externo
+                pygame.draw.line(
+                    glow_surface,
+                    (255, 100, 255, glow_alpha // 2),
+                    local_start,
+                    local_end,
+                    width + 8,
+                )
+                
+                # Camada de brilho médio
+                pygame.draw.line(
+                    glow_surface,
+                    (255, 150, 255, glow_alpha),
+                    local_start,
+                    local_end,
+                    width + 4,
+                )
+                
+                # Blit da superfície menor na posição correta
+                surface.blit(glow_surface, (min_x, min_y), special_flags=pygame.BLEND_RGBA_ADD)
+            
+            # Núcleo do laser (branco brilhante) - desenhar direto
             pygame.draw.line(
                 surface,
                 colors.WHITE,
-                (self.x, self.y),
-                (self.target_x, self.target_y),
-                int(self.w),
+                (start_x, start_y),
+                (end_x, end_y),
+                width,
             )
 
         elif self.state == "dying":
