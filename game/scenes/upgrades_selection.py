@@ -46,6 +46,54 @@ class UILayout:
     back_button: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
 
 
+class FloatingMessage:
+    """Mensagem flutuante similar ao FloatingScore para feedback visual."""
+    
+    def __init__(self, x: float, y: float, message: str, color: Tuple[int, int, int] = (255, 100, 100)):
+        self.x = x
+        self.y = y
+        self.message = message
+        self.color = color
+        self.alpha = 255
+        self.lifetime = 90  # Frames (1.5 segundos a 60fps)
+        self.initial_lifetime = self.lifetime
+        self.dy = -1.0  # Velocidade de subida
+        
+        # Font para a mensagem
+        self.font = get_font(20)
+        
+        # Efeito de fade e movimento
+        self.fade_start = 30  # Começar fade nos últimos 30 frames
+    
+    def update(self, dt: float) -> None:
+        """Atualiza posição e fade da mensagem."""
+        self.y += self.dy
+        self.lifetime -= 1
+        
+        # Calcular alpha baseado no lifetime
+        if self.lifetime <= self.fade_start:
+            fade_progress = self.lifetime / self.fade_start
+            self.alpha = max(0, int(255 * fade_progress))
+        else:
+            self.alpha = 255
+    
+    def draw(self, surface: pygame.Surface) -> None:
+        """Desenha a mensagem na tela."""
+        if self.alpha <= 0:
+            return
+            
+        # Renderizar texto com alpha
+        text_surf = self.font.render(self.message, True, self.color)
+        text_surf.set_alpha(self.alpha)
+        
+        # Centralizar horizontalmente
+        text_rect = text_surf.get_rect(center=(int(self.x), int(self.y)))
+        surface.blit(text_surf, text_rect)
+    
+    def is_dead(self) -> bool:
+        """Retorna True se a mensagem deve ser removida."""
+        return self.lifetime <= 0
+
 class UpgradesSelectionScene(Scene):
     """Cena de seleção de aprimoramentos com drag-and-drop e grid 2x2."""
 
@@ -116,6 +164,9 @@ class UpgradesSelectionScene(Scene):
         # Layout
         self.layout = UILayout()
         self._calculate_layout()
+        
+        # Sistema de mensagens flutuantes
+        self.floating_messages: List[FloatingMessage] = []
         
         # Sistema de transição
         self.transitioning = False
@@ -273,10 +324,18 @@ class UpgradesSelectionScene(Scene):
                     return
 
             # Iniciar Drag: Upgrade da grid 2x2 (slots ativos)
+            total_equipped_weight = self.player_profile.get_total_equipped_weight()
             for i, slot_rect in enumerate(self.layout.active_slots):
                 if slot_rect.collidepoint(pos):
-                    # Se o slot está bloqueado, tentar desbloquear
-                    if i >= self.player_profile.unlocked_slots:
+                    # Verificar se slot está bloqueado por estrelas
+                    locked_by_stars = i >= self.player_profile.unlocked_slots
+                    
+                    # Verificar se slot está bloqueado por peso (sem upgrade equipado)
+                    slot_consumed_by_weight = i >= (len(self.layout.active_slots) - total_equipped_weight)
+                    has_equipped = i < len(self.player_profile.upgrade_loadout) and self.player_profile.upgrade_loadout[i] is not None
+                    
+                    # Se o slot está bloqueado por estrelas, tentar desbloquear
+                    if locked_by_stars:
                         if self.player_profile.can_unlock_slot(i):
                             # Desbloquear slot
                             if self.player_profile.unlock_slot(i):
@@ -286,6 +345,10 @@ class UpgradesSelectionScene(Scene):
                             # Não tem estrelas suficientes, tremer
                             self.shaking_slot = i
                             self.shake_start_time = time.time()
+                        return
+                    
+                    # Se slot está consumido por peso mas não tem upgrade, não pode interagir
+                    if slot_consumed_by_weight and not has_equipped:
                         return
 
                     # Proteção contra índice fora do range
@@ -313,19 +376,39 @@ class UpgradesSelectionScene(Scene):
 
                 # Soltar em um dos slots da grid 2x2
                 dropped_in_slot = False
+                total_equipped_weight = self.player_profile.get_total_equipped_weight()
                 for i, slot_rect in enumerate(self.layout.active_slots):
                     if slot_rect.collidepoint(pos):
-                        # Se tentar soltar em slot bloqueado, tremer
-                        if i >= self.player_profile.unlocked_slots:
+                        # Verificar se slot está bloqueado por estrelas
+                        locked_by_stars = i >= self.player_profile.unlocked_slots
+                        if locked_by_stars:
                             self.shaking_slot = i
                             self.shake_start_time = time.time()
                             continue
 
                         # Verificar se pode equipar considerando o peso
-                        if not self.player_profile.can_equip_upgrade(self.dragging_upgrade.type, i):
+                        # Se estamos arrastando de um slot equipado, temporariamente considerar que aquele slot ficará livre
+                        can_equip = False
+                        if self.drag_source_slot is not None:
+                            # Temporariamente remover do slot de origem para verificar
+                            original_upgrade = self.player_profile.upgrade_loadout[self.drag_source_slot]
+                            self.player_profile.upgrade_loadout[self.drag_source_slot] = None
+                            can_equip = self.player_profile.can_equip_upgrade(self.dragging_upgrade.type, i)
+                            self.player_profile.upgrade_loadout[self.drag_source_slot] = original_upgrade
+                        else:
+                            can_equip = self.player_profile.can_equip_upgrade(self.dragging_upgrade.type, i)
+                        
+                        if not can_equip:
                             # Shake effect e som de erro
                             self.shaking_slot = i
                             self.shake_start_time = time.time()
+                            
+                            # Adicionar mensagem flutuante "Sem espaço"
+                            slot_center = slot_rect.center
+                            self.floating_messages.append(
+                                FloatingMessage(slot_center[0], slot_center[1] - 20, "Sem espaço", (255, 100, 100))
+                            )
+                            
                             try:
                                 if hasattr(self.app, 'sound_manager'):
                                     self.app.sound_manager.play_upgrade_denied()  # type: ignore
@@ -422,6 +505,12 @@ class UpgradesSelectionScene(Scene):
                 self.app.states.switch(MainMenuScene(self.app))
                 return
 
+        # Atualizar e limpar mensagens flutuantes
+        for message in self.floating_messages[:]:
+            message.update(dt)
+            if message.is_dead():
+                self.floating_messages.remove(message)
+        
         # Limpar shake se o tempo expirou
         if self.shaking_slot is not None:
             if time.time() - self.shake_start_time >= self.shake_duration:
@@ -443,13 +532,17 @@ class UpgradesSelectionScene(Scene):
             # Hover sobre slots ativos
             for i, slot_rect in enumerate(self.layout.active_slots):
                 if slot_rect.collidepoint(mouse_pos):
-                    self.hovered_slot_idx = i
+                    # Só permite hover se não estiver bloqueado por estrelas
+                    # Slots bloqueados por peso ainda podem fazer hover se tiverem upgrade equipado
+                    locked_by_stars = i >= self.player_profile.unlocked_slots
+                    if not locked_by_stars:
+                        self.hovered_slot_idx = i
                     break
         else:
             # Se está arrastando, verificar se o drop seria inválido
             for i, slot_rect in enumerate(self.layout.active_slots):
                 if slot_rect.collidepoint(mouse_pos):
-                    # Slot bloqueado ou sem peso suficiente = inválido
+                    # Slot bloqueado por estrelas ou sem peso suficiente = inválido
                     if i >= self.player_profile.unlocked_slots:
                         self.drag_invalid_target = True
                     elif not self.player_profile.can_equip_upgrade(self.dragging_upgrade.type, i):
@@ -490,6 +583,8 @@ class UpgradesSelectionScene(Scene):
             if self.hovered_upgrade and not self.dragging_upgrade:
                 self._draw_tooltip(temp_surface)
             
+            self._draw_floating_messages(temp_surface)
+            
             temp_surface.set_alpha(alpha)
             surface.blit(temp_surface, (0, offset_y))
         else:
@@ -506,6 +601,9 @@ class UpgradesSelectionScene(Scene):
             # Desenhar tooltip
             if self.hovered_upgrade and not self.dragging_upgrade:
                 self._draw_tooltip(surface)
+            
+            # Desenhar mensagens flutuantes
+            self._draw_floating_messages(surface)
 
     def _draw_tabs(self, surface: pygame.Surface):
         """Desenha as abas de categorias."""
@@ -623,14 +721,46 @@ class UpgradesSelectionScene(Scene):
         )
 
         # Slots
+        total_equipped_weight = self.player_profile.get_total_equipped_weight()
+        
+        # Se estamos arrastando um upgrade de um slot equipado, temporariamente excluir seu peso
+        if self.dragging_upgrade and self.drag_source_slot is not None:
+            total_equipped_weight -= self.dragging_upgrade.slot_weight
+            total_equipped_weight = max(0, total_equipped_weight)  # Nunca negativo
+        
+        # Calcular quais slots vazios devem aparecer bloqueados por peso
+        # Primeiro, identificar slots vazios desbloqueados
+        empty_slots: List[int] = []
+        for idx in range(len(self.layout.active_slots)):
+            if idx >= len(self.player_profile.upgrade_loadout) or self.player_profile.upgrade_loadout[idx] is None:
+                if idx < self.player_profile.unlocked_slots:  # Só considerar slots desbloqueados
+                    empty_slots.append(idx)
+        
+        # Calcular quantos slots ainda estão disponíveis para novos upgrades
+        slots_disponiveis = self.player_profile.unlocked_slots - total_equipped_weight
+        slots_disponiveis = max(0, slots_disponiveis)  # Nunca negativo
+        
+        # Bloquear os slots vazios que excedem a disponibilidade
+        # Se temos 7 slots vazios e 2 disponíveis, bloqueamos os últimos 5
+        num_slots_a_bloquear = max(0, len(empty_slots) - slots_disponiveis)
+        slots_to_block_by_weight: set[int] = set(empty_slots[-num_slots_a_bloquear:]) if num_slots_a_bloquear > 0 else set()
+        
         for i, slot_rect in enumerate(self.layout.active_slots):
             # Proteção contra índice fora do range
             if i >= len(self.player_profile.upgrade_loadout):
                 equipped_type = None
             else:
                 equipped_type = self.player_profile.upgrade_loadout[i]
-            locked = i >= self.player_profile.unlocked_slots
-            is_hovered = (self.hovered_slot_idx == i) and (not locked)
+            
+            # Determinar se slot está bloqueado por estrelas
+            locked_by_stars = i >= self.player_profile.unlocked_slots
+            
+            # Determinar se slot está "ocupado" visualmente pelo peso
+            # Apenas slots vazios podem estar bloqueados por peso
+            slot_consumed_by_weight = i in slots_to_block_by_weight
+            
+            # Considerar hover apenas se não estiver bloqueado por estrelas
+            is_hovered = (self.hovered_slot_idx == i) and (not locked_by_stars)
 
             # Aplicar shake effect se este slot está tremendo
             draw_rect = slot_rect.copy()
@@ -652,22 +782,22 @@ class UpgradesSelectionScene(Scene):
                 bg_color = (30, 30, 30) if not is_hovered else (40, 40, 40)
 
             border_color = (
-                colors.YELLOW if is_hovered else (80, 80, 80) if locked else colors.GRAY
+                colors.YELLOW if is_hovered else (80, 80, 80) if locked_by_stars else colors.GRAY
             )
             border_style = 2 if equipped_type else 1
 
             pygame.draw.rect(surface, bg_color, draw_rect, border_radius=10)
 
-            # Borda tracejada para slots vazios (não bloqueados)
-            if not equipped_type and not locked:
+            # Borda tracejada para slots vazios (não bloqueados por estrelas nem por peso)
+            if not equipped_type and not locked_by_stars and not slot_consumed_by_weight:
                 self._draw_dashed_rect(surface, draw_rect, border_color)
             else:
                 pygame.draw.rect(
                     surface, border_color, draw_rect, border_style, border_radius=10
                 )
 
-            # Label do slot com custo se bloqueado (com ícone de estrela)
-            if locked:
+            # Label do slot com custo se bloqueado por estrelas
+            if locked_by_stars:
                 cost = self.player_profile.get_slot_cost(i)
                 can_unlock = self.player_profile.can_unlock_slot(i)
                 cost_color = colors.GREEN if can_unlock else colors.RED
@@ -687,7 +817,12 @@ class UpgradesSelectionScene(Scene):
                 # Quantidade + sufixo
                 qty_text = self.small_font.render(f"{cost}", True, cost_color)
                 surface.blit(qty_text, (icon_x + 22, label_y))
+            elif slot_consumed_by_weight and not equipped_type:
+                # Slot consumido pelo peso: mostrar texto "PESO" em vez de número do slot
+                slot_label = self.small_font.render("PESO", True, (120, 80, 80))
+                surface.blit(slot_label, (draw_rect.x + 10, draw_rect.y + 5))
             else:
+                # Slot normal disponível
                 slot_label = self.small_font.render(f"SLOT {i+1}", True, colors.GRAY)
                 surface.blit(slot_label, (draw_rect.x + 10, draw_rect.y + 5))
 
@@ -739,8 +874,8 @@ class UpgradesSelectionScene(Scene):
                         (weight_bg.x + 3, weight_bg.y + 2)
                     )
             else:
-                if locked:
-                    # Desenhar ícone de bloqueado centralizado
+                if locked_by_stars:
+                    # Desenhar ícone de bloqueado por estrelas centralizado
                     icon_size = min(draw_rect.width, draw_rect.height) // 2
                     icon_scaled = pygame.transform.scale(
                         self.locked_icon, (icon_size, icon_size)
@@ -748,7 +883,20 @@ class UpgradesSelectionScene(Scene):
                     icon_x = draw_rect.centerx - icon_size // 2
                     icon_y = draw_rect.centery - icon_size // 2
                     surface.blit(icon_scaled, (icon_x, icon_y))
+                elif slot_consumed_by_weight:
+                    # Desenhar ícone de bloqueado por peso (menor e cor diferente)
+                    icon_size = min(draw_rect.width, draw_rect.height) // 3
+                    icon_scaled = pygame.transform.scale(
+                        self.locked_icon, (icon_size, icon_size)
+                    )
+                    # Aplicar tint avermelhado para distinguir do bloqueio por estrelas
+                    icon_tinted = icon_scaled.copy()
+                    icon_tinted.fill((255, 150, 150), special_flags=pygame.BLEND_MULT)
+                    icon_x = draw_rect.centerx - icon_size // 2
+                    icon_y = draw_rect.centery - icon_size // 2
+                    surface.blit(icon_tinted, (icon_x, icon_y))
                 else:
+                    # Slot vazio e disponível
                     empty_text = self.item_font.render("VAZIO", True, (60, 60, 60))
                     surface.blit(
                         empty_text,
@@ -884,7 +1032,6 @@ class UpgradesSelectionScene(Scene):
         # Atributos
         attr_y = desc_y + 10
         attrs: List[str] = []
-        attrs.append(f"Peso: {upgrade.slot_weight}")  # Primeira linha: peso
         attrs.append(f"Cooldown: {upgrade.base_cooldown}s")
         if upgrade.base_duration > 0:
             attrs.append(f"Duracao: {upgrade.base_duration}s")
@@ -970,3 +1117,8 @@ class UpgradesSelectionScene(Scene):
         if current_line:
             lines.append(current_line.strip())
         return lines
+    
+    def _draw_floating_messages(self, surface: pygame.Surface) -> None:
+        """Desenha todas as mensagens flutuantes."""
+        for message in self.floating_messages:
+            message.draw(surface)
