@@ -650,6 +650,19 @@ class PlayingScene(Scene):
             if f_ship_hit:
                 ship_hit = True
 
+            # Minas de torres vs formação
+            if self.entity_manager.cannon_mines:
+                f_cannon_gain, f_cannon_destroyed, f_cannon_score_events = (
+                    self.collisions.cannon_mines_vs_enemies(
+                        self.entity_manager.cannon_mines,
+                        formation_enemies,
+                        self.entity_manager,
+                    )
+                )
+                gain += f_cannon_gain
+                destroyed += f_cannon_destroyed
+                score_events.extend(f_cannon_score_events)
+
             # Explosive effects vs formação
             if self.entity_manager.explosive_effects:
                 f_exp_gain, f_exp_destroyed, f_exp_score_events = (
@@ -707,6 +720,19 @@ class PlayingScene(Scene):
             destroyed += air_destroyed
             score_events.extend(air_score_events)
 
+        # Colisão de minas das torres vs inimigos
+        if self.entity_manager.cannon_mines:
+            mine_gain, mine_destroyed, mine_score_events = (
+                self.collisions.cannon_mines_vs_enemies(
+                    self.entity_manager.cannon_mines,
+                    self.entity_manager.enemies,
+                    self.entity_manager,
+                )
+            )
+            gain += mine_gain
+            destroyed += mine_destroyed
+            score_events.extend(mine_score_events)
+
         # Colisão de efeitos explosivos vs boss
         if self.entity_manager.explosive_effects and self.entity_manager.boss:
             exp_boss_gain = self.collisions.explosive_effects_vs_boss(
@@ -726,6 +752,16 @@ class PlayingScene(Scene):
                 self.entity_manager,
             )
             gain += air_boss_gain
+
+        # Colisão de minas das torres vs boss
+        if self.entity_manager.cannon_mines and self.entity_manager.boss:
+            mine_boss_gain = self.collisions.cannon_mines_vs_boss(
+                self.entity_manager.cannon_mines,
+                self.entity_manager.boss,
+                self.entity_manager.floating_scores,
+                self.entity_manager,
+            )
+            gain += mine_boss_gain
 
         # Agrupar eventos próximos antes de criar floating scores
         batched_events = self._batch_floating_scores(

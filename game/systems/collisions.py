@@ -31,6 +31,7 @@ from ..core.config import Config
 from ..core.spatial_grid import SpatialGrid
 from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.air_strike_bomb import AirStrikeBomb
+from ..entities.cannon_mine import CannonMine, MineState
 
 
 from ..entities.explosive_mine import ExplosiveMine
@@ -504,6 +505,107 @@ class Collisions:
             score_events.extend(events)
 
         return score_gain, destroyed_count, score_events
+
+    def cannon_mines_vs_enemies(
+        self,
+        cannon_mines: list[CannonMine],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss],
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Verifica colisão entre minas de torres e inimigos."""
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        for mine in cannon_mines[:]:
+            # Processar qualquer mina que tenha dano ativo
+            damage_info = mine.damage_info
+            if damage_info.radius > 0:
+                # Aplicar dano em área contínuo
+                gain, destroyed, events = self._apply_area_damage(
+                    damage_info.x,
+                    damage_info.y,
+                    damage_info.radius,
+                    mine.hit_tracking_set,
+                    enemies,
+                    entity_manager,
+                    damage_to_mine=damage_info.damage,
+                )
+                score_gain += gain
+                destroyed_count += destroyed
+                score_events.extend(events)
+            
+            # Verificar colisão para ativação de minas armadas
+            if not mine.dead and mine.state == MineState.ARMED:
+                for enemy in enemies:
+                    if enemy.dead:
+                        continue
+                    
+                    if mine.check_enemy_collision(enemy):
+                        break  # Mina explodiu, sair do loop de inimigos
+
+        return score_gain, destroyed_count, score_events
+
+    def cannon_mines_vs_boss(
+        self,
+        cannon_mines: list[CannonMine],
+        boss: Boss | SpikeBoss | SlimeBoss | None,
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+    ) -> int:
+        """Verifica colisão entre minas de torres e boss."""
+        if not boss or boss.dead:
+            return 0
+
+        score_gain = 0
+
+        for mine in cannon_mines:
+            if mine.dead:
+                continue
+            
+            damage_info = mine.damage_info
+            if damage_info.radius <= 0:
+                continue
+            
+            # Verificar se boss está dentro do raio de explosão
+            boss_id = id(boss)
+            hit_set = mine.hit_tracking_set
+            if boss_id in hit_set:
+                continue  # Já atingiu este boss
+            
+            # Calcular distância entre explosão da mina e boss
+            boss_center_x = boss.x + boss.w / 2
+            boss_center_y = boss.y + boss.h / 2
+            dx = damage_info.x - boss_center_x
+            dy = damage_info.y - boss_center_y
+            distance = (dx * dx + dy * dy) ** 0.5
+            
+            if distance <= damage_info.radius:
+                # Boss atingido - aplicar dano
+                from ..core.config import config as Config
+                try:
+                    from ..core.sound import sound_manager
+                except Exception:
+                    sound_manager = None  # Fallback caso não tenha som
+                    
+                damage = int(damage_info.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                boss.take_damage(damage)
+                if sound_manager:
+                    sound_manager.play_boss_damage()
+                entity_manager.spawn_explosion(boss_center_x, boss_center_y, size=50)
+                
+                # Verificar se boss morreu
+                if boss.dead:
+                    score_gain += Config.BOSS_DEFEAT_SCORE
+                    floating_scores.append(
+                        FloatingScore(boss_center_x, boss_center_y, Config.BOSS_DEFEAT_SCORE)
+                    )
+                    entity_manager.spawn_explosion(boss_center_x, boss_center_y, size=100)
+                
+                # Marcar mina como já atingiu este boss
+                hit_set.add(boss_id)
+
+        return score_gain
 
     def air_strike_bombs_vs_boss(
         self,

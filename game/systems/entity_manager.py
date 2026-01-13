@@ -31,9 +31,10 @@ from ..entities.explosion_pool import ExplosionPool
 from ..entities.emp_wave import EMPWave
 from ..entities.star import Star
 from ..entities.explosive_effect import ExplosiveEffect
-from ..entities.air_strike_marker import AirStrikeMarker
 from ..entities.air_strike_bomb import AirStrikeBomb
 from ..entities.black_hole import BlackHole
+from ..entities.cannon_tower import CannonTower
+from ..entities.cannon_mine import CannonMine
 from ..entities.square_minion_boss import SquareMinionBoss
 from typing import Dict, Any, TYPE_CHECKING, Optional
 
@@ -69,8 +70,9 @@ class EntityManager:
         self.spikes: list[Spike] = []  # Lista para espinhos do SpikeBoss
         self._grid_needs_rebuild = True
 
-        self.air_strike_markers: list[AirStrikeMarker] = []  # Marcadores de bombardeio
         self.air_strike_bombs: list[AirStrikeBomb] = []  # Bombas do bombardeio aéreo
+        self.cannon_towers: list[CannonTower] = []  # Torres de canhão
+        self.cannon_mines: list[CannonMine] = []  # Minas das torres
         self.black_holes: list[BlackHole] = []  # Buracos negros
         self.meteor_pool = MeteorPool(initial_size=100)  # Pool de meteoros
         self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
@@ -140,10 +142,17 @@ class EntityManager:
         self.explosive_effects.append(ExplosiveEffect(x, y, radius=radius))
 
     def spawn_air_strike(self, target_x: float, target_y: float) -> None:
-        """Spawna um marcador e uma bomba para o bombardeio aéreo."""
-        marker = AirStrikeMarker(target_x, target_y)
-        self.air_strike_markers.append(marker)
-        # A bomba será spawnada quando o marcador terminar
+        """Spawna uma bomba para o bombardeio aéreo."""
+        # Validar que o alvo está dentro da tela
+        screen = pygame.display.get_surface()
+        screen_width = screen.get_width() if screen else 1600
+        screen_height = screen.get_height() if screen else 900
+        
+        clamped_target_x = max(40, min(screen_width - 40, target_x))
+        clamped_target_y = max(60, min(screen_height - 40, target_y))
+        
+        # Criar a bomba diretamente
+        self.spawn_air_strike_bomb(clamped_target_x, clamped_target_y)
 
     def spawn_air_strike_bomb(self, target_x: float, target_y: float) -> None:
         """Spawna uma bomba de bombardeio aéreo."""
@@ -161,6 +170,28 @@ class EntityManager:
         from ..entities.black_hole import BlackHole
         black_hole = BlackHole(x, y, duration)
         self.black_holes.append(black_hole)
+
+    def spawn_cannon_tower(self, x: float, y: float) -> None:
+        """Spawna uma torre de canhão."""
+        tower = CannonTower(x, y)  # Criar sem callback primeiro
+        
+        # Definir callback agora que temos a torre
+        def on_fire_mine(target_x: float, target_y: float) -> None:
+            self._spawn_cannon_mine(x + 30, y, target_x, target_y, tower)  # Centro da torre
+        
+        tower.on_fire_mine = on_fire_mine  # Atribuir callback
+        self.cannon_towers.append(tower)
+
+    def _spawn_cannon_mine(self, launch_x: float, launch_y: float, target_x: float, target_y: float, tower: CannonTower) -> None:
+        """Spawna uma mina de canhão."""
+        # Callback para som de explosão
+        on_explode = None
+        if self.sound_manager:
+            on_explode = self.sound_manager.play_explosion_asteroid
+            
+        mine = CannonMine(target_x, target_y, launch_x, launch_y, on_explode=on_explode)
+        self.cannon_mines.append(mine)
+        tower.register_mine(mine)  # Registrar mina na torre
 
     def spawn_player_laser(
         self,
@@ -441,19 +472,23 @@ class EntityManager:
             if square.dead:
                 self.boss_squares.remove(square)
 
-        # Atualizar marcadores de bombardeio aéreo
-        for marker in self.air_strike_markers[:]:
-            marker.update(enemy_dt)
-            if marker.dead:
-                # Quando o marcador termina, spawnar a bomba
-                self.spawn_air_strike_bomb(marker.target_x, marker.target_y)
-                self.air_strike_markers.remove(marker)
-
         # Atualizar bombas de bombardeio aéreo
         for bomb in self.air_strike_bombs[:]:
             bomb.update(enemy_dt)
             if bomb.dead:
                 self.air_strike_bombs.remove(bomb)
+
+        # Atualizar torres de canhão
+        for tower in self.cannon_towers[:]:
+            tower.update(enemy_dt)
+            if tower.dead:
+                self.cannon_towers.remove(tower)
+
+        # Atualizar minas das torres
+        for mine in self.cannon_mines[:]:
+            mine.update(enemy_dt)
+            if mine.dead:
+                self.cannon_mines.remove(mine)
 
         # Atualizar buracos negros
         for black_hole in self.black_holes[:]:
@@ -500,6 +535,8 @@ class EntityManager:
             self.boss_squares,  # Include boss squares
             self.eye_lasers,  # Include eye lasers
             self.mini_ship_bullets,  # Include mini ship bullets
+            self.cannon_towers,  # Include cannon towers
+            self.cannon_mines,  # Include cannon mines
         ]
 
         # Update all entities in a generic way, handling specific types
@@ -587,13 +624,17 @@ class EntityManager:
         for effect in self.explosive_effects:
             effect.draw(surface)
 
-        # Desenhar marcadores de bombardeio aéreo
-        for marker in self.air_strike_markers:
-            marker.draw(surface)
-
         # Desenhar bombas de bombardeio aéreo
         for bomb in self.air_strike_bombs:
             bomb.draw(surface)
+
+        # Desenhar minas das torres (antes dos inimigos para ficarem embaixo)
+        for mine in self.cannon_mines:
+            mine.draw(surface)
+
+        # Desenhar torres de canhão (fixas, sempre visíveis)
+        for tower in self.cannon_towers:
+            tower.draw(surface)
 
         # Desenhar buracos negros (devem ser desenhados ANTES dos inimigos para criar efeito de sucção)
         for black_hole in self.black_holes:
@@ -773,8 +814,9 @@ class EntityManager:
             f for f in self.formations if not f.dead
         ]  # Limpar formações mortas
         self.spikes = [s for s in self.spikes if not s.dead]  # Limpar spikes mortos
-        self.air_strike_markers = [m for m in self.air_strike_markers if not m.dead]
         self.air_strike_bombs = [b for b in self.air_strike_bombs if not b.dead]
+        self.cannon_towers = [t for t in self.cannon_towers if not t.dead]  # Limpar torres mortas
+        self.cannon_mines = [m for m in self.cannon_mines if not m.dead]  # Limpar minas mortas
         self._grid_needs_rebuild = True
 
     def clear_all(self):
@@ -790,8 +832,9 @@ class EntityManager:
         self.enemies.clear()
         self.mine_explosions.clear()
         self.explosive_effects.clear()  # Limpar efeitos de explosão de área
-        self.air_strike_markers.clear()  # Limpar marcadores de bombardeio
         self.air_strike_bombs.clear()  # Limpar bombas de bombardeio
+        self.cannon_towers.clear()  # Limpar torres de canhão
+        self.cannon_mines.clear()  # Limpar minas das torres
         self.boss = None
         self.mini_ships.clear()
         self.mini_ship_bullets.clear()
@@ -802,7 +845,7 @@ class EntityManager:
         self.explosion_pool.clear_active()  # Limpar explosões ativas do pool
 
     def clear_for_level_transition(self):
-        """Limpa entidades para transição de fase, mas preserva balas do jogador."""
+        """Limpa entidades para transição de fase, mas preserva balas do jogador e torres de upgrades."""
         # Balas do jogador são mantidas, mas limpamos as inativas do pool
         for bullet in self.bullets[:]:
             if bullet.dead:
@@ -822,8 +865,17 @@ class EntityManager:
         # NÃO limpar bullet_pool aqui para manter balas do jogador
         self.explosion_pool.clear_active()  # Limpar explosões ativas do pool
         self.spikes.clear()
-        self.air_strike_markers.clear()  # Limpar marcadores de bombardeio
         self.air_strike_bombs.clear()  # Limpar bombas de bombardeio
+        
+        # PRESERVAR torres e minas de upgrades ativos:
+        # Torres de canhão são mantidas pois fazem parte do sistema de upgrades
+        # Minas ativas das torres também são preservadas para continuidade
+        # self.cannon_towers.clear()  # REMOVIDO - preservar torres de upgrade
+        # self.cannon_mines.clear()   # REMOVIDO - preservar minas ativas
+        
+        # Apenas limpar minas mortas e torres mortas (cleanup normal)
+        self.cannon_towers = [tower for tower in self.cannon_towers if not tower.dead]
+        self.cannon_mines = [mine for mine in self.cannon_mines if not mine.dead]
 
     def get_stats(self) -> Dict[str, Any]:
         """Retorna estatísticas de performance para debug."""

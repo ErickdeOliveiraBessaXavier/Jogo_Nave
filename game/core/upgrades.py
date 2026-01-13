@@ -27,6 +27,7 @@ class UpgradeType(Enum):
     EXPLOSIVE_SHOT = auto()
     AIR_STRIKE = auto()  # Ultimate: Bombardeio Aéreo
     BLACK_HOLE = auto()  # Ultimate: Buraco Negro
+    CANNON_TOWER = auto()  # Ultimate: Torres de Canhão
 
 
 class UpgradeCategory(Enum):
@@ -70,6 +71,7 @@ class UpgradeMeta:
     base_cooldown: float
     base_duration: float
     base_charges: Optional[int]  # None = ilimitado por fase
+    slot_weight: int = 1  # Peso em slots (1-5): quanto mais forte o upgrade, mais pesado
 
 
 class ActiveUpgrade:
@@ -693,6 +695,46 @@ class BlackHoleUpgrade(ActiveUpgrade):
         self.active = False
 
 
+class CannonTowerUpgrade(ActiveUpgrade):
+    """Ultimate: Torres de Canhão - Duas torres fixas que disparam minas em cargas sequenciais.
+
+    Comportamento:
+    - 2 torres fixas nas laterais da tela
+    - Cada torre tem 3 cargas com 3 minas cada (9 minas por torre)
+    - Minas armam em 3 segundos após pousar
+    - Explodem por contato com inimigos, causando dano em área
+    - Torres desaparecem após usar todas as cargas
+    """
+
+    def allows_refresh(self) -> bool:
+        return False  # Ultimate não permite refresh
+
+    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+        """Spawna duas torres de canhão fixas."""
+        entity_manager = getattr(ctx, "entity_manager", None)
+        if entity_manager is None:
+            return
+
+        # Obter dimensões da tela
+        import pygame
+        screen = pygame.display.get_surface()
+        screen_width = screen.get_width() if screen else 1600
+        screen_height = screen.get_height() if screen else 900
+
+        # Posições das torres (laterais, na parte inferior)
+        left_tower_x = screen_width * 0.15  # 15% da largura
+        right_tower_x = screen_width * 0.85  # 85% da largura
+        tower_y = screen_height - 120  # 120 pixels do fundo
+
+        # Spawnar torres
+        if hasattr(entity_manager, "spawn_cannon_tower"):
+            entity_manager.spawn_cannon_tower(left_tower_x, tower_y)
+            entity_manager.spawn_cannon_tower(right_tower_x, tower_y)
+
+    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+        self.active = False
+
+
 # ===================== Registro e Fábrica ================================
 
 UPGRADES_REGISTRY: Dict[UpgradeType, Callable[[], ActiveUpgrade]] = {}
@@ -706,6 +748,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_cooldown=45.0,
         base_duration=0.0,  # Não usa duração - baseado em consumo
         base_charges=None,
+        slot_weight=2,  # Peso médio-baixo para upgrade defensivo
     ),
     UpgradeType.HEAL: UpgradeMeta(
         type=UpgradeType.HEAL,
@@ -716,6 +759,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_cooldown=60.0,
         base_duration=0.0,
         base_charges=2,
+        slot_weight=1,  # Upgrade leve com cargas limitadas
     ),
     UpgradeType.EMP: UpgradeMeta(
         type=UpgradeType.EMP,
@@ -726,6 +770,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_cooldown=50.0,
         base_duration=_emp_base_duration,
         base_charges=None,
+        slot_weight=2,  # Utilitário poderoso merece peso médio
     ),
     UpgradeType.HOMING_SHOT: UpgradeMeta(
         type=UpgradeType.HOMING_SHOT,
@@ -736,6 +781,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_cooldown=80.0,
         base_duration=7.0,
         base_charges=None,
+        slot_weight=3,  # Ofensivo potente com desvantagens
     ),
     UpgradeType.LASER_SHOT: UpgradeMeta(
         type=UpgradeType.LASER_SHOT,
@@ -746,6 +792,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_cooldown=60.0,
         base_duration=0.0,  # Não usa duração - baseado em cargas internas das bolinhas
         base_charges=None,  # Uso ilimitado do upgrade (cargas são internas: 3 bolas × 3 tiros)
+        slot_weight=3,  # Sistema de lasers automáticos é poderoso
     ),
     UpgradeType.EXPLOSIVE_SHOT: UpgradeMeta(
         type=UpgradeType.EXPLOSIVE_SHOT,
@@ -756,6 +803,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_cooldown=90.0,
         base_duration=0.0,  # Baseado em cargas, não em duração
         base_charges=30,
+        slot_weight=3,  # Explosões em área são muito fortes
     ),
     UpgradeType.AIR_STRIKE: UpgradeMeta(
         type=UpgradeType.AIR_STRIKE,
@@ -766,6 +814,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_cooldown=180.0,  # 3 minutos de cooldown
         base_duration=0.0,
         base_charges=30,  # 30 bombas por ativação
+        slot_weight=5,  # Ultimate extremamente poderoso
     ),
     UpgradeType.BLACK_HOLE: UpgradeMeta(
         type=UpgradeType.BLACK_HOLE,
@@ -776,6 +825,18 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_cooldown=120.0,  # 2 minutos de cooldown
         base_duration=8.0,  # Dura 8 segundos
         base_charges=None,
+        slot_weight=4,  # Ultimate poderoso mas com cooldown menor que Air Strike
+    ),
+    UpgradeType.CANNON_TOWER: UpgradeMeta(
+        type=UpgradeType.CANNON_TOWER,
+        name="CANNON",
+        desc="Ultimate: 2 torres fixas disparam minas que explodem por contato.",
+        icon_id="cannon_tower",
+        category=UpgradeCategory.OFFENSIVE,
+        base_cooldown=200.0,  # 3.3 minutos de cooldown
+        base_duration=0.0,  # Baseado na duração das torres
+        base_charges=None,
+        slot_weight=5,  # Ultimate extremamente poderoso com área de controle
     ),
 }
 
@@ -812,6 +873,10 @@ def _factory_black_hole() -> ActiveUpgrade:
     return BlackHoleUpgrade(UPGRADES_META[UpgradeType.BLACK_HOLE])
 
 
+def _factory_cannon_tower() -> ActiveUpgrade:
+    return CannonTowerUpgrade(UPGRADES_META[UpgradeType.CANNON_TOWER])
+
+
 UPGRADES_REGISTRY.update(
     {
         UpgradeType.SHIELD_BURST: _factory_shield,
@@ -822,6 +887,7 @@ UPGRADES_REGISTRY.update(
         UpgradeType.EXPLOSIVE_SHOT: _factory_explosive_shot,
         UpgradeType.AIR_STRIKE: _factory_air_strike,
         UpgradeType.BLACK_HOLE: _factory_black_hole,
+        UpgradeType.CANNON_TOWER: _factory_cannon_tower,
     }
 )
 
@@ -877,6 +943,8 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
         "AIR": "A",
         "Black Hole": "B",
         "HOLE": "B",
+        "Cannon Tower": "C",
+        "CANNON": "C",
     }
 
     icon = icon_name_map.get(upgrade_name)

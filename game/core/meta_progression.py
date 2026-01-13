@@ -537,6 +537,49 @@ class PlayerProfile:
 
         self.load()
 
+    def get_total_equipped_weight(self) -> int:
+        """Retorna o peso total de todos os upgrades equipados."""
+        from .upgrades import UPGRADES_META
+        
+        total_weight = 0
+        for upgrade_type in self.upgrade_loadout:
+            if upgrade_type is not None:
+                meta = UPGRADES_META.get(upgrade_type)
+                if meta:
+                    total_weight += meta.slot_weight
+        return total_weight
+    
+    def can_equip_upgrade(self, upgrade_type: UpgradeType, slot_index: int) -> bool:
+        """
+        Verifica se pode equipar um upgrade considerando o peso total.
+        
+        Returns:
+            bool: True se pode equipar, False caso contrário
+        """
+        from .upgrades import UPGRADES_META
+        
+        # Verificar se o slot está desbloqueado
+        if slot_index >= self.unlocked_slots:
+            return False
+        
+        # Obter peso do novo upgrade
+        meta = UPGRADES_META.get(upgrade_type)
+        if not meta:
+            return False
+        
+        new_weight = meta.slot_weight
+        
+        # Calcular peso atual sem o item do slot de destino
+        current_weight = 0
+        for i, equipped_type in enumerate(self.upgrade_loadout):
+            if i != slot_index and equipped_type is not None:
+                equipped_meta = UPGRADES_META.get(equipped_type)
+                if equipped_meta:
+                    current_weight += equipped_meta.slot_weight
+        
+        # Verificar se o peso total não excede o limite
+        return (current_weight + new_weight) <= self.unlocked_slots
+
     def equip_upgrade(self, upgrade_type: Optional[UpgradeType], slot_index: int):
         """Equipa ou desequipa um aprimoramento em um slot específico."""
         if 0 <= slot_index < UPGRADE_SLOT_COUNT:

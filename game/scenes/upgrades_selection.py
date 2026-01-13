@@ -102,6 +102,7 @@ class UpgradesSelectionScene(Scene):
         self.dragging_upgrade: Optional[UpgradeMeta] = None
         self.drag_offset: Tuple[int, int] = (0, 0)
         self.drag_source_slot: Optional[int] = None  # Se veio da grid direita
+        self.drag_invalid_target: bool = False  # Se o drop atual seria inválido por peso
 
         # Shake effect para slots bloqueados
         self.shaking_slot: Optional[int] = None
@@ -320,6 +321,18 @@ class UpgradesSelectionScene(Scene):
                             self.shake_start_time = time.time()
                             continue
 
+                        # Verificar se pode equipar considerando o peso
+                        if not self.player_profile.can_equip_upgrade(self.dragging_upgrade.type, i):
+                            # Shake effect e som de erro
+                            self.shaking_slot = i
+                            self.shake_start_time = time.time()
+                            try:
+                                if hasattr(self.app, 'sound_manager'):
+                                    self.app.sound_manager.play_upgrade_denied()  # type: ignore
+                            except:
+                                pass
+                            continue
+
                         # Se o slot de destino tem um upgrade e a origem também é um slot
                         target_upgrade = (
                             self.player_profile.upgrade_loadout[i]
@@ -418,6 +431,7 @@ class UpgradesSelectionScene(Scene):
         mouse_pos = pygame.mouse.get_pos()
         self.hovered_upgrade = None
         self.hovered_slot_idx = None
+        self.drag_invalid_target = False
 
         if not self.dragging_upgrade:
             # Hover sobre upgrades da grid
@@ -430,6 +444,16 @@ class UpgradesSelectionScene(Scene):
             for i, slot_rect in enumerate(self.layout.active_slots):
                 if slot_rect.collidepoint(mouse_pos):
                     self.hovered_slot_idx = i
+                    break
+        else:
+            # Se está arrastando, verificar se o drop seria inválido
+            for i, slot_rect in enumerate(self.layout.active_slots):
+                if slot_rect.collidepoint(mouse_pos):
+                    # Slot bloqueado ou sem peso suficiente = inválido
+                    if i >= self.player_profile.unlocked_slots:
+                        self.drag_invalid_target = True
+                    elif not self.player_profile.can_equip_upgrade(self.dragging_upgrade.type, i):
+                        self.drag_invalid_target = True
                     break
 
     def render(self, surface: pygame.Surface):
@@ -553,6 +577,22 @@ class UpgradesSelectionScene(Scene):
                 pygame.draw.circle(surface, colors.YELLOW, badge_rect.center, 7)
                 check_text = self.tiny_font.render("E", True, colors.BLACK)
                 surface.blit(check_text, (badge_rect.x + 3, badge_rect.y + 1))
+            
+            # Mostrar peso do upgrade (canto inferior direito)
+            weight_text = self.tiny_font.render(
+                f"{upgrade.slot_weight}", True, colors.WHITE if unlocked else colors.GRAY
+            )
+            weight_bg = pygame.Rect(
+                cell_rect.right - weight_text.get_width() - 8,
+                cell_rect.bottom - weight_text.get_height() - 5,
+                weight_text.get_width() + 6,
+                weight_text.get_height() + 4
+            )
+            pygame.draw.rect(surface, (20, 20, 20), weight_bg, border_radius=3)
+            surface.blit(
+                weight_text,
+                (weight_bg.x + 3, weight_bg.y + 2)
+            )
 
     def _draw_active_slots(self, surface: pygame.Surface):
         """Desenha a grid 2x2 de slots ativos do lado direito."""
@@ -561,12 +601,10 @@ class UpgradesSelectionScene(Scene):
         header_text = self.header_font.render("APRIMORAMENTOS", True, colors.WHITE)
         surface.blit(header_text, (header_rect.x, header_rect.y))
 
-        # Contador de slots e estrelas
-        equipped_count = sum(
-            1 for u in self.player_profile.upgrade_loadout if u is not None
-        )
+        # Contador de slots e estrelas (mostra peso usado/total)
+        total_weight = self.player_profile.get_total_equipped_weight()
         counter_text = self.item_font.render(
-            f"{equipped_count}/{self.player_profile.unlocked_slots}", True, colors.GRAY
+            f"{total_weight}/{self.player_profile.unlocked_slots}", True, colors.GRAY
         )
         surface.blit(
             counter_text,
@@ -673,7 +711,7 @@ class UpgradesSelectionScene(Scene):
                         ),
                     )
 
-                    # Nome
+                    # Nome e Peso
                     name_text = self.small_font.render(
                         upgrade_meta.name, True, colors.YELLOW
                     )
@@ -683,6 +721,22 @@ class UpgradesSelectionScene(Scene):
                             draw_rect.centerx - name_text.get_width() // 2,
                             draw_rect.bottom - 25,
                         ),
+                    )
+                    
+                    # Peso (canto inferior direito)
+                    weight_text = self.tiny_font.render(
+                        f"{upgrade_meta.slot_weight}", True, colors.WHITE
+                    )
+                    weight_bg = pygame.Rect(
+                        draw_rect.right - weight_text.get_width() - 8,
+                        draw_rect.bottom - weight_text.get_height() - 5,
+                        weight_text.get_width() + 6,
+                        weight_text.get_height() + 4
+                    )
+                    pygame.draw.rect(surface, (20, 20, 20), weight_bg, border_radius=3)
+                    surface.blit(
+                        weight_text,
+                        (weight_bg.x + 3, weight_bg.y + 2)
                     )
             else:
                 if locked:
@@ -742,21 +796,32 @@ class UpgradesSelectionScene(Scene):
         )
         surface.blit(shadow_surf, shadow_rect.topleft)
 
-        # Upgrade com transparência
+        # Upgrade com transparência (vermelho se inválido)
         drag_surf = pygame.Surface((80, 80), pygame.SRCALPHA)
+        
+        # Cor de fundo e borda dependem se o drop é válido
+        if self.drag_invalid_target:
+            bg_color = (80, 40, 40, 200)  # Vermelho escuro
+            border_color = (255, 80, 80, 220)  # Vermelho
+            icon_color = (150, 50, 50)  # Roxo avermelhado
+        else:
+            bg_color = (60, 60, 60, 200)  # Cinza normal
+            border_color = (colors.YELLOW[0], colors.YELLOW[1], colors.YELLOW[2], 220)
+            icon_color = CUSTOM_PURPLE
+        
         pygame.draw.rect(
-            drag_surf, (60, 60, 60, 200), drag_surf.get_rect(), border_radius=6
+            drag_surf, bg_color, drag_surf.get_rect(), border_radius=6
         )
         pygame.draw.rect(
             drag_surf,
-            (colors.YELLOW[0], colors.YELLOW[1], colors.YELLOW[2], 220),
+            border_color,
             drag_surf.get_rect(),
             3,
             border_radius=6,
         )
 
         # Ícone
-        pygame.draw.circle(drag_surf, CUSTOM_PURPLE, (40, 40), 25)
+        pygame.draw.circle(drag_surf, icon_color, (40, 40), 25)
         initial = get_upgrade_icon(
             self.dragging_upgrade.name, self.dragging_upgrade.icon_id
         )
@@ -819,6 +884,7 @@ class UpgradesSelectionScene(Scene):
         # Atributos
         attr_y = desc_y + 10
         attrs: List[str] = []
+        attrs.append(f"Peso: {upgrade.slot_weight}")  # Primeira linha: peso
         attrs.append(f"Cooldown: {upgrade.base_cooldown}s")
         if upgrade.base_duration > 0:
             attrs.append(f"Duracao: {upgrade.base_duration}s")
