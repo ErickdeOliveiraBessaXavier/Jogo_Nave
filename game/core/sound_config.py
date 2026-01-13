@@ -64,8 +64,8 @@ class SoundCategory(Enum):
 VOLUME_CONFIG: Dict[str, float] = {
     "master": 0.8,  # Volume geral
     "sfx": 0.3,  # Efeitos sonoros
-    "music": 0.5,  # Música
-    "boss_music": 2.5,  # Música do boss
+    "music": 0.6,  # Música de background (aumentado de 0.5 para 0.6)
+    "boss_music": 0.7,  # Música do boss (reduzido de 2.5 para 0.7 - mais balanceado)
     "shots": 0.2,  # Tiros específico
 }
 

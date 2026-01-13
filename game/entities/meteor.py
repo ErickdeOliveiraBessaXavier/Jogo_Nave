@@ -117,7 +117,7 @@ class Meteor:
 
         # rotação (maiores rodam mais devagar)
         self.rotation = 0.0
-        self.rotation_speed = random.uniform(-3, 3) * (1.0 - ratio * 0.5)
+        self.rotation_speed = random.uniform(-180, 180) * (1.0 - ratio * 0.5)
 
         # forma irregular + cor
         self._base_points: List[Tuple[float, float]] = _get_or_create_shape(self.size)
@@ -189,7 +189,7 @@ class Meteor:
 
         # rotação
         self.rotation = 0.0
-        self.rotation_speed = random.uniform(-3, 3) * (1.0 - ratio * 0.5)
+        self.rotation_speed = random.uniform(-180, 180) * (1.0 - ratio * 0.5)
 
         # forma irregular + cor
         self._base_points = _get_or_create_shape(self.size)
@@ -207,7 +207,7 @@ class Meteor:
     def update(self, dt: float):
         self.x += self.vx * dt
         self.y += self.vy * dt
-        self.rotation += self.rotation_speed
+        self.rotation += self.rotation_speed * dt  # FIX: multiplicar por dt para suavidade
         if (
             (self.y > Config.SCREEN_HEIGHT)
             or (self.x < -self.w)
@@ -216,16 +216,17 @@ class Meteor:
             self.dead = True
 
     def _rotated_points(self) -> List[Tuple[int, int]]:
-        """Retorna pontos rotacionados (otimizado)."""
+        """Retorna pontos rotacionados (otimizado com melhor precisão)."""
         rad = math.radians(self.rotation)
         cr = math.cos(rad)
         sr = math.sin(rad)
-        cx = self.x + self.w // 2
-        cy = self.y + self.h // 2
+        # Manter precisão float até a conversão final
+        cx = self.x + self.w * 0.5
+        cy = self.y + self.h * 0.5
         
-        # List comprehension é mais rápido que loop com append
+        # List comprehension com arredondamento ao invés de truncamento
         return [
-            (int(cx + px * cr - py * sr), int(cy + px * sr + py * cr))
+            (round(cx + px * cr - py * sr), round(cy + px * sr + py * cr))
             for px, py in self._base_points
         ]
 

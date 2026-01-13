@@ -28,7 +28,7 @@ class DifficultyConfig:
     BASE_METEOR_SPAWN_TIME: float = 1.2
     BASE_ALIEN_SPAWN_TIME: float = 2.5
     BASE_EYE_SPAWN_TIME: float = 6.0
-    MIN_SPAWN_TIME: float = 0.15  # Mínimo humanamente jogável
+    MIN_SPAWN_TIME: float = 0.3  # Aumentado de 0.15 para 0.3 (mais jogável)
 
     MIN_ENEMIES_TO_CLEAR: int = 80
     BASE_ENEMIES: int = 25
@@ -36,7 +36,18 @@ class DifficultyConfig:
     ENEMY_VARIATION: int = 20
 
     DIFFICULTY_SCALING: float = 0.15
-    MAX_DIFFICULTY_MULTIPLIER: float = 3.0
+    MAX_DIFFICULTY_MULTIPLIER: float = 2.5  # Reduzido de 3.0 para 2.5
+    
+    # Limites de inimigos simultâneos por tipo
+    MAX_METEORS_ON_SCREEN: int = 35
+    MAX_ALIENS_ON_SCREEN: int = 12
+    MAX_EYES_ON_SCREEN: int = 5
+    MAX_SQUARE_MINIONS_ON_SCREEN: int = 3
+    MAX_TOTAL_ENEMIES_ON_SCREEN: int = 50  # Limite total absoluto
+    
+    # Controle adaptativo de spawn
+    ADAPTIVE_SPAWN_ENABLED: bool = True  # Reduz spawn se muitos inimigos na tela
+    SPAWN_REDUCTION_THRESHOLD: float = 0.8  # 80% do limite = começa a reduzir spawn
 
     # Curvas de dificuldade configuráveis
     SPAWN_RATE_CURVE: str = "logarithmic"  # "linear", "logarithmic", "exponential"
@@ -173,8 +184,8 @@ LEVEL_THEMES = {
             "eye": 0.0,
             "square_minion_boss": 0.0,
         },
-        spawn_rate_multiplier=2.0,  # 2x mais meteoros por segundo
-        enemies_multiplier=1.8,  # 1.8x mais meteoros para limpar
+        spawn_rate_multiplier=1.4,  # Reduzido de 2.0 para 1.4 (mais balanceado)
+        enemies_multiplier=1.3,  # Reduzido de 1.8 para 1.3 (menos frustrante)
         special_feature="meteor_only",
     ),
     "balanced": LevelTheme(
@@ -241,6 +252,37 @@ class LevelConfig:
         if self.formation_types:
             return random.choice(self.formation_types)
         return None
+    
+    def validate_sanity(self) -> list[str]:
+        """Valida se a configuração do nível é jogável e faz sentido.
+        
+        Returns:
+            Lista de avisos/problemas encontrados (vazia se tudo OK)
+        """
+        warnings: list[str] = []
+        
+        # Verificar spawn times muito rápidos
+        for enemy_type, spawn_time in self.enemy_spawn_config.items():
+            if spawn_time < DifficultyConfig.MIN_SPAWN_TIME:
+                warnings.append(
+                    f"Spawn time de {enemy_type.__name__} muito rápido: {spawn_time:.2f}s "
+                    f"(mínimo recomendado: {DifficultyConfig.MIN_SPAWN_TIME}s)"
+                )
+        
+        # Verificar se tem inimigos demais para limpar
+        if self.enemies_to_clear > 1000:
+            warnings.append(
+                f"Muitos inimigos para limpar: {self.enemies_to_clear} "
+                f"(pode levar mais de 10 minutos)"
+            )
+        
+        # Verificar se tema tem multiplicadores extremos
+        if self.score_multiplier > 3.0:
+            warnings.append(
+                f"Score multiplier muito alto: {self.score_multiplier:.1f}x"
+            )
+        
+        return warnings
 
     def validate_formation_types(self, valid_types: set[str]) -> list[str]:
         """
@@ -776,6 +818,24 @@ class LevelAnalyzer:
         )
         # Assume que jogador mata ~80% dos inimigos que spawnam
         return (config.enemies_to_clear / 0.8) * avg_spawn
+    
+    @staticmethod
+    def estimate_spawn_rate(config: LevelConfig) -> float:
+        """Estima taxa de spawn total (inimigos por segundo)."""
+        if not config.enemy_spawn_config:
+            return 0.0
+        
+        # Somar inverso dos spawn times = taxa total
+        total_rate = sum(1.0 / spawn_time for spawn_time in config.enemy_spawn_config.values())
+        return total_rate
+    
+    @staticmethod
+    def estimate_max_enemies_on_screen(config: LevelConfig) -> int:
+        """Estima número máximo provável de inimigos na tela simultaneamente."""
+        spawn_rate = LevelAnalyzer.estimate_spawn_rate(config)
+        # Assumir que inimigos vivem ~5 segundos em média
+        avg_lifetime = 5.0
+        return int(spawn_rate * avg_lifetime)
 
     @staticmethod
     def print_level_progression(
@@ -801,12 +861,24 @@ class LevelAnalyzer:
                 features += "🌀"
 
             theme_name = config.theme_name or "N/A"
+            spawn_rate = LevelAnalyzer.estimate_spawn_rate(config)
+            max_enemies = LevelAnalyzer.estimate_max_enemies_on_screen(config)
+            warnings = config.validate_sanity()
+            
+            # Indicador de problemas
+            warning_icon = "⚠️" if warnings else "✓"
 
             print(
-                f"Nv.{level_num:2d} │ "
+                f"{warning_icon} Nv.{level_num:2d} │ "
                 f"{theme_name:22s} │ "
                 f"👾{stats['enemies_to_clear']:3d} │ "
-                f"⏱️{stats['avg_spawn_rate']:.2f}s │ "
+                f"📊{spawn_rate:.1f}/s │ "
+                f"🎯~{max_enemies:2d} tela │ "
                 f"🕐{duration/60:.1f}min │ "
                 f"{features:5s}"
             )
+            
+            # Mostrar avisos se houver
+            if warnings:
+                for warning in warnings:
+                    print(f"    └─ ⚠️  {warning}")
