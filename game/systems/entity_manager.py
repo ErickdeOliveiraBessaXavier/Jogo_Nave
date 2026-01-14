@@ -24,6 +24,7 @@ from ..entities.formation import Formation
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
 from ..entities.slime_boss import SlimeBoss
+from ..entities.giant_meteor_boss import GiantMeteorBoss
 from ..entities.slime_drip import SlimeDrip
 from ..entities.player_laser import PlayerLaser
 from ..core.spatial_grid import SpatialGrid
@@ -63,7 +64,7 @@ class EntityManager:
         self.powerups: list[PowerUp] = []
         self.stars: list[Star] = []  # Estrelas coletáveis
         self.floating_scores: list[FloatingScore] = []
-        self.boss: Boss | SpikeBoss | SlimeBoss | None = None
+        self.boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | None = None
         self.mini_ships: list[MiniShip] = []
         self.mini_ship_bullets: list[MiniShipBullet] = []
         self.formations: list[Formation] = []  # Nova lista para formações
@@ -439,6 +440,9 @@ class EntityManager:
             # SlimeBoss só tem ataque de drip interno, não spawna entidades externas
             elif isinstance(self.boss, SlimeBoss):
                 self.boss.update(enemy_dt, player_x, player_y, self)
+            # GiantMeteorBoss apenas atualiza posição (queda lenta)
+            elif isinstance(self.boss, GiantMeteorBoss):
+                self.boss.update(enemy_dt, player_x, player_y, self)
             # Boss normal retorna (List[BossLaser], List[BossSquare])
             else:  # isinstance(self.boss, Boss)
                 lasers_fired, spawned_squares = self.boss.update(
@@ -535,6 +539,7 @@ class EntityManager:
         from ..entities.eye_enemy import EyeEnemy
         from ..entities.spike_boss import SpikeBoss
         from ..entities.slime_boss import SlimeBoss
+        from ..entities.giant_meteor_boss import GiantMeteorBoss
 
         # List of entity groups to update
         entity_groups: list[list[Any]] = [
@@ -587,6 +592,8 @@ class EntityManager:
                     self.boss_lasers.extend(spike_boss_lasers)  # type: ignore
             elif isinstance(self.boss, SlimeBoss):
                 self.boss.update(dt, player_x, player_y)
+            elif isinstance(self.boss, GiantMeteorBoss):
+                self.boss.update(dt, player_x, player_y, self)
             else:  # General Boss type
                 lasers_fired, spawned_squares = self.boss.update(dt, player_x, player_y)
                 if lasers_fired:

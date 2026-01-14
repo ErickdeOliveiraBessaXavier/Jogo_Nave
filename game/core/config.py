@@ -259,6 +259,21 @@ class Config:
     BOSS_ANIMATION_SPEED_MULTIPLIER: float = 1.0
     BOSS_FRENZY_ANIMATION_SPEED_MULTIPLIER: float = 2.0
 
+    # ========================================
+    # GIANT METEOR BOSS
+    # ========================================
+    GIANT_METEOR_BOSS_HEALTH: int = 1200
+    GIANT_METEOR_BOSS_WIDTH: int = 220
+    GIANT_METEOR_BOSS_HEIGHT: int = 500
+    GIANT_METEOR_BOSS_ENTRY_SPEED: float = 35.0
+    GIANT_METEOR_BOSS_FALL_SPEED: float = 5.0
+    GIANT_METEOR_BOSS_ROTATION_SPEED: float = 6.0
+    GIANT_METEOR_FRAGMENT_MIN_SIZE: int = 16
+    GIANT_METEOR_FRAGMENT_MAX_SIZE: int = 40
+    GIANT_METEOR_HIT_FRAGMENT_CHANCE: float = 0.35  # 35% por hit
+    GIANT_METEOR_HIT_FRAGMENT_COUNT: tuple[int, int] = (1, 3)
+    GIANT_METEOR_DEATH_FRAGMENT_COUNT: tuple[int, int] = (8, 12)
+
     # Boss visual effects - Normal mode
     # (Sistema de partículas de carregamento não implementado)
 

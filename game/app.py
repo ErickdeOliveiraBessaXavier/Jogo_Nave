@@ -65,6 +65,9 @@ class GameApp:
         # Dificuldade selecionada (padrão: normal)
         self.selected_difficulty = DifficultyPreset.NORMAL
 
+        # Contador de uso do HEAL (persiste por jogo)
+        self.heal_usage_count = 0
+
         # Inicia com o menu principal.
         self.states.push(MainMenuScene(self))
 

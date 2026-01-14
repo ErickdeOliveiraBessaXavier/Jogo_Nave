@@ -426,6 +426,9 @@ class MainMenuScene(Scene):
         # Armazenar dificuldade no app
         self.app.selected_difficulty = preset
 
+        # Resetar contador de uso do HEAL para novo jogo
+        self.app.heal_usage_count = 0
+
         # Criar e empurrar a cena de jogo
         self.app.states.pop()  # Remove menu
         self.app.states.push(

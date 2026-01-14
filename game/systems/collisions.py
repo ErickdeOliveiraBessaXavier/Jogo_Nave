@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
@@ -25,6 +26,7 @@ from ..entities.eye_enemy import EyeEnemy
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
 from ..entities.slime_boss import SlimeBoss
+from ..entities.giant_meteor_boss import GiantMeteorBoss
 from ..entities.slime_drip import SlimeDrip
 from ..entities.star import Star
 from ..core.config import Config
@@ -155,7 +157,7 @@ class Collisions:
     def _apply_boss_damage(
         self,
         projectiles: list[Bullet] | list[MiniShipBullet],
-        boss: Boss | SpikeBoss | SlimeBoss,
+        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
         is_piercing_allowed: bool = False,
@@ -247,6 +249,79 @@ class Collisions:
                         score_gain += Config.BOSS_DEFEAT_SCORE
                         entity_manager.spawn_explosion(cx, cy, size=100)
 
+        return score_gain
+
+    def bullets_vs_giant_meteor_boss(
+        self,
+        bullets: list[Bullet],
+        boss: GiantMeteorBoss,
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+    ) -> int:
+        """Colisão de balas com GiantMeteorBoss.
+
+        - Aplica dano com multiplicador de boss.
+        - Em cada hit, chance de soltar pequenos fragmentos (meteoros) pelo pool.
+        - Ao morrer, gera explosão e vários fragmentos.
+        """
+        score_gain = 0
+        boss_rect = boss.rect
+
+        for b in bullets[:]:
+            if b.rect.colliderect(boss_rect):
+                # Destruir bala se não for piercing
+                if not getattr(b, "piercing", False):
+                    b.dead = True
+
+                # Dano com multiplicador
+                damage = int(b.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                boss.take_damage(damage, entity_manager)
+                sound_manager.play_boss_damage()
+                entity_manager.spawn_explosion(b.x, b.y, size=18)
+
+                # Chance de soltar fragmentos por hit
+                if random.random() < Config.GIANT_METEOR_HIT_FRAGMENT_CHANCE:
+                    count = random.randint(*Config.GIANT_METEOR_HIT_FRAGMENT_COUNT)
+                    cx = boss.x + boss.w / 2
+                    cy = boss.y + boss.h / 2
+                    for _ in range(count):
+                        size = random.randint(
+                            Config.GIANT_METEOR_FRAGMENT_MIN_SIZE,
+                            Config.GIANT_METEOR_FRAGMENT_MAX_SIZE,
+                        )
+                        ang = random.uniform(0, 2 * math.pi)
+                        speed = random.uniform(90.0, 180.0)
+                        vx = math.cos(ang) * speed
+                        vy = math.sin(ang) * speed
+                        entity_manager.spawn_meteor(
+                            size=size, x=cx, y=cy, vx=vx, vy=abs(vy)
+                        )
+
+                # Checar morte
+                if boss.dead:
+                    cx, cy = boss.x + boss.w / 2, boss.y + boss.h / 2
+                    floating_scores.append(
+                        FloatingScore(cx, cy, Config.BOSS_DEFEAT_SCORE)
+                    )
+                    score_gain += Config.BOSS_DEFEAT_SCORE
+                    entity_manager.spawn_explosion(cx, cy, size=120)
+
+                    # Muitos fragmentos ao morrer
+                    death_count = random.randint(
+                        *Config.GIANT_METEOR_DEATH_FRAGMENT_COUNT
+                    )
+                    for _ in range(death_count):
+                        size = random.randint(
+                            Config.GIANT_METEOR_FRAGMENT_MIN_SIZE,
+                            Config.GIANT_METEOR_FRAGMENT_MAX_SIZE,
+                        )
+                        ang = random.uniform(0, 2 * math.pi)
+                        speed = random.uniform(120.0, 240.0)
+                        vx = math.cos(ang) * speed
+                        vy = math.sin(ang) * speed
+                        entity_manager.spawn_meteor(
+                            size=size, x=cx, y=cy, vx=vx, vy=abs(vy)
+                        )
         return score_gain
 
     def check_mine_explosions(
@@ -421,7 +496,7 @@ class Collisions:
     def explosive_effects_vs_boss(
         self,
         explosive_effects: list[ExplosiveEffect],
-        boss: Boss | SpikeBoss | SlimeBoss | None,
+        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | None,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -554,7 +629,7 @@ class Collisions:
     def cannon_mines_vs_boss(
         self,
         cannon_mines: list[CannonMine],
-        boss: Boss | SpikeBoss | SlimeBoss | None,
+        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | None,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -620,7 +695,7 @@ class Collisions:
     def air_strike_bombs_vs_boss(
         self,
         air_strike_bombs: list[AirStrikeBomb],
-        boss: Boss | SpikeBoss | SlimeBoss | None,
+        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | None,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -879,7 +954,7 @@ class Collisions:
     def bullets_vs_boss(
         self,
         bullets: list[Bullet],
-        boss: Boss,
+        boss: Boss | GiantMeteorBoss,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -888,7 +963,10 @@ class Collisions:
         )
 
     def ship_vs_boss(
-        self, ship: Ship, boss: Boss | SlimeBoss, entity_manager: "EntityManager"
+        self,
+        ship: Ship,
+        boss: Boss | SlimeBoss | GiantMeteorBoss,
+        entity_manager: "EntityManager",
     ) -> bool:
         if ship.invuln > 0:
             return False
@@ -1011,7 +1089,7 @@ class Collisions:
     def mini_ship_bullets_vs_boss(
         self,
         mini_ship_bullets: list[MiniShipBullet],
-        boss: Boss,
+        boss: Boss | GiantMeteorBoss,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -1396,7 +1474,7 @@ class Collisions:
     def player_lasers_vs_boss(
         self,
         player_lasers: list[PlayerLaser],
-        boss: Boss | SpikeBoss | SlimeBoss,
+        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:

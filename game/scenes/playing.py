@@ -20,7 +20,7 @@ from ..entities.mini_ship import MiniShip
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_profile_path
-from ..core.upgrades import create_upgrade, ActiveUpgrade
+from ..core.upgrades import create_upgrade, ActiveUpgrade, HealUpgrade
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 
 if TYPE_CHECKING:
@@ -470,11 +470,14 @@ class PlayingScene(Scene):
         if self.entity_manager.boss:
             from ..entities.spike_boss import SpikeBoss
             from ..entities.slime_boss import SlimeBoss
+            from ..entities.giant_meteor_boss import GiantMeteorBoss
 
             if isinstance(self.entity_manager.boss, SpikeBoss):
                 self._boss_type_cache = "spike"
             elif isinstance(self.entity_manager.boss, SlimeBoss):
                 self._boss_type_cache = "slime"
+            elif isinstance(self.entity_manager.boss, GiantMeteorBoss):
+                self._boss_type_cache = "giant_meteor"
             else:
                 self._boss_type_cache = "normal"
         else:
@@ -893,6 +896,16 @@ class PlayingScene(Scene):
                 score_gain += self.collisions.mini_ship_bullets_vs_slime_boss(
                     self.entity_manager.mini_ship_bullets,
                     slime_boss,
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
+            elif self._boss_type_cache == "giant_meteor":
+                from ..entities.giant_meteor_boss import GiantMeteorBoss
+
+                gm_boss = cast(GiantMeteorBoss, boss)
+                score_gain = self.collisions.bullets_vs_giant_meteor_boss(
+                    self.entity_manager.bullets,
+                    gm_boss,
                     self.entity_manager.floating_scores,
                     self.entity_manager,
                 )
@@ -1475,7 +1488,10 @@ class PlayingScene(Scene):
                 self.upgrade_slots.append(None)
             else:
                 try:
-                    self.upgrade_slots.append(create_upgrade(t))
+                    upgrade = create_upgrade(t)
+                    if isinstance(upgrade, HealUpgrade):
+                        upgrade.usage_count = self.app.heal_usage_count
+                    self.upgrade_slots.append(upgrade)
                 except Exception:
                     self.upgrade_slots.append(None)
 
@@ -1533,6 +1549,8 @@ class PlayingScene(Scene):
         ctx: _Any = self._build_upgrade_ctx()
         try:
             upg.activate(ctx)
+            if isinstance(upg, HealUpgrade):
+                self.app.heal_usage_count = upg.usage_count
         except Exception:
             pass
 

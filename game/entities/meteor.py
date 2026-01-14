@@ -234,19 +234,22 @@ class Meteor:
 
     def draw(self, screen: pygame.Surface):
         points = self._rotated_points()
+        # Garantir que color_intensity seja um valor válido entre 0 e 1
+        intensity = max(0.0, min(1.0, self.color_intensity))
+
         if self.size <= Config.MIN_METEOR_SIZE + 8:
             body_color = (
-                int(255 * self.color_intensity),
-                int(200 * self.color_intensity),
-                int(100 * self.color_intensity),
+                max(0, min(255, int(255 * intensity))),
+                max(0, min(255, int(200 * intensity))),
+                max(0, min(255, int(100 * intensity))),
             )
             border_color = colors.YELLOW
             core_color = colors.LIGHT_ORANGE
         else:
             body_color = (
-                int(200 * self.color_intensity),
-                int(100 * self.color_intensity),
-                int(50 * self.color_intensity),
+                max(0, min(255, int(200 * intensity))),
+                max(0, min(255, int(100 * intensity))),
+                max(0, min(255, int(50 * intensity))),
             )
             border_color = colors.RED
             core_color = colors.DARK_RED

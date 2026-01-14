@@ -279,7 +279,13 @@ class ShieldBurstUpgrade(ActiveUpgrade):
 
 
 class HealUpgrade(ActiveUpgrade):
+    def __init__(self, meta: UpgradeMeta) -> None:
+        super().__init__(meta)
+        self.usage_count: int = 0
+
     def additional_can_activate(self, ctx: UpgradeContext) -> bool:
+        if self.usage_count >= 2:
+            return False
         ship = getattr(ctx, "ship", None)
         if ship is None:
             return False
@@ -299,6 +305,7 @@ class HealUpgrade(ActiveUpgrade):
         return current_lives < max_lives
 
     def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+        self.usage_count += 1
         ship = getattr(ctx, "ship", None)
         if ship is None:
             return
@@ -761,7 +768,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         category=UpgradeCategory.DEFENSIVE,
         base_cooldown=60.0,
         base_duration=0.0,
-        base_charges=2,
+        base_charges=None,
         slot_weight=1,  # Upgrade leve com cargas limitadas
     ),
     UpgradeType.EMP: UpgradeMeta(
