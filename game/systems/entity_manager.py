@@ -655,10 +655,6 @@ class EntityManager:
         for tower in self.cannon_towers:
             tower.draw(surface)
 
-        # Desenhar buracos negros (devem ser desenhados ANTES dos inimigos para criar efeito de sucção)
-        for black_hole in self.black_holes:
-            black_hole.draw(surface)
-
         # Desenhar boss_lasers ANTES do boss (para aparecer abaixo)
         for laser in self.boss_lasers:
             laser.draw(surface)
@@ -669,6 +665,10 @@ class EntityManager:
                 self.boss.draw(surface, fps)
             else:
                 self.boss.draw(surface)
+
+        # Desenhar buracos negros (APÓS do boss para aparecer acima)
+        for black_hole in self.black_holes:
+            black_hole.draw(surface)
 
         for entity_list in entity_lists:
             for entity in entity_list:

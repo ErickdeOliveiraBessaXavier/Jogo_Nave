@@ -262,12 +262,10 @@ class Config:
     # ========================================
     # GIANT METEOR BOSS
     # ========================================
-    GIANT_METEOR_BOSS_HEALTH: int = 1200
-    GIANT_METEOR_BOSS_WIDTH: int = 220
-    GIANT_METEOR_BOSS_HEIGHT: int = 500
+    GIANT_METEOR_BOSS_HEALTH: int = 4500
+    GIANT_METEOR_BOSS_HEIGHT: int = 800
     GIANT_METEOR_BOSS_ENTRY_SPEED: float = 35.0
     GIANT_METEOR_BOSS_FALL_SPEED: float = 5.0
-    GIANT_METEOR_BOSS_ROTATION_SPEED: float = 6.0
     GIANT_METEOR_FRAGMENT_MIN_SIZE: int = 16
     GIANT_METEOR_FRAGMENT_MAX_SIZE: int = 40
     GIANT_METEOR_HIT_FRAGMENT_CHANCE: float = 0.35  # 35% por hit

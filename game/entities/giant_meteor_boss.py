@@ -1,8 +1,9 @@
+import math
 import random
 import pygame
 from typing import TYPE_CHECKING, TypedDict
 
-from ..core.config import config as Config
+from ..core.config import config
 from ..core import colors
 
 if TYPE_CHECKING:
@@ -32,19 +33,19 @@ class GiantMeteorBoss:
 
     def __init__(self, x: float, y: float):
         # Tamanho grande, com overflow proposital para efeito visual impactante
-        self.w = int(Config.SCREEN_WIDTH * 1.3)  # 30% maior que a tela
-        self.h = Config.GIANT_METEOR_BOSS_HEIGHT
-        self.x = -int(Config.SCREEN_WIDTH * 0.15)  # Centralizar o overflow
+        self.w = int(config.SCREEN_WIDTH * 1.3)  # 30% maior que a tela
+        self.h = config.GIANT_METEOR_BOSS_HEIGHT
+        self.x = -int(config.SCREEN_WIDTH * 0.15)  # Centralizar o overflow
         self.y = -self.h - 100  # Criado bem fora da tela (100px acima)
         # Ajustar target_y para mostrar apenas 30% do meteoro (70% fica escondido acima)
         self.target_y = -self.h * 0.7
 
-        self.health = Config.GIANT_METEOR_BOSS_HEALTH
+        self.health = config.GIANT_METEOR_BOSS_HEALTH
         self.max_health = self.health
         self.dead = False
 
-        self.entry_speed = Config.GIANT_METEOR_BOSS_ENTRY_SPEED
-        self.speed = Config.GIANT_METEOR_BOSS_FALL_SPEED
+        self.entry_speed = config.GIANT_METEOR_BOSS_ENTRY_SPEED
+        self.speed = config.GIANT_METEOR_BOSS_FALL_SPEED
 
         # Estado
         self.state = "entering"  # entering -> falling -> dying
@@ -397,18 +398,19 @@ class GiantMeteorBoss:
         if self.health <= 0:
             self.dead = True
             self.state = "dying"
+            # Spawn fragments na morte
+            if entity_manager:
+                min_count, max_count = config.GIANT_METEOR_DEATH_FRAGMENT_COUNT
+                num_fragments = random.randint(min_count, max_count)
+                for _ in range(num_fragments):
+                    self._spawn_death_fragment(entity_manager)
             return
 
-        # Spawn de meteoros quando atingido (quantidade escala fortemente com estágio de dano)
+        # Spawn de meteoros quando atingido
         if entity_manager and self.state == "falling":
-            health_percent = self.health / self.max_health
-            current_stage = min(11, int((1.0 - health_percent) * 12))
-            # Chance de spawn aumenta com o dano (0.1 para saúde alta, 0.5 para saúde baixa)
-            spawn_chance = 0.1 + (0.4 * (1 - health_percent))
-
-            if random.random() < spawn_chance:
-                # Spawn de meteoros escala com estágio: 1 no início, até 20 no último estágio
-                num_meteors = random.randint(1 + current_stage, 1 + int(current_stage * 1.2))
+            if random.random() < config.GIANT_METEOR_HIT_FRAGMENT_CHANCE:
+                min_count, max_count = config.GIANT_METEOR_HIT_FRAGMENT_COUNT
+                num_meteors = random.randint(min_count, max_count)
                 for _ in range(num_meteors):
                     self._spawn_damage_meteor(entity_manager)
 
@@ -450,34 +452,112 @@ class GiantMeteorBoss:
     def _spawn_normal_meteor(self, entity_manager: "EntityManager") -> None:
         """Spawna um meteoro normal durante a luta do boss."""
         # Posição X aleatória na tela
-        x = random.uniform(0, Config.SCREEN_WIDTH - 100)
+        x = random.uniform(0, config.SCREEN_WIDTH - 100)
         y = -100  # Começa acima da tela
 
         # Velocidade vertical normal (sem horizontal)
         vx = 0.0
         vy = random.uniform(150, 250)
 
-        # Tamanho aleatório médio (entre 20 e 40)
-        size = random.randint(20, 40)
+        # Tamanho aleatório médio (entre config min e max)
+        size = random.randint(config.GIANT_METEOR_FRAGMENT_MIN_SIZE, config.GIANT_METEOR_FRAGMENT_MAX_SIZE)
 
         # Spawn o meteoro usando o entity_manager
         entity_manager.spawn_meteor(size=size, x=x, y=y, vx=vx, vy=vy)
 
     def _spawn_damage_meteor(self, entity_manager: "EntityManager") -> None:
-        """Spawna um meteoro quando o boss é atingido."""
-        # Posição próxima ao boss (leve variação)
-        x = self.x + self.w * 0.5 + random.uniform(-50, 50)
-        y = self.y + random.uniform(0, self.h * 0.8)
+        """Spawna um meteoro quando o boss é atingido - versão mais natural."""
+        # Inicializar variáveis para evitar erros do type checker
+        x = self.x + self.w / 2
+        y = self.y + self.h / 2
+        vx = 0.0
+        vy = 100.0
+        size = config.GIANT_METEOR_FRAGMENT_MIN_SIZE
 
-        # Velocidade diagonal (meteoro "saindo" do boss)
-        speed = random.uniform(100, 200)
-        vx = speed * random.choice([-1, 1]) * random.uniform(0.3, 1.0)
-        vy = speed * random.uniform(0.5, 1.5)
+        # Escolher uma rachadura existente ou ponto na borda para spawn mais natural
+        if self._crack_birth_stage and random.random() < 0.7:  # 70% chance de usar rachadura existente
+            # Spawn de rachadura existente (mais natural)
+            active_crack_indices = list(self._crack_birth_stage.keys())
+            if active_crack_indices:
+                crack_idx = random.choice(active_crack_indices)
+                crack_data = self._all_crack_positions[crack_idx]
 
-        # Tamanho pequeno (fragmentos)
-        size = random.randint(15, 30)
+                # Posição baseada na rachadura (com pequena variação)
+                x = self.x + crack_data["start_x"] + random.uniform(-10, 10)
+                y = self.y + crack_data["start_y"] + random.uniform(-10, 10)
+
+                # Velocidade baseada na direção da rachadura (saindo radialmente)
+                speed = random.uniform(120, 220)
+                # Direção oposta à rachadura (para fora do boss)
+                vx = -crack_data["dir_x"] * speed * random.uniform(0.8, 1.2)
+                vy = -crack_data["dir_y"] * speed * random.uniform(0.8, 1.2)
+
+                # Adicionar componente gravitacional (queda mais natural)
+                vy += random.uniform(50, 100)  # Componente para baixo
+
+                # CORREÇÃO 4: Usar variáveis do config com escala baseada na idade
+                birth_stage = self._crack_birth_stage[crack_idx]
+                current_stage = min(11, int((1.0 - self.health / self.max_health) * 12))
+                crack_age = current_stage - birth_stage
+                
+                # Interpolar entre MIN e MAX baseado na idade
+                min_size = config.GIANT_METEOR_FRAGMENT_MIN_SIZE
+                max_size = config.GIANT_METEOR_FRAGMENT_MAX_SIZE
+                size = random.randint(
+                    min_size + crack_age * 2,
+                    min_size + int((max_size - min_size) * (crack_age / 11.0))
+                )
+        else:
+            # Fallback: spawn na borda externa (menos comum)
+            # Escolher um lado aleatório
+            side = random.choice(['top', 'bottom', 'left', 'right'])
+
+            if side == 'top':
+                x = self.x + random.uniform(0, self.w)
+                y = self.y + random.uniform(-5, 15)
+                vx = random.uniform(-100, 100)
+                vy = random.uniform(80, 150)
+            elif side == 'bottom':
+                x = self.x + random.uniform(0, self.w)
+                y = self.y + self.h + random.uniform(-15, 5)
+                vx = random.uniform(-120, 120)
+                vy = random.uniform(-50, 20)  # Pode subir um pouco
+            elif side == 'left':
+                x = self.x + random.uniform(-5, 15)
+                y = self.y + random.uniform(0, self.h)
+                vx = random.uniform(80, 150)
+                vy = random.uniform(-50, 50)
+            else:  # right
+                x = self.x + self.w + random.uniform(-15, 5)
+                y = self.y + random.uniform(0, self.h)
+                vx = random.uniform(-150, -80)
+                vy = random.uniform(-50, 50)
+
+            # CORREÇÃO 5: Usar variáveis do config
+            size = random.randint(
+                config.GIANT_METEOR_FRAGMENT_MIN_SIZE,
+                config.GIANT_METEOR_FRAGMENT_MAX_SIZE
+            )
 
         # Spawn o meteoro usando o entity_manager
+        entity_manager.spawn_meteor(size=size, x=x, y=y, vx=vx, vy=vy)
+
+    def _spawn_death_fragment(self, entity_manager: "EntityManager") -> None:
+        """Spawna um fragmento quando o boss morre."""
+        # Posição aleatória no boss
+        x = self.x + random.uniform(0, self.w)
+        y = self.y + random.uniform(0, self.h)
+        
+        # Velocidade radial para fora
+        angle = random.uniform(0, 2 * 3.14159)
+        speed = random.uniform(150, 300)
+        vx = math.cos(angle) * speed
+        vy = math.sin(angle) * speed
+        
+        # Tamanho maior para fragmentos de morte
+        size = random.randint(config.GIANT_METEOR_FRAGMENT_MIN_SIZE + 10, config.GIANT_METEOR_FRAGMENT_MAX_SIZE + 20)
+        
+        # Spawn o meteoro
         entity_manager.spawn_meteor(size=size, x=x, y=y, vx=vx, vy=vy)
 
     def draw(self, surface: pygame.Surface) -> None:
@@ -493,8 +573,10 @@ class GiantMeteorBoss:
             self._target_shape = self._apply_damage_cracks(health_percent)
             # Reiniciar timer de transição
             self._transition_timer = 0.0
-            # Ativar tremor na mudança de estágio
+            # Ativar tremor na mudança de estágio (intensidade aumenta com o dano)
             self._shake_timer = self._shake_duration
+            # Intensidade base aumenta ligeiramente com cada estágio (8.0 até ~16.0)
+            self._shake_intensity = 8.0 + (current_stage * 0.7)
             self._last_damage_stage = current_stage
 
         # Atualizar transição (assumindo que draw é chamado a cada frame)
