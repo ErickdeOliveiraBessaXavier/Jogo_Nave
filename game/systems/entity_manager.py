@@ -442,7 +442,7 @@ class EntityManager:
                 self.boss.update(enemy_dt, player_x, player_y, self)
             # GiantMeteorBoss apenas atualiza posição (queda lenta)
             elif isinstance(self.boss, GiantMeteorBoss):
-                self.boss.update(enemy_dt, player_x, player_y, self)
+                self.boss.update(enemy_dt, self)
             # Boss normal retorna (List[BossLaser], List[BossSquare])
             else:  # isinstance(self.boss, Boss)
                 lasers_fired, spawned_squares = self.boss.update(
@@ -593,7 +593,7 @@ class EntityManager:
             elif isinstance(self.boss, SlimeBoss):
                 self.boss.update(dt, player_x, player_y)
             elif isinstance(self.boss, GiantMeteorBoss):
-                self.boss.update(dt, player_x, player_y, self)
+                self.boss.update(dt, self)
             else:  # General Boss type
                 lasers_fired, spawned_squares = self.boss.update(dt, player_x, player_y)
                 if lasers_fired:
@@ -694,18 +694,23 @@ class EntityManager:
         y: float | None = None,
         vx: float | None = None,
         vy: float | None = None,
+        behind: bool = False,
     ) -> Meteor:
         """
         Spawna um meteoro usando o pool.
 
         Args:
             size, x, y, vx, vy: Parâmetros de configuração do meteoro
+            behind: Se True, insere no início da lista (atrás de outros inimigos)
 
         Returns:
             Meteoro criado ou reutilizado do pool
         """
         meteor = self.meteor_pool.get(size=size, x=x, y=y, vx=vx, vy=vy)
-        self.enemies.append(meteor)
+        if behind:
+            self.enemies.insert(0, meteor)
+        else:
+            self.enemies.append(meteor)
         return meteor
 
     def spawn_bullet(

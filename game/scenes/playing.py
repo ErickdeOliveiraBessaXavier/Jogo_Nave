@@ -1273,6 +1273,32 @@ class PlayingScene(Scene):
                 )
         self.entity_manager.spikes.clear()
 
+        # Limpar inimigos restantes com explosões quando o boss for derrotado
+        for enemy in self.entity_manager.enemies[:]:
+            # Calcular centro do inimigo (alguns podem não ter w/h)
+            center_x = getattr(enemy, 'x', 0.0)
+            center_y = getattr(enemy, 'y', 0.0)
+            w = getattr(enemy, 'w', 0)
+            h = getattr(enemy, 'h', 0)
+            self.entity_manager.spawn_explosion(
+                float(center_x + w / 2), float(center_y + h / 2), size=15
+            )
+        self.entity_manager.enemies.clear()
+
+        # Limpar formações restantes com explosões quando o boss for derrotado
+        for formation in self.entity_manager.formations[:]:
+            for enemy in formation.enemies:
+                # Calcular centro do inimigo (alguns podem não ter w/h)
+                center_x = getattr(enemy, 'x', 0.0)
+                center_y = getattr(enemy, 'y', 0.0)
+                w = getattr(enemy, 'w', 0)
+                h = getattr(enemy, 'h', 0)
+                self.entity_manager.spawn_explosion(
+                    float(center_x + w / 2), float(center_y + h / 2), size=15
+                )
+            formation.dead = True
+        self.entity_manager.formations.clear()
+
         self.entity_manager.boss = None
         self.boss_fight_active = False
         self._boss_type_cache = None  # Limpar cache
