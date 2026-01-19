@@ -510,7 +510,7 @@ class ProceduralLevelGenerator:
                 )
 
             # Square Minion Boss (nível 3+)
-            if level_number >= 3:
+            if level_number >= 3 and len(enemy_spawn_config) < 3:
                 square_weight = (
                     theme.enemy_weight.get("square_minion_boss", 0.1) if theme else 0.1
                 )
@@ -601,7 +601,7 @@ class ProceduralLevelGenerator:
 
         # Boss sempre presente na fase 'meteor_storm'
         boss_type = None
-        if theme and getattr(theme, "special_feature", None) == "meteor_only":
+        if theme and theme.name == "meteor_storm":
             from ..entities.giant_meteor_boss import GiantMeteorBoss
 
             boss_type = GiantMeteorBoss
@@ -634,13 +634,13 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # Alien: 2.5,
             # EyeEnemy: 5.0,
         },
-        enemies_to_clear=0,
+        enemies_to_clear=150,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
         # mines_enabled=True,
         # boss_type=SlimeBoss,
         # boss_type=Boss,
-        boss_type=GiantMeteorBoss,
+        # boss_type=GiantMeteorBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),
@@ -673,8 +673,22 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         theme_name="Chefe Avançado",
         score_multiplier=1.6,
     ),
-    15: LevelConfig(
-        level_number=15,
+    # Novo nível: Meteoro Gigante
+    14: LevelConfig(
+        level_number=14,
+        enemy_spawn_config={
+            Meteor: 1.0,
+            Alien: 3.0,
+        },
+        enemies_to_clear=220,
+        boss_type=GiantMeteorBoss,
+        mines_enabled=True,
+        formations_enabled=False,
+        theme_name="Meteoro Gigante",
+        score_multiplier=1.5,
+    ),
+    20: LevelConfig(
+        level_number=20,
         enemy_spawn_config={
             Meteor: 0.7,
             Alien: 8.0,
@@ -693,20 +707,6 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         ],
         theme_name="Chefe Avançado",
         score_multiplier=1.8,
-    ),
-    # Novo nível: Meteoro Gigante
-    10: LevelConfig(
-        level_number=10,
-        enemy_spawn_config={
-            Meteor: 1.0,
-            Alien: 3.0,
-        },
-        enemies_to_clear=220,
-        boss_type=GiantMeteorBoss,
-        mines_enabled=True,
-        formations_enabled=False,
-        theme_name="Meteoro Gigante",
-        score_multiplier=1.5,
     ),
 }
 
