@@ -195,7 +195,12 @@ class BlackHole:
 
             # Verificar se é um boss - bosses são imunes ao buraco negro
             enemy_class_name = enemy.__class__.__name__
-            if enemy_class_name in ("Boss", "SlimeBoss", "SpikeBoss", "GiantMeteorBoss"):
+            if enemy_class_name in (
+                "Boss",
+                "SlimeBoss",
+                "SpikeBoss",
+                "GiantMeteorBoss",
+            ):
                 continue
 
             # Calcular distância ao buraco negro

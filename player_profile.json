@@ -1,48 +1,12 @@
 {
   "version": "1.0",
-  "profile_created": "2026-01-14T22:53:36.435481",
-  "last_played": "2026-01-14T22:53:44.688895",
+  "profile_created": "2026-01-19T16:35:54.934725",
+  "last_played": null,
   "total_playtime": 0.0,
   "highest_level_reached": 1,
-  "total_deaths": 3,
+  "total_deaths": 0,
   "total_score": 0,
-  "level_stats": {
-    "1": {
-      "level_number": 1,
-      "attempts": 1,
-      "clears": 0,
-      "deaths": 3,
-      "total_time": 0.0,
-      "best_time": null,
-      "worst_time": 0.0,
-      "total_score": 0,
-      "best_score": 0,
-      "total_enemies_killed": 0,
-      "total_damage_taken": 0,
-      "total_powerups_collected": 0,
-      "recent_attempts": [
-        {
-          "timestamp": "2026-01-14T22:54:19.647279",
-          "cleared": false,
-          "cause": "collision"
-        },
-        {
-          "timestamp": "2026-01-14T22:54:51.900305",
-          "cleared": false,
-          "cause": "collision"
-        },
-        {
-          "timestamp": "2026-01-14T22:55:00.426719",
-          "cleared": false,
-          "cause": "collision"
-        }
-      ],
-      "first_played": "2026-01-14T22:53:44.688888",
-      "last_played": "2026-01-14T22:53:44.688894",
-      "current_win_streak": 0,
-      "best_win_streak": 0
-    }
-  },
+  "level_stats": {},
   "level_adjustments": {},
   "session_history": [],
   "unlocked_upgrades": [
@@ -57,9 +21,9 @@
     "SHIELD_BURST"
   ],
   "upgrade_loadout": [
-    null,
-    null,
-    null,
+    "HOMING_SHOT",
+    "EXPLOSIVE_SHOT",
+    "LASER_SHOT",
     null,
     null,
     null,
@@ -80,5 +44,5 @@
   ],
   "stars_collected": 0,
   "stars_spent": 0,
-  "unlocked_slots": 2
+  "unlocked_slots": 9
 }

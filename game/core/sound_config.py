@@ -12,6 +12,7 @@ class MusicState(Enum):
     BOSS = "boss"
     SPIKE_BOSS = "spike_boss"
     SLIME_BOSS = "slime_boss"
+    GIANT_METEOR_BOSS = "giant_meteor_boss"
     SILENCE = "silence"
 
 
@@ -96,6 +97,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
         "menu": "music/menu-music.mp3",
         "spike_boss": "music/spike_boss_theme.mp3",
         "slime_boss": "music/Boss-Slime-Theme.mp3",
+        "giant_meteor_boss": "music/Musica_Giant_Meteor_Boss.mp3",
     },
     # Efeitos sonoros
     "sfx": {
@@ -118,6 +120,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "meteor_rain": "sfx/ui/som_chuva_meteoro_{}.wav",  # {} = 1,2,3,4
             "laser_shot": "sfx/ui/som_laser_raio.mp3",  # Som do laser do upgrade LASER_SHOT
             "black_hole": "sfx/ui/Buraco_negro_Som.mp3",  # Som do buraco negro
+            "hit_hurt_meteor_boss": "sfx/ui/hit_hurt_meteor_boss.wav",  # Som de rachadura do boss meteoro
         },
     },
 }

@@ -1220,11 +1220,16 @@ class PlayingScene(Scene):
 
             from ..entities.spike_boss import SpikeBoss
             from ..entities.slime_boss import SlimeBoss
+            from ..entities.giant_meteor_boss import GiantMeteorBoss
 
             if isinstance(self.entity_manager.boss, SpikeBoss):
                 sound_manager.music_state_manager.transition_to(MusicState.SPIKE_BOSS)
             elif isinstance(self.entity_manager.boss, SlimeBoss):
                 sound_manager.music_state_manager.transition_to(MusicState.SLIME_BOSS)
+            elif isinstance(self.entity_manager.boss, GiantMeteorBoss):
+                sound_manager.music_state_manager.transition_to(
+                    MusicState.GIANT_METEOR_BOSS
+                )
             else:
                 sound_manager.music_state_manager.transition_to(MusicState.BOSS)
 
@@ -1276,10 +1281,10 @@ class PlayingScene(Scene):
         # Limpar inimigos restantes com explosões quando o boss for derrotado
         for enemy in self.entity_manager.enemies[:]:
             # Calcular centro do inimigo (alguns podem não ter w/h)
-            center_x = getattr(enemy, 'x', 0.0)
-            center_y = getattr(enemy, 'y', 0.0)
-            w = getattr(enemy, 'w', 0)
-            h = getattr(enemy, 'h', 0)
+            center_x = getattr(enemy, "x", 0.0)
+            center_y = getattr(enemy, "y", 0.0)
+            w = getattr(enemy, "w", 0)
+            h = getattr(enemy, "h", 0)
             self.entity_manager.spawn_explosion(
                 float(center_x + w / 2), float(center_y + h / 2), size=15
             )
@@ -1289,10 +1294,10 @@ class PlayingScene(Scene):
         for formation in self.entity_manager.formations[:]:
             for enemy in formation.enemies:
                 # Calcular centro do inimigo (alguns podem não ter w/h)
-                center_x = getattr(enemy, 'x', 0.0)
-                center_y = getattr(enemy, 'y', 0.0)
-                w = getattr(enemy, 'w', 0)
-                h = getattr(enemy, 'h', 0)
+                center_x = getattr(enemy, "x", 0.0)
+                center_y = getattr(enemy, "y", 0.0)
+                w = getattr(enemy, "w", 0)
+                h = getattr(enemy, "h", 0)
                 self.entity_manager.spawn_explosion(
                     float(center_x + w / 2), float(center_y + h / 2), size=15
                 )

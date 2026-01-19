@@ -393,7 +393,9 @@ class ProceduralLevelGenerator:
 
         # Chance de tema especial (aumenta com o nível)
         if level_number >= 6:
-            special_chance = min(0.7, 0.3 + (level_number / 100))  # Aumenta com progressão, max 70%
+            special_chance = min(
+                0.7, 0.3 + (level_number / 100)
+            )  # Aumenta com progressão, max 70%
             if rng.random() < special_chance:
                 special_themes = ["minefield", "formation_hell", "eye_swarm"]
                 available = [
@@ -601,6 +603,7 @@ class ProceduralLevelGenerator:
         boss_type = None
         if theme and getattr(theme, "special_feature", None) == "meteor_only":
             from ..entities.giant_meteor_boss import GiantMeteorBoss
+
             boss_type = GiantMeteorBoss
 
         return LevelConfig(
@@ -631,13 +634,13 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # Alien: 2.5,
             # EyeEnemy: 5.0,
         },
-        enemies_to_clear=150,
+        enemies_to_clear=0,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
         # mines_enabled=True,
         # boss_type=SlimeBoss,
         # boss_type=Boss,
-        # boss_type=GiantMeteorBoss,
+        boss_type=GiantMeteorBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),
@@ -718,7 +721,9 @@ _procedural_generators: dict[DifficultyPreset, ProceduralLevelGenerator] = {}
 
 
 def get_level_config(
-    level_number: int, difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL, force_meteor_storm: bool = False
+    level_number: int,
+    difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
+    force_meteor_storm: bool = False,
 ) -> LevelConfig:
     """
     Retorna a configuração de um nível com dificuldade aplicada.
@@ -735,10 +740,15 @@ def get_level_config(
         LevelConfig do nível (fixo ou procedural) com dificuldade aplicada
     """
     # Para Hardcore e Nightmare, o nível 1 é sempre procedural (sem tutorial)
-    if level_number in FIXED_LEVELS and not (
-        level_number == 1
-        and difficulty_preset in [DifficultyPreset.HARDCORE, DifficultyPreset.NIGHTMARE]
-    ) and not force_meteor_storm:
+    if (
+        level_number in FIXED_LEVELS
+        and not (
+            level_number == 1
+            and difficulty_preset
+            in [DifficultyPreset.HARDCORE, DifficultyPreset.NIGHTMARE]
+        )
+        and not force_meteor_storm
+    ):
         config = FIXED_LEVELS[level_number]
         # Aplicar modificadores do preset aos níveis fixos também
         return _apply_difficulty_to_fixed_level(config, difficulty_preset)
@@ -754,7 +764,12 @@ def get_level_config(
         generator = _procedural_generators[difficulty_preset]
         difficulty = generator.calculate_difficulty(level_number)
         theme = LEVEL_THEMES["meteor_storm"]
-        return generator.generate_config(level_number, difficulty, theme, random.Random(generator.seed + level_number))
+        return generator.generate_config(
+            level_number,
+            difficulty,
+            theme,
+            random.Random(generator.seed + level_number),
+        )
 
     return _procedural_generators[difficulty_preset].generate_level(level_number)
 

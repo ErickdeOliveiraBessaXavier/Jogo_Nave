@@ -80,6 +80,7 @@ class MusicStateManager:
             MusicState.BOSS,
             MusicState.SPIKE_BOSS,
             MusicState.SLIME_BOSS,
+            MusicState.GIANT_METEOR_BOSS,
         ]
 
         is_game_music_active = self.current_state in game_music_types or (
@@ -103,6 +104,8 @@ class MusicStateManager:
                 self.sound_manager.play_spike_boss_music_internal()
             elif new_state == MusicState.SLIME_BOSS:
                 self.sound_manager.play_slime_boss_music_internal()
+            elif new_state == MusicState.GIANT_METEOR_BOSS:
+                self.sound_manager.play_giant_meteor_boss_music_internal()
             elif new_state == MusicState.SILENCE:
                 self.sound_manager.stop_music_internal()
 
@@ -258,6 +261,9 @@ class SoundManager:
                 "laser_shot"
             ],  # Som do laser do upgrade LASER_SHOT
             "black_hole": sfx_paths["ui"]["black_hole"],  # Som do buraco negro
+            "hit_hurt_meteor_boss": sfx_paths["ui"][
+                "hit_hurt_meteor_boss"
+            ],  # Som de rachadura do boss meteoro
         }
         for key, path in ui_sounds.items():
             sound_path = os.path.join(base_path, path)
@@ -461,6 +467,14 @@ class SoundManager:
             sound.play()
 
     @require_audio
+    def play_meteor_boss_crack(self):
+        """Toca o som de rachadura do boss meteoro."""
+        if "hit_hurt_meteor_boss" in self._sounds:
+            sound = self._sounds["hit_hurt_meteor_boss"]
+            sound.set_volume(self.sfx_volume * self.master_volume)
+            sound.play()
+
+    @require_audio
     def play_sound(self, sound_name: str):
         """Toca um som específico pelo nome."""
         if sound_name in self._sounds:
@@ -526,6 +540,9 @@ class SoundManager:
     def play_slime_boss_music(self):
         self.music_state_manager.transition_to(MusicState.SLIME_BOSS)
 
+    def play_giant_meteor_boss_music(self):
+        self.music_state_manager.transition_to(MusicState.GIANT_METEOR_BOSS)
+
     def play_menu_music(self, force: bool = False):
         self.music_state_manager.transition_to(MusicState.MENU, force=force)
 
@@ -578,6 +595,17 @@ class SoundManager:
         )
         if os.path.exists(music_path) and self.current_music != "slime_boss":
             self._transition_to_music(music_path, "slime_boss")
+
+    @require_audio
+    def play_giant_meteor_boss_music_internal(self):
+        music_paths = cast(MusicPaths, SOUND_PATHS["music"])
+        music_path = get_resource_path(
+            os.path.join(
+                str(SOUND_PATHS["base"]), str(music_paths["giant_meteor_boss"])
+            )
+        )
+        if os.path.exists(music_path) and self.current_music != "giant_meteor_boss":
+            self._transition_to_music(music_path, "giant_meteor_boss")
 
     @require_audio
     def play_menu_music_internal(self):
