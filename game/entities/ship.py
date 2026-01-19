@@ -41,7 +41,7 @@ class Ship:
     def __init__(self, x: float, y: float):
         # Dimensões da nave (baseadas na imagem)
         self.w = 35
-        self.h = 30
+        self.h = 35
         self.x = x
         self.y = y
         self.speed = 250
@@ -555,11 +555,11 @@ class Ship:
         else:
             sprite_w = self.w
 
-        # Offset de -3.5 para centralizar a bala no canhão da nave
+        # Offset de -3.5 para centralizar a bala no canhão da nave, +1 para mover um píxel à direita
         if self.double_shot_timer > 0:
             return [
                 (
-                    self.x + sprite_w * 0.2 - 3.5,
+                    self.x + sprite_w * 0.2 - 3.5 + 2.2,
                     self.y,
                     is_piercing,
                     is_homing,
@@ -567,7 +567,7 @@ class Ship:
                     is_low_ammo,
                 ),
                 (
-                    self.x + sprite_w * 0.8 - 3.5,
+                    self.x + sprite_w * 0.8 - 3.5 + 2.2,
                     self.y,
                     is_piercing,
                     is_homing,
@@ -578,7 +578,7 @@ class Ship:
         else:
             return [
                 (
-                    self.x + sprite_w / 2 - 3.5,
+                    self.x + sprite_w / 2 - 3.5 + 2.2,
                     self.y,
                     is_piercing,
                     is_homing,

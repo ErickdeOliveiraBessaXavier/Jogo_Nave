@@ -1,11 +1,15 @@
 {
   "version": "1.0",
-  "profile_created": "2026-01-19T16:35:54.934725",
+  "profile_created": "2026-01-19T18:37:34.710940",
   "last_played": null,
   "total_playtime": 0.0,
   "highest_level_reached": 1,
   "total_deaths": 0,
   "total_score": 0,
+  "resolution": [
+    1366,
+    768
+  ],
   "level_stats": {},
   "level_adjustments": {},
   "session_history": [],
@@ -21,9 +25,9 @@
     "SHIELD_BURST"
   ],
   "upgrade_loadout": [
-    "HOMING_SHOT",
-    "EXPLOSIVE_SHOT",
-    "LASER_SHOT",
+    null,
+    null,
+    null,
     null,
     null,
     null,
@@ -44,5 +48,5 @@
   ],
   "stars_collected": 0,
   "stars_spent": 0,
-  "unlocked_slots": 9
+  "unlocked_slots": 2
 }

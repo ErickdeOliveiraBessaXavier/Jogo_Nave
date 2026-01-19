@@ -856,21 +856,19 @@ class UpgradesSelectionScene(Scene):
                 can_unlock = self.player_profile.can_unlock_slot(i)
                 cost_color = colors.GREEN if can_unlock else colors.RED
 
-                label_x = draw_rect.x + 10
-                label_y = draw_rect.y + 5
-
-                # "Custo:" texto
-                custo_text = self.small_font.render("Custo:", True, cost_color)
-                surface.blit(custo_text, (label_x, label_y))
-
-                # Ícone estrela
-                icon_x = label_x + custo_text.get_width() + 6
-                icon_y = label_y + (custo_text.get_height() - 20) // 2
-                surface.blit(self.star_icon_small, (icon_x, icon_y))
-
-                # Quantidade + sufixo
+                # Centralizar ícone e valor na parte superior
+                icon_y = draw_rect.y + 5
                 qty_text = self.small_font.render(f"{cost}", True, cost_color)
-                surface.blit(qty_text, (icon_x + 22, label_y))
+                
+                # Centralizar ambos (ícone + texto) horizontalmente
+                total_width = 20 + 6 + qty_text.get_width()  # ícone + espaço + texto
+                start_x = draw_rect.centerx - total_width // 2
+                
+                # Ícone estrela
+                surface.blit(self.star_icon_small, (start_x, icon_y))
+                
+                # Quantidade
+                surface.blit(qty_text, (start_x + 26, icon_y + (20 - qty_text.get_height()) // 2))
             elif slot_consumed_by_weight and not equipped_type:
                 # Slot consumido pelo peso: mostrar texto "PESO" em vez de número do slot
                 slot_label = self.small_font.render("PESO", True, (120, 80, 80))

@@ -38,7 +38,7 @@ class AnimationConfig:
     MENU_X_RATIO = 0.5  # Horizontal position as ratio of screen width (0.5 = center)
     MENU_Y_RATIO = 0.5  # Vertical position as ratio of screen height (0.5 = center)
     TITLE_TOP_MARGIN = 20  # Margin from top of menu container to title
-    BUTTONS_TOP_MARGIN = 200  # Margin from title bottom to first button
+    BUTTONS_TOP_MARGIN = 130  # Margin from title bottom to first button
     TITLE_HEIGHT = 60  # Approximate height of title text
 
     # Animação de entrada

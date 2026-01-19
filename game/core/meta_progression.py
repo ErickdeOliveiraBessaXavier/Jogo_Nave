@@ -497,6 +497,9 @@ class PlayerProfile:
         # Preferências detectadas
         self.preferred_difficulty: Optional[DifficultyPreset] = None
 
+        # Configurações de vídeo
+        self.resolution: Tuple[int, int] = (1600, 900)  # Largura, altura
+
         # Aprimoramentos (ativos)
         # Armazenamos como nomes de enum para JSON estável
         self.unlocked_upgrades: set[UpgradeType] = set(DEFAULT_UNLOCKED)
@@ -858,6 +861,18 @@ class PlayerProfile:
                 self.total_deaths = data.get("total_deaths", 0)
                 self.total_score = data.get("total_score", 0)
 
+                # Configurações de vídeo
+                resolution_raw = data.get("resolution")
+                if isinstance(resolution_raw, list):
+                    from typing import cast
+                    resolution_list = cast(List[Any], resolution_raw)
+                    if len(resolution_list) == 2:
+                        self.resolution = (int(resolution_list[0]), int(resolution_list[1]))
+                    else:
+                        self.resolution = (1600, 900)  # Default
+                else:
+                    self.resolution = (1600, 900)  # Default
+
                 # Star collection system
                 self.stars_collected = data.get("stars_collected", 0)
                 self.stars_spent = data.get("stars_spent", 0)
@@ -1174,6 +1189,7 @@ class PlayerProfile:
             "highest_level_reached": self.highest_level_reached,
             "total_deaths": self.total_deaths,
             "total_score": self.total_score,
+            "resolution": list(self.resolution),
             "level_stats": level_stats_data,
             "level_adjustments": {str(k): v for k, v in self.level_adjustments.items()},
             "session_history": session_history_data,
@@ -1207,6 +1223,7 @@ class PlayerProfile:
         self.session_history = []
         self.level_adjustments = {}
         self.preferred_difficulty = None
+        self.resolution = (1600, 900)  # Default resolution
         self.unlocked_upgrades = set(DEFAULT_UNLOCKED)
         self.upgrade_loadout = [None] * UPGRADE_SLOT_COUNT
         self.upgrade_keybindings = [
