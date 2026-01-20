@@ -1,11 +1,11 @@
 """Script para analisar balanceamento dos níveis procedurais."""
 
 from game.core.levels import (
-    ProceduralLevelGenerator,
     LevelAnalyzer,
     DifficultyPreset,
     get_level_config,
 )
+from typing import List
 
 
 def analyze_difficulty_preset(preset: DifficultyPreset, levels_to_check: range):
@@ -14,8 +14,6 @@ def analyze_difficulty_preset(preset: DifficultyPreset, levels_to_check: range):
     print(f"ANÁLISE: {preset.value.upper()}")
     print(f"{'=' * 100}\n")
 
-    generator = ProceduralLevelGenerator(difficulty_preset=preset)
-
     print(
         f"{'Status':^6} │ {'Nível':^5} │ {'Tema':^22} │ {'Inimigos':^8} │ "
         f"{'Spawn/s':^8} │ {'~Tela':^6} │ {'Tempo':^8} │ {'Features':^8}"
@@ -23,7 +21,7 @@ def analyze_difficulty_preset(preset: DifficultyPreset, levels_to_check: range):
     print("─" * 100)
 
     total_warnings = 0
-    problematic_levels = []
+    problematic_levels: List[int] = []
 
     for level_num in levels_to_check:
         config = get_level_config(level_num, preset)
