@@ -1240,7 +1240,7 @@ class PlayingScene(Scene):
 
     def _end_boss_fight(self):
         from ..entities.giant_meteor_boss import GiantMeteorBoss
-        
+
         if not self.entity_manager.boss:
             return
 
@@ -1403,7 +1403,9 @@ class PlayingScene(Scene):
             # Sistema de debug: mostrar/ocultar FPS com F3
             elif event.key == pygame.K_F3:
                 self.show_fps = not self.show_fps
-                logging.info(f"Debug FPS: {'ATIVADO' if self.show_fps else 'DESATIVADO'}")
+                logging.info(
+                    f"Debug FPS: {'ATIVADO' if self.show_fps else 'DESATIVADO'}"
+                )
 
             # Sistema de cheat code
             self._process_cheat_input(event)

@@ -40,7 +40,12 @@ class SpriteLoader:
         logging.info("✅ Todos os sprites carregados!\n")
 
     @staticmethod
-    def load_animation_frames(base_path: str, num_frames: int, name: str, filename_pattern: str = "boss_3_gosma_sprite ({i}).png") -> List[pygame.Surface]:
+    def load_animation_frames(
+        base_path: str,
+        num_frames: int,
+        name: str,
+        filename_pattern: str = "boss_3_gosma_sprite ({i}).png",
+    ) -> List[pygame.Surface]:
         """
         Método genérico para carregar frames de animação com validação e logging.
 
@@ -70,9 +75,13 @@ class SpriteLoader:
                 continue
 
         if not frames:
-            logging.error(f"{name}: NENHUM frame foi carregado! Verifique o caminho dos sprites.")
+            logging.error(
+                f"{name}: NENHUM frame foi carregado! Verifique o caminho dos sprites."
+            )
         elif len(frames) < num_frames:
-            logging.warning(f"{name}: Apenas {len(frames)}/{num_frames} frames foram carregados.")
+            logging.warning(
+                f"{name}: Apenas {len(frames)}/{num_frames} frames foram carregados."
+            )
         else:
             logging.info(f"{name}: {len(frames)} frames carregados com sucesso.")
 

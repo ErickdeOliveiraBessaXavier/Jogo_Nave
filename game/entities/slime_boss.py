@@ -41,7 +41,9 @@ class SlimeBoss:
     @classmethod
     def _load_frames(cls) -> list[pygame.Surface]:
         """Internal method to load the frames."""
-        return sprite_loader.load_animation_frames("sprite_boss_03_slime", 24, "SlimeBoss")
+        return sprite_loader.load_animation_frames(
+            "sprite_boss_03_slime", 24, "SlimeBoss"
+        )
 
     def __init__(
         self,
@@ -408,7 +410,9 @@ class SlimeBoss:
                     scaled_frame, (int(self.x + offset_x), int(self.y + offset_y))
                 )
             except Exception as e:
-                logging.warning(f"SlimeBoss: Erro ao desenhar frame {self.current_frame}: {e}")
+                logging.warning(
+                    f"SlimeBoss: Erro ao desenhar frame {self.current_frame}: {e}"
+                )
                 # Fallback
                 rect = pygame.Rect(
                     int(self.x + offset_x),
@@ -449,7 +453,9 @@ class SlimeBoss:
                         mask = pygame.mask.from_surface(scaled_frame)
                         self._outline_cache[self.current_frame] = mask.outline()
                     except Exception as e:
-                        logging.warning(f"SlimeBoss: Erro ao gerar outline do flash: {e}")
+                        logging.warning(
+                            f"SlimeBoss: Erro ao gerar outline do flash: {e}"
+                        )
                         self._outline_cache[self.current_frame] = []
 
                 outline = self._outline_cache[self.current_frame]

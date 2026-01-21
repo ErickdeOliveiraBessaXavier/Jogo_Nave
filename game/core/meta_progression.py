@@ -875,9 +875,13 @@ class PlayerProfile:
                 resolution_raw = data.get("resolution")
                 if isinstance(resolution_raw, list):
                     from typing import cast
+
                     resolution_list = cast(List[Any], resolution_raw)
                     if len(resolution_list) == 2:
-                        self.resolution = (int(resolution_list[0]), int(resolution_list[1]))
+                        self.resolution = (
+                            int(resolution_list[0]),
+                            int(resolution_list[1]),
+                        )
                     else:
                         self.resolution = (1366, 768)  # Default
                 else:
@@ -951,7 +955,9 @@ class PlayerProfile:
 
                         self.level_stats[level_num] = stats
                     except (ValueError, TypeError, KeyError):
-                        logger.warning(f"Skipping corrupt level data for level {level_num_str}")
+                        logger.warning(
+                            f"Skipping corrupt level data for level {level_num_str}"
+                        )
                         continue
 
                 # Ajustes
@@ -1146,8 +1152,9 @@ class PlayerProfile:
             logger.error(f"Erro ao carregar perfil: {e}")
             # Fazer backup
             if self.profile_path.exists():
-                backup_path = self.profile_path.with_suffix('.backup.json')
+                backup_path = self.profile_path.with_suffix(".backup.json")
                 import shutil
+
                 shutil.copy2(self.profile_path, backup_path)
                 logger.info(f"Backup salvo em: {backup_path}")
             # Carregar defaults ao invés de resetar

@@ -16,7 +16,12 @@ if TYPE_CHECKING:
 class SettingsView:
     """View de configurações (pode ser usada dentro de outras cenas)."""
 
-    def __init__(self, on_back: Callable[[], None], renderer: Any = None, on_restart: Callable[[], None] | None = None):
+    def __init__(
+        self,
+        on_back: Callable[[], None],
+        renderer: Any = None,
+        on_restart: Callable[[], None] | None = None,
+    ):
         """
         Args:
             on_back: Callback chamado quando o usuário quer voltar
@@ -66,10 +71,10 @@ class SettingsView:
         # Tooltip para resoluções
         self.hovered_resolution_index: int | None = None
         self.layout_rects: Dict[str, Any] = {}
-        
+
         # Estado do pop-up de confirmação
         self.show_restart_popup = False
-        
+
         self._calculate_layout()
 
     def _calculate_layout(self):
@@ -101,7 +106,10 @@ class SettingsView:
 
         # Seletor de resolução
         self.layout_rects["resolution_label"] = pygame.Rect(
-            controls_card_rect.x + 20, controls_card_rect.y + 60, controls_card_rect.width - 40, 30
+            controls_card_rect.x + 20,
+            controls_card_rect.y + 60,
+            controls_card_rect.width - 40,
+            30,
         )
         self.layout_rects["resolution_buttons"] = []
         button_w = (controls_card_rect.width - 40 - 20) / 3  # Três botões lado a lado
@@ -109,32 +117,45 @@ class SettingsView:
         for i in range(len(self.available_resolutions)):
             row = i // 3
             col = i % 3
-            x = controls_card_rect.x + 20 + col * (button_w + 5)  # Menos espaço entre colunas
-            y = controls_card_rect.y + 100 + row * (button_h + 8)  # Menos espaço entre linhas
+            x = (
+                controls_card_rect.x + 20 + col * (button_w + 5)
+            )  # Menos espaço entre colunas
+            y = (
+                controls_card_rect.y + 100 + row * (button_h + 8)
+            )  # Menos espaço entre linhas
             from typing import cast, List
-            resolution_buttons = cast(List[pygame.Rect], self.layout_rects["resolution_buttons"])
-            resolution_buttons.append(
-                pygame.Rect(x, y, button_w, button_h)
+
+            resolution_buttons = cast(
+                List[pygame.Rect], self.layout_rects["resolution_buttons"]
             )
+            resolution_buttons.append(pygame.Rect(x, y, button_w, button_h))
 
         # Botão de Voltar
         back_text_width = self.item_font.size("Voltar")[0]
-        self.layout_rects["back_button"] = pygame.Rect(pad, screen_h - 60, back_text_width + 40, 40)
-        
+        self.layout_rects["back_button"] = pygame.Rect(
+            pad, screen_h - 60, back_text_width + 40, 40
+        )
+
         # Pop-up de confirmação
         popup_w, popup_h = 570, 200
         popup_x = (screen_w - popup_w) // 2
         popup_y = (screen_h - popup_h) // 2
-        self.layout_rects["popup_rect"] = pygame.Rect(popup_x, popup_y, popup_w, popup_h)
-        
+        self.layout_rects["popup_rect"] = pygame.Rect(
+            popup_x, popup_y, popup_w, popup_h
+        )
+
         # Botões do pop-up
         button_w = 80
         button_h = 35
         yes_x = popup_x + popup_w // 2 - button_w - 10
         no_x = popup_x + popup_w // 2 + 10
         button_y = popup_y + popup_h - button_h - 20
-        self.layout_rects["popup_yes_button"] = pygame.Rect(yes_x, button_y, button_w, button_h)
-        self.layout_rects["popup_no_button"] = pygame.Rect(no_x, button_y, button_w, button_h)
+        self.layout_rects["popup_yes_button"] = pygame.Rect(
+            yes_x, button_y, button_w, button_h
+        )
+        self.layout_rects["popup_no_button"] = pygame.Rect(
+            no_x, button_y, button_w, button_h
+        )
 
     def reset(self):
         """Reseta o estado da view para reiniciar animação."""
@@ -166,7 +187,10 @@ class SettingsView:
         if not self.is_entering:
             mouse_pos = pygame.mouse.get_pos()
             from typing import cast, List
-            resolution_buttons = cast(List[pygame.Rect], self.layout_rects["resolution_buttons"])
+
+            resolution_buttons = cast(
+                List[pygame.Rect], self.layout_rects["resolution_buttons"]
+            )
             self.hovered_resolution_index = None
             for i, button_rect in enumerate(resolution_buttons):
                 if button_rect.collidepoint(mouse_pos):
@@ -184,10 +208,13 @@ class SettingsView:
             if self.layout_rects["back_button"].collidepoint(pos):
                 self.on_back()
                 return True
-            
+
             # Botões de resolução
             from typing import cast, List
-            resolution_buttons = cast(List[pygame.Rect], self.layout_rects["resolution_buttons"])
+
+            resolution_buttons = cast(
+                List[pygame.Rect], self.layout_rects["resolution_buttons"]
+            )
             for i, button_rect in enumerate(resolution_buttons):
                 if button_rect.collidepoint(pos):
                     self.selected_resolution_index = i
@@ -198,12 +225,13 @@ class SettingsView:
                     # Mostrar pop-up de aviso
                     self.show_restart_popup = True
                     return True
-            
+
             # Pop-up de confirmação
             if self.show_restart_popup:
                 if self.layout_rects["popup_yes_button"].collidepoint(pos):
                     self.show_restart_popup = False
                     import sys
+
                     pygame.quit()
                     sys.exit(0)
                     return True
@@ -270,7 +298,7 @@ class SettingsView:
             alpha,
             offset_y,
         )
-        
+
         # Pop-up de confirmação
         if self.show_restart_popup:
             self._draw_restart_popup(surface)
@@ -431,7 +459,11 @@ class SettingsView:
         card_rect = self.layout_rects["controls_card"].copy()
         card_rect.y += offset_y
         self._draw_card(
-            surface, self.layout_rects["controls_card"], "Controles & Resolução", alpha, offset_y
+            surface,
+            self.layout_rects["controls_card"],
+            "Controles & Resolução",
+            alpha,
+            offset_y,
         )
 
         # Criar clipping para o card
@@ -447,7 +479,10 @@ class SettingsView:
 
         # Botões de resolução
         from typing import cast, List
-        resolution_buttons = cast(List[pygame.Rect], self.layout_rects["resolution_buttons"])
+
+        resolution_buttons = cast(
+            List[pygame.Rect], self.layout_rects["resolution_buttons"]
+        )
         for i, (w, h, label) in enumerate(self.available_resolutions):
             button_rect = resolution_buttons[i].copy()
             button_rect.y += offset_y
@@ -467,9 +502,10 @@ class SettingsView:
         # Tooltip para resolução hoverada
         if self.hovered_resolution_index is not None:
             from ..core.config import config as Config
+
             w, h, label = self.available_resolutions[self.hovered_resolution_index]
             tooltip_text = f"{w}×{h} pixels"
-            
+
             # Informações especiais para algumas resoluções
             if label == "4K":
                 tooltip_text += ""
@@ -479,29 +515,35 @@ class SettingsView:
                 tooltip_text += ""
             elif w <= 1366:
                 tooltip_text += ""
-            
+
             # Renderizar tooltip
             tooltip_font = self.small_font
             tooltip_surf = tooltip_font.render(tooltip_text, True, CUSTOM_GOLD)
             tooltip_surf.set_alpha(int(alpha * 0.9))
-            
+
             # Posição do tooltip (acima do mouse)
             mouse_x, mouse_y = pygame.mouse.get_pos()
             tooltip_x = mouse_x - tooltip_surf.get_width() // 2
             tooltip_y = mouse_y - 35
-            
+
             # Garantir que não saia da tela
-            tooltip_x = max(10, min(tooltip_x, Config.SCREEN_WIDTH - tooltip_surf.get_width() - 10))
+            tooltip_x = max(
+                10, min(tooltip_x, Config.SCREEN_WIDTH - tooltip_surf.get_width() - 10)
+            )
             tooltip_y = max(10, tooltip_y)
-            
+
             # Fundo semi-transparente
-            bg_rect = pygame.Rect(tooltip_x - 5, tooltip_y - 3, 
-                                tooltip_surf.get_width() + 10, tooltip_surf.get_height() + 6)
+            bg_rect = pygame.Rect(
+                tooltip_x - 5,
+                tooltip_y - 3,
+                tooltip_surf.get_width() + 10,
+                tooltip_surf.get_height() + 6,
+            )
             bg_surf = pygame.Surface((bg_rect.width, bg_rect.height))
             bg_surf.fill(BLACK)
             bg_surf.set_alpha(int(alpha * 0.7))
             surface.blit(bg_surf, bg_rect)
-            
+
             surface.blit(tooltip_surf, (tooltip_x, tooltip_y))
 
         # Instruções de controles
@@ -518,7 +560,10 @@ class SettingsView:
 
         # Calcular y_offset baseado nos botões
         from typing import cast, List
-        resolution_buttons = cast(List[pygame.Rect], self.layout_rects["resolution_buttons"])
+
+        resolution_buttons = cast(
+            List[pygame.Rect], self.layout_rects["resolution_buttons"]
+        )
         max_button_y = max(r.y + r.height for r in resolution_buttons)
         y_offset = max_button_y + 40 + offset_y
         for line in instructions:
@@ -536,21 +581,24 @@ class SettingsView:
     def _draw_restart_popup(self, surface: pygame.Surface):
         """Desenha o pop-up de confirmação para reiniciar o jogo."""
         popup_rect = self.layout_rects["popup_rect"]
-        
+
         # Fundo semi-transparente
         overlay = pygame.Surface((surface.get_width(), surface.get_height()))
         overlay.fill((0, 0, 0))
         overlay.set_alpha(128)
         surface.blit(overlay, (0, 0))
-        
+
         # Pop-up
         pygame.draw.rect(surface, colors.DARK_GRAY, popup_rect, border_radius=10)
         pygame.draw.rect(surface, CUSTOM_GOLD, popup_rect, 2, border_radius=10)
-        
+
         # Título
         title_surf = self.header_font.render("Reinício Necessário", True, CUSTOM_GOLD)
-        surface.blit(title_surf, (popup_rect.centerx - title_surf.get_width() // 2, popup_rect.y + 20))
-        
+        surface.blit(
+            title_surf,
+            (popup_rect.centerx - title_surf.get_width() // 2, popup_rect.y + 20),
+        )
+
         # Mensagem
         message_lines = [
             "As alterações só serão",
@@ -560,12 +608,18 @@ class SettingsView:
         y_offset = popup_rect.y + 60
         for line in message_lines:
             text_surf = self.item_font.render(line, True, colors.WHITE)
-            surface.blit(text_surf, (popup_rect.centerx - text_surf.get_width() // 2, y_offset))
+            surface.blit(
+                text_surf, (popup_rect.centerx - text_surf.get_width() // 2, y_offset)
+            )
             y_offset += 25
-        
+
         # Botões
-        self._draw_button(surface, self.layout_rects["popup_yes_button"], "Sim", colors.RED, 255, 0)
-        self._draw_button(surface, self.layout_rects["popup_no_button"], "Não", CUSTOM_PURPLE, 255, 0)
+        self._draw_button(
+            surface, self.layout_rects["popup_yes_button"], "Sim", colors.RED, 255, 0
+        )
+        self._draw_button(
+            surface, self.layout_rects["popup_no_button"], "Não", CUSTOM_PURPLE, 255, 0
+        )
 
 
 class SettingsScene(Scene):
@@ -576,9 +630,7 @@ class SettingsScene(Scene):
         self.return_to_game = return_to_game  # Se True, volta para o jogo
         self.r = app.renderer  # Usar renderer compartilhado
         self.view = SettingsView(
-            on_back=self._on_back, 
-            renderer=self.r,
-            on_restart=self._on_restart
+            on_back=self._on_back, renderer=self.r, on_restart=self._on_restart
         )
 
         # Sistema de transição
@@ -598,6 +650,7 @@ class SettingsScene(Scene):
         """Callback quando o usuário quer reiniciar o jogo."""
         # Reiniciar voltando ao menu principal
         from .main_menu import MainMenuScene
+
         self.app.states.switch(MainMenuScene(self.app))
 
     def enter(self):

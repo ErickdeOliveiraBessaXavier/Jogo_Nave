@@ -1346,7 +1346,9 @@ class Boss:
             else:
                 # Marcar frenzy como pendente para ativar quando possível
                 self.pending_frenzy = True
-                logging.warning("⚠️ Frenzy mode pendente - aguardando fim da ação atual...")
+                logging.warning(
+                    "⚠️ Frenzy mode pendente - aguardando fim da ação atual..."
+                )
 
     def is_off_screen(self) -> bool:
         """Check if boss is completely off screen."""
