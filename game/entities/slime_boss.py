@@ -1,8 +1,8 @@
 import random
+import logging
 import pygame
 import pygame.font
 from typing import Optional, TYPE_CHECKING, Any
-from ..core.assets import get_image, BASE_DIR
 from ..core.config import config as Config, SlimeBossState, StageConfig, SlimeDripMode
 from ..core.sound import sound_manager
 from ..core.sprite_loader import sprite_loader
@@ -41,41 +41,7 @@ class SlimeBoss:
     @classmethod
     def _load_frames(cls) -> list[pygame.Surface]:
         """Internal method to load the frames."""
-        frames: list[pygame.Surface] = []
-        for i in range(1, 25):  # 24 frames
-            path = (
-                BASE_DIR
-                / "assets"
-                / "images"
-                / "sprite_boss_03_slime"
-                / f"boss_3_gosma_sprite ({i}).png"
-            )
-
-            # ✅ ADICIONAR VALIDAÇÃO AQUI:
-            if not path.exists():
-                print(f"⚠️ SlimeBoss: Frame {i} não encontrado: {path}")
-                continue
-
-            try:
-                image = get_image(path)
-                frames.append(image)
-            except Exception as e:
-                print(f"❌ SlimeBoss: Erro ao carregar frame {i}: {e}")
-                continue
-
-        # ✅ ADICIONAR VALIDAÇÃO FINAL:
-        if not frames:
-            print(
-                "❌ SlimeBoss: NENHUM frame foi carregado! Verifique o caminho dos sprites."
-            )
-        elif len(frames) < 24:
-            print(f"⚠️ SlimeBoss: Apenas {len(frames)}/24 frames foram carregados.")
-        else:
-            print(f"✅ SlimeBoss: {len(frames)} frames carregados com sucesso.")
-
-        cls._animation_frames = frames
-        cls._frames_loaded = True
-        return frames
+        return sprite_loader.load_animation_frames("sprite_boss_03_slime", 24, "SlimeBoss")
 
     def __init__(
         self,
@@ -113,7 +79,7 @@ class SlimeBoss:
 
         # ✅ ADICIONAR PROTEÇÃO:
         if not self.animation_frames:
-            print("⚠️ SlimeBoss: Frames não carregados, usando fallback visual")
+            logging.warning("SlimeBoss: Frames não carregados, usando fallback visual")
 
         self.current_frame = 0
         self.animation_timer = 0.0
@@ -442,7 +408,7 @@ class SlimeBoss:
                     scaled_frame, (int(self.x + offset_x), int(self.y + offset_y))
                 )
             except Exception as e:
-                print(f"⚠️ SlimeBoss: Erro ao desenhar frame {self.current_frame}: {e}")
+                logging.warning(f"SlimeBoss: Erro ao desenhar frame {self.current_frame}: {e}")
                 # Fallback
                 rect = pygame.Rect(
                     int(self.x + offset_x),
@@ -483,7 +449,7 @@ class SlimeBoss:
                         mask = pygame.mask.from_surface(scaled_frame)
                         self._outline_cache[self.current_frame] = mask.outline()
                     except Exception as e:
-                        print(f"⚠️ SlimeBoss: Erro ao gerar outline do flash: {e}")
+                        logging.warning(f"SlimeBoss: Erro ao gerar outline do flash: {e}")
                         self._outline_cache[self.current_frame] = []
 
                 outline = self._outline_cache[self.current_frame]
@@ -551,8 +517,8 @@ class SlimeBoss:
                     # Scale the frame to boss dimensions
                     scaled_frame = pygame.transform.smoothscale(frame, current_size)
                 except Exception as e:
-                    print(
-                        f"⚠️ SlimeBoss: Erro ao escalonar frame {self.current_frame}: {e}"
+                    logging.warning(
+                        f"SlimeBoss: Erro ao escalonar frame {self.current_frame}: {e}"
                     )
                     # Fallback: create a dummy scaled surface
                     scaled_frame = pygame.Surface(current_size)
@@ -566,8 +532,8 @@ class SlimeBoss:
                 self._scaled_frame_cache[self.current_frame]
             )
         except Exception as e:
-            print(
-                f"⚠️ SlimeBoss: Erro ao criar máscara para frame {self.current_frame}: {e}"
+            logging.warning(
+                f"SlimeBoss: Erro ao criar máscara para frame {self.current_frame}: {e}"
             )
             # Fallback: rectangular mask
             mask = pygame.mask.Mask(current_size, fill=True)

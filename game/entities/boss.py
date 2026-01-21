@@ -1,5 +1,6 @@
 import math
 import random
+import logging
 from typing import List, Any
 from collections import deque
 
@@ -303,7 +304,7 @@ class Boss:
 
         self.fire_timer.duration = Config.BOSS_FRENZY_LASER_LIFETIME
 
-        print("💀 Boss entrou em modo FRENZY!")
+        logging.info("💀 Boss entrou em modo FRENZY!")
 
     def _check_pending_frenzy(self) -> None:
         """Check if there's a pending frenzy activation and activate if possible."""
@@ -1345,7 +1346,7 @@ class Boss:
             else:
                 # Marcar frenzy como pendente para ativar quando possível
                 self.pending_frenzy = True
-                print("⚠️ Frenzy mode pendente - aguardando fim da ação atual...")
+                logging.warning("⚠️ Frenzy mode pendente - aguardando fim da ação atual...")
 
     def is_off_screen(self) -> bool:
         """Check if boss is completely off screen."""
