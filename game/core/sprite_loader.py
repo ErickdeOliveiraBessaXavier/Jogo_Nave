@@ -1,9 +1,8 @@
-"""
-Sistema centralizado de pré-carregamento de sprites animados.
-Carrega todos os sprites uma vez no início do jogo para evitar travamentos.
-"""
+import logging
+from typing import Callable, Any, List
+import pygame
 
-from typing import Callable, Any
+from ..core.assets import get_image, BASE_DIR
 
 
 class SpriteLoader:
@@ -31,14 +30,53 @@ class SpriteLoader:
         if SpriteLoader._loaded:
             return
 
-        print("🎮 Carregando sprites animados...")
+        logging.info("🎮 Carregando sprites animados...")
         for name, loader_func in self.loaders:
-            print(f"  ⏳ Carregando {name}...")
+            logging.info(f"  ⏳ Carregando {name}...")
             loader_func()
-            print(f"  ✅ {name} carregado!")
+            logging.info(f"  ✅ {name} carregado!")
 
         SpriteLoader._loaded = True
-        print("✅ Todos os sprites carregados!\n")
+        logging.info("✅ Todos os sprites carregados!\n")
+
+    @staticmethod
+    def load_animation_frames(base_path: str, num_frames: int, name: str, filename_pattern: str = "boss_3_gosma_sprite ({i}).png") -> List[pygame.Surface]:
+        """
+        Método genérico para carregar frames de animação com validação e logging.
+
+        Args:
+            base_path: Caminho relativo à pasta assets/images (ex: "sprite_boss_03_slime")
+            num_frames: Número de frames a carregar (1 a num_frames)
+            name: Nome para logging
+            filename_pattern: Padrão do nome do arquivo, use {i} para o número do frame
+
+        Returns:
+            Lista de surfaces carregadas
+        """
+        frames: List[pygame.Surface] = []
+        for i in range(1, num_frames + 1):
+            filename = filename_pattern.format(i=i)
+            path = BASE_DIR / "assets" / "images" / base_path / filename
+
+            if not path.exists():
+                logging.warning(f"{name}: Frame {i} não encontrado: {path}")
+                continue
+
+            try:
+                image = get_image(path)
+                frames.append(image)
+            except Exception as e:
+                logging.error(f"{name}: Erro ao carregar frame {i}: {e}")
+                continue
+
+        if not frames:
+            logging.error(f"{name}: NENHUM frame foi carregado! Verifique o caminho dos sprites.")
+        elif len(frames) < num_frames:
+            logging.warning(f"{name}: Apenas {len(frames)}/{num_frames} frames foram carregados.")
+        else:
+            logging.info(f"{name}: {len(frames)} frames carregados com sucesso.")
+
+        return frames
 
     @classmethod
     def is_loaded(cls) -> bool:

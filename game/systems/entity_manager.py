@@ -687,6 +687,9 @@ class EntityManager:
             for formation in self.formations:
                 formation.draw(surface)
 
+        # Desenhar meteoros do pool (sempre visíveis, pois fazem parte do fluxo contínuo)
+        self.meteor_pool.draw(surface)
+
     def spawn_meteor(
         self,
         size: int | None = None,

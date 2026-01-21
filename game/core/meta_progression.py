@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple
 import json
+import logging
 from pathlib import Path
 from enum import Enum
 import pygame
@@ -498,7 +499,7 @@ class PlayerProfile:
         self.preferred_difficulty: Optional[DifficultyPreset] = None
 
         # Configurações de vídeo
-        self.resolution: Tuple[int, int] = (1600, 900)  # Largura, altura
+        self.resolution: Tuple[int, int] = (1366, 768)  # Largura, altura
 
         # Aprimoramentos (ativos)
         # Armazenamos como nomes de enum para JSON estável
@@ -810,10 +811,10 @@ class PlayerProfile:
 
             # Log para debug
             direction = "mais fácil" if new_adjustment < 1.0 else "mais difícil"
-            print(
+            logging.info(
                 f"[Meta-Progression] Level {level_num} ajustado {abs(new_adjustment - 1.0) * 100:.0f}% {direction}"
             )
-            print(f"  Motivo: {analysis['reason']}")
+            logging.info(f"  Motivo: {analysis['reason']}")
 
         return adjusted_config
 
@@ -869,9 +870,9 @@ class PlayerProfile:
                     if len(resolution_list) == 2:
                         self.resolution = (int(resolution_list[0]), int(resolution_list[1]))
                     else:
-                        self.resolution = (1600, 900)  # Default
+                        self.resolution = (1366, 768)  # Default
                 else:
-                    self.resolution = (1600, 900)  # Default
+                    self.resolution = (1366, 768)  # Default
 
                 # Star collection system
                 self.stars_collected = data.get("stars_collected", 0)
@@ -1223,7 +1224,7 @@ class PlayerProfile:
         self.session_history = []
         self.level_adjustments = {}
         self.preferred_difficulty = None
-        self.resolution = (1600, 900)  # Default resolution
+        self.resolution = (1366, 768)  # Default resolution
         self.unlocked_upgrades = set(DEFAULT_UNLOCKED)
         self.upgrade_loadout = [None] * UPGRADE_SLOT_COUNT
         self.upgrade_keybindings = [

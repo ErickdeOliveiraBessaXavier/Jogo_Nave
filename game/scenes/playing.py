@@ -2,6 +2,7 @@ import pygame
 import random
 import math
 import time
+import logging
 from typing import TYPE_CHECKING, Optional, cast, Any
 from ..core.state import Scene
 from ..core.config import config as Config, SlimeBossState
@@ -1175,7 +1176,7 @@ class PlayingScene(Scene):
             if has_enemies and not self.enemy_cleanup_active:
                 self.enemy_cleanup_active = True
                 self.enemy_cleanup_timer = 0.0
-                print(
+                logging.info(
                     f"🧹 SISTEMA DE LIMPEZA ATIVADO! {len(self.entity_manager.enemies)} inimigos restantes terão 15 segundos para serem derrotados..."
                 )
             elif not has_enemies or (
@@ -1236,6 +1237,8 @@ class PlayingScene(Scene):
             self.boss_music_started = True
 
     def _end_boss_fight(self):
+        from ..entities.giant_meteor_boss import GiantMeteorBoss
+        
         if not self.entity_manager.boss:
             return
 
@@ -1277,6 +1280,19 @@ class PlayingScene(Scene):
                     spike.center_x, spike.center_y, size=15
                 )
         self.entity_manager.spikes.clear()
+
+        # Para GiantMeteorBoss: destruir todos os meteoros ativos com explosões
+        if isinstance(self.entity_manager.boss, GiantMeteorBoss):
+            for meteor in self.entity_manager.meteor_pool.active[:]:
+                # Calcular centro do meteoro
+                center_x = meteor.x + meteor.w / 2
+                center_y = meteor.y + meteor.h / 2
+                # Criar explosão no meteoro
+                self.entity_manager.spawn_explosion(
+                    center_x, center_y, size=max(12, int(meteor.w // 2))
+                )
+            # Limpar todos os meteoros do pool
+            self.entity_manager.meteor_pool.clear_active()
 
         # Limpar inimigos restantes com explosões quando o boss for derrotado
         for enemy in self.entity_manager.enemies[:]:
@@ -1385,7 +1401,7 @@ class PlayingScene(Scene):
             # Sistema de debug: mostrar/ocultar FPS com F3
             elif event.key == pygame.K_F3:
                 self.show_fps = not self.show_fps
-                print(f"Debug FPS: {'ATIVADO' if self.show_fps else 'DESATIVADO'}")
+                logging.info(f"Debug FPS: {'ATIVADO' if self.show_fps else 'DESATIVADO'}")
 
             # Sistema de cheat code
             self._process_cheat_input(event)

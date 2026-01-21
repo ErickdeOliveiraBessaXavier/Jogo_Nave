@@ -812,8 +812,8 @@ class Collisions:
                             enemies,
                             entity_manager,
                             explosion_size=(
-                                None if isinstance(enemy, Meteor) else 15
-                            ),  # Explosão proporcional para meteors
+                                max(12, int(enemy.w // 2)) if isinstance(enemy, Meteor) else 15
+                            ),  # Explosão mínima de 12 para meteoros
                         )
                         score_gain += pts
                         destroyed_count += 1
@@ -889,8 +889,8 @@ class Collisions:
                             enemies,
                             entity_manager,
                             explosion_size=(
-                                None if isinstance(enemy, Meteor) else 15
-                            ),  # Explosão proporcional para meteors
+                                max(12, int(enemy.w // 2)) if isinstance(enemy, Meteor) else 15
+                            ),  # Explosão mínima de 12 para meteoros
                         )
                         score_gain += pts
                         destroyed_count += 1

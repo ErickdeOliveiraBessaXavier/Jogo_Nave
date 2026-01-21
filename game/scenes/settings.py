@@ -56,7 +56,7 @@ class SettingsView:
             (3840, 2160, "4K"),
             (5120, 2880, "5K"),
         ]
-        self.selected_resolution_index = 1  # Padrão 1600x900
+        self.selected_resolution_index = 2
 
         # Animação de entrada
         self.entry_progress = 0.0

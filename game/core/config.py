@@ -53,8 +53,8 @@ class Config:
     # DISPLAY & PERFORMANCE SETTINGS
     # ========================================
     FULLSCREEN: bool = True
-    SCREEN_WIDTH: int = 1600  # Largura padrão (será sobrescrita se fullscreen)
-    SCREEN_HEIGHT: int = 900  # Altura padrão (será sobrescrita se fullscreen)
+    SCREEN_WIDTH: int = 1366  # Largura padrão (será sobrescrita se fullscreen)
+    SCREEN_HEIGHT: int = 768  # Altura padrão (será sobrescrita se fullscreen)
     FPS: int = 120
 
     # ========================================
@@ -262,10 +262,10 @@ class Config:
     # ========================================
     # GIANT METEOR BOSS
     # ========================================
-    GIANT_METEOR_BOSS_HEALTH: int = 4500
+    GIANT_METEOR_BOSS_HEALTH: int = 3000
     GIANT_METEOR_BOSS_HEIGHT: int = 800
     GIANT_METEOR_BOSS_ENTRY_SPEED: float = 35.0
-    GIANT_METEOR_BOSS_FALL_SPEED: float = 5.0
+    GIANT_METEOR_BOSS_FALL_SPEED: float = 3.0
     GIANT_METEOR_FRAGMENT_MIN_SIZE: int = 16
     GIANT_METEOR_FRAGMENT_MAX_SIZE: int = 40
     GIANT_METEOR_HIT_FRAGMENT_CHANCE: float = 0.35  # 35% por hit
