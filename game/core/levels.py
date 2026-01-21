@@ -3,6 +3,7 @@ from typing import Type, Union
 from functools import lru_cache
 import random
 import math
+import logging
 from ..entities.meteor import Meteor
 from ..entities.alien import Alien
 from ..entities.boss import Boss
@@ -13,6 +14,9 @@ from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.slime_boss import SlimeBoss
 from ..entities.giant_meteor_boss import GiantMeteorBoss
 from .difficulty import DifficultyPreset, DifficultySettings
+
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -892,9 +896,9 @@ class LevelAnalyzer:
         start: int, end: int, generator: ProceduralLevelGenerator
     ):
         """Imprime progressão de dificuldade para análise."""
-        print(f"\n{'='*80}")
-        print(f"ANÁLISE DE PROGRESSÃO: Níveis {start} a {end}")
-        print(f"{'='*80}\n")
+        logger.info(f"\n{'='*80}")
+        logger.info(f"ANÁLISE DE PROGRESSÃO: Níveis {start} a {end}")
+        logger.info(f"{'='*80}\n")
 
         for level_num in range(start, end + 1):
             config = generator.generate_level(level_num)
@@ -918,7 +922,7 @@ class LevelAnalyzer:
             # Indicador de problemas
             warning_icon = "⚠️" if warnings else "✓"
 
-            print(
+            logger.info(
                 f"{warning_icon} Nv.{level_num:2d} │ "
                 f"{theme_name:22s} │ "
                 f"👾{stats['enemies_to_clear']:3d} │ "
@@ -931,4 +935,4 @@ class LevelAnalyzer:
             # Mostrar avisos se houver
             if warnings:
                 for warning in warnings:
-                    print(f"    └─ ⚠️  {warning}")
+                    logger.info(f"    └─ ⚠️  {warning}")

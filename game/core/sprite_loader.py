@@ -3,7 +3,11 @@ Sistema centralizado de pré-carregamento de sprites animados.
 Carrega todos os sprites uma vez no início do jogo para evitar travamentos.
 """
 
+import logging
 from typing import Callable, Any
+
+
+logger = logging.getLogger(__name__)
 
 
 class SpriteLoader:
@@ -31,14 +35,14 @@ class SpriteLoader:
         if SpriteLoader._loaded:
             return
 
-        print("🎮 Carregando sprites animados...")
+        logger.info("🎮 Carregando sprites animados...")
         for name, loader_func in self.loaders:
-            print(f"  ⏳ Carregando {name}...")
+            logger.info(f"  ⏳ Carregando {name}...")
             loader_func()
-            print(f"  ✅ {name} carregado!")
+            logger.info(f"  ✅ {name} carregado!")
 
         SpriteLoader._loaded = True
-        print("✅ Todos os sprites carregados!\n")
+        logger.info("✅ Todos os sprites carregados!\n")
 
     @classmethod
     def is_loaded(cls) -> bool:

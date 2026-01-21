@@ -6,6 +6,7 @@ from pathlib import Path
 from enum import Enum
 import pygame
 import time
+import logging
 
 from ..core.difficulty import DifficultyPreset
 from ..core.levels import LevelConfig
@@ -15,6 +16,8 @@ from ..core.upgrades_config import (
     DEFAULT_UNLOCKED,
     INITIAL_UNLOCKED_SLOTS,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PerformanceState(Enum):
@@ -90,7 +93,10 @@ class LevelPerformance:
     @property
     def avg_time(self) -> float:
         """Tempo médio de clear."""
-        return self.total_time / self.clears if self.clears > 0 else 0.0
+        if self.clears <= 0:
+            return 0.0
+        avg = self.total_time / self.clears
+        return avg if avg > 0 else 0.0
 
     @property
     def avg_score(self) -> float:
@@ -137,10 +143,8 @@ class LevelPerformance:
         # Dominando completamente
         if self.clear_rate > 0.9 and self.attempts >= 3:
             # Verificar consistência de tempos
-            if self.clears >= 2:
-                time_consistency = (
-                    self.best_time / self.avg_time if self.best_time else 1.0
-                )
+            if self.clears >= 2 and self.best_time and self.avg_time > 0:
+                time_consistency = self.best_time / self.avg_time
                 if time_consistency > 0.8:  # Tempos consistentes
                     return PerformanceState.DOMINATING
 
@@ -293,9 +297,9 @@ class PerformanceAnalyzer:
     ) -> str:
         """Determina skill level baseado em múltiplos fatores."""
         # Sistema de pontos ponderado
-        level_points = min(highest_level * 2, 50)  # Max 50 pontos
-        clear_rate_points = clear_rate * 30  # Max 30 pontos
-        experience_points = min(playtime / 3600 * 5, 20)  # Max 20 pontos (1pt/12min)
+        level_points = min(highest_level * 1.5, 40)  # Max 40 pontos
+        clear_rate_points = clear_rate * 40  # Max 40 pontos
+        experience_points = min(playtime / 3600 * 4, 20)  # Max 20 pontos
 
         total_points = level_points + clear_rate_points + experience_points
 
@@ -407,10 +411,12 @@ class DifficultyAdjuster:
         suggested_adjustment = analysis["adjustment"]
         confidence = analysis["confidence"]
 
-        # Suavizar ajuste baseado em confiança
+        # Não ajustar se confiança for baixa (dados insuficientes)
         if confidence == "low":
-            adjustment_factor = 0.3  # Apenas 30% do ajuste sugerido
-        elif confidence == "medium":
+            return base_config, 1.0
+
+        # Suavizar ajuste baseado em confiança
+        if confidence == "medium":
             adjustment_factor = 0.6  # 60% do ajuste sugerido
         else:  # high
             adjustment_factor = 1.0  # Ajuste completo
@@ -684,7 +690,7 @@ class PlayerProfile:
 
     def auto_save(self):
         """Auto-save if dirty and enough time has passed."""
-        if self._dirty and (time.time() - self._last_save) > 30:
+        if self._dirty and (time.time() - self._last_save) > 10:
             self.save()
 
     def record_attempt(self, level_number: int):
@@ -756,6 +762,10 @@ class PlayerProfile:
 
         self._mark_dirty()
 
+        # Salvar a cada 5 níveis completados
+        if level_number % 5 == 0:
+            self.save()
+
     def record_death(self, level_number: int, cause: str = "unknown"):
         """Registra morte em um nível."""
         stats = self.level_stats[level_number]
@@ -810,10 +820,10 @@ class PlayerProfile:
 
             # Log para debug
             direction = "mais fácil" if new_adjustment < 1.0 else "mais difícil"
-            print(
+            logger.info(
                 f"[Meta-Progression] Level {level_num} ajustado {abs(new_adjustment - 1.0) * 100:.0f}% {direction}"
             )
-            print(f"  Motivo: {analysis['reason']}")
+            logger.info(f"  Motivo: {analysis['reason']}")
 
         return adjusted_config
 
@@ -890,10 +900,7 @@ class PlayerProfile:
 
                 # Level stats
                 level_stats_raw: Dict[str, Dict[str, Any]] = data.get("level_stats", {})
-                # if isinstance(level_stats_raw, dict): # Unnecessary isinstance call
                 for level_num_str, stats_data_raw in level_stats_raw.items():
-                    # if not isinstance(stats_data_raw, dict): # Unnecessary isinstance call
-                    # continue
                     stats_data: Dict[str, Any] = stats_data_raw
                     try:
                         level_num = int(level_num_str)
@@ -944,12 +951,11 @@ class PlayerProfile:
 
                         self.level_stats[level_num] = stats
                     except (ValueError, TypeError, KeyError):
-                        print(f"Skipping corrupt level data for level {level_num_str}")
+                        logger.warning(f"Skipping corrupt level data for level {level_num_str}")
                         continue
 
                 # Ajustes
                 level_adjustments_raw = data.get("level_adjustments", {})
-                # if isinstance(level_adjustments_raw, dict): # Unnecessary isinstance call
                 self.level_adjustments = {
                     int(k): v
                     for k, v in level_adjustments_raw.items()
@@ -960,7 +966,6 @@ class PlayerProfile:
                 session_history_raw: List[Dict[str, Any]] = data.get(
                     "session_history", []
                 )
-                # if isinstance(session_history_raw, list): # Unnecessary isinstance call
                 for session_data_raw in session_history_raw:
                     if session_data_raw.get("start_time") is None:
                         continue
@@ -969,7 +974,7 @@ class PlayerProfile:
                         # Ensure start_time is a string before passing to fromisoformat
                         start_time_str = session_data.get("start_time")
                         if not isinstance(start_time_str, str):
-                            print(
+                            logger.warning(
                                 "Skipping corrupt session data due to invalid start_time type."
                             )
                             continue
@@ -1013,7 +1018,7 @@ class PlayerProfile:
 
                         self.session_history.append(session)
                     except (ValueError, TypeError, KeyError) as ve:
-                        print(f"Skipping corrupt session data: {ve}")
+                        logger.warning(f"Skipping corrupt session data: {ve}")
                         continue
 
                 # Aprimoramentos: unlocked + loadout (migração segura)
@@ -1138,8 +1143,15 @@ class PlayerProfile:
                     ]
 
         except Exception as e:
-            print(f"⚠️ Erro ao carregar perfil: {e}. Resetando perfil...")
-            self.reset()  # Reset on corrupt load
+            logger.error(f"Erro ao carregar perfil: {e}")
+            # Fazer backup
+            if self.profile_path.exists():
+                backup_path = self.profile_path.with_suffix('.backup.json')
+                import shutil
+                shutil.copy2(self.profile_path, backup_path)
+                logger.info(f"Backup salvo em: {backup_path}")
+            # Carregar defaults ao invés de resetar
+            return  # Mantém valores inicializados no __init__
 
     def save(self):
         """Salva perfil no disco."""
@@ -1251,7 +1263,7 @@ class PlayerProfile:
         # Salvar o perfil resetado
         self.save()
 
-        print("Perfil do jogador resetado com sucesso!")
+        logger.info("Perfil do jogador resetado com sucesso!")
 
 
 class ProfileVisualizer:

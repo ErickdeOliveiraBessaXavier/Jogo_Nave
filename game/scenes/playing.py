@@ -2,6 +2,7 @@ import pygame
 import random
 import math
 import time
+import logging
 from typing import TYPE_CHECKING, Optional, cast, Any
 from ..core.state import Scene
 from ..core.config import config as Config, SlimeBossState
@@ -22,6 +23,8 @@ from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_profile_path
 from ..core.upgrades import create_upgrade, ActiveUpgrade, HealUpgrade
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -405,8 +408,8 @@ class PlayingScene(Scene):
                         len(f.enemies) for f in self.entity_manager.formations
                     )
 
-                    print(
-                        f"⏰ TEMPO ESGOTADO! Removendo {total_enemies} inimigos normais "
+                    logger.info(
+                        f"TEMPO ESGOTADO! Removendo {total_enemies} inimigos normais "
                         f"e {total_formations} inimigos em formação automaticamente..."
                     )
 
@@ -507,13 +510,13 @@ class PlayingScene(Scene):
                 self.cheat_buffer = ""  # Resetar buffer
 
                 if self.god_mode:
-                    print("🛡️ GOD MODE ATIVADO - Invulnerabilidade ligada!")
+                    logger.info("GOD MODE ATIVADO - Invulnerabilidade ligada!")
                     # Reduzir cooldowns ativos para 1 segundo quando god_mode é ativado
                     self._apply_god_mode_cooldowns()
                     if hasattr(sound_manager, "play_powerup"):
                         sound_manager.play_powerup()  # type: ignore
                 else:
-                    print("⚔️ GOD MODE DESATIVADO - Invulnerabilidade desligada!")
+                    logger.info("GOD MODE DESATIVADO - Invulnerabilidade desligada!")
 
     def _batch_floating_scores(
         self,
@@ -1175,8 +1178,8 @@ class PlayingScene(Scene):
             if has_enemies and not self.enemy_cleanup_active:
                 self.enemy_cleanup_active = True
                 self.enemy_cleanup_timer = 0.0
-                print(
-                    f"🧹 SISTEMA DE LIMPEZA ATIVADO! {len(self.entity_manager.enemies)} inimigos restantes terão 15 segundos para serem derrotados..."
+                logger.info(
+                    f"SISTEMA DE LIMPEZA ATIVADO! {len(self.entity_manager.enemies)} inimigos restantes terão 15 segundos para serem derrotados..."
                 )
             elif not has_enemies or (
                 self.enemy_cleanup_active
@@ -1385,7 +1388,7 @@ class PlayingScene(Scene):
             # Sistema de debug: mostrar/ocultar FPS com F3
             elif event.key == pygame.K_F3:
                 self.show_fps = not self.show_fps
-                print(f"Debug FPS: {'ATIVADO' if self.show_fps else 'DESATIVADO'}")
+                logger.info(f"Debug FPS: {'ATIVADO' if self.show_fps else 'DESATIVADO'}")
 
             # Sistema de cheat code
             self._process_cheat_input(event)
