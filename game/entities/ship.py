@@ -38,7 +38,7 @@ class ParticleDict(TypedDict):
 
 
 class Ship:
-    def __init__(self, x: float, y: float):
+    def __init__(self, x: float, y: float, mouse_control: bool = False, auto_fire: bool = False):
         # Dimensões da nave (baseadas na imagem)
         self.w = 35
         self.h = 35
@@ -49,6 +49,11 @@ class Ship:
         self.lives = Config.INITIAL_LIVES
         self.visible = True
         self.move_vec = pygame.math.Vector2(0, 0)
+
+        # Configurações de controle
+        self.mouse_control = mouse_control
+        self.auto_fire = auto_fire
+        self.auto_fire_timer = 0.0
 
         # Carregar imagem da nave
         try:
@@ -503,26 +508,48 @@ class Ship:
         self._update_orbital_lasers(dt, entity_manager)
         self._update_particles(dt)
 
+        # Atualizar timer de tiro automático
+        if self.auto_fire:
+            self.auto_fire_timer += dt
+            # Disparar a cada 0.1 segundos (10 tiros por segundo)
+            if self.auto_fire_timer >= 0.1:
+                self.auto_fire_timer = 0.0
+
     def move(self, held_actions: set[str], dt: float):
         current_speed = self.speed * (1.5 if self.speed_boost_timer > 0 else 1.0)
         move_vec = pygame.math.Vector2(0, 0)
 
-        if "hold_left" in held_actions:
-            move_vec.x -= 1
-        if "hold_right" in held_actions:
-            move_vec.x += 1
-        if "hold_up" in held_actions:
-            move_vec.y -= 1
-        if "hold_down" in held_actions:
-            move_vec.y += 1
+        if self.mouse_control:
+            # Mover em direção ao mouse com precisão
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            ship_center_x = self.x + self.w / 2
+            ship_center_y = self.y + self.h / 2
+            # Usar sensibilidade para movimento proporcional à distância
+            sensitivity = 0.02  # 2% de sensibilidade
+            move_vec.x = (mouse_x - ship_center_x) * sensitivity
+            move_vec.y = (mouse_y - ship_center_y) * sensitivity
+        else:
+            # Movimento por teclado
+            if "hold_left" in held_actions:
+                move_vec.x -= 1
+            if "hold_right" in held_actions:
+                move_vec.x += 1
+            if "hold_up" in held_actions:
+                move_vec.y -= 1
+            if "hold_down" in held_actions:
+                move_vec.y += 1
 
-        if move_vec.length() > 0:
-            move_vec.normalize_ip()
+            if move_vec.length() > 0:
+                move_vec.normalize_ip()
 
         self.x += move_vec.x * current_speed * dt
         self.y += move_vec.y * current_speed * dt
 
         self._keep_in_bounds()
+
+    def should_auto_fire(self) -> bool:
+        """Retorna True se deve disparar automaticamente neste frame."""
+        return self.auto_fire and self.auto_fire_timer == 0.0
 
     def _keep_in_bounds(self):
         if self.x < 0:

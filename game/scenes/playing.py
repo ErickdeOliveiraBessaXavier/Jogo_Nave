@@ -43,8 +43,14 @@ class PlayingScene(Scene):
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
         self.last_dt = 1.0 / Config.FPS
         self.r = app.renderer  # Usar renderer compartilhado
+
+        # Carregar configurações do jogador
+        self.player_profile = PlayerProfile(get_profile_path())
+
         self.ship = Ship(
-            Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT + 100
+            Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT + 100,
+            mouse_control=self.player_profile.mouse_control,
+            auto_fire=self.player_profile.auto_fire
         )  # Start 100 pixels below the screen
         self.ship.is_entering = True
         self.entity_manager = EntityManager(sound_manager=sound_manager)
@@ -288,8 +294,8 @@ class PlayingScene(Scene):
             held = self.app.input.poll_held()
             self.ship.move(held, dt)
 
-            # Tiro contínuo com tecla segurada
-            if "hold_shoot" in held and self.shoot_cd == 0.0 and not boss_pausing:
+            # Tiro contínuo com tecla segurada ou automático
+            if (("hold_shoot" in held or self.ship.should_auto_fire()) and self.shoot_cd == 0.0 and not boss_pausing):
                 bullet_specs = self.ship.bullet_spawn()
                 for (
                     x,
@@ -1436,6 +1442,37 @@ class PlayingScene(Scene):
                         if event.key == keycode:
                             self._activate_upgrade_slot(i)
                             break
+
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # Disparar com clique esquerdo se não estiver em auto-fire
+            if not self.ship.auto_fire and self.shoot_cd == 0.0 and not self.ship.is_entering:
+                bullet_specs = self.ship.bullet_spawn()
+                for (
+                    x,
+                    y,
+                    is_piercing,
+                    is_homing,
+                    is_explosive,
+                    is_low_ammo,
+                ) in bullet_specs:
+                    base_damage = 10
+                    adjusted_damage = int(base_damage * self.player_damage_multiplier)
+                    self.entity_manager.spawn_bullet(
+                        x,
+                        y,
+                        damage=adjusted_damage,
+                        piercing=is_piercing,
+                        homing=is_homing,
+                        explosive=is_explosive,
+                        low_ammo=is_low_ammo,
+                    )
+                    # Consumir carga de tiro explosivo se usado
+                    if is_explosive:
+                        self.ship.consume_explosive_shot()
+                # Reset shoot cooldown
+                self.shoot_cd = 1.0 / (
+                    self.ship.attack_speed_multiplier * Config.FIRE_RATE
+                )
 
     def render(self, surface: pygame.Surface):
         # Usa o dt armazenado pela última chamada de update

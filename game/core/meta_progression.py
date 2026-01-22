@@ -506,6 +506,10 @@ class PlayerProfile:
         # Configurações de vídeo
         self.resolution: Tuple[int, int] = (1366, 768)  # Largura, altura
 
+        # Configurações de controle
+        self.mouse_control: bool = False  # Usar mouse para mover nave
+        self.auto_fire: bool = False  # Tiro automático ativado
+
         # Aprimoramentos (ativos)
         # Armazenamos como nomes de enum para JSON estável
         self.unlocked_upgrades: set[UpgradeType] = set(DEFAULT_UNLOCKED)
@@ -887,6 +891,10 @@ class PlayerProfile:
                 else:
                     self.resolution = (1366, 768)  # Default
 
+                # Configurações de controle
+                self.mouse_control = data.get("mouse_control", False)
+                self.auto_fire = data.get("auto_fire", False)
+
                 # Star collection system
                 self.stars_collected = data.get("stars_collected", 0)
                 self.stars_spent = data.get("stars_spent", 0)
@@ -1209,6 +1217,8 @@ class PlayerProfile:
             "total_deaths": self.total_deaths,
             "total_score": self.total_score,
             "resolution": list(self.resolution),
+            "mouse_control": self.mouse_control,
+            "auto_fire": self.auto_fire,
             "level_stats": level_stats_data,
             "level_adjustments": {str(k): v for k, v in self.level_adjustments.items()},
             "session_history": session_history_data,
@@ -1243,6 +1253,8 @@ class PlayerProfile:
         self.level_adjustments = {}
         self.preferred_difficulty = None
         self.resolution = (1366, 768)  # Default resolution
+        self.mouse_control = False
+        self.auto_fire = False
         self.unlocked_upgrades = set(DEFAULT_UNLOCKED)
         self.upgrade_loadout = [None] * UPGRADE_SLOT_COUNT
         self.upgrade_keybindings = [

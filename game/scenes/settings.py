@@ -46,6 +46,10 @@ class SettingsView:
             "sfx": sound_manager.sfx_volume,
             "shot": sound_manager.shot_volume_base,
         }
+        self.toggles: Dict[str, bool] = {
+            "mouse_control": self.player_profile.mouse_control,
+            "auto_fire": self.player_profile.auto_fire,
+        }
         self.dragging_slider: str | None = None
 
         # Resoluções disponíveis (mantendo 16:9)
@@ -104,10 +108,20 @@ class SettingsView:
         )
         self.layout_rects["controls_card"] = controls_card_rect
 
+        # Toggles de controle
+        self.layout_rects["toggles"] = {}
+        toggle_w, toggle_h = 30, 30
+        y_offset = controls_card_rect.y + 60
+        for key in self.toggles:
+            self.layout_rects["toggles"][key] = pygame.Rect(
+                controls_card_rect.x + 20, y_offset, toggle_w, toggle_h
+            )
+            y_offset += 50
+
         # Seletor de resolução
         self.layout_rects["resolution_label"] = pygame.Rect(
             controls_card_rect.x + 20,
-            controls_card_rect.y + 60,
+            y_offset + 10,
             controls_card_rect.width - 40,
             30,
         )
@@ -167,6 +181,10 @@ class SettingsView:
         self.sliders["sfx"] = sound_manager.sfx_volume
         self.sliders["shot"] = sound_manager.shot_volume_base
 
+        # Carregar toggles
+        self.toggles["mouse_control"] = self.player_profile.mouse_control
+        self.toggles["auto_fire"] = self.player_profile.auto_fire
+
         # Carregar resolução salva
         saved_res = self.player_profile.resolution
         for i, (w, h, _) in enumerate(self.available_resolutions):
@@ -224,6 +242,18 @@ class SettingsView:
                     self.player_profile.save()
                     # Mostrar pop-up de aviso
                     self.show_restart_popup = True
+                    return True
+
+            # Toggles
+            for key, rect in self.layout_rects["toggles"].items():
+                if rect.collidepoint(pos):
+                    self.toggles[key] = not self.toggles[key]
+                    # Salvar no perfil
+                    if key == "mouse_control":
+                        self.player_profile.mouse_control = self.toggles[key]
+                    elif key == "auto_fire":
+                        self.player_profile.auto_fire = self.toggles[key]
+                    self.player_profile.save()
                     return True
 
             # Pop-up de confirmação
@@ -469,6 +499,27 @@ class SettingsView:
         # Criar clipping para o card
         clip_rect = card_rect.inflate(-10, -10)
         surface.set_clip(clip_rect)
+
+        # Toggles
+        labels = {"mouse_control": "Controle por Mouse", "auto_fire": "Tiro Automático"}
+        for key in self.toggles:
+            rect = self.layout_rects["toggles"][key].copy()
+            rect.y += offset_y
+
+            # Checkbox
+            is_checked = self.toggles[key]
+            checkbox_color = CUSTOM_GOLD if is_checked else colors.GRAY
+            pygame.draw.rect(surface, (*checkbox_color, alpha), rect, 2, border_radius=5)
+            if is_checked:
+                # Checkmark
+                check_surf = pygame.Surface((rect.width - 6, rect.height - 6))
+                check_surf.fill((*CUSTOM_GOLD, alpha))
+                surface.blit(check_surf, (rect.x + 3, rect.y + 3))
+
+            # Label
+            label_surf = self.item_font.render(labels[key], True, colors.WHITE)
+            label_surf.set_alpha(alpha)
+            surface.blit(label_surf, (rect.right + 10, rect.centery - label_surf.get_height() / 2))
 
         # Label da resolução
         label_rect = self.layout_rects["resolution_label"].copy()
