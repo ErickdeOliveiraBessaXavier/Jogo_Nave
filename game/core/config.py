@@ -63,6 +63,7 @@ class Config:
     INITIAL_LIVES: int = 5
     PREPARATION_TIME: float = 5.0  # seconds
     SHOOT_COOLDOWN: float = 0.20  # Tempo entre tiros quando segura a tecla
+    FIRE_RATE: float = 5.0  # Tiros por segundo (1 / SHOOT_COOLDOWN)
 
     # ========================================
     # ENTITY MOVEMENT SPEEDS (pixels/second)
@@ -152,22 +153,25 @@ class Config:
     # Rarity system - Sistema de raridade para power-ups (porcentagens 0.0-100.0, soma deve ser 100.0)
     POWERUP_RARITIES: dict[PowerUpType, float] = field(
         default_factory=lambda: {
-            # 🔵 COMUM (45% total) - Power-ups básicos e frequentes
-            PowerUpType.SHIELD: 5.8,  # 5.8% - Escudo básico
-            PowerUpType.DOUBLE_SHOT: 12.7,  # 12.7% - Tiro duplo
-            # 🟢 INCOMUM (15% total) - Power-ups situacionais
-            PowerUpType.SPEED: 8.7,  # 8.7% - Velocidade aumentada
-            # 🟠 RARO (35% total) - Power-ups poderosos mas raros
-            PowerUpType.PIERCING_SHOT: 46.2,  # 46.2% - Tiro perfurante
-            PowerUpType.MINI_SHIPS: 9.8,  # 9.8% - Naves auxiliares
-            PowerUpType.LIFE: 2.9,  # 2.9% - Vida extra
+            # 🔵 COMUM (50% total) - Power-ups básicos e frequentes
+            PowerUpType.SHIELD: 15.0,      # 15.0% - Escudo básico ⭐ MAIS COMUM
+            PowerUpType.DOUBLE_SHOT: 20.0, # 20.0% - Tiro duplo ⭐ MAIS COMUM
+            PowerUpType.SPEED: 35.0,       # 15.0% - Velocidade aumentada ⭐ MAIS COMUM
+
+            # 🟢 INCOMUM (25% total) - Power-ups situacionais
+            PowerUpType.COOLDOWN_HASTE: 10.0, # 15.0% - Reduz tempo de recarga
+            PowerUpType.MINI_SHIPS: 5.0,    # 10.0% - Naves auxiliares
+
+            # 🟠 RARO (20% total) - Power-ups poderosos mas raros
+            PowerUpType.PIERCING_SHOT: 5.0, # 15.0% - Tiro perfurante ⭐ MENOS COMUM
+            PowerUpType.LIFE: 5.0,          # 5.0% - Vida extra
+
             # 🟣 ÉPICO (4% total) - Power-ups muito valiosos
-            PowerUpType.SCORE: 2.3,  # 2.3% - Multiplicador de pontos
+            PowerUpType.SCORE: 2.0,         # 2.0% - Multiplicador de pontos
+            PowerUpType.TIME_STOP: 2.0,     # 2.0% - Congelamento total
+
             # 🟡 LENDÁRIO (1% total) - Power-ups ultra-raros
-            PowerUpType.RAINBOW: 0.6,  # 0.6% - Power-up especial
-            # 🟠 NOVOS
-            PowerUpType.COOLDOWN_HASTE: 8.7,  # 8.7% - Reduz tempo de recarga
-            PowerUpType.TIME_STOP: 2.3,  # 2.3% - Congelamento total
+            PowerUpType.RAINBOW: 1.0,       # 1.0% - Power-up especial ⭐ MAIS COMUM
         }
     )
 

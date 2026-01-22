@@ -4,45 +4,76 @@ import math
 from ..core.config import config as Config
 
 
+class ExplosionType:
+    """Define tipos de explosão com suas paletas de cores."""
+    DEFAULT = None  # Laranja/vermelho padrão
+    SLIME = [(80, 57, 89), (204, 176, 217), (38, 2, 89), (77, 13, 166), (65, 11, 140)]
+    ALIEN = [(37, 217, 166), (78, 217, 74)]  # Verde
+
+
 class Explosion:
     def __init__(
         self,
         x: float,
         y: float,
         size: int = 20,
-        is_slime: bool = False,
-        custom_color: tuple[int, int, int, int] | None = None,
+        explosion_type: list[tuple[int, int, int]] | None = None,
     ):
+        """
+        Cria uma explosão de partículas.
+        
+        Args:
+            x, y: Posição central da explosão
+            size: Tamanho da explosão (afeta duração e número de partículas)
+            explosion_type: Paleta de cores (ExplosionType.ALIEN, ExplosionType.SLIME, etc)
+                          Se None, usa explosão padrão laranja/vermelho
+        """
         self.x, self.y = x, y
-        self.time = Config.EXPLOSION_DURATION * (
-            size / 40
-        )  # Explosões maiores duram mais
         self.size = size
-        self.is_slime = is_slime
-        self.custom_color = custom_color  # Cor personalizada para explosões de slime
-        count = min(20 + size // 4, 40)
+        self.explosion_type = explosion_type
+        self.time = Config.EXPLOSION_DURATION * (size / 40)
+        
+        # Inicializar partículas
         self.particles: list[list[float]] = []
+        self._create_particles()
+
+    def _create_particles(self):
+        """Cria partículas da explosão (método separado para reuso no pool)."""
+        count = min(20 + self.size // 4, 40)
+        self.particles.clear()
 
         for _ in range(count):
             angle = random.uniform(0, 360)
             rad_angle = math.radians(angle)
-            base_speed = random.uniform(150, 300) * (size / 20)
+            base_speed = random.uniform(150, 300) * (self.size / 20)
 
             vx = base_speed * math.cos(rad_angle)
             vy = base_speed * math.sin(rad_angle)
 
-            # Partículas começam no centro e se movem para fora
-            px, py = self.x, self.y
-
             life = random.uniform(self.time * 0.6, self.time)
-            self.particles.append([px, py, vx, vy, life])
+            self.particles.append([self.x, self.y, vx, vy, life])
+
+    def reset(
+        self,
+        x: float,
+        y: float,
+        size: int = 20,
+        explosion_type: list[tuple[int, int, int]] | None = None,
+    ):
+        """Reconfigura explosão para reuso (usado pelo pool)."""
+        self.x = x
+        self.y = y
+        self.size = size
+        self.explosion_type = explosion_type
+        self.time = Config.EXPLOSION_DURATION * (size / 40)
+        self._create_particles()
 
     def update(self, dt: float):
         self.time = max(0.0, self.time - dt)
         for p in self.particles:
             p[0] += p[2] * dt
             p[1] += p[3] * dt
-            p[2] *= 0.96  # Atrito um pouco mais forte
+            p[2] *= 0.96
             p[3] *= 0.96
             p[4] -= dt
         self.particles = [p for p in self.particles if p[4] > 0]
@@ -50,59 +81,45 @@ class Explosion:
     def finished(self) -> bool:
         return self.time <= 0 and not self.particles
 
+    def _get_color(self, life_ratio: float) -> tuple[int, int, int]:
+        """Calcula cor da partícula baseada no tipo de explosão e vida restante."""
+        if self.explosion_type:
+            # Interpolar entre cores da paleta
+            color_index = int(life_ratio * (len(self.explosion_type) - 1))
+            next_index = min(color_index + 1, len(self.explosion_type) - 1)
+            t = (life_ratio * (len(self.explosion_type) - 1)) - color_index
+
+            r = int(
+                self.explosion_type[color_index][0]
+                + t * (self.explosion_type[next_index][0] - self.explosion_type[color_index][0])
+            )
+            g = int(
+                self.explosion_type[color_index][1]
+                + t * (self.explosion_type[next_index][1] - self.explosion_type[color_index][1])
+            )
+            b = int(
+                self.explosion_type[color_index][2]
+                + t * (self.explosion_type[next_index][2] - self.explosion_type[color_index][2])
+            )
+            return (r, g, b)
+        else:
+            # Explosão padrão: amarelo/laranja -> vermelho
+            if life_ratio > 0.5:
+                r = 255
+                g = int(255 * ((life_ratio - 0.5) * 2))
+            else:
+                r = int(255 * (life_ratio * 2))
+                g = 0
+            return (r, g, 0)
+
     def draw(self, screen: pygame.Surface):
         if self.finished():
             return
 
-        for _, p in enumerate(self.particles):
+        for p in self.particles:
             life_ratio = p[4] / max(self.time, 1e-6)
-
-            if self.custom_color is not None:
-                # Usar cor personalizada (para gotas de slime)
-                base_color = self.custom_color[:3]  # RGB da cor base
-                alpha = (
-                    int(self.custom_color[3] * life_ratio)
-                    if len(self.custom_color) == 4
-                    else 255
-                )
-                color = (*base_color, alpha)
-            elif self.is_slime:
-                # Cores específicas para slime: #503959, #CCB0D9, #260259, #4D0DA6, #410B8C
-                slime_colors = [
-                    (80, 57, 89),  # #503959
-                    (204, 176, 217),  # #CCB0D9
-                    (38, 2, 89),  # #260259
-                    (77, 13, 166),  # #4D0DA6
-                    (65, 11, 140),  # #410B8C
-                ]
-                # Interpolar entre as cores baseado na vida da partícula
-                color_index = int(life_ratio * (len(slime_colors) - 1))
-                next_index = min(color_index + 1, len(slime_colors) - 1)
-                t = (life_ratio * (len(slime_colors) - 1)) - color_index
-
-                r = int(
-                    slime_colors[color_index][0]
-                    + t * (slime_colors[next_index][0] - slime_colors[color_index][0])
-                )
-                g = int(
-                    slime_colors[color_index][1]
-                    + t * (slime_colors[next_index][1] - slime_colors[color_index][1])
-                )
-                b = int(
-                    slime_colors[color_index][2]
-                    + t * (slime_colors[next_index][2] - slime_colors[color_index][2])
-                )
-                color = (r, g, b)
-            else:
-                # Cor muda de amarelo/laranja para vermelho/fumaça
-                if life_ratio > 0.5:
-                    r = 255
-                    g = int(255 * ((life_ratio - 0.5) * 2))
-                else:
-                    r = int(255 * (life_ratio * 2))
-                    g = 0
-                color = (r, g, 0)
-
+            color = self._get_color(life_ratio)
+            
             pos = (int(p[0]), int(p[1]))
             radius = max(1, self.size / 10 * life_ratio)
             pygame.draw.circle(screen, color, pos, radius)

@@ -34,9 +34,10 @@ from ..core.spatial_grid import SpatialGrid
 from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.air_strike_bomb import AirStrikeBomb
 from ..entities.cannon_mine import CannonMine, MineState
-
-
 from ..entities.explosive_mine import ExplosiveMine
+
+
+from ..entities.explosion import ExplosionType  # ← ADICIONAR
 
 
 class Collisions:
@@ -76,13 +77,16 @@ class Collisions:
             enemy.destroy()
         enemy.dead = True
 
-        # Explosão visual - tamanho depende do tipo
-        if explosion_size is None:
-            if isinstance(enemy, ExplosiveMine):
-                explosion_size = enemy.radius
-            else:
-                explosion_size = int(enemy.w // 2)
-        entity_manager.spawn_explosion(cx, cy, size=explosion_size)
+        # Definir tipo de explosão baseado no inimigo
+        if isinstance(enemy, Alien):
+            explosion_type = ExplosionType.ALIEN
+        else:
+            explosion_type = None
+
+        # Garantir que explosion_size não seja None
+        assert explosion_size is not None
+
+        entity_manager.spawn_explosion(cx, cy, size=explosion_size, explosion_type=explosion_type)
 
         # Som apropriado
         if isinstance(enemy, Meteor):
@@ -1382,7 +1386,7 @@ class Collisions:
 
                     # Criar explosão no ponto de impacto
                     entity_manager.spawn_explosion(
-                        bullet.x, bullet.y, size=20, is_slime=True
+                        bullet.x, bullet.y, size=20, explosion_type=ExplosionType.SLIME
                     )
 
                     # Destruir apenas a bala se não for piercing

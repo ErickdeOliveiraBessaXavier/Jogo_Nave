@@ -10,7 +10,7 @@ from ..entities.boss_square import BossSquare
 from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
 from ..entities.spike_boss_laser import SpikeBossLaser
-from ..entities.explosion import Explosion
+from ..entities.explosion import Explosion, ExplosionType  # ← ADICIONAR
 from ..entities.mine_explosion import MineExplosion
 from ..entities.powerup import PowerUp
 from ..entities.floating_score import FloatingScore
@@ -94,8 +94,7 @@ class EntityManager:
         x: float,
         y: float,
         size: int = 30,
-        is_slime: bool = False,
-        custom_color: tuple[int, int, int, int] | None = None,
+        explosion_type: list[tuple[int, int, int]] | None = None,
     ) -> Explosion:
         """
         Spawna uma explosão usando o pool.
@@ -103,13 +102,12 @@ class EntityManager:
         Args:
             x, y: Posição da explosão
             size: Tamanho da explosão
-            is_slime: Se é uma explosão de slime (usa cores específicas)
-            custom_color: Cor personalizada para a explosão (opcional)
+            explosion_type: Tipo de explosão (ExplosionType.ALIEN, ExplosionType.SLIME, None para padrão)
 
         Returns:
             Explosão criada ou reutilizada do pool
         """
-        return self.explosion_pool.get(x, y, size, is_slime, custom_color)
+        return self.explosion_pool.get(x, y, size, explosion_type)
 
     def trigger_slime_boss_death(self, boss: SlimeBoss) -> None:
         """Spawn a dramatic multi-explosion sequence for the Slime Boss death."""
@@ -118,21 +116,21 @@ class EntityManager:
         cy = boss.y + boss.h / 2
 
         # Central blast
-        self.spawn_explosion(cx, cy, size=140, is_slime=True)
+        self.spawn_explosion(cx, cy, size=140, explosion_type=ExplosionType.SLIME)  # ← ATUALIZAR
 
         # Large clustered blasts across the body
         for _ in range(12):
             ex = random.uniform(boss.x + boss.w * 0.1, boss.x + boss.w * 0.9)
             ey = random.uniform(boss.y + boss.h * 0.15, boss.y + boss.h * 0.85)
             size = random.randint(70, 120)
-            self.spawn_explosion(ex, ey, size=size, is_slime=True)
+            self.spawn_explosion(ex, ey, size=size, explosion_type=ExplosionType.SLIME)  # ← ATUALIZAR
 
         # Smaller follow-up blasts for lingering effect
         for _ in range(8):
             ex = random.uniform(boss.x, boss.x + boss.w)
             ey = random.uniform(boss.y, boss.y + boss.h)
             size = random.randint(40, 70)
-            self.spawn_explosion(ex, ey, size=size, is_slime=True)
+            self.spawn_explosion(ex, ey, size=size, explosion_type=ExplosionType.SLIME)  # ← ATUALIZAR
 
     def spawn_emp_wave(self, center_x: float, center_y: float) -> None:
         """Spawna uma onda visual de EMP."""

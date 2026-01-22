@@ -4,7 +4,7 @@ import math
 from typing import List, Tuple, Optional, TYPE_CHECKING
 from dataclasses import dataclass
 
-from ..core.config import config as Config
+from ..entities.explosion import ExplosionType  # ← ADICIONAR
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -643,7 +643,7 @@ class SlimeDripPool:
                         drip.x,
                         drip.y,
                         size=int(drip.params.radius),
-                        custom_color=drip.params.color,
+                        explosion_type=ExplosionType.SLIME,
                     )
 
                 to_release.append(drip)

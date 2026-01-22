@@ -3,12 +3,9 @@ Pool de explosões para reutilização de objetos.
 Reduz alocação de memória e garbage collection.
 """
 
-import random
-import math
 import pygame
 from typing import List, Dict, Union
 from ..entities.explosion import Explosion
-from ..core.config import config as Config
 
 
 class ExplosionPool:
@@ -42,8 +39,7 @@ class ExplosionPool:
         x: float,
         y: float,
         size: int = 30,
-        is_slime: bool = False,
-        custom_color: tuple[int, int, int, int] | None = None,
+        explosion_type: list[tuple[int, int, int]] | None = None,
     ) -> Explosion:
         """
         Obtém uma explosão do pool (reutiliza se possível).
@@ -51,8 +47,7 @@ class ExplosionPool:
         Args:
             x, y: Posição da explosão
             size: Tamanho da explosão
-            is_slime: Se é uma explosão de slime
-            custom_color: Cor personalizada para a explosão (opcional)
+            explosion_type: Tipo de explosão (ExplosionType.ALIEN, ExplosionType.SLIME, etc)
 
         Returns:
             Explosão configurada e pronta para uso
@@ -60,36 +55,10 @@ class ExplosionPool:
         if self.available:
             # Reutilizar explosão existente
             explosion = self.available.pop()
+            explosion.reset(x, y, size, explosion_type)
         else:
             # Pool vazio, criar nova (acontece raramente)
-            explosion = Explosion(0, 0, size=30, is_slime=is_slime)
-
-        # Reconfigurar explosão completamente (simula __init__)
-        explosion.x = x
-        explosion.y = y
-        explosion.size = size
-        explosion.is_slime = is_slime
-        explosion.custom_color = custom_color
-
-        # Recalcular tempo baseado no tamanho
-        explosion.time = Config.EXPLOSION_DURATION * (size / 40)
-
-        # Recriar partículas
-        count = min(20 + size // 4, 40)
-        explosion.particles = []
-
-        for _ in range(count):
-            angle = random.uniform(0, 360)
-            rad_angle = math.radians(angle)
-            base_speed = random.uniform(150, 300) * (size / 20)
-
-            vx = base_speed * math.cos(rad_angle)
-            vy = base_speed * math.sin(rad_angle)
-
-            px, py = x, y
-
-            life = random.uniform(explosion.time * 0.6, explosion.time)
-            explosion.particles.append([px, py, vx, vy, life])
+            explosion = Explosion(x, y, size, explosion_type)
 
         self.active.append(explosion)
         return explosion
@@ -106,7 +75,7 @@ class ExplosionPool:
             # Marcar como finalizada para não ser desenhada
             explosion.time = 0
             explosion.particles.clear()
-            explosion.custom_color = None  # Resetar cor personalizada
+            explosion.explosion_type = None  # ← ATUALIZAR ESTA LINHA
             self.available.append(explosion)
 
     def update(self, dt: float) -> None:

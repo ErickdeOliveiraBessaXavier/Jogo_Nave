@@ -7,6 +7,9 @@ from ..core.sprite_loader import sprite_loader
 
 
 class Alien:
+    # Cores de explosão do alien (verde brilhante)
+    EXPLOSION_COLORS = [(37, 217, 166), (78, 217, 74)]
+    
     # Cache de sprites de animação (carregado uma vez)
     _animation_frames: list[pygame.Surface] | None = None
 
@@ -186,6 +189,15 @@ class Alien:
         if self.animation_timer >= self.frame_duration:
             self.animation_timer = 0.0
             self.current_frame = (self.current_frame + 1) % len(self.animation_frames)
+
+        # Se morreu, definir cores personalizadas para a explosão
+        if self.dead and not hasattr(self, '_explosion_color_set'):
+            # Cores: #25D9A6 (37, 217, 166) e #4ED94A (78, 217, 74)
+            self.explosion_alien = [
+                (37, 217, 166),
+                (78, 217, 74)
+            ]
+            self._explosion_color_set = True
 
         return bullets
 
