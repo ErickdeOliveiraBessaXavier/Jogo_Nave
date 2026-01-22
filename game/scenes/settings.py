@@ -85,26 +85,37 @@ class SettingsView:
         from ..core.config import config as Config
 
         screen_w, screen_h = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-        pad = 20
-        gap = 30  # Gap entre os cards
+        
+        # Dimensões e espaçamentos
+        outer_pad = 40
+        card_gap = 40
+        
+        # Calcular largura dinâmica para ocupar a tela toda
+        available_width = screen_w - (2 * outer_pad)
+        card_width = (available_width - card_gap) / 2
+        card_height = screen_h - 180
+        
+        # Posição inicial X (agora começa no padding)
+        start_x = outer_pad
 
-        # Card de Áudio
-        audio_card_width = (screen_w - 2 * pad - gap) / 2
-        audio_card_rect = pygame.Rect(pad, 100, audio_card_width, screen_h - 180)
+        # Card de Áudio (Esquerda)
+        audio_card_rect = pygame.Rect(start_x, 100, card_width, card_height)
         self.layout_rects["audio_card"] = audio_card_rect
 
         self.layout_rects["sliders"] = {}
-        slider_w, slider_h = audio_card_rect.width - 40, 20
+        slider_w = card_width - 60
+        slider_h = 20
         y_offset = audio_card_rect.y + 80
-        for key in self.sliders:
+        
+        for key in ["music", "sfx", "shot"]:
             self.layout_rects["sliders"][key] = pygame.Rect(
-                audio_card_rect.x + 20, y_offset, slider_w, slider_h
+                audio_card_rect.x + 30, y_offset, slider_w, slider_h
             )
             y_offset += 100
 
-        # Card de Controles
+        # Card de Controles (Direita)
         controls_card_rect = pygame.Rect(
-            pad + audio_card_width + gap, 100, audio_card_width, screen_h - 180
+            start_x + card_width + card_gap, 100, card_width, card_height
         )
         self.layout_rects["controls_card"] = controls_card_rect
 
@@ -112,46 +123,59 @@ class SettingsView:
         self.layout_rects["toggles"] = {}
         toggle_w, toggle_h = 30, 30
         y_offset = controls_card_rect.y + 60
-        for key in self.toggles:
+        
+        # Agrupar toggles
+        for key in ["mouse_control", "auto_fire"]:
             self.layout_rects["toggles"][key] = pygame.Rect(
-                controls_card_rect.x + 20, y_offset, toggle_w, toggle_h
+                controls_card_rect.x + 30, y_offset, toggle_w, toggle_h
             )
             y_offset += 50
 
         # Seletor de resolução
+        y_offset += 20
         self.layout_rects["resolution_label"] = pygame.Rect(
-            controls_card_rect.x + 20,
-            y_offset + 10,
-            controls_card_rect.width - 40,
+            controls_card_rect.x + 30,
+            y_offset,
+            controls_card_rect.width - 60,
             30,
         )
+        
+        # Grid de botões de resolução
         self.layout_rects["resolution_buttons"] = []
-        button_w = (controls_card_rect.width - 40 - 20) / 3  # Três botões lado a lado
-        button_h = 35  # Botões um pouco menores
-        for i in range(len(self.available_resolutions)):
-            row = i // 3
-            col = i % 3
-            x = (
-                controls_card_rect.x + 20 + col * (button_w + 5)
-            )  # Menos espaço entre colunas
-            y = (
-                controls_card_rect.y + 100 + row * (button_h + 8)
-            )  # Menos espaço entre linhas
-            from typing import cast, List
-
-            resolution_buttons = cast(
-                List[pygame.Rect], self.layout_rects["resolution_buttons"]
-            )
-            resolution_buttons.append(pygame.Rect(x, y, button_w, button_h))
-
-        # Botão de Voltar
-        back_text_width = self.item_font.size("Voltar")[0]
-        self.layout_rects["back_button"] = pygame.Rect(
-            pad, screen_h - 60, back_text_width + 40, 40
+        
+        # Configuração do grid
+        cols = 3
+        button_gap_x = 10
+        button_gap_y = 10
+        available_width_for_buttons = controls_card_rect.width - 60
+        button_w = (available_width_for_buttons - (cols - 1) * button_gap_x) / cols
+        button_h = 35
+        
+        grid_start_y = y_offset + 40
+        
+        from typing import cast, List
+        resolution_buttons = cast(
+            List[pygame.Rect], self.layout_rects["resolution_buttons"]
         )
 
-        # Pop-up de confirmação
-        popup_w, popup_h = 570, 200
+        for i in range(len(self.available_resolutions)):
+            row = i // cols
+            col = i % cols
+            
+            x = controls_card_rect.x + 30 + col * (button_w + button_gap_x)
+            y = grid_start_y + row * (button_h + button_gap_y)
+            
+            resolution_buttons.append(pygame.Rect(x, y, button_w, button_h))
+
+        # Botão de Voltar (Canto inferior esquerdo, alinhado com card)
+        back_text_width = self.item_font.size("Voltar")[0]
+        back_btn_width = back_text_width + 60
+        self.layout_rects["back_button"] = pygame.Rect(
+            start_x, screen_h - 60, back_btn_width, 40
+        )
+
+        # Pop-up de confirmação (Centralizado na tela)
+        popup_w, popup_h = 500, 220
         popup_x = (screen_w - popup_w) // 2
         popup_y = (screen_h - popup_h) // 2
         self.layout_rects["popup_rect"] = pygame.Rect(
@@ -159,16 +183,19 @@ class SettingsView:
         )
 
         # Botões do pop-up
-        button_w = 80
-        button_h = 35
-        yes_x = popup_x + popup_w // 2 - button_w - 10
-        no_x = popup_x + popup_w // 2 + 10
-        button_y = popup_y + popup_h - button_h - 20
+        btn_w = 100
+        btn_h = 40
+        btn_gap = 20
+        total_btn_width = (btn_w * 2) + btn_gap
+        
+        start_btn_x = popup_x + (popup_w - total_btn_width) // 2
+        btn_y = popup_y + popup_h - btn_h - 25
+        
         self.layout_rects["popup_yes_button"] = pygame.Rect(
-            yes_x, button_y, button_w, button_h
+            start_btn_x, btn_y, btn_w, btn_h
         )
         self.layout_rects["popup_no_button"] = pygame.Rect(
-            no_x, button_y, button_w, button_h
+            start_btn_x + btn_w + btn_gap, btn_y, btn_w, btn_h
         )
 
     def reset(self):
@@ -313,7 +340,9 @@ class SettingsView:
         # Título
         title_surf = self.title_font.render("Configurações", True, CUSTOM_GOLD)
         title_surf.set_alpha(alpha)
-        surface.blit(title_surf, (20, 20 + offset_y))
+        # Centralizar título
+        title_x = (surface.get_width() - title_surf.get_width()) // 2
+        surface.blit(title_surf, (title_x, 20 + offset_y))
 
         # Desenhar Cards com alpha
         self._draw_audio_card(surface, alpha, offset_y)
@@ -600,13 +629,12 @@ class SettingsView:
         # Instruções de controles
         instructions = [
             "CONTROLES:",
-            "• WASD ou Setas: Mover nave",
+            "• WASD / Setas: Mover",
             "• Espaço: Atirar",
-            "• P: Pausar jogo",
-            "• ESC: Voltar/Menu",
+            "• P: Pausar | ESC: Sair",
             "",
-            "NOTA: Mudanças de resolução",
-            "requerem reinício do jogo.",
+            "NOTA: Mudar resolução",
+            "requer reiniciar.",
         ]
 
         # Calcular y_offset baseado nos botões
@@ -615,17 +643,25 @@ class SettingsView:
         resolution_buttons = cast(
             List[pygame.Rect], self.layout_rects["resolution_buttons"]
         )
-        max_button_y = max(r.y + r.height for r in resolution_buttons)
-        y_offset = max_button_y + 40 + offset_y
+        # Se não houver botões (resoluções vazias), usa um fallback
+        if resolution_buttons:
+            max_button_y = max(r.y + r.height for r in resolution_buttons)
+        else:
+            max_button_y = card_rect.y + 250
+            
+        y_offset = max_button_y + 30 + offset_y
+        
         for line in instructions:
             if line == "":
-                y_offset += 10
+                y_offset += 8
                 continue
             color = CUSTOM_GOLD if ":" in line or "NOTA" in line else colors.WHITE
+            # Centralizar texto de instruções no card
             text_surf = self.small_font.render(line, True, color)
             text_surf.set_alpha(alpha)
-            surface.blit(text_surf, (card_rect.x + 20, y_offset))
-            y_offset += 25
+            text_x = card_rect.centerx - text_surf.get_width() // 2
+            surface.blit(text_surf, (text_x, y_offset))
+            y_offset += 22
 
         surface.set_clip(None)
 

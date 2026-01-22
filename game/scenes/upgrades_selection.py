@@ -136,15 +136,17 @@ class UpgradesSelectionScene(Scene):
             ]
 
         # Organizar upgrades por categoria
-        self.all_upgrades = sorted(list_all_upgrades_meta(), key=lambda u: u.name)
+        # Ordenação alfabética (case-insensitive) para consistência
+        self.all_upgrades = sorted(list_all_upgrades_meta(), key=lambda u: u.name.lower())
         self.categorized_upgrades: Dict[UpgradeCategory, List[UpgradeMeta]] = (
             defaultdict(list)
         )
         for upg in self.all_upgrades:
             self.categorized_upgrades[upg.category].append(upg)
+        
         # Adicionar aba 'All' para listar todos os upgrades
         base_categories = sorted(
-            list(self.categorized_upgrades.keys()), key=lambda c: c.name
+            list(self.categorized_upgrades.keys()), key=lambda c: c.name.lower()
         )
         # Lista de categorias pode conter o rótulo "All" como str
         self.categories: List[UpgradeCategory | str] = ["All"] + base_categories
