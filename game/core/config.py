@@ -437,7 +437,7 @@ class Config:
     SLIME_DRIP_COLORS: list[Tuple[int, int, int]] = field(
         default_factory=lambda: [
             (241, 187, 242),
-            (96, 29, 11),
+            (166, 29, 224),
             (68, 18, 89),
         ]
     )
