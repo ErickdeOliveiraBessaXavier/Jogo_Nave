@@ -1,7 +1,7 @@
 import pygame
 import math
 import random
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, TypeAlias, Sequence
 
 if TYPE_CHECKING:
     from .entity_manager import EntityManager
@@ -40,11 +40,27 @@ from ..entities.explosive_mine import ExplosiveMine
 from ..entities.explosion import ExplosionType  # ← ADICIONAR
 
 
+# Type aliases
+Enemy: TypeAlias = Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
+BossEnemy: TypeAlias = Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss
+Projectile: TypeAlias = Bullet | MiniShipBullet
+
+# Constantes de colisão
+class CollisionConstants:
+    SPATIAL_QUERY_PADDING = 10
+    DEFAULT_EXPLOSION_SIZE = 20
+    AREA_EXPLOSION_SIZE = 30
+    BOSS_EXPLOSION_SIZE = 100
+    SPIKE_EXPLOSION_SIZE = 15
+    MINE_DAMAGE_DEFAULT = 2
+    MINE_DAMAGE_AIRSTRIKE = 5
+
+
 class Collisions:
 
     @staticmethod
     def get_collision_info(
-        enemy: Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss,
+        enemy: Enemy,
     ) -> tuple[float, float, float]:
         """OPT #6: Helper para calcular center_x, center_y, radius de qualquer inimigo.
 
@@ -54,9 +70,138 @@ class Collisions:
             return enemy.x, enemy.y, enemy.radius
         return enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, enemy.w / 2
 
+    def _is_invulnerable_to_damage(self, entity: Enemy) -> bool:
+        """Verifica se entidade é imune a dano comum (tiros/explosões)."""
+        return isinstance(entity, SquareMinionBoss)
+
+    def _handle_invulnerable_hit(
+        self, 
+        projectile_x: float, 
+        projectile_y: float,
+        entity_manager: "EntityManager"
+    ) -> None:
+        """Cria feedback visual ao atingir entidade invulnerável."""
+        entity_manager.spawn_explosion(projectile_x, projectile_y, size=20)
+        sound_manager.play_boss_damage()
+
+    def _calculate_default_explosion_size(self, enemy: Enemy) -> int:
+        """Calcula tamanho padrão de explosão baseado no inimigo."""
+        if isinstance(enemy, Meteor):
+            return max(12, int(enemy.w // 2))
+        elif isinstance(enemy, Alien):
+            return 40
+        elif isinstance(enemy, ExplosiveMine):
+            return 25
+        else:
+            return CollisionConstants.DEFAULT_EXPLOSION_SIZE
+
+    def _process_projectile_hit(
+        self,
+        projectile: Projectile,
+        hit_x: float,
+        hit_y: float,
+        entity_manager: "EntityManager",
+        explosion_size: int = 15
+    ) -> bool:
+        """
+        Processa hit de projétil (explosão visual, destruição).
+        
+        Returns:
+            True se projétil foi destruído, False se é piercing
+        """
+        is_piercing = getattr(projectile, 'piercing', False)
+        
+        if explosion_size > 0:
+            entity_manager.spawn_explosion(hit_x, hit_y, size=explosion_size)
+        
+        if not is_piercing:
+            projectile.dead = True
+        
+        return not is_piercing
+
+    def _check_mask_collision(
+        self,
+        entity_rect: pygame.Rect,
+        entity_mask: pygame.mask.Mask | None,
+        target_with_mask: BossEnemy,
+        entity_x: float,
+        entity_y: float,
+    ) -> bool:
+        """
+        Verifica colisão pixel-perfect entre entidade e alvo com máscara.
+        Fallback para rect collision se máscara não disponível.
+        """
+        if not hasattr(target_with_mask, 'mask'):
+            return entity_rect.colliderect(
+                pygame.Rect(target_with_mask.x, target_with_mask.y, 
+                           target_with_mask.w, target_with_mask.h)
+            )
+        
+        # Fast distance check first
+        target_center_x = target_with_mask.x + target_with_mask.w / 2
+        target_center_y = target_with_mask.y + target_with_mask.h / 2
+        entity_center_x = entity_x + entity_rect.width / 2
+        entity_center_y = entity_y + entity_rect.height / 2
+        
+        dx = entity_center_x - target_center_x
+        dy = entity_center_y - target_center_y
+        distance_squared = dx * dx + dy * dy
+        
+        proximity_threshold = (target_with_mask.w / 2 + max(entity_rect.width, entity_rect.height)) ** 2
+        
+        if distance_squared > proximity_threshold:
+            return False
+        
+        # Rect collision check
+        target_rect = pygame.Rect(target_with_mask.x, target_with_mask.y, 
+                                  target_with_mask.w, target_with_mask.h)
+        if not entity_rect.colliderect(target_rect):
+            return False
+        
+        # Mask overlap check
+        if entity_mask is None:
+            entity_mask = pygame.mask.Mask((entity_rect.width, entity_rect.height), fill=True)
+        
+        slime_boss = cast(SlimeBoss, target_with_mask)
+        offset = (int(entity_x - slime_boss.x), int(entity_y - slime_boss.y))
+        return slime_boss.mask.overlap(entity_mask, offset) is not None
+
+    def _batch_query_for_projectiles(
+        self,
+        projectiles: Sequence[Projectile],
+        grid: SpatialGrid[Enemy],
+        padding: int = CollisionConstants.SPATIAL_QUERY_PADDING
+    ) -> dict[int, list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]]:
+        """
+        Faz query única expandida para todos os projéteis.
+        Retorna dicionário mapeando projectile_id -> potential_targets.
+        """
+        if not projectiles:
+            return {}
+        
+        # Calcular bounds de todos os projéteis
+        rects = [p.rect for p in projectiles]
+        min_x = min(r.x for r in rects) - padding
+        min_y = min(r.y for r in rects) - padding
+        max_x = max(r.x + r.width for r in rects) + padding
+        max_y = max(r.y + r.height for r in rects) + padding
+        
+        # Query única
+        all_potential = grid.query(min_x, min_y, max_x - min_x, max_y - min_y)
+        
+        # Mapear para cada projétil
+        result: dict[int, list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]] = {}
+        for p in projectiles:
+            result[id(p)] = [
+                target for target in all_potential
+                if p.rect.colliderect(target.rect)
+            ]
+        
+        return result
+
     def _destroy_enemy(
         self,
-        enemy: Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss,
+        enemy: Enemy,
         enemies_list: list[Any],  # Usar Any para evitar problema de variância
         entity_manager: "EntityManager",
         explosion_size: int | None = None,
@@ -84,7 +229,8 @@ class Collisions:
             explosion_type = None
 
         # Garantir que explosion_size não seja None
-        assert explosion_size is not None
+        if explosion_size is None:
+            explosion_size = self._calculate_default_explosion_size(enemy)
 
         entity_manager.spawn_explosion(cx, cy, size=explosion_size, explosion_type=explosion_type)
 
@@ -111,7 +257,7 @@ class Collisions:
         source_y: float,
         damage_radius: float,
         hit_tracking_set: set[int],
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss],
+        enemies: list[Enemy],
         entity_manager: "EntityManager",
         damage_to_mine: int = 2,
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
@@ -142,9 +288,8 @@ class Collisions:
 
                 if isinstance(enemy, ExplosiveMine):
                     enemy.take_damage(damage_to_mine)
-                elif isinstance(enemy, SquareMinionBoss):
-                    # SquareMinionBoss não pode ser destruído por tiros
-                    pass  # Não faz nada - imune a tiros
+                elif self._is_invulnerable_to_damage(enemy):
+                    self._handle_invulnerable_hit(source_x, source_y, entity_manager)
                 else:
                     pts, score_event = self._destroy_enemy(
                         enemy,
@@ -173,53 +318,12 @@ class Collisions:
         Retorna score_gain.
         """
         score_gain = 0
-        boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
 
         for proj in projectiles[:]:
             proj_rect = proj.rect
 
             # Check for collision
-            collision_detected = False
-
-            # Pixel-perfect collision for SlimeBoss
-            if isinstance(boss, SlimeBoss) and hasattr(boss, "mask"):
-                # Fast distance check first (optimization)
-                proj_center_x = proj.x + proj.w / 2
-                proj_center_y = proj.y + proj.h / 2
-                boss_center_x = boss.x + boss.w / 2
-                boss_center_y = boss.y + boss.h / 2
-
-                # Calculate squared distance for performance
-                dx = proj_center_x - boss_center_x
-                dy = proj_center_y - boss_center_y
-                distance_squared = dx * dx + dy * dy
-
-                # Only do expensive mask check if projectile is reasonably close
-                # Use a threshold based on boss size (half boss width + projectile size)
-                proximity_threshold = (boss.w / 2 + max(proj.w, proj.h)) ** 2
-
-                if distance_squared <= proximity_threshold:
-                    # Check rect collision first (additional optimization)
-                    if proj_rect.colliderect(boss_rect):
-                        # Convert projectile position to boss-relative coordinates
-                        proj_relative_x = int(proj.x - boss.x)
-                        proj_relative_y = int(proj.y - boss.y)
-
-                        # Check if projectile overlaps with boss mask
-                        if (
-                            0 <= proj_relative_x < boss.w
-                            and 0 <= proj_relative_y < boss.h
-                        ):
-                            # Get projectile mask (assume circular for bullets)
-                            proj_mask = pygame.mask.Mask((proj.w, proj.h), fill=True)
-                            # Check overlap
-                            offset = (proj_relative_x, proj_relative_y)
-                            collision_detected = (
-                                boss.mask.overlap(proj_mask, offset) is not None
-                            )
-            else:
-                # Rectangular collision for other bosses
-                collision_detected = proj_rect.colliderect(boss_rect)
+            collision_detected = self._check_mask_collision(proj_rect, None, boss, proj.x, proj.y)
 
             if collision_detected:
                 # Destruir projétil se não for piercing
@@ -368,7 +472,7 @@ class Collisions:
 
                     # Checar nave e limpar formações
                     if self.handle_mine_explosion(
-                        cx, cy, explosion_radius, enemies, ship, entity_manager
+                        cx, cy, explosion_radius, ship, entity_manager
                     ):
                         ship_hit = True
 
@@ -409,9 +513,8 @@ class Collisions:
                 if dist_sq < (explosion_radius + enemy_r) ** 2:
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(enemy.health)
-                    elif isinstance(enemy, SquareMinionBoss):
-                        # SquareMinionBoss não pode ser destruído por explosões
-                        pass  # Não faz nada - imune a explosões
+                    elif self._is_invulnerable_to_damage(enemy):
+                        self._handle_invulnerable_hit(explosion_x, explosion_y, entity_manager)
                     else:
                         pts, score_event = self._destroy_enemy(
                             enemy, enemies, entity_manager, explosion_size=30
@@ -427,7 +530,6 @@ class Collisions:
         explosion_x: float,
         explosion_y: float,
         explosion_radius: int,
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss],
         ship: Ship,
         entity_manager: "EntityManager",
     ) -> bool:
@@ -505,6 +607,8 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Verifica colisão entre efeitos explosivos e boss."""
+        if not explosive_effects:
+            return 0
         if not boss or boss.dead:
             return 0
 
@@ -638,6 +742,8 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Verifica colisão entre minas de torres e boss."""
+        if not cannon_mines:
+            return 0
         if not boss or boss.dead:
             return 0
 
@@ -704,6 +810,8 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Verifica colisão entre explosões de bombas e boss."""
+        if not air_strike_bombs:
+            return 0
         if not boss or boss.dead:
             return 0
 
@@ -754,10 +862,10 @@ class Collisions:
         self,
         mini_ship_bullets: list[MiniShipBullet],
         enemy_grid: SpatialGrid[
-            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
+            Enemy
         ],
         enemies: list[
-            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
+            Enemy
         ],  # Para adicionar fragments
         entity_manager: "EntityManager",  # <-- ADICIONAR
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
@@ -769,17 +877,11 @@ class Collisions:
         if not mini_ship_bullets:
             return 0, 0, []
 
-        # Usar grid existente
+        # Usar batch query para otimização
+        projectile_targets = self._batch_query_for_projectiles(mini_ship_bullets, enemy_grid, padding=CollisionConstants.SPATIAL_QUERY_PADDING)
 
         for b in mini_ship_bullets[:]:
-            # OPT #2 & #3: Cache rect para evitar múltiplos acessos
-            b_rect = b.rect
-            # Query potential collisions using spatial grid (expand by 10 pixels for safety)
-            query_x = b_rect.x - 10
-            query_y = b_rect.y - 10
-            query_w = b_rect.width + 20
-            query_h = b_rect.height + 20
-            potential_enemies = enemy_grid.query(query_x, query_y, query_w, query_h)
+            potential_enemies = projectile_targets.get(id(b), [])
 
             # Early return se query vazia
             if not potential_enemies:
@@ -795,20 +897,11 @@ class Collisions:
                         getattr(enemy, "get_rect", lambda: pygame.Rect(0, 0, 0, 0))(),
                     )
                 )
-                if b_rect.colliderect(enemy_rect):  # Usa cache
-                    # Destruir projétil se não for piercing
-                    if not b.piercing:
-                        b.dead = True
-
+                if b.rect.colliderect(enemy_rect):
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
-                    elif isinstance(enemy, SquareMinionBoss):
-                        # SquareMinionBoss não pode ser destruído por tiros, mas a bala sim
-                        # Criar explosão visual no ponto de impacto
-                        entity_manager.spawn_explosion(b.x, b.y, size=20)
-                        # Som de impacto (mesmo som de dano ao boss)
-                        sound_manager.play_boss_damage()
-                        pass  # Não faz nada - imune a tiros
+                    elif self._is_invulnerable_to_damage(enemy):
+                        self._handle_invulnerable_hit(b.x, b.y, entity_manager)
                     else:
                         # Usar helper consolidado
                         pts, score_event = self._destroy_enemy(
@@ -825,7 +918,7 @@ class Collisions:
                         destroyed_count += 1
                         score_events.append(score_event)
 
-                    if not b.piercing:
+                    if self._process_projectile_hit(b, b.x, b.y, entity_manager, 0):
                         break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
@@ -850,15 +943,11 @@ class Collisions:
         if not bullets:
             return 0, 0, []
 
+        # Usar batch query para otimização
+        projectile_targets = self._batch_query_for_projectiles(bullets, enemy_grid, padding=10)
+
         for b in bullets[:]:
-            # OPT #2 & #3: Cache rect para evitar múltiplos acessos
-            b_rect = b.rect
-            # Query potential collisions using spatial grid (expand by 10 pixels for safety)
-            query_x = b_rect.x - 10
-            query_y = b_rect.y - 10
-            query_w = b_rect.width + 20
-            query_h = b_rect.height + 20
-            potential_enemies = enemy_grid.query(query_x, query_y, query_w, query_h)
+            potential_enemies = projectile_targets.get(id(b), [])
 
             # Early return se query vazia
             if not potential_enemies:
@@ -874,20 +963,11 @@ class Collisions:
                         getattr(enemy, "get_rect", lambda: pygame.Rect(0, 0, 0, 0))(),
                     )
                 )
-                if b_rect.colliderect(enemy_rect):  # Usa cache
-                    # Destruir projétil se não for piercing
-                    if not b.piercing:
-                        b.dead = True
-
+                if b.rect.colliderect(enemy_rect):  # Usa cache
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
-                    elif isinstance(enemy, SquareMinionBoss):
-                        # SquareMinionBoss não pode ser destruído por tiros, mas a bala sim
-                        # Criar explosão visual no ponto de impacto
-                        entity_manager.spawn_explosion(b.x, b.y, size=20)
-                        # Som de impacto (mesmo som de dano ao boss)
-                        sound_manager.play_boss_damage()
-                        pass  # Não faz nada - imune a tiros
+                    elif self._is_invulnerable_to_damage(enemy):
+                        self._handle_invulnerable_hit(b.x, b.y, entity_manager)
                     else:
                         # Usar helper consolidado
                         pts, score_event = self._destroy_enemy(
@@ -955,7 +1035,7 @@ class Collisions:
                                     destroyed_count += 1
                                     score_events.append(score_event)
 
-                    if not b.piercing:
+                    if self._process_projectile_hit(b, b.x, b.y, entity_manager, 0):
                         break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
@@ -966,6 +1046,10 @@ class Collisions:
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
+        if not bullets:
+            return 0
+        if not boss or boss.dead:
+            return 0
         return self._apply_boss_damage(
             bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True
         )
@@ -976,34 +1060,22 @@ class Collisions:
         boss: Boss | SlimeBoss | GiantMeteorBoss,
         entity_manager: "EntityManager",
     ) -> bool:
+        if not boss or boss.dead:
+            return False
         if ship.invuln > 0:
             return False
 
-        boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
+        ship_mask = (
+            pygame.mask.from_surface(ship.ship_image)
+            if hasattr(ship, "ship_image") and ship.ship_image is not None
+            else pygame.mask.Mask((ship.w, ship.h), fill=True)
+        )
 
-        # Pixel-perfect collision for SlimeBoss
-        if isinstance(boss, SlimeBoss) and hasattr(boss, "mask"):
-            # Check rect collision first (optimization)
-            if ship.rect.colliderect(boss_rect):
-                # Check mask overlap
-                ship_mask = (
-                    pygame.mask.from_surface(ship.ship_image)
-                    if hasattr(ship, "ship_image") and ship.ship_image is not None
-                    else pygame.mask.Mask((ship.w, ship.h), fill=True)
-                )
-                offset = (int(ship.x - boss.x), int(ship.y - boss.y))
-                if boss.mask.overlap(ship_mask, offset) is not None:
-                    entity_manager.spawn_explosion(
-                        ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
-                    )
-                    return True
-        else:
-            # Rectangular collision for other bosses
-            if ship.rect.colliderect(boss_rect):
-                entity_manager.spawn_explosion(
-                    ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
-                )
-                return True
+        if self._check_mask_collision(ship.rect, ship_mask, boss, ship.x, ship.y):
+            entity_manager.spawn_explosion(
+                ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
+            )
+            return True
         return False
 
     def ship_vs_enemies(
@@ -1102,6 +1174,10 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com Boss normal."""
+        if not mini_ship_bullets:
+            return 0
+        if not boss or boss.dead:
+            return 0
         return self._apply_boss_damage(
             mini_ship_bullets,
             boss,
@@ -1150,12 +1226,8 @@ class Collisions:
                     spike.rect
                 ):  # Usa cache
                     # Destruir projétil se não for piercing
-                    if not b.piercing:
-                        b.dead = True
+                    self._process_projectile_hit(b, spike.center_x, spike.center_y, entity_manager, 15)
                     spike.dead = True
-                    entity_manager.spawn_explosion(
-                        spike.center_x, spike.center_y, size=15
-                    )
                     sound_manager.play_explosion_alien()
                     score_gain += Config.SPIKE_POINTS
                     break
@@ -1223,20 +1295,11 @@ class Collisions:
             for spike in potential_spikes:
                 if b_rect.colliderect(spike.rect):  # Usa cache
                     # Remover bala
-                    if not b.piercing:
-                        b.dead = True
-
+                    self._process_projectile_hit(b, spike.center_x, spike.center_y, entity_manager, 15)
                     # Destruir espinho
                     spike.dead = True
-
-                    # Explosão pequena no centro do spike
-                    entity_manager.spawn_explosion(
-                        spike.center_x, spike.center_y, size=15
-                    )
-
                     # Som
                     sound_manager.play_explosion_asteroid()
-
                     # Pontos
                     score_gain += spike.get_points_value()
                     break  # Próxima bala
@@ -1250,6 +1313,10 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas com SpikeBoss."""
+        if not bullets:
+            return 0
+        if not boss or boss.dead:
+            return 0
         return self._apply_boss_damage(
             bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True
         )
@@ -1262,6 +1329,10 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas com SlimeBoss."""
+        if not bullets:
+            return 0
+        if not boss or boss.dead:
+            return 0
         return self._apply_boss_damage(
             bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True
         )
@@ -1274,6 +1345,10 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com SlimeBoss."""
+        if not mini_ship_bullets:
+            return 0
+        if not boss or boss.dead:
+            return 0
         return self._apply_boss_damage(
             mini_ship_bullets,
             boss,
@@ -1286,6 +1361,8 @@ class Collisions:
         self, ship: Ship, boss: SpikeBoss, entity_manager: "EntityManager"
     ) -> bool:
         """Colisão entre nave e SpikeBoss."""
+        if not boss or boss.dead:
+            return False
         if ship.invuln > 0:
             return False
 
@@ -1490,6 +1567,10 @@ class Collisions:
 
         Usa pixel-perfect collision para SlimeBoss quando disponível.
         """
+        if not player_lasers:
+            return 0
+        if not boss or boss.dead:
+            return 0
         score_gain: int = 0
 
         for laser in player_lasers:
