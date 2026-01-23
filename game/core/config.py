@@ -150,31 +150,6 @@ class Config:
         0.5  # Tiros explosivos são 50% mais lentos
     )
 
-    # Rarity system - Sistema de raridade para power-ups (porcentagens 0.0-100.0, soma deve ser 100.0)
-    POWERUP_RARITIES: dict[PowerUpType, float] = field(
-        default_factory=lambda: {
-            # 🔵 COMUM (50% total) - Power-ups básicos e frequentes
-            PowerUpType.SHIELD: 15.0,      # 15.0% - Escudo básico ⭐ MAIS COMUM
-            PowerUpType.DOUBLE_SHOT: 20.0, # 20.0% - Tiro duplo ⭐ MAIS COMUM
-            PowerUpType.SPEED: 35.0,       # 15.0% - Velocidade aumentada ⭐ MAIS COMUM
-
-            # 🟢 INCOMUM (25% total) - Power-ups situacionais
-            PowerUpType.COOLDOWN_HASTE: 10.0, # 15.0% - Reduz tempo de recarga
-            PowerUpType.MINI_SHIPS: 5.0,    # 10.0% - Naves auxiliares
-
-            # 🟠 RARO (20% total) - Power-ups poderosos mas raros
-            PowerUpType.PIERCING_SHOT: 5.0, # 15.0% - Tiro perfurante ⭐ MENOS COMUM
-            PowerUpType.LIFE: 5.0,          # 5.0% - Vida extra
-
-            # 🟣 ÉPICO (4% total) - Power-ups muito valiosos
-            PowerUpType.SCORE: 2.0,         # 2.0% - Multiplicador de pontos
-            PowerUpType.TIME_STOP: 2.0,     # 2.0% - Congelamento total
-
-            # 🟡 LENDÁRIO (1% total) - Power-ups ultra-raros
-            PowerUpType.RAINBOW: 1.0,       # 1.0% - Power-up especial ⭐ MAIS COMUM
-        }
-    )
-
     # ========================================
     # SCORING SYSTEM
     # ========================================
@@ -576,12 +551,6 @@ class Config:
         """Duração calculada do silêncio musical durante aviso do boss."""
         return self.BOSS_WARNING_DURATION + self.BOSS_POST_WARNING_DELAY
 
-    @property
-    def POWERUP_WEIGHTS(self) -> dict[PowerUpType, int]:
-        """Converte raridades em porcentagem para pesos inteiros (compatibilidade)."""
-        # Converte porcentagens para pesos (multiplica por 1000 para manter precisão)
-        return {k: int(v * 10) for k, v in self.POWERUP_RARITIES.items()}
-
     # ========================================
     # VALIDATION METHODS
     # ========================================
@@ -606,20 +575,6 @@ class Config:
         for name, (min_val, max_val) in ranges_to_check:
             if min_val > max_val:
                 errors.append(f"{name}: min ({min_val}) > max ({max_val})")
-
-        # Validar power-up rarities (devem somar exatamente 100.0)
-        total_rarity = sum(self.POWERUP_RARITIES.values())
-        if (
-            not abs(total_rarity - 100.0) < 0.001
-        ):  # Tolerância para erros de arredondamento
-            errors.append(
-                f"POWERUP_RARITIES deve somar exatamente 100.0, mas soma {total_rarity}"
-            )
-        for powerup_type, rarity in self.POWERUP_RARITIES.items():
-            if not (0.0 <= rarity <= 100.0):
-                errors.append(
-                    f"POWERUP_RARITIES[{powerup_type}] deve estar entre 0.0 e 100.0, mas é {rarity}"
-                )
 
         # Validar thresholds (0.0 a 1.0)
         thresholds = [
@@ -657,10 +612,10 @@ class Config:
 # INSTÂNCIA GLOBAL E VALIDAÇÃO
 # ============================================================================
 
-# Criar instância global da config
+
 _config_instance = Config()
 
-# Variáveis para armazenar resolução em tempo de execução
+
 _runtime_screen_width = _config_instance.SCREEN_WIDTH
 _runtime_screen_height = _config_instance.SCREEN_HEIGHT
 

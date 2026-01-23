@@ -1,7 +1,7 @@
 import random
 import pygame
 import colorsys
-from typing import Optional, Tuple
+from typing import Tuple
 from ..core.config import config as Config, PowerUpType
 from ..core.assets import get_font
 from ..core.colors import (
@@ -20,11 +20,7 @@ from ..core.colors import (
 
 
 class PowerUp:
-    def __init__(self, powerup_type: Optional[PowerUpType] = None):
-        # Se não especificado, usa o sistema de raridade do config
-        if powerup_type is None:
-            powerup_type = self._select_random_powerup()
-
+    def __init__(self, powerup_type: PowerUpType):
         self.type = powerup_type
         self.kind = powerup_type.value  # Mantém compatibilidade com código existente
         self.w, self.h = Config.POWERUP_SIZE, Config.POWERUP_SIZE
@@ -37,23 +33,6 @@ class PowerUp:
         self.animation_timer = 0.0
         self.pulse_scale = 1.0
         self.dead = False
-
-    def _select_random_powerup(self) -> PowerUpType:
-        """Seleciona um power-up aleatório baseado no sistema de pesos"""
-        total_weight = sum(Config.POWERUP_WEIGHTS.values())
-        if total_weight <= 0:
-            return PowerUpType.SHIELD  # Fallback
-
-        rand_val = random.randint(1, total_weight)
-        cumulative = 0
-
-        for powerup_type, weight in Config.POWERUP_WEIGHTS.items():
-            cumulative += weight
-            if rand_val <= cumulative:
-                return powerup_type
-
-        # Fallback para o último tipo se algo der errado
-        return PowerUpType.SHIELD
 
     def update(self, dt: float):
         self.y += self.speed * dt

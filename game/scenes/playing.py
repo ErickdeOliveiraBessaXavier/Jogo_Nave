@@ -103,7 +103,7 @@ class PlayingScene(Scene):
             self.difficulty_preset,
             self.enemy_health_multiplier,
         )
-        self.powerup_spawner = PowerUpSpawner()
+        self.powerup_spawner = PowerUpSpawner(self.difficulty_preset)
         self.collisions = Collisions()
 
         # Star spawner centralizado

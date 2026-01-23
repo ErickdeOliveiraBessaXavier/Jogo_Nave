@@ -23,6 +23,7 @@ from ..entities.eye_enemy import EyeEnemy
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.star import Star
 from ..entities.square_minion_boss import SquareMinionBoss
+from ..core.powerup_weights import get_powerup_weights
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -483,12 +484,13 @@ class EnemySpawner:
 
 
 class PowerUpSpawner:
-    def __init__(self) -> None:
+    def __init__(self, difficulty: DifficultyPreset = DifficultyPreset.NORMAL) -> None:
+        self.difficulty = difficulty
         self._reset_timer()
 
     def _select_powerup_by_rarity(self) -> PowerUpType:
         """Seleciona power-up baseado na raridade individual de cada tipo."""
-        powerup_weights = Config.POWERUP_WEIGHTS
+        powerup_weights = get_powerup_weights(self.difficulty)
 
         # Cria lista ponderada
         powerup_types = list(powerup_weights.keys())
@@ -514,30 +516,12 @@ class PowerUpSpawner:
 
 class StarSpawner:
     def __init__(self) -> None:
-        self._reset_timer()
         self.kill_counter = 0
         self.kill_threshold = getattr(Config, "STAR_SPAWN_KILL_THRESHOLD", 200)
 
-    def _reset_timer(self) -> None:
-        # Use intervalo configurável para estrelas
-        # Garantir tipo de intervalo seguro
-        default_interval: tuple[float, float] = (6.0, 10.0)
-        conf_interval = getattr(Config, "STAR_SPAWN_INTERVAL", default_interval)
-        try:
-            min_t, max_t = map(float, conf_interval)  # type: ignore[arg-type]
-            spawn_t = random.uniform(min_t, max_t)
-        except Exception:
-            try:
-                spawn_t = float(conf_interval)  # type: ignore[arg-type]
-            except Exception:
-                spawn_t = sum(default_interval) / 2.0
-        self.timer = Timer(spawn_t)
-        self.timer.start()
-
     def update(self, dt: float, stars: List[Star]) -> None:
-        # Atualização do timer mantida, porém sem spawn por tempo.
-        # Regra atual: estrelas só aparecem após derrotar N inimigos.
-        self.timer.update(dt)
+        # Estrelas só aparecem após derrotar N inimigos, não por timer.
+        pass
 
     def add_kills(self, count: int, stars: List[Star]) -> None:
         """Acumula abates e spawna uma estrela quando atingir o limiar.
