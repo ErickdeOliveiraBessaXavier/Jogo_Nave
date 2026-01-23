@@ -101,17 +101,21 @@ class Collisions:
         hit_x: float,
         hit_y: float,
         entity_manager: "EntityManager",
+        create_explosion: bool = True,
         explosion_size: int = 15
     ) -> bool:
         """
         Processa hit de projétil (explosão visual, destruição).
         
+        Args:
+            create_explosion: Se True, cria explosão visual
+            
         Returns:
             True se projétil foi destruído, False se é piercing
         """
         is_piercing = getattr(projectile, 'piercing', False)
         
-        if explosion_size > 0:
+        if create_explosion and explosion_size > 0:
             entity_manager.spawn_explosion(hit_x, hit_y, size=explosion_size)
         
         if not is_piercing:
@@ -131,7 +135,7 @@ class Collisions:
         Verifica colisão pixel-perfect entre entidade e alvo com máscara.
         Fallback para rect collision se máscara não disponível.
         """
-        if not hasattr(target_with_mask, 'mask'):
+        if not isinstance(target_with_mask, SlimeBoss):
             return entity_rect.colliderect(
                 pygame.Rect(target_with_mask.x, target_with_mask.y, 
                            target_with_mask.w, target_with_mask.h)
@@ -162,9 +166,8 @@ class Collisions:
         if entity_mask is None:
             entity_mask = pygame.mask.Mask((entity_rect.width, entity_rect.height), fill=True)
         
-        slime_boss = cast(SlimeBoss, target_with_mask)
-        offset = (int(entity_x - slime_boss.x), int(entity_y - slime_boss.y))
-        return slime_boss.mask.overlap(entity_mask, offset) is not None
+        offset = (int(entity_x - target_with_mask.x), int(entity_y - target_with_mask.y))
+        return target_with_mask.mask.overlap(entity_mask, offset) is not None
 
     def _batch_query_for_projectiles(
         self,
@@ -449,6 +452,9 @@ class Collisions:
         IMPORTANTE: Verificamos is_exploding + pre_explosion_timer <= 0 porque
         a mina só fica dead=True quando o timer acaba internamente.
         """
+        if not enemies:
+            return 0, 0, [], False
+        
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
@@ -571,6 +577,9 @@ class Collisions:
         Isso permite que fragmentos de meteoros e novos inimigos que entrem
         na área de explosão sofram dano enquanto o efeito estiver ativo.
         """
+        if not explosive_effects:
+            return 0, 0, []
+        
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
@@ -918,7 +927,7 @@ class Collisions:
                         destroyed_count += 1
                         score_events.append(score_event)
 
-                    if self._process_projectile_hit(b, b.x, b.y, entity_manager, 0):
+                    if self._process_projectile_hit(b, b.x, b.y, entity_manager, create_explosion=False):
                         break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
@@ -944,7 +953,7 @@ class Collisions:
             return 0, 0, []
 
         # Usar batch query para otimização
-        projectile_targets = self._batch_query_for_projectiles(bullets, enemy_grid, padding=10)
+        projectile_targets = self._batch_query_for_projectiles(bullets, enemy_grid, padding=CollisionConstants.SPATIAL_QUERY_PADDING)
 
         for b in bullets[:]:
             potential_enemies = projectile_targets.get(id(b), [])
@@ -1035,7 +1044,7 @@ class Collisions:
                                     destroyed_count += 1
                                     score_events.append(score_event)
 
-                    if self._process_projectile_hit(b, b.x, b.y, entity_manager, 0):
+                    if self._process_projectile_hit(b, b.x, b.y, entity_manager, create_explosion=False):
                         break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
@@ -1194,6 +1203,10 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com SpikeBoss."""
+        if not mini_ship_bullets:
+            return 0
+        if not boss or boss.dead:
+            return 0
         return self._apply_boss_damage(
             mini_ship_bullets,
             boss,
@@ -1226,7 +1239,7 @@ class Collisions:
                     spike.rect
                 ):  # Usa cache
                     # Destruir projétil se não for piercing
-                    self._process_projectile_hit(b, spike.center_x, spike.center_y, entity_manager, 15)
+                    self._process_projectile_hit(b, spike.center_x, spike.center_y, entity_manager, create_explosion=True, explosion_size=15)
                     spike.dead = True
                     sound_manager.play_explosion_alien()
                     score_gain += Config.SPIKE_POINTS
@@ -1295,7 +1308,7 @@ class Collisions:
             for spike in potential_spikes:
                 if b_rect.colliderect(spike.rect):  # Usa cache
                     # Remover bala
-                    self._process_projectile_hit(b, spike.center_x, spike.center_y, entity_manager, 15)
+                    self._process_projectile_hit(b, spike.center_x, spike.center_y, entity_manager, create_explosion=True, explosion_size=15)
                     # Destruir espinho
                     spike.dead = True
                     # Som
