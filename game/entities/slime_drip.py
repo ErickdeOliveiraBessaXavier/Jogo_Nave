@@ -5,6 +5,7 @@ from typing import List, Tuple, Optional, TYPE_CHECKING
 from dataclasses import dataclass
 
 from ..entities.explosion import ExplosionType  # ← ADICIONAR
+from ..core.config import config as Config
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager

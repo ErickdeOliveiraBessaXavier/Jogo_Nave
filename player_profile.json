@@ -1,23 +1,23 @@
 {
   "version": "1.0",
-  "profile_created": "2026-01-23T09:31:29.532651",
-  "last_played": "2026-01-23T10:35:23.440075",
-  "total_playtime": 37.300988,
+  "profile_created": "2026-01-23T12:18:33.177621",
+  "last_played": "2026-01-23T12:22:07.659157",
+  "total_playtime": 0.0,
   "highest_level_reached": 1,
-  "total_deaths": 2,
+  "total_deaths": 0,
   "total_score": 0,
   "resolution": [
-    1600,
-    900
+    1366,
+    768
   ],
   "mouse_control": false,
   "auto_fire": false,
   "level_stats": {
     "1": {
       "level_number": 1,
-      "attempts": 4,
+      "attempts": 3,
       "clears": 0,
-      "deaths": 2,
+      "deaths": 0,
       "total_time": 0.0,
       "best_time": null,
       "worst_time": 0.0,
@@ -26,37 +26,15 @@
       "total_enemies_killed": 0,
       "total_damage_taken": 0,
       "total_powerups_collected": 0,
-      "recent_attempts": [
-        {
-          "timestamp": "2026-01-23T09:32:10.002208",
-          "cleared": false,
-          "cause": "game_over"
-        },
-        {
-          "timestamp": "2026-01-23T09:38:54.935298",
-          "cleared": false,
-          "cause": "collision"
-        }
-      ],
-      "first_played": "2026-01-23T09:31:37.681561",
-      "last_played": "2026-01-23T10:35:23.440075",
+      "recent_attempts": [],
+      "first_played": "2026-01-23T12:18:41.111664",
+      "last_played": "2026-01-23T12:22:07.659157",
       "current_win_streak": 0,
       "best_win_streak": 0
     }
   },
-  "level_adjustments": {
-    "1": 0.8
-  },
-  "session_history": [
-    {
-      "start_time": "2026-01-23T09:31:32.701220",
-      "end_time": "2026-01-23T09:32:10.002208",
-      "levels_attempted": [],
-      "deaths": 1,
-      "score": 0,
-      "powerups_collected": 0
-    }
-  ],
+  "level_adjustments": {},
+  "session_history": [],
   "unlocked_upgrades": [
     "AIR_STRIKE",
     "BLACK_HOLE",

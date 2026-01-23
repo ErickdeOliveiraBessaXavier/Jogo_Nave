@@ -434,11 +434,11 @@ class Config:
     SLIME_DRIP_DEATH_MARGIN: int = 100  # Margem para considerar gota morta (pixels)
 
     # Visual - Cores
-    SLIME_DRIP_COLORS: list[Tuple[int, int, int, int]] = field(
+    SLIME_DRIP_COLORS: list[Tuple[int, int, int]] = field(
         default_factory=lambda: [
-            (241, 187, 242, 180),
-            (96, 29, 115, 200),
-            (68, 18, 89, 220),
+            (241, 187, 242),
+            (96, 29, 11),
+            (68, 18, 89),
         ]
     )
 
