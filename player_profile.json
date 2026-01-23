@@ -1,23 +1,23 @@
 {
   "version": "1.0",
   "profile_created": "2026-01-23T09:31:29.532651",
-  "last_played": "2026-01-23T09:31:37.681561",
+  "last_played": "2026-01-23T09:39:25.615720",
   "total_playtime": 37.300988,
   "highest_level_reached": 1,
-  "total_deaths": 1,
+  "total_deaths": 2,
   "total_score": 0,
   "resolution": [
-    1366,
-    768
+    1600,
+    900
   ],
   "mouse_control": false,
   "auto_fire": false,
   "level_stats": {
     "1": {
       "level_number": 1,
-      "attempts": 1,
+      "attempts": 3,
       "clears": 0,
-      "deaths": 1,
+      "deaths": 2,
       "total_time": 0.0,
       "best_time": null,
       "worst_time": 0.0,
@@ -31,10 +31,15 @@
           "timestamp": "2026-01-23T09:32:10.002208",
           "cleared": false,
           "cause": "game_over"
+        },
+        {
+          "timestamp": "2026-01-23T09:38:54.935298",
+          "cleared": false,
+          "cause": "collision"
         }
       ],
       "first_played": "2026-01-23T09:31:37.681561",
-      "last_played": "2026-01-23T09:31:37.681561",
+      "last_played": "2026-01-23T09:39:25.615720",
       "current_win_streak": 0,
       "best_win_streak": 0
     }

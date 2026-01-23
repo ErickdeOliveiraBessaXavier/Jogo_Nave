@@ -818,8 +818,8 @@ class Collisions:
                             explosion_size=(
                                 max(12, int(enemy.w // 2))
                                 if isinstance(enemy, Meteor)
-                                else 15
-                            ),  # Explosão mínima de 12 para meteoros
+                                else (40 if isinstance(enemy, Alien) else 15)
+                            ),  # Explosão maior para aliens (mini ships)
                         )
                         score_gain += pts
                         destroyed_count += 1
@@ -897,8 +897,8 @@ class Collisions:
                             explosion_size=(
                                 max(12, int(enemy.w // 2))
                                 if isinstance(enemy, Meteor)
-                                else 15
-                            ),  # Explosão mínima de 12 para meteoros
+                                else (40 if isinstance(enemy, Alien) else 15)
+                            ),  # Explosão maior para aliens (player bullets)
                         )
                         score_gain += pts
                         destroyed_count += 1
