@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "profile_created": "2026-01-23T14:12:20.541320",
-  "last_played": "2026-01-23T14:12:29.033562",
+  "profile_created": "2026-01-23T15:52:28.491363",
+  "last_played": null,
   "total_playtime": 0.0,
   "highest_level_reached": 1,
   "total_deaths": 0,
@@ -12,27 +12,7 @@
   ],
   "mouse_control": false,
   "auto_fire": false,
-  "level_stats": {
-    "1": {
-      "level_number": 1,
-      "attempts": 1,
-      "clears": 0,
-      "deaths": 0,
-      "total_time": 0.0,
-      "best_time": null,
-      "worst_time": 0.0,
-      "total_score": 0,
-      "best_score": 0,
-      "total_enemies_killed": 0,
-      "total_damage_taken": 0,
-      "total_powerups_collected": 0,
-      "recent_attempts": [],
-      "first_played": "2026-01-23T14:12:29.033562",
-      "last_played": "2026-01-23T14:12:29.033562",
-      "current_win_streak": 0,
-      "best_win_streak": 0
-    }
-  },
+  "level_stats": {},
   "level_adjustments": {},
   "session_history": [],
   "unlocked_upgrades": [

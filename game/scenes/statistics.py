@@ -57,7 +57,7 @@ class StatisticsView:
         from ..core.config import config as Config
 
         screen_w, screen_h = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-        
+
         # Dimensões e espaçamentos consistentes com settings.py
         outer_pad = 40
         top_offset = 100
@@ -69,49 +69,37 @@ class StatisticsView:
         tab_buttons: List[pygame.Rect] = []
         num_tabs = len(StatTab)
         # Tabs ocupam toda a largura disponível
-        tab_w = (available_width - (num_tabs - 1) * 20) / num_tabs  # 20px de gap entre abas
+        tab_w = (
+            available_width - (num_tabs - 1) * 20
+        ) / num_tabs  # 20px de gap entre abas
         tab_h = 50
-        
+
         for i, _ in enumerate(StatTab):
-            rect = pygame.Rect(
-                outer_pad + i * (tab_w + 20), 
-                top_offset, 
-                tab_w, 
-                tab_h
-            )
+            rect = pygame.Rect(outer_pad + i * (tab_w + 20), top_offset, tab_w, tab_h)
             tab_buttons.append(rect)
         self.layout_rects["tab_buttons"] = tab_buttons
 
         # Área de Conteúdo
         content_y = top_offset + tab_h + 20  # +20 gap
         self.layout_rects["content_area"] = pygame.Rect(
-            outer_pad, 
-            content_y, 
-            available_width, 
-            screen_h - content_y - outer_pad - 60
+            outer_pad, content_y, available_width, screen_h - content_y - outer_pad - 60
         )
 
         # Botões de Ação
         btn_w = 160
         btn_h = 40
-        
+
         self.layout_rects["back_button"] = pygame.Rect(
-            outer_pad, 
-            screen_h - 60, 
-            btn_w, 
-            btn_h
+            outer_pad, screen_h - 60, btn_w, btn_h
         )
         self.layout_rects["reset_button"] = pygame.Rect(
-            screen_w - outer_pad - btn_w, 
-            screen_h - 60, 
-            btn_w, 
-            btn_h
+            screen_w - outer_pad - btn_w, screen_h - 60, btn_w, btn_h
         )
 
     def _switch_tab(self, new_tab: StatTab):
         if self.current_tab != new_tab:
             self.current_tab = new_tab
-            self.scroll_y = 0 # Reset scroll on tab switch
+            self.scroll_y = 0  # Reset scroll on tab switch
 
     def reset(self):
         """Reseta o estado da view para reiniciar animação."""
@@ -339,7 +327,7 @@ class StatisticsView:
         if not self.profile:
             return
         summary = self.profile.get_statistics_summary()
-        
+
         # Dados para exibição
         stats_data = [
             ("Nível Mais Alto:", f"{summary['highest_level']}"),
@@ -354,68 +342,68 @@ class StatisticsView:
         ]
 
         # Configuração de Layout
-        cols = 2 # Forçado para 2 colunas como solicitado
+        cols = 2  # Forçado para 2 colunas como solicitado
         col_width = (area.width - 40) / cols
-        
+
         # Calcular altura do Card 1
         rows = (len(stats_data) + cols - 1) // cols
-        card1_height = 60 + rows * 35 + 20 # Header + Rows + Padding
-        
+        card1_height = 60 + rows * 35 + 20  # Header + Rows + Padding
+
         # Calcular altura do Card 2
         num_recom = len(summary["recommendations"]) if summary["recommendations"] else 1
         card2_height = 60 + num_recom * 28 + 20
-        
+
         # Altura total do conteúdo
         total_height = card1_height + 20 + card2_height
-        
+
         # Ajuste de Scroll
         visible_height = area.height
         if total_height > visible_height:
             self.scroll_y = max(0, min(self.scroll_y, total_height - visible_height))
         else:
             self.scroll_y = 0
-            
+
         # Criar superfície de conteúdo
         content_surface = pygame.Surface(
             (area.width, max(total_height, visible_height)), pygame.SRCALPHA
         )
-        
+
         current_y = 0
-        
+
         # --- Card 1: Resumo ---
         card_rect = pygame.Rect(0, current_y, area.width, card1_height)
         self._draw_card_background(content_surface, card_rect, alpha)
-        
+
         header = self.header_font.render("Resumo do Piloto", True, CUSTOM_GOLD)
         header.set_alpha(alpha)
         content_surface.blit(header, (card_rect.x + 20, card_rect.y + 15))
-        
+
         stats_y = card_rect.y + 60
-        
+
         for i, (label, value) in enumerate(stats_data):
             col = i % cols
             row = i // cols
             x_pos = card_rect.x + 20 + col * col_width
             y_pos = stats_y + row * 35
-            
+
             label_surf = self.item_font.render(label, True, colors.GRAY)
             label_surf.set_alpha(alpha)
             content_surface.blit(label_surf, (x_pos, y_pos))
-            
+
             value_surf = self.item_font.render(f" {value}", True, CUSTOM_PURPLE)
             value_surf.set_alpha(alpha)
             content_surface.blit(value_surf, (x_pos + label_surf.get_width(), y_pos))
-            
+
         current_y += card1_height + 20
-        
+
         # --- Card 2: Recomendações ---
         recom_rect = pygame.Rect(0, current_y, area.width, card2_height)
         self._draw_card_background(content_surface, recom_rect, alpha)
-        
+
         header = self.header_font.render("Recomendações", True, CUSTOM_GOLD)
         header.set_alpha(alpha)
         content_surface.blit(header, (recom_rect.x + 20, recom_rect.y + 15))
-        
+
         recom_y_inner = recom_rect.y + 60
         if summary["recommendations"]:
             for recom in summary["recommendations"]:
@@ -429,7 +417,7 @@ class StatisticsView:
             )
             recom_surf.set_alpha(alpha)
             content_surface.blit(recom_surf, (recom_rect.x + 25, recom_y_inner))
-            
+
         # Blitar conteúdo com scroll
         content_surface.set_alpha(alpha)
         surface.blit(

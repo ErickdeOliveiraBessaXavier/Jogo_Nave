@@ -38,7 +38,9 @@ class ParticleDict(TypedDict):
 
 
 class Ship:
-    def __init__(self, x: float, y: float, mouse_control: bool = False, auto_fire: bool = False):
+    def __init__(
+        self, x: float, y: float, mouse_control: bool = False, auto_fire: bool = False
+    ):
         # Dimensões da nave (baseadas na imagem)
         self.w = 35
         self.h = 35

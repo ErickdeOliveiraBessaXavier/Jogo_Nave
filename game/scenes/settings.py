@@ -85,16 +85,16 @@ class SettingsView:
         from ..core.config import config as Config
 
         screen_w, screen_h = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-        
+
         # Dimensões e espaçamentos
         outer_pad = 40
         card_gap = 40
-        
+
         # Calcular largura dinâmica para ocupar a tela toda
         available_width = screen_w - (2 * outer_pad)
         card_width = (available_width - card_gap) / 2
         card_height = screen_h - 180
-        
+
         # Posição inicial X (agora começa no padding)
         start_x = outer_pad
 
@@ -106,7 +106,7 @@ class SettingsView:
         slider_w = card_width - 60
         slider_h = 20
         y_offset = audio_card_rect.y + 80
-        
+
         for key in ["music", "sfx", "shot"]:
             self.layout_rects["sliders"][key] = pygame.Rect(
                 audio_card_rect.x + 30, y_offset, slider_w, slider_h
@@ -123,7 +123,7 @@ class SettingsView:
         self.layout_rects["toggles"] = {}
         toggle_w, toggle_h = 30, 30
         y_offset = controls_card_rect.y + 60
-        
+
         # Agrupar toggles
         for key in ["mouse_control", "auto_fire"]:
             self.layout_rects["toggles"][key] = pygame.Rect(
@@ -139,10 +139,10 @@ class SettingsView:
             controls_card_rect.width - 60,
             30,
         )
-        
+
         # Grid de botões de resolução
         self.layout_rects["resolution_buttons"] = []
-        
+
         # Configuração do grid
         cols = 3
         button_gap_x = 10
@@ -150,10 +150,11 @@ class SettingsView:
         available_width_for_buttons = controls_card_rect.width - 60
         button_w = (available_width_for_buttons - (cols - 1) * button_gap_x) / cols
         button_h = 35
-        
+
         grid_start_y = y_offset + 40
-        
+
         from typing import cast, List
+
         resolution_buttons = cast(
             List[pygame.Rect], self.layout_rects["resolution_buttons"]
         )
@@ -161,10 +162,10 @@ class SettingsView:
         for i in range(len(self.available_resolutions)):
             row = i // cols
             col = i % cols
-            
+
             x = controls_card_rect.x + 30 + col * (button_w + button_gap_x)
             y = grid_start_y + row * (button_h + button_gap_y)
-            
+
             resolution_buttons.append(pygame.Rect(x, y, button_w, button_h))
 
         # Botão de Voltar (Canto inferior esquerdo, alinhado com card)
@@ -187,10 +188,10 @@ class SettingsView:
         btn_h = 40
         btn_gap = 20
         total_btn_width = (btn_w * 2) + btn_gap
-        
+
         start_btn_x = popup_x + (popup_w - total_btn_width) // 2
         btn_y = popup_y + popup_h - btn_h - 25
-        
+
         self.layout_rects["popup_yes_button"] = pygame.Rect(
             start_btn_x, btn_y, btn_w, btn_h
         )
@@ -538,7 +539,9 @@ class SettingsView:
             # Checkbox
             is_checked = self.toggles[key]
             checkbox_color = CUSTOM_GOLD if is_checked else colors.GRAY
-            pygame.draw.rect(surface, (*checkbox_color, alpha), rect, 2, border_radius=5)
+            pygame.draw.rect(
+                surface, (*checkbox_color, alpha), rect, 2, border_radius=5
+            )
             if is_checked:
                 # Checkmark
                 check_surf = pygame.Surface((rect.width - 6, rect.height - 6))
@@ -548,7 +551,10 @@ class SettingsView:
             # Label
             label_surf = self.item_font.render(labels[key], True, colors.WHITE)
             label_surf.set_alpha(alpha)
-            surface.blit(label_surf, (rect.right + 10, rect.centery - label_surf.get_height() / 2))
+            surface.blit(
+                label_surf,
+                (rect.right + 10, rect.centery - label_surf.get_height() / 2),
+            )
 
         # Label da resolução
         label_rect = self.layout_rects["resolution_label"].copy()
@@ -648,9 +654,9 @@ class SettingsView:
             max_button_y = max(r.y + r.height for r in resolution_buttons)
         else:
             max_button_y = card_rect.y + 250
-            
+
         y_offset = max_button_y + 30 + offset_y
-        
+
         for line in instructions:
             if line == "":
                 y_offset += 8

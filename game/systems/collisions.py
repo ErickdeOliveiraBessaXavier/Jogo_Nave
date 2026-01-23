@@ -45,6 +45,7 @@ Enemy: TypeAlias = Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
 BossEnemy: TypeAlias = Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss
 Projectile: TypeAlias = Bullet | MiniShipBullet
 
+
 # Constantes de colisão
 class CollisionConstants:
     SPATIAL_QUERY_PADDING = 10
@@ -75,10 +76,7 @@ class Collisions:
         return isinstance(entity, SquareMinionBoss)
 
     def _handle_invulnerable_hit(
-        self, 
-        projectile_x: float, 
-        projectile_y: float,
-        entity_manager: "EntityManager"
+        self, projectile_x: float, projectile_y: float, entity_manager: "EntityManager"
     ) -> None:
         """Cria feedback visual ao atingir entidade invulnerável."""
         entity_manager.spawn_explosion(projectile_x, projectile_y, size=20)
@@ -102,25 +100,25 @@ class Collisions:
         hit_y: float,
         entity_manager: "EntityManager",
         create_explosion: bool = True,
-        explosion_size: int = 15
+        explosion_size: int = 15,
     ) -> bool:
         """
         Processa hit de projétil (explosão visual, destruição).
-        
+
         Args:
             create_explosion: Se True, cria explosão visual
-            
+
         Returns:
             True se projétil foi destruído, False se é piercing
         """
-        is_piercing = getattr(projectile, 'piercing', False)
-        
+        is_piercing = getattr(projectile, "piercing", False)
+
         if create_explosion and explosion_size > 0:
             entity_manager.spawn_explosion(hit_x, hit_y, size=explosion_size)
-        
+
         if not is_piercing:
             projectile.dead = True
-        
+
         return not is_piercing
 
     def _check_mask_collision(
@@ -137,43 +135,58 @@ class Collisions:
         """
         if not isinstance(target_with_mask, SlimeBoss):
             return entity_rect.colliderect(
-                pygame.Rect(target_with_mask.x, target_with_mask.y, 
-                           target_with_mask.w, target_with_mask.h)
+                pygame.Rect(
+                    target_with_mask.x,
+                    target_with_mask.y,
+                    target_with_mask.w,
+                    target_with_mask.h,
+                )
             )
-        
+
         # Fast distance check first
         target_center_x = target_with_mask.x + target_with_mask.w / 2
         target_center_y = target_with_mask.y + target_with_mask.h / 2
         entity_center_x = entity_x + entity_rect.width / 2
         entity_center_y = entity_y + entity_rect.height / 2
-        
+
         dx = entity_center_x - target_center_x
         dy = entity_center_y - target_center_y
         distance_squared = dx * dx + dy * dy
-        
-        proximity_threshold = (target_with_mask.w / 2 + max(entity_rect.width, entity_rect.height)) ** 2
-        
+
+        proximity_threshold = (
+            target_with_mask.w / 2 + max(entity_rect.width, entity_rect.height)
+        ) ** 2
+
         if distance_squared > proximity_threshold:
             return False
-        
+
         # Rect collision check
-        target_rect = pygame.Rect(target_with_mask.x, target_with_mask.y, 
-                                  target_with_mask.w, target_with_mask.h)
+        target_rect = pygame.Rect(
+            target_with_mask.x,
+            target_with_mask.y,
+            target_with_mask.w,
+            target_with_mask.h,
+        )
         if not entity_rect.colliderect(target_rect):
             return False
-        
+
         # Mask overlap check
         if entity_mask is None:
-            entity_mask = pygame.mask.Mask((entity_rect.width, entity_rect.height), fill=True)
-        
-        offset = (int(entity_x - target_with_mask.x), int(entity_y - target_with_mask.y))
+            entity_mask = pygame.mask.Mask(
+                (entity_rect.width, entity_rect.height), fill=True
+            )
+
+        offset = (
+            int(entity_x - target_with_mask.x),
+            int(entity_y - target_with_mask.y),
+        )
         return target_with_mask.mask.overlap(entity_mask, offset) is not None
 
     def _batch_query_for_projectiles(
         self,
         projectiles: Sequence[Projectile],
         grid: SpatialGrid[Enemy],
-        padding: int = CollisionConstants.SPATIAL_QUERY_PADDING
+        padding: int = CollisionConstants.SPATIAL_QUERY_PADDING,
     ) -> dict[int, list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]]:
         """
         Faz query única expandida para todos os projéteis.
@@ -181,25 +194,26 @@ class Collisions:
         """
         if not projectiles:
             return {}
-        
+
         # Calcular bounds de todos os projéteis
         rects = [p.rect for p in projectiles]
         min_x = min(r.x for r in rects) - padding
         min_y = min(r.y for r in rects) - padding
         max_x = max(r.x + r.width for r in rects) + padding
         max_y = max(r.y + r.height for r in rects) + padding
-        
+
         # Query única
         all_potential = grid.query(min_x, min_y, max_x - min_x, max_y - min_y)
-        
+
         # Mapear para cada projétil
-        result: dict[int, list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]] = {}
+        result: dict[
+            int, list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]
+        ] = {}
         for p in projectiles:
             result[id(p)] = [
-                target for target in all_potential
-                if p.rect.colliderect(target.rect)
+                target for target in all_potential if p.rect.colliderect(target.rect)
             ]
-        
+
         return result
 
     def _destroy_enemy(
@@ -235,7 +249,9 @@ class Collisions:
         if explosion_size is None:
             explosion_size = self._calculate_default_explosion_size(enemy)
 
-        entity_manager.spawn_explosion(cx, cy, size=explosion_size, explosion_type=explosion_type)
+        entity_manager.spawn_explosion(
+            cx, cy, size=explosion_size, explosion_type=explosion_type
+        )
 
         # Som apropriado
         if isinstance(enemy, Meteor):
@@ -326,7 +342,9 @@ class Collisions:
             proj_rect = proj.rect
 
             # Check for collision
-            collision_detected = self._check_mask_collision(proj_rect, None, boss, proj.x, proj.y)
+            collision_detected = self._check_mask_collision(
+                proj_rect, None, boss, proj.x, proj.y
+            )
 
             if collision_detected:
                 # Destruir projétil se não for piercing
@@ -454,7 +472,7 @@ class Collisions:
         """
         if not enemies:
             return 0, 0, [], False
-        
+
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
@@ -520,7 +538,9 @@ class Collisions:
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(enemy.health)
                     elif self._is_invulnerable_to_damage(enemy):
-                        self._handle_invulnerable_hit(explosion_x, explosion_y, entity_manager)
+                        self._handle_invulnerable_hit(
+                            explosion_x, explosion_y, entity_manager
+                        )
                     else:
                         pts, score_event = self._destroy_enemy(
                             enemy, enemies, entity_manager, explosion_size=30
@@ -579,7 +599,7 @@ class Collisions:
         """
         if not explosive_effects:
             return 0, 0, []
-        
+
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
@@ -870,12 +890,8 @@ class Collisions:
     def mini_ship_bullets_vs_enemies(
         self,
         mini_ship_bullets: list[MiniShipBullet],
-        enemy_grid: SpatialGrid[
-            Enemy
-        ],
-        enemies: list[
-            Enemy
-        ],  # Para adicionar fragments
+        enemy_grid: SpatialGrid[Enemy],
+        enemies: list[Enemy],  # Para adicionar fragments
         entity_manager: "EntityManager",  # <-- ADICIONAR
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
@@ -887,7 +903,11 @@ class Collisions:
             return 0, 0, []
 
         # Usar batch query para otimização
-        projectile_targets = self._batch_query_for_projectiles(mini_ship_bullets, enemy_grid, padding=CollisionConstants.SPATIAL_QUERY_PADDING)
+        projectile_targets = self._batch_query_for_projectiles(
+            mini_ship_bullets,
+            enemy_grid,
+            padding=CollisionConstants.SPATIAL_QUERY_PADDING,
+        )
 
         for b in mini_ship_bullets[:]:
             potential_enemies = projectile_targets.get(id(b), [])
@@ -927,7 +947,9 @@ class Collisions:
                         destroyed_count += 1
                         score_events.append(score_event)
 
-                    if self._process_projectile_hit(b, b.x, b.y, entity_manager, create_explosion=False):
+                    if self._process_projectile_hit(
+                        b, b.x, b.y, entity_manager, create_explosion=False
+                    ):
                         break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
@@ -953,7 +975,9 @@ class Collisions:
             return 0, 0, []
 
         # Usar batch query para otimização
-        projectile_targets = self._batch_query_for_projectiles(bullets, enemy_grid, padding=CollisionConstants.SPATIAL_QUERY_PADDING)
+        projectile_targets = self._batch_query_for_projectiles(
+            bullets, enemy_grid, padding=CollisionConstants.SPATIAL_QUERY_PADDING
+        )
 
         for b in bullets[:]:
             potential_enemies = projectile_targets.get(id(b), [])
@@ -1044,7 +1068,9 @@ class Collisions:
                                     destroyed_count += 1
                                     score_events.append(score_event)
 
-                    if self._process_projectile_hit(b, b.x, b.y, entity_manager, create_explosion=False):
+                    if self._process_projectile_hit(
+                        b, b.x, b.y, entity_manager, create_explosion=False
+                    ):
                         break  # Bullet is gone, check next bullet
         return score_gain, destroyed_count, score_events
 
@@ -1239,7 +1265,14 @@ class Collisions:
                     spike.rect
                 ):  # Usa cache
                     # Destruir projétil se não for piercing
-                    self._process_projectile_hit(b, spike.center_x, spike.center_y, entity_manager, create_explosion=True, explosion_size=15)
+                    self._process_projectile_hit(
+                        b,
+                        spike.center_x,
+                        spike.center_y,
+                        entity_manager,
+                        create_explosion=True,
+                        explosion_size=15,
+                    )
                     spike.dead = True
                     sound_manager.play_explosion_alien()
                     score_gain += Config.SPIKE_POINTS
@@ -1308,7 +1341,14 @@ class Collisions:
             for spike in potential_spikes:
                 if b_rect.colliderect(spike.rect):  # Usa cache
                     # Remover bala
-                    self._process_projectile_hit(b, spike.center_x, spike.center_y, entity_manager, create_explosion=True, explosion_size=15)
+                    self._process_projectile_hit(
+                        b,
+                        spike.center_x,
+                        spike.center_y,
+                        entity_manager,
+                        create_explosion=True,
+                        explosion_size=15,
+                    )
                     # Destruir espinho
                     spike.dead = True
                     # Som

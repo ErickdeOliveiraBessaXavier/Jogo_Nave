@@ -60,7 +60,7 @@ class SlimeBoss:
         self.x = Config.SCREEN_WIDTH / 2 - self.w / 2  # Center the boss horizontally
         self.y = -self.h  # More off-screen from the top
         self.target_y = -100  # Final position higher up, not too low
-        
+
         # ✅ PRÉ-CALCULAR VALORES CONSTANTES
         self.center_x = Config.SCREEN_WIDTH / 2 - self.w / 2
         self.move_range = Config.SLIME_BOSS_MOVE_RANGE
@@ -88,7 +88,9 @@ class SlimeBoss:
             logging.warning("SlimeBoss: Frames não carregados, usando fallback visual")
 
         # ✅ VALIDAR FRAMES UMA VEZ NO INIT (evitar try/except no hot path)
-        self.has_valid_frames = bool(self.animation_frames and len(self.animation_frames) > 0)
+        self.has_valid_frames = bool(
+            self.animation_frames and len(self.animation_frames) > 0
+        )
 
         self.current_frame = 0
         self.animation_timer = 0.0
@@ -240,34 +242,35 @@ class SlimeBoss:
             self.animation_timer = 0.0
             old_frame = self.current_frame
             self.current_frame = (self.current_frame + 1) % len(self.animation_frames)
-            
+
             # ✅ LIMPAR CACHES: manter apenas 3 frames (atual + 2 próximos)
             if old_frame != self.current_frame:
                 total_frames = len(self.animation_frames)
                 frames_to_keep = {
                     self.current_frame,
                     (self.current_frame + 1) % total_frames,
-                    (self.current_frame + 2) % total_frames
+                    (self.current_frame + 2) % total_frames,
                 }
-                
+
                 # Limpar scaled frames antigos
                 if len(self._scaled_frame_cache) > 3:
                     self._scaled_frame_cache = {
-                        k: v for k, v in self._scaled_frame_cache.items() 
+                        k: v
+                        for k, v in self._scaled_frame_cache.items()
                         if k in frames_to_keep
                     }
-                
+
                 # Limpar masks antigos
                 if len(self._mask_cache) > 3:
                     self._mask_cache = {
-                        k: v for k, v in self._mask_cache.items() 
-                        if k in frames_to_keep
+                        k: v for k, v in self._mask_cache.items() if k in frames_to_keep
                     }
-                
+
                 # Limpar outlines antigos
                 if len(self._outline_cache) > 3:
                     self._outline_cache = {
-                        k: v for k, v in self._outline_cache.items() 
+                        k: v
+                        for k, v in self._outline_cache.items()
                         if k in frames_to_keep
                     }
 
@@ -427,7 +430,9 @@ class SlimeBoss:
         elif self.direction < 0 and self.x <= self.center_x - self.move_range:
             self.direction = 1
 
-    def _draw_fallback(self, surface: pygame.Surface, offset_x: float, offset_y: float) -> None:
+    def _draw_fallback(
+        self, surface: pygame.Surface, offset_x: float, offset_y: float
+    ) -> None:
         """Fallback drawing when animation frames are not available."""
         rect = pygame.Rect(
             int(self.x + offset_x),
@@ -463,7 +468,7 @@ class SlimeBoss:
                     frame, (int(self.w), int(self.h))
                 )
                 self._scaled_frame_cache[self.current_frame] = scaled_frame
-            
+
             surface.blit(scaled_frame, (int(self.x + offset_x), int(self.y + offset_y)))
 
         # Draw dripping effect
@@ -487,8 +492,8 @@ class SlimeBoss:
             self._mask_cache.clear()
             self._scaled_frame_cache.clear()
             self._outline_cache.clear()
-            if hasattr(self, '_flash_surface'):
-                delattr(self, '_flash_surface')
+            if hasattr(self, "_flash_surface"):
+                delattr(self, "_flash_surface")
             self._last_mask_size = current_size
 
         # ✅ OTIMIZAR VERIFICAÇÃO DE CACHE: usar .get() ao invés de 'in' + acesso
@@ -499,7 +504,10 @@ class SlimeBoss:
         # ✅ REUTILIZAR scaled_frame_cache (evita smoothscale duplicado)
         scaled_frame = self._scaled_frame_cache.get(self.current_frame)
         if scaled_frame is None:
-            if not self.animation_frames or len(self.animation_frames) <= self.current_frame:
+            if (
+                not self.animation_frames
+                or len(self.animation_frames) <= self.current_frame
+            ):
                 scaled_frame = pygame.Surface(current_size)
                 scaled_frame.fill((255, 255, 255, 255))
             else:
@@ -507,15 +515,19 @@ class SlimeBoss:
                     frame = self.animation_frames[self.current_frame]
                     scaled_frame = pygame.transform.smoothscale(frame, current_size)
                 except Exception as e:
-                    logging.warning(f"SlimeBoss: Erro ao escalar frame {self.current_frame}: {e}")
+                    logging.warning(
+                        f"SlimeBoss: Erro ao escalar frame {self.current_frame}: {e}"
+                    )
                     scaled_frame = pygame.Surface(current_size)
                     scaled_frame.fill((255, 255, 255, 255))
-            
+
             self._scaled_frame_cache[self.current_frame] = scaled_frame
 
         # Create mask from cached scaled frame
         try:
-            mask = pygame.mask.from_surface(self._scaled_frame_cache[self.current_frame])
+            mask = pygame.mask.from_surface(
+                self._scaled_frame_cache[self.current_frame]
+            )
         except Exception as e:
             logging.warning(f"SlimeBoss: Erro ao criar máscara: {e}")
             mask = pygame.mask.Mask(current_size, fill=True)
@@ -525,23 +537,25 @@ class SlimeBoss:
         return mask
 
     def _draw_flash_outline(
-        self, 
-        surface: pygame.Surface, 
+        self,
+        surface: pygame.Surface,
         scaled_frame: pygame.Surface | None,
         offset_x: float,
-        offset_y: float
+        offset_y: float,
     ) -> None:
         """Desenha outline com LOD baseado em distância."""
         flash_intensity = self.hit_flash_timer / self.hit_flash_duration
         alpha = max(0, min(255, int(220 * flash_intensity)))
-        
+
         # ✅ LAZY LOADING: Skip se alpha seria invisível
         if alpha < 10:  # Invisível, pular completamente
             return
-        
-        if not hasattr(self, '_flash_surface'):
-            self._flash_surface = pygame.Surface((int(self.w), int(self.h)), pygame.SRCALPHA)
-        
+
+        if not hasattr(self, "_flash_surface"):
+            self._flash_surface = pygame.Surface(
+                (int(self.w), int(self.h)), pygame.SRCALPHA
+            )
+
         self._flash_surface.fill((0, 0, 0, 0))
 
         if scaled_frame is not None:
@@ -557,10 +571,12 @@ class SlimeBoss:
                         outline = outline[::4]  # 1/4 dos pontos
                         self._outline_cache[self.current_frame] = outline
                     except Exception as e:
-                        logging.warning(f"SlimeBoss: Erro ao gerar outline simplificado: {e}")
+                        logging.warning(
+                            f"SlimeBoss: Erro ao gerar outline simplificado: {e}"
+                        )
                         outline = []
                         self._outline_cache[self.current_frame] = outline
-                
+
                 if len(outline) > 1:
                     pygame.draw.lines(
                         self._flash_surface,
@@ -576,11 +592,11 @@ class SlimeBoss:
                     try:
                         mask = pygame.mask.from_surface(scaled_frame)
                         outline = mask.outline()
-                        
+
                         # ✅ SIMPLIFICAR OUTLINE: pegar 1 a cada 2 pontos se muito grande
                         if len(outline) > 200:
                             outline = outline[::2]  # Pegar metade dos pontos
-                        
+
                         self._outline_cache[self.current_frame] = outline
                     except Exception as e:
                         logging.warning(f"SlimeBoss: Erro ao gerar outline: {e}")
@@ -604,7 +620,9 @@ class SlimeBoss:
                 width=2,  # Espessura reduzida
             )
 
-        surface.blit(self._flash_surface, (int(self.x + offset_x), int(self.y + offset_y)))
+        surface.blit(
+            self._flash_surface, (int(self.x + offset_x), int(self.y + offset_y))
+        )
 
     def check_drip_damage(
         self, player_rect: pygame.Rect, entity_manager: Optional["EntityManager"] = None

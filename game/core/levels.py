@@ -635,14 +635,14 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         enemy_spawn_config={
             Meteor: 0.6,
             SquareMinionBoss: 15.0,  # Spawn lento para tutorial
-            Alien: 2.5,
+            # Alien: 2.5,
             # EyeEnemy: 5.0,
         },
-        enemies_to_clear=0,
+        enemies_to_clear=150,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
         # mines_enabled=True,
-        boss_type=SlimeBoss,
+        # boss_type=SlimeBoss,
         # boss_type=Boss,
         # boss_type=GiantMeteorBoss,
         # boss_type=SpikeBoss,
@@ -692,11 +692,12 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         theme_name="Meteoro Gigante",
         score_multiplier=1.5,
     ),
+    # Slime Boss
     20: LevelConfig(
         level_number=20,
         enemy_spawn_config={
             Meteor: 0.7,
-            Alien: 8.0,
+            # Alien: 15.0,
             EyeEnemy: 15.0,
         },
         enemies_to_clear=300,

@@ -116,21 +116,27 @@ class EntityManager:
         cy = boss.y + boss.h / 2
 
         # Central blast
-        self.spawn_explosion(cx, cy, size=140, explosion_type=ExplosionType.SLIME)  # ← ATUALIZAR
+        self.spawn_explosion(
+            cx, cy, size=140, explosion_type=ExplosionType.SLIME
+        )  # ← ATUALIZAR
 
         # Large clustered blasts across the body
         for _ in range(12):
             ex = random.uniform(boss.x + boss.w * 0.1, boss.x + boss.w * 0.9)
             ey = random.uniform(boss.y + boss.h * 0.15, boss.y + boss.h * 0.85)
             size = random.randint(70, 120)
-            self.spawn_explosion(ex, ey, size=size, explosion_type=ExplosionType.SLIME)  # ← ATUALIZAR
+            self.spawn_explosion(
+                ex, ey, size=size, explosion_type=ExplosionType.SLIME
+            )  # ← ATUALIZAR
 
         # Smaller follow-up blasts for lingering effect
         for _ in range(8):
             ex = random.uniform(boss.x, boss.x + boss.w)
             ey = random.uniform(boss.y, boss.y + boss.h)
             size = random.randint(40, 70)
-            self.spawn_explosion(ex, ey, size=size, explosion_type=ExplosionType.SLIME)  # ← ATUALIZAR
+            self.spawn_explosion(
+                ex, ey, size=size, explosion_type=ExplosionType.SLIME
+            )  # ← ATUALIZAR
 
     def spawn_emp_wave(self, center_x: float, center_y: float) -> None:
         """Spawna uma onda visual de EMP."""

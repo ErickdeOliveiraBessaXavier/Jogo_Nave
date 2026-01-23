@@ -6,6 +6,7 @@ from ..core.config import config as Config
 
 class ExplosionType:
     """Define tipos de explosão com suas paletas de cores."""
+
     DEFAULT = None  # Laranja/vermelho padrão
     SLIME = [(80, 57, 89), (204, 176, 217), (38, 2, 89), (77, 13, 166), (65, 11, 140)]
     ALIEN = [(37, 217, 166), (78, 217, 74)]  # Verde
@@ -21,7 +22,7 @@ class Explosion:
     ):
         """
         Cria uma explosão de partículas.
-        
+
         Args:
             x, y: Posição central da explosão
             size: Tamanho da explosão (afeta duração e número de partículas)
@@ -32,7 +33,7 @@ class Explosion:
         self.size = size
         self.explosion_type = explosion_type
         self.time = Config.EXPLOSION_DURATION * (size / 40)
-        
+
         # Inicializar partículas
         self.particles: list[list[float]] = []
         self._create_particles()
@@ -91,15 +92,27 @@ class Explosion:
 
             r = int(
                 self.explosion_type[color_index][0]
-                + t * (self.explosion_type[next_index][0] - self.explosion_type[color_index][0])
+                + t
+                * (
+                    self.explosion_type[next_index][0]
+                    - self.explosion_type[color_index][0]
+                )
             )
             g = int(
                 self.explosion_type[color_index][1]
-                + t * (self.explosion_type[next_index][1] - self.explosion_type[color_index][1])
+                + t
+                * (
+                    self.explosion_type[next_index][1]
+                    - self.explosion_type[color_index][1]
+                )
             )
             b = int(
                 self.explosion_type[color_index][2]
-                + t * (self.explosion_type[next_index][2] - self.explosion_type[color_index][2])
+                + t
+                * (
+                    self.explosion_type[next_index][2]
+                    - self.explosion_type[color_index][2]
+                )
             )
             return (r, g, b)
         else:
@@ -119,7 +132,7 @@ class Explosion:
         for p in self.particles:
             life_ratio = p[4] / max(self.time, 1e-6)
             color = self._get_color(life_ratio)
-            
+
             pos = (int(p[0]), int(p[1]))
             radius = max(1, self.size / 10 * life_ratio)
             pygame.draw.circle(screen, color, pos, radius)

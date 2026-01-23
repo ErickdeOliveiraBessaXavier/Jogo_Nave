@@ -48,9 +48,10 @@ class PlayingScene(Scene):
         self.player_profile = PlayerProfile(get_profile_path())
 
         self.ship = Ship(
-            Config.SCREEN_WIDTH / 2 - 20, Config.SCREEN_HEIGHT + 100,
+            Config.SCREEN_WIDTH / 2 - 20,
+            Config.SCREEN_HEIGHT + 100,
             mouse_control=self.player_profile.mouse_control,
-            auto_fire=self.player_profile.auto_fire
+            auto_fire=self.player_profile.auto_fire,
         )  # Start 100 pixels below the screen
         self.ship.is_entering = True
         self.entity_manager = EntityManager(sound_manager=sound_manager)
@@ -295,7 +296,11 @@ class PlayingScene(Scene):
             self.ship.move(held, dt)
 
             # Tiro contínuo com tecla segurada ou automático
-            if (("hold_shoot" in held or self.ship.should_auto_fire()) and self.shoot_cd == 0.0 and not boss_pausing):
+            if (
+                ("hold_shoot" in held or self.ship.should_auto_fire())
+                and self.shoot_cd == 0.0
+                and not boss_pausing
+            ):
                 bullet_specs = self.ship.bullet_spawn()
                 for (
                     x,
@@ -1445,7 +1450,11 @@ class PlayingScene(Scene):
 
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             # Disparar com clique esquerdo se não estiver em auto-fire
-            if not self.ship.auto_fire and self.shoot_cd == 0.0 and not self.ship.is_entering:
+            if (
+                not self.ship.auto_fire
+                and self.shoot_cd == 0.0
+                and not self.ship.is_entering
+            ):
                 bullet_specs = self.ship.bullet_spawn()
                 for (
                     x,

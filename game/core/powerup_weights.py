@@ -23,10 +23,10 @@ def get_powerup_weights(difficulty: DifficultyPreset) -> dict[PowerUpType, int]:
 
     # Multiplicadores para raridade por dificuldade
     rarity_multiplier = {
-        DifficultyPreset.CASUAL: 1.2,    # Mais comuns (20% a mais)
-        DifficultyPreset.NORMAL: 1.0,    # Padrão
+        DifficultyPreset.CASUAL: 1.2,  # Mais comuns (20% a mais)
+        DifficultyPreset.NORMAL: 1.0,  # Padrão
         DifficultyPreset.HARDCORE: 0.7,  # Menos comuns (30% a menos)
-        DifficultyPreset.NIGHTMARE: 0.5, # Muito raros (50% a menos)
+        DifficultyPreset.NIGHTMARE: 0.5,  # Muito raros (50% a menos)
     }.get(difficulty, 1.0)
 
     # Aplica multiplicador e converte para int
