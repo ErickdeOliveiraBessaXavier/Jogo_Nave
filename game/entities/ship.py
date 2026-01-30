@@ -466,13 +466,14 @@ class Ship:
         # Partículas de entrada (desabilitar em side-scroll)
         if self.is_entering and not is_side_scroll:
             for _ in range(PARTICLE_ENTRY_COUNT):
+                min_size, max_size = PARTICLE_ENTRY_SIZE
                 particle = ParticleDict(
                     x=self.x + sprite_w / 2,
                     y=self.y,
                     vx=random.uniform(*PARTICLE_ENTRY_VELOCITY),
                     vy=random.uniform(80, 80),
                     lifetime=random.uniform(*PARTICLE_ENTRY_LIFETIME),
-                    size=random.uniform(*PARTICLE_ENTRY_SIZE),
+                    size=random.uniform(min_size, max_size),
                     color=(255, random.randint(100, 220), 0),
                 )
                 self.entry_particles.append(particle)
