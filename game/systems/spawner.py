@@ -467,8 +467,8 @@ class EnemySpawner:
         )
         self.stopped = False
 
-        # Reiniciar warm-up para nova fase (transições suaves)
-        self.warm_up_timer = Config.LEVEL_TRANSITION_DELAY
+        # Reiniciar warm-up para nova fase (respeitar tempo de preparação como no início)
+        self.warm_up_timer = Config.PREPARATION_TIME
         self.spawn_intensity = 0.0
 
         # Recriar timers para nova fase
