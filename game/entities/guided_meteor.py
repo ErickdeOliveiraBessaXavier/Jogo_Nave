@@ -34,6 +34,7 @@ class GuidedMeteor(Meteor):
         super().__init__(size, x, y, vx, vy)
 
         # Configurações de guiamento
+        self.id = "guided_meteor"
         self.max_speed = Config.GUIDED_METEOR_MAX_SPEED
         self.acceleration = Config.GUIDED_METEOR_ACCELERATION
         self.turn_rate = Config.GUIDED_METEOR_TURN_RATE
@@ -50,13 +51,14 @@ class GuidedMeteor(Meteor):
         self.base_color: Tuple[int, int, int] = colors.GREEN
 
     def update(
-        self, dt: float, target_x: float | None = None, target_y: float | None = None
+        self, dt: float, is_side_scroll: bool = False, target_x: float | None = None, target_y: float | None = None
     ) -> None:
         """
         Update guided meteor with seeking behavior.
 
         Args:
             dt: Delta time
+            is_side_scroll: Whether the game is in side-scrolling mode (passed to parent)
             target_x, target_y: Current target position (player position)
         """
         # Atualizar posição do alvo se fornecida
@@ -68,7 +70,7 @@ class GuidedMeteor(Meteor):
         self._update_guidance(dt)
 
         # Física normal do meteoro (movimento e rotação)
-        super().update(dt)
+        super().update(dt, is_side_scroll)
 
     def _update_guidance(self, dt: float) -> None:
         """Update the guidance system to steer towards target."""

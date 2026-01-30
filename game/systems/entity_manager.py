@@ -474,7 +474,7 @@ class EntityManager:
                 if shot:
                     new_eye_lasers.extend(shot)
             elif isinstance(enemy, GuidedMeteor):
-                enemy.update(scaled_dt, player_x, player_y)
+                enemy.update(scaled_dt, self.is_side_scroll, player_x, player_y)
             elif isinstance(enemy, SquareMinionBoss):
                 enemy.update(scaled_dt, screen_width, screen_height)
             else:
@@ -567,7 +567,10 @@ class EntityManager:
         for entity_list in entity_groups:
             for entity in entity_list:
                 if isinstance(entity, (EyeEnemy, GuidedMeteor)):
-                    entity.update(dt, player_x, player_y)
+                    if isinstance(entity, GuidedMeteor):
+                        entity.update(dt, self.is_side_scroll, player_x, player_y)
+                    else:  # EyeEnemy
+                        entity.update(dt, player_x, player_y)
                 elif isinstance(entity, MiniShip):
                     # MiniShip.update expects enemy_list and bullet_list,
                     # but during game over slow-mo, they might not need complex interactions
