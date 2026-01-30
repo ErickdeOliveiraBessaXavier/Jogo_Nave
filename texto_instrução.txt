@@ -1,0 +1,1027 @@
+# Documento Completo: Sistema de Mundos com Progressão Procedural
+
+## 1. Análise do Sistema Atual
+
+### 1.1 Sistema de Níveis Existente
+```python
+# game/core/levels.py
+
+FIXED_LEVELS = {
+    1: LevelConfig(...),    # Tutorial
+    3: LevelConfig(...),    # Boss normal
+    7: LevelConfig(...),    # SpikeBoss
+    14: LevelConfig(...),   # GiantMeteorBoss
+    20: LevelConfig(...),   # SlimeBoss
+}
+
+# Após nível 20, tudo é procedural
+```
+
+**Conclusão**: O sistema já funciona de forma híbrida (fixo + procedural). Vamos manter essa lógica e adicionar a camada de "mundos" por cima.
+
+---
+
+## 2. Estrutura Proposta
+
+### 2.1 Organização dos Mundos e Bosses
+
+```
+MUNDO 1 - MONTANHAS (Níveis 1-10)
+├── 1-1 a 1-9: Procedural com tema "montanhas"
+└── 1-10: BOSS FINAL (Boss normal)
+
+MUNDO 2 - STARFIELD (Níveis 11-20)
+├── 2-1 a 2-9: Procedural com tema "espaço"
+└── 2-10: BOSS FINAL (SpikeBoss)
+
+MUNDO 3 - CIDADE CYBER (Níveis 21-30)
+├── 3-1 a 3-9: Procedural com tema "cidade"
+└── 3-10: BOSS FINAL (GiantMeteorBoss)
+
+MUNDO 4 - VULCÂNICO (Níveis 31-40)
+├── 4-1 a 4-9: Procedural com tema "lava"
+└── 4-10: BOSS FINAL (SlimeBoss)
+
+MUNDO 5+ - PROCEDURAL INFINITO (41+)
+└── Geração procedural completa, rotação de bosses
+```
+
+---
+
+## 3. Implementação Passo a Passo
+
+### PASSO 1: Criar Configuração de Mundos
+
+**Arquivo**: `game/core/world_config.py` (NOVO)
+
+```python
+from dataclasses import dataclass
+from typing import Optional, Type, Tuple, List
+from enum import Enum
+
+class WorldTheme(Enum):
+    """Temas visuais dos mundos."""
+    MOUNTAINS = "mountains"
+    STARFIELD = "starfield"
+    CITY = "city"
+    VOLCANIC = "volcanic"
+    PROCEDURAL = "procedural"
+
+
+@dataclass
+class WorldConfig:
+    """Configuração de um mundo."""
+    world_id: int
+    name: str
+    description: str
+    theme: WorldTheme
+    
+    # Visual
+    primary_color: Tuple[int, int, int]
+    secondary_color: Tuple[int, int, int]
+    
+    # Gameplay
+    start_level: int  # Nível inicial (ex: 1, 11, 21)
+    end_level: int    # Nível final (ex: 10, 20, 30)
+    boss_level: int   # Nível do boss (sempre end_level)
+    
+    # Boss específico (None = procedural)
+    boss_type: Optional[Type] = None
+    
+    # Modificadores de tema (aplicados à geração procedural)
+    theme_modifiers: dict = None
+    
+    def __post_init__(self):
+        if self.theme_modifiers is None:
+            self.theme_modifiers = {}
+    
+    @property
+    def total_stages(self) -> int:
+        """Total de estágios no mundo."""
+        return self.end_level - self.start_level + 1
+    
+    def get_stage_number(self, level_number: int) -> int:
+        """Converte nível absoluto para número do estágio (1-10)."""
+        return level_number - self.start_level + 1
+    
+    def contains_level(self, level_number: int) -> bool:
+        """Verifica se o nível pertence a este mundo."""
+        return self.start_level <= level_number <= self.end_level
+
+
+# ============================================================================
+# DEFINIÇÃO DOS MUNDOS
+# ============================================================================
+
+def _get_worlds() -> dict[int, WorldConfig]:
+    """Retorna dicionário de mundos configurados."""
+    from ..entities.boss import Boss
+    from ..entities.spike_boss import SpikeBoss
+    from ..entities.giant_meteor_boss import GiantMeteorBoss
+    from ..entities.slime_boss import SlimeBoss
+    
+    return {
+        1: WorldConfig(
+            world_id=1,
+            name="Cordilheira Celestial",
+            description="Montanhas rochosas flutuantes nas nuvens",
+            theme=WorldTheme.MOUNTAINS,
+            primary_color=(139, 90, 60),      # Marrom rochoso
+            secondary_color=(200, 200, 220),  # Névoa clara
+            start_level=1,
+            end_level=10,
+            boss_level=10,
+            boss_type=Boss,  # Boss normal
+            theme_modifiers={
+                "meteor_weight": 2.0,  # Mais meteoros (tema de pedras)
+                "alien_weight": 0.5,   # Menos aliens
+            }
+        ),
+        
+        2: WorldConfig(
+            world_id=2,
+            name="Vazio Sideral",
+            description="A vastidão infinita do espaço profundo",
+            theme=WorldTheme.STARFIELD,
+            primary_color=(30, 30, 80),       # Azul espacial
+            secondary_color=(100, 100, 150),  # Nebulosa
+            start_level=11,
+            end_level=20,
+            boss_level=20,
+            boss_type=SpikeBoss,
+            theme_modifiers={
+                "meteor_weight": 1.0,
+                "alien_weight": 1.5,   # Mais aliens no espaço
+                "formation_chance": 1.2,
+            }
+        ),
+        
+        3: WorldConfig(
+            world_id=3,
+            name="Metrópole Neon",
+            description="Cidade cyberpunk com arranha-céus brilhantes",
+            theme=WorldTheme.CITY,
+            primary_color=(150, 50, 200),     # Roxo neon
+            secondary_color=(0, 255, 255),    # Cyan elétrico
+            start_level=21,
+            end_level=30,
+            boss_level=30,
+            boss_type=GiantMeteorBoss,
+            theme_modifiers={
+                "eye_weight": 1.5,     # Mais olhos (câmeras de segurança)
+                "mines_chance": 1.3,   # Mais minas (armadilhas urbanas)
+            }
+        ),
+        
+        4: WorldConfig(
+            world_id=4,
+            name="Núcleo Vulcânico",
+            description="Mundo de lava e fragmentos ígneos",
+            theme=WorldTheme.VOLCANIC,
+            primary_color=(255, 80, 0),       # Laranja lava
+            secondary_color=(200, 0, 0),      # Vermelho incandescente
+            start_level=31,
+            end_level=40,
+            boss_level=40,
+            boss_type=SlimeBoss,  # Slime de lava
+            theme_modifiers={
+                "meteor_weight": 1.8,  # Muitos fragmentos vulcânicos
+                "spawn_rate_multiplier": 1.15,  # Mais caótico
+            }
+        ),
+    }
+
+
+WORLDS = _get_worlds()
+
+
+# ============================================================================
+# FUNÇÕES AUXILIARES
+# ============================================================================
+
+def get_world_for_level(level_number: int) -> WorldConfig:
+    """Retorna o mundo correspondente a um nível."""
+    for world in WORLDS.values():
+        if world.contains_level(level_number):
+            return world
+    
+    # Níveis 41+: mundo procedural infinito
+    return WorldConfig(
+        world_id=(level_number - 1) // 10 + 1,
+        name=f"Setor {(level_number - 1) // 10 + 1}",
+        description="Região desconhecida do espaço",
+        theme=WorldTheme.PROCEDURAL,
+        primary_color=(60, 60, 60),
+        secondary_color=(100, 100, 100),
+        start_level=((level_number - 1) // 10) * 10 + 1,
+        end_level=((level_number - 1) // 10) * 10 + 10,
+        boss_level=((level_number - 1) // 10) * 10 + 10,
+        boss_type=None,  # Rotação procedural
+    )
+
+
+def get_stage_identifier(level_number: int) -> Tuple[int, int]:
+    """Retorna (world_id, stage_number) para um nível."""
+    world = get_world_for_level(level_number)
+    stage = world.get_stage_number(level_number)
+    return (world.world_id, stage)
+
+
+def format_stage_name(level_number: int) -> str:
+    """Formata nome do estágio (ex: '1-5', '2-10')."""
+    world_id, stage = get_stage_identifier(level_number)
+    return f"{world_id}-{stage}"
+```
+
+---
+
+### PASSO 2: Modificar Sistema de Níveis
+
+**Arquivo**: `game/core/levels.py` (MODIFICAR)
+
+```python
+# NO TOPO DO ARQUIVO, adicionar:
+from .world_config import get_world_for_level, WORLDS
+
+# MODIFICAR a função get_level_config:
+
+def get_level_config(
+    level_number: int,
+    difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
+    force_meteor_storm: bool = False,
+) -> LevelConfig:
+    """
+    Retorna a configuração de um nível com dificuldade aplicada.
+    
+    NOVO: Integrado com sistema de mundos.
+    """
+    # Obter mundo correspondente
+    world = get_world_for_level(level_number)
+    
+    # Verificar se é nível de boss do mundo
+    if level_number == world.boss_level and world.boss_type is not None:
+        # Boss fixo do mundo
+        return _create_world_boss_level(world, level_number, difficulty_preset)
+    
+    # Níveis fixos especiais (tutorial, etc)
+    if level_number in FIXED_LEVELS and not force_meteor_storm:
+        # Aplicar tema do mundo ao nível fixo
+        config = FIXED_LEVELS[level_number]
+        config = _apply_world_theme_to_config(config, world)
+        return _apply_difficulty_to_fixed_level(config, difficulty_preset)
+    
+    # Geração procedural com tema do mundo
+    if difficulty_preset not in _procedural_generators:
+        _procedural_generators[difficulty_preset] = ProceduralLevelGenerator(
+            difficulty_preset=difficulty_preset
+        )
+    
+    generator = _procedural_generators[difficulty_preset]
+    
+    if force_meteor_storm:
+        difficulty = generator.calculate_difficulty(level_number)
+        theme = LEVEL_THEMES["meteor_storm"]
+        config = generator.generate_config(
+            level_number,
+            difficulty,
+            theme,
+            random.Random(generator.seed + level_number),
+        )
+    else:
+        # Gerar com tema do mundo aplicado
+        config = generator.generate_level(level_number)
+        config = _apply_world_theme_to_config(config, world)
+    
+    return config
+
+
+def _create_world_boss_level(
+    world: "WorldConfig",
+    level_number: int,
+    difficulty_preset: DifficultyPreset,
+) -> LevelConfig:
+    """Cria configuração para o boss de um mundo."""
+    from ..entities.boss import Boss
+    from ..entities.spike_boss import SpikeBoss
+    from ..entities.giant_meteor_boss import GiantMeteorBoss
+    from ..entities.slime_boss import SlimeBoss
+    
+    # Configuração base do boss
+    base_enemies_to_clear = 200 + (world.world_id - 1) * 50  # Escala com mundo
+    
+    # Inimigos antes do boss (tema do mundo)
+    enemy_spawn_config: dict = {}
+    
+    if world.theme == WorldTheme.MOUNTAINS:
+        enemy_spawn_config = {
+            Meteor: 0.8,
+            Alien: 3.0,
+        }
+    elif world.theme == WorldTheme.STARFIELD:
+        enemy_spawn_config = {
+            Meteor: 1.2,
+            Alien: 2.0,
+            EyeEnemy: 6.0,
+        }
+    elif world.theme == WorldTheme.CITY:
+        enemy_spawn_config = {
+            Meteor: 1.5,
+            Alien: 2.5,
+            EyeEnemy: 5.0,
+        }
+    elif world.theme == WorldTheme.VOLCANIC:
+        enemy_spawn_config = {
+            Meteor: 0.7,
+            EyeEnemy: 4.0,
+        }
+    else:  # PROCEDURAL
+        enemy_spawn_config = {
+            Meteor: 1.0,
+            Alien: 2.0,
+        }
+    
+    config = LevelConfig(
+        level_number=level_number,
+        enemy_spawn_config=enemy_spawn_config,
+        enemies_to_clear=base_enemies_to_clear,
+        boss_type=world.boss_type,
+        mines_enabled=True,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle"],
+        theme_name=f"Boss: {world.name}",
+        score_multiplier=1.0 + (world.world_id * 0.2),
+    )
+    
+    return _apply_difficulty_to_fixed_level(config, difficulty_preset)
+
+
+def _apply_world_theme_to_config(
+    config: LevelConfig,
+    world: "WorldConfig",
+) -> LevelConfig:
+    """Aplica modificadores do tema do mundo à configuração."""
+    if not world.theme_modifiers:
+        return config
+    
+    # Aplicar modificadores de peso de inimigos
+    adjusted_spawn_config = dict(config.enemy_spawn_config)
+    
+    meteor_mult = world.theme_modifiers.get("meteor_weight", 1.0)
+    alien_mult = world.theme_modifiers.get("alien_weight", 1.0)
+    eye_mult = world.theme_modifiers.get("eye_weight", 1.0)
+    
+    for enemy_type, spawn_time in adjusted_spawn_config.items():
+        if enemy_type.__name__ == "Meteor":
+            adjusted_spawn_config[enemy_type] = spawn_time / meteor_mult
+        elif enemy_type.__name__ == "Alien":
+            adjusted_spawn_config[enemy_type] = spawn_time / alien_mult
+        elif enemy_type.__name__ == "EyeEnemy":
+            adjusted_spawn_config[enemy_type] = spawn_time / eye_mult
+    
+    # Outros modificadores
+    spawn_rate_mult = world.theme_modifiers.get("spawn_rate_multiplier", 1.0)
+    for enemy_type in adjusted_spawn_config:
+        adjusted_spawn_config[enemy_type] /= spawn_rate_mult
+    
+    # Criar nova config
+    return LevelConfig(
+        level_number=config.level_number,
+        enemy_spawn_config=adjusted_spawn_config,
+        enemies_to_clear=config.enemies_to_clear,
+        boss_type=config.boss_type,
+        mines_enabled=config.mines_enabled,
+        formations_enabled=config.formations_enabled,
+        formation_types=config.formation_types,
+        theme_name=world.name,  # Atualizar nome
+        score_multiplier=config.score_multiplier,
+    )
+```
+
+---
+
+### PASSO 3: Criar Backgrounds Dinâmicos
+
+**Arquivo**: `game/render/backgrounds.py` (NOVO)
+
+```python
+from abc import ABC, abstractmethod
+from typing import List, Tuple
+import pygame
+import random
+from ..core.config import config as Config
+
+
+class Background(ABC):
+    """Classe base para backgrounds de mundos."""
+    
+    def __init__(self, width: int, height: int):
+        self.width = width
+        self.height = height
+    
+    @abstractmethod
+    def update(self, dt: float, speed_mult: float = 1.0):
+        """Atualiza animação do background."""
+        pass
+    
+    @abstractmethod
+    def draw(self, surface: pygame.Surface):
+        """Desenha o background."""
+        pass
+    
+    @abstractmethod
+    def reset(self):
+        """Reseta para estado inicial."""
+        pass
+
+
+class MountainsBackground(Background):
+    """Background de montanhas com parallax."""
+    
+    def __init__(self, width: int, height: int):
+        super().__init__(width, height)
+        self.layers: List[dict] = []
+        self._create_layers()
+    
+    def _create_layers(self):
+        """Cria 3 camadas de montanhas com parallax."""
+        # Camada distante (céu/nuvens - mais clara, mais lenta)
+        self.layers.append({
+            'y_base': self.height * 0.4,
+            'speed': 15,
+            'color': (120, 100, 80),
+            'peaks': self._generate_peaks(4, 80, 180),
+            'offset': 0.0,
+        })
+        
+        # Camada média
+        self.layers.append({
+            'y_base': self.height * 0.6,
+            'speed': 35,
+            'color': (90, 70, 50),
+            'peaks': self._generate_peaks(6, 100, 220),
+            'offset': 0.0,
+        })
+        
+        # Camada próxima (mais escura, mais rápida)
+        self.layers.append({
+            'y_base': self.height * 0.75,
+            'speed': 55,
+            'color': (60, 45, 35),
+            'peaks': self._generate_peaks(8, 120, 280),
+            'offset': 0.0,
+        })
+    
+    def _generate_peaks(
+        self, count: int, min_height: int, max_height: int
+    ) -> List[int]:
+        """Gera alturas de picos de montanha."""
+        return [random.randint(min_height, max_height) for _ in range(count)]
+    
+    def update(self, dt: float, speed_mult: float = 1.0):
+        """Atualiza scroll parallax."""
+        for layer in self.layers:
+            layer['offset'] += layer['speed'] * dt * speed_mult
+            # Wrap around quando completar um ciclo
+            if layer['offset'] >= self.width:
+                layer['offset'] -= self.width
+    
+    def draw(self, surface: pygame.Surface):
+        """Desenha camadas de montanhas."""
+        for layer in self.layers:
+            points = []
+            segment_width = self.width / len(layer['peaks'])
+            
+            # Desenhar duas vezes para criar loop sem emendas
+            for loop_offset in [0, self.width]:
+                for i, peak_height in enumerate(layer['peaks']):
+                    x = i * segment_width + loop_offset - layer['offset']
+                    y = layer['y_base'] - peak_height
+                    points.append((x, y))
+            
+            # Fechar polígono embaixo
+            points.append((self.width * 2, self.height))
+            points.append((-self.width, self.height))
+            
+            # Desenhar apenas pontos visíveis
+            visible_points = [
+                (int(x), int(y)) for x, y in points
+                if -100 <= x <= self.width + 100
+            ]
+            
+            if len(visible_points) >= 3:
+                pygame.draw.polygon(surface, layer['color'], visible_points)
+    
+    def reset(self):
+        self.layers.clear()
+        self._create_layers()
+
+
+class CityBackground(Background):
+    """Background de cidade cyberpunk."""
+    
+    def __init__(self, width: int, height: int):
+        super().__init__(width, height)
+        self.buildings: List[dict] = []
+        self.blink_timer = 0.0
+        self._create_buildings()
+    
+    def _create_buildings(self):
+        """Gera prédios proceduralmente."""
+        x = -200  # Começar fora da tela
+        while x < self.width + 400:
+            width = random.randint(60, 180)
+            height = random.randint(250, 550)
+            neon_color = random.choice([
+                (0, 255, 255),    # Cyan
+                (255, 0, 255),    # Magenta
+                (255, 255, 0),    # Amarelo
+                (0, 255, 150),    # Verde neon
+            ])
+            
+            self.buildings.append({
+                'x': x,
+                'width': width,
+                'height': height,
+                'neon_color': neon_color,
+                'window_pattern': random.randint(0, 3),  # Padrão de janelas
+            })
+            
+            x += width + random.randint(10, 40)
+    
+    def update(self, dt: float, speed_mult: float = 1.0):
+        """Scroll horizontal."""
+        scroll_speed = 25 * speed_mult
+        self.blink_timer += dt
+        
+        for building in self.buildings:
+            building['x'] += scroll_speed * dt
+            
+            # Wrap around
+            if building['x'] > self.width + 200:
+                building['x'] -= (self.width + 800)
+    
+    def draw(self, surface: pygame.Surface):
+        """Desenha cidade cyberpunk."""
+        for bldg in self.buildings:
+            x = int(bldg['x'])
+            y = self.height - bldg['height']
+            
+            # Silhueta do prédio (escuro)
+            pygame.draw.rect(
+                surface,
+                (15, 15, 30),
+                (x, y, bldg['width'], bldg['height'])
+            )
+            
+            # Borda neon
+            pygame.draw.rect(
+                surface,
+                bldg['neon_color'],
+                (x, y, bldg['width'], bldg['height']),
+                2
+            )
+            
+            # Janelas iluminadas
+            window_w = 12
+            window_h = 20
+            spacing = 25
+            
+            for wy in range(y + 30, y + bldg['height'] - 30, spacing + window_h):
+                for wx in range(x + 15, x + bldg['width'] - 15, spacing):
+                    # Padrão de piscar baseado em tempo + posição
+                    blink_offset = (wx + wy) % 100
+                    should_be_lit = (int(self.blink_timer * 100) + blink_offset) % 200 < 150
+                    
+                    if should_be_lit:
+                        color = (255, 255, 200)  # Branco quente
+                    else:
+                        color = (40, 40, 60)  # Apagado
+                    
+                    pygame.draw.rect(surface, color, (wx, wy, window_w, window_h))
+    
+    def reset(self):
+        self.buildings.clear()
+        self.blink_timer = 0.0
+        self._create_buildings()
+
+
+class VolcanicBackground(Background):
+    """Background vulcânico com lava."""
+    
+    def __init__(self, width: int, height: int):
+        super().__init__(width, height)
+        self.lava_pools: List[dict] = []
+        self.embers: List[dict] = []
+        self.wave_offset = 0.0
+        self._create_lava()
+        self._create_embers()
+    
+    def _create_lava(self):
+        """Cria pools de lava no chão."""
+        for i in range(3):
+            self.lava_pools.append({
+                'y': self.height - random.randint(50, 150),
+                'amplitude': random.randint(5, 15),
+                'frequency': random.uniform(0.5, 1.5),
+                'phase': random.uniform(0, 6.28),
+            })
+    
+    def _create_embers(self):
+        """Cria partículas de brasa."""
+        for _ in range(40):
+            self.embers.append({
+                'x': random.randint(0, self.width),
+                'y': random.randint(0, self.height),
+                'speed': random.uniform(20, 80),
+                'size': random.randint(2, 5),
+                'brightness': random.uniform(0.5, 1.0),
+            })
+    
+    def update(self, dt: float, speed_mult: float = 1.0):
+        """Atualiza animação de lava e brasas."""
+        self.wave_offset += dt * 2
+        
+        # Atualizar brasas (sobem)
+        for ember in self.embers:
+            ember['y'] -= ember['speed'] * dt * speed_mult
+            
+            # Resetar se sair da tela
+            if ember['y'] < -10:
+                ember['y'] = self.height + 10
+                ember['x'] = random.randint(0, self.width)
+    
+    def draw(self, surface: pygame.Surface):
+        """Desenha cenário vulcânico."""
+        import math
+        
+        # Lava no chão (ondulante)
+        for pool in self.lava_pools:
+            points = []
+            for x in range(0, self.width, 20):
+                wave = math.sin(
+                    (x * pool['frequency'] / 100) + 
+                    (self.wave_offset * pool['frequency']) + 
+                    pool['phase']
+                )
+                y = pool['y'] + wave * pool['amplitude']
+                points.append((x, y))
+            
+            points.append((self.width, self.height))
+            points.append((0, self.height))
+            
+            # Gradiente de lava
+            pygame.draw.polygon(surface, (200, 50, 0), points)
+            pygame.draw.polygon(surface, (255, 100, 0), points, 3)
+        
+        # Brasas flutuantes
+        for ember in self.embers:
+            brightness = int(255 * ember['brightness'])
+            color = (brightness, brightness // 3, 0)
+            pygame.draw.circle(
+                surface,
+                color,
+                (int(ember['x']), int(ember['y'])),
+                ember['size']
+            )
+    
+    def reset(self):
+        self.lava_pools.clear()
+        self.embers.clear()
+        self.wave_offset = 0.0
+        self._create_lava()
+        self._create_embers()
+```
+
+---
+
+### PASSO 4: Integrar Backgrounds no Renderer
+
+**Arquivo**: `game/render/renderer.py` (MODIFICAR)
+
+```python
+# NO TOPO, adicionar imports:
+from .backgrounds import (
+    Background,
+    MountainsBackground,
+    CityBackground,
+    VolcanicBackground,
+)
+from ..core.world_config import WorldTheme
+
+# NA CLASSE Renderer, modificar __init__:
+
+class Renderer:
+    def __init__(self):
+        # ... código existente ...
+        
+        # Background dinâmico (NOVO)
+        self.current_background: Optional[Background] = None
+        self.current_theme: Optional[WorldTheme] = None
+    
+    # ADICIONAR método:
+    def set_world_theme(self, theme: WorldTheme):
+        """Troca o background baseado no tema do mundo."""
+        # Não recriar se já está no tema correto
+        if self.current_theme == theme:
+            return
+        
+        self.current_theme = theme
+        
+        if theme == WorldTheme.MOUNTAINS:
+            self.current_background = MountainsBackground(
+                Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+            )
+        elif theme == WorldTheme.CITY:
+            self.current_background = CityBackground(
+                Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+            )
+        elif theme == WorldTheme.VOLCANIC:
+            self.current_background = VolcanicBackground(
+                Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+            )
+        else:  # STARFIELD ou PROCEDURAL
+            self.current_background = None  # Usa sistema original
+    
+    # MODIFICAR método background:
+    def background(
+        self,
+        surface: pygame.Surface,
+        dt: float,
+        speed_multiplier: float = 1.0,
+        draw_celestials: bool = True,
+    ):
+        surface.fill(colors.BLACK)
+        
+        # Sempre atualizar/desenhar starfield (base)
+        self.starfield.update(dt, speed_multiplier)
+        self.starfield.draw(surface)
+        
+        if self.current_background is None:
+            # Modo starfield clássico (mundo 2 ou procedural)
+            self.celestial_manager.update(dt, speed_multiplier, draw_celestials)
+            self.celestial_manager.draw(surface)
+        else:
+            # Background temático customizado
+            self.current_background.update(dt, speed_multiplier)
+            self.current_background.draw(surface)
+```
+
+---
+
+### PASSO 5: Atualizar PlayingScene
+
+**Arquivo**: `game/scenes/playing.py` (MODIFICAR)
+
+```python
+# NO TOPO, adicionar:
+from ..core.world_config import get_world_for_level, format_stage_name
+
+# MODIFICAR __init__:
+
+def __init__(
+    self,
+    app: "GameApp",
+    level_manager: LevelManager,
+    difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
+):
+    super().__init__(app)
+    # ... código existente até self.current_level_index ...
+    
+    self.current_level_index = 0
+    self.level_config = self._get_adjusted_level_config(
+        self.current_level_index + 1
+    )
+    
+    # NOVO: Aplicar tema do mundo
+    self._apply_world_theme()
+    
+    # ... resto do código ...
+
+# ADICIONAR método:
+def _apply_world_theme(self):
+    """Aplica o tema visual do mundo atual."""
+    current_level = self.current_level_index + 1
+    world = get_world_for_level(current_level)
+    self.r.set_world_theme(world.theme)
+    self.current_world = world  # Guardar referência
+
+# MODIFICAR _start_next_level:
+def _start_next_level(self):
+    self.level_transition_active = False
+    self.current_level_index += 1
+    
+    # ... código existente ...
+    
+    # NOVO: Verificar mudança de mundo
+    new_world = get_world_for_level(self.current_level_index + 1)
+    if new_world.world_id != self.current_world.world_id:
+        # Mudou de mundo! Aplicar novo tema
+        self._apply_world_theme()
+        logger.info(f"Entrando no mundo: {new_world.name}")
+    
+    # ... resto do código ...
+
+# MODIFICAR método render (no HUD):
+def render(self, surface: pygame.Surface):
+    # ... código existente até self.r.hud(...) ...
+    
+    # Mostrar estágio formatado (ex: "2-5" ao invés de "Fase: 15")
+    stage_name = format_stage_name(self.level_config.level_number)
+    
+    self.r.hud(
+        self.game_surface,
+        self.score,
+        self.lives,
+        self.total_enemies_destroyed,
+        self.ship,
+        stage_name,  # MODIFICADO (era level_number)
+        self.difficulty_preset,
+        # ... resto dos parâmetros ...
+    )
+    
+    # ... resto do código ...
+```
+
+---
+
+### PASSO 6: Atualizar HUD para mostrar Stage
+
+**Arquivo**: `game/render/renderer.py` (MODIFICAR método hud)
+
+```python
+def hud(
+    self,
+    surface: pygame.Surface,
+    score: int,
+    lives: int,
+    enemies_destroyed: int,
+    ship: Optional["Ship"] = None,
+    level_display: str = "1",  # MODIFICADO: era level_number: int
+    difficulty_preset: Optional["DifficultyPreset"] = None,
+    # ... resto dos parâmetros ...
+):
+    # ... código existente para score e lives ...
+    
+    # Mostrar estágio formatado
+    lvl = self.font_medium.render(f"Estágio: {level_display}", True, colors.WHITE)
+    surface.blit(lvl, (10, 44))
+    
+    # ... resto do código ...
+```
+
+---
+
+### PASSO 7: Adicionar Transição Visual Entre Mundos (OPCIONAL)
+
+**Arquivo**: `game/scenes/world_transition.py` (NOVO - OPCIONAL)
+
+```python
+import pygame
+from typing import TYPE_CHECKING
+from ..core.state import Scene
+from ..core import colors
+from ..core.assets import get_font
+from ..core.world_config import WorldConfig
+
+if TYPE_CHECKING:
+    from ..app import GameApp
+
+
+class WorldTransitionScene(Scene):
+    """Transição visual entre mundos."""
+    
+    def __init__(self, app: "GameApp", new_world: WorldConfig):
+        super().__init__(app)
+        self.new_world = new_world
+        self.timer = 0.0
+        self.duration = 3.0  # 3 segundos
+        self.font_title = get_font(60)
+        self.font_desc = get_font(24)
+    
+    def enter(self):
+        pygame.mouse.set_visible(True)
+    
+    def update(self, dt: float):
+        self.timer += dt
+        if self.timer >= self.duration:
+            self.app.states.pop()  # Remove transição
+    
+    def handle_event(self, event: pygame.Event):
+        if event.type == pygame.KEYDOWN:
+            if event.key in [pygame.K_RETURN, pygame.K_SPACE]:
+                self.app.states.pop()  # Pular transição
+    
+    def render(self, surface: pygame.Surface):
+        surface.fill(colors.BLACK)
+        
+        # Fade in/out
+        alpha = 255
+        if self.timer < 0.5:
+            alpha = int((self.timer / 0.5) * 255)
+        elif self.timer > self.duration - 0.5:
+            alpha = int(((self.duration - self.timer) / 0.5) * 255)
+        
+        # Título do mundo
+        title = self.font_title.render(self.new_world.name, True, self.new_world.primary_color)
+        title.set_alpha(alpha)
+        title_rect = title.get_rect(center=(surface.get_width() // 2, surface.get_height() // 2 - 50))
+        surface.blit(title, title_rect)
+        
+        # Descrição
+        desc = self.font_desc.render(self.new_world.description, True, colors.WHITE)
+        desc.set_alpha(alpha)
+        desc_rect = desc.get_rect(center=(surface.get_width() // 2, surface.get_height() // 2 + 20))
+        surface.blit(desc, desc_rect)
+        
+        # Instrução
+        skip_text = get_font(16).render("Pressione ENTER para continuar", True, colors.GRAY)
+        skip_text.set_alpha(alpha)
+        skip_rect = skip_text.get_rect(center=(surface.get_width() // 2, surface.get_height() - 50))
+        surface.blit(skip_text, skip_rect)
+```
+
+**Usar em PlayingScene** (opcional):
+
+```python
+# Em _start_next_level, quando muda de mundo:
+if new_world.world_id != self.current_world.world_id:
+    from ..scenes.world_transition import WorldTransitionScene
+    self.app.states.push(WorldTransitionScene(self.app, new_world))
+    self._apply_world_theme()
+```
+
+---
+
+## 4. Checklist de Implementação
+
+### Fase 1: Base (2-3h)
+- [ ] Criar `world_config.py` com 4 mundos
+- [ ] Modificar `levels.py` para integrar mundos
+- [ ] Testar que níveis ainda funcionam normalmente
+
+### Fase 2: Visual (2-3h)
+- [ ] Criar `backgrounds.py` com 3 backgrounds
+- [ ] Integrar backgrounds no `Renderer`
+- [ ] Testar transição entre backgrounds
+
+### Fase 3: Interface (1-2h)
+- [ ] Modificar HUD para mostrar "World-Stage"
+- [ ] Atualizar `PlayingScene` para aplicar temas
+- [ ] Testar progressão entre mundos
+
+### Fase 4: Polish (1-2h - OPCIONAL)
+- [ ] Criar `WorldTransitionScene`
+- [ ] Adicionar música por mundo
+- [ ] Adicionar partículas temáticas
+
+---
+
+## 5. Testes Essenciais
+
+```python
+# Testar conversão de níveis
+from game.core.world_config import get_world_for_level, format_stage_name
+
+# Nível 1 = Mundo 1, Stage 1
+assert format_stage_name(1) == "1-1"
+assert get_world_for_level(1).name == "Cordilheira Celestial"
+
+# Nível 10 = Mundo 1, Stage 10 (Boss)
+assert format_stage_name(10) == "1-10"
+assert get_world_for_level(10).boss_type is not None
+
+# Nível 11 = Mundo 2, Stage 1
+assert format_stage_name(11) == "2-1"
+assert get_world_for_level(11).theme == WorldTheme.STARFIELD
+
+# Nível 20 = Mundo 2, Stage 10 (Boss)
+assert format_stage_name(20) == "2-10"
+
+# Nível 45 = Mundo 5, Stage 5 (Procedural)
+assert format_stage_name(45) == "5-5"
+assert get_world_for_level(45).theme == WorldTheme.PROCEDURAL
+```
+
+---
+
+## 6. Resultado Final
+
+### O que o jogador verá:
+
+1. **Mundo 1 (1-1 a 1-10)**: Background de montanhas, mais meteoros, Boss normal
+2. **Mundo 2 (2-1 a 2-10)**: Starfield clássico, balanceado, SpikeBoss
+3. **Mundo 3 (3-1 a 3-10)**: Cidade cyberpunk, mais olhos/minas, GiantMeteorBoss
+4. **Mundo 4 (4-1 a 4-10)**: Lava vulcânica, caótico, SlimeBoss
+5. **Mundo 5+ (41+)**: Procedural infinito com rotação de bosses
+
+### Compatibilidade:
+- ✅ Sistema de níveis procedurais **mantido**
+- ✅ Dificuldades adaptativas **funcionam**
+- ✅ Meta-progression **compatível**
+- ✅ Saves existentes **compatíveis** (apenas mostram diferente visualmente)
+
+---
+
+**Tempo total estimado**: 6-10 horas
+**Complexidade**: Média-Alta
+**Impacto**: Alto (melhora muito a sensação de progressão)

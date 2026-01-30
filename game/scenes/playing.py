@@ -23,6 +23,7 @@ from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_profile_path
 from ..core.upgrades import create_upgrade, ActiveUpgrade, HealUpgrade
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
+from ..core.world_config import get_world_for_level, format_stage_name
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,10 @@ class PlayingScene(Scene):
             self.current_level_index + 1
         )
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
+        
+        # NOVO: Aplicar tema do mundo
+        self.current_world = get_world_for_level(self.current_level_index + 1)
+        self._apply_world_theme()
 
         # Cache de configuração de nível (otimização)
         self._cache_level_thresholds()
@@ -200,6 +205,11 @@ class PlayingScene(Scene):
         """Obtém configuração de nível ajustada pelo meta-progression."""
         base_config = get_level_config(level_number, self.difficulty_preset)
         return self.player_profile.get_adjusted_config(base_config)
+
+    def _apply_world_theme(self) -> None:
+        """Aplica o tema visual do mundo atual."""
+        self.r.set_world_theme(self.current_world.theme)
+        logger.info(f"🌍 Mundo aplicado: {self.current_world.name} ({self.current_world.theme.value})")
 
     def enter(self):
         pygame.mouse.set_visible(False)
@@ -1375,6 +1385,14 @@ class PlayingScene(Scene):
             self.current_level_index + 1
         )
 
+        # NOVO: Verificar mudança de mundo
+        new_world = get_world_for_level(self.current_level_index + 1)
+        if new_world.world_id != self.current_world.world_id:
+            # Mudou de mundo! Aplicar novo tema
+            self.current_world = new_world
+            self._apply_world_theme()
+            logger.info(f"✨ Bem-vindo ao {new_world.name}!")
+
         # Atualizar cache de nível (otimização)
         self._cache_level_thresholds()
 
@@ -1526,13 +1544,16 @@ class PlayingScene(Scene):
         # Atualizar FPS
         self.r.update_fps(dt)
 
+        # MODIFICADO: Mostrar estágio formatado (ex: "2-5" ao invés de "Fase: 15")
+        stage_name = format_stage_name(self.level_config.level_number)
+        
         self.r.hud(
             self.game_surface,
             self.score,
             self.lives,
             self.total_enemies_destroyed,
             self.ship,
-            self.level_config.level_number,
+            stage_name,  # MODIFICADO (era level_number)
             self.difficulty_preset,
             score_multiplier_active=self.score_multiplier_active,
             score_multiplier_timer=self.score_multiplier_timer,

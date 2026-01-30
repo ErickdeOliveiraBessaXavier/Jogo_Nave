@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Type, Union
+from typing import Type, Union, TYPE_CHECKING
 from functools import lru_cache
 import random
 import math
@@ -14,6 +14,10 @@ from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.slime_boss import SlimeBoss
 from ..entities.giant_meteor_boss import GiantMeteorBoss
 from .difficulty import DifficultyPreset, DifficultySettings
+from .world_config import get_world_for_level, WorldTheme
+
+if TYPE_CHECKING:
+    from .world_config import WorldConfig
 
 
 logger = logging.getLogger(__name__)
@@ -718,6 +722,116 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
 
 
 # ============================================================================
+# FUNÇÕES AUXILIARES - INTEGRAÇÃO COM MUNDOS
+# ============================================================================
+
+def _apply_world_theme_to_config(config: LevelConfig, world: "WorldConfig") -> LevelConfig:
+    """
+    Aplica modificadores do tema do mundo à configuração de nível.
+    
+    Modifica os pesos de spawn de inimigos baseado no tema.
+    """
+    if not world.theme_modifiers:
+        return config
+    
+    # Copiar config de spawn
+    adjusted_spawn_config = dict(config.enemy_spawn_config)
+    
+    # Aplicar multiplicadores de peso
+    meteor_mult = world.theme_modifiers.get("meteor_weight", 1.0)
+    alien_mult = world.theme_modifiers.get("alien_weight", 1.0)
+    eye_mult = world.theme_modifiers.get("eye_weight", 1.0)
+    
+    # Ajustar tempos de spawn (menor tempo = mais frequente)
+    for enemy_type, spawn_time in list(adjusted_spawn_config.items()):
+        if enemy_type.__name__ == "Meteor" and meteor_mult != 1.0:
+            adjusted_spawn_config[enemy_type] = spawn_time / meteor_mult
+        elif enemy_type.__name__ == "Alien" and alien_mult != 1.0:
+            adjusted_spawn_config[enemy_type] = spawn_time / alien_mult
+        elif enemy_type.__name__ == "EyeEnemy" and eye_mult != 1.0:
+            adjusted_spawn_config[enemy_type] = spawn_time / eye_mult
+    
+    # Aplicar multiplicador geral de spawn rate
+    spawn_rate_mult = world.theme_modifiers.get("spawn_rate_multiplier", 1.0)
+    if spawn_rate_mult != 1.0:
+        for enemy_type in adjusted_spawn_config:
+            adjusted_spawn_config[enemy_type] /= spawn_rate_mult
+    
+    # Garantir que tempos de spawn respeitam mínimo
+    for enemy_type in adjusted_spawn_config:
+        adjusted_spawn_config[enemy_type] = max(
+            DifficultyConfig.MIN_SPAWN_TIME,
+            adjusted_spawn_config[enemy_type]
+        )
+    
+    # Criar nova config com tema do mundo
+    return LevelConfig(
+        level_number=config.level_number,
+        enemy_spawn_config=adjusted_spawn_config,
+        enemies_to_clear=config.enemies_to_clear,
+        boss_type=config.boss_type,
+        mines_enabled=config.mines_enabled,
+        formations_enabled=config.formations_enabled,
+        formation_types=config.formation_types,
+        theme_name=world.name,  # Usar nome do mundo
+        score_multiplier=config.score_multiplier,
+    )
+
+
+def _create_world_boss_level(
+    world: "WorldConfig",
+    level_number: int,
+    difficulty_preset: DifficultyPreset,
+) -> LevelConfig:
+    """Cria configuração para o boss de um mundo."""
+    # Configuração base: mais inimigos conforme o mundo avança
+    base_enemies_to_clear = 200 + (world.world_id - 1) * 50
+    
+    # Montagem de spawn config baseado no tema
+    if world.theme == WorldTheme.MOUNTAINS:
+        enemy_spawn_config = {
+            Meteor: 0.8,
+            Alien: 3.0,
+        }
+    elif world.theme == WorldTheme.STARFIELD:
+        enemy_spawn_config = {
+            Meteor: 1.2,
+            Alien: 2.0,
+            EyeEnemy: 6.0,
+        }
+    elif world.theme == WorldTheme.CITY:
+        enemy_spawn_config = {
+            Meteor: 1.5,
+            Alien: 2.5,
+            EyeEnemy: 5.0,
+        }
+    elif world.theme == WorldTheme.VOLCANIC:
+        enemy_spawn_config = {
+            Meteor: 0.7,
+            EyeEnemy: 4.0,
+        }
+    else:  # PROCEDURAL
+        enemy_spawn_config = {
+            Meteor: 1.0,
+            Alien: 2.0,
+        }
+    
+    config = LevelConfig(
+        level_number=level_number,
+        enemy_spawn_config=enemy_spawn_config,
+        enemies_to_clear=base_enemies_to_clear,
+        boss_type=world.boss_type,
+        mines_enabled=True,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle"],
+        theme_name=f"Boss: {world.name}",
+        score_multiplier=1.0 + (world.world_id * 0.2),
+    )
+    
+    return _apply_difficulty_to_fixed_level(config, difficulty_preset)
+
+
+# ============================================================================
 # FUNÇÕES PÚBLICAS
 # ============================================================================
 
@@ -734,17 +848,28 @@ def get_level_config(
     """
     Retorna a configuração de um nível com dificuldade aplicada.
 
-    Sistema Híbrido:
-    - Se o nível está em FIXED_LEVELS, retorna a versão handcrafted ajustada
-    - Caso contrário, gera proceduralmente
+    Sistema Híbrido com Mundos:
+    - Se o nível é um boss_level de um mundo: retorna config customizada para boss
+    - Se o nível está em FIXED_LEVELS: retorna versão handcrafted ajustada
+    - Caso contrário: gera proceduralmente com tema do mundo
 
     Args:
         level_number: Número do nível desejado (1+)
         difficulty_preset: Preset de dificuldade a aplicar
+        force_meteor_storm: Forçar tema meteor storm (ignora mundo)
 
     Returns:
-        LevelConfig do nível (fixo ou procedural) com dificuldade aplicada
+        LevelConfig do nível com dificuldade aplicada
     """
+    # NOVO: Obter mundo do nível
+    world = get_world_for_level(level_number)
+    
+    # NOVO: Se é boss_level e mundo tem boss definido
+    if (level_number == world.boss_level and 
+        world.boss_type is not None and 
+        not force_meteor_storm):
+        return _create_world_boss_level(world, level_number, difficulty_preset)
+    
     # Para Hardcore e Nightmare, o nível 1 é sempre procedural (sem tutorial)
     if (
         level_number in FIXED_LEVELS
@@ -756,6 +881,8 @@ def get_level_config(
         and not force_meteor_storm
     ):
         config = FIXED_LEVELS[level_number]
+        # NOVO: Aplicar tema do mundo ao nível fixo
+        config = _apply_world_theme_to_config(config, world)
         # Aplicar modificadores do preset aos níveis fixos também
         return _apply_difficulty_to_fixed_level(config, difficulty_preset)
 
@@ -765,9 +892,10 @@ def get_level_config(
             difficulty_preset=difficulty_preset
         )
 
+    generator = _procedural_generators[difficulty_preset]
+    
     # Forçar tema meteor_storm no procedural
     if force_meteor_storm:
-        generator = _procedural_generators[difficulty_preset]
         difficulty = generator.calculate_difficulty(level_number)
         theme = LEVEL_THEMES["meteor_storm"]
         return generator.generate_config(
@@ -776,8 +904,11 @@ def get_level_config(
             theme,
             random.Random(generator.seed + level_number),
         )
-
-    return _procedural_generators[difficulty_preset].generate_level(level_number)
+    
+    # NOVO: Gerar com tema do mundo aplicado
+    config = generator.generate_level(level_number)
+    config = _apply_world_theme_to_config(config, world)
+    return config
 
 
 def _apply_difficulty_to_fixed_level(
