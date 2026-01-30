@@ -9,7 +9,7 @@ Implementa backgrounds temáticos para cada mundo:
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Tuple, Optional
+from typing import Any, List, Tuple
 import pygame
 import random
 import math
@@ -46,7 +46,7 @@ class MountainsBackground(Background):
     
     def __init__(self, width: int, height: int):
         super().__init__(width, height)
-        self.layers: List[dict] = []
+        self.layers: List[dict[str, Any]] = []
         self._create_layers()
     
     def _create_layers(self) -> None:
@@ -122,7 +122,7 @@ class CityBackground(Background):
     
     def __init__(self, width: int, height: int):
         super().__init__(width, height)
-        self.buildings: List[dict] = []
+        self.buildings: List[dict[str, Any]] = []
         self.blink_timer: float = 0.0
         self._create_buildings()
     
@@ -212,8 +212,8 @@ class VolcanicBackground(Background):
     
     def __init__(self, width: int, height: int):
         super().__init__(width, height)
-        self.lava_pools: List[dict] = []
-        self.embers: List[dict] = []
+        self.lava_pools: List[dict[str, Any]] = []
+        self.embers: List[dict[str, Any]] = []
         self.wave_offset: float = 0.0
         self._create_lava()
         self._create_embers()

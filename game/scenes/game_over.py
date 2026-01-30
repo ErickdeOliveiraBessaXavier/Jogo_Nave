@@ -4,6 +4,7 @@ from ..core.state import Scene
 from ..core.config import config as Config
 from ..core.assets import get_font
 from ..core.sound import sound_manager
+from ..core.world_config import format_stage_name
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -109,7 +110,7 @@ class GameOverScene(Scene):
             self.playing_scene.lives,
             self.playing_scene.total_enemies_destroyed,
             self.playing_scene.ship,
-            self.playing_scene.level_config.level_number,
+            format_stage_name(self.playing_scene.level_config.level_number),
             self.playing_scene.difficulty_preset,
         )
 

@@ -734,8 +734,8 @@ def _apply_world_theme_to_config(config: LevelConfig, world: "WorldConfig") -> L
     if not world.theme_modifiers:
         return config
     
-    # Copiar config de spawn
-    adjusted_spawn_config = dict(config.enemy_spawn_config)
+    # Copiar config de spawn com type hint
+    adjusted_spawn_config: dict[Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss], float] = dict(config.enemy_spawn_config)
     
     # Aplicar multiplicadores de peso
     meteor_mult = world.theme_modifiers.get("meteor_weight", 1.0)
@@ -788,6 +788,7 @@ def _create_world_boss_level(
     base_enemies_to_clear = 200 + (world.world_id - 1) * 50
     
     # Montagem de spawn config baseado no tema
+    enemy_spawn_config: dict[Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss], float]
     if world.theme == WorldTheme.MOUNTAINS:
         enemy_spawn_config = {
             Meteor: 0.8,

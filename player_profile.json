@@ -1,10 +1,10 @@
 {
   "version": "1.0",
   "profile_created": "2026-01-29T21:43:15.832713",
-  "last_played": "2026-01-29T21:44:18.039516",
+  "last_played": "2026-01-29T21:50:56.023117",
   "total_playtime": 0.0,
   "highest_level_reached": 1,
-  "total_deaths": 0,
+  "total_deaths": 3,
   "total_score": 0,
   "resolution": [
     1366,
@@ -29,6 +29,61 @@
       "recent_attempts": [],
       "first_played": "2026-01-29T21:44:18.039516",
       "last_played": "2026-01-29T21:44:18.039516",
+      "current_win_streak": 0,
+      "best_win_streak": 0
+    },
+    "32": {
+      "level_number": 32,
+      "attempts": 1,
+      "clears": 0,
+      "deaths": 2,
+      "total_time": 0.0,
+      "best_time": null,
+      "worst_time": 0.0,
+      "total_score": 0,
+      "best_score": 0,
+      "total_enemies_killed": 0,
+      "total_damage_taken": 0,
+      "total_powerups_collected": 0,
+      "recent_attempts": [
+        {
+          "timestamp": "2026-01-29T21:50:06.748368",
+          "cleared": false,
+          "cause": "collision"
+        },
+        {
+          "timestamp": "2026-01-29T21:50:25.962664",
+          "cleared": false,
+          "cause": "collision"
+        }
+      ],
+      "first_played": "2026-01-29T21:49:54.091794",
+      "last_played": "2026-01-29T21:49:54.091794",
+      "current_win_streak": 0,
+      "best_win_streak": 0
+    },
+    "22": {
+      "level_number": 22,
+      "attempts": 1,
+      "clears": 0,
+      "deaths": 1,
+      "total_time": 0.0,
+      "best_time": null,
+      "worst_time": 0.0,
+      "total_score": 0,
+      "best_score": 0,
+      "total_enemies_killed": 0,
+      "total_damage_taken": 0,
+      "total_powerups_collected": 0,
+      "recent_attempts": [
+        {
+          "timestamp": "2026-01-29T21:51:08.603060",
+          "cleared": false,
+          "cause": "collision"
+        }
+      ],
+      "first_played": "2026-01-29T21:50:56.023117",
+      "last_played": "2026-01-29T21:50:56.023117",
       "current_win_streak": 0,
       "best_win_streak": 0
     }

@@ -87,7 +87,7 @@ class PlayingScene(Scene):
         self.player_profile = PlayerProfile(get_profile_path())
         self.player_profile.start_session()
 
-        self.current_level_index = 0
+        self.current_level_index: int = 0
         self.level_config = self._get_adjusted_level_config(
             self.current_level_index + 1
         )
