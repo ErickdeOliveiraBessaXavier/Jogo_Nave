@@ -44,8 +44,9 @@ if TYPE_CHECKING:
 
 
 class EntityManager:
-    def __init__(self, sound_manager: Optional[Any] = None):
+    def __init__(self, sound_manager: Optional[Any] = None, is_side_scroll: bool = False):
         self.sound_manager = sound_manager
+        self.is_side_scroll = is_side_scroll  # NOVO: Modo de jogo
         self.bullets: list[Bullet] = []
         self.emp_waves: list[EMPWave] = []  # Ondas visuais do EMP
         self.explosive_effects: list[ExplosiveEffect] = (
@@ -75,7 +76,7 @@ class EntityManager:
         self.cannon_towers: list[CannonTower] = []  # Torres de canhão
         self.cannon_mines: list[CannonMine] = []  # Minas das torres
         self.black_holes: list[BlackHole] = []  # Buracos negros
-        self.meteor_pool = MeteorPool(initial_size=100)  # Pool de meteoros
+        self.meteor_pool = MeteorPool(initial_size=100, is_side_scroll=is_side_scroll)  # Pool de meteoros
         self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
         self.enemy_spatial_grid: SpatialGrid[
             Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
@@ -571,6 +572,9 @@ class EntityManager:
                     # MiniShip.update expects enemy_list and bullet_list,
                     # but during game over slow-mo, they might not need complex interactions
                     entity.update(dt, [], [])
+                elif isinstance(entity, Meteor):
+                    # Meteor.update precisa saber o modo de jogo
+                    entity.update(dt, self.is_side_scroll)
                 else:
                     entity.update(dt)
 
@@ -752,6 +756,7 @@ class EntityManager:
             homing=homing,
             explosive=explosive,
             low_ammo=low_ammo,
+            is_side_scroll=self.is_side_scroll,
         )
 
         # Se é um tiro teleguiado, atribuir alvo inteligentemente
@@ -812,6 +817,24 @@ class EntityManager:
                 best_target = enemy
 
         return best_target
+
+    def _is_enemy_off_screen(self, enemy: Any) -> bool:
+        """
+        Verifica se um inimigo está fora da tela.
+        
+        Em top-down: sai pela parte inferior (y > screen_height)
+        Em side-scroll: sai pela parte esquerda (x < -width)
+        """
+        if self.is_side_scroll:
+            # Side-scroll: inimigos saem pela esquerda
+            return enemy.x < -enemy.w
+        else:
+            # Top-down: inimigos saem pela parte inferior (ou pela lateral/superior)
+            return (
+                enemy.y > pygame.display.get_surface().get_height()
+                or enemy.x < -enemy.w
+                or enemy.x > pygame.display.get_surface().get_width()
+            )
 
     def cleanup(self):
         # Liberar bullets dead ao pool

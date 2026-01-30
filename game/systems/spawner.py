@@ -258,6 +258,7 @@ class EnemySpawner:
         entity_manager: "EntityManager",
         player_x: float | None = None,
         player_y: float | None = None,
+        is_side_scroll: bool = False,
     ) -> None:
         if self.stopped:
             return
@@ -282,8 +283,14 @@ class EnemySpawner:
                     continue
 
                 if enemy_type == EyeEnemy:
-                    x = random.randint(40, Config.SCREEN_WIDTH - 80)
-                    y = random.randint(40, 100)
+                    if is_side_scroll:
+                        # Side-scroll: spawn pela direita, altura variável
+                        x = Config.SCREEN_WIDTH + 40
+                        y = random.randint(60, Config.SCREEN_HEIGHT - 100)
+                    else:
+                        # Top-down: spawn pelo topo, posição horizontal variável
+                        x = random.randint(40, Config.SCREEN_WIDTH - 80)
+                        y = random.randint(40, 100)
                     new_enemy = EyeEnemy(x, y)
                     new_enemy.health = int(
                         new_enemy.health * self.enemy_health_multiplier
@@ -294,7 +301,20 @@ class EnemySpawner:
 
                     if enemy_type == Meteor:
                         # Usar o pool para meteoros
-                        meteor = self.meteor_pool.get()
+                        if is_side_scroll:
+                            # Side-scroll: velocidade para esquerda, pouca variação vertical
+                            size = random.randint(Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE)
+                            meteor = self.meteor_pool.get(
+                                size=size,
+                                x=Config.SCREEN_WIDTH + 40,
+                                y=random.randint(60, Config.SCREEN_HEIGHT - 100),
+                                vx=-random.uniform(150, 300),  # Movimento para esquerda (negativo)
+                                vy=random.uniform(-50, 50),  # Pequena variação vertical
+                            )
+                        else:
+                            # Top-down: usando padrão original
+                            meteor = self.meteor_pool.get()
+                        
                         meteor.health = int(
                             meteor.health * self.enemy_health_multiplier
                         )
@@ -304,8 +324,12 @@ class EnemySpawner:
                         if enemy_type == SquareMinionBoss:
                             # SquareMinionBoss precisa de posição do jogador
                             if player_x is not None and player_y is not None:
-                                x = random.randint(40, Config.SCREEN_WIDTH - 80)
-                                y = -50  # Spawn acima da tela
+                                if is_side_scroll:
+                                    x = Config.SCREEN_WIDTH + 40
+                                    y = random.randint(60, Config.SCREEN_HEIGHT - 100)
+                                else:
+                                    x = random.randint(40, Config.SCREEN_WIDTH - 80)
+                                    y = -50  # Spawn acima da tela
                                 new_enemy = SquareMinionBoss(x, y, player_x, player_y)
                                 new_enemy.health = int(
                                     new_enemy.health * self.enemy_health_multiplier

@@ -58,6 +58,13 @@ class CollisionConstants:
 
 
 class Collisions:
+    def __init__(self, is_side_scroll: bool = False) -> None:
+        """Inicializa o sistema de colisões com suporte ao modo de jogo.
+        
+        Args:
+            is_side_scroll: True se em modo side-scroll, False se em modo top-down
+        """
+        self.is_side_scroll = is_side_scroll
 
     @staticmethod
     def get_collision_info(
@@ -264,7 +271,7 @@ class Collisions:
 
         # Fragmentos (apenas meteoros)
         if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
-            fragments = enemy.spawn_fragments()
+            fragments = enemy.spawn_fragments(is_side_scroll=self.is_side_scroll)
             if fragments:
                 enemies_list.extend(fragments)
 

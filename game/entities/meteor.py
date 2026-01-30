@@ -204,18 +204,28 @@ class Meteor:
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
-    def update(self, dt: float):
+    def update(self, dt: float, is_side_scroll: bool = False):
         self.x += self.vx * dt
         self.y += self.vy * dt
         self.rotation += (
             self.rotation_speed * dt
         )  # FIX: multiplicar por dt para suavidade
-        if (
-            (self.y > Config.SCREEN_HEIGHT)
-            or (self.x < -self.w)
-            or (self.x > Config.SCREEN_WIDTH)
-        ):
-            self.dead = True
+        
+        # Verificar se saiu da tela (lógica diferente por modo)
+        if is_side_scroll:
+            # Side-scroll: Sair apenas pela esquerda (x < -self.w)
+            # Não sair pela direita pois spawn é lá!
+            if self.x < -self.w or self.y > Config.SCREEN_HEIGHT or self.y < -self.h:
+                self.dead = True
+        else:
+            # Top-down: Sair por baixo, esquerda ou direita
+            # Mas permitir spawn pela direita (x > SCREEN_WIDTH + buffer)
+            if (
+                (self.y > Config.SCREEN_HEIGHT)
+                or (self.x < -self.w)
+                or (self.x > Config.SCREEN_WIDTH + self.w)
+            ):
+                self.dead = True
 
     def _rotated_points(self) -> List[Tuple[int, int]]:
         """Retorna pontos rotacionados (otimizado com melhor precisão)."""
@@ -268,7 +278,7 @@ class Meteor:
     def can_split(self) -> bool:
         return self.size >= Config.FRAGMENT_SPLIT_THRESHOLD
 
-    def spawn_fragments(self) -> List["Meteor"]:
+    def spawn_fragments(self, is_side_scroll: bool = False) -> List["Meteor"]:
         if not self.can_split():
             return []
         cx = self.x + self.w / 2
@@ -279,10 +289,13 @@ class Meteor:
         frags: List[Meteor] = []
 
         # Pré-calcular valores constantes para todos os fragmentos
+        # Usar velocidade do pai como base, com mínimo garantido
+        parent_speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
+        # Garantir velocidade mínima de dispersão (200 pixels/s) + velocidade do pai
+        base_speed = max(200.0, parent_speed * 0.8)
+        
         base_angle_rad = math.radians(random.uniform(0, 360))
         half_spread_rad = math.radians(Config.FRAGMENT_SPREAD / 2)
-        speed_boost = self.vy * Config.FRAGMENT_SPEED_BOOST
-        vy_base = self.vy * 0.2
         size_offset_x = self.size * 0.5
         size_offset_y = self.size * 0.3
 
@@ -298,10 +311,18 @@ class Meteor:
             cos_ang = math.cos(ang)
             sin_ang = math.sin(ang)
 
-            # velocidade
-            speed = speed_boost * random.uniform(0.9, 1.25)
-            vx = cos_ang * speed
-            vy = abs(sin_ang * speed) + vy_base
+            # Velocidade com variação (0.8 a 1.3)
+            speed = base_speed * random.uniform(0.8, 1.3)
+            vx = cos_ang * speed + self.vx * 0.3  # Herdar 30% da velocidade do pai
+            
+            # Em side-scroll, permitir movimento vertical livre (sem viés)
+            # Em top-down, manter viés de gravidade (para baixo)
+            if is_side_scroll:
+                # Dispersão igual em todas as direções (sem viés de gravidade)
+                vy = sin_ang * speed + self.vy * 0.2  # Herdar 20% da velocidade do pai
+            else:
+                # Top-down: viés para baixo (gravidade)
+                vy = abs(sin_ang * speed) + self.vy * 0.2 + 50.0  # Adicionar gravidade base
 
             # posição (reutilizar cos_ang, sin_ang)
             fx = cx + cos_ang * size_offset_x - s

@@ -14,6 +14,7 @@ class Bullet:
         homing: bool = False,
         explosive: bool = False,
         low_ammo: bool = False,
+        is_side_scroll: bool = False,
     ):
         self.x, self.y = x, y
         self.w, self.h = 3, 10
@@ -29,6 +30,7 @@ class Bullet:
         self.homing_speed = 300  # Velocidade de rastreamento (pixels/s)
         self.homing_turn_rate = 4.0  # Taxa de rotação (radianos/s)
         self.rotation_angle = 0.0  # Ângulo de rotação visual (graus)
+        self.is_side_scroll = is_side_scroll  # Se está em modo side-scroll
 
     @property
     def rect(self) -> pygame.Rect:
@@ -43,6 +45,7 @@ class Bullet:
         homing: bool = False,
         explosive: bool = False,
         low_ammo: bool = False,
+        is_side_scroll: bool = False,
     ):
         """Reconfigura a bala para reutilização no pool."""
         self.x, self.y = x, y
@@ -52,6 +55,7 @@ class Bullet:
         self.homing = homing
         self.explosive = explosive
         self.low_ammo = low_ammo
+        self.is_side_scroll = is_side_scroll
         self.active = True
         self.target = None
         self.assigned_target_id = None
@@ -65,8 +69,13 @@ class Bullet:
             if self.rotation_angle >= 360.0:
                 self.rotation_angle -= 360.0
         else:
-            # Movimento normal para cima
-            self.y -= Config.BULLET_SPEED * dt
+            # Movimento baseado no modo de jogo
+            if self.is_side_scroll:
+                # Side-scroll: movimento para direita
+                self.x += Config.BULLET_SPEED * dt
+            else:
+                # Top-down: movimento para cima
+                self.y -= Config.BULLET_SPEED * dt
 
         if self.y + self.h < 0 or self.y > Config.SCREEN_HEIGHT:
             self.dead = True

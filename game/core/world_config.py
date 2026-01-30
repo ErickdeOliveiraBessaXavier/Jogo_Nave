@@ -154,34 +154,47 @@ def get_world_for_level(level_number: int) -> WorldConfig:
     """
     Retorna o mundo correspondente a um nível.
     
-    Níveis 1-10: Mundo 1
-    Níveis 11-20: Mundo 2
-    Níveis 21-30: Mundo 3
-    Níveis 31-40: Mundo 4
-    Níveis 41+: Mundos procedurais infinitos
+    Níveis 1-10: Mundo 1 (MOUNTAINS)
+    Níveis 11-20: Mundo 2 (STARFIELD)
+    Níveis 21-30: Mundo 3 (CITY)
+    Níveis 31-40: Mundo 4 (VOLCANIC)
+    Níveis 41+: Rotação de temas procedurais (MOUNTAINS -> STARFIELD -> CITY -> VOLCANIC -> ...)
     """
     for world in WORLDS.values():
         if world.contains_level(level_number):
             return world
     
-    # Níveis 41+: mundo procedural infinito
-    # Cada 10 níveis = um novo "setor"
+    # Níveis 41+: Rotação de temas procedurais
+    # Cada 10 níveis = um novo "setor" com tema rotacionado
     sector_id = (level_number - 1) // 10 + 1
     sector_start = (sector_id - 1) * 10 + 1
     sector_end = sector_id * 10
     
+    # Rotacionar entre os 4 temas principais
+    theme_cycle = [
+        WorldTheme.MOUNTAINS,
+        WorldTheme.STARFIELD,
+        WorldTheme.CITY,
+        WorldTheme.VOLCANIC,
+    ]
+    theme_index = (sector_id - 5) % 4  # Começa no setor 5 (nível 41+)
+    theme = theme_cycle[theme_index]
+    
+    # Usar colors e modifiers do mundo correspondente ao tema
+    world_template = WORLDS[theme_index + 1]  # Worlds 1-4
+    
     return WorldConfig(
         world_id=sector_id,
-        name=f"Setor {sector_id}",
-        description="Região desconhecida do espaço",
-        theme=WorldTheme.PROCEDURAL,
-        primary_color=(60, 60, 60),
-        secondary_color=(100, 100, 100),
+        name=f"Setor {sector_id} - {world_template.name}",
+        description=f"{world_template.description} (Procedimental)",
+        theme=theme,
+        primary_color=world_template.primary_color,
+        secondary_color=world_template.secondary_color,
         start_level=sector_start,
         end_level=sector_end,
         boss_level=sector_end,
-        boss_type=None,  # Rotação procedural
-        theme_modifiers={},
+        boss_type=None,  # Rotação procedural de bosses
+        theme_modifiers=world_template.theme_modifiers.copy(),
     )
 
 
@@ -208,6 +221,26 @@ def format_stage_name(level_number: int) -> str:
     """
     world_id, stage = get_stage_identifier(level_number)
     return f"{world_id}-{stage}"
+
+
+# ============================================================================
+# SISTEMA DE MODO DE JOGO (Top-Down vs Side-Scroll)
+# ============================================================================
+
+def is_top_down_mode(theme: WorldTheme) -> bool:
+    """
+    Retorna True se o tema usa modo TOP-DOWN (vertical).
+    Retorna False se usa modo SIDE-SCROLL (horizontal).
+    
+    TOP-DOWN: STARFIELD
+    SIDE-SCROLL: MOUNTAINS, CITY, VOLCANIC, PROCEDURAL
+    """
+    return theme == WorldTheme.STARFIELD
+
+
+def is_side_scroll_mode(theme: WorldTheme) -> bool:
+    """Retorna True se o tema usa modo SIDE-SCROLL (horizontal)."""
+    return not is_top_down_mode(theme)
 
 
 # ============================================================================

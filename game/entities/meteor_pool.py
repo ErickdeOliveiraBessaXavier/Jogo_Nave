@@ -9,15 +9,17 @@ class MeteorPool:
     evitando criar e destruir objetos repetidamente.
     """
 
-    def __init__(self, initial_size: int = 100):
+    def __init__(self, initial_size: int = 100, is_side_scroll: bool = False):
         """
         Inicializa o pool com meteoros inativos.
 
         Args:
             initial_size: Quantidade inicial de meteoros no pool
+            is_side_scroll: Se está em modo side-scroll
         """
         self.pool: List[Meteor] = []
         self.active: List[Meteor] = []
+        self.is_side_scroll = is_side_scroll
 
         # Pré-cria meteoros inativos
         for _ in range(initial_size):
@@ -68,15 +70,19 @@ class MeteorPool:
             meteor.dead = True
             self.active.remove(meteor)
 
-    def update(self, dt: float):
+    def update(self, dt: float, is_side_scroll: bool | None = None):
         """
         Atualiza todos os meteoros ativos e libera os que morreram.
 
         Args:
             dt: Delta time em segundos
+            is_side_scroll: Se está em modo side-scroll (usa valor armazenado se None)
         """
+        if is_side_scroll is not None:
+            self.is_side_scroll = is_side_scroll
+        
         for meteor in self.active[:]:  # Copia a lista para iterar com segurança
-            meteor.update(dt)
+            meteor.update(dt, self.is_side_scroll)
             if meteor.dead:
                 self.release(meteor)
 

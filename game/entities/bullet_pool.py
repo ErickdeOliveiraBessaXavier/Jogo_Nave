@@ -35,6 +35,7 @@ class BulletPool:
         homing: bool = False,
         explosive: bool = False,
         low_ammo: bool = False,
+        is_side_scroll: bool = False,
     ) -> Bullet:
         """
         Obtém uma bala do pool, reutilizando uma inativa ou criando nova.
@@ -46,6 +47,7 @@ class BulletPool:
             homing: Se a bala é teleguiada
             explosive: Se a bala é explosiva
             low_ammo: Se restam poucas cargas (efeito de piscar)
+            is_side_scroll: Se está em modo side-scroll
 
         Returns:
             Bala ativa e configurada
@@ -61,6 +63,7 @@ class BulletPool:
                     homing=homing,
                     explosive=explosive,
                     low_ammo=low_ammo,
+                    is_side_scroll=is_side_scroll,
                 )
                 self.active.append(bullet)
                 return bullet
@@ -74,6 +77,7 @@ class BulletPool:
             homing=homing,
             explosive=explosive,
             low_ammo=low_ammo,
+            is_side_scroll=is_side_scroll,
         )
         self.pool.append(bullet)
         self.active.append(bullet)

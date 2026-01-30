@@ -23,7 +23,7 @@ from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_profile_path
 from ..core.upgrades import create_upgrade, ActiveUpgrade, HealUpgrade
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
-from ..core.world_config import get_world_for_level, format_stage_name
+from ..core.world_config import get_world_for_level, format_stage_name, is_side_scroll_mode
 
 logger = logging.getLogger(__name__)
 
@@ -48,14 +48,37 @@ class PlayingScene(Scene):
         # Carregar configurações do jogador
         self.player_profile = PlayerProfile(get_profile_path())
 
+        # Meta-progression system (salvar profil antes)
+        self.player_profile.start_session()
+        
+        # Detectar modo de jogo CEDO (antes de criar nave)
+        self.current_level_index: int = 0
+        self.current_world = get_world_for_level(self.current_level_index + 1)
+        self.is_side_scroll = is_side_scroll_mode(self.current_world.theme)
+
+        # Criar nave com posição correta baseado no modo
+        if self.is_side_scroll:
+            # Side-scroll: Nave vem da esquerda, centrada verticalmente
+            ship_x = -50  # Fora da tela à esquerda
+            ship_y = (Config.SCREEN_HEIGHT - 35) / 2  # Centrada verticalmente
+        else:
+            # Top-down: Nave vem de baixo, centrada horizontalmente
+            ship_x = Config.SCREEN_WIDTH / 2 - 20
+            ship_y = Config.SCREEN_HEIGHT + 100  # Abaixo da tela
+        
         self.ship = Ship(
-            Config.SCREEN_WIDTH / 2 - 20,
-            Config.SCREEN_HEIGHT + 100,
+            ship_x,
+            ship_y,
             mouse_control=self.player_profile.mouse_control,
             auto_fire=self.player_profile.auto_fire,
-        )  # Start 100 pixels below the screen
+        )
         self.ship.is_entering = True
-        self.entity_manager = EntityManager(sound_manager=sound_manager)
+        self.ship.is_side_scroll = self.is_side_scroll
+        
+        # Rotacionar nave em side-scroll (90 graus para a direita)
+        if self.is_side_scroll:
+            self.ship.set_rotation(90.0)
+        
         self.first_entry = True
 
         # Aplicar configurações de dificuldade após criar a nave
@@ -83,18 +106,16 @@ class PlayingScene(Scene):
         self.screen_shake_intensity = Config.SCREEN_SHAKE_NORMAL
         self.warning_timer = 0.0
         self.warning_font = get_font(Config.WARNING_FONT_SIZE)
-        # Meta-progression system
-        self.player_profile = PlayerProfile(get_profile_path())
-        self.player_profile.start_session()
 
-        self.current_level_index: int = 0
         self.level_config = self._get_adjusted_level_config(
             self.current_level_index + 1
         )
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
         
-        # NOVO: Aplicar tema do mundo
-        self.current_world = get_world_for_level(self.current_level_index + 1)
+        # Criar EntityManager ANTES de usar (necessário para spawner)
+        self.entity_manager = EntityManager(is_side_scroll=self.is_side_scroll)
+        
+        # Aplicar tema do mundo
         self._apply_world_theme()
 
         # Cache de configuração de nível (otimização)
@@ -110,7 +131,7 @@ class PlayingScene(Scene):
             self.enemy_health_multiplier,
         )
         self.powerup_spawner = PowerUpSpawner(self.difficulty_preset)
-        self.collisions = Collisions()
+        self.collisions = Collisions(is_side_scroll=self.is_side_scroll)
 
         # Star spawner centralizado
         self.star_spawner = StarSpawner()
@@ -227,32 +248,55 @@ class PlayingScene(Scene):
             self.preparation_time_left -= dt
 
             # Mover a nave para a posição inicial de forma suave
-            target_y = Config.SCREEN_HEIGHT - 80
-            initial_y = (
-                Config.SCREEN_HEIGHT + 100
-            )  # Match the ship's initial y position
+            if self.is_side_scroll:
+                # Side-scroll: Nave entra pela esquerda, move para centro horizontal
+                target_x = 100  # Posição final (da esquerda)
+                initial_x = -50  # Posição inicial (fora da tela)
+                target_y = (Config.SCREEN_HEIGHT - 35) / 2  # Mantém altura
 
-            if self.preparation_time_left > 0:
-                elapsed_time = Config.PREPARATION_TIME - self.preparation_time_left
-                progress = min(1.0, elapsed_time / Config.PREPARATION_TIME)
-                # Interpolação linear para suavizar o movimento
-                self.ship.y = initial_y + (target_y - initial_y) * progress
+                if self.preparation_time_left > 0:
+                    elapsed_time = Config.PREPARATION_TIME - self.preparation_time_left
+                    progress = min(1.0, elapsed_time / Config.PREPARATION_TIME)
+                    # Interpolação linear para suavizar o movimento
+                    self.ship.x = initial_x + (target_x - initial_x) * progress
+                    self.ship.y = target_y  # Manter altura constante
+                else:
+                    self.ship.x = target_x
+                    self.ship.y = target_y
+                    self.state = "playing"
+                    self.ship.is_entering = False
+
+                    # Meta-progression: Record level attempt
+                    self.player_profile.record_attempt(self.current_level_index + 1)
+                    self.level_start_time = None
+                    self.level_damage_taken = 0
+                    self.level_powerups_collected = 0
             else:
-                self.ship.y = target_y
-                self.state = "playing"
-                self.ship.is_entering = False
+                # Top-down: Nave entra de baixo, move para topo (comportamento original)
+                target_y = Config.SCREEN_HEIGHT - 80
+                initial_y = Config.SCREEN_HEIGHT + 100  # Match the ship's initial y position
 
-                # Meta-progression: Record level attempt
-                self.player_profile.record_attempt(self.current_level_index + 1)
-                self.level_start_time = None  # Reset to None instead of 0.0
-                self.level_damage_taken = 0
-                self.level_powerups_collected = 0
+                if self.preparation_time_left > 0:
+                    elapsed_time = Config.PREPARATION_TIME - self.preparation_time_left
+                    progress = min(1.0, elapsed_time / Config.PREPARATION_TIME)
+                    # Interpolação linear para suavizar o movimento
+                    self.ship.y = initial_y + (target_y - initial_y) * progress
+                else:
+                    self.ship.y = target_y
+                    self.state = "playing"
+                    self.ship.is_entering = False
+
+                    # Meta-progression: Record level attempt
+                    self.player_profile.record_attempt(self.current_level_index + 1)
+                    self.level_start_time = None  # Reset to None instead of 0.0
+                    self.level_damage_taken = 0
+                    self.level_powerups_collected = 0
 
         if self.state == "playing" and self.level_start_time is None:
             self.level_start_time = time.time()
 
             self.ship.update(
-                dt, self.entity_manager
+                dt, self.entity_manager, is_side_scroll=self.is_side_scroll
             )  # Atualiza animações da nave (ex: propulsores)
             return
 
@@ -289,7 +333,7 @@ class PlayingScene(Scene):
                 if self.level_transition_timer >= self.level_transition_delay:
                     self._start_next_level()
 
-        self.ship.update(dt, self.entity_manager)
+        self.ship.update(dt, self.entity_manager, is_side_scroll=self.is_side_scroll)
         if self.ship.mini_ships_timer == 0.0 and self.entity_manager.mini_ships:
             self.entity_manager.mini_ships.clear()
 
@@ -303,7 +347,7 @@ class PlayingScene(Scene):
         # Bloquear movimento e tiro durante entrada da nave
         if not self.ship.is_entering:
             held = self.app.input.poll_held()
-            self.ship.move(held, dt)
+            self.ship.move(held, dt, is_side_scroll=self.is_side_scroll)
 
             # Tiro contínuo com tecla segurada ou automático
             if (
@@ -369,6 +413,7 @@ class PlayingScene(Scene):
                     self.entity_manager,
                     self.ship.rect.centerx,
                     self.ship.rect.centery,
+                    is_side_scroll=self.is_side_scroll,
                 )
 
             # Não spawnar power-ups no Nightmare (regra especial)
@@ -1391,6 +1436,16 @@ class PlayingScene(Scene):
             # Mudou de mundo! Aplicar novo tema
             self.current_world = new_world
             self._apply_world_theme()
+            
+            # NOVO: Atualizar modo de jogo se mudou (top-down <-> side-scroll)
+            new_is_side_scroll = is_side_scroll_mode(self.current_world.theme)
+            if new_is_side_scroll != self.is_side_scroll:
+                self.is_side_scroll = new_is_side_scroll
+                self.entity_manager.is_side_scroll = new_is_side_scroll
+                self.ship.is_side_scroll = new_is_side_scroll
+                self.collisions.is_side_scroll = new_is_side_scroll
+                logger.info(f"📋 Modo alterado para: {'Side-Scroll (Horizontal)' if self.is_side_scroll else 'Top-Down (Vertical)'}")
+            
             logger.info(f"✨ Bem-vindo ao {new_world.name}!")
 
         # Atualizar cache de nível (otimização)
