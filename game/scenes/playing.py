@@ -328,9 +328,9 @@ class PlayingScene(Scene):
             self.screen_shake_timer = max(0.0, self.screen_shake_timer - dt)
 
         if self.level_transition_active:
-            if self._all_animations_finished():
-                self.level_transition_timer += dt
-                if self.level_transition_timer >= self.level_transition_delay:
+            self.level_transition_timer += dt
+            if self.level_transition_timer >= self.level_transition_delay:
+                if self._all_animations_finished():
                     self._start_next_level()
 
         self.ship.update(dt, self.entity_manager, is_side_scroll=self.is_side_scroll)

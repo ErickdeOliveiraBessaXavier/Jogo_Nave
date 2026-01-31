@@ -9,13 +9,30 @@ Implementa backgrounds temáticos para cada mundo:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Dict, Optional, Type
 import pygame
 import random
 import math
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class ColorPalette:
+    """Paleta de cores para camadas de montanha."""
+    
+    def __init__(self, light: Tuple[int, int, int], dark: Tuple[int, int, int]) -> None:
+        self.light: Tuple[int, int, int] = light
+        self.dark: Tuple[int, int, int] = dark
+
+
+class LayerData:
+    """Dados de uma camada de parallax."""
+    
+    def __init__(self, surface: pygame.Surface, speed: float, offset: float = 0.0) -> None:
+        self.surface: pygame.Surface = surface
+        self.speed: float = speed
+        self.offset: float = offset
 
 
 class Background(ABC):
@@ -26,151 +43,512 @@ class Background(ABC):
         self.height = height
     
     @abstractmethod
-    def update(self, dt: float, speed_mult: float = 1.0):
+    def update(self, dt: float, speed_mult: float = 1.0) -> None:
         """Atualiza animação do background."""
         pass
     
     @abstractmethod
-    def draw(self, surface: pygame.Surface):
+    def draw(self, surface: pygame.Surface) -> None:
         """Desenha o background."""
         pass
     
     @abstractmethod
-    def reset(self):
+    def reset(self) -> None:
         """Reseta para estado inicial."""
         pass
+
+
+class Cloud:
+    """Representa uma nuvem individual com otimizações."""
+    
+    # Cache estático de superfícies de nuvem por cor
+    _surface_cache: Dict[Tuple[int, int, int], pygame.Surface] = {}
+    
+    def __init__(self, width: int, height: int, speed_range: Tuple[float, float], 
+                 color: Tuple[int, int, int], is_back_layer: bool):
+        self.screen_width = width
+        self.screen_height = height
+        self.speed_range = speed_range
+        self.color = color
+        self.is_back_layer = is_back_layer
+        
+        # Usar cache de superfície quando possível
+        cache_key = color
+        if cache_key not in Cloud._surface_cache:
+            Cloud._surface_cache[cache_key] = self._generate_cloud_surface()
+        
+        self.base_surface = Cloud._surface_cache[cache_key]
+        
+        # Propriedades da instância
+        self.x: float = 0.0
+        self.y: float = 0.0
+        self.speed: float = 0.0
+        self.scaled_surface: pygame.Surface = self.base_surface
+        
+        self.reset(is_first_time=True)
+
+    def _generate_cloud_surface(self) -> pygame.Surface:
+        """Gera superfície da nuvem estilo pixel art."""
+        surf = pygame.Surface((200, 100), pygame.SRCALPHA)
+        
+        # Desenhar forma da nuvem em camadas
+        rects = [
+            (30, 60, 140, 10),   # Camada inferior
+            (40, 50, 120, 15),   # Camada meio-baixo
+            (60, 35, 80, 15),    # Camada meio-alto
+            (80, 20, 40, 15),    # Topo
+            (50, 45, 10, 5),     # Detalhes esquerda
+            (70, 30, 10, 5),
+            (140, 45, 10, 5),    # Detalhes direita
+            (120, 30, 10, 5),
+            (90, 15, 20, 5),     # Topo detalhado
+        ]
+        
+        for rect in rects:
+            pygame.draw.rect(surf, self.color, rect)
+        
+        # Aplicar transparência baseada na camada
+        alpha = 102 if self.is_back_layer else 179  # 0.4 e 0.7 em 255
+        surf.set_alpha(alpha)
+        
+        return surf
+
+    def reset(self, is_first_time: bool = False) -> None:
+        """Reseta posição, tamanho e velocidade."""
+        # Escala aleatória
+        scale = random.uniform(0.5, 1.5)
+        new_width = int(self.base_surface.get_width() * scale)
+        new_height = int(self.base_surface.get_height() * scale)
+        
+        # Reutilizar surface transformada
+        self.scaled_surface = pygame.transform.scale(
+            self.base_surface, 
+            (new_width, new_height)
+        )
+        
+        # Posição inicial
+        if is_first_time:
+            self.x = random.uniform(0, self.screen_width)
+        else:
+            self.x = self.screen_width + random.randint(50, 200)
+        
+        self.y = (self.screen_height * 0.05) + random.random() * (self.screen_height * 0.35)
+        
+        # Velocidade
+        self.speed = random.uniform(self.speed_range[0], self.speed_range[1])
+
+    def update(self, dt: float, speed_mult: float = 1.0) -> None:
+        """Atualiza posição da nuvem."""
+        self.x -= self.speed * dt * speed_mult
+        
+        # Reset quando sair da tela
+        if self.x < -self.scaled_surface.get_width():
+            self.reset()
+
+    def draw(self, surface: pygame.Surface) -> None:
+        """Desenha a nuvem."""
+        surface.blit(self.scaled_surface, (int(self.x), int(self.y)))
+
+
 
 
 class MountainsBackground(Background):
     """Background de montanhas com parallax."""
     
+    # Constantes da classe
+    PALETTES = [
+        ColorPalette(light=(76, 59, 99), dark=(45, 33, 61)),
+        ColorPalette(light=(106, 76, 125), dark=(66, 45, 82)),
+        ColorPalette(light=(158, 92, 127), dark=(94, 58, 88)),
+        ColorPalette(light=(224, 126, 116), dark=(122, 62, 82)),
+        ColorPalette(light=(82, 52, 94), dark=(42, 27, 51)),
+        ColorPalette(light=(36, 25, 51), dark=(15, 10, 20))
+    ]
+    
+    LAYER_SPEEDS = [0.1, 0.3, 0.7, 1.5, 3.5, 7.0]
+    HEIGHT_PERCENTAGES = [0.65, 0.55, 0.45, 0.32, 0.20, 0.12]
+    PEAKS_COUNTS = [8, 12, 15, 7, 20, 30]
+    ROUGHNESS_VALUES = [15, 20, 25, 45, 15, 10]
+    
+    NUM_STARS = 70
+    NUM_CLOUDS_BACK = 4
+    NUM_CLOUDS_FRONT = 3
+    
     def __init__(self, width: int, height: int):
         super().__init__(width, height)
-        self.layers: List[dict[str, Any]] = []
+        
+        # Pré-calcular valores
+        self.star_twinkle_speed = 2.0
+        
+        # Inicializar coleções
+        self.layers: List[LayerData] = []
+        self.stars: List[Dict[str, Any]] = []
+        self.clouds_back: List[Cloud] = []
+        self.clouds_front: List[Cloud] = []
+        
+        # Sol
+        self.sun_rect: Optional[pygame.Rect] = None
+        self.sun_surface: Optional[pygame.Surface] = None
+        
+        # Gradiente do céu (pré-renderizado)
+        self.sky_gradient: Optional[pygame.Surface] = None
+        
+        # Criar elementos
+        self._create_sky_gradient()
         self._create_layers()
-    
+        self._create_stars()
+        self._create_sun()
+        self._create_clouds()
+
+    def _create_sky_gradient(self) -> None:
+        """Pré-renderiza o gradiente do céu com as cores vibrantes originais."""
+        self.sky_gradient = pygame.Surface((self.width, self.height))
+        
+        # Cores do gradiente (do HTML original)
+        gradient_colors = [
+            (30, 17, 40),    # #1e1128 - topo
+            (58, 37, 82),    # #3a2552 - 40%
+            (140, 75, 110),  # #8c4b6e - 70%
+            (201, 109, 99),  # #c96d63 - 90%
+            (255, 158, 125)  # #ff9e7d - base
+        ]
+        gradient_stops = [0.0, 0.4, 0.7, 0.9, 1.0]
+        
+        # Desenhar gradiente multi-stop
+        for y in range(self.height):
+            t = y / self.height
+            
+            # Encontrar entre quais stops estamos
+            for i in range(len(gradient_stops) - 1):
+                if t <= gradient_stops[i + 1]:
+                    # Interpolar entre gradient_colors[i] e gradient_colors[i+1]
+                    local_t = (t - gradient_stops[i]) / (gradient_stops[i + 1] - gradient_stops[i])
+                    color = tuple(
+                        int(gradient_colors[i][c] + (gradient_colors[i + 1][c] - gradient_colors[i][c]) * local_t)
+                        for c in range(3)
+                    )
+                    pygame.draw.line(self.sky_gradient, color, (0, y), (self.width, y))
+                    break
+
     def _create_layers(self) -> None:
-        """Cria 3 camadas de montanhas com parallax."""
-        # Camada distante (céu/nuvens - mais clara, mais lenta)
-        self.layers.append({
-            'y_base': self.height * 0.4,
-            'speed': 15,
-            'color': (120, 100, 80),
-            'peaks': self._generate_peaks(4, 80, 180),
-            'offset': 0.0,
-        })
+        """Cria camadas de parallax otimizadas."""
+        speed_multiplier = 50  # Ajuste de escala
         
-        # Camada média
-        self.layers.append({
-            'y_base': self.height * 0.6,
-            'speed': 35,
-            'color': (90, 70, 50),
-            'peaks': self._generate_peaks(6, 100, 220),
-            'offset': 0.0,
-        })
+        for i in range(6):
+            layer_surface = self._generate_mountain_surface(
+                self.PALETTES[i],
+                self.PEAKS_COUNTS[i],
+                self.ROUGHNESS_VALUES[i],
+                self.HEIGHT_PERCENTAGES[i]
+            )
+            
+            self.layers.append(LayerData(
+                surface=layer_surface,
+                speed=self.LAYER_SPEEDS[i] * speed_multiplier,
+                offset=0.0
+            ))
+
+    def _generate_mountain_surface(
+        self, 
+        palette: ColorPalette,
+        peaks: int, 
+        roughness: int, 
+        h_pct: float
+    ) -> pygame.Surface:
+        """Cria superfície otimizada da montanha com gradiente."""
+        surf_height = int(self.height * h_pct)
+        surf_width = self.width + 4
         
-        # Camada próxima (mais escura, mais rápida)
-        self.layers.append({
-            'y_base': self.height * 0.75,
-            'speed': 55,
-            'color': (60, 45, 35),
-            'peaks': self._generate_peaks(8, 120, 280),
-            'offset': 0.0,
-        })
-    
-    def _generate_peaks(self, count: int, min_height: int, max_height: int) -> List[int]:
-        """Gera alturas de picos de montanha."""
-        return [random.randint(min_height, max_height) for _ in range(count)]
-    
+        # Criar superfície final
+        final_surf = pygame.Surface((surf_width, surf_height), pygame.SRCALPHA)
+        
+        # Gerar pontos da montanha
+        points = self._generate_mountain_points(surf_width, surf_height, peaks, roughness)
+        highest_y = min(p[1] for p in points[1:-1])  # Ignorar pontos de fechamento
+        
+        # Criar gradiente (otimizado com surface lock)
+        grad_surf = self._create_gradient_surface(
+            surf_width, surf_height, palette, highest_y
+        )
+        
+        # Aplicar máscara
+        mask_surf = pygame.Surface((surf_width, surf_height), pygame.SRCALPHA)
+        pygame.draw.polygon(mask_surf, (255, 255, 255, 255), points)
+        
+        final_surf.blit(grad_surf, (0, 0))
+        final_surf.blit(mask_surf, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        
+        return final_surf
+
+    def _generate_mountain_points(
+        self, width: int, height: int, peaks: int, roughness: int
+    ) -> List[Tuple[int, int]]:
+        """Gera pontos da silhueta da montanha."""
+        base_y = height * 0.8
+        step = width / peaks
+        
+        points: List[Tuple[int, int]] = [(0, height)]
+        current_y = base_y + random.randint(0, int(height * 0.2))
+        start_y = current_y
+        points.append((0, int(current_y)))
+        
+        min_y = height * 0.1
+        max_y = height - 20
+        
+        for i in range(1, peaks):
+            x = int(i * step)
+            change = random.uniform(-0.5, 0.5) * roughness * 6
+            current_y = max(min_y, min(max_y, current_y + change))
+            points.append((x, int(current_y)))
+        
+        points.extend([
+            (width - 1, int(start_y)),
+            (width - 1, height)
+        ])
+        
+        return points
+
+    def _create_gradient_surface(
+        self, 
+        width: int, 
+        height: int, 
+        palette: ColorPalette,
+        highest_y: float
+    ) -> pygame.Surface:
+        """Cria superfície de gradiente otimizada."""
+        grad_surf = pygame.Surface((width, height), pygame.SRCALPHA)
+        
+        # Pré-calcular cores para evitar cálculos repetidos
+        gradient_range = height - highest_y
+        
+        # Lock surface para acesso direto aos pixels (mais rápido)
+        grad_surf.lock()
+        
+        for y in range(height):
+            if y < highest_y:
+                color = palette.light
+            else:
+                rel_y = min(1.0, (y - highest_y) / gradient_range if gradient_range > 0 else 0)
+                color = tuple(
+                    int(palette.light[c] + (palette.dark[c] - palette.light[c]) * rel_y)
+                    for c in range(3)
+                )
+            pygame.draw.line(grad_surf, color + (255,), (0, y), (width - 1, y))
+        
+        grad_surf.unlock()
+        return grad_surf
+
+    def _create_stars(self) -> None:
+        """Gera estrelas com distribuição pré-calculada."""
+        star_area_height = self.height * 0.5
+        
+        for _ in range(self.NUM_STARS):
+            self.stars.append({
+                'x': random.random() * self.width,
+                'y': random.random() * star_area_height,
+                'size': 2 if random.random() < 0.8 else 4,
+                'delay': random.random() * 5,
+                'base_alpha': random.uniform(0.3, 1.0)
+            })
+
+    def _draw_stars(self, surface: pygame.Surface) -> None:
+        """Desenha estrelas com brilho piscante otimizado."""
+        current_time = pygame.time.get_ticks() / 1000.0
+        
+        for star in self.stars:
+            # Calcular alpha usando seno para efeito de brilho
+            alpha_factor = (math.sin(current_time * self.star_twinkle_speed + star['delay']) + 1) * 0.5
+            alpha = int((0.3 + alpha_factor * 0.7) * 255)
+            
+            # Criar superfície temporária com alpha para a estrela
+            star_surf = pygame.Surface((star['size'], star['size']), pygame.SRCALPHA)
+            star_surf.fill((255, 255, 255, alpha))
+            
+            surface.blit(star_surf, (int(star['x']), int(star['y'])))
+
+    def _create_sun(self) -> None:
+        """Cria superfície do sol com brilho pré-renderizado."""
+        sun_size = 160
+        sun_center_x = self.width // 2
+        sun_center_y = self.height - int(self.height * 0.5)
+        
+        self.sun_rect = pygame.Rect(
+            sun_center_x - sun_size // 2,
+            sun_center_y - sun_size // 2,
+            sun_size,
+            sun_size
+        )
+        
+        # Pré-renderizar o sol com todos os efeitos
+        self.sun_surface = self._render_sun(sun_size)
+
+    def _render_sun(self, size: int) -> pygame.Surface:
+        """Renderiza o sol com gradiente radial."""
+        surf = pygame.Surface((size, size), pygame.SRCALPHA)
+        center = size // 2
+        radius = size // 2
+        
+        # Cores do sol
+        sun_inner = (255, 220, 163)   # Cor interna (mais clara)
+        sun_outer = (255, 189, 102)   # Cor externa (mais escura)
+        
+        # Desenha o gradiente radial de fora para dentro
+        for r in range(radius, 0, -1):
+            t = r / radius
+            # Interpolação quadrática para transição mais suave
+            t_smooth = t * t
+            
+            color = tuple(
+                int(sun_inner[c] + (sun_outer[c] - sun_inner[c]) * t_smooth)
+                for c in range(3)
+            )
+            
+            pygame.draw.circle(surf, color, (center, center), r)
+        
+        return surf
+
+    def _create_clouds(self) -> None:
+        """Cria nuvens em duas camadas."""
+        cloud_color = (200, 200, 220)
+        
+        # Camada de fundo (mais lentas)
+        for _ in range(self.NUM_CLOUDS_BACK):
+            self.clouds_back.append(
+                Cloud(self.width, self.height, (10, 30), cloud_color, is_back_layer=True)
+            )
+        
+        # Camada da frente (mais rápidas)
+        for _ in range(self.NUM_CLOUDS_FRONT):
+            self.clouds_front.append(
+                Cloud(self.width, self.height, (40, 70), cloud_color, is_back_layer=False)
+            )
+
     def update(self, dt: float, speed_mult: float = 1.0) -> None:
-        """Atualiza scroll parallax."""
+        """Atualiza animação do parallax e elementos."""
+        # Atualizar camadas
         for layer in self.layers:
-            layer['offset'] += layer['speed'] * dt * speed_mult
-            # Wrap around quando completar um ciclo
-            if layer['offset'] >= self.width:
-                layer['offset'] -= self.width
-    
+            layer.offset += layer.speed * dt * speed_mult
+            # Wrap around para parallax infinito
+            if layer.offset >= layer.surface.get_width():
+                layer.offset = 0.0
+        
+        # Atualizar nuvens
+        for cloud in self.clouds_back + self.clouds_front:
+            cloud.update(dt, speed_mult)
+
     def draw(self, surface: pygame.Surface) -> None:
-        """Desenha camadas de montanhas."""
+        """Desenha todos os elementos do background."""
+        # Desenhar gradiente de céu pré-renderizado
+        if self.sky_gradient:
+            surface.blit(self.sky_gradient, (0, 0))
+        
+        # Desenhar estrelas
+        self._draw_stars(surface)
+        
+        # Desenhar nuvens de fundo
+        for cloud in self.clouds_back:
+            cloud.draw(surface)
+        
+        # Desenhar sol (pré-renderizado)
+        if self.sun_surface and self.sun_rect:
+            surface.blit(self.sun_surface, self.sun_rect)
+        
+        # Desenhar camadas de montanhas (parallax)
         for layer in self.layers:
-            points: List[Tuple[int, int]] = []
-            segment_width = self.width / len(layer['peaks'])
+            # Desenhar duas vezes para efeito infinito
+            x_offset = -int(layer.offset)
+            surface.blit(layer.surface, (x_offset, self.height - layer.surface.get_height()))
             
-            # Desenhar duas vezes para criar loop sem emendas
-            for loop_offset in [0, self.width]:
-                for i, peak_height in enumerate(layer['peaks']):
-                    x = i * segment_width + loop_offset - layer['offset']
-                    y = layer['y_base'] - peak_height
-                    points.append((int(x), int(y)))
-            
-            # Fechar polígono embaixo
-            points.append((self.width * 2, self.height))
-            points.append((-self.width, self.height))
-            
-            # Desenhar apenas pontos visíveis
-            if len(points) >= 3:
-                pygame.draw.polygon(surface, layer['color'], points)
-    
+            # Segunda cópia para continuidade
+            if x_offset + layer.surface.get_width() < self.width:
+                surface.blit(
+                    layer.surface, 
+                    (x_offset + layer.surface.get_width(), self.height - layer.surface.get_height())
+                )
+        
+        # Desenhar nuvens da frente
+        for cloud in self.clouds_front:
+            cloud.draw(surface)
+
     def reset(self) -> None:
-        """Reseta camadas para estado inicial."""
-        self.layers.clear()
-        self._create_layers()
+        """Reseta para estado inicial."""
+        for layer in self.layers:
+            layer.offset = 0.0
+        
+        for cloud in self.clouds_back + self.clouds_front:
+            cloud.reset(is_first_time=True)
 
 
 class CityBackground(Background):
     """Background de cidade cyberpunk."""
     
+    # Constantes
+    NUM_BUILDINGS = 12
+    WINDOW_SIZE = (12, 20)
+    WINDOW_SPACING = 25
+    BLINK_SPEED = 1.5
+    
     def __init__(self, width: int, height: int):
         super().__init__(width, height)
-        self.buildings: List[dict[str, Any]] = []
+        self.buildings: List[Dict[str, Any]] = []
         self.blink_timer: float = 0.0
+        
+        # Pré-calcular padrão de piscar para evitar cálculos repetidos
+        self.blink_pattern_cache: Dict[int, bool] = {}
+        
         self._create_buildings()
     
     def _create_buildings(self) -> None:
-        """Gera prédios proceduralmente."""
-        x = -200  # Começar fora da tela
-        while x < self.width + 400:
-            width = random.randint(60, 180)
-            height = random.randint(250, 550)
-            neon_color = random.choice([
-                (0, 255, 255),    # Cyan
-                (255, 0, 255),    # Magenta
-                (255, 255, 0),    # Amarelo
-                (0, 255, 150),    # Verde neon
-            ])
+        """Gera prédios com propriedades variadas."""
+        neon_colors = [
+            (0, 255, 255),    # Ciano
+            (255, 0, 255),    # Magenta
+            (255, 255, 0),    # Amarelo
+            (0, 255, 127),    # Verde neon
+        ]
+        
+        x_pos = 0
+        min_spacing = 20
+        
+        for _ in range(self.NUM_BUILDINGS):
+            width = random.randint(80, 180)
+            height = random.randint(200, 500)
             
             self.buildings.append({
-                'x': x,
+                'x': x_pos,
+                'y': self.height - height,
                 'width': width,
                 'height': height,
-                'neon_color': neon_color,
-                'window_pattern': random.randint(0, 3),  # Padrão de janelas
+                'color': (random.randint(20, 40), random.randint(20, 40), random.randint(40, 60)),
+                'neon_color': random.choice(neon_colors)
             })
             
-            x += width + random.randint(10, 40)
+            x_pos += width + min_spacing
     
     def update(self, dt: float, speed_mult: float = 1.0) -> None:
-        """Scroll horizontal."""
-        scroll_speed = 25 * speed_mult
-        self.blink_timer += dt
+        """Atualiza timer de piscar."""
+        self.blink_timer += dt * self.BLINK_SPEED * speed_mult
         
-        for building in self.buildings:
-            building['x'] += scroll_speed * dt
-            
-            # Wrap around
-            if building['x'] > self.width + 200:
-                building['x'] -= (self.width + 800)
+        # Limpar cache periodicamente para economizar memória
+        if int(self.blink_timer * 100) % 500 == 0:
+            self.blink_pattern_cache.clear()
     
     def draw(self, surface: pygame.Surface) -> None:
-        """Desenha cidade cyberpunk."""
+        """Desenha cidade com janelas piscantes."""
+        # Fundo escuro
+        surface.fill((10, 10, 20))
+        
+        window_w, window_h = self.WINDOW_SIZE
+        spacing = self.WINDOW_SPACING
+        blink_time = int(self.blink_timer * 100)
+        
         for bldg in self.buildings:
-            x = int(bldg['x'])
-            y = self.height - bldg['height']
+            x, y = bldg['x'], bldg['y']
             
-            # Silhueta do prédio (escuro)
+            # Corpo do prédio
             pygame.draw.rect(
                 surface,
-                (15, 15, 30),
+                bldg['color'],
                 (x, y, bldg['width'], bldg['height'])
             )
             
@@ -182,45 +560,66 @@ class CityBackground(Background):
                 2
             )
             
-            # Janelas iluminadas
-            window_w = 12
-            window_h = 20
-            spacing = 25
-            
-            for wy in range(y + 30, y + bldg['height'] - 30, spacing + window_h):
-                for wx in range(x + 15, x + bldg['width'] - 15, spacing):
-                    # Padrão de piscar baseado em tempo + posição
-                    blink_offset = (wx + wy) % 100
-                    should_be_lit = (int(self.blink_timer * 100) + blink_offset) % 200 < 150
-                    
-                    if should_be_lit:
-                        color = (255, 255, 200)  # Branco quente
-                    else:
-                        color = (40, 40, 60)  # Apagado
-                    
-                    pygame.draw.rect(surface, color, (wx, wy, window_w, window_h))
+            # Desenhar janelas de forma otimizada
+            self._draw_windows(surface, x, y, bldg['width'], bldg['height'], 
+                             window_w, window_h, spacing, blink_time)
+    
+    def _draw_windows(self, surface: pygame.Surface, bldg_x: int, bldg_y: int,
+                     bldg_width: int, bldg_height: int, 
+                     window_w: int, window_h: int, spacing: int, blink_time: int) -> None:
+        """Desenha janelas com padrão de piscar otimizado."""
+        lit_color = (255, 255, 200)
+        dark_color = (40, 40, 60)
+        
+        y_start = bldg_y + 30
+        y_end = bldg_y + bldg_height - 30
+        x_start = bldg_x + 15
+        x_end = bldg_x + bldg_width - 15
+        
+        for wy in range(y_start, y_end, spacing + window_h):
+            for wx in range(x_start, x_end, spacing):
+                # Otimizar cálculo de piscar usando cache
+                window_key = wx + wy
+                
+                if window_key not in self.blink_pattern_cache:
+                    blink_offset = window_key % 100
+                    self.blink_pattern_cache[window_key] = (blink_time + blink_offset) % 200 < 150
+                
+                color = lit_color if self.blink_pattern_cache[window_key] else dark_color
+                pygame.draw.rect(surface, color, (wx, wy, window_w, window_h))
     
     def reset(self) -> None:
         """Reseta cidade para estado inicial."""
         self.buildings.clear()
         self.blink_timer = 0.0
+        self.blink_pattern_cache.clear()
         self._create_buildings()
 
 
 class VolcanicBackground(Background):
-    """Background vulcânico com lava."""
+    """Background vulcânico com lava e brasas."""
+    
+    # Constantes
+    NUM_LAVA_POOLS = 3
+    NUM_EMBERS = 40
+    WAVE_SPEED = 2.0
+    LAVA_RESOLUTION = 20  # Pontos de amostragem para ondas
     
     def __init__(self, width: int, height: int):
         super().__init__(width, height)
-        self.lava_pools: List[dict[str, Any]] = []
-        self.embers: List[dict[str, Any]] = []
+        self.lava_pools: List[Dict[str, Any]] = []
+        self.embers: List[Dict[str, Any]] = []
         self.wave_offset: float = 0.0
+        
+        # Pré-alocar listas de pontos para evitar realocações
+        self._lava_points_cache: List[List[Tuple[int, int]]] = [[] for _ in range(self.NUM_LAVA_POOLS)]
+        
         self._create_lava()
         self._create_embers()
     
     def _create_lava(self) -> None:
-        """Cria pools de lava no chão."""
-        for _ in range(3):
+        """Cria pools de lava otimizados."""
+        for _ in range(self.NUM_LAVA_POOLS):
             self.lava_pools.append({
                 'y': self.height - random.randint(50, 150),
                 'amplitude': random.randint(5, 15),
@@ -230,7 +629,7 @@ class VolcanicBackground(Background):
     
     def _create_embers(self) -> None:
         """Cria partículas de brasa."""
-        for _ in range(40):
+        for _ in range(self.NUM_EMBERS):
             self.embers.append({
                 'x': random.randint(0, self.width),
                 'y': random.randint(0, self.height),
@@ -241,9 +640,9 @@ class VolcanicBackground(Background):
     
     def update(self, dt: float, speed_mult: float = 1.0) -> None:
         """Atualiza animação de lava e brasas."""
-        self.wave_offset += dt * 2
+        self.wave_offset += dt * self.WAVE_SPEED * speed_mult
         
-        # Atualizar brasas (sobem)
+        # Atualizar brasas
         for ember in self.embers:
             ember['y'] -= ember['speed'] * dt * speed_mult
             
@@ -253,28 +652,21 @@ class VolcanicBackground(Background):
                 ember['x'] = random.randint(0, self.width)
     
     def draw(self, surface: pygame.Surface) -> None:
-        """Desenha cenário vulcânico."""
-        # Lava no chão (ondulante)
-        for pool in self.lava_pools:
-            points: List[Tuple[int, int]] = []
-            for x in range(0, self.width, 20):
-                wave = math.sin(
-                    (x * pool['frequency'] / 100) + 
-                    (self.wave_offset * pool['frequency']) + 
-                    pool['phase']
-                )
-                y = pool['y'] + wave * pool['amplitude']
-                points.append((x, int(y)))
+        """Desenha cenário vulcânico otimizado."""
+        # Fundo escuro avermelhado
+        surface.fill((30, 10, 10))
+        
+        # Desenhar lava com ondulação
+        for i, pool in enumerate(self.lava_pools):
+            points = self._calculate_lava_wave(pool, i)
             
-            points.append((self.width, self.height))
-            points.append((0, self.height))
-            
-            # Gradiente de lava (simulado com polígono)
             if len(points) >= 3:
+                # Preenchimento
                 pygame.draw.polygon(surface, (200, 50, 0), points)
+                # Borda brilhante
                 pygame.draw.polygon(surface, (255, 100, 0), points, 3)
         
-        # Brasas flutuantes
+        # Desenhar brasas
         for ember in self.embers:
             brightness = int(255 * ember['brightness'])
             color = (brightness, brightness // 3, 0)
@@ -285,10 +677,63 @@ class VolcanicBackground(Background):
                 ember['size']
             )
     
+    def _calculate_lava_wave(self, pool: Dict[str, Any], pool_index: int) -> List[Tuple[int, int]]:
+        """Calcula pontos da onda de lava de forma otimizada."""
+        points = []
+        
+        # Usar resolução fixa para melhor performance
+        for x in range(0, self.width, self.LAVA_RESOLUTION):
+            wave = math.sin(
+                (x * pool['frequency'] / 100) + 
+                (self.wave_offset * pool['frequency']) + 
+                pool['phase']
+            )
+            y = pool['y'] + wave * pool['amplitude']
+            points.append((x, int(y)))
+        
+        # Fechar o polígono
+        points.append((self.width, self.height))
+        points.append((0, self.height))
+        
+        return points
+    
     def reset(self) -> None:
         """Reseta vulcão para estado inicial."""
         self.lava_pools.clear()
         self.embers.clear()
         self.wave_offset = 0.0
+        self._lava_points_cache = [[] for _ in range(self.NUM_LAVA_POOLS)]
         self._create_lava()
         self._create_embers()
+
+
+# Factory function para facilitar criação
+def create_background(bg_type: str, width: int, height: int) -> Background:
+    """
+    Cria um background baseado no tipo especificado.
+    
+    Args:
+        bg_type: Tipo do background ('mountains', 'city', 'volcanic')
+        width: Largura da tela
+        height: Altura da tela
+    
+    Returns:
+        Instância do background apropriado
+    
+    Raises:
+        ValueError: Se o tipo de background não for válido
+    """
+    backgrounds: Dict[str, Type[Background]] = {
+        'mountains': MountainsBackground,
+        'city': CityBackground,
+        'volcanic': VolcanicBackground,
+    }
+    
+    bg_class = backgrounds.get(bg_type.lower())
+    if bg_class is None:
+        raise ValueError(
+            f"Tipo de background inválido: {bg_type}. "
+            f"Tipos válidos: {', '.join(backgrounds.keys())}"
+        )
+    
+    return bg_class(width, height)

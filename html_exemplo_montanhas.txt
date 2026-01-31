@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parallax Pixel Art - Square Stars</title>
+<style>
+    :root {
+        --sky-gradient: linear-gradient(to bottom, #1e1128 0%, #3a2552 40%, #8c4b6e 70%, #c96d63 90%, #ff9e7d 100%);
+        --sun-color: #ffdca3;
+        
+        /* PALETA (Light = Topo, Dark = Base) */
+        --m6-light: #4c3b63; --m6-dark: #2d213d;
+        --m5-light: #6a4c7d; --m5-dark: #422d52;
+        --m4-light: #9e5c7f; --m4-dark: #5e3a58;
+        --m3-light: #e07e74; --m3-dark: #7a3e52; 
+        --m2-light: #52345e; --m2-dark: #2a1b33;
+        --m1-light: #241933; --m1-dark: #0f0a14;
+        --cloud-color: #ffccb3;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: var(--sky-gradient); background-color: #1e1128; }
+    .game-window { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+
+    /* === ESTRELAS QUADRADAS === */
+    .stars-container { position: absolute; width: 100%; height: 50%; z-index: 1; }
+    .star { 
+        position: absolute; 
+        background: white; 
+        border-radius: 0; /* REMOVIDO O ARREDONDAMENTO */
+        shape-rendering: crispEdges;
+        animation: twinkle 4s infinite ease-in-out; 
+    }
+    @keyframes twinkle { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+    .sun {
+        position: absolute; width: 160px; height: 160px; border-radius: 50%;
+        bottom: 50%; left: 50%; transform: translateX(-50%); z-index: 2;
+        background: radial-gradient(circle at 30% 30%, var(--sun-color), #ffbd66);
+        box-shadow: 0 0 60px rgba(255, 189, 102, 0.4);
+    }
+
+    /* NUVENS */
+    .cloud-item {
+        position: absolute;
+        background-repeat: no-repeat;
+        background-size: contain;
+        image-rendering: pixelated;
+        will-change: transform;
+        pointer-events: none;
+    }
+    .cloud-back-layer { z-index: 3; opacity: 0.4; }
+    .cloud-front-layer { z-index: 4; opacity: 0.7; }
+
+    /* MONTANHAS */
+    .layer { 
+        position: absolute; 
+        width: 100%; 
+        bottom: 0; 
+        left: 0; 
+        background-repeat: repeat-x; 
+        background-position-y: bottom; 
+        will-change: background-position; 
+    }
+    
+    .mountains-6 { z-index: 5; height: 65%; }
+    .mountains-5 { z-index: 6; height: 55%; }
+    .mountains-4 { z-index: 7; height: 45%; }
+    .mountains-3 { z-index: 8; height: 32%; } 
+    .mountains-2 { z-index: 9; height: 20%; }
+    .mountains-1 { z-index: 10; height: 12%; }
+</style>
+</head>
+<body>
+
+<div class="game-window" id="gameWindow">
+    <div class="stars-container" id="stars"></div>
+    <div class="sun"></div>
+    
+    <div id="cloudsBackContainer"></div>
+    <div id="cloudsFrontContainer"></div>
+
+    <div class="layer mountains-6" data-speed="0.1" data-light="var(--m6-light)" data-dark="var(--m6-dark)" data-peaks="8" data-roughness="15"></div>
+    <div class="layer mountains-5" data-speed="0.3" data-light="var(--m5-light)" data-dark="var(--m5-dark)" data-peaks="12" data-roughness="20"></div>
+    <div class="layer mountains-4" data-speed="0.7" data-light="var(--m4-light)" data-dark="var(--m4-dark)" data-peaks="15" data-roughness="25"></div>
+    <div class="layer mountains-3" data-speed="1.5" data-light="var(--m3-light)" data-dark="var(--m3-dark)" data-peaks="7" data-roughness="45"></div>
+    <div class="layer mountains-2" data-speed="3.5" data-light="var(--m2-light)" data-dark="var(--m2-dark)" data-peaks="20" data-roughness="15"></div>
+    <div class="layer mountains-1" data-speed="7.0" data-light="var(--m1-light)" data-dark="var(--m1-dark)" data-peaks="30" data-roughness="10"></div>
+</div>
+
+<script>
+    const BASE_SPEED = 0.4;
+    const CANVAS_WIDTH = 1200;
+    const CANVAS_HEIGHT = 600;
+
+    function getCSSVar(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    function generateCloudSVG(color) {
+        const svgString = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">
+                <path fill="${color}" d="M40 50h120v15H40z M60 35h80v15H60z M80 20h40v15H80z M30 60h140v10H30z" />
+            </svg>`.trim();
+        return `url('data:image/svg+xml;base64,${window.btoa(svgString)}')`;
+    }
+
+    function generateMountainSVG(colorLight, colorDark, peaks, roughness, index) {
+        const gradId = `grad-${index}`;
+        let path = `M 0 ${CANVAS_HEIGHT}`;
+        const step = CANVAS_WIDTH / peaks;
+        let startY = 250 + Math.random() * 100;
+        if(index === 3) startY = 180; 
+        
+        path += ` L 0 ${startY}`;
+        let currentY = startY;
+        let highestPoint = startY;
+
+        for (let i = 1; i <= peaks; i++) {
+            let x = i * step;
+            if (i === peaks) {
+                currentY = startY;
+            } else {
+                let change = (Math.random() - 0.5) * roughness * 6;
+                currentY += change;
+                currentY = Math.max(50, Math.min(CANVAS_HEIGHT - 20, currentY));
+                if (currentY < highestPoint) highestPoint = currentY;
+            }
+            path += ` L ${x} ${currentY}`;
+        }
+        path += ` L ${CANVAS_WIDTH} ${CANVAS_HEIGHT} Z`;
+
+        const svgString = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}">
+                <defs>
+                    <linearGradient id="${gradId}" x1="0" y1="${CANVAS_HEIGHT}" x2="0" y2="${highestPoint}" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="${colorDark}" />
+                        <stop offset="100%" stop-color="${colorLight}" />
+                    </linearGradient>
+                </defs>
+                <path fill="url(#${gradId})" d="${path}"/>
+            </svg>`;
+        return `url('data:image/svg+xml;base64,${window.btoa(svgString)}')`;
+    }
+
+    // Configuração das Nuvens
+    const cloudColor = getCSSVar('--cloud-color');
+    const cloudSVG = generateCloudSVG(cloudColor);
+    
+    class Cloud {
+        constructor(container, speedMult, className) {
+            this.el = document.createElement('div');
+            this.el.className = `cloud-item ${className}`;
+            this.el.style.backgroundImage = cloudSVG;
+            this.speedMult = speedMult;
+            container.appendChild(this.el);
+            this.reset(true);
+        }
+        reset(isFirstTime = false) {
+            this.width = 150 + Math.random() * 150;
+            this.height = this.width / 2;
+            this.el.style.width = `${this.width}px`;
+            this.el.style.height = `${this.height}px`;
+            this.x = isFirstTime ? Math.random() * window.innerWidth : window.innerWidth + 200;
+            this.y = (window.innerHeight * 0.05) + Math.random() * (window.innerHeight * 0.35);
+            this.update();
+        }
+        update() {
+            this.x -= BASE_SPEED * this.speedMult;
+            if (this.x < -this.width) this.reset();
+            this.el.style.transform = `translate(${this.x}px, ${this.y}px)`;
+        }
+    }
+
+    const cloudsBack = [];
+    const cloudsFront = [];
+    for(let i=0; i<3; i++) {
+        cloudsBack.push(new Cloud(document.getElementById('cloudsBackContainer'), 0.4, 'cloud-back-layer'));
+        cloudsFront.push(new Cloud(document.getElementById('cloudsFrontContainer'), 1.2, 'cloud-front-layer'));
+    }
+
+    const layers = document.querySelectorAll('.layer');
+    layers.forEach((layer, index) => {
+        const cLight = getCSSVar(layer.getAttribute('data-light').replace(/var\(|\)/g, ''));
+        const cDark = getCSSVar(layer.getAttribute('data-dark').replace(/var\(|\)/g, ''));
+        layer.style.backgroundImage = generateMountainSVG(cLight, cDark, parseInt(layer.getAttribute('data-peaks')), parseInt(layer.getAttribute('data-roughness')), index);
+        layer.style.backgroundSize = `${CANVAS_WIDTH}px 100%`;
+    });
+
+    // === ESTRELAS QUADRADAS (Ajustadas para 2x2 pixels) ===
+    const starsContainer = document.getElementById('stars');
+    for(let i = 0; i < 70; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        // Tamanho fixo de 2px ou 4px para parecer pixel art
+        const size = Math.random() < 0.8 ? 2 : 4; 
+        star.style.width = size + 'px'; 
+        star.style.height = size + 'px';
+        star.style.left = Math.random() * 100 + '%'; 
+        star.style.top = Math.random() * 100 + '%';
+        star.style.animationDelay = Math.random() * 5 + 's';
+        starsContainer.appendChild(star);
+    }
+
+    let scrollPosition = 0;
+    function animate() {
+        scrollPosition += BASE_SPEED;
+        layers.forEach(layer => {
+            const speed = parseFloat(layer.getAttribute('data-speed'));
+            layer.style.backgroundPositionX = `-${scrollPosition * speed}px`;
+        });
+        cloudsBack.forEach(c => c.update());
+        cloudsFront.forEach(c => c.update());
+        requestAnimationFrame(animate);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+        cloudsBack.forEach(c => { if(c.x > window.innerWidth) c.reset() });
+        cloudsFront.forEach(c => { if(c.x > window.innerWidth) c.reset() });
+    });
+</script>
+</body>
+</html>
