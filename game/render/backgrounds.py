@@ -679,7 +679,7 @@ class VolcanicBackground(Background):
     
     def _calculate_lava_wave(self, pool: Dict[str, Any], pool_index: int) -> List[Tuple[int, int]]:
         """Calcula pontos da onda de lava de forma otimizada."""
-        points = []
+        points: List[Tuple[int, int]] = []
         
         # Usar resolução fixa para melhor performance
         for x in range(0, self.width, self.LAVA_RESOLUTION):
