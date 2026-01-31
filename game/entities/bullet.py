@@ -17,7 +17,10 @@ class Bullet:
         is_side_scroll: bool = False,
     ):
         self.x, self.y = x, y
-        self.w, self.h = 3, 10
+        if is_side_scroll:
+            self.w, self.h = 10, 3
+        else:
+            self.w, self.h = 3, 10
         self.damage = damage
         self.dead = False
         self.piercing = piercing
@@ -49,6 +52,10 @@ class Bullet:
     ):
         """Reconfigura a bala para reutilização no pool."""
         self.x, self.y = x, y
+        if is_side_scroll:
+            self.w, self.h = 10, 3
+        else:
+            self.w, self.h = 3, 10
         self.damage = damage
         self.dead = False
         self.piercing = piercing
