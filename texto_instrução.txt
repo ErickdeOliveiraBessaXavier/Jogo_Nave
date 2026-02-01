@@ -1,117 +1,130 @@
-Para integrar a lógica visual do seu código HTML/CSS (que usa 6 camadas, gradientes verticais por montanha e nuvens individuais) no seu jogo em Pygame, precisamos adaptar os geradores de SVG para funções de desenho de superfícies do Pygame.
+# Correção: Inimigos não morriam ao sair da tela em side-scroll
 
-O segredo está em criar **6 superfícies independentes** (uma para cada camada) e usar o método `special_flags` do Pygame para simular o gradiente linear dentro de cada montanha.
+## 🐛 Problema Identificado
 
-Aqui está o código adaptado:
+No modo `side-scroll` (Mountains, City, Volcanic), os inimigos que saíam da tela pela esquerda **não eram contabilizados como mortos**, resultando em:
+
+1. O contador de inimigos destruídos (`enemies_destroyed_in_level`) não avançava
+2. A fase só era considerada "passada" após o timer de limpeza de 20 segundos expirar
+3. Os inimigos continuavam acumulando em memória mesmo fora da tela
+
+**Por que funcionava no Starfield (top-down) mas não nos outros mundos?**
+
+No Starfield, os inimigos caem pela parte inferior da tela (`enemy.y > screen_height`), e essa verificação funciona. Nos outros mundos (side-scroll), os inimigos vão para a esquerda (`enemy.x < -enemy.w`), mas havia um **bug crítico** na verificação.
+
+## 🔍 Causa Raiz REAL
+
+O arquivo `entity_manager.py` possui a função `_is_enemy_off_screen()`, mas ela tinha **DOIS problemas graves**:
+
+### Problema 1: AttributeError silencioso
+
+A função tentava acessar `enemy.w` diretamente:
 
 ```python
-import pygame
-import random
-import math
-from typing import List, Tuple, Any
-
-class MountainsBackground(Background):
-    def __init__(self, width: int, height: int):
-        super().__init__(width, height)
-        # Paleta de cores baseada no seu :root CSS
-        self.palette = [
-            {'light': (76, 59, 99),   'dark': (45, 33, 61)},   # m6
-            {'light': (106, 76, 125),  'dark': (66, 45, 82)},   # m5
-            {'light': (158, 92, 127),  'dark': (94, 58, 88)},   # m4
-            {'light': (224, 126, 116), 'dark': (122, 62, 82)},  # m3
-            {'light': (82, 52, 94),   'dark': (42, 27, 51)},   # m2
-            {'light': (36, 25, 51),   'dark': (15, 10, 20)}    # m1
-        ]
-        self.layers: List[dict] = []
-        self._create_layers()
-
-    def _create_layers(self) -> None:
-        speeds = [0.1, 0.3, 0.7, 1.5, 3.5, 7.0] # data-speed do HTML
-        height_pcts = [0.65, 0.55, 0.45, 0.32, 0.20, 0.12] # height do CSS
-        peaks_counts = [8, 12, 15, 7, 20, 30] # data-peaks
-        roughness = [15, 20, 25, 45, 15, 10] # data-roughness
-
-        for i in range(6):
-            layer_surface = self._generate_mountain_surface(
-                self.palette[i]['light'], 
-                self.palette[i]['dark'],
-                peaks_counts[i],
-                roughness[i],
-                height_pcts[i]
-            )
-            self.layers.append({
-                'surface': layer_surface,
-                'speed': speeds[i] * 50, # Ajuste de escala de velocidade para Pygame
-                'offset': 0.0
-            })
-
-    def _generate_mountain_surface(self, light: Tuple, dark: Tuple, peaks: int, roughness: int, h_pct: int) -> pygame.Surface:
-        """Cria uma superfície com a montanha e o gradiente linear aplicado."""
-        surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        base_y = self.height * (1.0 - h_pct)
-        
-        # Gerar pontos da montanha (lógica do JS)
-        points = [(0, self.height)]
-        step = self.width / peaks
-        current_y = base_y + random.randint(0, 100)
-        points.append((0, current_y))
-
-        for i in range(1, peaks):
-            x = i * step
-            change = random.uniform(-0.5, 0.5) * roughness * 6
-            current_y += change
-            current_y = max(self.height * 0.1, min(self.height - 20, current_y))
-            points.append((x, current_y))
-            
-        points.append((self.width, base_y))
-        points.append((self.width, self.height))
-
-        # 1. Desenha a silhueta sólida (máscara)
-        mask_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        pygame.draw.polygon(mask_surf, (255, 255, 255), points)
-
-        # 2. Cria o Gradiente (Escuro embaixo -> Claro no topo)
-        grad_surf = pygame.Surface((self.width, self.height))
-        # Preenchimento vertical do gradiente
-        for y in range(int(self.height * (1-h_pct-0.2)), self.height):
-            # Interpolação de cor
-            rel_y = (y - (self.height * (1-h_pct-0.2))) / (self.height * h_pct * 1.2)
-            rel_y = max(0, min(1, rel_y))
-            # Invertido: light no topo (rel_y=0), dark na base (rel_y=1)
-            color = [
-                int(light[c] + (dark[c] - light[c]) * rel_y)
-                for c in range(3)
-            ]
-            pygame.draw.line(grad_surf, color, (0, y), (self.width, y))
-
-        # 3. Blit do gradiente na máscara usando MULTIPLY
-        grad_surf.blit(mask_surf, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-        return grad_surf
-
-    def update(self, dt: float, speed_mult: float = 1.0) -> None:
-        for layer in self.layers:
-            layer['offset'] += layer['speed'] * dt * speed_mult
-            if layer['offset'] >= self.width:
-                layer['offset'] -= self.width
-
-    def draw(self, surface: pygame.Surface) -> None:
-        for layer in self.layers:
-            # Desenha duas vezes para o loop infinito (parallax)
-            x_pos = -layer['offset']
-            surface.blit(layer['surface'], (x_pos, 0))
-            surface.blit(layer['surface'], (x_pos + self.width, 0))
-
-    def reset(self) -> None:
-        self.layers.clear()
-        self._create_layers()
-
+def _is_enemy_off_screen(self, enemy: Any) -> bool:
+    if self.is_side_scroll:
+        return enemy.x < -enemy.w  # ❌ ERRO! enemy.w pode não existir
 ```
 
-### O que mudou e como funciona:
+Mas nem todos os inimigos têm o atributo `.w`! Alguns usam `rect.width`. Quando `enemy.w` não existe:
+- Python lança `AttributeError`
+- A exceção é silenciosamente ignorada ou retorna False
+- O inimigo nunca é marcado como fora da tela
 
-1. **A Lógica do Gradiente:** No Pygame não existe um `linearGradient` nativo como no SVG. A função `_generate_mountain_surface` resolve isso desenhando linhas horizontais de cores levemente diferentes (interpolação) e depois recortando-as com o desenho da montanha usando o flag `pygame.BLEND_RGBA_MULT`. Isso garante que a **base seja escura e o topo seja claro**, exatamente como você pediu.
-2. **6 Camadas Fiéis:** O código agora respeita as 6 camadas do seu CSS, com as velocidades e proporções de altura idênticas (`mountains-1` a `mountains-6`).
-3. **Parallax Infinito:** O método `draw` desenha a superfície da camada duas vezes lado a lado. Quando o `offset` ultrapassa a largura da tela, ele reseta, criando o efeito de movimento contínuo sem emendas.
-4. **Desempenho:** As montanhas são geradas e desenhadas em superfícies uma única vez no `__init__`. No loop de jogo (`draw`), o Pygame apenas faz o `blit` (cópia de pixels), o que é extremamente rápido para manter o FPS alto.
+**Evidência:** Em outras partes do código, o desenvolvedor usa `getattr(enemy, "w", 0)` com valor padrão, indicando que sabia que `.w` pode não existir!
 
-Gostaria que eu adaptasse também a classe das **Nuvens Individuais** para seguir essa mesma lógica de "resetar" a posição e variar a altura aleatoriamente como está no seu JavaScript?
+### Problema 2: Função não era aplicada universalmente
+
+A função `_is_enemy_off_screen()` estava sendo usada **APENAS** para `ExplosiveMine`:
+
+```python
+self.enemies = [
+    e
+    for e in self.enemies
+    if not e.dead and not (isinstance(e, ExplosiveMine) and e.is_off_screen())
+]
+```
+
+Todos os outros tipos de inimigos (meteoros, aliens, eye enemies) **não eram verificados**.
+
+## ✅ Solução Implementada
+
+### Fix 1: Acesso seguro aos atributos de tamanho
+
+Corrigi a função `_is_enemy_off_screen()` para:
+
+1. **Usar `getattr` com fallback** para obter largura/altura
+2. **Verificar `rect.width/height`** se `.w/.h` não existir  
+3. **Usar valores padrão** (50) como último recurso
+
+```python
+def _is_enemy_off_screen(self, enemy: Any) -> bool:
+    # Obter largura do inimigo de forma segura
+    enemy_width = getattr(enemy, 'w', None)
+    if enemy_width is None:
+        rect = getattr(enemy, 'rect', None)
+        if rect is not None:
+            enemy_width = getattr(rect, 'width', 50)
+        else:
+            enemy_width = 50  # Fallback
+    
+    # Mesma lógica para altura...
+    
+    if self.is_side_scroll:
+        return enemy.x < -enemy_width  # ✅ Agora funciona!
+    else:
+        # ... verificações top-down
+```
+
+### Fix 2: Aplicar verificação a TODOS os inimigos
+
+Adicionei verificação no método `cleanup()`:
+
+```python
+def cleanup(self):
+    # Marcar inimigos fora da tela como mortos ANTES de liberar ao pool
+    for e in self.enemies:
+        if not e.dead and self._is_enemy_off_screen(e):
+            e.dead = True
+    
+    # Resto do cleanup...
+```
+
+## 📊 Resultado Esperado
+
+Após aplicar esta correção:
+
+✅ **Starfield (top-down)**: Continua funcionando normalmente  
+✅ **Mountains/City/Volcanic (side-scroll)**: Agora funciona corretamente!  
+✅ Inimigos que saem da tela são marcados como `dead`  
+✅ O contador `enemies_destroyed_in_level` avança  
+✅ A fase progride sem esperar os 20 segundos  
+✅ Não há acúmulo de inimigos inativos em memória  
+✅ Não há mais `AttributeError` ao verificar `.w` inexistente  
+
+## 🔧 Como Aplicar
+
+1. Substitua o arquivo `entity_manager.py` original pelo `entity_manager_v2.py`
+2. O sistema detectará automaticamente inimigos fora da tela em **ambos os modos**
+3. Nenhuma outra alteração é necessária
+
+## 📝 Observações Técnicas
+
+### Por que o bug não aparecia no Starfield?
+
+No modo **top-down**, a primeira verificação é `enemy.y > screen_height`, que funciona **antes** de tentar acessar `enemy.w`. Então mesmo que o acesso a `.w` falhasse, os inimigos já eram removidos pela verificação do `y`.
+
+No modo **side-scroll**, a **única** verificação é `enemy.x < -enemy.w`, que falhava se `.w` não existisse.
+
+### Estrutura dos inimigos
+
+Diferentes inimigos têm diferentes estruturas:
+- Alguns têm `.w` e `.h` (width/height)
+- Outros têm apenas `.rect.width` e `.rect.height`
+- A solução agora suporta ambos os casos
+
+### Performance
+
+- Overhead mínimo: apenas chamadas `getattr` que são muito rápidas
+- Verificação ocorre uma vez por frame no `cleanup()`
+- Complexidade: O(n) linear nos inimigos ativos

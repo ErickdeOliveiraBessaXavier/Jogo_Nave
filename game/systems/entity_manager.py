@@ -828,15 +828,44 @@ class EntityManager:
         Em top-down: sai pela parte inferior (y > screen_height)
         Em side-scroll: sai pela parte esquerda (x < -width)
         """
+        # Obter largura do inimigo de forma segura
+        enemy_width = getattr(enemy, 'w', None)
+        if enemy_width is None:
+            # Tentar rect.width se .w não existir
+            rect = getattr(enemy, 'rect', None)
+            if rect is not None:
+                enemy_width = getattr(rect, 'width', 50)  # Default 50 se não encontrar
+            else:
+                enemy_width = 50  # Fallback para largura padrão
+        
+        # Obter altura do inimigo de forma segura
+        enemy_height = getattr(enemy, 'h', None)
+        if enemy_height is None:
+            rect = getattr(enemy, 'rect', None)
+            if rect is not None:
+                enemy_height = getattr(rect, 'height', 50)
+            else:
+                enemy_height = 50
+        
         if self.is_side_scroll:
-            # Side-scroll: inimigos saem pela esquerda
-            return enemy.x < -enemy.w
+            # Side-scroll: inimigos saem pela esquerda, por cima ou por baixo
+            screen = pygame.display.get_surface()
+            screen_height = screen.get_height() if screen else 900
+            return (
+                enemy.x < -enemy_width
+                or enemy.y < -enemy_height
+                or enemy.y > screen_height
+            )
         else:
             # Top-down: inimigos saem pela parte inferior (ou pela lateral/superior)
+            screen = pygame.display.get_surface()
+            screen_height = screen.get_height() if screen else 900
+            screen_width = screen.get_width() if screen else 1600
+            
             return (
-                enemy.y > pygame.display.get_surface().get_height()
-                or enemy.x < -enemy.w
-                or enemy.x > pygame.display.get_surface().get_width()
+                enemy.y > screen_height
+                or enemy.x < -enemy_width
+                or enemy.x > screen_width
             )
 
     def cleanup(self):
@@ -846,6 +875,11 @@ class EntityManager:
                 self.bullet_pool.release(b)
         self.bullets = [b for b in self.bullets if not b.dead]
 
+        # Marcar inimigos fora da tela como mortos ANTES de liberar ao pool
+        for e in self.enemies:
+            if not e.dead and self._is_enemy_off_screen(e):
+                e.dead = True
+        
         # Liberar meteoros dead ao pool
         for e in self.enemies:
             if isinstance(e, Meteor) and e.dead:
