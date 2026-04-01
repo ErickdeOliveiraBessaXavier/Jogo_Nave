@@ -1,0 +1,24 @@
+[MASTER]
+# Pasta a analisar
+ignore-patterns=test_.*?\.py
+
+[MESSAGES CONTROL]
+# Desabilitar warnings menos importantes
+disable=
+    missing-docstring,
+    too-few-public-methods,
+    invalid-name,
+    line-too-long,
+
+[DESIGN]
+# Limites para complexidade
+max-locals=15
+max-branches=12
+max-statements=50
+max-attributes=7
+
+[SIMILARITIES]
+# Detectar código duplicado
+min-similarity-lines=4
+ignore-comments=yes
+ignore-docstrings=yes

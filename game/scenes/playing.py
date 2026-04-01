@@ -1,29 +1,36 @@
-import pygame
-import random
-import math
-import time
 import logging
-from typing import TYPE_CHECKING, Optional, cast, Any
-from ..core.state import Scene
-from ..core.config import config as Config, SlimeBossState
-from ..entities.ship import Ship
-from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
-from ..systems.collisions import Collisions
-from ..systems.entity_manager import EntityManager
-from ..entities.floating_score import FloatingScore
-from ..core.levels import LevelManager, get_level_config, LevelConfig
-from ..core.difficulty import DifficultyPreset, DifficultySettings
-from ..core.assets import get_font
+import math
+import random
+import time
+from typing import TYPE_CHECKING, Any, Optional, cast
+
+import pygame
+
 from ..core import colors
-from ..core.sound import sound_manager
-from ..core.sound_config import MusicState
-from ..entities.mini_ship import MiniShip
-from ..entities.spike_boss_laser import SpikeBossLaser
+from ..core.assets import get_font
+from ..core.config import SlimeBossState
+from ..core.config import config as Config
+from ..core.difficulty import DifficultyPreset, DifficultySettings
+from ..core.levels import LevelConfig, LevelManager, get_level_config
 from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_profile_path
-from ..core.upgrades import create_upgrade, ActiveUpgrade, HealUpgrade
+from ..core.sound import sound_manager
+from ..core.sound_config import MusicState
+from ..core.state import Scene
+from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
-from ..core.world_config import get_world_for_level, format_stage_name, is_side_scroll_mode
+from ..core.world_config import (
+    format_stage_name,
+    get_world_for_level,
+    is_side_scroll_mode,
+)
+from ..entities.floating_score import FloatingScore
+from ..entities.mini_ship import MiniShip
+from ..entities.ship import Ship
+from ..entities.spike_boss_laser import SpikeBossLaser
+from ..systems.collisions import Collisions
+from ..systems.entity_manager import EntityManager
+from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +57,7 @@ class PlayingScene(Scene):
 
         # Meta-progression system (salvar profil antes)
         self.player_profile.start_session()
-        
+
         # Detectar modo de jogo CEDO (antes de criar nave)
         self.current_level_index: int = 0
         self.current_world = get_world_for_level(self.current_level_index + 1)
@@ -65,7 +72,7 @@ class PlayingScene(Scene):
             # Top-down: Nave vem de baixo, centrada horizontalmente
             ship_x = Config.SCREEN_WIDTH / 2 - 20
             ship_y = Config.SCREEN_HEIGHT + 100  # Abaixo da tela
-        
+
         self.ship = Ship(
             ship_x,
             ship_y,
@@ -74,11 +81,11 @@ class PlayingScene(Scene):
         )
         self.ship.is_entering = True
         self.ship.is_side_scroll = self.is_side_scroll
-        
+
         # Rotacionar nave em side-scroll (90 graus para a direita)
         if self.is_side_scroll:
             self.ship.set_rotation(90.0)
-        
+
         self.first_entry = True
 
         # Aplicar configurações de dificuldade após criar a nave
@@ -111,10 +118,10 @@ class PlayingScene(Scene):
             self.current_level_index + 1
         )
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
-        
+
         # Criar EntityManager ANTES de usar (necessário para spawner)
         self.entity_manager = EntityManager(is_side_scroll=self.is_side_scroll)
-        
+
         # Aplicar tema do mundo
         self._apply_world_theme()
 
@@ -230,7 +237,9 @@ class PlayingScene(Scene):
     def _apply_world_theme(self) -> None:
         """Aplica o tema visual do mundo atual."""
         self.r.set_world_theme(self.current_world.theme)
-        logger.info(f"🌍 Mundo aplicado: {self.current_world.name} ({self.current_world.theme.value})")
+        logger.info(
+            f"🌍 Mundo aplicado: {self.current_world.name} ({self.current_world.theme.value})"
+        )
 
     def enter(self):
         pygame.mouse.set_visible(False)
@@ -274,7 +283,9 @@ class PlayingScene(Scene):
             else:
                 # Top-down: Nave entra de baixo, move para topo (comportamento original)
                 target_y = Config.SCREEN_HEIGHT - 80
-                initial_y = Config.SCREEN_HEIGHT + 100  # Match the ship's initial y position
+                initial_y = (
+                    Config.SCREEN_HEIGHT + 100
+                )  # Match the ship's initial y position
 
                 if self.preparation_time_left > 0:
                     elapsed_time = Config.PREPARATION_TIME - self.preparation_time_left
@@ -294,11 +305,6 @@ class PlayingScene(Scene):
 
         if self.state == "playing" and self.level_start_time is None:
             self.level_start_time = time.time()
-
-            self.ship.update(
-                dt, self.entity_manager, is_side_scroll=self.is_side_scroll
-            )  # Atualiza animações da nave (ex: propulsores)
-            return
 
         # Timers
         self.time_stop_timer = max(0.0, self.time_stop_timer - dt)
@@ -416,9 +422,8 @@ class PlayingScene(Scene):
                     is_side_scroll=self.is_side_scroll,
                 )
 
-            # Não spawnar power-ups no Nightmare (regra especial)
-            special_rules = self.difficulty_settings.get("special_rules", [])
-            if "no_powerups" not in special_rules:
+            # Não spawnar power-ups no Nightmare (regra especial, usando cache)
+            if not self._no_powerups_mode:
                 self.powerup_spawner.update(dt, self.entity_manager.powerups)
 
             # Spawner de estrelas
@@ -537,9 +542,9 @@ class PlayingScene(Scene):
     def _cache_boss_type(self):
         """Cachear tipo de boss quando ele spawna"""
         if self.entity_manager.boss:
-            from ..entities.spike_boss import SpikeBoss
-            from ..entities.slime_boss import SlimeBoss
             from ..entities.giant_meteor_boss import GiantMeteorBoss
+            from ..entities.slime_boss import SlimeBoss
+            from ..entities.spike_boss import SpikeBoss
 
             if isinstance(self.entity_manager.boss, SpikeBoss):
                 self._boss_type_cache = "spike"
@@ -637,33 +642,35 @@ class PlayingScene(Scene):
 
         return batched
 
-    def _handle_collisions(self):
-        # A grid JÁ FOI CONSTRUÍDA no entity_manager.update()
-        enemy_grid = self.entity_manager.enemy_spatial_grid
-
-        # Colisões com TODOS os inimigos (normais + formações) usando grid única
+    def _check_projectile_vs_enemies(
+        self, enemy_grid
+    ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
+        """
+        Verifica colisões de projéteis contra inimigos normais.
+        Retorna: (ganho_score, destruídos, score_events, ship_hit)
+        """
         gain: int = 0
         destroyed: int = 0
         score_events: list[tuple[float, float, int]] = []
+        ship_hit: bool = False
+
+        # Balas vs inimigos
         gain, destroyed, score_events = self.collisions.bullets_vs_enemies(
             self.entity_manager.bullets,
             self.entity_manager.mine_explosions,
             self.ship,
             enemy_grid,
-            self.entity_manager.enemies,  # Para adicionar fragments
-            self.entity_manager,  # <-- NOVO
+            self.entity_manager.enemies,
+            self.entity_manager,
         )
 
-        # Mini ships vs TODOS os inimigos usando a mesma grid
-        vector_gain: int
-        vector_destroyed: int
-        vector_score_events: list[tuple[float, float, int]]
+        # Mini ships vs inimigos
         vector_gain, vector_destroyed, vector_score_events = (
             self.collisions.mini_ship_bullets_vs_enemies(
                 self.entity_manager.mini_ship_bullets,
                 enemy_grid,
-                self.entity_manager.enemies,  # Para adicionar fragments
-                self.entity_manager,  # <-- ADICIONADO
+                self.entity_manager.enemies,
+                self.entity_manager,
             )
         )
         gain += vector_gain
@@ -671,9 +678,6 @@ class PlayingScene(Scene):
         score_events.extend(vector_score_events)
 
         # Lasers do jogador vs inimigos
-        laser_gain: int
-        laser_destroyed: int
-        laser_score_events: list[tuple[float, float, int]]
         laser_gain, laser_destroyed, laser_score_events = (
             self.collisions.player_lasers_vs_enemies(
                 self.entity_manager.player_lasers,
@@ -687,11 +691,7 @@ class PlayingScene(Scene):
         score_events.extend(laser_score_events)
 
         # Explosões de minas vs inimigos normais
-        mine_gain: int
-        mine_destroyed: int
-        mine_score_events: list[tuple[float, float, int]]
-        ship_hit: bool
-        mine_gain, mine_destroyed, mine_score_events, ship_hit = (
+        mine_gain, mine_destroyed, mine_score_events, mine_ship_hit = (
             self.collisions.check_mine_explosions(
                 self.entity_manager.enemies,
                 self.entity_manager.mine_explosions,
@@ -702,13 +702,23 @@ class PlayingScene(Scene):
         gain += mine_gain
         destroyed += mine_destroyed
         score_events.extend(mine_score_events)
+        ship_hit = ship_hit or mine_ship_hit
 
-        # NOVO: Processar formações uma única vez (consolidando 3 loops em 1)
+        return gain, destroyed, score_events, ship_hit
+
+    def _check_formation_collisions(
+        self, gain: int, destroyed: int, score_events: list[tuple[float, float, int]]
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """
+        Verifica colisões de formações e efeitos contra inimigos.
+        Retorna: (ganho_score_acumulado, destruídos_acumulados, score_events)
+        """
+        # Processar formações
         for formation in self.entity_manager.formations:
             formation_enemies = formation.get_enemies()
 
             # Minas vs formação
-            f_gain, f_destroyed, f_score_events, f_ship_hit = (
+            f_gain, f_destroyed, f_score_events, _ = (
                 self.collisions.check_mine_explosions(
                     formation_enemies,
                     self.entity_manager.mine_explosions,
@@ -719,8 +729,6 @@ class PlayingScene(Scene):
             gain += f_gain
             destroyed += f_destroyed
             score_events.extend(f_score_events)
-            if f_ship_hit:
-                ship_hit = True
 
             # Minas de torres vs formação
             if self.entity_manager.cannon_mines:
@@ -761,11 +769,6 @@ class PlayingScene(Scene):
                 destroyed += f_air_destroyed
                 score_events.extend(f_air_score_events)
 
-        if ship_hit:
-            self._handle_ship_hit()
-            # Meta-progression: Track damage taken
-            self.level_damage_taken += 1
-
         # Colisão contínua dos efeitos explosivos vs inimigos (para pegar fragmentos)
         if self.entity_manager.explosive_effects:
             exp_gain, exp_destroyed, exp_score_events = (
@@ -805,135 +808,17 @@ class PlayingScene(Scene):
             destroyed += mine_destroyed
             score_events.extend(mine_score_events)
 
-        # Colisão de efeitos explosivos vs boss
-        if self.entity_manager.explosive_effects and self.entity_manager.boss:
-            exp_boss_gain = self.collisions.explosive_effects_vs_boss(
-                self.entity_manager.explosive_effects,
-                self.entity_manager.boss,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
-            gain += exp_boss_gain
+        return gain, destroyed, score_events
 
-        # Colisão de bombas de bombardeio aéreo vs boss
-        if self.entity_manager.air_strike_bombs and self.entity_manager.boss:
-            air_boss_gain = self.collisions.air_strike_bombs_vs_boss(
-                self.entity_manager.air_strike_bombs,
-                self.entity_manager.boss,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
-            gain += air_boss_gain
-
-        # Colisão de minas das torres vs boss
-        if self.entity_manager.cannon_mines and self.entity_manager.boss:
-            mine_boss_gain = self.collisions.cannon_mines_vs_boss(
-                self.entity_manager.cannon_mines,
-                self.entity_manager.boss,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
-            gain += mine_boss_gain
-
-        # Agrupar eventos próximos antes de criar floating scores
-        batched_events = self._batch_floating_scores(
-            score_events, proximity_threshold=self.floating_score_batch_threshold
-        )
-
-        for x, y, pts in batched_events:
-            # Usar multiplicador em cache
-            multiplier = self._base_score_multiplier
-            if self.score_multiplier_active:
-                multiplier *= self.score_multiplier_value
-            adjusted_pts = int(pts * multiplier)
-            self.entity_manager.floating_scores.append(
-                FloatingScore(x, y, adjusted_pts)
-            )
-        # Usar multiplicador em cache
-        multiplier = self._base_score_multiplier
-        if self.score_multiplier_active:
-            multiplier *= self.score_multiplier_value
-        score_to_add = int(gain * multiplier)
-        self.score += score_to_add
-        self.total_enemies_destroyed += destroyed
-        self.enemies_destroyed_in_level += destroyed
-        # Regra: spawnar estrela a cada N inimigos destruídos
-        if destroyed > 0:
-            self.star_spawner.add_kills(destroyed, self.entity_manager.stars)
-
-        if self.entity_manager.boss:
-            score_gain = 0
-            if self._boss_type_cache == "spike":
-                from ..entities.spike_boss import SpikeBoss
-
-                score_gain = self.collisions.bullets_vs_spike_boss(
-                    self.entity_manager.bullets,
-                    cast(SpikeBoss, self.entity_manager.boss),
-                    self.entity_manager.floating_scores,
-                    self.entity_manager,
-                )
-                # Mini ships vs SpikeBoss
-                mini_ship_boss_gain = self.collisions.mini_ship_bullets_vs_spike_boss(
-                    self.entity_manager.mini_ship_bullets,
-                    cast(SpikeBoss, self.entity_manager.boss),
-                    self.entity_manager.floating_scores,
-                    self.entity_manager,
-                )
-                score_gain += mini_ship_boss_gain
-            elif self._boss_type_cache == "slime":
-                # SlimeBoss não usa lasers ou squares, apenas dripping
-                score_gain = 0
-            else:  # self._boss_type_cache == "normal"
-                score_gain = self.collisions.bullets_vs_boss(
-                    self.entity_manager.bullets,
-                    self.entity_manager.boss,  # type: ignore
-                    self.entity_manager.floating_scores,
-                    self.entity_manager,
-                )
-                # Mini ships vs Boss normal
-                mini_ship_boss_gain = self.collisions.mini_ship_bullets_vs_boss(
-                    self.entity_manager.mini_ship_bullets,
-                    self.entity_manager.boss,  # type: ignore
-                    self.entity_manager.floating_scores,
-                    self.entity_manager,
-                )
-                score_gain += mini_ship_boss_gain
-
-            # Lasers do jogador vs Boss (não aplicável ao SlimeBoss)
-            if self._boss_type_cache != "slime":
-                laser_boss_gain = self.collisions.player_lasers_vs_boss(
-                    self.entity_manager.player_lasers,
-                    self.entity_manager.boss,  # type: ignore
-                    self.entity_manager.floating_scores,
-                    self.entity_manager,
-                )
-                score_gain += laser_boss_gain
-
-            if self.score_multiplier_active:
-                score_gain = int(score_gain * self.score_multiplier_value)
-            self.score += score_gain
-
-        # Mini ships vs Spikes
-        if self.entity_manager.spikes:
-            spike_gain = self.collisions.mini_ship_bullets_vs_spikes(
-                self.entity_manager.mini_ship_bullets,
-                self.entity_manager.spike_spatial_grid,  # OPT #1: Usa grid pronta
-                self.entity_manager,
-            )
-            if self.score_multiplier_active:
-                spike_gain = int(spike_gain * self.score_multiplier_value)
-            self.score += spike_gain
-
-        # Colisão da nave com TODOS os inimigos usando grid única
-        if self.collisions.ship_vs_enemies(self.ship, enemy_grid, self.entity_manager):
-            self._handle_ship_hit()
-
-        # CONSOLIDAÇÃO: Todas as colisões com boss em um bloco único
-        # Lazy evaluation: só processa se boss existe E cache está validado
+    def _check_boss_collisions(self, gain: int) -> int:
+        """
+        Verifica todas as colisões envolvendo o boss.
+        Retorna: ganho_score_do_boss
+        """
+        score_gain = 0
         boss = self.entity_manager.boss
-        if boss and self._boss_type_cache:
-            score_gain = 0
 
+        if boss and self._boss_type_cache:
             # Projéteis vs Boss (usando cache para evitar isinstance)
             if self._boss_type_cache == "spike":
                 from ..entities.spike_boss import SpikeBoss
@@ -1000,6 +885,33 @@ class PlayingScene(Scene):
                 self.entity_manager,
             )
 
+            # Efeitos explosivos vs boss
+            if self.entity_manager.explosive_effects:
+                score_gain += self.collisions.explosive_effects_vs_boss(
+                    self.entity_manager.explosive_effects,
+                    boss,
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
+
+            # Bombas de bombardeio aéreo vs boss
+            if self.entity_manager.air_strike_bombs:
+                score_gain += self.collisions.air_strike_bombs_vs_boss(
+                    self.entity_manager.air_strike_bombs,
+                    boss,
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
+
+            # Minas das torres vs boss
+            if self.entity_manager.cannon_mines:
+                score_gain += self.collisions.cannon_mines_vs_boss(
+                    self.entity_manager.cannon_mines,
+                    boss,
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
+
             # Dano das gotas do SlimeBoss
             if self._boss_type_cache == "slime":
                 from ..entities.slime_boss import SlimeBoss
@@ -1010,33 +922,15 @@ class PlayingScene(Scene):
                 )
                 if drip_damage > 0:
                     self._handle_ship_hit()
-                    # Meta-progression: Track damage taken
                     self.level_damage_taken += drip_damage
 
             if self.score_multiplier_active:
                 score_gain = int(score_gain * self.score_multiplier_value)
-            self.score += score_gain
 
-            # Nave vs Boss
-            if self._boss_type_cache == "spike":
-                from ..entities.spike_boss import SpikeBoss
+        return gain + score_gain
 
-                if self.collisions.ship_vs_spike_boss(
-                    self.ship, cast(SpikeBoss, boss), self.entity_manager
-                ):
-                    self._handle_ship_hit()
-            elif self._boss_type_cache == "slime":
-                # SlimeBoss usa ship_vs_boss com pixel-perfect collision
-                if self.collisions.ship_vs_boss(
-                    self.ship, boss, self.entity_manager  # type: ignore
-                ):
-                    self._handle_ship_hit()
-            elif self._boss_type_cache == "normal":
-                if self.collisions.ship_vs_boss(
-                    self.ship, boss, self.entity_manager  # type: ignore
-                ):
-                    self._handle_ship_hit()
-
+    def _check_ship_damage(self) -> None:
+        """Verifica todas as colisões que causam dano à nave."""
         if self.collisions.alien_bullets_vs_ship(
             self.ship, self.entity_manager.alien_bullets
         ):
@@ -1077,14 +971,99 @@ class PlayingScene(Scene):
         ):
             self._handle_ship_hit()
 
-        # Balas vs quadrados do boss (gera explosão mas não destrói os quadrados)
+    def _apply_score_multiplier(self, pts: int) -> int:
+        """Aplica multiplicador de score se ativo."""
+        multiplier = self._base_score_multiplier
+        if self.score_multiplier_active:
+            multiplier *= self.score_multiplier_value
+        return int(pts * multiplier)
+
+    def _handle_collisions(self):
+        """
+        Orquestrador de colisões. Delega para métodos especializados em ordem:
+        1. Projéteis vs inimigos normais
+        2. Formações e efeitos de área vs inimigos
+        3. Score e floating scores dos inimigos
+        4. Mini ships vs spikes
+        5. Nave vs inimigos (físico)
+        6. Boss (projéteis, efeitos, físico, slime drips)
+        7. Balas vs objetos indestrutíveis (boss squares, slime drips, spikes)
+        8. Dano à nave (lasers, spikes, quadrados)
+        9. Power-ups e estrelas
+        """
+        enemy_grid = self.entity_manager.enemy_spatial_grid
+
+        # --- Passo 1 & 2: Inimigos normais e formações ---
+        gain, destroyed, score_events, ship_hit = self._check_projectile_vs_enemies(
+            enemy_grid
+        )
+        gain, destroyed, score_events = self._check_formation_collisions(
+            gain, destroyed, score_events
+        )
+
+        if ship_hit:
+            self._handle_ship_hit()
+            self.level_damage_taken += 1
+
+        # --- Passo 3: Aplicar score dos inimigos ---
+        batched_events = self._batch_floating_scores(
+            score_events, proximity_threshold=self.floating_score_batch_threshold
+        )
+        for x, y, pts in batched_events:
+            self.entity_manager.floating_scores.append(
+                FloatingScore(x, y, self._apply_score_multiplier(pts))
+            )
+
+        self.score += self._apply_score_multiplier(gain)
+        self.total_enemies_destroyed += destroyed
+        self.enemies_destroyed_in_level += destroyed
+
+        if destroyed > 0:
+            self.star_spawner.add_kills(destroyed, self.entity_manager.stars)
+
+        # --- Passo 4: Mini ships vs Spikes ---
+        if self.entity_manager.spikes:
+            spike_gain = self.collisions.mini_ship_bullets_vs_spikes(
+                self.entity_manager.mini_ship_bullets,
+                self.entity_manager.spike_spatial_grid,
+                self.entity_manager,
+            )
+            if self.score_multiplier_active:
+                spike_gain = int(spike_gain * self.score_multiplier_value)
+            self.score += spike_gain
+
+        # --- Passo 5: Nave vs inimigos (físico) ---
+        if self.collisions.ship_vs_enemies(self.ship, enemy_grid, self.entity_manager):
+            self._handle_ship_hit()
+
+        # --- Passo 6: Boss (projéteis, área, físico, slime drips) ---
+        boss_score_gain = self._check_boss_collisions(0)
+        self.score += boss_score_gain
+
+        boss = self.entity_manager.boss
+        if boss and self._boss_type_cache:
+            if self._boss_type_cache == "spike":
+                from ..entities.spike_boss import SpikeBoss
+
+                if self.collisions.ship_vs_spike_boss(
+                    self.ship, cast(SpikeBoss, boss), self.entity_manager
+                ):
+                    self._handle_ship_hit()
+            elif self._boss_type_cache in ("slime", "normal"):
+                if self.collisions.ship_vs_boss(
+                    self.ship,
+                    boss,  # type: ignore
+                    self.entity_manager,
+                ):
+                    self._handle_ship_hit()
+
+        # --- Passo 7: Balas vs objetos indestrutíveis ---
         self.collisions.bullets_vs_boss_squares(
             self.entity_manager.bullets,
             self.entity_manager.boss_squares,
             self.entity_manager,
         )
 
-        # Balas vs gotas de slime (gera explosão mas não destrói as gotas)
         if self._boss_type_cache == "slime":
             self.collisions.bullets_vs_slime_drips(
                 self.entity_manager.bullets,
@@ -1092,16 +1071,23 @@ class PlayingScene(Scene):
                 self.entity_manager,
             )
 
-        # Balas vs espinhos
         spike_score = self.collisions.bullets_vs_spikes(
             self.entity_manager.bullets,
-            self.entity_manager.spike_spatial_grid,  # OPT #1: Usa grid pronta
+            self.entity_manager.spike_spatial_grid,
             self.entity_manager,
         )
         if self.score_multiplier_active:
             spike_score = int(spike_score * self.score_multiplier_value)
         self.score += spike_score
 
+        # --- Passo 8: Dano à nave (lasers, spikes, quadrados) ---
+        self._check_ship_damage()
+
+        # --- Passo 9: Power-ups e estrelas ---
+        self._process_powerups_and_stars()
+
+    def _process_powerups_and_stars(self) -> None:
+        """Processa coleta de power-ups e estrelas."""
         collected_powerups = self.collisions.ship_vs_powerups(
             self.ship, self.entity_manager.powerups
         )
@@ -1287,20 +1273,16 @@ class PlayingScene(Scene):
 
             self._cache_boss_type()  # Cache do tipo de boss
 
-            from ..entities.spike_boss import SpikeBoss
-            from ..entities.slime_boss import SlimeBoss
-            from ..entities.giant_meteor_boss import GiantMeteorBoss
-
-            if isinstance(self.entity_manager.boss, SpikeBoss):
-                sound_manager.music_state_manager.transition_to(MusicState.SPIKE_BOSS)
-            elif isinstance(self.entity_manager.boss, SlimeBoss):
-                sound_manager.music_state_manager.transition_to(MusicState.SLIME_BOSS)
-            elif isinstance(self.entity_manager.boss, GiantMeteorBoss):
-                sound_manager.music_state_manager.transition_to(
-                    MusicState.GIANT_METEOR_BOSS
-                )
-            else:
-                sound_manager.music_state_manager.transition_to(MusicState.BOSS)
+            _boss_music_map = {
+                "spike": MusicState.SPIKE_BOSS,
+                "slime": MusicState.SLIME_BOSS,
+                "giant_meteor": MusicState.GIANT_METEOR_BOSS,
+            }
+            # Garantir que boss_type não é None para o Pylance
+            boss_type = self._boss_type_cache or "normal"
+            sound_manager.music_state_manager.transition_to(
+                _boss_music_map.get(boss_type, MusicState.BOSS)
+            )
 
             self.boss_music_started = True
 
@@ -1436,7 +1418,7 @@ class PlayingScene(Scene):
             # Mudou de mundo! Aplicar novo tema
             self.current_world = new_world
             self._apply_world_theme()
-            
+
             # NOVO: Atualizar modo de jogo se mudou (top-down <-> side-scroll)
             new_is_side_scroll = is_side_scroll_mode(self.current_world.theme)
             if new_is_side_scroll != self.is_side_scroll:
@@ -1444,8 +1426,10 @@ class PlayingScene(Scene):
                 self.entity_manager.is_side_scroll = new_is_side_scroll
                 self.ship.is_side_scroll = new_is_side_scroll
                 self.collisions.is_side_scroll = new_is_side_scroll
-                logger.info(f"📋 Modo alterado para: {'Side-Scroll (Horizontal)' if self.is_side_scroll else 'Top-Down (Vertical)'}")
-            
+                logger.info(
+                    f"📋 Modo alterado para: {'Side-Scroll (Horizontal)' if self.is_side_scroll else 'Top-Down (Vertical)'}"
+                )
+
             logger.info(f"✨ Bem-vindo ao {new_world.name}!")
 
         # Atualizar cache de nível (otimização)
@@ -1601,7 +1585,7 @@ class PlayingScene(Scene):
 
         # MODIFICADO: Mostrar estágio formatado (ex: "2-5" ao invés de "Fase: 15")
         stage_name = format_stage_name(self.level_config.level_number)
-        
+
         self.r.hud(
             self.game_surface,
             self.score,
@@ -1729,6 +1713,7 @@ class PlayingScene(Scene):
 
     def _render_upgrades_hud(self, surface: pygame.Surface):
         import pygame as _pg
+
         from ..core import colors as _colors
 
         if not self.upgrade_slots:
@@ -1778,8 +1763,6 @@ class PlayingScene(Scene):
             ui = upg.get_ui_state()  # type: ignore
 
             # Ícone no centro (usando função centralizada de mapeamento)
-            from ..core.upgrades import get_upgrade_icon
-
             name_str = str(ui.get("name", ""))
             icon_id = str(ui.get("icon_id", "")) if ui.get("icon_id") else None
             icon = get_upgrade_icon(name_str, icon_id)

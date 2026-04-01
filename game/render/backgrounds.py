@@ -728,8 +728,8 @@ class VolcanicBackground(Background):
         surface.fill((30, 10, 10))
 
         # Desenhar lava com ondulação
-        for i, pool in enumerate(self.lava_pools):
-            points = self._calculate_lava_wave(pool, i)
+        for pool in self.lava_pools:
+            points = self._calculate_lava_wave(pool)
 
             if len(points) >= 3:
                 # Preenchimento
@@ -745,9 +745,7 @@ class VolcanicBackground(Background):
                 surface, color, (int(ember["x"]), int(ember["y"])), ember["size"]
             )
 
-    def _calculate_lava_wave(
-        self, pool: Dict[str, Any], pool_index: int
-    ) -> List[Tuple[int, int]]:
+    def _calculate_lava_wave(self, pool: Dict[str, Any]) -> List[Tuple[int, int]]:
         """Calcula pontos da onda de lava de forma otimizada."""
         points: List[Tuple[int, int]] = []
 

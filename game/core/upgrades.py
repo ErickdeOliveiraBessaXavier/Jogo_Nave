@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Optional, Protocol, Dict, Any, Callable
+from typing import Any, Callable, Dict, Optional, Protocol
 
 try:
     # Prefer consistent config access via proxy
@@ -117,10 +117,9 @@ class ActiveUpgrade:
 
         # Se já estava ativo e permite refresh, reinicia duração
         self.duration_left = self.get_effective_duration(ctx)
-        already_active = self.active
         self.active = True
 
-        self.on_activate_effect(ctx, refreshed=already_active)
+        self.on_activate_effect(ctx)
         self.on_after_activate(ctx)
         return True
 
@@ -151,7 +150,7 @@ class ActiveUpgrade:
     def allows_refresh(self) -> bool:
         return False
 
-    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+    def on_activate_effect(self, ctx: UpgradeContext) -> None:
         raise NotImplementedError
 
     def on_after_activate(self, ctx: UpgradeContext) -> None:
@@ -235,11 +234,11 @@ class ShieldBurstUpgrade(ActiveUpgrade):
         self._monitoring_shield = True
         self.active = True
 
-        self.on_activate_effect(ctx, refreshed=False)
+        self.on_activate_effect(ctx)
         self.on_after_activate(ctx)
         return True
 
-    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+    def on_activate_effect(self, ctx: UpgradeContext) -> None:
         # Ativa escudo que absorve 1 hit de dano (sem limite de tempo)
         ship = getattr(ctx, "ship", None)
         if ship is None:
@@ -304,7 +303,7 @@ class HealUpgrade(ActiveUpgrade):
             return False
         return current_lives < max_lives
 
-    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+    def on_activate_effect(self, ctx: UpgradeContext) -> None:
         self.usage_count += 1
         ship = getattr(ctx, "ship", None)
         if ship is None:
@@ -328,7 +327,7 @@ class EMPUpgrade(ActiveUpgrade):
     def allows_refresh(self) -> bool:
         return True
 
-    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+    def on_activate_effect(self, ctx: UpgradeContext) -> None:
         em = getattr(ctx, "entity_manager", None)
         if em is None:
             return
@@ -385,7 +384,7 @@ class HomingShotUpgrade(ActiveUpgrade):
     def allows_refresh(self) -> bool:
         return True
 
-    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+    def on_activate_effect(self, ctx: UpgradeContext) -> None:
         ship = getattr(ctx, "ship", None)
         if ship is None:
             return
@@ -393,7 +392,7 @@ class HomingShotUpgrade(ActiveUpgrade):
         duration = self.get_effective_duration(ctx)
 
         try:
-            from .upgrades_config import HOMING_SPEED_PENALTY, HOMING_FIRE_RATE_PENALTY
+            from .upgrades_config import HOMING_FIRE_RATE_PENALTY, HOMING_SPEED_PENALTY
 
             speed_penalty = float(HOMING_SPEED_PENALTY)
             fire_rate_penalty = float(HOMING_FIRE_RATE_PENALTY)
@@ -447,7 +446,7 @@ class LaserShotUpgrade(ActiveUpgrade):
     def allows_refresh(self) -> bool:
         return False  # Baseado em cargas, não permite refresh
 
-    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+    def on_activate_effect(self, ctx: UpgradeContext) -> None:
         """Ativa o sistema de bolas elétricas orbitais (3 bolas, 3 cargas cada)."""
         ship = getattr(ctx, "ship", None)
 
@@ -510,11 +509,11 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
         self._waiting_for_charges_depleted = True
         self.active = True
 
-        self.on_activate_effect(ctx, refreshed=False)
+        self.on_activate_effect(ctx)
         self.on_after_activate(ctx)
         return True
 
-    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+    def on_activate_effect(self, ctx: UpgradeContext) -> None:
         """Ativa o sistema de tiros explosivos na nave."""
         ship = getattr(ctx, "ship", None)
 
@@ -598,11 +597,11 @@ class AirStrikeUpgrade(ActiveUpgrade):
         self._bombs_remaining = self.meta.base_charges if self.meta.base_charges else 10
         self._spawn_timer = 0.0  # Primeira bomba spawna imediatamente
 
-        self.on_activate_effect(ctx, refreshed=False)
+        self.on_activate_effect(ctx)
         self.on_after_activate(ctx)
         return True
 
-    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+    def on_activate_effect(self, ctx: UpgradeContext) -> None:
         """Inicia o bombardeio aéreo."""
         import pygame
 
@@ -682,7 +681,7 @@ class BlackHoleUpgrade(ActiveUpgrade):
     def allows_refresh(self) -> bool:
         return False  # Ultimate não permite refresh
 
-    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+    def on_activate_effect(self, ctx: UpgradeContext) -> None:
         """Ativa o buraco negro."""
         entity_manager = getattr(ctx, "entity_manager", None)
         ship = getattr(ctx, "ship", None)
@@ -718,7 +717,7 @@ class CannonTowerUpgrade(ActiveUpgrade):
     def allows_refresh(self) -> bool:
         return False  # Ultimate não permite refresh
 
-    def on_activate_effect(self, ctx: UpgradeContext, refreshed: bool) -> None:
+    def on_activate_effect(self, ctx: UpgradeContext) -> None:
         """Spawna duas torres de canhão fixas."""
         entity_manager = getattr(ctx, "entity_manager", None)
         if entity_manager is None:
