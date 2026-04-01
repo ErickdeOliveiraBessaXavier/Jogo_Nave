@@ -65,7 +65,13 @@ class SettingsView:
             (3840, 2160, "4K"),
             (5120, 2880, "5K"),
         ]
-        self.selected_resolution_index = 2
+        # Carregar resolução salva já aqui, evitando dependência de reset()
+        saved_res = self.player_profile.resolution
+        self.selected_resolution_index = 2  # default
+        for i, (w, h, _) in enumerate(self.available_resolutions):
+            if w == saved_res[0] and h == saved_res[1]:
+                self.selected_resolution_index = i
+                break
 
         # Animação de entrada
         self.entry_progress = 0.0
@@ -723,7 +729,7 @@ class SettingsScene(Scene):
         self.return_to_game = return_to_game  # Se True, volta para o jogo
         self.r = app.renderer  # Usar renderer compartilhado
         self.view = SettingsView(
-            on_back=self._on_back, renderer=self.r, on_restart=self._on_restart
+            on_back=self._on_back, renderer=self.r
         )
 
         # Sistema de transição
@@ -738,13 +744,6 @@ class SettingsScene(Scene):
         self.fade_out = True
         self.transitioning = True
         self.transition_progress = 0.0
-
-    def _on_restart(self):
-        """Callback quando o usuário quer reiniciar o jogo."""
-        # Reiniciar voltando ao menu principal
-        from .main_menu import MainMenuScene
-
-        self.app.states.switch(MainMenuScene(self.app))
 
     def enter(self):
         pygame.mouse.set_visible(True)

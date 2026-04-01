@@ -16,27 +16,13 @@ class GameApp:
 
         # Carregar perfil para obter resolução salva
         profile = PlayerProfile(get_profile_path())
-        saved_res = profile.resolution
+        base_width, base_height = profile.resolution
 
-        if saved_res and saved_res != (1600, 900):  # Se não for o default, usar salva
-            # Usar resolução salva
-            base_width, base_height = saved_res
-        else:
-            # Detectar resolução nativa do monitor para resolução dinâmica
-            display_info = pygame.display.Info()
-            native_width = display_info.current_w
-            native_height = display_info.current_h
-
-            # Usar resolução nativa como base, mas com fallback para 1600x900 se muito pequena
-            base_width = max(native_width, 1600)
-            base_height = max(native_height, 900)
-
-            # Para evitar distorções, manter proporção 16:9 se possível
-            target_ratio = 16 / 9
-            current_ratio = base_width / base_height
-            if abs(current_ratio - target_ratio) > 0.1:  # Tolerância de 10%
-                # Ajustar altura para manter 16:9
-                base_height = int(base_width / target_ratio)
+        # Garantir proporção 16:9 se necessário (em caso de edição manual do perfil)
+        target_ratio = 16 / 9
+        current_ratio = base_width / base_height
+        if abs(current_ratio - target_ratio) > 0.1:  # Tolerância de 10%
+            base_height = int(base_width / target_ratio)
 
         # Garante que a configuração global use a resolução detectada.
         set_screen_resolution(base_width, base_height)
