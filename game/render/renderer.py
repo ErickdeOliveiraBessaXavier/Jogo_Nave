@@ -1,27 +1,29 @@
-import pygame
-import random
 import math
+import random
 import time
-from typing import TypedDict, Optional, TYPE_CHECKING
-from pathlib import Path
 from collections import OrderedDict, deque
+from pathlib import Path
+from typing import TYPE_CHECKING, Optional, TypedDict
+
+import pygame
+
 from ..core.sprite_loader import sprite_loader
+from ..core.world_config import WorldTheme
 from .backgrounds import (
     Background,
-    MountainsBackground,
     CityBackground,
+    MountainsBackground,
     VolcanicBackground,
 )
-from ..core.world_config import WorldTheme
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
 
 from ..core import colors
-from ..core.config import config as Config
 from ..core.assets import get_font, get_image
-from ..core.render_config import RenderConfig
+from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
+from ..core.render_config import RenderConfig
 
 
 class Star(TypedDict):
@@ -467,16 +469,16 @@ class Renderer:
     def set_world_theme(self, theme: WorldTheme) -> None:
         """
         Troca o background baseado no tema do mundo.
-        
+
         Args:
             theme: Tema do mundo (WorldTheme enum)
         """
         # Não recriar se já está no tema correto
         if self.current_theme == theme:
             return
-        
+
         self.current_theme = theme
-        
+
         if theme == WorldTheme.MOUNTAINS:
             self.current_background = MountainsBackground(
                 Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
@@ -500,7 +502,7 @@ class Renderer:
         draw_celestials: bool = True,
     ):
         surface.fill(colors.BLACK)
-        
+
         # Desenhar starfield APENAS se o tema for STARFIELD ou PROCEDURAL
         if self.current_theme in (WorldTheme.STARFIELD, WorldTheme.PROCEDURAL, None):
             self.starfield.update(dt, speed_multiplier)
@@ -574,10 +576,10 @@ class Renderer:
         lives_surf = self._render_text_cached(
             "lives", lives, "Vidas: {}", self.font_medium, colors.WHITE
         )
-        
+
         # MODIFICADO: Mostrar estágio formatado (ex: "2-5" ao invés de "Fase: 15")
         lvl = self.font_medium.render(f"Estágio: {level_display}", True, colors.WHITE)
-        
+
         e = self._render_text_cached(
             "enemies", enemies_destroyed, "Inimigos: {}", self.font_small, colors.WHITE
         )

@@ -1,11 +1,13 @@
-import pygame
-import random
 import math
-from typing import List, Tuple, Optional, TYPE_CHECKING
+import random
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from ..entities.explosion import ExplosionType  # ← ADICIONAR
+import pygame
+
 from ..core.config import config as Config
+from ..core.spatial_grid import SpatialGrid
+from ..entities.explosion import ExplosionType  # ← ADICIONAR
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -58,9 +60,6 @@ class SlimeDripParticle:
         # Desativar quando tempo acabar ou tamanho muito pequeno
         if self.age >= self.lifetime or self.current_size <= 0.05:
             self.active = False
-
-
-from ..core.spatial_grid import SpatialGrid
 
 
 @dataclass
@@ -509,9 +508,9 @@ class SlimeDripPool:
         min_drip_size = 0.5  # Gotas muito pequenas são ignoradas
 
         # Batch rendering: coletar todos os círculos visíveis para desenhar de uma vez
-        filled_circles: List[Tuple[Tuple[int, int, int, int], Tuple[int, int], int]] = (
-            []
-        )  # Gotas preenchidas
+        filled_circles: List[
+            Tuple[Tuple[int, int, int, int], Tuple[int, int], int]
+        ] = []  # Gotas preenchidas
         outline_circles: List[
             Tuple[Tuple[int, int, int, int], Tuple[int, int], int]
         ] = []  # Partículas órfãs (bordas apenas)

@@ -1,0 +1,17 @@
+[tool.ruff]
+select = [
+    "F",     # erros reais (undefined, unused imports)
+    "E",     # estilo PEP8
+    "W",     # warnings
+    "F401",  # imports não usados
+    "F811",  # redefinição de nome
+    "F841",  # variáveis atribuídas mas nunca usadas
+]
+ignore = [
+    "E501",  # line too long
+    "W293",  # blank line contains whitespace
+]
+
+[tool.vulture]
+min_confidence = 80
+paths = ["game/"]

@@ -1,57 +1,61 @@
 import random
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
 import pygame
+
+from ..core.spatial_grid import SpatialGrid
+from ..entities.air_strike_bomb import AirStrikeBomb
+from ..entities.alien import Alien
+from ..entities.alien_bullet import AlienBullet
+from ..entities.black_hole import BlackHole
+from ..entities.boss import Boss
+from ..entities.boss_laser import BossLaser
+from ..entities.boss_square import BossSquare
 from ..entities.bullet import Bullet
 from ..entities.bullet_pool import BulletPool
-from ..entities.meteor import Meteor
-from ..entities.meteor_pool import MeteorPool
-from ..entities.alien import Alien
-from ..entities.boss import Boss
-from ..entities.boss_square import BossSquare
-from ..entities.alien_bullet import AlienBullet
-from ..entities.boss_laser import BossLaser
-from ..entities.spike_boss_laser import SpikeBossLaser
+from ..entities.cannon_mine import CannonMine
+from ..entities.cannon_tower import CannonTower
+from ..entities.emp_wave import EMPWave
 from ..entities.explosion import Explosion, ExplosionType  # ← ADICIONAR
-from ..entities.mine_explosion import MineExplosion
-from ..entities.powerup import PowerUp
-from ..entities.floating_score import FloatingScore
-from ..entities.guided_meteor import GuidedMeteor
+from ..entities.explosion_pool import ExplosionPool
+from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.explosive_mine import ExplosiveMine
-from ..entities.mini_ship import MiniShip
-from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.eye_laser import EyeLaser
+from ..entities.floating_score import FloatingScore
 from ..entities.formation import Formation
+from ..entities.giant_meteor_boss import GiantMeteorBoss
+from ..entities.guided_meteor import GuidedMeteor
+from ..entities.meteor import Meteor
+from ..entities.meteor_pool import MeteorPool
+from ..entities.mine_explosion import MineExplosion
+from ..entities.mini_ship import MiniShip
+from ..entities.mini_ship_bullet import MiniShipBullet
+from ..entities.player_laser import PlayerLaser
+from ..entities.powerup import PowerUp
+from ..entities.slime_boss import SlimeBoss
+from ..entities.slime_drip import SlimeDrip
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
-from ..entities.slime_boss import SlimeBoss
-from ..entities.giant_meteor_boss import GiantMeteorBoss
-from ..entities.slime_drip import SlimeDrip
-from ..entities.player_laser import PlayerLaser
-from ..core.spatial_grid import SpatialGrid
-from ..entities.explosion_pool import ExplosionPool
-from ..entities.emp_wave import EMPWave
-from ..entities.star import Star
-from ..entities.explosive_effect import ExplosiveEffect
-from ..entities.air_strike_bomb import AirStrikeBomb
-from ..entities.black_hole import BlackHole
-from ..entities.cannon_tower import CannonTower
-from ..entities.cannon_mine import CannonMine
+from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
-from typing import Dict, Any, TYPE_CHECKING, Optional
+from ..entities.star import Star
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
 
 
 class EntityManager:
-    def __init__(self, sound_manager: Optional[Any] = None, is_side_scroll: bool = False):
+    def __init__(
+        self, sound_manager: Optional[Any] = None, is_side_scroll: bool = False
+    ):
         self.sound_manager = sound_manager
         self.is_side_scroll = is_side_scroll  # NOVO: Modo de jogo
         self.bullets: list[Bullet] = []
         self.emp_waves: list[EMPWave] = []  # Ondas visuais do EMP
-        self.explosive_effects: list[ExplosiveEffect] = (
-            []
-        )  # Efeitos visuais de explosão de área
+        self.explosive_effects: list[
+            ExplosiveEffect
+        ] = []  # Efeitos visuais de explosão de área
         self.enemies: list[
             Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
         ] = []
@@ -76,7 +80,9 @@ class EntityManager:
         self.cannon_towers: list[CannonTower] = []  # Torres de canhão
         self.cannon_mines: list[CannonMine] = []  # Minas das torres
         self.black_holes: list[BlackHole] = []  # Buracos negros
-        self.meteor_pool = MeteorPool(initial_size=100, is_side_scroll=is_side_scroll)  # Pool de meteoros
+        self.meteor_pool = MeteorPool(
+            initial_size=100, is_side_scroll=is_side_scroll
+        )  # Pool de meteoros
         self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
         self.enemy_spatial_grid: SpatialGrid[
             Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
@@ -540,11 +546,12 @@ class EntityManager:
         This method consolidates the update logic previously found in PlayingScene.
         """
         from typing import Any  # Used for type hinting lists of varied entities
-        from ..entities.mini_ship import MiniShip
+
         from ..entities.eye_enemy import EyeEnemy
-        from ..entities.spike_boss import SpikeBoss
-        from ..entities.slime_boss import SlimeBoss
         from ..entities.giant_meteor_boss import GiantMeteorBoss
+        from ..entities.mini_ship import MiniShip
+        from ..entities.slime_boss import SlimeBoss
+        from ..entities.spike_boss import SpikeBoss
 
         # List of entity groups to update
         entity_groups: list[list[Any]] = [
@@ -824,29 +831,29 @@ class EntityManager:
     def _is_enemy_off_screen(self, enemy: Any) -> bool:
         """
         Verifica se um inimigo está fora da tela.
-        
+
         Em top-down: sai pela parte inferior (y > screen_height)
         Em side-scroll: sai pela parte esquerda (x < -width)
         """
         # Obter largura do inimigo de forma segura
-        enemy_width = getattr(enemy, 'w', None)
+        enemy_width = getattr(enemy, "w", None)
         if enemy_width is None:
             # Tentar rect.width se .w não existir
-            rect = getattr(enemy, 'rect', None)
+            rect = getattr(enemy, "rect", None)
             if rect is not None:
-                enemy_width = getattr(rect, 'width', 50)  # Default 50 se não encontrar
+                enemy_width = getattr(rect, "width", 50)  # Default 50 se não encontrar
             else:
                 enemy_width = 50  # Fallback para largura padrão
-        
+
         # Obter altura do inimigo de forma segura
-        enemy_height = getattr(enemy, 'h', None)
+        enemy_height = getattr(enemy, "h", None)
         if enemy_height is None:
-            rect = getattr(enemy, 'rect', None)
+            rect = getattr(enemy, "rect", None)
             if rect is not None:
-                enemy_height = getattr(rect, 'height', 50)
+                enemy_height = getattr(rect, "height", 50)
             else:
                 enemy_height = 50
-        
+
         if self.is_side_scroll:
             # Side-scroll: inimigos saem pela esquerda, por cima ou por baixo
             screen = pygame.display.get_surface()
@@ -861,7 +868,7 @@ class EntityManager:
             screen = pygame.display.get_surface()
             screen_height = screen.get_height() if screen else 900
             screen_width = screen.get_width() if screen else 1600
-            
+
             return (
                 enemy.y > screen_height
                 or enemy.x < -enemy_width
@@ -879,7 +886,7 @@ class EntityManager:
         for e in self.enemies:
             if not e.dead and self._is_enemy_off_screen(e):
                 e.dead = True
-        
+
         # Liberar meteoros dead ao pool
         for e in self.enemies:
             if isinstance(e, Meteor) and e.dead:

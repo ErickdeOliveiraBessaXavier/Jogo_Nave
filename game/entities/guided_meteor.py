@@ -1,8 +1,10 @@
 import math
-import pygame
 from typing import Tuple
-from ..core.config import config as Config
+
+import pygame
+
 from ..core import colors
+from ..core.config import config as Config
 from .meteor import Meteor
 
 
@@ -51,7 +53,11 @@ class GuidedMeteor(Meteor):
         self.base_color: Tuple[int, int, int] = colors.GREEN
 
     def update(
-        self, dt: float, is_side_scroll: bool = False, target_x: float | None = None, target_y: float | None = None
+        self,
+        dt: float,
+        is_side_scroll: bool = False,
+        target_x: float | None = None,
+        target_y: float | None = None,
     ) -> None:
         """
         Update guided meteor with seeking behavior.

@@ -1,20 +1,21 @@
-from dataclasses import dataclass
-from typing import Type, Union, TYPE_CHECKING
-from functools import lru_cache
-import random
-import math
 import logging
-from ..entities.meteor import Meteor
+import math
+import random
+from dataclasses import dataclass
+from functools import lru_cache
+from typing import TYPE_CHECKING, Type, Union
+
 from ..entities.alien import Alien
 from ..entities.boss import Boss
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
+from ..entities.giant_meteor_boss import GiantMeteorBoss
+from ..entities.meteor import Meteor
+from ..entities.slime_boss import SlimeBoss
 from ..entities.spike_boss import SpikeBoss
 from ..entities.square_minion_boss import SquareMinionBoss
-from ..entities.slime_boss import SlimeBoss
-from ..entities.giant_meteor_boss import GiantMeteorBoss
 from .difficulty import DifficultyPreset, DifficultySettings
-from .world_config import get_world_for_level, WorldTheme
+from .world_config import WorldTheme, get_world_for_level
 
 if TYPE_CHECKING:
     from .world_config import WorldConfig
@@ -274,7 +275,7 @@ class LevelConfig:
         for enemy_type, spawn_time in self.enemy_spawn_config.items():
             if spawn_time < DifficultyConfig.MIN_SPAWN_TIME:
                 warnings.append(
-                    f"Spawn time de {enemy_type.__name__} muito rápido: {spawn_time:.2f}s "
+                    f"Spawn time de {enemy_type.__name__} muito rápido: {spawn_time:.2f}s "  # noqa: E501
                     f"(mínimo recomendado: {DifficultyConfig.MIN_SPAWN_TIME}s)"
                 )
 
@@ -339,9 +340,9 @@ class ProceduralLevelGenerator:
         self.difficulty_curves = DifficultyCurves()
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
-        self._difficulty_cache: dict[Union[int, str], float] = (
-            {}
-        )  # Cache for difficulty and score multiplier calculations
+        self._difficulty_cache: dict[
+            Union[int, str], float
+        ] = {}  # Cache for difficulty and score multiplier calculations
 
     # OPT #6: Cache últimos 50 níveis gerados para não recalcular
     @lru_cache(maxsize=50)
@@ -725,23 +726,28 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
 # FUNÇÕES AUXILIARES - INTEGRAÇÃO COM MUNDOS
 # ============================================================================
 
-def _apply_world_theme_to_config(config: LevelConfig, world: "WorldConfig") -> LevelConfig:
+
+def _apply_world_theme_to_config(
+    config: LevelConfig, world: "WorldConfig"
+) -> LevelConfig:
     """
     Aplica modificadores do tema do mundo à configuração de nível.
-    
+
     Modifica os pesos de spawn de inimigos baseado no tema.
     """
     if not world.theme_modifiers:
         return config
-    
+
     # Copiar config de spawn com type hint
-    adjusted_spawn_config: dict[Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss], float] = dict(config.enemy_spawn_config)
-    
+    adjusted_spawn_config: dict[
+        Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss], float
+    ] = dict(config.enemy_spawn_config)
+
     # Aplicar multiplicadores de peso
     meteor_mult = world.theme_modifiers.get("meteor_weight", 1.0)
     alien_mult = world.theme_modifiers.get("alien_weight", 1.0)
     eye_mult = world.theme_modifiers.get("eye_weight", 1.0)
-    
+
     # Ajustar tempos de spawn (menor tempo = mais frequente)
     for enemy_type, spawn_time in list(adjusted_spawn_config.items()):
         if enemy_type.__name__ == "Meteor" and meteor_mult != 1.0:
@@ -750,20 +756,19 @@ def _apply_world_theme_to_config(config: LevelConfig, world: "WorldConfig") -> L
             adjusted_spawn_config[enemy_type] = spawn_time / alien_mult
         elif enemy_type.__name__ == "EyeEnemy" and eye_mult != 1.0:
             adjusted_spawn_config[enemy_type] = spawn_time / eye_mult
-    
+
     # Aplicar multiplicador geral de spawn rate
     spawn_rate_mult = world.theme_modifiers.get("spawn_rate_multiplier", 1.0)
     if spawn_rate_mult != 1.0:
         for enemy_type in adjusted_spawn_config:
             adjusted_spawn_config[enemy_type] /= spawn_rate_mult
-    
+
     # Garantir que tempos de spawn respeitam mínimo
     for enemy_type in adjusted_spawn_config:
         adjusted_spawn_config[enemy_type] = max(
-            DifficultyConfig.MIN_SPAWN_TIME,
-            adjusted_spawn_config[enemy_type]
+            DifficultyConfig.MIN_SPAWN_TIME, adjusted_spawn_config[enemy_type]
         )
-    
+
     # Criar nova config com tema do mundo
     return LevelConfig(
         level_number=config.level_number,
@@ -786,9 +791,11 @@ def _create_world_boss_level(
     """Cria configuração para o boss de um mundo."""
     # Configuração base: mais inimigos conforme o mundo avança
     base_enemies_to_clear = 200 + (world.world_id - 1) * 50
-    
+
     # Montagem de spawn config baseado no tema
-    enemy_spawn_config: dict[Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss], float]
+    enemy_spawn_config: dict[
+        Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss], float
+    ]
     if world.theme == WorldTheme.MOUNTAINS:
         enemy_spawn_config = {
             Meteor: 0.8,
@@ -816,7 +823,7 @@ def _create_world_boss_level(
             Meteor: 1.0,
             Alien: 2.0,
         }
-    
+
     config = LevelConfig(
         level_number=level_number,
         enemy_spawn_config=enemy_spawn_config,
@@ -828,7 +835,7 @@ def _create_world_boss_level(
         theme_name=f"Boss: {world.name}",
         score_multiplier=1.0 + (world.world_id * 0.2),
     )
-    
+
     return _apply_difficulty_to_fixed_level(config, difficulty_preset)
 
 
@@ -864,13 +871,15 @@ def get_level_config(
     """
     # NOVO: Obter mundo do nível
     world = get_world_for_level(level_number)
-    
+
     # NOVO: Se é boss_level e mundo tem boss definido
-    if (level_number == world.boss_level and 
-        world.boss_type is not None and 
-        not force_meteor_storm):
+    if (
+        level_number == world.boss_level
+        and world.boss_type is not None
+        and not force_meteor_storm
+    ):
         return _create_world_boss_level(world, level_number, difficulty_preset)
-    
+
     # Para Hardcore e Nightmare, o nível 1 é sempre procedural (sem tutorial)
     if (
         level_number in FIXED_LEVELS
@@ -894,7 +903,7 @@ def get_level_config(
         )
 
     generator = _procedural_generators[difficulty_preset]
-    
+
     # Forçar tema meteor_storm no procedural
     if force_meteor_storm:
         difficulty = generator.calculate_difficulty(level_number)
@@ -905,7 +914,7 @@ def get_level_config(
             theme,
             random.Random(generator.seed + level_number),
         )
-    
+
     # NOVO: Gerar com tema do mundo aplicado
     config = generator.generate_level(level_number)
     config = _apply_world_theme_to_config(config, world)
@@ -1030,9 +1039,9 @@ class LevelAnalyzer:
         start: int, end: int, generator: ProceduralLevelGenerator
     ):
         """Imprime progressão de dificuldade para análise."""
-        logger.info(f"\n{'='*80}")
+        logger.info(f"\n{'=' * 80}")
         logger.info(f"ANÁLISE DE PROGRESSÃO: Níveis {start} a {end}")
-        logger.info(f"{'='*80}\n")
+        logger.info(f"{'=' * 80}\n")
 
         for level_num in range(start, end + 1):
             config = generator.generate_level(level_num)
@@ -1062,7 +1071,7 @@ class LevelAnalyzer:
                 f"👾{stats['enemies_to_clear']:3d} │ "
                 f"📊{spawn_rate:.1f}/s │ "
                 f"🎯~{max_enemies:2d} tela │ "
-                f"🕐{duration/60:.1f}min │ "
+                f"🕐{duration / 60:.1f}min │ "
                 f"{features:5s}"
             )
 

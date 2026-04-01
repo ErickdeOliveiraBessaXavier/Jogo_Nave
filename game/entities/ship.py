@@ -1,10 +1,12 @@
-import pygame
-import random
 import math
+import random
 import time
+from typing import TYPE_CHECKING, Any, Optional, Tuple, TypedDict
+
+import pygame
+
 from ..core.config import config as Config
 from ..core.sound import sound_manager
-from typing import Tuple, TypedDict, TYPE_CHECKING, Optional, Any
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -59,7 +61,7 @@ class Ship:
 
         # Carregar imagem da nave
         try:
-            from ..core.assets import get_image, BASE_DIR
+            from ..core.assets import BASE_DIR, get_image
 
             icon_path = BASE_DIR / "assets" / "icons" / "ship_icon.png"
             self.ship_image = get_image(icon_path).convert_alpha()
@@ -83,9 +85,11 @@ class Ship:
         self.is_entering = False
         self.entry_particles: list[ParticleDict] = []
         self.thruster_particles: list[ParticleDict] = []
-        
+
         # NOVO: Rotação visual da nave (para side-scroll)
-        self.rotation_angle: float = 0.0  # 0° = vertical (top-down), 90° = horizontal (side-scroll)
+        self.rotation_angle: float = (
+            0.0  # 0° = vertical (top-down), 90° = horizontal (side-scroll)
+        )
         self.ship_image_rotated = self.ship_image  # Cache da imagem rotacionada
         self.is_side_scroll: bool = False  # Modo de jogo (top-down vs side-scroll)
 
@@ -251,7 +255,7 @@ class Ship:
 
     def set_rotation(self, angle: float) -> None:
         """Define o ângulo de rotação visual da nave.
-        
+
         Args:
             angle: Ângulo em graus (0° = vertical/top-down, 90° = horizontal/side-scroll)
         """
@@ -499,7 +503,9 @@ class Ship:
                 # Side-scroll: Thruster apontando para esquerda (direção oposta ao movimento)
                 particle = ParticleDict(
                     x=self.x + random.uniform(-5, 5),  # Posição frontal da nave
-                    y=self.y + sprite_h / 2 + random.uniform(-5, 5),  # Centrado verticalmente
+                    y=self.y
+                    + sprite_h / 2
+                    + random.uniform(-5, 5),  # Centrado verticalmente
                     vx=-random.uniform(100, 200),  # Movimento para esquerda (negativo)
                     vy=random.uniform(-50, 50),  # Pequena variação vertical
                     lifetime=random.uniform(*PARTICLE_THRUSTER_LIFETIME),
@@ -536,7 +542,12 @@ class Ship:
             if p["lifetime"] - dt > 0 and p["size"] - dt > 0
         ]
 
-    def update(self, dt: float, entity_manager: Optional["EntityManager"] = None, is_side_scroll: bool = False):
+    def update(
+        self,
+        dt: float,
+        entity_manager: Optional["EntityManager"] = None,
+        is_side_scroll: bool = False,
+    ):
         self._update_timers(dt)
         self._update_orbital_lasers(dt, entity_manager)
         self._update_particles(dt, is_side_scroll)
@@ -551,7 +562,7 @@ class Ship:
     def move(self, held_actions: set[str], dt: float, is_side_scroll: bool = False):
         """
         Move a nave baseado nas ações pressionadas.
-        
+
         Args:
             held_actions: Conjunto de ações sendo pressionadas
             dt: Delta time
@@ -595,7 +606,7 @@ class Ship:
 
     def _keep_in_bounds(self, is_side_scroll: bool = False):
         """Mantém a nave dentro dos limites da tela.
-        
+
         Args:
             is_side_scroll: Se True, permite movimento livre em todos os eixos
         """
@@ -744,8 +755,8 @@ class Ship:
         if self.ship_image is not None:
             # Usar imagem rotacionada se houver uma diferente da original
             image_to_draw = (
-                self.ship_image_rotated 
-                if (self.rotation_angle != 0.0 and self.ship_image_rotated is not None) 
+                self.ship_image_rotated
+                if (self.rotation_angle != 0.0 and self.ship_image_rotated is not None)
                 else self.ship_image
             )
             surface.blit(image_to_draw, (self.x + shake_x, self.y + shake_y))

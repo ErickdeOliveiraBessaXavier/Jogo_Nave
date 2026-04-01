@@ -1,22 +1,23 @@
-import pygame
 import time
-from typing import TYPE_CHECKING, List, Optional, Dict, Tuple
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
-from ..core.state import Scene
+import pygame
+
 from ..core import colors
-from ..core.colors import CUSTOM_PURPLE, CUSTOM_GOLD, BLACK
-from ..core.assets import get_font, get_image, BASE_DIR
-from ..core.upgrades import (
-    list_all_upgrades_meta,
-    get_upgrade_icon,
-    UpgradeCategory,
-    UpgradeMeta,
-)
-from ..core.upgrades_config import UPGRADE_SLOT_COUNT
+from ..core.assets import BASE_DIR, get_font, get_image
+from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_profile_path
+from ..core.state import Scene
+from ..core.upgrades import (
+    UpgradeCategory,
+    UpgradeMeta,
+    get_upgrade_icon,
+    list_all_upgrades_meta,
+)
+from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -445,7 +446,7 @@ class UpgradesSelectionScene(Scene):
                             try:
                                 if hasattr(self.app, "sound_manager"):
                                     self.app.sound_manager.play_upgrade_denied()  # type: ignore
-                            except:
+                            except Exception:
                                 pass
                             continue
 
@@ -836,7 +837,9 @@ class UpgradesSelectionScene(Scene):
             border_color = (
                 colors.YELLOW
                 if is_hovered
-                else (80, 80, 80) if locked_by_stars else colors.GRAY
+                else (80, 80, 80)
+                if locked_by_stars
+                else colors.GRAY
             )
             border_style = 2 if equipped_type else 1
 
@@ -881,7 +884,7 @@ class UpgradesSelectionScene(Scene):
                 surface.blit(slot_label, (draw_rect.x + 10, draw_rect.y + 5))
             else:
                 # Slot normal disponível
-                slot_label = self.small_font.render(f"SLOT {i+1}", True, colors.GRAY)
+                slot_label = self.small_font.render(f"SLOT {i + 1}", True, colors.GRAY)
                 surface.blit(slot_label, (draw_rect.x + 10, draw_rect.y + 5))
 
             # Conteúdo do slot
