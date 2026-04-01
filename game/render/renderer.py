@@ -1,9 +1,10 @@
 import pygame
 import random
 import math
+import time
 from typing import TypedDict, Optional, TYPE_CHECKING
 from pathlib import Path
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from ..core.sprite_loader import sprite_loader
 from .backgrounds import (
     Background,
@@ -74,7 +75,10 @@ class CelestialManager:
 
     def _generate_scaled_image(self, image_path: Path, scale: float) -> pygame.Surface:
         """Loads, scales, and sets alpha for a celestial body image. Uses cache to avoid recomputation."""
-        cache_key = (image_path, scale)
+        # Arredondar para 1 casa decimal — garante hits reais no cache.
+        # Sem isso, random.uniform() gera floats únicos e o cache nunca acerta.
+        scale_key = round(scale, 1)
+        cache_key = (image_path, scale_key)
         if cache_key in self.scaled_image_cache:
             return self.scaled_image_cache[cache_key]
 
@@ -353,8 +357,8 @@ class StarField:
 
             # Atualizar fase da animação
             s["phase"] += s["pulse_speed"] * dt
-            if s["phase"] > 2 * math.pi:
-                s["phase"] -= 2 * math.pi
+            if s["phase"] > self.TWO_PI:
+                s["phase"] -= self.TWO_PI
 
             # Reset se sair da tela
             if s["y"] > self.h:
@@ -430,7 +434,7 @@ class Renderer:
             "difficulty": None,
         }
 
-        self._hud_values: dict[str, Optional[int]] = {
+        self._hud_values: dict[str, Optional[int | str]] = {
             "score": None,  # Último valor renderizado (None = nunca renderizado)
             "lives": None,
             "level": None,
@@ -456,8 +460,8 @@ class Renderer:
         self.fps_counter = 0
         self.fps_timer = 0.0
         self.current_fps = 0.0
-        self.frame_times: list[float] = []
         self.max_frame_times = 60  # Manter histórico dos últimos 60 frames
+        self.frame_times: deque[float] = deque(maxlen=self.max_frame_times)
         # === FIM DO SISTEMA DE FPS ===
 
     def set_world_theme(self, theme: WorldTheme) -> None:
@@ -515,7 +519,7 @@ class Renderer:
     def _render_text_cached(
         self,
         cache_key: str,
-        current_value: int,
+        current_value: int | str,
         text_template: str,
         font: pygame.font.Font,
         color: tuple[int, int, int],
@@ -598,7 +602,7 @@ class Renderer:
 
             diff_text = self._render_text_cached(
                 "difficulty",
-                hash(difficulty_preset.name),  # Usar hash do nome para consistência
+                difficulty_preset.value,  # Valor do enum — estável e sem risco de colisão
                 f"Dificuldade: {settings['name']}",
                 self.font_small,
                 difficulty_color,
@@ -639,9 +643,7 @@ class Renderer:
             if explosive_shots_active and explosive_shots_remaining > 0:
                 # Piscar quando restarem 5 ou menos cargas
                 if explosive_shots_remaining <= 5:
-                    import time as _time
-
-                    blink = int(_time.time() * 4) % 2 == 0
+                    blink = int(time.time() * 4) % 2 == 0
                     color = colors.ORANGE if blink else colors.RED
                 else:
                     color = colors.ORANGE
@@ -698,11 +700,7 @@ class Renderer:
         """Atualiza o contador de FPS e calcula métricas de performance."""
         self.fps_counter += 1
         self.fps_timer += dt
-        self.frame_times.append(dt)
-
-        # Manter apenas os últimos frames
-        if len(self.frame_times) > self.max_frame_times:
-            self.frame_times.pop(0)
+        self.frame_times.append(dt)  # deque(maxlen=60) descarta automaticamente
 
         # Atualizar FPS a cada segundo
         if self.fps_timer >= 1.0:

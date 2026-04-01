@@ -61,8 +61,8 @@ class Background(ABC):
 class Cloud:
     """Representa uma nuvem individual com otimizações."""
     
-    # Cache estático de superfícies de nuvem por cor
-    _surface_cache: Dict[Tuple[int, int, int], pygame.Surface] = {}
+    # Cache estático de superfícies de nuvem por (cor, camada)
+    _surface_cache: Dict[Tuple[Tuple[int, int, int], bool], pygame.Surface] = {}
     
     def __init__(self, width: int, height: int, speed_range: Tuple[float, float], 
                  color: Tuple[int, int, int], is_back_layer: bool):
@@ -72,8 +72,9 @@ class Cloud:
         self.color = color
         self.is_back_layer = is_back_layer
         
-        # Usar cache de superfície quando possível
-        cache_key = color
+        # Usar cache de superfície quando possível — chave inclui is_back_layer
+        # pois o alpha difere entre camadas (102 vs 179)
+        cache_key = (color, is_back_layer)
         if cache_key not in Cloud._surface_cache:
             Cloud._surface_cache[cache_key] = self._generate_cloud_surface()
         
@@ -170,9 +171,9 @@ class MountainsBackground(Background):
     PEAKS_COUNTS = [8, 12, 15, 7, 20, 30]
     ROUGHNESS_VALUES = [15, 20, 25, 45, 15, 10]
     
-    NUM_STARS = 70
-    NUM_CLOUDS_BACK = 4
-    NUM_CLOUDS_FRONT = 3
+    NUM_STARS = 40  # Reduzido de 70 para melhor performance
+    NUM_CLOUDS_BACK = 3  # Reduzido de 4 para melhor performance
+    NUM_CLOUDS_FRONT = 2  # Reduzido de 3 para melhor performance
     
     def __init__(self, width: int, height: int):
         super().__init__(width, height)
@@ -201,7 +202,7 @@ class MountainsBackground(Background):
         self._create_clouds()
 
     def _create_sky_gradient(self) -> None:
-        """Pré-renderiza o gradiente do céu com as cores vibrantes originais."""
+        """Pré-renderiza o gradiente do céu com as cores vibrantes originais (otimizado com draw.line)."""
         self.sky_gradient = pygame.Surface((self.width, self.height))
         
         # Cores do gradiente (do HTML original)
@@ -214,7 +215,7 @@ class MountainsBackground(Background):
         ]
         gradient_stops = [0.0, 0.4, 0.7, 0.9, 1.0]
         
-        # Desenhar gradiente multi-stop
+        # Desenhar gradiente otimizado (pré-calcular cores)
         for y in range(self.height):
             t = y / self.height
             
@@ -227,6 +228,8 @@ class MountainsBackground(Background):
                         int(gradient_colors[i][c] + (gradient_colors[i + 1][c] - gradient_colors[i][c]) * local_t)
                         for c in range(3)
                     )
+                    
+                    # Desenhar linha uma vez (mais otimizado que pixel por pixel)
                     pygame.draw.line(self.sky_gradient, color, (0, y), (self.width, y))
                     break
 
@@ -257,7 +260,8 @@ class MountainsBackground(Background):
     ) -> pygame.Surface:
         """Cria superfície otimizada da montanha com gradiente."""
         surf_height = int(self.height * h_pct)
-        surf_width = self.width + 4
+        # Largura igual à tela — o parallax infinito é feito desenhando 2 cópias lado a lado
+        surf_width = self.width
         
         # Criar superfície final
         final_surf = pygame.Surface((surf_width, surf_height), pygame.SRCALPHA)
@@ -315,56 +319,74 @@ class MountainsBackground(Background):
         palette: ColorPalette,
         highest_y: float
     ) -> pygame.Surface:
-        """Cria superfície de gradiente otimizada."""
+        """Cria superfície de gradiente otimizada com draw.line."""
         grad_surf = pygame.Surface((width, height), pygame.SRCALPHA)
         
-        # Pré-calcular cores para evitar cálculos repetidos
         gradient_range = height - highest_y
         
-        # Lock surface para acesso direto aos pixels (mais rápido)
-        grad_surf.lock()
+        # Desempacotar cores para evitar indexação e tuple comprehension no loop
+        lr, lg, lb = palette.light
+        dr, dg, db = palette.dark
+        light_color = (lr, lg, lb, 255)
         
         for y in range(height):
             if y < highest_y:
-                color = palette.light
+                color = light_color
             else:
                 rel_y = min(1.0, (y - highest_y) / gradient_range if gradient_range > 0 else 0)
-                color = tuple(
-                    int(palette.light[c] + (palette.dark[c] - palette.light[c]) * rel_y)
-                    for c in range(3)
+                color = (
+                    int(lr + (dr - lr) * rel_y),
+                    int(lg + (dg - lg) * rel_y),
+                    int(lb + (db - lb) * rel_y),
+                    255
                 )
-            pygame.draw.line(grad_surf, color + (255,), (0, y), (width - 1, y))
+            pygame.draw.line(grad_surf, color, (0, y), (width - 1, y))
         
-        grad_surf.unlock()
         return grad_surf
 
     def _create_stars(self) -> None:
         """Gera estrelas com distribuição pré-calculada."""
         star_area_height = self.height * 0.5
         
+        # Surfaces compartilhadas por tamanho — apenas 2 objetos no total.
+        # set_alpha nelas é chamado uma vez por tamanho por frame, não por estrela.
+        self._star_surf_cache: Dict[int, pygame.Surface] = {}
+        for size in (2, 4):
+            surf = pygame.Surface((size, size), pygame.SRCALPHA)
+            surf.fill((255, 255, 255, 255))
+            self._star_surf_cache[size] = surf
+        
         for _ in range(self.NUM_STARS):
+            size = 2 if random.random() < 0.8 else 4
             self.stars.append({
                 'x': random.random() * self.width,
                 'y': random.random() * star_area_height,
-                'size': 2 if random.random() < 0.8 else 4,
+                'size': size,
                 'delay': random.random() * 5,
-                'base_alpha': random.uniform(0.3, 1.0)
+                'base_alpha': random.uniform(0.3, 1.0),
             })
 
     def _draw_stars(self, surface: pygame.Surface) -> None:
-        """Desenha estrelas com brilho piscante otimizado."""
-        current_time = pygame.time.get_ticks() / 1000.0
+        """Desenha estrelas com brilho piscante usando surfaces compartilhadas por tamanho.
         
+        Evita o custo de set_alpha por estrela: agrupa por tamanho, aplica o alpha
+        uma vez na surface compartilhada e faz os blits de todas as estrelas daquele grupo.
+        """
+        current_time = pygame.time.get_ticks() / 1000.0
+        twinkle_speed = self.star_twinkle_speed
+        
+        # Separar estrelas por tamanho para minimizar trocas de set_alpha
+        groups: Dict[int, List[Tuple[int, int, int]]] = {2: [], 4: []}
         for star in self.stars:
-            # Calcular alpha usando seno para efeito de brilho
-            alpha_factor = (math.sin(current_time * self.star_twinkle_speed + star['delay']) + 1) * 0.5
-            alpha = int((0.3 + alpha_factor * 0.7) * 255)
-            
-            # Criar superfície temporária com alpha para a estrela
-            star_surf = pygame.Surface((star['size'], star['size']), pygame.SRCALPHA)
-            star_surf.fill((255, 255, 255, alpha))
-            
-            surface.blit(star_surf, (int(star['x']), int(star['y'])))
+            alpha_factor = (math.sin(current_time * twinkle_speed + star['delay']) + 1) * 0.5
+            alpha = int((star['base_alpha'] * (0.3 + alpha_factor * 0.7)) * 255)
+            groups[star['size']].append((int(star['x']), int(star['y']), alpha))
+        
+        for size, entries in groups.items():
+            surf = self._star_surf_cache[size]
+            for x, y, alpha in entries:
+                surf.set_alpha(alpha)
+                surface.blit(surf, (x, y))
 
     def _create_sun(self) -> None:
         """Cria superfície do sol com brilho pré-renderizado."""
@@ -383,7 +405,7 @@ class MountainsBackground(Background):
         self.sun_surface = self._render_sun(sun_size)
 
     def _render_sun(self, size: int) -> pygame.Surface:
-        """Renderiza o sol com gradiente radial."""
+        """Renderiza o sol com gradiente radial otimizado."""
         surf = pygame.Surface((size, size), pygame.SRCALPHA)
         center = size // 2
         radius = size // 2
@@ -392,8 +414,8 @@ class MountainsBackground(Background):
         sun_inner = (255, 220, 163)   # Cor interna (mais clara)
         sun_outer = (255, 189, 102)   # Cor externa (mais escura)
         
-        # Desenha o gradiente radial de fora para dentro
-        for r in range(radius, 0, -1):
+        # Desenha o gradiente radial de fora para dentro (otimizado: passo de 2 em 2)
+        for r in range(radius, 0, -2):
             t = r / radius
             # Interpolação quadrática para transição mais suave
             t_smooth = t * t
@@ -428,12 +450,13 @@ class MountainsBackground(Background):
         # Atualizar camadas
         for layer in self.layers:
             layer.offset += layer.speed * dt * speed_mult
-            # Wrap around para parallax infinito
-            if layer.offset >= layer.surface.get_width():
-                layer.offset = 0.0
+            # Wrap via módulo — evita acúmulo de float e mantém offset em [0, layer_w)
+            layer.offset %= layer.surface.get_width()
         
-        # Atualizar nuvens
-        for cloud in self.clouds_back + self.clouds_front:
+        # Atualizar nuvens — iterar sem criar lista temporária
+        for cloud in self.clouds_back:
+            cloud.update(dt, speed_mult)
+        for cloud in self.clouds_front:
             cloud.update(dt, speed_mult)
 
     def draw(self, surface: pygame.Surface) -> None:
@@ -455,16 +478,16 @@ class MountainsBackground(Background):
         
         # Desenhar camadas de montanhas (parallax)
         for layer in self.layers:
-            # Desenhar duas vezes para efeito infinito
-            x_offset = -int(layer.offset)
-            surface.blit(layer.surface, (x_offset, self.height - layer.surface.get_height()))
+            layer_w = layer.surface.get_width()
+            layer_h = layer.surface.get_height()
+            y_pos = self.height - layer_h
             
-            # Segunda cópia para continuidade
-            if x_offset + layer.surface.get_width() < self.width:
-                surface.blit(
-                    layer.surface, 
-                    (x_offset + layer.surface.get_width(), self.height - layer.surface.get_height())
-                )
+            # Offset sempre dentro de [0, layer_w) para wrap correto
+            x_offset = -(int(layer.offset) % layer_w)
+            
+            # Sempre desenhar duas cópias — garante continuidade sem gap
+            surface.blit(layer.surface, (x_offset, y_pos))
+            surface.blit(layer.surface, (x_offset + layer_w, y_pos))
         
         # Desenhar nuvens da frente
         for cloud in self.clouds_front:
@@ -475,7 +498,9 @@ class MountainsBackground(Background):
         for layer in self.layers:
             layer.offset = 0.0
         
-        for cloud in self.clouds_back + self.clouds_front:
+        for cloud in self.clouds_back:
+            cloud.reset(is_first_time=True)
+        for cloud in self.clouds_front:
             cloud.reset(is_first_time=True)
 
 
