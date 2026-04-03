@@ -36,6 +36,12 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..app import GameApp
+    from ..core.spatial_grid import SpatialGrid
+    from ..entities.alien import Alien
+    from ..entities.explosive_mine import ExplosiveMine
+    from ..entities.eye_enemy import EyeEnemy
+    from ..entities.meteor import Meteor
+    from ..entities.square_minion_boss import SquareMinionBoss
 
 
 class PlayingScene(Scene):
@@ -643,7 +649,7 @@ class PlayingScene(Scene):
         return batched
 
     def _check_projectile_vs_enemies(
-        self, enemy_grid
+        self, enemy_grid: "SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]"
     ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
         """
         Verifica colisões de projéteis contra inimigos normais.
