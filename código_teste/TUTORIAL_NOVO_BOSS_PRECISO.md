@@ -9,23 +9,59 @@
 1. **Hierarquia de Bosses**: Não existe herança - cada boss é uma classe **independente**
 2. **Union Types**: Bosses são gerenciados como: `Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | None`
 3. **Padrão de Retorno**: Cada boss retorna entidades de formas **diferentes**
-4. **Sprites Reais**: Todos usam `sprite_loader` para carregar frames de `.png`, **não** `pygame.draw`
-5. **Sistema EMP**: Todos os bosses sofrem com o efeito de slowdown do EMP
+4. **Visual**: Apenas SlimeBoss usa `sprite_loader` para carregar frames de `.png`. Os demais (Boss, SpikeBoss, GiantMeteorBoss) usam desenho geométrico com `pygame.draw` (círculos, retângulos, polígonos)
+5. **Sistema EMP**: Todos os bosses sofrem com o efeito de slowdown do EMP (upgrade ativável que desacelera 65% por 10s). Aplicado automaticamente via multiplicador no `entity_manager.update()` - nenhuma ação necessária
 
 ---
 
 ## 📊 Comparação de Padrões Existentes
 
-| Boss | Update Retorna | Spawn | Sprites | Particularidade |
+| Boss | Update Retorna | Spawn | Visual | Particularidade |
 |------|---|---|---|---|
-| **Boss** | `(lasers[], squares[])` | Externo | Sim (sprite original) | Face tracking |
-| **SpikeBoss** | `(spikes[], lasers[])` | Externo | Sim | Pausa o jogo |
-| **SlimeBoss** | `None` | Interno | Sim (animado) | Recebe EntityManager |
-| **GiantMeteorBoss** | `None` | Interno | Sim | Cai e causa dano área |
+| **Boss** | `(lasers[], squares[])` | Externo | Geométrico (pygame.draw) | Face tracking |
+| **SpikeBoss** | `(spikes[], lasers[])` | Externo | Geométrico (pygame.draw) | Pausa o jogo |
+| **SlimeBoss** | `None` | Interno | **Sprite animado** | Recebe EntityManager |
+| **GiantMeteorBoss** | `None` | Interno | Geométrico (pygame.draw) | Cai e causa dano área |
 
 ---
 
-## Passo 1: Criar a Classe do Boss
+## 🔌 Sistema EMP Explicado
+
+### O Que É?
+
+**EMP (Electromagnetic Pulse)** é um upgrade ativável do jogador que desacelera todos os inimigos e bosses.
+
+### Como Funciona?
+
+1. **Ativação**: Jogador pressiona tecla do upgrade EMP
+2. **Efeito Visual**: Onda expandindo-se do centro da nave (classe `EMPWave`)
+3. **Desaceleração**: TODOS os inimigos/bosses ficam a **35% da velocidade** (65% mais lento)
+4. **Duração**: 10 segundos
+5. **Linger**: Após a onda passar, o slowdown persiste por mais 8 segundos
+
+### Configuração
+
+```python
+# Em game/core/upgrades_config.py
+EMP_SLOW_FACTOR: float = 0.35          # 35% velocidade = 65% desaceleração
+EMP_BASE_DURATION: float = 10.0        # Segundos do efeito principal
+EMP_LINGER_DURATION: float = 8.0       # Segundos após onda passar
+```
+
+### Como Afeta Novos Bosses
+
+**Automático!** No `entity_manager.update()`, há um multiplicador que verifica:
+
+```python
+def emp_mul_for(entity: Any) -> float:
+    if not emp_active:
+        return 1.0
+    return slow_factor  # 0.35
+```
+
+Todos os `dt` são multiplicados por este valor. **Você não precisa fazer nada especial** - basta usar `enemy_dt` ao invés de `dt` e o EMP funciona automaticamente.
+
+---
 
 ### 1.1 Estrutura Base
 
@@ -799,10 +835,44 @@ python -m py_compile game/scenes/playing.py
 |--------|---|---|
 | **Herança** | `class FireBoss(Boss)` | `class FireBoss` (nenhuma herança) |
 | **Update** | `def update(dt, player_x, player_y)` | Igual, mas padrão documentado |
-| **Sprites** | `pygame.draw.rect()` | `sprite_loader.load_animation_frames()` |
+| **Sprites** | ❌ "Todos usam sprite_loader" | ✅ "Apenas SlimeBoss usa sprites" |
 | **Retorno** | Sempre retorna entidades | Documentado: FireBoss retorna, SlimeBoss não |
 | **EntityManager** | Novos atributos | Usa padrões existentes |
-| **EMP System** | Não menciona | Documentado funcionamento automático |
+| **EMP System** | Não menciona | ✅ Explicado: automático, 65% slowdown |
+
+---
+
+## 👀 Opções de Visual para Novo Boss
+
+### Opção 1: Desenho Geométrico (Como Boss, SpikeBoss, GiantMeteorBoss)
+
+Mais simples, sem necesidade de arquivos PNG:
+
+```python
+def draw(self, surface: pygame.Surface):
+    # Desenhar corpo com pygame.draw
+    pygame.draw.rect(surface, RED, (self.x, self.y, self.w, self.h))
+    
+    # Desenhar olhos
+    pygame.draw.circle(surface, YELLOW, (self.x + 20, self.y + 15), 8)
+    pygame.draw.circle(surface, YELLOW, (self.x + self.w - 20, self.y + 15), 8)
+    
+    # Barra de vida
+    pygame.draw.rect(surface, DARK_GRAY, (self.x, self.y - 15, self.w, 8))
+    health_width = (self.health / self.max_health) * self.w
+    pygame.draw.rect(surface, RED, (self.x, self.y - 15, health_width, 8))
+```
+
+### Opção 2: Sprite Animado (Como SlimeBoss)
+
+Requer arquivo PNG mas oferece visual melhor:
+
+```python
+# Carrega sprite sheet: game/assets/images/sprite_boss_fire.png (800x80 = 8 frames)
+self.animation_frames = self.load_animation_frames()
+frame = self.animation_frames[self.current_frame]
+surface.blit(frame, (int(self.x), int(self.y)))
+```
 
 ---
 

@@ -40,6 +40,7 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
+from ..entities.stone_golem_boss import StoneGolemBoss, Boulder, RockShard, OrbitalRock
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
@@ -69,11 +70,14 @@ class EntityManager:
         self.powerups: list[PowerUp] = []
         self.stars: list[Star] = []  # Estrelas coletáveis
         self.floating_scores: list[FloatingScore] = []
-        self.boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | None = None
+        self.boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss | None = None
         self.mini_ships: list[MiniShip] = []
         self.mini_ship_bullets: list[MiniShipBullet] = []
         self.formations: list[Formation] = []  # Nova lista para formações
         self.spikes: list[Spike] = []  # Lista para espinhos do SpikeBoss
+        self.boulders: list[Boulder] = []  # Pedregulhos do StoneGolemBoss
+        self.rock_shards: list[RockShard] = []  # Fragmentos de pedra do StoneGolemBoss
+        self.orbital_rocks: list[OrbitalRock] = []  # Pedras orbitais do StoneGolemBoss
         self._grid_needs_rebuild = True
 
         self.air_strike_bombs: list[AirStrikeBomb] = []  # Bombas do bombardeio aéreo
@@ -454,6 +458,15 @@ class EntityManager:
             # GiantMeteorBoss apenas atualiza posição (queda lenta)
             elif isinstance(self.boss, GiantMeteorBoss):
                 self.boss.update(enemy_dt, self)
+            # StoneGolemBoss retorna (List[Boulder], List[RockShard], List[OrbitalRock])
+            elif isinstance(self.boss, StoneGolemBoss):
+                new_boulders, new_shards, orbital_rocks = self.boss.update(enemy_dt, player_x, player_y)
+                if new_boulders:
+                    self.boulders.extend(new_boulders)
+                if new_shards:
+                    self.rock_shards.extend(new_shards)
+                # Sincroniza a lista de pedras orbitais (gerenciada pelo boss)
+                self.orbital_rocks = orbital_rocks
             # Boss normal retorna (List[BossLaser], List[BossSquare])
             else:  # isinstance(self.boss, Boss)
                 lasers_fired, spawned_squares = self.boss.update(
@@ -500,6 +513,20 @@ class EntityManager:
             square.update(enemy_dt, screen_width, screen_height)
             if square.dead:
                 self.boss_squares.remove(square)
+
+        # Atualizar minas do StoneGolemBoss (GolemMine.update retorna shards da explosão)
+        for mine in self.boulders:
+            explosion_shards = mine.update(dt)
+            if explosion_shards:
+                self.rock_shards.extend(explosion_shards)
+
+        # Atualizar rock shards do StoneGolemBoss
+        for shard in self.rock_shards:
+            shard.update(dt)
+
+        # Atualizar pedras orbitais do StoneGolemBoss (o boss já faz o update
+        # interno; aqui apenas garantimos que a lista local está sincronizada)
+        # Nada a fazer: self.orbital_rocks é referência à lista interna do boss
 
         # Atualizar bombas de bombardeio aéreo
         for bomb in self.air_strike_bombs[:]:
@@ -612,6 +639,13 @@ class EntityManager:
                 self.boss.update(dt, player_x, player_y)
             elif isinstance(self.boss, GiantMeteorBoss):
                 self.boss.update(dt, self)
+            elif isinstance(self.boss, StoneGolemBoss):
+                new_boulders, new_shards, orbital_rocks = self.boss.update(dt, player_x, player_y)
+                if new_boulders:
+                    self.boulders.extend(new_boulders)
+                if new_shards:
+                    self.rock_shards.extend(new_shards)
+                self.orbital_rocks = orbital_rocks
             else:  # General Boss type
                 lasers_fired, spawned_squares = self.boss.update(dt, player_x, player_y)
                 if lasers_fired:
@@ -676,6 +710,14 @@ class EntityManager:
         # Desenhar boss_lasers ANTES do boss (para aparecer abaixo)
         for laser in self.boss_lasers:
             laser.draw(surface)
+
+        # Desenhar boulders e shards do StoneGolemBoss
+        for boulder in self.boulders:
+            boulder.draw(surface)
+        for shard in self.rock_shards:
+            shard.draw(surface)
+        # Nota: OrbitalRocks são desenhadas pelo próprio StoneGolemBoss.draw()
+        # com depth-sort correto (atrás/frente do corpo), não aqui.
 
         # Tratar o boss separadamente para passar o FPS
         if self.boss:
@@ -919,6 +961,10 @@ class EntityManager:
         self.cannon_mines = [
             m for m in self.cannon_mines if not m.dead
         ]  # Limpar minas mortas
+        self.boulders = [b for b in self.boulders if not b.dead]  # Limpar boulders mortos
+        self.rock_shards = [s for s in self.rock_shards if not s.dead]  # Limpar shards mortos
+        # orbital_rocks é gerenciada pelo boss — apenas filtra as mortas da cópia local
+        self.orbital_rocks = [r for r in self.orbital_rocks if not r.dead]
         self._grid_needs_rebuild = True
 
     def clear_all(self):

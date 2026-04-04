@@ -66,8 +66,7 @@ class WorldConfig:
 def _get_worlds() -> dict[int, WorldConfig]:
     """Retorna dicionário de mundos configurados."""
     # Importações locais para evitar circular imports
-    from ..entities.boss import Boss
-    from ..entities.spike_boss import SpikeBoss
+    from ..entities.stone_golem_boss import StoneGolemBoss
     from ..entities.giant_meteor_boss import GiantMeteorBoss
     from ..entities.slime_boss import SlimeBoss
     
@@ -82,7 +81,7 @@ def _get_worlds() -> dict[int, WorldConfig]:
             start_level=1,
             end_level=10,
             boss_level=10,
-            boss_type=Boss,  # Boss normal
+            boss_type=StoneGolemBoss,  # Boss das montanhas
             theme_modifiers={
                 "meteor_weight": 2.0,  # Mais meteoros (tema de pedras)
                 "alien_weight": 0.5,   # Menos aliens
@@ -97,9 +96,9 @@ def _get_worlds() -> dict[int, WorldConfig]:
             primary_color=(30, 30, 80),       # Azul espacial
             secondary_color=(100, 100, 150),  # Nebulosa
             start_level=11,
-            end_level=20,
-            boss_level=20,
-            boss_type=SpikeBoss,
+            end_level=25,
+            boss_level=25,
+            boss_type=None,  # Bosses determinados por FIXED_LEVELS
             theme_modifiers={
                 "meteor_weight": 1.0,
                 "alien_weight": 1.5,   # Mais aliens no espaço
@@ -114,9 +113,9 @@ def _get_worlds() -> dict[int, WorldConfig]:
             theme=WorldTheme.CITY,
             primary_color=(150, 50, 200),     # Roxo neon
             secondary_color=(0, 255, 255),    # Cyan elétrico
-            start_level=21,
-            end_level=30,
-            boss_level=30,
+            start_level=26,
+            end_level=35,
+            boss_level=35,
             boss_type=GiantMeteorBoss,
             theme_modifiers={
                 "eye_weight": 1.5,     # Mais olhos (câmeras de segurança)
@@ -131,9 +130,9 @@ def _get_worlds() -> dict[int, WorldConfig]:
             theme=WorldTheme.VOLCANIC,
             primary_color=(255, 80, 0),       # Laranja lava
             secondary_color=(200, 0, 0),      # Vermelho incandescente
-            start_level=31,
-            end_level=40,
-            boss_level=40,
+            start_level=36,
+            end_level=45,
+            boss_level=45,
             boss_type=SlimeBoss,  # Slime de lava
             theme_modifiers={
                 "meteor_weight": 1.8,  # Muitos fragmentos vulcânicos

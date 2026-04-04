@@ -551,6 +551,7 @@ class PlayingScene(Scene):
             from ..entities.giant_meteor_boss import GiantMeteorBoss
             from ..entities.slime_boss import SlimeBoss
             from ..entities.spike_boss import SpikeBoss
+            from ..entities.stone_golem_boss import StoneGolemBoss
 
             if isinstance(self.entity_manager.boss, SpikeBoss):
                 self._boss_type_cache = "spike"
@@ -558,6 +559,8 @@ class PlayingScene(Scene):
                 self._boss_type_cache = "slime"
             elif isinstance(self.entity_manager.boss, GiantMeteorBoss):
                 self._boss_type_cache = "giant_meteor"
+            elif isinstance(self.entity_manager.boss, StoneGolemBoss):
+                self._boss_type_cache = "stone_golem"
             else:
                 self._boss_type_cache = "normal"
         else:
@@ -976,6 +979,47 @@ class PlayingScene(Scene):
             self.ship, self.entity_manager.boss_squares
         ):
             self._handle_ship_hit()
+
+        # Colisão com o feixe sweep do StoneGolemBoss (laser azul visual)
+        if self._boss_type_cache == "stone_golem" and self.entity_manager.boss:
+            from ..entities.stone_golem_boss import StoneGolemBoss
+            golem = cast(StoneGolemBoss, self.entity_manager.boss)
+            beam = golem.get_sweep_beam()
+            if beam and self.ship.invuln <= 0:
+                px, py, ex, ey = beam
+                # Distância do centro da nave à linha do feixe
+                sx = float(self.ship.rect.centerx)
+                sy = float(self.ship.rect.centery)
+                dx, dy  = ex - px, ey - py
+                len_sq  = dx * dx + dy * dy
+                if len_sq > 0:
+                    t = max(0.0, min(1.0, ((sx - px) * dx + (sy - py) * dy) / len_sq))
+                    closest_x = px + t * dx
+                    closest_y = py + t * dy
+                    dist = math.hypot(sx - closest_x, sy - closest_y)
+                    hit_radius = golem.SCALE * 2 + self.ship.rect.width * 0.4
+                    if dist < hit_radius:
+                        self._handle_ship_hit()
+
+        # Colisão com minas do StoneGolemBoss (contato direto remove vida mas não destrói a mina)
+        for mine in self.entity_manager.boulders:
+            if not mine.dead and self.ship.rect.colliderect(mine.rect):
+                self._handle_ship_hit()
+                break
+
+        # Colisão com rock shards do StoneGolemBoss (sweep, orbs e explosões de minas)
+        for shard in self.entity_manager.rock_shards:
+            if not shard.dead and self.ship.rect.colliderect(shard.rect):
+                shard.dead = True
+                self._handle_ship_hit()
+                break
+
+        # Colisão com pedras orbitais do StoneGolemBoss (só causa dano em fase 'fired')
+        for rock in self.entity_manager.orbital_rocks:
+            if rock.causes_damage and not rock.dead and self.ship.rect.colliderect(rock.rect):
+                rock.dead = True
+                self._handle_ship_hit()
+                break
 
     def _apply_score_multiplier(self, pts: int) -> int:
         """Aplica multiplicador de score se ativo."""

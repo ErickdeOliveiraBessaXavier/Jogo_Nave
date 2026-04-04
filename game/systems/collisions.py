@@ -27,6 +27,7 @@ from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
 from ..entities.slime_boss import SlimeBoss
 from ..entities.giant_meteor_boss import GiantMeteorBoss
+from ..entities.stone_golem_boss import StoneGolemBoss
 from ..entities.slime_drip import SlimeDrip
 from ..entities.star import Star
 from ..core.config import Config
@@ -42,7 +43,7 @@ from ..entities.explosion import ExplosionType  # ← ADICIONAR
 
 # Type aliases
 Enemy: TypeAlias = Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
-BossEnemy: TypeAlias = Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss
+BossEnemy: TypeAlias = Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss
 Projectile: TypeAlias = Bullet | MiniShipBullet
 
 
@@ -638,7 +639,7 @@ class Collisions:
     def explosive_effects_vs_boss(
         self,
         explosive_effects: list[ExplosiveEffect],
-        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | None,
+        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss | None,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -773,7 +774,7 @@ class Collisions:
     def cannon_mines_vs_boss(
         self,
         cannon_mines: list[CannonMine],
-        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | None,
+        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss | None,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -841,7 +842,7 @@ class Collisions:
     def air_strike_bombs_vs_boss(
         self,
         air_strike_bombs: list[AirStrikeBomb],
-        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | None,
+        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss | None,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:

@@ -14,6 +14,7 @@ from ..entities.meteor import Meteor
 from ..entities.slime_boss import SlimeBoss
 from ..entities.spike_boss import SpikeBoss
 from ..entities.square_minion_boss import SquareMinionBoss
+from ..entities.stone_golem_boss import StoneGolemBoss
 from .difficulty import DifficultyPreset, DifficultySettings
 from .world_config import WorldTheme, get_world_for_level
 
@@ -228,7 +229,7 @@ class LevelConfig:
         Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss], float
     ]  # Tipo -> tempo de spawn
     enemies_to_clear: int  # quantos inimigos para passar de fase
-    boss_type: Type[Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss] | None = None
+    boss_type: Type[Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss] | None = None
     mines_enabled: bool = False
     formations_enabled: bool = False
     formation_types: list[str] | None = None
@@ -643,7 +644,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # Alien: 2.5,
             # EyeEnemy: 5.0,
         },
-        enemies_to_clear=150,
+        enemies_to_clear=0,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
         # mines_enabled=True,
@@ -651,10 +652,11 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         # boss_type=Boss,
         # boss_type=GiantMeteorBoss,
         # boss_type=SpikeBoss,
+        boss_type=StoneGolemBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),
-    # Nível 3: Primeiro Boss - Mix de inimigos + Boss clássico
+    # Nível 3: Primeiro Boss - Stone Golem (Montanhas)
     3: LevelConfig(
         level_number=3,
         enemy_spawn_config={
@@ -663,51 +665,70 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             SquareMinionBoss: 15.0,
         },
         enemies_to_clear=350,
-        boss_type=Boss,
+        boss_type=StoneGolemBoss,
         mines_enabled=True,
-        theme_name="Chefe Inicial",
+        theme_name="Chefe do Golem de Pedra",
         score_multiplier=1.2,
     ),
-    # Nível 7: Boss Spike - Desafio avançado com todas as features
-    7: LevelConfig(
-        level_number=7,
+    # Vazio Sideral - 4 Bosses
+    # Nível 12: Boss clássico
+    12: LevelConfig(
+        level_number=12,
         enemy_spawn_config={
-            Meteor: 1.5,
-            EyeEnemy: 5.0,
-        },
-        enemies_to_clear=250,
-        boss_type=SpikeBoss,
-        # mines_enabled=True,
-        formations_enabled=True,
-        formation_types=["spiral_circle", "spiral_v", "spiral_line"],
-        theme_name="Chefe Avançado",
-        score_multiplier=1.6,
-    ),
-    # Novo nível: Meteoro Gigante
-    14: LevelConfig(
-        level_number=14,
-        enemy_spawn_config={
-            Meteor: 1.0,
+            Meteor: 0.8,
             Alien: 3.0,
+            EyeEnemy: 2.0,
         },
-        enemies_to_clear=220,
-        boss_type=GiantMeteorBoss,
+        enemies_to_clear=400,
+        boss_type=Boss,
         mines_enabled=True,
-        formations_enabled=False,
-        theme_name="Meteoro Gigante",
-        score_multiplier=1.5,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v"],
+        theme_name="Chefe Clássico do Espaço",
+        score_multiplier=1.3,
     ),
-    # Slime Boss
+    # Nível 16: Spike Boss
+    16: LevelConfig(
+        level_number=16,
+        enemy_spawn_config={
+            Meteor: 0.7,
+            Alien: 2.0,
+            EyeEnemy: 4.0,
+        },
+        enemies_to_clear=380,
+        boss_type=SpikeBoss,
+        mines_enabled=True,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v", "spiral_square"],
+        theme_name="Criatura Alienígena com Espinhos",
+        score_multiplier=1.4,
+    ),
+    # Nível 20: Giant Meteor Boss
     20: LevelConfig(
         level_number=20,
         enemy_spawn_config={
-            Meteor: 0.7,
-            # Alien: 15.0,
-            EyeEnemy: 15.0,
+            Meteor: 1.2,
+            Alien: 1.5,
+            EyeEnemy: 3.0,
         },
-        enemies_to_clear=300,
+        enemies_to_clear=350,
+        boss_type=GiantMeteorBoss,
+        mines_enabled=True,
+        formations_enabled=False,
+        theme_name="Meteorito Gigante",
+        score_multiplier=1.5,
+    ),
+    # Nível 25: Slime Boss
+    25: LevelConfig(
+        level_number=25,
+        enemy_spawn_config={
+            Meteor: 0.6,
+            Alien: 2.5,
+            EyeEnemy: 3.0,
+        },
+        enemies_to_clear=420,
         boss_type=SlimeBoss,
-        # mines_enabled=True,
+        mines_enabled=True,
         formations_enabled=True,
         formation_types=[
             "spiral_circle",
@@ -716,8 +737,8 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             "full_cycle",
             "spiral_line",
         ],
-        theme_name="Chefe Avançado",
-        score_multiplier=1.8,
+        theme_name="Criatura Gelatinosa Alienígena",
+        score_multiplier=1.6,
     ),
 }
 
