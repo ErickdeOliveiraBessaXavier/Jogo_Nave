@@ -652,7 +652,8 @@ class PlayingScene(Scene):
         return batched
 
     def _check_projectile_vs_enemies(
-        self, enemy_grid: "SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]"
+        self,
+        enemy_grid: "SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]",
     ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
         """
         Verifica colisões de projéteis contra inimigos normais.
@@ -983,6 +984,7 @@ class PlayingScene(Scene):
         # Colisão com o feixe sweep do StoneGolemBoss (laser azul visual)
         if self._boss_type_cache == "stone_golem" and self.entity_manager.boss:
             from ..entities.stone_golem_boss import StoneGolemBoss
+
             golem = cast(StoneGolemBoss, self.entity_manager.boss)
             beam = golem.get_sweep_beam()
             if beam and self.ship.invuln <= 0:
@@ -990,8 +992,8 @@ class PlayingScene(Scene):
                 # Distância do centro da nave à linha do feixe
                 sx = float(self.ship.rect.centerx)
                 sy = float(self.ship.rect.centery)
-                dx, dy  = ex - px, ey - py
-                len_sq  = dx * dx + dy * dy
+                dx, dy = ex - px, ey - py
+                len_sq = dx * dx + dy * dy
                 if len_sq > 0:
                     t = max(0.0, min(1.0, ((sx - px) * dx + (sy - py) * dy) / len_sq))
                     closest_x = px + t * dx
@@ -1016,7 +1018,11 @@ class PlayingScene(Scene):
 
         # Colisão com pedras orbitais do StoneGolemBoss (só causa dano em fase 'fired')
         for rock in self.entity_manager.orbital_rocks:
-            if rock.causes_damage and not rock.dead and self.ship.rect.colliderect(rock.rect):
+            if (
+                rock.causes_damage
+                and not rock.dead
+                and self.ship.rect.colliderect(rock.rect)
+            ):
                 rock.dead = True
                 self._handle_ship_hit()
                 break

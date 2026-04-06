@@ -1,130 +1,71 @@
-# Correção: Inimigos não morriam ao sair da tela em side-scroll
+Agora tenho visão completa do código. Suas 4 otimizações estão todas corretas e bem priorizadas. Deixa eu detalhar o que realmente acontece em cada uma e onde tem nuance que você pode não ter visto.
 
-## 🐛 Problema Identificado
+---
 
-No modo `side-scroll` (Mountains, City, Volcanic), os inimigos que saíam da tela pela esquerda **não eram contabilizados como mortos**, resultando em:
+## ✅ As 4 otimizações fazem sentido — com alguns detalhes importantes
 
-1. O contador de inimigos destruídos (`enemies_destroyed_in_level`) não avançava
-2. A fase só era considerada "passada" após o timer de limpeza de 20 segundos expirar
-3. Os inimigos continuavam acumulando em memória mesmo fora da tela
+### 1. Pre-bake do corpo (maior ganho)
 
-**Por que funcionava no Starfield (top-down) mas não nos outros mundos?**
+Sua análise está certa, mas tem uma complicação: o boss usa **jitter** (`_jitter_x`, `_jitter_y`) e **float** (`_current_float_y`), então o `ox/oy` muda todo frame. O blit do corpo pré-baked ainda funciona — você blita em `(ox, oy)` — mas as **linhas adjacentes ao olho** (`_EYE_ROW_ABOVE` e `_EYE_ROW_BELOW`) se deslocam com `eye_offset`, o que é o problema real.
 
-No Starfield, os inimigos caem pela parte inferior da tela (`enemy.y > screen_height`), e essa verificação funciona. Nos outros mundos (side-scroll), os inimigos vão para a esquerda (`enemy.x < -enemy.w`), mas havia um **bug crítico** na verificação.
+Solução limpa: pré-bake em **3 partes**:
+- `_body_surf_top` — linhas 0 até `EYE_ROW_ABOVE - 1` (estático)
+- `_body_surf_bottom` — linhas `EYE_ROW_BELOW + 1` até o fim (estático)
+- As 3 linhas do olho (above, eye, below) são redesenhadas por frame — são apenas ~15 pixels cada
 
-## 🔍 Causa Raiz REAL
+Isso elimina ~175 das ~190 chamadas `draw.rect` por frame.
 
-O arquivo `entity_manager.py` possui a função `_is_enemy_off_screen()`, mas ela tinha **DOIS problemas graves**:
+### 2. Pool do thruster
 
-### Problema 1: AttributeError silencioso
+Correto. Os 5 `pygame.Surface` são criados com tamanho variável (`w + 2, h + 2`), mas `w` decresce de `S*10` até 0 e `h` de `S*4` até `S`. Você pode pré-alocar uma surface do tamanho máximo (`S*10 + 2, S*4 + 2`) uma única vez e reusar com `fill((0,0,0,0))` + blit recortado. Cuidado: o `pygame.draw.rect(..., S)` usa borderless outline — precisa do tamanho exato ou o rect interno fica errado. A alternativa mais simples: uma lista de 5 surfaces no tamanho máximo, todas pré-alocadas no `__init__`.
 
-A função tentava acessar `enemy.w` diretamente:
+### 3. Surfaces do sweep (cone + beam)
 
-```python
-def _is_enemy_off_screen(self, enemy: Any) -> bool:
-    if self.is_side_scroll:
-        return enemy.x < -enemy.w  # ❌ ERRO! enemy.w pode não existir
-```
+Exato — são 1–2 alocações de tela inteira por frame durante o sweep. Pré-alocar como `self._cone_surf` e `self._beam_surf` no `__init__` e chamar `fill((0,0,0,0))` no início de cada draw é ganho direto. Vale notar: essas surfaces têm `SRCALPHA`, então o `fill` é necessário e barato comparado ao `Surface(...)`.
 
-Mas nem todos os inimigos têm o atributo `.w`! Alguns usam `rect.width`. Quando `enemy.w` não existe:
-- Python lança `AttributeError`
-- A exceção é silenciosamente ignorada ou retorna False
-- O inimigo nunca é marcado como fora da tela
+### 4. `_ChargeParticle.draw()` — surface por partícula
 
-**Evidência:** Em outras partes do código, o desenvolvedor usa `getattr(enemy, "w", 0)` com valor padrão, indicando que sabia que `.w` pode não existir!
+Aqui tem um detalhe do seu código: as partículas têm `size` variável (`randint(3, 6)`), então não dá um pool de tamanho único facilmente. Duas alternativas reais:
 
-### Problema 2: Função não era aplicada universalmente
+**a)** Usar `pygame.draw.rect` diretamente com `set_alpha()` na surface principal — mas `set_alpha` afeta a surface inteira, não funciona por rect.
 
-A função `_is_enemy_off_screen()` estava sendo usada **APENAS** para `ExplosiveMine`:
+**b)** Pre-alocar **uma surface por tamanho possível** (3 surfaces para sizes 3, 4, 5, 6) no `__init__` como dicionário `{size: Surface}`, reusar com `fill`. Isso reduz de ~150 alocações para 4 max.
 
-```python
-self.enemies = [
-    e
-    for e in self.enemies
-    if not e.dead and not (isinstance(e, ExplosiveMine) and e.is_off_screen())
-]
-```
+**c)** Mais simples ainda: `surface.set_at()` pixel a pixel — sem Surface auxiliar — mas perde o alpha suave.
 
-Todos os outros tipos de inimigos (meteoros, aliens, eye enemies) **não eram verificados**.
+A opção (b) é a melhor custo-benefício.
 
-## ✅ Solução Implementada
+---
 
-### Fix 1: Acesso seguro aos atributos de tamanho
+## 🔍 Outras otimizações que você não mencionou
 
-Corrigi a função `_is_enemy_off_screen()` para:
+**5. `OrbitalRock.draw()` — Surface por pedra por frame**
 
-1. **Usar `getattr` com fallback** para obter largura/altura
-2. **Verificar `rect.width/height`** se `.w/.h` não existir  
-3. **Usar valores padrão** (50) como último recurso
+Linha 508: `rock_surf = pygame.Surface((canvas_size, canvas_size), pygame.SRCALPHA)` — isso é criado **a cada frame para cada uma das 15 pedras**. Durante orbiting o shape nunca muda (mesmo `_size` e `S`). Pré-bake: criar a surface no `__init__` da `OrbitalRock` e reusar. Quando `phase == "fired"`, o `pygame.transform.rotate` já cria uma nova surface — isso é inevitável, mas só ocorre enquanto a pedra voa.
 
-```python
-def _is_enemy_off_screen(self, enemy: Any) -> bool:
-    # Obter largura do inimigo de forma segura
-    enemy_width = getattr(enemy, 'w', None)
-    if enemy_width is None:
-        rect = getattr(enemy, 'rect', None)
-        if rect is not None:
-            enemy_width = getattr(rect, 'width', 50)
-        else:
-            enemy_width = 50  # Fallback
-    
-    # Mesma lógica para altura...
-    
-    if self.is_side_scroll:
-        return enemy.x < -enemy_width  # ✅ Agora funciona!
-    else:
-        # ... verificações top-down
-```
+**6. Rastro de poeira da `OrbitalRock` — surface por ponto por frame**
 
-### Fix 2: Aplicar verificação a TODOS os inimigos
+Linha 502–504: cada ponto do `trail` cria uma `Surface((S*2, S*2), SRCALPHA)`. Com até 30–40 pontos ativos por pedra × 15 pedras, isso soma. A cor é constante por pedra (`self.color`) — pré-alocar uma surface por pedra e só mudar o alpha via `set_alpha()`.
 
-Adicionei verificação no método `cleanup()`:
+**7. `GolemMine.draw()` — 2 surfaces por frame por mina**
 
-```python
-def cleanup(self):
-    # Marcar inimigos fora da tela como mortos ANTES de liberar ao pool
-    for e in self.enemies:
-        if not e.dead and self._is_enemy_off_screen(e):
-            e.dead = True
-    
-    # Resto do cleanup...
-```
+Linha 198–202 e 223–238: glow e arc timer cada um cria uma `Surface` por frame. Como o raio máximo do glow é calculável (`r * 1.6 + r * 0.6 = r * 2.2`), dá pra pré-alocar no `__init__`.
 
-## 📊 Resultado Esperado
+**8. `RockShard.draw()` — surface por shard por frame**
 
-Após aplicar esta correção:
+Linha 310–312: glow `pygame.Surface((s*4, s*4), SRCALPHA)` criado por frame. Com até 16 shards por explosão de mine + shards do sweep, são muitas alocações. O `s = size // 2` é fixo por instância — pré-alocar no `__init__`.
 
-✅ **Starfield (top-down)**: Continua funcionando normalmente  
-✅ **Mountains/City/Volcanic (side-scroll)**: Agora funciona corretamente!  
-✅ Inimigos que saem da tela são marcados como `dead`  
-✅ O contador `enemies_destroyed_in_level` avança  
-✅ A fase progride sem esperar os 20 segundos  
-✅ Não há acúmulo de inimigos inativos em memória  
-✅ Não há mais `AttributeError` ao verificar `.w` inexistente  
+---
 
-## 🔧 Como Aplicar
+## Prioridade real de implementação
 
-1. Substitua o arquivo `entity_manager.py` original pelo `entity_manager_v2.py`
-2. O sistema detectará automaticamente inimigos fora da tela em **ambos os modos**
-3. Nenhuma outra alteração é necessária
-
-## 📝 Observações Técnicas
-
-### Por que o bug não aparecia no Starfield?
-
-No modo **top-down**, a primeira verificação é `enemy.y > screen_height`, que funciona **antes** de tentar acessar `enemy.w`. Então mesmo que o acesso a `.w` falhasse, os inimigos já eram removidos pela verificação do `y`.
-
-No modo **side-scroll**, a **única** verificação é `enemy.x < -enemy.w`, que falhava se `.w` não existisse.
-
-### Estrutura dos inimigos
-
-Diferentes inimigos têm diferentes estruturas:
-- Alguns têm `.w` e `.h` (width/height)
-- Outros têm apenas `.rect.width` e `.rect.height`
-- A solução agora suporta ambos os casos
-
-### Performance
-
-- Overhead mínimo: apenas chamadas `getattr` que são muito rápidas
-- Verificação ocorre uma vez por frame no `cleanup()`
-- Complexidade: O(n) linear nos inimigos ativos
+| Otimização | Impacto | Complexidade |
+|---|---|---|
+| Pre-bake corpo (split 3 partes) | Alto | Média |
+| `OrbitalRock` surface pré-baked | Alto | Baixa |
+| Pool sweep cone/beam | Médio | Baixa |
+| Pool thruster (5 surfaces) | Médio | Baixa |
+| Dict de surfaces por tamanho (partículas) | Médio | Baixa |
+| Rastro de poeira com `set_alpha` | Médio | Baixa |
+| `GolemMine` glow pré-alocado | Baixo | Baixa |
+| `RockShard` glow pré-alocado | Baixo | Baixa |

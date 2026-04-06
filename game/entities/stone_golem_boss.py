@@ -135,6 +135,14 @@ class GolemMine:
             self.RADIUS * 2,
         )
 
+        # ── Otimização: Pré-alocação de superfícies ──────────────────────────
+        r = self.RADIUS
+        max_glow_r = int(r * 2.2)  # r * 1.6 + 0.6 * r
+        self._glow_surf = pygame.Surface(
+            (max_glow_r * 2, max_glow_r * 2), pygame.SRCALPHA
+        )
+        self._arc_surf = pygame.Surface((r * 4, r * 4), pygame.SRCALPHA)
+
     # ------------------------------------------------------------------
     def update(self, dt: float) -> list["RockShard"]:
         """Retorna lista de RockShards criados neste frame (vazia até explodir)."""
@@ -191,15 +199,16 @@ class GolemMine:
         blink_freq = 4.0 + fuse_ratio * 14.0  # 4 Hz → 18 Hz
         blink_on = math.sin(self._pulse_t * blink_freq * math.pi * 2) > 0
 
-        # ── Glow pulsante ────────────────────────────────────────────────────
+        # ── Glow pulsante (Reutiliza Surface) ────────────────────────────────
         pulse = abs(math.sin(self._pulse_t * blink_freq * math.pi))
         glow_r = int(r * 1.6 + pulse * r * 0.6)
         glow_alpha = int(60 + pulse * 80)
-        glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+
+        self._glow_surf.fill((0, 0, 0, 0))
         pygame.draw.circle(
-            glow_surf, (*self._COLOR_RING, glow_alpha), (glow_r, glow_r), glow_r
+            self._glow_surf, (*self._COLOR_RING, glow_alpha), (glow_r, glow_r), glow_r
         )
-        surface.blit(glow_surf, (cx - glow_r, cy - glow_r))
+        surface.blit(self._glow_surf, (cx - glow_r, cy - glow_r))
 
         # ── Corpo da mina (pixel-art: cruz + quadrado central) ───────────────
         S = max(2, r // 3)
@@ -220,7 +229,7 @@ class GolemMine:
             remaining = 1.0 - fuse_ratio
             arc_end = int(remaining * 360)
             if arc_end > 2:
-                arc_surf = pygame.Surface((r * 4, r * 4), pygame.SRCALPHA)
+                self._arc_surf.fill((0, 0, 0, 0))
                 arc_col = (
                     int(255 * fuse_ratio + 60 * remaining),
                     int(200 * remaining),
@@ -228,14 +237,14 @@ class GolemMine:
                     200,
                 )
                 pygame.draw.arc(
-                    arc_surf,
+                    self._arc_surf,
                     arc_col,
                     (4, 4, r * 4 - 8, r * 4 - 8),
                     math.radians(90),
                     math.radians(90 + arc_end),
                     max(1, S),
                 )
-                surface.blit(arc_surf, (cx - r * 2, cy - r * 2))
+                surface.blit(self._arc_surf, (cx - r * 2, cy - r * 2))
 
 
 # Alias de retrocompatibilidade — entity_manager importa 'Boulder'
@@ -278,6 +287,11 @@ class RockShard:
             self.size * 2,
         )
 
+        # ── Otimização: Pré-alocação do glow ─────────────────────────────────
+        s = self.size // 2
+        self._glow_surf = pygame.Surface((s * 4, s * 4), pygame.SRCALPHA)
+        self._glow_surf.fill((*self.color, 60))
+
     def update(self, dt: float) -> None:
         self.x += self.vx * dt
         self.y += self.vy * dt
@@ -306,10 +320,10 @@ class RockShard:
         s = self.size // 2
         c = self.color
         core = (255, 255, 255)
-        # Camada externa (glow)
-        glow = pygame.Surface((s * 4, s * 4), pygame.SRCALPHA)
-        glow.fill((*c, 60))
-        surface.blit(glow, (cx - s * 2, cy - s * 2))
+
+        # Camada externa (glow) - Reutiliza Surface
+        surface.blit(self._glow_surf, (cx - s * 2, cy - s * 2))
+
         # Corpo principal do orbe
         pygame.draw.rect(surface, c, (cx - s, cy - s, s * 2, s * 2))
         # Núcleo brilhante
@@ -390,6 +404,20 @@ class OrbitalRock:
         # Rect de colisão — atualizado em update()
         hit = S * self._size
         self.rect = pygame.Rect(int(self.x) - hit, int(self.y) - hit, hit * 2, hit * 2)
+
+        # ── Otimização: Pré-bake do shape e rastro ───────────────────────────
+        canvas_size = (self._size + 2) * S * 2
+        self._rock_surf = pygame.Surface((canvas_size, canvas_size), pygame.SRCALPHA)
+        ox = canvas_size // 2 - (self._size * S) // 2
+        oy = canvas_size // 2 - S
+        if self._size == 2:
+            pygame.draw.rect(self._rock_surf, self.color, (ox, oy, S * 2, S * 2))
+        else:
+            pygame.draw.rect(self._rock_surf, self.color, (ox, oy, S * 3, S * 2))
+            pygame.draw.rect(self._rock_surf, self.color, (ox + S, oy - S, S, S))
+            pygame.draw.rect(self._rock_surf, self.color, (ox - S, oy + S, S, S))
+
+        self._dust_surf = pygame.Surface((S * 2, S * 2), pygame.SRCALPHA)
 
     # ------------------------------------------------------------------
     def _orbit_target(self) -> Tuple[float, float]:
@@ -499,27 +527,14 @@ class OrbitalRock:
 
         # ── 1. Rastro de poeira (apenas quando disparada) ──────────────────
         for tx, ty, alpha in self.trail:
-            dust = pygame.Surface((S * 2, S * 2), pygame.SRCALPHA)
-            dust.fill((*c, int(alpha * 0.6)))
-            surface.blit(dust, (int(tx) - S, int(ty) - S))
+            self._dust_surf.fill((*c, int(alpha * 0.6)))
+            surface.blit(self._dust_surf, (int(tx) - S, int(ty) - S))
 
-        # ── 2. Renderiza a pedra em uma Surface auxiliar ───────────────────
-        canvas_size = (self._size + 2) * S * 2
-        rock_surf = pygame.Surface((canvas_size, canvas_size), pygame.SRCALPHA)
-        ox = canvas_size // 2 - (self._size * S) // 2  # centro da pedra no canvas
-        oy = canvas_size // 2 - S  # alinhado verticalmente
-
-        if self._size == 2:
-            pygame.draw.rect(rock_surf, c, (ox, oy, S * 2, S * 2))
-        else:
-            pygame.draw.rect(rock_surf, c, (ox, oy, S * 3, S * 2))
-            pygame.draw.rect(rock_surf, c, (ox + S, oy - S, S, S))
-            pygame.draw.rect(rock_surf, c, (ox - S, oy + S, S, S))
-
-        # ── 3. Rotaciona apenas quando disparada ───────────────────────────
-        img = rock_surf
+        # ── 2. Usa shape pré-baked ─────────────────────────────────────────
         if self.phase == "fired":
-            img = pygame.transform.rotate(rock_surf, self.spin)
+            img = pygame.transform.rotate(self._rock_surf, self.spin)
+        else:
+            img = self._rock_surf
 
         rect = img.get_rect(center=(int(self.x), int(self.y)))
         surface.blit(img, rect)
@@ -556,6 +571,9 @@ class _ChargeParticle:
         self.py = pupil_y
         self.dead = False
 
+        # ── Otimização: Pré-alocação de superfície ──────────────────────────
+        self._surf = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
+
     def update(self, dt: float, pupil_x: float, pupil_y: float) -> None:
         self.dist -= self.radial_speed * dt
         speed_mul = 1.0 + (1.0 - _clamp(self.dist / self.start_dist, 0, 1)) * 2.0
@@ -570,10 +588,10 @@ class _ChargeParticle:
         alpha_ratio = _clamp(self.dist / self.start_dist * 2, 0, 1)
         if alpha_ratio < 0.05:
             return
-        s = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
+
         r, g, b = self.color
-        s.fill((r, g, b, int(alpha_ratio * 220)))
-        surface.blit(s, (int(self.px) - self.size, int(self.py) - self.size))
+        self._surf.fill((r, g, b, int(alpha_ratio * 220)))
+        surface.blit(self._surf, (int(self.px) - self.size, int(self.py) - self.size))
 
 
 class StoneGolemBoss:
@@ -623,6 +641,7 @@ class StoneGolemBoss:
         # ── FSM ──────────────────────────────────────────────────────────────
         self.fsm_state = "ENTERING"
         self.fsm_ticks = 0.0
+        self._prev_fsm_state = "ENTERING"
 
         # ── Olho ─────────────────────────────────────────────────────────────
         self.eye_growth = 0.0  # 0 = fechado, 1 = totalmente aberto
@@ -651,6 +670,11 @@ class StoneGolemBoss:
 
         # ── Minas de energia (ataque FIRE) ───────────────────────────────────
         self._mines: List[GolemMine] = []
+        self._fire_shots_count: int = 0
+        self._fire_shot_timer: float = 0.0
+        self._cycles_since_fire: int = (
+            0  # garante que FIRE ocorre a cada 3 ciclos no máximo
+        )
 
         # ── Particulas de carga ───────────────────────────────────────────────
         self._charge_particles: List[_ChargeParticle] = []
@@ -663,6 +687,25 @@ class StoneGolemBoss:
 
         self.emp_linger_timer = 0.0
 
+        # ── Otimização: Pré-alocação e Pre-bake ──────────────────────────────
+        self._body_surf_top: Optional[pygame.Surface] = None
+        self._body_surf_bottom: Optional[pygame.Surface] = None
+        self._pre_bake_body()
+
+        self._thruster_surfs = [
+            pygame.Surface((S * 10 + 2, S * 4 + 2), pygame.SRCALPHA) for _ in range(5)
+        ]
+
+        self._cone_surf = pygame.Surface(
+            (self._screen_w, self._screen_h), pygame.SRCALPHA
+        )
+        self._beam_surf = pygame.Surface(
+            (self._screen_w, self._screen_h), pygame.SRCALPHA
+        )
+        self._halo_surf = pygame.Surface(
+            (self._screen_w, self._screen_h), pygame.SRCALPHA
+        )
+
         logger.debug(
             "StoneGolemBoss criado em (%.0f, %.0f) | HP=%d | dif=%.2f",
             self.x,
@@ -670,6 +713,33 @@ class StoneGolemBoss:
             self.max_health,
             difficulty_multiplier,
         )
+
+    def _pre_bake_body(self) -> None:
+        """Cria superfícies pré-renderizadas para as partes estáticas do boss."""
+        S = self.SCALE
+        # Topo: linhas 0 até EYE_ROW_ABOVE - 1 (linhas 0-5)
+        top_h = _EYE_ROW_ABOVE * S
+        self._body_surf_top = pygame.Surface((self.w, top_h), pygame.SRCALPHA)
+        for row_idx in range(_EYE_ROW_ABOVE):
+            for col_idx, key in enumerate(_PIXEL_MAP[row_idx]):
+                if key:
+                    pygame.draw.rect(
+                        self._body_surf_top, _C[key], (col_idx * S, row_idx * S, S, S)
+                    )
+
+        # Base: linhas EYE_ROW_BELOW + 1 até o fim (linhas 9-21)
+        bottom_start_row = _EYE_ROW_BELOW + 1
+        bottom_h = (_PIXEL_ROWS - bottom_start_row) * S
+        self._body_surf_bottom = pygame.Surface((self.w, bottom_h), pygame.SRCALPHA)
+        for row_idx in range(bottom_start_row, _PIXEL_ROWS):
+            draw_row = row_idx - bottom_start_row
+            for col_idx, key in enumerate(_PIXEL_MAP[row_idx]):
+                if key:
+                    pygame.draw.rect(
+                        self._body_surf_bottom,
+                        _C[key],
+                        (col_idx * S, draw_row * S, S, S),
+                    )
 
     # =========================================================================
     # COORDENADAS COMPARTILHADAS (updateShared do JS)
@@ -701,6 +771,7 @@ class StoneGolemBoss:
 
     def _change_fsm(self, new_state: str) -> None:
         old = self.fsm_state
+        self._prev_fsm_state = old  # rastreia origem para CLOSING
         self.fsm_state = new_state
         self.fsm_ticks = 0.0
         logger.debug("StoneGolemBoss FSM: %s → %s", old, new_state)
@@ -711,6 +782,10 @@ class StoneGolemBoss:
         if new_state == "FIRE":
             self._fire_shots_count = 0
             self._fire_shot_timer = 0.0
+            self._cycles_since_fire = 0
+
+        if new_state == "ORB_SPAWN":
+            self._orb_rotation = 0.0
 
         if new_state == "SWEEP_CHARGE":
             self._sweep_base_angle = math.pi / 2  # Posição segura inicial
@@ -881,11 +956,14 @@ class StoneGolemBoss:
             self.eye_growth = 0.0
             if t > 2.0:
                 r = random.random()
-                if r < 0.25:
+                # Após 2 ciclos sem FIRE, força o ataque de minas no próximo SCAN
+                if self._cycles_since_fire >= 2:
                     self._change_fsm("OPENING")
-                elif r < 0.50:
+                elif r < 0.40:
+                    self._change_fsm("OPENING")
+                elif r < 0.60:
                     self._change_fsm("EARTH_SHAKE")
-                elif r < 0.75:
+                elif r < 0.80:
                     self._change_fsm("ORB_SPAWN")
                 else:
                     self._change_fsm("SWEEP_CHARGE")
@@ -953,6 +1031,7 @@ class StoneGolemBoss:
                 r.phase == "fired" and r.dead for r in self._orbital_rocks
             )
             if all_gone or t > 5.0:
+                self._cycles_since_fire += 1
                 self._change_fsm("SCAN")
 
         # ── ORBES ─────────────────────────────────────────────────────────────
@@ -963,15 +1042,21 @@ class StoneGolemBoss:
 
         elif state == "ORB_HOLD":
             px, py = self._pupil_pos()
-            # Dispara shards a cada 0.5 segundos
+            # Dispara 4 shards (90° de espaçamento) a cada 0.5 s, com rotação
+            # progressiva de 22.5° por salva — o "corredor seguro" gira
+            # continuamente, forçando o jogador a se mover em vez de ficar parado.
             if int(t * 2) != int((t - dt) * 2):
-                for angle_deg in range(0, 360, 45):
+                for i in range(4):
+                    angle_deg = i * 90.0 + self._orb_rotation
                     new_shards.append(
                         RockShard(
                             px, py, angle_deg, speed_mult=1.2, color=_C["EYE_IRIS_ORB"]
                         )
                     )
-            if t > 5.0:
+                self._orb_rotation += (
+                    22.5  # metade do espaçamento → nunca repete posição
+                )
+            if t > 8.0:
                 self._change_fsm("CLOSING")
 
         # ── SWEEP ─────────────────────────────────────────────────────────────
@@ -1046,6 +1131,11 @@ class StoneGolemBoss:
             self.eye_growth = 1.0 - _ease_out_cubic(_clamp(t / 0.6, 0, 1))
             if self.eye_growth <= 0.01:
                 self.eye_growth = 0.0
+                # Atualiza contador de ciclos sem FIRE
+                if self._prev_fsm_state == "FIRE":
+                    self._cycles_since_fire = 0
+                else:
+                    self._cycles_since_fire += 1
                 self._change_fsm("SCAN")
 
     # =========================================================================
@@ -1089,10 +1179,16 @@ class StoneGolemBoss:
             if rock.behind_boss:
                 rock.draw(surface)
 
-        # ── Corpo pixel-art ───────────────────────────────────────────────────
+        # ── 1. Corpo pré-baked (Topo e Base) ───────────────────────────────────
+        if self._body_surf_top:
+            surface.blit(self._body_surf_top, (ox, oy))
+        if self._body_surf_bottom:
+            surface.blit(self._body_surf_bottom, (ox, oy + (_EYE_ROW_BELOW + 1) * S))
+
+        # ── 2. Linhas adjacentes ao olho (redesenhadas por frame) ─────────────
         eye_offset = int(self.eye_growth * S)
-        for row_idx, row in enumerate(_PIXEL_MAP):
-            for col_idx, key in enumerate(row):
+        for row_idx in (_EYE_ROW_ABOVE, _EYE_ROW, _EYE_ROW_BELOW):
+            for col_idx, key in enumerate(_PIXEL_MAP[row_idx]):
                 if key is None:
                     continue
                 if row_idx == _EYE_ROW and _EYE_COL_START <= col_idx <= _EYE_COL_END:
@@ -1134,10 +1230,6 @@ class StoneGolemBoss:
         for rock in self._orbital_rocks:
             if not rock.behind_boss:
                 rock.draw(surface)
-
-        # ── Minas de energia ──────────────────────────────────────────────────
-        for mine in self._mines:
-            mine.draw(surface)
 
         # ── Barra de vida ─────────────────────────────────────────────────────
         self._draw_health_bar(surface, ox, oy)
@@ -1206,13 +1298,12 @@ class StoneGolemBoss:
                 color = (157, 212, 240)
             else:
                 color = (91, 159, 200)
-            try:
-                rs = pygame.Surface((w + 2, h + 2), pygame.SRCALPHA)
-                rs.fill((0, 0, 0, 0))
-                pygame.draw.rect(rs, (*color, alpha), (0, 0, w, h), S)
-                surface.blit(rs, (cx - w // 2, y - h // 2))
-            except Exception:
-                pass
+
+            # ── Otimização: Reutiliza Surface pré-alocada ──────────────────
+            rs = self._thruster_surfs[i]
+            rs.fill((0, 0, 0, 0))
+            pygame.draw.rect(rs, (*color, alpha), (0, 0, w, h), S)
+            surface.blit(rs, (cx - w // 2, y - h // 2))
 
     def _draw_sweep_cone(self, surface: pygame.Surface) -> None:
         px, py = self._pupil_pos()
@@ -1230,8 +1321,8 @@ class StoneGolemBoss:
         if base_angle is None or not getattr(self, "_sweep_lock_done", False):
             base_angle = getattr(self, "_sweep_base_angle", math.pi / 2)
 
-        # Usamos uma superfície do tamanho da tela para o alpha blending do polígono
-        cone_surf = pygame.Surface((self._screen_w, self._screen_h), pygame.SRCALPHA)
+        # ── Otimização: Reutiliza Surface pré-alocada ──────────────────
+        self._cone_surf.fill((0, 0, 0, 0))
         r, g, b = _C["SWEEP_BEAM"]
 
         pts = [
@@ -1245,8 +1336,8 @@ class StoneGolemBoss:
                 int(py + math.sin(base_angle + half) * cone_len),
             ),
         ]
-        pygame.draw.polygon(cone_surf, (r, g, b, alpha), pts)
-        surface.blit(cone_surf, (0, 0))
+        pygame.draw.polygon(self._cone_surf, (r, g, b, alpha), pts)
+        surface.blit(self._cone_surf, (0, 0))
 
     def get_sweep_beam(self) -> Optional[Tuple[float, float, float, float]]:
         """
@@ -1271,16 +1362,16 @@ class StoneGolemBoss:
         ey = py + math.sin(angle) * beam_len
         r, g, b = _C["SWEEP_BEAM"]
 
-        # Halo (brilho externo)
-        halo_surf = pygame.Surface((self._screen_w, self._screen_h), pygame.SRCALPHA)
+        # ── Otimização: Reutiliza Surfaces pré-alocadas ──────────────────
+        self._halo_surf.fill((0, 0, 0, 0))
         pygame.draw.line(
-            halo_surf,
+            self._halo_surf,
             (r, g, b, 77),
             (int(px), int(py)),
             (int(ex), int(ey)),
             self.SCALE * 3,
         )
-        surface.blit(halo_surf, (0, 0))
+        surface.blit(self._halo_surf, (0, 0))
 
         pygame.draw.line(
             surface,

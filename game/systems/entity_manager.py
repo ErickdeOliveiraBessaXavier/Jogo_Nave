@@ -40,7 +40,7 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import StoneGolemBoss, Boulder, RockShard, OrbitalRock
+from ..entities.stone_golem_boss import Boulder, OrbitalRock, RockShard, StoneGolemBoss
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
@@ -70,7 +70,9 @@ class EntityManager:
         self.powerups: list[PowerUp] = []
         self.stars: list[Star] = []  # Estrelas coletáveis
         self.floating_scores: list[FloatingScore] = []
-        self.boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss | None = None
+        self.boss: (
+            Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss | None
+        ) = None
         self.mini_ships: list[MiniShip] = []
         self.mini_ship_bullets: list[MiniShipBullet] = []
         self.formations: list[Formation] = []  # Nova lista para formações
@@ -460,7 +462,9 @@ class EntityManager:
                 self.boss.update(enemy_dt, self)
             # StoneGolemBoss retorna (List[Boulder], List[RockShard], List[OrbitalRock])
             elif isinstance(self.boss, StoneGolemBoss):
-                new_boulders, new_shards, orbital_rocks = self.boss.update(enemy_dt, player_x, player_y)
+                new_boulders, new_shards, orbital_rocks = self.boss.update(
+                    enemy_dt, player_x, player_y
+                )
                 if new_boulders:
                     self.boulders.extend(new_boulders)
                 if new_shards:
@@ -640,7 +644,9 @@ class EntityManager:
             elif isinstance(self.boss, GiantMeteorBoss):
                 self.boss.update(dt, self)
             elif isinstance(self.boss, StoneGolemBoss):
-                new_boulders, new_shards, orbital_rocks = self.boss.update(dt, player_x, player_y)
+                new_boulders, new_shards, orbital_rocks = self.boss.update(
+                    dt, player_x, player_y
+                )
                 if new_boulders:
                     self.boulders.extend(new_boulders)
                 if new_shards:
@@ -961,8 +967,12 @@ class EntityManager:
         self.cannon_mines = [
             m for m in self.cannon_mines if not m.dead
         ]  # Limpar minas mortas
-        self.boulders = [b for b in self.boulders if not b.dead]  # Limpar boulders mortos
-        self.rock_shards = [s for s in self.rock_shards if not s.dead]  # Limpar shards mortos
+        self.boulders = [
+            b for b in self.boulders if not b.dead
+        ]  # Limpar boulders mortos
+        self.rock_shards = [
+            s for s in self.rock_shards if not s.dead
+        ]  # Limpar shards mortos
         # orbital_rocks é gerenciada pelo boss — apenas filtra as mortas da cópia local
         self.orbital_rocks = [r for r in self.orbital_rocks if not r.dead]
         self._grid_needs_rebuild = True
