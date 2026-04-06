@@ -1045,12 +1045,12 @@ class StoneGolemBoss:
             # Dispara 4 shards (90° de espaçamento) a cada 0.5 s, com rotação
             # progressiva de 22.5° por salva — o "corredor seguro" gira
             # continuamente, forçando o jogador a se mover em vez de ficar parado.
-            if int(t * 2) != int((t - dt) * 2):
+            if int(t * 2.5) != int((t - dt) * 2):
                 for i in range(4):
                     angle_deg = i * 90.0 + self._orb_rotation
                     new_shards.append(
                         RockShard(
-                            px, py, angle_deg, speed_mult=1.2, color=_C["EYE_IRIS_ORB"]
+                            px, py, angle_deg, speed_mult=5, color=_C["EYE_IRIS_ORB"]
                         )
                     )
                 self._orb_rotation += (
