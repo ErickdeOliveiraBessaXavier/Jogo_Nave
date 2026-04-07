@@ -12,7 +12,9 @@ if TYPE_CHECKING:
     from ..entities.eye_enemy import EyeEnemy
     from ..entities.square_minion_boss import SquareMinionBoss
 
-EnemyType = Union["Meteor", "Alien", "ExplosiveMine", "EyeEnemy", "SquareMinionBoss", "ElementalRobot"]
+EnemyType = Union[
+    "Meteor", "Alien", "ExplosiveMine", "EyeEnemy", "SquareMinionBoss", "ElementalRobot"
+]
 
 
 class MineState(Enum):

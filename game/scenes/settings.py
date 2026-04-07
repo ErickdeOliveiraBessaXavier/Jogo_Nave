@@ -728,9 +728,7 @@ class SettingsScene(Scene):
         super().__init__(app)
         self.return_to_game = return_to_game  # Se True, volta para o jogo
         self.r = app.renderer  # Usar renderer compartilhado
-        self.view = SettingsView(
-            on_back=self._on_back, renderer=self.r
-        )
+        self.view = SettingsView(on_back=self._on_back, renderer=self.r)
 
         # Sistema de transição
         self.transitioning = False

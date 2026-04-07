@@ -130,6 +130,7 @@ LEVEL_THEMES = {
             "alien": 0.5,
             "eye": 0.3,
             "square_minion_boss": 0.1,
+            "elemental_robot": 0.2,
         },
         spawn_rate_multiplier=1.3,
         enemies_multiplier=1.2,
@@ -143,6 +144,7 @@ LEVEL_THEMES = {
             "alien": 3.0,
             "eye": 1.0,
             "square_minion_boss": 0.2,
+            "elemental_robot": 0.1,
         },
         spawn_rate_multiplier=1.0,
         enemies_multiplier=1.0,
@@ -156,6 +158,7 @@ LEVEL_THEMES = {
             "alien": 0.5,
             "eye": 3.0,
             "square_minion_boss": 0.1,
+            "elemental_robot": 0.1,
         },
         spawn_rate_multiplier=0.8,
         enemies_multiplier=0.9,
@@ -169,6 +172,7 @@ LEVEL_THEMES = {
             "alien": 1.0,
             "eye": 0.5,
             "square_minion_boss": 0.1,
+            "elemental_robot": 0.1,
         },
         spawn_rate_multiplier=1.0,
         enemies_multiplier=1.0,
@@ -182,6 +186,7 @@ LEVEL_THEMES = {
             "alien": 2.0,
             "eye": 1.0,
             "square_minion_boss": 0.2,
+            "elemental_robot": 0.1,
         },
         spawn_rate_multiplier=0.9,
         enemies_multiplier=0.85,
@@ -195,6 +200,7 @@ LEVEL_THEMES = {
             "alien": 0.0,
             "eye": 0.0,
             "square_minion_boss": 0.0,
+            "elemental_robot": 0.0,
         },
         spawn_rate_multiplier=1.4,  # Reduzido de 2.0 para 1.4 (mais balanceado)
         enemies_multiplier=1.3,  # Reduzido de 1.8 para 1.3 (menos frustrante)
@@ -208,6 +214,7 @@ LEVEL_THEMES = {
             "alien": 1.0,
             "eye": 1.0,
             "square_minion_boss": 0.1,
+            "elemental_robot": 0.15,
         },
         spawn_rate_multiplier=1.0,
         enemies_multiplier=1.0,
@@ -370,9 +377,9 @@ class ProceduralLevelGenerator:
         self.difficulty_curves = DifficultyCurves()
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
-        self._difficulty_cache: dict[
-            Union[int, str], float
-        ] = {}  # Cache for difficulty and score multiplier calculations
+        self._difficulty_cache: dict[Union[int, str], float] = (
+            {}
+        )  # Cache for difficulty and score multiplier calculations
 
     # OPT #6: Cache últimos 50 níveis gerados para não recalcular
     @lru_cache(maxsize=50)

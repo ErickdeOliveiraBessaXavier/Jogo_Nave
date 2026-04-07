@@ -837,9 +837,7 @@ class UpgradesSelectionScene(Scene):
             border_color = (
                 colors.YELLOW
                 if is_hovered
-                else (80, 80, 80)
-                if locked_by_stars
-                else colors.GRAY
+                else (80, 80, 80) if locked_by_stars else colors.GRAY
             )
             border_style = 2 if equipped_type else 1
 

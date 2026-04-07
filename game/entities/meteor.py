@@ -210,7 +210,7 @@ class Meteor:
         self.rotation += (
             self.rotation_speed * dt
         )  # FIX: multiplicar por dt para suavidade
-        
+
         # Verificar se saiu da tela (lógica diferente por modo)
         if is_side_scroll:
             # Side-scroll: Sair apenas pela esquerda (x < -self.w)
@@ -293,7 +293,7 @@ class Meteor:
         parent_speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
         # Garantir velocidade mínima de dispersão (200 pixels/s) + velocidade do pai
         base_speed = max(200.0, parent_speed * 0.8)
-        
+
         base_angle_rad = math.radians(random.uniform(0, 360))
         half_spread_rad = math.radians(Config.FRAGMENT_SPREAD / 2)
         size_offset_x = self.size * 0.5
@@ -314,7 +314,7 @@ class Meteor:
             # Velocidade com variação (0.8 a 1.3)
             speed = base_speed * random.uniform(0.8, 1.3)
             vx = cos_ang * speed + self.vx * 0.3  # Herdar 30% da velocidade do pai
-            
+
             # Em side-scroll, permitir movimento vertical livre (sem viés)
             # Em top-down, manter viés de gravidade (para baixo)
             if is_side_scroll:
@@ -322,7 +322,9 @@ class Meteor:
                 vy = sin_ang * speed + self.vy * 0.2  # Herdar 20% da velocidade do pai
             else:
                 # Top-down: viés para baixo (gravidade)
-                vy = abs(sin_ang * speed) + self.vy * 0.2 + 50.0  # Adicionar gravidade base
+                vy = (
+                    abs(sin_ang * speed) + self.vy * 0.2 + 50.0
+                )  # Adicionar gravidade base
 
             # posição (reutilizar cos_ang, sin_ang)
             fx = cx + cos_ang * size_offset_x - s

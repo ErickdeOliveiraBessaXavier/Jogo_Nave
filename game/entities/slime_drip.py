@@ -508,9 +508,9 @@ class SlimeDripPool:
         min_drip_size = 0.5  # Gotas muito pequenas são ignoradas
 
         # Batch rendering: coletar todos os círculos visíveis para desenhar de uma vez
-        filled_circles: List[
-            Tuple[Tuple[int, int, int, int], Tuple[int, int], int]
-        ] = []  # Gotas preenchidas
+        filled_circles: List[Tuple[Tuple[int, int, int, int], Tuple[int, int], int]] = (
+            []
+        )  # Gotas preenchidas
         outline_circles: List[
             Tuple[Tuple[int, int, int, int], Tuple[int, int], int]
         ] = []  # Partículas órfãs (bordas apenas)

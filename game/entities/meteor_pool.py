@@ -80,7 +80,7 @@ class MeteorPool:
         """
         if is_side_scroll is not None:
             self.is_side_scroll = is_side_scroll
-        
+
         for meteor in self.active[:]:  # Copia a lista para iterar com segurança
             meteor.update(dt, self.is_side_scroll)
             if meteor.dead:

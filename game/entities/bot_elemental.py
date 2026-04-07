@@ -442,7 +442,11 @@ class ElementalRobot:
         self._orb_speed_mult = 1.0 + (difficulty_multiplier - 1.0) * 0.3
 
         # Velocidade de deriva horizontal
-        self._drift_vx = self._DRIFT_SPEED * random.choice([-1, 1]) * (1.0 + (difficulty_multiplier - 1.0) * 0.2)
+        self._drift_vx = (
+            self._DRIFT_SPEED
+            * random.choice([-1, 1])
+            * (1.0 + (difficulty_multiplier - 1.0) * 0.2)
+        )
 
         # ── FSM ──────────────────────────────────────────────────────────────
         self.fsm_state = "ENTERING"

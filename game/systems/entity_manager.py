@@ -55,12 +55,19 @@ class EntityManager:
         self.is_side_scroll = is_side_scroll  # NOVO: Modo de jogo
         self.bullets: list[Bullet] = []
         self.emp_waves: list[EMPWave] = []  # Ondas visuais do EMP
-        self.energy_orbs: list[EnergyOrb] = []  # Projéteis do ElementalRobot (mini-boss)
-        self.explosive_effects: list[
-            ExplosiveEffect
-        ] = []  # Efeitos visuais de explosão de área
+        self.energy_orbs: list[EnergyOrb] = (
+            []
+        )  # Projéteis do ElementalRobot (mini-boss)
+        self.explosive_effects: list[ExplosiveEffect] = (
+            []
+        )  # Efeitos visuais de explosão de área
         self.enemies: list[
-            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot
+            Meteor
+            | Alien
+            | ExplosiveMine
+            | EyeEnemy
+            | SquareMinionBoss
+            | ElementalRobot
         ] = []
         self.alien_bullets: list[AlienBullet] = []
         self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
@@ -83,7 +90,8 @@ class EntityManager:
         self.rock_shards: list[RockShard] = []  # Fragmentos de pedra do StoneGolemBoss
         self.orbital_rocks: list[OrbitalRock] = []  # Pedras orbitais do StoneGolemBoss
         self._grid_needs_rebuild = True
-
+        self._cached_formation_enemies: list[Any] = []
+        self._cached_all_enemies: list[Any] = []
         self.air_strike_bombs: list[AirStrikeBomb] = []  # Bombas do bombardeio aéreo
         self.cannon_towers: list[CannonTower] = []  # Torres de canhão
         self.cannon_mines: list[CannonMine] = []  # Minas das torres
@@ -93,7 +101,12 @@ class EntityManager:
         )  # Pool de meteoros
         self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
         self.enemy_spatial_grid: SpatialGrid[
-            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot
+            Meteor
+            | Alien
+            | ExplosiveMine
+            | EyeEnemy
+            | SquareMinionBoss
+            | ElementalRobot
         ] = SpatialGrid()  # Grid espacial para inimigos
         self.spike_spatial_grid: SpatialGrid[Spike] = (
             SpatialGrid()
@@ -689,7 +702,7 @@ class EntityManager:
         entity_lists: list[list[Any]] = [
             self.bullets,
             self.alien_bullets,
-            self.energy_orbs,      # Projéteis do ElementalRobot (mini-boss)
+            self.energy_orbs,  # Projéteis do ElementalRobot (mini-boss)
             self.player_lasers,  # Lasers do jogador
             self.boss_squares,  # Quadrados do boss
             self.eye_lasers,
@@ -791,9 +804,11 @@ class EntityManager:
         sh = screen.get_height() if screen else 900
 
         spawn_x = x if x is not None else sw / 2 - 72  # centralizado na tela
-        spawn_y = y if y is not None else sh * 0.15     # 15% do topo
+        spawn_y = y if y is not None else sh * 0.15  # 15% do topo
 
-        robot = ElementalRobot(spawn_x, spawn_y, difficulty_multiplier=difficulty_multiplier)
+        robot = ElementalRobot(
+            spawn_x, spawn_y, difficulty_multiplier=difficulty_multiplier
+        )
         self.enemies.append(robot)
         return robot
 
