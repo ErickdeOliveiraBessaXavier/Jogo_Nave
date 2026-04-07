@@ -7,14 +7,14 @@ from typing import Any, Callable, Dict, Optional, Protocol
 try:
     # Prefer consistent config access via proxy
     from .config import config as Config
-except Exception:  # pragma: no cover - defensive fallback for isolated tests
+except ImportError:  # pragma: no cover - defensive fallback for isolated tests
     Config = None  # type: ignore
 
 try:
     from .upgrades_config import EMP_BASE_DURATION
 
     _emp_base_duration = EMP_BASE_DURATION
-except Exception:
+except ImportError:
     _emp_base_duration = 10.0  # fallback
 
 
@@ -144,7 +144,7 @@ class ActiveUpgrade:
                 self.on_expire(ctx)
 
     # ----- Hooks for subclasses -----------------------------------------
-    def additional_can_activate(self, ctx: UpgradeContext) -> bool:
+    def additional_can_activate(self, _ctx: UpgradeContext) -> bool:
         return True
 
     def allows_refresh(self) -> bool:
@@ -158,14 +158,14 @@ class ActiveUpgrade:
         try:
             if hasattr(ctx, "sound_manager"):
                 ctx.sound_manager.play_upgrade_activate()
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
     def on_denied(self, ctx: UpgradeContext) -> None:
         try:
             if hasattr(ctx, "sound_manager"):
                 ctx.sound_manager.play_upgrade_denied()
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
     def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
@@ -184,11 +184,11 @@ class ActiveUpgrade:
                 rules: Any = ctx.difficulty_settings.get("special_rules", [])
                 if "no_powerups" in rules:
                     cd *= 1.5  # MVP: +50% cooldown
-        except Exception:
+        except (AttributeError, TypeError, KeyError):
             pass
         return cd
 
-    def get_effective_duration(self, ctx: Optional[UpgradeContext]) -> float:
+    def get_effective_duration(self, _ctx: Optional[UpgradeContext]) -> float:
         return self.meta.base_duration
 
     # ----- UI helpers ----------------------------------------------------
@@ -251,7 +251,7 @@ class ShieldBurstUpgrade(ActiveUpgrade):
             try:
                 ship.activate_shield(duration, shield_hp=1)
                 return
-            except Exception:
+            except (AttributeError, TypeError):
                 pass
 
     def update(self, dt: float, ctx: Optional[UpgradeContext] = None) -> None:
@@ -319,7 +319,7 @@ class HealUpgrade(ActiveUpgrade):
                 # Se a cena espelha `lives`, sincronizar
                 if scene and hasattr(scene, "lives"):
                     scene.lives = getattr(scene, "lives", 0) + 1
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
 
@@ -336,7 +336,7 @@ class EMPUpgrade(ActiveUpgrade):
             from .upgrades_config import EMP_SLOW_FACTOR
 
             slow_factor = float(EMP_SLOW_FACTOR)
-        except Exception:
+        except (AttributeError, TypeError):
             slow_factor = 0.4  # fallback
 
         # Spawnar onda visual do EMP
@@ -346,7 +346,7 @@ class EMPUpgrade(ActiveUpgrade):
                 center_x = ship.x + ship.w / 2
                 center_y = ship.y + ship.h / 2
                 em.spawn_emp_wave(center_x, center_y)
-            except Exception:
+            except (AttributeError, TypeError):
                 pass
 
         # Preferir API dedicada, se existir
@@ -354,14 +354,14 @@ class EMPUpgrade(ActiveUpgrade):
             try:
                 em.apply_emp(duration=duration, slow_factor=slow_factor)
                 return
-            except Exception:
+            except (AttributeError, TypeError):
                 pass
         # Fallback simples: marcar efeito no manager; sistema de update deve respeitar se implementado
         try:
             setattr(em, "emp_active", True)
             setattr(em, "emp_slow_factor", slow_factor)
             setattr(em, "emp_timer", duration)
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
     def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
@@ -376,7 +376,7 @@ class EMPUpgrade(ActiveUpgrade):
                 setattr(em, "emp_active", False)
                 setattr(em, "emp_slow_factor", 1.0)
                 setattr(em, "emp_timer", 0.0)
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
 
@@ -392,12 +392,11 @@ class HomingShotUpgrade(ActiveUpgrade):
         duration = self.get_effective_duration(ctx)
 
         try:
-            from .upgrades_config import (HOMING_FIRE_RATE_PENALTY,
-                                          HOMING_SPEED_PENALTY)
+            from .upgrades_config import HOMING_FIRE_RATE_PENALTY, HOMING_SPEED_PENALTY
 
             speed_penalty = float(HOMING_SPEED_PENALTY)
             fire_rate_penalty = float(HOMING_FIRE_RATE_PENALTY)
-        except Exception:
+        except (AttributeError, TypeError):
             speed_penalty = 0.75  # 75% da velocidade normal
             fire_rate_penalty = 1.2  # 20% mais lento para atirar
 
@@ -405,7 +404,7 @@ class HomingShotUpgrade(ActiveUpgrade):
         if hasattr(ship, "activate_homing_shots"):
             try:
                 ship.activate_homing_shots(duration, speed_penalty, fire_rate_penalty)
-            except Exception:
+            except (AttributeError, TypeError):
                 pass
         else:
             # Fallback: definir flags na nave
@@ -419,7 +418,7 @@ class HomingShotUpgrade(ActiveUpgrade):
                     setattr(ship, "original_speed", getattr(ship, "speed", 5))
                 # Aplicar penalidade de velocidade
                 ship.speed = getattr(ship, "original_speed", 5) * speed_penalty
-            except Exception:
+            except (AttributeError, TypeError):
                 pass
 
     def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
@@ -437,7 +436,7 @@ class HomingShotUpgrade(ActiveUpgrade):
                 # Restaurar velocidade original
                 if hasattr(ship, "original_speed"):
                     ship.speed = getattr(ship, "original_speed", 5)
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
 
@@ -460,13 +459,13 @@ class LaserShotUpgrade(ActiveUpgrade):
                 ship.activate_orbital_lasers(
                     0
                 )  # Parâmetro ignorado, usa sistema de cargas
-            except Exception:
+            except (AttributeError, TypeError):
                 pass
         else:
             # Fallback: definir flags na nave
             try:
                 setattr(ship, "orbital_lasers_active", True)
-            except Exception:
+            except (AttributeError, TypeError):
                 pass
 
     def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
@@ -527,14 +526,14 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
         if hasattr(ship, "activate_explosive_shots"):
             try:
                 ship.activate_explosive_shots(charges)
-            except Exception:
+            except (AttributeError, TypeError):
                 pass
         else:
             # Fallback: definir flags na nave
             try:
                 setattr(ship, "explosive_shots_active", True)
                 setattr(ship, "explosive_shots_remaining", charges)
-            except Exception:
+            except (AttributeError, TypeError):
                 pass
 
     def update(self, dt: float, ctx: Optional[UpgradeContext] = None) -> None:

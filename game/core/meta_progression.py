@@ -12,8 +12,11 @@ import pygame
 from ..core.difficulty import DifficultyPreset
 from ..core.levels import LevelConfig
 from ..core.upgrades import UpgradeType
-from ..core.upgrades_config import (DEFAULT_UNLOCKED, INITIAL_UNLOCKED_SLOTS,
-                                    UPGRADE_SLOT_COUNT)
+from ..core.upgrades_config import (
+    DEFAULT_UNLOCKED,
+    INITIAL_UNLOCKED_SLOTS,
+    UPGRADE_SLOT_COUNT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1043,7 +1046,8 @@ class PlayerProfile:
                         for name in cast(List[Any], unlocked_raw):
                             try:
                                 parsed.add(UpgradeType[name])
-                            except Exception:
+                            except KeyError:
+                                logger.warning(f"Skipping unknown upgrade: {name}")
                                 continue
                         # Fazer merge com DEFAULT_UNLOCKED para adicionar novos upgrades
                         # Isso garante que upgrades novos sejam automaticamente desbloqueados
@@ -1066,15 +1070,16 @@ class PlayerProfile:
                                 continue
                             try:
                                 slots.append(UpgradeType[item])
-                            except Exception:
+                            except KeyError:
                                 slots.append(None)
+                                logger.warning(f"Skipping unknown upgrade: {item}")
                         # Completar tamanho de slots
                         while len(slots) < UPGRADE_SLOT_COUNT:
                             slots.append(None)
                         self.upgrade_loadout = slots
                     else:
                         self.upgrade_loadout = [None] * UPGRADE_SLOT_COUNT
-                except Exception:
+                except (KeyError, ValueError, TypeError):
                     # Em caso de erro, usar defaults
                     self.unlocked_upgrades = set(DEFAULT_UNLOCKED)
                     self.upgrade_loadout = [None] * UPGRADE_SLOT_COUNT
@@ -1134,7 +1139,7 @@ class PlayerProfile:
                                 pygame.K_9,
                             ]
                             self.upgrade_keybindings = defaults[:UPGRADE_SLOT_COUNT]
-                    except Exception:
+                    except (KeyError, ValueError, TypeError, IndexError):
                         defaults: List[int] = [
                             pygame.K_1,
                             pygame.K_2,
@@ -1154,7 +1159,7 @@ class PlayerProfile:
                         -self.MAX_SESSION_HISTORY :
                     ]
 
-        except Exception as e:
+        except (OSError, ValueError, KeyError, TypeError) as e:
             logger.error(f"Erro ao carregar perfil: {e}")
             # Fazer backup
             if self.profile_path.exists():

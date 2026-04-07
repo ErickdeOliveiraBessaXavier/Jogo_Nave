@@ -17,11 +17,13 @@ from ..core.paths import get_profile_path
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
-from ..core.upgrades import (ActiveUpgrade, HealUpgrade, create_upgrade,
-                             get_upgrade_icon)
+from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
-from ..core.world_config import (format_stage_name, get_world_for_level,
-                                 is_side_scroll_mode)
+from ..core.world_config import (
+    format_stage_name,
+    get_world_for_level,
+    is_side_scroll_mode,
+)
 from ..entities.floating_score import FloatingScore
 from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
@@ -94,6 +96,14 @@ class PlayingScene(Scene):
         self.first_entry = True
 
         # Aplicar configurações de dificuldade após criar a nave
+        # Declarações antecipadas — valores reais definidos em _apply_difficulty_settings()
+        self.shoot_cd: float = 0.0
+        self.cheat_buffer: str = ""
+        self.god_mode: bool = False
+        self.state: str = "preparing"
+        self.level_start_time: Optional[float] = None
+        self.level_damage_taken: int = 0
+        self.level_powerups_collected: int = 0
         self._apply_difficulty_settings()
         self.enemies_destroyed_in_level = 0
         self.boss_fight_active = False
@@ -1704,7 +1714,7 @@ class PlayingScene(Scene):
                     if isinstance(upgrade, HealUpgrade):
                         upgrade.usage_count = self.app.heal_usage_count
                     self.upgrade_slots.append(upgrade)
-                except Exception:
+                except (ValueError, AttributeError):
                     self.upgrade_slots.append(None)
 
     def _build_upgrade_ctx(self):
@@ -1726,9 +1736,8 @@ class PlayingScene(Scene):
     def _update_upgrades(self, dt: float):
         if not self.upgrade_slots:
             return
-        from typing import Any as _Any
 
-        ctx: _Any = self._build_upgrade_ctx()
+        ctx: Any = self._build_upgrade_ctx()
         for upg in self.upgrade_slots:
             if upg is not None:
                 upg.update(dt, ctx)
@@ -1756,18 +1765,16 @@ class PlayingScene(Scene):
         upg = self.upgrade_slots[idx]
         if upg is None:
             return
-        from typing import Any as _Any
 
-        ctx: _Any = self._build_upgrade_ctx()
+        ctx: Any = self._build_upgrade_ctx()
         try:
             upg.activate(ctx)
             if isinstance(upg, HealUpgrade):
                 self.app.heal_usage_count = upg.usage_count
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
     def _render_upgrades_hud(self, surface: pygame.Surface):
-        import pygame as _pg
 
         from ..core import colors as _colors
 
@@ -1792,13 +1799,13 @@ class PlayingScene(Scene):
 
         for display_index, (i, upg) in enumerate(active_slots):
             # Criar surface temporária com alpha
-            slot_surface = _pg.Surface((slot_w, slot_h), _pg.SRCALPHA)
+            slot_surface = pygame.Surface((slot_w, slot_h), pygame.SRCALPHA)
 
             # Fundo semi-transparente (30, 30, 30) com alpha 180
-            _pg.draw.rect(
+            pygame.draw.rect(
                 slot_surface, (30, 30, 30, 180), (0, 0, slot_w, slot_h), border_radius=8
             )
-            _pg.draw.rect(
+            pygame.draw.rect(
                 slot_surface,
                 (*_colors.WHITE, 200),
                 (0, 0, slot_w, slot_h),
@@ -1809,8 +1816,8 @@ class PlayingScene(Scene):
             # Nome da tecla vinculada no canto superior esquerdo
             try:
                 keycode = self.player_profile.upgrade_keybindings[i]
-                key_label = _pg.key.name(keycode).upper()
-            except Exception:
+                key_label = pygame.key.name(keycode).upper()
+            except (AttributeError, IndexError, TypeError):
                 key_label = str(i + 1)
             label = font_small.render(key_label, True, _colors.WHITE)
             slot_surface.blit(label, (4, 2))
@@ -1835,14 +1842,14 @@ class PlayingScene(Scene):
             if cd_left > 0.0:
                 pct = max(0.0, min(1.0, cd_left / cd_base))
                 bar_h = 4
-                _pg.draw.rect(
+                pygame.draw.rect(
                     slot_surface,
                     (120, 120, 120, 150),
                     (2, slot_h - bar_h - 2, slot_w - 4, bar_h),
                     border_radius=2,
                 )
                 bar_w = int((slot_w - 4) * pct)
-                _pg.draw.rect(
+                pygame.draw.rect(
                     slot_surface,
                     (80, 180, 255, 200),
                     (2, slot_h - bar_h - 2, bar_w, bar_h),
@@ -1863,5 +1870,5 @@ class PlayingScene(Scene):
 
             # Borda verde quando ativo (renderizada diretamente na surface principal)
             if ui["active"]:
-                rect = _pg.Rect(slot_x, y, slot_w, slot_h)
-                _pg.draw.rect(surface, _colors.GREEN, rect, 3, border_radius=8)
+                rect = pygame.Rect(slot_x, y, slot_w, slot_h)
+                pygame.draw.rect(surface, _colors.GREEN, rect, 3, border_radius=8)
