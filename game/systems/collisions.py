@@ -38,7 +38,6 @@ from ..entities.cannon_mine import CannonMine, MineState
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.bot_elemental import ElementalRobot
 
-
 from ..entities.explosion import ExplosionType  # ← ADICIONAR
 
 
@@ -241,10 +240,21 @@ class Collisions:
         # Calcular centro
         cx, cy, _ = self.get_collision_info(enemy)
 
-        # Marcar como morto
-        if isinstance(enemy, EyeEnemy):
-            enemy.destroy()
-        enemy.dead = True
+        # ElementalRobot tem sistema de HP próprio — delegar ao take_damage
+        if isinstance(enemy, ElementalRobot):
+            enemy.take_damage(1)
+            pts = enemy.get_points_value()
+            if not enemy.dead:
+                # Ainda vivo: só explosão pequena de hit, sem score
+                entity_manager.spawn_explosion(cx, cy, size=10)
+                sound_manager.play_boss_damage()
+                return 0, (cx, cy, 0)
+            # Morreu neste hit: continua para dar pontos e explosão grande
+        else:
+            # Marcar como morto
+            if isinstance(enemy, EyeEnemy):
+                enemy.destroy()
+            enemy.dead = True
 
         # Definir tipo de explosão baseado no inimigo
         if isinstance(enemy, Alien):
