@@ -152,6 +152,7 @@ class EnergyOrb:
         target_y: float,
         color: Tuple[int, int, int],
         glow_color: Tuple[int, int, int],
+        speed_multiplier: float = 1.0,
     ):
         self.x = float(x)
         self.y = float(y)
@@ -163,8 +164,9 @@ class EnergyOrb:
         dx = target_x - x
         dy = target_y - y
         dist = math.hypot(dx, dy) or 1.0
-        self.vx = (dx / dist) * self.SPEED
-        self.vy = (dy / dist) * self.SPEED
+        actual_speed = self.SPEED * speed_multiplier
+        self.vx = (dx / dist) * actual_speed
+        self.vy = (dy / dist) * actual_speed
 
         self._spin = random.uniform(-180, 180)
         self._angle = 0.0
@@ -415,8 +417,8 @@ class ElementalRobot:
         difficulty_multiplier: float = 1.0,
     ):
         S = self.SCALE
-        self._screen_w = getattr(Config, "SCREEN_WIDTH", 480)
-        self._screen_h = getattr(Config, "SCREEN_HEIGHT", 800)
+        self._screen_w = getattr(Config, "SCREEN_WIDTH", 280)
+        self._screen_h = getattr(Config, "SCREEN_HEIGHT", 400)
 
         self.w = _PIXEL_COLS * S  # largura em px
         self.h = _PIXEL_ROWS * S  # altura em px
@@ -426,14 +428,21 @@ class ElementalRobot:
         self.y = -float(self.h)
         self._target_y = float(y)  # onde para após entrar
 
-        self.max_health = self.MAX_HEALTH
+        # Aplicar multiplicador de dificuldade
+        self.difficulty_multiplier = difficulty_multiplier
+        self.max_health = int(self.MAX_HEALTH * difficulty_multiplier)
         self.health = health if health is not None else self.max_health
         self.dead = False
         self.causes_damage = False  # contato não causa dano direto
         self.hit_score = self.HIT_SCORE
 
+        # Ajustar durações e velocidades com base na dificuldade
+        # (mais difícil = menos tempo parado, projéteis mais rápidos)
+        self._dur_idle = self._DUR_IDLE / (1.0 + (difficulty_multiplier - 1.0) * 0.5)
+        self._orb_speed_mult = 1.0 + (difficulty_multiplier - 1.0) * 0.3
+
         # Velocidade de deriva horizontal
-        self._drift_vx = self._DRIFT_SPEED * random.choice([-1, 1])
+        self._drift_vx = self._DRIFT_SPEED * random.choice([-1, 1]) * (1.0 + (difficulty_multiplier - 1.0) * 0.2)
 
         # ── FSM ──────────────────────────────────────────────────────────────
         self.fsm_state = "ENTERING"
@@ -696,6 +705,7 @@ class ElementalRobot:
             target_y=player_y,
             color=self._palette["mid"],
             glow_color=self._palette["core"],
+            speed_multiplier=self._orb_speed_mult,
         )
 
         dx = player_x - ax
@@ -785,8 +795,8 @@ class ElementalRobot:
         return spawned
 
     def take_damage(self, amount: int = 1) -> None:
-        """Reduz 1 hit por tiro (mini-boss: 25 tiros total)."""
-        self.health -= 1
+        """Reduz a vida pelo valor de 'amount' (mini-boss balanceado)."""
+        self.health -= amount
         if self.health <= 0 and self.fsm_state != "DYING":
             self.health = 0
             self._transition("DYING")
@@ -1049,8 +1059,8 @@ class ElementalRobot:
     def _draw_aura(
         self,
         surface: pygame.Surface,
-        ox: int,
-        oy: int,
+        _ox: int,
+        _oy: int,
         S: int,
     ) -> None:
         """
@@ -1115,8 +1125,8 @@ class ElementalRobot:
     def _draw_health_bar(
         self,
         surface: pygame.Surface,
-        ox: int,
-        oy: int,
+        _ox: int,
+        _oy: int,
     ) -> None:
         # Barra de vida oculta: mini-boss sem indicador visível de HP.
         pass

@@ -1,30 +1,31 @@
 import random
 from typing import (
     TYPE_CHECKING,
+    Callable,
     Dict,
-    Type,
-    TypedDict,
-    Tuple,
     List,
     Protocol,
-    cast,
+    Tuple,
+    Type,
+    TypedDict,
     Union,
-    Callable,
+    cast,
 )
-from ..core.config import config as Config, PowerUpType
-from ..core.time import Timer
+
+from ..core.config import PowerUpType
+from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset
-from ..core.levels import DifficultyConfig
-from ..entities.powerup import PowerUp
-from ..core.levels import LevelManager
+from ..core.levels import DifficultyConfig, LevelManager
+from ..core.powerup_weights import get_powerup_weights
+from ..core.time import Timer
+from ..entities.bot_elemental import ElementalRobot
+from ..entities.explosive_mine import ExplosiveMine
+from ..entities.eye_enemy import EyeEnemy
 from ..entities.formation import Formation, FormationPattern
 from ..entities.meteor_pool import MeteorPool
-from ..entities.eye_enemy import EyeEnemy
-from ..entities.explosive_mine import ExplosiveMine
-from ..entities.star import Star
+from ..entities.powerup import PowerUp
 from ..entities.square_minion_boss import SquareMinionBoss
-from ..entities.bot_elemental import ElementalRobot
-from ..core.powerup_weights import get_powerup_weights
+from ..entities.star import Star
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -173,10 +174,17 @@ class EnemySpawner:
 
     def _count_enemies_by_type(self, entity_manager: "EntityManager") -> dict[str, int]:
         """Conta inimigos por tipo que estão ativos na tela."""
-        counts = {"meteor": 0, "alien": 0, "eye": 0, "square_minion": 0, "elemental_robot": 0, "total": 0}
+        counts = {
+            "meteor": 0,
+            "alien": 0,
+            "eye": 0,
+            "square_minion": 0,
+            "elemental_robot": 0,
+            "total": 0,
+        }
 
-        from ..entities.meteor import Meteor
         from ..entities.alien import Alien
+        from ..entities.meteor import Meteor
 
         for enemy in entity_manager.enemies:
             if not getattr(enemy, "dead", False):
@@ -208,8 +216,8 @@ class EnemySpawner:
             return False
 
         # Verificar limites por tipo
-        from ..entities.meteor import Meteor
         from ..entities.alien import Alien
+        from ..entities.meteor import Meteor
 
         if enemy_type == Meteor:
             if counts["meteor"] >= DifficultyConfig.MAX_METEORS_ON_SCREEN:
@@ -311,18 +319,22 @@ class EnemySpawner:
                         # Usar o pool para meteoros
                         if is_side_scroll:
                             # Side-scroll: velocidade para esquerda, pouca variação vertical
-                            size = random.randint(Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE)
+                            size = random.randint(
+                                Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE
+                            )
                             meteor = self.meteor_pool.get(
                                 size=size,
                                 x=Config.SCREEN_WIDTH + 40,
                                 y=random.randint(60, Config.SCREEN_HEIGHT - 100),
-                                vx=-random.uniform(150, 300),  # Movimento para esquerda (negativo)
+                                vx=-random.uniform(
+                                    150, 300
+                                ),  # Movimento para esquerda (negativo)
                                 vy=random.uniform(-50, 50),  # Pequena variação vertical
                             )
                         else:
                             # Top-down: usando padrão original
                             meteor = self.meteor_pool.get()
-                        
+
                         meteor.health = int(
                             meteor.health * self.enemy_health_multiplier
                         )
@@ -345,13 +357,17 @@ class EnemySpawner:
                                 entity_manager.enemies.append(new_enemy)
                         elif enemy_type == ElementalRobot:
                             # Mini-boss: spawna centralizado no topo da tela,
-                            # HP fixo em 25 hits (não escala com difficulty_multiplier)
+                            # HP escala com difficulty_multiplier (mini-boss balanceado)
                             spawn_x = random.randint(
                                 int(Config.SCREEN_WIDTH * 0.2),
                                 int(Config.SCREEN_WIDTH * 0.8),
                             )
                             target_y = Config.SCREEN_HEIGHT * 0.15
-                            robot = ElementalRobot(spawn_x, target_y)
+                            robot = ElementalRobot(
+                                spawn_x,
+                                target_y,
+                                difficulty_multiplier=self.enemy_health_multiplier,
+                            )
                             entity_manager.enemies.append(robot)
                         else:
                             new_enemy = cast(EnemyWithHealth, enemy_type())
@@ -411,7 +427,9 @@ class EnemySpawner:
                         count = 5  # Fallback
 
                     # CORRIGIDO: Usar valores pré-calculados em vez de condicionais repetidos
-                    margin_value: Union[float, Callable[[int], float]] = self._formation_safe_margins.get(formation_type, 200)  # type: ignore
+                    margin_value: Union[float, Callable[[int], float]] = (
+                        self._formation_safe_margins.get(formation_type, 200)
+                    )  # type: ignore
                     if callable(margin_value):
                         safe_margin = float(margin_value(count))
                     else:
@@ -474,7 +492,6 @@ class EnemySpawner:
             and player_x is not None
             and player_y is not None
         ):
-
             self.guided_meteor_timer.update(dt)
             if (
                 self.guided_meteor_timer.done()
