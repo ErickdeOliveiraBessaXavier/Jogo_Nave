@@ -227,10 +227,20 @@ class LevelConfig:
 
     level_number: int
     enemy_spawn_config: dict[
-        Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot], float
+        Type[
+            Meteor
+            | Alien
+            | ExplosiveMine
+            | EyeEnemy
+            | SquareMinionBoss
+            | ElementalRobot
+        ],
+        float,
     ]  # Tipo -> tempo de spawn
     enemies_to_clear: int  # quantos inimigos para passar de fase
-    boss_type: Type[Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss] | None = None
+    boss_type: (
+        Type[Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss] | None
+    ) = None
     mines_enabled: bool = False
     formations_enabled: bool = False
     formation_types: list[str] | None = None
@@ -240,20 +250,38 @@ class LevelConfig:
     @property
     def enemy_types(
         self,
-    ) -> list[Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot]]:
+    ) -> list[
+        Type[
+            Meteor
+            | Alien
+            | ExplosiveMine
+            | EyeEnemy
+            | SquareMinionBoss
+            | ElementalRobot
+        ]
+    ]:
         """Retorna lista de tipos de inimigos configurados."""
         return list(self.enemy_spawn_config.keys())
 
     def get_spawn_time(
         self,
-        enemy_type: Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot],
+        enemy_type: Type[
+            Meteor
+            | Alien
+            | ExplosiveMine
+            | EyeEnemy
+            | SquareMinionBoss
+            | ElementalRobot
+        ],
     ) -> float:
         """Retorna o tempo de spawn para um tipo específico de inimigo."""
         return self.enemy_spawn_config.get(enemy_type, 1.0)
 
     def get_random_enemy_type(
         self,
-    ) -> Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot]:
+    ) -> Type[
+        Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot
+    ]:
         """Retorna um tipo de inimigo aleatório da lista."""
         if not self.enemy_types:
             raise ValueError(f"Level {self.level_number} has no enemies configured!")
@@ -478,7 +506,15 @@ class ProceduralLevelGenerator:
 
         # 1. Calcular spawn times com pesos do tema
         enemy_spawn_config: dict[
-            Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot], float
+            Type[
+                Meteor
+                | Alien
+                | ExplosiveMine
+                | EyeEnemy
+                | SquareMinionBoss
+                | ElementalRobot
+            ],
+            float,
         ] = {}
 
         # Verificar se é fase especial "meteor_only"
@@ -642,7 +678,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         enemy_spawn_config={
             Meteor: 0.6,
             SquareMinionBoss: 15.0,  # Spawn lento para tutorial
-            ElementalRobot: 1.0,    # Mini-boss: aparece raramente (1x a cada ~45s)
+            ElementalRobot: 1.0,  # Mini-boss: aparece raramente (1x a cada ~45s)
             # Alien: 2.5,
             # EyeEnemy: 5.0,
         },
@@ -763,7 +799,15 @@ def _apply_world_theme_to_config(
 
     # Copiar config de spawn com type hint
     adjusted_spawn_config: dict[
-        Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot], float
+        Type[
+            Meteor
+            | Alien
+            | ExplosiveMine
+            | EyeEnemy
+            | SquareMinionBoss
+            | ElementalRobot
+        ],
+        float,
     ] = dict(config.enemy_spawn_config)
 
     # Aplicar multiplicadores de peso
@@ -817,7 +861,15 @@ def _create_world_boss_level(
 
     # Montagem de spawn config baseado no tema
     enemy_spawn_config: dict[
-        Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot], float
+        Type[
+            Meteor
+            | Alien
+            | ExplosiveMine
+            | EyeEnemy
+            | SquareMinionBoss
+            | ElementalRobot
+        ],
+        float,
     ]
     if world.theme == WorldTheme.MOUNTAINS:
         enemy_spawn_config = {

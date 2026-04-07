@@ -1,48 +1,52 @@
-import pygame
 import math
 import random
-from typing import TYPE_CHECKING, Any, cast, TypeAlias, Sequence
+from typing import TYPE_CHECKING, Any, Sequence, TypeAlias, cast
+
+import pygame
+
+from ..core.config import Config
+from ..core.config import config as config_instance
+from ..core.sound import sound_manager
+from ..core.spatial_grid import SpatialGrid
+from ..entities.air_strike_bomb import AirStrikeBomb
+from ..entities.alien import Alien
+from ..entities.alien_bullet import AlienBullet
+from ..entities.boss import Boss
+from ..entities.boss_laser import BossLaser
+from ..entities.boss_square import BossSquare
+from ..entities.bot_elemental import ElementalRobot
+from ..entities.bullet import Bullet
+from ..entities.cannon_mine import CannonMine, MineState
+from ..entities.explosion import ExplosionType
+from ..entities.explosive_effect import ExplosiveEffect
+from ..entities.explosive_mine import ExplosiveMine
+from ..entities.eye_enemy import EyeEnemy
+from ..entities.eye_laser import EyeLaser
+from ..entities.floating_score import FloatingScore
+from ..entities.giant_meteor_boss import GiantMeteorBoss
+from ..entities.meteor import Meteor
+from ..entities.mine_explosion import MineExplosion
+from ..entities.mini_ship_bullet import MiniShipBullet
+from ..entities.player_laser import PlayerLaser
+from ..entities.powerup import PowerUp
+from ..entities.ship import Ship
+from ..entities.slime_boss import SlimeBoss
+from ..entities.slime_drip import SlimeDrip
+from ..entities.spike import Spike
+from ..entities.spike_boss import SpikeBoss
+from ..entities.spike_boss_laser import SpikeBossLaser
+from ..entities.square_minion_boss import SquareMinionBoss
+from ..entities.star import Star
+from ..entities.stone_golem_boss import StoneGolemBoss
 
 if TYPE_CHECKING:
     from .entity_manager import EntityManager
-from ..entities.ship import Ship
-from ..entities.meteor import Meteor
-from ..entities.alien import Alien
-from ..entities.bullet import Bullet
-from ..entities.alien_bullet import AlienBullet
-from ..entities.boss_laser import BossLaser
-from ..entities.player_laser import PlayerLaser
-from ..entities.eye_laser import EyeLaser
-from ..entities.spike_boss_laser import SpikeBossLaser
-from ..entities.mine_explosion import MineExplosion
-from ..entities.powerup import PowerUp
-from ..entities.boss import Boss
-from ..entities.boss_square import BossSquare
-from ..entities.floating_score import FloatingScore
-from ..entities.square_minion_boss import SquareMinionBoss
-from ..core.sound import sound_manager
-from ..entities.mini_ship_bullet import MiniShipBullet
-from ..entities.eye_enemy import EyeEnemy
-from ..entities.spike import Spike
-from ..entities.spike_boss import SpikeBoss
-from ..entities.slime_boss import SlimeBoss
-from ..entities.giant_meteor_boss import GiantMeteorBoss
-from ..entities.stone_golem_boss import StoneGolemBoss
-from ..entities.slime_drip import SlimeDrip
-from ..entities.star import Star
-from ..core.config import Config
-from ..core.spatial_grid import SpatialGrid
-from ..entities.explosive_effect import ExplosiveEffect
-from ..entities.air_strike_bomb import AirStrikeBomb
-from ..entities.cannon_mine import CannonMine, MineState
-from ..entities.explosive_mine import ExplosiveMine
-from ..entities.bot_elemental import ElementalRobot
-
-from ..entities.explosion import ExplosionType  # ← ADICIONAR
 
 
 # Type aliases
-Enemy: TypeAlias = Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot
+Enemy: TypeAlias = (
+    Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot
+)
 BossEnemy: TypeAlias = Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss
 Projectile: TypeAlias = Bullet | MiniShipBullet
 
@@ -61,7 +65,7 @@ class CollisionConstants:
 class Collisions:
     def __init__(self, is_side_scroll: bool = False) -> None:
         """Inicializa o sistema de colisões com suporte ao modo de jogo.
-        
+
         Args:
             is_side_scroll: True se em modo side-scroll, False se em modo top-down
         """
@@ -94,12 +98,11 @@ class Collisions:
         """Calcula tamanho padrão de explosão baseado no inimigo."""
         if isinstance(enemy, Meteor):
             return max(12, int(enemy.w // 2))
-        elif isinstance(enemy, Alien):
+        if isinstance(enemy, Alien):
             return 40
-        elif isinstance(enemy, ExplosiveMine):
+        if isinstance(enemy, ExplosiveMine):
             return 25
-        else:
-            return CollisionConstants.DEFAULT_EXPLOSION_SIZE
+        return CollisionConstants.DEFAULT_EXPLOSION_SIZE
 
     def _process_projectile_hit(
         self,
@@ -369,9 +372,9 @@ class Collisions:
                     proj.dead = True
 
                 # Aplicar dano com multiplicador
-                from ..core.config import config as Config
-
-                damage = int(proj.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                damage = int(
+                    proj.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER
+                )
                 boss.take_damage(damage)
                 sound_manager.play_boss_damage()
                 entity_manager.spawn_explosion(proj.x, proj.y, size=15)
@@ -385,14 +388,14 @@ class Collisions:
                             boss.death_sequence_started = True
                             entity_manager.trigger_slime_boss_death(boss)
                             floating_scores.append(
-                                FloatingScore(cx, cy, Config.BOSS_DEFEAT_SCORE)
+                                FloatingScore(cx, cy, config_instance.BOSS_DEFEAT_SCORE)
                             )
-                            score_gain += Config.BOSS_DEFEAT_SCORE
+                            score_gain += config_instance.BOSS_DEFEAT_SCORE
                     else:
                         floating_scores.append(
-                            FloatingScore(cx, cy, Config.BOSS_DEFEAT_SCORE)
+                            FloatingScore(cx, cy, config_instance.BOSS_DEFEAT_SCORE)
                         )
-                        score_gain += Config.BOSS_DEFEAT_SCORE
+                        score_gain += config_instance.BOSS_DEFEAT_SCORE
                         entity_manager.spawn_explosion(cx, cy, size=100)
 
         return score_gain
@@ -677,19 +680,21 @@ class Collisions:
 
             if distance <= damage_radius:
                 # Boss atingido - aplicar dano
-                from ..core.config import config as Config
-
-                damage = int(effect.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                damage = int(
+                    effect.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER
+                )
                 boss.take_damage(damage)
                 sound_manager.play_boss_damage()
                 entity_manager.spawn_explosion(boss_center_x, boss_center_y, size=30)
 
                 # Verificar se boss morreu
                 if boss.dead:
-                    score_gain += Config.BOSS_DEFEAT_SCORE
+                    score_gain += config_instance.BOSS_DEFEAT_SCORE
                     floating_scores.append(
                         FloatingScore(
-                            boss_center_x, boss_center_y, Config.BOSS_DEFEAT_SCORE
+                            boss_center_x,
+                            boss_center_y,
+                            config_instance.BOSS_DEFEAT_SCORE,
                         )
                     )
                     entity_manager.spawn_explosion(
@@ -818,25 +823,21 @@ class Collisions:
 
             if distance <= damage_info.radius:
                 # Boss atingido - aplicar dano
-                from ..core.config import config as Config
-
-                try:
-                    from ..core.sound import sound_manager
-                except Exception:
-                    sound_manager = None  # Fallback caso não tenha som
-
-                damage = int(damage_info.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                damage = int(
+                    damage_info.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER
+                )
                 boss.take_damage(damage)
-                if sound_manager:
-                    sound_manager.play_boss_damage()
+                sound_manager.play_boss_damage()
                 entity_manager.spawn_explosion(boss_center_x, boss_center_y, size=50)
 
                 # Verificar se boss morreu
                 if boss.dead:
-                    score_gain += Config.BOSS_DEFEAT_SCORE
+                    score_gain += config_instance.BOSS_DEFEAT_SCORE
                     floating_scores.append(
                         FloatingScore(
-                            boss_center_x, boss_center_y, Config.BOSS_DEFEAT_SCORE
+                            boss_center_x,
+                            boss_center_y,
+                            config_instance.BOSS_DEFEAT_SCORE,
                         )
                     )
                     entity_manager.spawn_explosion(
@@ -880,19 +881,21 @@ class Collisions:
 
             if distance <= damage_radius:
                 # Boss atingido - aplicar dano
-                from ..core.config import config as Config
-
-                damage = int(bomb.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                damage = int(
+                    bomb.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER
+                )
                 boss.take_damage(damage)
                 sound_manager.play_boss_damage()
                 entity_manager.spawn_explosion(boss_center_x, boss_center_y, size=50)
 
                 # Verificar se boss morreu
                 if boss.dead:
-                    score_gain += Config.BOSS_DEFEAT_SCORE
+                    score_gain += config_instance.BOSS_DEFEAT_SCORE
                     floating_scores.append(
                         FloatingScore(
-                            boss_center_x, boss_center_y, Config.BOSS_DEFEAT_SCORE
+                            boss_center_x,
+                            boss_center_y,
+                            config_instance.BOSS_DEFEAT_SCORE,
                         )
                     )
                     entity_manager.spawn_explosion(
@@ -973,12 +976,13 @@ class Collisions:
     def bullets_vs_enemies(
         self,
         bullets: list[Bullet],
-        mine_explosions: list[MineExplosion],
-        ship: Ship,
+        mine_explosions: list[MineExplosion],  # noqa: ARG002
+        ship: Ship,  # noqa: ARG002
         enemy_grid: SpatialGrid[Enemy],
         enemies: list[Enemy],  # Para adicionar fragments
         entity_manager: "EntityManager",  # <-- NOVO
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        _ = mine_explosions, ship  # Unused; kept for API compatibility
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
@@ -1715,9 +1719,9 @@ class Collisions:
 
                 laser.hit_enemies.add(boss_id)
                 # Apply damage modifier for laser upgrade against boss
-                from ..core.config import config as Config
-
-                damage = int(laser.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                damage = int(
+                    laser.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER
+                )
                 boss.take_damage(damage)
                 sound_manager.play_boss_damage()
 
@@ -1728,7 +1732,7 @@ class Collisions:
 
                 if boss.dead:
                     # Boss sempre dá pontos fixos ao morrer
-                    pts: int = Config.BOSS_DEFEAT_SCORE
+                    pts: int = config_instance.BOSS_DEFEAT_SCORE
                     score_gain += pts
                     floating_scores.append(FloatingScore(cx, cy, pts))
                     entity_manager.spawn_explosion(cx, cy, size=100)

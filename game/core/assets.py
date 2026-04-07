@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+
 import pygame
 
 # Caminho base para o jogo
@@ -33,8 +34,7 @@ def get_image(path: str | Path, alpha: bool = True) -> pygame.Surface:
         image = pygame.image.load(str(image_path))
         if alpha:
             return image.convert_alpha()
-        else:
-            return image.convert()
+        return image.convert()
     except pygame.error as e:
         print(f"❌ Erro ao carregar imagem {image_path}: {e}")
         # Retorna uma Surface vazia em caso de erro de carregamento

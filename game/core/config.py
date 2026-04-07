@@ -1,6 +1,6 @@
-from enum import Enum, auto
 from dataclasses import dataclass, field
-from typing import Tuple, Any
+from enum import Enum, auto
+from typing import Any, Tuple
 
 
 class SlimeBossState(Enum):
@@ -629,7 +629,7 @@ class ConfigProxy:
     def __getattr__(self, name: str) -> Any:
         if name == "SCREEN_WIDTH":
             return _runtime_screen_width
-        elif name == "SCREEN_HEIGHT":
+        if name == "SCREEN_HEIGHT":
             return _runtime_screen_height
         else:
             return getattr(self._config, name)

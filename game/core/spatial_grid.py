@@ -1,4 +1,4 @@
-from typing import Any, TypeVar, Generic, Protocol, cast
+from typing import Any, Generic, Protocol, TypeVar, cast
 
 
 class HasRect(Protocol):
