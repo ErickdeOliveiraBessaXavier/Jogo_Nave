@@ -1,5 +1,6 @@
-import pygame
 from typing import Set
+
+import pygame
 
 
 class ExplosiveEffect:

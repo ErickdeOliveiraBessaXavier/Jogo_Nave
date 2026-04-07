@@ -1,9 +1,10 @@
 """Square Minion Boss - Common enemy based on boss square projectile."""
 
-import pygame
 import math
 import random
 from typing import List
+
+import pygame
 
 
 class TrailParticle:

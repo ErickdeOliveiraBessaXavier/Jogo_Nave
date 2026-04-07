@@ -4,7 +4,6 @@ from typing import List
 
 from .upgrades import UpgradeType
 
-
 # Quantidade de slots de aprimoramentos ativos
 UPGRADE_SLOT_COUNT: int = 9
 

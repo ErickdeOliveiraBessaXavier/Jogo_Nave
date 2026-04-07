@@ -1,9 +1,11 @@
-import pygame
 import random
+
+import pygame
+
+from ..core.assets import BASE_DIR, get_image
 from ..core.config import config as Config
-from ..core.assets import get_image, BASE_DIR
-from .alien_bullet import AlienBullet
 from ..core.sprite_loader import sprite_loader
+from .alien_bullet import AlienBullet
 
 
 class Alien:

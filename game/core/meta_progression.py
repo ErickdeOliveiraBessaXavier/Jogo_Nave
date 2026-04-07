@@ -1,21 +1,19 @@
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple
 import json
 import logging
-from pathlib import Path
-from enum import Enum
-import pygame
 import time
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import pygame
 
 from ..core.difficulty import DifficultyPreset
 from ..core.levels import LevelConfig
 from ..core.upgrades import UpgradeType
-from ..core.upgrades_config import (
-    UPGRADE_SLOT_COUNT,
-    DEFAULT_UNLOCKED,
-    INITIAL_UNLOCKED_SLOTS,
-)
+from ..core.upgrades_config import (DEFAULT_UNLOCKED, INITIAL_UNLOCKED_SLOTS,
+                                    UPGRADE_SLOT_COUNT)
 
 logger = logging.getLogger(__name__)
 
@@ -1371,8 +1369,9 @@ class ProfileVisualizer:
         y: int,
     ):
         """Renderiza preview de um nível com estatísticas."""
-        from ..core import colors
         import pygame
+
+        from ..core import colors
         from ..core.assets import get_font
 
         if level_number not in profile.level_stats:

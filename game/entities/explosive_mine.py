@@ -1,8 +1,10 @@
-import pygame
 import random
-from ..core.config import config as Config
+
+import pygame
+
 from ..core import colors
 from ..core.assets import get_image
+from ..core.config import config as Config
 from ..core.sprite_loader import sprite_loader
 
 

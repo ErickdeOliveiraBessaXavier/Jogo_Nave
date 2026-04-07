@@ -1,8 +1,9 @@
 import logging
-from typing import Callable, Any, List
+from typing import Any, Callable, List
+
 import pygame
 
-from ..core.assets import get_image, BASE_DIR
+from ..core.assets import BASE_DIR, get_image
 
 
 class SpriteLoader:

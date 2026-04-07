@@ -1,10 +1,11 @@
-import random
 import math
-import pygame
+import random
 from typing import List, Tuple
-from ..core.config import config as Config
-from ..core import colors
 
+import pygame
+
+from ..core import colors
+from ..core.config import config as Config
 
 # Cache global de shapes para reutilização (evita recalcular pontos irregulares)
 _SHAPE_CACHE: dict[int, List[Tuple[float, float]]] = {}

@@ -1,6 +1,7 @@
-import pygame
 import random
 from typing import List, Tuple, TypedDict
+
+import pygame
 
 from ..core import colors
 

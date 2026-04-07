@@ -1,15 +1,16 @@
-import pygame
 import math
-from enum import Enum
 from dataclasses import dataclass
-from typing import Set, Optional, Callable, Union, TYPE_CHECKING
+from enum import Enum
+from typing import TYPE_CHECKING, Callable, Optional, Set, Union
+
+import pygame
 
 if TYPE_CHECKING:
-    from ..entities.meteor import Meteor
     from ..entities.alien import Alien
     from ..entities.bot_elemental import ElementalRobot
     from ..entities.explosive_mine import ExplosiveMine
     from ..entities.eye_enemy import EyeEnemy
+    from ..entities.meteor import Meteor
     from ..entities.square_minion_boss import SquareMinionBoss
 
 EnemyType = Union[

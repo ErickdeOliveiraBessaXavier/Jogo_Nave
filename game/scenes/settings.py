@@ -1,13 +1,14 @@
-import pygame
-from typing import TYPE_CHECKING, Dict, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Dict
 
-from ..core.state import Scene
+import pygame
+
 from ..core import colors
-from ..core.colors import CUSTOM_PURPLE, CUSTOM_GOLD, BLACK
 from ..core.assets import get_font
-from ..core.sound import sound_manager
+from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_profile_path
+from ..core.sound import sound_manager
+from ..core.state import Scene
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -159,7 +160,7 @@ class SettingsView:
 
         grid_start_y = y_offset + 40
 
-        from typing import cast, List
+        from typing import List, cast
 
         resolution_buttons = cast(
             List[pygame.Rect], self.layout_rects["resolution_buttons"]
@@ -238,7 +239,7 @@ class SettingsView:
         # Detectar hover nos botões de resolução
         if not self.is_entering:
             mouse_pos = pygame.mouse.get_pos()
-            from typing import cast, List
+            from typing import List, cast
 
             resolution_buttons = cast(
                 List[pygame.Rect], self.layout_rects["resolution_buttons"]
@@ -262,7 +263,7 @@ class SettingsView:
                 return True
 
             # Botões de resolução
-            from typing import cast, List
+            from typing import List, cast
 
             resolution_buttons = cast(
                 List[pygame.Rect], self.layout_rects["resolution_buttons"]
@@ -570,7 +571,7 @@ class SettingsView:
         surface.blit(label_surf, (label_rect.x, label_rect.y))
 
         # Botões de resolução
-        from typing import cast, List
+        from typing import List, cast
 
         resolution_buttons = cast(
             List[pygame.Rect], self.layout_rects["resolution_buttons"]
@@ -650,7 +651,7 @@ class SettingsView:
         ]
 
         # Calcular y_offset baseado nos botões
-        from typing import cast, List
+        from typing import List, cast
 
         resolution_buttons = cast(
             List[pygame.Rect], self.layout_rects["resolution_buttons"]

@@ -1,11 +1,8 @@
 """Script para analisar balanceamento dos níveis procedurais."""
 
-from game.core.levels import (
-    LevelAnalyzer,
-    DifficultyPreset,
-    get_level_config,
-)
 from typing import List
+
+from game.core.levels import DifficultyPreset, LevelAnalyzer, get_level_config
 
 
 def analyze_difficulty_preset(preset: DifficultyPreset, levels_to_check: range):

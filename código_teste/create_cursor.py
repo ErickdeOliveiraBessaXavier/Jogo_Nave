@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Script para criar um cursor customizado em pixel art."""
 
-import pygame
 import os
+
+import pygame
 
 # Inicializar pygame
 pygame.init()

@@ -1,5 +1,5 @@
-import traceback
 import logging
+import traceback
 
 # Configure logging
 logging.basicConfig(

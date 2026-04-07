@@ -1,11 +1,12 @@
-import pygame
 import math
 import random
 from typing import Any, TypedDict
 
-from ..core.sound import sound_manager
-from ..core.config import config
+import pygame
+
 from ..core.colors import BLACK_HOLE_PARTICLE_COLORS
+from ..core.config import config
+from ..core.sound import sound_manager
 
 
 class Particle(TypedDict):

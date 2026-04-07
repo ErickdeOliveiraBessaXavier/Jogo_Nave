@@ -12,29 +12,30 @@ Exemplo:
     python performance_test.py --duration 60 --difficulty HARDCORE --output results.json
 """
 
-import pygame
-import time
 import json
+import time
+
+import pygame
 
 try:
     import psutil  # type: ignore
 except ImportError:
     psutil = None
-import os
 import argparse
-from typing import Dict, List, Any
-import sys
 import cProfile
+import os
 import pstats
+import sys
 from io import StringIO
+from typing import Any, Dict, List
 
 # Adicionar o diretório do jogo ao path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from game.app import GameApp
 from game.core.difficulty import DifficultyPreset
-from game.scenes.playing import PlayingScene
 from game.core.levels import LevelManager
+from game.scenes.playing import PlayingScene
 
 
 class PerformanceMonitor:

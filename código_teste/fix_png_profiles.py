@@ -1,7 +1,8 @@
 """Script para remover perfis iCCP incorretos de imagens PNG."""
 
-from PIL import Image
 from pathlib import Path
+
+from PIL import Image
 
 
 def fix_png_profile(png_path: Path):

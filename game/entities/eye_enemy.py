@@ -1,9 +1,11 @@
-import pygame
-import random
 import math
+import random
 from typing import List, Tuple, TypedDict
-from ..core.config import config as Config
+
+import pygame
+
 from ..core import colors
+from ..core.config import config as Config
 from .eye_laser import EyeLaser
 
 

@@ -1,7 +1,9 @@
-import pygame
-import random
 import math
-from typing import List, Tuple, TypedDict, Set, TYPE_CHECKING, Optional, Any, Literal
+import random
+from typing import (TYPE_CHECKING, Any, List, Literal, Optional, Set, Tuple,
+                    TypedDict)
+
+import pygame
 
 from ..core import colors
 

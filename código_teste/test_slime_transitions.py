@@ -4,8 +4,8 @@ Test script for SlimeBoss transitions.
 Simulates health reduction to test state transitions.
 """
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -14,8 +14,9 @@ import pygame
 pygame.init()
 pygame.display.set_mode((1, 1))  # Minimal display for image loading
 
+from game.core.config import SlimeBossState
+from game.core.config import config as Config
 from game.entities.slime_boss import SlimeBoss
-from game.core.config import config as Config, SlimeBossState
 
 
 def test_transitions():

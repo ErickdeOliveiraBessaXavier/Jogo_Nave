@@ -1,6 +1,7 @@
-import pygame
 import random
-from typing import Set, Optional, Callable
+from typing import Callable, Optional, Set
+
+import pygame
 
 
 class AirStrikeBomb:

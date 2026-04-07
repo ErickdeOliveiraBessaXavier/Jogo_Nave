@@ -1,6 +1,7 @@
-import pygame
 import random
-from typing import List, Optional, Callable, TYPE_CHECKING, Tuple, TypedDict
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, TypedDict
+
+import pygame
 
 if TYPE_CHECKING:
     from .cannon_mine import CannonMine

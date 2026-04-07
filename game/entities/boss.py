@@ -1,17 +1,17 @@
+import logging
 import math
 import random
-import logging
-from typing import List, Any
 from collections import deque
+from typing import Any, List
 
 import pygame
 
 from ..core import colors
 from ..core.config import config as Config
-from ..core.time import Timer
 from ..core.sound import sound_manager
+from ..core.time import Timer
+from .boss_cannon import BossAttackSystem, BossCannon
 from .boss_laser import BossLaser
-from .boss_cannon import BossCannon, BossAttackSystem
 from .boss_particles import BossParticleSystem
 from .boss_square import BossSquare
 
@@ -128,8 +128,8 @@ class Boss:
 
     def _init_floating_squares(self) -> None:
         """Inicializa os quadrados flutuantes orbitando ao redor do boss."""
-        import random
         import math
+        import random
 
         # Criar 14 quadrados em órbitas ao redor do boss
         num_squares = 14

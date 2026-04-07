@@ -3,8 +3,10 @@ Pool de explosões para reutilização de objetos.
 Reduz alocação de memória e garbage collection.
 """
 
+from typing import Dict, List, Union
+
 import pygame
-from typing import List, Dict, Union
+
 from ..entities.explosion import Explosion
 
 

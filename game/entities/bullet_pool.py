@@ -1,5 +1,7 @@
 from typing import List
+
 import pygame
+
 from .bullet import Bullet
 
 

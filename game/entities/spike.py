@@ -1,8 +1,10 @@
-import pygame
 import math
 import random
-from ..core.config import config as Config
+
+import pygame
+
 from ..core import colors
+from ..core.config import config as Config
 
 
 class Spike:

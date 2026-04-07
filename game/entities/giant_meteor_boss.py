@@ -1,10 +1,11 @@
 import math
 import random
-import pygame
 from typing import TYPE_CHECKING, TypedDict
 
-from ..core.config import config
+import pygame
+
 from ..core import colors
+from ..core.config import config
 from ..core.sound import sound_manager
 
 if TYPE_CHECKING:

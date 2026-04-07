@@ -1,9 +1,12 @@
-import random
 import logging
+import random
+from typing import TYPE_CHECKING, Any, Optional
+
 import pygame
 import pygame.font
-from typing import Optional, TYPE_CHECKING, Any
-from ..core.config import config as Config, SlimeBossState, StageConfig, SlimeDripMode
+
+from ..core.config import SlimeBossState, SlimeDripMode, StageConfig
+from ..core.config import config as Config
 from ..core.sound import sound_manager
 from ..core.sprite_loader import sprite_loader
 from .slime_drip import SlimeDrippingEffect

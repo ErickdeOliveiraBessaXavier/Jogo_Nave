@@ -1,7 +1,9 @@
+from typing import Any, List, Optional
+
 import pygame
-from ..core.config import config as Config
+
 from ..core import colors
-from typing import Optional, Any, List
+from ..core.config import config as Config
 
 
 class Bullet:

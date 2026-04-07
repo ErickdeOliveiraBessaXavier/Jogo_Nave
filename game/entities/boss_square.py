@@ -1,9 +1,10 @@
 """Boss Square Projectile - Indestructible projectile launched by the boss."""
 
-import pygame
 import math
 import random
 from typing import List
+
+import pygame
 
 
 class TrailParticle:

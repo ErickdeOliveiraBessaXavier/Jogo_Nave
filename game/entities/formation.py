@@ -1,8 +1,10 @@
-import pygame
 import math
 import random
 from enum import Enum
-from typing import List, Type, Any, Tuple, cast
+from typing import Any, List, Tuple, Type, cast
+
+import pygame
+
 from ..core.config import config as Config
 
 

@@ -1,16 +1,17 @@
-from typing import TYPE_CHECKING, Callable, List, Dict, Any
 from enum import Enum
+from typing import TYPE_CHECKING, Any, Callable, Dict, List
+
 import pygame
 
 if TYPE_CHECKING:
     from ..app import GameApp
 
 from ..core import colors
-from ..core.colors import CUSTOM_PURPLE, CUSTOM_GOLD, BLACK
 from ..core.assets import get_font
-from ..core.meta_progression import PlayerProfile, PerformanceState
-from ..core.state import Scene
+from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
+from ..core.meta_progression import PerformanceState, PlayerProfile
 from ..core.paths import get_profile_path
+from ..core.state import Scene
 
 
 class StatTab(Enum):

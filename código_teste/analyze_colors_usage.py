@@ -11,7 +11,7 @@ Este script:
 import ast
 import re
 from pathlib import Path
-from typing import Set, Dict, List
+from typing import Dict, List, Set
 
 
 def extract_color_definitions(colors_file_path: str) -> Set[str]:

@@ -1,11 +1,12 @@
-import pygame
 from typing import TYPE_CHECKING, Optional
 
-from ..core.state import Scene
-from ..core.config import config as Config
-from ..core.colors import CUSTOM_PURPLE, CUSTOM_GOLD, WHITE
+import pygame
+
 from ..core.assets import get_font
+from ..core.colors import CUSTOM_GOLD, CUSTOM_PURPLE, WHITE
+from ..core.config import config as Config
 from ..core.sound import sound_manager
+from ..core.state import Scene
 
 if TYPE_CHECKING:
     from ..app import GameApp

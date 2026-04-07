@@ -1,4 +1,4 @@
-from game.core.levels import get_level_config, DifficultyPreset
+from game.core.levels import DifficultyPreset, get_level_config
 
 # Força o procedural meteor_storm no nível 1
 level_config = get_level_config(

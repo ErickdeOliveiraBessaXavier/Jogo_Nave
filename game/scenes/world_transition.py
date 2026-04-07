@@ -4,13 +4,14 @@ Cena de Transição Entre Mundos
 Mostra uma tela de apresentação do novo mundo quando o jogador avança para um.
 """
 
-import pygame
 import logging
 from typing import TYPE_CHECKING
 
-from ..core.state import Scene
+import pygame
+
 from ..core import colors
 from ..core.assets import get_font
+from ..core.state import Scene
 from ..core.world_config import WorldConfig
 
 logger = logging.getLogger(__name__)

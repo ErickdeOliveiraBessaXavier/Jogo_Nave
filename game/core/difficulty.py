@@ -1,6 +1,6 @@
 from enum import Enum
-from typing import TypedDict, NotRequired
 from functools import lru_cache
+from typing import NotRequired, TypedDict
 
 
 class DifficultySettingsDict(TypedDict):

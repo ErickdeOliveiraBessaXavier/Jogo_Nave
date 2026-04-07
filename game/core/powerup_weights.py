@@ -1,5 +1,5 @@
-from .difficulty import DifficultyPreset
 from .config import PowerUpType
+from .difficulty import DifficultyPreset
 
 
 def get_powerup_weights(difficulty: DifficultyPreset) -> dict[PowerUpType, int]:

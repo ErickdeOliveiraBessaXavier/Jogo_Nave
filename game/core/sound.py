@@ -1,20 +1,16 @@
-import pygame
-import random
 import os
+import random
 import sys
 import threading
 import time
-from typing import Dict, List, cast, Any, Union, Callable, TypeVar
 from functools import wraps
+from typing import Any, Callable, Dict, List, TypeVar, Union, cast
 
-from .sound_config import (
-    VOLUME_CONFIG,
-    CHANNEL_CONFIG,
-    BEHAVIOR_CONFIG,
-    SOUND_PATHS,
-    MusicState,
-    MUSIC_BEHAVIOR_CONFIG,
-)
+import pygame
+
+from .sound_config import (BEHAVIOR_CONFIG, CHANNEL_CONFIG,
+                           MUSIC_BEHAVIOR_CONFIG, SOUND_PATHS, VOLUME_CONFIG,
+                           MusicState)
 
 MusicPaths = Dict[str, Union[str, List[str]]]
 

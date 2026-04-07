@@ -3,7 +3,7 @@ Configurações do sistema de som.
 """
 
 from enum import Enum
-from typing import Dict, Any, Union
+from typing import Any, Dict, Union
 
 
 class MusicState(Enum):

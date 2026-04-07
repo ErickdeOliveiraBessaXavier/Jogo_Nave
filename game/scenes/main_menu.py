@@ -1,25 +1,26 @@
-import pygame
 import math
 import random
-from typing import TYPE_CHECKING, TypedDict, List, Callable, Any, Optional
 from enum import Enum
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, TypedDict
+
+import pygame
 
 if TYPE_CHECKING:
     from ..app import GameApp
 
-from ..core.state import Scene
-from ..core.colors import BLACK, CUSTOM_PURPLE, CUSTOM_GOLD
-from ..core.difficulty import DifficultyPreset
-from ..scenes.settings import SettingsScene
-from ..scenes.difficulty_selection import DifficultySelectionView
-from ..scenes.statistics import StatisticsScene
-from ..scenes.upgrades_selection import UpgradesSelectionScene
 from ..core.assets import get_font
+from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.config import config as Config
+from ..core.difficulty import DifficultyPreset
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
-from ..entities.meteor import Meteor
+from ..core.state import Scene
 from ..entities.explosion_pool import ExplosionPool
+from ..entities.meteor import Meteor
+from ..scenes.difficulty_selection import DifficultySelectionView
+from ..scenes.settings import SettingsScene
+from ..scenes.statistics import StatisticsScene
+from ..scenes.upgrades_selection import UpgradesSelectionScene
 
 
 class CharDict(TypedDict):

@@ -5,10 +5,10 @@ Organiza o jogo em 4 mundos temáticos + procedural infinito.
 Cada mundo tem um tema visual, modificadores de spawn, e um boss específico.
 """
 
-from dataclasses import dataclass, field
-from typing import Optional, Type, Tuple, Set, Any
-from enum import Enum
 import logging
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Optional, Set, Tuple, Type
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +69,9 @@ class WorldConfig:
 def _get_worlds() -> dict[int, WorldConfig]:
     """Retorna dicionário de mundos configurados."""
     # Importações locais para evitar circular imports
-    from ..entities.stone_golem_boss import StoneGolemBoss
     from ..entities.giant_meteor_boss import GiantMeteorBoss
     from ..entities.slime_boss import SlimeBoss
+    from ..entities.stone_golem_boss import StoneGolemBoss
 
     return {
         1: WorldConfig(

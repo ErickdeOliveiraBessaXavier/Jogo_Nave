@@ -1,6 +1,8 @@
-import pygame
-import random
 import math
+import random
+
+import pygame
+
 from ..core.config import config as Config
 
 

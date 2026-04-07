@@ -1,9 +1,11 @@
-import pygame
 from typing import TYPE_CHECKING
-from ..core.state import Scene
-from ..core.config import config as Config
+
+import pygame
+
 from ..core.assets import get_font
+from ..core.config import config as Config
 from ..core.sound import sound_manager
+from ..core.state import Scene
 from ..core.world_config import format_stage_name
 
 if TYPE_CHECKING:

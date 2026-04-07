@@ -1,13 +1,15 @@
-import pygame
 import math
-from ..core.config import config as Config
+
+import pygame
+
 from ..core.colors import LIGHT_BLUE
-from .ship import Ship
-from .mini_ship_bullet import MiniShipBullet
-from .meteor import Meteor
+from ..core.config import config as Config
 from .alien import Alien
 from .explosive_mine import ExplosiveMine
 from .eye_enemy import EyeEnemy
+from .meteor import Meteor
+from .mini_ship_bullet import MiniShipBullet
+from .ship import Ship
 
 
 class MiniShip:

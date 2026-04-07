@@ -1,5 +1,7 @@
 from typing import List
+
 import pygame
+
 from .meteor import Meteor
 
 

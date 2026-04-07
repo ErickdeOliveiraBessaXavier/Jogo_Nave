@@ -1,6 +1,8 @@
 import math
-from typing import Tuple, List
+from typing import List, Tuple
+
 import pygame
+
 from ..core.config import config as Config
 from .boss_laser import BossLaser
 

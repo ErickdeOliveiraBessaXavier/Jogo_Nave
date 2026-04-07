@@ -1,5 +1,7 @@
-import pygame
 from typing import Tuple
+
+import pygame
+
 from ..core.assets import get_font
 
 

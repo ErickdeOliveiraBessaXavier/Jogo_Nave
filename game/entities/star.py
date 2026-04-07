@@ -1,10 +1,11 @@
 """Star (Estrela) - Moeda coletável para desbloquear slots de upgrades."""
 
-import pygame
-
 # math not needed anymore
 import random
-from ..core.assets import get_image, BASE_DIR
+
+import pygame
+
+from ..core.assets import BASE_DIR, get_image
 from ..core.config import config as Config
 
 

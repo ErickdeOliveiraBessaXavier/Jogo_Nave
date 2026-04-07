@@ -1,13 +1,15 @@
 import pygame
-from .core.state import StateManager
-from .core.config import config as Config, set_screen_resolution
+
 from .core.assets import load_custom_cursor
-from .scenes.main_menu import MainMenuScene
-from .core.levels import LevelManager, FIXED_LEVELS
-from .core.input import Input
+from .core.config import config as Config
+from .core.config import set_screen_resolution
 from .core.difficulty import DifficultyPreset
+from .core.input import Input
+from .core.levels import FIXED_LEVELS, LevelManager
 from .core.meta_progression import PlayerProfile
 from .core.paths import get_profile_path
+from .core.state import StateManager
+from .scenes.main_menu import MainMenuScene
 
 
 class GameApp:

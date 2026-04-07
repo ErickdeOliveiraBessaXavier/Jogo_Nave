@@ -1,6 +1,7 @@
-import pygame
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, List, Optional
+
+import pygame
 
 if TYPE_CHECKING:
     from ..app import GameApp
