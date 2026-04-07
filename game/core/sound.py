@@ -8,9 +8,14 @@ from typing import Any, Callable, Dict, List, TypeVar, Union, cast
 
 import pygame
 
-from .sound_config import (BEHAVIOR_CONFIG, CHANNEL_CONFIG,
-                           MUSIC_BEHAVIOR_CONFIG, SOUND_PATHS, VOLUME_CONFIG,
-                           MusicState)
+from .sound_config import (
+    BEHAVIOR_CONFIG,
+    CHANNEL_CONFIG,
+    MUSIC_BEHAVIOR_CONFIG,
+    SOUND_PATHS,
+    VOLUME_CONFIG,
+    MusicState,
+)
 
 MusicPaths = Dict[str, Union[str, List[str]]]
 

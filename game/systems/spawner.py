@@ -1,6 +1,16 @@
 import random
-from typing import (TYPE_CHECKING, Callable, Dict, List, Protocol, Tuple, Type,
-                    TypedDict, Union, cast)
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    Dict,
+    List,
+    Protocol,
+    Tuple,
+    Type,
+    TypedDict,
+    Union,
+    cast,
+)
 
 from ..core.config import PowerUpType
 from ..core.config import config as Config

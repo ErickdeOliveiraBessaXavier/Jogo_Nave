@@ -9,8 +9,12 @@ import pygame
 
 from ..core.sprite_loader import sprite_loader
 from ..core.world_config import WorldTheme
-from .backgrounds import (Background, CityBackground, MountainsBackground,
-                          VolcanicBackground)
+from .backgrounds import (
+    Background,
+    CityBackground,
+    MountainsBackground,
+    VolcanicBackground,
+)
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
