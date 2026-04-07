@@ -23,6 +23,7 @@ from ..entities.eye_enemy import EyeEnemy
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.star import Star
 from ..entities.square_minion_boss import SquareMinionBoss
+from ..entities.bot_elemental import ElementalRobot
 from ..core.powerup_weights import get_powerup_weights
 
 if TYPE_CHECKING:
@@ -172,7 +173,7 @@ class EnemySpawner:
 
     def _count_enemies_by_type(self, entity_manager: "EntityManager") -> dict[str, int]:
         """Conta inimigos por tipo que estão ativos na tela."""
-        counts = {"meteor": 0, "alien": 0, "eye": 0, "square_minion": 0, "total": 0}
+        counts = {"meteor": 0, "alien": 0, "eye": 0, "square_minion": 0, "elemental_robot": 0, "total": 0}
 
         from ..entities.meteor import Meteor
         from ..entities.alien import Alien
@@ -188,6 +189,8 @@ class EnemySpawner:
                     counts["eye"] += 1
                 elif isinstance(enemy, SquareMinionBoss):
                     counts["square_minion"] += 1
+                elif isinstance(enemy, ElementalRobot):
+                    counts["elemental_robot"] += 1
 
         return counts
 
@@ -235,6 +238,11 @@ class EnemySpawner:
 
         elif enemy_type == SquareMinionBoss:
             if counts["square_minion"] >= DifficultyConfig.MAX_SQUARE_MINIONS_ON_SCREEN:
+                return False
+
+        elif enemy_type == ElementalRobot:
+            # Mini-boss: máximo de 1 na tela ao mesmo tempo
+            if counts["elemental_robot"] >= 1:
                 return False
 
         # Redução gradual se total está alto
@@ -335,6 +343,16 @@ class EnemySpawner:
                                     new_enemy.health * self.enemy_health_multiplier
                                 )
                                 entity_manager.enemies.append(new_enemy)
+                        elif enemy_type == ElementalRobot:
+                            # Mini-boss: spawna centralizado no topo da tela,
+                            # HP fixo em 25 hits (não escala com difficulty_multiplier)
+                            spawn_x = random.randint(
+                                int(Config.SCREEN_WIDTH * 0.2),
+                                int(Config.SCREEN_WIDTH * 0.8),
+                            )
+                            target_y = Config.SCREEN_HEIGHT * 0.15
+                            robot = ElementalRobot(spawn_x, target_y)
+                            entity_manager.enemies.append(robot)
                         else:
                             new_enemy = cast(EnemyWithHealth, enemy_type())
                             new_enemy.health = int(

@@ -36,13 +36,14 @@ from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.air_strike_bomb import AirStrikeBomb
 from ..entities.cannon_mine import CannonMine, MineState
 from ..entities.explosive_mine import ExplosiveMine
+from ..entities.bot_elemental import ElementalRobot
 
 
 from ..entities.explosion import ExplosionType  # ← ADICIONAR
 
 
 # Type aliases
-Enemy: TypeAlias = Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
+Enemy: TypeAlias = Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot
 BossEnemy: TypeAlias = Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss
 Projectile: TypeAlias = Bullet | MiniShipBullet
 
@@ -195,7 +196,7 @@ class Collisions:
         projectiles: Sequence[Projectile],
         grid: SpatialGrid[Enemy],
         padding: int = CollisionConstants.SPATIAL_QUERY_PADDING,
-    ) -> dict[int, list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]]:
+    ) -> dict[int, list[Enemy]]:
         """
         Faz query única expandida para todos os projéteis.
         Retorna dicionário mapeando projectile_id -> potential_targets.
@@ -214,9 +215,7 @@ class Collisions:
         all_potential = grid.query(min_x, min_y, max_x - min_x, max_y - min_y)
 
         # Mapear para cada projétil
-        result: dict[
-            int, list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]
-        ] = {}
+        result: dict[int, list[Enemy]] = {}
         for p in projectiles:
             result[id(p)] = [
                 target for target in all_potential if p.rect.colliderect(target.rect)
@@ -463,7 +462,7 @@ class Collisions:
 
     def check_mine_explosions(
         self,
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss],
+        enemies: list[Enemy],
         mine_explosions: list[MineExplosion],
         ship: Ship,
         entity_manager: "EntityManager",
@@ -597,7 +596,7 @@ class Collisions:
     def explosive_effects_vs_enemies(
         self,
         explosive_effects: list[ExplosiveEffect],
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss],
+        enemies: list[Enemy],
         entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Verifica colisão contínua entre efeitos explosivos ativos e inimigos.
@@ -695,7 +694,7 @@ class Collisions:
     def air_strike_bombs_vs_enemies(
         self,
         air_strike_bombs: list[AirStrikeBomb],
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss],
+        enemies: list[Enemy],
         entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Verifica colisão entre explosões de bombas e inimigos.
@@ -734,7 +733,7 @@ class Collisions:
     def cannon_mines_vs_enemies(
         self,
         cannon_mines: list[CannonMine],
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss],
+        enemies: list[Enemy],
         entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Verifica colisão entre minas de torres e inimigos."""
@@ -966,12 +965,8 @@ class Collisions:
         bullets: list[Bullet],
         mine_explosions: list[MineExplosion],
         ship: Ship,
-        enemy_grid: SpatialGrid[
-            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
-        ],
-        enemies: list[
-            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
-        ],  # Para adicionar fragments
+        enemy_grid: SpatialGrid[Enemy],
+        enemies: list[Enemy],  # Para adicionar fragments
         entity_manager: "EntityManager",  # <-- NOVO
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
@@ -1124,9 +1119,7 @@ class Collisions:
     def ship_vs_enemies(
         self,
         ship: Ship,
-        enemy_grid: SpatialGrid[
-            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
-        ],
+        enemy_grid: SpatialGrid[Enemy],
         entity_manager: "EntityManager",
     ) -> bool:
         if ship.invuln > 0:
@@ -1557,7 +1550,7 @@ class Collisions:
     def player_lasers_vs_enemies(
         self,
         player_lasers: list[PlayerLaser],
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss],
+        enemies: list[Enemy],
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]]]:

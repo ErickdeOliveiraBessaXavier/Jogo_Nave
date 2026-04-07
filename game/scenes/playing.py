@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from ..app import GameApp
     from ..core.spatial_grid import SpatialGrid
     from ..entities.alien import Alien
+    from ..entities.bot_elemental import ElementalRobot
     from ..entities.explosive_mine import ExplosiveMine
     from ..entities.eye_enemy import EyeEnemy
     from ..entities.meteor import Meteor
@@ -653,7 +654,7 @@ class PlayingScene(Scene):
 
     def _check_projectile_vs_enemies(
         self,
-        enemy_grid: "SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss]",
+        enemy_grid: "SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot]",
     ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
         """
         Verifica colisões de projéteis contra inimigos normais.

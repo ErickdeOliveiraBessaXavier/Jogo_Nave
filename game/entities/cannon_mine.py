@@ -7,11 +7,12 @@ from typing import Set, Optional, Callable, Union, TYPE_CHECKING
 if TYPE_CHECKING:
     from ..entities.meteor import Meteor
     from ..entities.alien import Alien
+    from ..entities.bot_elemental import ElementalRobot
     from ..entities.explosive_mine import ExplosiveMine
     from ..entities.eye_enemy import EyeEnemy
     from ..entities.square_minion_boss import SquareMinionBoss
 
-EnemyType = Union["Meteor", "Alien", "ExplosiveMine", "EyeEnemy", "SquareMinionBoss"]
+EnemyType = Union["Meteor", "Alien", "ExplosiveMine", "EyeEnemy", "SquareMinionBoss", "ElementalRobot"]
 
 
 class MineState(Enum):

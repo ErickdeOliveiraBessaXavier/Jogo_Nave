@@ -11,6 +11,7 @@ from ..entities.black_hole import BlackHole
 from ..entities.boss import Boss
 from ..entities.boss_laser import BossLaser
 from ..entities.boss_square import BossSquare
+from ..entities.bot_elemental import ElementalRobot, EnergyOrb
 from ..entities.bullet import Bullet
 from ..entities.bullet_pool import BulletPool
 from ..entities.cannon_mine import CannonMine
@@ -54,11 +55,12 @@ class EntityManager:
         self.is_side_scroll = is_side_scroll  # NOVO: Modo de jogo
         self.bullets: list[Bullet] = []
         self.emp_waves: list[EMPWave] = []  # Ondas visuais do EMP
+        self.energy_orbs: list[EnergyOrb] = []  # Projéteis do ElementalRobot (mini-boss)
         self.explosive_effects: list[
             ExplosiveEffect
         ] = []  # Efeitos visuais de explosão de área
         self.enemies: list[
-            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
+            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot
         ] = []
         self.alien_bullets: list[AlienBullet] = []
         self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
@@ -91,7 +93,7 @@ class EntityManager:
         )  # Pool de meteoros
         self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
         self.enemy_spatial_grid: SpatialGrid[
-            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss
+            Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot
         ] = SpatialGrid()  # Grid espacial para inimigos
         self.spike_spatial_grid: SpatialGrid[Spike] = (
             SpatialGrid()
@@ -500,8 +502,17 @@ class EntityManager:
                 enemy.update(scaled_dt, self.is_side_scroll, player_x, player_y)
             elif isinstance(enemy, SquareMinionBoss):
                 enemy.update(scaled_dt, screen_width, screen_height)
+            elif isinstance(enemy, ElementalRobot):
+                # Mini-boss: update recebe dt real + enemy_dt (EMP) + posição do jogador
+                new_orbs = enemy.update(dt, scaled_dt, player_x, player_y)
+                if new_orbs:
+                    self.energy_orbs.extend(new_orbs)
             else:
                 enemy.update(scaled_dt)
+
+        # Atualizar Energy Orbs (projéteis do ElementalRobot)
+        for orb in self.energy_orbs:
+            orb.update(dt)
 
         # Verificar colisões entre aliens
         self._check_alien_collisions()
@@ -678,6 +689,7 @@ class EntityManager:
         entity_lists: list[list[Any]] = [
             self.bullets,
             self.alien_bullets,
+            self.energy_orbs,      # Projéteis do ElementalRobot (mini-boss)
             self.player_lasers,  # Lasers do jogador
             self.boss_squares,  # Quadrados do boss
             self.eye_lasers,
@@ -755,6 +767,35 @@ class EntityManager:
 
         # Desenhar meteoros do pool (sempre visíveis, pois fazem parte do fluxo contínuo)
         self.meteor_pool.draw(surface)
+
+    def spawn_elemental_robot(
+        self,
+        x: float | None = None,
+        y: float | None = None,
+        difficulty_multiplier: float = 1.0,
+    ) -> ElementalRobot:
+        """
+        Spawna um ElementalRobot (mini-boss) na posição indicada.
+
+        Args:
+            x: Posição horizontal (padrão: centro da tela)
+            y: Posição vertical de parada (padrão: 15% da altura)
+            difficulty_multiplier: Não afeta o HP (fixo em 25 hits), reservado
+                                   para uso futuro (ex: velocidade de disparo).
+
+        Returns:
+            ElementalRobot criado e adicionado à lista de inimigos.
+        """
+        screen = pygame.display.get_surface()
+        sw = screen.get_width() if screen else 1600
+        sh = screen.get_height() if screen else 900
+
+        spawn_x = x if x is not None else sw / 2 - 72  # centralizado na tela
+        spawn_y = y if y is not None else sh * 0.15     # 15% do topo
+
+        robot = ElementalRobot(spawn_x, spawn_y, difficulty_multiplier=difficulty_multiplier)
+        self.enemies.append(robot)
+        return robot
 
     def spawn_meteor(
         self,
@@ -941,6 +982,7 @@ class EntityManager:
                 self.meteor_pool.release(e)
 
         self.alien_bullets = [ab for ab in self.alien_bullets if not ab.dead]
+        self.energy_orbs = [orb for orb in self.energy_orbs if not orb.dead]
         self.boss_lasers = [bl for bl in self.boss_lasers if not bl.dead]
         self.player_lasers = [pl for pl in self.player_lasers if not pl.dead]
         self.boss_squares = [bs for bs in self.boss_squares if not bs.dead]
@@ -980,6 +1022,7 @@ class EntityManager:
     def clear_all(self):
         self.bullets.clear()
         self.alien_bullets.clear()
+        self.energy_orbs.clear()  # Limpar orbs do ElementalRobot
         self.boss_lasers.clear()
         self.boss_squares.clear()
         self.slime_drips.clear()
@@ -1011,7 +1054,7 @@ class EntityManager:
         self.bullets = [b for b in self.bullets if not b.dead]
 
         self.alien_bullets.clear()
-        self.boss_lasers.clear()
+        self.energy_orbs.clear()  # Limpar orbs do ElementalRobot na transição
         self.boss_squares.clear()
         self.eye_lasers.clear()
         self.floating_scores.clear()
