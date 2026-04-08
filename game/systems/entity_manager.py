@@ -630,9 +630,12 @@ class EntityManager:
         # Update all entities in a generic way, handling specific types
         for entity_list in entity_groups:
             for entity in entity_list:
-                if isinstance(entity, (EyeEnemy, GuidedMeteor)):
+                if isinstance(entity, (EyeEnemy, GuidedMeteor, ElementalRobot)):
                     if isinstance(entity, GuidedMeteor):
                         entity.update(dt, self.is_side_scroll, player_x, player_y)
+                    elif isinstance(entity, ElementalRobot):
+                        # ElementalRobot no Game Over: usamos dt para ambos os tempos
+                        entity.update(dt, dt, player_x, player_y)
                     else:  # EyeEnemy
                         entity.update(dt, player_x, player_y)
                 elif isinstance(entity, MiniShip):

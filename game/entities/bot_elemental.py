@@ -124,12 +124,14 @@ class EnergyOrb:
         color_mid: RGB,
         color_outer: RGB,
         pixel_size: int,
+        theme: str,
         speed_multiplier: float = 1.0,
     ):
         self.x = float(x)
         self.y = float(y)
         self.dead = False
         self.causes_damage = True
+        self.theme = theme
         self.color_core = color_core
         self.color_mid = color_mid
         self.color_outer = color_outer
@@ -719,6 +721,7 @@ class ElementalRobot:
             color_mid=self._palette["mid"],
             color_outer=self._palette["outer"],
             pixel_size=pixel_size,
+            theme=self._attack_theme,
             speed_multiplier=self._orb_speed_mult,
         )
 

@@ -59,6 +59,11 @@ class Ship:
         self.auto_fire = auto_fire
         self.auto_fire_timer = 0.0
 
+        # Elemental Debuffs (Timers)
+        self.fire_rate_modifier_timer: float = 0.0  # Inferno: sobreaquecimento
+        self.invert_controls_timer: float = 0.0     # Toxina: interferência
+        self.speed_modifier_timer: float = 0.0      # Nevasca: congelamento
+
         # Carregar imagem da nave
         try:
             from ..core.assets import BASE_DIR, get_image
@@ -154,6 +159,10 @@ class Ship:
             multiplier *= (
                 Config.EXPLOSIVE_SHOT_FIRE_RATE_PENALTY
             )  # Tiros explosivos são mais lentos
+            
+        # Inferno debuff: Sobreaquecimento reduz cadência em 50%
+        if self.fire_rate_modifier_timer > 0.0:
+            multiplier *= 0.5
 
         return multiplier
 
@@ -317,7 +326,7 @@ class Ship:
         return nearest_enemy
 
     def _update_timers(self, dt: float) -> None:
-        """Atualiza todos os timers de power-ups."""
+        """Atualiza todos os timers de power-ups e debuffs."""
         if self.invuln > 0:
             self.invuln = max(0, self.invuln - dt * 1000)
 
@@ -337,6 +346,11 @@ class Ship:
             if self.homing_shots_timer <= 0.0:
                 self.homing_shots_active = False
                 self.speed = self.original_speed
+
+        # Update elemental debuffs
+        self.fire_rate_modifier_timer = max(0.0, self.fire_rate_modifier_timer - dt)
+        self.invert_controls_timer = max(0.0, self.invert_controls_timer - dt)
+        self.speed_modifier_timer = max(0.0, self.speed_modifier_timer - dt)
 
     def _update_orbital_lasers(
         self, dt: float, entity_manager: Optional["EntityManager"]
@@ -569,7 +583,14 @@ class Ship:
             is_side_scroll: Se True, usa movimentação horizontal (left-right com up-down)
                            Se False, usa movimentação vertical (top-down)
         """
-        current_speed = self.speed * (1.5 if self.speed_boost_timer > 0 else 1.0)
+        # Calcular velocidade atual considerando boost e debuff de congelamento (Nevasca)
+        base_speed_multiplier = 1.0
+        if self.speed_boost_timer > 0:
+            base_speed_multiplier = 1.5
+        if self.speed_modifier_timer > 0.0:
+            base_speed_multiplier *= 0.3  # Nevasca: 70% de redução
+            
+        current_speed = self.speed * base_speed_multiplier
         move_vec = pygame.math.Vector2(0, 0)
 
         if self.mouse_control:
@@ -579,17 +600,27 @@ class Ship:
             ship_center_y = self.y + self.h / 2
             # Usar sensibilidade para movimento proporcional à distância
             sensitivity = 0.02  # 2% de sensibilidade
-            move_vec.x = (mouse_x - ship_center_x) * sensitivity
-            move_vec.y = (mouse_y - ship_center_y) * sensitivity
+            
+            # Toxina debuff: Inverte a direção do movimento em relação ao mouse
+            dir_mult = -1.0 if self.invert_controls_timer > 0.0 else 1.0
+            
+            move_vec.x = (mouse_x - ship_center_x) * sensitivity * dir_mult
+            move_vec.y = (mouse_y - ship_center_y) * sensitivity * dir_mult
         else:
             # Movimento por teclado
-            if "hold_left" in held_actions:
+            # Toxina debuff: Inverte mapeamento de teclas
+            left = "hold_right" if self.invert_controls_timer > 0.0 else "hold_left"
+            right = "hold_left" if self.invert_controls_timer > 0.0 else "hold_right"
+            up = "hold_down" if self.invert_controls_timer > 0.0 else "hold_up"
+            down = "hold_up" if self.invert_controls_timer > 0.0 else "hold_down"
+            
+            if left in held_actions:
                 move_vec.x -= 1
-            if "hold_right" in held_actions:
+            if right in held_actions:
                 move_vec.x += 1
-            if "hold_up" in held_actions:
+            if up in held_actions:
                 move_vec.y -= 1
-            if "hold_down" in held_actions:
+            if down in held_actions:
                 move_vec.y += 1
 
             if move_vec.length() > 0:

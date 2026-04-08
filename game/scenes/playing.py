@@ -955,6 +955,44 @@ class PlayingScene(Scene):
         if self.collisions.eye_laser_vs_ship(self.ship, self.entity_manager.eye_lasers):
             self._handle_ship_hit()
 
+        # Colisão com EnergyOrb (ElementalRobot)
+        orb_hit = self.collisions.energy_orbs_vs_ship(
+            self.ship, self.entity_manager.energy_orbs
+        )
+        if orb_hit:
+            # Aplicar dano normal
+            self._handle_ship_hit()
+            
+            # Se a nave ficou invulnerável (recebeu o dano), aplicar debuffs elementais
+            if self.ship.invuln > 0:
+                if orb_hit.theme == "inferno":
+                    self.ship.fire_rate_modifier_timer = 4.0 # 4s de cadência lenta
+                elif orb_hit.theme == "toxina":
+                    self.ship.invert_controls_timer = 2.5    # 2.5s de controles invertidos
+                elif orb_hit.theme == "nevasca":
+                    self.ship.speed_modifier_timer = 3.5     # 3.5s de velocidade lenta
+
+        from ..entities.boss_laser import BossLaser
+
+        # Como EnergyOrb é injetado em entity_manager.alien_bullets, verificamos aqui
+        from ..entities.bot_elemental import EnergyOrb
+        for orb in self.entity_manager.alien_bullets:
+            if isinstance(orb, EnergyOrb) and not orb.dead:
+                if self.ship.rect.colliderect(orb.rect):
+                    orb.dead = True
+                    # Aplicar dano normal
+                    self._handle_ship_hit()
+                    
+                    # Se não for atingido em estado invulnerável, aplicar debuffs
+                    if self.ship.invuln > 0: # Ship ficou invulnerável após o hit acima
+                        if orb.theme == "inferno":
+                            self.ship.fire_rate_modifier_timer = 4.0 # 4s de cadência lenta
+                        elif orb.theme == "toxina":
+                            self.ship.invert_controls_timer = 2.5    # 2.5s de controles invertidos
+                        elif orb.theme == "nevasca":
+                            self.ship.speed_modifier_timer = 3.5     # 3.5s de velocidade lenta
+                    break
+
         from ..entities.boss_laser import BossLaser
 
         boss_lasers = [

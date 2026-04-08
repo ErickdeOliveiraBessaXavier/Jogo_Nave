@@ -14,7 +14,7 @@ from ..entities.alien_bullet import AlienBullet
 from ..entities.boss import Boss
 from ..entities.boss_laser import BossLaser
 from ..entities.boss_square import BossSquare
-from ..entities.bot_elemental import ElementalRobot
+from ..entities.bot_elemental import ElementalRobot, EnergyOrb
 from ..entities.bullet import Bullet
 from ..entities.cannon_mine import CannonMine, MineState
 from ..entities.explosion import ExplosionType
@@ -1203,6 +1203,22 @@ class Collisions:
                 bullet.dead = True
                 return True
         return False
+
+    def energy_orbs_vs_ship(
+        self, ship: Ship, energy_orbs: list[EnergyOrb]
+    ) -> EnergyOrb | None:
+        """Verifica colisão entre EnergyOrbs (ElementalRobot) e a nave.
+        
+        Retorna o orbe que colidiu para que PlayingScene possa aplicar os debuffs.
+        """
+        if ship.invuln > 0:
+            return None
+            
+        for orb in energy_orbs[:]:
+            if not orb.dead and ship.rect.colliderect(orb.rect):
+                orb.dead = True
+                return orb
+        return None
 
     def eye_laser_vs_ship(self, ship: Ship, eye_lasers: list[EyeLaser]) -> bool:
         if ship.invuln > 0:
