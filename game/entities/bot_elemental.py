@@ -43,7 +43,7 @@ Animações implementadas (mapeamento HTML → Python):
   growSphere      → _aura_scale 0.5 → 3.5 em CHARGING
   shootSphere     → aura ocultada + EnergyOrb em FIRING
   recoil          → _recoil_x/_recoil_y/_recoil_rot em RECOIL
-  thrustFlicker   → 3 barras independentes em _draw_thruster
+  thrustRings     → anéis dinâmicos (estilo StoneGolemBoss) em _draw_thruster
 """
 
 import logging
@@ -77,14 +77,6 @@ logger = logging.getLogger(__name__)
 
 # Alias de cor RGB — espelha o tipo definido no pixel map
 RGB = Tuple[int, int, int]
-
-# Linhas de corpo que recebem efeito de inset-shadow (fiel ao HTML):
-#   box-shadow: inset 0 12px 0 current-light, inset 0 -12px 0 current-dark
-# 12 px / SCALE=8 ≈ 1,5 linhas → 2 primeiras linhas do corpo = light, 2 últimas = dark
-_BODY_ROW_FIRST = 12  # primeira linha com "D" no interior do corpo
-_BODY_ROW_LAST = 17  # última linha com "D" no interior do corpo
-_BODY_ROW_LIGHT_MAX = _BODY_ROW_FIRST + 1  # linhas 12-13 → cor light
-_BODY_ROW_DARK_MIN = _BODY_ROW_LAST - 1  # linhas 16-17 → cor dark
 
 # ============================================================================
 
@@ -225,7 +217,7 @@ class _ChargeParticle:
         self,
         antenna_x: float,
         antenna_y: float,
-        palette: dict,
+        palette: dict[str, RGB],
         theme: str,
     ):
         self.theme = theme
@@ -361,7 +353,7 @@ class ElementalRobot:
     SCALE = 8  # px por "pixel" do mapa
     # Mini-boss: precisa de 25 tiros para ser eliminado.
     MAX_HEALTH = 25
-    HIT_SCORE = 20
+    HIT_SCORE = 5000
 
     # Durações dos estados (segundos)
     _DUR_IDLE = 3.0
@@ -403,6 +395,7 @@ class ElementalRobot:
         self.max_health = int(self.MAX_HEALTH * difficulty_multiplier)
         self.health = health if health is not None else self.max_health
         self.dead = False
+        self.just_died = False  # True por um ciclo quando entra em DYING
         self.causes_damage = False  # contato não causa dano direto
         self.hit_score = self.HIT_SCORE
 
@@ -485,9 +478,9 @@ class ElementalRobot:
 
         # ── Superfícies pré-alocadas ──────────────────────────────────────────
         _s = self.SCALE
-        # Propulsor: 3 superfícies independentes por barra
-        self._tb_surfs = [
-            pygame.Surface((_s * 12, _s * 2), pygame.SRCALPHA) for _ in range(3)
+        # Otimização do propulsor (anéis dinâmicos similares ao StoneGolemBoss)
+        self._thruster_surfs = [
+            pygame.Surface((_s * 10 + 2, _s * 4 + 2), pygame.SRCALPHA) for _ in range(5)
         ]
         self._aura_surf = pygame.Surface((_s * 24, _s * 24), pygame.SRCALPHA)
         self._pulse_surf = pygame.Surface((_s * 6, _s * 6), pygame.SRCALPHA)
@@ -518,6 +511,8 @@ class ElementalRobot:
     def _transition(self, new_state: str) -> None:
         self.fsm_state = new_state
         self._fsm_timer = 0.0
+        if new_state == "DYING":
+            self.just_died = True  # sinaliza para o sistema externo disparar a explosão
 
     def _run_fsm(
         self,
@@ -567,8 +562,10 @@ class ElementalRobot:
                 self._transition("IDLE")
 
         elif self.fsm_state == "DYING":
-            frac = self._fsm_timer / self._DUR_DYING
-            self._alpha = int(255 * (1.0 - frac))
+            # Dispara explosão no primeiro frame de DYING e marca dead imediatamente.
+            # A animação de morte é delegada ao ExplosionPool (gerenciado externamente).
+            if self._fsm_timer == dt:  # primeiro tick após transição
+                pass  # sinal já foi dado via just_died (ver abaixo)
             if self._fsm_timer >= self._DUR_DYING:
                 self.dead = True
 
@@ -770,33 +767,32 @@ class ElementalRobot:
 
     def take_damage(self, amount: int = 1) -> None:
         """Reduz a vida pelo valor de 'amount' (mini-boss balanceado)."""
+        if self.fsm_state == "DYING":
+            return  # Ignora dano durante animação de morte
         self.health -= amount
-        if self.health <= 0 and self.fsm_state != "DYING":
+        if self.health <= 0:
             self.health = 0
             self._transition("DYING")
 
     def get_points_value(self) -> int:
         return self.hit_score
 
+    def get_explosion_type(self) -> list[RGB]:
+        """Retorna a paleta atual para a explosão."""
+        return [self._palette["core"], self._palette["mid"], self._palette["outer"]]
+
     # =========================================================================
     # DRAW
     # =========================================================================
 
     def draw(self, surface: pygame.Surface) -> None:
-        if self.dead:
+        if self.dead or self.fsm_state == "DYING":
             return
 
         S = self.SCALE
         ox = int(self._draw_x())
         oy = int(self._draw_y())
-
-        if self.fsm_state == "DYING" and self._alpha < 255:
-            tmp = pygame.Surface((self.w, self.h + S * 6), pygame.SRCALPHA)
-            self._draw_sprite(tmp, 0, 0, S)
-            tmp.set_alpha(self._alpha)
-            surface.blit(tmp, (ox, oy))
-        else:
-            self._draw_sprite(surface, ox, oy, S)
+        self._draw_sprite(surface, ox, oy, S)
 
     # ── Sub-rotinas de desenho ───────────────────────────────────────────────
 
@@ -868,20 +864,20 @@ class ElementalRobot:
                 # Escolha de cor
                 if cell == "A":
                     color = self._body_outline
-                elif cell == "B":
+                elif cell == "B" or cell == "D":
                     color = self._body_main
                 elif cell == "C":
                     color = _C["C"]
-                elif cell == "D":
-                    # Inset shadow: zona clara no topo, escura na base
-                    if row_i <= _BODY_ROW_LIGHT_MAX:
-                        color = self._body_light
-                    elif row_i >= _BODY_ROW_DARK_MIN:
-                        color = self._body_dark
-                    else:
-                        color = self._body_main
                 elif cell == "E":
                     color = _C["E"]
+                elif cell == "F":
+                    color = self._body_light
+                elif cell == "G":
+                    color = self._body_dark
+                elif cell == "H":
+                    color = _C["H"]
+                elif cell == "I":
+                    color = _C["I"]
                 else:
                     color = (255, 0, 255)  # magenta = letra desconhecida
 
@@ -893,12 +889,6 @@ class ElementalRobot:
                     color,
                     (ox + col_i * S, oy + row_i * S + dy_extra, S, S),
                 )
-
-        # ── Glint na antena (HTML: .glint — branco 8×8 px no canto sup. esq.) ──
-        # Interior da ponta: row 1, col 8 (excluindo borda "E")
-        glint_x = ox + (_ANTENNA_COL_START + 1) * S
-        glint_y = oy + (_ANTENNA_ROW_START + 1) * S
-        pygame.draw.rect(surface, _C["PUPIL"], (glint_x, glint_y, S, S))
 
         # ── Pulso da antena (antennaPulse em IDLE) ────────────────────────────
         if self._antenna_pulse_alpha > 0 and self.fsm_state == "IDLE":
@@ -988,47 +978,41 @@ class ElementalRobot:
         S: int,
     ) -> None:
         """
-        3 barras horizontais empilhadas com flicker independente.
-
-        Fiel ao HTML:
-          tb-1: 70 px → 66 px, thrustFlicker1 0.15 s steps(2) alternate
-          tb-2: 44 px → 40 px, thrustFlicker2 0.20 s steps(2) alternate-reverse, opacity 0.8
-          tb-3: 20 px → 14 px, thrustFlicker3 0.10 s steps(2) alternate, opacity 0→0
-
-        Escala: HTML body=140px → Python body=18*S=144px → fator≈1.03
+        Propulsor dinâmico com anéis de energia que descem e diminuem.
+        Fiel ao efeito do StoneGolemBoss, mas usando a paleta do ElementalRobot.
         """
         cx = ox + self.w // 2
-        base_y = oy + _PIXEL_ROWS * S  # imediatamente abaixo do pixel map
-        gap = max(1, S // 4)  # espaçamento entre barras
+        start_y = oy + self.h
+        
+        # Pequena base fixa
+        pygame.draw.rect(surface, self._thruster_colors[0], (cx - S, start_y, S * 2, S))
 
-        c1, c2, c3 = self._thruster_colors
+        rings = 5
+        max_drop = S * 14
+        speed = 2.0
+        t = self._time
+        for i in range(rings):
+            phase = ((t * speed) + (i / rings)) % 1.0
+            w = int(S * 10 * (1 - phase))
+            h = max(S, int(S * 4 * (1 - phase)))
+            y = start_y + int(phase * max_drop) + S
+            alpha = max(0, int(255 * (1 - phase**2)))
+            if w < S:
+                continue
+            
+            # Cores interpoladas baseadas na paleta
+            if phase < 0.15:
+                color = self._thruster_colors[0]
+            elif phase < 0.50:
+                color = self._thruster_colors[1]
+            else:
+                color = self._thruster_colors[2]
 
-        # ── tb-1: 9S → 8S (flicker a 0.15 s, steps(2) alternate) ─────────────
-        f1 = int(self._time / 0.075) % 2  # steps(2) alternate: 0→1→0 a cada 0.15 s
-        w1 = (9 - f1) * S
-        dy1 = f1 * 2  # translateY(0 → 2px)
-        pygame.draw.rect(surface, c1, (cx - w1 // 2, base_y + dy1, w1, S))
-
-        # ── tb-2: 5S → 4S (flicker a 0.20 s, steps(2) alternate-reverse) ─────
-        f2 = int(self._time / 0.10) % 2
-        w2 = (5 - (1 - f2)) * S  # alternate-reverse: começa em "1"
-        a2 = 255 if f2 == 0 else 204  # opacity 1 → 0.8
-        dy2 = (1 - f2) * 2
-        s2 = self._tb_surfs[1]
-        s2.fill((0, 0, 0, 0))
-        pygame.draw.rect(s2, (*c2, a2), (0, 0, w2, S))
-        surface.blit(s2, (cx - w2 // 2, base_y + S + gap + dy2))
-
-        # ── tb-3: 2S → S (flicker a 0.10 s, steps(2) alternate, opacity 1→0) ─
-        f3 = int(self._time / 0.05) % 2
-        w3 = max(S, (3 - f3) * S)
-        a3 = 255 if f3 == 0 else 0  # opacity desaparece
-        dy3 = f3 * 4
-        if a3 > 0:
-            s3 = self._tb_surfs[2]
-            s3.fill((0, 0, 0, 0))
-            pygame.draw.rect(s3, (*c3, a3), (0, 0, w3, S))
-            surface.blit(s3, (cx - w3 // 2, base_y + 2 * (S + gap) + dy3))
+            # ── Otimização: Reutiliza Surface pré-alocada ──────────────────
+            rs = self._thruster_surfs[i]
+            rs.fill((0, 0, 0, 0))
+            pygame.draw.rect(rs, (*color, alpha), (0, 0, w, h), S)
+            surface.blit(rs, (cx - w // 2, y - h // 2))
 
     def _draw_aura(
         self,

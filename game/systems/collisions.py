@@ -231,11 +231,11 @@ class Collisions:
         enemies_list: list[Any],  # Usar Any para evitar problema de variância
         entity_manager: "EntityManager",
         explosion_size: int | None = None,
-    ) -> tuple[int, tuple[float, float, int]]:
+    ) -> tuple[int, tuple[float, float, int] | None]:
         """Helper para destruição de inimigos com explosão, som e fragmentos.
 
         Centraliza lógica repetida em 8+ lugares.
-        Retorna (pontos, (cx, cy, pontos)) para score_events.
+        Retorna (pontos, (cx, cy, pontos) | None) para score_events.
 
         Args:
             explosion_size: Tamanho da explosão. Se None, usa w//2 ou radius.
@@ -246,12 +246,15 @@ class Collisions:
         # ElementalRobot tem sistema de HP próprio — delegar ao take_damage
         if isinstance(enemy, ElementalRobot):
             enemy.take_damage(1)
-            pts = enemy.get_points_value()
-            if not enemy.dead:
+            # Morreu neste hit: fsm_state passa para DYING (dead só vira True após animação)
+            just_died = enemy.fsm_state == "DYING" and enemy.just_died
+            if just_died:
+                enemy.just_died = False  # consome a flag
+            if not just_died:
                 # Ainda vivo: só explosão pequena de hit, sem score
                 entity_manager.spawn_explosion(cx, cy, size=10)
                 sound_manager.play_boss_damage()
-                return 0, (cx, cy, 0)
+                return 0, None
             # Morreu neste hit: continua para dar pontos e explosão grande
         else:
             # Marcar como morto
@@ -262,6 +265,8 @@ class Collisions:
         # Definir tipo de explosão baseado no inimigo
         if isinstance(enemy, Alien):
             explosion_type = ExplosionType.ALIEN
+        elif isinstance(enemy, ElementalRobot):
+            explosion_type = enemy.get_explosion_type()
         else:
             explosion_type = None
 
@@ -338,7 +343,8 @@ class Collisions:
                     )
                     score_gain += pts
                     destroyed_count += 1
-                    score_events.append(score_event)
+                    if score_event is not None:
+                        score_events.append(score_event)
 
         return score_gain, destroyed_count, score_events
 
@@ -567,7 +573,8 @@ class Collisions:
                         )
                         score_gain += pts
                         destroyed_count += 1
-                        score_events.append(score_event)
+                        if score_event is not None:
+                            score_events.append(score_event)
 
         return score_gain, destroyed_count, score_events, ship_hit
 
@@ -965,7 +972,8 @@ class Collisions:
                         )
                         score_gain += pts
                         destroyed_count += 1
-                        score_events.append(score_event)
+                        if score_event is not None:
+                            score_events.append(score_event)
 
                     if self._process_projectile_hit(
                         b, b.x, b.y, entity_manager, create_explosion=False
@@ -1032,7 +1040,8 @@ class Collisions:
                         )
                         score_gain += pts
                         destroyed_count += 1
-                        score_events.append(score_event)
+                        if score_event is not None:
+                            score_events.append(score_event)
 
                     # Se é um tiro explosivo, causar dano em área
                     if b.explosive:
@@ -1083,7 +1092,8 @@ class Collisions:
                                     )
                                     score_gain += pts
                                     destroyed_count += 1
-                                    score_events.append(score_event)
+                                    if score_event is not None:
+                                        score_events.append(score_event)
 
                     if self._process_projectile_hit(
                         b, b.x, b.y, entity_manager, create_explosion=False
@@ -1619,8 +1629,9 @@ class Collisions:
                         )
                         score_gain += pts
                         destroyed_count += 1
-                        score_events.append(score_event)
-                        floating_scores.append(FloatingScore(*score_event))
+                        if score_event is not None:
+                            score_events.append(score_event)
+                            floating_scores.append(FloatingScore(*score_event))
 
         return score_gain, destroyed_count, score_events
 
