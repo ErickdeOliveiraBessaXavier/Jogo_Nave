@@ -37,6 +37,11 @@ def get_profile_path() -> Path:
     return get_user_data_dir() / "player_profile.json"
 
 
+def get_preferences_path() -> Path:
+    """Retorna o caminho para o arquivo de preferências do jogador."""
+    return get_user_data_dir() / "user_preferences.json"
+
+
 def get_error_log_path() -> Path:
     """Retorna o caminho para o arquivo de log de erros."""
     return get_user_data_dir() / "error.log"

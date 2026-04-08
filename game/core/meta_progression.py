@@ -501,13 +501,6 @@ class PlayerProfile:
         # Preferências detectadas
         self.preferred_difficulty: Optional[DifficultyPreset] = None
 
-        # Configurações de vídeo
-        self.resolution: Tuple[int, int] = (1280, 720)  # Largura, altura
-
-        # Configurações de controle
-        self.mouse_control: bool = False  # Usar mouse para mover nave
-        self.auto_fire: bool = False  # Tiro automático ativado
-
         # Aprimoramentos (ativos)
         # Armazenamos como nomes de enum para JSON estável
         self.unlocked_upgrades: set[UpgradeType] = set(DEFAULT_UNLOCKED)

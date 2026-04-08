@@ -510,6 +510,20 @@ class SoundManager:
         print(f"  🎼 Música: {self.music_volume:.1%}")
         print(f"  🔫 Tiros: {self.shot_volume_base:.1%}")
 
+    def load_config(self, music_vol: float, sfx_volume: float, shot_volume: float):
+        """Carrega configurações de volume de uma fonte externa."""
+        self.music_volume = max(0.0, min(1.0, music_vol))
+        self.sfx_volume = max(0.0, min(1.0, sfx_volume))
+        self.shot_volume_base = max(0.0, min(1.0, shot_volume))
+        self._update_all_volumes()
+
+        # Atualizar música se estiver tocando
+        if self.current_music is not None:
+            base_volume = self.music_volume
+            if self.current_music in ["boss", "spike_boss", "slime_boss"]:
+                base_volume *= self.boss_music_multiplier
+            pygame.mixer.music.set_volume(min(1.0, base_volume * self.master_volume))
+
     @require_audio
     def _update_all_volumes(self):
         """Atualiza o volume de todos os sons carregados."""

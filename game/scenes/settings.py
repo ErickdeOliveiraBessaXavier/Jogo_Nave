@@ -6,7 +6,8 @@ from ..core import colors
 from ..core.assets import get_font
 from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.meta_progression import PlayerProfile
-from ..core.paths import get_profile_path
+from ..core.paths import get_preferences_path, get_profile_path
+from ..core.preferences import UserPreferences
 from ..core.sound import sound_manager
 from ..core.state import Scene
 
@@ -32,6 +33,9 @@ class SettingsView:
         self.on_back = on_back
         self.on_restart = on_restart
         self.renderer = renderer
+
+        # Agora usamos ambos: preferências para sistema e profile para progressão (se necessário)
+        self.preferences = UserPreferences(get_preferences_path())
         self.player_profile = PlayerProfile(get_profile_path())
 
         # Fonts
@@ -43,13 +47,13 @@ class SettingsView:
 
         # Estado da UI
         self.sliders: Dict[str, float] = {
-            "music": sound_manager.music_volume,
-            "sfx": sound_manager.sfx_volume,
-            "shot": sound_manager.shot_volume_base,
+            "music": self.preferences.music_volume,
+            "sfx": self.preferences.sfx_volume,
+            "shot": self.preferences.shot_volume,
         }
         self.toggles: Dict[str, bool] = {
-            "mouse_control": self.player_profile.mouse_control,
-            "auto_fire": self.player_profile.auto_fire,
+            "mouse_control": self.preferences.mouse_control,
+            "auto_fire": self.preferences.auto_fire,
         }
         self.dragging_slider: str | None = None
 
@@ -66,8 +70,9 @@ class SettingsView:
             (3840, 2160, "4K"),
             (5120, 2880, "5K"),
         ]
-        # Carregar resolução salva já aqui, evitando dependência de reset()
-        saved_res = self.player_profile.resolution
+
+        # Carregar resolução salva das preferências
+        saved_res = self.preferences.resolution
         self.selected_resolution_index = 1  # default
         for i, (w, h, _) in enumerate(self.available_resolutions):
             if w == saved_res[0] and h == saved_res[1]:
@@ -102,7 +107,7 @@ class SettingsView:
         card_width = (available_width - card_gap) / 2
         card_height = screen_h - 180
 
-        # Posição inicial X (agora começa no padding)
+        # Posição inicial X
         start_x = outer_pad
 
         # Card de Áudio (Esquerda)
@@ -211,17 +216,17 @@ class SettingsView:
         self.entry_progress = 0.0
         self.is_entering = True
         self.dragging_slider = None
-        # Atualizar valores dos sliders
-        self.sliders["music"] = sound_manager.music_volume
-        self.sliders["sfx"] = sound_manager.sfx_volume
-        self.sliders["shot"] = sound_manager.shot_volume_base
 
-        # Carregar toggles
-        self.toggles["mouse_control"] = self.player_profile.mouse_control
-        self.toggles["auto_fire"] = self.player_profile.auto_fire
+        # Recarregar das preferências
+        self.preferences.load()
+        self.sliders["music"] = self.preferences.music_volume
+        self.sliders["sfx"] = self.preferences.sfx_volume
+        self.sliders["shot"] = self.preferences.shot_volume
 
-        # Carregar resolução salva
-        saved_res = self.player_profile.resolution
+        self.toggles["mouse_control"] = self.preferences.mouse_control
+        self.toggles["auto_fire"] = self.preferences.auto_fire
+
+        saved_res = self.preferences.resolution
         for i, (w, h, _) in enumerate(self.available_resolutions):
             if w == saved_res[0] and h == saved_res[1]:
                 self.selected_resolution_index = i
@@ -253,12 +258,14 @@ class SettingsView:
     def handle_event(self, event: pygame.event.Event) -> bool:
         """Processa eventos da view."""
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.preferences.save()
             self.on_back()
             return True
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             pos = event.pos
             if self.layout_rects["back_button"].collidepoint(pos):
+                self.preferences.save()
                 self.on_back()
                 return True
 
@@ -271,10 +278,10 @@ class SettingsView:
             for i, button_rect in enumerate(resolution_buttons):
                 if button_rect.collidepoint(pos):
                     self.selected_resolution_index = i
-                    # Salvar no perfil
+                    # Salvar nas preferências
                     w, h, _ = self.available_resolutions[i]
-                    self.player_profile.resolution = (w, h)
-                    self.player_profile.save()
+                    self.preferences.resolution = (w, h)
+                    self.preferences.save()
                     # Mostrar pop-up de aviso
                     self.show_restart_popup = True
                     return True
@@ -283,12 +290,12 @@ class SettingsView:
             for key, rect in self.layout_rects["toggles"].items():
                 if rect.collidepoint(pos):
                     self.toggles[key] = not self.toggles[key]
-                    # Salvar no perfil
+                    # Salvar nas preferências
                     if key == "mouse_control":
-                        self.player_profile.mouse_control = self.toggles[key]
+                        self.preferences.mouse_control = self.toggles[key]
                     elif key == "auto_fire":
-                        self.player_profile.auto_fire = self.toggles[key]
-                    self.player_profile.save()
+                        self.preferences.auto_fire = self.toggles[key]
+                    self.preferences.save()
                     return True
 
             # Pop-up de confirmação
@@ -315,6 +322,8 @@ class SettingsView:
                     return True
 
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if self.dragging_slider:
+                self.preferences.save()
             self.dragging_slider = None
             return True
 
@@ -333,10 +342,13 @@ class SettingsView:
     def _update_volume(self, key: str):
         volume = self.sliders[key]
         if key == "music":
+            self.preferences.music_volume = volume
             sound_manager.set_music_volume(volume)
         elif key == "sfx":
+            self.preferences.sfx_volume = volume
             sound_manager.set_sfx_volume(volume)
         elif key == "shot":
+            self.preferences.shot_volume = volume
             sound_manager.set_shot_volume(volume)
 
     def render(self, surface: pygame.Surface):
@@ -507,7 +519,7 @@ class SettingsView:
             )
             surface.blit(temp_knob, (knob_rect.x - 1, knob_rect.y - 1))
 
-            # Valor em % (ajustado para não extrapolar)
+            # Valor em %
             percent_text = f"{int(val * 100)}%"
             percent_surf = self.percent_font.render(percent_text, True, colors.GRAY)
             percent_surf.set_alpha(alpha)
@@ -586,10 +598,10 @@ class SettingsView:
             self._draw_button(
                 surface,
                 button_rect,
-                label,  # Apenas o label (ex: "1080p")
+                label,
                 color,
                 alpha,
-                0,  # offset_y já aplicado
+                0,
             )
 
         # Tooltip para resolução hoverada
@@ -599,33 +611,19 @@ class SettingsView:
             w, h, label = self.available_resolutions[self.hovered_resolution_index]
             tooltip_text = f"{w}×{h} pixels"
 
-            # Informações especiais para algumas resoluções
-            if label == "4K":
-                tooltip_text += ""
-            elif label == "5K":
-                tooltip_text += ""
-            elif w >= 3000:
-                tooltip_text += ""
-            elif w <= 1366:
-                tooltip_text += ""
-
-            # Renderizar tooltip
             tooltip_font = self.small_font
             tooltip_surf = tooltip_font.render(tooltip_text, True, CUSTOM_GOLD)
             tooltip_surf.set_alpha(int(alpha * 0.9))
 
-            # Posição do tooltip (acima do mouse)
             mouse_x, mouse_y = pygame.mouse.get_pos()
             tooltip_x = mouse_x - tooltip_surf.get_width() // 2
             tooltip_y = mouse_y - 35
 
-            # Garantir que não saia da tela
             tooltip_x = max(
                 10, min(tooltip_x, Config.SCREEN_WIDTH - tooltip_surf.get_width() - 10)
             )
             tooltip_y = max(10, tooltip_y)
 
-            # Fundo semi-transparente
             bg_rect = pygame.Rect(
                 tooltip_x - 5,
                 tooltip_y - 3,
@@ -650,13 +648,9 @@ class SettingsView:
             "requer reiniciar.",
         ]
 
-        # Calcular y_offset baseado nos botões
-        from typing import List, cast
-
         resolution_buttons = cast(
             List[pygame.Rect], self.layout_rects["resolution_buttons"]
         )
-        # Se não houver botões (resoluções vazias), usa um fallback
         if resolution_buttons:
             max_button_y = max(r.y + r.height for r in resolution_buttons)
         else:
@@ -669,7 +663,6 @@ class SettingsView:
                 y_offset += 8
                 continue
             color = CUSTOM_GOLD if ":" in line or "NOTA" in line else colors.WHITE
-            # Centralizar texto de instruções no card
             text_surf = self.small_font.render(line, True, color)
             text_surf.set_alpha(alpha)
             text_x = card_rect.centerx - text_surf.get_width() // 2
@@ -682,24 +675,20 @@ class SettingsView:
         """Desenha o pop-up de confirmação para reiniciar o jogo."""
         popup_rect = self.layout_rects["popup_rect"]
 
-        # Fundo semi-transparente
         overlay = pygame.Surface((surface.get_width(), surface.get_height()))
         overlay.fill((0, 0, 0))
         overlay.set_alpha(128)
         surface.blit(overlay, (0, 0))
 
-        # Pop-up
         pygame.draw.rect(surface, colors.DARK_GRAY, popup_rect, border_radius=10)
         pygame.draw.rect(surface, CUSTOM_GOLD, popup_rect, 2, border_radius=10)
 
-        # Título
         title_surf = self.header_font.render("Reinício Necessário", True, CUSTOM_GOLD)
         surface.blit(
             title_surf,
             (popup_rect.centerx - title_surf.get_width() // 2, popup_rect.y + 20),
         )
 
-        # Mensagem
         message_lines = [
             "As alterações só serão",
             "vistas ao reiniciar o jogo.",
@@ -713,7 +702,6 @@ class SettingsView:
             )
             y_offset += 25
 
-        # Botões
         self._draw_button(
             surface, self.layout_rects["popup_yes_button"], "Sim", colors.RED, 255, 0
         )
@@ -723,23 +711,20 @@ class SettingsView:
 
 
 class SettingsScene(Scene):
-    """Cena de configurações (mantida para compatibilidade)."""
+    """Cena de configurações."""
 
     def __init__(self, app: "GameApp", return_to_game: bool = False):
         super().__init__(app)
-        self.return_to_game = return_to_game  # Se True, volta para o jogo
-        self.r = app.renderer  # Usar renderer compartilhado
+        self.return_to_game = return_to_game
+        self.r = app.renderer
         self.view = SettingsView(on_back=self._on_back, renderer=self.r)
 
-        # Sistema de transição
         self.transitioning = False
         self.transition_progress = 0.0
         self.transition_duration = 0.3
         self.fade_out = False
 
     def _on_back(self):
-        """Callback quando o usuário quer voltar."""
-        # Iniciar transição de saída
         self.fade_out = True
         self.transitioning = True
         self.transition_progress = 0.0
@@ -749,21 +734,19 @@ class SettingsScene(Scene):
         self.view.reset()
 
     def exit(self):
+        self.view.preferences.save()
         self.view.player_profile.save()
 
     def handle_event(self, event: pygame.event.Event):
         self.view.handle_event(event)
 
     def update(self, dt: float):
-        # Atualiza o fundo animado para não ficar estático
         self.r.starfield.update(dt)
 
-        # Atualizar transição
         if self.transitioning:
             self.transition_progress += dt / self.transition_duration
 
             if self.transition_progress >= 1.0:
-                # Completou o fade out, executar ação
                 if self.return_to_game:
                     self.app.states.pop()
                 else:
@@ -778,14 +761,12 @@ class SettingsScene(Scene):
         surface.fill(BLACK)
         self.r.starfield.draw(surface)
 
-        # Aplicar fade de transição
         if self.transitioning:
             alpha_mult = (
                 1.0 - self.transition_progress
                 if self.fade_out
                 else self.transition_progress
             )
-            # Criar surface temporária para aplicar fade
             temp_surface = pygame.Surface(
                 (surface.get_width(), surface.get_height()), pygame.SRCALPHA
             )

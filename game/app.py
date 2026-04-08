@@ -7,7 +7,8 @@ from .core.difficulty import DifficultyPreset
 from .core.input import Input
 from .core.levels import FIXED_LEVELS, LevelManager
 from .core.meta_progression import PlayerProfile
-from .core.paths import get_profile_path
+from .core.paths import get_preferences_path, get_profile_path
+from .core.preferences import UserPreferences
 from .core.state import StateManager
 from .scenes.main_menu import MainMenuScene
 
@@ -16,38 +17,41 @@ class GameApp:
     def __init__(self):
         pygame.init()
 
-        # Carregar perfil para obter resolução salva
-        profile = PlayerProfile(get_profile_path())
-        base_width, base_height = profile.resolution
+        # Carregar preferências de sistema (vídeo, áudio, controles)
+        self.preferences = UserPreferences(get_preferences_path())
+        base_width, base_height = self.preferences.resolution
 
-        # Garantir proporção 16:9 se necessário (em caso de edição manual do perfil)
+        # Carregar perfil de progressão
+        self.player_profile = PlayerProfile(get_profile_path())
+
+        # Garantir proporção 16:9 se necessário
         target_ratio = 16 / 9
         current_ratio = base_width / base_height
-        if abs(current_ratio - target_ratio) > 0.1:  # Tolerância de 10%
+        if abs(current_ratio - target_ratio) > 0.1:
             base_height = int(base_width / target_ratio)
 
         # Garante que a configuração global use a resolução detectada.
         set_screen_resolution(base_width, base_height)
 
-        # Define as flags da tela. Usa FULLSCREEN se ativado.
-        flags = 0
-        if Config.FULLSCREEN:
-            flags |= pygame.FULLSCREEN
+        # Sincronizar volumes do SoundManager com as preferências
+        from .core.sound import sound_manager
 
-        # A flag SCALED é a chave para o desempenho.
-        # O Pygame gerencia o dimensionamento via hardware, que é muito mais rápido
-        # do que o escalonamento manual via software (CPU).
+        sound_manager.load_config(
+            self.preferences.music_volume,
+            self.preferences.sfx_volume,
+            self.preferences.shot_volume,
+        )
+
+        # Define as flags da tela.
+        flags = 0
+        if self.preferences.fullscreen:
+            flags |= pygame.FULLSCREEN
         flags |= pygame.SCALED
 
-        # Cria a tela com a resolução detectada. O Pygame cuidará do dimensionamento
-        # para a resolução real do monitor, mantendo a proporção ("letterboxing").
         self.screen = pygame.display.set_mode((base_width, base_height), flags)
-
-        # Armazenar resolução para consistência.
         self.screen_width = base_width
         self.screen_height = base_height
 
-        # Carregar cursor customizado.
         load_custom_cursor()
 
         # Registrar sprites para pré-carregamento
@@ -55,8 +59,6 @@ class GameApp:
         from .entities.slime_boss import SlimeBoss
 
         sprite_loader.register("slime_boss", SlimeBoss.load_frames_for_preload)
-
-        # PRÉ-CARREGAR TODOS OS SPRITES (adicionar aqui)
         sprite_loader.load_all()
 
         pygame.display.set_caption("Space Shooter")
@@ -67,18 +69,13 @@ class GameApp:
         self.level_manager = LevelManager(FIXED_LEVELS)
         self.input: Input = Input()
 
-        # Renderer compartilhado para manter starfield contínuo
         from .render.renderer import Renderer
 
         self.renderer = Renderer()
 
-        # Dificuldade selecionada (padrão: normal)
         self.selected_difficulty = DifficultyPreset.NORMAL
-
-        # Contador de uso do HEAL (persiste por jogo)
         self.heal_usage_count = 0
 
-        # Inicia com o menu principal.
         self.states.push(MainMenuScene(self))
 
     def run(self):
