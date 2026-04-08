@@ -502,7 +502,7 @@ class PlayerProfile:
         self.preferred_difficulty: Optional[DifficultyPreset] = None
 
         # Configurações de vídeo
-        self.resolution: Tuple[int, int] = (1366, 768)  # Largura, altura
+        self.resolution: Tuple[int, int] = (1280, 720)  # Largura, altura
 
         # Configurações de controle
         self.mouse_control: bool = False  # Usar mouse para mover nave
@@ -885,9 +885,9 @@ class PlayerProfile:
                             int(resolution_list[1]),
                         )
                     else:
-                        self.resolution = (1366, 768)  # Default
+                        self.resolution = (1280, 720)  # Default
                 else:
-                    self.resolution = (1366, 768)  # Default
+                    self.resolution = (1280, 720)  # Default
 
                 # Configurações de controle
                 self.mouse_control = data.get("mouse_control", False)
@@ -1252,7 +1252,7 @@ class PlayerProfile:
         self.session_history = []
         self.level_adjustments = {}
         self.preferred_difficulty = None
-        self.resolution = (1366, 768)  # Default resolution
+        self.resolution = (1280, 720)  # Default resolution
         self.mouse_control = False
         self.auto_fire = False
         self.unlocked_upgrades = set(DEFAULT_UNLOCKED)

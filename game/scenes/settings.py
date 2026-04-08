@@ -68,7 +68,7 @@ class SettingsView:
         ]
         # Carregar resolução salva já aqui, evitando dependência de reset()
         saved_res = self.player_profile.resolution
-        self.selected_resolution_index = 2  # default
+        self.selected_resolution_index = 1  # default
         for i, (w, h, _) in enumerate(self.available_resolutions):
             if w == saved_res[0] and h == saved_res[1]:
                 self.selected_resolution_index = i

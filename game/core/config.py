@@ -53,8 +53,8 @@ class Config:
     # DISPLAY & PERFORMANCE SETTINGS
     # ========================================
     FULLSCREEN: bool = True
-    SCREEN_WIDTH: int = 1366  # Largura padrão (será sobrescrita se fullscreen)
-    SCREEN_HEIGHT: int = 768  # Altura padrão (será sobrescrita se fullscreen)
+    SCREEN_WIDTH: int = 1280  # Largura padrão (será sobrescrita se fullscreen)
+    SCREEN_HEIGHT: int = 720  # Altura padrão (será sobrescrita se fullscreen)
     FPS: int = 120
 
     # ========================================
