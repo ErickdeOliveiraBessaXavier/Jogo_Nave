@@ -103,7 +103,7 @@ class Collisions:
         if isinstance(enemy, ExplosiveMine):
             return 25
         if isinstance(enemy, ElementalRobot):
-            return 200
+            return 55
         return CollisionConstants.DEFAULT_EXPLOSION_SIZE
 
     def _process_projectile_hit(
@@ -247,7 +247,7 @@ class Collisions:
         """
         # Calcular centro
         cx, cy, _ = self.get_collision_info(enemy)
-        
+
         # Ponto de explosão de impacto: hit_x/y se disponível, senão centro
         hx = hit_x if hit_x is not None else cx
         hy = hit_y if hit_y is not None else cy
@@ -349,7 +349,7 @@ class Collisions:
                         enemy,
                         enemies,
                         entity_manager,
-                        explosion_size=20,  # Tamanho padrão para explosões de área
+                        explosion_size=None,  # Usar tamanho padrão do inimigo
                     )
                     score_gain += pts
                     destroyed_count += 1
@@ -579,7 +579,7 @@ class Collisions:
                         )
                     else:
                         pts, score_event = self._destroy_enemy(
-                            enemy, enemies, entity_manager, explosion_size=30
+                            enemy, enemies, entity_manager, explosion_size=None
                         )
                         score_gain += pts
                         destroyed_count += 1
@@ -969,16 +969,11 @@ class Collisions:
                     elif self._is_invulnerable_to_damage(enemy):
                         self._handle_invulnerable_hit(b.x, b.y, entity_manager)
                     else:
-                        # Usar helper consolidado
                         pts, score_event = self._destroy_enemy(
                             enemy,
                             enemies,
                             entity_manager,
-                            explosion_size=(
-                                max(12, int(enemy.w // 2))
-                                if isinstance(enemy, Meteor)
-                                else (40 if isinstance(enemy, Alien) else 15)
-                            ),  # Explosão maior para aliens (mini ships)
+                            explosion_size=None,
                             hit_x=b.x,
                             hit_y=b.y,
                         )
@@ -1044,11 +1039,7 @@ class Collisions:
                             enemy,
                             enemies,
                             entity_manager,
-                            explosion_size=(
-                                max(12, int(enemy.w // 2))
-                                if isinstance(enemy, Meteor)
-                                else (40 if isinstance(enemy, Alien) else 15)
-                            ),  # Explosão maior para aliens (player bullets)
+                            explosion_size=None,
                             hit_x=b.x,
                             hit_y=b.y,
                         )
@@ -1102,7 +1093,7 @@ class Collisions:
                                         nearby_enemy,
                                         enemies,
                                         entity_manager,
-                                        explosion_size=30,  # Explosão maior para efeito de área
+                                        explosion_size=None,  # Usar tamanho padrão do inimigo
                                     )
                                     score_gain += pts
                                     destroyed_count += 1
@@ -1639,7 +1630,7 @@ class Collisions:
                             enemy,
                             enemies,
                             entity_manager,
-                            explosion_size=None if isinstance(enemy, Meteor) else 20,
+                            explosion_size=None,
                         )
                         score_gain += pts
                         destroyed_count += 1
