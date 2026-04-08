@@ -54,23 +54,31 @@ from typing import Optional, Tuple
 import pygame
 
 from ..core.config import config as Config
-from ..entities.bot_elemental_pixel_map import ANTENNA_COL_END as _ANTENNA_COL_END
-from ..entities.bot_elemental_pixel_map import ANTENNA_COL_START as _ANTENNA_COL_START
-from ..entities.bot_elemental_pixel_map import ANTENNA_ROW_END as _ANTENNA_ROW_END
-from ..entities.bot_elemental_pixel_map import ANTENNA_ROW_START as _ANTENNA_ROW_START
-from ..entities.bot_elemental_pixel_map import ATTACK_PALETTES as _ATTACK_PALETTES
-from ..entities.bot_elemental_pixel_map import EYE_LEFT_COL_END as _EYE_LEFT_COL_END
-from ..entities.bot_elemental_pixel_map import EYE_LEFT_COL_START as _EYE_LEFT_COL_START
-from ..entities.bot_elemental_pixel_map import EYE_RIGHT_COL_END as _EYE_RIGHT_COL_END
-from ..entities.bot_elemental_pixel_map import (
-    EYE_RIGHT_COL_START as _EYE_RIGHT_COL_START,
-)
+from ..entities.bot_elemental_pixel_map import \
+    ANTENNA_COL_END as _ANTENNA_COL_END
+from ..entities.bot_elemental_pixel_map import \
+    ANTENNA_COL_START as _ANTENNA_COL_START
+from ..entities.bot_elemental_pixel_map import \
+    ANTENNA_ROW_END as _ANTENNA_ROW_END
+from ..entities.bot_elemental_pixel_map import \
+    ANTENNA_ROW_START as _ANTENNA_ROW_START
+from ..entities.bot_elemental_pixel_map import \
+    ATTACK_PALETTES as _ATTACK_PALETTES
+from ..entities.bot_elemental_pixel_map import \
+    EYE_LEFT_COL_END as _EYE_LEFT_COL_END
+from ..entities.bot_elemental_pixel_map import \
+    EYE_LEFT_COL_START as _EYE_LEFT_COL_START
+from ..entities.bot_elemental_pixel_map import \
+    EYE_RIGHT_COL_END as _EYE_RIGHT_COL_END
+from ..entities.bot_elemental_pixel_map import \
+    EYE_RIGHT_COL_START as _EYE_RIGHT_COL_START
 from ..entities.bot_elemental_pixel_map import EYE_ROW_END as _EYE_ROW_END
 from ..entities.bot_elemental_pixel_map import EYE_ROW_START as _EYE_ROW_START
 from ..entities.bot_elemental_pixel_map import PIXEL_COLS as _PIXEL_COLS
 from ..entities.bot_elemental_pixel_map import PIXEL_MAP as _PIXEL_MAP
 from ..entities.bot_elemental_pixel_map import PIXEL_ROWS as _PIXEL_ROWS
-from ..entities.bot_elemental_pixel_map import THRUSTER_NEUTRAL as _THRUSTER_NEUTRAL
+from ..entities.bot_elemental_pixel_map import \
+    THRUSTER_NEUTRAL as _THRUSTER_NEUTRAL
 from ..entities.bot_elemental_pixel_map import C as _C
 
 logger = logging.getLogger(__name__)
@@ -126,7 +134,7 @@ class EnergyOrb:
         self.color_mid = color_mid
         self.color_outer = color_outer
         self.p_s = pixel_size
-        
+
         # Raio de colisão balanceado: cobre o núcleo e a camada média (2x pixel_size)
         self.size = pixel_size * 2
 
@@ -198,20 +206,30 @@ class EnergyOrb:
         surface.blit(self._glow_surf, (cx - g_radius, cy - g_radius))
 
         # Estrela de energia pixelada (mesma geometria da aura)
-        
+
         # 1. Camada OUTER: Diagonais ±1 e Pontas Axiais ±2
         for dx, dy in (
-            (-s, -s), (s, -s), (-s, s), (s, s),  # diagonais
-            (0, -s*2), (0, s*2), (-s*2, 0), (s*2, 0) # pontas axiais
+            (-s, -s),
+            (s, -s),
+            (-s, s),
+            (s, s),  # diagonais
+            (0, -s * 2),
+            (0, s * 2),
+            (-s * 2, 0),
+            (s * 2, 0),  # pontas axiais
         ):
-            pygame.draw.rect(surface, self.color_outer, (cx + dx - s//2, cy + dy - s//2, s, s))
+            pygame.draw.rect(
+                surface, self.color_outer, (cx + dx - s // 2, cy + dy - s // 2, s, s)
+            )
 
         # 2. Camada MID: Cruz central ±1
         for dx, dy in ((0, -s), (0, s), (-s, 0), (s, 0)):
-            pygame.draw.rect(surface, self.color_mid, (cx + dx - s//2, cy + dy - s//2, s, s))
+            pygame.draw.rect(
+                surface, self.color_mid, (cx + dx - s // 2, cy + dy - s // 2, s, s)
+            )
 
         # 3. Camada CORE: Pixel central
-        pygame.draw.rect(surface, self.color_core, (cx - s//2, cy - s//2, s, s))
+        pygame.draw.rect(surface, self.color_core, (cx - s // 2, cy - s // 2, s, s))
 
 
 # ============================================================================
@@ -325,11 +343,11 @@ class _ChargeParticle:
     def update(self, dt: float, antenna_x: float, antenna_y: float) -> None:
         # Multiplicador de velocidade que aumenta conforme a distância diminui (espiral acelerada)
         speed_mul = 1.0 + (1.0 - _clamp(self.dist / self._start_dist, 0, 1)) * 3.0
-        
+
         self.dist -= self._radial_speed * speed_mul * dt
         self.angle += self._orbit_speed * speed_mul * (dt * 60)
         self._rot_angle += self._spin * dt
-        
+
         if self.dist < 2:
             self.dead = True
             return
@@ -790,8 +808,8 @@ class ElementalRobot:
         # O propulsor (rows 20+) é tratado como efeito visual sem colisão.
         S = self.SCALE
         self.rect.width = 15 * S  # cols 1 a 16 aprox.
-        self.rect.height = 20 * S # rows 0 a 19
-        
+        self.rect.height = 20 * S  # rows 0 a 19
+
         # Centraliza o rect reduzido na posição visual
         self.rect.x = int(self.x + self._jitter_x + self._recoil_x) + S
         self.rect.y = int(self.y + self._float_y + self._jitter_y + self._recoil_y)
@@ -1017,7 +1035,7 @@ class ElementalRobot:
         cx = ox + self.w // 2
         # O corpo visual termina na Row 19. Começamos o thruster logo abaixo (Row 20).
         start_y = oy + 20 * S
-        
+
         # Pequena base fixa
         pygame.draw.rect(surface, self._thruster_colors[0], (cx - S, start_y, S * 2, S))
 
@@ -1033,7 +1051,7 @@ class ElementalRobot:
             alpha = max(0, int(255 * (1 - phase**2)))
             if w < S:
                 continue
-            
+
             # Cores interpoladas baseadas na paleta
             if phase < 0.15:
                 color = self._thruster_colors[0]
