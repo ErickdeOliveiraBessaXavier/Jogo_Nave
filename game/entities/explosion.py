@@ -42,13 +42,15 @@ class Explosion:
 
     def _create_particles(self):
         """Cria partículas da explosão (método separado para reuso no pool)."""
-        count = min(20 + self.size // 4, 40)
+        # Aumentado o limite para 100 para explosões mais dramáticas
+        count = min(30 + self.size // 2, 100)
         self.particles.clear()
 
         for _ in range(count):
             angle = random.uniform(0, 360)
             rad_angle = math.radians(angle)
-            base_speed = random.uniform(150, 300) * (self.size / 20)
+            # Velocidade baseada no tamanho
+            base_speed = random.uniform(150, 350) * (self.size / 20)
 
             vx = base_speed * math.cos(rad_angle)
             vy = base_speed * math.sin(rad_angle)
@@ -136,5 +138,6 @@ class Explosion:
             color = self._get_color(life_ratio)
 
             pos = (int(p[0]), int(p[1]))
-            radius = max(1, self.size / 10 * life_ratio)
+            # Aumentado o raio base (divisor de 10 para 6) para partículas mais encorpadas
+            radius = max(1, self.size / 6 * life_ratio)
             pygame.draw.circle(screen, color, pos, radius)

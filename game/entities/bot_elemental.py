@@ -99,12 +99,12 @@ class EnergyOrb:
     """
     Orbe de energia disparado pelo robô em direção ao jogador.
 
-    Visual: quadrado pixelado com camada de glow, cor baseada no tema do ataque.
-    Causa 1 vida de dano por colisão (processado em playing.py).
+    Visual: Estrela de pixels multicamada (core, mid, outer) idêntica à aura
+    de carregamento, mantendo o tamanho final atingido na antena.
+    Causa 1 vida de dano por colisão.
     """
 
     SPEED = 420.0  # px/s
-    SIZE = 10  # raio em px
 
     def __init__(
         self,
@@ -112,16 +112,23 @@ class EnergyOrb:
         y: float,
         target_x: float,
         target_y: float,
-        color: Tuple[int, int, int],
-        glow_color: Tuple[int, int, int],
+        color_core: RGB,
+        color_mid: RGB,
+        color_outer: RGB,
+        pixel_size: int,
         speed_multiplier: float = 1.0,
     ):
         self.x = float(x)
         self.y = float(y)
         self.dead = False
         self.causes_damage = True
-        self.color = color
-        self.glow_color = glow_color
+        self.color_core = color_core
+        self.color_mid = color_mid
+        self.color_outer = color_outer
+        self.p_s = pixel_size
+        
+        # Raio de colisão balanceado: cobre o núcleo e a camada média (2x pixel_size)
+        self.size = pixel_size * 2
 
         dx = target_x - x
         dy = target_y - y
@@ -130,73 +137,81 @@ class EnergyOrb:
         self.vx = (dx / dist) * actual_speed
         self.vy = (dy / dist) * actual_speed
 
-        self._spin = random.uniform(-180, 180)
         self._angle = 0.0
         self._trail: list[list[float]] = []  # [x, y, alpha]
 
         self.rect = pygame.Rect(
-            int(self.x) - self.SIZE,
-            int(self.y) - self.SIZE,
-            self.SIZE * 2,
-            self.SIZE * 2,
+            int(self.x) - self.size,
+            int(self.y) - self.size,
+            self.size * 2,
+            self.size * 2,
         )
 
         # Pré-alocação de superfícies
-        g = self.SIZE * 2
-        self._glow_surf = pygame.Surface((g * 2, g * 2), pygame.SRCALPHA)
-        pygame.draw.rect(
+        # O glow (halo) deve ser grande o suficiente para envolver as pontas axiais (2.5x pixel_size)
+        g_size = int(pixel_size * 3)
+        self._glow_surf = pygame.Surface((g_size * 2, g_size * 2), pygame.SRCALPHA)
+        pygame.draw.circle(
             self._glow_surf,
-            (*self.glow_color, 60),
-            (0, 0, g * 2, g * 2),
+            (*self.color_outer, 40),
+            (g_size, g_size),
+            g_size,
         )
-        self._trail_surf = pygame.Surface((self.SIZE, self.SIZE), pygame.SRCALPHA)
+        self._trail_surf = pygame.Surface((self.p_s, self.p_s), pygame.SRCALPHA)
 
     # ------------------------------------------------------------------
     def update(self, dt: float) -> None:
         self.x += self.vx * dt
         self.y += self.vy * dt
-        self._angle += self._spin * dt
 
-        # Rastro
-        if random.random() < 0.5:
-            self._trail.append([self.x, self.y, 200.0])
+        # Rastro baseado na cor outer
+        if random.random() < 0.4:
+            self._trail.append([self.x, self.y, 180.0])
         for t in self._trail:
-            t[2] -= 600.0 * dt
+            t[2] -= 500.0 * dt
         self._trail = [t for t in self._trail if t[2] > 0]
 
-        self.rect.x = int(self.x) - self.SIZE
-        self.rect.y = int(self.y) - self.SIZE
+        self.rect.x = int(self.x) - self.size
+        self.rect.y = int(self.y) - self.size
 
         sw = getattr(Config, "SCREEN_WIDTH", 480)
         sh = getattr(Config, "SCREEN_HEIGHT", 800)
-        if self.x < -50 or self.x > sw + 50 or self.y < -50 or self.y > sh + 50:
+        if self.x < -100 or self.x > sw + 100 or self.y < -100 or self.y > sh + 100:
             self.dead = True
 
     # ------------------------------------------------------------------
     def draw(self, surface: pygame.Surface) -> None:
         # Rastro
-        r, g, b = self.color
+        r, g, b = self.color_outer
         for tx, ty, alpha in self._trail:
-            self._trail_surf.fill((r, g, b, int(alpha * 0.5)))
+            self._trail_surf.fill((r, g, b, int(alpha * 0.4)))
             surface.blit(
                 self._trail_surf,
-                (int(tx) - self.SIZE // 2, int(ty) - self.SIZE // 2),
+                (int(tx) - self.p_s // 2, int(ty) - self.p_s // 2),
             )
 
         cx, cy = int(self.x), int(self.y)
-        s = self.SIZE
+        s = self.p_s
 
-        # Glow
-        surface.blit(self._glow_surf, (cx - s, cy - s))
+        # Glow (Halo)
+        g_radius = self._glow_surf.get_width() // 2
+        surface.blit(self._glow_surf, (cx - g_radius, cy - g_radius))
 
-        # Corpo pixelado
-        pygame.draw.rect(surface, self.color, (cx - s // 2, cy - s // 2, s, s))
-        # Núcleo branco
-        pygame.draw.rect(
-            surface,
-            _C["PUPIL"],
-            (cx - s // 4, cy - s // 4, s // 2, s // 2),
-        )
+        # Estrela de energia pixelada (mesma geometria da aura)
+        
+        # 1. Camada OUTER: Diagonais ±1 e Pontas Axiais ±2
+        for dx, dy in (
+            (-s, -s), (s, -s), (-s, s), (s, s),  # diagonais
+            (0, -s*2), (0, s*2), (-s*2, 0), (s*2, 0) # pontas axiais
+        ):
+            pygame.draw.rect(surface, self.color_outer, (cx + dx - s//2, cy + dy - s//2, s, s))
+
+        # 2. Camada MID: Cruz central ±1
+        for dx, dy in ((0, -s), (0, s), (-s, 0), (s, 0)):
+            pygame.draw.rect(surface, self.color_mid, (cx + dx - s//2, cy + dy - s//2, s, s))
+
+        # 3. Camada CORE: Pixel central
+        pygame.draw.rect(surface, self.color_core, (cx - s//2, cy - s//2, s, s))
 
 
 # ============================================================================
@@ -308,10 +323,13 @@ class _ChargeParticle:
                 )
 
     def update(self, dt: float, antenna_x: float, antenna_y: float) -> None:
-        self.dist -= self._radial_speed * dt
-        speed_mul = 1.0 + (1.0 - _clamp(self.dist / self._start_dist, 0, 1)) * 2.0
+        # Multiplicador de velocidade que aumenta conforme a distância diminui (espiral acelerada)
+        speed_mul = 1.0 + (1.0 - _clamp(self.dist / self._start_dist, 0, 1)) * 3.0
+        
+        self.dist -= self._radial_speed * speed_mul * dt
         self.angle += self._orbit_speed * speed_mul * (dt * 60)
         self._rot_angle += self._spin * dt
+        
         if self.dist < 2:
             self.dead = True
             return
@@ -350,7 +368,7 @@ class ElementalRobot:
     - Expõe .rect, .dead, .health, .causes_damage
     """
 
-    SCALE = 8  # px por "pixel" do mapa
+    SCALE = 6  # px por "pixel" do mapa
     # Mini-boss: precisa de 25 tiros para ser eliminado.
     MAX_HEALTH = 25
     HIT_SCORE = 5000
@@ -536,7 +554,8 @@ class ElementalRobot:
 
         elif self.fsm_state == "CHARGING":
             self._tick_charging(dt)
-            if self._fsm_timer >= self._DUR_CHARGING:
+            # Transição: Tempo mínimo passado E todas as partículas aglomeradas no centro
+            if self._fsm_timer >= self._DUR_CHARGING and not self._charge_particles:
                 self._transition("FIRING")
 
         elif self.fsm_state == "FIRING":
@@ -650,12 +669,13 @@ class ElementalRobot:
         arm_targets = (0, -8, -16)
         self._arm_dy = float(arm_targets[min(step, 2)])
 
-        # Spawn de partículas
-        if random.random() < 0.6:
-            ax, ay = self._antenna_tip_center()
-            self._charge_particles.append(
-                _ChargeParticle(ax, ay, self._palette, self._attack_theme)
-            )
+        # Spawn de partículas (somente nos primeiros 60% do carregamento)
+        if self._fsm_timer < self._DUR_CHARGING * 0.6:
+            if random.random() < 0.6:
+                ax, ay = self._antenna_tip_center()
+                self._charge_particles.append(
+                    _ChargeParticle(ax, ay, self._palette, self._attack_theme)
+                )
 
         ax, ay = self._antenna_tip_center()
         for p in self._charge_particles:
@@ -669,13 +689,18 @@ class ElementalRobot:
         """
         ax, ay = self._antenna_tip_center()
 
+        # Reduzido de 3.5 para 2.5 para uma esfera de ataque um pouco menor e mais elegante
+        pixel_size = int(self.SCALE * 2.5)
+
         orb = EnergyOrb(
             x=ax,
             y=ay,
             target_x=player_x,
             target_y=player_y,
-            color=self._palette["mid"],
-            glow_color=self._palette["core"],
+            color_core=self._palette["core"],
+            color_mid=self._palette["mid"],
+            color_outer=self._palette["outer"],
+            pixel_size=pixel_size,
             speed_multiplier=self._orb_speed_mult,
         )
 
@@ -760,8 +785,16 @@ class ElementalRobot:
         spawned = self._run_fsm(enemy_dt, player_x, player_y)
 
         # ── Colisão ───────────────────────────────────────────────────────────
-        self.rect.x = int(self.x)
-        self.rect.y = int(self.y + self._float_y)
+        # A sprite tem 18 colunas, mas o corpo sólido ocupa das cols 1 a 16.
+        # A altura sólida vai do topo (row 0) até a base strip (row 19).
+        # O propulsor (rows 20+) é tratado como efeito visual sem colisão.
+        S = self.SCALE
+        self.rect.width = 15 * S  # cols 1 a 16 aprox.
+        self.rect.height = 20 * S # rows 0 a 19
+        
+        # Centraliza o rect reduzido na posição visual
+        self.rect.x = int(self.x + self._jitter_x + self._recoil_x) + S
+        self.rect.y = int(self.y + self._float_y + self._jitter_y + self._recoil_y)
 
         return spawned
 
@@ -982,7 +1015,8 @@ class ElementalRobot:
         Fiel ao efeito do StoneGolemBoss, mas usando a paleta do ElementalRobot.
         """
         cx = ox + self.w // 2
-        start_y = oy + self.h
+        # O corpo visual termina na Row 19. Começamos o thruster logo abaixo (Row 20).
+        start_y = oy + 20 * S
         
         # Pequena base fixa
         pygame.draw.rect(surface, self._thruster_colors[0], (cx - S, start_y, S * 2, S))

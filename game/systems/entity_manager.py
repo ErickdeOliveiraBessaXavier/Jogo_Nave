@@ -694,92 +694,70 @@ class EntityManager:
         enemy_visible: bool = True,
         fps: float = 60.0,
     ):
-        """Desenha todas as entidades. EyeEnemy precisa da posição do jogador."""
+        """Desenha todas as entidades com a profundidade correta."""
         from typing import Any
 
-        # Entidades que não precisam da posição do jogador
-        # boss_lasers removido daqui para ser desenhado antes do boss
-        entity_lists: list[list[Any]] = [
-            self.bullets,
-            self.alien_bullets,
-            self.energy_orbs,  # Projéteis do ElementalRobot (mini-boss)
-            self.player_lasers,  # Lasers do jogador
-            self.boss_squares,  # Quadrados do boss
-            self.eye_lasers,
-            self.mine_explosions,
-            self.powerups,
-            self.stars,  # Estrelas coletáveis
-            self.floating_scores,
-            self.mini_ship_bullets,
-            self.mini_ships,
-            self.spikes,  # Adicionar spikes
-        ]
-
-        # Desenhar explosões do pool
-        self.explosion_pool.draw_all(surface)
-
-        # Desenhar ondas EMP (efeito visual)
-        for wave in self.emp_waves:
-            wave.draw(surface)
-
-        # Desenhar efeitos de explosão de área (círculos brancos)
-        for effect in self.explosive_effects:
-            effect.draw(surface)
-
-        # Desenhar bombas de bombardeio aéreo
-        for bomb in self.air_strike_bombs:
-            bomb.draw(surface)
-
-        # Desenhar minas das torres (antes dos inimigos para ficarem embaixo)
-        for mine in self.cannon_mines:
-            mine.draw(surface)
-
-        # Desenhar torres de canhão (fixas, sempre visíveis)
-        for tower in self.cannon_towers:
-            tower.draw(surface)
-
-        # Desenhar boss_lasers ANTES do boss (para aparecer abaixo)
-        for laser in self.boss_lasers:
-            laser.draw(surface)
-
-        # Desenhar boulders e shards do StoneGolemBoss
-        for boulder in self.boulders:
-            boulder.draw(surface)
-        for shard in self.rock_shards:
-            shard.draw(surface)
-        # Nota: OrbitalRocks são desenhadas pelo próprio StoneGolemBoss.draw()
-        # com depth-sort correto (atrás/frente do corpo), não aqui.
-
-        # Tratar o boss separadamente para passar o FPS
-        if self.boss:
-            if isinstance(self.boss, SlimeBoss):
-                self.boss.draw(surface, fps)
-            else:
-                self.boss.draw(surface)
-
-        # Desenhar buracos negros (APÓS do boss para aparecer acima)
-        for black_hole in self.black_holes:
-            black_hole.draw(surface)
-
-        for entity_list in entity_lists:
-            for entity in entity_list:
-                entity.draw(surface)
-
-        # Desenhar inimigos (EyeEnemy precisa da posição do jogador)
+        # 1. Primeiro desenhamos os inimigos (base/fundo)
         if enemy_visible:
+            # Meteoros do pool (fluxo contínuo)
+            self.meteor_pool.draw(surface)
+            
+            # Inimigos comuns e mini-bosses (como o ElementalRobot)
             for enemy in self.enemies:
                 if isinstance(enemy, EyeEnemy):
                     enemy.draw(surface, player_x, player_y)
                 else:
                     enemy.draw(surface)
 
-        # Desenhar formações (respeitar enemy_visible)
-        if enemy_visible:
+            # Formações de inimigos
             for formation in self.formations:
                 formation.draw(surface)
 
-        # Desenhar meteoros do pool (sempre visíveis, pois fazem parte do fluxo contínuo)
-        self.meteor_pool.draw(surface)
+        # 2. Desenhar o Boss (logo acima dos inimigos comuns)
+        if self.boss:
+            if isinstance(self.boss, SlimeBoss):
+                self.boss.draw(surface, fps)
+            else:
+                self.boss.draw(surface)
+
+        # 3. Desenhar perigos ambientais e lasers de área
+        for laser in self.boss_lasers:
+            laser.draw(surface)
+        for black_hole in self.black_holes:
+            black_hole.draw(surface)
+        for wave in self.emp_waves:
+            wave.draw(surface)
+
+        # 4. Desenhar projéteis e efeitos de impacto (devem ficar SOBRE os inimigos)
+        entity_lists: list[list[Any]] = [
+            self.bullets,
+            self.alien_bullets,
+            self.energy_orbs,
+            self.player_lasers,
+            self.mini_ship_bullets,
+            self.eye_lasers,
+            self.boss_squares,
+            self.powerups,
+            self.stars,
+            self.floating_scores,
+            self.mini_ships,
+            self.spikes,
+            self.mine_explosions,
+            self.air_strike_bombs,
+            self.cannon_mines,
+            self.cannon_towers,
+            self.boulders,
+            self.rock_shards,
+        ]
+
+        for entity_list in entity_lists:
+            for entity in entity_list:
+                entity.draw(surface)
+
+        # 5. Efeitos visuais de explosão (no topo de tudo)
+        self.explosion_pool.draw_all(surface)
+        for effect in self.explosive_effects:
+            effect.draw(surface)
 
     def spawn_elemental_robot(
         self,
