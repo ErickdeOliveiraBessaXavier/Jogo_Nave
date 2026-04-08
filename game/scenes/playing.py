@@ -17,11 +17,13 @@ from ..core.paths import get_profile_path
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
-from ..core.upgrades import (ActiveUpgrade, HealUpgrade, create_upgrade,
-                             get_upgrade_icon)
+from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
-from ..core.world_config import (format_stage_name, get_world_for_level,
-                                 is_side_scroll_mode)
+from ..core.world_config import (
+    format_stage_name,
+    get_world_for_level,
+    is_side_scroll_mode,
+)
 from ..entities.floating_score import FloatingScore
 from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
@@ -373,6 +375,7 @@ class PlayingScene(Scene):
                 ("hold_shoot" in held or self.ship.should_auto_fire())
                 and self.shoot_cd == 0.0
                 and not boss_pausing
+                and self.ship.speed_modifier_timer <= 0.0  # Bloquear tiro se congelado
             ):
                 bullet_specs = self.ship.bullet_spawn()
                 for (
@@ -962,36 +965,15 @@ class PlayingScene(Scene):
         if orb_hit:
             # Aplicar dano normal
             self._handle_ship_hit()
-            
+
             # Se a nave ficou invulnerável (recebeu o dano), aplicar debuffs elementais
             if self.ship.invuln > 0:
                 if orb_hit.theme == "inferno":
-                    self.ship.fire_rate_modifier_timer = 4.0 # 4s de cadência lenta
+                    self.ship.fire_rate_modifier_timer = 5  # 5s de cadência lenta
                 elif orb_hit.theme == "toxina":
-                    self.ship.invert_controls_timer = 2.5    # 2.5s de controles invertidos
+                    self.ship.invert_controls_timer = 4  # 4s de controles invertidos
                 elif orb_hit.theme == "nevasca":
-                    self.ship.speed_modifier_timer = 3.5     # 3.5s de velocidade lenta
-
-        from ..entities.boss_laser import BossLaser
-
-        # Como EnergyOrb é injetado em entity_manager.alien_bullets, verificamos aqui
-        from ..entities.bot_elemental import EnergyOrb
-        for orb in self.entity_manager.alien_bullets:
-            if isinstance(orb, EnergyOrb) and not orb.dead:
-                if self.ship.rect.colliderect(orb.rect):
-                    orb.dead = True
-                    # Aplicar dano normal
-                    self._handle_ship_hit()
-                    
-                    # Se não for atingido em estado invulnerável, aplicar debuffs
-                    if self.ship.invuln > 0: # Ship ficou invulnerável após o hit acima
-                        if orb.theme == "inferno":
-                            self.ship.fire_rate_modifier_timer = 4.0 # 4s de cadência lenta
-                        elif orb.theme == "toxina":
-                            self.ship.invert_controls_timer = 2.5    # 2.5s de controles invertidos
-                        elif orb.theme == "nevasca":
-                            self.ship.speed_modifier_timer = 3.5     # 3.5s de velocidade lenta
-                    break
+                    self.ship.speed_modifier_timer = 3  # 3s de velocidade lenta
 
         from ..entities.boss_laser import BossLaser
 
