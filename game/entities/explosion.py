@@ -50,7 +50,7 @@ class Explosion:
             angle = random.uniform(0, 360)
             rad_angle = math.radians(angle)
             # Velocidade baseada no tamanho
-            base_speed = random.uniform(150, 350) * (self.size / 20)
+            base_speed = random.uniform(150, 350) * (self.size / 30)
 
             vx = base_speed * math.cos(rad_angle)
             vy = base_speed * math.sin(rad_angle)
