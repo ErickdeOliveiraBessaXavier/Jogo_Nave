@@ -1,606 +1,182 @@
-# 🎆 Sugestões de Melhoria: Lógica de Explosão e Morte de Inimigos
-
-Análise do código `explosion.py`, `explosion_pool.py`, `collisions.py` e `entity_manager.py`.
-
----
-
-## 1. **Pool de Explosões: Vazamento de Tipo**
-
-### Problema Identificado
-Na linha 62 de `explosion_pool.py`:
-
-```python
-def release(self, explosion: Explosion) -> None:
-    if explosion in self.active:
-        self.active.remove(explosion)
-        explosion.time = 0
-        explosion.particles.clear()
-        explosion.explosion_type = None  # ← RESETAR TIPO!
-        self.available.append(explosion)
-```
-
-**Por que é problema?** Se uma explosão do tipo `SLIME` é reutilizada, o tipo antigo pode vazar se não for resetado corretamente no `release()`. Seu código JÁ FAZ ISSO (comentário "ATUALIZAR ESTA LINHA"), então está correto! ✅
-
-### Recomendação
-Manter como está. Garantir que em **todos os `release()`** o tipo seja resetado:
-
-```python
-def release(self, explosion: Explosion) -> None:
-    if explosion in self.active:
-        self.active.remove(explosion)
-        # Reset total: restaurar estado inicial do pool
-        explosion.time = 0
-        explosion.particles.clear()
-        explosion.explosion_type = None  # ✅ Essencial
-        self.available.append(explosion)
-```
-
----
-
-## 2. **Tamanho de Explosão: Inconsistência entre Inimigos**
-
-### Problema Identificado
-Em `collisions.py` linhas 97-107:
-
-```python
-def _calculate_default_explosion_size(self, enemy: Enemy) -> int:
-    if isinstance(enemy, Meteor):
-        return max(12, int(enemy.w // 2))  # Usa largura do inimigo
-    if isinstance(enemy, Alien):
-        return 40  # HARDCODED
-    if isinstance(enemy, ExplosiveMine):
-        return 25  # HARDCODED
-    if isinstance(enemy, ElementalRobot):
-        return 200  # HARDCODED
-    return CollisionConstants.DEFAULT_EXPLOSION_SIZE  # 20
-```
-
-**Problema:** Alguns tamanhos são baseados em atributos do inimigo (Meteor) enquanto outros são hardcoded (Alien, Mine). Inconsistente!
-
-### Sugestão de Melhoria
-
-Criar uma tabela centralizada em `config.py` ou constantes em `collisions.py`:
-
-```python
-# Em config.py ou CollisionConstants
-class ExplosionSizes:
-    """Tamanhos padrão de explosão por tipo de inimigo."""
-    METEOR_RATIO = 0.5  # 50% da largura do inimigo
-    ALIEN = 40
-    EXPLOSIVE_MINE = 25
-    ELEMENTAL_ROBOT = 200
-    DEFAULT = 20
-    SPIKE = 15
-    AREA_BOMB = 30
-```
-
-Depois refatorar:
-
-```python
-def _calculate_default_explosion_size(self, enemy: Enemy) -> int:
-    from ..core.config import ExplosionSizes
-    
-    if isinstance(enemy, Meteor):
-        return max(12, int(enemy.w * ExplosionSizes.METEOR_RATIO))
-    if isinstance(enemy, Alien):
-        return ExplosionSizes.ALIEN
-    if isinstance(enemy, ExplosiveMine):
-        return ExplosionSizes.EXPLOSIVE_MINE
-    if isinstance(enemy, ElementalRobot):
-        return ExplosionSizes.ELEMENTAL_ROBOT
-    return ExplosionSizes.DEFAULT
-```
-
-**Benefícios:**
-- ✅ Fácil ajustar tamanhos globalmente
-- ✅ Evita magic numbers espalhados
-- ✅ Mais fácil escalar para novos inimigos
-
----
-
-## 3. **Falta de Interatividade Visual na Morte**
-
-### Problema Identificado
-Quando um inimigo morre, ocorre:
-1. Explosão (partículas)
-2. Som
-3. Score flutuante
-
-**E... pronto?** Inimigos simplesmente desaparecem.
-
-### Sugestão: Adicionar Efeitos de Morte Graduais
-
-```python
-class EnemyDeathEffect:
-    """Efeito visual de desaparecimento do inimigo ao morrer."""
-    
-    def __init__(self, x: float, y: float, w: float, h: float, duration: float = 0.5):
-        self.x, self.y = x, y
-        self.w, self.h = w, h
-        self.duration = duration
-        self.elapsed = 0.0
-        self.particles: list[list[float]] = []  # (x, y, vx, vy, life, color)
-        self._create_debris()
-    
-    def _create_debris(self):
-        """Cria pequenos fragmentos espalhados."""
-        for _ in range(8):
-            angle = random.uniform(0, 360)
-            rad_angle = math.radians(angle)
-            speed = random.uniform(100, 250)
-            
-            vx = speed * math.cos(rad_angle)
-            vy = speed * math.sin(rad_angle)
-            
-            self.particles.append([
-                self.x + random.uniform(-self.w/2, self.w/2),
-                self.y + random.uniform(-self.h/2, self.h/2),
-                vx, vy,
-                self.duration,
-                (200, 200, 200)  # Cinza
-            ])
-    
-    def update(self, dt: float) -> bool:
-        self.elapsed += dt
-        for p in self.particles:
-            p[0] += p[2] * dt
-            p[1] += p[3] * dt
-            p[2] *= 0.9
-            p[3] *= 0.9
-            p[4] -= dt
-        self.particles = [p for p in self.particles if p[4] > 0]
-        return self.elapsed >= self.duration
-    
-    def draw(self, screen: pygame.Surface):
-        for p in self.particles:
-            pygame.draw.circle(screen, (int(p[5][0]), int(p[5][1]), int(p[5][2])), 
-                             (int(p[0]), int(p[1])), 2)
-```
-
-Depois adicionar ao `EntityManager`:
-
-```python
-class EntityManager:
-    def __init__(self, ...):
-        # ... existing code ...
-        self.death_effects: list[EnemyDeathEffect] = []
-    
-    def spawn_death_effect(self, x: float, y: float, w: float, h: float):
-        self.death_effects.append(EnemyDeathEffect(x, y, w, h))
-    
-    def update_death_effects(self, dt: float):
-        finished = []
-        for effect in self.death_effects:
-            if effect.update(dt):
-                finished.append(effect)
-        for effect in finished:
-            self.death_effects.remove(effect)
-    
-    def draw_death_effects(self, screen: pygame.Surface):
-        for effect in self.death_effects:
-            effect.draw(screen)
-```
-
----
-
-## 4. **ElementalRobot: Morte Duplicada?**
-
-### Problema Identificado
-Em `collisions.py` linhas 256-267:
-
-```python
-if isinstance(enemy, ElementalRobot):
-    enemy.take_damage(1)
-    just_died = enemy.fsm_state == "DYING" and enemy.just_died
-    if just_died:
-        enemy.just_died = False  # consome a flag
-    if not just_died:
-        # Ainda vivo: só explosão pequena
-        entity_manager.spawn_explosion(hx, hy, size=10)
-        sound_manager.play_boss_damage()
-        return 0, None
-    # Morreu neste hit: continua para dar pontos...
-```
-
-**Pergunta:** O ElementalRobot já tem animação de morte (`DYING`) no seu FSM. Há risco de:
-1. Explosão pequena durante DYING
-2. Explosão grande ao terminar
-3. Duplicação de efeitos?
-
-### Verificação Necessária
-
-Conferir em `bot_elemental.py` se há **duas explosões**:
-
-```python
-# Procurar por "DYING" ou "death"
-# Se ElementalRobot.update() ou Explosion.draw() chamar spawn_explosion()
-# pode haver duplicação
-```
-
-**Se confirmado, refatorar:**
-
-```python
-def _destroy_enemy(self, enemy, ...) -> tuple[int, tuple[float, float, int] | None]:
-    # ... código anterior ...
-    
-    if isinstance(enemy, ElementalRobot):
-        enemy.take_damage(1)
-        just_died = enemy.fsm_state == "DYING" and enemy.just_died
-        
-        if just_died:
-            enemy.just_died = False
-            # SOMENTE EXPLOSÃO GRANDE ao completar morte
-            explosion_size = ExplosionSizes.ELEMENTAL_ROBOT
-            entity_manager.spawn_explosion(
-                cx, cy, size=explosion_size, 
-                explosion_type=enemy.get_explosion_type()
-            )
-            # Não executar hit explosion pequeno (duplicado)
-        else:
-            # Ainda vivo: pequena explosão de impacto
-            entity_manager.spawn_explosion(hx, hy, size=10)
-            sound_manager.play_boss_damage()
-            return 0, None
-```
-
----
-
-## 5. **Falta de Cascata de Explosões em Morte de Inimigos Grandes**
-
-### Problema Identificado
-Atualmente, apenas o **SlimeBoss** tem morte espetacular:
-
-```python
-def trigger_slime_boss_death(self, boss: SlimeBoss) -> None:
-    # ... 28 explosões em cascata (linhas 140-167) ...
-```
-
-Mas **Boss, SpikeBoss, GiantMeteorBoss, StoneGolemBoss** só têm uma explosão central:
-
-```python
-if boss.dead:
-    # ... linha 415 ...
-    entity_manager.spawn_explosion(cx, cy, size=100)
-```
-
-### Sugestão: Generalizar Morte em Cascata
-
-Criar método genérico em `EntityManager`:
-
-```python
-def trigger_boss_death_sequence(
-    self, 
-    boss: BossEnemy, 
-    explosion_count: int = 15,
-    explosion_type: list[tuple[int, int, int]] | None = None
-) -> None:
-    """Spawna sequência de explosões para morte de boss."""
-    cx = boss.x + boss.w / 2
-    cy = boss.y + boss.h / 2
-    
-    # Explosão central
-    size_central = int(150 * (boss.w / 100))  # Escalar com tamanho do boss
-    self.spawn_explosion(cx, cy, size=size_central, explosion_type=explosion_type)
-    
-    # Explosões menores ao redor
-    for _ in range(explosion_count):
-        angle = random.uniform(0, 360)
-        distance = random.uniform(boss.w * 0.3, boss.w * 0.8)
-        
-        rad_angle = math.radians(angle)
-        ex = cx + distance * math.cos(rad_angle)
-        ey = cy + distance * math.sin(rad_angle)
-        
-        size = random.randint(int(boss.w * 0.3), int(boss.w * 0.6))
-        self.spawn_explosion(ex, ey, size=size, explosion_type=explosion_type)
-```
-
-Depois chamar em `collisions.py`:
-
-```python
-def _apply_boss_damage(self, ...):
-    # ... código anterior ...
-    if boss.dead:
-        cx, cy = boss.x + boss.w / 2, boss.y + boss.h / 2
-        
-        if isinstance(boss, SlimeBoss):
-            if not getattr(boss, "death_sequence_started", False):
-                boss.death_sequence_started = True
-                entity_manager.trigger_slime_boss_death(boss)
-                floating_scores.append(FloatingScore(cx, cy, config_instance.BOSS_DEFEAT_SCORE))
-                score_gain += config_instance.BOSS_DEFEAT_SCORE
-        else:
-            # ✨ NOVO: Morte em cascata para todos os bosses
-            entity_manager.trigger_boss_death_sequence(
-                boss,
-                explosion_count=15,
-                explosion_type=getattr(boss, 'death_explosion_type', None)
-            )
-            floating_scores.append(FloatingScore(cx, cy, config_instance.BOSS_DEFEAT_SCORE))
-            score_gain += config_instance.BOSS_DEFEAT_SCORE
-```
-
----
-
-## 6. **Pool de Explosões: Dimensionamento Dinâmico**
-
-### Problema Identificado
-Pool inicializado com tamanho fixo:
-
-```python
-self.explosion_pool = ExplosionPool(initial_size=50)  # Hardcoded
-```
-
-Em fases intensas com muitos inimigos, pode haver:
-- Pool vazio → criação de novas explosões (pior performance)
-- Memory leak se muitas explosões deixarem de ser reutilizadas
-
-### Sugestão: Pool Adaptativo
-
-```python
-class ExplosionPool:
-    def __init__(self, initial_size: int = 50, max_size: int = 200):
-        self.available: List[Explosion] = []
-        self.active: List[Explosion] = []
-        self.max_size = max_size
-        self.created_count = initial_size  # Rastrear total criadas
-        
-        for _ in range(initial_size):
-            explosion = Explosion(0, 0, size=30)
-            explosion.time = 0
-            explosion.particles.clear()
-            self.available.append(explosion)
-    
-    def get(self, x: float, y: float, size: int = 30, 
-            explosion_type: list[tuple[int, int, int]] | None = None) -> Explosion:
-        """Obtém explosão do pool, criando se necessário (até limite)."""
-        if self.available:
-            explosion = self.available.pop()
-            explosion.reset(x, y, size, explosion_type)
-        else:
-            # Pool vazio: criar nova se não atingiu limite
-            if self.created_count < self.max_size:
-                explosion = Explosion(x, y, size, explosion_type)
-                self.created_count += 1
-            else:
-                # Limite atingido: reutilizar a mais antiga (fallback)
-                if self.active:
-                    explosion = self.active.pop(0)
-                    explosion.reset(x, y, size, explosion_type)
-                else:
-                    explosion = Explosion(x, y, size, explosion_type)
-                    self.created_count += 1
-        
-        self.active.append(explosion)
-        return explosion
-    
-    def get_stats(self) -> Dict[str, Union[int, float]]:
-        """Retorna estatísticas detalhadas."""
-        total = len(self.active) + len(self.available)
-        return {
-            "active": len(self.active),
-            "available": len(self.available),
-            "total_created": self.created_count,
-            "max_size": self.max_size,
-            "utilization": len(self.active) / self.created_count if self.created_count > 0 else 0,
-            "utilization_percent": f"{(len(self.active) / self.created_count * 100) if self.created_count > 0 else 0:.1f}%"
-        }
-```
-
-**Benefícios:**
-- ✅ Adapta-se automaticamente a fases intensas
-- ✅ Evita memory leak
-- ✅ Facilita debug via stats
-
----
-
-## 7. **Falta de Feedback de Dano Acumulado**
-
-### Problema Identificado
-Inimigos simplesmente levam dano sem feedback visual incremental. Você só vê efeitos ao morrer.
-
-### Sugestão: Sistema de Dano Gradual
-
-```python
-class DamageIndicator:
-    """Indicador de dano flutuante."""
-    def __init__(self, x: float, y: float, damage: int, color: tuple = (255, 0, 0)):
-        self.x = x
-        self.y = y
-        self.damage = damage
-        self.color = color
-        self.life = 0.5  # segundos
-        self.elapsed = 0.0
-    
-    def update(self, dt: float) -> bool:
-        self.elapsed += dt
-        self.y -= 50 * dt  # Flutua para cima
-        return self.elapsed >= self.life
-    
-    def draw(self, screen: pygame.Surface, font: pygame.font.Font):
-        alpha = 1.0 - (self.elapsed / self.life)
-        if alpha > 0:
-            text = font.render(f"-{self.damage}", True, self.color)
-            # Aplicar alpha manualmente se necessário
-            screen.blit(text, (int(self.x), int(self.y)))
-```
-
-Adicionar em `_destroy_enemy()`:
-
-```python
-def _destroy_enemy(self, enemy, ...) -> tuple[int, tuple[float, float, int] | None]:
-    # ... código anterior ...
-    
-    # Ao atingir um inimigo que NÃO morre ainda
-    if not enemy.dead:
-        # Indicador de dano
-        hx = hit_x if hit_x is not None else cx
-        hy = hit_y if hit_y is not None else cy
-        entity_manager.spawn_damage_indicator(hx, hy, damage=1)
-```
-
----
-
-## 8. **Sincronização de Som com Explosão**
-
-### Problema Identificado
-Às vezes a explosão visual e o som não correspondem:
-
-```python
-# Explosão é visual (partículas)
-entity_manager.spawn_explosion(cx, cy, size=explosion_size, ...)
-# Som tocado logo depois (desincronizado se houver lag)
-sound_manager.play_explosion_alien()
-```
-
-### Sugestão: Wrapper de Efeito de Morte
-
-```python
-class DeathEffect:
-    """Agrupa explosão + som + score em um único efeito sincronizado."""
-    def __init__(self, x: float, y: float, sound_id: str, 
-                 explosion_size: int = 40, points: int = 100):
-        self.x, self.y = x, y
-        self.sound_id = sound_id
-        self.explosion_size = explosion_size
-        self.points = points
-        self.triggered = False
-    
-    def trigger(self, entity_manager, sound_manager):
-        """Dispara explosão + som sincronizados."""
-        if not self.triggered:
-            entity_manager.spawn_explosion(self.x, self.y, size=self.explosion_size)
-            if self.sound_id == "asteroid":
-                sound_manager.play_explosion_asteroid()
-            elif self.sound_id == "alien":
-                sound_manager.play_explosion_alien()
-            self.triggered = True
-```
-
----
-
-## 9. **Animação de Morte para Inimigos Diferentes**
-
-### Sugestão: Sistema de Estados de Morte
-
-```python
-class EnemyDeathType:
-    """Tipos de morte de inimigos."""
-    DEFAULT = "default"        # Explosão simples
-    FRAGMENTED = "fragmented"  # Libera fragmentos (meteoros)
-    DISINTEGRATE = "disintegrate"  # Desaparece em partículas
-    CHAIN_REACTION = "chain"   # Explode em cascata
-```
-
-Depois, ao matar inimigo:
-
-```python
-def _destroy_enemy(self, enemy, ...):
-    # Determinar tipo de morte
-    if isinstance(enemy, Meteor):
-        death_type = EnemyDeathType.FRAGMENTED
-    elif isinstance(enemy, Alien):
-        death_type = EnemyDeathType.DISINTEGRATE
-    else:
-        death_type = EnemyDeathType.DEFAULT
-    
-    # Executar morte apropriada
-    self._execute_death_animation(enemy, death_type, entity_manager)
-```
-
----
-
-## 10. **Checklist de Otimização do Pool**
-
-### Diagnóstico
-Adicionar método para verificar saúde do pool:
-
-```python
-def diagnose_pool_health(pool: ExplosionPool, threshold: float = 0.8) -> str:
-    """Diagnostica se o pool está dimensionado corretamente."""
-    stats = pool.get_stats()
-    utilization = stats["utilization"]
-    
-    if utilization > threshold:
-        return f"⚠️ ALERTA: Pool sobrecarga! Utilização: {stats['utilization_percent']}"
-    elif utilization < 0.1:
-        return f"ℹ️ INFO: Pool subutilizado. Considerar diminuir tamanho."
-    else:
-        return f"✅ OK: Pool bem dimensionado ({stats['utilization_percent']} em uso)"
-```
-
----
-
-## Resumo de Implementação Recomendada
-
-| Prioridade | Melhoria | Esforço | Impacto |
-|------------|----------|--------|--------|
-| 🔴 Alta | #5: Cascata de explosões para bosses | 1h | 🌟🌟🌟 Visual |
-| 🔴 Alta | #2: Centralizar tamanhos de explosão | 30min | 🌟🌟 Manutenção |
-| 🟠 Média | #6: Pool adaptativo | 1h | 🌟🌟 Performance |
-| 🟠 Média | #3: Efeitos de morte graduais | 1.5h | 🌟🌟 Polish |
-| 🟠 Média | #4: Verificar duplicação ElementalRobot | 20min | 🌟 Bug fix |
-| 🟡 Baixa | #7: Indicadores de dano | 1.5h | 🌟 Feedback |
-| 🟡 Baixa | #8: Sincronização som/explosão | 30min | 🌟 Polish |
-| 🟡 Baixa | #9: Sistema de tipos de morte | 2h | 🌟🌟 Variedade |
-
----
-
-## Código Exemplo: Implementação Rápida #5
-
-```python
-# Em collisions.py
-
-def _apply_boss_damage(self, projectiles, boss, floating_scores, entity_manager, ...):
-    score_gain = 0
-    
-    for proj in projectiles[:]:
-        if proj.rect.colliderect(boss.rect):
-            if not getattr(proj, "piercing", False):
-                proj.dead = True
-            
-            boss.take_damage(int(proj.damage * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER))
-            sound_manager.play_boss_damage()
-            entity_manager.spawn_explosion(proj.x, proj.y, size=15)
-            
-            # ✨ NOVO: Morte em cascata
-            if boss.dead:
-                cx, cy = boss.x + boss.w / 2, boss.y + boss.h / 2
-                
-                # Explosão central
-                entity_manager.spawn_explosion(cx, cy, size=150, explosion_type=None)
-                
-                # Explosões secundárias ao redor
-                for _ in range(12):
-                    angle = random.uniform(0, 360)
-                    dist = boss.w * random.uniform(0.3, 0.8)
-                    rad = math.radians(angle)
-                    
-                    ex = cx + dist * math.cos(rad)
-                    ey = cy + dist * math.sin(rad)
-                    size = random.randint(60, 120)
-                    entity_manager.spawn_explosion(ex, ey, size=size)
-                
-                floating_scores.append(FloatingScore(cx, cy, Config.BOSS_DEFEAT_SCORE))
-                score_gain += Config.BOSS_DEFEAT_SCORE
-    
-    return score_gain
-```
-
----
-
-## Conclusão
-
-Seu sistema de explosões é **sólido**! Principais observações:
-
-✅ **Pontos fortes:**
-- Pool de explosões bem implementado
-- Tratamento correto de reutilização
-- Tipos de explosão (ALIEN, SLIME) funcionais
-- Sistema de cascata para SlimeBoss
-
-⚠️ **Melhorias sugeridas:**
-1. Generalizar cascata para todos bosses
-2. Centralizar constantes de tamanho
-3. Adicionar efeitos visuais intermediários
-4. Diagnosticar duplicação no ElementalRobot
+Code Review
+stone_golem_boss.py
+Boas práticas Python / Pygame
+
+
+Sumário executivo
+O arquivo implementa um boss completo com FSM, entidades projetadas e sistema visual pixel-art. O código funciona e está bem documentado, mas apresenta sete pontos de melhoria distribuídos em três categorias: performance, robustez e legibilidade.
+
+Performance
+2 itens	Robustez
+2 itens	Legibilidade
+3 itens
+
+
+
+1. Performance
+
+1.1  Set _anchored recriado a cada frame
+O set de estados ancorados é alocado dentro de update(), gerando uma nova estrutura em memória a cada tick (~60x/s). Como o conteúdo é fixo, deve ser uma constante de classe com frozenset.
+
+Arquivo: stone_golem_boss.py — método update()
+# Antes (problema)
+def update(self, dt, player_x, player_y):
+    _anchored = {"CHARGE", "FIRE", "EARTH_SHAKE",
+                 "EARTH_PULL", "EARTH_ORBIT", ...}  # novo set a cada tick!
+# Depois (correção)
+class StoneGolemBoss:
+    _ANCHORED_STATES = frozenset({
+        "CHARGE", "FIRE", "EARTH_SHAKE",
+        "EARTH_PULL", "EARTH_ORBIT", "EARTH_FIRE",
+        "ORB_SPAWN", "ORB_HOLD", "ORB_FIRE",
+        "SWEEP_CHARGE", "SWEEP_FIRE",
+    })
+
+
+1.2  getattr(Config, ...) chamado toda frame em RockShard
+RockShard.update() acessa Config via getattr a cada chamada. As dimensões da tela não mudam em runtime — cachear no __init__ elimina o custo de reflexão repetida.
+
+Arquivo: stone_golem_boss.py — classe RockShard
+# Antes (problema)
+def update(self, dt):
+    screen_h = getattr(Config, "SCREEN_HEIGHT", 800)  # toda frame
+    screen_w = getattr(Config, "SCREEN_WIDTH", 480)   # toda frame
+# Depois (correção)
+def __init__(self, x, y, angle_deg, ...):
+    self._screen_w = getattr(Config, "SCREEN_WIDTH", 480)
+    self._screen_h = getattr(Config, "SCREEN_HEIGHT", 800)
+
+def update(self, dt):
+    if self.y > self._screen_h + 40 or self.x < -40: ...
+
+
+
+2. Robustez
+
+2.1  Sentinela px == 0 em _draw_sweep_beam
+Linha 960 usa px == 0 para detectar ausência de beam. Se o boss estiver em x=0 (borda esquerda), o beam não é desenhado silenciosamente. Verificar None é o padrão correto.
+
+Arquivo: stone_golem_boss.py — método _draw_sweep_beam
+# Antes (problema)
+px, py, ex, ey = self.get_sweep_beam() or (0, 0, 0, 0)
+if px == 0:  # falha se boss estiver em x=0
+    return
+# Depois (correção)
+beam = self.get_sweep_beam()
+if beam is None:
+    return
+px, py, ex, ey = beam
+
+
+2.2  if ao invés de elif em _change_fsm
+Os 10+ blocos condicionais em _change_fsm são mutuamente exclusivos — cada transição ativa exatamente um estado. Usar elif em vez de if documenta essa intenção e evita avaliar condições desnecessárias após o primeiro match.
+
+Arquivo: stone_golem_boss.py — método _change_fsm
+# Antes (problema)
+if new_state == "CHARGE":
+    self._charge_particles.clear()
+if new_state == "FIRE":      # ainda avaliado mesmo após match acima
+    self._fire_shots_count = 0
+if new_state == "ORB_SPAWN": # idem
+    ...
+# Depois (correção)
+if new_state == "CHARGE":
+    self._charge_particles.clear()
+elif new_state == "FIRE":    # para no primeiro match
+    self._fire_shots_count = 0
+elif new_state == "ORB_SPAWN":
+    ...
+
+
+
+3. Legibilidade e manutenibilidade
+
+3.1  Números mágicos sem nome
+Valores como 150 (max partículas), 0.4 (chance de trail) e 800 (fade speed) aparecem inline. Ao extrair como constantes de classe, o balanceamento de gameplay fica centralizado e autoexplicativo.
+
+Arquivo: stone_golem_boss.py — classes OrbitalRock e StoneGolemBoss
+# Antes (problema)
+if len(self._charge_particles) < 150:
+    ...
+if random.random() < 0.4:
+    self.trail.append([self.x, self.y, 255.0])
+t[2] -= 800 * dt
+# Depois (correção)
+class OrbitalRock:
+    TRAIL_SPAWN_CHANCE = 0.4
+    TRAIL_FADE_SPEED   = 800.0
+
+class StoneGolemBoss:
+    MAX_CHARGE_PARTICLES = 150
+
+
+3.2  Alias Boulder sem documentação
+A linha Boulder = GolemMine não tem comentário. Sem contexto, é impossível saber se é legado, alias intencional ou erro. Usar TypeAlias com comentário comunica a intenção diretamente.
+
+Arquivo: stone_golem_boss.py — linha 204
+# Antes (problema)
+Boulder = GolemMine  # sem contexto
+# Depois (correção)
+from typing import TypeAlias
+
+# Alias de compatibilidade — EntityManager referencia o nome Boulder
+Boulder: TypeAlias = GolemMine
+
+
+3.3  _run_fsm monolítico e __init__ extenso
+_run_fsm tem ~150 linhas tratando todos os estados em sequência. Extrair cada handler para um método próprio (_fsm_scan, _fsm_charge, etc.) torna cada estado testável de forma isolada. O mesmo vale para o __init__ de StoneGolemBoss: dividir em _init_stats(), _init_fsm() e _init_surfaces() facilita rastrear onde um atributo é inicializado.
+
+Arquivo: stone_golem_boss.py — métodos _run_fsm e __init__
+# Antes (problema)
+def _run_fsm(self, dt, px, py, mines, shards):
+    if state == "SCAN":
+        ...  # 10 linhas
+    elif state == "OPENING":
+        ...  # 8 linhas
+    # ... +130 linhas
+# Depois (correção)
+def _run_fsm(self, dt, px, py, mines, shards):
+    handler = getattr(self, f'_fsm_{self.fsm_state.lower()}', None)
+    if handler:
+        handler(dt, px, py, mines, shards)
+
+def _fsm_scan(self, dt, px, py, mines, shards):
+    self._move_vertical(dt)
+    self.eye_growth = 0.0
+    ...
+
+def __init__(self, x, y, health=None, difficulty_multiplier=1.0):
+    self._init_stats(health, difficulty_multiplier)
+    self._init_fsm()
+    self._init_surfaces()
+
+
+
+Bônus: consistência de interface
+O módulo documenta que todas as entidades expõem .rect, .dead e .causes_damage — mas a implementação é inconsistente:
+
+•	GolemMine: causes_damage é atributo de instância (sempre True)
+•	OrbitalRock: causes_damage é @property (condicional)
+•	RockShard: causes_damage não está implementado
+
+Solução recomendada: formalizar um typing.Protocol com os três atributos e anotar as listas internas de entidades com esse tipo.
+
+Protocolo sugerido — entities/protocols.py
+# Antes (problema)
+# Sem contrato formal — qualquer entidade pode faltar um atributo
+# e o erro só aparece em runtime durante uma colisão
+# Depois (correção)
+from typing import Protocol
+import pygame
+
+class DamageEntity(Protocol):
+    rect: pygame.Rect
+    dead: bool
+
+    @property
+    def causes_damage(self) -> bool: ...
+
+# Em playing.py:
+def _check_ship_damage(self, entities: list[DamageEntity]) -> None:
+    ...
+
