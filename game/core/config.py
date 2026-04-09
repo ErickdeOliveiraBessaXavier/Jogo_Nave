@@ -278,6 +278,16 @@ class Config:
     BOSS_FRENZY_AIM_BLINK_ON_DURATION: int = 100
 
     # ========================================
+    # STONE GOLEM BOSS
+    # ========================================
+    GOLEM_HEALTH: int = 2500
+    GOLEM_ENTRY_SPEED: float = 160.0
+    GOLEM_SPEED: float = 75.0
+    GOLEM_SHARD_SPEED: float = 420.0
+    GOLEM_BOULDER_SPEED: float = 340.0
+    GOLEM_BOULDER_GRAVITY: float = 30.0
+
+    # ========================================
     # BLACK HOLE SYSTEM
     # ========================================
     # Movement and physics

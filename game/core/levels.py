@@ -685,7 +685,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         enemy_spawn_config={
             Meteor: 0.6,
             SquareMinionBoss: 15.0,  # Spawn lento para tutorial
-            ElementalRobot: 1.0,  # Mini-boss: aparece raramente (1x a cada ~45s)
+            # ElementalRobot: 1.0,  # Mini-boss: aparece raramente (1x a cada ~45s)
             # Alien: 2.5,
             # EyeEnemy: 5.0,
         },
@@ -1150,10 +1150,10 @@ class LevelAnalyzer:
             logger.info(
                 f"{warning_icon} Nv.{level_num:2d} │ "
                 f"{theme_name:22s} │ "
-                f"👾{stats['enemies_to_clear']:3d} │ "
-                f"📊{spawn_rate:.1f}/s │ "
-                f"🎯~{max_enemies:2d} tela │ "
-                f"🕐{duration / 60:.1f}min │ "
+                f"{stats['enemies_to_clear']:3d} │ "
+                f"{spawn_rate:.1f}/s │ "
+                f"~{max_enemies:2d} tela │ "
+                f"{duration / 60:.1f}min │ "
                 f"{features:5s}"
             )
 

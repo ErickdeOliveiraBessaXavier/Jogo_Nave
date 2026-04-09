@@ -1208,12 +1208,12 @@ class Collisions:
         self, ship: Ship, energy_orbs: list[EnergyOrb]
     ) -> EnergyOrb | None:
         """Verifica colisão entre EnergyOrbs (ElementalRobot) e a nave.
-        
+
         Retorna o orbe que colidiu para que PlayingScene possa aplicar os debuffs.
         """
         if ship.invuln > 0:
             return None
-            
+
         for orb in energy_orbs[:]:
             if not orb.dead and ship.rect.colliderect(orb.rect):
                 orb.dead = True

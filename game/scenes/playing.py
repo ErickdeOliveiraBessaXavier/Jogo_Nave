@@ -17,13 +17,11 @@ from ..core.paths import get_profile_path
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
-from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
+from ..core.upgrades import (ActiveUpgrade, HealUpgrade, create_upgrade,
+                             get_upgrade_icon)
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
-from ..core.world_config import (
-    format_stage_name,
-    get_world_for_level,
-    is_side_scroll_mode,
-)
+from ..core.world_config import (format_stage_name, get_world_for_level,
+                                 is_side_scroll_mode)
 from ..entities.floating_score import FloatingScore
 from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
@@ -1348,10 +1346,23 @@ class PlayingScene(Scene):
         sound_manager.stop_all_sfx()
 
         if self.level_config.boss_type:
-            boss = self.level_config.boss_type(Config.SCREEN_WIDTH / 2 - 50, 50)
-            # Aplicar multiplicador de health da dificuldade
-            boss.health = int(boss.health * self.enemy_health_multiplier)
-            boss.max_health = boss.health  # Atualizar max_health também
+            from ..entities.stone_golem_boss import StoneGolemBoss
+
+            # Sistema flexível para inicializar bosses com suporte a dificuldade
+            if self.level_config.boss_type == StoneGolemBoss:
+                # StoneGolemBoss já aplica o multiplicador internamente no __init__
+                boss = StoneGolemBoss(
+                    Config.SCREEN_WIDTH / 2 - 50,
+                    50,
+                    difficulty_multiplier=self.enemy_health_multiplier,
+                )
+            else:
+                # Bosses legados
+                boss = self.level_config.boss_type(Config.SCREEN_WIDTH / 2 - 50, 50)
+                # Aplicar multiplicador de health da dificuldade
+                boss.health = int(boss.health * self.enemy_health_multiplier)
+                boss.max_health = boss.health  # Atualizar max_health também
+
             self.entity_manager.boss = boss
 
             self._cache_boss_type()  # Cache do tipo de boss

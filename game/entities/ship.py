@@ -61,8 +61,8 @@ class Ship:
 
         # Elemental Debuffs (Timers)
         self.fire_rate_modifier_timer: float = 0.0  # Inferno: sobreaquecimento
-        self.invert_controls_timer: float = 0.0     # Toxina: interferência
-        self.speed_modifier_timer: float = 0.0      # Nevasca: congelamento
+        self.invert_controls_timer: float = 0.0  # Toxina: interferência
+        self.speed_modifier_timer: float = 0.0  # Nevasca: congelamento
 
         # Carregar imagem da nave
         try:
@@ -159,7 +159,7 @@ class Ship:
             multiplier *= (
                 Config.EXPLOSIVE_SHOT_FIRE_RATE_PENALTY
             )  # Tiros explosivos são mais lentos
-            
+
         # Inferno debuff: Sobreaquecimento reduz cadência em 50%
         if self.fire_rate_modifier_timer > 0.0:
             multiplier *= 0.5
@@ -589,7 +589,7 @@ class Ship:
             base_speed_multiplier = 1.5
         if self.speed_modifier_timer > 0.0:
             base_speed_multiplier *= 0.3  # Nevasca: 70% de redução
-            
+
         current_speed = self.speed * base_speed_multiplier
         move_vec = pygame.math.Vector2(0, 0)
 
@@ -600,10 +600,10 @@ class Ship:
             ship_center_y = self.y + self.h / 2
             # Usar sensibilidade para movimento proporcional à distância
             sensitivity = 0.02  # 2% de sensibilidade
-            
+
             # Toxina debuff: Inverte a direção do movimento em relação ao mouse
             dir_mult = -1.0 if self.invert_controls_timer > 0.0 else 1.0
-            
+
             move_vec.x = (mouse_x - ship_center_x) * sensitivity * dir_mult
             move_vec.y = (mouse_y - ship_center_y) * sensitivity * dir_mult
         else:
@@ -613,7 +613,7 @@ class Ship:
             right = "hold_left" if self.invert_controls_timer > 0.0 else "hold_right"
             up = "hold_down" if self.invert_controls_timer > 0.0 else "hold_up"
             down = "hold_up" if self.invert_controls_timer > 0.0 else "hold_down"
-            
+
             if left in held_actions:
                 move_vec.x -= 1
             if right in held_actions:
