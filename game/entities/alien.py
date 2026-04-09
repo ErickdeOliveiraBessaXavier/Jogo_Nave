@@ -78,6 +78,10 @@ class Alien:
         self.animation_timer = 0.0
         self.frame_duration = Config.ALIEN_ANIMATION_FRAME_DURATION
 
+        # Explosão (inicializar para satisfazer o Pylint)
+        self.explosion_alien = []
+        self._explosion_color_set = False
+
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
@@ -193,7 +197,7 @@ class Alien:
             self.current_frame = (self.current_frame + 1) % len(self.animation_frames)
 
         # Se morreu, definir cores personalizadas para a explosão
-        if self.dead and not hasattr(self, "_explosion_color_set"):
+        if self.dead and not self._explosion_color_set:
             # Cores: #25D9A6 (37, 217, 166) e #4ED94A (78, 217, 74)
             self.explosion_alien = [(37, 217, 166), (78, 217, 74)]
             self._explosion_color_set = True

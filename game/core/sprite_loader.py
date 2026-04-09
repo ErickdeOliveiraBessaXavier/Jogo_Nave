@@ -71,7 +71,7 @@ class SpriteLoader:
             try:
                 image = get_image(path)
                 frames.append(image)
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 logging.error(f"{name}: Erro ao carregar frame {i}: {e}")
                 continue
 

@@ -535,6 +535,11 @@ class PlayerProfile:
         self._dirty = False
         self._last_save = time.time()
 
+        # Configurações de vídeo e controle (inicializadas com defaults)
+        self.resolution = (1280, 720)
+        self.mouse_control = False
+        self.auto_fire = False
+
         # OPT #4: Cache global performance analysis
         self._cached_global_stats: Optional[Dict[str, Any]] = None
         self._stats_dirty = True

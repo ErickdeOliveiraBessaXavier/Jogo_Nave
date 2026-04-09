@@ -52,8 +52,8 @@ class UserPreferences:
                 self.mouse_control = data.get("mouse_control", self.mouse_control)
                 self.auto_fire = data.get("auto_fire", self.auto_fire)
 
-        except Exception as e:
-            logger.error(f"Erro ao carregar preferências: {e}")
+        except (OSError, json.JSONDecodeError, ValueError) as e:
+            logger.error("Erro ao carregar preferências: %s", e)
 
     def save(self):
         """Salva preferências no disco."""
@@ -70,8 +70,8 @@ class UserPreferences:
             }
             with open(self.file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
-        except Exception as e:
-            logger.error(f"Erro ao salvar preferências: {e}")
+        except (OSError, ValueError) as e:
+            logger.error("Erro ao salvar preferências: %s", e)
 
     def reset(self):
         """Redefine para os padrões de fábrica."""

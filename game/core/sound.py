@@ -48,8 +48,8 @@ def require_audio(func: F) -> F:
 
 
 class MusicStateManager:
-    def __init__(self, sound_manager: "SoundManager"):
-        self.sound_manager = sound_manager
+    def __init__(self, manager: "SoundManager"):
+        self.sound_manager = manager
         self.current_state: MusicState = MusicState.SILENCE
         self.previous_state: MusicState = MusicState.SILENCE
 

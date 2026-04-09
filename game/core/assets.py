@@ -18,7 +18,7 @@ def get_font(size: int, path: str | Path | None = None) -> pygame.font.Font:
     font_path = Path(path) if path else DEFAULT_FONT_PATH
     try:
         return pygame.font.Font(str(font_path), size)
-    except Exception:
+    except (OSError, pygame.error):
         return pygame.font.Font(None, size)
 
 
@@ -42,7 +42,7 @@ def get_image(path: str | Path, alpha: bool = True) -> pygame.Surface:
     except FileNotFoundError:
         print(f"⚠️ Imagem não encontrada: {image_path}")
         return pygame.Surface((1, 1), pygame.SRCALPHA)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(f"❌ Erro inesperado ao carregar imagem {image_path}: {e}")
         return pygame.Surface((1, 1), pygame.SRCALPHA)
 
@@ -60,5 +60,5 @@ def load_custom_cursor() -> None:
             pygame.mouse.set_cursor(cursor)
         else:
             print(f"⚠️ Cursor não encontrado em {CURSOR_PATH}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(f"❌ Erro ao carregar cursor: {e}")

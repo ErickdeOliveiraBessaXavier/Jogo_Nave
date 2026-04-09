@@ -656,8 +656,6 @@ class ProceduralLevelGenerator:
         # Boss sempre presente na fase 'meteor_storm'
         boss_type = None
         if theme and theme.name == "meteor_storm":
-            from ..entities.giant_meteor_boss import GiantMeteorBoss
-
             boss_type = GiantMeteorBoss
 
         return LevelConfig(
