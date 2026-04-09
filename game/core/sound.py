@@ -563,7 +563,7 @@ class SoundManager:
         self.music_state_manager.resume_current()
 
     def stop_music(self, force: bool = False):
-        self.music_state_manager.transition_to(MusicState.SILENCE, force=True)
+        self.music_state_manager.transition_to(MusicState.SILENCE, force=force)
 
     # === MÉTODOS INTERNOS DE MÚSICA (CHAMADOS PELO STATE MANAGER) ===
 

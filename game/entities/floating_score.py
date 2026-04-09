@@ -23,7 +23,7 @@ class FloatingScore:
 
         self.font = get_font(28)
 
-    def update(self, dt: float = 0.0) -> None:
+    def update(self, _dt: float = 0.0) -> None:
         self.y += self.dy
         self.lifetime -= 1
         self.alpha = max(0, int(255 * (self.lifetime / 60)))

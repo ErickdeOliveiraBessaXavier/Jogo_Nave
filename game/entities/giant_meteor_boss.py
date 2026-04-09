@@ -33,7 +33,7 @@ class GiantMeteorBoss:
     - Ao morrer, dispara uma grande explosão (controlada pelas colisões).
     """
 
-    def __init__(self, x: float, y: float):
+    def __init__(self, _x: float, _y: float):
         # Tamanho grande, com overflow proposital para efeito visual impactante
         self.w = int(config.SCREEN_WIDTH * 1.3)  # 30% maior que a tela
         self.h = config.GIANT_METEOR_BOSS_HEIGHT

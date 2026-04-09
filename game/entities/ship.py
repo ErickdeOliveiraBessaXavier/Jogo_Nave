@@ -206,7 +206,7 @@ class Ship:
         # Aplicar penalidade de velocidade
         self.speed = self.original_speed * speed_penalty
 
-    def activate_orbital_lasers(self, duration: float) -> None:
+    def activate_orbital_lasers(self, _duration: float) -> None:
         """Ativa sistema de lasers orbitais com cargas por bolinha."""
         self.orbital_lasers_active = True
         self.orbital_angle = 0.0
@@ -629,13 +629,13 @@ class Ship:
         self.x += move_vec.x * current_speed * dt
         self.y += move_vec.y * current_speed * dt
 
-        self._keep_in_bounds(is_side_scroll=is_side_scroll)
+        self._keep_in_bounds(is_side_scroll)
 
     def should_auto_fire(self) -> bool:
         """Retorna True se deve disparar automaticamente neste frame."""
         return self.auto_fire and self.auto_fire_timer == 0.0
 
-    def _keep_in_bounds(self, is_side_scroll: bool = False):
+    def _keep_in_bounds(self, _is_side_scroll: bool = False):
         """Mantém a nave dentro dos limites da tela.
 
         Args:

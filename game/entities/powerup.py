@@ -124,7 +124,7 @@ class PowerUp:
         try:
             # Usa o sistema de assets para carregar a fonte
             font = get_font(10)  # Tamanho um pouco menor para melhor alinhamento
-        except Exception:
+        except pygame.error:
             # Fallback para fonte padrão se get_font falhar
             font = pygame.font.Font(None, 16)
 

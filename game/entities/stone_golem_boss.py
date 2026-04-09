@@ -18,7 +18,8 @@ from ..entities.stone_golem_pixel_map import EYE_COL_START as _EYE_COL_START
 from ..entities.stone_golem_pixel_map import EYE_ROW as _EYE_ROW
 from ..entities.stone_golem_pixel_map import EYE_ROW_ABOVE as _EYE_ROW_ABOVE
 from ..entities.stone_golem_pixel_map import EYE_ROW_BELOW as _EYE_ROW_BELOW
-from ..entities.stone_golem_pixel_map import ORBITAL_ROCK_COLORS as _ORBITAL_ROCK_COLORS
+from ..entities.stone_golem_pixel_map import \
+    ORBITAL_ROCK_COLORS as _ORBITAL_ROCK_COLORS
 from ..entities.stone_golem_pixel_map import PIXEL_COLS as _PIXEL_COLS
 from ..entities.stone_golem_pixel_map import PIXEL_MAP as _PIXEL_MAP
 from ..entities.stone_golem_pixel_map import PIXEL_ROWS as _PIXEL_ROWS

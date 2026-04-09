@@ -33,7 +33,7 @@ class BossLaser:
         self.max_w = 18
         self.dead = False
 
-        self.lifetime = Config.BOSS_LASER_LIFETIME
+        self.lifetime = lifetime
         self.expand_time = 0.1
         self.hold_time = 0.3
         self.timer = 0.0

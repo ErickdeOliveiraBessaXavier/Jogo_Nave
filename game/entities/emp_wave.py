@@ -63,7 +63,7 @@ class EMPWave:
                         int(self.radius - 5),
                         max(1, self.line_width - 1),
                     )
-            except Exception:
+            except pygame.error:
                 # Ignorar erros de desenho se a onda sair da tela
                 pass
 
@@ -71,7 +71,7 @@ class EMPWave:
         """Retorna o raio atual da onda."""
         return self.radius
 
-    def is_affecting_position(self, x: float, y: float, dt: float) -> bool:
+    def is_affecting_position(self, x: float, y: float, _dt: float) -> bool:
         """Verifica se uma posição está sendo afetada pela onda neste frame.
 
         A onda afeta tudo que está dentro do raio atual (área completa, não apenas a borda).
