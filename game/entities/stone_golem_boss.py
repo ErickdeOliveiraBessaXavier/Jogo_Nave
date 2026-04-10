@@ -491,6 +491,7 @@ class EntryDebris:
         color: Optional[Tuple[int, int, int]] = None,
         S: int = 10,
         rock_size: int = 3,
+        gravity: Optional[float] = None,
     ):
         self.x, self.y = float(x), float(y)
         self.vx, self.vy = vx, vy
@@ -501,8 +502,11 @@ class EntryDebris:
         self.spin = random.uniform(0, 360)
         self.spin_speed = random.uniform(150, 450) * random.choice([-1, 1])
         self.trail: list[list[float]] = []
-        # Gravidade ligeiramente maior para o arco ser mais fechado e rápido
-        self._gravity = getattr(Config, "GOLEM_BOULDER_GRAVITY", 30) * 22.0
+        self._gravity = (
+            gravity
+            if gravity is not None
+            else getattr(Config, "GOLEM_BOULDER_GRAVITY", 30) * 5.0
+        )
 
         self._screen_w = getattr(Config, "SCREEN_WIDTH", 480)
         self._screen_h = getattr(Config, "SCREEN_HEIGHT", 800)
@@ -783,6 +787,7 @@ class StoneGolemBoss:
         self._orb_shots_done, self._orb_rotation = 0, 0.0
         self._charge_particles = []
         self._entry_debris: List[EntryDebris] = []
+        self._entry_debris_timer: float = 0.0
         self._time = 0.0
         self.rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
         self.emp_linger_timer = 0.0
@@ -890,6 +895,11 @@ class StoneGolemBoss:
                 if r.phase == "orbiting":
                     r.fire_delay = random.uniform(0.1, 1.2)
 
+    @property
+    def entry_debris(self) -> List[EntryDebris]:
+        """Expõe os detritos de entrada para colisão externa."""
+        return self._entry_debris
+
     def update(
         self, dt: float, player_x: float, player_y: float
     ) -> Tuple[List["GolemMine"], List[RockShard], List[OrbitalRock]]:
@@ -933,8 +943,6 @@ class StoneGolemBoss:
 
         for d in self._entry_debris:
             d.update(dt)
-            # Adiciona detritos à lista de shards para que EntityManager/Collisions processem dano
-            new_shards.append(d)  # type: ignore
         self._entry_debris = [d for d in self._entry_debris if not d.dead]
 
         self._mines = [m for m in self._mines if not m.dead]
@@ -975,9 +983,11 @@ class StoneGolemBoss:
             self._jitter_x = random.uniform(-5, 5)
             self._jitter_y = random.uniform(-2, 2)
 
-            # Alguns detritos prévios
-            if random.random() < 0.15:
-                self._spawn_debris_cluster(1)
+            # Alguns detritos prévios (intervalo fixo de 0.25s)
+            self._entry_debris_timer += dt
+            if self._entry_debris_timer >= 0.25:
+                self._entry_debris_timer = 0.0
+                self._spawn_debris_cluster(1, _px, _py)
         else:
             # O BURST: Sobe muito rápido
             speed = self.entry_speed * 2.5
@@ -987,12 +997,14 @@ class StoneGolemBoss:
 
             # No frame exato do burst (primeira vez cruzando burst_y), solta o cluster massivo
             if not hasattr(self, "_burst_done") or not self._burst_done:
-                self._spawn_debris_cluster(25)  # Explosão massiva
+                self._spawn_debris_cluster(25, _px, _py)  # Explosão massiva
                 self._burst_done = True
 
-            # Detritos contínuos durante a subida explosiva
-            if random.random() < 0.4:
-                self._spawn_debris_cluster(2)
+            # Detritos contínuos durante a subida explosiva (intervalo fixo de 0.12s)
+            self._entry_debris_timer += dt
+            if self._entry_debris_timer >= 0.12:
+                self._entry_debris_timer = 0.0
+                self._spawn_debris_cluster(2, _px, _py)
 
         if self.y <= self.target_y:
             self.y = self.target_y
@@ -1000,21 +1012,55 @@ class StoneGolemBoss:
             self._burst_done = False  # Reset para a próxima vez (se houver)
             self._change_fsm("SCAN")
 
-    def _spawn_debris_cluster(self, count: int) -> None:
-        """Helper para criar vários detritos de uma vez com cores de terra."""
+    def _spawn_debris_cluster(
+        self, count: int, player_x: float = 0.0, player_y: float = 0.0
+    ) -> None:
+        """
+        Cria detritos com trajetória parabólica a partir do TOPO do boss.
+        ~40% dos fragmentos têm mira parcial no player; o restante é aleatório.
+        """
         cx = self.x + self.w / 2
+        # Spawn no topo do boss (não na base)
+        cy = self.y + self.SCALE * 2
+
+        # Gravidade reduzida para arco mais amplo
+        gravity = getattr(Config, "GOLEM_BOULDER_GRAVITY", 30) * 5.0
+
         for _ in range(count):
-            vx = random.uniform(-350, 350)
-            vy = random.uniform(-800, -200)
+            aimed = player_x != 0.0 and random.random() < 0.4
+
+            if aimed:
+                # Calcula ângulo base em direção ao player com spread de ±25°
+                dx = player_x - cx
+                dy = player_y - cy
+                base_angle = math.degrees(
+                    math.atan2(-dy, dx)
+                )  # negativo pois y cresce p/ baixo
+                # Garante que o fragmento sempre suba (ângulo entre 10° e 170°)
+                base_angle = _clamp(base_angle, 10.0, 170.0)
+                angle_deg = base_angle + random.uniform(-25, 25)
+            else:
+                # Dispersão aleatória — ampliada para cobrir mais área
+                angle_deg = random.uniform(20, 160)
+
+            angle_rad = math.radians(angle_deg)
+            initial_velocity = random.uniform(500, 800)
+
+            vx = initial_velocity * math.cos(angle_rad)
+            vy = -initial_velocity * math.sin(angle_rad)  # negativo = sobe
+
+            start_x = cx + random.uniform(-self.w / 4, self.w / 4)
+
             self._entry_debris.append(
                 EntryDebris(
-                    cx + random.uniform(-self.w / 2, self.w / 2),
-                    self.y + self.h - 10,
+                    start_x,
+                    cy,
                     vx,
                     vy,
-                    None,  # Usa cores aleatórias da paleta EARTH_COLORS
+                    None,
                     self.SCALE,
                     rock_size=random.randint(2, 5),
+                    gravity=gravity,
                 )
             )
 

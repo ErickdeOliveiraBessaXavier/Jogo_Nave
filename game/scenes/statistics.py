@@ -25,7 +25,9 @@ class StatTab(Enum):
 class StatisticsView:
     """View de estatísticas do jogador (pode ser usada dentro de outras cenas)."""
 
-    def __init__(self, on_back: Callable[[], None], renderer: Any = None):
+    def __init__(
+        self, on_back: Callable[[], None], renderer: Any = None, app: Any = None
+    ):
         """
         Args:
             on_back: Callback chamado quando o usuário quer voltar
@@ -33,6 +35,7 @@ class StatisticsView:
         """
         self.on_back = on_back
         self.renderer = renderer
+        self._app = app
         self.profile: PlayerProfile | None = None
         self.dialog: ConfirmationDialog | None = None
 
@@ -616,6 +619,27 @@ class StatisticsView:
     def reset_profile(self):
         if self.profile:
             self.profile.reset()
+
+        # Resetar preferências para os valores padrão
+        from ..core.paths import get_preferences_path
+        from ..core.preferences import UserPreferences
+
+        prefs = UserPreferences(get_preferences_path())
+        prefs.reset()
+
+        # Sincronizar o estado vivo do app (volumes, input) sem precisar reiniciar
+        if self._app is not None:
+            self._app.preferences.reset()
+            from ..core.sound import sound_manager
+
+            sound_manager.load_config(
+                self._app.preferences.music_volume,
+                self._app.preferences.sfx_volume,
+                self._app.preferences.shot_volume,
+            )
+            self._app.input.mouse_control = self._app.preferences.mouse_control
+            self._app.input.auto_fire = self._app.preferences.auto_fire
+
         self.close_confirmation()
 
 
@@ -625,7 +649,7 @@ class StatisticsScene(Scene):
     def __init__(self, game_app: "GameApp"):
         super().__init__(game_app)
         self.r = game_app.renderer  # Usar renderer compartilhado
-        self.view = StatisticsView(on_back=self._on_back, renderer=self.r)
+        self.view = StatisticsView(on_back=self._on_back, renderer=self.r, app=game_app)
 
         # Sistema de transição
         self.transitioning = False

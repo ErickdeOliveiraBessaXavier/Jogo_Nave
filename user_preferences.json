@@ -1,0 +1,12 @@
+{
+  "resolution": [
+    1280,
+    720
+  ],
+  "fullscreen": true,
+  "music_volume": 0.5,
+  "sfx_volume": 0.7,
+  "shot_volume": 0.4,
+  "mouse_control": true,
+  "auto_fire": true
+}

@@ -1,6 +1,7 @@
 import math
 import random
-from typing import TYPE_CHECKING, Any, Sequence, TypeAlias, cast
+from typing import (TYPE_CHECKING, MutableSequence, Protocol, Sequence,
+                    TypeAlias, cast, runtime_checkable)
 
 import pygame
 
@@ -16,7 +17,7 @@ from ..entities.boss_laser import BossLaser
 from ..entities.boss_square import BossSquare
 from ..entities.bot_elemental import ElementalRobot, EnergyOrb
 from ..entities.bullet import Bullet
-from ..entities.cannon_mine import CannonMine, EnemyType as CannonMineEnemyType, MineState
+from ..entities.cannon_mine import CannonMine, MineState
 from ..entities.explosion import ExplosionType
 from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.explosive_mine import ExplosiveMine
@@ -42,6 +43,17 @@ from ..entities.stone_golem_boss import (Boulder, EntryDebris, RockShard,
 
 if TYPE_CHECKING:
     from .entity_manager import EntityManager
+
+
+# Protocol define um contrato estrutural (duck typing com type checking)
+# Qualquer classe que implemente get_points_value() satisfaz este contrato
+@runtime_checkable
+class Scoreable(Protocol):
+    """Contrato para entidades que geram pontos ao serem destruídas."""
+
+    def get_points_value(self) -> int:
+        """Retorna quantidade de pontos que a entidade gera."""
+        ...
 
 
 # Type aliases
@@ -245,7 +257,7 @@ class Collisions:
     def _destroy_enemy(
         self,
         enemy: Enemy,
-        enemies_list: list[Any],  # Usar Any para evitar problema de variância
+        enemies: Sequence[Enemy],
         entity_manager: "EntityManager",
         explosion_size: int | None = None,
         hit_x: float | None = None,
@@ -257,9 +269,17 @@ class Collisions:
         Retorna (pontos, (cx, cy, pontos) | None, foi_morto).
 
         Args:
-            explosion_size: Tamanho da explosão. Se None, usa w//2 ou radius.
+            enemy: Inimigo a ser destruído
+            enemies: Sequência de inimigos (será convertida em lista para mutação)
+            entity_manager: Gerenciador de entidades
+            explosion_size: Tamanho da explosão. Se None, usa tamanho padrão.
             hit_x, hit_y: Ponto exato do impacto (opcional).
+
+        Returns:
+            Tupla com (pontos_ganhos, evento_pontos, foi_destruído)
         """
+        # Converter para lista mutável apenas internamente - melhor prática
+        enemies_list: MutableSequence[Enemy] = list(enemies)
         # Calcular centro
         cx, cy, _ = self.get_collision_info(enemy)
 
@@ -314,8 +334,13 @@ class Collisions:
         else:
             sound_manager.play_explosion_alien()
 
-        # Pontos
-        pts = enemy.get_points_value() if hasattr(enemy, "get_points_value") else 0
+        # Pontos - usar Protocol e isinstance para type safety
+        # isinstance com Protocol (@runtime_checkable) é mais elegante que hasattr
+        if isinstance(enemy, Scoreable):
+            pts = enemy.get_points_value()
+        else:
+            # Fallback para entidades que não implementam o protocolo
+            pts = 0
 
         # Fragmentos (apenas meteoros)
         if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
@@ -813,7 +838,7 @@ class Collisions:
                     if enemy.dead:
                         continue
 
-                    if mine.check_enemy_collision(cast(CannonMineEnemyType, enemy)):
+                    if mine.check_enemy_collision(enemy):  # type: ignore[arg-type]
                         break  # Mina explodiu, sair do loop de inimigos
 
         return score_gain, destroyed_count, score_events

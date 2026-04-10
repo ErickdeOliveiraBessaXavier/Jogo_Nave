@@ -23,16 +23,19 @@ class SettingsView:
         on_back: Callable[[], None],
         renderer: Any = None,
         on_restart: Callable[[], None] | None = None,
+        app: Any = None,
     ):
         """
         Args:
             on_back: Callback chamado quando o usuário quer voltar
             renderer: Renderer compartilhado (opcional)
             on_restart: Callback chamado quando o usuário quer reiniciar o jogo (opcional)
+            app: Instância do GameApp para aplicar mudanças em tempo real (opcional)
         """
         self.on_back = on_back
         self.on_restart = on_restart
         self.renderer = renderer
+        self._app = app
 
         # Agora usamos ambos: preferências para sistema e profile para progressão (se necessário)
         self.preferences = UserPreferences(get_preferences_path())
@@ -293,8 +296,14 @@ class SettingsView:
                     # Salvar nas preferências
                     if key == "mouse_control":
                         self.preferences.mouse_control = self.toggles[key]
+                        # Aplica imediatamente ao input em execução
+                        if self._app is not None:
+                            self._app.input.mouse_control = self.toggles[key]
                     elif key == "auto_fire":
                         self.preferences.auto_fire = self.toggles[key]
+                        # Aplica imediatamente ao input em execução
+                        if self._app is not None:
+                            self._app.input.auto_fire = self.toggles[key]
                     self.preferences.save()
                     return True
 
@@ -717,7 +726,7 @@ class SettingsScene(Scene):
         super().__init__(app)
         self.return_to_game = return_to_game
         self.r = app.renderer
-        self.view = SettingsView(on_back=self._on_back, renderer=self.r)
+        self.view = SettingsView(on_back=self._on_back, renderer=self.r, app=app)
 
         self.transitioning = False
         self.transition_progress = 0.0
