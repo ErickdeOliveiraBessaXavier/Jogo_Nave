@@ -1,6 +1,6 @@
 import math
 import random
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
 import pygame
 
@@ -279,7 +279,11 @@ class Meteor:
     def can_split(self) -> bool:
         return self.size >= Config.FRAGMENT_SPLIT_THRESHOLD
 
-    def spawn_fragments(self, is_side_scroll: bool = False) -> List["Meteor"]:
+    def spawn_fragments(
+        self,
+        is_side_scroll: bool = False,
+        meteor_factory: "Callable[..., Meteor] | None" = None,
+    ) -> List["Meteor"]:
         if not self.can_split():
             return []
         cx = self.x + self.w / 2
@@ -331,5 +335,8 @@ class Meteor:
             fx = cx + cos_ang * size_offset_x - s
             fy = cy + sin_ang * size_offset_y - s
 
-            frags.append(Meteor(size=s, x=fx, y=fy, vx=vx, vy=vy))
+            if meteor_factory is not None:
+                frags.append(meteor_factory(size=s, x=fx, y=fy, vx=vx, vy=vy))
+            else:
+                frags.append(Meteor(size=s, x=fx, y=fy, vx=vx, vy=vy))
         return frags

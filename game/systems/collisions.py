@@ -1,7 +1,13 @@
 import math
 import random
-from typing import (TYPE_CHECKING, MutableSequence, Protocol, Sequence,
-                    TypeAlias, cast, runtime_checkable)
+from typing import (
+    TYPE_CHECKING,
+    Protocol,
+    Sequence,
+    TypeAlias,
+    cast,
+    runtime_checkable,
+)
 
 import pygame
 
@@ -38,8 +44,7 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import (Boulder, EntryDebris, RockShard,
-                                         StoneGolemBoss)
+from ..entities.stone_golem_boss import Boulder, EntryDebris, RockShard, StoneGolemBoss
 
 if TYPE_CHECKING:
     from .entity_manager import EntityManager
@@ -279,7 +284,7 @@ class Collisions:
             Tupla com (pontos_ganhos, evento_pontos, foi_destruído)
         """
         # Converter para lista mutável apenas internamente - melhor prática
-        enemies_list: MutableSequence[Enemy] = list(enemies)
+        # (mantido para compatibilidade com outros usos futuros do método)
         # Calcular centro
         cx, cy, _ = self.get_collision_info(enemy)
 
@@ -344,9 +349,12 @@ class Collisions:
 
         # Fragmentos (apenas meteoros)
         if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
-            fragments = enemy.spawn_fragments(is_side_scroll=self.is_side_scroll)
-            if fragments:
-                enemies_list.extend(fragments)
+            fragments = enemy.spawn_fragments(
+                is_side_scroll=self.is_side_scroll,
+                meteor_factory=entity_manager.meteor_pool.get,
+            )
+            for frag in fragments:
+                entity_manager.enemies.append(frag)
 
         return pts, (cx, cy, pts), True
 
