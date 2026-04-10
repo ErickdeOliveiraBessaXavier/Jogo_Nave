@@ -7,21 +7,43 @@ from .meteor import Meteor
 
 class MeteorPool:
     """
-    Pool Pattern para meteoros: gerencia uma coleção reutilizável de meteoros,
+    Object pool for meteors: gerencia uma coleção reutilizável de meteoros,
     evitando criar e destruir objetos repetidamente.
+
+    Tracks pool efficiency and prevents unbounded growth.
     """
 
-    def __init__(self, initial_size: int = 100, is_side_scroll: bool = False):
+    def __init__(
+        self,
+        initial_size: int = 100,
+        max_size: int = 500,
+        is_side_scroll: bool = False,
+    ):
         """
         Inicializa o pool com meteoros inativos.
 
         Args:
             initial_size: Quantidade inicial de meteoros no pool
+            max_size: Tamanho máximo permitido (evita crescimento infinito)
             is_side_scroll: Se está em modo side-scroll
+
+        Raises:
+            ValueError: If max_size < initial_size
         """
+        if max_size < initial_size:
+            raise ValueError("max_size must be greater than or equal to initial_size")
+
+        self.initial_size = initial_size
+        self.max_size = max_size
+        self.is_side_scroll = is_side_scroll
+
         self.pool: List[Meteor] = []
         self.active: List[Meteor] = []
-        self.is_side_scroll = is_side_scroll
+
+        # Statistics
+        self.peak_active = 0
+        self.total_created = 0
+        self.reused_count = 0
 
         # Pré-cria meteoros inativos
         for _ in range(initial_size):
@@ -29,6 +51,7 @@ class MeteorPool:
             meteor.active = False
             meteor.dead = True
             self.pool.append(meteor)
+            self.total_created += 1
 
     def get(
         self,
@@ -52,13 +75,29 @@ class MeteorPool:
             if not meteor.active:
                 meteor.reset(size=size, x=x, y=y, vx=vx, vy=vy)
                 self.active.append(meteor)
+                self.reused_count += 1
+                self._update_peak()
                 return meteor
 
-        # Se não houver disponível, cria novo
-        meteor = Meteor(size=size, x=x, y=y, vx=vx, vy=vy)
-        self.pool.append(meteor)
-        self.active.append(meteor)
-        return meteor
+        # Se não houver disponível, tenta criar novo
+        if len(self.pool) < self.max_size:
+            meteor = Meteor(size=size, x=x, y=y, vx=vx, vy=vy)
+            self.pool.append(meteor)
+            self.active.append(meteor)
+            self.total_created += 1
+            self._update_peak()
+            return meteor
+        else:
+            # Pool está no máximo - reutiliza o mais antigo (fallback)
+            if self.active:
+                meteor = self.active.pop(0)
+                meteor.reset(size=size, x=x, y=y, vx=vx, vy=vy)
+                self.active.append(meteor)
+                self._update_peak()
+                return meteor
+            else:
+                # Nunca deve chegar aqui
+                return Meteor(size=size, x=x, y=y, vx=vx, vy=vy)
 
     def release(self, meteor: Meteor):
         """
@@ -110,3 +149,26 @@ class MeteorPool:
     def get_pool_size(self) -> int:
         """Retorna o tamanho total do pool (ativos + inativos)."""
         return len(self.pool)
+
+    def _update_peak(self) -> None:
+        """Track peak active count for statistics."""
+        self.peak_active = max(self.peak_active, len(self.active))
+
+    def get_stats(self) -> dict[str, int | float]:
+        """
+        Get pool statistics for monitoring.
+
+        Returns:
+            Dictionary with usage metrics
+        """
+        total = max(1, self.total_created)
+        return {
+            "active": len(self.active),
+            "inactive": len(self.pool) - len(self.active),
+            "pool_total": len(self.pool),
+            "peak_active": self.peak_active,
+            "max_size": self.max_size,
+            "total_created": self.total_created,
+            "reused": self.reused_count,
+            "efficiency_percent": (self.reused_count / total) * 100,
+        }

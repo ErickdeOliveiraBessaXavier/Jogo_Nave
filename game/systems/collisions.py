@@ -2,6 +2,7 @@ import math
 import random
 from typing import (
     TYPE_CHECKING,
+    Any,
     Protocol,
     Sequence,
     TypeAlias,
@@ -230,7 +231,7 @@ class Collisions:
     def _batch_query_for_projectiles(
         self,
         projectiles: Sequence[Projectile],
-        grid: SpatialGrid[Enemy],
+        grid: SpatialGrid[Any],
         padding: int = CollisionConstants.SPATIAL_QUERY_PADDING,
     ) -> dict[int, list[Enemy]]:
         """
@@ -976,7 +977,7 @@ class Collisions:
     def mini_ship_bullets_vs_enemies(
         self,
         mini_ship_bullets: list[MiniShipBullet],
-        enemy_grid: SpatialGrid[Enemy],
+        enemy_grid: SpatialGrid[Any],
         enemies: Sequence[Enemy],  # Para adicionar fragments
         entity_manager: "EntityManager",  # <-- ADICIONAR
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
@@ -1043,7 +1044,7 @@ class Collisions:
         bullets: list[Bullet],
         mine_explosions: list[MineExplosion],  # noqa: ARG002
         ship: Ship,  # noqa: ARG002
-        enemy_grid: SpatialGrid[Enemy],
+        enemy_grid: SpatialGrid[Any],
         enemies: Sequence[Enemy],  # Para adicionar fragments
         entity_manager: "EntityManager",  # <-- NOVO
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
@@ -1200,7 +1201,7 @@ class Collisions:
     def ship_vs_enemies(
         self,
         ship: Ship,
-        enemy_grid: SpatialGrid[Enemy],
+        enemy_grid: SpatialGrid[Any],
         entity_manager: "EntityManager",
     ) -> bool:
         if ship.invuln > 0:

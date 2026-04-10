@@ -16,10 +16,12 @@ class HasPosition(Protocol):
     h: float
 
 
-T_co = TypeVar("T_co", covariant=True)
+# FIXED: Changed from T_co (covariant) to T (invariant)
+# Lists are mutable containers, so they need invariant type parameters
+T = TypeVar("T")
 
 
-class SpatialGrid(Generic[T_co]):
+class SpatialGrid(Generic[T]):
     """
     A simple spatial hash grid for efficient collision detection.
     Divides space into cells and stores objects in them based on their position.
@@ -29,7 +31,7 @@ class SpatialGrid(Generic[T_co]):
         if cell_size <= 0:
             raise ValueError("cell_size must be positive")
         self.cell_size = cell_size
-        self.grid: dict[tuple[int, int], list[T_co]] = {}
+        self.grid: dict[tuple[int, int], list[T]] = {}
 
     def _get_cell_coords(self, x: float, y: float) -> tuple[int, int]:
         """Get the cell coordinates for a given position."""
@@ -48,15 +50,15 @@ class SpatialGrid(Generic[T_co]):
             (cx, cy) for cx in range(left, right + 1) for cy in range(top, bottom + 1)
         }
 
-    def insert(self, obj: Any, x: float, y: float, w: float = 0, h: float = 0):
+    def insert(self, obj: T, x: float, y: float, w: float = 0, h: float = 0):
         """Insert an object into the grid based on its bounding box."""
         cells = self._get_cells_for_rect(x, y, w, h)
         for cell in cells:
             if cell not in self.grid:
                 self.grid[cell] = []
-            self.grid[cell].append(obj)  # type: ignore[arg-type]
+            self.grid[cell].append(obj)
 
-    def insert_from_rect(self, obj: Any):
+    def insert_from_rect(self, obj: T):
         """Insert object that has a pygame rect attribute."""
         if hasattr(obj, "rect"):
             r = cast(HasRect, obj).rect
@@ -72,31 +74,31 @@ class SpatialGrid(Generic[T_co]):
         else:
             raise ValueError("Object must have rect or x/y/w/h attributes")
 
-    def insert_batch(self, objects: list[tuple[Any, float, float, float, float]]):
+    def insert_batch(self, objects: list[tuple[T, float, float, float, float]]):
         """Insert multiple objects at once. More efficient than individual inserts."""
         for obj, x, y, w, h in objects:
             cells = self._get_cells_for_rect(x, y, w, h)
             for cell in cells:
                 if cell not in self.grid:
                     self.grid[cell] = []
-                self.grid[cell].append(obj)  # type: ignore[arg-type]
+                self.grid[cell].append(obj)
 
-    def query(self, x: float, y: float, w: float, h: float) -> list[T_co]:
+    def query(self, x: float, y: float, w: float, h: float) -> list[T]:
         """Query objects in the cells that overlap with the given rectangle."""
         cells = self._get_cells_for_rect(x, y, w, h)
-        result: list[T_co] = []
-        seen: set[int] = set()  # Store IDs instead of objects for faster hashing
-        grid = self.grid  # Cache grid reference to avoid repeated attribute lookups
+        result: list[T] = []
+        seen: set[int] = set()
+        grid = self.grid
         for cell in cells:
             if cell in grid:
                 for obj in grid[cell]:
-                    obj_id = id(obj)  # Much faster than hashing arbitrary objects
+                    obj_id = id(obj)
                     if obj_id not in seen:
                         seen.add(obj_id)
                         result.append(obj)
         return result
 
-    def query_from_rect(self, rect: Any) -> list[T_co]:
+    def query_from_rect(self, rect: Any) -> list[T]:
         """Query using a pygame Rect object."""
         return self.query(rect.x, rect.y, rect.width, rect.height)
 

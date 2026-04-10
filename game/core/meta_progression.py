@@ -12,8 +12,11 @@ import pygame
 from ..core.difficulty import DifficultyPreset
 from ..core.levels import LevelConfig
 from ..core.upgrades import UpgradeType
-from ..core.upgrades_config import (DEFAULT_UNLOCKED, INITIAL_UNLOCKED_SLOTS,
-                                    UPGRADE_SLOT_COUNT)
+from ..core.upgrades_config import (
+    DEFAULT_UNLOCKED,
+    INITIAL_UNLOCKED_SLOTS,
+    UPGRADE_SLOT_COUNT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -537,6 +540,10 @@ class PlayerProfile:
 
         # Configurações de vídeo (inicializadas com defaults)
         self.resolution = (1280, 720)
+
+        # Configurações de controle (inicializadas com defaults)
+        self.mouse_control: bool = False
+        self.auto_fire: bool = False
 
         # OPT #4: Cache global performance analysis
         self._cached_global_stats: Optional[Dict[str, Any]] = None

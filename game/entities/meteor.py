@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 import random
 from typing import Callable, List, Tuple
@@ -7,7 +9,10 @@ import pygame
 from ..core import colors
 from ..core.config import config as Config
 
-# Cache global de shapes para reutilização (evita recalcular pontos irregulares)
+# Type alias for the meteor factory function
+MeteorFactory = Callable[[int, float, float, float, float], "Meteor"]
+
+# Cache global de shapes para reutilização
 _SHAPE_CACHE: dict[int, List[Tuple[float, float]]] = {}
 
 
@@ -15,26 +20,20 @@ def _get_or_create_shape(size: int) -> List[Tuple[float, float]]:
     """Retorna shape cacheado ou cria novo com irregularidade balanceada."""
     if size not in _SHAPE_CACHE:
         pts: List[Tuple[float, float]] = []
-        # Mais pontos para meteoros grandes
         num_points = max(8, int(size / 3))
 
-        # Gerar raios base para cada ponto
         radii: List[float] = []
         for i in range(num_points):
-            # Variação moderada: 0.7 a 1.3
             radii.append(random.uniform(0.7, 1.3))
 
-        # Suavização leve para evitar picos extremos, mas mantendo variação
         smoothed_radii: List[float] = []
         for i in range(num_points):
             prev_r: float = radii[(i - 1) % num_points]
             curr_r: float = radii[i]
             next_r: float = radii[(i + 1) % num_points]
-            # Suavização leve: 10% anterior + 80% atual + 10% próximo
             smooth_r: float = prev_r * 0.1 + curr_r * 0.8 + next_r * 0.1
             smoothed_radii.append(smooth_r)
 
-        # Criar pontos com raios suavizados
         for i in range(num_points):
             ang: float = (2 * math.pi * i) / num_points
             r: float = size * smoothed_radii[i]
@@ -53,30 +52,23 @@ class Meteor:
         vx: float | None = None,
         vy: float | None = None,
     ):
-        # tamanho base
+        # Initialize attributes with type hints
         self.size: int
         self.w: int
         self.h: int
-
-        # posição
         self.x: float
         self.y: float
-
-        # velocidade
         self.vx: float
         self.vy: float
-
-        # rotação (maiores rodam mais devagar)
         self.rotation: float
         self.rotation_speed: float
-
-        # forma irregular + cor
         self._base_points: List[Tuple[float, float]]
         self.color_intensity: float
         self.dead: bool
-        self.active: bool  # Para o Pool Pattern
+        self.active: bool
+        self.health: int
 
-        # tamanho base
+        # Configure all attributes
         self.size = (
             size
             if size is not None
@@ -84,14 +76,22 @@ class Meteor:
         )
         self.w = self.h = self.size * 2
 
-        # posição
+        self._configure_position(x, y)
+        self._configure_velocity(vx, vy)
+        self._configure_rotation()
+        self._configure_appearance()
+        self._configure_health()
+
+    def _configure_position(self, x: float | None, y: float | None) -> None:
+        """Configure meteor position."""
         if x is None:
             self.x = random.randint(0, Config.SCREEN_WIDTH - self.w)
         else:
             self.x = x
         self.y = -self.h if y is None else y
 
-        # velocidade vertical baseada no tamanho (pequenos mais rápidos)
+    def _configure_velocity(self, vx: float | None, vy: float | None) -> None:
+        """Configure meteor velocity based on size."""
         ratio = (self.size - Config.MIN_METEOR_SIZE) / (
             Config.MAX_METEOR_SIZE - Config.MIN_METEOR_SIZE + 1e-6
         )
@@ -100,7 +100,6 @@ class Meteor:
             - (Config.FAST_METEOR_SPEED - Config.SLOW_METEOR_SPEED) * ratio
         )
 
-        # velocidade
         if vy is None:
             self.vy = base_vy
         else:
@@ -116,28 +115,27 @@ class Meteor:
         else:
             self.vx = vx
 
-        # rotação (maiores rodam mais devagar)
+    def _configure_rotation(self) -> None:
+        """Configure meteor rotation."""
+        ratio = (self.size - Config.MIN_METEOR_SIZE) / (
+            Config.MAX_METEOR_SIZE - Config.MIN_METEOR_SIZE + 1e-6
+        )
         self.rotation = 0.0
         self.rotation_speed = random.uniform(-180, 180) * (1.0 - ratio * 0.5)
 
-        # forma irregular + cor
-        self._base_points: List[Tuple[float, float]] = _get_or_create_shape(self.size)
+    def _configure_appearance(self) -> None:
+        """Configure meteor shape and color."""
+        ratio = (self.size - Config.MIN_METEOR_SIZE) / (
+            Config.MAX_METEOR_SIZE - Config.MIN_METEOR_SIZE + 1e-6
+        )
+        self._base_points = _get_or_create_shape(self.size)
         self.color_intensity = 1.0 - ratio * 0.3
         self.dead = False
-        self.active = True  # Para o Pool Pattern
+        self.active = True
 
-        # Vida baseada no tamanho (meteoros maiores = mais vida)
-        self.health: int = int(10 + (self.size / Config.MAX_METEOR_SIZE) * 40)
-
-    def _generate_irregular_shape(self) -> List[Tuple[float, float]]:
-        pts: List[Tuple[float, float]] = []
-        num = 6  # Reduzido de variável para 6 pontos fixos para otimização
-        for i in range(num):
-            ang = (2 * math.pi * i) / num
-            rv = random.uniform(0.6, 1.4)
-            r = self.size * rv
-            pts.append((r * math.cos(ang), r * math.sin(ang)))
-        return pts
+    def _configure_health(self) -> None:
+        """Configure meteor health based on size."""
+        self.health = int(10 + (self.size / Config.MAX_METEOR_SIZE) * 40)
 
     def reset(
         self,
@@ -148,7 +146,6 @@ class Meteor:
         vy: float | None = None,
     ):
         """Reconfigura o meteoro para reutilização no pool."""
-        # tamanho base
         self.size = (
             size
             if size is not None
@@ -156,71 +153,26 @@ class Meteor:
         )
         self.w = self.h = self.size * 2
 
-        # posição
-        if x is None:
-            self.x = random.randint(0, Config.SCREEN_WIDTH - self.w)
-        else:
-            self.x = x
-        self.y = -self.h if y is None else y
-
-        # velocidade vertical baseada no tamanho
-        ratio = (self.size - Config.MIN_METEOR_SIZE) / (
-            Config.MAX_METEOR_SIZE - Config.MIN_METEOR_SIZE + 1e-6
-        )
-        base_vy = (
-            Config.FAST_METEOR_SPEED
-            - (Config.FAST_METEOR_SPEED - Config.SLOW_METEOR_SPEED) * ratio
-        )
-
-        # velocidade
-        if vy is None:
-            self.vy = base_vy
-        else:
-            self.vy = vy
-
-        if vx is None:
-            if random.random() < Config.DIAGONAL_CHANCE:
-                self.vx = random.uniform(-120.0, 120.0) * (
-                    self.vy / max(Config.FAST_METEOR_SPEED, 1e-6)
-                )
-            else:
-                self.vx = 0.0
-        else:
-            self.vx = vx
-
-        # rotação
-        self.rotation = 0.0
-        self.rotation_speed = random.uniform(-180, 180) * (1.0 - ratio * 0.5)
-
-        # forma irregular + cor
-        self._base_points = _get_or_create_shape(self.size)
-        self.color_intensity = 1.0 - ratio * 0.3
-        self.dead = False
-        self.active = True
-
-        # Vida baseada no tamanho
-        self.health = int(10 + (self.size / Config.MAX_METEOR_SIZE) * 40)
+        self._configure_position(x, y)
+        self._configure_velocity(vx, vy)
+        self._configure_rotation()
+        self._configure_appearance()
+        self._configure_health()
 
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
     def update(self, dt: float, is_side_scroll: bool = False):
+        """Update meteor position and rotation."""
         self.x += self.vx * dt
         self.y += self.vy * dt
-        self.rotation += (
-            self.rotation_speed * dt
-        )  # FIX: multiplicar por dt para suavidade
+        self.rotation += self.rotation_speed * dt
 
-        # Verificar se saiu da tela (lógica diferente por modo)
         if is_side_scroll:
-            # Side-scroll: Sair apenas pela esquerda (x < -self.w)
-            # Não sair pela direita pois spawn é lá!
             if self.x < -self.w or self.y > Config.SCREEN_HEIGHT or self.y < -self.h:
                 self.dead = True
         else:
-            # Top-down: Sair por baixo, esquerda ou direita
-            # Mas permitir spawn pela direita (x > SCREEN_WIDTH + buffer)
             if (
                 (self.y > Config.SCREEN_HEIGHT)
                 or (self.x < -self.w)
@@ -229,23 +181,21 @@ class Meteor:
                 self.dead = True
 
     def _rotated_points(self) -> List[Tuple[int, int]]:
-        """Retorna pontos rotacionados (otimizado com melhor precisão)."""
+        """Retorna pontos rotacionados."""
         rad = math.radians(self.rotation)
         cr = math.cos(rad)
         sr = math.sin(rad)
-        # Manter precisão float até a conversão final
         cx = self.x + self.w * 0.5
         cy = self.y + self.h * 0.5
 
-        # List comprehension com arredondamento ao invés de truncamento
         return [
             (round(cx + px * cr - py * sr), round(cy + px * sr + py * cr))
             for px, py in self._base_points
         ]
 
     def draw(self, screen: pygame.Surface):
+        """Draw meteor on screen."""
         points = self._rotated_points()
-        # Garantir que color_intensity seja um valor válido entre 0 e 1
         intensity = max(0.0, min(1.0, self.color_intensity))
 
         if self.size <= Config.MIN_METEOR_SIZE + 8:
@@ -264,39 +214,55 @@ class Meteor:
             )
             border_color = colors.RED
             core_color = colors.DARK_RED
+
         pygame.draw.polygon(screen, body_color, points)
         pygame.draw.polygon(screen, border_color, points, 2)
         center = (int(self.x + self.w // 2), int(self.y + self.h // 2))
         pygame.draw.circle(screen, core_color, center, max(2, self.size // 4))
 
     def get_points_value(self) -> int:
-        # Calcula quão pequeno o meteoro é em relação ao máximo
+        """Calculate points value based on meteor size."""
         size_factor = Config.MAX_METEOR_SIZE - self.size
         size_bonus = int(size_factor * Config.SIZE_BONUS_MULTIPLIER)
         return Config.BASE_POINTS + size_bonus
 
-    # ── NOVO: regras de fragmentação ─────────────────────────────────────────
     def can_split(self) -> bool:
+        """Check if meteor is large enough to fragment."""
         return self.size >= Config.FRAGMENT_SPLIT_THRESHOLD
 
     def spawn_fragments(
         self,
         is_side_scroll: bool = False,
-        meteor_factory: "Callable[..., Meteor] | None" = None,
-    ) -> List["Meteor"]:
+        meteor_factory: MeteorFactory | None = None,
+    ) -> List[Meteor]:
+        """
+        Split meteor into smaller fragments when destroyed.
+
+        In top-down mode: fragments inherit gravity (fall downward)
+        In side-scroll mode: fragments disperse naturally in all directions
+
+        Args:
+            is_side_scroll: Game mode determines fragment physics
+            meteor_factory: Optional factory function for creating fragments
+
+        Returns:
+            List of fragment Meteor objects (empty if cannot split)
+        """
         if not self.can_split():
             return []
+
+        # Use provided factory or default constructor
+        factory = meteor_factory or self._create_meteor
+
         cx = self.x + self.w / 2
         cy = self.y + self.h / 2
 
         count = random.randint(*Config.FRAGMENT_COUNT_RANGE)
         target_size = max(Config.MIN_METEOR_SIZE, int(self.size * 0.55))
-        frags: List[Meteor] = []
+        fragments: List[Meteor] = []
 
-        # Pré-calcular valores constantes para todos os fragmentos
-        # Usar velocidade do pai como base, com mínimo garantido
+        # Pre-calculate physics constants
         parent_speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
-        # Garantir velocidade mínima de dispersão (200 pixels/s) + velocidade do pai
         base_speed = max(200.0, parent_speed * 0.8)
 
         base_angle_rad = math.radians(random.uniform(0, 360))
@@ -305,38 +271,38 @@ class Meteor:
         size_offset_y = self.size * 0.3
 
         for _ in range(count):
-            # variação de tamanho (±20%)
+            # Fragment size variation (±20%)
             s = max(Config.MIN_METEOR_SIZE, int(target_size * random.uniform(0.8, 1.2)))
 
-            # ângulo relativo (apenas 1 random.uniform por fragmento)
+            # Angle with spread
             angle_offset = random.uniform(-half_spread_rad, half_spread_rad)
             ang = base_angle_rad + angle_offset
 
-            # Calcular cos/sin uma única vez
+            # Pre-calculate trigonometry once
             cos_ang = math.cos(ang)
             sin_ang = math.sin(ang)
 
-            # Velocidade com variação (0.8 a 1.3)
+            # Velocity with variation
             speed = base_speed * random.uniform(0.8, 1.3)
-            vx = cos_ang * speed + self.vx * 0.3  # Herdar 30% da velocidade do pai
+            vx = cos_ang * speed + self.vx * 0.3
 
-            # Em side-scroll, permitir movimento vertical livre (sem viés)
-            # Em top-down, manter viés de gravidade (para baixo)
+            # Y velocity depends on game mode
             if is_side_scroll:
-                # Dispersão igual em todas as direções (sem viés de gravidade)
-                vy = sin_ang * speed + self.vy * 0.2  # Herdar 20% da velocidade do pai
+                # Side-scroll: natural dispersal
+                vy = sin_ang * speed + self.vy * 0.2
             else:
-                # Top-down: viés para baixo (gravidade)
-                vy = (
-                    abs(sin_ang * speed) + self.vy * 0.2 + 50.0
-                )  # Adicionar gravidade base
+                # Top-down: gravity pulls downward
+                vy = abs(sin_ang * speed) + self.vy * 0.2 + 50.0
 
-            # posição (reutilizar cos_ang, sin_ang)
+            # Fragment position
             fx = cx + cos_ang * size_offset_x - s
             fy = cy + sin_ang * size_offset_y - s
 
-            if meteor_factory is not None:
-                frags.append(meteor_factory(size=s, x=fx, y=fy, vx=vx, vy=vy))
-            else:
-                frags.append(Meteor(size=s, x=fx, y=fy, vx=vx, vy=vy))
-        return frags
+            fragments.append(factory(s, fx, fy, vx, vy))
+
+        return fragments
+
+    @staticmethod
+    def _create_meteor(size: int, x: float, y: float, vx: float, vy: float) -> Meteor:
+        """Default factory for creating fragment meteors."""
+        return Meteor(size=size, x=x, y=y, vx=vx, vy=vy)
