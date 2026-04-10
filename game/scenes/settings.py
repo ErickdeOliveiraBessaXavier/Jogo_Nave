@@ -30,7 +30,6 @@ class SettingsView:
             on_back: Callback chamado quando o usuário quer voltar
             renderer: Renderer compartilhado (opcional)
             on_restart: Callback chamado quando o usuário quer reiniciar o jogo (opcional)
-            app: Instância do GameApp para aplicar mudanças em tempo real (opcional)
         """
         self.on_back = on_back
         self.on_restart = on_restart
