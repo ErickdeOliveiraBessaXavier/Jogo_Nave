@@ -37,12 +37,6 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from ..app import GameApp
     from ..core.spatial_grid import SpatialGrid
-    from ..entities.alien import Alien
-    from ..entities.bot_elemental import ElementalRobot
-    from ..entities.explosive_mine import ExplosiveMine
-    from ..entities.eye_enemy import EyeEnemy
-    from ..entities.meteor import Meteor
-    from ..entities.square_minion_boss import SquareMinionBoss
 
 
 class PlayingScene(Scene):
@@ -83,8 +77,8 @@ class PlayingScene(Scene):
         self.ship = Ship(
             ship_x,
             ship_y,
-            mouse_control=getattr(self.player_profile, "mouse_control", False),
-            auto_fire=getattr(self.player_profile, "auto_fire", False),
+            mouse_control=self.app.preferences.mouse_control,
+            auto_fire=self.app.preferences.auto_fire,
         )
         self.ship.is_entering = True
         self.ship.is_side_scroll = self.is_side_scroll
@@ -663,7 +657,7 @@ class PlayingScene(Scene):
 
     def _check_projectile_vs_enemies(
         self,
-        enemy_grid: "SpatialGrid[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot]",
+        enemy_grid: SpatialGrid[Any],
     ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
         """
         Verifica colisões de projéteis contra inimigos normais.
