@@ -18,14 +18,38 @@ from ..entities.stone_golem_pixel_map import EYE_COL_START as _EYE_COL_START
 from ..entities.stone_golem_pixel_map import EYE_ROW as _EYE_ROW
 from ..entities.stone_golem_pixel_map import EYE_ROW_ABOVE as _EYE_ROW_ABOVE
 from ..entities.stone_golem_pixel_map import EYE_ROW_BELOW as _EYE_ROW_BELOW
-from ..entities.stone_golem_pixel_map import \
-    ORBITAL_ROCK_COLORS as _ORBITAL_ROCK_COLORS
 from ..entities.stone_golem_pixel_map import PIXEL_COLS as _PIXEL_COLS
 from ..entities.stone_golem_pixel_map import PIXEL_MAP as _PIXEL_MAP
 from ..entities.stone_golem_pixel_map import PIXEL_ROWS as _PIXEL_ROWS
 from ..entities.stone_golem_pixel_map import C as _C
 
 logger = logging.getLogger(__name__)
+
+# Paleta de cores de terra, pedras escuras e poeira (Refinada para alto contraste)
+_EARTH_COLORS = [
+    (25, 15, 10),    # Solo Profundo (Escuríssimo)
+    (55, 40, 30),    # Marrom Sombra
+    (90, 70, 50),    # Terra Média
+    (130, 110, 80),  # Barro / Argila
+    (170, 150, 120), # Pedra Seca
+    (205, 190, 160), # Areia Clara (Contraste)
+    (240, 225, 200), # Highlight Final (Muito Claro)
+    (180, 105, 65),  # Sienna / Argila Queimada
+    (40, 40, 40),    # Rocha Vulcânica (Quase Preto)
+    (100, 100, 100), # Cinza Pedra
+    (155, 160, 170), # Ardósia (Cinza Frio)
+]
+
+
+def _get_random_earth_color() -> Tuple[int, int, int]:
+    """Retorna uma cor de terra aleatória com pequena variação para maior diversidade."""
+    base = random.choice(_EARTH_COLORS)
+    j = random.randint(-12, 12)
+    return (
+        int(_clamp(base[0] + j, 0, 255)),
+        int(_clamp(base[1] + j, 0, 255)),
+        int(_clamp(base[2] + j, 0, 255)),
+    )
 
 
 # ============================================================================
@@ -69,6 +93,8 @@ class GolemMine:
         self.target_x = float(target_x)
         self.target_y = float(target_y)
         self.dead = False
+        self.health = 5  # Mini-boss projectile: can be destroyed with 5 shots
+        self._hit_flash = 0.0
 
         self._phase = "landing"
         self._fuse_timer = 0.0
@@ -94,8 +120,25 @@ class GolemMine:
         """Sempre causa dano ao contato."""
         return True
 
+    def take_damage(self, amount: int = 1) -> None:
+        """Recebe dano do jogador."""
+        if self._phase == "exploded":
+            return
+        self.health -= amount
+        self._hit_flash = 0.15  # Flash visual de hit
+        if self.health <= 0:
+            self.health = 0
+            self.dead = True
+
+    def get_points_value(self) -> int:
+        """Retorna pontos ao ser destruído."""
+        return 50
+
     def update(self, dt: float) -> list["RockShard"]:
         self._pulse_t += dt
+        if self._hit_flash > 0:
+            self._hit_flash -= dt
+        
         spawned: list[RockShard] = []
 
         if self._phase == "landing":
@@ -154,7 +197,11 @@ class GolemMine:
         surface.blit(self._glow_surf, (cx - glow_r, cy - glow_r))
 
         S = max(2, r // 3)
-        body_color = self._COLOR_PULSE if blink_on else self._COLOR_BODY
+        if self._hit_flash > 0:
+            body_color = (255, 255, 255)
+        else:
+            body_color = self._COLOR_PULSE if blink_on else self._COLOR_BODY
+            
         pygame.draw.rect(surface, body_color, (cx - S, cy - S * 3, S * 2, S * 6))
         pygame.draw.rect(surface, body_color, (cx - S * 3, cy - S, S * 6, S * 2))
         pygame.draw.rect(surface, body_color, (cx - S * 2, cy - S * 2, S * 4, S * 4))
@@ -202,7 +249,7 @@ class RockShard:
         self.y = y
         self.size = random.randint(10, 16)
         self.dead = False
-        self.color = color if color is not None else (217, 66, 255)
+        self.color = color if color is not None else _get_random_earth_color()
 
         # Cache de configurações
         self._screen_w = getattr(Config, "SCREEN_WIDTH", 480)
@@ -418,20 +465,139 @@ class OrbitalRock:
         surface.blit(rotated, (int(self.x) - rw // 2, int(self.y) - rh // 2))
 
 
+class EntryDebris:
+    """
+    Detritos lançados quando o boss irrompe do chão.
+    Design similar ao OrbitalRock, com gravidade.
+    """
+
+    TRAIL_FADE_SPEED = 600.0
+    # Paleta expandida: tons de terra, pedras escuras e poeira
+    EARTH_COLORS = [
+        (101, 67, 33),   # Marrom escuro (terra)
+        (84, 56, 26),    # Marrom profundo
+        (65, 65, 65),    # Cinza pedra
+        (45, 45, 45),    # Pedra escura
+        (139, 115, 85),  # Barro/Argila
+        (160, 82, 45),   # Sienna
+    ]
+
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        vx: float,
+        vy: float,
+        color: Optional[Tuple[int, int, int]] = None,
+        S: int = 10,
+        rock_size: int = 3,
+    ):
+        self.x, self.y = float(x), float(y)
+        self.vx, self.vy = vx, vy
+        self.dead = False
+        self.S = S
+        self.rock_size = rock_size
+        self.color = color if color else random.choice(self.EARTH_COLORS)
+        self.spin = random.uniform(0, 360)
+        self.spin_speed = random.uniform(150, 450) * random.choice([-1, 1])
+        self.trail: list[list[float]] = []
+        # Gravidade ligeiramente maior para o arco ser mais fechado e rápido
+        self._gravity = getattr(Config, "GOLEM_BOULDER_GRAVITY", 30) * 22.0
+
+        self._screen_w = getattr(Config, "SCREEN_WIDTH", 480)
+        self._screen_h = getattr(Config, "SCREEN_HEIGHT", 800)
+
+        hit = S * self.rock_size
+        self.rect = pygame.Rect(int(self.x) - hit, int(self.y) - hit, hit * 2, hit * 2)
+
+        canvas_size = (self.rock_size + 2) * S * 2
+        self._rock_surf = pygame.Surface((canvas_size, canvas_size), pygame.SRCALPHA)
+        ox = canvas_size // 2 - (self.rock_size * S) // 2
+        oy = canvas_size // 2 - S
+        if self.rock_size <= 2:
+            pygame.draw.rect(self._rock_surf, self.color, (ox, oy, S * 2, S * 2))
+        else:
+            pygame.draw.rect(self._rock_surf, self.color, (ox, oy, S * 3, S * 2))
+            pygame.draw.rect(self._rock_surf, self.color, (ox + S, oy - S, S, S))
+            pygame.draw.rect(self._rock_surf, self.color, (ox - S, oy + S, S, S))
+        self._dust_surf = pygame.Surface((S * 2, S * 2), pygame.SRCALPHA)
+
+    @property
+    def causes_damage(self) -> bool:
+        return True
+
+    def update(self, dt: float) -> None:
+        # Aplicar gravidade
+        self.vy += self._gravity * dt
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.spin += self.spin_speed * dt
+
+        # Rastro
+        if random.random() < 0.3:
+            self.trail.append([self.x, self.y, 200.0])
+        for t in self.trail:
+            t[2] -= self.TRAIL_FADE_SPEED * dt
+        self.trail = [t for t in self.trail if t[2] > 0]
+
+        hit = self.S * self.rock_size
+        self.rect.x, self.rect.y = int(self.x) - hit, int(self.y) - hit
+
+        if self.y > self._screen_h + 100 or self.x < -100 or self.x > self._screen_w + 100:
+            self.dead = True
+
+    def draw_trail(self, surface: pygame.Surface) -> None:
+        """Desenha apenas o rastro de poeira (atrás)."""
+        # Cor de poeira neutra/cinza para contraste com a pedra
+        dust_base = (140, 130, 120)
+        for t in self.trail:
+            alpha = int(_clamp(t[2], 0, 255))
+            s = self.S
+            self._dust_surf.fill((0, 0, 0, 0))
+            # Usa cor de poeira com o alpha do rastro
+            pygame.draw.rect(self._dust_surf, (*dust_base, alpha // 2), (0, 0, s * 2, s * 2))
+            surface.blit(self._dust_surf, (int(t[0]) - s, int(t[1]) - s))
+
+    def draw(self, surface: pygame.Surface) -> None:
+        """Desenha apenas o corpo sólido da pedra."""
+        rotated = pygame.transform.rotate(self._rock_surf, self.spin)
+        rw, rh = rotated.get_size()
+        surface.blit(rotated, (int(self.x) - rw // 2, int(self.y) - rh // 2))
+
+
 # ============================================================================
 # PARTICULA DE CARGA
 # ============================================================================
 
 
 class _ChargeParticle:
-    def __init__(self, pupil_x: float, pupil_y: float, color: Tuple[int, int, int]):
+    def __init__(
+        self,
+        pupil_x: float,
+        pupil_y: float,
+        color: Tuple[int, int, int],
+        size: Optional[int] = None,
+        radial_speed: Optional[float] = None,
+        orbit_speed: Optional[float] = None,
+        dist: Optional[float] = None,
+        follow_pupil: bool = True,
+        max_burst_dist: float = 300.0,
+    ):
         self.angle = random.uniform(0, math.pi * 2)
-        self.dist = 120 + random.uniform(0, 40)
+        self.dist = dist if dist is not None else (120 + random.uniform(0, 40))
         self.start_dist = self.dist
-        self.orbit_speed = 0.05 + random.uniform(0, 0.08)
-        self.radial_speed = 80 + random.uniform(0, 80)
-        self.color, self.size = color, random.randint(3, 6)
+        self.orbit_speed = (
+            orbit_speed if orbit_speed is not None else (0.05 + random.uniform(0, 0.08))
+        )
+        self.radial_speed = (
+            radial_speed if radial_speed is not None else (80 + random.uniform(0, 80))
+        )
+        self.color = color
+        self.size = size if size is not None else random.randint(3, 6)
         self.px, self.py = pupil_x, pupil_y
+        self.anchor_x, self.anchor_y = pupil_x, pupil_y
+        self.follow_pupil = follow_pupil
+        self.max_burst_dist = max_burst_dist
         self.dead = False
         self._surf = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
 
@@ -439,22 +605,34 @@ class _ChargeParticle:
         self.dist -= self.radial_speed * dt
         speed_mul = 1.0 + (1.0 - _clamp(self.dist / self.start_dist, 0, 1)) * 2.0
         self.angle += self.orbit_speed * speed_mul * (dt * 60)
-        if self.dist < 2:
+        # Morre ao convergir no centro (partículas normais)
+        # ou ao se afastar demais (burst de morte)
+        if self.radial_speed > 0 and self.dist < 2:
             self.dead = True
             return
-        self.px = pupil_x + math.cos(self.angle) * self.dist
-        self.py = pupil_y + math.sin(self.angle) * self.dist
+        if self.radial_speed < 0 and self.dist > self.max_burst_dist:
+            self.dead = True
+            return
+
+        cx = pupil_x if self.follow_pupil else self.anchor_x
+        cy = pupil_y if self.follow_pupil else self.anchor_y
+        self.px = cx + math.cos(self.angle) * self.dist
+        self.py = cy + math.sin(self.angle) * self.dist
 
     def draw(self, surface: pygame.Surface) -> None:
-        ratio = _clamp(self.dist / self.start_dist * 2, 0, 1)
+        if self.radial_speed > 0:
+            # Partícula de convergência: fica mais transparente ao chegar no centro
+            ratio = _clamp(self.dist / self.start_dist * 2, 0, 1)
+        else:
+            # Partícula de burst: fica mais transparente ao se afastar
+            ratio = _clamp(1.0 - self.dist / self.max_burst_dist, 0, 1)
         if ratio < 0.05:
             return
         self._surf.fill((0, 0, 0, 0))
-        pygame.draw.circle(
+        pygame.draw.rect(
             self._surf,
             (*self.color, int(ratio * 220)),
-            (self.size, self.size),
-            self.size,
+            (0, 0, self.size * 2, self.size * 2),
         )
         surface.blit(self._surf, (int(self.px) - self.size, int(self.py) - self.size))
 
@@ -465,8 +643,8 @@ class StoneGolemBoss:
     Implementação otimizada com FSM modularizada.
     """
 
-    SCALE = 12
-    MAX_CHARGE_PARTICLES = 150
+    SCALE = 10
+    MAX_CHARGE_PARTICLES = 100
 
     # Otimização: Estados onde o boss deve flutuar ou ficar ancorado
     _ANCHORED_STATES = frozenset(
@@ -508,6 +686,8 @@ class StoneGolemBoss:
         self.entry_speed: float = 0.0
         self.fsm_state: str = "ENTERING"
         self._prev_fsm_state: str = "ENTERING"
+        self._last_attack: str = ""
+        self._attack_bag: List[str] = []
         self.fsm_ticks: float = 0.0
         self.eye_growth: float = 0.0
         self._scan_step: int = 0
@@ -517,13 +697,14 @@ class StoneGolemBoss:
         self._jitter_y: float = 0.0
         self._sweep_angle: float = 0.0
         self._sweep_total: float = 0.0
-        self._shards_fired_at: set = set()
+        self._shards_fired_at: set[int] = set()
         self._sweep_locked_angle: float = 0.0
         self._sweep_lock_done: bool = False
         self._orbital_rocks: List[OrbitalRock] = []
         self._mines: List[GolemMine] = []
         self._fire_shots_count: int = 0
         self._fire_shot_timer: float = 0.0
+        self._fire_ready: bool = False
         self._cycles_since_fire: int = 0
         self._orb_shots_done: int = 0
         self._orb_rotation: float = 0.0
@@ -535,7 +716,7 @@ class StoneGolemBoss:
         self._screen_h: int = 0
         self._body_surf_top: Optional[pygame.Surface] = None
         self._body_surf_bottom: Optional[pygame.Surface] = None
-        self._thruster_surfs: list = []
+        self._thruster_surfs: list[pygame.Surface] = []
         self._cone_surf: pygame.Surface
         self._beam_surf: pygame.Surface
         self._halo_surf: pygame.Surface
@@ -552,7 +733,9 @@ class StoneGolemBoss:
         self.w, self.h = _PIXEL_COLS * S, _PIXEL_ROWS * S
 
         margin_x = 70
-        self.x, self.y = self._screen_w - self.w - margin_x, -self.h
+        # Inicia abaixo da tela (irrompendo de baixo)
+        self.x = self._screen_w - self.w - margin_x
+        self.y = float(self._screen_h + 100)
         self.difficulty_multiplier = difficulty_multiplier
 
         base_health = getattr(Config, "GOLEM_HEALTH", 2500)
@@ -567,6 +750,8 @@ class StoneGolemBoss:
         self.entry_speed = getattr(Config, "GOLEM_ENTRY_SPEED", 160)
         self.fsm_state = "ENTERING"
         self._prev_fsm_state = "ENTERING"
+        self._last_attack = ""
+        self._attack_bag = []
         self.fsm_ticks = 0.0
 
         # Estados visuais
@@ -579,7 +764,7 @@ class StoneGolemBoss:
         # Ataques
         self._sweep_angle = math.pi / 2
         self._sweep_total = math.radians(30)
-        self._shards_fired_at = set()
+        self._shards_fired_at: set[int] = set()
         self._sweep_locked_angle, self._sweep_lock_done = math.pi / 2, False
         self._orbital_rocks = []
         self._mines = []
@@ -588,8 +773,10 @@ class StoneGolemBoss:
             0.0,
             0,
         )
+        self._fire_ready = False
         self._orb_shots_done, self._orb_rotation = 0, 0.0
         self._charge_particles = []
+        self._entry_debris: List[EntryDebris] = []
         self._time = 0.0
         self.rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
         self.emp_linger_timer = 0.0
@@ -657,6 +844,7 @@ class StoneGolemBoss:
                 0.0,
                 0,
             )
+            self._fire_ready = False
         elif new_state == "ORB_SPAWN":
             self._orb_rotation, self._orb_shots_done = 0.0, 0
         elif new_state == "SWEEP_CHARGE":
@@ -664,7 +852,7 @@ class StoneGolemBoss:
         elif new_state == "SWEEP_FIRE":
             self._sweep_angle, self._shards_fired_at = (
                 self._sweep_locked_angle - self._sweep_total / 2,
-                set(),
+                set[int](),
             )
         elif new_state == "EARTH_PULL":
             self._orbital_rocks.clear()
@@ -684,7 +872,7 @@ class StoneGolemBoss:
                         ry,
                         random.random() * math.pi * 2,
                         2 if random.random() > 0.5 else 3,
-                        random.choice(_ORBITAL_ROCK_COLORS),
+                        _get_random_earth_color(), # Usa a nova paleta
                         S,
                     )
                 )
@@ -699,7 +887,8 @@ class StoneGolemBoss:
     def update(
         self, dt: float, player_x: float, player_y: float
     ) -> Tuple[List["GolemMine"], List[RockShard], List[OrbitalRock]]:
-        new_mines, new_shards = [], []
+        new_mines: List[GolemMine] = []
+        new_shards: List[RockShard] = []
         self._time += dt
         self.fsm_ticks += dt
 
@@ -716,22 +905,32 @@ class StoneGolemBoss:
             if self.fsm_state in {"SCAN", "OPENING", "ORB_SPAWN"}
             else 0
         )
+
+        self._run_fsm(dt, player_x, player_y, new_mines, new_shards)
+
         S = self.SCALE
         if self.fsm_state in ("EARTH_SHAKE", "EARTH_PULL", "SWEEP_FIRE"):
             self._jitter_x, self._jitter_y = (
                 random.uniform(-0.5, 0.5) * S,
                 random.uniform(-0.5, 0.5) * S,
             )
-        else:
+        elif self.fsm_state != "ENTERING":
+            # Reseta jitter para outros estados, exceto ENTERING que define o seu próprio
             self._jitter_x, self._jitter_y = 0.0, 0.0
-        self.stomp_shake = self._jitter_y
 
-        self._run_fsm(dt, player_x, player_y, new_mines, new_shards)
+        self.stomp_shake = self._jitter_y
 
         px, py = self._pupil_pos()
         for p in self._charge_particles:
             p.update(dt, px, py)
         self._charge_particles = [p for p in self._charge_particles if not p.dead]
+
+        for d in self._entry_debris:
+            d.update(dt)
+            # Adiciona detritos à lista de shards para que EntityManager/Collisions processem dano
+            new_shards.append(d) # type: ignore
+        self._entry_debris = [d for d in self._entry_debris if not d.dead]
+
         self._mines = [m for m in self._mines if not m.dead]
         cx, cy = self._shared_center()
         for r in self._orbital_rocks:
@@ -753,49 +952,134 @@ class StoneGolemBoss:
         if handler:
             handler(dt, player_x, player_y, new_mines, new_shards)
 
-    def _fsm_entering(self, dt, _px, _py, _mines, _shards):
-        self.y += self.entry_speed * dt
-        if self.y >= self.target_y:
+    def _fsm_entering(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
+        # Posição onde o "burst" acontece (quando o topo do boss toca a borda da tela)
+        burst_y = self._screen_h - 20
+        
+        # Antes do burst: Tremor forte no chão (abaixo da tela)
+        if self.y > burst_y:
+            self.y -= self.entry_speed * 0.4 * dt
+            self._jitter_x = random.uniform(-5, 5)
+            self._jitter_y = random.uniform(-2, 2)
+            
+            # Alguns detritos prévios
+            if random.random() < 0.15:
+                self._spawn_debris_cluster(1)
+        else:
+            # O BURST: Sobe muito rápido
+            speed = self.entry_speed * 2.5
+            self.y -= speed * dt
+            self._jitter_x = random.uniform(-8, 8)
+            self._jitter_y = random.uniform(-8, 8)
+
+            # No frame exato do burst (primeira vez cruzando burst_y), solta o cluster massivo
+            if not hasattr(self, "_burst_done") or not self._burst_done:
+                self._spawn_debris_cluster(25) # Explosão massiva
+                self._burst_done = True
+            
+            # Detritos contínuos durante a subida explosiva
+            if random.random() < 0.4:
+                self._spawn_debris_cluster(2)
+
+        if self.y <= self.target_y:
             self.y = self.target_y
+            self._jitter_x, self._jitter_y = 0.0, 0.0
+            self._burst_done = False # Reset para a próxima vez (se houver)
             self._change_fsm("SCAN")
 
-    def _fsm_scan(self, dt, _px, _py, _mines, _shards):
+    def _spawn_debris_cluster(self, count: int) -> None:
+        """Helper para criar vários detritos de uma vez com cores de terra."""
+        cx = self.x + self.w / 2
+        for _ in range(count):
+            vx = random.uniform(-350, 350)
+            vy = random.uniform(-800, -200)
+            self._entry_debris.append(
+                EntryDebris(
+                    cx + random.uniform(-self.w / 2, self.w / 2),
+                    self.y + self.h - 10,
+                    vx,
+                    vy,
+                    None, # Usa cores aleatórias da paleta EARTH_COLORS
+                    self.SCALE,
+                    rock_size=random.randint(2, 5),
+                )
+            )
+
+    def _fsm_scan(self, dt: float, player_x: float, player_y: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
         self._move_vertical(dt)
         self.eye_growth = 0.0
         spd = self.difficulty_multiplier
-        if self.fsm_ticks > (2.0 / spd):
-            r = random.random()
-            if self._cycles_since_fire >= 2 or r < 0.4:
+        if self.fsm_ticks > (1.8 / spd): # Reduzido de 2.0
+            # Laser forçado se faz muito tempo que não dispara
+            if self._cycles_since_fire >= 2:
                 self._change_fsm("OPENING")
-            elif r < 0.6:
-                self._change_fsm("EARTH_SHAKE")
-            elif r < 0.8:
-                self._change_fsm("ORB_SPAWN")
-            else:
-                self._change_fsm("SWEEP_CHARGE")
+                return
 
-    def _fsm_opening(self, dt, _px, _py, _mines, _shards):
+            # Bag shuffle: garante que todos os ataques apareçam antes de repetir.
+            if not self._attack_bag:
+                pool = ["OPENING", "EARTH_SHAKE", "ORB_SPAWN", "SWEEP_CHARGE"]
+                random.shuffle(pool)
+                
+                # Evitar repetição imediata na virada do bag
+                last_map = {
+                    "FIRE": "OPENING",
+                    "EARTH_FIRE": "EARTH_SHAKE",
+                    "ORB_FIRE": "ORB_SPAWN",
+                    "SWEEP_FIRE": "SWEEP_CHARGE",
+                }
+                last_equiv = last_map.get(self._last_attack, "")
+                
+                # Se o primeiro do novo bag é igual ao último, ou se temos 
+                # dois ataques de partículas (OPENING e SWEEP_CHARGE) seguidos
+                particle_attacks = {"OPENING", "SWEEP_CHARGE"}
+                needs_swap = (pool[0] == last_equiv) or (
+                    self._last_attack in ("FIRE", "SWEEP_FIRE") and pool[0] in particle_attacks
+                )
+                
+                if needs_swap and len(pool) > 1:
+                    # Encontra o primeiro que não seja de partículas para quebrar o padrão
+                    for i in range(1, len(pool)):
+                        if pool[i] not in particle_attacks:
+                            pool[0], pool[i] = pool[i], pool[0]
+                            break
+                self._attack_bag = pool
+
+            chosen = self._attack_bag.pop(0)
+            self._change_fsm(chosen)
+            if chosen == "SWEEP_CHARGE":
+                px, py = self._pupil_pos()
+                self._sweep_locked_angle = math.atan2(player_y - py, player_x - px) % (2 * math.pi)
+
+    def _fsm_opening(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
         self._move_vertical(dt)
         spd = self.difficulty_multiplier
-        self.eye_growth = _ease_out_cubic(_clamp(self.fsm_ticks / (1.5 / spd), 0, 1))
-        if self.fsm_ticks > (2.5 / spd):
+        # Abertura mais rápida: 1.5s -> 0.7s
+        dur = 0.7 / spd
+        self.eye_growth = _ease_out_cubic(_clamp(self.fsm_ticks / dur, 0, 1))
+        if self.fsm_ticks > (dur + 0.15):
             self._change_fsm("CHARGE")
 
-    def _fsm_charge(self, dt, _player_x, _player_y, _mines, _shards):
+    def _fsm_charge(self, dt: float, _player_x: float, _player_y: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
         self._move_vertical(dt)
         px, py = self._pupil_pos()
-        spd = self.difficulty_multiplier
-        if len(self._charge_particles) < self.MAX_CHARGE_PARTICLES:
-            for _ in range(3):
+        
+        # Dispara UM ÚNICO CLUSTER no início em vez de stream contínuo
+        # Isso evita a sensação de "partículas dobradas"
+        if self.fsm_ticks < 0.05 and not self._charge_particles:
+            for _ in range(self.MAX_CHARGE_PARTICLES):
                 self._charge_particles.append(
                     _ChargeParticle(
-                        px, py, random.choice([(255, 77, 77), (255, 153, 153)])
+                        px, py, random.choice([(255, 77, 77), (255, 153, 153)]),
+                        radial_speed=160 + random.uniform(0, 120) # Muito mais rápido
                     )
                 )
-        if self.fsm_ticks > (1.5 / spd):
+
+        # Só avança para o disparo quando as partículas convergiram
+        # Adicionada margem de segurança temporal
+        if self.fsm_ticks >= 0.2 and not self._charge_particles:
             self._change_fsm("FIRE")
 
-    def _fsm_fire(self, dt, player_x, player_y, new_mines, _shards):
+    def _fsm_fire(self, dt: float, player_x: float, player_y: float, new_mines: List["GolemMine"], _shards: List[RockShard]) -> None:
         self._fire_shot_timer -= dt
         spd = self.difficulty_multiplier
         if self._fire_shot_timer <= 0 and self._fire_shots_count < 3:
@@ -813,22 +1097,22 @@ class StoneGolemBoss:
         if self._fire_shots_count >= 3 and self._fire_shot_timer <= -0.3:
             self._change_fsm("CLOSING")
 
-    def _fsm_earth_shake(self, dt, _px, _py, _mines, _shards):
+    def _fsm_earth_shake(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
         self._move_vertical(dt)
         if self.fsm_ticks > (0.8 / self.difficulty_multiplier):
             self._change_fsm("EARTH_PULL")
 
-    def _fsm_earth_pull(self, dt, _px, _py, _mines, _shards):
+    def _fsm_earth_pull(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
         self._move_vertical(dt)
         if self.fsm_ticks > (1.33 / self.difficulty_multiplier):
             self._change_fsm("EARTH_ORBIT")
 
-    def _fsm_earth_orbit(self, dt, _px, _py, _mines, _shards):
+    def _fsm_earth_orbit(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
         self._move_vertical(dt)
         if self.fsm_ticks > (1.5 / self.difficulty_multiplier):
             self._change_fsm("EARTH_FIRE")
 
-    def _fsm_earth_fire(self, dt, _px, _py, _mines, _shards):
+    def _fsm_earth_fire(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
         self._move_vertical(dt)
         if (
             not self._orbital_rocks
@@ -836,86 +1120,143 @@ class StoneGolemBoss:
             or self.fsm_ticks > (5.0 / self.difficulty_multiplier)
         ):
             self._cycles_since_fire += 1
+            self._last_attack = "EARTH_FIRE"
             self._change_fsm("SCAN")
 
-    def _fsm_orb_spawn(self, _dt, _px, _py, _mines, _shards):
+    def _fsm_orb_spawn(self, _dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
         spd = self.difficulty_multiplier
         self.eye_growth = _ease_out_cubic(_clamp(self.fsm_ticks / (0.8 / spd), 0, 1))
+        
+        # Burst único de partículas roxas na abertura
+        if self.fsm_ticks < 0.05 and not self._charge_particles:
+            px, py = self._pupil_pos()
+            for _ in range(self.MAX_CHARGE_PARTICLES):
+                self._charge_particles.append(
+                    _ChargeParticle(
+                        px, py, _C["EYE_IRIS_ORB"],
+                        radial_speed=160 + random.uniform(0, 120)
+                    )
+                )
+
         if self.fsm_ticks > (0.8 / spd):
             self._change_fsm("ORB_HOLD")
 
-    def _fsm_orb_hold(self, _dt, _px, _py, _mines, new_shards):
+    def _fsm_orb_hold(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], new_shards: List[RockShard]) -> None:
         px, py = self._pupil_pos()
-        wave_interval, max_waves = 0.75 / self.difficulty_multiplier, 4
+        spd = self.difficulty_multiplier
+        wave_interval = 0.22 / spd
+        max_waves = 15
+
+        # Rotaciona o padrão continuamente enquanto dispara
+        # O spd aumenta a velocidade da rotação para dificultar em dificuldades altas
+        self._orb_rotation += dt * 160 * spd
+
         if self._orb_shots_done < max_waves and self.fsm_ticks >= (
             self._orb_shots_done * wave_interval
         ):
-            offset = 22.5 if (self._orb_shots_done % 2 == 1) else 0.0
+            # Dispara 8 projéteis em leque rotativo (Estrela Espiral)
             for i in range(8):
+                angle = (i * 45.0) + self._orb_rotation
                 new_shards.append(
                     RockShard(
                         px,
                         py,
-                        (i * 45.0) + offset,
-                        speed_mult=2.0,
+                        angle,
+                        speed_mult=1.8,
                         color=_C["EYE_IRIS_ORB"],
                     )
                 )
             self._orb_shots_done += 1
+
         if self._orb_shots_done >= max_waves and self.fsm_ticks > (
-            max_waves * wave_interval + 0.5
+            max_waves * wave_interval + 0.4
         ):
             self._change_fsm("CLOSING")
 
-    def _fsm_sweep_charge(self, dt, player_x, player_y, _mines, _shards):
+    def _fsm_sweep_charge(self, dt: float, player_x: float, player_y: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
         self._move_vertical(dt)
         spd = self.difficulty_multiplier
-        self.eye_growth = _ease_out_cubic(_clamp(self.fsm_ticks / (1.2 / spd), 0, 1))
-        charge_duration = 1.8 / spd
-        if self.fsm_ticks / charge_duration < 0.7:
+        track_duration = 1.2 / spd   # tempo rastreando o jogador
+        freeze_duration = 1.0 / spd  # tempo parado antes de disparar
+        total_duration = track_duration + freeze_duration
+        self.eye_growth = _ease_out_cubic(_clamp(self.fsm_ticks / track_duration, 0, 1))
+        if self.fsm_ticks < track_duration:
+            # Fase de rastreamento: cone segue o jogador
             px, py = self._pupil_pos()
-            self._sweep_locked_angle = math.atan2(player_y - py, player_x - px) % (
-                2 * math.pi
-            )
+            self._sweep_locked_angle = math.atan2(player_y - py, player_x - px) % (2 * math.pi)
+            self._sweep_lock_done = False
         elif not self._sweep_lock_done:
+            # Travou — congela o ângulo
             self._sweep_lock_done = True
-        if self.fsm_ticks > charge_duration:
+        # Partículas de carregamento azuis (Burst Único)
+        if self.fsm_ticks < 0.05 and not self._charge_particles:
+            px, py = self._pupil_pos()
+            for _ in range(self.MAX_CHARGE_PARTICLES):
+                self._charge_particles.append(
+                    _ChargeParticle(
+                        px, py, random.choice([_C["EYE_IRIS_SWEEP"], _C["SWEEP_BEAM"]]),
+                        radial_speed=160 + random.uniform(0, 120)
+                    )
+                )
+        if self.fsm_ticks > total_duration:
             self._change_fsm("SWEEP_FIRE")
 
-    def _fsm_sweep_fire(self, _dt, _px, _py, _mines, new_shards):
+    def _fsm_sweep_fire(self, _dt: float, _px: float, _py: float, _mines: List["GolemMine"], new_shards: List[RockShard]) -> None:
         px, py = self._pupil_pos()
-        fire_duration, delay = (
-            0.9 / self.difficulty_multiplier,
-            0.2 / self.difficulty_multiplier,
-        )
+        fire_duration = 0.9 / self.difficulty_multiplier
+        sweep_progress = _clamp(self.fsm_ticks / fire_duration, 0, 1)
         self._sweep_angle = (
             self._sweep_locked_angle
             - self._sweep_total / 2
-            + _clamp(self.fsm_ticks / fire_duration, 0, 1) * self._sweep_total
+            + sweep_progress * self._sweep_total
         )
-        if self.fsm_ticks > delay:
-            shoot_angle = (
-                self._sweep_locked_angle
-                - self._sweep_total / 2
-                + _clamp((self.fsm_ticks - delay) / fire_duration, 0, 1)
-                * self._sweep_total
-            )
-            bucket = int(math.degrees(shoot_angle) / 4)
-            if bucket not in self._shards_fired_at:
-                self._shards_fired_at.add(bucket)
-                new_shards.append(
-                    RockShard(
-                        px,
-                        py,
-                        math.degrees(shoot_angle),
-                        speed_mult=1.3,
-                        color=_C["SWEEP_BEAM"],
-                    )
+        bucket = int(math.degrees(self._sweep_angle) / 4)
+        if bucket not in self._shards_fired_at:
+            self._shards_fired_at.add(bucket)
+            new_shards.append(
+                RockShard(
+                    px,
+                    py,
+                    math.degrees(self._sweep_angle),
+                    speed_mult=1.3,
+                    color=_C["SWEEP_BEAM"],
                 )
-        if self.fsm_ticks > fire_duration + delay + 0.3:
+            )
+        if self.fsm_ticks > fire_duration + 0.3:
+            # Burst de partículas de morte do laser ao longo da linha do laser
+            px, py = self._pupil_pos()
+            burst_col = _C["SWEEP_BEAM"]
+
+            # Calculamos a linha final do laser (similar ao boss_laser.py)
+            bl = max(self._screen_w, self._screen_h) * 1.2
+            dx, dy = math.cos(self._sweep_angle), math.sin(self._sweep_angle)
+
+            # Spawna partículas ao longo da linha
+            step = 30
+            num_steps = int(bl / step)
+            for i in range(num_steps):
+                dist_on_line = i * step + random.uniform(0, step)
+                pos_x = px + dx * dist_on_line
+                pos_y = py + dy * dist_on_line
+
+                # Para cada ponto na linha, spawna algumas partículas
+                for _ in range(2):
+                    p = _ChargeParticle(
+                        pos_x,
+                        pos_y,
+                        burst_col,
+                        size=random.randint(2, 5),
+                        radial_speed=-(140 + random.uniform(0, 120)),
+                        orbit_speed=random.uniform(-0.1, 0.1),
+                        dist=random.uniform(1, 6),
+                        follow_pupil=False,
+                        max_burst_dist=120.0,
+                    )
+                    self._charge_particles.append(p)
+
             self._change_fsm("CLOSING")
 
-    def _fsm_closing(self, dt, _px, _py, _mines, _shards):
+    def _fsm_closing(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
         self._move_vertical(dt)
         spd = self.difficulty_multiplier
         self.eye_growth = 1.0 - _ease_out_cubic(
@@ -926,6 +1267,7 @@ class StoneGolemBoss:
             self._cycles_since_fire = (
                 0 if self._prev_fsm_state == "FIRE" else self._cycles_since_fire + 1
             )
+            self._last_attack = self._prev_fsm_state
             self._change_fsm("SCAN")
 
     def _move_vertical(self, dt: float) -> None:
@@ -970,14 +1312,27 @@ class StoneGolemBoss:
                 pygame.draw.rect(surface, _C[k], (px_d, py_d, S, S))
         self._draw_eye(surface, ox, oy, S, eye_off)
         self._draw_thruster(surface, ox, oy, S)
+        
+        # 1. Desenhar rastros de poeira PRIMEIRO (atrás de tudo)
         for p in self._charge_particles:
             p.draw(surface)
+        for d in self._entry_debris:
+            d.draw_trail(surface)
+            
+        # 2. Desenhar corpos sólidos por CIMA da poeira
+        for d in self._entry_debris:
+            d.draw(surface)
+            
         if self.fsm_state in ("SWEEP_CHARGE", "SWEEP_FIRE"):
             self._draw_sweep_cone(surface)
         if self.fsm_state == "SWEEP_FIRE":
             self._draw_sweep_beam(surface)
-        if self.fsm_state in ("CHARGE", "SWEEP_CHARGE"):
-            self._draw_charge_core(surface)
+        if self.fsm_state in ("SWEEP_CHARGE", "SWEEP_FIRE"):
+            self._draw_sweep_orb(surface)
+        if self.fsm_state in ("CHARGE", "FIRE"):
+            self._draw_red_orb(surface)
+        if self.fsm_state in ("ORB_SPAWN", "ORB_HOLD"):
+            self._draw_purple_orb(surface)
         for r in self._orbital_rocks:
             if not r.behind_boss:
                 r.draw(surface)
@@ -1034,7 +1389,7 @@ class StoneGolemBoss:
             if self.fsm_state == "SWEEP_CHARGE"
             else 40
         )
-        ang = self._sweep_locked_angle if self._sweep_lock_done else self._sweep_angle
+        ang = self._sweep_locked_angle
         self._cone_surf.fill((0, 0, 0, 0))
         pts = [
             (int(px), int(py)),
@@ -1084,47 +1439,182 @@ class StoneGolemBoss:
             max(1, self.SCALE),
         )
 
-    def _draw_charge_core(self, surface: pygame.Surface) -> None:
-        px, py, S, t = *self._pupil_pos(), self.SCALE, self.fsm_ticks
-        col = (
-            _C["EYE_IRIS_LASER"] if self.fsm_state == "CHARGE" else _C["EYE_IRIS_SWEEP"]
+    def _draw_red_orb(self, surface: pygame.Surface) -> None:
+        """Esfera vermelha: cresce no CHARGE, encolhe a cada disparo no FIRE."""
+        px, py = self._pupil_pos()
+        S = self.SCALE
+        col_inner = _C["EYE_IRIS_LASER"]
+        col_outer = (255, 77, 77)
+
+        if self.fsm_state == "CHARGE":
+            spd = self.difficulty_multiplier
+            charge_duration = 1.5 / spd
+            t = _clamp(self.fsm_ticks / charge_duration, 0, 1)
+            # Pulsa levemente quando cheio
+            if t >= 1.0:
+                pulse = math.sin(self._time * math.pi * 8) * 0.1
+                radius = int(S * 4 * (1.0 + pulse))
+            else:
+                radius = int(S * 0.5 + _ease_out_cubic(t) * S * 3.5)
+            alpha = 220
+
+        else:  # FIRE — encolhe a cada disparo
+            shots_done = self._fire_shots_count
+            total_shots = 3
+            shrink = _clamp(shots_done / total_shots, 0, 1)
+            # Também aplica progresso dentro do intervalo entre disparos
+            pulse = math.sin(self._time * math.pi * 6) * 0.08
+            radius = int(S * 4 * (1.0 - shrink * 0.85) * (1.0 + pulse))
+            alpha = int(220 * (1.0 - shrink * 0.7))
+
+        if radius < 2:
+            return
+
+        # Glow externo
+        glow_r = int(radius * 1.5)
+        glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+        pygame.draw.rect(
+            glow_surf,
+            (*col_outer, int(alpha * 0.25)),
+            (0, 0, glow_r * 2, glow_r * 2),
         )
-        rot = self._time * (10 if self.fsm_state == "CHARGE" else 20)
-        idx = 2 if t > 1.0 else (1 if t > 0.6 else 0)
-        if idx == 0:
-            pygame.draw.rect(surface, col, (int(px) - S // 2, int(py) - S // 2, S, S))
-        elif idx == 1:
+        surface.blit(glow_surf, (int(px) - glow_r, int(py) - glow_r))
+
+        # Núcleo em camadas de quadrados rotacionados
+        rot = self._time * 25
+        for layer, (size_mult, col, alpha_mult) in enumerate([
+            (1.0, col_outer, 0.5),
+            (0.7, col_inner, 0.8),
+            (0.4, (255, 255, 255), 1.0),
+        ]):
+            r = max(1, int(radius * size_mult))
+            a = math.radians(rot + layer * 15)
+            cx = int(px - r * math.cos(a) * 0.1)
+            cy = int(py - r * math.sin(a) * 0.1)
+            sq_surf = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
             pygame.draw.rect(
-                surface, col, (int(px) - S // 2, int(py) - S * 2, S, S * 4)
+                sq_surf,
+                (*col, int(alpha * alpha_mult)),
+                (0, 0, r * 2, r * 2),
             )
+            rotated = pygame.transform.rotate(sq_surf, rot + layer * 45)
+            rw, rh = rotated.get_size()
+            surface.blit(rotated, (cx - rw // 2, cy - rh // 2))
+
+    def _draw_sweep_orb(self, surface: pygame.Surface) -> None:
+        """Esfera de energia do laser: cresce no charge, encolhe no fire."""
+        px, py = self._pupil_pos()
+        S = self.SCALE
+        col_inner = _C["EYE_IRIS_SWEEP"]
+        col_outer = _C["SWEEP_BEAM"]
+
+        if self.fsm_state == "SWEEP_CHARGE":
+            spd = self.difficulty_multiplier
+            track_duration = 1.2 / spd
+            freeze_duration = 1.0 / spd
+            # Cresce durante o tracking, pulsa levemente durante o freeze
+            if self.fsm_ticks < track_duration:
+                t = self.fsm_ticks / track_duration
+                radius = int(S * 0.5 + _ease_out_cubic(t) * S * 3.5)
+            else:
+                freeze_t = (self.fsm_ticks - track_duration) / freeze_duration
+                pulse = math.sin(freeze_t * math.pi * 6) * 0.12
+                radius = int(S * 4 + pulse * S * 4)
+            alpha = 220
+
+        else:  # SWEEP_FIRE
+            fire_duration = 0.9 / self.difficulty_multiplier
+            progress = _clamp(self.fsm_ticks / fire_duration, 0, 1)
+            radius = int(S * 4 * (1.0 - progress))
+            alpha = int(220 * (1.0 - progress))
+
+        if radius < 2:
+            return
+
+        # Glow externo
+        glow_r = int(radius * 1.5)
+        glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+        pygame.draw.rect(
+            glow_surf,
+            (*col_outer, int(alpha * 0.25)),
+            (0, 0, glow_r * 2, glow_r * 2),
+        )
+        surface.blit(glow_surf, (int(px) - glow_r, int(py) - glow_r))
+
+        # Núcleo em camadas de quadrados rotacionados
+        rot = self._time * 30
+        for layer, (size_mult, col, alpha_mult) in enumerate([
+            (1.0, col_outer, 0.5),
+            (0.7, col_inner, 0.8),
+            (0.4, (255, 255, 255), 1.0),
+        ]):
+            r = max(1, int(radius * size_mult))
+            a = math.radians(rot + layer * 15)
+            cx = int(px - r * math.cos(a) * 0.1)
+            cy = int(py - r * math.sin(a) * 0.1)
+            sq_surf = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
             pygame.draw.rect(
-                surface, col, (int(px) - S * 2, int(py) - S // 2, S * 4, S)
+                sq_surf,
+                (*col, int(alpha * alpha_mult)),
+                (0, 0, r * 2, r * 2),
             )
+            rotated = pygame.transform.rotate(sq_surf, rot + layer * 45)
+            rw, rh = rotated.get_size()
+            surface.blit(rotated, (cx - rw // 2, cy - rh // 2))
+
+    def _draw_purple_orb(self, surface: pygame.Surface) -> None:
+        """Esfera roxa: cresce no SPAWN, encolhe durante os disparos no HOLD."""
+        px, py = self._pupil_pos()
+        S = self.SCALE
+        col_inner = _C["EYE_IRIS_ORB"]
+        col_outer = (217, 66, 255) # Roxo vibrante
+
+        if self.fsm_state == "ORB_SPAWN":
+            spd = self.difficulty_multiplier
+            dur = 0.8 / spd
+            t = _clamp(self.fsm_ticks / dur, 0, 1)
+            radius = int(S * 0.5 + _ease_out_cubic(t) * S * 3.5)
+            alpha = 220
+        else: # ORB_HOLD
+            shots_done = self._orb_shots_done
+            max_waves = 15
+            progress = _clamp(shots_done / max_waves, 0, 1)
+            pulse = math.sin(self._time * math.pi * 10) * 0.1
+            radius = int(S * 4 * (1.0 - progress * 0.8) * (1.0 + pulse))
+            alpha = int(220 * (1.0 - progress * 0.6))
+
+        if radius < 2:
+            return
+
+        # Glow externo
+        glow_r = int(radius * 1.6)
+        glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+        pygame.draw.rect(
+            glow_surf,
+            (*col_outer, int(alpha * 0.25)),
+            (0, 0, glow_r * 2, glow_r * 2),
+        )
+        surface.blit(glow_surf, (int(px) - glow_r, int(py) - glow_r))
+
+        # Núcleo em camadas de quadrados rotacionados (estilo glitch/magia)
+        rot = self._time * 40
+        for layer, (size_mult, col, alpha_mult) in enumerate([
+            (1.0, col_outer, 0.5),
+            (0.7, col_inner, 0.8),
+            (0.4, (255, 255, 255), 1.0),
+        ]):
+            r = max(1, int(radius * size_mult))
+            sq_surf = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
             pygame.draw.rect(
-                surface, _C["PUPIL"], (int(px) - S // 2, int(py) - S // 2, S, S)
+                sq_surf,
+                (*col, int(alpha * alpha_mult)),
+                (0, 0, r * 2, r * 2),
             )
-        else:
-            pygame.draw.rect(
-                surface, col, (int(px) - S // 2, int(py) - S * 3, S, S * 6)
-            )
-            pygame.draw.rect(
-                surface, col, (int(px) - S * 3, int(py) - S // 2, S * 6, S)
-            )
-            pygame.draw.rect(
-                surface, col, (int(px) - S * 2, int(py) - S * 2, S * 4, S * 4)
-            )
-            for i in range(4):
-                a = math.radians(rot + i * 90)
-                pygame.draw.rect(
-                    surface,
-                    _C["PUPIL"],
-                    (
-                        int(px + math.cos(a) * S * 2) - S // 2,
-                        int(py + math.sin(a) * S * 2) - S // 2,
-                        S,
-                        S,
-                    ),
-                )
+            # Rotação alternada por camada
+            layer_rot = rot * (1.0 if layer % 2 == 0 else -1.2)
+            rotated = pygame.transform.rotate(sq_surf, layer_rot + layer * 30)
+            rw, rh = rotated.get_size()
+            surface.blit(rotated, (int(px) - rw // 2, int(py) - rh // 2))
 
     def _draw_health_bar(self, surface: pygame.Surface, ox: int, oy: int) -> None:
         bw, bx, by, bh = self.w + 16, ox - 8, oy - 14, 7

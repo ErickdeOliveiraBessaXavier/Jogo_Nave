@@ -1,7 +1,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Tuple
+from typing import Any, Dict, List, Tuple, cast
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +34,22 @@ class UserPreferences:
 
         try:
             with open(self.file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+                raw_data = json.load(f)
+
+                if not isinstance(raw_data, dict):
+                    return
+
+                data = cast(Dict[str, Any], raw_data)
 
                 # Resolução
                 res = data.get("resolution")
-                if isinstance(res, list) and len(res) == 2:
-                    self.resolution = (int(res[0]), int(res[1]))
+                if isinstance(res, list):
+                    res_list = cast(List[Any], res)
+                    if len(res_list) == 2:
+                        try:
+                            self.resolution = (int(res_list[0]), int(res_list[1]))
+                        except (ValueError, TypeError):
+                            pass
 
                 self.fullscreen = data.get("fullscreen", self.fullscreen)
 
@@ -59,7 +69,7 @@ class UserPreferences:
         """Salva preferências no disco."""
         try:
             self.file_path.parent.mkdir(parents=True, exist_ok=True)
-            data = {
+            data: Dict[str, Any] = {
                 "resolution": list(self.resolution),
                 "fullscreen": self.fullscreen,
                 "music_volume": self.music_volume,

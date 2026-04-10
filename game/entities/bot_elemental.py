@@ -778,6 +778,7 @@ class ElementalRobot:
         player_x/y: posição do jogador para mira
         """
         self._time += dt
+        self.just_died = False  # limpa o flag — só fica True no frame da transição
 
         # ── Flutuação discreta (idleFloat 2s steps(3)) ────────────────────────
         # Somente em IDLE e ENTERING (charging/firing param: animation:none)

@@ -683,7 +683,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         enemy_spawn_config={
             Meteor: 0.6,
             SquareMinionBoss: 15.0,  # Spawn lento para tutorial
-            # ElementalRobot: 1.0,  # Mini-boss: aparece raramente (1x a cada ~45s)
+            ElementalRobot: 1.0,  # Mini-boss: aparece raramente (1x a cada ~45s)
             # Alien: 2.5,
             # EyeEnemy: 5.0,
         },

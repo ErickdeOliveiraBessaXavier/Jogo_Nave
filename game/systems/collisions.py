@@ -37,7 +37,7 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import StoneGolemBoss
+from ..entities.stone_golem_boss import Boulder, EntryDebris, RockShard, StoneGolemBoss
 
 if TYPE_CHECKING:
     from .entity_manager import EntityManager
@@ -45,7 +45,15 @@ if TYPE_CHECKING:
 
 # Type aliases
 Enemy: TypeAlias = (
-    Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot
+    Meteor
+    | Alien
+    | ExplosiveMine
+    | EyeEnemy
+    | SquareMinionBoss
+    | ElementalRobot
+    | Boulder
+    | RockShard
+    | EntryDebris
 )
 BossEnemy: TypeAlias = Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss
 Projectile: TypeAlias = Bullet | MiniShipBullet
@@ -81,6 +89,12 @@ class Collisions:
         """
         if isinstance(enemy, ExplosiveMine):
             return enemy.x, enemy.y, enemy.radius
+        if isinstance(enemy, Boulder):
+            return enemy.x, enemy.y, enemy.RADIUS
+        if isinstance(enemy, RockShard):
+            return enemy.x, enemy.y, enemy.size
+        if isinstance(enemy, EntryDebris):
+            return enemy.x, enemy.y, enemy.S * enemy.rock_size
         return enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, enemy.w / 2
 
     def _is_invulnerable_to_damage(self, entity: Enemy) -> bool:
@@ -235,11 +249,11 @@ class Collisions:
         explosion_size: int | None = None,
         hit_x: float | None = None,
         hit_y: float | None = None,
-    ) -> tuple[int, tuple[float, float, int] | None]:
+    ) -> tuple[int, tuple[float, float, int] | None, bool]:
         """Helper para destruição de inimigos com explosão, som e fragmentos.
 
         Centraliza lógica repetida em 8+ lugares.
-        Retorna (pontos, (cx, cy, pontos) | None) para score_events.
+        Retorna (pontos, (cx, cy, pontos) | None, foi_morto).
 
         Args:
             explosion_size: Tamanho da explosão. Se None, usa w//2 ou radius.
@@ -252,18 +266,23 @@ class Collisions:
         hx = hit_x if hit_x is not None else cx
         hy = hit_y if hit_y is not None else cy
 
-        # ElementalRobot tem sistema de HP próprio — delegar ao take_damage
-        if isinstance(enemy, ElementalRobot):
+        # ElementalRobot e Boulder (GolemMine) têm sistema de HP próprio — delegar ao take_damage
+        if isinstance(enemy, (ElementalRobot, Boulder)):
             enemy.take_damage(1)
-            # Morreu neste hit: fsm_state passa para DYING (dead só vira True após animação)
-            just_died = enemy.fsm_state == "DYING" and enemy.just_died
-            if just_died:
-                enemy.just_died = False  # consome a flag
+            # Para ElementalRobot
+            if isinstance(enemy, ElementalRobot):
+                just_died = enemy.fsm_state == "DYING" and enemy.just_died
+                if just_died:
+                    enemy.just_died = False  # consome a flag
+            else:
+                # Para Boulder (GolemMine)
+                just_died = enemy.dead
+            
             if not just_died:
                 # Ainda vivo: só explosão pequena de hit, sem score
                 entity_manager.spawn_explosion(hx, hy, size=10)
                 sound_manager.play_boss_damage()
-                return 0, None
+                return 0, None, False
             # Morreu neste hit: continua para dar pontos e explosão grande
         else:
             # Marcar como morto
@@ -303,7 +322,7 @@ class Collisions:
             if fragments:
                 enemies_list.extend(fragments)
 
-        return pts, (cx, cy, pts)
+        return pts, (cx, cy, pts), True
 
     def _apply_area_damage(
         self,
@@ -345,14 +364,15 @@ class Collisions:
                 elif self._is_invulnerable_to_damage(enemy):
                     self._handle_invulnerable_hit(source_x, source_y, entity_manager)
                 else:
-                    pts, score_event = self._destroy_enemy(
+                    pts, score_event, killed = self._destroy_enemy(
                         enemy,
                         enemies,
                         entity_manager,
                         explosion_size=None,  # Usar tamanho padrão do inimigo
                     )
                     score_gain += pts
-                    destroyed_count += 1
+                    if killed:
+                        destroyed_count += 1
                     if score_event is not None:
                         score_events.append(score_event)
 
@@ -578,11 +598,12 @@ class Collisions:
                             explosion_x, explosion_y, entity_manager
                         )
                     else:
-                        pts, score_event = self._destroy_enemy(
+                        pts, score_event, killed = self._destroy_enemy(
                             enemy, enemies, entity_manager, explosion_size=None
                         )
                         score_gain += pts
-                        destroyed_count += 1
+                        if killed:
+                            destroyed_count += 1
                         if score_event is not None:
                             score_events.append(score_event)
 
@@ -969,7 +990,7 @@ class Collisions:
                     elif self._is_invulnerable_to_damage(enemy):
                         self._handle_invulnerable_hit(b.x, b.y, entity_manager)
                     else:
-                        pts, score_event = self._destroy_enemy(
+                        pts, score_event, killed = self._destroy_enemy(
                             enemy,
                             enemies,
                             entity_manager,
@@ -978,7 +999,8 @@ class Collisions:
                             hit_y=b.y,
                         )
                         score_gain += pts
-                        destroyed_count += 1
+                        if killed:
+                            destroyed_count += 1
                         if score_event is not None:
                             score_events.append(score_event)
 
@@ -1035,7 +1057,7 @@ class Collisions:
                         self._handle_invulnerable_hit(b.x, b.y, entity_manager)
                     else:
                         # Usar helper consolidado
-                        pts, score_event = self._destroy_enemy(
+                        pts, score_event, killed = self._destroy_enemy(
                             enemy,
                             enemies,
                             entity_manager,
@@ -1044,7 +1066,8 @@ class Collisions:
                             hit_y=b.y,
                         )
                         score_gain += pts
-                        destroyed_count += 1
+                        if killed:
+                            destroyed_count += 1
                         if score_event is not None:
                             score_events.append(score_event)
 
@@ -1089,14 +1112,15 @@ class Collisions:
                                     # SquareMinionBoss não pode ser destruído por explosões de área
                                     pass  # Não faz nada - imune a explosões
                                 elif not nearby_enemy.dead:
-                                    pts, score_event = self._destroy_enemy(
+                                    pts, score_event, killed = self._destroy_enemy(
                                         nearby_enemy,
                                         enemies,
                                         entity_manager,
                                         explosion_size=None,  # Usar tamanho padrão do inimigo
                                     )
                                     score_gain += pts
-                                    destroyed_count += 1
+                                    if killed:
+                                        destroyed_count += 1
                                     if score_event is not None:
                                         score_events.append(score_event)
 
@@ -1642,18 +1666,18 @@ class Collisions:
                     else:
                         # Para todos os outros inimigos (Meteoros, Aliens, EyeEnemies)
                         # Usar helper com explosion_size customizado
-                        pts, score_event = self._destroy_enemy(
+                        pts, score_event, killed = self._destroy_enemy(
                             enemy,
                             enemies,
                             entity_manager,
                             explosion_size=None,
                         )
                         score_gain += pts
-                        destroyed_count += 1
+                        if killed:
+                            destroyed_count += 1
                         if score_event is not None:
                             score_events.append(score_event)
                             floating_scores.append(FloatingScore(*score_event))
-
         return score_gain, destroyed_count, score_events
 
     def player_lasers_vs_boss(

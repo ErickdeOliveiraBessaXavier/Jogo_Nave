@@ -274,6 +274,11 @@ class EntityManager:
         for enemy in self.enemies:
             self.enemy_spatial_grid.insert_from_rect(enemy)
 
+        # Inserir minas do StoneGolemBoss (agora destrutíveis)
+        for mine in self.boulders:
+            if not mine.dead:
+                self.enemy_spatial_grid.insert_from_rect(mine)
+
         # Inserir inimigos de formações (reutilizar cache se disponível)
         cached_formation_enemies = getattr(self, "_cached_formation_enemies", None)
         if cached_formation_enemies:
