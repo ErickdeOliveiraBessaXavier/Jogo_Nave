@@ -27,17 +27,17 @@ logger = logging.getLogger(__name__)
 
 # Paleta de cores de terra, pedras escuras e poeira (Refinada para alto contraste)
 _EARTH_COLORS = [
-    (25, 15, 10),    # Solo Profundo (Escuríssimo)
-    (55, 40, 30),    # Marrom Sombra
-    (90, 70, 50),    # Terra Média
+    (25, 15, 10),  # Solo Profundo (Escuríssimo)
+    (55, 40, 30),  # Marrom Sombra
+    (90, 70, 50),  # Terra Média
     (130, 110, 80),  # Barro / Argila
-    (170, 150, 120), # Pedra Seca
-    (205, 190, 160), # Areia Clara (Contraste)
-    (240, 225, 200), # Highlight Final (Muito Claro)
+    (170, 150, 120),  # Pedra Seca
+    (205, 190, 160),  # Areia Clara (Contraste)
+    (240, 225, 200),  # Highlight Final (Muito Claro)
     (180, 105, 65),  # Sienna / Argila Queimada
-    (40, 40, 40),    # Rocha Vulcânica (Quase Preto)
-    (100, 100, 100), # Cinza Pedra
-    (155, 160, 170), # Ardósia (Cinza Frio)
+    (40, 40, 40),  # Rocha Vulcânica (Quase Preto)
+    (100, 100, 100),  # Cinza Pedra
+    (155, 160, 170),  # Ardósia (Cinza Frio)
 ]
 
 
@@ -138,7 +138,7 @@ class GolemMine:
         self._pulse_t += dt
         if self._hit_flash > 0:
             self._hit_flash -= dt
-        
+
         spawned: list[RockShard] = []
 
         if self._phase == "landing":
@@ -201,7 +201,7 @@ class GolemMine:
             body_color = (255, 255, 255)
         else:
             body_color = self._COLOR_PULSE if blink_on else self._COLOR_BODY
-            
+
         pygame.draw.rect(surface, body_color, (cx - S, cy - S * 3, S * 2, S * 6))
         pygame.draw.rect(surface, body_color, (cx - S * 3, cy - S, S * 6, S * 2))
         pygame.draw.rect(surface, body_color, (cx - S * 2, cy - S * 2, S * 4, S * 4))
@@ -474,12 +474,12 @@ class EntryDebris:
     TRAIL_FADE_SPEED = 600.0
     # Paleta expandida: tons de terra, pedras escuras e poeira
     EARTH_COLORS = [
-        (101, 67, 33),   # Marrom escuro (terra)
-        (84, 56, 26),    # Marrom profundo
-        (65, 65, 65),    # Cinza pedra
-        (45, 45, 45),    # Pedra escura
+        (101, 67, 33),  # Marrom escuro (terra)
+        (84, 56, 26),  # Marrom profundo
+        (65, 65, 65),  # Cinza pedra
+        (45, 45, 45),  # Pedra escura
         (139, 115, 85),  # Barro/Argila
-        (160, 82, 45),   # Sienna
+        (160, 82, 45),  # Sienna
     ]
 
     def __init__(
@@ -543,7 +543,11 @@ class EntryDebris:
         hit = self.S * self.rock_size
         self.rect.x, self.rect.y = int(self.x) - hit, int(self.y) - hit
 
-        if self.y > self._screen_h + 100 or self.x < -100 or self.x > self._screen_w + 100:
+        if (
+            self.y > self._screen_h + 100
+            or self.x < -100
+            or self.x > self._screen_w + 100
+        ):
             self.dead = True
 
     def draw_trail(self, surface: pygame.Surface) -> None:
@@ -555,7 +559,9 @@ class EntryDebris:
             s = self.S
             self._dust_surf.fill((0, 0, 0, 0))
             # Usa cor de poeira com o alpha do rastro
-            pygame.draw.rect(self._dust_surf, (*dust_base, alpha // 2), (0, 0, s * 2, s * 2))
+            pygame.draw.rect(
+                self._dust_surf, (*dust_base, alpha // 2), (0, 0, s * 2, s * 2)
+            )
             surface.blit(self._dust_surf, (int(t[0]) - s, int(t[1]) - s))
 
     def draw(self, surface: pygame.Surface) -> None:
@@ -872,7 +878,7 @@ class StoneGolemBoss:
                         ry,
                         random.random() * math.pi * 2,
                         2 if random.random() > 0.5 else 3,
-                        _get_random_earth_color(), # Usa a nova paleta
+                        _get_random_earth_color(),  # Usa a nova paleta
                         S,
                     )
                 )
@@ -928,7 +934,7 @@ class StoneGolemBoss:
         for d in self._entry_debris:
             d.update(dt)
             # Adiciona detritos à lista de shards para que EntityManager/Collisions processem dano
-            new_shards.append(d) # type: ignore
+            new_shards.append(d)  # type: ignore
         self._entry_debris = [d for d in self._entry_debris if not d.dead]
 
         self._mines = [m for m in self._mines if not m.dead]
@@ -952,16 +958,23 @@ class StoneGolemBoss:
         if handler:
             handler(dt, player_x, player_y, new_mines, new_shards)
 
-    def _fsm_entering(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
+    def _fsm_entering(
+        self,
+        dt: float,
+        _px: float,
+        _py: float,
+        _mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
         # Posição onde o "burst" acontece (quando o topo do boss toca a borda da tela)
         burst_y = self._screen_h - 20
-        
+
         # Antes do burst: Tremor forte no chão (abaixo da tela)
         if self.y > burst_y:
             self.y -= self.entry_speed * 0.4 * dt
             self._jitter_x = random.uniform(-5, 5)
             self._jitter_y = random.uniform(-2, 2)
-            
+
             # Alguns detritos prévios
             if random.random() < 0.15:
                 self._spawn_debris_cluster(1)
@@ -974,9 +987,9 @@ class StoneGolemBoss:
 
             # No frame exato do burst (primeira vez cruzando burst_y), solta o cluster massivo
             if not hasattr(self, "_burst_done") or not self._burst_done:
-                self._spawn_debris_cluster(25) # Explosão massiva
+                self._spawn_debris_cluster(25)  # Explosão massiva
                 self._burst_done = True
-            
+
             # Detritos contínuos durante a subida explosiva
             if random.random() < 0.4:
                 self._spawn_debris_cluster(2)
@@ -984,7 +997,7 @@ class StoneGolemBoss:
         if self.y <= self.target_y:
             self.y = self.target_y
             self._jitter_x, self._jitter_y = 0.0, 0.0
-            self._burst_done = False # Reset para a próxima vez (se houver)
+            self._burst_done = False  # Reset para a próxima vez (se houver)
             self._change_fsm("SCAN")
 
     def _spawn_debris_cluster(self, count: int) -> None:
@@ -999,17 +1012,24 @@ class StoneGolemBoss:
                     self.y + self.h - 10,
                     vx,
                     vy,
-                    None, # Usa cores aleatórias da paleta EARTH_COLORS
+                    None,  # Usa cores aleatórias da paleta EARTH_COLORS
                     self.SCALE,
                     rock_size=random.randint(2, 5),
                 )
             )
 
-    def _fsm_scan(self, dt: float, player_x: float, player_y: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
+    def _fsm_scan(
+        self,
+        dt: float,
+        player_x: float,
+        player_y: float,
+        _mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
         self._move_vertical(dt)
         self.eye_growth = 0.0
         spd = self.difficulty_multiplier
-        if self.fsm_ticks > (1.8 / spd): # Reduzido de 2.0
+        if self.fsm_ticks > (1.8 / spd):  # Reduzido de 2.0
             # Laser forçado se faz muito tempo que não dispara
             if self._cycles_since_fire >= 2:
                 self._change_fsm("OPENING")
@@ -1019,7 +1039,7 @@ class StoneGolemBoss:
             if not self._attack_bag:
                 pool = ["OPENING", "EARTH_SHAKE", "ORB_SPAWN", "SWEEP_CHARGE"]
                 random.shuffle(pool)
-                
+
                 # Evitar repetição imediata na virada do bag
                 last_map = {
                     "FIRE": "OPENING",
@@ -1028,14 +1048,15 @@ class StoneGolemBoss:
                     "SWEEP_FIRE": "SWEEP_CHARGE",
                 }
                 last_equiv = last_map.get(self._last_attack, "")
-                
-                # Se o primeiro do novo bag é igual ao último, ou se temos 
+
+                # Se o primeiro do novo bag é igual ao último, ou se temos
                 # dois ataques de partículas (OPENING e SWEEP_CHARGE) seguidos
                 particle_attacks = {"OPENING", "SWEEP_CHARGE"}
                 needs_swap = (pool[0] == last_equiv) or (
-                    self._last_attack in ("FIRE", "SWEEP_FIRE") and pool[0] in particle_attacks
+                    self._last_attack in ("FIRE", "SWEEP_FIRE")
+                    and pool[0] in particle_attacks
                 )
-                
+
                 if needs_swap and len(pool) > 1:
                     # Encontra o primeiro que não seja de partículas para quebrar o padrão
                     for i in range(1, len(pool)):
@@ -1048,9 +1069,18 @@ class StoneGolemBoss:
             self._change_fsm(chosen)
             if chosen == "SWEEP_CHARGE":
                 px, py = self._pupil_pos()
-                self._sweep_locked_angle = math.atan2(player_y - py, player_x - px) % (2 * math.pi)
+                self._sweep_locked_angle = math.atan2(player_y - py, player_x - px) % (
+                    2 * math.pi
+                )
 
-    def _fsm_opening(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
+    def _fsm_opening(
+        self,
+        dt: float,
+        _px: float,
+        _py: float,
+        _mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
         self._move_vertical(dt)
         spd = self.difficulty_multiplier
         # Abertura mais rápida: 1.5s -> 0.7s
@@ -1059,18 +1089,27 @@ class StoneGolemBoss:
         if self.fsm_ticks > (dur + 0.15):
             self._change_fsm("CHARGE")
 
-    def _fsm_charge(self, dt: float, _player_x: float, _player_y: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
+    def _fsm_charge(
+        self,
+        dt: float,
+        _player_x: float,
+        _player_y: float,
+        _mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
         self._move_vertical(dt)
         px, py = self._pupil_pos()
-        
+
         # Dispara UM ÚNICO CLUSTER no início em vez de stream contínuo
         # Isso evita a sensação de "partículas dobradas"
         if self.fsm_ticks < 0.05 and not self._charge_particles:
             for _ in range(self.MAX_CHARGE_PARTICLES):
                 self._charge_particles.append(
                     _ChargeParticle(
-                        px, py, random.choice([(255, 77, 77), (255, 153, 153)]),
-                        radial_speed=160 + random.uniform(0, 120) # Muito mais rápido
+                        px,
+                        py,
+                        random.choice([(255, 77, 77), (255, 153, 153)]),
+                        radial_speed=160 + random.uniform(0, 120),  # Muito mais rápido
                     )
                 )
 
@@ -1079,7 +1118,14 @@ class StoneGolemBoss:
         if self.fsm_ticks >= 0.2 and not self._charge_particles:
             self._change_fsm("FIRE")
 
-    def _fsm_fire(self, dt: float, player_x: float, player_y: float, new_mines: List["GolemMine"], _shards: List[RockShard]) -> None:
+    def _fsm_fire(
+        self,
+        dt: float,
+        player_x: float,
+        player_y: float,
+        new_mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
         self._fire_shot_timer -= dt
         spd = self.difficulty_multiplier
         if self._fire_shot_timer <= 0 and self._fire_shots_count < 3:
@@ -1097,22 +1143,50 @@ class StoneGolemBoss:
         if self._fire_shots_count >= 3 and self._fire_shot_timer <= -0.3:
             self._change_fsm("CLOSING")
 
-    def _fsm_earth_shake(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
+    def _fsm_earth_shake(
+        self,
+        dt: float,
+        _px: float,
+        _py: float,
+        _mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
         self._move_vertical(dt)
         if self.fsm_ticks > (0.8 / self.difficulty_multiplier):
             self._change_fsm("EARTH_PULL")
 
-    def _fsm_earth_pull(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
+    def _fsm_earth_pull(
+        self,
+        dt: float,
+        _px: float,
+        _py: float,
+        _mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
         self._move_vertical(dt)
         if self.fsm_ticks > (1.33 / self.difficulty_multiplier):
             self._change_fsm("EARTH_ORBIT")
 
-    def _fsm_earth_orbit(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
+    def _fsm_earth_orbit(
+        self,
+        dt: float,
+        _px: float,
+        _py: float,
+        _mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
         self._move_vertical(dt)
         if self.fsm_ticks > (1.5 / self.difficulty_multiplier):
             self._change_fsm("EARTH_FIRE")
 
-    def _fsm_earth_fire(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
+    def _fsm_earth_fire(
+        self,
+        dt: float,
+        _px: float,
+        _py: float,
+        _mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
         self._move_vertical(dt)
         if (
             not self._orbital_rocks
@@ -1123,25 +1197,41 @@ class StoneGolemBoss:
             self._last_attack = "EARTH_FIRE"
             self._change_fsm("SCAN")
 
-    def _fsm_orb_spawn(self, _dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
+    def _fsm_orb_spawn(
+        self,
+        _dt: float,
+        _px: float,
+        _py: float,
+        _mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
         spd = self.difficulty_multiplier
         self.eye_growth = _ease_out_cubic(_clamp(self.fsm_ticks / (0.8 / spd), 0, 1))
-        
+
         # Burst único de partículas roxas na abertura
         if self.fsm_ticks < 0.05 and not self._charge_particles:
             px, py = self._pupil_pos()
             for _ in range(self.MAX_CHARGE_PARTICLES):
                 self._charge_particles.append(
                     _ChargeParticle(
-                        px, py, _C["EYE_IRIS_ORB"],
-                        radial_speed=160 + random.uniform(0, 120)
+                        px,
+                        py,
+                        _C["EYE_IRIS_ORB"],
+                        radial_speed=160 + random.uniform(0, 120),
                     )
                 )
 
         if self.fsm_ticks > (0.8 / spd):
             self._change_fsm("ORB_HOLD")
 
-    def _fsm_orb_hold(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], new_shards: List[RockShard]) -> None:
+    def _fsm_orb_hold(
+        self,
+        dt: float,
+        _px: float,
+        _py: float,
+        _mines: List["GolemMine"],
+        new_shards: List[RockShard],
+    ) -> None:
         px, py = self._pupil_pos()
         spd = self.difficulty_multiplier
         wave_interval = 0.22 / spd
@@ -1173,17 +1263,26 @@ class StoneGolemBoss:
         ):
             self._change_fsm("CLOSING")
 
-    def _fsm_sweep_charge(self, dt: float, player_x: float, player_y: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
+    def _fsm_sweep_charge(
+        self,
+        dt: float,
+        player_x: float,
+        player_y: float,
+        _mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
         self._move_vertical(dt)
         spd = self.difficulty_multiplier
-        track_duration = 1.2 / spd   # tempo rastreando o jogador
+        track_duration = 1.2 / spd  # tempo rastreando o jogador
         freeze_duration = 1.0 / spd  # tempo parado antes de disparar
         total_duration = track_duration + freeze_duration
         self.eye_growth = _ease_out_cubic(_clamp(self.fsm_ticks / track_duration, 0, 1))
         if self.fsm_ticks < track_duration:
             # Fase de rastreamento: cone segue o jogador
             px, py = self._pupil_pos()
-            self._sweep_locked_angle = math.atan2(player_y - py, player_x - px) % (2 * math.pi)
+            self._sweep_locked_angle = math.atan2(player_y - py, player_x - px) % (
+                2 * math.pi
+            )
             self._sweep_lock_done = False
         elif not self._sweep_lock_done:
             # Travou — congela o ângulo
@@ -1194,14 +1293,23 @@ class StoneGolemBoss:
             for _ in range(self.MAX_CHARGE_PARTICLES):
                 self._charge_particles.append(
                     _ChargeParticle(
-                        px, py, random.choice([_C["EYE_IRIS_SWEEP"], _C["SWEEP_BEAM"]]),
-                        radial_speed=160 + random.uniform(0, 120)
+                        px,
+                        py,
+                        random.choice([_C["EYE_IRIS_SWEEP"], _C["SWEEP_BEAM"]]),
+                        radial_speed=160 + random.uniform(0, 120),
                     )
                 )
         if self.fsm_ticks > total_duration:
             self._change_fsm("SWEEP_FIRE")
 
-    def _fsm_sweep_fire(self, _dt: float, _px: float, _py: float, _mines: List["GolemMine"], new_shards: List[RockShard]) -> None:
+    def _fsm_sweep_fire(
+        self,
+        _dt: float,
+        _px: float,
+        _py: float,
+        _mines: List["GolemMine"],
+        new_shards: List[RockShard],
+    ) -> None:
         px, py = self._pupil_pos()
         fire_duration = 0.9 / self.difficulty_multiplier
         sweep_progress = _clamp(self.fsm_ticks / fire_duration, 0, 1)
@@ -1256,7 +1364,14 @@ class StoneGolemBoss:
 
             self._change_fsm("CLOSING")
 
-    def _fsm_closing(self, dt: float, _px: float, _py: float, _mines: List["GolemMine"], _shards: List[RockShard]) -> None:
+    def _fsm_closing(
+        self,
+        dt: float,
+        _px: float,
+        _py: float,
+        _mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
         self._move_vertical(dt)
         spd = self.difficulty_multiplier
         self.eye_growth = 1.0 - _ease_out_cubic(
@@ -1312,17 +1427,17 @@ class StoneGolemBoss:
                 pygame.draw.rect(surface, _C[k], (px_d, py_d, S, S))
         self._draw_eye(surface, ox, oy, S, eye_off)
         self._draw_thruster(surface, ox, oy, S)
-        
+
         # 1. Desenhar rastros de poeira PRIMEIRO (atrás de tudo)
         for p in self._charge_particles:
             p.draw(surface)
         for d in self._entry_debris:
             d.draw_trail(surface)
-            
+
         # 2. Desenhar corpos sólidos por CIMA da poeira
         for d in self._entry_debris:
             d.draw(surface)
-            
+
         if self.fsm_state in ("SWEEP_CHARGE", "SWEEP_FIRE"):
             self._draw_sweep_cone(surface)
         if self.fsm_state == "SWEEP_FIRE":
@@ -1482,11 +1597,13 @@ class StoneGolemBoss:
 
         # Núcleo em camadas de quadrados rotacionados
         rot = self._time * 25
-        for layer, (size_mult, col, alpha_mult) in enumerate([
-            (1.0, col_outer, 0.5),
-            (0.7, col_inner, 0.8),
-            (0.4, (255, 255, 255), 1.0),
-        ]):
+        for layer, (size_mult, col, alpha_mult) in enumerate(
+            [
+                (1.0, col_outer, 0.5),
+                (0.7, col_inner, 0.8),
+                (0.4, (255, 255, 255), 1.0),
+            ]
+        ):
             r = max(1, int(radius * size_mult))
             a = math.radians(rot + layer * 15)
             cx = int(px - r * math.cos(a) * 0.1)
@@ -1543,11 +1660,13 @@ class StoneGolemBoss:
 
         # Núcleo em camadas de quadrados rotacionados
         rot = self._time * 30
-        for layer, (size_mult, col, alpha_mult) in enumerate([
-            (1.0, col_outer, 0.5),
-            (0.7, col_inner, 0.8),
-            (0.4, (255, 255, 255), 1.0),
-        ]):
+        for layer, (size_mult, col, alpha_mult) in enumerate(
+            [
+                (1.0, col_outer, 0.5),
+                (0.7, col_inner, 0.8),
+                (0.4, (255, 255, 255), 1.0),
+            ]
+        ):
             r = max(1, int(radius * size_mult))
             a = math.radians(rot + layer * 15)
             cx = int(px - r * math.cos(a) * 0.1)
@@ -1567,7 +1686,7 @@ class StoneGolemBoss:
         px, py = self._pupil_pos()
         S = self.SCALE
         col_inner = _C["EYE_IRIS_ORB"]
-        col_outer = (217, 66, 255) # Roxo vibrante
+        col_outer = (217, 66, 255)  # Roxo vibrante
 
         if self.fsm_state == "ORB_SPAWN":
             spd = self.difficulty_multiplier
@@ -1575,7 +1694,7 @@ class StoneGolemBoss:
             t = _clamp(self.fsm_ticks / dur, 0, 1)
             radius = int(S * 0.5 + _ease_out_cubic(t) * S * 3.5)
             alpha = 220
-        else: # ORB_HOLD
+        else:  # ORB_HOLD
             shots_done = self._orb_shots_done
             max_waves = 15
             progress = _clamp(shots_done / max_waves, 0, 1)
@@ -1598,11 +1717,13 @@ class StoneGolemBoss:
 
         # Núcleo em camadas de quadrados rotacionados (estilo glitch/magia)
         rot = self._time * 40
-        for layer, (size_mult, col, alpha_mult) in enumerate([
-            (1.0, col_outer, 0.5),
-            (0.7, col_inner, 0.8),
-            (0.4, (255, 255, 255), 1.0),
-        ]):
+        for layer, (size_mult, col, alpha_mult) in enumerate(
+            [
+                (1.0, col_outer, 0.5),
+                (0.7, col_inner, 0.8),
+                (0.4, (255, 255, 255), 1.0),
+            ]
+        ):
             r = max(1, int(radius * size_mult))
             sq_surf = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
             pygame.draw.rect(

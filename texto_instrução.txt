@@ -1,182 +1,133 @@
-Code Review
-stone_golem_boss.py
-Boas práticas Python / Pygame
+===========================================================
+CORREÇÕES PARA OS ERROS DO PYLANCE
+===========================================================
+
+-----------------------------------------------------------
+PROBLEMA 1 — collisions.py linha 318
+"Cannot access attribute 'get_points_value' for class RockShard / EntryDebris"
+-----------------------------------------------------------
+
+RockShard e EntryDebris não têm o método get_points_value().
+
+SOLUÇÃO: Adicione o método nas classes RockShard e EntryDebris
+(arquivo stone_golem_boss.py):
+
+    def get_points_value(self) -> int:
+        return 0  # ou o valor de pontos que fizer sentido
 
 
-Sumário executivo
-O arquivo implementa um boss completo com FSM, entidades projetadas e sistema visual pixel-art. O código funciona e está bem documentado, mas apresenta sete pontos de melhoria distribuídos em três categorias: performance, robustez e legibilidade.
+-----------------------------------------------------------
+PROBLEMA 2 — collisions.py linhas 588–590
+"Cannot access attribute 'w' / 'h' for class GolemMine / RockShard / EntryDebris"
+-----------------------------------------------------------
 
-Performance
-2 itens	Robustez
-2 itens	Legibilidade
-3 itens
+O código faz enemy.w e enemy.h no else genérico, mas essas classes
+não têm esses atributos — elas usam radius/size.
 
+SOLUÇÃO: Expanda o isinstanc- poderia analisar e aplicar  e no bloco else para tratá-las explicitamente.
+Substitua o trecho atual (linhas ~584–590):
 
+    if isinstance(enemy, ExplosiveMine):
+        enemy_cx, enemy_cy = enemy.x, enemy.y
+        enemy_r = enemy.radius
+    else:
+        enemy_cx = enemy.x + enemy.w / 2
+        enemy_cy = enemy.y + enemy.h / 2
+        enemy_r = enemy.w / 2
 
-1. Performance
+Por:
 
-1.1  Set _anchored recriado a cada frame
-O set de estados ancorados é alocado dentro de update(), gerando uma nova estrutura em memória a cada tick (~60x/s). Como o conteúdo é fixo, deve ser uma constante de classe com frozenset.
+    if isinstance(enemy, ExplosiveMine):
+        enemy_cx, enemy_cy = enemy.x, enemy.y
+        enemy_r = enemy.radius
+    elif isinstance(enemy, Boulder):
+        enemy_cx, enemy_cy = enemy.x, enemy.y
+        enemy_r = enemy.RADIUS
+    elif isinstance(enemy, RockShard):
+        enemy_cx, enemy_cy = enemy.x, enemy.y
+        enemy_r = enemy.size
+    elif isinstance(enemy, EntryDebris):
+        enemy_cx, enemy_cy = enemy.x, enemy.y
+        enemy_r = enemy.S * enemy.rock_size
+    else:
+        enemy_cx = enemy.x + enemy.w / 2
+        enemy_cy = enemy.y + enemy.h / 2
+        enemy_r = enemy.w / 2
 
-Arquivo: stone_golem_boss.py — método update()
-# Antes (problema)
-def update(self, dt, player_x, player_y):
-    _anchored = {"CHARGE", "FIRE", "EARTH_SHAKE",
-                 "EARTH_PULL", "EARTH_ORBIT", ...}  # novo set a cada tick!
-# Depois (correção)
-class StoneGolemBoss:
-    _ANCHORED_STATES = frozenset({
-        "CHARGE", "FIRE", "EARTH_SHAKE",
-        "EARTH_PULL", "EARTH_ORBIT", "EARTH_FIRE",
-        "ORB_SPAWN", "ORB_HOLD", "ORB_FIRE",
-        "SWEEP_CHARGE", "SWEEP_FIRE",
-    })
+Já existe um helper idêntico: get_collision_info() na linha 84.
+Você pode simplificar usando ele:
 
-
-1.2  getattr(Config, ...) chamado toda frame em RockShard
-RockShard.update() acessa Config via getattr a cada chamada. As dimensões da tela não mudam em runtime — cachear no __init__ elimina o custo de reflexão repetida.
-
-Arquivo: stone_golem_boss.py — classe RockShard
-# Antes (problema)
-def update(self, dt):
-    screen_h = getattr(Config, "SCREEN_HEIGHT", 800)  # toda frame
-    screen_w = getattr(Config, "SCREEN_WIDTH", 480)   # toda frame
-# Depois (correção)
-def __init__(self, x, y, angle_deg, ...):
-    self._screen_w = getattr(Config, "SCREEN_WIDTH", 480)
-    self._screen_h = getattr(Config, "SCREEN_HEIGHT", 800)
-
-def update(self, dt):
-    if self.y > self._screen_h + 40 or self.x < -40: ...
+    enemy_cx, enemy_cy, enemy_r = self.get_collision_info(enemy)
 
 
+-----------------------------------------------------------
+PROBLEMA 3 — collisions.py linha 822
+"Argument of type 'Enemy' cannot be assigned to parameter 'enemy' of type 'EnemyType'"
+-----------------------------------------------------------
 
-2. Robustez
+mine.check_enemy_collision(enemy) espera EnemyType, mas enemy é do
+tipo Enemy (que inclui Boulder, RockShard, EntryDebris não presentes em EnemyType).
 
-2.1  Sentinela px == 0 em _draw_sweep_beam
-Linha 960 usa px == 0 para detectar ausência de beam. Se o boss estiver em x=0 (borda esquerda), o beam não é desenhado silenciosamente. Verificar None é o padrão correto.
+SOLUÇÃO OPÇÃO A (recomendada): Atualize o TypeAlias EnemyType em CannonMine
+para incluir Boulder, RockShard e EntryDebris — igual ao Enemy de collisions.py.
 
-Arquivo: stone_golem_boss.py — método _draw_sweep_beam
-# Antes (problema)
-px, py, ex, ey = self.get_sweep_beam() or (0, 0, 0, 0)
-if px == 0:  # falha se boss estiver em x=0
-    return
-# Depois (correção)
-beam = self.get_sweep_beam()
-if beam is None:
-    return
-px, py, ex, ey = beam
+SOLUÇÃO OPÇÃO B (rápida): Adicione um cast na chamada:
 
-
-2.2  if ao invés de elif em _change_fsm
-Os 10+ blocos condicionais em _change_fsm são mutuamente exclusivos — cada transição ativa exatamente um estado. Usar elif em vez de if documenta essa intenção e evita avaliar condições desnecessárias após o primeiro match.
-
-Arquivo: stone_golem_boss.py — método _change_fsm
-# Antes (problema)
-if new_state == "CHARGE":
-    self._charge_particles.clear()
-if new_state == "FIRE":      # ainda avaliado mesmo após match acima
-    self._fire_shots_count = 0
-if new_state == "ORB_SPAWN": # idem
-    ...
-# Depois (correção)
-if new_state == "CHARGE":
-    self._charge_particles.clear()
-elif new_state == "FIRE":    # para no primeiro match
-    self._fire_shots_count = 0
-elif new_state == "ORB_SPAWN":
-    ...
+    from typing import cast
+    # ...
+    if mine.check_enemy_collision(cast(EnemyType, enemy)):
 
 
+-----------------------------------------------------------
+PROBLEMA 4 — playing.py linhas 681, 690, 702, 714, 795, 808, 821
+"list[Meteor | Alien | ...] is not assignable to list[Enemy]"
+-----------------------------------------------------------
 
-3. Legibilidade e manutenibilidade
+As funções de colisão em collisions.py declaram o parâmetro como
+list[Enemy], mas o Pylance trata list como invariante.
 
-3.1  Números mágicos sem nome
-Valores como 150 (max partículas), 0.4 (chance de trail) e 800 (fade speed) aparecem inline. Ao extrair como constantes de classe, o balanceamento de gameplay fica centralizado e autoexplicativo.
+SOLUÇÃO: Mude a assinatura de todas as funções afetadas em collisions.py
+de list[Enemy] para Sequence[Enemy]:
 
-Arquivo: stone_golem_boss.py — classes OrbitalRock e StoneGolemBoss
-# Antes (problema)
-if len(self._charge_particles) < 150:
-    ...
-if random.random() < 0.4:
-    self.trail.append([self.x, self.y, 255.0])
-t[2] -= 800 * dt
-# Depois (correção)
-class OrbitalRock:
-    TRAIL_SPAWN_CHANCE = 0.4
-    TRAIL_FADE_SPEED   = 800.0
+Funções a alterar:
+  - bullets_vs_enemies
+  - mini_ship_bullets_vs_enemies
+  - player_lasers_vs_enemies
+  - check_mine_explosions
+  - explosive_effects_vs_enemies
+  - air_strike_bombs_vs_enemies
+  - cannon_mines_vs_enemies
 
-class StoneGolemBoss:
-    MAX_CHARGE_PARTICLES = 150
+Troque o import e a assinatura:
 
+    # No topo do arquivo já existe: from typing import Sequence
+    # Apenas mude o parâmetro:
 
-3.2  Alias Boulder sem documentação
-A linha Boulder = GolemMine não tem comentário. Sem contexto, é impossível saber se é legado, alias intencional ou erro. Usar TypeAlias com comentário comunica a intenção diretamente.
+    def bullets_vs_enemies(
+        self,
+        ...,
+        enemies: Sequence[Enemy],   # era list[Enemy]
+        ...
+    )
 
-Arquivo: stone_golem_boss.py — linha 204
-# Antes (problema)
-Boulder = GolemMine  # sem contexto
-# Depois (correção)
-from typing import TypeAlias
+ATENÇÃO: Se dentro dessas funções você chama enemies[:] ou
+enemies.extend(), Sequence não suporta isso.
+- enemies[:] → list(enemies)  (para fazer cópia)
+- enemies.extend() → não é possível; mantenha list[Enemy] nesse caso
+  e use cast() na chamada do playing.py em vez de mudar a assinatura.
 
-# Alias de compatibilidade — EntityManager referencia o nome Boulder
-Boulder: TypeAlias = GolemMine
+SOLUÇÃO ALTERNATIVA (sem mudar collisions.py):
+No playing.py, faça cast antes de passar a lista:
 
+    from typing import cast
+    from ..systems.collisions import Enemy
+    # ...
+    self.collisions.bullets_vs_enemies(
+        ...,
+        cast(list[Enemy], self.entity_manager.enemies),
+        ...
+    )
 
-3.3  _run_fsm monolítico e __init__ extenso
-_run_fsm tem ~150 linhas tratando todos os estados em sequência. Extrair cada handler para um método próprio (_fsm_scan, _fsm_charge, etc.) torna cada estado testável de forma isolada. O mesmo vale para o __init__ de StoneGolemBoss: dividir em _init_stats(), _init_fsm() e _init_surfaces() facilita rastrear onde um atributo é inicializado.
+Repita o cast nas 7 chamadas problemáticas.
 
-Arquivo: stone_golem_boss.py — métodos _run_fsm e __init__
-# Antes (problema)
-def _run_fsm(self, dt, px, py, mines, shards):
-    if state == "SCAN":
-        ...  # 10 linhas
-    elif state == "OPENING":
-        ...  # 8 linhas
-    # ... +130 linhas
-# Depois (correção)
-def _run_fsm(self, dt, px, py, mines, shards):
-    handler = getattr(self, f'_fsm_{self.fsm_state.lower()}', None)
-    if handler:
-        handler(dt, px, py, mines, shards)
-
-def _fsm_scan(self, dt, px, py, mines, shards):
-    self._move_vertical(dt)
-    self.eye_growth = 0.0
-    ...
-
-def __init__(self, x, y, health=None, difficulty_multiplier=1.0):
-    self._init_stats(health, difficulty_multiplier)
-    self._init_fsm()
-    self._init_surfaces()
-
-
-
-Bônus: consistência de interface
-O módulo documenta que todas as entidades expõem .rect, .dead e .causes_damage — mas a implementação é inconsistente:
-
-•	GolemMine: causes_damage é atributo de instância (sempre True)
-•	OrbitalRock: causes_damage é @property (condicional)
-•	RockShard: causes_damage não está implementado
-
-Solução recomendada: formalizar um typing.Protocol com os três atributos e anotar as listas internas de entidades com esse tipo.
-
-Protocolo sugerido — entities/protocols.py
-# Antes (problema)
-# Sem contrato formal — qualquer entidade pode faltar um atributo
-# e o erro só aparece em runtime durante uma colisão
-# Depois (correção)
-from typing import Protocol
-import pygame
-
-class DamageEntity(Protocol):
-    rect: pygame.Rect
-    dead: bool
-
-    @property
-    def causes_damage(self) -> bool: ...
-
-# Em playing.py:
-def _check_ship_damage(self, entities: list[DamageEntity]) -> None:
-    ...
-
+===========================================================

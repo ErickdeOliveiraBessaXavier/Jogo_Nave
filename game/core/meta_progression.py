@@ -12,8 +12,11 @@ import pygame
 from ..core.difficulty import DifficultyPreset
 from ..core.levels import LevelConfig
 from ..core.upgrades import UpgradeType
-from ..core.upgrades_config import (DEFAULT_UNLOCKED, INITIAL_UNLOCKED_SLOTS,
-                                    UPGRADE_SLOT_COUNT)
+from ..core.upgrades_config import (
+    DEFAULT_UNLOCKED,
+    INITIAL_UNLOCKED_SLOTS,
+    UPGRADE_SLOT_COUNT,
+)
 
 logger = logging.getLogger(__name__)
 

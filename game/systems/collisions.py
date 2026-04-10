@@ -16,7 +16,7 @@ from ..entities.boss_laser import BossLaser
 from ..entities.boss_square import BossSquare
 from ..entities.bot_elemental import ElementalRobot, EnergyOrb
 from ..entities.bullet import Bullet
-from ..entities.cannon_mine import CannonMine, MineState
+from ..entities.cannon_mine import CannonMine, EnemyType as CannonMineEnemyType, MineState
 from ..entities.explosion import ExplosionType
 from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.explosive_mine import ExplosiveMine
@@ -37,7 +37,8 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import Boulder, EntryDebris, RockShard, StoneGolemBoss
+from ..entities.stone_golem_boss import (Boulder, EntryDebris, RockShard,
+                                         StoneGolemBoss)
 
 if TYPE_CHECKING:
     from .entity_manager import EntityManager
@@ -277,7 +278,7 @@ class Collisions:
             else:
                 # Para Boulder (GolemMine)
                 just_died = enemy.dead
-            
+
             if not just_died:
                 # Ainda vivo: só explosão pequena de hit, sem score
                 entity_manager.spawn_explosion(hx, hy, size=10)
@@ -314,7 +315,7 @@ class Collisions:
             sound_manager.play_explosion_alien()
 
         # Pontos
-        pts = enemy.get_points_value()
+        pts = enemy.get_points_value() if hasattr(enemy, "get_points_value") else 0
 
         # Fragmentos (apenas meteoros)
         if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
@@ -330,7 +331,7 @@ class Collisions:
         source_y: float,
         damage_radius: float,
         hit_tracking_set: set[int],
-        enemies: list[Enemy],
+        enemies: Sequence[Enemy],
         entity_manager: "EntityManager",
         damage_to_mine: int = 2,
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
@@ -511,7 +512,7 @@ class Collisions:
 
     def check_mine_explosions(
         self,
-        enemies: list[Enemy],
+        enemies: Sequence[Enemy],
         mine_explosions: list[MineExplosion],
         ship: Ship,
         entity_manager: "EntityManager",
@@ -580,13 +581,7 @@ class Collisions:
                 if enemy.dead:
                     continue
 
-                if isinstance(enemy, ExplosiveMine):
-                    enemy_cx, enemy_cy = enemy.x, enemy.y
-                    enemy_r = enemy.radius
-                else:
-                    enemy_cx = enemy.x + enemy.w / 2
-                    enemy_cy = enemy.y + enemy.h / 2
-                    enemy_r = enemy.w / 2
+                enemy_cx, enemy_cy, enemy_r = self.get_collision_info(enemy)
 
                 dist_sq = (enemy_cx - explosion_x) ** 2 + (enemy_cy - explosion_y) ** 2
 
@@ -647,7 +642,7 @@ class Collisions:
     def explosive_effects_vs_enemies(
         self,
         explosive_effects: list[ExplosiveEffect],
-        enemies: list[Enemy],
+        enemies: Sequence[Enemy],
         entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Verifica colisão contínua entre efeitos explosivos ativos e inimigos.
@@ -747,7 +742,7 @@ class Collisions:
     def air_strike_bombs_vs_enemies(
         self,
         air_strike_bombs: list[AirStrikeBomb],
-        enemies: list[Enemy],
+        enemies: Sequence[Enemy],
         entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Verifica colisão entre explosões de bombas e inimigos.
@@ -786,7 +781,7 @@ class Collisions:
     def cannon_mines_vs_enemies(
         self,
         cannon_mines: list[CannonMine],
-        enemies: list[Enemy],
+        enemies: Sequence[Enemy],
         entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Verifica colisão entre minas de torres e inimigos."""
@@ -818,7 +813,7 @@ class Collisions:
                     if enemy.dead:
                         continue
 
-                    if mine.check_enemy_collision(enemy):
+                    if mine.check_enemy_collision(cast(CannonMineEnemyType, enemy)):
                         break  # Mina explodiu, sair do loop de inimigos
 
         return score_gain, destroyed_count, score_events
@@ -949,7 +944,7 @@ class Collisions:
         self,
         mini_ship_bullets: list[MiniShipBullet],
         enemy_grid: SpatialGrid[Enemy],
-        enemies: list[Enemy],  # Para adicionar fragments
+        enemies: Sequence[Enemy],  # Para adicionar fragments
         entity_manager: "EntityManager",  # <-- ADICIONAR
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
@@ -1016,7 +1011,7 @@ class Collisions:
         mine_explosions: list[MineExplosion],  # noqa: ARG002
         ship: Ship,  # noqa: ARG002
         enemy_grid: SpatialGrid[Enemy],
-        enemies: list[Enemy],  # Para adicionar fragments
+        enemies: Sequence[Enemy],  # Para adicionar fragments
         entity_manager: "EntityManager",  # <-- NOVO
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         _ = mine_explosions, ship  # Unused; kept for API compatibility
@@ -1619,7 +1614,7 @@ class Collisions:
     def player_lasers_vs_enemies(
         self,
         player_lasers: list[PlayerLaser],
-        enemies: list[Enemy],
+        enemies: Sequence[Enemy],
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
