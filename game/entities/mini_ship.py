@@ -10,6 +10,7 @@ from .eye_enemy import EyeEnemy
 from .meteor import Meteor
 from .mini_ship_bullet import MiniShipBullet
 from .ship import Ship
+from .stone_sentry import StoneSentry
 
 
 class MiniShip:
@@ -32,7 +33,7 @@ class MiniShip:
     def update(
         self,
         dt: float,
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy],
+        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry],
         bullets: list[MiniShipBullet],
     ):
         # Movement
@@ -52,8 +53,8 @@ class MiniShip:
                 self.shoot_timer = self.shoot_cooldown
 
     def _find_nearest_enemy(
-        self, enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy]
-    ) -> Meteor | Alien | ExplosiveMine | EyeEnemy | None:
+        self, enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry]
+    ) -> Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry | None:
         nearest_enemy = None
         min_dist_sq = float("inf")
 
@@ -72,7 +73,7 @@ class MiniShip:
 
     def shoot(
         self,
-        target: Meteor | Alien | ExplosiveMine | EyeEnemy,
+        target: Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry,
         bullets: list[MiniShipBullet],
     ):
         if isinstance(target, ExplosiveMine):

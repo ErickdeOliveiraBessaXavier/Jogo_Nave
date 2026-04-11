@@ -19,13 +19,11 @@ from ..core.paths import get_profile_path
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
-from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
+from ..core.upgrades import (ActiveUpgrade, HealUpgrade, create_upgrade,
+                             get_upgrade_icon)
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
-from ..core.world_config import (
-    format_stage_name,
-    get_world_for_level,
-    is_side_scroll_mode,
-)
+from ..core.world_config import (format_stage_name, get_world_for_level,
+                                 is_side_scroll_mode)
 from ..entities.floating_score import FloatingScore
 from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
@@ -724,17 +722,18 @@ class PlayingScene(Scene):
 
     def _check_formation_collisions(
         self, gain: int, destroyed: int, score_events: list[tuple[float, float, int]]
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
         """
         Verifica colisões de formações e efeitos contra inimigos.
-        Retorna: (ganho_score_acumulado, destruídos_acumulados, score_events)
+        Retorna: (ganho_score_acumulado, destruídos_acumulados, score_events, ship_hit)
         """
+        ship_hit = False
         # Processar formações
         for formation in self.entity_manager.formations:
             formation_enemies = formation.get_enemies()
 
             # Minas vs formação
-            f_gain, f_destroyed, f_score_events, _ = (
+            f_gain, f_destroyed, f_score_events, f_ship_hit = (
                 self.collisions.check_mine_explosions(
                     formation_enemies,
                     self.entity_manager.mine_explosions,
@@ -745,6 +744,7 @@ class PlayingScene(Scene):
             gain += f_gain
             destroyed += f_destroyed
             score_events.extend(f_score_events)
+            ship_hit = ship_hit or f_ship_hit
 
             # Minas de torres vs formação
             if self.entity_manager.cannon_mines:
@@ -824,7 +824,7 @@ class PlayingScene(Scene):
             destroyed += mine_destroyed
             score_events.extend(mine_score_events)
 
-        return gain, destroyed, score_events
+        return gain, destroyed, score_events, ship_hit
 
     def _check_boss_collisions(self, gain: int) -> int:
         """
@@ -1026,40 +1026,8 @@ class PlayingScene(Scene):
                     if dist < hit_radius:
                         self._handle_ship_hit()
 
-        # Colisão com minas do StoneGolemBoss (contato direto remove vida mas não destrói a mina)
-        for mine in self.entity_manager.boulders:
-            if not mine.dead and self.ship.rect.colliderect(mine.rect):
-                self._handle_ship_hit()
-                break
-
-        # Colisão com rock shards do StoneGolemBoss (sweep, orbs e explosões de minas)
-        for shard in self.entity_manager.rock_shards:
-            if not shard.dead and self.ship.rect.colliderect(shard.rect):
-                shard.dead = True
-                self._handle_ship_hit()
-                break
-
-        # Colisão com detritos de entrada do StoneGolemBoss
-        if self._boss_type_cache == "stone_golem" and self.entity_manager.boss:
-            from ..entities.stone_golem_boss import StoneGolemBoss
-
-            golem = cast(StoneGolemBoss, self.entity_manager.boss)
-            for debris in golem.entry_debris:
-                if not debris.dead and self.ship.rect.colliderect(debris.rect):
-                    debris.dead = True
-                    self._handle_ship_hit()
-                    break
-
-        # Colisão com pedras orbitais do StoneGolemBoss (só causa dano em fase 'fired')
-        for rock in self.entity_manager.orbital_rocks:
-            if (
-                rock.causes_damage
-                and not rock.dead
-                and self.ship.rect.colliderect(rock.rect)
-            ):
-                rock.dead = True
-                self._handle_ship_hit()
-                break
+        # NOTA: Boulders, RockShards e Detritos agora são tratados no ship_vs_enemies 
+        # através da SpatialGrid e do Protocol Enemy.
 
     def _apply_score_multiplier(self, pts: int) -> int:
         """Aplica multiplicador de score se ativo."""
@@ -1084,14 +1052,14 @@ class PlayingScene(Scene):
         enemy_grid = self.entity_manager.enemy_spatial_grid
 
         # --- Passo 1 & 2: Inimigos normais e formações ---
-        gain, destroyed, score_events, ship_hit = self._check_projectile_vs_enemies(
+        gain, destroyed, score_events, ship_hit_proj = self._check_projectile_vs_enemies(
             enemy_grid
         )
-        gain, destroyed, score_events = self._check_formation_collisions(
+        gain, destroyed, score_events, ship_hit_form = self._check_formation_collisions(
             gain, destroyed, score_events
         )
 
-        if ship_hit:
+        if ship_hit_proj or ship_hit_form:
             self._handle_ship_hit()
             self.level_damage_taken += 1
 

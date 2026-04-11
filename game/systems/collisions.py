@@ -1,14 +1,7 @@
 import math
 import random
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Protocol,
-    Sequence,
-    TypeAlias,
-    cast,
-    runtime_checkable,
-)
+from typing import (TYPE_CHECKING, Any, Protocol, Sequence, TypeAlias, cast,
+                    runtime_checkable)
 
 import pygame
 
@@ -45,7 +38,9 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import Boulder, EntryDebris, RockShard, StoneGolemBoss
+from ..entities.stone_golem_boss import (Boulder, EntryDebris, RockShard,
+                                         StoneGolemBoss)
+from ..entities.stone_sentry import StoneSentry
 
 if TYPE_CHECKING:
     from .entity_manager import EntityManager
@@ -62,18 +57,26 @@ class Scoreable(Protocol):
         ...
 
 
-# Type aliases
-Enemy: TypeAlias = (
-    Meteor
-    | Alien
-    | ExplosiveMine
-    | EyeEnemy
-    | SquareMinionBoss
-    | ElementalRobot
-    | Boulder
-    | RockShard
-    | EntryDebris
-)
+@runtime_checkable
+class Enemy(Protocol):
+    """Protocol para qualquer inimigo comum do jogo."""
+
+    @property
+    def x(self) -> float: ...
+
+    @property
+    def y(self) -> float: ...
+
+    @property
+    def rect(self) -> pygame.Rect: ...
+
+    dead: bool
+    health: int
+
+    def get_points_value(self) -> int: ...
+    def update(self, dt: float, *args: Any, **kwargs: Any) -> Any: ...
+
+
 BossEnemy: TypeAlias = Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss
 Projectile: TypeAlias = Bullet | MiniShipBullet
 
@@ -114,7 +117,11 @@ class Collisions:
             return enemy.x, enemy.y, enemy.size
         if isinstance(enemy, EntryDebris):
             return enemy.x, enemy.y, enemy.S * enemy.rock_size
-        return enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, enemy.w / 2
+        return (
+            enemy.rect.centerx,
+            enemy.rect.centery,
+            max(enemy.rect.width, enemy.rect.height) / 2,
+        )
 
     def _is_invulnerable_to_damage(self, entity: Enemy) -> bool:
         """Verifica se entidade é imune a dano comum (tiros/explosões)."""
@@ -137,6 +144,8 @@ class Collisions:
             return 25
         if isinstance(enemy, ElementalRobot):
             return 55
+        if isinstance(enemy, StoneSentry):
+            return 45
         return CollisionConstants.DEFAULT_EXPLOSION_SIZE
 
     def _process_projectile_hit(
@@ -293,16 +302,19 @@ class Collisions:
         hx = hit_x if hit_x is not None else cx
         hy = hit_y if hit_y is not None else cy
 
-        # ElementalRobot e Boulder (GolemMine) têm sistema de HP próprio — delegar ao take_damage
-        if isinstance(enemy, (ElementalRobot, Boulder)):
+        # ElementalRobot, Boulder e StoneSentry têm sistema de HP próprio — delegar ao take_damage
+        if isinstance(enemy, (ElementalRobot, Boulder, StoneSentry)):
             enemy.take_damage(1)
-            # Para ElementalRobot
-            if isinstance(enemy, ElementalRobot):
-                just_died = enemy.fsm_state == "DYING" and enemy.just_died
+            # ElementalRobot sinaliza morte via flag just_died no estado DYING.
+            if hasattr(enemy, "fsm_state") and hasattr(enemy, "just_died"):
+                elemental_enemy = cast(ElementalRobot, enemy)
+                just_died = (
+                    elemental_enemy.fsm_state == "DYING" and elemental_enemy.just_died
+                )
                 if just_died:
-                    enemy.just_died = False  # consome a flag
+                    elemental_enemy.just_died = False  # consome a flag
             else:
-                # Para Boulder (GolemMine)
+                # Boulder e StoneSentry marcam morte diretamente em .dead
                 just_died = enemy.dead
 
             if not just_died:
@@ -340,13 +352,8 @@ class Collisions:
         else:
             sound_manager.play_explosion_alien()
 
-        # Pontos - usar Protocol e isinstance para type safety
-        # isinstance com Protocol (@runtime_checkable) é mais elegante que hasattr
-        if isinstance(enemy, Scoreable):
-            pts = enemy.get_points_value()
-        else:
-            # Fallback para entidades que não implementam o protocolo
-            pts = 0
+        # Enemy já garante contrato de pontuação.
+        pts = enemy.get_points_value()
 
         # Fragmentos (apenas meteoros)
         if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
@@ -1216,6 +1223,9 @@ class Collisions:
         query_h = ship.rect.height + 20
         potential_enemies = enemy_grid.query(query_x, query_y, query_w, query_h)
         for enemy in potential_enemies:
+            if not enemy or getattr(enemy, "dead", False):
+                continue
+
             # Garantir que enemy_rect é pygame.Rect
             enemy_rect: pygame.Rect = (
                 enemy.rect
@@ -1226,8 +1236,13 @@ class Collisions:
                 )
             )
             if enemy and ship.rect.colliderect(enemy_rect):
+                from ..entities.stone_golem_boss import (Boulder, EntryDebris,
+                                                         RockShard)
+
                 if isinstance(enemy, ExplosiveMine):
                     enemy.dead = True  # Explode immediately
+                elif isinstance(enemy, (Boulder, RockShard, EntryDebris)):
+                    enemy.dead = True
                 else:
                     if isinstance(enemy, EyeEnemy):
                         enemy.destroy()

@@ -16,6 +16,7 @@ from ..entities.slime_boss import SlimeBoss
 from ..entities.spike_boss import SpikeBoss
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.stone_golem_boss import StoneGolemBoss
+from ..entities.stone_sentry import StoneSentry
 from .difficulty import DifficultyPreset, DifficultySettings
 from .world_config import WorldTheme, get_world_for_level
 
@@ -241,6 +242,7 @@ class LevelConfig:
             | EyeEnemy
             | SquareMinionBoss
             | ElementalRobot
+            | StoneSentry
         ],
         float,
     ]  # Tipo -> tempo de spawn
@@ -265,6 +267,7 @@ class LevelConfig:
             | EyeEnemy
             | SquareMinionBoss
             | ElementalRobot
+            | StoneSentry
         ]
     ]:
         """Retorna lista de tipos de inimigos configurados."""
@@ -279,6 +282,7 @@ class LevelConfig:
             | EyeEnemy
             | SquareMinionBoss
             | ElementalRobot
+            | StoneSentry
         ],
     ) -> float:
         """Retorna o tempo de spawn para um tipo específico de inimigo."""
@@ -287,7 +291,13 @@ class LevelConfig:
     def get_random_enemy_type(
         self,
     ) -> Type[
-        Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot
+        Meteor
+        | Alien
+        | ExplosiveMine
+        | EyeEnemy
+        | SquareMinionBoss
+        | ElementalRobot
+        | StoneSentry
     ]:
         """Retorna um tipo de inimigo aleatório da lista."""
         if not self.enemy_types:
@@ -520,9 +530,11 @@ class ProceduralLevelGenerator:
                 | EyeEnemy
                 | SquareMinionBoss
                 | ElementalRobot
+                | StoneSentry
             ],
             float,
-        ] = {}
+        ] = {}  # Tipo -> tempo de spawn
+
 
         # Verificar se é fase especial "meteor_only"
         if theme and theme.special_feature == "meteor_only":
@@ -682,10 +694,11 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         level_number=1,
         enemy_spawn_config={
             Meteor: 0.6,
-            SquareMinionBoss: 15.0,  # Spawn lento para tutorial
-            ElementalRobot: 1.0,  # Mini-boss: aparece raramente (1x a cada ~45s)
+            SquareMinionBoss: 15.0,
+            ElementalRobot: 1.0,  # Mini-boss
             # Alien: 2.5,
             # EyeEnemy: 5.0,
+            StoneSentry: 1.0,
         },
         enemies_to_clear=25,
         # formations_enabled=True,
@@ -811,6 +824,7 @@ def _apply_world_theme_to_config(
             | EyeEnemy
             | SquareMinionBoss
             | ElementalRobot
+            | StoneSentry
         ],
         float,
     ] = dict(config.enemy_spawn_config)
@@ -822,11 +836,11 @@ def _apply_world_theme_to_config(
 
     # Ajustar tempos de spawn (menor tempo = mais frequente)
     for enemy_type, spawn_time in list(adjusted_spawn_config.items()):
-        if enemy_type.__name__ == "Meteor" and meteor_mult != 1.0:
+        if issubclass(enemy_type, Meteor) and meteor_mult != 1.0:
             adjusted_spawn_config[enemy_type] = spawn_time / meteor_mult
-        elif enemy_type.__name__ == "Alien" and alien_mult != 1.0:
+        elif issubclass(enemy_type, Alien) and alien_mult != 1.0:
             adjusted_spawn_config[enemy_type] = spawn_time / alien_mult
-        elif enemy_type.__name__ == "EyeEnemy" and eye_mult != 1.0:
+        elif issubclass(enemy_type, EyeEnemy) and eye_mult != 1.0:
             adjusted_spawn_config[enemy_type] = spawn_time / eye_mult
 
     # Aplicar multiplicador geral de spawn rate
@@ -873,12 +887,14 @@ def _create_world_boss_level(
             | EyeEnemy
             | SquareMinionBoss
             | ElementalRobot
+            | StoneSentry
         ],
         float,
-    ]
+    ]  # Tipo -> tempo de spawn
+
     if world.theme == WorldTheme.MOUNTAINS:
         enemy_spawn_config = {
-            Meteor: 0.8,
+            StoneSentry: 1.5,
             Alien: 3.0,
         }
     elif world.theme == WorldTheme.STARFIELD:

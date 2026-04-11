@@ -41,7 +41,9 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import Boulder, OrbitalRock, RockShard, StoneGolemBoss
+from ..entities.stone_golem_boss import (Boulder, OrbitalRock, RockShard,
+                                         StoneGolemBoss)
+from ..entities.stone_sentry import StoneSentry
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
@@ -68,6 +70,7 @@ class EntityManager:
             | EyeEnemy
             | SquareMinionBoss
             | ElementalRobot
+            | StoneSentry
         ] = []
         self.alien_bullets: list[AlienBullet] = []
         self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
@@ -107,6 +110,7 @@ class EntityManager:
             | EyeEnemy
             | SquareMinionBoss
             | ElementalRobot
+            | StoneSentry
             | Boulder
         ] = SpatialGrid()  # Grid espacial para inimigos
         self.spike_spatial_grid: SpatialGrid[Spike] = (
@@ -526,6 +530,10 @@ class EntityManager:
                 new_orbs = enemy.update(dt, scaled_dt, player_x, player_y)
                 if new_orbs:
                     self.energy_orbs.extend(new_orbs)
+            elif isinstance(enemy, StoneSentry):
+                shot = enemy.update(scaled_dt, (player_x, player_y))
+                if shot:
+                    new_alien_bullets.extend(shot)
             else:
                 enemy.update(scaled_dt)
 
@@ -606,7 +614,8 @@ class EntityManager:
         Updates entities specifically for the game over slow motion sequence.
         This method consolidates the update logic previously found in PlayingScene.
         """
-        from typing import Any  # Used for type hinting lists of varied entities
+        from typing import \
+            Any  # Used for type hinting lists of varied entities
 
         from ..entities.eye_enemy import EyeEnemy
         from ..entities.giant_meteor_boss import GiantMeteorBoss

@@ -1,33 +1,70 @@
-Vou ler os arquivos que não vieram no contexto para ter o quadro completo.Encontrei o problema. É um bug clássico de **mutação em cópia local**.
-
----
-
-## O Bug
-
-Em `collisions.py`, linha 288, dentro de `_destroy_enemy`:
-
-```python
-enemies_list: MutableSequence[Enemy] = list(enemies)  # ← cria cópia LOCAL
-...
-enemies_list.extend(fragments)  # ← adiciona fragmentos na CÓPIA, não na lista original
-```
-
-Os fragmentos são adicionados em `enemies_list`, que é uma lista nova criada com `list(enemies)`. Essa cópia é descartada ao término do método. A lista real de inimigos do `EntityManager` (`self.enemies`) nunca recebe os fragmentos.
-
-## A Correção
-
-O `EntityManager` já possui o `meteor_pool` para gerenciar meteoros. O lugar correto para adicionar os fragmentos é `entity_manager.enemies`. Substitua o bloco de fragmentação (linhas 352–355) por:
-
-```python
-# Fragmentos (apenas meteoros)
-if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
-    fragments = enemy.spawn_fragments(is_side_scroll=self.is_side_scroll)
-    for frag in fragments:
-        entity_manager.enemies.append(frag)
-```
-
-Isso garante que os fragmentos entrem na lista real de inimigos que é iterada, desenhada e verificada a cada frame.
-
----
-
-**Observação secundária:** se o projeto migrar completamente para o `MeteorPool`, o ideal seria obter os fragmentos via `entity_manager.meteor_pool.get(...)` em vez de criar `Meteor` diretamente em `spawn_fragments`. Mas por ora, a correção acima já resolve o problema.
+[{
+	"resource": "/c:/Users/eobx/OneDrive/Documentos/Jogos_Python/Nave/run.py",
+	"owner": "Pylance2",
+	"severity": 8,
+	"message": "Try statement must have at least one except or finally clause",
+	"source": "Pylance",
+	"startLineNumber": 12,
+	"startColumn": 5,
+	"endLineNumber": 12,
+	"endColumn": 8,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/c:/Users/eobx/OneDrive/Documentos/Jogos_Python/Nave/run.py",
+	"owner": "Pylance2",
+	"code": {
+		"value": "reportUnusedExpression",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportUnusedExpression.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "Expression value is unused",
+	"source": "Pylance",
+	"startLineNumber": 12,
+	"startColumn": 9,
+	"endLineNumber": 12,
+	"endColumn": 10,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/c:/Users/eobx/OneDrive/Documentos/Jogos_Python/Nave/run.py",
+	"owner": "Pylance2",
+	"severity": 8,
+	"message": "Unexpected indentation",
+	"source": "Pylance",
+	"startLineNumber": 13,
+	"startColumn": 1,
+	"endLineNumber": 13,
+	"endColumn": 9,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/c:/Users/eobx/OneDrive/Documentos/Jogos_Python/Nave/run.py",
+	"owner": "Pylance2",
+	"severity": 8,
+	"message": "Expected expression",
+	"source": "Pylance",
+	"startLineNumber": 16,
+	"startColumn": 5,
+	"endLineNumber": 16,
+	"endColumn": 11,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/c:/Users/eobx/OneDrive/Documentos/Jogos_Python/Nave/run.py",
+	"owner": "Pylance2",
+	"severity": 8,
+	"message": "Unexpected indentation",
+	"source": "Pylance",
+	"startLineNumber": 17,
+	"startColumn": 1,
+	"endLineNumber": 17,
+	"endColumn": 9,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+}]

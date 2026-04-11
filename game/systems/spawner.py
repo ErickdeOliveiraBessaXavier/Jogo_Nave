@@ -16,6 +16,7 @@ from ..entities.meteor_pool import MeteorPool
 from ..entities.powerup import PowerUp
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
+from ..entities.stone_sentry import StoneSentry
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -170,6 +171,7 @@ class EnemySpawner:
             "eye": 0,
             "square_minion": 0,
             "elemental_robot": 0,
+            "stone_sentry": 0,
             "total": 0,
         }
 
@@ -189,6 +191,8 @@ class EnemySpawner:
                     counts["square_minion"] += 1
                 elif isinstance(enemy, ElementalRobot):
                     counts["elemental_robot"] += 1
+                elif isinstance(enemy, StoneSentry):
+                    counts["stone_sentry"] += 1
 
         return counts
 
@@ -241,6 +245,11 @@ class EnemySpawner:
         elif enemy_type == ElementalRobot:
             # Mini-boss: máximo de 1 na tela ao mesmo tempo
             if counts["elemental_robot"] >= 1:
+                return False
+
+        elif enemy_type == StoneSentry:
+            # Sentinelas: máximo de 3 na tela
+            if counts["stone_sentry"] >= 3:
                 return False
 
         # Redução gradual se total está alto
@@ -359,6 +368,12 @@ class EnemySpawner:
                                 difficulty_multiplier=self.enemy_health_multiplier,
                             )
                             entity_manager.enemies.append(robot)
+                        elif enemy_type == StoneSentry:
+                            new_enemy = StoneSentry()
+                            new_enemy.health = int(
+                                new_enemy.health * self.enemy_health_multiplier
+                            )
+                            entity_manager.enemies.append(new_enemy)
                         else:
                             new_enemy = cast(EnemyWithHealth, enemy_type())
                             new_enemy.health = int(
