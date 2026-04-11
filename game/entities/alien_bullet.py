@@ -8,6 +8,8 @@ class AlienBullet:
     def __init__(self, x: float, y: float):
         self.x, self.y = x, y
         self.speed = Config.ALIEN_BULLET_SPEED
+        self.vx = 0.0
+        self.vy = self.speed
         self.dead = False
 
         # Cores para piscar
@@ -32,8 +34,16 @@ class AlienBullet:
         )
 
     def update(self, dt: float):
-        self.y += self.speed * dt
-        if self.y > Config.SCREEN_HEIGHT:
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+
+        margin = max(self.current_radius * 2, 32)
+        if (
+            self.y > Config.SCREEN_HEIGHT + margin
+            or self.y < -margin
+            or self.x > Config.SCREEN_WIDTH + margin
+            or self.x < -margin
+        ):
             self.dead = True
 
         # Atualizar pulsação de tamanho e cor

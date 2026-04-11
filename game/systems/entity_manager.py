@@ -41,8 +41,13 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import (Boulder, OrbitalRock, RockShard,
-                                         StoneGolemBoss)
+from ..entities.stone_golem_boss import (
+    Boulder,
+    EntryDebris,
+    OrbitalRock,
+    RockShard,
+    StoneGolemBoss,
+)
 from ..entities.stone_sentry import StoneSentry
 
 if TYPE_CHECKING:
@@ -112,6 +117,9 @@ class EntityManager:
             | ElementalRobot
             | StoneSentry
             | Boulder
+            | RockShard
+            | OrbitalRock
+            | EntryDebris
         ] = SpatialGrid()  # Grid espacial para inimigos
         self.spike_spatial_grid: SpatialGrid[Spike] = (
             SpatialGrid()
@@ -282,6 +290,25 @@ class EntityManager:
         for mine in self.boulders:
             if not mine.dead:
                 self.enemy_spatial_grid.insert_from_rect(mine)
+
+        # Inserir fragmentos de pedra do StoneGolemBoss
+        for shard in self.rock_shards:
+            if not shard.dead:
+                self.enemy_spatial_grid.insert_from_rect(shard)
+
+        # Inserir pedras orbitais APENAS quando podem causar dano (fase fired)
+        for orbital_rock in self.orbital_rocks:
+            if (
+                not orbital_rock.dead
+                and getattr(orbital_rock, "causes_damage", False)
+            ):
+                self.enemy_spatial_grid.insert_from_rect(orbital_rock)
+
+        # Inserir detritos de entrada do StoneGolemBoss
+        if isinstance(self.boss, StoneGolemBoss):
+            for debris in self.boss.entry_debris:
+                if not debris.dead:
+                    self.enemy_spatial_grid.insert_from_rect(debris)
 
         # Inserir inimigos de formações (reutilizar cache se disponível)
         cached_formation_enemies = getattr(self, "_cached_formation_enemies", None)

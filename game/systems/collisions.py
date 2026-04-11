@@ -1236,12 +1236,19 @@ class Collisions:
                 )
             )
             if enemy and ship.rect.colliderect(enemy_rect):
-                from ..entities.stone_golem_boss import (Boulder, EntryDebris,
-                                                         RockShard)
+                from ..entities.stone_golem_boss import (
+                    Boulder,
+                    EntryDebris,
+                    OrbitalRock,
+                    RockShard,
+                )
+
+                if not getattr(enemy, "causes_damage", True):
+                    continue
 
                 if isinstance(enemy, ExplosiveMine):
                     enemy.dead = True  # Explode immediately
-                elif isinstance(enemy, (Boulder, RockShard, EntryDebris)):
+                elif isinstance(enemy, (Boulder, RockShard, EntryDebris, OrbitalRock)):
                     enemy.dead = True
                 else:
                     if isinstance(enemy, EyeEnemy):

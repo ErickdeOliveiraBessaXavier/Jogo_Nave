@@ -56,7 +56,7 @@ class StoneSentry:
 
     def _generate_stone_shape(self) -> List[Tuple[float, float]]:
         """Gera um formato de pedra irregular (octaedro imperfeito)."""
-        pts = []
+        pts: List[Tuple[float, float]] = []
         num_points = 8
         size = self.w // 2
         for i in range(num_points):
@@ -102,11 +102,12 @@ class StoneSentry:
             # Mirar no jogador
             dx = player_pos[0] - bx
             dy = player_pos[1] - by
-            dist = math.sqrt(dx*dx + dy*dy)
+            dist = math.sqrt(dx * dx + dy * dy)
             if dist > 0:
                 bullet.vx = (dx / dist) * 300.0
                 bullet.vy = (dy / dist) * 300.0
         else:
+            bullet.vx = 0.0
             bullet.vy = 350.0
             
         return [bullet]
