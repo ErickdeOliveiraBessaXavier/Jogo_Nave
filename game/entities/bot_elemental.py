@@ -415,6 +415,7 @@ class ElementalRobot:
         y: float,
         health: Optional[int] = None,
         difficulty_multiplier: float = 1.0,
+        start_visible: bool = False,
     ):
         S = self.SCALE
         self._screen_w = getattr(Config, "SCREEN_WIDTH", 280)
@@ -425,7 +426,7 @@ class ElementalRobot:
 
         # Posição inicial acima da tela
         self.x = float(x)
-        self.y = -float(self.h)
+        self.y = float(y) if start_visible else -float(self.h)
         self._target_y = float(y)  # onde para após entrar
 
         # Aplicar multiplicador de dificuldade

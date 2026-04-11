@@ -8,7 +8,7 @@ Refatorado para seguir boas práticas de performance, robustez e legibilidade.
 import logging
 import math
 import random
-from typing import List, Optional, Tuple, TypeAlias
+from typing import Any, List, Optional, Tuple, TypeAlias
 
 import pygame
 
@@ -22,6 +22,7 @@ from ..entities.stone_golem_pixel_map import PIXEL_COLS as _PIXEL_COLS
 from ..entities.stone_golem_pixel_map import PIXEL_MAP as _PIXEL_MAP
 from ..entities.stone_golem_pixel_map import PIXEL_ROWS as _PIXEL_ROWS
 from ..entities.stone_golem_pixel_map import C as _C
+from ..entities.bot_elemental import ElementalRobot
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,7 @@ class GolemMine:
     FUSE_TIME = 5.0
     LAND_SPEED = 900.0
     RADIUS = 12
-    EXPL_SHARDS = 16
+    EXPL_SHARDS = 14
 
     _COLOR_BODY = (200, 40, 40)
     _COLOR_RING = (255, 100, 100)
@@ -712,6 +713,8 @@ class StoneGolemBoss:
         self._sweep_lock_done: bool = False
         self._orbital_rocks: List[OrbitalRock] = []
         self._mines: List[GolemMine] = []
+        self._half_phase_mines: List[GolemMine] = []
+        self._half_phase_bots: List[ElementalRobot] = []
         self._fire_shots_count: int = 0
         self._fire_shot_timer: float = 0.0
         self._fire_ready: bool = False
@@ -722,6 +725,12 @@ class StoneGolemBoss:
         self._entry_debris: List[EntryDebris] = []
         self._entry_debris_timer: float = 0.0
         self._burst_done: bool = False
+        self._half_phase_triggered: bool = False
+        self._half_phase_pending: bool = False
+        self._half_phase_bots_spawned: bool = False
+        self._half_phase_summon_timer: float = 0.0
+        self._half_phase_wave_timer: float = 0.0
+        self._entity_manager: Any | None = None
         self._time: float = 0.0
         self.rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
         self.emp_linger_timer: float = 0.0
@@ -781,6 +790,8 @@ class StoneGolemBoss:
         self._sweep_locked_angle, self._sweep_lock_done = math.pi / 2, False
         self._orbital_rocks = []
         self._mines = []
+        self._half_phase_mines = []
+        self._half_phase_bots = []
         self._fire_shots_count, self._fire_shot_timer, self._cycles_since_fire = (
             0,
             0.0,
@@ -792,6 +803,11 @@ class StoneGolemBoss:
         self._entry_debris: List[EntryDebris] = []
         self._entry_debris_timer: float = 0.0
         self._burst_done: bool = False
+        self._half_phase_triggered = False
+        self._half_phase_pending = False
+        self._half_phase_bots_spawned = False
+        self._half_phase_summon_timer = 0.0
+        self._half_phase_wave_timer = 0.0
         self._time = 0.0
         self.rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
         self.emp_linger_timer = 0.0
@@ -898,6 +914,99 @@ class StoneGolemBoss:
             for r in self._orbital_rocks:
                 if r.phase == "orbiting":
                     r.fire_delay = random.uniform(0.1, 1.2)
+        elif new_state == "HALF_RETREAT":
+            self._half_phase_summon_timer = 0.0
+            self._half_phase_wave_timer = 0.0
+            self._half_phase_bots_spawned = False
+            self._half_phase_mines.clear()
+            self._half_phase_bots.clear()
+            self._orbital_rocks.clear()
+            self._mines.clear()
+            self._charge_particles.clear()
+            self._entry_debris.clear()
+            self._burst_done = False
+        elif new_state == "HALF_SUMMON":
+            self._half_phase_summon_timer = 0.0
+        elif new_state == "HALF_VOLLEY":
+            self._half_phase_wave_timer = 0.0
+
+    def _start_half_phase(self) -> None:
+        self._half_phase_triggered = True
+        self._change_fsm("HALF_RETREAT")
+
+    def _spawn_half_phase_bots(self) -> None:
+        manager = self._entity_manager
+        if manager is None or self._half_phase_bots_spawned:
+            return
+
+        screen_w = self._screen_w
+        screen_h = self._screen_h
+        left_bot = manager.spawn_elemental_robot(
+            x=screen_w * 0.28,
+            y=screen_h * 0.2,
+            difficulty_multiplier=self.difficulty_multiplier,
+        )
+        right_bot = manager.spawn_elemental_robot(
+            x=screen_w * 0.72,
+            y=screen_h * 0.2,
+            difficulty_multiplier=self.difficulty_multiplier,
+        )
+        self._half_phase_bots = [left_bot, right_bot]
+        self._half_phase_bots_spawned = True
+
+    def _active_half_phase_bots(self) -> list[ElementalRobot]:
+        self._half_phase_bots = [bot for bot in self._half_phase_bots if not bot.dead]
+        return self._half_phase_bots
+
+    def _spawn_half_phase_mines(
+        self,
+        new_mines: List[GolemMine],
+        player_x: float,
+        player_y: float,
+    ) -> None:
+        del player_x, player_y
+        if self._half_phase_mines:
+            return
+
+        base_x = self.x + self.w / 2
+        base_y = self.y + self.h / 2
+        screen_w = self._screen_w
+        screen_h = self._screen_h
+        for _ in range(3):
+            target_x = random.uniform(90, screen_w - 90)
+            target_y = random.uniform(90, screen_h - 120)
+            mine = GolemMine(base_x, base_y, target_x, target_y)
+            self._half_phase_mines.append(mine)
+            new_mines.append(mine)
+
+    def _finish_half_phase(self) -> None:
+        self._half_phase_mines.clear()
+        self._half_phase_bots.clear()
+        self._half_phase_bots_spawned = False
+        self._half_phase_summon_timer = 0.0
+        self._half_phase_wave_timer = 0.0
+        self._entry_debris.clear()
+        self._charge_particles.clear()
+        self._orbital_rocks.clear()
+        self._mines.clear()
+        self._attack_bag.clear()
+        self._last_attack = ""
+        self._cycles_since_fire = 0
+        self._fire_ready = False
+        self._fire_shots_count = 0
+        self._fire_shot_timer = 0.0
+        self._orb_shots_done = 0
+        self._orb_rotation = 0.0
+        self._shards_fired_at.clear()
+        self._sweep_locked_angle = math.pi / 2
+        self._sweep_lock_done = False
+        self._current_float_y = 0.0
+        self._scan_step = 0
+        self._jitter_x = 0.0
+        self._jitter_y = 0.0
+        self._burst_done = False
+        self.y = float(self._screen_h + 100)
+        self._change_fsm("ENTERING")
 
     @property
     def entry_debris(self) -> List[EntryDebris]:
@@ -905,10 +1014,15 @@ class StoneGolemBoss:
         return self._entry_debris
 
     def update(
-        self, dt: float, player_x: float, player_y: float
+        self,
+        dt: float,
+        player_x: float,
+        player_y: float,
+        entity_manager: Any | None = None,
     ) -> Tuple[List["GolemMine"], List[RockShard], List[OrbitalRock]]:
         new_mines: List[GolemMine] = []
         new_shards: List[RockShard] = []
+        self._entity_manager = entity_manager
         self._time += dt
         self.fsm_ticks += dt
 
@@ -955,6 +1069,7 @@ class StoneGolemBoss:
             r.update(dt, cx, cy, player_x, player_y)
         self._orbital_rocks = [r for r in self._orbital_rocks if not r.dead]
         self.rect.x, self.rect.y = int(self.x), int(self.y)
+        self._entity_manager = None
         return new_mines, new_shards, self._orbital_rocks
 
     def _run_fsm(
@@ -1001,7 +1116,7 @@ class StoneGolemBoss:
 
             # No frame exato do burst (primeira vez cruzando burst_y), solta o cluster massivo
             if not self._burst_done:
-                self._spawn_debris_cluster(25, _px, _py)  # Explosão massiva
+                self._spawn_debris_cluster(20, _px, _py)  # Explosão massiva
                 self._burst_done = True
 
             # Detritos contínuos durante a subida explosiva (intervalo fixo de 0.12s)
@@ -1016,16 +1131,97 @@ class StoneGolemBoss:
             self._burst_done = False  # Reset para a próxima vez (se houver)
             self._change_fsm("SCAN")
 
+    def _fsm_half_retreat(
+        self,
+        dt: float,
+        _px: float,
+        _py: float,
+        _mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
+        retreat_speed = getattr(Config, "GOLEM_ENTRY_SPEED", 160) * 1.8
+        self.y += retreat_speed * dt
+        self._jitter_x = random.uniform(-6, 6)
+        self._jitter_y = random.uniform(-3, 3)
+
+        # Só dispara fragmentos quando o boss estiver realmente próximo do chão,
+        # simulando a perfuração da terra na borda inferior da tela.
+        near_floor_line = self._screen_h - (self.h * 0.15)
+        is_near_floor = (self.y + self.h) >= near_floor_line
+        if is_near_floor:
+            self._entry_debris_timer += dt
+            if not self._burst_done:
+                self._spawn_debris_cluster(16, _px, _py, spawn_from_bottom=True)
+                self._burst_done = True
+            elif self._entry_debris_timer >= 0.18:
+                self._entry_debris_timer = 0.0
+                self._spawn_debris_cluster(2, _px, _py, spawn_from_bottom=True)
+        else:
+            self._entry_debris_timer = 0.0
+
+        if self.y >= self._screen_h + self.h + 60:
+            self.y = float(self._screen_h + self.h + 60)
+            self._jitter_x = 0.0
+            self._jitter_y = 0.0
+            self._change_fsm("HALF_SUMMON")
+
+    def _fsm_half_summon(
+        self,
+        dt: float,
+        _px: float,
+        _py: float,
+        _mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
+        self._half_phase_summon_timer += dt
+
+        # Após submergir, espera 3s antes de invocar os bots e retomar ataques.
+        if self._half_phase_summon_timer < 3.0:
+            return
+
+        if not self._half_phase_bots_spawned:
+            self._spawn_half_phase_bots()
+
+        if self._half_phase_bots_spawned and self._half_phase_summon_timer >= 3.35:
+            self._change_fsm("HALF_VOLLEY")
+
+    def _fsm_half_volley(
+        self,
+        dt: float,
+        player_x: float,
+        player_y: float,
+        new_mines: List["GolemMine"],
+        _shards: List[RockShard],
+    ) -> None:
+        self._half_phase_wave_timer -= dt
+        active_bots = self._active_half_phase_bots()
+        self._half_phase_mines = [m for m in self._half_phase_mines if not m.dead]
+
+        if active_bots and self._half_phase_wave_timer <= 0.0:
+            self._spawn_half_phase_mines(new_mines, player_x, player_y)
+            self._half_phase_wave_timer = 1.5
+
+        if not active_bots and not self._half_phase_mines:
+            self._finish_half_phase()
+
     def _spawn_debris_cluster(
-        self, count: int, player_x: float = 0.0, player_y: float = 0.0
+        self,
+        count: int,
+        player_x: float = 0.0,
+        player_y: float = 0.0,
+        spawn_from_bottom: bool = False,
     ) -> None:
         """
         Cria detritos com trajetória parabólica a partir do TOPO do boss.
         ~40% dos fragmentos têm mira parcial no player; o restante é aleatório.
         """
         cx = self.x + self.w / 2
-        # Spawn no topo do boss (não na base)
-        cy = self.y + self.SCALE * 2
+        # Entrada normal: topo (boss irrompendo de baixo para cima).
+        # Submersão dos 50%: base (boss perfurando o chão para baixo).
+        if spawn_from_bottom:
+            cy = self.y + self.h - self.SCALE * 2
+        else:
+            cy = self.y + self.SCALE * 2
 
         # Gravidade reduzida para arco mais amplo
         gravity = getattr(Config, "GOLEM_BOULDER_GRAVITY", 30) * 5.0
@@ -1076,6 +1272,11 @@ class StoneGolemBoss:
         _mines: List["GolemMine"],
         _shards: List[RockShard],
     ) -> None:
+        if self._half_phase_pending:
+            self._half_phase_pending = False
+            self._start_half_phase()
+            return
+
         self._move_vertical(dt)
         self.eye_growth = 0.0
         spd = self.difficulty_multiplier
@@ -1442,9 +1643,22 @@ class StoneGolemBoss:
             self.direction *= -1
 
     def take_damage(self, amount: int) -> None:
+        if self.dead:
+            return
+
+        half_health = self.max_health * 0.5
+        prev_health = self.health
         self.health -= amount
         if self.health <= 0:
             self.health, self.dead = 0, True
+            return
+
+        if (
+            not self._half_phase_triggered
+            and prev_health > half_health
+            and self.health <= half_health
+        ):
+            self._half_phase_pending = True
 
     def draw(self, surface: pygame.Surface) -> None:
         if self.dead:

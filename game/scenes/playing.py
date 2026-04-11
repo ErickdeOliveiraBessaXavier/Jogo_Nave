@@ -1317,6 +1317,10 @@ class PlayingScene(Scene):
 
         self.boss_fight_active = True
         self.screen_shake_timer = Config.BOSS_ENTRY_SHAKE_DURATION
+        # Garante que inimigos/mini-bosses voltem a renderizar após o piscar
+        # do sistema de limpeza pré-boss.
+        self.enemy_visible = True
+        self.enemy_blink_timer = 0.0
 
         # Parar sons de warning e outros efeitos
         sound_manager.stop_warning()

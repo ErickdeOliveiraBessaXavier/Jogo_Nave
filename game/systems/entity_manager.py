@@ -507,7 +507,7 @@ class EntityManager:
             # StoneGolemBoss retorna (List[Boulder], List[RockShard], List[OrbitalRock])
             elif isinstance(self.boss, StoneGolemBoss):
                 new_boulders, new_shards, orbital_rocks = self.boss.update(
-                    enemy_dt, player_x, player_y
+                    enemy_dt, player_x, player_y, self
                 )
                 if new_boulders:
                     self.boulders.extend(new_boulders)
@@ -697,7 +697,7 @@ class EntityManager:
                 self.boss.update(dt, self)
             elif isinstance(self.boss, StoneGolemBoss):
                 new_boulders, new_shards, orbital_rocks = self.boss.update(
-                    dt, player_x, player_y
+                    dt, player_x, player_y, self
                 )
                 if new_boulders:
                     self.boulders.extend(new_boulders)
@@ -790,6 +790,7 @@ class EntityManager:
         x: float | None = None,
         y: float | None = None,
         difficulty_multiplier: float = 1.0,
+        start_visible: bool = False,
     ) -> ElementalRobot:
         """
         Spawna um ElementalRobot (mini-boss) na posição indicada.
@@ -811,7 +812,10 @@ class EntityManager:
         spawn_y = y if y is not None else sh * 0.15  # 15% do topo
 
         robot = ElementalRobot(
-            spawn_x, spawn_y, difficulty_multiplier=difficulty_multiplier
+            spawn_x,
+            spawn_y,
+            difficulty_multiplier=difficulty_multiplier,
+            start_visible=start_visible,
         )
         self.enemies.append(robot)
         return robot
