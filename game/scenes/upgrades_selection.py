@@ -68,7 +68,7 @@ class FloatingMessage:
         # Efeito de fade e movimento
         self.fade_start = 30  # Começar fade nos últimos 30 frames
 
-    def update(self, dt: float) -> None:
+    def update(self, _dt: float) -> None:
         """Atualiza posição e fade da mensagem."""
         self.y += self.dy
         self.lifetime -= 1
@@ -442,7 +442,7 @@ class UpgradesSelectionScene(Scene):
                             try:
                                 if hasattr(self.app, "sound_manager"):
                                     self.app.sound_manager.play_upgrade_denied()  # type: ignore
-                            except Exception:
+                            except (AttributeError, TypeError, pygame.error):
                                 pass
                             continue
 

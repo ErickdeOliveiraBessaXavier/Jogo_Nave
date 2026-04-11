@@ -1,7 +1,7 @@
 import math
 import random
-from typing import (TYPE_CHECKING, Any, Protocol, Sequence, TypeAlias, cast,
-                    runtime_checkable)
+from typing import (TYPE_CHECKING, Any, Callable, Protocol, Sequence,
+                    TypeAlias, cast, runtime_checkable)
 
 import pygame
 
@@ -38,8 +38,13 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import (Boulder, EntryDebris, RockShard,
-                                         StoneGolemBoss)
+from ..entities.stone_golem_boss import (
+    Boulder,
+    EntryDebris,
+    OrbitalRock,
+    RockShard,
+    StoneGolemBoss,
+)
 from ..entities.stone_sentry import StoneSentry
 
 if TYPE_CHECKING:
@@ -100,6 +105,14 @@ class Collisions:
             is_side_scroll: True se em modo side-scroll, False se em modo top-down
         """
         self.is_side_scroll = is_side_scroll
+
+    @staticmethod
+    def _get_points_value(enemy: Any) -> int:
+        """Retorna pontos de forma segura para entidades que suportam score."""
+        getter = getattr(enemy, "get_points_value", None)
+        if callable(getter):
+            return int(cast(Callable[[], int], getter)())
+        return 0
 
     @staticmethod
     def get_collision_info(
@@ -272,7 +285,7 @@ class Collisions:
     def _destroy_enemy(
         self,
         enemy: Enemy,
-        enemies: Sequence[Enemy],
+        _enemies: Sequence[Enemy],
         entity_manager: "EntityManager",
         explosion_size: int | None = None,
         hit_x: float | None = None,
@@ -293,6 +306,11 @@ class Collisions:
         Returns:
             Tupla com (pontos_ganhos, evento_pontos, foi_destruído)
         """
+        # Fragmentos do Golem não são destrutíveis por ataques do jogador.
+        # A esfera vermelha (Boulder/GolemMine) continua seguindo o fluxo normal.
+        if isinstance(enemy, (RockShard, OrbitalRock, EntryDebris)):
+            return 0, None, False
+
         # Converter para lista mutável apenas internamente - melhor prática
         # (mantido para compatibilidade com outros usos futuros do método)
         # Calcular centro
@@ -352,8 +370,7 @@ class Collisions:
         else:
             sound_manager.play_explosion_alien()
 
-        # Enemy já garante contrato de pontuação.
-        pts = enemy.get_points_value()
+        pts = self._get_points_value(enemy)
 
         # Fragmentos (apenas meteoros)
         if isinstance(enemy, Meteor) and hasattr(enemy, "spawn_fragments"):
@@ -603,7 +620,7 @@ class Collisions:
                     # Marcar como dead DEPOIS de criar explosão
                     enemy.dead = True
 
-                    pts = enemy.get_points_value()
+                    pts = self._get_points_value(enemy)
                     score_gain += pts
                     destroyed_count += 1
                     score_events.append((cx, cy, pts))
@@ -1236,13 +1253,6 @@ class Collisions:
                 )
             )
             if enemy and ship.rect.colliderect(enemy_rect):
-                from ..entities.stone_golem_boss import (
-                    Boulder,
-                    EntryDebris,
-                    OrbitalRock,
-                    RockShard,
-                )
-
                 if not getattr(enemy, "causes_damage", True):
                     continue
 

@@ -50,8 +50,8 @@ class SlimeBoss:
 
     def __init__(
         self,
-        x: float,
-        y: float,
+        _x: float,
+        _y: float,
         health: int | None = None,
         difficulty_multiplier: float = 1.0,
     ):
@@ -76,6 +76,8 @@ class SlimeBoss:
         self.stage_timer = 0.0
         self.current_stage_config: StageConfig | None = None
         self._next_normal_stage: SlimeBossState | None = None
+        self._next_homing_stage: SlimeBossState | None = None
+        self.direction = 1
 
         # Entry speed
         self.slow_entry_speed = Config.SLIME_BOSS_ENTRY_SPEED_SLOW
@@ -123,6 +125,7 @@ class SlimeBoss:
         self._mask_cache_max_size = (
             6  # Keep masks for last 6 frames to balance memory/performance
         )
+        self._flash_surface: pygame.Surface | None = None
 
         # Sistema de dripping slime
         self.dripping_effect = SlimeDrippingEffect(
@@ -221,9 +224,6 @@ class SlimeBoss:
         )  # pixels/segundo (ajuste conforme necessário)
 
         # Mover horizontalmente
-        if not hasattr(self, "direction"):
-            self.direction = 1  # 1 = direita, -1 = esquerda
-
         self.x += speed * dt * self.direction
 
         # Calcular posição central
@@ -294,7 +294,7 @@ class SlimeBoss:
 
         # Retreating → Próximo stage homing (saiu da tela)
         if self.current_state == SlimeBossState.RETREATING and self.y <= -self.h:
-            if not hasattr(self, "_next_homing_stage"):
+            if self._next_homing_stage is None:
                 self._next_homing_stage = SlimeBossState.STAGE_2_HOMING
             next_stage = self._next_homing_stage
             self._next_homing_stage = None
@@ -424,8 +424,6 @@ class SlimeBoss:
 
         # Horizontal movement
         speed = 50.0
-        if not hasattr(self, "direction"):
-            self.direction = 1
         self.x += speed * dt * self.direction
         # ✅ USAR VALORES PRÉ-CALCULADOS
         if self.direction > 0 and self.x >= self.center_x + self.move_range:
@@ -449,7 +447,7 @@ class SlimeBoss:
         text_rect = text.get_rect(center=(rect.centerx, rect.centery))
         surface.blit(text, text_rect)
 
-    def draw(self, surface: pygame.Surface, fps: float = 60.0) -> None:
+    def draw(self, surface: pygame.Surface, _fps: float = 60.0) -> None:
         # Draw the slime sprite stretched to boss dimensions (with simple fallback)
         offset_x, offset_y = (0, 0)
 
@@ -495,8 +493,7 @@ class SlimeBoss:
             self._mask_cache.clear()
             self._scaled_frame_cache.clear()
             self._outline_cache.clear()
-            if hasattr(self, "_flash_surface"):
-                delattr(self, "_flash_surface")
+            self._flash_surface = None
             self._last_mask_size = current_size
 
         # ✅ OTIMIZAR VERIFICAÇÃO DE CACHE: usar .get() ao invés de 'in' + acesso
@@ -517,7 +514,7 @@ class SlimeBoss:
                 try:
                     frame = self.animation_frames[self.current_frame]
                     scaled_frame = pygame.transform.smoothscale(frame, current_size)
-                except Exception as e:
+                except (pygame.error, ValueError, TypeError) as e:
                     logging.warning(
                         f"SlimeBoss: Erro ao escalar frame {self.current_frame}: {e}"
                     )
@@ -531,7 +528,7 @@ class SlimeBoss:
             mask = pygame.mask.from_surface(
                 self._scaled_frame_cache[self.current_frame]
             )
-        except Exception as e:
+        except (pygame.error, ValueError, TypeError) as e:
             logging.warning(f"SlimeBoss: Erro ao criar máscara: {e}")
             mask = pygame.mask.Mask(current_size, fill=True)
 
@@ -554,7 +551,7 @@ class SlimeBoss:
         if alpha < 10:  # Invisível, pular completamente
             return
 
-        if not hasattr(self, "_flash_surface"):
+        if self._flash_surface is None:
             self._flash_surface = pygame.Surface(
                 (int(self.w), int(self.h)), pygame.SRCALPHA
             )
@@ -573,7 +570,7 @@ class SlimeBoss:
                         outline = mask.outline()
                         outline = outline[::4]  # 1/4 dos pontos
                         self._outline_cache[self.current_frame] = outline
-                    except Exception as e:
+                    except (pygame.error, ValueError, TypeError) as e:
                         logging.warning(
                             f"SlimeBoss: Erro ao gerar outline simplificado: {e}"
                         )
@@ -601,7 +598,7 @@ class SlimeBoss:
                             outline = outline[::2]  # Pegar metade dos pontos
 
                         self._outline_cache[self.current_frame] = outline
-                    except Exception as e:
+                    except (pygame.error, ValueError, TypeError) as e:
                         logging.warning(f"SlimeBoss: Erro ao gerar outline: {e}")
                         outline = []
                         self._outline_cache[self.current_frame] = outline

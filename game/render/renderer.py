@@ -736,7 +736,7 @@ def preload_celestial_images():
     for image_path in image_files:
         try:
             get_image(image_path)  # Carrega a imagem
-        except Exception as e:
+        except (OSError, pygame.error, ValueError, TypeError) as e:
             print(f"Erro ao pré-carregar imagem celestial {image_path}: {e}")
 
 

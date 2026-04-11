@@ -1558,7 +1558,7 @@ class PlayingScene(Scene):
                         if event.key == keycode:
                             self._activate_upgrade_slot(i)
                             break
-                except Exception:
+                except (AttributeError, TypeError):
                     # Fallback to defaults (1-9)
                     default_keys = [
                         pygame.K_1,

@@ -314,7 +314,6 @@ class SettingsView:
 
                     pygame.quit()
                     sys.exit(0)
-                    return True
                 elif self.layout_rects["popup_no_button"].collidepoint(pos):
                     self.show_restart_popup = False
                     return True

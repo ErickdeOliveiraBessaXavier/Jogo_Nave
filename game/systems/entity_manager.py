@@ -49,6 +49,7 @@ from ..entities.stone_golem_boss import (
     StoneGolemBoss,
 )
 from ..entities.stone_sentry import StoneSentry
+from ..core.upgrades_config import EMP_LINGER_DURATION
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
@@ -213,8 +214,6 @@ class EntityManager:
 
     def spawn_black_hole(self, x: float, y: float, duration: float) -> None:
         """Spawna um buraco negro."""
-        from ..entities.black_hole import BlackHole
-
         black_hole = BlackHole(x, y, duration)
         self.black_holes.append(black_hole)
 
@@ -368,8 +367,6 @@ class EntityManager:
         screen_width: int = 1600,
         screen_height: int = 900,
     ):
-        from typing import Any
-
         enemy_dt = 0.0 if freeze_enemies else dt
 
         new_alien_bullets: list[AlienBullet] = []
@@ -425,12 +422,7 @@ class EntityManager:
             for wave in emp_waves:
                 if wave.is_affecting_position(float(ex), float(ey), dt):
                     # Resetar/ativar timer de linger
-                    try:
-                        from ..core.upgrades_config import EMP_LINGER_DURATION
-
-                        setattr(entity, "emp_linger_timer", float(EMP_LINGER_DURATION))
-                    except Exception:
-                        setattr(entity, "emp_linger_timer", 3.0)
+                    setattr(entity, "emp_linger_timer", float(EMP_LINGER_DURATION))
                     return float(slow_factor)
 
             # Não está na onda, verificar linger
@@ -641,15 +633,6 @@ class EntityManager:
         Updates entities specifically for the game over slow motion sequence.
         This method consolidates the update logic previously found in PlayingScene.
         """
-        from typing import \
-            Any  # Used for type hinting lists of varied entities
-
-        from ..entities.eye_enemy import EyeEnemy
-        from ..entities.giant_meteor_boss import GiantMeteorBoss
-        from ..entities.mini_ship import MiniShip
-        from ..entities.slime_boss import SlimeBoss
-        from ..entities.spike_boss import SpikeBoss
-
         # List of entity groups to update
         entity_groups: list[list[Any]] = [
             self.enemies,
@@ -740,8 +723,6 @@ class EntityManager:
         fps: float = 60.0,
     ):
         """Desenha todas as entidades com a profundidade correta."""
-        from typing import Any
-
         # 1. Primeiro desenhamos os inimigos (base/fundo)
         if enemy_visible:
             # Meteoros do pool (fluxo contínuo)

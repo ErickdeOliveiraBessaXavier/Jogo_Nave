@@ -348,8 +348,6 @@ class SpikeBoss:
             dt: Delta time
             spikes: Lista de todos os spikes ativos
         """
-        import random
-
         # Se deve disparar todos os spikes (entrada em frenzy)
         if self.should_launch_all_spikes:
             self.should_launch_all_spikes = False

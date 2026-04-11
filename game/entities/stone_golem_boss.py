@@ -719,6 +719,9 @@ class StoneGolemBoss:
         self._orb_shots_done: int = 0
         self._orb_rotation: float = 0.0
         self._charge_particles: List[_ChargeParticle] = []
+        self._entry_debris: List[EntryDebris] = []
+        self._entry_debris_timer: float = 0.0
+        self._burst_done: bool = False
         self._time: float = 0.0
         self.rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
         self.emp_linger_timer: float = 0.0
@@ -788,6 +791,7 @@ class StoneGolemBoss:
         self._charge_particles = []
         self._entry_debris: List[EntryDebris] = []
         self._entry_debris_timer: float = 0.0
+        self._burst_done: bool = False
         self._time = 0.0
         self.rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
         self.emp_linger_timer = 0.0
@@ -996,7 +1000,7 @@ class StoneGolemBoss:
             self._jitter_y = random.uniform(-8, 8)
 
             # No frame exato do burst (primeira vez cruzando burst_y), solta o cluster massivo
-            if not hasattr(self, "_burst_done") or not self._burst_done:
+            if not self._burst_done:
                 self._spawn_debris_cluster(25, _px, _py)  # Explosão massiva
                 self._burst_done = True
 

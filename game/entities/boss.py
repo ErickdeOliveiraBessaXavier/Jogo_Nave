@@ -57,6 +57,8 @@ class Boss:
         self.speed = Config.BOSS_NORMAL_SPEED
         self.direction = 1
         self.entry_speed = Config.BOSS_ENTRY_SPEED
+        self.player_x: float = 0.0
+        self.player_y: float | None = None
 
         # State machine
         self.state = "entering"
@@ -69,6 +71,11 @@ class Boss:
         self.can_spawn_meteors = False
 
         # Attack system
+        self.attack_timer: Timer
+        self.charge_duration: float
+        self.charge_timer: Timer
+        self.fire_duration: float
+        self.fire_timer: Timer
         self._init_attack_system()
 
         # Manual charge progress tracking
@@ -128,9 +135,6 @@ class Boss:
 
     def _init_floating_squares(self) -> None:
         """Inicializa os quadrados flutuantes orbitando ao redor do boss."""
-        import math
-        import random
-
         # Criar 14 quadrados em órbitas ao redor do boss
         num_squares = 14
 
@@ -598,7 +602,7 @@ class Boss:
         self.attack_timer.start()
 
     def _launch_square_projectiles(
-        self, player_x: float, player_y: float
+        self, _player_x: float, _player_y: float
     ) -> List[BossSquare]:
         """
         Launch one or more floating squares as projectiles towards the player.

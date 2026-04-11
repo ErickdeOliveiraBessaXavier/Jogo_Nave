@@ -1058,7 +1058,7 @@ class PlayerProfile:
 
                     loadout_raw = data.get("upgrade_loadout")
                     if isinstance(loadout_raw, list):
-                        from typing import Optional, cast
+                        from typing import cast
 
                         slots: List[Optional[UpgradeType]] = []
                         for item in cast(List[Any], loadout_raw)[:UPGRADE_SLOT_COUNT]:
@@ -1371,8 +1371,6 @@ class ProfileVisualizer:
         y: int,
     ):
         """Renderiza preview de um nível com estatísticas."""
-        import pygame
-
         from ..core import colors
         from ..core.assets import get_font
 
