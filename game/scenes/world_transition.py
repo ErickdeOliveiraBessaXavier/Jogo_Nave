@@ -70,6 +70,8 @@ class WorldTransitionScene(Scene):
             # Fade out
             alpha = int(((self.duration - self.timer) / fade_duration) * 255)
 
+        alpha = max(0, min(255, alpha))
+
         overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
         primary_rgb = self._normalize_rgb(self.new_world.primary_color)
         secondary_rgb = self._normalize_rgb(self.new_world.secondary_color)
@@ -130,7 +132,7 @@ class WorldTransitionScene(Scene):
         # Linha separadora minimalista para reforçar hierarquia visual.
         sep_width = 140
         sep_rect = pygame.Rect(center_x - sep_width // 2, current_y, sep_width, 2)
-        pygame.draw.rect(overlay, (*primary_rgb, alpha), sep_rect)
+        pygame.draw.rect(overlay, primary_rgb, sep_rect)
         current_y += 20
 
         # === DESCRIÇÃO ===
