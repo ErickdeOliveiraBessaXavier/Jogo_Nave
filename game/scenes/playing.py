@@ -73,7 +73,7 @@ class PlayingScene(Scene):
         self.player_profile.start_session()
 
         # Detectar modo de jogo CEDO (antes de criar nave)
-        self.current_level_index: int = 9
+        self.current_level_index: int = 0
         self.current_world = get_world_for_level(self.current_level_index + 1)
         self.is_side_scroll = is_side_scroll_mode(self.current_world.theme)
 
@@ -818,10 +818,7 @@ class PlayingScene(Scene):
 
             self._update_warning_system(dt)
 
-        elif self.transition_phase in (
-            TransitionPhase.PLAYING,
-            TransitionPhase.LEVEL_ENTRY,
-        ):
+        elif self.transition_phase == TransitionPhase.PLAYING:
             # Atualizar timer de limpeza de inimigos se ativo
             if self.enemy_cleanup_active:
                 self.enemy_cleanup_timer += dt
@@ -1877,8 +1874,8 @@ class PlayingScene(Scene):
         if theme_changed:
             self._start_world_transition_cutscene(new_world)
         else:
-            # Sem troca de mundo, transição padrão imediata.
-            self._begin_level_preparation()
+            # Sem troca de mundo, iniciar o próximo nível imediatamente.
+            self._begin_playing_state()
 
         # Reset enemy cleanup system
         self.enemy_cleanup_active = False
