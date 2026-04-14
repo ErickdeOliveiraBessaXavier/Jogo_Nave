@@ -806,7 +806,10 @@ class PlayingScene(Scene):
         self.entity_manager.cleanup()
 
         # Lógica de progressão de fase
-        if self.pre_boss_transition:
+        if self.boss_fight_active:
+            if self.entity_manager.boss and self.entity_manager.boss.dead:
+                self._end_boss_fight()
+        elif self.pre_boss_transition:
             if not self.entity_manager.enemies and self.warning_stage == 0:
                 # Iniciar sequência de warning em 3 estágios
                 self.warning_stage = 1  # Estágio 1: Pre-delay
@@ -862,8 +865,6 @@ class PlayingScene(Scene):
                     self.entity_manager.formations.clear()
 
             self._check_level_progression()
-        elif self.entity_manager.boss and self.entity_manager.boss.dead:
-            self._end_boss_fight()
 
         # Auto-save profile periodically
         self.player_profile.auto_save()
