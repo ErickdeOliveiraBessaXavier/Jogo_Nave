@@ -4,6 +4,7 @@ import logging
 import math
 import random
 import time
+from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 import pygame
@@ -42,6 +43,15 @@ if TYPE_CHECKING:
     from ..core.spatial_grid import SpatialGrid
 
 
+class TransitionPhase(Enum):
+    PLAYING = auto()
+    POST_VICTORY_DELAY = auto()
+    LEVEL_TRANSITION_WAIT = auto()
+    CUTSCENE_EXIT = auto()
+    WORLD_PANEL = auto()
+    LEVEL_ENTRY = auto()
+
+
 class PlayingScene(Scene):
     def __init__(
         self,
@@ -63,7 +73,7 @@ class PlayingScene(Scene):
         self.player_profile.start_session()
 
         # Detectar modo de jogo CEDO (antes de criar nave)
-        self.current_level_index: int = 0
+        self.current_level_index: int = 9
         self.current_world = get_world_for_level(self.current_level_index + 1)
         self.is_side_scroll = is_side_scroll_mode(self.current_world.theme)
 
@@ -101,6 +111,8 @@ class PlayingScene(Scene):
         self.level_start_time: Optional[float] = None
         self.level_damage_taken: int = 0
         self.level_powerups_collected: int = 0
+        self.level_attempt_recorded: bool = False
+        self.transition_phase: TransitionPhase = TransitionPhase.LEVEL_ENTRY
         self._apply_difficulty_settings()
         self.enemies_destroyed_in_level = 0
         self.boss_fight_active = False
@@ -120,6 +132,14 @@ class PlayingScene(Scene):
         self.level_transition_active = False
         self.level_transition_timer = 0.0
         self.level_transition_delay = Config.LEVEL_TRANSITION_DELAY  # segundos
+        self.level_transition_pending = False
+        self.level_transition_pending_timer = 0.0
+        self.level_transition_pending_delay = Config.LEVEL_TRANSITION_PENDING_DELAY
+        self.level_transition_animation_timeout = (
+            Config.LEVEL_TRANSITION_ANIMATION_TIMEOUT
+        )
+        self.pending_world_transition: Optional[WorldConfig] = None
+        self.awaiting_world_transition_panel = False
 
         self.screen_shake_timer = 0.0
         self.screen_shake_intensity = Config.SCREEN_SHAKE_NORMAL
@@ -198,10 +218,18 @@ class PlayingScene(Scene):
         # Cutscene de transição de mundo (saída da nave antes do painel)
         self.world_transition_cutscene_active = False
         self.world_transition_cutscene_timer = 0.0
-        self.world_transition_cutscene_duration = 1.6
-        self.world_transition_cutscene_charge_duration = 0.6
-        self.world_transition_cutscene_launch_speed = 80.0
+        self.world_transition_cutscene_duration = (
+            Config.WORLD_TRANSITION_CUTSCENE_DURATION
+        )
+        self.world_transition_cutscene_charge_duration = (
+            Config.WORLD_TRANSITION_CUTSCENE_CHARGE_DURATION
+        )
+        self.world_transition_cutscene_launch_speed = (
+            Config.WORLD_TRANSITION_CUTSCENE_LAUNCH_SPEED
+        )
         self.world_transition_cutscene_origin = (0.0, 0.0)
+        self.world_transition_cutscene_recoil_offset = 0.0
+        self.world_transition_cutscene_launch_distance = 0.0
         self.world_transition_cutscene_target_world: Optional[WorldConfig] = None
         self.world_transition_cutscene_debug_mode = False
         self.world_transition_thruster_particles: list[dict[str, Any]] = []
@@ -246,6 +274,7 @@ class PlayingScene(Scene):
         self.level_start_time: Optional[float] = None
         self.level_damage_taken = 0
         self.level_powerups_collected = 0
+        self.level_attempt_recorded = False
 
     def _cache_level_thresholds(self):
         """Pre-calcula valores usados em verificações frequentes."""
@@ -264,6 +293,75 @@ class PlayingScene(Scene):
             f"🌍 Mundo aplicado: {self.current_world.name} ({self.current_world.theme.value})"
         )
 
+    def _set_transition_phase(self, phase: TransitionPhase) -> None:
+        """Atualiza a fase de transicao e sincroniza os flags legados."""
+        self.transition_phase = phase
+        self.level_transition_pending = phase == TransitionPhase.POST_VICTORY_DELAY
+        self.level_transition_active = phase == TransitionPhase.LEVEL_TRANSITION_WAIT
+        self.world_transition_cutscene_active = phase == TransitionPhase.CUTSCENE_EXIT
+        self.awaiting_world_transition_panel = phase == TransitionPhase.WORLD_PANEL
+
+        if phase != TransitionPhase.POST_VICTORY_DELAY:
+            self.level_transition_pending_timer = 0.0
+        if phase != TransitionPhase.LEVEL_TRANSITION_WAIT:
+            self.level_transition_timer = 0.0
+
+    def _can_handle_gameplay_actions(self) -> bool:
+        """Retorna True quando o jogador pode agir normalmente."""
+        return self.transition_phase == TransitionPhase.PLAYING
+
+    def _begin_level_preparation(self) -> None:
+        """Coloca a cena em modo de preparação para o próximo nível."""
+        self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
+        self.level_transition_pending = False
+        self.level_transition_active = False
+        self.awaiting_world_transition_panel = False
+        self.state = "preparing"
+        self.preparation_time_left = Config.PREPARATION_TIME
+        self.level_start_time = None
+        self.level_damage_taken = 0
+        self.level_powerups_collected = 0
+        self.level_attempt_recorded = False
+        self._reset_ship_for_level_entry()
+
+    def _begin_playing_state(self) -> None:
+        """Ativa o gameplay e registra a tentativa do nível uma única vez."""
+        self._set_transition_phase(TransitionPhase.PLAYING)
+        self.state = "playing"
+        self.ship.is_entering = False
+        if self.level_start_time is None:
+            self.level_start_time = time.time()
+        if not self.level_attempt_recorded:
+            self.player_profile.record_attempt(self.current_level_index + 1)
+            self.level_attempt_recorded = True
+
+    def _apply_pending_world_transition(self) -> None:
+        """Aplica o mundo pendente após o painel de transição finalizar."""
+        if self.pending_world_transition is None:
+            self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
+            return
+
+        new_world = self.pending_world_transition
+        self.pending_world_transition = None
+        self.awaiting_world_transition_panel = False
+
+        self.current_world = new_world
+        self._apply_world_theme()
+
+        new_is_side_scroll = is_side_scroll_mode(self.current_world.theme)
+        if new_is_side_scroll != self.is_side_scroll:
+            self.is_side_scroll = new_is_side_scroll
+            self.entity_manager.is_side_scroll = new_is_side_scroll
+            self.ship.is_side_scroll = new_is_side_scroll
+            self.collisions.is_side_scroll = new_is_side_scroll
+            logger.info(
+                f"📋 Modo alterado para: {'Side-Scroll (Horizontal)' if self.is_side_scroll else 'Top-Down (Vertical)'}"
+            )
+
+        logger.info(f"✨ Bem-vindo ao {new_world.name}!")
+
+        self._begin_level_preparation()
+
     def _reset_ship_for_level_entry(self) -> None:
         """Reposiciona a nave para a animação de entrada do próximo nível."""
         self.ship.is_entering = True
@@ -279,14 +377,14 @@ class PlayingScene(Scene):
             self.ship.set_rotation(0.0)
 
     def _find_next_world_for_debug_preview(self):
-        """Retorna o próximo mundo diferente para preview visual da transição."""
+        """Retorna o próximo mundo com tema diferente para preview visual da transição."""
         current_level = self.current_level_index + 1
         base_world = get_world_for_level(current_level)
 
         # Janela ampla para cobrir setores procedurais sem custo relevante.
         for level in range(current_level + 1, current_level + 120):
             candidate_world = get_world_for_level(level)
-            if candidate_world.world_id != base_world.world_id:
+            if candidate_world.theme != base_world.theme:
                 return candidate_world, level
 
         return None, None
@@ -301,8 +399,8 @@ class PlayingScene(Scene):
         for _ in range(intensity):
             if self.is_side_scroll:
                 particle = {
-                    "x": self.ship.x + random.uniform(-14, 4),
-                    "y": self.ship.y + sprite_h / 2 + random.uniform(-8, 8),
+                    "offset_x": random.uniform(-14, 4),
+                    "offset_y": sprite_h / 2 + random.uniform(-8, 8),
                     "vx": -random.uniform(220, 460),
                     "vy": random.uniform(-120, 120),
                     "lifetime": random.uniform(0.14, 0.34),
@@ -311,8 +409,8 @@ class PlayingScene(Scene):
                 }
             else:
                 particle = {
-                    "x": self.ship.x + sprite_w / 2 + random.uniform(-9, 9),
-                    "y": self.ship.y + sprite_h + random.uniform(-4, 10),
+                    "offset_x": sprite_w / 2 + random.uniform(-9, 9),
+                    "offset_y": sprite_h + random.uniform(-4, 10),
                     "vx": random.uniform(-90, 90),
                     "vy": random.uniform(220, 460),
                     "lifetime": random.uniform(0.14, 0.34),
@@ -325,8 +423,8 @@ class PlayingScene(Scene):
         """Atualiza partículas extras da cutscene."""
         self.world_transition_thruster_particles = [
             {
-                "x": p["x"] + p["vx"] * dt,
-                "y": p["y"] + p["vy"] * dt,
+                "offset_x": p["offset_x"] + p["vx"] * dt,
+                "offset_y": p["offset_y"] + p["vy"] * dt,
                 "vx": p["vx"],
                 "vy": p["vy"],
                 "lifetime": p["lifetime"] - dt,
@@ -341,15 +439,19 @@ class PlayingScene(Scene):
         self, target_world: WorldConfig, debug_mode: bool = False
     ) -> None:
         """Inicia a cutscene de saída da nave antes do painel de transição."""
-        self.world_transition_cutscene_active = True
+        self._set_transition_phase(TransitionPhase.CUTSCENE_EXIT)
         self.world_transition_cutscene_timer = 0.0
-        self.world_transition_cutscene_launch_speed = 80.0
+        self.world_transition_cutscene_launch_speed = (
+            Config.WORLD_TRANSITION_CUTSCENE_LAUNCH_SPEED
+        )
         self.world_transition_cutscene_origin = (float(self.ship.x), float(self.ship.y))
+        self.world_transition_cutscene_recoil_offset = 0.0
+        self.world_transition_cutscene_launch_distance = 0.0
         self.world_transition_cutscene_target_world = target_world
         self.world_transition_cutscene_debug_mode = debug_mode
         self.world_transition_thruster_particles.clear()
 
-        # Tremor/partículas ficam ligados durante a sequência.
+        # A cutscene usa apenas movimento da nave; não há tremor de tela.
         self.ship.is_entering = True
         self.ship.is_side_scroll = self.is_side_scroll
 
@@ -370,15 +472,17 @@ class PlayingScene(Scene):
         self.world_transition_cutscene_target_world = None
         self.world_transition_cutscene_debug_mode = False
         self.world_transition_thruster_particles.clear()
-        self.screen_shake_intensity = Config.SCREEN_SHAKE_NORMAL
+        self.world_transition_cutscene_recoil_offset = 0.0
+        self.world_transition_cutscene_launch_distance = 0.0
 
         if target_world is None:
             return
 
-        # Após o painel, a entrada reaproveita a animação já existente.
-        self.state = "preparing"
-        self.preparation_time_left = Config.PREPARATION_TIME
-        self._reset_ship_for_level_entry()
+        if debug_mode:
+            # Preview de debug não altera progressão real.
+            self._begin_level_preparation()
+        else:
+            self._set_transition_phase(TransitionPhase.WORLD_PANEL)
 
         logger.info(
             f"[CUTSCENE] Saída concluída, abrindo painel de transição ({target_world.name})"
@@ -400,24 +504,64 @@ class PlayingScene(Scene):
         self.world_transition_cutscene_timer += dt
         t = self.world_transition_cutscene_timer
         charge_end = self.world_transition_cutscene_charge_duration
+        charge_progress = min(1.0, max(0.0, t / charge_end))
 
-        if t < charge_end:
-            # Fase de carga: tremor e motor intensificando.
-            jitter_x = math.sin(t * 45.0) * 1.6
-            jitter_y = math.cos(t * 38.0) * 1.4
-            self.ship.x = self.world_transition_cutscene_origin[0] + jitter_x
-            self.ship.y = self.world_transition_cutscene_origin[1] + jitter_y
-            self._spawn_world_transition_thruster_particles(intensity=8)
-            self.screen_shake_timer = max(self.screen_shake_timer, 0.08)
-            self.screen_shake_intensity = max(self.screen_shake_intensity, 12)
+        # Sequência visual da nave:
+        # 1) Tremor curto
+        # 2) Pequeno recoil para trás
+        # 3) Estabiliza com thrusters intensos
+        recoil_sign = -1.0 if self.is_side_scroll else 1.0
+        if charge_progress < 0.28:
+            tremble_strength = 1.8 * (1.0 - charge_progress * 0.8)
+            ship_x = self.world_transition_cutscene_origin[0]
+            ship_y = self.world_transition_cutscene_origin[1]
+            ship_x += math.sin(t * 55.0) * tremble_strength
+            ship_y += math.cos(t * 47.0) * tremble_strength * 0.75
+            self.world_transition_cutscene_recoil_offset = 0.0
+            thruster_intensity = 6
+        elif charge_progress < 0.68:
+            recoil_progress = (charge_progress - 0.28) / (0.68 - 0.28)
+            self.world_transition_cutscene_recoil_offset = 12.0 * recoil_progress
+            ship_x = self.world_transition_cutscene_origin[0]
+            ship_y = self.world_transition_cutscene_origin[1]
+            ship_x += recoil_sign * self.world_transition_cutscene_recoil_offset
+            tremble_strength = 1.2 * (1.0 - recoil_progress)
+            ship_x += math.sin(t * 42.0) * tremble_strength * 0.55
+            ship_y += math.cos(t * 39.0) * tremble_strength * 0.55
+            thruster_intensity = 10
         else:
+            hold_progress = (charge_progress - 0.68) / (1.0 - 0.68)
+            self.world_transition_cutscene_recoil_offset = 12.0
+            ship_x = (
+                self.world_transition_cutscene_origin[0]
+                + recoil_sign * self.world_transition_cutscene_recoil_offset
+            )
+            ship_y = self.world_transition_cutscene_origin[1]
+            thruster_intensity = 14 + int(6 * hold_progress)
+
+        self.ship.x = ship_x
+        self.ship.y = ship_y
+
+        self._spawn_world_transition_thruster_particles(intensity=thruster_intensity)
+
+        if t >= charge_end:
             # Fase de lançamento: aceleração rápida para fora da tela.
-            self.world_transition_cutscene_launch_speed += 2200.0 * dt
+            self.world_transition_cutscene_launch_speed += (
+                Config.WORLD_TRANSITION_CUTSCENE_LAUNCH_ACCELERATION * dt
+            )
             launch_speed = self.world_transition_cutscene_launch_speed
+            self.world_transition_cutscene_launch_distance += launch_speed * dt
             if self.is_side_scroll:
-                self.ship.x += launch_speed * dt
+                self.ship.x = (
+                    self.world_transition_cutscene_origin[0]
+                    + recoil_sign * self.world_transition_cutscene_recoil_offset
+                    + self.world_transition_cutscene_launch_distance
+                )
             else:
-                self.ship.y -= launch_speed * dt
+                self.ship.y = (
+                    self.world_transition_cutscene_origin[1]
+                    - self.world_transition_cutscene_launch_distance
+                )
             self._spawn_world_transition_thruster_particles(intensity=14)
 
         # Intensificar emissão base durante a cutscene.
@@ -457,15 +601,26 @@ class PlayingScene(Scene):
             sound_manager.music_state_manager.transition_to(MusicState.GAME)
             self.first_entry = False
 
+        if self.transition_phase == TransitionPhase.WORLD_PANEL:
+            self._apply_pending_world_transition()
+
     def exit(self):
         pygame.mouse.set_visible(True)
 
     def update(self, dt: float):
         self.last_dt = dt
 
-        if self.world_transition_cutscene_active:
+        if self.transition_phase == TransitionPhase.CUTSCENE_EXIT:
             self._update_world_transition_cutscene(dt)
             return
+
+        if self.transition_phase == TransitionPhase.POST_VICTORY_DELAY:
+            self.level_transition_pending_timer += dt
+            if (
+                self.level_transition_pending_timer
+                >= self.level_transition_pending_delay
+            ):
+                self._set_transition_phase(TransitionPhase.LEVEL_TRANSITION_WAIT)
 
         if self.state == "preparing":
             self.preparation_time_left -= dt
@@ -486,14 +641,7 @@ class PlayingScene(Scene):
                 else:
                     self.ship.x = target_x
                     self.ship.y = target_y
-                    self.state = "playing"
-                    self.ship.is_entering = False
-
-                    # Meta-progression: Record level attempt
-                    self.player_profile.record_attempt(self.current_level_index + 1)
-                    self.level_start_time = None
-                    self.level_damage_taken = 0
-                    self.level_powerups_collected = 0
+                    self._begin_playing_state()
             else:
                 # Top-down: Nave entra de baixo, move para topo (comportamento original)
                 target_y = Config.SCREEN_HEIGHT - 80
@@ -508,17 +656,7 @@ class PlayingScene(Scene):
                     self.ship.y = initial_y + (target_y - initial_y) * progress
                 else:
                     self.ship.y = target_y
-                    self.state = "playing"
-                    self.ship.is_entering = False
-
-                    # Meta-progression: Record level attempt
-                    self.player_profile.record_attempt(self.current_level_index + 1)
-                    self.level_start_time = None  # Reset to None instead of 0.0
-                    self.level_damage_taken = 0
-                    self.level_powerups_collected = 0
-
-        if self.state == "playing" and self.level_start_time is None:
-            self.level_start_time = time.time()
+                    self._begin_playing_state()
 
         # Timers
         self.time_stop_timer = max(0.0, self.time_stop_timer - dt)
@@ -547,10 +685,14 @@ class PlayingScene(Scene):
         else:
             self.screen_shake_timer = max(0.0, self.screen_shake_timer - dt)
 
-        if self.level_transition_active:
+        if self.transition_phase == TransitionPhase.LEVEL_TRANSITION_WAIT:
             self.level_transition_timer += dt
             if self.level_transition_timer >= self.level_transition_delay:
-                if self._all_animations_finished():
+                timed_out = self.level_transition_timer >= (
+                    self.level_transition_delay
+                    + self.level_transition_animation_timeout
+                )
+                if self._all_animations_finished() or timed_out:
                     self._start_next_level()
 
         self.ship.update(dt, self.entity_manager, is_side_scroll=self.is_side_scroll)
@@ -565,7 +707,7 @@ class PlayingScene(Scene):
             boss_pausing = cast(SpikeBoss, self.entity_manager.boss).is_pausing_game()
 
         # Bloquear movimento e tiro durante entrada da nave
-        if not self.ship.is_entering:
+        if self._can_handle_gameplay_actions() and not self.ship.is_entering:
             held = self.app.input.poll_held()
             self.ship.move(held, dt, is_side_scroll=self.is_side_scroll)
 
@@ -627,6 +769,7 @@ class PlayingScene(Scene):
             not self.boss_fight_active
             and not self.pre_boss_transition
             and not self.level_transition_active
+            and not self.level_transition_pending
         ):
             if not self.freeze_active:
                 self.enemy_spawner.update(
@@ -653,8 +796,12 @@ class PlayingScene(Scene):
             screen_height=Config.SCREEN_HEIGHT,
         )
 
-        # Processar colisões sempre (incluindo durante transições)
-        self._handle_collisions()
+        # Durante troca de fase, evitar novas colisões para não prolongar a transição.
+        if self.transition_phase in (
+            TransitionPhase.PLAYING,
+            TransitionPhase.LEVEL_ENTRY,
+        ):
+            self._handle_collisions()
 
         self.entity_manager.cleanup()
 
@@ -668,7 +815,10 @@ class PlayingScene(Scene):
 
             self._update_warning_system(dt)
 
-        elif not self.boss_fight_active and not self.level_transition_active:
+        elif self.transition_phase in (
+            TransitionPhase.PLAYING,
+            TransitionPhase.LEVEL_ENTRY,
+        ):
             # Atualizar timer de limpeza de inimigos se ativo
             if self.enemy_cleanup_active:
                 self.enemy_cleanup_timer += dt
@@ -777,7 +927,11 @@ class PlayingScene(Scene):
 
     def _all_animations_finished(self) -> bool:
         """Check if all animations (explosions) have finished for level transition."""
-        return not self.entity_manager.explosive_effects  # type: ignore
+        pool_stats = self.entity_manager.explosion_pool.get_stats()
+        return (
+            not self.entity_manager.explosive_effects
+            and pool_stats.get("active", 0) == 0
+        )
 
     def _process_cheat_input(self, event: pygame.event.Event):
         """
@@ -1667,6 +1821,9 @@ class PlayingScene(Scene):
         self._advance_to_next_level()
 
     def _advance_to_next_level(self):
+        if self.transition_phase == TransitionPhase.PLAYING:
+            self._set_transition_phase(TransitionPhase.POST_VICTORY_DELAY)
+
         # Meta-progression: Record level clear
         if self.level_start_time is not None:
             clear_time = time.time() - self.level_start_time
@@ -1679,12 +1836,8 @@ class PlayingScene(Scene):
                 powerups_collected=self.level_powerups_collected,
             )
 
-        if not self.level_transition_active:
-            self.level_transition_active = True
-            self.level_transition_timer = 0.0
-
     def _start_next_level(self):
-        self.level_transition_active = False
+        self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
         self.current_level_index += 1
 
         # Gerar próximo nível (sistema híbrido: fixo ou procedural)
@@ -1692,26 +1845,15 @@ class PlayingScene(Scene):
             self.current_level_index + 1
         )
 
-        # NOVO: Verificar mudança de mundo
+        # Dispara cutscene apenas quando muda o tema visual.
         new_world = get_world_for_level(self.current_level_index + 1)
-        world_changed = new_world.world_id != self.current_world.world_id
-        if new_world.world_id != self.current_world.world_id:
-            # Mudou de mundo! Aplicar novo tema
+        theme_changed = new_world.theme != self.current_world.theme
+        if theme_changed:
+            # Tema e modo serão aplicados só após o painel de transição.
+            self.pending_world_transition = new_world
+        else:
+            # Mantém o mundo em sincronia sem acionar transição temática.
             self.current_world = new_world
-            self._apply_world_theme()
-
-            # NOVO: Atualizar modo de jogo se mudou (top-down <-> side-scroll)
-            new_is_side_scroll = is_side_scroll_mode(self.current_world.theme)
-            if new_is_side_scroll != self.is_side_scroll:
-                self.is_side_scroll = new_is_side_scroll
-                self.entity_manager.is_side_scroll = new_is_side_scroll
-                self.ship.is_side_scroll = new_is_side_scroll
-                self.collisions.is_side_scroll = new_is_side_scroll
-                logger.info(
-                    f"📋 Modo alterado para: {'Side-Scroll (Horizontal)' if self.is_side_scroll else 'Top-Down (Vertical)'}"
-                )
-
-            logger.info(f"✨ Bem-vindo ao {new_world.name}!")
 
         # Atualizar cache de nível (otimização)
         self._cache_level_thresholds()
@@ -1729,23 +1871,19 @@ class PlayingScene(Scene):
         self.level_start_time = None  # Reset to None instead of 0.0
         self.level_damage_taken = 0
         self.level_powerups_collected = 0
+        self.level_attempt_recorded = False
 
-        # Reiniciar a entrada do nível para combinar com a transição de mundo
-        self.state = "preparing"
-        self.preparation_time_left = Config.PREPARATION_TIME
-        self._reset_ship_for_level_entry()
-
-        if world_changed:
+        if theme_changed:
             self._start_world_transition_cutscene(new_world)
+        else:
+            # Sem troca de mundo, transição padrão imediata.
+            self._begin_level_preparation()
 
         # Reset enemy cleanup system
         self.enemy_cleanup_active = False
         self.enemy_cleanup_timer = 0.0
         self.enemy_blink_timer = 0.0
         self.enemy_visible = True
-
-        # Meta-progression: Record attempt for new level
-        self.player_profile.record_attempt(self.current_level_index + 1)
 
         # Usar método que preserva balas do jogador durante transições
         self.entity_manager.clear_for_level_transition()
@@ -1772,7 +1910,7 @@ class PlayingScene(Scene):
             self._process_cheat_input(event)
 
             # Ativar upgrades (quando jogando)
-            if self.state == "playing" and not self.ship.is_entering:
+            if self._can_handle_gameplay_actions() and not self.ship.is_entering:
                 # Use keybindings from player profile
                 try:
                     keybinds = self.player_profile.upgrade_keybindings
@@ -1804,6 +1942,7 @@ class PlayingScene(Scene):
                 not self.ship.auto_fire
                 and self.shoot_cd == 0.0
                 and not self.ship.is_entering
+                and self._can_handle_gameplay_actions()
             ):
                 bullet_specs = self.ship.bullet_spawn()
                 for (
@@ -1874,10 +2013,12 @@ class PlayingScene(Scene):
 
         # Partículas extras da cutscene (atrás da nave)
         for p in self.world_transition_thruster_particles:
+            px = self.ship.x + p["offset_x"]
+            py = self.ship.y + p["offset_y"]
             pygame.draw.circle(
                 self.game_surface,
                 p["color"],
-                (int(p["x"]), int(p["y"])),
+                (int(px), int(py)),
                 max(1, int(p["size"])),
             )
 

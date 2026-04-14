@@ -102,23 +102,10 @@ class WorldTransitionScene(Scene):
 
         overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
 
-        # Fundo atmosférico com a paleta do novo mundo
+        # Fundo limpo e mais legível
         overlay.fill((*colors.BLACK, 230))
-        glow_radius = int(180 + 40 * math.sin(self.timer * 3.0))
         center_x = surface.get_width() // 2
         center_y = surface.get_height() // 2
-        pygame.draw.circle(
-            overlay,
-            (*self.new_world.primary_color, 70),
-            (center_x - 180, center_y - 120),
-            glow_radius,
-        )
-        pygame.draw.circle(
-            overlay,
-            (*self.new_world.secondary_color, 60),
-            (center_x + 180, center_y + 90),
-            glow_radius - 30,
-        )
 
         # Cartão principal
         card_width = min(760, surface.get_width() - 80)
@@ -145,18 +132,34 @@ class WorldTransitionScene(Scene):
         )
 
         # === TÍTULO DO MUNDO ===
-        title = self.font_title.render(
-            self.new_world.name, True, self.new_world.primary_color
+        title_top = card_y + 28
+        self._blit_wrapped_centered_text(
+            overlay,
+            self.font_title,
+            self.new_world.name,
+            self.new_world.primary_color,
+            center_x,
+            title_top,
+            card_width - 80,
+            alpha,
+            max_lines=2,
+            line_spacing=2,
         )
-        title.set_alpha(alpha)
-        title_rect = title.get_rect(center=(center_x, center_y - 96))
-        overlay.blit(title, title_rect)
 
         # === DESCRIÇÃO ===
-        desc = self.font_desc.render(self.new_world.description, True, colors.WHITE)
-        desc.set_alpha(alpha)
-        desc_rect = desc.get_rect(center=(center_x, center_y - 38))
-        overlay.blit(desc, desc_rect)
+        desc_top = card_y + 96
+        self._blit_wrapped_centered_text(
+            overlay,
+            self.font_desc,
+            self.new_world.description,
+            colors.WHITE,
+            center_x,
+            desc_top,
+            card_width - 90,
+            alpha,
+            max_lines=3,
+            line_spacing=4,
+        )
 
         # === DETALHES ===
         details = [
@@ -164,15 +167,21 @@ class WorldTransitionScene(Scene):
             self._get_mode_label(),
             self._get_boss_label(),
         ]
-        detail_y = center_y + 22
-        detail_gap = 34
+        detail_y = card_y + 178
+        detail_gap = 32
         for index, text in enumerate(details):
-            detail = self.font_meta.render(text, True, colors.WHITE)
-            detail.set_alpha(alpha)
-            detail_rect = detail.get_rect(
-                center=(center_x, detail_y + index * detail_gap)
+            self._blit_wrapped_centered_text(
+                overlay,
+                self.font_meta,
+                text,
+                colors.WHITE,
+                center_x,
+                detail_y + index * detail_gap,
+                card_width - 110,
+                alpha,
+                max_lines=1,
+                line_spacing=0,
             )
-            overlay.blit(detail, detail_rect)
 
         # === CORES DO MUNDO (visual) ===
         bar_height = 12
@@ -226,3 +235,60 @@ class WorldTransitionScene(Scene):
 
         overlay.set_alpha(alpha)
         surface.blit(overlay, (0, 0))
+
+    def _wrap_text(
+        self, font: pygame.font.Font, text: str, max_width: int
+    ) -> list[str]:
+        words = text.split()
+        if not words:
+            return [text]
+
+        lines: list[str] = []
+        current_line = words[0]
+
+        for word in words[1:]:
+            candidate = f"{current_line} {word}"
+            if font.size(candidate)[0] <= max_width:
+                current_line = candidate
+            else:
+                lines.append(current_line)
+                current_line = word
+
+        lines.append(current_line)
+        return lines
+
+    def _blit_wrapped_centered_text(
+        self,
+        surface: pygame.Surface,
+        font: pygame.font.Font,
+        text: str,
+        color: tuple[int, int, int],
+        center_x: int,
+        top_y: int,
+        max_width: int,
+        alpha: int,
+        max_lines: int | None = None,
+        line_spacing: int = 4,
+    ) -> None:
+        lines = self._wrap_text(font, text, max_width)
+        if max_lines is not None:
+            lines = lines[:max_lines]
+
+        rendered_lines = []
+        total_height = 0
+        for line in lines:
+            rendered = font.render(line, True, color)
+            rendered.set_alpha(alpha)
+            rendered_lines.append(rendered)
+            total_height += rendered.get_height()
+
+        if rendered_lines:
+            total_height += line_spacing * (len(rendered_lines) - 1)
+
+        current_y = top_y
+        for rendered in rendered_lines:
+            rect = rendered.get_rect(
+                center=(center_x, current_y + rendered.get_height() // 2)
+            )
+            surface.blit(rendered, rect)
+            current_y += rendered.get_height() + line_spacing

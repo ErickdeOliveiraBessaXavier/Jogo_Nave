@@ -162,6 +162,8 @@ class Config:
     # ========================================
     INVULN_TIME: float = 3.0
     LEVEL_TRANSITION_DELAY: float = 2.0
+    LEVEL_TRANSITION_PENDING_DELAY: float = 2.0
+    LEVEL_TRANSITION_ANIMATION_TIMEOUT: float = 1.2
     INITIAL_GAME_DELAY: float = 5.0
 
     # Boss warning sequence
@@ -198,6 +200,12 @@ class Config:
     GAME_OVER_FADE_DURATION: float = 2.0
     GAME_OVER_RESTART_DELAY: float = 1.5
     GAME_OVER_OVERLAY_ALPHA: int = 200  # 0-255
+
+    # World transition cutscene
+    WORLD_TRANSITION_CUTSCENE_DURATION: float = 1.6
+    WORLD_TRANSITION_CUTSCENE_CHARGE_DURATION: float = 0.6
+    WORLD_TRANSITION_CUTSCENE_LAUNCH_SPEED: float = 80.0
+    WORLD_TRANSITION_CUTSCENE_LAUNCH_ACCELERATION: float = 2200.0
 
     # ========================================
     # CLASSIC BOSS SYSTEM
@@ -280,7 +288,7 @@ class Config:
     # ========================================
     # STONE GOLEM BOSS
     # ========================================
-    GOLEM_HEALTH: int = 2500
+    GOLEM_HEALTH: int = 100
     GOLEM_ENTRY_SPEED: float = 160.0
     GOLEM_SPEED: float = 75.0
     GOLEM_SHARD_SPEED: float = 420.0
