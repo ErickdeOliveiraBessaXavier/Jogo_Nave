@@ -5,7 +5,7 @@ import math
 import random
 import time
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional, TypedDict, cast
 
 import pygame
 
@@ -52,6 +52,16 @@ class TransitionPhase(Enum):
     LEVEL_ENTRY = auto()
 
 
+class ThrusterParticle(TypedDict):
+    offset_x: float
+    offset_y: float
+    vx: float
+    vy: float
+    lifetime: float
+    size: float
+    color: tuple[int, int, int]
+
+
 class PlayingScene(Scene):
     def __init__(
         self,
@@ -73,7 +83,7 @@ class PlayingScene(Scene):
         self.player_profile.start_session()
 
         # Detectar modo de jogo CEDO (antes de criar nave)
-        self.current_level_index: int = 0
+        self.current_level_index: int = 9
         self.current_world = get_world_for_level(self.current_level_index + 1)
         self.is_side_scroll = is_side_scroll_mode(self.current_world.theme)
 
@@ -108,6 +118,7 @@ class PlayingScene(Scene):
         self.cheat_buffer: str = ""
         self.god_mode: bool = False
         self.state: str = "preparing"
+        self.preparation_time_left: float = Config.PREPARATION_TIME
         self.level_start_time: Optional[float] = None
         self.level_damage_taken: int = 0
         self.level_powerups_collected: int = 0
@@ -232,7 +243,7 @@ class PlayingScene(Scene):
         self.world_transition_cutscene_launch_distance = 0.0
         self.world_transition_cutscene_target_world: Optional[WorldConfig] = None
         self.world_transition_cutscene_debug_mode = False
-        self.world_transition_thruster_particles: list[dict[str, Any]] = []
+        self.world_transition_thruster_particles: list[ThrusterParticle] = []
 
         # Sistema de multiplicador de score
         self.score_multiplier_timer = 0.0
@@ -337,8 +348,15 @@ class PlayingScene(Scene):
 
     def _apply_pending_world_transition(self) -> None:
         """Aplica o mundo pendente após o painel de transição finalizar."""
+        if (
+            self.pending_world_transition is None
+            and self.transition_phase == TransitionPhase.PLAYING
+        ):
+            return
+
         if self.pending_world_transition is None:
-            self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
+            self.awaiting_world_transition_panel = False
+            self._begin_playing_state()
             return
 
         new_world = self.pending_world_transition
@@ -398,7 +416,7 @@ class PlayingScene(Scene):
 
         for _ in range(intensity):
             if self.is_side_scroll:
-                particle = {
+                particle: ThrusterParticle = {
                     "offset_x": random.uniform(-14, 4),
                     "offset_y": sprite_h / 2 + random.uniform(-8, 8),
                     "vx": -random.uniform(220, 460),
@@ -1657,7 +1675,8 @@ class PlayingScene(Scene):
                 if self.has_boss:  # Cache ao invés de self.level_config.boss_type
                     self.pre_boss_transition = True
                 else:
-                    self._advance_to_next_level()
+                    # Fase comum sem boss: sem delays, troca instantânea
+                    self._advance_to_next_level(with_delay=False)
 
     def _start_boss_fight(self):
         self.pre_boss_transition = False
@@ -1818,10 +1837,7 @@ class PlayingScene(Scene):
         sound_manager.music_state_manager.transition_to(MusicState.GAME)
         self._advance_to_next_level()
 
-    def _advance_to_next_level(self):
-        if self.transition_phase == TransitionPhase.PLAYING:
-            self._set_transition_phase(TransitionPhase.POST_VICTORY_DELAY)
-
+    def _advance_to_next_level(self, with_delay: bool = True):
         # Meta-progression: Record level clear
         if self.level_start_time is not None:
             clear_time = time.time() - self.level_start_time
@@ -1833,6 +1849,15 @@ class PlayingScene(Scene):
                 damage_taken=self.level_damage_taken,
                 powerups_collected=self.level_powerups_collected,
             )
+
+        if with_delay:
+            # Boss fights e trocas de mundo: pipeline completo com delays
+            # (dá tempo para explosões terminarem e a transição ficar bonita)
+            if self.transition_phase == TransitionPhase.PLAYING:
+                self._set_transition_phase(TransitionPhase.POST_VICTORY_DELAY)
+        else:
+            # Fases comuns (sem boss, mesmo mundo): avançar imediatamente
+            self._start_next_level()
 
     def _start_next_level(self):
         self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
@@ -1852,6 +1877,7 @@ class PlayingScene(Scene):
         else:
             # Mantém o mundo em sincronia sem acionar transição temática.
             self.current_world = new_world
+            self.pending_world_transition = None
 
         # Atualizar cache de nível (otimização)
         self._cache_level_thresholds()

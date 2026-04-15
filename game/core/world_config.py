@@ -91,7 +91,7 @@ def _get_worlds() -> dict[int, WorldConfig]:
             },
         ),
         2: WorldConfig(
-            world_id=2,
+        world_id=2,
             name="Vazio Sideral",
             description="A vastidão infinita do espaço profundo",
             theme=WorldTheme.STARFIELD,
@@ -275,7 +275,7 @@ def print_world_summary() -> None:
         if world.theme_modifiers:
             logger.info(f"   Modificadores: {world.theme_modifiers}")
 
-    logger.info("\n" + "=" * 70)
+    logger.info("\n%s", "=" * 70)
     logger.info("Níveis 41+: Mundos procedurais infinitos")
     logger.info("=" * 70)
 

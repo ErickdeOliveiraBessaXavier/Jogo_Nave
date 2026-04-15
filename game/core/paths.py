@@ -27,9 +27,9 @@ def get_user_data_dir() -> Path:
         # Criar diretório se não existir
         data_dir.mkdir(parents=True, exist_ok=True)
         return data_dir
-    else:
-        # Modo desenvolvimento: usa diretório atual
-        return Path.cwd()
+
+    # Modo desenvolvimento: usa diretório atual
+    return Path.cwd()
 
 
 def get_profile_path() -> Path:

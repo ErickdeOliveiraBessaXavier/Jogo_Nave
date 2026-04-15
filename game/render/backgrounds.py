@@ -48,17 +48,17 @@ class Background(ABC):
     @abstractmethod
     def update(self, dt: float, speed_mult: float = 1.0) -> None:
         """Atualiza animação do background."""
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def draw(self, surface: pygame.Surface) -> None:
         """Desenha o background."""
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def reset(self) -> None:
         """Reseta para estado inicial."""
-        pass
+        raise NotImplementedError
 
 
 class Cloud:

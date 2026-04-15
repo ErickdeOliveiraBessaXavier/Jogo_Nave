@@ -240,18 +240,19 @@ class WorldTransitionScene(Scene):
         if max_lines is not None:
             lines = lines[:max_lines]
 
-        rendered_lines = []
+        rendered_lines: list[pygame.Surface] = []
         for line in lines:
-            rendered = font.render(line, True, color)
+            rendered: pygame.Surface = font.render(line, True, color)
             rendered.set_alpha(alpha)
             rendered_lines.append(rendered)
 
-        current_y = top_y
+        current_y: int = top_y
         for rendered in rendered_lines:
-            rect = rendered.get_rect(
-                center=(center_x, current_y + rendered.get_height() // 2)
+            rendered_height: int = rendered.get_height()
+            rect: pygame.Rect = rendered.get_rect(
+                center=(center_x, current_y + rendered_height // 2)
             )
             surface.blit(rendered, rect)
-            current_y += rendered.get_height() + line_spacing
+            current_y += rendered_height + line_spacing
 
         return current_y - top_y

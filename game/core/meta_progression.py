@@ -303,16 +303,15 @@ class PerformanceAnalyzer:
 
         if total_points < 20:
             return "Novato"
-        elif total_points < 40:
+        if total_points < 40:
             return "Aprendiz"
-        elif total_points < 60:
+        if total_points < 60:
             return "Intermediário"
-        elif total_points < 80:
+        if total_points < 80:
             return "Avançado"
-        elif total_points < 90:
+        if total_points < 90:
             return "Veterano"
-        else:
-            return "Mestre"
+        return "Mestre"
 
     @staticmethod
     def _calculate_trend(values: List[float]) -> str:
@@ -335,10 +334,9 @@ class PerformanceAnalyzer:
 
         if slope > 0.05:
             return "improving"
-        elif slope < -0.05:
+        if slope < -0.05:
             return "declining"
-        else:
-            return "stable"
+        return "stable"
 
     @staticmethod
     def _generate_recommendations(
@@ -1427,9 +1425,8 @@ class ProfileVisualizer:
         """Retorna cor baseada na taxa de sucesso."""
         if clear_rate < 0.3:
             return (255, 0, 0)  # Vermelho - struggling
-        elif clear_rate < 0.5:
+        if clear_rate < 0.5:
             return (255, 165, 0)  # Laranja - learning
-        elif clear_rate < 0.8:
+        if clear_rate < 0.8:
             return (0, 255, 0)  # Verde - comfortable
-        else:
-            return (0, 191, 255)  # Azul - dominating
+        return (0, 191, 255)  # Azul - dominating

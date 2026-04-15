@@ -634,8 +634,10 @@ class Config:
 _config_instance = Config()
 
 
-_runtime_screen_width = _config_instance.SCREEN_WIDTH
-_runtime_screen_height = _config_instance.SCREEN_HEIGHT
+_runtime_screen = {
+    "width": _config_instance.SCREEN_WIDTH,
+    "height": _config_instance.SCREEN_HEIGHT,
+}
 
 
 class ConfigProxy:
@@ -646,11 +648,10 @@ class ConfigProxy:
 
     def __getattr__(self, name: str) -> Any:
         if name == "SCREEN_WIDTH":
-            return _runtime_screen_width
+            return _runtime_screen["width"]
         if name == "SCREEN_HEIGHT":
-            return _runtime_screen_height
-        else:
-            return getattr(self._config, name)
+            return _runtime_screen["height"]
+        return getattr(self._config, name)
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name == "_config":
@@ -661,9 +662,8 @@ class ConfigProxy:
 
 def set_screen_resolution(width: int, height: int):
     """Atualiza a resolução da tela em tempo de execução."""
-    global _runtime_screen_width, _runtime_screen_height
-    _runtime_screen_width = width
-    _runtime_screen_height = height
+    _runtime_screen["width"] = width
+    _runtime_screen["height"] = height
 
 
 # Envolver a instância com o proxy
