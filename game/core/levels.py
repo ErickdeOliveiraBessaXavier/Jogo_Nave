@@ -535,7 +535,6 @@ class ProceduralLevelGenerator:
             float,
         ] = {}  # Tipo -> tempo de spawn
 
-
         # Verificar se é fase especial "meteor_only"
         if theme and theme.special_feature == "meteor_only":
             # Apenas meteoros, spawn rate extremo

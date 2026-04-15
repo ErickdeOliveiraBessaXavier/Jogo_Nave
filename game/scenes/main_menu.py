@@ -1,3 +1,4 @@
+import logging
 import math
 import random
 from enum import Enum
@@ -18,10 +19,14 @@ from ..core.state import Scene
 from ..core.world_config import get_world_for_level_by_id
 from ..entities.explosion_pool import ExplosionPool
 from ..entities.meteor import Meteor
+from ..scenes.difficulty_selection import DifficultySelectionView
+from ..scenes.playing import PlayingScene
 from ..scenes.settings import SettingsScene
 from ..scenes.statistics import StatisticsScene
 from ..scenes.upgrades_selection import UpgradesSelectionScene
 from ..scenes.world_selection import WorldSelectionView
+
+logger = logging.getLogger(__name__)
 
 
 class CharDict(TypedDict):
@@ -432,8 +437,6 @@ class MainMenuScene(Scene):
 
     def _on_difficulty_selected(self, preset: DifficultyPreset):
         """Callback quando uma dificuldade é selecionada."""
-        from ..scenes.playing import PlayingScene
-
         # Armazenar dificuldade no app
         self.app.selected_difficulty = preset
 
@@ -446,7 +449,8 @@ class MainMenuScene(Scene):
         starting_level = world_config.start_level if world_config else 1
 
         # Resetar score quando iniciar em novo checkpoint
-        self.app.player_profile.current_session.score = 0
+        if self.app.player_profile.current_session:
+            self.app.player_profile.current_session.score = 0
 
         # Criar e empurrar a cena de jogo
         self.app.states.pop()  # Remove menu

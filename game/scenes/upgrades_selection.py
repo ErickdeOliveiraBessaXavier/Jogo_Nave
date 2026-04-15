@@ -11,8 +11,12 @@ from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_profile_path
 from ..core.state import Scene
-from ..core.upgrades import (UpgradeCategory, UpgradeMeta, get_upgrade_icon,
-                             list_all_upgrades_meta)
+from ..core.upgrades import (
+    UpgradeCategory,
+    UpgradeMeta,
+    get_upgrade_icon,
+    list_all_upgrades_meta,
+)
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 
 if TYPE_CHECKING:

@@ -13,6 +13,7 @@ from ..entities.alien_bullet import AlienBullet
 @dataclass
 class Particle:
     """Partícula de pedra flutuante."""
+
     x: float
     y: float
     vx: float
@@ -112,6 +113,7 @@ class StoneShardBullet(AlienBullet):
             hit_radius * 2,
         )
 
+
 class StoneSentry:
     """
     Inimigo Sentinela de Pedra - Tema de Montanha.
@@ -128,7 +130,7 @@ class StoneSentry:
     ACCENT_COLORS = [(185, 108, 68), (206, 126, 74), (230, 160, 104)]
     EXPLOSION_COLORS = [(130, 110, 80), (100, 100, 100), (255, 60, 60)]
     LOW_RES_SIZE = 20
-    
+
     # Constantes de movimento e física
     EDGE_MARGIN = 20.0
     REPULSION_RADIUS = 90.0
@@ -148,24 +150,24 @@ class StoneSentry:
         self.y = -self.h
         self.target_y = random.randint(50, 200)
         self.speed_y = 150.0
-        
+
         self.float_amplitude = 10.0
         self.float_frequency = 2.0
         self.float_offset = 0.0
         self._entry_done = False
-        
+
         # Cache de garras por frame
         self._claw_tips: Tuple[Tuple[float, float], Tuple[float, float]] | None = None
-        
+
         self.dead = False
         self.health = 30
         self.active = True
         self.hit_timer = 0.0
-        
+
         self.shoot_timer = random.uniform(2.7, 4.7)
         self._shoot_cycle = self.shoot_timer
         self.charge_duration = 1.45
-        
+
         self.rotation = 0.0
         self.rotation_speed = random.uniform(-15, 15)
         self.points = self._generate_stone_shape()
@@ -177,10 +179,12 @@ class StoneSentry:
         self._eye_spin_speed = random.uniform(45.0, 80.0)
         self._eye_spin_boost = 0.0
         self._shape_scale = (self.LOW_RES_SIZE - 2) / self.w
-        self._low_res_surface = pygame.Surface((self.LOW_RES_SIZE, self.LOW_RES_SIZE), pygame.SRCALPHA)
+        self._low_res_surface = pygame.Surface(
+            (self.LOW_RES_SIZE, self.LOW_RES_SIZE), pygame.SRCALPHA
+        )
         self._particles: list[Particle] = []
         self._crack_paths = self._generate_crack_paths()
-        
+
         self._arm_phase = random.uniform(0.0, math.tau)
         self._arm_sway = random.uniform(0.65, 1.0)
         self._arm_open_progress = 0.0
@@ -193,7 +197,7 @@ class StoneSentry:
         self._arm_impulse_stretch = 0.0
         self._was_jumping = False
         self._prev_jump_vy = 0.0
-        
+
         self._recoil_left = 0.0
         self._recoil_right = 0.0
         self.shake_offset_x = 0.0
@@ -212,7 +216,7 @@ class StoneSentry:
         self._land_timer: float = 0.0
         self._land_duration: float = random.uniform(5.0, 8.0)
         self._jump_count: int = 0
-        
+
         # NOVO: Guarda a instância do projétil que está sendo carregado
         self._charging_bullet: StoneShardBullet | None = None
         self._is_super_bullet: bool = False
@@ -249,7 +253,9 @@ class StoneSentry:
             paths.append(path)
         return paths
 
-    def _update_player_tracking(self, dt: float, player_pos: Tuple[float, float]) -> None:
+    def _update_player_tracking(
+        self, dt: float, player_pos: Tuple[float, float]
+    ) -> None:
         """Estimativa simples de velocidade do jogador para mira preditiva."""
         if dt <= 0.0:
             return
@@ -307,13 +313,20 @@ class StoneSentry:
         self._jump_gravity = random.uniform(260.0, 420.0)
 
         # vy inicial: resolve dy = vy*t + 0.5*g*t^2
-        self._jump_vy = (dy - 0.5 * self._jump_gravity * flight_time * flight_time) / flight_time
+        self._jump_vy = (
+            dy - 0.5 * self._jump_gravity * flight_time * flight_time
+        ) / flight_time
         self._jump_vx = dx / flight_time
 
         self._is_jumping = True
         self._land_duration = random.uniform(5.0, 8.0)
 
-    def _update_combat_movement(self, dt: float, player_pos: Tuple[float, float], nearby_enemies: list[Any] | None = None) -> None:
+    def _update_combat_movement(
+        self,
+        dt: float,
+        player_pos: Tuple[float, float],
+        nearby_enemies: list[Any] | None = None,
+    ) -> None:
         """Movimento de parábola simples com pouso no alvo."""
         min_y = 30.0
         max_y = Config.SCREEN_HEIGHT - self.h - 30.0
@@ -355,7 +368,9 @@ class StoneSentry:
             self._land_timer += dt
             # Só permite salto se não estiver ativamente carregando/disparando
             # Carregamento acontece quando: 0 < shoot_timer <= charge_duration
-            if self._land_timer >= self._land_duration and not (0 < self.shoot_timer <= self.charge_duration):
+            if self._land_timer >= self._land_duration and not (
+                0 < self.shoot_timer <= self.charge_duration
+            ):
                 self._launch_jump(player_pos)
 
         # Repulsão entre StoneSentry próximos
@@ -415,8 +430,14 @@ class StoneSentry:
         arm_stretch = self._arm_impulse_stretch
         flex_x = c_ratio * 8.0 + arm_open * 15.0 + abs(self._arm_dyn_x) * 0.8
 
-        left_base = (body_cx - self.w * 0.28 - flex_x + self._arm_dyn_x, body_bottom + 2 + self._arm_dyn_y)
-        right_base = (body_cx + self.w * 0.28 + flex_x + self._arm_dyn_x, body_bottom + 2 + self._arm_dyn_y)
+        left_base = (
+            body_cx - self.w * 0.28 - flex_x + self._arm_dyn_x,
+            body_bottom + 2 + self._arm_dyn_y,
+        )
+        right_base = (
+            body_cx + self.w * 0.28 + flex_x + self._arm_dyn_x,
+            body_bottom + 2 + self._arm_dyn_y,
+        )
 
         left_tip, right_tip = self._get_claw_tips()
 
@@ -424,11 +445,17 @@ class StoneSentry:
         bend = 8.0 * (1.0 - arm_open) + 1.2
         left_joint = (
             left_base[0] * 0.45 + left_tip[0] * 0.55 - bend + sway * 0.25,
-            left_base[1] * 0.45 + left_tip[1] * 0.55 - (6.0 * (1.0 - arm_open)) - arm_stretch * 2.0,
+            left_base[1] * 0.45
+            + left_tip[1] * 0.55
+            - (6.0 * (1.0 - arm_open))
+            - arm_stretch * 2.0,
         )
         right_joint = (
             right_base[0] * 0.45 + right_tip[0] * 0.55 + bend - sway * 0.25,
-            right_base[1] * 0.45 + right_tip[1] * 0.55 - (6.0 * (1.0 - arm_open)) - arm_stretch * 2.0,
+            right_base[1] * 0.45
+            + right_tip[1] * 0.55
+            - (6.0 * (1.0 - arm_open))
+            - arm_stretch * 2.0,
         )
 
         # Paleta: braços mais claros, garras na cor base da sentinela.
@@ -449,9 +476,18 @@ class StoneSentry:
             def draw_rock(cx: float, cy: float, size: float, phase: float) -> None:
                 wobble_x = math.sin(self.pulse_timer * 3.5 + phase) * 0.9
                 wobble_y = math.cos(self.pulse_timer * 3.0 + phase * 0.8) * 0.8
-                w = max(3, int(size * (1.55 + 0.14 * math.sin(phase + self.pulse_timer))))
-                h = max(3, int(size * (1.35 + 0.16 * math.cos(phase * 0.7 + self.pulse_timer))))
-                rect = pygame.Rect(int(cx + wobble_x - w / 2), int(cy + wobble_y - h / 2), w, h)
+                w = max(
+                    3, int(size * (1.55 + 0.14 * math.sin(phase + self.pulse_timer)))
+                )
+                h = max(
+                    3,
+                    int(
+                        size * (1.35 + 0.16 * math.cos(phase * 0.7 + self.pulse_timer))
+                    ),
+                )
+                rect = pygame.Rect(
+                    int(cx + wobble_x - w / 2), int(cy + wobble_y - h / 2), w, h
+                )
                 pygame.draw.ellipse(screen, arm_col, rect)
                 pygame.draw.ellipse(screen, colors.BLACK, rect, border_w)
                 inner_rect = rect.inflate(-2, -2)
@@ -479,12 +515,24 @@ class StoneSentry:
             claw_open = 2.0 + 9.0 * arm_open + 3.0 * arm_stretch
 
             # Ponto superior e inferior da pinça
-            p1: tuple[float, float] = (tip[0] + dir_mod * (10 + claw_open), tip[1] - 8 - arm_open * 2.0)
-            p2: tuple[float, float] = (tip[0] + dir_mod * (12 + claw_open), tip[1] + 10 + arm_open * 2.0)
+            p1: tuple[float, float] = (
+                tip[0] + dir_mod * (10 + claw_open),
+                tip[1] - 8 - arm_open * 2.0,
+            )
+            p2: tuple[float, float] = (
+                tip[0] + dir_mod * (12 + claw_open),
+                tip[1] + 10 + arm_open * 2.0,
+            )
 
             # Pinças segmentadas em pedras (irregulares) com cor própria
-            upper_mid = (tip[0] + dir_mod * (5.5 + claw_open * 0.5), tip[1] - 4.0 - arm_open)
-            lower_mid = (tip[0] + dir_mod * (6.0 + claw_open * 0.5), tip[1] + 5.0 + arm_open)
+            upper_mid = (
+                tip[0] + dir_mod * (5.5 + claw_open * 0.5),
+                tip[1] - 4.0 - arm_open,
+            )
+            lower_mid = (
+                tip[0] + dir_mod * (6.0 + claw_open * 0.5),
+                tip[1] + 5.0 + arm_open,
+            )
             for idx, node in enumerate((upper_mid, p1)):
                 seg = pygame.Rect(int(node[0] - 3.0), int(node[1] - 2.5), 6, 5)
                 pygame.draw.ellipse(screen, claw_col, seg)
@@ -511,19 +559,25 @@ class StoneSentry:
             # 2) Desenhar as pedras do braço por cima
             # Vamos colocar 3 fragmentos entre a base e a ponta
             pts: list[tuple[float, float]] = [
-                (base[0] * 0.65 + joint[0] * 0.35, base[1] * 0.65 + joint[1] * 0.35), # Perto do corpo
-                (joint[0], joint[1]),                                                 # O "cotovelo"
-                (joint[0] * 0.35 + tip[0] * 0.65, joint[1] * 0.35 + tip[1] * 0.65)    # Perto da garra
+                (
+                    base[0] * 0.65 + joint[0] * 0.35,
+                    base[1] * 0.65 + joint[1] * 0.35,
+                ),  # Perto do corpo
+                (joint[0], joint[1]),  # O "cotovelo"
+                (
+                    joint[0] * 0.35 + tip[0] * 0.65,
+                    joint[1] * 0.35 + tip[1] * 0.65,
+                ),  # Perto da garra
             ]
-            
+
             # 2. Desenhar as pedras flutuantes com oscilação independente
             for i, (px, py) in enumerate(pts):
                 # Magia matemática: cada pedra flutua um pouco diferente da outra
                 float_y = math.sin(self.pulse_timer * 4.0 + i * 1.5) * 2.5
                 float_x = math.cos(self.pulse_timer * 3.0 + i * 1.5) * 1.5
-                
+
                 # A pedra do meio (cotovelo) é ligeiramente maior
-                size = 5 if i == 1 else 4 
+                size = 5 if i == 1 else 4
                 draw_rock(px + float_x, py + float_y, size, i * 1.7)
 
         # Renderizar braço esquerdo e direito
@@ -534,7 +588,12 @@ class StoneSentry:
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
-    def update(self, dt: float, player_pos: Tuple[float, float] | None = None, nearby_enemies: list[Any] | None = None) -> List[AlienBullet]:
+    def update(
+        self,
+        dt: float,
+        player_pos: Tuple[float, float] | None = None,
+        nearby_enemies: list[Any] | None = None,
+    ) -> List[AlienBullet]:
         if not self._entry_done:
             self.y += self.speed_y * dt
             if self.y >= self.target_y:
@@ -549,8 +608,13 @@ class StoneSentry:
                 self._update_combat_movement(dt, player_pos, nearby_enemies)
             else:
                 # Sem jogador: flutua suavemente no lugar
-                target_offset = math.sin(self.pulse_timer * self.float_frequency) * self.float_amplitude
-                self.float_offset += (target_offset - self.float_offset) * min(1.0, 8.0 * dt)
+                target_offset = (
+                    math.sin(self.pulse_timer * self.float_frequency)
+                    * self.float_amplitude
+                )
+                self.float_offset += (target_offset - self.float_offset) * min(
+                    1.0, 8.0 * dt
+                )
                 self.y = self.target_y + self.float_offset
 
         # Fisica secundaria dos bracos: impulso, queda com balanco e retorno rapido no pouso.
@@ -567,12 +631,16 @@ class StoneSentry:
             self._arm_dyn_vx *= 0.45
 
         if dt > 0.0:
-            jump_accel = (self._jump_vy - self._prev_jump_vy) / dt if self._is_jumping else 0.0
+            jump_accel = (
+                (self._jump_vy - self._prev_jump_vy) / dt if self._is_jumping else 0.0
+            )
             inertial_push = -jump_accel * 0.020
 
             if self._is_jumping and self._jump_vy > 0.0:
                 # Na queda: bracos sobem e balancam.
-                target_y = -14.0 + math.sin(self.pulse_timer * 7.5 + self._arm_phase) * 2.2
+                target_y = (
+                    -14.0 + math.sin(self.pulse_timer * 7.5 + self._arm_phase) * 2.2
+                )
                 target_x = math.sin(self.pulse_timer * 9.0 + self._arm_phase) * 5.0
                 settle_k = 26.0
                 damping = 7.8
@@ -589,8 +657,14 @@ class StoneSentry:
                 settle_k = 38.0
                 damping = 10.5
 
-            ay = (target_y - self._arm_dyn_y) * settle_k - self._arm_dyn_vy * damping + inertial_push
-            ax = (target_x - self._arm_dyn_x) * (settle_k * 0.70) - self._arm_dyn_vx * (damping * 0.90)
+            ay = (
+                (target_y - self._arm_dyn_y) * settle_k
+                - self._arm_dyn_vy * damping
+                + inertial_push
+            )
+            ax = (target_x - self._arm_dyn_x) * (settle_k * 0.70) - self._arm_dyn_vx * (
+                damping * 0.90
+            )
 
             self._arm_dyn_vy += ay * dt
             self._arm_dyn_vx += ax * dt
@@ -631,7 +705,9 @@ class StoneSentry:
 
         charge_boost = self.charge_ratio * 220.0
         target_spin_speed = 55.0 + charge_boost + self._eye_spin_boost
-        self._eye_spin_speed += (target_spin_speed - self._eye_spin_speed) * min(1.0, 10.0 * dt)
+        self._eye_spin_speed += (target_spin_speed - self._eye_spin_speed) * min(
+            1.0, 10.0 * dt
+        )
         self._eye_rotation = (self._eye_rotation + self._eye_spin_speed * dt) % 360.0
         self._eye_spin_boost = max(0.0, self._eye_spin_boost - 260.0 * dt)
 
@@ -649,13 +725,23 @@ class StoneSentry:
                 if self._charging_bullet is None:
                     self._charging_bullet = StoneShardBullet(0, 0)
                     # Decide if super bullet (10% chance) na criação
-                    self._is_super_bullet = random.random() < self.SUPER_PROJECTILE_CHANCE
+                    self._is_super_bullet = (
+                        random.random() < self.SUPER_PROJECTILE_CHANCE
+                    )
                     if self._is_super_bullet:
                         scale = self.SUPER_PROJECTILE_SCALE
-                        self._charging_bullet.current_radius = int(self._charging_bullet.current_radius * scale)
-                        self._charging_bullet.min_radius = int(self._charging_bullet.min_radius * scale)
-                        self._charging_bullet.max_radius = int(self._charging_bullet.max_radius * scale)
-                        self._charging_bullet.hit_radius = int(self._charging_bullet.hit_radius * scale)
+                        self._charging_bullet.current_radius = int(
+                            self._charging_bullet.current_radius * scale
+                        )
+                        self._charging_bullet.min_radius = int(
+                            self._charging_bullet.min_radius * scale
+                        )
+                        self._charging_bullet.max_radius = int(
+                            self._charging_bullet.max_radius * scale
+                        )
+                        self._charging_bullet.hit_radius = int(
+                            self._charging_bullet.hit_radius * scale
+                        )
 
                 # Gira o projétil enquanto ele é carregado para dar vida!
                 self._charging_bullet.spin += self._charging_bullet.spin_speed * dt
@@ -711,14 +797,14 @@ class StoneSentry:
 
     def _shoot(self, player_pos: Tuple[float, float] | None) -> List[AlienBullet]:
         left_tip, right_tip = self._claw_tips or self._get_claw_tips()
-        
+
         bx = (left_tip[0] + right_tip[0]) / 2
         by = (left_tip[1] + right_tip[1]) / 2
-        
+
         self._recoil_left = 25.0
         self._recoil_right = 25.0
         self._eye_spin_boost = max(self._eye_spin_boost, 220.0)
-        
+
         # Pega a instância que estava sendo carregada (ou cria uma emergencial)
         if self._charging_bullet:
             bullet = self._charging_bullet
@@ -732,10 +818,10 @@ class StoneSentry:
             bullet.min_radius = int(bullet.min_radius * scale)
             bullet.max_radius = int(bullet.max_radius * scale)
             bullet.hit_radius = int(bullet.hit_radius * scale)
-            
+
         bullet.x = bx
         bullet.y = by
-        
+
         if player_pos:
             lead_time = 0.24
             target_x = player_pos[0] + self._player_velocity[0] * lead_time
@@ -752,7 +838,7 @@ class StoneSentry:
         else:
             bullet.vx = 0.0
             bullet.vy = 330.0
-            
+
         return [bullet]
 
     def draw(self, screen: pygame.Surface):
@@ -761,7 +847,7 @@ class StoneSentry:
         sr = math.sin(rad)
         cx = self.LOW_RES_SIZE / 2
         cy = self.LOW_RES_SIZE / 2
-        
+
         rotated_pts = [
             (
                 cx + (px * cr - py * sr) * self._shape_scale,
@@ -779,8 +865,7 @@ class StoneSentry:
         pygame.draw.polygon(self._low_res_surface, outline_color, rotated_pts, 1)
 
         inner_pts = [
-            (px * 0.88 + cx * 0.12, py * 0.88 + cy * 0.12)
-            for px, py in rotated_pts
+            (px * 0.88 + cx * 0.12, py * 0.88 + cy * 0.12) for px, py in rotated_pts
         ]
         pygame.draw.polygon(
             self._low_res_surface,
@@ -788,7 +873,7 @@ class StoneSentry:
             inner_pts,
             0,
         )
-        
+
         eye_cx, eye_cy = int(cx), int(cy)
         if self.hit_timer > 0.0:
             eye_fill = (255, 0, 0)
@@ -799,7 +884,7 @@ class StoneSentry:
                 eye_fill = (
                     int(190 + 65 * c_ratio),
                     int(80 + 100 * c_ratio),
-                    int(60 + 60 * c_ratio)
+                    int(60 + 60 * c_ratio),
                 )
                 eye_ring = (255, 220, 170)
             else:
@@ -835,20 +920,23 @@ class StoneSentry:
 
         # Desenha O MESMO PROJÉTIL crescendo e tremendo entre as garras
         c_ratio = self.charge_ratio
-        if c_ratio > 0.1 and self._charging_bullet: 
+        if c_ratio > 0.1 and self._charging_bullet:
             left_tip, right_tip = self._get_claw_tips()
-            
+
             # Tremor específico do projétil durante o charging (maior para super)
             rock_shake = c_ratio * (8.0 if self._is_super_bullet else 4.0)
-            rock_cx = (left_tip[0] + right_tip[0]) / 2 + random.uniform(-rock_shake, rock_shake)
-            rock_cy = (left_tip[1] + right_tip[1]) / 2 + random.uniform(-rock_shake, rock_shake)
-            
+            rock_cx = (left_tip[0] + right_tip[0]) / 2 + random.uniform(
+                -rock_shake, rock_shake
+            )
+            rock_cy = (left_tip[1] + right_tip[1]) / 2 + random.uniform(
+                -rock_shake, rock_shake
+            )
+
             # Rotaciona a superfície base do projétil em tempo real
             rock_surf = pygame.transform.rotate(
-                self._charging_bullet.get_render_surface(),
-                self._charging_bullet.spin
+                self._charging_bullet.get_render_surface(), self._charging_bullet.spin
             )
-            
+
             # Calcula o tamanho atual baseado no charge_ratio (mais rápido para super)
             final_diameter = max(16, int(self._charging_bullet.current_radius) * 2)
             if self._is_super_bullet:
@@ -857,24 +945,36 @@ class StoneSentry:
             else:
                 # Normal bullets: linear growth from 0% to 100%
                 current_diameter = max(2, int(final_diameter * c_ratio))
-            
+
             # Redimensiona e desenha a textura real
-            scaled_rock = pygame.transform.scale(rock_surf, (current_diameter, current_diameter))
+            scaled_rock = pygame.transform.scale(
+                rock_surf, (current_diameter, current_diameter)
+            )
             screen.blit(
                 scaled_rock,
-                (int(rock_cx) - current_diameter // 2, int(rock_cy) - current_diameter // 2)
+                (
+                    int(rock_cx) - current_diameter // 2,
+                    int(rock_cy) - current_diameter // 2,
+                ),
             )
 
         for particle in self._particles:
             # Calcula alpha como proporção de lifetime restante
-            alpha = min(1.0, particle.lifetime / 0.7)  # Normaliza para lifetime máx de 0.7s
-            particle_surf = pygame.Surface((particle.size * 2, particle.size * 2), pygame.SRCALPHA)
+            alpha = min(
+                1.0, particle.lifetime / 0.7
+            )  # Normaliza para lifetime máx de 0.7s
+            particle_surf = pygame.Surface(
+                (particle.size * 2, particle.size * 2), pygame.SRCALPHA
+            )
             pygame.draw.rect(
                 particle_surf,
                 (*self.color, int(255 * alpha)),
                 (0, 0, particle.size * 2, particle.size * 2),
             )
-            screen.blit(particle_surf, (int(particle.x) - particle.size, int(particle.y) - particle.size))
+            screen.blit(
+                particle_surf,
+                (int(particle.x) - particle.size, int(particle.y) - particle.size),
+            )
 
     def get_points_value(self) -> int:
         return 250

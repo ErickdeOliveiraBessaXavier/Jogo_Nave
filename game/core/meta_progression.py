@@ -9,10 +9,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pygame
 
-from ..core.difficulty import DifficultyPreset
-from ..core.levels import LevelConfig
-from ..core.upgrades import UpgradeType
-from ..core.upgrades_config import (
+from .difficulty import DifficultyPreset
+from .levels import LevelConfig
+from .upgrades import UpgradeType
+from .upgrades_config import (
     DEFAULT_UNLOCKED,
     INITIAL_UNLOCKED_SLOTS,
     UPGRADE_SLOT_COUNT,
@@ -1365,9 +1365,11 @@ class PlayerProfile:
                 str(world_id): {
                     "world_id": status.world_id,
                     "is_unlocked": status.is_unlocked,
-                    "first_accessed_at": status.first_accessed_at.isoformat()
-                    if status.first_accessed_at
-                    else None,
+                    "first_accessed_at": (
+                        status.first_accessed_at.isoformat()
+                        if status.first_accessed_at
+                        else None
+                    ),
                     "last_best_score_at_checkpoint": status.last_best_score_at_checkpoint,
                     "checkpoint_set": status.checkpoint_set,
                 }

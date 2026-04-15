@@ -63,7 +63,7 @@ class PausedScene(Scene):
         if not self.go_to_menu and not self.go_to_settings:
             sound_manager.resume_music()
 
-    def update(self, dt: float):
+    def update(self, _dt: float):
         pass
 
     def handle_event(self, event: pygame.event.Event):

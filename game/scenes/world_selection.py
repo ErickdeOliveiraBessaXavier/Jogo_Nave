@@ -280,7 +280,7 @@ class WorldSelectionView:
                 self.on_world_selected(card.world_config.world_id)
                 sound_manager.play_sound("button_click")
 
-    def update(self, dt: float):
+    def update(self, _dt: float):
         """Atualiza a view."""
         # Atualizar hover dos cards
         mouse_pos = pygame.mouse.get_pos()

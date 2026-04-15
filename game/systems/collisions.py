@@ -1,7 +1,15 @@
 import math
 import random
-from typing import (TYPE_CHECKING, Any, Callable, Protocol, Sequence,
-                    TypeAlias, cast, runtime_checkable)
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Protocol,
+    Sequence,
+    TypeAlias,
+    cast,
+    runtime_checkable,
+)
 
 import pygame
 

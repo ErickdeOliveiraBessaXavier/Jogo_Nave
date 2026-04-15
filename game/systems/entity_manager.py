@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 import pygame
 
 from ..core.spatial_grid import SpatialGrid
+from ..core.upgrades_config import EMP_LINGER_DURATION
 from ..entities.air_strike_bomb import AirStrikeBomb
 from ..entities.alien import Alien
 from ..entities.alien_bullet import AlienBullet
@@ -49,7 +50,6 @@ from ..entities.stone_golem_boss import (
     StoneGolemBoss,
 )
 from ..entities.stone_sentry import StoneSentry
-from ..core.upgrades_config import EMP_LINGER_DURATION
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
@@ -63,12 +63,12 @@ class EntityManager:
         self.is_side_scroll = is_side_scroll  # NOVO: Modo de jogo
         self.bullets: list[Bullet] = []
         self.emp_waves: list[EMPWave] = []  # Ondas visuais do EMP
-        self.energy_orbs: list[
-            EnergyOrb
-        ] = []  # Projéteis do ElementalRobot (mini-boss)
-        self.explosive_effects: list[
-            ExplosiveEffect
-        ] = []  # Efeitos visuais de explosão de área
+        self.energy_orbs: list[EnergyOrb] = (
+            []
+        )  # Projéteis do ElementalRobot (mini-boss)
+        self.explosive_effects: list[ExplosiveEffect] = (
+            []
+        )  # Efeitos visuais de explosão de área
         self.enemies: list[
             Meteor
             | Alien
@@ -297,10 +297,7 @@ class EntityManager:
 
         # Inserir pedras orbitais APENAS quando podem causar dano (fase fired)
         for orbital_rock in self.orbital_rocks:
-            if (
-                not orbital_rock.dead
-                and getattr(orbital_rock, "causes_damage", False)
-            ):
+            if not orbital_rock.dead and getattr(orbital_rock, "causes_damage", False):
                 self.enemy_spatial_grid.insert_from_rect(orbital_rock)
 
         # Inserir detritos de entrada do StoneGolemBoss

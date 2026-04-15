@@ -13,6 +13,7 @@ from typing import Any, List, Optional, Tuple, TypeAlias
 import pygame
 
 from ..core.config import config as Config
+from ..entities.bot_elemental import ElementalRobot
 from ..entities.stone_golem_pixel_map import EYE_COL_END as _EYE_COL_END
 from ..entities.stone_golem_pixel_map import EYE_COL_START as _EYE_COL_START
 from ..entities.stone_golem_pixel_map import EYE_ROW as _EYE_ROW
@@ -22,7 +23,6 @@ from ..entities.stone_golem_pixel_map import PIXEL_COLS as _PIXEL_COLS
 from ..entities.stone_golem_pixel_map import PIXEL_MAP as _PIXEL_MAP
 from ..entities.stone_golem_pixel_map import PIXEL_ROWS as _PIXEL_ROWS
 from ..entities.stone_golem_pixel_map import C as _C
-from ..entities.bot_elemental import ElementalRobot
 
 logger = logging.getLogger(__name__)
 
