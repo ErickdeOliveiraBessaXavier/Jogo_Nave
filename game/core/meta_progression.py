@@ -12,8 +12,11 @@ import pygame
 from ..core.difficulty import DifficultyPreset
 from ..core.levels import LevelConfig
 from ..core.upgrades import UpgradeType
-from ..core.upgrades_config import (DEFAULT_UNLOCKED, INITIAL_UNLOCKED_SLOTS,
-                                    UPGRADE_SLOT_COUNT)
+from ..core.upgrades_config import (
+    DEFAULT_UNLOCKED,
+    INITIAL_UNLOCKED_SLOTS,
+    UPGRADE_SLOT_COUNT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +163,17 @@ class LevelPerformance:
 
         # Ainda aprendendo
         return PerformanceState.LEARNING
+
+
+@dataclass
+class WorldUnlockStatus:
+    """Status de desbloqueio de um mundo."""
+
+    world_id: int
+    is_unlocked: bool
+    first_accessed_at: Optional[datetime] = None
+    last_best_score_at_checkpoint: int = 0
+    checkpoint_set: bool = False
 
 
 class PerformanceAnalyzer:
@@ -489,6 +503,11 @@ class PlayerProfile:
         self.total_deaths: int = 0
         self.total_score: int = 0
 
+        # Sistema de mundos e savepoints
+        self.world_unlocks: Dict[int, WorldUnlockStatus] = {}
+        self.current_checkpoint_world: int = 1
+        self.selected_world_id: int = 1  # Transient - não salvo
+
         # Sessão atual
         self.current_session: Optional[SessionStats] = None
         self.session_history: List[SessionStats] = []
@@ -545,6 +564,83 @@ class PlayerProfile:
         self._stats_dirty = True
 
         self.load()
+
+    # ============================================================================
+    # SISTEMA DE MUNDOS E SAVEPOINTS
+    # ============================================================================
+
+    def unlock_next_world(self):
+        """Desbloqueia o próximo mundo após completar boss."""
+        current_world_id = self.current_checkpoint_world
+        next_world_id = current_world_id + 1
+
+        # Máximo 4 mundos nomeados
+        if next_world_id <= 4:
+            if next_world_id not in self.world_unlocks:
+                self.world_unlocks[next_world_id] = WorldUnlockStatus(
+                    world_id=next_world_id,
+                    is_unlocked=True,
+                    first_accessed_at=datetime.now(),
+                    checkpoint_set=False,
+                )
+            else:
+                self.world_unlocks[next_world_id].is_unlocked = True
+                if not self.world_unlocks[next_world_id].first_accessed_at:
+                    self.world_unlocks[next_world_id].first_accessed_at = datetime.now()
+
+            # Atualizar checkpoint para o novo mundo
+            self.current_checkpoint_world = next_world_id
+            self.save()
+            logger.info(
+                f"🌍 Mundo {next_world_id} desbloqueado! Checkpoint atualizado."
+            )
+
+    def set_checkpoint_on_level_start(self, level_number: int):
+        """Chamado quando jogador inicia um novo nível - marca checkpoint se primeira vez neste mundo."""
+        from .world_config import get_world_for_level
+
+        world_config = get_world_for_level(level_number)
+
+        # Se é primeira vez neste mundo, marcar como checkpoint
+        if world_config.world_id not in self.world_unlocks:
+            # Inicializar mundo se não existe
+            self.world_unlocks[world_config.world_id] = WorldUnlockStatus(
+                world_id=world_config.world_id,
+                is_unlocked=True,
+                first_accessed_at=datetime.now(),
+                checkpoint_set=True,
+            )
+            self.current_checkpoint_world = world_config.world_id
+            self.save()
+            logger.info(
+                f"🌍 Primeiro acesso ao Mundo {world_config.world_id} - checkpoint definido!"
+            )
+        elif not self.world_unlocks[world_config.world_id].checkpoint_set:
+            # Já existe mas não era checkpoint ainda
+            self.world_unlocks[world_config.world_id].checkpoint_set = True
+            self.current_checkpoint_world = world_config.world_id
+            self.save()
+            logger.info(f"🌍 Checkpoint definido no Mundo {world_config.world_id}!")
+
+    def reset_to_checkpoint(self) -> int:
+        """Jogador perdeu: retorna nível inicial do mundo checkpoint atual."""
+        from .world_config import get_world_for_level_by_id
+
+        checkpoint_world = get_world_for_level_by_id(self.current_checkpoint_world)
+        if checkpoint_world:
+            # Resetar score da sessão atual
+            if self.current_session:
+                self.current_session.score = 0
+                self.current_session.deaths += 1
+
+            logger.info(
+                f"💀 Reset para checkpoint: Mundo {checkpoint_world.world_id}, Nível {checkpoint_world.start_level}"
+            )
+            return checkpoint_world.start_level
+
+        # Fallback para nível 1 se algo der errado
+        logger.warning("Checkpoint inválido, fallback para nível 1")
+        return 1
 
     def get_total_equipped_weight(self) -> int:
         """Retorna o peso total de todos os upgrades equipados."""
@@ -896,6 +992,45 @@ class PlayerProfile:
                 self.stars_spent = data.get("stars_spent", 0)
                 self.unlocked_slots = data.get("unlocked_slots", INITIAL_UNLOCKED_SLOTS)
 
+                # Sistema de mundos e savepoints
+                world_unlocks_raw: Dict[str, Dict[str, Any]] = data.get(
+                    "world_unlocks", {}
+                )
+                for world_id_str, world_data_raw in world_unlocks_raw.items():
+                    world_data: Dict[str, Any] = world_data_raw
+                    try:
+                        world_id = int(world_id_str)
+                        status = WorldUnlockStatus(
+                            world_id=world_id,
+                            is_unlocked=world_data.get("is_unlocked", False),
+                            first_accessed_at=(
+                                datetime.fromisoformat(world_data["first_accessed_at"])
+                                if world_data.get("first_accessed_at")
+                                else None
+                            ),
+                            last_best_score_at_checkpoint=world_data.get(
+                                "last_best_score_at_checkpoint", 0
+                            ),
+                            checkpoint_set=world_data.get("checkpoint_set", False),
+                        )
+                        self.world_unlocks[world_id] = status
+                    except (ValueError, TypeError, KeyError):
+                        logger.warning(
+                            f"Skipping corrupt world data for world {world_id_str}"
+                        )
+                        continue
+
+                # Inicializar mundo 1 se não existir (mundo padrão sempre desbloqueado)
+                if 1 not in self.world_unlocks:
+                    self.world_unlocks[1] = WorldUnlockStatus(
+                        world_id=1,
+                        is_unlocked=True,
+                        first_accessed_at=datetime.now(),
+                        checkpoint_set=True,
+                    )
+
+                self.current_checkpoint_world = data.get("current_checkpoint_world", 1)
+
                 # Timestamps
                 if "profile_created" in data and isinstance(
                     data["profile_created"], str
@@ -1226,6 +1361,19 @@ class PlayerProfile:
             "stars_collected": self.stars_collected,
             "stars_spent": self.stars_spent,
             "unlocked_slots": self.unlocked_slots,
+            "world_unlocks": {
+                str(world_id): {
+                    "world_id": status.world_id,
+                    "is_unlocked": status.is_unlocked,
+                    "first_accessed_at": status.first_accessed_at.isoformat()
+                    if status.first_accessed_at
+                    else None,
+                    "last_best_score_at_checkpoint": status.last_best_score_at_checkpoint,
+                    "checkpoint_set": status.checkpoint_set,
+                }
+                for world_id, status in self.world_unlocks.items()
+            },
+            "current_checkpoint_world": self.current_checkpoint_world,
         }
 
         with open(self.profile_path, "w", encoding="utf-8") as f:

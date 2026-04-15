@@ -69,6 +69,7 @@ class PlayingScene(Scene):
         app: "GameApp",
         level_manager: LevelManager,
         difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
+        starting_level: int = 1,
     ):
         super().__init__(app)
         self.level_manager = level_manager
@@ -84,7 +85,9 @@ class PlayingScene(Scene):
         self.player_profile.start_session()
 
         # Detectar modo de jogo CEDO (antes de criar nave)
-        self.current_level_index: int = 0
+        self.current_level_index: int = (
+            starting_level - 1
+        )  # starting_level é 1-based, index é 0-based
         self.current_world = get_world_for_level(self.current_level_index + 1)
         self.is_side_scroll = is_side_scroll_mode(self.current_world.theme)
 
@@ -1645,14 +1648,20 @@ class PlayingScene(Scene):
             # Meta-progression: Record death (but not game over)
             self.player_profile.record_death(self.current_level_index + 1, "collision")
         else:
-            # Switch to GameOverScene
-            from .game_over import GameOverScene
+            # Sistema de mundos: reset para checkpoint quando perde
+            next_level = self.player_profile.reset_to_checkpoint()
 
-            self.app.states.switch(GameOverScene(self.app, self.score, self))
-
-            # Meta-progression: Record death and end session
-            self.player_profile.record_death(self.current_level_index + 1, "game_over")
-            self.player_profile.end_session()
+            # Reiniciar no nível do checkpoint
+            logger.info(f"Reiniciando no nível {next_level} (checkpoint)")
+            self.app.states.pop()  # Remove playing scene atual
+            self.app.states.push(
+                PlayingScene(
+                    self.app,
+                    self.level_manager,
+                    difficulty_preset=self.difficulty_preset,
+                    starting_level=next_level,
+                )
+            )
 
     def _check_level_progression(self):
         # Usar cache ao invés de acessar level_config toda vez
@@ -1838,6 +1847,10 @@ class PlayingScene(Scene):
 
         # Voltar para música normal
         sound_manager.music_state_manager.transition_to(MusicState.GAME)
+
+        # Sistema de mundos: desbloquear próximo mundo após derrotar boss
+        self.player_profile.unlock_next_world()
+
         self._advance_to_next_level()
 
     def _advance_to_next_level(self, with_delay: bool = True):
@@ -1863,6 +1876,9 @@ class PlayingScene(Scene):
             self._start_next_level()
 
     def _start_next_level(self):
+        # Sistema de mundos: marcar checkpoint se primeira vez neste mundo
+        self.player_profile.set_checkpoint_on_level_start(self.current_level_index + 1)
+
         self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
         self.current_level_index += 1
 

@@ -15,12 +15,13 @@ from ..core.difficulty import DifficultyPreset
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
+from ..core.world_config import get_world_for_level_by_id
 from ..entities.explosion_pool import ExplosionPool
 from ..entities.meteor import Meteor
-from ..scenes.difficulty_selection import DifficultySelectionView
 from ..scenes.settings import SettingsScene
 from ..scenes.statistics import StatisticsScene
 from ..scenes.upgrades_selection import UpgradesSelectionScene
+from ..scenes.world_selection import WorldSelectionView
 
 
 class CharDict(TypedDict):
@@ -62,6 +63,7 @@ class MenuView(Enum):
 
     MAIN = 0
     DIFFICULTY_SELECTION = 1
+    WORLD_SELECTION = 2
 
 
 class MenuStrings:
@@ -355,6 +357,14 @@ class MainMenuScene(Scene):
             renderer=self.r,
         )
 
+        # View de seleção de mundo
+        self.world_selection_view = WorldSelectionView(
+            on_world_selected=self._on_world_selected,
+            on_back=self._on_world_back,
+            renderer=self.r,
+            player_profile=self.app.player_profile,
+        )
+
         # Menu container position - temporary, will be adjusted
         self.menu_x = int(Config.SCREEN_WIDTH * AnimationConfig.MENU_X_RATIO)
         self.menu_y = 0  # Temporary
@@ -414,8 +424,8 @@ class MainMenuScene(Scene):
                     char["base_rect"].y += offset
                     char["rect"].y += offset
 
-    def _start_difficulty_selection(self):
-        """Inicia transição para a view de seleção de dificuldade."""
+    def _start_world_selection(self):
+        """Inicia transição para a view de seleção de mundo."""
         self.fade_out = True
         self.transitioning = True
         self.transition_progress = 0.0
@@ -430,6 +440,14 @@ class MainMenuScene(Scene):
         # Resetar contador de uso do HEAL para novo jogo
         self.app.heal_usage_count = 0
 
+        # Determinar nível inicial baseado no mundo selecionado
+        selected_world_id = self.app.player_profile.selected_world_id
+        world_config = get_world_for_level_by_id(selected_world_id)
+        starting_level = world_config.start_level if world_config else 1
+
+        # Resetar score quando iniciar em novo checkpoint
+        self.app.player_profile.current_session.score = 0
+
         # Criar e empurrar a cena de jogo
         self.app.states.pop()  # Remove menu
         self.app.states.push(
@@ -437,11 +455,29 @@ class MainMenuScene(Scene):
                 self.app,
                 self.app.level_manager,
                 difficulty_preset=preset,
+                starting_level=starting_level,
             )
         )
 
     def _on_difficulty_back(self):
         """Callback quando o usuário quer voltar da seleção de dificuldade."""
+        self.fade_out = True
+        self.transitioning = True
+        self.transition_progress = 0.0
+
+    def _on_world_selected(self, world_id: int):
+        """Callback quando um mundo é selecionado."""
+        # Salvar seleção no perfil
+        self.app.player_profile.selected_world_id = world_id
+        logger.info(f"Mundo {world_id} selecionado")
+
+        # Avançar para seleção de dificuldade
+        self.fade_out = True
+        self.transitioning = True
+        self.transition_progress = 0.0
+
+    def _on_world_back(self):
+        """Callback quando o usuário quer voltar da seleção de mundo."""
         self.fade_out = True
         self.transitioning = True
         self.transition_progress = 0.0
@@ -483,7 +519,7 @@ class MainMenuScene(Scene):
                 MenuStrings.START_GAME,
                 CUSTOM_GOLD,
                 CUSTOM_PURPLE,
-                self._start_difficulty_selection,
+                self._start_world_selection,
             ),
             (
                 MenuStrings.STATISTICS,
@@ -579,6 +615,9 @@ class MainMenuScene(Scene):
         if self.current_view == MenuView.DIFFICULTY_SELECTION:
             self.difficulty_view.handle_event(event)
             return
+        elif self.current_view == MenuView.WORLD_SELECTION:
+            self.world_selection_view.handle_event(event)
+            return
 
         # View MAIN (menu principal)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -644,6 +683,9 @@ class MainMenuScene(Scene):
                 if self.fade_out:
                     # Completou fade out, trocar view
                     if self.current_view == MenuView.MAIN:
+                        self.current_view = MenuView.WORLD_SELECTION
+                        self.world_selection_view.reset()
+                    elif self.current_view == MenuView.WORLD_SELECTION:
                         self.current_view = MenuView.DIFFICULTY_SELECTION
                         self.difficulty_view.reset()
                     else:
@@ -667,6 +709,8 @@ class MainMenuScene(Scene):
         # Atualizar view ativa
         if self.current_view == MenuView.DIFFICULTY_SELECTION:
             self.difficulty_view.update(dt)
+        elif self.current_view == MenuView.WORLD_SELECTION:
+            self.world_selection_view.update(dt)
         else:  # MenuView.MAIN
             # Atualizar animação de entrada
             if self.is_entering:
@@ -736,6 +780,17 @@ class MainMenuScene(Scene):
                 surface.blit(temp_surface, (0, 0))
             else:
                 self.difficulty_view.render(surface)
+        elif self.current_view == MenuView.WORLD_SELECTION:
+            # Criar surface temporária para aplicar fade
+            if alpha_mult < 1.0:
+                temp_surface = pygame.Surface(
+                    (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+                )
+                self.world_selection_view.render(temp_surface)
+                temp_surface.set_alpha(int(255 * alpha_mult))
+                surface.blit(temp_surface, (0, 0))
+            else:
+                self.world_selection_view.render(surface)
         else:  # MenuView.MAIN
             # Calcular alpha e offset do título
             title_alpha = int(255 * self.title_entry_progress * alpha_mult)

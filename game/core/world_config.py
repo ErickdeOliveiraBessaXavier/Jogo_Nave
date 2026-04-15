@@ -91,7 +91,7 @@ def _get_worlds() -> dict[int, WorldConfig]:
             },
         ),
         2: WorldConfig(
-        world_id=2,
+            world_id=2,
             name="Vazio Sideral",
             description="A vastidão infinita do espaço profundo",
             theme=WorldTheme.STARFIELD,
@@ -196,6 +196,19 @@ def get_world_for_level(level_number: int) -> WorldConfig:
         boss_type=None,  # Rotação procedural de bosses
         theme_modifiers=world_template.theme_modifiers.copy(),
     )
+
+
+def get_world_for_level_by_id(world_id: int) -> Optional[WorldConfig]:
+    """
+    Retorna a configuração de mundo para um world_id específico.
+
+    Args:
+        world_id: ID do mundo (1-4 para mundos nomeados)
+
+    Returns:
+        WorldConfig ou None se não encontrado
+    """
+    return WORLDS.get(world_id)
 
 
 def get_stage_identifier(level_number: int) -> Tuple[int, int]:
@@ -307,7 +320,7 @@ def validate_worlds() -> bool:
         w1 = WORLDS[i]
         w2 = WORLDS[i + 1]
         if w1.end_level + 1 != w2.start_level:
-            errors.append(f"Mundos {i} e {i+1} não são contíguos")
+            errors.append(f"Mundos {i} e {i + 1} não são contíguos")
 
     if errors:
         logger.error("Erros na validação de mundos:")
