@@ -155,20 +155,22 @@ def get_world_for_level(level_number: int) -> WorldConfig:
     Retorna o mundo correspondente a um nível.
 
     Níveis 1-10: Mundo 1 (MOUNTAINS)
-    Níveis 11-20: Mundo 2 (STARFIELD)
-    Níveis 21-30: Mundo 3 (CITY)
-    Níveis 31-40: Mundo 4 (VOLCANIC)
-    Níveis 41+: Rotação de temas procedurais (MOUNTAINS -> STARFIELD -> CITY -> VOLCANIC -> ...)
+    Níveis 11-25: Mundo 2 (STARFIELD)
+    Níveis 26-35: Mundo 3 (CITY)
+    Níveis 36-45: Mundo 4 (VOLCANIC)
+    Níveis 46+: Rotação de temas procedurais (MOUNTAINS -> STARFIELD -> CITY -> VOLCANIC -> ...)
     """
     for world in WORLDS.values():
         if world.contains_level(level_number):
             return world
 
-    # Níveis 41+: Rotação de temas procedurais
+    # Níveis 46+: Rotação de temas procedurais
     # Cada 10 níveis = um novo "setor" com tema rotacionado
-    sector_id = (level_number - 1) // 10 + 1
-    sector_start = (sector_id - 1) * 10 + 1
-    sector_end = sector_id * 10
+    offset = level_number - 46
+    sector_idx = offset // 10
+    sector_id = sector_idx + 5
+    sector_start = 46 + sector_idx * 10
+    sector_end = sector_start + 9
 
     # Rotacionar entre os 4 temas principais
     theme_cycle = [
@@ -177,7 +179,7 @@ def get_world_for_level(level_number: int) -> WorldConfig:
         WorldTheme.CITY,
         WorldTheme.VOLCANIC,
     ]
-    theme_index = (sector_id - 5) % 4  # Começa no setor 5 (nível 41+)
+    theme_index = sector_idx % 4  # Começa no setor 5 (nível 46+)
     theme = theme_cycle[theme_index]
 
     # Usar colors e modifiers do mundo correspondente ao tema
@@ -203,12 +205,20 @@ def get_world_for_level_by_id(world_id: int) -> Optional[WorldConfig]:
     Retorna a configuração de mundo para um world_id específico.
 
     Args:
-        world_id: ID do mundo (1-4 para mundos nomeados)
+        world_id: ID do mundo (1-4 fixos, 5+ procedurais)
 
     Returns:
         WorldConfig ou None se não encontrado
     """
-    return WORLDS.get(world_id)
+    if world_id in WORLDS:
+        return WORLDS[world_id]
+
+    # IDs 5+ representam setores procedurais de 10 níveis.
+    if world_id >= 5:
+        level_number = 46 + (world_id - 5) * 10
+        return get_world_for_level(level_number)
+
+    return None
 
 
 def get_stage_identifier(level_number: int) -> Tuple[int, int]:
@@ -230,7 +240,8 @@ def format_stage_name(level_number: int) -> str:
     - level 1 -> "1-1"
     - level 10 -> "1-10"
     - level 15 -> "2-5"
-    - level 45 -> "5-5"
+    - level 45 -> "4-10"
+    - level 46 -> "5-1"
     """
     world_id, stage = get_stage_identifier(level_number)
     return f"{world_id}-{stage}"

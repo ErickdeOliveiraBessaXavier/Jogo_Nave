@@ -493,6 +493,17 @@ class PlayerProfile:
 
     MAX_SESSION_HISTORY = 50  # Limit session history to last 50 sessions
 
+    def _ensure_safe_world_defaults(self) -> None:
+        """Garante estado mínimo seguro para mundos/checkpoint."""
+        if 1 not in self.world_unlocks:
+            self.world_unlocks[1] = WorldUnlockStatus(
+                world_id=1,
+                is_unlocked=True,
+                first_accessed_at=datetime.now(),
+                checkpoint_set=True,
+            )
+        self.current_checkpoint_world = 1
+
     def __init__(self, profile_path: Path):
         self.profile_path = profile_path
 
@@ -951,6 +962,9 @@ class PlayerProfile:
     def load(self):
         """Carrega perfil do disco."""
         if not self.profile_path.exists():
+            # Garantir estado inicial consistente em perfil novo.
+            self.world_unlocks = {}
+            self._ensure_safe_world_defaults()
             return
 
         try:
@@ -993,8 +1007,11 @@ class PlayerProfile:
                 self.unlocked_slots = data.get("unlocked_slots", INITIAL_UNLOCKED_SLOTS)
 
                 # Sistema de mundos e savepoints
-                world_unlocks_raw: Dict[str, Dict[str, Any]] = data.get(
-                    "world_unlocks", {}
+                world_unlocks_raw_untyped = data.get("world_unlocks", {})
+                world_unlocks_raw: Dict[str, Dict[str, Any]] = (
+                    world_unlocks_raw_untyped
+                    if isinstance(world_unlocks_raw_untyped, dict)
+                    else {}
                 )
                 for world_id_str, world_data_raw in world_unlocks_raw.items():
                     world_data: Dict[str, Any] = world_data_raw
@@ -1029,7 +1046,21 @@ class PlayerProfile:
                         checkpoint_set=True,
                     )
 
-                self.current_checkpoint_world = data.get("current_checkpoint_world", 1)
+                checkpoint_raw = data.get("current_checkpoint_world", 1)
+                self.current_checkpoint_world = (
+                    int(checkpoint_raw)
+                    if isinstance(checkpoint_raw, (int, float, str))
+                    and str(checkpoint_raw).isdigit()
+                    else 1
+                )
+                if self.current_checkpoint_world not in self.world_unlocks:
+                    self.current_checkpoint_world = 1
+
+                # Se o checkpoint carregado estiver inválido/corrompido, forçar Mundo 1.
+                from .world_config import get_world_for_level_by_id
+
+                if get_world_for_level_by_id(self.current_checkpoint_world) is None:
+                    self.current_checkpoint_world = 1
 
                 # Timestamps
                 if "profile_created" in data and isinstance(
@@ -1299,6 +1330,7 @@ class PlayerProfile:
                 shutil.copy2(self.profile_path, backup_path)
                 logger.info(f"Backup salvo em: {backup_path}")
             # Carregar defaults ao invés de resetar
+            self._ensure_safe_world_defaults()
             return  # Mantém valores inicializados no __init__
 
     def save(self):

@@ -1056,8 +1056,14 @@ class ProceduralLevelGenerator:
         # Multiplicadores do preset
         preset_spawn_mult = self.difficulty_settings["spawn_rate_multiplier"]
 
+        # Multiplicador global do mundo (quando configurado em world_config).
+        world = get_world_for_level(level_number)
+        world_spawn_mult = float(
+            world.theme_modifiers.get("spawn_rate_multiplier", 1.0)
+        )
+
         # Multiplicador final combinado
-        spawn_multiplier = theme_spawn_mult * preset_spawn_mult
+        spawn_multiplier = theme_spawn_mult * preset_spawn_mult * world_spawn_mult
         enemies_multiplier = theme_enemies_mult
 
         # 1. Calcular spawn times com pesos do tema
