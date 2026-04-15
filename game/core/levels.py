@@ -26,6 +26,476 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+ACTIVE_ENEMY_TUNING_PROFILE = "moderate"
+
+
+# Registro central de elegibilidade por tema.
+# Se um inimigo está aqui, ele só aparece nos temas listados.
+ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
+    StoneSentry: {WorldTheme.MOUNTAINS},
+    ElementalRobot: {WorldTheme.MOUNTAINS},
+}
+
+# Multiplicadores de frequência por tema (camada 2), organizados por preset.
+# Valor > 1.0 aumenta frequência (reduz spawn_time), valor < 1.0 reduz frequência.
+ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
+    "conservative": {
+        WorldTheme.MOUNTAINS: {
+            Meteor: 1.05,
+            StoneSentry: 1.15,
+            ElementalRobot: 1.10,
+        },
+        WorldTheme.STARFIELD: {
+            Alien: 1.05,
+            EyeEnemy: 1.05,
+        },
+        WorldTheme.CITY: {
+            Alien: 1.10,
+            EyeEnemy: 1.10,
+        },
+        WorldTheme.VOLCANIC: {
+            Meteor: 1.12,
+            EyeEnemy: 1.05,
+        },
+        WorldTheme.PROCEDURAL: {},
+    },
+    "moderate": {
+        WorldTheme.MOUNTAINS: {
+            Meteor: 1.08,
+            StoneSentry: 1.30,
+            ElementalRobot: 1.18,
+        },
+        WorldTheme.STARFIELD: {
+            Alien: 1.10,
+            EyeEnemy: 1.08,
+        },
+        WorldTheme.CITY: {
+            Alien: 1.15,
+            EyeEnemy: 1.18,
+        },
+        WorldTheme.VOLCANIC: {
+            Meteor: 1.18,
+            EyeEnemy: 1.08,
+        },
+        WorldTheme.PROCEDURAL: {},
+    },
+    "aggressive": {
+        WorldTheme.MOUNTAINS: {
+            Meteor: 1.10,
+            StoneSentry: 1.45,
+            ElementalRobot: 1.25,
+        },
+        WorldTheme.STARFIELD: {
+            Alien: 1.15,
+            EyeEnemy: 1.10,
+        },
+        WorldTheme.CITY: {
+            Alien: 1.20,
+            EyeEnemy: 1.25,
+        },
+        WorldTheme.VOLCANIC: {
+            Meteor: 1.25,
+            EyeEnemy: 1.10,
+        },
+        WorldTheme.PROCEDURAL: {},
+    },
+}
+
+# Terceira camada por estágio dentro do mundo, organizada por preset.
+ENEMY_STAGE_WEIGHT_PROFILES: dict[
+    str, dict[WorldTheme, dict[str, dict[type, float]]]
+] = {
+    "conservative": {
+        WorldTheme.MOUNTAINS: {
+            "early": {
+                Meteor: 1.08,
+                StoneSentry: 0.88,
+                ElementalRobot: 0.85,
+            },
+            "mid": {
+                Meteor: 1.00,
+                StoneSentry: 1.05,
+                ElementalRobot: 1.00,
+            },
+            "late": {
+                Meteor: 0.95,
+                StoneSentry: 1.15,
+                ElementalRobot: 1.10,
+            },
+        },
+        WorldTheme.STARFIELD: {
+            "early": {Alien: 1.00, EyeEnemy: 0.95},
+            "mid": {Alien: 1.02, EyeEnemy: 1.00},
+            "late": {Alien: 1.05, EyeEnemy: 1.08},
+        },
+        WorldTheme.CITY: {
+            "early": {Alien: 1.00, EyeEnemy: 0.95},
+            "mid": {Alien: 1.05, EyeEnemy: 1.05},
+            "late": {Alien: 1.10, EyeEnemy: 1.12},
+        },
+        WorldTheme.VOLCANIC: {
+            "early": {Meteor: 1.05, EyeEnemy: 0.95},
+            "mid": {Meteor: 1.10, EyeEnemy: 1.00},
+            "late": {Meteor: 1.15, EyeEnemy: 1.08},
+        },
+        WorldTheme.PROCEDURAL: {
+            "early": {},
+            "mid": {},
+            "late": {},
+        },
+    },
+    "moderate": {
+        WorldTheme.MOUNTAINS: {
+            "early": {
+                Meteor: 1.12,
+                StoneSentry: 0.85,
+                ElementalRobot: 0.80,
+            },
+            "mid": {
+                Meteor: 1.00,
+                StoneSentry: 1.08,
+                ElementalRobot: 1.03,
+            },
+            "late": {
+                Meteor: 0.95,
+                StoneSentry: 1.22,
+                ElementalRobot: 1.18,
+            },
+        },
+        WorldTheme.STARFIELD: {
+            "early": {Alien: 1.00, EyeEnemy: 0.90},
+            "mid": {Alien: 1.04, EyeEnemy: 1.00},
+            "late": {Alien: 1.08, EyeEnemy: 1.12},
+        },
+        WorldTheme.CITY: {
+            "early": {Alien: 1.00, EyeEnemy: 0.95},
+            "mid": {Alien: 1.08, EyeEnemy: 1.08},
+            "late": {Alien: 1.14, EyeEnemy: 1.18},
+        },
+        WorldTheme.VOLCANIC: {
+            "early": {Meteor: 1.08, EyeEnemy: 0.95},
+            "mid": {Meteor: 1.13, EyeEnemy: 1.03},
+            "late": {Meteor: 1.20, EyeEnemy: 1.12},
+        },
+        WorldTheme.PROCEDURAL: {
+            "early": {},
+            "mid": {},
+            "late": {},
+        },
+    },
+    "aggressive": {
+        WorldTheme.MOUNTAINS: {
+            "early": {
+                Meteor: 1.15,
+                StoneSentry: 0.80,
+                ElementalRobot: 0.75,
+            },
+            "mid": {
+                Meteor: 1.00,
+                StoneSentry: 1.10,
+                ElementalRobot: 1.05,
+            },
+            "late": {
+                Meteor: 0.95,
+                StoneSentry: 1.30,
+                ElementalRobot: 1.25,
+            },
+        },
+        WorldTheme.STARFIELD: {
+            "early": {Alien: 1.00, EyeEnemy: 0.90},
+            "mid": {Alien: 1.05, EyeEnemy: 1.00},
+            "late": {Alien: 1.10, EyeEnemy: 1.15},
+        },
+        WorldTheme.CITY: {
+            "early": {Alien: 1.00, EyeEnemy: 0.95},
+            "mid": {Alien: 1.10, EyeEnemy: 1.10},
+            "late": {Alien: 1.20, EyeEnemy: 1.25},
+        },
+        WorldTheme.VOLCANIC: {
+            "early": {Meteor: 1.10, EyeEnemy: 0.95},
+            "mid": {Meteor: 1.15, EyeEnemy: 1.05},
+            "late": {Meteor: 1.25, EyeEnemy: 1.15},
+        },
+        WorldTheme.PROCEDURAL: {
+            "early": {},
+            "mid": {},
+            "late": {},
+        },
+    },
+}
+
+
+def _resolve_tuning_profile(profile_name: str) -> str:
+    """Retorna perfil válido ou fallback seguro (moderate)."""
+    if (
+        profile_name in ENEMY_THEME_WEIGHT_PROFILES
+        and profile_name in ENEMY_STAGE_WEIGHT_PROFILES
+    ):
+        return profile_name
+
+    logger.warning(
+        "Unknown enemy tuning profile '%s'. Falling back to 'moderate'.",
+        profile_name,
+    )
+    return "moderate"
+
+
+_ACTIVE_PROFILE = _resolve_tuning_profile(ACTIVE_ENEMY_TUNING_PROFILE)
+ENEMY_THEME_WEIGHT_MULTIPLIERS = ENEMY_THEME_WEIGHT_PROFILES[_ACTIVE_PROFILE]
+ENEMY_STAGE_WEIGHT_MULTIPLIERS = ENEMY_STAGE_WEIGHT_PROFILES[_ACTIVE_PROFILE]
+
+THEME_FALLBACK_ENEMIES: dict[WorldTheme, list[type]] = {
+    WorldTheme.MOUNTAINS: [Meteor, Alien, EyeEnemy],
+    WorldTheme.STARFIELD: [Meteor, Alien, EyeEnemy],
+    WorldTheme.CITY: [Alien, EyeEnemy, Meteor],
+    WorldTheme.VOLCANIC: [Meteor, EyeEnemy, Alien],
+    WorldTheme.PROCEDURAL: [Meteor, Alien, EyeEnemy],
+}
+
+DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
+    Meteor: 1.2,
+    Alien: 2.5,
+    EyeEnemy: 6.0,
+}
+
+
+def _is_enemy_allowed_in_theme(enemy_type: type, world_theme: WorldTheme) -> bool:
+    """Valida se um tipo de inimigo é permitido no tema informado."""
+    allowed_themes = ENEMY_THEME_ALLOWLIST.get(enemy_type)
+    if allowed_themes is None:
+        return True
+    return world_theme in allowed_themes
+
+
+def _filter_enemy_spawn_for_theme(
+    enemy_spawn_config: dict[
+        Type[
+            Meteor
+            | Alien
+            | ExplosiveMine
+            | EyeEnemy
+            | SquareMinionBoss
+            | ElementalRobot
+            | StoneSentry
+        ],
+        float,
+    ],
+    world_theme: WorldTheme,
+) -> dict[
+    Type[
+        Meteor
+        | Alien
+        | ExplosiveMine
+        | EyeEnemy
+        | SquareMinionBoss
+        | ElementalRobot
+        | StoneSentry
+    ],
+    float,
+]:
+    """Filtra inimigos proibidos no tema e garante fallback mínimo."""
+    filtered: dict[
+        Type[
+            Meteor
+            | Alien
+            | ExplosiveMine
+            | EyeEnemy
+            | SquareMinionBoss
+            | ElementalRobot
+            | StoneSentry
+        ],
+        float,
+    ] = {}
+    removed: list[str] = []
+
+    for enemy_type, spawn_time in enemy_spawn_config.items():
+        if _is_enemy_allowed_in_theme(enemy_type, world_theme):
+            filtered[enemy_type] = spawn_time
+        else:
+            removed.append(enemy_type.__name__)
+
+    if removed:
+        logger.info(
+            "Theme filter removed enemies for %s: %s",
+            world_theme.value,
+            ", ".join(sorted(removed)),
+        )
+
+    if filtered:
+        return filtered
+
+    # Segurança: evita nível sem pool de inimigos.
+    for fallback_type in THEME_FALLBACK_ENEMIES.get(world_theme, [Meteor]):
+        if not _is_enemy_allowed_in_theme(fallback_type, world_theme):
+            continue
+
+        fallback_time = DEFAULT_ENEMY_SPAWN_TIME.get(fallback_type, 1.0)
+        fallback_time = max(DifficultyConfig.MIN_SPAWN_TIME, fallback_time)
+        filtered[fallback_type] = fallback_time
+        logger.warning(
+            "Theme %s had empty enemy pool after filtering. Fallback=%s",
+            world_theme.value,
+            fallback_type.__name__,
+        )
+        break
+
+    return filtered
+
+
+def _apply_theme_enemy_eligibility(
+    config: "LevelConfig", world: "WorldConfig"
+) -> "LevelConfig":
+    """Aplica elegibilidade de inimigos por tema em qualquer LevelConfig."""
+    adjusted_spawn_config = _filter_enemy_spawn_for_theme(
+        config.enemy_spawn_config,
+        world.theme,
+    )
+
+    if adjusted_spawn_config == config.enemy_spawn_config:
+        return config
+
+    return LevelConfig(
+        level_number=config.level_number,
+        enemy_spawn_config=adjusted_spawn_config,
+        enemies_to_clear=config.enemies_to_clear,
+        boss_type=config.boss_type,
+        mines_enabled=config.mines_enabled,
+        formations_enabled=config.formations_enabled,
+        formation_types=config.formation_types,
+        theme_name=config.theme_name,
+        score_multiplier=config.score_multiplier,
+    )
+
+
+def _apply_theme_enemy_weights(
+    config: "LevelConfig", world: "WorldConfig"
+) -> "LevelConfig":
+    """Aplica multiplicadores de frequência por tema no spawn_config."""
+    theme_weights = ENEMY_THEME_WEIGHT_MULTIPLIERS.get(world.theme)
+    if not theme_weights:
+        return config
+
+    adjusted_spawn_config: dict[
+        Type[
+            Meteor
+            | Alien
+            | ExplosiveMine
+            | EyeEnemy
+            | SquareMinionBoss
+            | ElementalRobot
+            | StoneSentry
+        ],
+        float,
+    ] = {}
+    changed = False
+
+    for enemy_type, spawn_time in config.enemy_spawn_config.items():
+        weight_multiplier = theme_weights.get(enemy_type, 1.0)
+        if weight_multiplier <= 0:
+            weight_multiplier = 1.0
+
+        adjusted_spawn_time = max(
+            DifficultyConfig.MIN_SPAWN_TIME,
+            spawn_time / weight_multiplier,
+        )
+        adjusted_spawn_config[enemy_type] = adjusted_spawn_time
+        if abs(adjusted_spawn_time - spawn_time) > 1e-9:
+            changed = True
+
+    if not changed:
+        return config
+
+    return LevelConfig(
+        level_number=config.level_number,
+        enemy_spawn_config=adjusted_spawn_config,
+        enemies_to_clear=config.enemies_to_clear,
+        boss_type=config.boss_type,
+        mines_enabled=config.mines_enabled,
+        formations_enabled=config.formations_enabled,
+        formation_types=config.formation_types,
+        theme_name=config.theme_name,
+        score_multiplier=config.score_multiplier,
+    )
+
+
+def _get_stage_band(world: "WorldConfig", level_number: int) -> str:
+    """Retorna faixa de estágio no mundo: early, mid ou late."""
+    total_stages = max(1, world.total_stages)
+    stage_number = max(1, min(total_stages, world.get_stage_number(level_number)))
+    progress = stage_number / total_stages
+
+    if progress <= 0.33:
+        return "early"
+    if progress <= 0.66:
+        return "mid"
+    return "late"
+
+
+def _apply_stage_progression_enemy_weights(
+    config: "LevelConfig", world: "WorldConfig"
+) -> "LevelConfig":
+    """Aplica pesos extras por faixa de estágio dentro do mundo."""
+    theme_stage_weights = ENEMY_STAGE_WEIGHT_MULTIPLIERS.get(world.theme)
+    if not theme_stage_weights:
+        return config
+
+    stage_band = _get_stage_band(world, config.level_number)
+    stage_weights = theme_stage_weights.get(stage_band)
+    if not stage_weights:
+        return config
+
+    adjusted_spawn_config: dict[
+        Type[
+            Meteor
+            | Alien
+            | ExplosiveMine
+            | EyeEnemy
+            | SquareMinionBoss
+            | ElementalRobot
+            | StoneSentry
+        ],
+        float,
+    ] = {}
+    changed = False
+
+    for enemy_type, spawn_time in config.enemy_spawn_config.items():
+        weight_multiplier = stage_weights.get(enemy_type, 1.0)
+        if weight_multiplier <= 0:
+            weight_multiplier = 1.0
+
+        adjusted_spawn_time = max(
+            DifficultyConfig.MIN_SPAWN_TIME,
+            spawn_time / weight_multiplier,
+        )
+        adjusted_spawn_config[enemy_type] = adjusted_spawn_time
+        if abs(adjusted_spawn_time - spawn_time) > 1e-9:
+            changed = True
+
+    if not changed:
+        return config
+
+    return LevelConfig(
+        level_number=config.level_number,
+        enemy_spawn_config=adjusted_spawn_config,
+        enemies_to_clear=config.enemies_to_clear,
+        boss_type=config.boss_type,
+        mines_enabled=config.mines_enabled,
+        formations_enabled=config.formations_enabled,
+        formation_types=config.formation_types,
+        theme_name=config.theme_name,
+        score_multiplier=config.score_multiplier,
+    )
+
+
+def _apply_theme_enemy_rules(
+    config: "LevelConfig", world: "WorldConfig"
+) -> "LevelConfig":
+    """Pipeline único: elegibilidade + pesos por tema + pesos por estágio."""
+    config = _apply_theme_enemy_eligibility(config, world)
+    config = _apply_theme_enemy_weights(config, world)
+    config = _apply_stage_progression_enemy_weights(config, world)
+    return config
+
 
 # ============================================================================
 # CONSTANTES DE CONFIGURAÇÃO
@@ -42,8 +512,15 @@ class DifficultyConfig:
     BASE_ALIEN_SPAWN_TIME: float = 2.5
     BASE_EYE_SPAWN_TIME: float = 6.0
     MIN_SPAWN_TIME: float = 0.3  # Aumentado de 0.15 para 0.3 (mais jogável)
+    WEIGHTED_SPAWN_ENABLED: bool = True  # Feature flag do novo spawn ponderado
+    WEIGHTED_SPAWN_TICK: float = 0.15  # Janela entre tentativas de spawn ponderado
+    WEIGHTED_RECENT_MEMORY: int = 3  # Quantos spawns recentes entram no anti-repetição
+    WEIGHTED_REPEAT_PENALTY: float = 0.45  # Penalidade por repetição recente
+    WEIGHTED_SPAWN_TELEMETRY: bool = False  # Logs periódicos para calibração
+    WEIGHTED_TELEMETRY_INTERVAL: float = 15.0  # Segundos entre relatórios
 
     MIN_ENEMIES_TO_CLEAR: int = 80
+    MAX_ENEMIES_TO_CLEAR: int = 600
     BASE_ENEMIES: int = 25
     ENEMIES_PER_LEVEL: int = 5
     ENEMY_VARIATION: int = 20
@@ -304,6 +781,44 @@ class LevelConfig:
             raise ValueError(f"Level {self.level_number} has no enemies configured!")
         return random.choice(self.enemy_types)
 
+    def get_enemy_spawn_weights(
+        self,
+    ) -> dict[
+        Type[
+            Meteor
+            | Alien
+            | ExplosiveMine
+            | EyeEnemy
+            | SquareMinionBoss
+            | ElementalRobot
+            | StoneSentry
+        ],
+        float,
+    ]:
+        """Retorna pesos base de spawn derivados do intervalo configurado.
+
+        Spawn menor significa maior frequência. Convertemos isso em peso por
+        inversão de tempo para suportar seleção ponderada dinâmica.
+        """
+        weights: dict[
+            Type[
+                Meteor
+                | Alien
+                | ExplosiveMine
+                | EyeEnemy
+                | SquareMinionBoss
+                | ElementalRobot
+                | StoneSentry
+            ],
+            float,
+        ] = {}
+
+        for enemy_type, spawn_time in self.enemy_spawn_config.items():
+            safe_spawn_time = max(DifficultyConfig.MIN_SPAWN_TIME, spawn_time)
+            weights[enemy_type] = 1.0 / safe_spawn_time
+
+        return weights
+
     def get_random_formation_type(self) -> str | None:
         """Retorna um tipo de formação aleatório da lista."""
         if self.formation_types:
@@ -387,9 +902,9 @@ class ProceduralLevelGenerator:
         self.difficulty_curves = DifficultyCurves()
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
-        self._difficulty_cache: dict[Union[int, str], float] = (
-            {}
-        )  # Cache for difficulty and score multiplier calculations
+        self._difficulty_cache: dict[
+            Union[int, str], float
+        ] = {}  # Cache for difficulty and score multiplier calculations
 
     # OPT #6: Cache últimos 50 níveis gerados para não recalcular
     @lru_cache(maxsize=50)
@@ -623,6 +1138,7 @@ class ProceduralLevelGenerator:
         enemies_to_clear = max(
             DifficultyConfig.MIN_ENEMIES_TO_CLEAR, base_enemies + variation
         )
+        enemies_to_clear = min(DifficultyConfig.MAX_ENEMIES_TO_CLEAR, enemies_to_clear)
 
         # 3. Features baseadas no tema
         mines_enabled = False
@@ -973,7 +1489,8 @@ def get_level_config(
         and world.boss_type is not None
         and not force_meteor_storm
     ):
-        return _create_world_boss_level(world, level_number, difficulty_preset)
+        config = _create_world_boss_level(world, level_number, difficulty_preset)
+        return _apply_theme_enemy_rules(config, world)
 
     # Para Hardcore e Nightmare, o nível 1 é sempre procedural (sem tutorial)
     if (
@@ -988,6 +1505,7 @@ def get_level_config(
         config = FIXED_LEVELS[level_number]
         # NOVO: Aplicar tema do mundo ao nível fixo
         config = _apply_world_theme_to_config(config, world)
+        config = _apply_theme_enemy_rules(config, world)
         # Aplicar modificadores do preset aos níveis fixos também
         return _apply_difficulty_to_fixed_level(config, difficulty_preset)
 
@@ -1013,6 +1531,7 @@ def get_level_config(
     # NOVO: Gerar com tema do mundo aplicado
     config = generator.generate_level(level_number)
     config = _apply_world_theme_to_config(config, world)
+    config = _apply_theme_enemy_rules(config, world)
     return config
 
 

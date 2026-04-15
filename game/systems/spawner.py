@@ -1,4 +1,6 @@
+import logging
 import random
+from collections import deque
 from typing import (
     TYPE_CHECKING,
     Callable,
@@ -30,6 +32,9 @@ from ..entities.stone_sentry import StoneSentry
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
+
+
+logger = logging.getLogger(__name__)
 
 
 class EnemyWithHealth(Protocol):
@@ -152,13 +157,19 @@ class EnemySpawner:
             "full_cycle": float(Config.FORMATION_CIRCLE_RADIUS + 40),
         }
 
-        # Criar um timer para cada tipo de inimigo
-        self.enemy_timers: Dict[Type[object], Timer] = {}
-        for enemy_type in self.config.enemy_types:
-            spawn_time = self.config.get_spawn_time(enemy_type)
-            timer = Timer(spawn_time)
-            timer.start()
-            self.enemy_timers[enemy_type] = timer
+        # Novo pipeline ponderado com fallback para o modo legado.
+        self.use_weighted_spawn = DifficultyConfig.WEIGHTED_SPAWN_ENABLED
+        self.recent_enemy_types: deque[type] = deque(
+            maxlen=DifficultyConfig.WEIGHTED_RECENT_MEMORY
+        )
+        self.weighted_telemetry_enabled = DifficultyConfig.WEIGHTED_SPAWN_TELEMETRY
+        self.weighted_telemetry_timer = 0.0
+        self.weighted_spawn_attempts = 0
+        self.weighted_spawn_success = 0
+        self.weighted_spawn_blocked = 0
+        self.weighted_spawn_by_type: dict[str, int] = {}
+
+        self._reset_spawn_pipeline()
 
         # Timer separado para meteoros teleguiados (a cada 3 segundos)
         self.guided_meteor_timer = Timer(3.0)
@@ -172,6 +183,24 @@ class EnemySpawner:
         min_t, max_t = Config.FORMATION_SPAWN_INTERVAL
         self.formation_spawn_timer = Timer(random.uniform(min_t, max_t))
         self.formation_spawn_timer.start()
+
+    def _reset_spawn_pipeline(self) -> None:
+        """Recria timers para o modo ativo de spawn."""
+        self.enemy_timers: Dict[Type[object], Timer] = {}
+        for enemy_type in self.config.enemy_types:
+            spawn_time = self.config.get_spawn_time(enemy_type)
+            timer = Timer(spawn_time)
+            timer.start()
+            self.enemy_timers[enemy_type] = timer
+
+        self.weighted_spawn_timer = Timer(DifficultyConfig.WEIGHTED_SPAWN_TICK)
+        self.weighted_spawn_timer.start()
+        self.recent_enemy_types.clear()
+        self.weighted_telemetry_timer = 0.0
+        self.weighted_spawn_attempts = 0
+        self.weighted_spawn_success = 0
+        self.weighted_spawn_blocked = 0
+        self.weighted_spawn_by_type = {}
 
     def _count_enemies_by_type(self, entity_manager: "EntityManager") -> dict[str, int]:
         """Conta inimigos por tipo que estão ativos na tela."""
@@ -277,6 +306,257 @@ class EnemySpawner:
 
         return True
 
+    def _is_hard_capped(self, enemy_type: type, counts: dict[str, int]) -> bool:
+        """Valida apenas caps rígidos para filtrar candidatos de spawn."""
+        from ..entities.alien import Alien
+        from ..entities.meteor import Meteor
+
+        if counts["total"] >= DifficultyConfig.MAX_TOTAL_ENEMIES_ON_SCREEN:
+            return True
+        if (
+            enemy_type == Meteor
+            and counts["meteor"] >= DifficultyConfig.MAX_METEORS_ON_SCREEN
+        ):
+            return True
+        if (
+            enemy_type == Alien
+            and counts["alien"] >= DifficultyConfig.MAX_ALIENS_ON_SCREEN
+        ):
+            return True
+        if (
+            enemy_type == EyeEnemy
+            and counts["eye"] >= DifficultyConfig.MAX_EYES_ON_SCREEN
+        ):
+            return True
+        if (
+            enemy_type == SquareMinionBoss
+            and counts["square_minion"] >= DifficultyConfig.MAX_SQUARE_MINIONS_ON_SCREEN
+        ):
+            return True
+        if enemy_type == ElementalRobot and counts["elemental_robot"] >= 1:
+            return True
+        if enemy_type == StoneSentry and counts["stone_sentry"] >= 3:
+            return True
+        return False
+
+    def _get_dynamic_enemy_weights(
+        self, entity_manager: "EntityManager"
+    ) -> dict[type, float]:
+        """Calcula pesos efetivos com anti-repetição e filtro por caps rígidos."""
+        counts = self._count_enemies_by_type(entity_manager)
+        base_weights = self.config.get_enemy_spawn_weights()
+        dynamic_weights: dict[type, float] = {}
+
+        for enemy_type, base_weight in base_weights.items():
+            if base_weight <= 0:
+                continue
+            if self._is_hard_capped(enemy_type, counts):
+                continue
+
+            repeat_count = sum(1 for t in self.recent_enemy_types if t == enemy_type)
+            penalty = DifficultyConfig.WEIGHTED_REPEAT_PENALTY**repeat_count
+            final_weight = max(0.01, base_weight * penalty)
+            dynamic_weights[enemy_type] = final_weight
+
+        return dynamic_weights
+
+    def _pick_weighted_enemy_type(self, entity_manager: "EntityManager") -> type | None:
+        """Seleciona um tipo de inimigo por sorteio ponderado robusto."""
+        weights_by_type = self._get_dynamic_enemy_weights(entity_manager)
+        if not weights_by_type:
+            return None
+
+        enemy_types = list(weights_by_type.keys())
+        weights = list(weights_by_type.values())
+        return cast(type, random.choices(enemy_types, weights=weights, k=1)[0])
+
+    def _spawn_enemy_of_type(
+        self,
+        enemy_type: type,
+        entity_manager: "EntityManager",
+        player_x: float | None = None,
+        player_y: float | None = None,
+        is_side_scroll: bool = False,
+    ) -> bool:
+        """Spawna um inimigo de um tipo específico mantendo regras antigas."""
+        if enemy_type == EyeEnemy:
+            if is_side_scroll:
+                x = Config.SCREEN_WIDTH + 40
+                y = random.randint(60, Config.SCREEN_HEIGHT - 100)
+            else:
+                x = random.randint(40, Config.SCREEN_WIDTH - 80)
+                y = random.randint(40, 100)
+            new_enemy = EyeEnemy(x, y)
+            new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
+            entity_manager.enemies.append(new_enemy)
+            return True
+
+        from ..entities.meteor import Meteor
+
+        if enemy_type == Meteor:
+            if is_side_scroll:
+                size = random.randint(Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE)
+                meteor = self.meteor_pool.get(
+                    size=size,
+                    x=Config.SCREEN_WIDTH + 40,
+                    y=random.randint(60, Config.SCREEN_HEIGHT - 100),
+                    vx=-random.uniform(150, 300),
+                    vy=random.uniform(-50, 50),
+                )
+            else:
+                meteor = self.meteor_pool.get()
+
+            meteor.health = int(meteor.health * self.enemy_health_multiplier)
+            entity_manager.enemies.append(meteor)
+            return True
+
+        if enemy_type == SquareMinionBoss:
+            if player_x is None or player_y is None:
+                return False
+            if is_side_scroll:
+                x = Config.SCREEN_WIDTH + 40
+                y = random.randint(60, Config.SCREEN_HEIGHT - 100)
+            else:
+                x = random.randint(40, Config.SCREEN_WIDTH - 80)
+                y = -50
+            new_enemy = SquareMinionBoss(x, y, player_x, player_y)
+            new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
+            entity_manager.enemies.append(new_enemy)
+            return True
+
+        if enemy_type == ElementalRobot:
+            spawn_x = random.randint(
+                int(Config.SCREEN_WIDTH * 0.2), int(Config.SCREEN_WIDTH * 0.8)
+            )
+            target_y = Config.SCREEN_HEIGHT * 0.15
+            robot = ElementalRobot(
+                spawn_x,
+                target_y,
+                difficulty_multiplier=self.enemy_health_multiplier,
+            )
+            entity_manager.enemies.append(robot)
+            return True
+
+        if enemy_type == StoneSentry:
+            new_enemy = StoneSentry()
+            new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
+            entity_manager.enemies.append(new_enemy)
+            return True
+
+        new_enemy = cast(EnemyWithHealth, enemy_type())
+        new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
+        entity_manager.enemies.append(new_enemy)  # type: ignore[arg-type]
+        return True
+
+    def _record_weighted_spawn(self, enemy_type: type) -> None:
+        """Atualiza contadores de telemetria do spawn ponderado."""
+        type_name = enemy_type.__name__
+        self.weighted_spawn_by_type[type_name] = (
+            self.weighted_spawn_by_type.get(type_name, 0) + 1
+        )
+
+    def _flush_weighted_telemetry(self, dt: float) -> None:
+        """Emite telemetria periódica para calibrar o modelo ponderado."""
+        if not self.weighted_telemetry_enabled:
+            return
+
+        self.weighted_telemetry_timer += dt
+        if self.weighted_telemetry_timer < DifficultyConfig.WEIGHTED_TELEMETRY_INTERVAL:
+            return
+
+        attempts = max(1, self.weighted_spawn_attempts)
+        success_ratio = self.weighted_spawn_success / attempts
+        blocked_ratio = self.weighted_spawn_blocked / attempts
+        by_type_text = ", ".join(
+            f"{name}:{count}"
+            for name, count in sorted(self.weighted_spawn_by_type.items())
+        )
+        logger.info(
+            "[WeightedSpawn] level=%s success=%.2f blocked=%.2f attempts=%s dist={%s}",
+            self.current_level_number,
+            success_ratio,
+            blocked_ratio,
+            self.weighted_spawn_attempts,
+            by_type_text,
+        )
+
+        self.weighted_telemetry_timer = 0.0
+        self.weighted_spawn_attempts = 0
+        self.weighted_spawn_success = 0
+        self.weighted_spawn_blocked = 0
+        self.weighted_spawn_by_type = {}
+
+    def _update_legacy_enemy_spawn(
+        self,
+        dt: float,
+        entity_manager: "EntityManager",
+        player_x: float | None,
+        player_y: float | None,
+        is_side_scroll: bool,
+    ) -> None:
+        """Mantém comportamento anterior de timer por tipo (fallback)."""
+        for enemy_type, timer in self.enemy_timers.items():
+            timer.update(dt)
+            if timer.done() and random.random() < self.spawn_intensity:
+                if not self._should_spawn_enemy(enemy_type, entity_manager):
+                    timer.start()
+                    continue
+
+                self._spawn_enemy_of_type(
+                    enemy_type,
+                    entity_manager,
+                    player_x=player_x,
+                    player_y=player_y,
+                    is_side_scroll=is_side_scroll,
+                )
+                timer.start()
+
+    def _update_weighted_enemy_spawn(
+        self,
+        dt: float,
+        entity_manager: "EntityManager",
+        player_x: float | None,
+        player_y: float | None,
+        is_side_scroll: bool,
+    ) -> None:
+        """Novo spawn ponderado com anti-repetição e caps adaptativos."""
+        self.weighted_spawn_timer.update(dt)
+        if not self.weighted_spawn_timer.done():
+            return
+
+        self.weighted_spawn_attempts += 1
+
+        if random.random() >= self.spawn_intensity:
+            self.weighted_spawn_blocked += 1
+            self.weighted_spawn_timer.start()
+            return
+
+        enemy_type = self._pick_weighted_enemy_type(entity_manager)
+        if enemy_type is None:
+            self.weighted_spawn_blocked += 1
+            self.weighted_spawn_timer.start()
+            return
+
+        if not self._should_spawn_enemy(enemy_type, entity_manager):
+            self.weighted_spawn_blocked += 1
+            self.weighted_spawn_timer.start()
+            return
+
+        did_spawn = self._spawn_enemy_of_type(
+            enemy_type,
+            entity_manager,
+            player_x=player_x,
+            player_y=player_y,
+            is_side_scroll=is_side_scroll,
+        )
+        if did_spawn:
+            self.weighted_spawn_success += 1
+            self._record_weighted_spawn(enemy_type)
+            self.recent_enemy_types.append(enemy_type)
+        else:
+            self.weighted_spawn_blocked += 1
+        self.weighted_spawn_timer.start()
+
     def update(
         self,
         dt: float,
@@ -298,99 +578,23 @@ class EnemySpawner:
             # Após warm-up: intensidade 100% (spawn normal)
             self.spawn_intensity = 1.0
 
-        # Atualizar e verificar cada timer de inimigo
-        for enemy_type, timer in self.enemy_timers.items():
-            timer.update(dt)
-            if timer.done() and random.random() < self.spawn_intensity:
-                # Verificar se deve spawnar (controle adaptativo)
-                if not self._should_spawn_enemy(enemy_type, entity_manager):
-                    timer.start()  # Reiniciar timer mesmo sem spawnar
-                    continue
-
-                if enemy_type == EyeEnemy:
-                    if is_side_scroll:
-                        # Side-scroll: spawn pela direita, altura variável
-                        x = Config.SCREEN_WIDTH + 40
-                        y = random.randint(60, Config.SCREEN_HEIGHT - 100)
-                    else:
-                        # Top-down: spawn pelo topo, posição horizontal variável
-                        x = random.randint(40, Config.SCREEN_WIDTH - 80)
-                        y = random.randint(40, 100)
-                    new_enemy = EyeEnemy(x, y)
-                    new_enemy.health = int(
-                        new_enemy.health * self.enemy_health_multiplier
-                    )
-                    entity_manager.enemies.append(new_enemy)
-                else:
-                    from ..entities.meteor import Meteor
-
-                    if enemy_type == Meteor:
-                        # Usar o pool para meteoros
-                        if is_side_scroll:
-                            # Side-scroll: velocidade para esquerda, pouca variação vertical
-                            size = random.randint(
-                                Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE
-                            )
-                            meteor = self.meteor_pool.get(
-                                size=size,
-                                x=Config.SCREEN_WIDTH + 40,
-                                y=random.randint(60, Config.SCREEN_HEIGHT - 100),
-                                vx=-random.uniform(
-                                    150, 300
-                                ),  # Movimento para esquerda (negativo)
-                                vy=random.uniform(-50, 50),  # Pequena variação vertical
-                            )
-                        else:
-                            # Top-down: usando padrão original
-                            meteor = self.meteor_pool.get()
-
-                        meteor.health = int(
-                            meteor.health * self.enemy_health_multiplier
-                        )
-                        entity_manager.enemies.append(meteor)
-                    else:
-                        # Outros inimigos normalmente
-                        if enemy_type == SquareMinionBoss:
-                            # SquareMinionBoss precisa de posição do jogador
-                            if player_x is not None and player_y is not None:
-                                if is_side_scroll:
-                                    x = Config.SCREEN_WIDTH + 40
-                                    y = random.randint(60, Config.SCREEN_HEIGHT - 100)
-                                else:
-                                    x = random.randint(40, Config.SCREEN_WIDTH - 80)
-                                    y = -50  # Spawn acima da tela
-                                new_enemy = SquareMinionBoss(x, y, player_x, player_y)
-                                new_enemy.health = int(
-                                    new_enemy.health * self.enemy_health_multiplier
-                                )
-                                entity_manager.enemies.append(new_enemy)
-                        elif enemy_type == ElementalRobot:
-                            # Mini-boss: spawna centralizado no topo da tela,
-                            # HP escala com difficulty_multiplier (mini-boss balanceado)
-                            spawn_x = random.randint(
-                                int(Config.SCREEN_WIDTH * 0.2),
-                                int(Config.SCREEN_WIDTH * 0.8),
-                            )
-                            target_y = Config.SCREEN_HEIGHT * 0.15
-                            robot = ElementalRobot(
-                                spawn_x,
-                                target_y,
-                                difficulty_multiplier=self.enemy_health_multiplier,
-                            )
-                            entity_manager.enemies.append(robot)
-                        elif enemy_type == StoneSentry:
-                            new_enemy = StoneSentry()
-                            new_enemy.health = int(
-                                new_enemy.health * self.enemy_health_multiplier
-                            )
-                            entity_manager.enemies.append(new_enemy)
-                        else:
-                            new_enemy = cast(EnemyWithHealth, enemy_type())
-                            new_enemy.health = int(
-                                new_enemy.health * self.enemy_health_multiplier
-                            )
-                            entity_manager.enemies.append(new_enemy)  # type: ignore[arg-type]
-                timer.start()  # Reiniciar timer
+        if self.use_weighted_spawn:
+            self._update_weighted_enemy_spawn(
+                dt,
+                entity_manager,
+                player_x=player_x,
+                player_y=player_y,
+                is_side_scroll=is_side_scroll,
+            )
+            self._flush_weighted_telemetry(dt)
+        else:
+            self._update_legacy_enemy_spawn(
+                dt,
+                entity_manager,
+                player_x=player_x,
+                player_y=player_y,
+                is_side_scroll=is_side_scroll,
+            )
 
         # Spawner de minas
         if self.config.mines_enabled:
@@ -545,13 +749,8 @@ class EnemySpawner:
         self.warm_up_timer = Config.PREPARATION_TIME
         self.spawn_intensity = 0.0
 
-        # Recriar timers para nova fase
-        self.enemy_timers = {}
-        for enemy_type in self.config.enemy_types:
-            spawn_time = self.config.get_spawn_time(enemy_type)
-            timer = Timer(spawn_time)
-            timer.start()
-            self.enemy_timers[enemy_type] = timer
+        # Recriar pipeline de spawn para nova fase
+        self._reset_spawn_pipeline()
 
         # Reiniciar timer de meteoros guiados para nova fase
         self.guided_meteor_timer.start()

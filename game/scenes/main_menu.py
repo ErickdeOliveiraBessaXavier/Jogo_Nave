@@ -354,6 +354,7 @@ class MainMenuScene(Scene):
         self.transition_progress = 0.0
         self.transition_duration = 0.3
         self.fade_out = False  # True = fade out, False = fade in
+        self.returning_to_main = False
 
         # View de seleção de dificuldade
         self.difficulty_view = DifficultySelectionView(
@@ -482,6 +483,7 @@ class MainMenuScene(Scene):
 
     def _on_world_back(self):
         """Callback quando o usuário quer voltar da seleção de mundo."""
+        self.returning_to_main = True
         self.fade_out = True
         self.transitioning = True
         self.transition_progress = 0.0
@@ -686,7 +688,19 @@ class MainMenuScene(Scene):
                 # Trocar view e inverter direção do fade
                 if self.fade_out:
                     # Completou fade out, trocar view
-                    if self.current_view == MenuView.MAIN:
+                    if self.returning_to_main:
+                        self.current_view = MenuView.MAIN
+                        self.returning_to_main = False
+                        # Resetar animação de entrada do menu
+                        self.entry_timer = 0.0
+                        self.title_entry_progress = 0.0
+                        self.is_entering = True
+                        for i, button in enumerate(self.buttons):
+                            button.entry_progress = 0.0
+                            button.entry_delay = AnimationConfig.BUTTON_ENTRY_DELAY + (
+                                i * AnimationConfig.BUTTON_STAGGER
+                            )
+                    elif self.current_view == MenuView.MAIN:
                         self.current_view = MenuView.WORLD_SELECTION
                         self.world_selection_view.reset()
                     elif self.current_view == MenuView.WORLD_SELECTION:

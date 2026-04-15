@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pygame
 
 from .difficulty import DifficultyPreset
-from .levels import LevelConfig
+from .levels import DifficultyConfig, LevelConfig
 from .upgrades import UpgradeType
 from .upgrades_config import (
     DEFAULT_UNLOCKED,
@@ -466,7 +466,7 @@ class DifficultyAdjuster:
             adjusted_time = spawn_time / multiplier
 
             # Garantir mínimo jogável
-            adjusted_time = max(0.15, adjusted_time)  # MIN_SPAWN_TIME
+            adjusted_time = max(DifficultyConfig.MIN_SPAWN_TIME, adjusted_time)
 
             adjusted_spawn_config[enemy_type] = adjusted_time
 

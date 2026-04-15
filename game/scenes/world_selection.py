@@ -15,9 +15,43 @@ from ..core.colors import CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.config import config as Config
 from ..core.sound import sound_manager
 from ..core.world_config import WorldConfig, get_all_worlds
+from ..render.backgrounds import create_background
 
 if TYPE_CHECKING:
     pass
+
+
+def render_text_wrapped(text, font, color, surface, center_x, start_y, max_width):
+    """Renderiza texto com quebra de linha automática, centralizado."""
+    words = text.split(" ")
+    lines = []
+    current_line = []
+
+    for word in words:
+        test_line = " ".join(current_line + [word])
+        # Verifica a largura da linha com a nova palavra
+        width, _ = font.size(test_line)
+        if width <= max_width and current_line:
+            current_line.append(word)
+        elif not current_line:
+            current_line.append(word)  # Garante que pelo menos uma palavra entre
+        else:
+            lines.append(" ".join(current_line))
+            current_line = [word]
+
+    if current_line:
+        lines.append(" ".join(current_line))
+
+    y_offset = start_y
+    for line in lines:
+        rendered_line = font.render(line, True, color)
+        line_rect = rendered_line.get_rect(centerx=center_x, top=y_offset)
+        surface.blit(rendered_line, line_rect)
+        y_offset += (
+            font.get_linesize() + 2
+        )  # +2 para um pequeno espaçamento entre linhas
+
+    return y_offset
 
 
 class WorldCardState(Enum):
@@ -40,8 +74,8 @@ class WorldCard:
         self.hover = False
 
         # Dimensões do card
-        self.width = 300
-        self.height = 200
+        self.width = 340
+        self.height = 220
         self.rect = pygame.Rect(0, 0, self.width, self.height)
 
         # Cores baseadas no estado
@@ -86,23 +120,35 @@ class WorldCard:
             surface, self.border_color, self.rect, border_width, border_radius=10
         )
 
-        # Título
-        title_text = self.title_font.render(
-            self.world_config.name, True, self.title_color
-        )
-        title_rect = title_text.get_rect(
-            centerx=self.rect.centerx, top=self.rect.top + 15
-        )
-        surface.blit(title_text, title_rect)
+        # Margem interna (Padding)
+        padding = 20
+        max_text_width = self.width - (padding * 2)
 
-        # Descrição
-        desc_text = self.desc_font.render(
-            self.world_config.description, True, (200, 200, 200)
+        # Título
+        title_bottom = render_text_wrapped(
+            text=self.world_config.name,
+            font=self.title_font,
+            color=self.title_color,
+            surface=surface,
+            center_x=self.rect.centerx,
+            start_y=self.rect.top + 20,
+            max_width=max_text_width,
         )
-        desc_rect = desc_text.get_rect(
-            centerx=self.rect.centerx, top=title_rect.bottom + 10
+
+        # Descrição usando a nova função de quebra de linha
+        desc_start_y = title_bottom + 10
+        desc_color = (
+            (100, 100, 100) if self.state == WorldCardState.LOCKED else (200, 200, 200)
         )
-        surface.blit(desc_text, desc_rect)
+        render_text_wrapped(
+            text=self.world_config.description,
+            font=self.desc_font,
+            color=desc_color,
+            surface=surface,
+            center_x=self.rect.centerx,
+            start_y=desc_start_y,
+            max_width=max_text_width,
+        )
 
         # Status/Score
         if self.state == WorldCardState.CHECKPOINT:
@@ -115,7 +161,7 @@ class WorldCard:
             status_text = self.score_font.render("Bloqueado", True, (150, 150, 150))
 
         status_rect = status_text.get_rect(
-            centerx=self.rect.centerx, bottom=self.rect.bottom - 15
+            centerx=self.rect.centerx, bottom=self.rect.bottom - 20
         )
         surface.blit(status_text, status_rect)
 
@@ -148,13 +194,17 @@ class WorldSelectionView:
         self.selected_index = 0
 
         # Layout
-        self.card_spacing = 50
+        self.card_spacing = 40
         self.cols = 2
         self.rows = 2
 
         # Navegação por teclado
         self.last_key_time = 0
         self.key_repeat_delay = 200  # ms
+
+        # Background dinâmico
+        self.current_background = None
+        self.last_selected = -1
 
     def reset(self):
         """Reinicia a view com dados atualizados."""
@@ -287,9 +337,48 @@ class WorldSelectionView:
         for card in self.world_cards:
             card.update_hover(mouse_pos)
 
+        # Atualizar background se seleção mudou
+        if self.selected_index != self.last_selected:
+            self.last_selected = self.selected_index
+            if self.selected_index < len(self.world_cards):
+                world_config = self.world_cards[self.selected_index].world_config
+                theme_str = world_config.theme.value.lower()
+                if theme_str == "procedural":
+                    # Cycle through themes for procedural worlds
+                    themes = ["mountains", "city", "volcanic"]
+                    theme_str = themes[(world_config.world_id - 5) % len(themes)]
+                elif theme_str == "starfield":
+                    # Para STARFIELD, usar o starfield do renderer (mesmo do menu)
+                    self.current_background = None
+                else:
+                    try:
+                        self.current_background = create_background(
+                            theme_str, Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+                        )
+                    except ValueError:
+                        self.current_background = None
+
+        # Atualizar animação do background
+        if self.current_background:
+            self.current_background.update(_dt, 0.5)  # Animação mais fluida
+
     def render(self, surface: pygame.Surface):
         """Renderiza a view."""
-        surface.fill((10, 10, 20))  # Fundo escuro
+        # Fundo preto para evitar transparência
+        surface.fill((0, 0, 0))
+
+        # Desenhar background baseado no tema
+        if self.current_background:
+            # Background temático (MOUNTAINS, CITY, VOLCANIC, PROCEDURAL)
+            bg_surface = pygame.Surface(
+                (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+            )
+            self.current_background.draw(bg_surface)
+            bg_surface.set_alpha(76)  # 30% opacidade
+            surface.blit(bg_surface, (0, 0))
+        else:
+            # Para STARFIELD, usar o starfield do renderer (mesmo do menu)
+            self.renderer.starfield.draw(surface)
 
         # Renderizar cards
         for i, card in enumerate(self.world_cards):
