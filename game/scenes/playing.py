@@ -5,7 +5,7 @@ import math
 import random
 import time
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Optional, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Optional, Sequence, TypedDict, cast
 
 import pygame
 
@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from ..app import GameApp
     from ..core.spatial_grid import SpatialGrid
+    from ..systems.collisions import Enemy
 
 
 class TransitionPhase(Enum):
@@ -83,7 +84,7 @@ class PlayingScene(Scene):
         self.player_profile.start_session()
 
         # Detectar modo de jogo CEDO (antes de criar nave)
-        self.current_level_index: int = 9
+        self.current_level_index: int = 0
         self.current_world = get_world_for_level(self.current_level_index + 1)
         self.is_side_scroll = is_side_scroll_mode(self.current_world.theme)
 
@@ -1042,6 +1043,7 @@ class PlayingScene(Scene):
         destroyed: int = 0
         score_events: list[tuple[float, float, int]] = []
         ship_hit: bool = False
+        enemies_view = cast("Sequence[Enemy]", self.entity_manager.enemies)
 
         # Balas vs inimigos
         gain, destroyed, score_events = self.collisions.bullets_vs_enemies(
@@ -1049,7 +1051,7 @@ class PlayingScene(Scene):
             self.entity_manager.mine_explosions,
             self.ship,
             enemy_grid,
-            self.entity_manager.enemies,
+            enemies_view,
             self.entity_manager,
         )
 
@@ -1058,7 +1060,7 @@ class PlayingScene(Scene):
             self.collisions.mini_ship_bullets_vs_enemies(
                 self.entity_manager.mini_ship_bullets,
                 enemy_grid,
-                self.entity_manager.enemies,
+                enemies_view,
                 self.entity_manager,
             )
         )
@@ -1070,7 +1072,7 @@ class PlayingScene(Scene):
         laser_gain, laser_destroyed, laser_score_events = (
             self.collisions.player_lasers_vs_enemies(
                 self.entity_manager.player_lasers,
-                self.entity_manager.enemies,
+                enemies_view,
                 self.entity_manager.floating_scores,
                 self.entity_manager,
             )
@@ -1082,7 +1084,7 @@ class PlayingScene(Scene):
         # Explosões de minas vs inimigos normais
         mine_gain, mine_destroyed, mine_score_events, mine_ship_hit = (
             self.collisions.check_mine_explosions(
-                self.entity_manager.enemies,
+                enemies_view,
                 self.entity_manager.mine_explosions,
                 self.ship,
                 self.entity_manager,
@@ -1103,6 +1105,7 @@ class PlayingScene(Scene):
         Retorna: (ganho_score_acumulado, destruídos_acumulados, score_events, ship_hit)
         """
         ship_hit = False
+        enemies_view = cast("Sequence[Enemy]", self.entity_manager.enemies)
         # Processar formações
         for formation in self.entity_manager.formations:
             formation_enemies = formation.get_enemies()
@@ -1165,7 +1168,7 @@ class PlayingScene(Scene):
             exp_gain, exp_destroyed, exp_score_events = (
                 self.collisions.explosive_effects_vs_enemies(
                     self.entity_manager.explosive_effects,
-                    self.entity_manager.enemies,
+                    enemies_view,
                     self.entity_manager,
                 )
             )
@@ -1178,7 +1181,7 @@ class PlayingScene(Scene):
             air_gain, air_destroyed, air_score_events = (
                 self.collisions.air_strike_bombs_vs_enemies(
                     self.entity_manager.air_strike_bombs,
-                    self.entity_manager.enemies,
+                    enemies_view,
                     self.entity_manager,
                 )
             )
@@ -1191,7 +1194,7 @@ class PlayingScene(Scene):
             mine_gain, mine_destroyed, mine_score_events = (
                 self.collisions.cannon_mines_vs_enemies(
                     self.entity_manager.cannon_mines,
-                    self.entity_manager.enemies,
+                    enemies_view,
                     self.entity_manager,
                 )
             )

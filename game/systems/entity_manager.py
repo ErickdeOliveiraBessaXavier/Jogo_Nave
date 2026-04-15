@@ -550,7 +550,7 @@ class EntityManager:
                 if new_orbs:
                     self.energy_orbs.extend(new_orbs)
             elif isinstance(enemy, StoneSentry):
-                shot = enemy.update(scaled_dt, (player_x, player_y))
+                shot = enemy.update(scaled_dt, (player_x, player_y), self.enemies)
                 if shot:
                     new_alien_bullets.extend(shot)
             else:

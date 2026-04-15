@@ -8,5 +8,5 @@
   "sfx_volume": 0.21923076923076923,
   "shot_volume": 0.11346153846153846,
   "mouse_control": true,
-  "auto_fire": true
+  "auto_fire": false
 }
