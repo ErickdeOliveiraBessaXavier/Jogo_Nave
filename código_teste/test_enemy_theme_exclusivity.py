@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from game.core.levels import (
     ACTIVE_ENEMY_TUNING_PROFILE,
+    DEFAULT_ENEMY_SPAWN_TIME,
     ENEMY_STAGE_WEIGHT_MULTIPLIERS,
     ENEMY_STAGE_WEIGHT_PROFILES,
     ENEMY_THEME_WEIGHT_MULTIPLIERS,
@@ -21,6 +22,7 @@ from game.entities.alien import Alien
 from game.entities.bot_elemental import ElementalRobot
 from game.entities.eye_enemy import EyeEnemy
 from game.entities.meteor import Meteor
+from game.entities.rock_glider import RockGlider
 from game.entities.stone_sentry import StoneSentry
 
 
@@ -40,7 +42,8 @@ def test_theme_exclusive_enemies_allowed_in_mountains() -> None:
 
     assert StoneSentry in adjusted.enemy_spawn_config
     assert ElementalRobot in adjusted.enemy_spawn_config
-    assert Meteor in adjusted.enemy_spawn_config
+    assert Meteor not in adjusted.enemy_spawn_config
+    assert RockGlider in adjusted.enemy_spawn_config
 
 
 def test_theme_exclusive_enemies_removed_outside_mountains() -> None:
@@ -60,6 +63,23 @@ def test_theme_exclusive_enemies_removed_outside_mountains() -> None:
     assert StoneSentry not in adjusted.enemy_spawn_config
     assert ElementalRobot not in adjusted.enemy_spawn_config
     assert Meteor in adjusted.enemy_spawn_config
+
+
+def test_starfield_keeps_meteor_and_excludes_rock_glider() -> None:
+    config = LevelConfig(
+        level_number=11,
+        enemy_spawn_config={
+            Meteor: 2.0,
+            RockGlider: 1.8,
+        },
+        enemies_to_clear=120,
+    )
+
+    starfield_world = get_world_for_level(11)
+    adjusted = _apply_theme_enemy_eligibility(config, starfield_world)
+
+    assert Meteor in adjusted.enemy_spawn_config
+    assert RockGlider not in adjusted.enemy_spawn_config
 
 
 def test_theme_exclusive_filter_has_safe_fallback() -> None:
@@ -103,14 +123,15 @@ def test_theme_weight_multiplier_increases_mountains_exclusive_frequency() -> No
         / ENEMY_THEME_WEIGHT_MULTIPLIERS[mountains_world.theme][StoneSentry]
         / ENEMY_STAGE_WEIGHT_MULTIPLIERS[mountains_world.theme][stage_band][StoneSentry]
     )
-    expected_meteor = (
+    expected_glider = (
         2.0
-        / ENEMY_THEME_WEIGHT_MULTIPLIERS[mountains_world.theme][Meteor]
-        / ENEMY_STAGE_WEIGHT_MULTIPLIERS[mountains_world.theme][stage_band][Meteor]
+        / ENEMY_THEME_WEIGHT_MULTIPLIERS[mountains_world.theme][RockGlider]
+        / ENEMY_STAGE_WEIGHT_MULTIPLIERS[mountains_world.theme][stage_band][RockGlider]
     )
 
     assert abs(adjusted.enemy_spawn_config[StoneSentry] - expected_stone) < 1e-9
-    assert abs(adjusted.enemy_spawn_config[Meteor] - expected_meteor) < 1e-9
+    assert Meteor not in adjusted.enemy_spawn_config
+    assert abs(adjusted.enemy_spawn_config[RockGlider] - expected_glider) < 1e-9
 
 
 def test_theme_weight_multiplier_not_applied_when_enemy_removed_by_eligibility() -> (
@@ -211,3 +232,39 @@ def test_active_tuning_profile_is_valid_and_safe() -> None:
     assert resolved in {"conservative", "moderate", "aggressive"}
     # Se profile inválido for configurado, resolve para moderate.
     assert _resolve_tuning_profile("invalid-profile") == "moderate"
+
+
+def test_rock_glider_profile_ordering_in_mountains_is_monotonic() -> None:
+    conservative_theme = ENEMY_THEME_WEIGHT_PROFILES["conservative"][
+        get_world_for_level(1).theme
+    ][RockGlider]
+    moderate_theme = ENEMY_THEME_WEIGHT_PROFILES["moderate"][
+        get_world_for_level(1).theme
+    ][RockGlider]
+    aggressive_theme = ENEMY_THEME_WEIGHT_PROFILES["aggressive"][
+        get_world_for_level(1).theme
+    ][RockGlider]
+
+    assert conservative_theme < moderate_theme < aggressive_theme
+
+    for stage_band in ("early", "mid", "late"):
+        conservative_stage = ENEMY_STAGE_WEIGHT_PROFILES["conservative"][
+            get_world_for_level(1).theme
+        ][stage_band][RockGlider]
+        moderate_stage = ENEMY_STAGE_WEIGHT_PROFILES["moderate"][
+            get_world_for_level(1).theme
+        ][stage_band][RockGlider]
+        aggressive_stage = ENEMY_STAGE_WEIGHT_PROFILES["aggressive"][
+            get_world_for_level(1).theme
+        ][stage_band][RockGlider]
+        assert conservative_stage < moderate_stage < aggressive_stage
+
+
+def test_mountains_defaults_include_special_enemies() -> None:
+    assert RockGlider in DEFAULT_ENEMY_SPAWN_TIME
+    assert StoneSentry in DEFAULT_ENEMY_SPAWN_TIME
+    assert ElementalRobot in DEFAULT_ENEMY_SPAWN_TIME
+
+    assert DEFAULT_ENEMY_SPAWN_TIME[RockGlider] > 0
+    assert DEFAULT_ENEMY_SPAWN_TIME[StoneSentry] > 0
+    assert DEFAULT_ENEMY_SPAWN_TIME[ElementalRobot] > 0

@@ -1396,6 +1396,16 @@ class PlayerProfile:
         self.highest_level_reached = 1
         self.total_deaths = 0
         self.total_score = 0
+        self.world_unlocks = {
+            1: WorldUnlockStatus(
+                world_id=1,
+                is_unlocked=True,
+                first_accessed_at=datetime.now(),
+                checkpoint_set=True,
+            )
+        }
+        self.current_checkpoint_world = 1
+        self.selected_world_id = 1
         self.current_session = None
         self.session_history = []
         self.level_adjustments = {}

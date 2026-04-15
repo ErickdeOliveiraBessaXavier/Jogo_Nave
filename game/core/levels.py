@@ -12,6 +12,7 @@ from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.giant_meteor_boss import GiantMeteorBoss
 from ..entities.meteor import Meteor
+from ..entities.rock_glider import RockGlider
 from ..entities.slime_boss import SlimeBoss
 from ..entities.spike_boss import SpikeBoss
 from ..entities.square_minion_boss import SquareMinionBoss
@@ -32,6 +33,13 @@ ACTIVE_ENEMY_TUNING_PROFILE = "moderate"
 # Registro central de elegibilidade por tema.
 # Se um inimigo está aqui, ele só aparece nos temas listados.
 ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
+    Meteor: {
+        WorldTheme.STARFIELD,
+        WorldTheme.CITY,
+        WorldTheme.VOLCANIC,
+        WorldTheme.PROCEDURAL,
+    },
+    RockGlider: {WorldTheme.MOUNTAINS},
     StoneSentry: {WorldTheme.MOUNTAINS},
     ElementalRobot: {WorldTheme.MOUNTAINS},
 }
@@ -41,7 +49,7 @@ ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
 ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
     "conservative": {
         WorldTheme.MOUNTAINS: {
-            Meteor: 1.05,
+            RockGlider: 1.06,
             StoneSentry: 1.15,
             ElementalRobot: 1.10,
         },
@@ -61,7 +69,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
     },
     "moderate": {
         WorldTheme.MOUNTAINS: {
-            Meteor: 1.08,
+            RockGlider: 1.10,
             StoneSentry: 1.30,
             ElementalRobot: 1.18,
         },
@@ -81,7 +89,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
     },
     "aggressive": {
         WorldTheme.MOUNTAINS: {
-            Meteor: 1.10,
+            RockGlider: 1.14,
             StoneSentry: 1.45,
             ElementalRobot: 1.25,
         },
@@ -108,17 +116,17 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
     "conservative": {
         WorldTheme.MOUNTAINS: {
             "early": {
-                Meteor: 1.08,
+                RockGlider: 1.10,
                 StoneSentry: 0.88,
                 ElementalRobot: 0.85,
             },
             "mid": {
-                Meteor: 1.00,
+                RockGlider: 1.01,
                 StoneSentry: 1.05,
                 ElementalRobot: 1.00,
             },
             "late": {
-                Meteor: 0.95,
+                RockGlider: 0.94,
                 StoneSentry: 1.15,
                 ElementalRobot: 1.10,
             },
@@ -147,17 +155,17 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
     "moderate": {
         WorldTheme.MOUNTAINS: {
             "early": {
-                Meteor: 1.12,
+                RockGlider: 1.15,
                 StoneSentry: 0.85,
                 ElementalRobot: 0.80,
             },
             "mid": {
-                Meteor: 1.00,
+                RockGlider: 1.02,
                 StoneSentry: 1.08,
                 ElementalRobot: 1.03,
             },
             "late": {
-                Meteor: 0.95,
+                RockGlider: 0.95,
                 StoneSentry: 1.22,
                 ElementalRobot: 1.18,
             },
@@ -186,17 +194,17 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
     "aggressive": {
         WorldTheme.MOUNTAINS: {
             "early": {
-                Meteor: 1.15,
+                RockGlider: 1.20,
                 StoneSentry: 0.80,
                 ElementalRobot: 0.75,
             },
             "mid": {
-                Meteor: 1.00,
+                RockGlider: 1.04,
                 StoneSentry: 1.10,
                 ElementalRobot: 1.05,
             },
             "late": {
-                Meteor: 0.95,
+                RockGlider: 0.96,
                 StoneSentry: 1.30,
                 ElementalRobot: 1.25,
             },
@@ -245,7 +253,7 @@ ENEMY_THEME_WEIGHT_MULTIPLIERS = ENEMY_THEME_WEIGHT_PROFILES[_ACTIVE_PROFILE]
 ENEMY_STAGE_WEIGHT_MULTIPLIERS = ENEMY_STAGE_WEIGHT_PROFILES[_ACTIVE_PROFILE]
 
 THEME_FALLBACK_ENEMIES: dict[WorldTheme, list[type]] = {
-    WorldTheme.MOUNTAINS: [Meteor, Alien, EyeEnemy],
+    WorldTheme.MOUNTAINS: [RockGlider, Alien, EyeEnemy],
     WorldTheme.STARFIELD: [Meteor, Alien, EyeEnemy],
     WorldTheme.CITY: [Alien, EyeEnemy, Meteor],
     WorldTheme.VOLCANIC: [Meteor, EyeEnemy, Alien],
@@ -254,8 +262,15 @@ THEME_FALLBACK_ENEMIES: dict[WorldTheme, list[type]] = {
 
 DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
     Meteor: 1.2,
+    RockGlider: 1.05,
     Alien: 2.5,
     EyeEnemy: 6.0,
+    StoneSentry: 1.8,
+    ElementalRobot: 2.6,
+}
+
+THEME_ENEMY_REPLACEMENTS: dict[tuple[WorldTheme, type], type] = {
+    (WorldTheme.MOUNTAINS, Meteor): RockGlider,
 }
 
 
@@ -313,6 +328,14 @@ def _filter_enemy_spawn_for_theme(
             filtered[enemy_type] = spawn_time
         else:
             removed.append(enemy_type.__name__)
+            replacement = THEME_ENEMY_REPLACEMENTS.get((world_theme, enemy_type))
+            if replacement is not None and _is_enemy_allowed_in_theme(
+                replacement, world_theme
+            ):
+                current = filtered.get(replacement)
+                filtered[replacement] = (
+                    spawn_time if current is None else min(current, spawn_time)
+                )
 
     if removed:
         logger.info(
@@ -378,6 +401,7 @@ def _apply_theme_enemy_weights(
     adjusted_spawn_config: dict[
         Type[
             Meteor
+            | RockGlider
             | Alien
             | ExplosiveMine
             | EyeEnemy
@@ -1346,12 +1370,15 @@ def _apply_world_theme_to_config(
 
     # Aplicar multiplicadores de peso
     meteor_mult = world.theme_modifiers.get("meteor_weight", 1.0)
+    rock_glider_mult = world.theme_modifiers.get("rock_glider_weight", 1.0)
     alien_mult = world.theme_modifiers.get("alien_weight", 1.0)
     eye_mult = world.theme_modifiers.get("eye_weight", 1.0)
 
     # Ajustar tempos de spawn (menor tempo = mais frequente)
     for enemy_type, spawn_time in list(adjusted_spawn_config.items()):
-        if issubclass(enemy_type, Meteor) and meteor_mult != 1.0:
+        if issubclass(enemy_type, RockGlider) and rock_glider_mult != 1.0:
+            adjusted_spawn_config[enemy_type] = spawn_time / rock_glider_mult
+        elif issubclass(enemy_type, Meteor) and meteor_mult != 1.0:
             adjusted_spawn_config[enemy_type] = spawn_time / meteor_mult
         elif issubclass(enemy_type, Alien) and alien_mult != 1.0:
             adjusted_spawn_config[enemy_type] = spawn_time / alien_mult

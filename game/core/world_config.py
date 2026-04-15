@@ -86,7 +86,7 @@ def _get_worlds() -> dict[int, WorldConfig]:
             boss_level=10,
             boss_type=StoneGolemBoss,  # Boss das montanhas
             theme_modifiers={
-                "meteor_weight": 2.0,  # Mais meteoros (tema de pedras)
+                "rock_glider_weight": 2.0,  # Mais enxames rochosos no tema montanhoso
                 "alien_weight": 0.5,  # Menos aliens
             },
         ),

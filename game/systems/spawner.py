@@ -252,7 +252,7 @@ class EnemySpawner:
         from ..entities.alien import Alien
         from ..entities.meteor import Meteor
 
-        if enemy_type == Meteor:
+        if issubclass(enemy_type, Meteor):
             if counts["meteor"] >= DifficultyConfig.MAX_METEORS_ON_SCREEN:
                 return False
             # Reduzir spawn se próximo do limite
@@ -314,7 +314,7 @@ class EnemySpawner:
         if counts["total"] >= DifficultyConfig.MAX_TOTAL_ENEMIES_ON_SCREEN:
             return True
         if (
-            enemy_type == Meteor
+            issubclass(enemy_type, Meteor)
             and counts["meteor"] >= DifficultyConfig.MAX_METEORS_ON_SCREEN
         ):
             return True
@@ -393,21 +393,38 @@ class EnemySpawner:
 
         from ..entities.meteor import Meteor
 
-        if enemy_type == Meteor:
-            if is_side_scroll:
+        if issubclass(enemy_type, Meteor):
+            if enemy_type is Meteor:
+                if is_side_scroll:
+                    size = random.randint(
+                        Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE
+                    )
+                    meteor = self.meteor_pool.get(
+                        size=size,
+                        x=Config.SCREEN_WIDTH + 40,
+                        y=random.randint(60, Config.SCREEN_HEIGHT - 100),
+                        vx=-random.uniform(150, 300),
+                        vy=random.uniform(-50, 50),
+                    )
+                else:
+                    meteor = self.meteor_pool.get()
+            elif is_side_scroll:
                 size = random.randint(Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE)
-                meteor = self.meteor_pool.get(
-                    size=size,
-                    x=Config.SCREEN_WIDTH + 40,
-                    y=random.randint(60, Config.SCREEN_HEIGHT - 100),
-                    vx=-random.uniform(150, 300),
-                    vy=random.uniform(-50, 50),
+                meteor = cast(
+                    EnemyWithHealth,
+                    enemy_type(
+                        size=size,
+                        x=Config.SCREEN_WIDTH + 40,
+                        y=random.randint(60, Config.SCREEN_HEIGHT - 100),
+                        vx=-random.uniform(150, 300),
+                        vy=random.uniform(-50, 50),
+                    ),
                 )
             else:
-                meteor = self.meteor_pool.get()
+                meteor = cast(EnemyWithHealth, enemy_type())
 
             meteor.health = int(meteor.health * self.enemy_health_multiplier)
-            entity_manager.enemies.append(meteor)
+            entity_manager.enemies.append(meteor)  # type: ignore[arg-type]
             return True
 
         if enemy_type == SquareMinionBoss:

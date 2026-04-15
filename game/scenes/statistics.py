@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 from ..core import colors
 from ..core.assets import get_font
 from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
-from ..core.meta_progression import PerformanceState, PlayerProfile
+from ..core.meta_progression import PerformanceState, PlayerProfile, WorldUnlockStatus
 from ..core.paths import get_profile_path
 from ..core.state import Scene
 
@@ -608,7 +608,11 @@ class StatisticsView:
 
     def show_confirmation(self):
         self.dialog = ConfirmationDialog(
-            ["Tem certeza?", "Todo o progresso", "será perdido."],
+            [
+                "Tem certeza?",
+                "Estatísticas serão resetadas.",
+                "A campanha voltará ao Mundo 1.",
+            ],
             self.reset_profile,
             self.close_confirmation,
         )
@@ -618,7 +622,21 @@ class StatisticsView:
 
     def reset_profile(self):
         if self.profile:
+            # Reset base do perfil (stats, upgrades, sessões, etc.).
             self.profile.reset()
+
+            # Após reset, campanha retorna ao estado inicial: apenas Mundo 1.
+            self.profile.world_unlocks = {
+                1: WorldUnlockStatus(
+                    world_id=1,
+                    is_unlocked=True,
+                    first_accessed_at=self.profile.profile_created,
+                    checkpoint_set=True,
+                )
+            }
+            self.profile.current_checkpoint_world = 1
+            self.profile.highest_level_reached = 1
+            self.profile.save()
 
         # Resetar preferências para os valores padrão
         from ..core.paths import get_preferences_path

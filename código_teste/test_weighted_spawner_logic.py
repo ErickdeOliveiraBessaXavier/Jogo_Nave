@@ -47,20 +47,40 @@ def test_weighted_spawn_penalizes_recent_repetition() -> None:
     }
 
     base_weights = spawner.config.get_enemy_spawn_weights()
-    if Meteor not in base_weights:
-        raise AssertionError("Config de teste deveria incluir Meteor")
+    meteor_like_type = next(
+        (enemy_type for enemy_type in base_weights if issubclass(enemy_type, Meteor)),
+        None,
+    )
+    if meteor_like_type is None:
+        raise AssertionError(
+            "Config de teste deveria incluir algum tipo derivado de Meteor"
+        )
 
     # Simula repetição recente do mesmo tipo.
-    spawner.recent_enemy_types.extend([Meteor, Meteor])
+    spawner.recent_enemy_types.extend([meteor_like_type, meteor_like_type])
     dynamic = spawner._get_dynamic_enemy_weights(DummyEntityManager())
 
-    expected = base_weights[Meteor] * (DifficultyConfig.WEIGHTED_REPEAT_PENALTY**2)
-    assert Meteor in dynamic
-    assert abs(dynamic[Meteor] - expected) < 1e-9
+    expected = base_weights[meteor_like_type] * (
+        DifficultyConfig.WEIGHTED_REPEAT_PENALTY**2
+    )
+    assert meteor_like_type in dynamic
+    assert abs(dynamic[meteor_like_type] - expected) < 1e-9
 
 
 def test_weighted_spawn_filters_hard_capped_type() -> None:
     spawner = _make_spawner()
+    meteor_like_type = next(
+        (
+            enemy_type
+            for enemy_type in spawner.config.enemy_types
+            if issubclass(enemy_type, Meteor)
+        ),
+        None,
+    )
+    if meteor_like_type is None:
+        raise AssertionError(
+            "Config de teste deveria incluir algum tipo derivado de Meteor"
+        )
 
     spawner._count_enemies_by_type = lambda _em: {
         "meteor": DifficultyConfig.MAX_METEORS_ON_SCREEN,
@@ -73,7 +93,7 @@ def test_weighted_spawn_filters_hard_capped_type() -> None:
     }
 
     dynamic = spawner._get_dynamic_enemy_weights(DummyEntityManager())
-    assert Meteor not in dynamic
+    assert meteor_like_type not in dynamic
 
 
 def test_spawn_enemy_returns_false_when_square_minion_missing_player_target() -> None:
