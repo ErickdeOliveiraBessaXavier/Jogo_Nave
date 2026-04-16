@@ -528,6 +528,15 @@ def _apply_theme_enemy_rules(
 # OPT #7: Pre-calculate math lookup table for enemy counts (levels 1-100)
 _ENEMY_COUNT_TABLE = {i: int(math.log1p(i) * 20) for i in range(1, 101)}
 
+# Multiplicadores de volume (objetivo de fase) por preset.
+# Mantidos em um único lugar para evitar drift entre fluxo procedural e níveis fixos.
+DIFFICULTY_ENEMY_COUNT_MULTIPLIER: dict[DifficultyPreset, float] = {
+    DifficultyPreset.CASUAL: 0.8,
+    DifficultyPreset.NORMAL: 1.0,
+    DifficultyPreset.HARDCORE: 1.1,
+    DifficultyPreset.NIGHTMARE: 1.25,
+}
+
 
 class DifficultyConfig:
     """Constantes para balanceamento de dificuldade."""
@@ -549,12 +558,30 @@ class DifficultyConfig:
     ENEMIES_PER_LEVEL: int = 5
     ENEMY_VARIATION: int = 20
 
+    # Cadência mínima entre spawns para evitar bursts em sequência.
+    MIN_GLOBAL_SPAWN_GAP: float = 0.16
+    DIFFICULTY_SPAWN_GAP_MULTIPLIER: dict[DifficultyPreset, float] = {
+        DifficultyPreset.CASUAL: 0.90,
+        DifficultyPreset.NORMAL: 1.00,
+        DifficultyPreset.HARDCORE: 1.15,
+        DifficultyPreset.NIGHTMARE: 1.30,
+    }
+    MIN_SPAWN_GAP_BY_TYPE: dict[str, float] = {
+        "meteor": 0.18,
+        "rock_glider": 0.18,
+        "alien": 0.42,
+        "eye": 0.70,
+        "square_minion_boss": 1.00,
+        "elemental_robot": 0.90,
+        "stone_sentry": 0.80,
+    }
+
     DIFFICULTY_SCALING: float = 0.15
     MAX_DIFFICULTY_MULTIPLIER: float = 2.5  # Reduzido de 3.0 para 2.5
 
     # Limites de inimigos simultâneos por tipo
     MAX_METEORS_ON_SCREEN: int = 35
-    MAX_ALIENS_ON_SCREEN: int = 12
+    MAX_ALIENS_ON_SCREEN: int = 8
     MAX_EYES_ON_SCREEN: int = 5
     MAX_SQUARE_MINIONS_ON_SCREEN: int = 3
     MAX_TOTAL_ENEMIES_ON_SCREEN: int = 50  # Limite total absoluto
@@ -723,6 +750,87 @@ LEVEL_THEMES = {
         special_feature=None,
     ),
 }
+
+# ============================================================================
+# PROGRESSÃO NATURAL DE PRESSÃO (VOLUME / INTERMEDIÁRIO / FORTE)
+# ============================================================================
+
+# Mapeia cada grupo de inimigos para uma faixa de pressão.
+ENEMY_PRESSURE_TIER_BY_KEY: dict[str, str] = {
+    "meteor": "volume",
+    "rock_glider": "volume",
+    "alien": "intermediate",
+    "eye": "strong",
+    "square_minion_boss": "strong",
+    "elemental_robot": "strong",
+    "stone_sentry": "strong",
+}
+
+# Curvas por tier ao longo do tema (início -> fim).
+# volume: mais forte no início, suavemente reduzido no fim.
+# intermediate/strong: entram e crescem gradualmente até o fim.
+ENEMY_PRESSURE_TIER_CURVE: dict[str, tuple[float, float]] = {
+    "volume": (1.25, 0.90),
+    "intermediate": (0.55, 1.15),
+    "strong": (0.20, 0.95),
+}
+
+# Gate de entrada por tipo para evitar picos bruscos no início do mundo.
+ENEMY_PRESSURE_UNLOCK_START: dict[str, float] = {
+    "meteor": 0.0,
+    "rock_glider": 0.0,
+    "alien": 0.08,
+    "eye": 0.38,
+    "square_minion_boss": 0.30,
+    "elemental_robot": 0.55,
+    "stone_sentry": 0.42,
+}
+
+ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
+    "meteor": 0.01,
+    "rock_glider": 0.01,
+    "alien": 0.30,
+    "eye": 0.28,
+    "square_minion_boss": 0.32,
+    "elemental_robot": 0.30,
+    "stone_sentry": 0.30,
+}
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def _get_world_stage_progress(level_number: int) -> float:
+    """Retorna progresso normalizado [0..1] dentro do tema/mundo atual."""
+    world = get_world_for_level(level_number)
+    if world.total_stages <= 1:
+        return 1.0
+    stage = world.get_stage_number(level_number)
+    return _clamp01((stage - 1) / (world.total_stages - 1))
+
+
+def _get_progressive_enemy_weight(
+    enemy_key: str,
+    base_weight: float,
+    stage_progress: float,
+) -> float:
+    """Aplica tier + gate por estágio para progressão natural de pressão."""
+    tier = ENEMY_PRESSURE_TIER_BY_KEY.get(enemy_key, "intermediate")
+    start_mult, end_mult = ENEMY_PRESSURE_TIER_CURVE.get(tier, (1.0, 1.0))
+    tier_mult = start_mult + (end_mult - start_mult) * _clamp01(stage_progress)
+
+    unlock_start = ENEMY_PRESSURE_UNLOCK_START.get(enemy_key, 0.0)
+    unlock_window = max(0.01, ENEMY_PRESSURE_UNLOCK_WINDOW.get(enemy_key, 0.25))
+    unlock_progress = _clamp01((stage_progress - unlock_start) / unlock_window)
+
+    # Mantém presença mínima de tipos desbloqueados para evitar "on/off" abrupto.
+    if unlock_start <= 0.0:
+        gate_mult = 1.0
+    else:
+        gate_mult = 0.15 + 0.85 * unlock_progress
+
+    return max(0.05, base_weight * tier_mult * gate_mult)
 
 
 # ============================================================================
@@ -1065,6 +1173,7 @@ class ProceduralLevelGenerator:
         # Multiplicador final combinado
         spawn_multiplier = theme_spawn_mult * preset_spawn_mult * world_spawn_mult
         enemies_multiplier = theme_enemies_mult
+        stage_progress = _get_world_stage_progress(level_number)
 
         # 1. Calcular spawn times com pesos do tema
         enemy_spawn_config: dict[
@@ -1092,6 +1201,9 @@ class ProceduralLevelGenerator:
         else:
             # Meteoros
             meteor_weight = theme.enemy_weight.get("meteor", 1.0) if theme else 1.0
+            meteor_weight = _get_progressive_enemy_weight(
+                "meteor", meteor_weight, stage_progress
+            )
             base_meteor_time = (
                 DifficultyConfig.BASE_METEOR_SPAWN_TIME / difficulty
             ) / spawn_multiplier
@@ -1102,6 +1214,9 @@ class ProceduralLevelGenerator:
             # Aliens (nível 2+)
             if level_number >= 2:
                 alien_weight = theme.enemy_weight.get("alien", 1.0) if theme else 1.0
+                alien_weight = _get_progressive_enemy_weight(
+                    "alien", alien_weight, stage_progress
+                )
                 base_alien_time = (
                     DifficultyConfig.BASE_ALIEN_SPAWN_TIME / difficulty
                 ) / spawn_multiplier
@@ -1112,6 +1227,9 @@ class ProceduralLevelGenerator:
             # Eyes (nível 5+)
             if level_number >= 5:
                 eye_weight = theme.enemy_weight.get("eye", 1.0) if theme else 1.0
+                eye_weight = _get_progressive_enemy_weight(
+                    "eye", eye_weight, stage_progress
+                )
                 base_eye_time = (
                     DifficultyConfig.BASE_EYE_SPAWN_TIME / difficulty
                 ) / spawn_multiplier
@@ -1123,6 +1241,9 @@ class ProceduralLevelGenerator:
             if level_number >= 3 and len(enemy_spawn_config) < 3:
                 square_weight = (
                     theme.enemy_weight.get("square_minion_boss", 0.1) if theme else 0.1
+                )
+                square_weight = _get_progressive_enemy_weight(
+                    "square_minion_boss", square_weight, stage_progress
                 )
                 base_square_time = (
                     8.0 / difficulty  # Spawn time base
@@ -1154,13 +1275,11 @@ class ProceduralLevelGenerator:
 
         base_enemies = int(base_enemies * enemies_multiplier)
 
-        # Aplicar variação baseada na dificuldade (mais inimigos em hardcore/nightmare)
-        if self.difficulty_preset == DifficultyPreset.HARDCORE:
-            base_enemies = int(base_enemies * 1.2)
-        elif self.difficulty_preset == DifficultyPreset.NIGHTMARE:
-            base_enemies = int(base_enemies * 1.5)
-        elif self.difficulty_preset == DifficultyPreset.CASUAL:
-            base_enemies = int(base_enemies * 0.8)
+        # Aplicar volume alvo por preset (centralizado para facilitar manutenção).
+        base_enemies = int(
+            base_enemies
+            * DIFFICULTY_ENEMY_COUNT_MULTIPLIER.get(self.difficulty_preset, 1.0)
+        )
 
         variation = rng.randint(
             -DifficultyConfig.ENEMY_VARIATION, DifficultyConfig.ENEMY_VARIATION
@@ -1584,12 +1703,9 @@ def _apply_difficulty_to_fixed_level(
     }
 
     adjusted_enemies = config.enemies_to_clear
-    if preset == DifficultyPreset.HARDCORE:
-        adjusted_enemies = int(adjusted_enemies * 1.2)
-    elif preset == DifficultyPreset.NIGHTMARE:
-        adjusted_enemies = int(adjusted_enemies * 1.5)
-    elif preset == DifficultyPreset.CASUAL:
-        adjusted_enemies = int(adjusted_enemies * 0.8)
+    adjusted_enemies = int(
+        adjusted_enemies * DIFFICULTY_ENEMY_COUNT_MULTIPLIER.get(preset, 1.0)
+    )
 
     return LevelConfig(
         level_number=config.level_number,

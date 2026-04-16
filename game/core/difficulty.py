@@ -54,7 +54,7 @@ class DifficultySettings:
             "name": "Hardcore",
             "description": "Para veteranos",
             "difficulty_scaling": 0.22,
-            "spawn_rate_multiplier": 1.4,
+            "spawn_rate_multiplier": 1.2,
             "enemy_health_multiplier": 1.3,
             "player_damage_multiplier": 0.9,
             "lives": 2,
@@ -64,7 +64,7 @@ class DifficultySettings:
             "name": "Pesadelo",
             "description": "Você foi avisado",
             "difficulty_scaling": 0.30,
-            "spawn_rate_multiplier": 2.0,
+            "spawn_rate_multiplier": 1.55,
             "enemy_health_multiplier": 1.5,
             "player_damage_multiplier": 0.8,
             "lives": 1,  # Permadeath!

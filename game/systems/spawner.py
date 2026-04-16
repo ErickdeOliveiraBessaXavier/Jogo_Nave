@@ -168,6 +168,14 @@ class EnemySpawner:
         self.weighted_spawn_success = 0
         self.weighted_spawn_blocked = 0
         self.weighted_spawn_by_type: dict[str, int] = {}
+        self.weighted_occupancy_samples: deque[int] = deque(maxlen=768)
+        self.weighted_peak_occupancy = 0
+        self.weighted_near_cap_samples = 0
+        self.weighted_hard_cap_samples = 0
+
+        self.spawn_clock = 0.0
+        self.last_spawn_clock = -9999.0
+        self.last_spawn_clock_by_type: dict[str, float] = {}
 
         self._reset_spawn_pipeline()
 
@@ -201,6 +209,86 @@ class EnemySpawner:
         self.weighted_spawn_success = 0
         self.weighted_spawn_blocked = 0
         self.weighted_spawn_by_type = {}
+        self.weighted_occupancy_samples.clear()
+        self.weighted_peak_occupancy = 0
+        self.weighted_near_cap_samples = 0
+        self.weighted_hard_cap_samples = 0
+        self.spawn_clock = 0.0
+        self.last_spawn_clock = -9999.0
+        self.last_spawn_clock_by_type = {}
+
+    @staticmethod
+    def _enemy_type_key(enemy_type: type) -> str:
+        aliases = {
+            "Meteor": "meteor",
+            "RockGlider": "rock_glider",
+            "Alien": "alien",
+            "EyeEnemy": "eye",
+            "SquareMinionBoss": "square_minion_boss",
+            "ElementalRobot": "elemental_robot",
+            "StoneSentry": "stone_sentry",
+        }
+        return aliases.get(enemy_type.__name__, enemy_type.__name__.lower())
+
+    def _get_min_spawn_gap(self, enemy_type: type) -> float:
+        """Retorna o intervalo mínimo entre spawns do mesmo tipo."""
+        type_key = self._enemy_type_key(enemy_type)
+        base_gap = DifficultyConfig.MIN_SPAWN_GAP_BY_TYPE.get(
+            type_key, DifficultyConfig.MIN_GLOBAL_SPAWN_GAP
+        )
+        preset_mult = DifficultyConfig.DIFFICULTY_SPAWN_GAP_MULTIPLIER.get(
+            self.difficulty_preset, 1.0
+        )
+        return base_gap * preset_mult
+
+    def _get_min_global_spawn_gap(self) -> float:
+        """Retorna o espaçamento mínimo entre quaisquer spawns."""
+        return DifficultyConfig.MIN_GLOBAL_SPAWN_GAP * DifficultyConfig.DIFFICULTY_SPAWN_GAP_MULTIPLIER.get(
+            self.difficulty_preset, 1.0
+        )
+
+    def _can_spawn_now(self, enemy_type: type) -> bool:
+        """Bloqueia spawns muito próximos entre si para evitar bursts."""
+        global_gap = self._get_min_global_spawn_gap()
+        if self.spawn_clock - self.last_spawn_clock < global_gap:
+            return False
+
+        type_key = self._enemy_type_key(enemy_type)
+        type_gap = self._get_min_spawn_gap(enemy_type)
+        last_type_spawn = self.last_spawn_clock_by_type.get(type_key, -9999.0)
+        if self.spawn_clock - last_type_spawn < type_gap:
+            return False
+
+        return True
+
+    def _register_spawn(self, enemy_type: type) -> None:
+        """Marca a hora do spawn para respeitar a cadência mínima."""
+        self.last_spawn_clock = self.spawn_clock
+        self.last_spawn_clock_by_type[self._enemy_type_key(enemy_type)] = self.spawn_clock
+
+    def _record_pressure_sample(self, entity_manager: "EntityManager") -> None:
+        """Amostra ocupação de tela para telemetria de balanceamento."""
+        counts = self._count_enemies_by_type(entity_manager)
+        total = counts["total"]
+        self.weighted_occupancy_samples.append(total)
+        self.weighted_peak_occupancy = max(self.weighted_peak_occupancy, total)
+
+        total_cap = DifficultyConfig.MAX_TOTAL_ENEMIES_ON_SCREEN
+        near_cap_threshold = int(total_cap * DifficultyConfig.SPAWN_REDUCTION_THRESHOLD)
+        if total >= near_cap_threshold:
+            self.weighted_near_cap_samples += 1
+        if total >= total_cap:
+            self.weighted_hard_cap_samples += 1
+
+    @staticmethod
+    def _percentile(values: list[int], percentile: float) -> float:
+        """Percentil simples para séries pequenas sem dependências externas."""
+        if not values:
+            return 0.0
+        ordered = sorted(values)
+        idx = int((len(ordered) - 1) * percentile)
+        idx = max(0, min(idx, len(ordered) - 1))
+        return float(ordered[idx])
 
     def _count_enemies_by_type(self, entity_manager: "EntityManager") -> dict[str, int]:
         """Conta inimigos por tipo que estão ativos na tela."""
@@ -368,7 +456,7 @@ class EnemySpawner:
 
         enemy_types = list(weights_by_type.keys())
         weights = list(weights_by_type.values())
-        return cast(type, random.choices(enemy_types, weights=weights, k=1)[0])
+        return random.choices(enemy_types, weights=weights, k=1)[0]
 
     def _spawn_enemy_of_type(
         self,
@@ -484,16 +572,25 @@ class EnemySpawner:
         attempts = max(1, self.weighted_spawn_attempts)
         success_ratio = self.weighted_spawn_success / attempts
         blocked_ratio = self.weighted_spawn_blocked / attempts
+        occupancy_values = list(self.weighted_occupancy_samples)
+        sample_count = len(occupancy_values)
+        p95_occupancy = self._percentile(occupancy_values, 0.95)
+        near_cap_ratio = self.weighted_near_cap_samples / max(1, sample_count)
+        hard_cap_ratio = self.weighted_hard_cap_samples / max(1, sample_count)
         by_type_text = ", ".join(
             f"{name}:{count}"
             for name, count in sorted(self.weighted_spawn_by_type.items())
         )
         logger.info(
-            "[WeightedSpawn] level=%s success=%.2f blocked=%.2f attempts=%s dist={%s}",
+            "[WeightedSpawn] level=%s success=%.2f blocked=%.2f attempts=%s peak=%s p95=%.1f near_cap=%.2f hard_cap=%.2f dist={%s}",
             self.current_level_number,
             success_ratio,
             blocked_ratio,
             self.weighted_spawn_attempts,
+            self.weighted_peak_occupancy,
+            p95_occupancy,
+            near_cap_ratio,
+            hard_cap_ratio,
             by_type_text,
         )
 
@@ -502,6 +599,10 @@ class EnemySpawner:
         self.weighted_spawn_success = 0
         self.weighted_spawn_blocked = 0
         self.weighted_spawn_by_type = {}
+        self.weighted_occupancy_samples.clear()
+        self.weighted_peak_occupancy = 0
+        self.weighted_near_cap_samples = 0
+        self.weighted_hard_cap_samples = 0
 
     def _update_legacy_enemy_spawn(
         self,
@@ -519,6 +620,10 @@ class EnemySpawner:
                     timer.start()
                     continue
 
+                if not self._can_spawn_now(enemy_type):
+                    timer.start()
+                    continue
+
                 self._spawn_enemy_of_type(
                     enemy_type,
                     entity_manager,
@@ -526,6 +631,7 @@ class EnemySpawner:
                     player_y=player_y,
                     is_side_scroll=is_side_scroll,
                 )
+                self._register_spawn(enemy_type)
                 timer.start()
 
     def _update_weighted_enemy_spawn(
@@ -559,6 +665,11 @@ class EnemySpawner:
             self.weighted_spawn_timer.start()
             return
 
+        if not self._can_spawn_now(enemy_type):
+            self.weighted_spawn_blocked += 1
+            self.weighted_spawn_timer.start()
+            return
+
         did_spawn = self._spawn_enemy_of_type(
             enemy_type,
             entity_manager,
@@ -570,6 +681,7 @@ class EnemySpawner:
             self.weighted_spawn_success += 1
             self._record_weighted_spawn(enemy_type)
             self.recent_enemy_types.append(enemy_type)
+            self._register_spawn(enemy_type)
         else:
             self.weighted_spawn_blocked += 1
         self.weighted_spawn_timer.start()
@@ -585,6 +697,8 @@ class EnemySpawner:
         if self.stopped:
             return
 
+        self.spawn_clock += dt
+
         # Sistema de delay inicial (período sem spawn seguido de ativação total)
         if self.warm_up_timer > 0:
             self.warm_up_timer -= dt
@@ -596,6 +710,7 @@ class EnemySpawner:
             self.spawn_intensity = 1.0
 
         if self.use_weighted_spawn:
+            self._record_pressure_sample(entity_manager)
             self._update_weighted_enemy_spawn(
                 dt,
                 entity_manager,
