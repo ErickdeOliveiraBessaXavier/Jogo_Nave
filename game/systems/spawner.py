@@ -598,24 +598,29 @@ class EnemySpawner:
         """Mantém comportamento anterior de timer por tipo (fallback)."""
         for enemy_type, timer in self.enemy_timers.items():
             timer.update(dt)
-            if timer.done() and random.random() < self.spawn_intensity:
-                if not self._should_spawn_enemy(enemy_type, entity_manager):
-                    timer.start()
-                    continue
+            if not timer.done():
+                continue
 
-                if not self._can_spawn_now(enemy_type):
-                    timer.start()
-                    continue
+            # Reinicia sempre para evitar burst ao sair de warm-up com timer acumulado.
+            timer.start()
 
-                self._spawn_enemy_of_type(
-                    enemy_type,
-                    entity_manager,
-                    player_x=player_x,
-                    player_y=player_y,
-                    is_side_scroll=is_side_scroll,
-                )
-                self._register_spawn(enemy_type)
-                timer.start()
+            if random.random() >= self.spawn_intensity:
+                continue
+
+            if not self._should_spawn_enemy(enemy_type, entity_manager):
+                continue
+
+            if not self._can_spawn_now(enemy_type):
+                continue
+
+            self._spawn_enemy_of_type(
+                enemy_type,
+                entity_manager,
+                player_x=player_x,
+                player_y=player_y,
+                is_side_scroll=is_side_scroll,
+            )
+            self._register_spawn(enemy_type)
 
     def _update_weighted_enemy_spawn(
         self,
@@ -714,8 +719,9 @@ class EnemySpawner:
         # Spawner de minas
         if self.config.mines_enabled:
             self.mine_spawn_timer.update(dt)
-            if self.mine_spawn_timer.done() and random.random() < self.spawn_intensity:
-                if random.random() < 0.5:  # 50% de chance de spawnar minas
+            if self.mine_spawn_timer.done():
+                self.mine_spawn_timer.start()
+                if random.random() < self.spawn_intensity and random.random() < 0.5:
                     num_mines = random.choices(
                         [2, 3, 5], weights=[0.50, 0.25, 0.10], k=1
                     )[0]
@@ -732,90 +738,92 @@ class EnemySpawner:
                                 )
                                 break
                             attempts += 1
-                    self.mine_spawn_timer.start()
 
         # Spawner de formações
         if self.config.formations_enabled:
             self.formation_spawn_timer.update(dt)
-            if (
-                self.formation_spawn_timer.done()
-                and random.random() < self.spawn_intensity
-            ):
-                # Criar formação
-                formation_type = self.config.get_random_formation_type()
-                if formation_type:
-                    # Buscar configuração do tipo de formação
-                    config = FORMATION_CONFIGS[formation_type]
-                    patterns = config.get(
-                        "patterns",
-                        [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE],
-                    )
+            if self.formation_spawn_timer.done():
+                min_t, max_t = Config.FORMATION_SPAWN_INTERVAL
+                self.formation_spawn_timer = Timer(random.uniform(min_t, max_t))
+                self.formation_spawn_timer.start()
 
-                    # Determinar contagem de naves
-                    if "count_options" in config:
-                        count = random.choice(config["count_options"])
-                    elif "count_range" in config:
-                        count_range = config["count_range"]
-                        count = random.randint(count_range[0], count_range[1])
-                    else:
-                        count = 5  # Fallback
-
-                    # CORRIGIDO: Usar valores pré-calculados em vez de condicionais repetidos
-                    margin_value: Union[float, Callable[[int], float]] = (
-                        self._formation_safe_margins.get(formation_type, 200)
-                    )  # type: ignore
-                    if callable(margin_value):
-                        safe_margin = float(margin_value(count))
-                    else:
-                        safe_margin = float(margin_value)
-
-                    # Garantir que safe_margin não ultrapasse metade da largura da tela
-                    safe_margin = min(safe_margin, Config.SCREEN_WIDTH / 2 - 100)
-
-                    # CORRIGIDO: Calcular posições SEMPRE (não cachear para evitar desync)
-                    formation_positions = [
-                        f.center_x for f in entity_manager.formations
-                    ]
-
-                    # Tentar encontrar uma posição que não esteja muito próxima de outras formações
-                    min_distance = 300  # Distância mínima entre formações (pixels)
-                    max_attempts = 10  # Número máximo de tentativas
-                    entry_x = None
-
-                    for _ in range(max_attempts):
-                        candidate_x = random.randint(
-                            int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
+                if random.random() >= self.spawn_intensity:
+                    pass
+                else:
+                    # Criar formação
+                    formation_type = self.config.get_random_formation_type()
+                    if formation_type:
+                        # Buscar configuração do tipo de formação
+                        config = FORMATION_CONFIGS[formation_type]
+                        patterns = config.get(
+                            "patterns",
+                            [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE],
                         )
 
-                        # Verificar distância contra posições atuais
-                        too_close = any(
-                            abs(candidate_x - pos) < min_distance
-                            for pos in formation_positions
+                        # Determinar contagem de naves
+                        if "count_options" in config:
+                            count = random.choice(config["count_options"])
+                        elif "count_range" in config:
+                            count_range = config["count_range"]
+                            count = random.randint(count_range[0], count_range[1])
+                        else:
+                            count = 5  # Fallback
+
+                        # CORRIGIDO: Usar valores pré-calculados em vez de condicionais repetidos
+                        margin_value: Union[float, Callable[[int], float]] = (
+                            self._formation_safe_margins.get(formation_type, 200)
+                        )  # type: ignore
+                        if callable(margin_value):
+                            safe_margin = float(margin_value(count))
+                        else:
+                            safe_margin = float(margin_value)
+
+                        # Garantir que safe_margin não ultrapasse metade da largura da tela
+                        safe_margin = min(safe_margin, Config.SCREEN_WIDTH / 2 - 100)
+
+                        # CORRIGIDO: Calcular posições SEMPRE (não cachear para evitar desync)
+                        formation_positions = [
+                            f.center_x for f in entity_manager.formations
+                        ]
+
+                        # Tentar encontrar uma posição que não esteja muito próxima de outras formações
+                        min_distance = 300  # Distância mínima entre formações (pixels)
+                        max_attempts = 10  # Número máximo de tentativas
+                        entry_x = None
+
+                        for _ in range(max_attempts):
+                            candidate_x = random.randint(
+                                int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
+                            )
+
+                            # Verificar distância contra posições atuais
+                            too_close = any(
+                                abs(candidate_x - pos) < min_distance
+                                for pos in formation_positions
+                            )
+
+                            if not too_close:
+                                entry_x = candidate_x
+                                break
+
+                        # Se não encontrou posição boa após todas as tentativas, usar a última
+                        if entry_x is None:
+                            entry_x = random.randint(
+                                int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
+                            )
+
+                        # Calcular entry_y baseado no padrão para evitar que fique cortado no topo
+                        # CORRIGIDO: Usar valores pré-calculados
+                        entry_y = float(
+                            self._formation_entry_y.get(formation_type, 80.0)
                         )
 
-                        if not too_close:
-                            entry_x = candidate_x
-                            break
+                        from ..entities.alien import Alien
 
-                    # Se não encontrou posição boa após todas as tentativas, usar a última
-                    if entry_x is None:
-                        entry_x = random.randint(
-                            int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
+                        new_formation = Formation(
+                            Alien, count, entry_x, entry_y, patterns
                         )
-
-                    # Calcular entry_y baseado no padrão para evitar que fique cortado no topo
-                    # CORRIGIDO: Usar valores pré-calculados
-                    entry_y = float(self._formation_entry_y.get(formation_type, 80.0))
-
-                    from ..entities.alien import Alien
-
-                    new_formation = Formation(Alien, count, entry_x, entry_y, patterns)
-                    entity_manager.formations.append(new_formation)
-
-                    # Reiniciar timer
-                    min_t, max_t = Config.FORMATION_SPAWN_INTERVAL
-                    self.formation_spawn_timer = Timer(random.uniform(min_t, max_t))
-                    self.formation_spawn_timer.start()
+                        entity_manager.formations.append(new_formation)
 
         # Timer separado para meteoros teleguiados (a cada 3 segundos)
         # Só funciona se a fase tem meteoros na lista de tipos
@@ -827,27 +835,25 @@ class EnemySpawner:
             and player_y is not None
         ):
             self.guided_meteor_timer.update(dt)
-            if (
-                self.guided_meteor_timer.done()
-                and random.random() < self.spawn_intensity
-            ):
-                # Chance de spawnar meteoro guiado baseada na intensidade
-                base_chance = Config.GUIDED_METEOR_NORMAL_PHASES_CHANCE
-                if random.random() < base_chance:
-                    from ..entities.guided_meteor import GuidedMeteor
+            if self.guided_meteor_timer.done():
+                self.guided_meteor_timer.start()
 
-                    guided_meteor = GuidedMeteor(
-                        size=random.randint(15, 25),
-                        x=random.randint(0, Config.SCREEN_WIDTH),
-                        y=-30,  # Spawna acima da tela
-                        vx=0,  # Velocidade inicial baixa
-                        vy=50,  # Velocidade inicial para baixo
-                        target_x=player_x,
-                        target_y=player_y,
-                    )
-                    entity_manager.enemies.append(guided_meteor)
+                if random.random() < self.spawn_intensity:
+                    # Chance de spawnar meteoro guiado baseada na intensidade
+                    base_chance = Config.GUIDED_METEOR_NORMAL_PHASES_CHANCE
+                    if random.random() < base_chance:
+                        from ..entities.guided_meteor import GuidedMeteor
 
-                self.guided_meteor_timer.start()  # Reinicia timer de 3 segundos
+                        guided_meteor = GuidedMeteor(
+                            size=random.randint(15, 25),
+                            x=random.randint(0, Config.SCREEN_WIDTH),
+                            y=-30,  # Spawna acima da tela
+                            vx=0,  # Velocidade inicial baixa
+                            vy=50,  # Velocidade inicial para baixo
+                            target_x=player_x,
+                            target_y=player_y,
+                        )
+                        entity_manager.enemies.append(guided_meteor)
 
     def stop(self) -> None:
         self.stopped = True

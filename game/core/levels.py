@@ -2,7 +2,6 @@ import logging
 import math
 import random
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import TYPE_CHECKING, Type, Union
 
 from ..entities.alien import Alien
@@ -820,6 +819,9 @@ def _get_progressive_enemy_weight(
     stage_progress: float,
 ) -> float:
     """Aplica tier + gate por estágio para progressão natural de pressão."""
+    if base_weight <= 0.0:
+        return 0.0
+
     tier = ENEMY_PRESSURE_TIER_BY_KEY.get(enemy_key, "intermediate")
     start_mult, end_mult = ENEMY_PRESSURE_TIER_CURVE.get(tier, (1.0, 1.0))
     tier_mult = start_mult + (end_mult - start_mult) * _clamp01(stage_progress)
@@ -870,8 +872,8 @@ def calculate_dynamic_enemy_cap(
     # Obter mundo atual
     world = get_world_for_level(level_number)
 
-    # Bonus por mundo: cada mundo adiciona 1 inimigo (mundo 1 = 0, mundo 2 = 1, etc)
-    world_bonus = world.world_id - 1
+    # Bonus por mundo com teto para evitar cap excessivo em mundos procedurais.
+    world_bonus = min(world.world_id - 1, 6)
 
     # Bonus por progresso dentro do mundo: cresce de 0 a 2 do início ao fim
     # Este bonus REINICIA para cada novo mundo
@@ -1093,10 +1095,24 @@ class ProceduralLevelGenerator:
         self._difficulty_cache: dict[
             Union[int, str], float
         ] = {}  # Cache for difficulty and score multiplier calculations
+        self._level_cache: dict[int, LevelConfig] = {}
 
-    # OPT #6: Cache últimos 50 níveis gerados para não recalcular
-    @lru_cache(maxsize=50)
     def generate_level(self, level_number: int) -> LevelConfig:
+        """Gera configuração procedural para um nível com cache por instância."""
+        cached = self._level_cache.get(level_number)
+        if cached is not None:
+            return cached
+
+        config = self._generate_level_impl(level_number)
+        self._level_cache[level_number] = config
+
+        # LRU simples: remove o item mais antigo quando excede 50 entradas.
+        if len(self._level_cache) > 50:
+            self._level_cache.pop(next(iter(self._level_cache)))
+
+        return config
+
+    def _generate_level_impl(self, level_number: int) -> LevelConfig:
         """Gera configuração procedural para um nível."""
         # Criar uma instância de Random com uma seed determinística para este nível
         rng = random.Random(self.seed + level_number)
@@ -1260,12 +1276,13 @@ class ProceduralLevelGenerator:
             meteor_weight = _get_progressive_enemy_weight(
                 "meteor", meteor_weight, stage_progress
             )
-            base_meteor_time = (
-                DifficultyConfig.BASE_METEOR_SPAWN_TIME / difficulty
-            ) / spawn_multiplier
-            enemy_spawn_config[Meteor] = self._clamp_spawn_time(
-                base_meteor_time * (2.0 / meteor_weight)
-            )
+            if meteor_weight > 0.0:
+                base_meteor_time = (
+                    DifficultyConfig.BASE_METEOR_SPAWN_TIME / difficulty
+                ) / spawn_multiplier
+                enemy_spawn_config[Meteor] = self._clamp_spawn_time(
+                    base_meteor_time * (2.0 / meteor_weight)
+                )
 
             # Aliens (nível 2+)
             if level_number >= 2:
@@ -1273,12 +1290,13 @@ class ProceduralLevelGenerator:
                 alien_weight = _get_progressive_enemy_weight(
                     "alien", alien_weight, stage_progress
                 )
-                base_alien_time = (
-                    DifficultyConfig.BASE_ALIEN_SPAWN_TIME / difficulty
-                ) / spawn_multiplier
-                enemy_spawn_config[Alien] = self._clamp_spawn_time(
-                    base_alien_time * (2.0 / alien_weight)
-                )
+                if alien_weight > 0.0:
+                    base_alien_time = (
+                        DifficultyConfig.BASE_ALIEN_SPAWN_TIME / difficulty
+                    ) / spawn_multiplier
+                    enemy_spawn_config[Alien] = self._clamp_spawn_time(
+                        base_alien_time * (2.0 / alien_weight)
+                    )
 
             # Eyes (nível 5+)
             if level_number >= 5:
@@ -1286,27 +1304,29 @@ class ProceduralLevelGenerator:
                 eye_weight = _get_progressive_enemy_weight(
                     "eye", eye_weight, stage_progress
                 )
-                base_eye_time = (
-                    DifficultyConfig.BASE_EYE_SPAWN_TIME / difficulty
-                ) / spawn_multiplier
-                enemy_spawn_config[EyeEnemy] = self._clamp_spawn_time(
-                    base_eye_time * (2.0 / eye_weight)
-                )
+                if eye_weight > 0.0:
+                    base_eye_time = (
+                        DifficultyConfig.BASE_EYE_SPAWN_TIME / difficulty
+                    ) / spawn_multiplier
+                    enemy_spawn_config[EyeEnemy] = self._clamp_spawn_time(
+                        base_eye_time * (2.0 / eye_weight)
+                    )
 
             # Square Minion Boss (nível 3+)
-            if level_number >= 3 and len(enemy_spawn_config) < 3:
+            if level_number >= 3:
                 square_weight = (
                     theme.enemy_weight.get("square_minion_boss", 0.1) if theme else 0.1
                 )
                 square_weight = _get_progressive_enemy_weight(
                     "square_minion_boss", square_weight, stage_progress
                 )
-                base_square_time = (
-                    8.0 / difficulty  # Spawn time base
-                ) / spawn_multiplier
-                enemy_spawn_config[SquareMinionBoss] = self._clamp_spawn_time(
-                    base_square_time * (2.0 / square_weight)
-                )
+                if square_weight > 0.0:
+                    base_square_time = (
+                        8.0 / difficulty  # Spawn time base
+                    ) / spawn_multiplier
+                    enemy_spawn_config[SquareMinionBoss] = self._clamp_spawn_time(
+                        base_square_time * (2.0 / square_weight)
+                    )
 
         # 2. Calcular quantidade de inimigos
         curve = DifficultyConfig.ENEMY_COUNT_CURVE

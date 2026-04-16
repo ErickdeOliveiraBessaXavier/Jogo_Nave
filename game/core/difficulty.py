@@ -74,7 +74,12 @@ class DifficultySettings:
     }
 
     @classmethod
-    @lru_cache(maxsize=4)  # OPT #5: Cache 4 difficulty presets
-    def get_settings(cls, preset: DifficultyPreset) -> DifficultySettingsDict:
-        """Retorna configurações para um preset."""
+    @lru_cache(maxsize=4)
+    def _get_settings_cached(cls, preset: DifficultyPreset) -> DifficultySettingsDict:
+        """Retorna referência cacheada interna (não expor fora da classe)."""
         return cls.PRESETS[preset]
+
+    @classmethod
+    def get_settings(cls, preset: DifficultyPreset) -> DifficultySettingsDict:
+        """Retorna cópia defensiva das configurações para um preset."""
+        return cls._get_settings_cached(preset).copy()
