@@ -63,12 +63,12 @@ class EntityManager:
         self.is_side_scroll = is_side_scroll  # NOVO: Modo de jogo
         self.bullets: list[Bullet] = []
         self.emp_waves: list[EMPWave] = []  # Ondas visuais do EMP
-        self.energy_orbs: list[EnergyOrb] = (
-            []
-        )  # Projéteis do ElementalRobot (mini-boss)
-        self.explosive_effects: list[ExplosiveEffect] = (
-            []
-        )  # Efeitos visuais de explosão de área
+        self.energy_orbs: list[
+            EnergyOrb
+        ] = []  # Projéteis do ElementalRobot (mini-boss)
+        self.explosive_effects: list[
+            ExplosiveEffect
+        ] = []  # Efeitos visuais de explosão de área
         self.enemies: list[
             Meteor
             | Alien
@@ -720,6 +720,22 @@ class EntityManager:
         fps: float = 60.0,
     ):
         """Desenha todas as entidades com a profundidade correta."""
+        screen_rect = surface.get_rect()
+
+        def is_visible(entity: Any) -> bool:
+            rect = getattr(entity, "rect", None)
+            if rect is not None:
+                return rect.colliderect(screen_rect)
+
+            x = getattr(entity, "x", None)
+            y = getattr(entity, "y", None)
+            w = getattr(entity, "w", None)
+            h = getattr(entity, "h", None)
+            if x is None or y is None or w is None or h is None:
+                return True
+
+            return pygame.Rect(int(x), int(y), int(w), int(h)).colliderect(screen_rect)
+
         # 1. Primeiro desenhamos os inimigos (base/fundo)
         if enemy_visible:
             # Meteoros do pool (fluxo contínuo)
@@ -727,6 +743,8 @@ class EntityManager:
 
             # Inimigos comuns e mini-bosses (como o ElementalRobot)
             for enemy in self.enemies:
+                if not is_visible(enemy):
+                    continue
                 if isinstance(enemy, EyeEnemy):
                     enemy.draw(surface, player_x, player_y)
                 else:
@@ -734,6 +752,8 @@ class EntityManager:
 
             # Formações de inimigos
             for formation in self.formations:
+                if not is_visible(formation):
+                    continue
                 formation.draw(surface)
 
         # 2. Desenhar o Boss (logo acima dos inimigos comuns)
@@ -775,6 +795,8 @@ class EntityManager:
 
         for entity_list in entity_lists:
             for entity in entity_list:
+                if not is_visible(entity):
+                    continue
                 entity.draw(surface)
 
         # 5. Efeitos visuais de explosão (no topo de tudo)

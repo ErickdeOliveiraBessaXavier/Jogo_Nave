@@ -1670,7 +1670,9 @@ class PlayingScene(Scene):
 
             from .game_over import GameOverScene
 
-            self.app.states.switch(GameOverScene(self.app, self.score, self, next_level))
+            self.app.states.switch(
+                GameOverScene(self.app, self.score, self, next_level)
+            )
 
     def _check_level_progression(self):
         # Usar cache ao invés de acessar level_config toda vez
@@ -2054,13 +2056,13 @@ class PlayingScene(Scene):
             draw_celestials=not boss_active,
         )
 
-        fps_stats = self.r.get_fps_stats()
+        current_fps = self.r.current_fps if self.r.current_fps > 0 else 60.0
         self.entity_manager.draw(
             self.game_surface,
             self.ship.rect.centerx,
             self.ship.rect.centery,
             self.enemy_visible,
-            fps=fps_stats.get("fps", 60.0),
+            fps=current_fps,
         )
 
         # Partículas extras da cutscene (atrás da nave)
@@ -2103,6 +2105,7 @@ class PlayingScene(Scene):
 
         # Mostrar FPS se ativado (F3)
         if self.show_fps:
+            fps_stats = self.r.get_fps_stats()
             fps_text = f"FPS: {fps_stats['fps']:.1f} | Avg: {fps_stats['avg_frame_time']:.1f}ms | Max: {fps_stats['max_frame_time']:.1f}ms"
             fps_surface = self.r.font_small.render(fps_text, True, colors.YELLOW)
             self.game_surface.blit(fps_surface, (10, Config.SCREEN_HEIGHT - 30))

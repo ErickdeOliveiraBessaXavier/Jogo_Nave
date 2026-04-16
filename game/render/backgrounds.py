@@ -182,6 +182,7 @@ class MountainsBackground(Background):
     NUM_STARS = 40  # Reduzido de 70 para melhor performance
     NUM_CLOUDS_BACK = 3  # Reduzido de 4 para melhor performance
     NUM_CLOUDS_FRONT = 2  # Reduzido de 3 para melhor performance
+    STAR_ALPHA_LEVELS = 16
 
     def __init__(self, width: int, height: int):
         super().__init__(width, height)
@@ -357,13 +358,16 @@ class MountainsBackground(Background):
         """Gera estrelas com distribuição pré-calculada."""
         star_area_height = self.height * 0.5
 
-        # Surfaces compartilhadas por tamanho — apenas 2 objetos no total.
-        # set_alpha nelas é chamado uma vez por tamanho por frame, não por estrela.
-        self._star_surf_cache: Dict[int, pygame.Surface] = {}
+        # Surfaces pré-renderizadas por tamanho e nível de alpha.
+        self._star_surf_cache: Dict[int, List[pygame.Surface]] = {}
         for size in (2, 4):
-            surf = pygame.Surface((size, size), pygame.SRCALPHA)
-            surf.fill((255, 255, 255, 255))
-            self._star_surf_cache[size] = surf
+            variants: List[pygame.Surface] = []
+            for level in range(self.STAR_ALPHA_LEVELS):
+                alpha = int(255 * (level / (self.STAR_ALPHA_LEVELS - 1)))
+                surf = pygame.Surface((size, size), pygame.SRCALPHA)
+                surf.fill((255, 255, 255, alpha))
+                variants.append(surf)
+            self._star_surf_cache[size] = variants
 
         for _ in range(self.NUM_STARS):
             size = 2 if random.random() < 0.8 else 4
@@ -378,28 +382,21 @@ class MountainsBackground(Background):
             )
 
     def _draw_stars(self, surface: pygame.Surface) -> None:
-        """Desenha estrelas com brilho piscante usando surfaces compartilhadas por tamanho.
-
-        Evita o custo de set_alpha por estrela: agrupa por tamanho, aplica o alpha
-        uma vez na surface compartilhada e faz os blits de todas as estrelas daquele grupo.
-        """
+        """Desenha estrelas com brilho piscante usando variants pré-renderizadas."""
         current_time = pygame.time.get_ticks() / 1000.0
         twinkle_speed = self.star_twinkle_speed
 
-        # Separar estrelas por tamanho para minimizar trocas de set_alpha
-        groups: Dict[int, List[Tuple[int, int, int]]] = {2: [], 4: []}
         for star in self.stars:
             alpha_factor = (
                 math.sin(current_time * twinkle_speed + star["delay"]) + 1
             ) * 0.5
             alpha = int((star["base_alpha"] * (0.3 + alpha_factor * 0.7)) * 255)
-            groups[star["size"]].append((int(star["x"]), int(star["y"]), alpha))
-
-        for size, entries in groups.items():
-            surf = self._star_surf_cache[size]
-            for x, y, alpha in entries:
-                surf.set_alpha(alpha)
-                surface.blit(surf, (x, y))
+            level = min(
+                self.STAR_ALPHA_LEVELS - 1,
+                max(0, round(alpha * (self.STAR_ALPHA_LEVELS - 1) / 255)),
+            )
+            surf = self._star_surf_cache[star["size"]][level]
+            surface.blit(surf, (int(star["x"]), int(star["y"])))
 
     def _create_sun(self) -> None:
         """Cria superfície do sol com brilho pré-renderizado."""
@@ -504,7 +501,8 @@ class MountainsBackground(Background):
 
             # Sempre desenhar duas cópias — garante continuidade sem gap
             surface.blit(layer.surface, (x_offset, y_pos))
-            surface.blit(layer.surface, (x_offset + layer_w, y_pos))
+            if x_offset != 0:
+                surface.blit(layer.surface, (x_offset + layer_w, y_pos))
 
         # Desenhar nuvens da frente
         for cloud in self.clouds_front:

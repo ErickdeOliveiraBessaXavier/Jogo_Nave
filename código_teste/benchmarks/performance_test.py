@@ -7,6 +7,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -19,16 +20,20 @@ for path in (ROOT_DIR, COMMON_DIR):
         sys.path.insert(0, str(path))
 
 from performance_common import (  # noqa: E402
-    DifficultyPreset,
     parse_difficulty,
     run_benchmark,
     write_json,
 )
 
+from game.core.difficulty import DifficultyPreset  # noqa: E402
+
 DEFAULT_OUTPUT_PATH = SCRIPT_DIR / "performance_results.json"
 
 
-def print_summary(results: dict[str, object], output_path: Path) -> None:
+BenchmarkResults = dict[str, Any]
+
+
+def print_summary(results: BenchmarkResults, output_path: Path) -> None:
     print("=" * 78)
     print("PERFORMANCE BENCHMARK")
     print("=" * 78)

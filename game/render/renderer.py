@@ -77,9 +77,9 @@ class CelestialManager:
 
     def _generate_scaled_image(self, image_path: Path, scale: float) -> pygame.Surface:
         """Loads, scales, and sets alpha for a celestial body image. Uses cache to avoid recomputation."""
-        # Arredondar para 1 casa decimal — garante hits reais no cache.
-        # Sem isso, random.uniform() gera floats únicos e o cache nunca acerta.
-        scale_key = round(scale, 1)
+        # Quantizar para passos de 0.2 para aumentar reutilização do cache sem
+        # impacto visual perceptível.
+        scale_key = round(scale * 5.0) / 5.0
         cache_key = (image_path, scale_key)
         if cache_key in self.scaled_image_cache:
             return self.scaled_image_cache[cache_key]
@@ -448,6 +448,7 @@ class Renderer:
         # NOVO: Background dinâmico (NOVO)
         self.current_background: Optional[Background] = None
         self.current_theme: Optional[WorldTheme] = None
+        self._use_starfield_background = True
 
         self.starfield = StarField(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
         self.celestial_manager = CelestialManager(
@@ -461,7 +462,16 @@ class Renderer:
         self.fps_timer = 0.0
         self.current_fps = 0.0
         self.max_frame_times = 60  # Manter histórico dos últimos 60 frames
-        self.frame_times: deque[float] = deque(maxlen=self.max_frame_times)
+        self.frame_times: deque[float] = deque()
+        self._frame_time_sum = 0.0
+        self._frame_time_min_candidates: deque[float] = deque()
+        self._frame_time_max_candidates: deque[float] = deque()
+        self._fps_stats_cache: dict[str, float] = {
+            "fps": 0.0,
+            "avg_frame_time": 0.0,
+            "max_frame_time": 0.0,
+            "min_frame_time": 0.0,
+        }
         # === FIM DO SISTEMA DE FPS ===
 
     def set_world_theme(self, theme: WorldTheme) -> None:
@@ -481,16 +491,20 @@ class Renderer:
             self.current_background = MountainsBackground(
                 Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
             )
+            self._use_starfield_background = False
         elif theme == WorldTheme.CITY:
             self.current_background = CityBackground(
                 Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
             )
+            self._use_starfield_background = False
         elif theme == WorldTheme.VOLCANIC:
             self.current_background = VolcanicBackground(
                 Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
             )
+            self._use_starfield_background = False
         else:  # STARFIELD ou PROCEDURAL
             self.current_background = None  # Usa sistema original
+            self._use_starfield_background = True
 
     def background(
         self,
@@ -501,8 +515,8 @@ class Renderer:
     ):
         surface.fill(colors.BLACK)
 
-        # Desenhar starfield APENAS se o tema for STARFIELD ou PROCEDURAL
-        if self.current_theme in (WorldTheme.STARFIELD, WorldTheme.PROCEDURAL, None):
+        # Desenhar starfield APENAS se o tema exigir fundo procedural
+        if self._use_starfield_background:
             self.starfield.update(dt, speed_multiplier)
             self.celestial_manager.update(
                 dt, speed_multiplier, allow_spawning=draw_celestials
@@ -682,7 +696,36 @@ class Renderer:
         """Atualiza o contador de FPS e calcula métricas de performance."""
         self.fps_counter += 1
         self.fps_timer += dt
-        self.frame_times.append(dt)  # deque(maxlen=60) descarta automaticamente
+
+        if len(self.frame_times) >= self.max_frame_times:
+            removed_dt = self.frame_times.popleft()
+            self._frame_time_sum -= removed_dt
+
+            if (
+                self._frame_time_min_candidates
+                and removed_dt == self._frame_time_min_candidates[0]
+            ):
+                self._frame_time_min_candidates.popleft()
+            if (
+                self._frame_time_max_candidates
+                and removed_dt == self._frame_time_max_candidates[0]
+            ):
+                self._frame_time_max_candidates.popleft()
+
+        self.frame_times.append(dt)
+        self._frame_time_sum += dt
+
+        while (
+            self._frame_time_min_candidates and self._frame_time_min_candidates[-1] > dt
+        ):
+            self._frame_time_min_candidates.pop()
+        self._frame_time_min_candidates.append(dt)
+
+        while (
+            self._frame_time_max_candidates and self._frame_time_max_candidates[-1] < dt
+        ):
+            self._frame_time_max_candidates.pop()
+        self._frame_time_max_candidates.append(dt)
 
         # Atualizar FPS a cada segundo
         if self.fps_timer >= 1.0:
@@ -690,26 +733,17 @@ class Renderer:
             self.fps_counter = 0
             self.fps_timer = 0.0
 
-    def get_fps_stats(self) -> dict[str, float]:
-        """Retorna estatísticas de FPS e performance."""
-        if not self.frame_times:
-            return {
-                "fps": 0.0,
-                "avg_frame_time": 0.0,
-                "max_frame_time": 0.0,
-                "min_frame_time": 0.0,
+        if self.frame_times:
+            self._fps_stats_cache = {
+                "fps": self.current_fps,
+                "avg_frame_time": (self._frame_time_sum / len(self.frame_times)) * 1000,
+                "max_frame_time": self._frame_time_max_candidates[0] * 1000,
+                "min_frame_time": self._frame_time_min_candidates[0] * 1000,
             }
 
-        avg_frame_time = sum(self.frame_times) / len(self.frame_times)
-        max_frame_time = max(self.frame_times)
-        min_frame_time = min(self.frame_times)
-
-        return {
-            "fps": self.current_fps,
-            "avg_frame_time": avg_frame_time * 1000,  # em ms
-            "max_frame_time": max_frame_time * 1000,  # em ms
-            "min_frame_time": min_frame_time * 1000,  # em ms
-        }
+    def get_fps_stats(self) -> dict[str, float]:
+        """Retorna estatísticas de FPS e performance."""
+        return dict(self._fps_stats_cache)
 
 
 # Função para pré-carregar imagens celestiais

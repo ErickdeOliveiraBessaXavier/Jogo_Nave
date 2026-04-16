@@ -2,17 +2,38 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 import time
 import tracemalloc
-from typing import Any
+import warnings
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-import pygame
-
-from game.core.config import config as Config
-from game.core.difficulty import DifficultyPreset
+if TYPE_CHECKING:
+    from game.core.difficulty import DifficultyPreset
 
 
-def parse_difficulty(value: str) -> DifficultyPreset:
+def _prepare_pygame_runtime() -> None:
+    # Hide pygame banner and silence setuptools deprecation warning emitted by pygame.
+    os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+    warnings.filterwarnings(
+        "ignore",
+        message="pkg_resources is deprecated as an API.*",
+        category=UserWarning,
+    )
+
+
+def _ensure_project_root_on_path() -> None:
+    root_dir = Path(__file__).resolve().parents[2]
+    if str(root_dir) not in sys.path:
+        sys.path.insert(0, str(root_dir))
+
+
+def parse_difficulty(value: str) -> "DifficultyPreset":
+    _ensure_project_root_on_path()
+    from game.core.difficulty import DifficultyPreset
+
     normalized = value.strip().lower()
     for preset in DifficultyPreset:
         if preset.value == normalized or preset.name.lower() == normalized:
@@ -36,9 +57,10 @@ def classify_performance(average_fps: float) -> str:
 
 
 def build_scene(
-    difficulty: DifficultyPreset,
+    difficulty: "DifficultyPreset",
     starting_level: int,
 ):
+    _ensure_project_root_on_path()
     from game.app import GameApp
     from game.scenes.playing import PlayingScene
 
@@ -88,9 +110,15 @@ def summarize_memory(memory_samples: list[int]) -> dict[str, float]:
 def run_benchmark(
     duration_seconds: float,
     warmup_seconds: float,
-    difficulty: DifficultyPreset,
+    difficulty: "DifficultyPreset",
     starting_level: int,
 ) -> dict[str, Any]:
+    _prepare_pygame_runtime()
+    _ensure_project_root_on_path()
+    import pygame
+
+    from game.core.config import config as Config
+
     app, scene = build_scene(difficulty, starting_level)
 
     frame_times: list[float] = []

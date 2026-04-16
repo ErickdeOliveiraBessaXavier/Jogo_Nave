@@ -14,64 +14,80 @@ from typing import Any, Dict
 def load_performance_results(file_path: str) -> Dict[str, Any]:
     """Carrega resultados de teste de performance."""
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-
-
-def generate_optimization_report() -> Dict[str, Any]:
-    """Gera relatório completo das otimizações implementadas."""
-
-    print("=" * 80)
-    print("🚀 RELATÓRIO FINAL DE OTIMIZAÇÃO DE PERFORMANCE - JOGO NAVE")
-    print("=" * 80)
-
-    current_results = load_performance_results(
-        str(Path(__file__).resolve().parent / "benchmarks" / "performance_results.json")
-    )
-
-    print("\n📊 MÉTRICAS DE PERFORMANCE ATUAIS:")
-    print("-" * 40)
-    if current_results:
-        print(f"⏱️  Duração: {current_results.get('duration_seconds', 0):.1f}s")
-        print(f"🎮 Frames: {current_results.get('total_frames', 0)}")
-        print(f"🎯 FPS Médio: {current_results.get('fps', {}).get('average', 0):.1f}")
-        print(f"📉 FPS Mínimo: {current_results.get('fps', {}).get('minimum', 0):.1f}")
-        print(f"📈 FPS Máximo: {current_results.get('fps', {}).get('maximum', 0):.1f}")
-        print(
-            f"⚡ Frame Time Médio: {current_results.get('frame_time_ms', {}).get('average', 0):.2f}ms"
-        )
-        print(
-            f"🐌 Frame Time Máximo: {current_results.get('frame_time_ms', {}).get('maximum', 0):.2f}ms"
-        )
-        print(
-            f"💾 Memória Média: {current_results.get('memory_mb', {}).get('average', 0):.1f}MB"
-        )
-        print(
-            f"🧠 Memória Máxima: {current_results.get('memory_mb', {}).get('maximum', 0):.1f}MB"
-        )
-        print(f"🏆 Classificação: {current_results.get('performance_rating', 'N/A')}")
-    else:
-        print(
-            "❌ Nenhum dado de performance encontrado. Execute: python código_teste/benchmarks/performance_test.py"
-        )
-
-    print("\n🔧 OTIMIZAÇÕES IMPLEMENTADAS:")
-    print("-" * 40)
-
     optimizations = [
         {
             "categoria": "🎨 Sistema de Renderização",
-            "titulo": "Otimização do StarField",
-            "problema": "Desenho de estrelas grandes usando polígonos complexos com ~100 chamadas cos/sin por frame",
-            "solucao": "Substituir polígonos por múltiplos círculos (4x mais eficiente)",
-            "impacto": "88% redução no tempo de draw das estrelas (6.8s → 0.8s)",
-            "arquivo": "renderer.py:265(draw)",
+            "titulo": "Cache incremental de FPS",
+            "problema": "get_fps_stats() recalculava soma, minimo e maximo a cada frame",
+            "solucao": "Manter janela fixa com acumuladores incrementais e cache pronto para leitura",
+            "impacto": "Menor custo por frame no HUD de debug",
+            "arquivo": "game/render/renderer.py:get_fps_stats()",
         },
         {
-            "categoria": "📝 Interface do Usuário",
-            "titulo": "Cache Inteligente de Textos HUD",
+            "categoria": "🌌 Fundo Animado",
+            "titulo": "Estrelas com alpha quantizado",
+            "problema": "set_alpha() era chamado por estrela em cada frame",
+            "solucao": "Usar variantes pre-renderizadas de alpha por tamanho",
+            "impacto": "Reducao do custo de blending no fundo procedural",
+            "arquivo": "game/render/backgrounds.py:_draw_stars()",
+        },
+        {
+            "categoria": "🗺️ Fundo Parallax",
+            "titulo": "Reducao de blit redundante",
+            "problema": "A segunda copia da camada era desenhada mesmo quando estava totalmente fora da tela",
+            "solucao": "Pular o segundo blit quando o offset esta alinhado",
+            "impacto": "Menos chamadas de blit por frame no fundo de montanhas",
+            "arquivo": "game/render/backgrounds.py:draw()",
+        },
+        {
+            "categoria": "🧠 Gestão de Cenas",
+            "titulo": "Culling de entidades fora da tela",
+            "problema": "Entidades invisiveis continuavam recebendo draw()",
+            "solucao": "Filtrar por rect ou bounding box antes de desenhar",
+            "impacto": "Reducao de overdraw em ondas com muitos objetos",
+            "arquivo": "game/systems/entity_manager.py:draw()",
+        },
+        {
+            "categoria": "🌠 Cache de Assets",
+            "titulo": "Escala de corpos celestes quantizada",
+            "problema": "A chave do cache gerava muitas variacoes de escala",
+            "solucao": "Arredondar a escala em passos de 0.2 para aumentar hits",
+            "impacto": "Mais reutilizacao de surfaces escaladas",
+            "arquivo": "game/render/renderer.py:_generate_scaled_image()",
+        },
+        {
+            "categoria": "🚀 Startup",
+            "titulo": "Cache canonico de imagens",
+            "problema": "O mesmo asset podia entrar no cache com chaves de caminho diferentes",
+            "solucao": "Normalizar caminho absoluto antes de consultar cache de imagem",
+            "impacto": "Menos recarregamento redundante durante preload",
+            "arquivo": "game/core/assets.py:get_image()",
+        },
+        {
+            "categoria": "🎞️ Animacoes",
+            "titulo": "Cache de frames no sprite loader",
+            "problema": "Frames podiam ser recarregados em chamadas repetidas do loader",
+            "solucao": "Memorizar listas de frames por chave de animacao",
+            "impacto": "Menor custo de startup para animacoes repetidas",
+            "arquivo": "game/core/sprite_loader.py:load_animation_frames()",
+        },
+        {
+            "categoria": "🧹 Limpeza de Codigo Morto",
+            "titulo": "Remocao do halo inativo",
+            "problema": "Um caminho visual nao usado permanecia no renderer",
+            "solucao": "Remover o codigo morto e a estrutura de cache associada",
+            "impacto": "Menos complexidade e menos manutencao",
+            "arquivo": "game/render/renderer.py (removido)",
+        },
+        {
+            "categoria": "🧪 Ferramentas",
+            "titulo": "Benchmark e profiling automatizados",
+            "problema": "Nao havia medicao repetivel do estado atual",
+            "solucao": "Scripts separados para benchmark e cProfile",
+            "impacto": "Comparacao consistente entre versoes",
+            "arquivo": "código_teste/benchmarks/performance_test.py e código_teste/profiling/profile_game.py",
+        },
+    ]
             "problema": "Re-renderização desnecessária de textos que não mudam",
             "solucao": "Cache de surfaces de texto baseado em valores atuais",
             "impacto": "Redução significativa em operações de renderização de texto",
@@ -82,20 +98,20 @@ def generate_optimization_report() -> Dict[str, Any]:
             "titulo": "Remoção do Halo Inativo",
             "problema": "Efeito visual de halo sem uso no fluxo principal",
             "solucao": "Remover o caminho morto e simplificar o renderer",
-            "impacto": "Menos manutencao e menos codigo sem efeito pratico",
-            "arquivo": "renderer.py (removido)",
-        },
-        {
-            "categoria": "🔍 Monitoramento de Performance",
-            "titulo": "Sistema de FPS em Tempo Real",
+    print("✅ Cache de FPS e fundo procedural simplificados")
+    print("✅ Estrelas e camadas com menor custo por frame")
+    print("✅ Culling de entidades fora da tela aplicado")
+    print("✅ Ferramentas de benchmark e profiling prontas")
+    print("✅ Remoção de caminho visual inativo consolidada")
+    print("✅ Cache de assets mais previsivel")
             "problema": "Falta de visibilidade sobre performance durante gameplay",
             "solucao": "Monitor FPS com tecla F3 + estatísticas detalhadas",
             "impacto": "Debugging em tempo real e identificação de gargalos",
-            "arquivo": "renderer.py:update_fps(), playing.py:render()",
-        },
-        {
-            "categoria": "🧹 Gerenciamento de Entidades",
-            "titulo": "Limpeza Adequada de Balas",
+    print("1. 📊 Executar testes regulares: python código_teste/benchmarks/performance_test.py")
+    print("2. 🔍 Monitorar FPS em jogo pressionando F3")
+    print("3. 📈 Reexecutar cProfile após cada ajuste grande")
+    print("4. 🎨 Considerar otimizações adicionais no fundo se o render seguir dominante")
+    print("5. 💾 Avaliar pooling para entidades temporarias se surgirem muitos alocadores")
             "problema": "Balas mortas permanecendo no entity_manager",
             "solucao": "Limpeza forçada em transições de nível",
             "impacto": "Prevenção de acúmulo de entidades mortas",

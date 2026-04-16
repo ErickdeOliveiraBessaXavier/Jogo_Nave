@@ -20,6 +20,7 @@ class SpriteLoader:
     def __init__(self):
         if not SpriteLoader._loaded:
             self.loaders: list[tuple[str, Callable[[], Any]]] = []
+            self._animation_cache: dict[tuple[str, int, str], List[pygame.Surface]] = {}
 
     def register(self, name: str, loader_func: Callable[[], Any]) -> None:
         """Registra uma função de carregamento de sprites."""
@@ -38,6 +39,7 @@ class SpriteLoader:
             logging.info(f"  ✅ {name} carregado!")
 
         SpriteLoader._loaded = True
+        self.loaders.clear()
         logging.info("✅ Todos os sprites carregados!\n")
 
     @staticmethod
@@ -59,6 +61,11 @@ class SpriteLoader:
         Returns:
             Lista de surfaces carregadas
         """
+        cache_key = (base_path, num_frames, filename_pattern)
+        loader = sprite_loader
+        if cache_key in loader._animation_cache:
+            return list(loader._animation_cache[cache_key])
+
         frames: List[pygame.Surface] = []
         for i in range(1, num_frames + 1):
             filename = filename_pattern.format(i=i)
@@ -86,6 +93,7 @@ class SpriteLoader:
         else:
             logging.info(f"{name}: {len(frames)} frames carregados com sucesso.")
 
+        loader._animation_cache[cache_key] = list(frames)
         return frames
 
     @classmethod

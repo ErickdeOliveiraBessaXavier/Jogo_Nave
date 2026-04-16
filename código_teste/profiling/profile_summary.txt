@@ -1,0 +1,23 @@
+         431418 function calls (424627 primitive calls) in 3.493 seconds
+
+   Ordered by: cumulative time
+   List reduced from 2399 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.002    0.002    3.494    3.494 performance_common.py:110(run_benchmark)
+       45    0.006    0.000    2.778    0.062 playing.py:2029(render)
+       45    0.001    0.000    2.276    0.051 renderer.py:509(background)
+       33    0.003    0.000    2.018    0.061 __init__.py:1(<module>)
+    359/5    0.007    0.000    1.260    0.252 <frozen importlib._bootstrap>:1349(_find_and_load)
+    358/5    0.003    0.000    1.260    0.252 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+    350/5    0.002    0.000    1.256    0.251 <frozen importlib._bootstrap>:911(_load_unlocked)
+    287/5    0.002    0.000    1.256    0.251 <frozen importlib._bootstrap_external>:993(exec_module)
+   825/10    0.003    0.000    1.252    0.125 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+    333/5    0.038    0.000    1.252    0.250 {built-in method builtins.exec}
+       45    0.023    0.001    1.159    0.026 backgrounds.py:476(draw)
+       42    0.014    0.000    0.904    0.022 assets.py:50(get_image)
+       42    0.001    0.000    0.862    0.021 assets.py:25(_get_image_cached)
+       45    0.057    0.001    0.802    0.018 backgrounds.py:384(_draw_stars)
+       42    0.759    0.018    0.759    0.018 {built-in method pygame.image.load}
+
+

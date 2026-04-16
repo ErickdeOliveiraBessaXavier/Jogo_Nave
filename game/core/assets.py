@@ -23,28 +23,39 @@ def get_font(size: int, path: str | Path | None = None) -> pygame.font.Font:
 
 
 @lru_cache(maxsize=128)
-def get_image(path: str | Path, alpha: bool = True) -> pygame.Surface:
+def _get_image_cached(image_path: str, alpha: bool = True) -> pygame.Surface:
     """
     Carrega e retorna uma imagem, com cache para evitar recarregar a mesma imagem.
     Converte a imagem para ter um canal alpha se 'alpha' for True.
     Retorna uma Surface vazia em caso de erro.
     """
-    image_path = Path(path)
+    normalized_path = Path(image_path)
     try:
-        image = pygame.image.load(str(image_path))
+        image = pygame.image.load(str(normalized_path))
         if alpha:
             return image.convert_alpha()
         return image.convert()
     except pygame.error as e:
-        print(f"❌ Erro ao carregar imagem {image_path}: {e}")
+        print(f"❌ Erro ao carregar imagem {normalized_path}: {e}")
         # Retorna uma Surface vazia em caso de erro de carregamento
         return pygame.Surface((1, 1), pygame.SRCALPHA)
     except FileNotFoundError:
-        print(f"⚠️ Imagem não encontrada: {image_path}")
+        print(f"⚠️ Imagem não encontrada: {normalized_path}")
         return pygame.Surface((1, 1), pygame.SRCALPHA)
     except Exception as e:  # pylint: disable=broad-exception-caught
-        print(f"❌ Erro inesperado ao carregar imagem {image_path}: {e}")
+        print(f"❌ Erro inesperado ao carregar imagem {normalized_path}: {e}")
         return pygame.Surface((1, 1), pygame.SRCALPHA)
+
+
+def get_image(path: str | Path, alpha: bool = True) -> pygame.Surface:
+    """
+    Carrega e retorna uma imagem, com cache para evitar recarregar a mesma imagem.
+
+    Normaliza o caminho absoluto para aumentar hits de cache quando o mesmo
+    arquivo é referenciado por caminhos equivalentes.
+    """
+    normalized_path = str(Path(path).resolve())
+    return _get_image_cached(normalized_path, alpha)
 
 
 def load_custom_cursor() -> None:
