@@ -249,6 +249,9 @@ class PlayingScene(Scene):
         self.world_transition_cutscene_debug_mode = False
         self.world_transition_thruster_particles: list[ThrusterParticle] = []
 
+        # Trava para evitar progressão no mesmo frame após acionar game over.
+        self._game_over_triggered = False
+
         # Sistema de multiplicador de score
         self.score_multiplier_timer = 0.0
         self.score_multiplier_active = False
@@ -630,6 +633,9 @@ class PlayingScene(Scene):
         pygame.mouse.set_visible(True)
 
     def update(self, dt: float):
+        if self._game_over_triggered:
+            return
+
         self.last_dt = dt
 
         if self.transition_phase == TransitionPhase.CUTSCENE_EXIT:
@@ -824,6 +830,8 @@ class PlayingScene(Scene):
             TransitionPhase.LEVEL_ENTRY,
         ):
             self._handle_collisions()
+            if self._game_over_triggered:
+                return
 
         self.entity_manager.cleanup()
 
@@ -841,6 +849,9 @@ class PlayingScene(Scene):
             self._update_warning_system(dt)
 
         elif self.transition_phase == TransitionPhase.PLAYING:
+            if self._game_over_triggered:
+                return
+
             # Atualizar timer de limpeza de inimigos se ativo
             if self.enemy_cleanup_active:
                 self.enemy_cleanup_timer += dt
@@ -1621,6 +1632,9 @@ class PlayingScene(Scene):
                 self.level_powerups_collected += 1
 
     def _handle_ship_hit(self):
+        if self._game_over_triggered:
+            return
+
         # God mode: ignorar dano
         if self.god_mode:
             return
@@ -1648,20 +1662,15 @@ class PlayingScene(Scene):
             # Meta-progression: Record death (but not game over)
             self.player_profile.record_death(self.current_level_index + 1, "collision")
         else:
-            # Sistema de mundos: reset para checkpoint quando perde
+            # Registra a morte final e mantém o checkpoint para o restart após Game Over.
+            self.player_profile.record_death(self.current_level_index + 1, "collision")
             next_level = self.player_profile.reset_to_checkpoint()
+            logger.info(f"Game Over! Reinício preparado para nível {next_level}")
+            self._game_over_triggered = True
 
-            # Reiniciar no nível do checkpoint
-            logger.info(f"Reiniciando no nível {next_level} (checkpoint)")
-            self.app.states.pop()  # Remove playing scene atual
-            self.app.states.push(
-                PlayingScene(
-                    self.app,
-                    self.level_manager,
-                    difficulty_preset=self.difficulty_preset,
-                    starting_level=next_level,
-                )
-            )
+            from .game_over import GameOverScene
+
+            self.app.states.switch(GameOverScene(self.app, self.score, self, next_level))
 
     def _check_level_progression(self):
         # Usar cache ao invés de acessar level_config toda vez

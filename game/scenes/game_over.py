@@ -14,12 +14,19 @@ if TYPE_CHECKING:
 
 
 class GameOverScene(Scene):
-    def __init__(self, app: "GameApp", score: int, playing_scene: "PlayingScene"):
+    def __init__(
+        self,
+        app: "GameApp",
+        score: int,
+        playing_scene: "PlayingScene",
+        restart_level: int = 1,
+    ):
         super().__init__(app)
         self.score = score
         self.playing_scene = (
             playing_scene  # Reference to the playing scene for rendering
         )
+        self.restart_level = max(1, restart_level)
         self.r = playing_scene.r  # Reusar o MESMO renderer da cena de jogo
 
         self.game_over_timer = 0.0
@@ -43,6 +50,9 @@ class GameOverScene(Scene):
         # Botão para voltar ao menu principal
         self.back_to_menu_button = pygame.Rect(20, Config.SCREEN_HEIGHT - 60, 320, 40)
 
+    def enter(self):
+        pygame.mouse.set_visible(True)
+
     def update(self, dt: float):
         self.game_over_timer += dt
         slow_mo_dt = dt * 0.2
@@ -64,6 +74,7 @@ class GameOverScene(Scene):
                     self.app,
                     self.playing_scene.level_manager,
                     self.playing_scene.difficulty_preset,
+                    starting_level=self.restart_level,
                 )
             )
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
