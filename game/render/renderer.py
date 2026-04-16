@@ -1,7 +1,7 @@
 import math
 import random
 import time
-from collections import OrderedDict, deque
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, TypedDict
 
@@ -455,8 +455,6 @@ class Renderer:
             Config.SCREEN_HEIGHT,
             n=RenderConfig.CELESTIAL_NUM_BODIES,
         )
-        self.halo_cache: OrderedDict[int, pygame.Surface] = OrderedDict()
-        self.MAX_HALO_CACHE_SIZE = 30
 
         # === NOVO: Sistema de medição de FPS ===
         self.fps_counter = 0
@@ -679,24 +677,6 @@ class Renderer:
             center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2)
         )
         surface.blit(ct, crect)
-
-    def effects_on_ship(self, surface: pygame.Surface, ship: "Ship"):
-        """Desenha efeitos visuais na nave (ex.: halo de escudo)."""
-        if ship.is_invulnerable:
-            cx = int(ship.x + ship.w / 2)
-            cy = int(ship.y + ship.h / 2)
-            radius = max(ship.w, ship.h) // 2 + 6
-
-            if radius not in self.halo_cache:
-                if len(self.halo_cache) >= self.MAX_HALO_CACHE_SIZE:
-                    self.halo_cache.popitem(last=False)  # Remove oldest
-                halo = pygame.Surface((radius * 2 + 6, radius * 2 + 6), pygame.SRCALPHA)
-                pygame.draw.circle(
-                    halo, (0, 120, 255, 120), (radius + 3, radius + 3), radius, width=3
-                )
-                self.halo_cache[radius] = halo
-            halo = self.halo_cache[radius]
-            surface.blit(halo, (cx - radius - 3, cy - radius - 3))
 
     def update_fps(self, dt: float):
         """Atualiza o contador de FPS e calcula métricas de performance."""

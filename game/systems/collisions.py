@@ -358,7 +358,7 @@ class Collisions:
 
             score_event = (part_center[0], part_center[1], pts) if pts > 0 else None
 
-            return pts, score_event, fully_destroyed
+            return pts, score_event, part_destroyed
 
         # ElementalRobot, Boulder e StoneSentry têm sistema de HP próprio — delegar ao take_damage
         if isinstance(enemy, (ElementalRobot, Boulder, StoneSentry)):

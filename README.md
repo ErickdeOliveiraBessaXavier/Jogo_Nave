@@ -146,13 +146,13 @@ O jogo inclui ferramentas avançadas de monitoramento:
 ### Testes Automatizados (Desenvolvimento)
 ```bash
 # Executar teste de performance
-python performance_test.py --duration 30 --difficulty normal
+python código_teste/benchmarks/performance_test.py --duration 30 --difficulty normal
 
 # Profiling detalhado
-python profile_game.py --duration 15
+python código_teste/profiling/profile_game.py --duration 15
 
 # Gerar relatório de otimizações
-python optimization_report.py
+python código_teste/optimization_report.py
 ```
 
 ## 🔧 Tecnologias Utilizadas

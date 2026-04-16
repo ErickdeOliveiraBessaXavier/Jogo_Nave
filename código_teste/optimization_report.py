@@ -7,6 +7,7 @@ a performance do jogo, baseado em análise de profiling detalhada.
 """
 
 import json
+from pathlib import Path
 from typing import Any, Dict
 
 
@@ -26,8 +27,9 @@ def generate_optimization_report() -> Dict[str, Any]:
     print("🚀 RELATÓRIO FINAL DE OTIMIZAÇÃO DE PERFORMANCE - JOGO NAVE")
     print("=" * 80)
 
-    # Carregar dados de performance atuais
-    current_results = load_performance_results("performance_results.json")
+    current_results = load_performance_results(
+        str(Path(__file__).resolve().parent / "benchmarks" / "performance_results.json")
+    )
 
     print("\n📊 MÉTRICAS DE PERFORMANCE ATUAIS:")
     print("-" * 40)
@@ -52,7 +54,7 @@ def generate_optimization_report() -> Dict[str, Any]:
         print(f"🏆 Classificação: {current_results.get('performance_rating', 'N/A')}")
     else:
         print(
-            "❌ Nenhum dado de performance encontrado. Execute: python performance_test.py"
+            "❌ Nenhum dado de performance encontrado. Execute: python código_teste/benchmarks/performance_test.py"
         )
 
     print("\n🔧 OTIMIZAÇÕES IMPLEMENTADAS:")
@@ -77,11 +79,11 @@ def generate_optimization_report() -> Dict[str, Any]:
         },
         {
             "categoria": "💾 Gerenciamento de Memória",
-            "titulo": "Limitação de Cache de Halo",
-            "problema": "Cache de efeitos visuais crescendo indefinidamente",
-            "solucao": "Limite máximo de 10 entradas com limpeza automática",
-            "impacto": "Prevenção de vazamentos de memória em efeitos visuais",
-            "arquivo": "renderer.py:effects_on_ship()",
+            "titulo": "Remoção do Halo Inativo",
+            "problema": "Efeito visual de halo sem uso no fluxo principal",
+            "solucao": "Remover o caminho morto e simplificar o renderer",
+            "impacto": "Menos manutencao e menos codigo sem efeito pratico",
+            "arquivo": "renderer.py (removido)",
         },
         {
             "categoria": "🔍 Monitoramento de Performance",
@@ -105,7 +107,7 @@ def generate_optimization_report() -> Dict[str, Any]:
             "problema": "Falta de testes sistemáticos de performance",
             "solucao": "Script automatizado com métricas detalhadas",
             "impacto": "Monitoramento contínuo e detecção de regressões",
-            "arquivo": "performance_test.py",
+            "arquivo": "benchmarks/performance_test.py",
         },
         {
             "categoria": "🔬 Profiling Detalhado",
@@ -113,7 +115,7 @@ def generate_optimization_report() -> Dict[str, Any]:
             "problema": "Análise superficial de gargalos de performance",
             "solucao": "Profiling completo com análise automática",
             "impacto": "Identificação precisa de funções custosas",
-            "arquivo": "profile_game.py",
+            "arquivo": "profiling/profile_game.py",
         },
     ]
 
@@ -135,7 +137,9 @@ def generate_optimization_report() -> Dict[str, Any]:
 
     print("\n🚀 PRÓXIMOS PASSOS RECOMENDADOS:")
     print("-" * 40)
-    print("1. 📊 Executar testes regulares: python performance_test.py")
+    print(
+        "1. 📊 Executar testes regulares: python código_teste/benchmarks/performance_test.py"
+    )
     print("2. 🔍 Monitorar FPS em jogo pressionando F3")
     print("3. 📈 Considerar otimização do spatial grid se necessário")
     print("4. 🎨 Explorar redução do número de corpos celestiais se FPS < 50")
@@ -144,10 +148,12 @@ def generate_optimization_report() -> Dict[str, Any]:
     print("\n🛠️ COMANDOS ÚTEIS:")
     print("-" * 40)
     print("# Teste de performance completo")
-    print("python performance_test.py --duration 30 --difficulty NORMAL")
+    print(
+        "python código_teste/benchmarks/performance_test.py --duration 30 --difficulty NORMAL"
+    )
     print()
     print("# Profiling detalhado")
-    print("python profile_game.py --duration 15")
+    print("python código_teste/profiling/profile_game.py --duration 15")
     print()
     print("# Executar jogo normal")
     print("python run.py")
