@@ -38,6 +38,7 @@ from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
+from ..entities.rock_glider import RockGlider
 from ..entities.ship import Ship
 from ..entities.slime_boss import SlimeBoss
 from ..entities.slime_drip import SlimeDrip
@@ -327,6 +328,37 @@ class Collisions:
         # Ponto de explosão de impacto: hit_x/y se disponível, senão centro
         hx = hit_x if hit_x is not None else cx
         hy = hit_y if hit_y is not None else cy
+
+        # RockGlider possui dano por partes (pedra e bot) com mortes independentes.
+        if isinstance(enemy, RockGlider):
+            (
+                pts,
+                part_destroyed,
+                fully_destroyed,
+                part_center,
+                part_name,
+            ) = enemy.take_part_damage(hx, hy, amount=1)
+
+            if not part_destroyed:
+                entity_manager.spawn_explosion(hx, hy, size=10)
+                sound_manager.play_boss_damage()
+                return 0, None, False
+
+            part_explosion_size = 35 if part_name == "rock" else 25
+            entity_manager.spawn_explosion(
+                part_center[0],
+                part_center[1],
+                size=part_explosion_size,
+            )
+
+            if part_name == "rock":
+                sound_manager.play_explosion_asteroid()
+            else:
+                sound_manager.play_explosion_alien()
+
+            score_event = (part_center[0], part_center[1], pts) if pts > 0 else None
+
+            return pts, score_event, fully_destroyed
 
         # ElementalRobot, Boulder e StoneSentry têm sistema de HP próprio — delegar ao take_damage
         if isinstance(enemy, (ElementalRobot, Boulder, StoneSentry)):

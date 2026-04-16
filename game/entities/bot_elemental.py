@@ -501,6 +501,9 @@ class ElementalRobot:
         # ── Fade out (DYING) ──────────────────────────────────────────────────
         self._alpha = 255
 
+        # Colisão é desativada assim que a morte começa; a animação continua.
+        self._collision_disabled = False
+
         # ── Tempo global ─────────────────────────────────────────────────────
         self._time = 0.0
 
@@ -544,6 +547,11 @@ class ElementalRobot:
         self._fsm_timer = 0.0
         if new_state == "DYING":
             self.just_died = True  # sinaliza para o sistema externo disparar a explosão
+            self._collision_disabled = True
+            self.rect.width = 0
+            self.rect.height = 0
+            self.rect.x = int(self.x)
+            self.rect.y = int(self.y)
 
     def _run_fsm(
         self,
@@ -803,13 +811,19 @@ class ElementalRobot:
         # A sprite tem 18 colunas, mas o corpo sólido ocupa das cols 1 a 16.
         # A altura sólida vai do topo (row 0) até a base strip (row 19).
         # O propulsor (rows 20+) é tratado como efeito visual sem colisão.
-        S = self.SCALE
-        self.rect.width = 15 * S  # cols 1 a 16 aprox.
-        self.rect.height = 20 * S  # rows 0 a 19
+        if self._collision_disabled:
+            self.rect.width = 0
+            self.rect.height = 0
+            self.rect.x = int(self.x)
+            self.rect.y = int(self.y)
+        else:
+            S = self.SCALE
+            self.rect.width = 15 * S  # cols 1 a 16 aprox.
+            self.rect.height = 20 * S  # rows 0 a 19
 
-        # Centraliza o rect reduzido na posição visual
-        self.rect.x = int(self.x + self._jitter_x + self._recoil_x) + S
-        self.rect.y = int(self.y + self._float_y + self._jitter_y + self._recoil_y)
+            # Centraliza o rect reduzido na posição visual
+            self.rect.x = int(self.x + self._jitter_x + self._recoil_x) + S
+            self.rect.y = int(self.y + self._float_y + self._jitter_y + self._recoil_y)
 
         return spawned
 

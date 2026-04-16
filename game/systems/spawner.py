@@ -498,13 +498,15 @@ class EnemySpawner:
                     meteor = self.meteor_pool.get()
             elif is_side_scroll:
                 size = random.randint(Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE)
+                # RockGlider controla sua propria velocidade horizontal internamente.
+                side_vx = None if enemy_type.__name__ == "RockGlider" else -random.uniform(150, 300)
                 meteor = cast(
                     EnemyWithHealth,
                     enemy_type(
                         size=size,
                         x=Config.SCREEN_WIDTH + 40,
                         y=random.randint(60, Config.SCREEN_HEIGHT - 100),
-                        vx=-random.uniform(150, 300),
+                        vx=side_vx,
                         vy=random.uniform(-50, 50),
                     ),
                 )
