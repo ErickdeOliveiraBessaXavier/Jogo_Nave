@@ -48,6 +48,7 @@ class RockGlider(Meteor):
         vx: float | None = None,
         vy: float | None = None,
     ):
+
         glider_size = size if size is not None else random.randint(15, 22)
         super().__init__(size=glider_size, x=x, y=y, vx=vx, vy=vy)
 
@@ -96,6 +97,27 @@ class RockGlider(Meteor):
         self._rock_fall_vy = 0.0
         self._rock_fall_gravity = 620.0
         self._collision_disabled = False
+
+        self._rock_surface = pygame.Surface((1, 1), pygame.SRCALPHA)
+        self._bot_surface = pygame.Surface((1, 1), pygame.SRCALPHA)
+        self._draw_offset_x = 0
+        self._draw_offset_y = 0
+        self._rock_surface_offset_x = 0
+        self._rock_surface_offset_y = 0
+        self._bot_surface_offset_x = 0
+        self._bot_surface_offset_y = 0
+        self._local_rock_points: list[tuple[int, int]] = []
+        self._local_body_rect = pygame.Rect(0, 0, 1, 1)
+        self._local_left_arm_rect = pygame.Rect(0, 0, 1, 1)
+        self._local_right_arm_rect = pygame.Rect(0, 0, 1, 1)
+        self._local_left_nozzle_rect = pygame.Rect(0, 0, 1, 1)
+        self._local_right_nozzle_rect = pygame.Rect(0, 0, 1, 1)
+        self._eye_base_left_x = 0
+        self._eye_base_right_x = 0
+        self._eye_base_y = 0
+        self._nozzle_base_y = 0
+        self._thruster_left_center_x = 0
+        self._thruster_right_center_x = 0
 
         self._eye_scan_speed = 2.0
         self._eye_scan_offset = 0
@@ -228,19 +250,191 @@ class RockGlider(Meteor):
         self._eye_blink_interval = random.uniform(1.6, 3.2)
 
         self.health = self._rock_hp + self._bot_hp
+        self._rebuild_draw_cache()
         self._update_collision_regions()
 
     def _build_geometry(self) -> tuple[list[tuple[int, int]], pygame.Rect, int, int]:
-        cx = int(self.x + self.size)
-        cy = int(self.y + self.size)
-        rock_points = [(int(cx + px), int(cy + py - 5)) for px, py in self.rock_pts]
-        rock_span_screen = max(x for x, _ in rock_points) - min(
-            x for x, _ in rock_points
+        base_x = int(self.x)
+        base_y = int(self.y)
+        rock_points = [(base_x + px, base_y + py) for px, py in self._local_rock_points]
+        body_rect = self._local_body_rect.move(base_x, base_y)
+        return rock_points, body_rect, body_rect.centerx, body_rect.top
+
+    def _rebuild_draw_cache(self) -> None:
+        cx = self.size
+        cy = self.size
+
+        self._local_rock_points = [
+            (int(cx + px), int(cy + py - 5)) for px, py in self.rock_pts
+        ]
+
+        rock_span_screen = max(x for x, _ in self._local_rock_points) - min(
+            x for x, _ in self._local_rock_points
         )
         body_w = max(self._base_body_w, rock_span_screen + self._base_margin)
         body_h = self._base_body_h
-        body_rect = pygame.Rect(cx - body_w // 2, cy, body_w, body_h)
-        return rock_points, body_rect, cx, cy
+        self._local_body_rect = pygame.Rect(cx - body_w // 2, cy, body_w, body_h)
+
+        arm_w = 5
+        arm_h = 10
+        self._local_left_arm_rect = pygame.Rect(
+            self._local_body_rect.left,
+            self._local_body_rect.top - 8,
+            arm_w,
+            arm_h,
+        )
+        self._local_right_arm_rect = pygame.Rect(
+            self._local_body_rect.right - arm_w,
+            self._local_body_rect.top - 8,
+            arm_w,
+            arm_h,
+        )
+
+        nozzle_w = 3
+        nozzle_h = 2
+        self._local_left_nozzle_rect = pygame.Rect(
+            self._local_body_rect.left + 1,
+            self._local_body_rect.bottom,
+            nozzle_w,
+            nozzle_h,
+        )
+        self._local_right_nozzle_rect = pygame.Rect(
+            self._local_body_rect.right - nozzle_w - 1,
+            self._local_body_rect.bottom,
+            nozzle_w,
+            nozzle_h,
+        )
+
+        min_x = min(
+            min(x for x, _ in self._local_rock_points),
+            self._local_left_arm_rect.left,
+            self._local_right_arm_rect.left,
+            self._local_left_nozzle_rect.left,
+            self._local_right_nozzle_rect.left,
+        )
+        min_y = min(
+            min(y for _, y in self._local_rock_points),
+            self._local_left_arm_rect.top,
+            self._local_right_arm_rect.top,
+            self._local_left_nozzle_rect.top,
+            self._local_right_nozzle_rect.top,
+        )
+        max_x = max(
+            max(x for x, _ in self._local_rock_points),
+            self._local_left_arm_rect.right,
+            self._local_right_arm_rect.right,
+            self._local_left_nozzle_rect.right,
+            self._local_right_nozzle_rect.right,
+        )
+        max_y = max(
+            max(y for _, y in self._local_rock_points),
+            self._local_left_arm_rect.bottom,
+            self._local_right_arm_rect.bottom,
+            self._local_left_nozzle_rect.bottom,
+            self._local_right_nozzle_rect.bottom,
+        )
+
+        self._draw_offset_x = min_x
+        self._draw_offset_y = min_y
+
+        # Surface da pedra (parte superior)
+        rock_surface_w = max(1, max_x - min_x + 3)
+        rock_surface_h = max(1, max_y - min_y + 3)
+        self._rock_surface = pygame.Surface(
+            (rock_surface_w, rock_surface_h), pygame.SRCALPHA
+        )
+        self._rock_surface_offset_x = min_x
+        self._rock_surface_offset_y = min_y
+        pygame.draw.polygon(
+            self._rock_surface,
+            self._rock_color,
+            [(x - min_x, y - min_y) for x, y in self._local_rock_points],
+        )
+        pygame.draw.polygon(
+            self._rock_surface,
+            colors.BLACK,
+            [(x - min_x, y - min_y) for x, y in self._local_rock_points],
+            2,
+        )
+
+        # Surface do corpo/base (parte inferior)
+        bot_min_x = min(
+            self._local_body_rect.left,
+            self._local_left_arm_rect.left,
+            self._local_right_arm_rect.left,
+            self._local_left_nozzle_rect.left,
+            self._local_right_nozzle_rect.left,
+        )
+        bot_min_y = min(
+            self._local_body_rect.top,
+            self._local_left_arm_rect.top,
+            self._local_right_arm_rect.top,
+            self._local_left_nozzle_rect.top,
+            self._local_right_nozzle_rect.top,
+        )
+        bot_max_x = max(
+            self._local_body_rect.right,
+            self._local_left_arm_rect.right,
+            self._local_right_arm_rect.right,
+            self._local_left_nozzle_rect.right,
+            self._local_right_nozzle_rect.right,
+        )
+        bot_max_y = max(
+            self._local_body_rect.bottom,
+            self._local_left_arm_rect.bottom,
+            self._local_right_arm_rect.bottom,
+            self._local_left_nozzle_rect.bottom,
+            self._local_right_nozzle_rect.bottom,
+        )
+        bot_surface_w = max(1, bot_max_x - bot_min_x + 3)
+        bot_surface_h = max(1, bot_max_y - bot_min_y + 3)
+        self._bot_surface = pygame.Surface(
+            (bot_surface_w, bot_surface_h), pygame.SRCALPHA
+        )
+        self._bot_surface_offset_x = bot_min_x
+        self._bot_surface_offset_y = bot_min_y
+
+        def shift_bot(rect: pygame.Rect) -> pygame.Rect:
+            return rect.move(-bot_min_x, -bot_min_y)
+
+        pygame.draw.rect(
+            self._bot_surface,
+            self.color_body,
+            shift_bot(self._local_body_rect),
+        )
+        pygame.draw.rect(
+            self._bot_surface,
+            colors.BLACK,
+            shift_bot(self._local_body_rect),
+            2,
+        )
+        pygame.draw.rect(
+            self._bot_surface,
+            self.color_body,
+            shift_bot(self._local_left_arm_rect),
+        )
+        pygame.draw.rect(
+            self._bot_surface,
+            self.color_body,
+            shift_bot(self._local_right_arm_rect),
+        )
+        pygame.draw.rect(
+            self._bot_surface,
+            self.color_body,
+            shift_bot(self._local_left_nozzle_rect),
+        )
+        pygame.draw.rect(
+            self._bot_surface,
+            self.color_body,
+            shift_bot(self._local_right_nozzle_rect),
+        )
+
+        self._eye_base_left_x = self._local_body_rect.centerx - self._eye_size - 2
+        self._eye_base_right_x = self._local_body_rect.centerx + 2
+        self._eye_base_y = self._local_body_rect.centery
+        self._nozzle_base_y = self._local_left_nozzle_rect.bottom
+        self._thruster_left_center_x = self._local_left_nozzle_rect.centerx
+        self._thruster_right_center_x = self._local_right_nozzle_rect.centerx
 
     def _update_collision_regions(self) -> None:
         rock_points, body_rect, _cx, cy = self._build_geometry()
@@ -468,55 +662,48 @@ class RockGlider(Meteor):
             self.dead = True
 
     def draw(self, screen: pygame.Surface):
-        rock_points, body_rect, _cx, cy = self._build_geometry()
+        rock_x = int(self.x) + self._rock_surface_offset_x
+        rock_y = int(self.y) + self._rock_surface_offset_y
+        bot_x = int(self.x) + self._bot_surface_offset_x
+        bot_y = int(self.y) + self._bot_surface_offset_y
+
+        if not self._rock_destroyed:
+            screen.blit(self._rock_surface, (rock_x, rock_y))
+        if not self._bot_destroyed:
+            screen.blit(self._bot_surface, (bot_x, bot_y))
 
         self._rock_center = (
-            float(sum(x for x, _ in rock_points) / len(rock_points)),
-            float(sum(y for _, y in rock_points) / len(rock_points)),
+            float(
+                int(self.x)
+                + sum(px for px, _ in self._local_rock_points)
+                / len(self._local_rock_points)
+            ),
+            float(
+                int(self.y)
+                + sum(py for _, py in self._local_rock_points)
+                / len(self._local_rock_points)
+            ),
         )
-        self._bot_center = (float(body_rect.centerx), float(body_rect.centery))
+        self._bot_center = (
+            float(int(self.x) + self._local_body_rect.centerx),
+            float(int(self.y) + self._local_body_rect.centery),
+        )
 
-        # 1) Pedra no topo
-        if not self._rock_destroyed:
-            pygame.draw.polygon(screen, self._rock_color, rock_points)
-            pygame.draw.polygon(screen, colors.BLACK, rock_points, 2)
-
-        # 2) Corpo principal (baixo e fixo na altura)
         if not self._bot_destroyed:
-            pygame.draw.rect(screen, self.color_body, body_rect)
-            pygame.draw.rect(screen, colors.BLACK, body_rect, 2)
-
-            # 3) Bracos/garras laterais
-            arm_w = 5
-            arm_h = 10
-            pygame.draw.rect(
-                screen, self.color_body, (body_rect.left, cy - 8, arm_w, arm_h)
-            )
-            pygame.draw.rect(
-                screen,
-                self.color_body,
-                (body_rect.right - arm_w, cy - 8, arm_w, arm_h),
-            )
-
-            # 4) Olhos laranja quadrados
             eye_size = self._eye_size
             eye_h = (
                 eye_size if self._eye_blink_remaining <= 0.0 else max(1, eye_size // 3)
             )
-            eye_y = body_rect.centery - eye_h // 2
+            eye_y = int(self.y) + self._eye_base_y - eye_h // 2
 
-            left_eye_x = body_rect.centerx - eye_size - 2 + self._eye_scan_offset
-            right_eye_x = body_rect.centerx + 2 + self._eye_scan_offset
+            left_eye_x = int(self.x) + self._eye_base_left_x + self._eye_scan_offset
+            right_eye_x = int(self.x) + self._eye_base_right_x + self._eye_scan_offset
 
             pygame.draw.rect(
-                screen,
-                self.color_eye,
-                (left_eye_x, eye_y, eye_size, eye_h),
+                screen, self.color_eye, (left_eye_x, eye_y, eye_size, eye_h)
             )
             pygame.draw.rect(
-                screen,
-                self.color_eye,
-                (right_eye_x, eye_y, eye_size, eye_h),
+                screen, self.color_eye, (right_eye_x, eye_y, eye_size, eye_h)
             )
 
             if eye_h > 1:
@@ -543,7 +730,6 @@ class RockGlider(Meteor):
                     ),
                 )
 
-            # Sobrancelhas inclinadas para dentro (expressao de foco/agressividade).
             brow_y = eye_y - 2
             pygame.draw.line(
                 screen,
@@ -560,24 +746,14 @@ class RockGlider(Meteor):
                 1,
             )
 
-            # 5) Dois thrusters de anel (estilo Bot Elemental), compactos nas pontas
-            nozzle_w = 3
-            nozzle_h = 2
-            nozzle_y = body_rect.bottom
-            left_nozzle = pygame.Rect(body_rect.left + 1, nozzle_y, nozzle_w, nozzle_h)
-            right_nozzle = pygame.Rect(
-                body_rect.right - nozzle_w - 1, nozzle_y, nozzle_w, nozzle_h
-            )
-            pygame.draw.rect(screen, self.color_body, left_nozzle)
-            pygame.draw.rect(screen, self.color_body, right_nozzle)
-
             ring_count = 3
             max_drop = 10
             ring_speed = 2.3
+            nozzle_y = int(self.y) + self._nozzle_base_y
 
             for cx_ring, side_phase in (
-                (left_nozzle.centerx, 0.0),
-                (right_nozzle.centerx, 0.5),
+                (int(self.x) + self._thruster_left_center_x, 0.0),
+                (int(self.x) + self._thruster_right_center_x, 0.5),
             ):
                 for i in range(ring_count):
                     phase = (
@@ -585,7 +761,7 @@ class RockGlider(Meteor):
                     ) % 1.0
                     ring_w = max(2, int(8 * (1.0 - phase)))
                     ring_h = max(1, int(3 * (1.0 - phase)))
-                    ring_y = nozzle_y + nozzle_h + int(phase * max_drop)
+                    ring_y = nozzle_y + 2 + int(phase * max_drop)
 
                     if phase < 0.2:
                         ring_color = self.color_thruster_hot

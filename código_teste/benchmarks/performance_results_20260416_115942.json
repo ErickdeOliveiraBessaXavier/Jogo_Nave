@@ -1,0 +1,23 @@
+{
+  "duration_seconds": 1.044,
+  "total_frames": 74,
+  "warmup_seconds": 0.1,
+  "difficulty": "normal",
+  "starting_level": 1,
+  "fps": {
+    "average": 75.0,
+    "minimum": 34.87,
+    "maximum": 85.7
+  },
+  "frame_time_ms": {
+    "average": 13.333238229867728,
+    "minimum": 11.668800143525004,
+    "maximum": 28.681900119408965
+  },
+  "memory_mb": {
+    "average": 0.08,
+    "maximum": 0.15,
+    "current": 0.07
+  },
+  "performance_rating": "very_good"
+}

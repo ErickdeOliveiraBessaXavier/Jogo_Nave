@@ -35,6 +35,8 @@ from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
+from ..entities.rock_glider import RockGlider
+from ..entities.rock_glider_pool import RockGliderPool
 from ..entities.slime_boss import SlimeBoss
 from ..entities.slime_drip import SlimeDrip
 from ..entities.spike import Spike
@@ -108,6 +110,9 @@ class EntityManager:
         self.meteor_pool = MeteorPool(
             initial_size=100, is_side_scroll=is_side_scroll
         )  # Pool de meteoros
+        self.rock_glider_pool = RockGliderPool(
+            initial_size=24, is_side_scroll=is_side_scroll
+        )  # Pool de rock gliders
         self.bullet_pool = BulletPool(initial_size=50)  # Pool de balas
         self.enemy_spatial_grid: SpatialGrid[
             Meteor
@@ -1022,6 +1027,8 @@ class EntityManager:
         for e in self.enemies:
             if isinstance(e, Meteor) and e.dead:
                 self.meteor_pool.release(e)
+            elif isinstance(e, RockGlider) and e.dead:
+                self.rock_glider_pool.release(e)
 
         self.alien_bullets = [ab for ab in self.alien_bullets if not ab.dead]
         self.energy_orbs = [orb for orb in self.energy_orbs if not orb.dead]
@@ -1084,6 +1091,7 @@ class EntityManager:
         self.formations.clear()
         self.spikes.clear()
         self.meteor_pool.clear_active()  # Limpar meteoros ativos do pool
+        self.rock_glider_pool.clear_active()  # Limpar rock gliders ativos do pool
         self.bullet_pool.clear_active()  # Limpar balas ativas do pool
         self.explosion_pool.clear_active()  # Limpar explosões ativas do pool
 
@@ -1105,6 +1113,7 @@ class EntityManager:
         self.boss = None
         self.formations.clear()
         self.meteor_pool.clear_active()  # Limpar meteoros ativos do pool
+        self.rock_glider_pool.clear_active()  # Limpar rock gliders ativos do pool
         # NÃO limpar bullet_pool aqui para manter balas do jogador
         self.explosion_pool.clear_active()  # Limpar explosões ativas do pool
         self.spikes.clear()

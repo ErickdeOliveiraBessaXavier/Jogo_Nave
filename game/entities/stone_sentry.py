@@ -31,6 +31,8 @@ class StoneShardBullet(AlienBullet):
         (142, 118, 92),
         (60, 56, 54),
     ]
+    _render_cache: dict[tuple[tuple[int, int, int], int, int], pygame.Surface] = {}
+    _render_cache_limit = 256
 
     def __init__(self, x: float, y: float):
         super().__init__(x, y)
@@ -86,6 +88,21 @@ class StoneShardBullet(AlienBullet):
         """Retorna a superfície base usada para renderização rotacionada."""
         return self._surface_cache
 
+    def _get_rendered_surface(self, diameter: int) -> pygame.Surface:
+        angle_bucket = int(self.spin / 5.0) * 5 % 360
+        cache_key = (self.current_color, angle_bucket, diameter)
+        cached_surface = self._render_cache.get(cache_key)
+        if cached_surface is None:
+            rotated_surface = pygame.transform.rotate(self._surface_cache, angle_bucket)
+            cached_surface = pygame.transform.scale(
+                rotated_surface,
+                (diameter, diameter),
+            )
+            if len(self._render_cache) >= self._render_cache_limit:
+                self._render_cache.clear()
+            self._render_cache[cache_key] = cached_surface
+        return cached_surface
+
     def update(self, dt: float) -> None:
         self.x += self.vx * dt
         self.y += self.vy * dt
@@ -96,8 +113,7 @@ class StoneShardBullet(AlienBullet):
 
     def draw(self, surface: pygame.Surface) -> None:
         diameter = max(16, int(self.current_radius) * 2)
-        rock_surface = pygame.transform.rotate(self._surface_cache, self.spin)
-        scaled_surface = pygame.transform.scale(rock_surface, (diameter, diameter))
+        scaled_surface = self._get_rendered_surface(diameter)
         surface.blit(
             scaled_surface,
             (int(self.x) - diameter // 2, int(self.y) - diameter // 2),
@@ -142,6 +158,13 @@ class StoneSentry:
     MIN_BOUNCE_VELOCITY = 140.0
     SUPER_PROJECTILE_CHANCE = 0.10
     SUPER_PROJECTILE_SCALE = 3.0
+    _eye_sprite_cache: dict[
+        tuple[tuple[int, int, int], tuple[int, int, int]], pygame.Surface
+    ] = {}
+    _particle_surface_cache: dict[
+        tuple[tuple[int, int, int], int, int], pygame.Surface
+    ] = {}
+    _particle_alpha_step = 32
 
     def __init__(self):
         self.w = 40
@@ -182,6 +205,7 @@ class StoneSentry:
         self._low_res_surface = pygame.Surface(
             (self.LOW_RES_SIZE, self.LOW_RES_SIZE), pygame.SRCALPHA
         )
+        self._body_surface_cache: dict[tuple[bool, int], pygame.Surface] = {}
         self._particles: list[Particle] = []
         self._crack_paths = self._generate_crack_paths()
 
@@ -252,6 +276,90 @@ class StoneSentry:
                 path.append((x, y))
             paths.append(path)
         return paths
+
+    def _get_body_surface(self, angle_bucket: int, hit_active: bool) -> pygame.Surface:
+        cache_key = (hit_active, angle_bucket)
+        cached_surface = self._body_surface_cache.get(cache_key)
+        if cached_surface is None:
+            cached_surface = pygame.Surface(
+                (self.LOW_RES_SIZE, self.LOW_RES_SIZE), pygame.SRCALPHA
+            )
+            rad = math.radians(angle_bucket)
+            cr = math.cos(rad)
+            sr = math.sin(rad)
+            cx = self.LOW_RES_SIZE / 2
+            cy = self.LOW_RES_SIZE / 2
+
+            rotated_pts = [
+                (
+                    cx + (px * cr - py * sr) * self._shape_scale,
+                    cy + (px * sr + py * cr) * self._shape_scale,
+                )
+                for px, py in self.points
+            ]
+
+            draw_color = colors.WHITE if hit_active else self.color
+            outline_color = colors.WHITE if hit_active else colors.BLACK
+
+            pygame.draw.polygon(cached_surface, draw_color, rotated_pts)
+            pygame.draw.polygon(cached_surface, outline_color, rotated_pts, 1)
+
+            inner_pts = [
+                (px * 0.88 + cx * 0.12, py * 0.88 + cy * 0.12) for px, py in rotated_pts
+            ]
+            pygame.draw.polygon(
+                cached_surface,
+                tuple(max(0, c - 12) for c in draw_color),
+                inner_pts,
+                0,
+            )
+
+            if len(self._body_surface_cache) >= 120:
+                self._body_surface_cache.clear()
+            self._body_surface_cache[cache_key] = cached_surface
+
+        return cached_surface
+
+    @classmethod
+    def _get_eye_sprite(
+        cls,
+        eye_fill: tuple[int, int, int],
+        eye_ring: tuple[int, int, int],
+    ) -> pygame.Surface:
+        cache_key = (eye_fill, eye_ring)
+        cached_sprite = cls._eye_sprite_cache.get(cache_key)
+        if cached_sprite is None:
+            cached_sprite = pygame.Surface((12, 12), pygame.SRCALPHA)
+            pygame.draw.rect(cached_sprite, eye_ring, (2, 5, 8, 2))
+            pygame.draw.rect(cached_sprite, eye_ring, (5, 2, 2, 8))
+            pygame.draw.rect(cached_sprite, eye_fill, (3, 5, 6, 2))
+            pygame.draw.rect(cached_sprite, eye_fill, (5, 3, 2, 6))
+            pygame.draw.rect(cached_sprite, (255, 255, 255), (5, 5, 2, 2))
+            cls._eye_sprite_cache[cache_key] = cached_sprite
+        return cached_sprite
+
+    @classmethod
+    def _get_particle_surface(
+        cls,
+        color: tuple[int, int, int],
+        size: int,
+        alpha: float,
+    ) -> pygame.Surface:
+        alpha_value = max(0, min(255, int(255 * alpha)))
+        alpha_bucket = (
+            alpha_value // cls._particle_alpha_step
+        ) * cls._particle_alpha_step
+        cache_key = (color, size, alpha_bucket)
+        cached_surface = cls._particle_surface_cache.get(cache_key)
+        if cached_surface is None:
+            cached_surface = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
+            pygame.draw.rect(
+                cached_surface,
+                (*color, alpha_bucket),
+                (0, 0, size * 2, size * 2),
+            )
+            cls._particle_surface_cache[cache_key] = cached_surface
+        return cached_surface
 
     def _update_player_tracking(
         self, dt: float, player_pos: Tuple[float, float]
@@ -842,39 +950,12 @@ class StoneSentry:
         return [bullet]
 
     def draw(self, screen: pygame.Surface):
-        rad = math.radians(self.rotation)
-        cr = math.cos(rad)
-        sr = math.sin(rad)
-        cx = self.LOW_RES_SIZE / 2
-        cy = self.LOW_RES_SIZE / 2
-
-        rotated_pts = [
-            (
-                cx + (px * cr - py * sr) * self._shape_scale,
-                cy + (px * sr + py * cr) * self._shape_scale,
-            )
-            for px, py in self.points
-        ]
-
+        angle_bucket = int(self.rotation / 6.0) * 6 % 360
+        body_surface = self._get_body_surface(angle_bucket, self.hit_timer > 0.0)
         self._low_res_surface.fill((0, 0, 0, 0))
+        self._low_res_surface.blit(body_surface, (0, 0))
 
-        draw_color = colors.WHITE if self.hit_timer > 0.0 else self.color
-        outline_color = colors.WHITE if self.hit_timer > 0.0 else colors.BLACK
-
-        pygame.draw.polygon(self._low_res_surface, draw_color, rotated_pts)
-        pygame.draw.polygon(self._low_res_surface, outline_color, rotated_pts, 1)
-
-        inner_pts = [
-            (px * 0.88 + cx * 0.12, py * 0.88 + cy * 0.12) for px, py in rotated_pts
-        ]
-        pygame.draw.polygon(
-            self._low_res_surface,
-            tuple(max(0, c - 12) for c in draw_color),
-            inner_pts,
-            0,
-        )
-
-        eye_cx, eye_cy = int(cx), int(cy)
+        eye_cx, eye_cy = self.LOW_RES_SIZE // 2, self.LOW_RES_SIZE // 2
         if self.hit_timer > 0.0:
             eye_fill = (255, 0, 0)
             eye_ring = (255, 255, 255)
@@ -891,13 +972,7 @@ class StoneSentry:
                 eye_fill = (255, 246, 210)
                 eye_ring = (255, 197, 120)
 
-        eye_sprite = pygame.Surface((12, 12), pygame.SRCALPHA)
-        pygame.draw.rect(eye_sprite, eye_ring, (2, 5, 8, 2))
-        pygame.draw.rect(eye_sprite, eye_ring, (5, 2, 2, 8))
-        pygame.draw.rect(eye_sprite, eye_fill, (3, 5, 6, 2))
-        pygame.draw.rect(eye_sprite, eye_fill, (5, 3, 2, 6))
-        pygame.draw.rect(eye_sprite, (255, 255, 255), (5, 5, 2, 2))
-
+        eye_sprite = self._get_eye_sprite(eye_fill, eye_ring)
         rotated_eye = pygame.transform.rotate(eye_sprite, self._eye_rotation)
         eye_rect = rotated_eye.get_rect(center=(eye_cx, eye_cy))
         self._low_res_surface.blit(rotated_eye, eye_rect)
@@ -963,14 +1038,7 @@ class StoneSentry:
             alpha = min(
                 1.0, particle.lifetime / 0.7
             )  # Normaliza para lifetime máx de 0.7s
-            particle_surf = pygame.Surface(
-                (particle.size * 2, particle.size * 2), pygame.SRCALPHA
-            )
-            pygame.draw.rect(
-                particle_surf,
-                (*self.color, int(255 * alpha)),
-                (0, 0, particle.size * 2, particle.size * 2),
-            )
+            particle_surf = self._get_particle_surface(self.color, particle.size, alpha)
             screen.blit(
                 particle_surf,
                 (int(particle.x) - particle.size, int(particle.y) - particle.size),

@@ -559,12 +559,13 @@ class DifficultyConfig:
     ENEMY_VARIATION: int = 20
 
     # Cadência mínima entre spawns para evitar bursts em sequência.
+    # ALINHADO com spawn_rate_multiplier: valores menores = spawn mais rápido.
     MIN_GLOBAL_SPAWN_GAP: float = 0.16
     DIFFICULTY_SPAWN_GAP_MULTIPLIER: dict[DifficultyPreset, float] = {
-        DifficultyPreset.CASUAL: 0.90,
+        DifficultyPreset.CASUAL: 1.10,  # 10% mais lento (menos spawn)
         DifficultyPreset.NORMAL: 1.00,
-        DifficultyPreset.HARDCORE: 1.15,
-        DifficultyPreset.NIGHTMARE: 1.30,
+        DifficultyPreset.HARDCORE: 0.85,  # 15% mais rápido (mais spawn)
+        DifficultyPreset.NIGHTMARE: 0.70,  # 30% mais rápido (muito mais spawn)
     }
     MIN_SPAWN_GAP_BY_TYPE: dict[str, float] = {
         "meteor": 0.18,
@@ -579,16 +580,19 @@ class DifficultyConfig:
     DIFFICULTY_SCALING: float = 0.15
     MAX_DIFFICULTY_MULTIPLIER: float = 2.5  # Reduzido de 3.0 para 2.5
 
-    # Limites de inimigos simultâneos por tipo
-    MAX_METEORS_ON_SCREEN: int = 35
-    MAX_ALIENS_ON_SCREEN: int = 8
-    MAX_EYES_ON_SCREEN: int = 5
-    MAX_SQUARE_MINIONS_ON_SCREEN: int = 3
-    MAX_TOTAL_ENEMIES_ON_SCREEN: int = 50  # Limite total absoluto
+    # Limite total de inimigos simultâneos por dificuldade
+    DIFFICULTY_TOTAL_ENEMY_CAPS: dict[DifficultyPreset, int] = {
+        DifficultyPreset.CASUAL: 15,  # Fácil: poucos inimigos
+        DifficultyPreset.NORMAL: 20,  # Médio: balanceado
+        DifficultyPreset.HARDCORE: 22,  # Difícil: mais desafio
+        DifficultyPreset.NIGHTMARE: 25,  # Super difícil: máximo caos controlado
+    }
 
     # Controle adaptativo de spawn
-    ADAPTIVE_SPAWN_ENABLED: bool = True  # Reduz spawn se muitos inimigos na tela
-    SPAWN_REDUCTION_THRESHOLD: float = 0.8  # 80% do limite = começa a reduzir spawn
+    ADAPTIVE_SPAWN_ENABLED: bool = True  # Reduz spawn se próximo do limite
+    SPAWN_REDUCTION_THRESHOLD: float = (
+        0.80  # 80% do limite = começa a reduzir spawn (evitar picos)
+    )
 
     # Curvas de dificuldade configuráveis
     SPAWN_RATE_CURVE: str = "logarithmic"  # "linear", "logarithmic", "exponential"
@@ -831,6 +835,58 @@ def _get_progressive_enemy_weight(
         gate_mult = 0.15 + 0.85 * unlock_progress
 
     return max(0.05, base_weight * tier_mult * gate_mult)
+
+
+def calculate_dynamic_enemy_cap(
+    level_number: int, difficulty_preset: DifficultyPreset
+) -> int:
+    """
+    Calcula o limite de inimigos simultâneos de forma progressiva por mundo.
+
+    A progressão é composta por:
+    1. Cap base da dificuldade (CASUAL 15, NORMAL 20, HARDCORE 22, NIGHTMARE 25)
+    2. Bonus por mundo: cada novo mundo adiciona 1 inimigo (mundo 1=0, mundo 2=1, etc)
+    3. Bonus por progresso dentro do mundo: cresce de 0 a +2 do início ao fim
+
+    Exemplo NORMAL (resets dentro de cada mundo):
+    Mundo 1 (níveis 1-10):
+    - Nível 1: 20 + 0 + 0 = 20
+    - Nível 5: 20 + 0 + 1 = 21
+    - Nível 10: 20 + 0 + 2 = 22
+
+    Mundo 2 (níveis 11-25) - reinicia progressão:
+    - Nível 11: 20 + 1 + 0 = 21
+    - Nível 18: 20 + 1 + 1 = 22
+    - Nível 25: 20 + 1 + 2 = 23
+
+    Mundo 3 (níveis 26-35) - reinicia progressão:
+    - Nível 26: 20 + 2 + 0 = 22
+    - Nível 30: 20 + 2 + 1 = 23
+    - Nível 35: 20 + 2 + 2 = 24
+    """
+    # Cap base por dificuldade
+    base_cap = DifficultyConfig.DIFFICULTY_TOTAL_ENEMY_CAPS.get(difficulty_preset, 20)
+
+    # Obter mundo atual
+    world = get_world_for_level(level_number)
+
+    # Bonus por mundo: cada mundo adiciona 1 inimigo (mundo 1 = 0, mundo 2 = 1, etc)
+    world_bonus = world.world_id - 1
+
+    # Bonus por progresso dentro do mundo: cresce de 0 a 2 do início ao fim
+    # Este bonus REINICIA para cada novo mundo
+    stage = world.get_stage_number(level_number)
+    total_stages = world.total_stages
+    if total_stages > 1:
+        # Normalizar progresso 0..1 dentro do mundo e multiplicar por 2 para range 0..2
+        stage_progress = (stage - 1) / (total_stages - 1)
+        stage_bonus = min(
+            2, int(stage_progress * 2 + 0.5)
+        )  # +0.5 para arredondar corretamente
+    else:
+        stage_bonus = 0
+
+    return base_cap + world_bonus + stage_bonus
 
 
 # ============================================================================
@@ -1493,17 +1549,16 @@ def _apply_world_theme_to_config(
         float,
     ] = dict(config.enemy_spawn_config)
 
-    # Aplicar multiplicadores de peso
+    # Aplicar multiplicadores de peso (RockGlider agora compartilha com Meteor)
     meteor_mult = world.theme_modifiers.get("meteor_weight", 1.0)
-    rock_glider_mult = world.theme_modifiers.get("rock_glider_weight", 1.0)
     alien_mult = world.theme_modifiers.get("alien_weight", 1.0)
     eye_mult = world.theme_modifiers.get("eye_weight", 1.0)
 
     # Ajustar tempos de spawn (menor tempo = mais frequente)
     for enemy_type, spawn_time in list(adjusted_spawn_config.items()):
-        if issubclass(enemy_type, RockGlider) and rock_glider_mult != 1.0:
-            adjusted_spawn_config[enemy_type] = spawn_time / rock_glider_mult
-        elif issubclass(enemy_type, Meteor) and meteor_mult != 1.0:
+        if (
+            issubclass(enemy_type, Meteor) or issubclass(enemy_type, RockGlider)
+        ) and meteor_mult != 1.0:
             adjusted_spawn_config[enemy_type] = spawn_time / meteor_mult
         elif issubclass(enemy_type, Alien) and alien_mult != 1.0:
             adjusted_spawn_config[enemy_type] = spawn_time / alien_mult

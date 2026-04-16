@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,11 @@ DEFAULT_OUTPUT_PATH = SCRIPT_DIR / "performance_results.json"
 
 
 BenchmarkResults = dict[str, Any]
+
+
+def build_timestamped_path(base_path: Path) -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return base_path.with_name(f"{base_path.stem}_{timestamp}{base_path.suffix}")
 
 
 def print_summary(results: BenchmarkResults, output_path: Path) -> None:
@@ -77,6 +83,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_OUTPUT_PATH,
         help="Output JSON file path.",
     )
+    parser.add_argument(
+        "--timestamp-output",
+        action="store_true",
+        help="Append timestamp (YYYYMMDD_HHMMSS) to output filename.",
+    )
     return parser
 
 
@@ -91,14 +102,19 @@ def main() -> int:
     if args.starting_level <= 0:
         parser.error("--starting-level must be greater than 0")
 
+    output_path = args.output
+    if args.timestamp_output:
+        output_path = build_timestamped_path(output_path)
+
     results = run_benchmark(
         duration_seconds=args.duration,
         warmup_seconds=args.warmup,
         difficulty=args.difficulty,
         starting_level=args.starting_level,
     )
-    write_json(str(args.output), results)
-    print_summary(results, args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    write_json(str(output_path), results)
+    print_summary(results, output_path)
     return 0
 
 

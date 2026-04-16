@@ -8,6 +8,7 @@ import cProfile
 import io
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -28,6 +29,11 @@ from performance_common import (  # noqa: E402
 
 DEFAULT_PROFILE_PATH = SCRIPT_DIR / "profile_game.prof"
 DEFAULT_SUMMARY_PATH = SCRIPT_DIR / "profile_summary.txt"
+
+
+def build_timestamped_path(base_path: Path) -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return base_path.with_name(f"{base_path.stem}_{timestamp}{base_path.suffix}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -76,6 +82,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=DEFAULT_SUMMARY_PATH,
         help="Text summary output file.",
+    )
+    parser.add_argument(
+        "--timestamp-output",
+        action="store_true",
+        help="Append timestamp (YYYYMMDD_HHMMSS) to output filenames.",
     )
     return parser
 
@@ -154,6 +165,12 @@ def main() -> int:
     if args.lines <= 0:
         parser.error("--lines must be greater than 0")
 
+    output_path = args.output
+    summary_output_path = args.summary_output
+    if args.timestamp_output:
+        output_path = build_timestamped_path(output_path)
+        summary_output_path = build_timestamped_path(summary_output_path)
+
     results, profiler = run_profile(
         duration_seconds=args.duration,
         warmup_seconds=args.warmup,
@@ -161,14 +178,14 @@ def main() -> int:
         starting_level=args.starting_level,
     )
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    profiler.dump_stats(str(args.output))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    profiler.dump_stats(str(output_path))
 
     summary_text = build_summary_text(profiler, args.sort_by, args.lines)
-    args.summary_output.parent.mkdir(parents=True, exist_ok=True)
-    args.summary_output.write_text(summary_text, encoding="utf-8")
+    summary_output_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_output_path.write_text(summary_text, encoding="utf-8")
 
-    print_summary(results, summary_text, args.output, args.summary_output)
+    print_summary(results, summary_text, output_path, summary_output_path)
     return 0
 
 

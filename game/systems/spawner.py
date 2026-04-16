@@ -17,7 +17,7 @@ from typing import (
 from ..core.config import PowerUpType
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset
-from ..core.levels import DifficultyConfig, LevelManager
+from ..core.levels import DifficultyConfig, LevelManager, calculate_dynamic_enemy_cap
 from ..core.powerup_weights import get_powerup_weights
 from ..core.time import Timer
 from ..entities.bot_elemental import ElementalRobot
@@ -26,6 +26,7 @@ from ..entities.eye_enemy import EyeEnemy
 from ..entities.formation import Formation, FormationPattern
 from ..entities.meteor_pool import MeteorPool
 from ..entities.powerup import PowerUp
+from ..entities.rock_glider import RockGlider
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
 from ..entities.stone_sentry import StoneSentry
@@ -243,8 +244,11 @@ class EnemySpawner:
 
     def _get_min_global_spawn_gap(self) -> float:
         """Retorna o espaçamento mínimo entre quaisquer spawns."""
-        return DifficultyConfig.MIN_GLOBAL_SPAWN_GAP * DifficultyConfig.DIFFICULTY_SPAWN_GAP_MULTIPLIER.get(
-            self.difficulty_preset, 1.0
+        return (
+            DifficultyConfig.MIN_GLOBAL_SPAWN_GAP
+            * DifficultyConfig.DIFFICULTY_SPAWN_GAP_MULTIPLIER.get(
+                self.difficulty_preset, 1.0
+            )
         )
 
     def _can_spawn_now(self, enemy_type: type) -> bool:
@@ -264,7 +268,9 @@ class EnemySpawner:
     def _register_spawn(self, enemy_type: type) -> None:
         """Marca a hora do spawn para respeitar a cadência mínima."""
         self.last_spawn_clock = self.spawn_clock
-        self.last_spawn_clock_by_type[self._enemy_type_key(enemy_type)] = self.spawn_clock
+        self.last_spawn_clock_by_type[self._enemy_type_key(enemy_type)] = (
+            self.spawn_clock
+        )
 
     def _record_pressure_sample(self, entity_manager: "EntityManager") -> None:
         """Amostra ocupação de tela para telemetria de balanceamento."""
@@ -273,7 +279,10 @@ class EnemySpawner:
         self.weighted_occupancy_samples.append(total)
         self.weighted_peak_occupancy = max(self.weighted_peak_occupancy, total)
 
-        total_cap = DifficultyConfig.MAX_TOTAL_ENEMIES_ON_SCREEN
+        # Usar cap dinâmico baseado em dificuldade e nível
+        total_cap = calculate_dynamic_enemy_cap(
+            self.current_level_number, self.difficulty_preset
+        )
         near_cap_threshold = int(total_cap * DifficultyConfig.SPAWN_REDUCTION_THRESHOLD)
         if total >= near_cap_threshold:
             self.weighted_near_cap_samples += 1
@@ -326,105 +335,54 @@ class EnemySpawner:
     def _should_spawn_enemy(
         self, enemy_type: type, entity_manager: "EntityManager"
     ) -> bool:
-        """Verifica se deve spawnar um inimigo baseado em limites e controle adaptativo."""
+        """Verifica se deve spawnar um inimigo baseado em limite total por dificuldade."""
         if not DifficultyConfig.ADAPTIVE_SPAWN_ENABLED:
             return True
 
         counts = self._count_enemies_by_type(entity_manager)
 
-        # Verificar limite total absoluto
-        if counts["total"] >= DifficultyConfig.MAX_TOTAL_ENEMIES_ON_SCREEN:
-            return False
-
-        # Verificar limites por tipo
-        from ..entities.alien import Alien
-        from ..entities.meteor import Meteor
-
-        if issubclass(enemy_type, Meteor):
-            if counts["meteor"] >= DifficultyConfig.MAX_METEORS_ON_SCREEN:
-                return False
-            # Reduzir spawn se próximo do limite
-            threshold = int(
-                DifficultyConfig.MAX_METEORS_ON_SCREEN
-                * DifficultyConfig.SPAWN_REDUCTION_THRESHOLD
-            )
-            if counts["meteor"] >= threshold:
-                return random.random() < 0.5  # 50% de chance
-
-        elif enemy_type == Alien:
-            if counts["alien"] >= DifficultyConfig.MAX_ALIENS_ON_SCREEN:
-                return False
-            threshold = int(
-                DifficultyConfig.MAX_ALIENS_ON_SCREEN
-                * DifficultyConfig.SPAWN_REDUCTION_THRESHOLD
-            )
-            if counts["alien"] >= threshold:
-                return random.random() < 0.5
-
-        elif enemy_type == EyeEnemy:
-            if counts["eye"] >= DifficultyConfig.MAX_EYES_ON_SCREEN:
-                return False
-
-        elif enemy_type == SquareMinionBoss:
-            if counts["square_minion"] >= DifficultyConfig.MAX_SQUARE_MINIONS_ON_SCREEN:
-                return False
-
-        elif enemy_type == ElementalRobot:
-            # Mini-boss: máximo de 1 na tela ao mesmo tempo
+        # Caps especiais para inimigos muito fortes (sempre únicos ou em duplas)
+        if enemy_type == ElementalRobot:
             if counts["elemental_robot"] >= 1:
                 return False
-
         elif enemy_type == StoneSentry:
-            # Sentinelas: máximo de 3 na tela
-            if counts["stone_sentry"] >= 3:
+            if counts["stone_sentry"] >= 2:
                 return False
 
-        # Redução gradual se total está alto
-        total_threshold = int(
-            DifficultyConfig.MAX_TOTAL_ENEMIES_ON_SCREEN
-            * DifficultyConfig.SPAWN_REDUCTION_THRESHOLD
+        # Obter limite total baseado em dificuldade e nível atual
+        max_enemies = calculate_dynamic_enemy_cap(
+            self.current_level_number, self.difficulty_preset
         )
-        if counts["total"] >= total_threshold:
-            # Redução proporcional
-            ratio = (counts["total"] - total_threshold) / (
-                DifficultyConfig.MAX_TOTAL_ENEMIES_ON_SCREEN - total_threshold
-            )
-            spawn_chance = 1.0 - (ratio * 0.7)  # Até 70% de redução
+
+        # Verificar limite total absoluto
+        if counts["total"] >= max_enemies:
+            return False
+
+        # Redução adaptativa quando próximo do limite
+        threshold = int(max_enemies * DifficultyConfig.SPAWN_REDUCTION_THRESHOLD)
+        if counts["total"] >= threshold:
+            # Chance de spawn reduzida: quanto mais próximo, menor a chance
+            ratio = (counts["total"] - threshold) / (max_enemies - threshold)
+            spawn_chance = 1.0 - (ratio * 0.6)  # 60% de redução máxima
             return random.random() < spawn_chance
 
         return True
 
     def _is_hard_capped(self, enemy_type: type, counts: dict[str, int]) -> bool:
         """Valida apenas caps rígidos para filtrar candidatos de spawn."""
-        from ..entities.alien import Alien
-        from ..entities.meteor import Meteor
+        # Obter limite total baseado em dificuldade e nível atual
+        max_enemies = calculate_dynamic_enemy_cap(
+            self.current_level_number, self.difficulty_preset
+        )
+        if counts["total"] >= max_enemies:
+            return True
 
-        if counts["total"] >= DifficultyConfig.MAX_TOTAL_ENEMIES_ON_SCREEN:
-            return True
-        if (
-            issubclass(enemy_type, Meteor)
-            and counts["meteor"] >= DifficultyConfig.MAX_METEORS_ON_SCREEN
-        ):
-            return True
-        if (
-            enemy_type == Alien
-            and counts["alien"] >= DifficultyConfig.MAX_ALIENS_ON_SCREEN
-        ):
-            return True
-        if (
-            enemy_type == EyeEnemy
-            and counts["eye"] >= DifficultyConfig.MAX_EYES_ON_SCREEN
-        ):
-            return True
-        if (
-            enemy_type == SquareMinionBoss
-            and counts["square_minion"] >= DifficultyConfig.MAX_SQUARE_MINIONS_ON_SCREEN
-        ):
-            return True
+        # Caps especiais para inimigos muito fortes (sempre únicos ou em duplas)
         if enemy_type == ElementalRobot and counts["elemental_robot"] >= 1:
             return True
-        if enemy_type == StoneSentry and counts["stone_sentry"] >= 3:
+        if enemy_type == StoneSentry and counts["stone_sentry"] >= 2:
             return True
+
         return False
 
     def _get_dynamic_enemy_weights(
@@ -482,6 +440,25 @@ class EnemySpawner:
         from ..entities.meteor import Meteor
 
         if issubclass(enemy_type, Meteor):
+            if enemy_type is RockGlider:
+                if is_side_scroll:
+                    size = random.randint(
+                        Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE
+                    )
+                    glider = entity_manager.rock_glider_pool.get(
+                        size=size,
+                        x=Config.SCREEN_WIDTH + 40,
+                        y=random.randint(60, Config.SCREEN_HEIGHT - 100),
+                        vx=None,
+                        vy=random.uniform(-50, 50),
+                    )
+                else:
+                    glider = entity_manager.rock_glider_pool.get()
+
+                glider.health = int(glider.health * self.enemy_health_multiplier)
+                entity_manager.enemies.append(glider)  # type: ignore[arg-type]
+                return True
+
             if enemy_type is Meteor:
                 if is_side_scroll:
                     size = random.randint(
@@ -499,7 +476,11 @@ class EnemySpawner:
             elif is_side_scroll:
                 size = random.randint(Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE)
                 # RockGlider controla sua propria velocidade horizontal internamente.
-                side_vx = None if enemy_type.__name__ == "RockGlider" else -random.uniform(150, 300)
+                side_vx = (
+                    None
+                    if enemy_type.__name__ == "RockGlider"
+                    else -random.uniform(150, 300)
+                )
                 meteor = cast(
                     EnemyWithHealth,
                     enemy_type(

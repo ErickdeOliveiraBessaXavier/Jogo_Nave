@@ -83,13 +83,13 @@ def test_weighted_spawn_filters_hard_capped_type() -> None:
         )
 
     spawner._count_enemies_by_type = lambda _em: {
-        "meteor": DifficultyConfig.MAX_METEORS_ON_SCREEN,
+        "meteor": 20,  # Simula cap de meteoros no novo sistema (começa em 20)
         "alien": 0,
         "eye": 0,
         "square_minion": 0,
         "elemental_robot": 0,
         "stone_sentry": 0,
-        "total": 1,
+        "total": 20,  # Total cap para NORMAL difficulty
     }
 
     dynamic = spawner._get_dynamic_enemy_weights(DummyEntityManager())
