@@ -229,6 +229,7 @@ class PlayingScene(Scene):
 
         # Debug FPS display (F3 toggle)
         self.show_fps = False
+        self.show_enemy_hitboxes = False
 
         # Cutscene de transição de mundo (saída da nave antes do painel)
         self.world_transition_cutscene_active = False
@@ -1956,6 +1957,14 @@ class PlayingScene(Scene):
                     f"Debug FPS: {'ATIVADO' if self.show_fps else 'DESATIVADO'}"
                 )
 
+            # Sistema de debug: mostrar/ocultar hitboxes de inimigos com F7
+            elif event.key == pygame.K_F7:
+                self.show_enemy_hitboxes = not self.show_enemy_hitboxes
+                logging.info(
+                    "Debug Hitbox de Inimigos: "
+                    f"{'ATIVADO' if self.show_enemy_hitboxes else 'DESATIVADO'}"
+                )
+
             # Debug visual: prévia da próxima transição de mundo
             elif event.key == pygame.K_F8:
                 self._trigger_world_transition_debug_preview()
@@ -2026,6 +2035,52 @@ class PlayingScene(Scene):
                     self.ship.attack_speed_multiplier * Config.FIRE_RATE
                 )
 
+    @staticmethod
+    def _get_enemy_contact_hitboxes(enemy: Any) -> tuple[pygame.Rect, ...]:
+        """Retorna hitboxes de contato para debug visual, com fallback para rect."""
+        getter = getattr(enemy, "get_ship_contact_hitboxes", None)
+        if callable(getter):
+            raw_hitboxes = cast(Any, getter)()
+            hitboxes = tuple(
+                rect
+                for rect in raw_hitboxes
+                if isinstance(rect, pygame.Rect) and rect.width > 0 and rect.height > 0
+            )
+            if hitboxes:
+                return hitboxes
+
+        enemy_rect = getattr(enemy, "rect", pygame.Rect(0, 0, 0, 0))
+        if isinstance(enemy_rect, pygame.Rect) and enemy_rect.width > 0 and enemy_rect.height > 0:
+            return (enemy_rect,)
+        return ()
+
+    def _draw_enemy_hitboxes(self, surface: pygame.Surface) -> None:
+        """Overlay de hitboxes dos inimigos para tuning de colisao em runtime."""
+        enemies_in_view = self.entity_manager.enemy_spatial_grid.query(
+            0,
+            0,
+            Config.SCREEN_WIDTH,
+            Config.SCREEN_HEIGHT,
+        )
+
+        seen: set[int] = set()
+        for enemy in enemies_in_view:
+            enemy_id = id(enemy)
+            if enemy_id in seen:
+                continue
+            seen.add(enemy_id)
+
+            if getattr(enemy, "dead", False):
+                continue
+
+            hitboxes = self._get_enemy_contact_hitboxes(enemy)
+            if not hitboxes:
+                continue
+
+            for index, rect in enumerate(hitboxes):
+                color = (255, 200, 40) if index == 0 else (40, 220, 255)
+                pygame.draw.rect(surface, color, rect, 2)
+
     def render(self, surface: pygame.Surface):
         # Usa o dt armazenado pela última chamada de update
         dt = self.last_dt
@@ -2064,6 +2119,9 @@ class PlayingScene(Scene):
             self.enemy_visible,
             fps=current_fps,
         )
+
+        if self.show_enemy_hitboxes:
+            self._draw_enemy_hitboxes(self.game_surface)
 
         # Partículas extras da cutscene (atrás da nave)
         for p in self.world_transition_thruster_particles:
@@ -2109,6 +2167,14 @@ class PlayingScene(Scene):
             fps_text = f"FPS: {fps_stats['fps']:.1f} | Avg: {fps_stats['avg_frame_time']:.1f}ms | Max: {fps_stats['max_frame_time']:.1f}ms"
             fps_surface = self.r.font_small.render(fps_text, True, colors.YELLOW)
             self.game_surface.blit(fps_surface, (10, Config.SCREEN_HEIGHT - 30))
+
+        if self.show_enemy_hitboxes:
+            hitbox_text = self.r.font_small.render(
+                "F7 Hitbox Debug: ON",
+                True,
+                (255, 200, 40),
+            )
+            self.game_surface.blit(hitbox_text, (10, Config.SCREEN_HEIGHT - 50))
 
         shake_offset = (0, 0)
         if self.screen_shake_timer > 0:

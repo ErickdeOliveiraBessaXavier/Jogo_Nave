@@ -470,6 +470,30 @@ class RockGlider(Meteor):
             float(self._bot_hit_rect.centery),
         )
 
+    def get_ship_contact_hitboxes(self) -> tuple[pygame.Rect, ...]:
+        """Retorna hitboxes reais de contato para colisao com a nave."""
+        if self._fully_destroyed or self._collision_disabled:
+            return ()
+
+        hitboxes: list[pygame.Rect] = []
+        if not self._rock_destroyed and self._rock_hit_rect.width > 0 and self._rock_hit_rect.height > 0:
+            hitboxes.append(self._rock_hit_rect)
+        if not self._bot_destroyed and self._bot_hit_rect.width > 0 and self._bot_hit_rect.height > 0:
+            hitboxes.append(self._bot_hit_rect)
+        return tuple(hitboxes)
+
+    @property
+    def rect(self) -> pygame.Rect:
+        """Rect agregado para broad-phase (grid), baseado nas partes vivas."""
+        hitboxes = self.get_ship_contact_hitboxes()
+        if not hitboxes:
+            return pygame.Rect(int(self.x), int(self.y), 0, 0)
+
+        aggregated_rect = hitboxes[0].copy()
+        for hitbox in hitboxes[1:]:
+            aggregated_rect.union_ip(hitbox)
+        return aggregated_rect
+
     def _spawn_death_particles(self, part: str) -> None:
         if part == "rock":
             count = 18
@@ -671,23 +695,6 @@ class RockGlider(Meteor):
             screen.blit(self._rock_surface, (rock_x, rock_y))
         if not self._bot_destroyed:
             screen.blit(self._bot_surface, (bot_x, bot_y))
-
-        self._rock_center = (
-            float(
-                int(self.x)
-                + sum(px for px, _ in self._local_rock_points)
-                / len(self._local_rock_points)
-            ),
-            float(
-                int(self.y)
-                + sum(py for _, py in self._local_rock_points)
-                / len(self._local_rock_points)
-            ),
-        )
-        self._bot_center = (
-            float(int(self.x) + self._local_body_rect.centerx),
-            float(int(self.y) + self._local_body_rect.centery),
-        )
 
         if not self._bot_destroyed:
             eye_size = self._eye_size

@@ -124,6 +124,40 @@ class Collisions:
         return 0
 
     @staticmethod
+    def _get_ship_contact_hitboxes(enemy: Any) -> tuple[pygame.Rect, ...]:
+        """Retorna hitboxes de contato com a nave, com fallback para enemy.rect."""
+        getter = getattr(enemy, "get_ship_contact_hitboxes", None)
+        if callable(getter):
+            raw_hitboxes = cast(Callable[[], Sequence[pygame.Rect]], getter)()
+            hitboxes = tuple(
+                rect
+                for rect in raw_hitboxes
+                if rect.width > 0 and rect.height > 0
+            )
+            if hitboxes:
+                return hitboxes
+
+        enemy_rect: pygame.Rect = (
+            enemy.rect
+            if hasattr(enemy, "rect")
+            else cast(
+                pygame.Rect,
+                getattr(enemy, "get_rect", lambda: pygame.Rect(0, 0, 0, 0))(),
+            )
+        )
+        if enemy_rect.width <= 0 or enemy_rect.height <= 0:
+            return ()
+        return (enemy_rect,)
+
+    @classmethod
+    def _ship_collides_with_enemy(cls, ship_rect: pygame.Rect, enemy: Any) -> bool:
+        """Verifica colisao da nave usando hitbox custom quando disponivel."""
+        return any(
+            ship_rect.colliderect(hitbox)
+            for hitbox in cls._get_ship_contact_hitboxes(enemy)
+        )
+
+    @staticmethod
     def get_collision_info(
         enemy: Enemy,
     ) -> tuple[float, float, float]:
@@ -334,7 +368,7 @@ class Collisions:
             (
                 pts,
                 part_destroyed,
-                fully_destroyed,
+                _fully_destroyed,
                 part_center,
                 part_name,
             ) = enemy.take_part_damage(hx, hy, amount=1)
@@ -1268,53 +1302,72 @@ class Collisions:
         enemy_grid: SpatialGrid[Any],
         entity_manager: "EntityManager",
     ) -> bool:
+        # Durante invulnerabilidade, a nave fica intangível para colisão com inimigos.
         if ship.invuln > 0:
             return False
 
         # Usar grid existente
 
+        ship_rect = ship.rect
+
         # Query potential collisions with ship's rect (expand by 10 pixels)
-        query_x = ship.rect.x - 10
-        query_y = ship.rect.y - 10
-        query_w = ship.rect.width + 20
-        query_h = ship.rect.height + 20
+        query_x = ship_rect.x - 10
+        query_y = ship_rect.y - 10
+        query_w = ship_rect.width + 20
+        query_h = ship_rect.height + 20
         potential_enemies = enemy_grid.query(query_x, query_y, query_w, query_h)
         for enemy in potential_enemies:
             if not enemy or getattr(enemy, "dead", False):
                 continue
 
-            # Garantir que enemy_rect é pygame.Rect
-            enemy_rect: pygame.Rect = (
-                enemy.rect
-                if hasattr(enemy, "rect")
-                else cast(
-                    pygame.Rect,
-                    getattr(enemy, "get_rect", lambda: pygame.Rect(0, 0, 0, 0))(),
-                )
-            )
-            if enemy and ship.rect.colliderect(enemy_rect):
+            if enemy and self._ship_collides_with_enemy(ship_rect, enemy):
                 if not getattr(enemy, "causes_damage", True):
                     continue
 
-                if isinstance(enemy, ExplosiveMine):
+                if isinstance(enemy, RockGlider):
+                    ship_cx = ship.x + ship.w / 2
+                    ship_cy = ship.y + ship.h / 2
+                    (
+                        _pts,
+                        part_destroyed,
+                        _fully_destroyed,
+                        _part_center,
+                        part_name,
+                    ) = enemy.take_part_damage(
+                        ship_cx,
+                        ship_cy,
+                        amount=max(enemy.ROCK_MAX_HP, enemy.BOT_MAX_HP),
+                    )
+
+                    if part_destroyed:
+                        if part_name == "rock":
+                            sound_manager.play_explosion_asteroid()
+                        else:
+                            sound_manager.play_explosion_alien()
+                    else:
+                        sound_manager.play_boss_damage()
+                elif isinstance(enemy, ExplosiveMine):
                     enemy.dead = True  # Explode immediately
+                    sound_manager.play_explosion_alien()
                 elif isinstance(enemy, (Boulder, RockShard, EntryDebris, OrbitalRock)):
                     enemy.dead = True
+                    sound_manager.play_explosion_asteroid()
                 else:
                     if isinstance(enemy, EyeEnemy):
                         enemy.destroy()
                     enemy.dead = True
+                    # Tocar som de colisão apropriado baseado no tipo de inimigo
+                    if isinstance(enemy, Meteor):
+                        sound_manager.play_explosion_asteroid()
+                    elif isinstance(enemy, (Alien, SquareMinionBoss)):
+                        sound_manager.play_explosion_alien()
+                    else:
+                        # EyeEnemy e outros
+                        sound_manager.play_explosion_alien()
+
                 entity_manager.spawn_explosion(
                     ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
                 )
-                # Tocar som de colisão apropriado baseado no tipo de inimigo
-                if isinstance(enemy, Meteor):
-                    sound_manager.play_explosion_asteroid()
-                elif isinstance(enemy, (Alien, SquareMinionBoss)):
-                    sound_manager.play_explosion_alien()
-                else:
-                    # ExplosiveMine, EyeEnemy e outros
-                    sound_manager.play_explosion_alien()
                 return True
         return False
 
