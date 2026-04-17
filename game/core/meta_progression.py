@@ -580,9 +580,10 @@ class PlayerProfile:
     # SISTEMA DE MUNDOS E SAVEPOINTS
     # ============================================================================
 
-    def unlock_next_world(self):
-        """Desbloqueia o próximo mundo após completar boss."""
-        current_world_id = self.current_checkpoint_world
+    def unlock_next_world(self, current_world_id: int | None = None):
+        """Desbloqueia o próximo mundo após completar o boss final do mundo atual."""
+        if current_world_id is None:
+            current_world_id = self.current_checkpoint_world
         next_world_id = current_world_id + 1
 
         # Máximo 4 mundos nomeados
@@ -1008,11 +1009,17 @@ class PlayerProfile:
 
                 # Sistema de mundos e savepoints
                 world_unlocks_raw_untyped = data.get("world_unlocks", {})
-                world_unlocks_raw: Dict[str, Dict[str, Any]] = (
-                    world_unlocks_raw_untyped
-                    if isinstance(world_unlocks_raw_untyped, dict)
-                    else {}
-                )
+                world_unlocks_raw: Dict[str, Dict[str, Any]] = {}
+                if isinstance(world_unlocks_raw_untyped, dict):
+                    from typing import cast
+
+                    world_unlocks_dict = cast(
+                        Dict[Any, Any],
+                        world_unlocks_raw_untyped,
+                    )
+                    for world_id_key, world_data_value in world_unlocks_dict.items():
+                        if isinstance(world_id_key, str) and isinstance(world_data_value, dict):
+                            world_unlocks_raw[world_id_key] = world_data_value
                 for world_id_str, world_data_raw in world_unlocks_raw.items():
                     world_data: Dict[str, Any] = world_data_raw
                     try:

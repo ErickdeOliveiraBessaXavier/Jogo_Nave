@@ -38,6 +38,24 @@ ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
         WorldTheme.VOLCANIC,
         WorldTheme.PROCEDURAL,
     },
+    Alien: {
+        WorldTheme.STARFIELD,
+        WorldTheme.CITY,
+        WorldTheme.VOLCANIC,
+        WorldTheme.PROCEDURAL,
+    },
+    EyeEnemy: {
+        WorldTheme.STARFIELD,
+        WorldTheme.CITY,
+        WorldTheme.VOLCANIC,
+        WorldTheme.PROCEDURAL,
+    },
+    SquareMinionBoss: {
+        WorldTheme.STARFIELD,
+        WorldTheme.CITY,
+        WorldTheme.VOLCANIC,
+        WorldTheme.PROCEDURAL,
+    },
     RockGlider: {WorldTheme.MOUNTAINS},
     StoneSentry: {WorldTheme.MOUNTAINS},
     ElementalRobot: {WorldTheme.MOUNTAINS},
@@ -252,7 +270,7 @@ ENEMY_THEME_WEIGHT_MULTIPLIERS = ENEMY_THEME_WEIGHT_PROFILES[_ACTIVE_PROFILE]
 ENEMY_STAGE_WEIGHT_MULTIPLIERS = ENEMY_STAGE_WEIGHT_PROFILES[_ACTIVE_PROFILE]
 
 THEME_FALLBACK_ENEMIES: dict[WorldTheme, list[type]] = {
-    WorldTheme.MOUNTAINS: [RockGlider, Alien, EyeEnemy],
+    WorldTheme.MOUNTAINS: [RockGlider, StoneSentry, ElementalRobot],
     WorldTheme.STARFIELD: [Meteor, Alien, EyeEnemy],
     WorldTheme.CITY: [Alien, EyeEnemy, Meteor],
     WorldTheme.VOLCANIC: [Meteor, EyeEnemy, Alien],
@@ -264,7 +282,7 @@ DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
     RockGlider: 1.05,
     Alien: 2.5,
     EyeEnemy: 6.0,
-    StoneSentry: 1.8,
+    StoneSentry: 30.0,
     ElementalRobot: 2.6,
 }
 
@@ -573,7 +591,8 @@ class DifficultyConfig:
         "eye": 0.70,
         "square_minion_boss": 1.00,
         "elemental_robot": 0.90,
-        "stone_sentry": 0.80,
+        # StoneSentry deve ter cadência rara (30s entre spawns).
+        "stone_sentry": 30.0,
     }
 
     DIFFICULTY_SCALING: float = 0.15
@@ -1433,12 +1452,9 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     1: LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            Meteor: 0.6,
-            SquareMinionBoss: 15.0,
+            RockGlider: 0.6,
             ElementalRobot: 1.0,  # Mini-boss
-            # Alien: 2.5,
-            # EyeEnemy: 5.0,
-            StoneSentry: 1.0,
+            StoneSentry: 30.0,
         },
         enemies_to_clear=25,
         # formations_enabled=True,
@@ -1456,9 +1472,9 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     3: LevelConfig(
         level_number=3,
         enemy_spawn_config={
-            Meteor: 0.5,
-            Alien: 2.5,
-            SquareMinionBoss: 15.0,
+            RockGlider: 0.7,
+            ElementalRobot: 2.4,
+            StoneSentry: 30.0,
         },
         enemies_to_clear=350,
         boss_type=StoneGolemBoss,
@@ -1636,8 +1652,9 @@ def _create_world_boss_level(
 
     if world.theme == WorldTheme.MOUNTAINS:
         enemy_spawn_config = {
-            StoneSentry: 1.5,
-            Alien: 3.0,
+            RockGlider: 0.9,
+            ElementalRobot: 2.2,
+            StoneSentry: 30.0,
         }
     elif world.theme == WorldTheme.STARFIELD:
         enemy_spawn_config = {

@@ -355,6 +355,12 @@ class MainMenuScene(Scene):
         self.transition_duration = 0.3
         self.fade_out = False  # True = fade out, False = fade in
         self.returning_to_main = False
+        self.pending_game_start = False
+        self.pending_difficulty: Optional[DifficultyPreset] = None
+        self.game_start_black_hold_active = False
+        self.game_start_black_hold_timer = 0.0
+        self.game_start_black_hold_duration = 0.18
+        self.force_blackout_frame = False
 
         # View de seleção de dificuldade
         self.difficulty_view = DifficultySelectionView(
@@ -438,6 +444,25 @@ class MainMenuScene(Scene):
 
     def _on_difficulty_selected(self, preset: DifficultyPreset):
         """Callback quando uma dificuldade é selecionada."""
+        # Iniciar fade de saída e adiar início do jogo até o fim da transição.
+        self.pending_game_start = True
+        self.pending_difficulty = preset
+        self.game_start_black_hold_active = False
+        self.game_start_black_hold_timer = 0.0
+        self.force_blackout_frame = False
+        self.fade_out = True
+        self.transitioning = True
+        self.transition_progress = 0.0
+
+    def _start_game_with_preset(self, preset: DifficultyPreset) -> None:
+        """Inicia o jogo com o preset já selecionado."""
+        # Garante tela preta caso este frame ainda renderize o menu.
+        self.force_blackout_frame = True
+        self.pending_game_start = False
+        self.pending_difficulty = None
+        self.game_start_black_hold_active = False
+        self.game_start_black_hold_timer = 0.0
+
         # Armazenar dificuldade no app
         self.app.selected_difficulty = preset
 
@@ -677,6 +702,14 @@ class MainMenuScene(Scene):
         self.auto_play.update(dt)
         time_ms = pygame.time.get_ticks()
 
+        # Manter a tela preta por um curto periodo antes de iniciar a gameplay.
+        if self.game_start_black_hold_active:
+            self.game_start_black_hold_timer -= dt
+            if self.game_start_black_hold_timer <= 0.0:
+                if self.pending_difficulty is not None:
+                    self._start_game_with_preset(self.pending_difficulty)
+                return
+
         # Atualizar transição
         if self.transitioning:
             self.transition_progress += dt / self.transition_duration
@@ -687,6 +720,14 @@ class MainMenuScene(Scene):
 
                 # Trocar view e inverter direção do fade
                 if self.fade_out:
+                    # Completou fade out para iniciar jogo.
+                    if self.pending_game_start and self.pending_difficulty is not None:
+                        self.game_start_black_hold_active = True
+                        self.game_start_black_hold_timer = (
+                            self.game_start_black_hold_duration
+                        )
+                        return
+
                     # Completou fade out, trocar view
                     if self.returning_to_main:
                         self.current_view = MenuView.MAIN
@@ -904,3 +945,17 @@ class MainMenuScene(Scene):
 
                 # Restaurar progresso original
                 button.entry_progress = original_progress
+
+        # Transicao para gameplay: fade-out para preto e pequena pausa em preto.
+        if self.pending_game_start and self.fade_out and self.transitioning:
+            black_alpha = int(255 * self.transition_progress)
+            black_overlay = pygame.Surface(
+                (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+            )
+            black_overlay.fill((0, 0, 0, black_alpha))
+            surface.blit(black_overlay, (0, 0))
+        elif self.game_start_black_hold_active:
+            surface.fill(BLACK)
+
+        if self.force_blackout_frame:
+            surface.fill(BLACK)

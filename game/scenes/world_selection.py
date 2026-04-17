@@ -6,7 +6,7 @@ Mostra status de desbloqueio e checkpoint atual.
 """
 
 from enum import Enum
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Any, Callable, List, Tuple
 
 import pygame
 
@@ -18,14 +18,22 @@ from ..core.world_config import WorldConfig, get_all_worlds
 from ..render.backgrounds import create_background
 
 if TYPE_CHECKING:
-    pass
+    from ..render.renderer import Renderer
 
 
-def render_text_wrapped(text, font, color, surface, center_x, start_y, max_width):
+def render_text_wrapped(
+    text: str,
+    font: pygame.font.Font,
+    color: Tuple[int, int, int],
+    surface: pygame.Surface,
+    center_x: int,
+    start_y: int,
+    max_width: int,
+) -> int:
     """Renderiza texto com quebra de linha automática, centralizado."""
-    words = text.split(" ")
-    lines = []
-    current_line = []
+    words: list[str] = text.split(" ")
+    lines: list[str] = []
+    current_line: list[str] = []
 
     for word in words:
         test_line = " ".join(current_line + [word])
@@ -86,7 +94,7 @@ class WorldCard:
         self.desc_font = get_font(16)
         self.score_font = get_font(18)
 
-    def _update_colors(self):
+    def _update_colors(self) -> None:
         """Atualiza cores baseado no estado atual."""
         if self.state == WorldCardState.CHECKPOINT:
             self.border_color = CUSTOM_GOLD
@@ -101,18 +109,23 @@ class WorldCard:
             self.bg_color = (15, 15, 15)
             self.title_color = (150, 150, 150)
 
-    def set_position(self, x: int, y: int):
+    def set_position(self, x: int, y: int) -> None:
         """Define posição do card."""
         self.rect.topleft = (x, y)
 
-    def update_hover(self, mouse_pos: tuple[int, int]):
+    def update_hover(self, mouse_pos: tuple[int, int]) -> None:
         """Atualiza estado de hover."""
         self.hover = self.rect.collidepoint(mouse_pos)
 
-    def render(self, surface: pygame.Surface):
+    def render(self, surface: pygame.Surface) -> None:
         """Renderiza o card."""
-        # Fundo
-        pygame.draw.rect(surface, self.bg_color, self.rect, border_radius=10)
+        # Fundo com efeito hover
+        bg_color = self.bg_color
+        if self.hover:
+            # Brightening effect ao passar o mouse (para todos os cards)
+            bg_color = tuple(min(255, c + 100) for c in self.bg_color)
+        
+        pygame.draw.rect(surface, bg_color, self.rect, border_radius=10)
 
         # Borda
         border_width = 3 if self.hover else 2
@@ -152,18 +165,32 @@ class WorldCard:
 
         # Status/Score
         if self.state == WorldCardState.CHECKPOINT:
-            status_text = self.score_font.render(
-                f"Checkpoint - Best: {self.best_score:,}", True, CUSTOM_GOLD
-            )
-        elif self.state == WorldCardState.UNLOCKED:
-            status_text = self.score_font.render("Desbloqueado", True, CUSTOM_PURPLE)
-        else:
-            status_text = self.score_font.render("Bloqueado", True, (150, 150, 150))
+            # Mostrar em duas linhas menores para caber sem abreviacao.
+            checkpoint_font = get_font(14)
+            line1 = checkpoint_font.render("Checkpoint", True, CUSTOM_GOLD)
+            line2 = checkpoint_font.render(f"Score: {self.best_score:,}", True, CUSTOM_GOLD)
 
-        status_rect = status_text.get_rect(
-            centerx=self.rect.centerx, bottom=self.rect.bottom - 20
-        )
-        surface.blit(status_text, status_rect)
+            line2_rect = line2.get_rect(
+                centerx=self.rect.centerx, bottom=self.rect.bottom - 16
+            )
+            line1_rect = line1.get_rect(
+                centerx=self.rect.centerx, bottom=line2_rect.top - 4
+            )
+            surface.blit(line1, line1_rect)
+            surface.blit(line2, line2_rect)
+        else:
+            if self.state == WorldCardState.UNLOCKED:
+                status_label = "Desbloqueado"
+                status_color = CUSTOM_PURPLE
+            else:
+                status_label = "Bloqueado"
+                status_color = (150, 150, 150)
+
+            status_text = self.score_font.render(status_label, True, status_color)
+            status_rect = status_text.get_rect(
+                centerx=self.rect.centerx, bottom=self.rect.bottom - 20
+            )
+            surface.blit(status_text, status_rect)
 
         # Efeito hover
         if self.hover and self.state != WorldCardState.LOCKED:
@@ -183,7 +210,13 @@ class WorldCard:
 class WorldSelectionView:
     """View para seleção de mundo."""
 
-    def __init__(self, on_world_selected, on_back, renderer, player_profile):
+    def __init__(
+        self,
+        on_world_selected: Callable[[int], None],
+        on_back: Callable[[], None],
+        renderer: "Renderer",
+        player_profile: Any,
+    ) -> None:
         self.on_world_selected = on_world_selected
         self.on_back = on_back
         self.renderer = renderer
@@ -192,6 +225,7 @@ class WorldSelectionView:
         # Cards de mundo
         self.world_cards: List[WorldCard] = []
         self.selected_index = 0
+        self.hovered_index: int | None = None
 
         # Layout
         self.card_spacing = 40
@@ -204,9 +238,15 @@ class WorldSelectionView:
 
         # Background dinâmico
         self.current_background = None
+        self.previous_background = None
         self.last_selected = -1
+        
+        # Transição de fade
+        self.transition_progress = 0.0  # 0.0 a 1.0
+        self.transition_duration = 0.3  # segundos
+        self.is_transitioning = False
 
-    def reset(self):
+    def reset(self) -> None:
         """Reinicia a view com dados atualizados."""
         self.world_cards.clear()
         self.selected_index = 0
@@ -240,7 +280,7 @@ class WorldSelectionView:
 
         self._layout_cards()
 
-    def _layout_cards(self):
+    def _layout_cards(self) -> None:
         """Posiciona os cards em grid."""
         start_x = (
             Config.SCREEN_WIDTH
@@ -264,7 +304,7 @@ class WorldSelectionView:
             y = start_y + row * (card.height + self.card_spacing)
             card.set_position(x, y)
 
-    def handle_event(self, event: pygame.event.Event):
+    def handle_event(self, event: pygame.event.Event) -> None:
         """Processa eventos de entrada."""
         if event.type == pygame.KEYDOWN:
             current_time = pygame.time.get_ticks()
@@ -311,6 +351,21 @@ class WorldSelectionView:
             elif event.key == pygame.K_ESCAPE:
                 self.on_back()
 
+        elif event.type == pygame.MOUSEMOTION:
+            # Atualizar hover ao mover o mouse
+            self.hovered_index = None
+            for i, card in enumerate(self.world_cards):
+                card.update_hover(event.pos)
+                
+                if card.hover:
+                    self.hovered_index = i
+                    # Sempre atualiza selected_index quando hovereado (mesmo se LOCKED)
+                    old_index = self.selected_index
+                    self.selected_index = i
+                    if old_index != i:
+                        sound_manager.play_sound("button_hover")
+                    break
+
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             for i, card in enumerate(self.world_cards):
                 if (
@@ -321,7 +376,7 @@ class WorldSelectionView:
                     self._select_current_world()
                     break
 
-    def _select_current_world(self):
+    def _select_current_world(self) -> None:
         """Seleciona o mundo atualmente focado."""
         if self.selected_index < len(self.world_cards):
             card = self.world_cards[self.selected_index]
@@ -330,9 +385,9 @@ class WorldSelectionView:
                 self.on_world_selected(card.world_config.world_id)
                 sound_manager.play_sound("button_click")
 
-    def update(self, _dt: float):
+    def update(self, _dt: float) -> None:
         """Atualiza a view."""
-        # Atualizar hover dos cards
+        # Atualizar hover visual dos cards (apenas aparência, sem mudar selected_index)
         mouse_pos = pygame.mouse.get_pos()
         for card in self.world_cards:
             card.update_hover(mouse_pos)
@@ -340,6 +395,11 @@ class WorldSelectionView:
         # Atualizar background se seleção mudou
         if self.selected_index != self.last_selected:
             self.last_selected = self.selected_index
+            # Iniciar transição: salvar background antigo
+            self.previous_background = self.current_background
+            self.is_transitioning = True
+            self.transition_progress = 0.0
+            
             if self.selected_index < len(self.world_cards):
                 world_config = self.world_cards[self.selected_index].world_config
                 theme_str = world_config.theme.value.lower()
@@ -358,34 +418,115 @@ class WorldSelectionView:
                     except ValueError:
                         self.current_background = None
 
-        # Atualizar animação do background
-        if self.current_background:
-            self.current_background.update(_dt, 0.5)  # Animação mais fluida
+        # Animar transição de fade
+        if self.is_transitioning:
+            self.transition_progress += _dt / self.transition_duration
+            if self.transition_progress >= 1.0:
+                self.transition_progress = 1.0
+                self.is_transitioning = False
+                self.previous_background = None  # Limpar background antigo
+            else:
+                # Continuar atualizando o background antigo durante a transição
+                if self.previous_background is not None:
+                    try:
+                        self.previous_background.update(_dt, 0.5)
+                    except Exception:
+                        pass
 
-    def render(self, surface: pygame.Surface):
+        # Atualizar animação do background
+        if self.current_background is not None:
+            try:
+                self.current_background.update(_dt, 0.5)  # Animação mais fluida
+            except Exception:
+                pass
+
+    def render(self, surface: pygame.Surface) -> None:
         """Renderiza a view."""
         # Fundo preto para evitar transparência
         surface.fill((0, 0, 0))
 
-        # Desenhar background baseado no tema
-        if self.current_background:
-            # Background temático (MOUNTAINS, CITY, VOLCANIC, PROCEDURAL)
-            bg_surface = pygame.Surface(
-                (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
-            )
-            self.current_background.draw(bg_surface)
-            bg_surface.set_alpha(76)  # 30% opacidade
-            surface.blit(bg_surface, (0, 0))
+        # Desenhar background com transição de fade
+        if self.is_transitioning:
+            # Transição de fade em andamento
+            
+            # Desenhar background antigo (desaparecendo)
+            if self.previous_background is not None:
+                try:
+                    bg_surface_old = pygame.Surface(
+                        (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+                    )
+                    self.previous_background.draw(bg_surface_old)
+                    old_alpha = int(76 * (1.0 - self.transition_progress))  # Fade out
+                    bg_surface_old.set_alpha(old_alpha)
+                    surface.blit(bg_surface_old, (0, 0))
+                except Exception:
+                    # Se houver erro no draw, ignorar
+                    pass
+            else:
+                # Background antigo era starfield (que é None)
+                starfield_alpha = int(76 * (1.0 - self.transition_progress))
+                temp_surface = pygame.Surface(
+                    (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+                )
+                try:
+                    self.renderer.starfield.draw(temp_surface)
+                    temp_surface.set_alpha(starfield_alpha)
+                    surface.blit(temp_surface, (0, 0))
+                except Exception:
+                    pass
+            
+            # Desenhar background novo (aparecendo)
+            if self.current_background is not None:
+                try:
+                    bg_surface_new = pygame.Surface(
+                        (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+                    )
+                    self.current_background.draw(bg_surface_new)
+                    new_alpha = int(76 * self.transition_progress)  # Fade in
+                    bg_surface_new.set_alpha(new_alpha)
+                    surface.blit(bg_surface_new, (0, 0))
+                except Exception:
+                    # Se houver erro no draw, ignorar
+                    pass
+            else:
+                # Novo background é starfield
+                starfield_alpha = int(76 * self.transition_progress)
+                temp_surface = pygame.Surface(
+                    (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+                )
+                try:
+                    self.renderer.starfield.draw(temp_surface)
+                    temp_surface.set_alpha(starfield_alpha)
+                    surface.blit(temp_surface, (0, 0))
+                except Exception:
+                    pass
         else:
-            # Para STARFIELD, usar o starfield do renderer (mesmo do menu)
-            self.renderer.starfield.draw(surface)
+            # Sem transição: desenhar normalmente
+            if self.current_background is not None:
+                # Background temático (MOUNTAINS, CITY, VOLCANIC, PROCEDURAL)
+                try:
+                    bg_surface = pygame.Surface(
+                        (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+                    )
+                    self.current_background.draw(bg_surface)
+                    bg_surface.set_alpha(76)  # 30% opacidade
+                    surface.blit(bg_surface, (0, 0))
+                except Exception:
+                    # Fallback ao starfield
+                    self.renderer.starfield.draw(surface)
+            else:
+                # Para STARFIELD, usar o starfield do renderer (mesmo do menu)
+                self.renderer.starfield.draw(surface)
 
         # Renderizar cards
         for i, card in enumerate(self.world_cards):
             card.render(surface)
 
-            # Destaque para card selecionado
-            if i == self.selected_index:
+            # Destacar: seleção por teclado OU hover do mouse
+            is_keyboard_selected = (i == self.selected_index and self.hovered_index is None)
+            is_hovered = (i == self.hovered_index)
+
+            if is_keyboard_selected or is_hovered:
                 # Borda extra dourada
                 pygame.draw.rect(surface, CUSTOM_GOLD, card.rect, 4, border_radius=12)
 

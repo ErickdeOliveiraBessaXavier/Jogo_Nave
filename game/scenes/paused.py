@@ -63,7 +63,7 @@ class PausedScene(Scene):
         if not self.go_to_menu and not self.go_to_settings:
             sound_manager.resume_music()
 
-    def update(self, _dt: float):
+    def update(self, dt: float):
         pass
 
     def handle_event(self, event: pygame.event.Event):
@@ -78,7 +78,13 @@ class PausedScene(Scene):
                 from .settings import SettingsScene
 
                 self.go_to_settings = True
-                self.app.states.push(SettingsScene(self.app, return_to_game=True))
+                self.app.states.push(
+                    SettingsScene(
+                        self.app,
+                        return_to_game=True,
+                        runtime_scene=self.previous_scene,
+                    )
+                )
 
             elif self.menu_button_rect.collidepoint(event.pos):
                 self.go_to_menu = True

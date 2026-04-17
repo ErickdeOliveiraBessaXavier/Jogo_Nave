@@ -23,6 +23,7 @@ from game.entities.bot_elemental import ElementalRobot
 from game.entities.eye_enemy import EyeEnemy
 from game.entities.meteor import Meteor
 from game.entities.rock_glider import RockGlider
+from game.entities.square_minion_boss import SquareMinionBoss
 from game.entities.stone_sentry import StoneSentry
 
 
@@ -219,6 +220,31 @@ def test_stage_band_city_progression_for_aliens() -> None:
         adjusted_late.enemy_spawn_config[Alien]
         < adjusted_early.enemy_spawn_config[Alien]
     )
+
+
+def test_mountains_pool_is_strictly_limited_to_mountain_enemies() -> None:
+    config = LevelConfig(
+        level_number=1,
+        enemy_spawn_config={
+            Meteor: 1.0,
+            Alien: 1.0,
+            EyeEnemy: 1.0,
+            SquareMinionBoss: 8.0,
+            RockGlider: 1.0,
+            ElementalRobot: 2.0,
+            StoneSentry: 30.0,
+        },
+        enemies_to_clear=120,
+    )
+
+    mountains_world = get_world_for_level(1)
+    adjusted = _apply_theme_enemy_eligibility(config, mountains_world)
+
+    assert set(adjusted.enemy_spawn_config.keys()) == {
+        RockGlider,
+        ElementalRobot,
+        StoneSentry,
+    }
 
 
 def test_tuning_profiles_have_expected_variants() -> None:

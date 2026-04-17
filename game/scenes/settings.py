@@ -24,6 +24,7 @@ class SettingsView:
         renderer: Any = None,
         on_restart: Callable[[], None] | None = None,
         app: Any = None,
+        runtime_scene: Any = None,
     ):
         """
         Args:
@@ -35,6 +36,7 @@ class SettingsView:
         self.on_restart = on_restart
         self.renderer = renderer
         self._app = app
+        self._runtime_scene = runtime_scene
 
         # Agora usamos ambos: preferências para sistema e profile para progressão (se necessário)
         self.preferences = UserPreferences(get_preferences_path())
@@ -260,9 +262,35 @@ class SettingsView:
     def handle_event(self, event: pygame.event.Event) -> bool:
         """Processa eventos da view."""
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            if self.show_restart_popup:
+                self.show_restart_popup = False
+                return True
             self.preferences.save()
             self.on_back()
             return True
+
+        # Enquanto o pop-up estiver aberto, bloquear interação com o restante da tela.
+        if self.show_restart_popup:
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                pos = event.pos
+                if self.layout_rects["popup_yes_button"].collidepoint(pos):
+                    self.show_restart_popup = False
+                    import sys
+
+                    pygame.quit()
+                    sys.exit(0)
+                if self.layout_rects["popup_no_button"].collidepoint(pos):
+                    self.show_restart_popup = False
+                return True
+
+            # Consumir os demais eventos para evitar click-through.
+            if event.type in (
+                pygame.MOUSEBUTTONUP,
+                pygame.MOUSEMOTION,
+                pygame.MOUSEWHEEL,
+                pygame.KEYDOWN,
+            ):
+                return True
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             pos = event.pos
@@ -295,27 +323,11 @@ class SettingsView:
                     # Salvar nas preferências
                     if key == "mouse_control":
                         self.preferences.mouse_control = self.toggles[key]
-                        # Aplica imediatamente ao input em execução
-                        if self._app is not None:
-                            self._app.input.mouse_control = self.toggles[key]
+                        self._apply_live_control_settings()
                     elif key == "auto_fire":
                         self.preferences.auto_fire = self.toggles[key]
-                        # Aplica imediatamente ao input em execução
-                        if self._app is not None:
-                            self._app.input.auto_fire = self.toggles[key]
+                        self._apply_live_control_settings()
                     self.preferences.save()
-                    return True
-
-            # Pop-up de confirmação
-            if self.show_restart_popup:
-                if self.layout_rects["popup_yes_button"].collidepoint(pos):
-                    self.show_restart_popup = False
-                    import sys
-
-                    pygame.quit()
-                    sys.exit(0)
-                elif self.layout_rects["popup_no_button"].collidepoint(pos):
-                    self.show_restart_popup = False
                     return True
 
             # Sliders
@@ -357,6 +369,27 @@ class SettingsView:
         elif key == "shot":
             self.preferences.shot_volume = volume
             sound_manager.set_shot_volume(volume)
+
+    def _apply_live_control_settings(self) -> None:
+        """Aplica mouse_control/auto_fire imediatamente no runtime atual."""
+        if self._app is None:
+            return
+
+        # Sincroniza preferências em memória do app.
+        self._app.preferences.mouse_control = self.preferences.mouse_control
+        self._app.preferences.auto_fire = self.preferences.auto_fire
+
+        # Sincroniza sistema de input global.
+        self._app.input.mouse_control = self.preferences.mouse_control
+        self._app.input.auto_fire = self.preferences.auto_fire
+
+        # Se houver cena de gameplay ativa por baixo (abrindo settings via pause),
+        # atualiza também a nave existente sem exigir reinício.
+        runtime_ship = getattr(self._runtime_scene, "ship", None)
+        if runtime_ship is not None:
+            runtime_ship.mouse_control = self.preferences.mouse_control
+            runtime_ship.auto_fire = self.preferences.auto_fire
+            runtime_ship.auto_fire_timer = 0.0
 
     def render(self, surface: pygame.Surface):
         """Renderiza a view."""
@@ -696,18 +729,40 @@ class SettingsView:
             (popup_rect.centerx - title_surf.get_width() // 2, popup_rect.y + 20),
         )
 
-        message_lines = [
-            "As alterações só serão",
-            "vistas ao reiniciar o jogo.",
-            "Deseja fazer isso agora?",
-        ]
-        y_offset = popup_rect.y + 60
+        message_text = (
+            "As alterações só serão vistas ao reiniciar o jogo. "
+            "Deseja fazer isso agora?"
+        )
+        text_max_width = popup_rect.width - 60
+        message_lines = self._wrap_text(self.item_font, message_text, text_max_width)
+
+        line_height = self.item_font.get_linesize()
+        line_gap = 4
+        block_height = (len(message_lines) * line_height) + (
+            max(0, len(message_lines) - 1) * line_gap
+        )
+        message_top = popup_rect.y + 60
+        message_bottom = self.layout_rects["popup_yes_button"].y - 12
+        available_height = max(0, message_bottom - message_top)
+
+        if block_height > available_height:
+            # Fallback para garantir que nunca estoure verticalmente.
+            msg_font = self.small_font
+            line_height = msg_font.get_linesize()
+            message_lines = self._wrap_text(msg_font, message_text, text_max_width)
+            block_height = (len(message_lines) * line_height) + (
+                max(0, len(message_lines) - 1) * line_gap
+            )
+        else:
+            msg_font = self.item_font
+
+        y_offset = message_top + max(0, (available_height - block_height) // 2)
         for line in message_lines:
-            text_surf = self.item_font.render(line, True, colors.WHITE)
+            text_surf = msg_font.render(line, True, colors.WHITE)
             surface.blit(
                 text_surf, (popup_rect.centerx - text_surf.get_width() // 2, y_offset)
             )
-            y_offset += 25
+            y_offset += line_height + line_gap
 
         self._draw_button(
             surface, self.layout_rects["popup_yes_button"], "Sim", colors.RED, 255, 0
@@ -716,15 +771,45 @@ class SettingsView:
             surface, self.layout_rects["popup_no_button"], "Não", CUSTOM_PURPLE, 255, 0
         )
 
+    def _wrap_text(self, font: pygame.font.Font, text: str, max_width: int) -> list[str]:
+        """Quebra texto em múltiplas linhas para caber na largura máxima."""
+        words = text.split()
+        if not words:
+            return [""]
+
+        lines: list[str] = []
+        current_line = words[0]
+
+        for word in words[1:]:
+            candidate = f"{current_line} {word}"
+            if font.size(candidate)[0] <= max_width:
+                current_line = candidate
+            else:
+                lines.append(current_line)
+                current_line = word
+
+        lines.append(current_line)
+        return lines
+
 
 class SettingsScene(Scene):
     """Cena de configurações."""
 
-    def __init__(self, app: "GameApp", return_to_game: bool = False):
+    def __init__(
+        self,
+        app: "GameApp",
+        return_to_game: bool = False,
+        runtime_scene: Any = None,
+    ):
         super().__init__(app)
         self.return_to_game = return_to_game
         self.r = app.renderer
-        self.view = SettingsView(on_back=self._on_back, renderer=self.r, app=app)
+        self.view = SettingsView(
+            on_back=self._on_back,
+            renderer=self.r,
+            app=app,
+            runtime_scene=runtime_scene,
+        )
 
         self.transitioning = False
         self.transition_progress = 0.0

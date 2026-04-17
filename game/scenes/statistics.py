@@ -745,6 +745,7 @@ class ConfirmationDialog:
         self.on_no = on_no
         self.header_font = get_font(24)
         self.item_font = get_font(20)
+        self.small_font = get_font(16)
 
         # Box
         box_w, box_h = 450, 200
@@ -753,17 +754,6 @@ class ConfirmationDialog:
             screen_w / 2 - box_w / 2, screen_h / 2 - box_h / 2, box_w, box_h
         )
 
-        # Texto
-        self.lines = [
-            self.header_font.render(line, True, colors.WHITE) for line in question_lines
-        ]
-        self.line_rects: List[pygame.Rect] = []
-        y_offset = self.box_rect.y + 30
-        for line in self.lines:
-            rect = line.get_rect(centerx=self.box_rect.centerx, top=y_offset)
-            self.line_rects.append(rect)
-            y_offset += line.get_height() + 10
-
         # Botões
         btn_w, btn_h = 150, 40
         btn_y = self.box_rect.bottom - btn_h - 20
@@ -771,6 +761,43 @@ class ConfirmationDialog:
             self.box_rect.centerx - btn_w - 10, btn_y, btn_w, btn_h
         )
         self.no_rect = pygame.Rect(self.box_rect.centerx + 10, btn_y, btn_w, btn_h)
+
+        # Texto com quebra automática para evitar overflow
+        self.text_max_width = self.box_rect.width - 50
+        message_text = " ".join(question_lines)
+        self.message_font = self.item_font
+        self.message_lines = self._wrap_text(
+            self.message_font, message_text, self.text_max_width
+        )
+
+        line_gap = 8
+        line_height = self.message_font.get_linesize()
+        text_block_height = (len(self.message_lines) * line_height) + (
+            max(0, len(self.message_lines) - 1) * line_gap
+        )
+        text_top = self.box_rect.y + 25
+        text_bottom = self.yes_rect.y - 12
+        available_height = max(0, text_bottom - text_top)
+
+        if text_block_height > available_height:
+            self.message_font = self.small_font
+            self.message_lines = self._wrap_text(
+                self.message_font, message_text, self.text_max_width
+            )
+            line_height = self.message_font.get_linesize()
+            text_block_height = (len(self.message_lines) * line_height) + (
+                max(0, len(self.message_lines) - 1) * line_gap
+            )
+
+        self.line_rects: List[pygame.Rect] = []
+        y_offset = text_top + max(0, (available_height - text_block_height) // 2)
+        for line in self.message_lines:
+            rect = self.message_font.render(line, True, colors.WHITE).get_rect(
+                centerx=self.box_rect.centerx,
+                top=y_offset,
+            )
+            self.line_rects.append(rect)
+            y_offset += line_height + line_gap
 
         # Overlay
         self.overlay = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
@@ -793,12 +820,33 @@ class ConfirmationDialog:
         pygame.draw.rect(surface, colors.WHITE, self.box_rect, 2, border_radius=12)
 
         # Texto
-        for line, rect in zip(self.lines, self.line_rects):
-            surface.blit(line, rect)
+        for line_text, rect in zip(self.message_lines, self.line_rects):
+            line_surface = self.message_font.render(line_text, True, colors.WHITE)
+            surface.blit(line_surface, rect)
 
         # Botões
         self._draw_button(surface, self.yes_rect, "Sim", colors.GREEN)
         self._draw_button(surface, self.no_rect, "Não", colors.RED)
+
+    def _wrap_text(self, font: pygame.font.Font, text: str, max_width: int) -> list[str]:
+        """Quebra texto em linhas para caber dentro do dialog."""
+        words = text.split()
+        if not words:
+            return [""]
+
+        lines: list[str] = []
+        current = words[0]
+
+        for word in words[1:]:
+            candidate = f"{current} {word}"
+            if font.size(candidate)[0] <= max_width:
+                current = candidate
+            else:
+                lines.append(current)
+                current = word
+
+        lines.append(current)
+        return lines
 
     def _draw_button(
         self, surface: pygame.Surface, rect: pygame.Rect, text: str, color: colors.Color

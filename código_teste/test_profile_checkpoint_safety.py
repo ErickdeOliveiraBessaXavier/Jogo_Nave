@@ -114,3 +114,31 @@ def test_invalid_json_file_keeps_safe_world_defaults(tmp_path: Path) -> None:
     assert profile.current_checkpoint_world == 1
     assert 1 in profile.world_unlocks
     assert profile.world_unlocks[1].is_unlocked is True
+
+
+def test_unlock_next_world_uses_explicit_world_id(tmp_path: Path) -> None:
+    profile_path = tmp_path / "explicit_unlock_world_id.json"
+    profile = PlayerProfile(profile_path)
+
+    # Simula checkpoint já adiantado por outro fluxo, mas desbloqueio precisa seguir world_id informado.
+    profile.current_checkpoint_world = 4
+
+    profile.unlock_next_world(1)
+
+    assert 2 in profile.world_unlocks
+    assert profile.world_unlocks[2].is_unlocked is True
+    assert profile.current_checkpoint_world == 2
+
+
+def test_unlock_next_world_respects_max_named_world(tmp_path: Path) -> None:
+    profile_path = tmp_path / "max_named_world_unlock.json"
+    profile = PlayerProfile(profile_path)
+
+    profile.current_checkpoint_world = 4
+    existing_world_unlocks = set(profile.world_unlocks.keys())
+
+    profile.unlock_next_world(4)
+
+    # Não deve desbloquear além do mundo 4 nomeado.
+    assert set(profile.world_unlocks.keys()) == existing_world_unlocks
+    assert profile.current_checkpoint_world == 4

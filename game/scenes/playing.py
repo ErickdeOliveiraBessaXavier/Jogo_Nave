@@ -156,6 +156,15 @@ class PlayingScene(Scene):
         self.pending_world_transition: Optional[WorldConfig] = None
         self.awaiting_world_transition_panel = False
 
+        # Fade-in sutil no inicio da partida para evitar corte abrupto.
+        self.start_fade_active = True
+        self.start_fade_alpha = 255.0
+        self.start_fade_elapsed = 0.0
+        self.start_fade_duration = 0.45
+        self.start_fade_overlay = pygame.Surface(
+            (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+        )
+
         self.screen_shake_timer = 0.0
         self.screen_shake_intensity = Config.SCREEN_SHAKE_NORMAL
         self.warning_timer = 0.0
@@ -638,6 +647,19 @@ class PlayingScene(Scene):
             return
 
         self.last_dt = dt
+
+        if self.start_fade_active:
+            self.start_fade_elapsed = min(
+                self.start_fade_duration,
+                self.start_fade_elapsed + dt,
+            )
+            progress = self.start_fade_elapsed / self.start_fade_duration
+            # Ease-out cubico para reduzir trancos perceptiveis no inicio/fim.
+            eased = 1.0 - (1.0 - progress) ** 3
+            self.start_fade_alpha = 255.0 * (1.0 - eased)
+            if self.start_fade_elapsed >= self.start_fade_duration:
+                self.start_fade_alpha = 0.0
+                self.start_fade_active = False
 
         if self.transition_phase == TransitionPhase.CUTSCENE_EXIT:
             self._update_world_transition_cutscene(dt)
@@ -1860,8 +1882,10 @@ class PlayingScene(Scene):
         # Voltar para música normal
         sound_manager.music_state_manager.transition_to(MusicState.GAME)
 
-        # Sistema de mundos: desbloquear próximo mundo após derrotar boss
-        self.player_profile.unlock_next_world()
+        # Sistema de mundos: desbloquear próximo mundo apenas no boss final do mundo atual.
+        current_level_number = self.current_level_index + 1
+        if current_level_number == self.current_world.boss_level:
+            self.player_profile.unlock_next_world(self.current_world.world_id)
 
         self._advance_to_next_level()
 
@@ -2197,6 +2221,10 @@ class PlayingScene(Scene):
 
         if self.state == "preparing":
             self.r.preparation(surface, self.preparation_time_left)
+
+        if self.start_fade_active:
+            self.start_fade_overlay.fill((0, 0, 0, int(self.start_fade_alpha)))
+            surface.blit(self.start_fade_overlay, (0, 0))
 
     # ===================== Upgrades (helpers) =====================
     def _init_upgrades_from_profile(self):

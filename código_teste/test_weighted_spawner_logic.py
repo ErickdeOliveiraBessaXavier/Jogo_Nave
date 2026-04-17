@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from game.core.levels import DifficultyConfig, LevelManager
 from game.entities.meteor import Meteor
+from game.entities.stone_sentry import StoneSentry
 from game.entities.square_minion_boss import SquareMinionBoss
 from game.systems.spawner import EnemySpawner
 
@@ -110,3 +111,16 @@ def test_spawn_enemy_returns_false_when_square_minion_missing_player_target() ->
 
     assert did_spawn is False
     assert len(entity_manager.enemies) == 0
+
+
+def test_stone_sentry_min_spawn_gap_is_30_seconds() -> None:
+    spawner = _make_spawner()
+    gap = spawner._get_min_spawn_gap(StoneSentry)
+
+    expected = (
+        DifficultyConfig.MIN_SPAWN_GAP_BY_TYPE["stone_sentry"]
+        * DifficultyConfig.DIFFICULTY_SPAWN_GAP_MULTIPLIER[spawner.difficulty_preset]
+    )
+
+    assert expected == 30.0
+    assert abs(gap - expected) < 1e-9
