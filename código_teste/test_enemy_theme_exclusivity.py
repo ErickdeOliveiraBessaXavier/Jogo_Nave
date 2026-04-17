@@ -1,5 +1,6 @@
 import os
 import sys
+from unittest.mock import patch
 
 # Permite importar pacote `game` quando rodando direto via pytest no workspace.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -7,15 +8,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from game.core.levels import (
     ACTIVE_ENEMY_TUNING_PROFILE,
     DEFAULT_ENEMY_SPAWN_TIME,
+    DifficultyPreset,
     ENEMY_STAGE_WEIGHT_MULTIPLIERS,
     ENEMY_STAGE_WEIGHT_PROFILES,
     ENEMY_THEME_WEIGHT_MULTIPLIERS,
     ENEMY_THEME_WEIGHT_PROFILES,
     LevelConfig,
+    ProceduralLevelGenerator,
     _apply_theme_enemy_eligibility,
     _apply_theme_enemy_rules,
     _get_stage_band,
     _resolve_tuning_profile,
+    get_level_config,
 )
 from game.core.world_config import get_world_for_level
 from game.entities.alien import Alien
@@ -294,3 +298,39 @@ def test_mountains_defaults_include_special_enemies() -> None:
     assert DEFAULT_ENEMY_SPAWN_TIME[RockGlider] > 0
     assert DEFAULT_ENEMY_SPAWN_TIME[StoneSentry] > 0
     assert DEFAULT_ENEMY_SPAWN_TIME[ElementalRobot] > 0
+
+
+def test_force_meteor_storm_still_respects_world_enemy_eligibility() -> None:
+    config = get_level_config(
+        1,
+        difficulty_preset=DifficultyPreset.NORMAL,
+        force_meteor_storm=True,
+    )
+
+    allowed = {RockGlider, StoneSentry, ElementalRobot}
+    assert set(config.enemy_spawn_config.keys()).issubset(allowed)
+    assert Meteor not in config.enemy_spawn_config
+    assert Alien not in config.enemy_spawn_config
+
+
+def test_procedural_rng_seed_uses_non_colliding_composition() -> None:
+    generator = ProceduralLevelGenerator(
+        seed=100,
+        difficulty_preset=DifficultyPreset.NORMAL,
+    )
+    expected_seed = 100 * 10_000 + 5
+    dummy_config = LevelConfig(
+        level_number=5,
+        enemy_spawn_config={Meteor: 1.0},
+        enemies_to_clear=10,
+    )
+
+    with (
+        patch("game.core.levels.random.Random") as random_ctor,
+        patch.object(generator, "_choose_theme", return_value=None),
+        patch.object(generator, "generate_config", return_value=dummy_config),
+    ):
+        result = generator._generate_level_impl(5)
+
+    assert result is dummy_config
+    random_ctor.assert_called_once_with(expected_seed)

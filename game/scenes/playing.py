@@ -880,8 +880,10 @@ class PlayingScene(Scene):
                 self.enemy_cleanup_timer += dt
 
                 # Sistema de piscar: começa nos últimos 5 segundos
-                time_remaining = self.enemy_cleanup_duration - self.enemy_cleanup_timer
-                if time_remaining <= 5.0:
+                time_remaining = max(
+                    0.0, self.enemy_cleanup_duration - self.enemy_cleanup_timer
+                )
+                if 0.0 < time_remaining <= 5.0:
                     # Piscar acelera conforme o tempo vai acabando
                     blink_min = 0.05  # 50ms
                     blink_max = 0.4  # 400ms
@@ -892,30 +894,9 @@ class PlayingScene(Scene):
                     if self.enemy_blink_timer >= self.enemy_blink_interval:
                         self.enemy_blink_timer = 0.0
                         self.enemy_visible = not self.enemy_visible
-
-                # Se timer expirou, marcar todos os inimigos como mortos
-                if self.enemy_cleanup_timer >= self.enemy_cleanup_duration:
-                    total_enemies = len(self.entity_manager.enemies)
-                    total_formations = sum(
-                        len(f.enemies) for f in self.entity_manager.formations
-                    )
-
-                    logger.info(
-                        f"TEMPO ESGOTADO! Removendo {total_enemies} inimigos normais "
-                        f"e {total_formations} inimigos em formação automaticamente..."
-                    )
-
-                    # Limpar inimigos normais
-                    for enemy in self.entity_manager.enemies[:]:
-                        enemy.dead = True
-                    self.entity_manager.enemies.clear()
-
-                    # Limpar formações também
-                    for formation in self.entity_manager.formations[:]:
-                        for enemy in formation.enemies:
-                            enemy.dead = True
-                        formation.dead = True
-                    self.entity_manager.formations.clear()
+                elif time_remaining <= 0.0:
+                    # Não avançar por timeout: manter inimigos visíveis até a tela ficar limpa.
+                    self.enemy_visible = True
 
             self._check_level_progression()
 
@@ -1697,26 +1678,59 @@ class PlayingScene(Scene):
                 GameOverScene(self.app, self.score, self, next_level)
             )
 
+    def _count_active_stage_hostiles(self) -> int:
+        """Conta hostis ativos relevantes para concluir a fase atual."""
+        active_enemies = sum(
+            1 for enemy in self.entity_manager.enemies if not getattr(enemy, "dead", False)
+        )
+
+        active_formation_enemies = 0
+        for formation in self.entity_manager.formations:
+            if getattr(formation, "dead", False):
+                continue
+            active_formation_enemies += sum(
+                1
+                for enemy in formation.get_enemies()
+                if not getattr(enemy, "dead", False)
+            )
+
+        # Ataques do StoneGolemBoss podem permanecer ativos fora de "enemies".
+        active_boulders = sum(1 for mine in self.entity_manager.boulders if not mine.dead)
+        active_rock_shards = sum(
+            1 for shard in self.entity_manager.rock_shards if not shard.dead
+        )
+        active_orbital_rocks = sum(
+            1
+            for rock in self.entity_manager.orbital_rocks
+            if not rock.dead and getattr(rock, "causes_damage", False)
+        )
+
+        return (
+            active_enemies
+            + active_formation_enemies
+            + active_boulders
+            + active_rock_shards
+            + active_orbital_rocks
+        )
+
     def _check_level_progression(self):
         # Usar cache ao invés de acessar level_config toda vez
         if self.enemies_destroyed_in_level >= self.enemies_to_clear:
             self.enemy_spawner.stop()
 
-            # Lazy evaluation: verificar presença de inimigos uma única vez
-            has_enemies = bool(self.entity_manager.enemies)
+            active_hostiles = self._count_active_stage_hostiles()
+            has_active_hostiles = active_hostiles > 0
 
             # Iniciar limpeza de inimigos restantes se ainda houver inimigos
-            if has_enemies and not self.enemy_cleanup_active:
+            if has_active_hostiles and not self.enemy_cleanup_active:
                 self.enemy_cleanup_active = True
                 self.enemy_cleanup_timer = 0.0
                 logging.info(
-                    f"🧹 SISTEMA DE LIMPEZA ATIVADO! {len(self.entity_manager.enemies)} inimigos restantes terão 15 segundos para serem derrotados..."
+                    "🧹 Aguardando limpeza final: %s hostis ainda ativos antes de avançar fase.",
+                    active_hostiles,
                 )
-            elif not has_enemies or (
-                self.enemy_cleanup_active
-                and self.enemy_cleanup_timer >= self.enemy_cleanup_duration
-            ):
-                # Todos os inimigos foram limpos ou timer expirou
+            elif not has_active_hostiles:
+                # Só avança quando não restar hostil ativo em tela.
                 self.enemy_cleanup_active = False
                 if self.has_boss:  # Cache ao invés de self.level_config.boss_type
                     self.pre_boss_transition = True

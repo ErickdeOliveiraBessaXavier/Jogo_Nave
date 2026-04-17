@@ -4,10 +4,13 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import pygame
+
 # Permite importar pacote `game` quando rodando direto via pytest no workspace.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from game.core.meta_progression import PlayerProfile, SessionStats
+from game.core.upgrades_config import UPGRADE_SLOT_COUNT
 
 
 def test_new_profile_without_file_initializes_world_1_unlocked(tmp_path: Path) -> None:
@@ -142,3 +145,55 @@ def test_unlock_next_world_respects_max_named_world(tmp_path: Path) -> None:
     # Não deve desbloquear além do mundo 4 nomeado.
     assert set(profile.world_unlocks.keys()) == existing_world_unlocks
     assert profile.current_checkpoint_world == 4
+
+
+def test_upgrade_keybindings_load_independently_from_upgrades(tmp_path: Path) -> None:
+    profile_path = tmp_path / "profile_with_custom_keybindings.json"
+    defaults_all = [
+        pygame.K_1,
+        pygame.K_2,
+        pygame.K_3,
+        pygame.K_4,
+        pygame.K_5,
+        pygame.K_6,
+        pygame.K_7,
+        pygame.K_8,
+        pygame.K_9,
+    ]
+    custom_keys = [
+        pygame.K_q,
+        pygame.K_w,
+        pygame.K_e,
+        pygame.K_r,
+        pygame.K_t,
+        pygame.K_y,
+        pygame.K_u,
+        pygame.K_i,
+        pygame.K_o,
+    ][:UPGRADE_SLOT_COUNT]
+
+    profile_payload = {
+        "version": "1.0",
+        "level_stats": {},
+        "unlocked_upgrades": [],
+        "upgrade_loadout": [None] * UPGRADE_SLOT_COUNT,
+        "upgrade_keybindings": custom_keys,
+        "world_unlocks": {
+            "1": {
+                "is_unlocked": True,
+                "first_accessed_at": None,
+                "last_best_score_at_checkpoint": 0,
+                "checkpoint_set": True,
+            }
+        },
+        "current_checkpoint_world": 1,
+    }
+    profile_path.write_text(
+        json.dumps(profile_payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    profile = PlayerProfile(profile_path)
+
+    assert profile.upgrade_keybindings == custom_keys
+    assert profile.upgrade_keybindings != defaults_all[:UPGRADE_SLOT_COUNT]

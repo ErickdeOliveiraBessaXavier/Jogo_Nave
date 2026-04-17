@@ -1134,7 +1134,7 @@ class ProceduralLevelGenerator:
     def _generate_level_impl(self, level_number: int) -> LevelConfig:
         """Gera configuração procedural para um nível."""
         # Criar uma instância de Random com uma seed determinística para este nível
-        rng = random.Random(self.seed + level_number)
+        rng = random.Random(self.seed * 10_000 + level_number)
 
         # 1. Calcular dificuldade base usando curva configurada
         difficulty = self.calculate_difficulty(level_number)
@@ -1719,7 +1719,7 @@ def get_level_config(
     Args:
         level_number: Número do nível desejado (1+)
         difficulty_preset: Preset de dificuldade a aplicar
-        force_meteor_storm: Forçar tema meteor storm (ignora mundo)
+        force_meteor_storm: Forçar tema meteor storm mantendo regras de elegibilidade por mundo
 
     Returns:
         LevelConfig do nível com dificuldade aplicada
@@ -1765,12 +1765,15 @@ def get_level_config(
     if force_meteor_storm:
         difficulty = generator.calculate_difficulty(level_number)
         theme = LEVEL_THEMES["meteor_storm"]
-        return generator.generate_config(
+        config = generator.generate_config(
             level_number,
             difficulty,
             theme,
-            random.Random(generator.seed + level_number),
+            random.Random(generator.seed * 10_000 + level_number),
         )
+        config = _apply_world_theme_to_config(config, world)
+        config = _apply_theme_enemy_rules(config, world)
+        return config
 
     # NOVO: Gerar com tema do mundo aplicado
     config = generator.generate_level(level_number)

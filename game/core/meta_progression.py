@@ -1252,62 +1252,47 @@ class PlayerProfile:
                     self.unlocked_upgrades = set(DEFAULT_UNLOCKED)
                     self.upgrade_loadout = [None] * UPGRADE_SLOT_COUNT
 
-                    # Keybindings (migração segura)
-                    try:
-                        keybindings_raw = data.get("upgrade_keybindings")
-                        if isinstance(keybindings_raw, list):
-                            from typing import cast
+                # Keybindings (migração segura) — deve rodar independente do bloco de upgrades
+                try:
+                    keybindings_raw = data.get("upgrade_keybindings")
+                    if isinstance(keybindings_raw, list):
+                        from typing import cast
 
-                            keys: List[int] = []
-                            for key in cast(List[Any], keybindings_raw)[
-                                :UPGRADE_SLOT_COUNT
-                            ]:
-                                if (
-                                    isinstance(key, int) and 0 <= key <= 1000000
-                                ):  # Valid pygame key range
-                                    keys.append(key)
-                                else:
-                                    defaults_all: List[int] = [
-                                        pygame.K_1,
-                                        pygame.K_2,
-                                        pygame.K_3,
-                                        pygame.K_4,
-                                        pygame.K_5,
-                                        pygame.K_6,
-                                        pygame.K_7,
-                                        pygame.K_8,
-                                        pygame.K_9,
-                                    ]
-                                    keys.append(defaults_all[len(keys)])
-                            # Complete slot count
-                            defaults: List[int] = [
-                                pygame.K_1,
-                                pygame.K_2,
-                                pygame.K_3,
-                                pygame.K_4,
-                                pygame.K_5,
-                                pygame.K_6,
-                                pygame.K_7,
-                                pygame.K_8,
-                                pygame.K_9,
-                            ]
-                            while len(keys) < UPGRADE_SLOT_COUNT:
-                                keys.append(defaults[len(keys)])
-                            self.upgrade_keybindings = keys
-                        else:
-                            defaults: List[int] = [
-                                pygame.K_1,
-                                pygame.K_2,
-                                pygame.K_3,
-                                pygame.K_4,
-                                pygame.K_5,
-                                pygame.K_6,
-                                pygame.K_7,
-                                pygame.K_8,
-                                pygame.K_9,
-                            ]
-                            self.upgrade_keybindings = defaults[:UPGRADE_SLOT_COUNT]
-                    except (KeyError, ValueError, TypeError, IndexError):
+                        keys: List[int] = []
+                        for key in cast(List[Any], keybindings_raw)[:UPGRADE_SLOT_COUNT]:
+                            if (
+                                isinstance(key, int) and 0 <= key <= 1000000
+                            ):  # Valid pygame key range
+                                keys.append(key)
+                            else:
+                                defaults_all: List[int] = [
+                                    pygame.K_1,
+                                    pygame.K_2,
+                                    pygame.K_3,
+                                    pygame.K_4,
+                                    pygame.K_5,
+                                    pygame.K_6,
+                                    pygame.K_7,
+                                    pygame.K_8,
+                                    pygame.K_9,
+                                ]
+                                keys.append(defaults_all[len(keys)])
+                        # Complete slot count
+                        defaults: List[int] = [
+                            pygame.K_1,
+                            pygame.K_2,
+                            pygame.K_3,
+                            pygame.K_4,
+                            pygame.K_5,
+                            pygame.K_6,
+                            pygame.K_7,
+                            pygame.K_8,
+                            pygame.K_9,
+                        ]
+                        while len(keys) < UPGRADE_SLOT_COUNT:
+                            keys.append(defaults[len(keys)])
+                        self.upgrade_keybindings = keys
+                    else:
                         defaults: List[int] = [
                             pygame.K_1,
                             pygame.K_2,
@@ -1320,6 +1305,19 @@ class PlayerProfile:
                             pygame.K_9,
                         ]
                         self.upgrade_keybindings = defaults[:UPGRADE_SLOT_COUNT]
+                except (KeyError, ValueError, TypeError, IndexError):
+                    defaults: List[int] = [
+                        pygame.K_1,
+                        pygame.K_2,
+                        pygame.K_3,
+                        pygame.K_4,
+                        pygame.K_5,
+                        pygame.K_6,
+                        pygame.K_7,
+                        pygame.K_8,
+                        pygame.K_9,
+                    ]
+                    self.upgrade_keybindings = defaults[:UPGRADE_SLOT_COUNT]
 
                 # Limit session history after loading
                 if len(self.session_history) > self.MAX_SESSION_HISTORY:
