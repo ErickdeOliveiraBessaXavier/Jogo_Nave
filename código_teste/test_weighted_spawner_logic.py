@@ -5,9 +5,12 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from game.core.levels import DifficultyConfig, LevelManager
+from game.entities.explosive_mine import ExplosiveMine
 from game.entities.meteor import Meteor
+from game.entities.mountain_geode import MountainGeode
 from game.entities.stone_sentry import StoneSentry
 from game.entities.square_minion_boss import SquareMinionBoss
+from game.entities.bot_elemental import ElementalRobot
 from game.systems.spawner import EnemySpawner
 
 
@@ -124,3 +127,50 @@ def test_stone_sentry_min_spawn_gap_is_30_seconds() -> None:
 
     assert expected == 30.0
     assert abs(gap - expected) < 1e-9
+
+
+def test_elemental_robot_respects_level_config_spawn_gap() -> None:
+    spawner = _make_spawner()
+    spawner.config.enemy_spawn_config[ElementalRobot] = 25.0
+
+    gap = spawner._get_min_spawn_gap(ElementalRobot)
+    expected = (
+        25.0
+        * DifficultyConfig.DIFFICULTY_SPAWN_GAP_MULTIPLIER[spawner.difficulty_preset]
+    )
+
+    assert abs(gap - expected) < 1e-9
+
+
+def test_storm_levels_override_total_enemy_cap_to_30() -> None:
+    spawner = _make_spawner()
+
+    spawner.config.theme_name = "Tempestade de Meteoros"
+    assert spawner._get_current_enemy_cap() == 30
+
+    spawner.config.theme_name = "Tempestade de Rock Gliders"
+    assert spawner._get_current_enemy_cap() == 30
+
+
+def test_rock_glider_small_bias_only_in_rock_glider_storm() -> None:
+    spawner = _make_spawner()
+
+    spawner.config.theme_name = "Tutorial"
+    assert spawner._is_rock_glider_storm_level() is False
+
+    spawner.config.theme_name = "Tempestade de Rock Gliders"
+    assert spawner._is_rock_glider_storm_level() is True
+
+
+def test_mines_use_mountain_geode_in_cordilheiras() -> None:
+    spawner = _make_spawner()
+    spawner.current_level_number = 1
+
+    assert spawner._get_theme_mine_type() is MountainGeode
+
+
+def test_mines_use_explosive_mine_outside_cordilheiras() -> None:
+    spawner = _make_spawner()
+    spawner.current_level_number = 11
+
+    assert spawner._get_theme_mine_type() is ExplosiveMine

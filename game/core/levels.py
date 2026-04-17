@@ -753,9 +753,23 @@ LEVEL_THEMES = {
             "square_minion_boss": 0.0,
             "elemental_robot": 0.0,
         },
-        spawn_rate_multiplier=1.4,  # Reduzido de 2.0 para 1.4 (mais balanceado)
-        enemies_multiplier=1.3,  # Reduzido de 1.8 para 1.3 (menos frustrante)
+        spawn_rate_multiplier=1.4,  
+        enemies_multiplier=1.3,
         special_feature="meteor_only",
+    ),
+    "rock_glider_storm": LevelTheme(
+        name="Tempestade de Rock Gliders",
+        description="Enxame de Rock Gliders pequenos em volume extremo",
+        enemy_weight={
+            "meteor": 0.0,
+            "alien": 0.0,
+            "eye": 0.0,
+            "square_minion_boss": 0.0,
+            "elemental_robot": 0.0,
+        },
+        spawn_rate_multiplier=1.35,
+        enemies_multiplier=1.35,
+        special_feature="rock_glider_only",
     ),
     "balanced": LevelTheme(
         name="Balanceado",
@@ -1176,14 +1190,19 @@ class ProceduralLevelGenerator:
 
     def _choose_theme(self, level_number: int, rng: random.Random) -> LevelTheme | None:
         """Escolhe um tema baseado no nível."""
+        world = get_world_for_level(level_number)
+
         # Níveis iniciais: sempre balanceado
         if level_number <= 2:
             return LEVEL_THEMES["balanced"]
 
-        # A cada 5 níveis, chance de tempestade de meteoros (nível 8+)
+        # A cada 5 níveis, chance de tempestade temática por mundo (nível 8+)
         if level_number >= 8 and level_number % 5 == 0:
             if rng.random() < 0.4:  # 40% de chance
-                return LEVEL_THEMES["meteor_storm"]
+                if world.theme == WorldTheme.STARFIELD:
+                    return LEVEL_THEMES["meteor_storm"]
+                if world.theme == WorldTheme.MOUNTAINS:
+                    return LEVEL_THEMES["rock_glider_storm"]
 
         # Chance de tema especial (aumenta com o nível)
         if level_number >= 6:
@@ -1280,15 +1299,26 @@ class ProceduralLevelGenerator:
             float,
         ] = {}  # Tipo -> tempo de spawn
 
-        # Verificar se é fase especial "meteor_only"
-        if theme and theme.special_feature == "meteor_only":
-            # Apenas meteoros, spawn rate extremo
-            meteor_spawn_time = (
-                (DifficultyConfig.BASE_METEOR_SPAWN_TIME / difficulty)
-                / spawn_multiplier
-                / 2.0
-            )  # Mesmo mais rápido
-            enemy_spawn_config[Meteor] = self._clamp_spawn_time(meteor_spawn_time)
+        # Verificar se é fase especial de inimigo único
+        if theme and theme.special_feature in ("meteor_only", "rock_glider_only"):
+            if theme.special_feature == "meteor_only":
+                # Apenas meteoros, spawn rate extremo
+                meteor_spawn_time = (
+                    (DifficultyConfig.BASE_METEOR_SPAWN_TIME / difficulty)
+                    / spawn_multiplier
+                    / 2.0
+                )
+                enemy_spawn_config[Meteor] = self._clamp_spawn_time(meteor_spawn_time)
+            else:
+                # Apenas RockGlider com cadência agressiva.
+                rock_glider_spawn_time = (
+                    (DifficultyConfig.BASE_METEOR_SPAWN_TIME / difficulty)
+                    / spawn_multiplier
+                    / 1.9
+                )
+                enemy_spawn_config[RockGlider] = self._clamp_spawn_time(
+                    rock_glider_spawn_time
+                )
         else:
             # Meteoros
             meteor_weight = theme.enemy_weight.get("meteor", 1.0) if theme else 1.0
@@ -1388,7 +1418,7 @@ class ProceduralLevelGenerator:
         mines_enabled = False
         formations_enabled = False
 
-        if theme and theme.special_feature == "meteor_only":
+        if theme and theme.special_feature in ("meteor_only", "rock_glider_only"):
             # Fase especial: apenas meteoros, sem features extras
             pass
         else:
@@ -1453,18 +1483,18 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         level_number=1,
         enemy_spawn_config={
             RockGlider: 0.6,
-            ElementalRobot: 1.0,  # Mini-boss
-            StoneSentry: 30.0,
+            # ElementalRobot: 1.0,  # Mini-boss
+            # StoneSentry: 30.0,
         },
-        enemies_to_clear=25,
+        enemies_to_clear=100,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
-        # mines_enabled=True,
+        mines_enabled=True,
         # boss_type=SlimeBoss,
         # boss_type=Boss,
         # boss_type=GiantMeteorBoss,
         # boss_type=SpikeBoss,
-        boss_type=StoneGolemBoss,
+        # boss_type=StoneGolemBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),
@@ -1473,10 +1503,10 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         level_number=3,
         enemy_spawn_config={
             RockGlider: 0.7,
-            ElementalRobot: 2.4,
+            ElementalRobot: 25.0,
             StoneSentry: 30.0,
         },
-        enemies_to_clear=350,
+        enemies_to_clear=250,
         boss_type=StoneGolemBoss,
         mines_enabled=True,
         theme_name="Chefe do Golem de Pedra",

@@ -334,3 +334,34 @@ def test_procedural_rng_seed_uses_non_colliding_composition() -> None:
 
     assert result is dummy_config
     random_ctor.assert_called_once_with(expected_seed)
+
+
+def test_storm_theme_selection_is_world_exclusive() -> None:
+    generator = ProceduralLevelGenerator(
+        seed=321,
+        difficulty_preset=DifficultyPreset.NORMAL,
+    )
+
+    class _RngAlwaysStorm:
+        def random(self) -> float:
+            return 0.0
+
+        def choice(self, seq):  # noqa: ANN001
+            return seq[0]
+
+    rng = _RngAlwaysStorm()
+
+    mountains_theme = generator._choose_theme(10, rng)
+    starfield_theme = generator._choose_theme(15, rng)
+    city_theme = generator._choose_theme(30, rng)
+
+    assert mountains_theme is not None
+    assert mountains_theme.special_feature == "rock_glider_only"
+
+    assert starfield_theme is not None
+    assert starfield_theme.special_feature == "meteor_only"
+
+    # CITY não recebe storm temático exclusivo.
+    assert city_theme is not None
+    assert city_theme.special_feature != "meteor_only"
+    assert city_theme.special_feature != "rock_glider_only"

@@ -49,7 +49,14 @@ class RockGlider(Meteor):
         vy: float | None = None,
     ):
 
-        glider_size = size if size is not None else random.randint(15, 22)
+        glider_size = (
+            size
+            if size is not None
+            else random.randint(
+                Config.ROCK_GLIDER_BASE_MIN_SIZE,
+                Config.ROCK_GLIDER_BASE_MAX_SIZE,
+            )
+        )
         super().__init__(size=glider_size, x=x, y=y, vx=vx, vy=vy)
 
         # Atributos dinamicos definidos aqui para evitar W0201 (attribute-defined-outside-init).
@@ -136,7 +143,14 @@ class RockGlider(Meteor):
         vx: float | None = None,
         vy: float | None = None,
     ):
-        glider_size = size if size is not None else random.randint(15, 22)
+        glider_size = (
+            size
+            if size is not None
+            else random.randint(
+                Config.ROCK_GLIDER_BASE_MIN_SIZE,
+                Config.ROCK_GLIDER_BASE_MAX_SIZE,
+            )
+        )
         super().reset(size=glider_size, x=x, y=y, vx=vx, vy=vy)
 
         self.health = 14

@@ -20,10 +20,12 @@ from ..core.difficulty import DifficultyPreset
 from ..core.levels import DifficultyConfig, LevelManager, calculate_dynamic_enemy_cap
 from ..core.powerup_weights import get_powerup_weights
 from ..core.time import Timer
+from ..core.world_config import WorldTheme, get_world_for_level
 from ..entities.bot_elemental import ElementalRobot
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.formation import Formation, FormationPattern
+from ..entities.mountain_geode import MountainGeode
 from ..entities.meteor_pool import MeteorPool
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
@@ -237,6 +239,13 @@ class EnemySpawner:
         base_gap = DifficultyConfig.MIN_SPAWN_GAP_BY_TYPE.get(
             type_key, DifficultyConfig.MIN_GLOBAL_SPAWN_GAP
         )
+
+        # Para inimigos fortes, o spawn_time do LevelConfig também deve atuar
+        # como cooldown real entre respawns no modo ponderado.
+        if enemy_type in (ElementalRobot, StoneSentry):
+            configured_gap = self.config.get_spawn_time(enemy_type)
+            base_gap = max(base_gap, configured_gap)
+
         preset_mult = DifficultyConfig.DIFFICULTY_SPAWN_GAP_MULTIPLIER.get(
             self.difficulty_preset, 1.0
         )
@@ -279,15 +288,27 @@ class EnemySpawner:
         self.weighted_occupancy_samples.append(total)
         self.weighted_peak_occupancy = max(self.weighted_peak_occupancy, total)
 
-        # Usar cap dinâmico baseado em dificuldade e nível
-        total_cap = calculate_dynamic_enemy_cap(
-            self.current_level_number, self.difficulty_preset
-        )
+        total_cap = self._get_current_enemy_cap()
         near_cap_threshold = int(total_cap * DifficultyConfig.SPAWN_REDUCTION_THRESHOLD)
         if total >= near_cap_threshold:
             self.weighted_near_cap_samples += 1
         if total >= total_cap:
             self.weighted_hard_cap_samples += 1
+
+    def _is_storm_level(self) -> bool:
+        theme_name = (self.config.theme_name or "").lower()
+        return "tempestade de meteoros" in theme_name or "tempestade de rock gliders" in theme_name
+
+    def _is_rock_glider_storm_level(self) -> bool:
+        """Retorna True apenas para a fase temática de Tempestade de Rock Gliders."""
+        theme_name = (self.config.theme_name or "").strip().casefold()
+        return theme_name == "tempestade de rock gliders"
+
+    def _get_current_enemy_cap(self) -> int:
+        """Retorna cap total de inimigos com override para fases de tempestade."""
+        if self._is_storm_level():
+            return 30
+        return calculate_dynamic_enemy_cap(self.current_level_number, self.difficulty_preset)
 
     @staticmethod
     def _percentile(values: list[int], percentile: float) -> float:
@@ -350,9 +371,7 @@ class EnemySpawner:
                 return False
 
         # Obter limite total baseado em dificuldade e nível atual
-        max_enemies = calculate_dynamic_enemy_cap(
-            self.current_level_number, self.difficulty_preset
-        )
+        max_enemies = self._get_current_enemy_cap()
 
         # Verificar limite total absoluto
         if counts["total"] >= max_enemies:
@@ -371,9 +390,7 @@ class EnemySpawner:
     def _is_hard_capped(self, enemy_type: type, counts: dict[str, int]) -> bool:
         """Valida apenas caps rígidos para filtrar candidatos de spawn."""
         # Obter limite total baseado em dificuldade e nível atual
-        max_enemies = calculate_dynamic_enemy_cap(
-            self.current_level_number, self.difficulty_preset
-        )
+        max_enemies = self._get_current_enemy_cap()
         if counts["total"] >= max_enemies:
             return True
 
@@ -416,6 +433,28 @@ class EnemySpawner:
         weights = list(weights_by_type.values())
         return random.choices(enemy_types, weights=weights, k=1)[0]
 
+    def _get_theme_mine_type(self) -> type[ExplosiveMine]:
+        """Seleciona o tipo de mina por tema de mundo para hazards temáticos."""
+        world = get_world_for_level(self.current_level_number)
+        if world.theme == WorldTheme.MOUNTAINS:
+            return MountainGeode
+        return ExplosiveMine
+
+    def _pick_rock_glider_size(self, storm_small_bias: bool) -> int:
+        """Escolhe tamanho do RockGlider; storm favorece pequenos, normal mantém variedade."""
+        if storm_small_bias:
+            return random.choices(
+                Config.ROCK_GLIDER_STORM_SIZE_OPTIONS,
+                weights=Config.ROCK_GLIDER_STORM_SIZE_WEIGHTS,
+                k=1,
+            )[0]
+
+        # Fora da tempestade, permitir variedade maior para evitar enxame sempre "mini".
+        return random.randint(
+            Config.ROCK_GLIDER_NORMAL_MIN_SIZE,
+            Config.ROCK_GLIDER_NORMAL_MAX_SIZE,
+        )
+
     def _spawn_enemy_of_type(
         self,
         enemy_type: type,
@@ -441,19 +480,20 @@ class EnemySpawner:
 
         if issubclass(enemy_type, Meteor):
             if enemy_type is RockGlider:
+                storm_small_bias = self._is_rock_glider_storm_level()
+
                 if is_side_scroll:
-                    size = random.randint(
-                        Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE
-                    )
+                    glider_size = self._pick_rock_glider_size(storm_small_bias)
                     glider = entity_manager.rock_glider_pool.get(
-                        size=size,
+                        size=glider_size,
                         x=Config.SCREEN_WIDTH + 40,
                         y=random.randint(60, Config.SCREEN_HEIGHT - 100),
                         vx=None,
                         vy=random.uniform(-50, 50),
                     )
                 else:
-                    glider = entity_manager.rock_glider_pool.get()
+                    glider_size = self._pick_rock_glider_size(storm_small_bias)
+                    glider = entity_manager.rock_glider_pool.get(size=glider_size)
 
                 glider.health = int(glider.health * self.enemy_health_multiplier)
                 entity_manager.enemies.append(glider)  # type: ignore[arg-type]
@@ -722,6 +762,7 @@ class EnemySpawner:
             if self.mine_spawn_timer.done():
                 self.mine_spawn_timer.start()
                 if random.random() < self.spawn_intensity and random.random() < 0.5:
+                    mine_type = self._get_theme_mine_type()
                     num_mines = random.choices(
                         [2, 3, 5], weights=[0.50, 0.25, 0.10], k=1
                     )[0]
@@ -734,7 +775,7 @@ class EnemySpawner:
                             if all(abs(x - px) > min_distance for px in positions):
                                 positions.append(x)
                                 entity_manager.enemies.append(
-                                    ExplosiveMine(x=x, y=-random.uniform(10, 100))
+                                    mine_type(x=x, y=-random.uniform(10, 100))
                                 )
                                 break
                             attempts += 1

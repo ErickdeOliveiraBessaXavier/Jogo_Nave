@@ -127,6 +127,14 @@ class Config:
     GUIDED_METEOR_ACCELERATION: float = 100.0
     GUIDED_METEOR_TURN_RATE: float = 3.0  # rad/s
 
+    # RockGlider sizes
+    ROCK_GLIDER_NORMAL_MIN_SIZE: int = 12
+    ROCK_GLIDER_NORMAL_MAX_SIZE: int = 45
+    ROCK_GLIDER_BASE_MIN_SIZE: int = 15
+    ROCK_GLIDER_BASE_MAX_SIZE: int = 22
+    ROCK_GLIDER_STORM_SIZE_OPTIONS: Tuple[int, ...] = (15, 16, 17, 18, 19, 20, 21, 22)
+    ROCK_GLIDER_STORM_SIZE_WEIGHTS: Tuple[int, ...] = (22, 20, 17, 13, 10, 8, 6, 4)
+
     # ========================================
     # POWER-UP SYSTEM
     # ========================================
@@ -588,6 +596,14 @@ class Config:
             ("BOSS_FRENZY_ATTACK_INTERVAL", self.BOSS_FRENZY_ATTACK_INTERVAL),
             ("POWERUP_SPAWN_INTERVAL", self.POWERUP_SPAWN_INTERVAL),
             ("FORMATION_SPAWN_INTERVAL", self.FORMATION_SPAWN_INTERVAL),
+            (
+                "ROCK_GLIDER_NORMAL_SIZE_RANGE",
+                (self.ROCK_GLIDER_NORMAL_MIN_SIZE, self.ROCK_GLIDER_NORMAL_MAX_SIZE),
+            ),
+            (
+                "ROCK_GLIDER_BASE_SIZE_RANGE",
+                (self.ROCK_GLIDER_BASE_MIN_SIZE, self.ROCK_GLIDER_BASE_MAX_SIZE),
+            ),
         ]
 
         for name, (min_val, max_val) in ranges_to_check:
@@ -622,6 +638,16 @@ class Config:
             value = getattr(self, name)
             if value <= 0:
                 errors.append(f"{name} deve ser positivo, mas é {value}")
+
+        if len(self.ROCK_GLIDER_STORM_SIZE_OPTIONS) != len(
+            self.ROCK_GLIDER_STORM_SIZE_WEIGHTS
+        ):
+            errors.append(
+                "ROCK_GLIDER_STORM_SIZE_OPTIONS e ROCK_GLIDER_STORM_SIZE_WEIGHTS devem ter o mesmo tamanho"
+            )
+
+        if not self.ROCK_GLIDER_STORM_SIZE_OPTIONS:
+            errors.append("ROCK_GLIDER_STORM_SIZE_OPTIONS não pode estar vazio")
 
         return errors
 
