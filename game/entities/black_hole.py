@@ -23,22 +23,30 @@ class Particle(TypedDict):
 
 
 class BlackHole:
-    """Buraco negro que sobe pela tela, crescendo e atraindo inimigos."""
+    """Buraco negro com movimento orientado pelo modo da fase."""
 
-    def __init__(self, x: float, y: float, duration: float):
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        duration: float,
+        is_side_scroll: bool = False,
+    ):
         self.x = x
         self.y = y
         self.duration = duration  # Não usado, mas mantido para compatibilidade
+        self.is_side_scroll = is_side_scroll
         self.lifetime = 0.0
         self.dead = False
 
         # Tocar som do buraco negro
         sound_manager.play_black_hole()
 
-        # Movimento
-        self.speed_y = (
-            config.BLACK_HOLE_SPEED_Y
-        )  # Velocidade para cima (pixels/segundo)
+        # Movimento orientado pelo tema/mode:
+        # - top-down: sobe (eixo Y)
+        # - side-scroll: avança para a direita (eixo X)
+        self.speed_y = config.BLACK_HOLE_SPEED_Y
+        self.speed_x = abs(config.BLACK_HOLE_SPEED_Y)
 
         # Raios do buraco negro (começam pequenos)
         self.core_radius = (
@@ -94,8 +102,11 @@ class BlackHole:
         self.lifetime += dt
         self.animation_timer += dt
 
-        # Mover para cima
-        self.y += self.speed_y * dt
+        # Movimento orientado por modo
+        if self.is_side_scroll:
+            self.x += self.speed_x * dt
+        else:
+            self.y += self.speed_y * dt
 
         # Crescer gradualmente até atingir tamanho máximo
         if self.core_radius < self.max_core_radius:
@@ -107,8 +118,12 @@ class BlackHole:
                 self.max_pull_radius, self.pull_radius + self.growth_rate * 5 * dt
             )
 
-        # Morrer se sair da tela (parte de cima)
-        if self.y < -self.pull_radius:
+        # Encerramento quando sair da área útil conforme orientação.
+        if self.is_side_scroll:
+            if self.x > config.SCREEN_WIDTH + self.pull_radius:
+                self.dead = True
+                return
+        elif self.y < -self.pull_radius:
             self.dead = True
             return
 

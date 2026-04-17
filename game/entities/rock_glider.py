@@ -18,8 +18,7 @@ class RockGlider(Meteor):
 
     ROCK_MAX_HP = 3
     BOT_MAX_HP = 2
-    ROCK_SCORE = 8
-    BOT_SCORE = 6
+    ROCK_SCORE_SHARE = 0.58
     # Mesma paleta de terra usada pelos fragmentos de entrada do StoneGolemBoss.
     STONE_FRAGMENT_COLORS = [
         (101, 67, 33),
@@ -621,7 +620,7 @@ class RockGlider(Meteor):
                 self._rock_hp = 0
                 self._rock_destroyed = True
                 part_destroyed = True
-                points = self.ROCK_SCORE
+                points = self.get_part_points_value("rock")
                 self._spawn_death_particles("rock")
         elif target == "bot" and not self._bot_destroyed:
             self._bot_hp -= amount
@@ -629,7 +628,7 @@ class RockGlider(Meteor):
                 self._bot_hp = 0
                 self._bot_destroyed = True
                 part_destroyed = True
-                points = self.BOT_SCORE
+                points = self.get_part_points_value("bot")
                 self._spawn_death_particles("bot")
                 if not self._rock_destroyed:
                     self._rock_falling = True
@@ -804,5 +803,20 @@ class RockGlider(Meteor):
     def can_split(self) -> bool:
         return False
 
+    def get_part_points_value(self, part: str) -> int:
+        """Retorna os pontos de cada parte com base no tamanho atual."""
+        total_points = self.get_points_value()
+        rock_points = max(1, int(round(total_points * self.ROCK_SCORE_SHARE)))
+        bot_points = max(1, total_points - rock_points)
+
+        if part == "rock":
+            return rock_points
+        if part == "bot":
+            return bot_points
+        raise ValueError(f"Unknown part '{part}'")
+
     def get_points_value(self) -> int:
-        return 14
+        # Mesma base do Meteor: menor tamanho -> maior pontuação.
+        size_factor = Config.MAX_METEOR_SIZE - self.size
+        size_bonus = int(size_factor * Config.SIZE_BONUS_MULTIPLIER)
+        return max(1, Config.BASE_POINTS + size_bonus)

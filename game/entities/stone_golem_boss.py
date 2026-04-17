@@ -1116,14 +1116,22 @@ class StoneGolemBoss:
 
             # No frame exato do burst (primeira vez cruzando burst_y), solta o cluster massivo
             if not self._burst_done:
-                self._spawn_debris_cluster(20, _px, _py)  # Explosão massiva
+                self._spawn_debris_cluster(
+                    Config.GOLEM_EMERGE_DEBRIS_COUNT,
+                    _px,
+                    _py,
+                )
                 self._burst_done = True
 
             # Detritos contínuos durante a subida explosiva (intervalo fixo de 0.12s)
             self._entry_debris_timer += dt
             if self._entry_debris_timer >= 0.12:
                 self._entry_debris_timer = 0.0
-                self._spawn_debris_cluster(2, _px, _py)
+                self._spawn_debris_cluster(
+                    2,
+                    _px,
+                    _py,
+                )
 
         if self.y <= self.target_y:
             self.y = self.target_y
@@ -1151,11 +1159,21 @@ class StoneGolemBoss:
         if is_near_floor:
             self._entry_debris_timer += dt
             if not self._burst_done:
-                self._spawn_debris_cluster(16, _px, _py, spawn_from_bottom=True)
+                self._spawn_debris_cluster(
+                    Config.GOLEM_SUBMERGE_DEBRIS_COUNT,
+                    _px,
+                    _py,
+                    spawn_from_bottom=True,
+                )
                 self._burst_done = True
             elif self._entry_debris_timer >= 0.18:
                 self._entry_debris_timer = 0.0
-                self._spawn_debris_cluster(2, _px, _py, spawn_from_bottom=True)
+                self._spawn_debris_cluster(
+                    2,
+                    _px,
+                    _py,
+                    spawn_from_bottom=True,
+                )
         else:
             self._entry_debris_timer = 0.0
 

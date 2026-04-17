@@ -1494,7 +1494,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         # boss_type=Boss,
         # boss_type=GiantMeteorBoss,
         # boss_type=SpikeBoss,
-        # boss_type=StoneGolemBoss,
+        boss_type=StoneGolemBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),

@@ -389,6 +389,8 @@ class PlayingScene(Scene):
             self.entity_manager.is_side_scroll = new_is_side_scroll
             self.ship.is_side_scroll = new_is_side_scroll
             self.collisions.is_side_scroll = new_is_side_scroll
+            for mini_ship in self.entity_manager.mini_ships:
+                mini_ship.set_orientation(new_is_side_scroll)
             logger.info(
                 f"📋 Modo alterado para: {'Side-Scroll (Horizontal)' if self.is_side_scroll else 'Top-Down (Vertical)'}"
             )
@@ -1593,8 +1595,16 @@ class PlayingScene(Scene):
                         self._powerup_values["mini_ships_duration"],
                     )
                     self.entity_manager.mini_ships.clear()
-                    self.entity_manager.mini_ships.append(MiniShip(self.ship, "left"))
-                    self.entity_manager.mini_ships.append(MiniShip(self.ship, "right"))
+                    self.entity_manager.mini_ships.append(
+                        MiniShip(self.ship, "left", is_side_scroll=self.is_side_scroll)
+                    )
+                    self.entity_manager.mini_ships.append(
+                        MiniShip(
+                            self.ship,
+                            "right",
+                            is_side_scroll=self.is_side_scroll,
+                        )
+                    )
                 elif kind == "cooldown_haste":
                     # Reduz instantaneamente o cooldown de todos os upgrades ativos
                     reduction = self._powerup_values["cooldown_haste_reduction"]
@@ -1625,8 +1635,16 @@ class PlayingScene(Scene):
                         self._powerup_values["mini_ships_duration"],
                     )
                     self.entity_manager.mini_ships.clear()
-                    self.entity_manager.mini_ships.append(MiniShip(self.ship, "left"))
-                    self.entity_manager.mini_ships.append(MiniShip(self.ship, "right"))
+                    self.entity_manager.mini_ships.append(
+                        MiniShip(self.ship, "left", is_side_scroll=self.is_side_scroll)
+                    )
+                    self.entity_manager.mini_ships.append(
+                        MiniShip(
+                            self.ship,
+                            "right",
+                            is_side_scroll=self.is_side_scroll,
+                        )
+                    )
                     rainbow_score = self._powerup_values["rainbow_score"]
                     if self.score_multiplier_active:
                         rainbow_score = int(rainbow_score * self.score_multiplier_value)

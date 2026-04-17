@@ -296,12 +296,14 @@ class Config:
     # ========================================
     # STONE GOLEM BOSS
     # ========================================
-    GOLEM_HEALTH: int = 100
+    GOLEM_HEALTH: int = 2500
     GOLEM_ENTRY_SPEED: float = 160.0
     GOLEM_SPEED: float = 75.0
     GOLEM_SHARD_SPEED: float = 420.0
     GOLEM_BOULDER_SPEED: float = 340.0
     GOLEM_BOULDER_GRAVITY: float = 30.0
+    GOLEM_EMERGE_DEBRIS_COUNT: int = 18
+    GOLEM_SUBMERGE_DEBRIS_COUNT: int = 14
 
     # ========================================
     # BLACK HOLE SYSTEM
@@ -648,6 +650,14 @@ class Config:
 
         if not self.ROCK_GLIDER_STORM_SIZE_OPTIONS:
             errors.append("ROCK_GLIDER_STORM_SIZE_OPTIONS não pode estar vazio")
+
+        golem_debris_counts = [
+            ("GOLEM_EMERGE_DEBRIS_COUNT", self.GOLEM_EMERGE_DEBRIS_COUNT),
+            ("GOLEM_SUBMERGE_DEBRIS_COUNT", self.GOLEM_SUBMERGE_DEBRIS_COUNT),
+        ]
+        for name, value in golem_debris_counts:
+            if value < 0:
+                errors.append(f"{name} deve ser >= 0, mas é {value}")
 
         return errors
 

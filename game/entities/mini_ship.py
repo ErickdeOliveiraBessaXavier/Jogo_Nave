@@ -14,9 +14,10 @@ from .stone_sentry import StoneSentry
 
 
 class MiniShip:
-    def __init__(self, player_ship: Ship, side: str):
+    def __init__(self, player_ship: Ship, side: str, is_side_scroll: bool = False):
         self.player = player_ship
         self.side = side  # 'left' or 'right'
+        self.is_side_scroll = is_side_scroll
         self.w = 20
         self.h = 20
         self.x = self.player.x
@@ -24,11 +25,22 @@ class MiniShip:
         self.shoot_cooldown = 0.75
         self.shoot_timer = self.shoot_cooldown
 
-        if self.side == "left":
-            self.target_offset_x = -40
-        else:  # right
-            self.target_offset_x = 40
-        self.target_offset_y = 10
+        self.target_offset_x = 0
+        self.target_offset_y = 0
+        self.set_orientation(is_side_scroll)
+
+    def set_orientation(self, is_side_scroll: bool) -> None:
+        """Atualiza offsets de formação conforme o modo da fase."""
+        self.is_side_scroll = is_side_scroll
+
+        if self.is_side_scroll:
+            # Em side-scroll, escolta em coluna (acima/abaixo) um pouco atrás da nave.
+            self.target_offset_x = -34
+            self.target_offset_y = -34 if self.side == "left" else 34
+        else:
+            # Em top-down, escolta lateral clássica.
+            self.target_offset_x = -40 if self.side == "left" else 40
+            self.target_offset_y = 10
 
     def update(
         self,
@@ -81,15 +93,22 @@ class MiniShip:
         else:
             target_cx, target_cy = target.x + target.w / 2, target.y + target.h / 2
 
-        angle = math.atan2(target_cy - self.y, target_cx - self.x)
+        if self.is_side_scroll:
+            origin_x = self.x + self.w
+            origin_y = self.y + self.h / 2
+        else:
+            origin_x = self.x + self.w / 2
+            origin_y = self.y
+
+        angle = math.atan2(target_cy - origin_y, target_cx - origin_x)
         bullet_speed = Config.BULLET_SPEED * 1.2
         vx = math.cos(angle) * bullet_speed
         vy = math.sin(angle) * bullet_speed
 
         bullets.append(
             MiniShipBullet(
-                self.x + self.w / 2,
-                self.y,
+                origin_x,
+                origin_y,
                 vx,
                 vy,
                 piercing=self.player.piercing_shot_timer > 0,
@@ -104,9 +123,17 @@ class MiniShip:
         if should_blink and int(pygame.time.get_ticks() / 150) % 2 == 0:
             return
 
-        points: list[tuple[float, float]] = [
-            (self.x + self.w / 2, self.y),
-            (self.x, self.y + self.h),
-            (self.x + self.w, self.y + self.h),
-        ]
+        if self.is_side_scroll:
+            # Nave apontando para a direita.
+            points: list[tuple[float, float]] = [
+                (self.x + self.w, self.y + self.h / 2),
+                (self.x, self.y),
+                (self.x, self.y + self.h),
+            ]
+        else:
+            points = [
+                (self.x + self.w / 2, self.y),
+                (self.x, self.y + self.h),
+                (self.x + self.w, self.y + self.h),
+            ]
         pygame.draw.polygon(surface, LIGHT_BLUE, points)

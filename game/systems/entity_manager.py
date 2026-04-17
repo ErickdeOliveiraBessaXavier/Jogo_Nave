@@ -219,7 +219,12 @@ class EntityManager:
 
     def spawn_black_hole(self, x: float, y: float, duration: float) -> None:
         """Spawna um buraco negro."""
-        black_hole = BlackHole(x, y, duration)
+        black_hole = BlackHole(
+            x,
+            y,
+            duration,
+            is_side_scroll=self.is_side_scroll,
+        )
         self.black_holes.append(black_hole)
 
     def spawn_cannon_tower(self, x: float, y: float) -> None:
