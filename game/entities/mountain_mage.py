@@ -587,8 +587,8 @@ class MountainMage:
 
     WIDTH:             Final = 54
     HEIGHT:            Final = 58
-    ORBIT_RADIUS:      Final = 44.0
-    ORB_RADIUS:        Final = 12
+    ORBIT_RADIUS:      Final = 50.0
+    ORB_RADIUS:        Final = 10
     DRIFT_SPEED:       Final = 38.0
     TELEGRAPH_SLOWDOWN: Final = 0.30
 
