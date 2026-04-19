@@ -1,122 +1,181 @@
-# Guia Moderno para Criar Novos Inimigos (v2.0)
+# Guia Moderno para Criar Novos Inimigos (v3.0)
 
-Este documento descreve o processo atualizado para adicionar novos inimigos, utilizando **Protocols** (Duck Typing) para simplificar a integração e suporte a sistemas como **EMP (Slow Motion)**.
+Este guia resume o fluxo atual do projeto para adicionar inimigos com segurança,
+incluindo o padrão composto (inimigo principal + ataque/entidade invocada),
+compatibilidade com **EMP (slow motion)** e integração com spawn procedural.
 
 ---
 
-## Passo 1: Criar a Classe do Inimigo
+## 1. Contrato Mínimo do Inimigo
 
-1. **Localização**: `game/entities/nome_do_inimigo.py`
-2. **Requisitos do Protocolo `Enemy`**: Para que o jogo reconheça sua classe como um inimigo automaticamente, ela **DEVE** ter estes atributos:
-   *   `x, y, w, h` (float/int)
-   *   `rect` (propriedade que retorna `pygame.Rect`)
-   *   `dead` (bool)
-   *   `health` (int)
-   *   `get_points_value()` (método que retorna int)
-   *   `update(dt, ...)` (método de atualização)
+Para um objeto ser tratado como inimigo no jogo, ele deve expor:
 
-### Estrutura Recomendada:
+- `x, y, w, h`
+- `rect` (de preferência `@property` retornando `pygame.Rect`)
+- `dead` (bool)
+- `health` (int)
+- `get_points_value() -> int`
+- `update(dt, ...)`
+
+Se o inimigo usa HP real, implemente também:
+
+- `take_damage(amount: int)`
+
+Estrutura base:
+
 ```python
 import pygame
-import math
-import random
-from typing import Tuple, List, Any
-from ..core import colors
-from ..core.config import config as Config
+
 
 class NovoInimigo:
     def __init__(self, x: float, y: float):
         self.x, self.y = x, y
         self.w, self.h = 40, 40
-        self.health = 30  # Vida para suportar múltiplos tiros
+        self.health = 10
         self.dead = False
-        self.active = True # Importante para sistemas de Pool
-        
+        self.active = True
+
     @property
     def rect(self) -> pygame.Rect:
-        """Retângulo de colisão (acessado como atributo)."""
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
-    def take_damage(self, amount: int):
-        """Chamado automaticamente pelo sistema de colisões."""
+    def take_damage(self, amount: int) -> None:
         self.health -= amount
         if self.health <= 0:
             self.dead = True
 
-    def update(self, dt: float, player_pos: Tuple[float, float] = None):
-        """
-        dt: Delta time (já considera slow motion se passado pelo EntityManager).
-        player_pos: Opcional, para inimigos que perseguem ou miram.
-        """
-        # Exemplo: Movimento simples para baixo
-        self.y += 100 * dt
-        
-        # Remoção automática por posição é feita pelo EntityManager.
+    def update(self, dt: float) -> None:
+        pass
 
-    def draw(self, screen: pygame.Surface):
-        # Lógica de desenho (Polygon, Circle ou Surface)
-        pygame.draw.rect(screen, colors.RED, self.rect)
+    def draw(self, screen: pygame.Surface) -> None:
+        pass
 
     def get_points_value(self) -> int:
-        return 150
+        return 100
 ```
 
 ---
 
-## Passo 2: Integrar no Sistema de Níveis (`levels.py`)
+## 2. Padrão Composto (Recomendado)
 
-Apesar do sistema de colisão usar Protocols, o `LevelConfig` ainda precisa conhecer o tipo explicitamente para a criação (factory).
+Quando o inimigo cria ataques persistentes (ex.: estalagmite, mina, totem, drone),
+use **duas entidades**:
 
-1. **Importe seu inimigo** no topo de `game/core/levels.py`.
-2. **Atualizar Tipos Union**: Adicione `NovoInimigo` nos type hints da classe `LevelConfig` e seus métodos (busque por `Meteor | Alien | ...`).
-3. **Adicione ao Tema**: No `_create_world_boss_level` ou nos `LEVEL_THEMES`, defina o peso/tempo de spawn:
-   ```python
-   if world.theme == WorldTheme.MEU_TEMA:
-       enemy_spawn_config = { NovoInimigo: 1.5, Alien: 2.0 }
-   ```
+- entidade A: inimigo principal (decide quando atacar)
+- entidade B: entidade do ataque (tem `dead/health/rect/update/draw` próprios)
 
----
+Vantagens:
 
-## Passo 3: Sistema de Colisões (`collisions.py`)
-
-**A grande vantagem do Protocol:** Você quase não precisa mexer nas assinaturas das funções!
-
-1. **Importe seu inimigo** apenas para fins de `isinstance` se precisar de lógica especial.
-2. **Tamanho da Explosão**: Adicione uma entrada em `_calculate_default_explosion_size`:
-   ```python
-   if isinstance(enemy, NovoInimigo): return 45
-   ```
-3. **Dano Customizado**: Se seu inimigo tem HP, certifique-se de que ele está na lista de `isinstance` dentro de `_destroy_enemy` que chama `take_damage(1)`.
+- colisão e pontuação ficam previsíveis
+- mais fácil balancear HP do ataque separado do inimigo
+- integração limpa no grid espacial e no EMP
 
 ---
 
-## Passo 4: Entity Manager (`entity_manager.py`)
+## 3. Integração em `levels.py`
 
-O `EntityManager` gerencia o ciclo de vida e o **Slow Motion (EMP)**.
+1. Importe o novo tipo.
+2. Inclua no tema certo (`ENEMY_THEME_ALLOWLIST`).
+3. Adicione pesos em perfis de tema/estágio quando necessário.
+4. Inclua fallback para evitar pool vazio no tema.
+5. Se for exclusivo de um mundo, inclua nas regras do `_create_world_boss_level` também.
 
-1. **Adicione ao `update` principal**:
-   ```python
-   elif isinstance(enemy, NovoInimigo):
-       # Use scaled_dt para que o inimigo respeite o slow motion
-       enemy.update(scaled_dt, (player_x, player_y))
-   ```
-2. **Grid Espacial**: Adicione o tipo ao Type Hint do `enemies` e `enemy_spatial_grid` para evitar avisos do linter.
+Observação importante (tipagem):
 
----
-
-## Passo 5: Spawner (`spawner.py`)
-
-1. **Contagem de Inimigos**: No método `_count_enemies_by_type`, adicione uma chave para seu inimigo para que o jogo saiba quantos existem na tela e respeite os limites de performance.
-2. **Limite de Spawn**: No `_should_spawn_enemy`, defina um limite máximo (ex: `if counts["novo_inimigo"] >= 3: return False`).
-3. **Lógica de Spawn**: No `update`, adicione o bloco `elif enemy_type == NovoInimigo:` para instanciar a classe e aplicar o multiplicador de vida da dificuldade atual.
+- Hoje `LevelConfig.enemy_spawn_config` usa `dict[type, float]`.
+- Isso evita churn de unions gigantes e reduz erros de tipagem ao adicionar novos tipos.
 
 ---
 
-## Checklist de "Stone Sentry" (O Padrão Atual)
+## 4. Integração em `spawner.py`
 
-Siga o exemplo do `StoneSentry` (`game/entities/stone_sentry.py`) para a melhor implementação:
-- [ ] Usa `@property rect` para sintaxe limpa.
-- [ ] Implementa `take_damage` para suporte a HP.
-- [ ] No `EntityManager`, recebe `scaled_dt` para funcionar com o upgrade de EMP.
-- [ ] No `Spawner`, tem um limite fixo (ex: máximo 3 na tela).
-- [ ] Em `collisions.py`, utiliza o `Enemy` Protocol automaticamente.
+Checklist:
+
+- [ ] adicionar contagem no `_count_enemies_by_type`
+- [ ] definir cap em `_should_spawn_enemy` e `_is_hard_capped`
+- [ ] implementar instanciamento em `_spawn_enemy_of_type`
+- [ ] aplicar `enemy_health_multiplier` no spawn
+
+Regra prática:
+
+- inimigo forte/controlador de campo: cap baixo (1 ou 2)
+
+---
+
+## 5. Integração em `entity_manager.py`
+
+Checklist:
+
+- [ ] adicionar tipo em `self.enemies` (type hint)
+- [ ] adicionar tipo em `enemy_spatial_grid` (type hint)
+- [ ] no loop principal de update, usar `scaled_dt` para respeitar EMP
+- [ ] se o update retornar entidades novas (ataques), anexar em `self.enemies`
+- [ ] garantir que o rebuild do grid inclui essas entidades
+
+Exemplo:
+
+```python
+elif isinstance(enemy, NovoInimigo):
+    spawned = enemy.update(scaled_dt, (player_x, player_y))
+    if spawned:
+        self.enemies.extend(spawned)
+```
+
+---
+
+## 6. Integração em `collisions.py`
+
+Checklist:
+
+- [ ] importar tipo se houver regra especial por `isinstance`
+- [ ] definir tamanho padrão de explosão em `_calculate_default_explosion_size`
+- [ ] se tiver HP próprio, incluir no branch de `_destroy_enemy` que chama `take_damage(1)`
+- [ ] validar colisão com nave em `ship_vs_enemies` quando necessário
+
+Regra prática:
+
+- ataque invocado com HP (ex.: estalagmite) deve entrar na mesma lógica de HP de inimigos especiais
+
+---
+
+## 7. Configuração Recomendada
+
+Para inimigos novos com mecânicas de telegraph/cooldown, adicione constantes em
+`game/core/config.py` em vez de hardcode:
+
+- `WARNING_DURATION`
+- `COOLDOWN`
+- `ATTACK_HEALTH`
+- `MIN/MAX_ATTACK_SIZE`
+
+Isso facilita tuning sem quebrar o comportamento.
+
+---
+
+## 8. Checklist Final de Entrega
+
+- [ ] spawn no tema correto
+- [ ] não aparece em temas errados
+- [ ] respeita EMP/slow motion
+- [ ] colisão com bala funciona
+- [ ] colisão com nave funciona
+- [ ] pontuação e explosão corretas
+- [ ] sem erros de análise (`get_errors`)
+
+---
+
+## 9. Bloco de Briefing para IA (Copiar e Colar)
+
+Use este bloco quando pedir para criar inimigos novos:
+
+```text
+Crie um novo inimigo seguindo o padrão do projeto:
+- Classe principal em game/entities
+- Se houver ataque persistente, criar entidade separada para o ataque
+- Integrar em levels.py (allowlist, pesos, fallback)
+- Integrar em spawner.py (count, cap, spawn)
+- Integrar em entity_manager.py (update com scaled_dt, grid, append de entidades geradas)
+- Integrar em collisions.py (explosion size, HP branch com take_damage)
+- Adicionar constantes de tuning em core/config.py
+- Rodar validação de erros e corrigir antes de finalizar
+```

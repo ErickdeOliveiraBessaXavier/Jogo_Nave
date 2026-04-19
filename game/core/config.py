@@ -198,6 +198,13 @@ class Config:
     BOSS_EXPLOSION_SMALL_SIZE: int = 40
     BOSS_EXPLOSION_LARGE_SIZE: int = 60
 
+    # Mountain mage / stalagmite attack tuning
+    MOUNTAIN_MAGE_WARNING_DURATION: float = 0.9
+    MOUNTAIN_MAGE_COOLDOWN: float = 2.8
+    MOUNTAIN_MAGE_STALAGMITE_HEALTH: int = 3
+    MOUNTAIN_MAGE_STALAGMITE_MIN_HEIGHT: int = 62
+    MOUNTAIN_MAGE_STALAGMITE_MAX_HEIGHT: int = 150
+
     # Screen shake effects
     SCREEN_SHAKE_NORMAL: int = 10
     SCREEN_SHAKE_GAME_OVER: int = 15

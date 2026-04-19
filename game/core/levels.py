@@ -11,6 +11,7 @@ from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.giant_meteor_boss import GiantMeteorBoss
 from ..entities.meteor import Meteor
+from ..entities.mountain_mage import MountainMage
 from ..entities.rock_glider import RockGlider
 from ..entities.slime_boss import SlimeBoss
 from ..entities.spike_boss import SpikeBoss
@@ -59,6 +60,7 @@ ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
     RockGlider: {WorldTheme.MOUNTAINS},
     StoneSentry: {WorldTheme.MOUNTAINS},
     ElementalRobot: {WorldTheme.MOUNTAINS},
+    MountainMage: {WorldTheme.MOUNTAINS},
 }
 
 # Multiplicadores de frequência por tema (camada 2), organizados por preset.
@@ -270,7 +272,7 @@ ENEMY_THEME_WEIGHT_MULTIPLIERS = ENEMY_THEME_WEIGHT_PROFILES[_ACTIVE_PROFILE]
 ENEMY_STAGE_WEIGHT_MULTIPLIERS = ENEMY_STAGE_WEIGHT_PROFILES[_ACTIVE_PROFILE]
 
 THEME_FALLBACK_ENEMIES: dict[WorldTheme, list[type]] = {
-    WorldTheme.MOUNTAINS: [RockGlider, StoneSentry, ElementalRobot],
+    WorldTheme.MOUNTAINS: [RockGlider, MountainMage, StoneSentry, ElementalRobot],
     WorldTheme.STARFIELD: [Meteor, Alien, EyeEnemy],
     WorldTheme.CITY: [Alien, EyeEnemy, Meteor],
     WorldTheme.VOLCANIC: [Meteor, EyeEnemy, Alien],
@@ -284,6 +286,7 @@ DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
     EyeEnemy: 6.0,
     StoneSentry: 30.0,
     ElementalRobot: 2.6,
+    MountainMage: 18.0,
 }
 
 THEME_ENEMY_REPLACEMENTS: dict[tuple[WorldTheme, type], type] = {
@@ -934,18 +937,7 @@ class LevelConfig:
     """Configuração de um nível do jogo."""
 
     level_number: int
-    enemy_spawn_config: dict[
-        Type[
-            Meteor
-            | Alien
-            | ExplosiveMine
-            | EyeEnemy
-            | SquareMinionBoss
-            | ElementalRobot
-            | StoneSentry
-        ],
-        float,
-    ]  # Tipo -> tempo de spawn
+    enemy_spawn_config: dict[type, float]  # Tipo -> tempo de spawn
     enemies_to_clear: int  # quantos inimigos para passar de fase
     boss_type: (
         Type[Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss] | None
@@ -957,84 +949,27 @@ class LevelConfig:
     score_multiplier: float = 1.0  # Multiplicador de pontuação para o nível
 
     @property
-    def enemy_types(
-        self,
-    ) -> list[
-        Type[
-            Meteor
-            | Alien
-            | ExplosiveMine
-            | EyeEnemy
-            | SquareMinionBoss
-            | ElementalRobot
-            | StoneSentry
-        ]
-    ]:
+    def enemy_types(self) -> list[type]:
         """Retorna lista de tipos de inimigos configurados."""
         return list(self.enemy_spawn_config.keys())
 
-    def get_spawn_time(
-        self,
-        enemy_type: Type[
-            Meteor
-            | Alien
-            | ExplosiveMine
-            | EyeEnemy
-            | SquareMinionBoss
-            | ElementalRobot
-            | StoneSentry
-        ],
-    ) -> float:
+    def get_spawn_time(self, enemy_type: type) -> float:
         """Retorna o tempo de spawn para um tipo específico de inimigo."""
         return self.enemy_spawn_config.get(enemy_type, 1.0)
 
-    def get_random_enemy_type(
-        self,
-    ) -> Type[
-        Meteor
-        | Alien
-        | ExplosiveMine
-        | EyeEnemy
-        | SquareMinionBoss
-        | ElementalRobot
-        | StoneSentry
-    ]:
+    def get_random_enemy_type(self) -> type:
         """Retorna um tipo de inimigo aleatório da lista."""
         if not self.enemy_types:
             raise ValueError(f"Level {self.level_number} has no enemies configured!")
         return random.choice(self.enemy_types)
 
-    def get_enemy_spawn_weights(
-        self,
-    ) -> dict[
-        Type[
-            Meteor
-            | Alien
-            | ExplosiveMine
-            | EyeEnemy
-            | SquareMinionBoss
-            | ElementalRobot
-            | StoneSentry
-        ],
-        float,
-    ]:
+    def get_enemy_spawn_weights(self) -> dict[type, float]:
         """Retorna pesos base de spawn derivados do intervalo configurado.
 
         Spawn menor significa maior frequência. Convertemos isso em peso por
         inversão de tempo para suportar seleção ponderada dinâmica.
         """
-        weights: dict[
-            Type[
-                Meteor
-                | Alien
-                | ExplosiveMine
-                | EyeEnemy
-                | SquareMinionBoss
-                | ElementalRobot
-                | StoneSentry
-            ],
-            float,
-        ] = {}
+        weights: dict[type, float] = {}
 
         for enemy_type, spawn_time in self.enemy_spawn_config.items():
             safe_spawn_time = max(DifficultyConfig.MIN_SPAWN_TIME, spawn_time)
@@ -1085,7 +1020,6 @@ class LevelConfig:
 
         Args:
             valid_types: Conjunto de tipos válidos (chaves de FORMATION_CONFIGS)
-
         Returns:
             Lista de tipos inválidos encontrados (vazia se todos válidos)
         """
@@ -1295,6 +1229,7 @@ class ProceduralLevelGenerator:
                 | SquareMinionBoss
                 | ElementalRobot
                 | StoneSentry
+                | MountainMage
             ],
             float,
         ] = {}  # Tipo -> tempo de spawn
@@ -1376,6 +1311,16 @@ class ProceduralLevelGenerator:
                     enemy_spawn_config[SquareMinionBoss] = self._clamp_spawn_time(
                         base_square_time * (2.0 / square_weight)
                     )
+
+            if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.35:
+                if stage_progress < 0.7:
+                    mage_base_time = 14.0
+                else:
+                    mage_base_time = 10.0
+                mage_spawn_time = (mage_base_time / difficulty) / spawn_multiplier
+                enemy_spawn_config[MountainMage] = self._clamp_spawn_time(
+                    mage_spawn_time
+                )
 
         # 2. Calcular quantidade de inimigos
         curve = DifficultyConfig.ENEMY_COUNT_CURVE
@@ -1482,19 +1427,20 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     1: LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            RockGlider: 0.6,
+            # RockGlider: 0.6,
             # ElementalRobot: 1.0,  # Mini-boss
             # StoneSentry: 30.0,
+             MountainMage: 1.0,
         },
         enemies_to_clear=100,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
-        mines_enabled=True,
+        # mines_enabled=True,
         # boss_type=SlimeBoss,
         # boss_type=Boss,
         # boss_type=GiantMeteorBoss,
         # boss_type=SpikeBoss,
-        boss_type=StoneGolemBoss,
+        # boss_type=StoneGolemBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),

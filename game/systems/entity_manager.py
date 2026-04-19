@@ -35,6 +35,7 @@ from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
+from ..entities.mountain_mage import MountainMage, MountainStalagmite
 from ..entities.rock_glider import RockGlider
 from ..entities.rock_glider_pool import RockGliderPool
 from ..entities.slime_boss import SlimeBoss
@@ -79,6 +80,8 @@ class EntityManager:
             | SquareMinionBoss
             | ElementalRobot
             | StoneSentry
+            | MountainMage
+            | MountainStalagmite
         ] = []
         self.alien_bullets: list[AlienBullet] = []
         self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
@@ -122,6 +125,8 @@ class EntityManager:
             | SquareMinionBoss
             | ElementalRobot
             | StoneSentry
+            | MountainMage
+            | MountainStalagmite
             | Boulder
             | RockShard
             | OrbitalRock
@@ -560,6 +565,10 @@ class EntityManager:
                 shot = enemy.update(scaled_dt, (player_x, player_y), self.enemies)
                 if shot:
                     new_alien_bullets.extend(shot)
+            elif isinstance(enemy, MountainMage):
+                new_stalagmites = enemy.update(scaled_dt, (player_x, player_y))
+                if new_stalagmites:
+                    self.enemies.extend(new_stalagmites)
             else:
                 enemy.update(scaled_dt)
 

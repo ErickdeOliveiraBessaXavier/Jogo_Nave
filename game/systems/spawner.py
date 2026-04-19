@@ -3,6 +3,7 @@ import random
 from collections import deque
 from typing import (
     TYPE_CHECKING,
+    Any,
     Callable,
     Dict,
     List,
@@ -17,7 +18,7 @@ from typing import (
 from ..core.config import PowerUpType
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset
-from ..core.levels import DifficultyConfig, LevelManager, calculate_dynamic_enemy_cap
+from ..core.levels import DifficultyConfig, calculate_dynamic_enemy_cap
 from ..core.powerup_weights import get_powerup_weights
 from ..core.time import Timer
 from ..core.world_config import WorldTheme, get_world_for_level
@@ -27,6 +28,7 @@ from ..entities.eye_enemy import EyeEnemy
 from ..entities.formation import Formation, FormationPattern
 from ..entities.mountain_geode import MountainGeode
 from ..entities.meteor_pool import MeteorPool
+from ..entities.mountain_mage import MountainMage
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
 from ..entities.square_minion_boss import SquareMinionBoss
@@ -88,7 +90,7 @@ FORMATION_CONFIGS: Dict[str, FormationConfig] = {
 class EnemySpawner:
     def __init__(
         self,
-        level_manager: LevelManager,
+        level_manager: Any,
         meteor_pool: MeteorPool,
         is_initial_level: bool = False,
         difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
@@ -99,7 +101,7 @@ class EnemySpawner:
         self.difficulty_preset = difficulty_preset
         self.enemy_health_multiplier = enemy_health_multiplier
         self.current_level_number = 1  # EnemySpawner starts at level 1
-        self.config = self.level_manager.get_level(
+        self.config: Any = self.level_manager.get_level(
             self.current_level_number, self.difficulty_preset
         )
         self.stopped = False
@@ -329,6 +331,7 @@ class EnemySpawner:
             "square_minion": 0,
             "elemental_robot": 0,
             "stone_sentry": 0,
+            "mountain_mage": 0,
             "total": 0,
         }
 
@@ -350,6 +353,8 @@ class EnemySpawner:
                     counts["elemental_robot"] += 1
                 elif isinstance(enemy, StoneSentry):
                     counts["stone_sentry"] += 1
+                elif isinstance(enemy, MountainMage):
+                    counts["mountain_mage"] += 1
 
         return counts
 
@@ -368,6 +373,9 @@ class EnemySpawner:
                 return False
         elif enemy_type == StoneSentry:
             if counts["stone_sentry"] >= 2:
+                return False
+        elif enemy_type == MountainMage:
+            if counts["mountain_mage"] >= 1:
                 return False
 
         # Obter limite total baseado em dificuldade e nível atual
@@ -398,6 +406,8 @@ class EnemySpawner:
         if enemy_type == ElementalRobot and counts["elemental_robot"] >= 1:
             return True
         if enemy_type == StoneSentry and counts["stone_sentry"] >= 2:
+            return True
+        if enemy_type == MountainMage and counts["mountain_mage"] >= 1:
             return True
 
         return False
@@ -567,6 +577,18 @@ class EnemySpawner:
 
         if enemy_type == StoneSentry:
             new_enemy = StoneSentry()
+            new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
+            entity_manager.enemies.append(new_enemy)
+            return True
+
+        if enemy_type == MountainMage:
+            if is_side_scroll:
+                x = Config.SCREEN_WIDTH + 40
+                y = random.randint(70, int(Config.SCREEN_HEIGHT * 0.32))
+            else:
+                x = random.randint(90, max(110, Config.SCREEN_WIDTH - 140))
+                y = random.randint(70, int(Config.SCREEN_HEIGHT * 0.32))
+            new_enemy = MountainMage(x, y)
             new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
             entity_manager.enemies.append(new_enemy)
             return True
@@ -902,7 +924,7 @@ class EnemySpawner:
     def set_level(self, level_number: int) -> None:
         """Atualiza o spawner para uma nova fase."""
         self.current_level_number = level_number
-        self.config = self.level_manager.get_level(
+        self.config: Any = self.level_manager.get_level(
             self.current_level_number, self.difficulty_preset
         )
         self.stopped = False

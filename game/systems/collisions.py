@@ -36,6 +36,7 @@ from ..entities.giant_meteor_boss import GiantMeteorBoss
 from ..entities.meteor import Meteor
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
+from ..entities.mountain_mage import MountainStalagmite
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
@@ -202,6 +203,8 @@ class Collisions:
             return 55
         if isinstance(enemy, StoneSentry):
             return 45
+            if isinstance(enemy, MountainStalagmite):
+                return 38
         return CollisionConstants.DEFAULT_EXPLOSION_SIZE
 
     def _process_projectile_hit(
