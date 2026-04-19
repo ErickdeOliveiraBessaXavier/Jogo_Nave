@@ -247,8 +247,8 @@ class Collisions:
             return 55
         if isinstance(enemy, StoneSentry):
             return 45
-            if isinstance(enemy, MountainStalagmite):
-                return 38
+        if isinstance(enemy, MountainStalagmite):
+            return 38
         return CollisionConstants.DEFAULT_EXPLOSION_SIZE
 
     def _process_projectile_hit(
@@ -441,8 +441,9 @@ class Collisions:
 
             return pts, score_event, part_destroyed
 
-        # ElementalRobot, Boulder e StoneSentry têm sistema de HP próprio — delegar ao take_damage
-        if isinstance(enemy, (ElementalRobot, Boulder, StoneSentry)):
+        # ElementalRobot, Boulder, StoneSentry e MountainStalagmite têm HP próprio.
+        if isinstance(enemy, (ElementalRobot, Boulder, StoneSentry, MountainStalagmite)):
+            prev_health = enemy.health if isinstance(enemy, MountainStalagmite) else 0
             enemy.take_damage(1)
             # ElementalRobot sinaliza morte via flag just_died no estado DYING.
             if hasattr(enemy, "fsm_state") and hasattr(enemy, "just_died"):
@@ -452,8 +453,11 @@ class Collisions:
                 )
                 if just_died:
                     elemental_enemy.just_died = False  # consome a flag
+            elif isinstance(enemy, MountainStalagmite):
+                # Para estalagmite, o hit fatal cruza HP > 0 para HP <= 0 e inicia shattering.
+                just_died = prev_health > 0 and enemy.health <= 0
             else:
-                # Boulder e StoneSentry marcam morte diretamente em .dead
+                # Boulder e StoneSentry marcam morte diretamente em .dead.
                 just_died = enemy.dead
 
             if not just_died:

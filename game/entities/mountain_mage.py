@@ -30,6 +30,10 @@ def _ease_out_cubic(value: float) -> float:
     value = _clamp(value, 0.0, 1.0)
     return 1.0 - (1.0 - value) ** 3
 
+
+_SpikePolygon = list[tuple[int, int]]
+_SpikePolygons = list[_SpikePolygon]
+
 class MountainStalagmite:
     """Pilar de pedra invocado pelo MountainMage, estilo low-poly terroso."""
 
@@ -38,6 +42,13 @@ class MountainStalagmite:
     RISE_TIME = 0.32
     LINGER_TIME = 3.0
     SHATTER_TIME = 0.42
+
+    # Secundárias: delay e altura máxima relativa ao alvo principal
+    SECONDARY_DELAY_LEFT  = 0.0    # secundária esquerda começa imediatamente
+    SECONDARY_DELAY_RIGHT = 0.2    # secundária direita começa 0.5s depois
+    MAIN_DELAY            = 0.3    # principal começa 1.0s depois
+    SECONDARY_RISE_TIME   = 0.28   # tempo de animação das secundárias
+    SECONDARY_MAX_RATIO   = 0.48   # altura máxima = 48% da altura da principal
 
     def __init__(self, x: float, ground_y: float, target_y: float):
         self.x = float(x)
@@ -58,6 +69,15 @@ class MountainStalagmite:
         self._shatter_timer = 0.0
         self._fragments: list[_StalagmiteFragment] = []
         self._current_height = 1.0
+
+        # Timers independentes para as estalagmites secundárias
+        # Negativos = ainda no período de delay antes de começar a animar
+        self._secondary_left_timer  = -self.SECONDARY_DELAY_LEFT
+        self._secondary_right_timer = -self.SECONDARY_DELAY_RIGHT
+        self._main_delay_timer      = -self.MAIN_DELAY
+        self._secondary_left_height  = 0.0   # começa invisível
+        self._secondary_right_height = 0.0   # começa invisível
+
         max_height = max(self.MIN_HEIGHT, self.ground_y - 6.0)
         desired_height = self.ground_y - self.target_y + 8.0
         self._target_height = _clamp(
@@ -65,6 +85,10 @@ class MountainStalagmite:
             self.MIN_HEIGHT,
             max_height,
         )
+
+        # Alturas-alvo das secundárias (calculadas após _target_height ser definida)
+        self._secondary_left_target  = max(20, int(self._target_height * self.SECONDARY_MAX_RATIO))
+        self._secondary_right_target = max(20, int(self._target_height * self.SECONDARY_MAX_RATIO * 0.82))
         self._collision_mask: pygame.mask.Mask | None = None
         self._collision_mask_offset = (0, 0)
         self._collision_bounds_rect = pygame.Rect(0, 0, 0, 0)
@@ -191,14 +215,36 @@ class MountainStalagmite:
         if self._hit_flash > 0.0:
             self._hit_flash = max(0.0, self._hit_flash - dt)
 
+        # ── Animação das secundárias (independente do estado da principal) ──────
+        # Esquerda: delay 0s, começa junto com o primeiro frame
+        self._secondary_left_timer += dt
+        if self._secondary_left_timer >= 0.0:
+            left_progress = _clamp(self._secondary_left_timer / self.SECONDARY_RISE_TIME, 0.0, 1.0)
+            self._secondary_left_height = max(
+                1.0,
+                self._secondary_left_target * _ease_out_cubic(left_progress),
+            )
+
+        # Direita: delay 0.5s, só anima depois que o timer virar positivo
+        self._secondary_right_timer += dt
+        if self._secondary_right_timer >= 0.0:
+            right_progress = _clamp(self._secondary_right_timer / self.SECONDARY_RISE_TIME, 0.0, 1.0)
+            self._secondary_right_height = max(
+                1.0,
+                self._secondary_right_target * _ease_out_cubic(right_progress),
+            )
+
         if self._state == "rising":
-            self._rise_timer += dt
-            rise_progress = self._rise_timer / self.RISE_TIME
-            eased = _ease_out_cubic(rise_progress)
-            self._current_height = max(1.0, self._target_height * eased)
-            if self._rise_timer >= self.RISE_TIME:
-                self._state = "active"
-                self._current_height = self._target_height
+            # Principal aguarda o delay antes de começar a crescer
+            self._main_delay_timer += dt
+            if self._main_delay_timer >= 0.0:
+                self._rise_timer += dt
+                rise_progress = self._rise_timer / self.RISE_TIME
+                eased = _ease_out_cubic(rise_progress)
+                self._current_height = max(1.0, self._target_height * eased)
+                if self._rise_timer >= self.RISE_TIME:
+                    self._state = "active"
+                    self._current_height = self._target_height
         elif self._state == "active":
             self._linger_timer += dt
             if self._linger_timer >= self.LINGER_TIME:
@@ -359,7 +405,7 @@ class MountainStalagmite:
             lean_dir, lean_top, lean_mid, notch_cut,
         )
 
-    def _build_visual_spike_polygons(self) -> list[list[tuple[int, int]]]:
+    def _build_visual_spike_polygons(self) -> _SpikePolygons:
         cx = int(self.x)
         base_y = int(self.ground_y)
         height = max(8, int(self._current_height))
@@ -367,34 +413,47 @@ class MountainStalagmite:
         screen_w = getattr(Config, "SCREEN_WIDTH", 1280)
         main_hw  = min(int(self.w * 1.6), int(screen_w * 0.11))
 
-        side_h   = max(20, int(self._target_height * 0.48))
         left_hw  = max(8, int(main_hw * 0.70))
         right_hw = max(8, int(main_hw * 0.58))
 
-        left_pts = self._build_flat_spike_pts(
-            cx=cx - int(main_hw * 0.95),
-            base_y=base_y,
-            height=side_h,
-            half_w=left_hw,
-            phase_seed=self._shape_phase + 1.2,
-            forced_lean_dir=-1,
-        )
-        center_pts = self._build_flat_spike_pts(
-            cx=cx,
-            base_y=base_y,
-            height=height,
-            half_w=main_hw,
-            phase_seed=self._shape_phase,
-        )
-        right_pts = self._build_flat_spike_pts(
-            cx=cx + int(main_hw * 0.88),
-            base_y=base_y,
-            height=int(side_h * 0.82),
-            half_w=right_hw,
-            phase_seed=self._shape_phase - 0.9,
-            forced_lean_dir=1,
-        )
-        return [left_pts, center_pts, right_pts]
+        left_h  = int(self._secondary_left_height)
+        right_h = int(self._secondary_right_height)
+
+        polygons: _SpikePolygons = []
+
+        if left_h >= 4:
+            left_poly = self._build_flat_spike_pts(
+                cx=cx - int(main_hw * 0.95),
+                base_y=base_y,
+                height=max(4, left_h),
+                half_w=left_hw,
+                phase_seed=self._shape_phase + 1.2,
+                forced_lean_dir=-1,
+            )
+            polygons.append(left_poly)
+
+        if self._main_delay_timer >= 0.0:
+            center_poly = self._build_flat_spike_pts(
+                cx=cx,
+                base_y=base_y,
+                height=height,
+                half_w=main_hw,
+                phase_seed=self._shape_phase,
+            )
+            polygons.append(center_poly)
+
+        if right_h >= 4:
+            right_poly = self._build_flat_spike_pts(
+                cx=cx + int(main_hw * 0.88),
+                base_y=base_y,
+                height=max(4, right_h),
+                half_w=right_hw,
+                phase_seed=self._shape_phase - 0.9,
+                forced_lean_dir=1,
+            )
+            polygons.append(right_poly)
+
+        return polygons
 
     def _draw_flat_spike(
         self, surface: pygame.Surface,
@@ -452,46 +511,52 @@ class MountainStalagmite:
         screen_w = getattr(Config, "SCREEN_WIDTH", 1280)
         main_hw  = min(int(self.w * 1.6), int(screen_w * 0.11))
 
-        side_h   = max(20, int(self._target_height * 0.48))
         left_hw  = max(8, int(main_hw * 0.70))
         right_hw = max(8, int(main_hw * 0.58))
 
+        # Alturas animadas independentemente — só desenha se já começou a crescer
+        left_h  = int(self._secondary_left_height)
+        right_h = int(self._secondary_right_height)
+
         # ── Lateral de fundo (atrás da principal) ──────────────────────────────
-        self._draw_flat_spike(
-            surface,
-            cx         = cx - int(main_hw * 0.95),
-            base_y     = base_y,
-            height     = side_h,
-            half_w     = left_hw,
-            phase_seed = self._shape_phase + 1.2,
-            color      = c_left,
-            edge       = c_edge,
-            forced_lean_dir = -1,
-        )
-        # ── Central (cresce com animação, mais escura, desenhada por cima) ────
-        self._draw_flat_spike(
-            surface,
-            cx         = cx,
-            base_y     = base_y,
-            height     = height,
-            half_w     = main_hw,
-            phase_seed = self._shape_phase,
-            color      = c_center,
-            edge       = c_edge,
-        )
+        if left_h >= 4:
+            self._draw_flat_spike(
+                surface,
+                cx         = cx - int(main_hw * 0.95),
+                base_y     = base_y,
+                height     = max(4, left_h),
+                half_w     = left_hw,
+                phase_seed = self._shape_phase + 1.2,
+                color      = c_left,
+                edge       = c_edge,
+                forced_lean_dir = -1,
+            )
+        # ── Central (cresce com a lógica de atingir o player) ────
+        if self._main_delay_timer >= 0.0:
+            self._draw_flat_spike(
+                surface,
+                cx         = cx,
+                base_y     = base_y,
+                height     = height,
+                half_w     = main_hw,
+                phase_seed = self._shape_phase,
+                color      = c_center,
+                edge       = c_edge,
+            )
 
         # ── Lateral de frente (sobre a principal) ──────────────────────────────
-        self._draw_flat_spike(
-            surface,
-            cx         = cx + int(main_hw * 0.88),
-            base_y     = base_y,
-            height     = int(side_h * 0.82),
-            half_w     = right_hw,
-            phase_seed = self._shape_phase - 0.9,
-            color      = c_right,
-            edge       = c_edge,
-            forced_lean_dir = 1,
-        )
+        if right_h >= 4:
+            self._draw_flat_spike(
+                surface,
+                cx         = cx + int(main_hw * 0.88),
+                base_y     = base_y,
+                height     = max(4, right_h),
+                half_w     = right_hw,
+                phase_seed = self._shape_phase - 0.9,
+                color      = c_right,
+                edge       = c_edge,
+                forced_lean_dir = 1,
+            )
 class MountainMage:
     """Robo/mago exclusivo das montanhas que invoca estalagmites no alvo."""
 
