@@ -150,13 +150,57 @@ class Collisions:
             return ()
         return (enemy_rect,)
 
+    @staticmethod
+    def _get_enemy_collision_mask_data(
+        enemy: Any,
+    ) -> tuple[pygame.mask.Mask, tuple[int, int]] | None:
+        getter = getattr(enemy, "get_collision_mask_data", None)
+        if not callable(getter):
+            return None
+
+        raw_data = cast(
+            tuple[pygame.mask.Mask, tuple[int, int]] | None,
+            getter(),
+        )
+        if raw_data is None:
+            return None
+
+        mask, offset = raw_data
+        if mask.get_size()[0] <= 0 or mask.get_size()[1] <= 0:
+            return None
+        return mask, offset
+
+    @classmethod
+    def _rect_collides_with_enemy(cls, rect: pygame.Rect, enemy: Any) -> bool:
+        mask_data = cls._get_enemy_collision_mask_data(enemy)
+        if mask_data is not None:
+            enemy_mask, (enemy_x, enemy_y) = mask_data
+            enemy_mask_rect = pygame.Rect(
+                enemy_x,
+                enemy_y,
+                enemy_mask.get_size()[0],
+                enemy_mask.get_size()[1],
+            )
+            if not rect.colliderect(enemy_mask_rect):
+                return False
+
+            rect_mask = pygame.mask.Mask((rect.width, rect.height), fill=True)
+            overlap = rect_mask.overlap(enemy_mask, (enemy_x - rect.x, enemy_y - rect.y))
+            return overlap is not None
+
+        return any(rect.colliderect(hitbox) for hitbox in cls._get_ship_contact_hitboxes(enemy))
+
     @classmethod
     def _ship_collides_with_enemy(cls, ship_rect: pygame.Rect, enemy: Any) -> bool:
         """Verifica colisao da nave usando hitbox custom quando disponivel."""
-        return any(
-            ship_rect.colliderect(hitbox)
-            for hitbox in cls._get_ship_contact_hitboxes(enemy)
-        )
+        return cls._rect_collides_with_enemy(ship_rect, enemy)
+
+    @classmethod
+    def _projectile_collides_with_enemy(
+        cls, projectile_rect: pygame.Rect, enemy: Any
+    ) -> bool:
+        """Verifica colisao de projeteis com suporte a hitboxes customizadas."""
+        return cls._rect_collides_with_enemy(projectile_rect, enemy)
 
     @staticmethod
     def get_collision_info(
@@ -1105,16 +1149,7 @@ class Collisions:
                 continue
 
             for enemy in potential_enemies:
-                # Garantir que enemy_rect é pygame.Rect
-                enemy_rect: pygame.Rect = (
-                    enemy.rect
-                    if hasattr(enemy, "rect")
-                    else cast(
-                        pygame.Rect,
-                        getattr(enemy, "get_rect", lambda: pygame.Rect(0, 0, 0, 0))(),
-                    )
-                )
-                if b.rect.colliderect(enemy_rect):
+                if self._projectile_collides_with_enemy(b.rect, enemy):
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
                     elif self._is_invulnerable_to_damage(enemy):
@@ -1171,16 +1206,7 @@ class Collisions:
                 continue
 
             for enemy in potential_enemies:
-                # Garantir que enemy_rect é pygame.Rect
-                enemy_rect: pygame.Rect = (
-                    enemy.rect
-                    if hasattr(enemy, "rect")
-                    else cast(
-                        pygame.Rect,
-                        getattr(enemy, "get_rect", lambda: pygame.Rect(0, 0, 0, 0))(),
-                    )
-                )
-                if b.rect.colliderect(enemy_rect):  # Usa cache
+                if self._projectile_collides_with_enemy(b.rect, enemy):  # Usa cache
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
                     elif self._is_invulnerable_to_damage(enemy):

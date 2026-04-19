@@ -65,11 +65,63 @@ class MountainStalagmite:
             self.MIN_HEIGHT,
             max_height,
         )
+        self._collision_mask: pygame.mask.Mask | None = None
+        self._collision_mask_offset = (0, 0)
+        self._collision_bounds_rect = pygame.Rect(0, 0, 0, 0)
+        self._update_collision_regions()
+
+    def _update_collision_regions(self) -> None:
+        """Atualiza mascara de colisao com base na silhueta visual desenhada."""
+        if self.dead or self._state == "shattering":
+            self._collision_mask = None
+            self._collision_mask_offset = (0, 0)
+            self._collision_bounds_rect = pygame.Rect(0, 0, 0, 0)
+            return
+
+        polygons = self._build_visual_spike_polygons()
+        if not polygons:
+            self._collision_mask = None
+            self._collision_mask_offset = (0, 0)
+            self._collision_bounds_rect = pygame.Rect(0, 0, 0, 0)
+            return
+
+        min_x = min(x for poly in polygons for x, _ in poly)
+        max_x = max(x for poly in polygons for x, _ in poly)
+        min_y = min(y for poly in polygons for _, y in poly)
+        max_y = max(y for poly in polygons for _, y in poly)
+
+        pad = 2
+        mask_x = min_x - pad
+        mask_y = min_y - pad
+        mask_w = max(1, (max_x - min_x) + 1 + pad * 2)
+        mask_h = max(1, (max_y - min_y) + 1 + pad * 2)
+
+        mask_surface = pygame.Surface((mask_w, mask_h), pygame.SRCALPHA)
+        for poly in polygons:
+            local_poly = [(x - mask_x, y - mask_y) for x, y in poly]
+            pygame.draw.polygon(mask_surface, (255, 255, 255, 255), local_poly)
+
+        self._collision_mask = pygame.mask.from_surface(mask_surface, 1)
+        self._collision_mask_offset = (mask_x, mask_y)
+        self._collision_bounds_rect = pygame.Rect(mask_x, mask_y, mask_w, mask_h)
+
+    def get_ship_contact_hitboxes(self) -> tuple[pygame.Rect, ...]:
+        if self.dead or self._state == "shattering" or self._collision_bounds_rect.width <= 0:
+            return ()
+        return (self._collision_bounds_rect,)
+
+    def get_collision_mask_data(
+        self,
+    ) -> tuple[pygame.mask.Mask, tuple[int, int]] | None:
+        if self.dead or self._state == "shattering" or self._collision_mask is None:
+            return None
+        return self._collision_mask, self._collision_mask_offset
 
     @property
     def rect(self) -> pygame.Rect:
-        height = max(8, int(self._current_height))
-        return pygame.Rect(int(self.x - self.w / 2), int(self.ground_y - height), self.w, height)
+        if self._collision_bounds_rect.width <= 0 or self._collision_bounds_rect.height <= 0:
+            return pygame.Rect(int(self.x), int(self.ground_y), 0, 0)
+        return self._collision_bounds_rect
 
     @property
     def y(self) -> float:
@@ -167,6 +219,8 @@ class MountainStalagmite:
 
             if self._shatter_timer >= self.SHATTER_TIME and not self._fragments:
                 self.dead = True
+
+        self._update_collision_regions()
 
     def _draw_shadow_stalactite(
         self, surface: pygame.Surface, offset_x: float, scale: float, alpha: int, color_base: tuple[int, int, int], color_mid: tuple[int, int, int], color_light: tuple[int, int, int]
@@ -287,6 +341,61 @@ class MountainStalagmite:
             (cx_n3 + hw_n3, y_n3), (cx_n2 + hw_n2, y_n2), (cx_n1 + hw_n1, y_n1),
         ]
 
+    def _build_flat_spike_pts(
+        self,
+        cx: int, base_y: int, height: int, half_w: int,
+        phase_seed: float,
+        forced_lean_dir: int | None = None,
+    ) -> list[tuple[int, int]]:
+        if forced_lean_dir is None:
+            lean_dir = 1 if math.sin(phase_seed) >= 0 else -1
+        else:
+            lean_dir = 1 if forced_lean_dir >= 0 else -1
+        lean_top  = int(half_w * (0.20 + 0.12 * abs(math.sin(phase_seed))))
+        lean_mid  = int(half_w * (0.10 + 0.08 * abs(math.cos(phase_seed * 0.9))))
+        notch_cut = int(half_w * (0.28 + 0.14 * abs(math.sin(phase_seed * 1.4))))
+        return self._build_spike_pts(
+            cx, base_y, height, half_w,
+            lean_dir, lean_top, lean_mid, notch_cut,
+        )
+
+    def _build_visual_spike_polygons(self) -> list[list[tuple[int, int]]]:
+        cx = int(self.x)
+        base_y = int(self.ground_y)
+        height = max(8, int(self._current_height))
+
+        screen_w = getattr(Config, "SCREEN_WIDTH", 1280)
+        main_hw  = min(int(self.w * 1.6), int(screen_w * 0.11))
+
+        side_h   = max(20, int(self._target_height * 0.48))
+        left_hw  = max(8, int(main_hw * 0.70))
+        right_hw = max(8, int(main_hw * 0.58))
+
+        left_pts = self._build_flat_spike_pts(
+            cx=cx - int(main_hw * 0.95),
+            base_y=base_y,
+            height=side_h,
+            half_w=left_hw,
+            phase_seed=self._shape_phase + 1.2,
+            forced_lean_dir=-1,
+        )
+        center_pts = self._build_flat_spike_pts(
+            cx=cx,
+            base_y=base_y,
+            height=height,
+            half_w=main_hw,
+            phase_seed=self._shape_phase,
+        )
+        right_pts = self._build_flat_spike_pts(
+            cx=cx + int(main_hw * 0.88),
+            base_y=base_y,
+            height=int(side_h * 0.82),
+            half_w=right_hw,
+            phase_seed=self._shape_phase - 0.9,
+            forced_lean_dir=1,
+        )
+        return [left_pts, center_pts, right_pts]
+
     def _draw_flat_spike(
         self, surface: pygame.Surface,
         cx: int, base_y: int, height: int, half_w: int,
@@ -296,17 +405,8 @@ class MountainStalagmite:
         forced_lean_dir: int | None = None,
     ) -> None:
         """Desenha uma estalagmite flat 2D com cor única sólida."""
-        if forced_lean_dir is None:
-            lean_dir = 1 if math.sin(phase_seed) >= 0 else -1
-        else:
-            lean_dir = 1 if forced_lean_dir >= 0 else -1
-        lean_top  = int(half_w * (0.20 + 0.12 * abs(math.sin(phase_seed))))
-        lean_mid  = int(half_w * (0.10 + 0.08 * abs(math.cos(phase_seed * 0.9))))
-        notch_cut = int(half_w * (0.28 + 0.14 * abs(math.sin(phase_seed * 1.4))))
-
-        pts = self._build_spike_pts(
-            cx, base_y, height, half_w,
-            lean_dir, lean_top, lean_mid, notch_cut,
+        pts = self._build_flat_spike_pts(
+            cx, base_y, height, half_w, phase_seed, forced_lean_dir
         )
         pygame.draw.polygon(surface, color, pts)
         pygame.draw.polygon(surface, edge,  pts, width=2)
