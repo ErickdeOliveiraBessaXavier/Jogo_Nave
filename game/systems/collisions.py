@@ -1385,6 +1385,10 @@ class Collisions:
                 elif isinstance(enemy, (Boulder, RockShard, EntryDebris, OrbitalRock)):
                     enemy.dead = True
                     sound_manager.play_explosion_asteroid()
+                elif isinstance(enemy, MountainStalagmite):
+                    # Trigger shatter animation with fragments on ship contact
+                    enemy.take_damage(amount=999)
+                    sound_manager.play_explosion_asteroid()
                 else:
                     if isinstance(enemy, EyeEnemy):
                         enemy.destroy()

@@ -16,6 +16,8 @@ class _StalagmiteFragment:
     y: float
     vx: float
     vy: float
+    angle: float
+    spin: float
     life: float
     max_life: float
     size: float
@@ -41,7 +43,10 @@ class MountainStalagmite:
     MIN_HEIGHT = 62
     RISE_TIME = 0.32
     LINGER_TIME = 3.0
-    SHATTER_TIME = 0.42
+    SHATTER_TIME = 1.05
+
+    FRAGMENT_LIFE_MIN = 0.62
+    FRAGMENT_LIFE_MAX = 1.18
 
     # Secundárias: delay e altura máxima relativa ao alvo principal
     SECONDARY_DELAY_LEFT  = 0.0    # secundária esquerda começa imediatamente
@@ -165,17 +170,19 @@ class MountainStalagmite:
 
         base_x = self.x
         top_y = self.ground_y - self._current_height
-        for _ in range(16):
-            vx = random.uniform(-180.0, 180.0)
-            vy = random.uniform(-210.0, -40.0)
-            life = random.uniform(0.18, self.SHATTER_TIME)
-            size = random.uniform(2.0, 5.0)
+        for _ in range(18):
+            vx = random.uniform(-150.0, 150.0)
+            vy = random.uniform(-235.0, -55.0)
+            life = random.uniform(self.FRAGMENT_LIFE_MIN, self.FRAGMENT_LIFE_MAX)
+            size = random.uniform(3.0, 7.0)
             self._fragments.append(
                 _StalagmiteFragment(
                     x=base_x + random.uniform(-self.w * 0.45, self.w * 0.45),
                     y=random.uniform(top_y, self.ground_y - 4.0),
                     vx=vx,
                     vy=vy,
+                    angle=random.uniform(0.0, math.tau),
+                    spin=random.uniform(-7.0, 7.0),
                     life=life,
                     max_life=life,
                     size=size,
@@ -208,7 +215,11 @@ class MountainStalagmite:
         return 120
 
     def update(self, dt: float) -> None:
-        if self.dead:
+        if self.dead and not self._fragments:
+            return
+
+        if self.dead and self._fragments:
+            self._update_fragments(dt)
             return
 
         self._pulse_timer += dt
@@ -253,20 +264,23 @@ class MountainStalagmite:
                 self.active = False
                 self._spawn_fragments()
         elif self._state == "shattering":
-            self._shatter_timer += dt
-            gravity = 430.0
-            for fragment in self._fragments:
-                fragment.life = max(0.0, fragment.life - dt)
-                fragment.vy = fragment.vy + gravity * dt
-                fragment.x = fragment.x + fragment.vx * dt
-                fragment.y = fragment.y + fragment.vy * dt
-
-            self._fragments = [frag for frag in self._fragments if frag.life > 0.0]
-
+            self._update_fragments(dt)
             if self._shatter_timer >= self.SHATTER_TIME and not self._fragments:
                 self.dead = True
 
         self._update_collision_regions()
+
+    def _update_fragments(self, dt: float) -> None:
+        self._shatter_timer += dt
+        gravity = 520.0
+        for fragment in self._fragments:
+            fragment.life = max(0.0, fragment.life - dt)
+            fragment.vy = fragment.vy + gravity * dt
+            fragment.x = fragment.x + fragment.vx * dt
+            fragment.y = fragment.y + fragment.vy * dt
+            fragment.angle += fragment.spin * dt
+
+        self._fragments = [frag for frag in self._fragments if frag.life > 0.0]
 
     def _draw_shadow_stalactite(
         self, surface: pygame.Surface, offset_x: float, scale: float, alpha: int, color_base: tuple[int, int, int], color_mid: tuple[int, int, int], color_light: tuple[int, int, int]
@@ -473,7 +487,7 @@ class MountainStalagmite:
     # ------------------------------------------------------------------
 
     def draw(self, surface: pygame.Surface) -> None:
-        if self.dead:
+        if self.dead and not self._fragments:
             return
 
         cx     = int(self.x)
@@ -481,19 +495,64 @@ class MountainStalagmite:
         height = max(8, int(self._current_height))
 
         # ── Fragmentos do shatter ─────────────────────────────────────────────
-        if self._state == "shattering":
+        if self._state == "shattering" or (self.dead and self._fragments):
             for fragment in self._fragments:
                 life     = fragment.life
                 max_life = max(0.001, fragment.max_life)
                 alpha    = int(255 * (life / max_life))
                 size     = max(1, int(fragment.size))
-                frag_surf = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
-                pygame.draw.polygon(
+                piece_w = max(4, size * 2)
+                piece_h = max(4, int(size * 1.5))
+                dust_size = max(6, int(size * 2.4))
+
+                dust_alpha = int(alpha * 0.35)
+                dust_surface = pygame.Surface((dust_size * 2, dust_size * 2), pygame.SRCALPHA)
+                dust_color = (*fragment.color, dust_alpha)
+                pygame.draw.circle(dust_surface, dust_color, (dust_size, dust_size), dust_size)
+                pygame.draw.circle(
+                    dust_surface,
+                    (193, 154, 131, int(dust_alpha * 0.7)),
+                    (dust_size + 1, dust_size - 1),
+                    max(2, dust_size // 2),
+                )
+                dust_pos = (
+                    int(fragment.x) - dust_size + int(fragment.vx * 0.02),
+                    int(fragment.y) - dust_size + int(fragment.vy * 0.01),
+                )
+                surface.blit(dust_surface, dust_pos)
+
+                frag_surf = pygame.Surface((piece_w + 8, piece_h + 8), pygame.SRCALPHA)
+                frag_rect = pygame.Rect(0, 0, piece_w, piece_h)
+                frag_rect.center = ((piece_w + 8) // 2, (piece_h + 8) // 2)
+
+                pygame.draw.rect(
                     frag_surf,
                     (*fragment.color, alpha),
-                    [(size, 0), (size * 2, size), (size, size * 2), (0, size)],
+                    frag_rect,
+                    border_radius=max(1, size // 4),
                 )
-                surface.blit(frag_surf, (int(fragment.x) - size, int(fragment.y) - size))
+                pygame.draw.rect(
+                    frag_surf,
+                    (70, 44, 34, min(255, alpha + 20)),
+                    frag_rect,
+                    width=1,
+                    border_radius=max(1, size // 4),
+                )
+                # Pequenas lascas internas para dar leitura de terra quebradiça.
+                pygame.draw.line(
+                    frag_surf,
+                    (215, 178, 154, int(alpha * 0.55)),
+                    (frag_rect.left + 2, frag_rect.centery - 1),
+                    (frag_rect.right - 3, frag_rect.centery - 2),
+                    width=1,
+                )
+
+                rotated_piece = pygame.transform.rotate(
+                    frag_surf,
+                    math.degrees(fragment.angle),
+                )
+                piece_pos = rotated_piece.get_rect(center=(int(fragment.x), int(fragment.y)))
+                surface.blit(rotated_piece, piece_pos)
             return
 
         # ── Cores únicas por estalagmite (monocromático, sem overlay) ────────

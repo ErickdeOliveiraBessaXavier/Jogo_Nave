@@ -762,6 +762,10 @@ class EntityManager:
 
             # Inimigos comuns e mini-bosses (como o ElementalRobot)
             for enemy in self.enemies:
+                # Estalagmites com fragmentos ativos sempre devem ser desenhadas
+                if isinstance(enemy, MountainStalagmite) and getattr(enemy, "_fragments", None):
+                    enemy.draw(surface)
+                    continue
                 if not is_visible(enemy):
                     continue
                 if isinstance(enemy, EyeEnemy):
@@ -1055,7 +1059,14 @@ class EntityManager:
         self.enemies = [
             e
             for e in self.enemies
-            if not e.dead and not (isinstance(e, ExplosiveMine) and e.is_off_screen())
+            if not (
+                e.dead
+                and not (
+                    isinstance(e, MountainStalagmite)
+                    and getattr(e, "_fragments", None)
+                )
+            )
+            and not (isinstance(e, ExplosiveMine) and e.is_off_screen())
         ]
         self.mine_explosions = [me for me in self.mine_explosions if not me.finished()]
         self.powerups = [p for p in self.powerups if not p.dead]
