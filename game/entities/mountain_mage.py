@@ -587,7 +587,7 @@ class MountainMage:
 
     WIDTH:             Final = 54
     HEIGHT:            Final = 58
-    ORBIT_RADIUS:      Final = 28.0
+    ORBIT_RADIUS:      Final = 44.0
     ORB_RADIUS:        Final = 12
     DRIFT_SPEED:       Final = 38.0
     TELEGRAPH_SLOWDOWN: Final = 0.30
@@ -627,6 +627,7 @@ class MountainMage:
         self._accent_color:   tuple[int, int, int] = colors.CYAN
         self._eye_color:      tuple[int, int, int] = colors.YELLOW
         self._orb_base_color: tuple[int, int, int] = (155, 220, 255)
+        self._thruster_surfs: list[pygame.Surface] = [pygame.Surface((64, 32), pygame.SRCALPHA) for _ in range(5)]
 
     # ------------------------------------------------------------------
     # Properties / public API
@@ -672,6 +673,7 @@ class MountainMage:
         self._draw_telegraph_marker(surface)
         self._draw_orb(surface)
         self._draw_body(surface)
+        self._draw_thruster(surface)
 
     # ------------------------------------------------------------------
     # Private – state
@@ -798,39 +800,135 @@ class MountainMage:
         surface.blit(ms, (int(self._target_x) - mr * 2, screen_h - mr * 2))
 
     def _draw_body(self, surface: pygame.Surface) -> None:
-        body_x = int(self.x)
+        """Bloquinho fofinho com chapéu de mago pixel-art."""
+        body_x = int(self.x + self.w / 2)
         body_y = int(self.y)
         pulse  = 0.5 + 0.5 * math.sin(self._pulse_timer * math.tau * 1.1)
 
-        bs = pygame.Surface((self.w + 28, self.h + 26), pygame.SRCALPHA)
-        cx = bs.get_width()  // 2
-        cy = bs.get_height() // 2
+        # Surface grande o suficiente para o corpo + chapéu acima
+        sw, sh = 56, 68
+        bs = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        cx = sw // 2
 
-        robe_color = colors.WHITE      if self._hit_flash > 0.0 else self._robe_color
-        body_color = colors.BRIGHT_GRAY if self._hit_flash > 0.0 else self._body_color
+        flash = self._hit_flash > 0.0
 
-        pygame.draw.ellipse(bs, robe_color, (cx - 18, 10, 36, 42))
-        pygame.draw.rect(bs, body_color, (cx - 14, 18, 28, 32), border_radius=6)
-        pygame.draw.rect(bs, (45, 48, 58), (cx - 20, 28, 40, 12), border_radius=4)
+        # ── Corpo: bloco quadrado fofinho ─────────────────────────────────────
+        body_top = 30          # onde o corpo começa verticalmente na surface
+        body_w, body_h = 34, 28
+        bx = cx - body_w // 2  # left do corpo
 
-        pygame.draw.polygon(bs, (72, 76, 90), [
-            (cx - 22, 24), (cx - 10, 4), (cx + 10, 4),
-            (cx + 22, 24), (cx + 14, 50), (cx - 14, 50),
-        ])
+        body_col  = (220, 220, 220) if flash else (78, 82, 98)
+        border    = (255, 255, 255) if flash else (30, 32, 42)
 
-        eye_glow = 0.55 + 0.45 * pulse + self._telegraph_charge * 0.55
-        eye_color = (
-            int(_clamp(220 + 35 * eye_glow, 0, 255)),
-            int(_clamp(220 + 20 * eye_glow, 0, 255)),
-            int(_clamp(120 + 10 * eye_glow, 0, 255)),
-        )
-        pygame.draw.circle(bs, eye_color, (cx - 7, 24), 3)
-        pygame.draw.circle(bs, eye_color, (cx + 7, 24), 3)
-        pygame.draw.line(bs, self._accent_color, (cx, 8), (cx, 2), width=2)
-        pygame.draw.circle(bs, self._accent_color, (cx, 2), 3)
+        # Corpo principal
+        pygame.draw.rect(bs, body_col,  (bx, body_top,     body_w, body_h - 2), border_radius=4)
+        # Borda escura
+        pygame.draw.rect(bs, border,    (bx, body_top,     body_w, body_h - 2), 2, border_radius=4)
 
-        side_color = (112, 118, 136)
-        pygame.draw.rect(bs, side_color, (cx - 24, 30, 6, 16), border_radius=2)
-        pygame.draw.rect(bs, side_color, (cx + 18, 30, 6, 16), border_radius=2)
+        # Highlight superior (pixel-art especular)
+        hi_col = (255, 255, 255) if flash else (110, 116, 140)
+        pygame.draw.line(bs, hi_col, (bx + 4, body_top + 2), (bx + body_w - 5, body_top + 2), 1)
 
-        surface.blit(bs, (body_x - cx + 10, body_y - cy + 4))
+        # Bochechas redondas (fofura)
+        cheek_col = (255, 180, 180) if not flash else (255, 220, 220)
+        pygame.draw.circle(bs, cheek_col, (bx + 5,          body_top + 18), 3)
+        pygame.draw.circle(bs, cheek_col, (bx + body_w - 6, body_top + 18), 3)
+
+        # ── Olhos fofinhos ────────────────────────────────────────────────────
+        eye_glow = 0.6 + 0.4 * pulse + self._telegraph_charge * 0.6
+        if flash:
+            eye_white = (255, 255, 255)
+            pupil_col = (200, 200, 200)
+            shine_col = (255, 255, 255)
+        else:
+            # Olhos amarelo-âmbar que pulsam
+            ey_r = int(_clamp(255,                      0, 255))
+            ey_g = int(_clamp(200 + 30 * eye_glow,      0, 255))
+            ey_b = int(_clamp(40  + 20 * eye_glow,      0, 255))
+            eye_white = (ey_r, ey_g, ey_b)
+            pupil_col = (30, 20, 10)
+            shine_col = (255, 255, 220)
+
+        eye_y  = body_top + 10
+        for ex in (cx - 7, cx + 7):
+            pygame.draw.circle(bs, eye_white, (ex, eye_y), 5)          # esclera/íris
+            pygame.draw.circle(bs, pupil_col, (ex + 1, eye_y + 1), 2)  # pupila
+            pygame.draw.circle(bs, shine_col, (ex - 2, eye_y - 2), 1)  # brilho
+
+        # ── Chapéu de mago pixel-art ──────────────────────────────────────────
+        # Aba do chapéu (retângulo largo e fino na base)
+        hat_col    = (45, 28, 80)    # roxo escuro
+        hat_mid    = (62, 40, 110)   # roxo médio (face frontal)
+        hat_border = (20, 10, 40)
+        star_col   = (255, 220, 60)  # estrela amarela
+
+        brim_y = body_top - 3
+        brim_w, brim_h = 40, 5
+        brim_x = cx - brim_w // 2
+        pygame.draw.rect(bs, hat_col,    (brim_x,     brim_y, brim_w, brim_h), border_radius=2)
+        pygame.draw.rect(bs, hat_border, (brim_x,     brim_y, brim_w, brim_h), 1, border_radius=2)
+        # Highlight na aba
+        pygame.draw.line(bs, hat_mid, (brim_x + 2, brim_y + 1), (brim_x + brim_w - 3, brim_y + 1), 1)
+
+        # Corpo do chapéu (trapezoidal pixel-art: mais largo embaixo, mais fino em cima)
+        # Desenhado como polígono para dar perspectiva levemente inclinada
+        cone_b  = brim_y           # base do cone = topo da aba
+        cone_t  = cone_b - 22      # altura do cone
+        cone_bw = 24               # meia-largura na base
+        cone_tw = 6                # meia-largura no topo
+        cone_pts = [
+            (cx - cone_bw, cone_b),
+            (cx + cone_bw, cone_b),
+            (cx + cone_tw, cone_t),
+            (cx - cone_tw, cone_t),
+        ]
+        pygame.draw.polygon(bs, hat_col, cone_pts)
+        # Face frontal mais clara (lado iluminado)
+        face_pts = [
+            (cx - cone_bw + 3, cone_b),
+            (cx + cone_bw,     cone_b),
+            (cx + cone_tw,     cone_t),
+            (cx - cone_tw + 2, cone_t),
+        ]
+        pygame.draw.polygon(bs, hat_mid, face_pts)
+        pygame.draw.polygon(bs, hat_border, cone_pts, 1)
+
+        # Faixa decorativa no chapéu
+        band_y = cone_b - 6
+        pygame.draw.line(bs, (100, 60, 160), (cx - cone_bw + 3, band_y), (cx + cone_bw - 2, band_y), 2)
+
+        # Estrela pixel-art no chapéu (5 pontos via círculos pequenos)
+        star_cx, star_cy = cx + 4, cone_b - 13
+        for angle_i in range(5):
+            ang = math.tau * angle_i / 5 - math.pi / 2
+            sx = star_cx + int(math.cos(ang) * 4)
+            sy = star_cy + int(math.sin(ang) * 4)
+            pygame.draw.circle(bs, star_col, (sx, sy), 1)
+        pygame.draw.circle(bs, star_col, (star_cx, star_cy), 1)  # centro
+
+        # ── Blit na surface principal ─────────────────────────────────────────
+        surface.blit(bs, (body_x - cx, body_y - 10))
+
+    def _draw_thruster(self, surface: pygame.Surface) -> None:
+        cx = int(self.x + self.w / 2)
+        sy = int(self.y + self.h)
+        t = self._pulse_timer
+
+        pygame.draw.rect(surface, (255, 255, 255), (cx - 4, sy, 8, 4))
+        for i in range(5):
+            ph = ((t * 2.0) + (i / 5)) % 1.0
+            w = int(4 * 10 * (1 - ph))
+            h = max(4, int(4 * 4 * (1 - ph)))
+            y = sy + int(ph * 4 * 14) + 4
+            al = max(0, int(255 * (1 - ph * ph)))
+            if w < 4:
+                continue
+            col = (
+                (255, 255, 255)
+                if ph < 0.15
+                else ((157, 212, 240) if ph < 0.5 else (91, 159, 200))
+            )
+            thruster = self._thruster_surfs[i]
+            thruster.fill((0, 0, 0, 0))
+            pygame.draw.rect(thruster, (*col, al), (0, 0, w, h), 4)
+            surface.blit(thruster, (cx - w // 2, y - h // 2))

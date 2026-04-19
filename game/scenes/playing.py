@@ -2111,7 +2111,11 @@ class PlayingScene(Scene):
         return ()
 
     def _draw_enemy_hitboxes(self, surface: pygame.Surface) -> None:
-        """Overlay de hitboxes dos inimigos para tuning de colisao em runtime."""
+        """Overlay de hitboxes dos inimigos para tuning de colisao em runtime.
+
+        Amarelo  = bounding rect (get_ship_contact_hitboxes)
+        Vermelho = contorno pixel-perfect da máscara (get_collision_mask_data)
+        """
         enemies_in_view = self.entity_manager.enemy_spatial_grid.query(
             0,
             0,
@@ -2129,13 +2133,35 @@ class PlayingScene(Scene):
             if getattr(enemy, "dead", False):
                 continue
 
-            hitboxes = self._get_enemy_contact_hitboxes(enemy)
-            if not hitboxes:
-                continue
+            # ── Pixel-perfect mask (amarelo borda) ou bounding rect como fallback ──
+            mask_getter = getattr(enemy, "get_collision_mask_data", None)
+            has_mask = False
+            if callable(mask_getter):
+                raw = cast(
+                    tuple[pygame.mask.Mask, tuple[int, int]] | None,
+                    mask_getter(),
+                )
+                if raw is not None:
+                    mask: pygame.mask.Mask
+                    offset: tuple[int, int]
+                    mask, offset = raw
+                    mask_w, mask_h = mask.get_size()
+                    if mask_w > 0 and mask_h > 0:
+                        outline_surf: pygame.Surface = pygame.Surface((mask_w, mask_h), pygame.SRCALPHA)
+                        for px, py in mask.outline():
+                            pygame.draw.circle(outline_surf, (255, 200, 40, 220), (px, py), 1)
+                        surface.blit(outline_surf, offset)
+                        has_mask = True
 
-            for index, rect in enumerate(hitboxes):
-                color = (255, 200, 40) if index == 0 else (40, 220, 255)
-                pygame.draw.rect(surface, color, rect, 2)
+            if not has_mask:
+                # Só usa rect como fallback se o inimigo não possui máscara definida
+                # (não quando a máscara foi zerada por estado transitório como SHATTERING)
+                has_mask_method = callable(getattr(enemy, "get_collision_mask_data", None))
+                if not has_mask_method:
+                    hitboxes = self._get_enemy_contact_hitboxes(enemy)
+                    for index, rect in enumerate(hitboxes):
+                        color = (255, 200, 40) if index == 0 else (40, 220, 255)
+                        pygame.draw.rect(surface, color, rect, 2)
 
     def render(self, surface: pygame.Surface):
         # Usa o dt armazenado pela última chamada de update
