@@ -12,6 +12,7 @@ from ..entities.eye_enemy import EyeEnemy
 from ..entities.giant_meteor_boss import GiantMeteorBoss
 from ..entities.meteor import Meteor
 from ..entities.mountain_mage import MountainMage
+from ..entities.mountain_serpent_boss import MountainSerpentBoss
 from ..entities.rock_glider import RockGlider
 from ..entities.slime_boss import SlimeBoss
 from ..entities.spike_boss import SpikeBoss
@@ -756,7 +757,7 @@ LEVEL_THEMES = {
             "square_minion_boss": 0.0,
             "elemental_robot": 0.0,
         },
-        spawn_rate_multiplier=1.4,  
+        spawn_rate_multiplier=1.4,
         enemies_multiplier=1.3,
         special_feature="meteor_only",
     ),
@@ -940,7 +941,15 @@ class LevelConfig:
     enemy_spawn_config: dict[type, float]  # Tipo -> tempo de spawn
     enemies_to_clear: int  # quantos inimigos para passar de fase
     boss_type: (
-        Type[Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss] | None
+        Type[
+            Boss
+            | SpikeBoss
+            | SlimeBoss
+            | GiantMeteorBoss
+            | StoneGolemBoss
+            | MountainSerpentBoss
+        ]
+        | None
     ) = None
     mines_enabled: bool = False
     formations_enabled: bool = False
@@ -1430,9 +1439,9 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # RockGlider: 0.6,
             # ElementalRobot: 1.0,  # Mini-boss
             # StoneSentry: 30.0,
-             MountainMage: 1.0,
+            MountainMage: 1.0,
         },
-        enemies_to_clear=100,
+        enemies_to_clear=1,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
         # mines_enabled=True,
@@ -1441,6 +1450,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         # boss_type=GiantMeteorBoss,
         # boss_type=SpikeBoss,
         # boss_type=StoneGolemBoss,
+        boss_type=MountainSerpentBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),
@@ -1457,6 +1467,19 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         mines_enabled=True,
         theme_name="Chefe do Golem de Pedra",
         score_multiplier=1.2,
+    ),
+    5: LevelConfig(
+        level_number=5,
+        enemy_spawn_config={
+            RockGlider: 0.6,
+            ElementalRobot: 18.0,
+            StoneSentry: 25.0,
+        },
+        enemies_to_clear=240,
+        boss_type=MountainSerpentBoss,
+        mines_enabled=True,
+        theme_name="Boss da Serpente de Pedra",
+        score_multiplier=1.3,
     ),
     # Vazio Sideral - 4 Bosses
     # Nível 12: Boss clássico

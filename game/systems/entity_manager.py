@@ -34,6 +34,7 @@ from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.mountain_mage import MountainMage, MountainStalagmite
+from ..entities.mountain_serpent_boss import MountainSerpentBoss
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
@@ -94,7 +95,13 @@ class EntityManager:
         self.stars: list[Star] = []  # Estrelas coletáveis
         self.floating_scores: list[FloatingScore] = []
         self.boss: (
-            Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss | None
+            Boss
+            | SpikeBoss
+            | SlimeBoss
+            | GiantMeteorBoss
+            | StoneGolemBoss
+            | MountainSerpentBoss
+            | None
         ) = None
         self.mini_ships: list[MiniShip] = []
         self.mini_ship_bullets: list[MiniShipBullet] = []

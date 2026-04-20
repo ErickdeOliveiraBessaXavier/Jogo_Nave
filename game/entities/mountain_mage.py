@@ -38,10 +38,10 @@ _SpikePolygon = list[tuple[int, int]]
 _SpikePolygons = list[_SpikePolygon]
 
 _STONE_COLORS: Final[tuple[tuple[int, int, int], ...]] = (
-    (140, 100, 84),  # marrom médio
-    (175, 130, 107),  # marrom claro / bege
-    (89, 56, 49),  # marrom escuro
-    (193, 154, 131),  # detalhe claro
+    (76, 59, 99),  # rocha roxa escura do parallax
+    (106, 76, 125),  # pedra violeta média
+    (158, 92, 127),  # rosa púrpura suave
+    (224, 126, 116),  # destaque quente de montanha
 )
 
 _FRAGMENT_GRAVITY: Final[float] = 520.0
@@ -490,7 +490,12 @@ class MountainStalagmite:
     ]:
         if self._hit_flash > 0.0:
             return (255, 255, 255), (210, 210, 210), (185, 185, 185), (160, 160, 160)
-        return (52, 30, 22), (88, 60, 46), (112, 80, 62), (28, 14, 10)
+        return (
+            (106, 76, 125),  # roxo médio
+            (158, 92, 127),  # rosa púrpura
+            (224, 126, 116),  # laranja quente
+            (15, 10, 20),  # borda escura
+        )
 
     def _build_visual_spike_polygons(self) -> _SpikePolygons:
         cx = int(self.x)
@@ -802,7 +807,7 @@ class MountainMage:
         if player_pos is not None:
             self._track_player(player_pos)
 
-        orb_speed = 6.0 if self._state is _MageState.TELEGRAPH else 2.4
+        orb_speed = 15.0 if self._state is _MageState.TELEGRAPH else 2.4
         self._orb_angle += orb_speed * dt
         self._update_movement(dt)
 
@@ -918,16 +923,22 @@ class MountainMage:
         orb_x = center_x + math.cos(self._orb_angle) * self.ORBIT_RADIUS
         orb_y = center_y + math.sin(self._orb_angle) * (self.ORBIT_RADIUS * 0.72)
 
-        charge = self._telegraph_charge if self._state is _MageState.TELEGRAPH else 0.0
+        is_telegraphing = self._state is _MageState.TELEGRAPH
+        charge = self._telegraph_charge if is_telegraphing else 0.0
         glow_r = int(self.ORB_RADIUS * (2.0 + charge * 1.6))
         glow_a = int(45 + charge * 135)
-        glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
-        pygame.draw.circle(
-            glow_surf, (*self._orb_base_color, glow_a), (glow_r, glow_r), glow_r
+        glow_color = (
+            (255, 120, 120) if is_telegraphing else (*self._orb_base_color, glow_a)
         )
+        glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+        pygame.draw.circle(glow_surf, glow_color, (glow_r, glow_r), glow_r)
         surface.blit(glow_surf, (int(orb_x) - glow_r, int(orb_y) - glow_r))
 
-        orb_color = (int(120 + charge * 70), int(210 + charge * 35), 255)
+        orb_color = (
+            (255, 60, 60)
+            if is_telegraphing
+            else (int(120 + charge * 70), int(210 + charge * 35), 255)
+        )
         pygame.draw.circle(
             surface, orb_color, (int(orb_x), int(orb_y)), self.ORB_RADIUS
         )
@@ -1028,7 +1039,10 @@ class MountainMage:
         eye_y = body_top + 10
         is_recovering = self._state == _MageState.COOLDOWN
         recovery_time = 2.8 - self._state_timer if is_recovering else 0.0
-        tremor_window = is_recovering and (0.0 < recovery_time < 0.18)
+        is_telegraphing = self._state == _MageState.TELEGRAPH
+        tremor_window = is_telegraphing or (
+            is_recovering and (0.0 < recovery_time < 0.18)
+        )
         recovery_blink = is_recovering and (
             (0.20 < recovery_time < 0.30) or (0.45 < recovery_time < 0.55)
         )
@@ -1074,7 +1088,7 @@ class MountainMage:
             else:
                 pygame.draw.circle(bs, eye_white, (ex, ey), 5)
                 pygame.draw.circle(bs, pupil_col, (pupil_x, pupil_y), 2)
-                pygame.draw.circle(bs, shine_col, (pupil_x - 3, pupil_y - 3), 1)
+                pygame.draw.circle(bs, shine_col, (ex - 3, ey - 3), 1)
 
         # ── Chapéu de mago pixel-art (Descolado e com Inércia/Lerp) ────────────
         hat_col = (45, 28, 80)  # roxo escuro

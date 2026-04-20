@@ -37,6 +37,7 @@ from ..entities.meteor import Meteor
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.mountain_mage import MountainStalagmite
+from ..entities.mountain_serpent_boss import MountainSerpentBoss
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
@@ -92,7 +93,14 @@ class Enemy(Protocol):
     def update(self, dt: float, *args: Any, **kwargs: Any) -> Any: ...
 
 
-BossEnemy: TypeAlias = Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss
+BossEnemy: TypeAlias = (
+    Boss
+    | SpikeBoss
+    | SlimeBoss
+    | GiantMeteorBoss
+    | StoneGolemBoss
+    | MountainSerpentBoss
+)
 Projectile: TypeAlias = Bullet | MiniShipBullet
 
 
@@ -577,7 +585,7 @@ class Collisions:
 
     def _apply_boss_damage(
         self,
-        projectiles: list[Projectile],
+        projectiles: Sequence[Projectile],
         boss: BossEnemy,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
@@ -635,7 +643,7 @@ class Collisions:
 
     def _boss_projectile_collision(
         self,
-        projectiles: list[Projectile],
+        projectiles: Sequence[Projectile],
         boss: BossEnemy,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
@@ -899,7 +907,7 @@ class Collisions:
     def explosive_effects_vs_boss(
         self,
         explosive_effects: list[ExplosiveEffect],
-        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss | None,
+        boss: BossEnemy | None,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -1036,7 +1044,7 @@ class Collisions:
     def cannon_mines_vs_boss(
         self,
         cannon_mines: list[CannonMine],
-        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss | None,
+        boss: BossEnemy | None,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -1100,7 +1108,7 @@ class Collisions:
     def air_strike_bombs_vs_boss(
         self,
         air_strike_bombs: list[AirStrikeBomb],
-        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | StoneGolemBoss | None,
+        boss: BossEnemy | None,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
