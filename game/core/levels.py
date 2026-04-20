@@ -1436,7 +1436,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     1: LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            # RockGlider: 0.6,
+            RockGlider: 0.6,
             # ElementalRobot: 1.0,  # Mini-boss
             # StoneSentry: 30.0,
             MountainMage: 1.0,

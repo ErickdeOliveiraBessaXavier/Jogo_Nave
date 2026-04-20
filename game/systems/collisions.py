@@ -1341,6 +1341,77 @@ class Collisions:
             bullets, boss, floating_scores, entity_manager
         )
 
+    def bullets_vs_mountain_serpent_boss(
+        self,
+        bullets: list[Bullet],
+        boss: MountainSerpentBoss,
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+    ) -> int:
+        """Colisão de balas com MountainSerpentBoss.
+
+        Regras:
+        - Apenas os boulders do corpo recebem dano de projéteis.
+        - A cabeça é IMUNE a projéteis diretos.
+        - Cada boulder tem 25 HP. Hitbox = círculo desenhado (SEGMENT_RADIUS * 2).
+        - Quando todos os boulders de uma coluna (esq. ou dir.) são destruídos,
+          a cabeça perde automaticamente 25% do seu HP máximo via
+          ``take_segment_damage`` → ``_check_column_cleared``.
+        """
+        if not bullets:
+            return 0
+        if not boss or boss.dead:
+            return 0
+
+        score_gain = 0
+
+        for bullet in bullets[:]:
+            if bullet.dead:
+                continue
+
+            bullet_rect = bullet.rect
+
+            for hbox, segment in boss.get_segment_hitboxes():
+                if not bullet_rect.colliderect(hbox):
+                    continue
+
+                # Destruir bala (a menos que seja piercing)
+                if not getattr(bullet, "piercing", False):
+                    bullet.dead = True
+
+                damage = int(
+                    bullet.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER
+                )
+
+                # Aplica dano ao boulder — a cabeça nunca está na lista
+                boss.take_segment_damage(segment, damage)
+                sound_manager.play_boss_damage()
+
+                seg_x = boss.left_x if segment.side == "left" else boss.right_x
+                if segment.dead:
+                    # Boulder destruído: explosão grande no centro do boulder
+                    entity_manager.spawn_explosion(seg_x, segment.y, size=28)
+                else:
+                    # Hit normal: faísca pequena no ponto de impacto
+                    entity_manager.spawn_explosion(bullet.x, bullet.y, size=12)
+
+                # Verificar morte do boss (pode ter morrido via dano de coluna)
+                if boss.dead:
+                    cx = boss.x + boss.w / 2
+                    cy = boss.y + boss.h / 2
+                    score_gain += config_instance.BOSS_DEFEAT_SCORE
+                    floating_scores.append(
+                        FloatingScore(cx, cy, config_instance.BOSS_DEFEAT_SCORE)
+                    )
+                    entity_manager.spawn_explosion(cx, cy, size=100)
+                    return score_gain
+
+                # Bala destruída: não checar mais hitboxes desta bala
+                if bullet.dead:
+                    break
+
+        return score_gain
+
     def ship_vs_boss(
         self,
         ship: Ship,
