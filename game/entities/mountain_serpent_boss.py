@@ -1,5 +1,4 @@
 import random
-from dataclasses import dataclass
 from typing import Any, Final
 
 import pygame
@@ -8,43 +7,136 @@ from ..core import colors
 from ..core.config import config as Config
 
 
-@dataclass
-class SerpentSegment:
-    """Um boulder individual do corpo da serpente."""
+# ---------------------------------------------------------------------------
+# Bloco de pedra independente — tratado como inimigo avulso
+# ---------------------------------------------------------------------------
 
-    y: float
-    side: str  # "left" ou "right"
-    health: int = 25
-    max_health: int = 25
-    dead: bool = False
-    hit_flash: float = 0.0
+class SerpentBlock:
+    """
+    Bloco de pedra fixo nas laterais da tela.
+
+    É registrado na lista de inimigos normais do EntityManager e colide com
+    balas/laser exatamente como qualquer outro inimigo com HP.
+
+    Quando morrer, notifica o boss (MountainSerpentBoss) para que ele
+    contabilize se uma coluna inteira foi destruída.
+    """
+
+    RADIUS: Final[int] = 24
+    MAX_HEALTH: Final[int] = 25
+
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        side: str,          # "left" | "right"
+        boss: "MountainSerpentBoss",
+    ) -> None:
+        self.x = x - self.RADIUS
+        self.y = y - self.RADIUS
+        self.w = self.RADIUS * 2
+        self.h = self.RADIUS * 2
+        self.cx = x          # centro X (posição canônica do círculo)
+        self.cy = y          # centro Y
+        self.side = side
+        self.boss = boss
+
+        self.health: int = self.MAX_HEALTH
+        self.dead: bool = False
+        self._hit_flash: float = 0.0
+
+    # -- Protocolo Enemy ------------------------------------------------
+
+    @property
+    def rect(self) -> pygame.Rect:
+        return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+
+    def get_points_value(self) -> int:
+        return 80
 
     def take_damage(self, amount: int) -> None:
         if self.dead:
             return
         self.health -= amount
-        self.hit_flash = 0.18
+        self._hit_flash = 0.18
         if self.health <= 0:
             self.health = 0
             self.dead = True
+            # Avisa o boss: "um bloco desta coluna morreu"
+            self.boss.on_block_killed(self.side)
 
-    def update(self, dt: float) -> None:
-        self.hit_flash = max(0.0, self.hit_flash - dt)
+    def update(self, dt: float, *_args: Any, **_kwargs: Any) -> None:
+        self._hit_flash = max(0.0, self._hit_flash - dt)
 
+    def draw(self, surface: pygame.Surface) -> None:
+        if self.dead:
+            return
+
+        body_color = (106, 76, 125)
+        edge_color = (42, 24, 55)
+        highlight_color = (224, 126, 116)
+
+        cx, cy = int(self.cx), int(self.cy)
+
+        # Flash de dano
+        draw_color = body_color
+        if self._hit_flash > 0.0:
+            draw_color = tuple(
+                min(255, int(c + (255 - c) * self._hit_flash)) for c in body_color
+            )
+
+        pygame.draw.circle(surface, edge_color, (cx, cy), self.RADIUS + 3)
+        pygame.draw.circle(surface, draw_color, (cx, cy), self.RADIUS)
+        pygame.draw.circle(surface, highlight_color, (cx, cy), self.RADIUS // 2)
+
+        # Barra de vida
+        bar_w = self.RADIUS * 2
+        bar_h = 4
+        bar_x = cx - self.RADIUS
+        bar_y = cy - self.RADIUS - 8
+        pygame.draw.rect(surface, colors.DARK_GRAY, (bar_x, bar_y, bar_w, bar_h))
+        life_w = max(0, int(bar_w * (self.health / self.MAX_HEALTH)))
+        bar_color = (
+            (80, 220, 80)
+            if self.health > self.MAX_HEALTH * 0.5
+            else (220, 160, 40)
+            if self.health > self.MAX_HEALTH * 0.25
+            else (220, 60, 60)
+        )
+        pygame.draw.rect(surface, bar_color, (bar_x, bar_y, life_w, bar_h))
+
+
+# ---------------------------------------------------------------------------
+# Boss — apenas a cabeça móvel
+# ---------------------------------------------------------------------------
 
 class MountainSerpentBoss:
-    """Boss serpente de pedra exclusivo das Cordilheiras."""
+    """
+    Cabeça da Serpente de Pedra (boss das Cordilheiras).
+
+    Responsabilidade desta classe:
+      - Mover a cabeça de lado a lado.
+      - Receber dano **somente** quando uma coluna inteira de SerpentBlocks
+        é destruída (25 % do HP máximo por coluna).
+      - Desenhar a cabeça e a barra de HP.
+
+    Os blocos de pedra (SerpentBlock) são entidades separadas gerenciadas
+    pelo EntityManager. Ao criar o boss, use ``create_blocks()`` para
+    instanciar os blocos e adicioná-los à lista de inimigos.
+    """
 
     HEAD_RADIUS: Final[int] = 30
-    SEGMENT_RADIUS: Final[int] = 24
-    SEGMENT_COUNT: Final[int] = 5
     SIDE_MARGIN: Final[int] = 52
-    SIDE_GAP_Y: Final[int] = 82
     HEAD_Y: Final[int] = 88
     HEAD_SPEED: Final[float] = 24.0
 
-    # HP perdido pela cabeça quando uma coluna inteira de segmentos é destruída
-    HEAD_DAMAGE_PER_COLUMN: Final[float] = 0.25  # 25% da vida máxima
+    # Dano recebido pela cabeça ao se destruir uma coluna inteira de blocos
+    HEAD_DAMAGE_PER_COLUMN: Final[float] = 0.25  # 25 % do HP máximo
+
+    # Layout dos blocos
+    BLOCK_COUNT: Final[int] = 5          # blocos por coluna (esq. e dir.)
+    BLOCK_START_OFFSET_Y: Final[int] = 80  # distância vertical da cabeça ao 1.º bloco
+    BLOCK_GAP_Y: Final[int] = 82          # espaçamento entre blocos
 
     def __init__(
         self,
@@ -56,166 +148,83 @@ class MountainSerpentBoss:
         self.head_y: float = float(y if y is not None else self.HEAD_Y)
         self.direction: int = random.choice((-1, 1))
         self.speed: float = self.HEAD_SPEED
-        self.hit_flash: float = 0.0
 
         self.left_x: float = float(self.SIDE_MARGIN)
         self.right_x: float = float(Config.SCREEN_WIDTH - self.SIDE_MARGIN)
 
-        # Segmentos independentes: lista por lado
-        segment_ys = [
-            float(self.head_y + 80 + i * self.SIDE_GAP_Y)
-            for i in range(self.SEGMENT_COUNT)
-        ]
-        self.left_segments: list[SerpentSegment] = [
-            SerpentSegment(y=y, side="left") for y in segment_ys
-        ]
-        self.right_segments: list[SerpentSegment] = [
-            SerpentSegment(y=y, side="right") for y in segment_ys
-        ]
-
-        # Rastrear quais colunas já causaram dano à cabeça
-        self._left_column_damaged: bool = False
-        self._right_column_damaged: bool = False
-
         self.health: int = health if health is not None else 320
         self.max_health: int = self.health
         self.dead: bool = False
+        self.hit_flash: float = 0.0
+
+        # Quantas colunas já causaram dano (máx. 2)
+        self._left_column_damaged: bool = False
+        self._right_column_damaged: bool = False
+
+        # Contadores de blocos vivos por coluna
+        self._left_alive: int = self.BLOCK_COUNT
+        self._right_alive: int = self.BLOCK_COUNT
+
+        # Bounds para compatibilidade com código existente
+        self.x: float = self.left_x - SerpentBlock.RADIUS
+        self.y: float = self.head_y - self.HEAD_RADIUS
+        self.w: float = (self.right_x + SerpentBlock.RADIUS) - self.x
+        self.h: float = float(self.HEAD_RADIUS * 2)
+
         self.floating_squares: list[Any] = []
 
-        self._recalc_bounds()
-
     # ------------------------------------------------------------------
-    # Propriedades de conveniência (mantém compatibilidade com código antigo)
+    # Fábrica de blocos — chame logo após criar o boss
     # ------------------------------------------------------------------
 
-    @property
-    def segment_ys(self) -> list[float]:
-        """Retorna as posições Y dos segmentos (compatibilidade)."""
-        return [seg.y for seg in self.left_segments]
+    def create_blocks(self) -> list[SerpentBlock]:
+        """
+        Instancia e retorna todos os SerpentBlocks das duas colunas.
+
+        Adicione o retorno desta função diretamente em
+        ``entity_manager.enemies`` (ou equivalente).
+        """
+        blocks: list[SerpentBlock] = []
+        for i in range(self.BLOCK_COUNT):
+            cy = self.head_y + self.BLOCK_START_OFFSET_Y + i * self.BLOCK_GAP_Y
+            blocks.append(SerpentBlock(self.left_x, cy, "left", self))
+            blocks.append(SerpentBlock(self.right_x, cy, "right", self))
+        return blocks
 
     # ------------------------------------------------------------------
-    # Bounds / Rect
+    # Callbacks chamados pelos blocos
     # ------------------------------------------------------------------
 
-    def _recalc_bounds(self) -> None:
-        top = int(self.head_y - self.HEAD_RADIUS)
+    def on_block_killed(self, side: str) -> None:
+        """
+        Chamado por SerpentBlock.take_damage() quando um bloco morre.
 
-        # Calcular bottom considerando apenas segmentos vivos
-        alive_ys = [
-            seg.y for seg in self.left_segments + self.right_segments if not seg.dead
-        ]
-        if alive_ys:
-            bottom = int(max(alive_ys) + self.SEGMENT_RADIUS)
+        Decrementa o contador do lado correspondente; se a coluna zerar,
+        aplica o dano de coluna à cabeça (uma única vez por coluna).
+        """
+        if self.dead:
+            return
+
+        if side == "left":
+            self._left_alive = max(0, self._left_alive - 1)
+            if self._left_alive == 0 and not self._left_column_damaged:
+                self._left_column_damaged = True
+                self._apply_column_damage()
         else:
-            bottom = int(self.head_y + self.HEAD_RADIUS)
+            self._right_alive = max(0, self._right_alive - 1)
+            if self._right_alive == 0 and not self._right_column_damaged:
+                self._right_column_damaged = True
+                self._apply_column_damage()
 
-        left = int(self.left_x - self.SEGMENT_RADIUS)
-        right = int(self.right_x + self.SEGMENT_RADIUS)
-
-        self.x = float(left)
-        self.y = float(top)
-        self.w = max(1, right - left)
-        self.h = max(1, bottom - top)
-
-    @property
-    def rect(self) -> pygame.Rect:
-        return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+    def _apply_column_damage(self) -> None:
+        penalty = int(self.max_health * self.HEAD_DAMAGE_PER_COLUMN)
+        self.take_damage(penalty)
 
     # ------------------------------------------------------------------
-    # Pontos / hitboxes
-    # ------------------------------------------------------------------
-
-    def get_points_value(self) -> int:
-        return 850
-
-    def get_ship_contact_hitboxes(self) -> tuple[pygame.Rect, ...]:
-        """Retorna hitboxes individuais para colisão com a nave."""
-        if self.dead:
-            return ()
-
-        hitboxes: list[pygame.Rect] = []
-
-        # Cabeça
-        hitboxes.append(
-            pygame.Rect(
-                int(self.head_x - self.HEAD_RADIUS),
-                int(self.head_y - self.HEAD_RADIUS),
-                self.HEAD_RADIUS * 2,
-                self.HEAD_RADIUS * 2,
-            )
-        )
-
-        # Segmentos vivos
-        for seg in self.left_segments:
-            if not seg.dead:
-                hitboxes.append(
-                    pygame.Rect(
-                        int(self.left_x - self.SEGMENT_RADIUS),
-                        int(seg.y - self.SEGMENT_RADIUS),
-                        self.SEGMENT_RADIUS * 2,
-                        self.SEGMENT_RADIUS * 2,
-                    )
-                )
-        for seg in self.right_segments:
-            if not seg.dead:
-                hitboxes.append(
-                    pygame.Rect(
-                        int(self.right_x - self.SEGMENT_RADIUS),
-                        int(seg.y - self.SEGMENT_RADIUS),
-                        self.SEGMENT_RADIUS * 2,
-                        self.SEGMENT_RADIUS * 2,
-                    )
-                )
-
-        return tuple(hitboxes)
-
-    def get_segment_hitboxes(self) -> list[tuple[pygame.Rect, "SerpentSegment"]]:
-        """
-        Retorna lista de (Rect, segmento) apenas para boulders vivos.
-
-        A cabeça é imune a projéteis — só recebe dano ao destruir uma coluna inteira.
-        Cada Rect tem exatamente o diâmetro do círculo desenhado (SEGMENT_RADIUS * 2).
-        """
-        if self.dead:
-            return []
-
-        result: list[tuple[pygame.Rect, SerpentSegment]] = []
-
-        for seg in self.left_segments:
-            if not seg.dead:
-                result.append(
-                    (
-                        pygame.Rect(
-                            int(self.left_x - self.SEGMENT_RADIUS),
-                            int(seg.y - self.SEGMENT_RADIUS),
-                            self.SEGMENT_RADIUS * 2,
-                            self.SEGMENT_RADIUS * 2,
-                        ),
-                        seg,
-                    )
-                )
-        for seg in self.right_segments:
-            if not seg.dead:
-                result.append(
-                    (
-                        pygame.Rect(
-                            int(self.right_x - self.SEGMENT_RADIUS),
-                            int(seg.y - self.SEGMENT_RADIUS),
-                            self.SEGMENT_RADIUS * 2,
-                            self.SEGMENT_RADIUS * 2,
-                        ),
-                        seg,
-                    )
-                )
-
-        return result
-
-    # ------------------------------------------------------------------
-    # Dano
+    # Dano direto à cabeça
     # ------------------------------------------------------------------
 
     def take_damage(self, amount: int) -> None:
-        """Dano direto à cabeça."""
         if self.dead:
             return
         self.health -= amount
@@ -224,52 +233,39 @@ class MountainSerpentBoss:
             self.health = 0
             self.dead = True
 
-    def take_segment_damage(self, segment: SerpentSegment, amount: int) -> None:
-        """
-        Aplica dano a um segmento individual.
+    # ------------------------------------------------------------------
+    # Compatibilidade com collisions.py / entity_manager.py existentes
+    # ------------------------------------------------------------------
 
-        Se todos os segmentos de uma coluna morrerem pela primeira vez,
-        a cabeça perde HEAD_DAMAGE_PER_COLUMN da sua vida máxima.
-        """
-        if self.dead or segment.dead:
-            return
+    def get_points_value(self) -> int:
+        return 850
 
-        segment.take_damage(amount)
+    @property
+    def rect(self) -> pygame.Rect:
+        return pygame.Rect(
+            int(self.head_x - self.HEAD_RADIUS),
+            int(self.head_y - self.HEAD_RADIUS),
+            self.HEAD_RADIUS * 2,
+            self.HEAD_RADIUS * 2,
+        )
 
-        # Verificar se uma coluna inteira acabou de ser destruída
-        self._check_column_cleared()
-
-    def _check_column_cleared(self) -> None:
-        """Aplica dano de coluna à cabeça quando todos os segmentos de um lado morrem."""
-        if not self._left_column_damaged and all(
-            seg.dead for seg in self.left_segments
-        ):
-            self._left_column_damaged = True
-            penalty = int(self.max_health * self.HEAD_DAMAGE_PER_COLUMN)
-            self.take_damage(penalty)
-
-        if not self._right_column_damaged and all(
-            seg.dead for seg in self.right_segments
-        ):
-            self._right_column_damaged = True
-            penalty = int(self.max_health * self.HEAD_DAMAGE_PER_COLUMN)
-            self.take_damage(penalty)
+    def get_ship_contact_hitboxes(self) -> tuple[pygame.Rect, ...]:
+        """Apenas a cabeça colide com a nave."""
+        if self.dead:
+            return ()
+        return (self.rect,)
 
     # ------------------------------------------------------------------
     # Update / Draw
     # ------------------------------------------------------------------
 
     def update(
-        self, dt: float, player_x: float, player_y: float
+        self, dt: float, player_x: float = 0.0, player_y: float = 0.0
     ) -> tuple[list[Any], list[Any]]:
         if self.dead:
             return [], []
 
         self.hit_flash = max(0.0, self.hit_flash - dt)
-
-        # Atualizar flash dos segmentos
-        for seg in self.left_segments + self.right_segments:
-            seg.update(dt)
 
         self.head_x += self.direction * self.speed * dt
 
@@ -280,7 +276,11 @@ class MountainSerpentBoss:
             self.head_x = self.right_x - self.HEAD_RADIUS
             self.direction = -1
 
-        self._recalc_bounds()
+        # Atualizar bounds (compatibilidade)
+        self.x = self.left_x - SerpentBlock.RADIUS
+        self.y = self.head_y - self.HEAD_RADIUS
+        self.w = (self.right_x + SerpentBlock.RADIUS) - self.x
+
         return [], []
 
     def draw(self, surface: pygame.Surface) -> None:
@@ -289,61 +289,8 @@ class MountainSerpentBoss:
 
         body_color = (106, 76, 125)
         edge_color = (42, 24, 55)
-        highlight_color = (224, 126, 116)
         glow_color = (255, 205, 125)
-        dead_color = (55, 45, 55)  # tom acinzentado para slots vazios
-        dead_edge_color = (30, 22, 38)
 
-        # ── Segmentos laterais ──────────────────────────────────────────
-        for i, (left_seg, right_seg) in enumerate(
-            zip(self.left_segments, self.right_segments)
-        ):
-            for seg, sx in ((left_seg, self.left_x), (right_seg, self.right_x)):
-                cx, cy = int(sx), int(seg.y)
-
-                if seg.dead:
-                    # Slot vazio: apenas contorno escuro pequeno (pedaços destruídos)
-                    pygame.draw.circle(
-                        surface, dead_edge_color, (cx, cy), self.SEGMENT_RADIUS // 2
-                    )
-                    continue
-
-                # Flash ao tomar dano
-                seg_body = body_color
-                if seg.hit_flash > 0.0:
-                    seg_body = tuple(
-                        min(255, int(c + (255 - c) * seg.hit_flash)) for c in seg_body
-                    )
-
-                # Boulder principal
-                pygame.draw.circle(
-                    surface, edge_color, (cx, cy), self.SEGMENT_RADIUS + 3
-                )
-                pygame.draw.circle(surface, seg_body, (cx, cy), self.SEGMENT_RADIUS)
-                pygame.draw.circle(
-                    surface, highlight_color, (cx, cy), self.SEGMENT_RADIUS // 2
-                )
-
-                # ── Mini barra de vida do segmento ──
-                bar_w = self.SEGMENT_RADIUS * 2
-                bar_h = 4
-                bar_x = cx - self.SEGMENT_RADIUS
-                bar_y = cy - self.SEGMENT_RADIUS - 8
-                pygame.draw.rect(
-                    surface, colors.DARK_GRAY, (bar_x, bar_y, bar_w, bar_h)
-                )
-                if seg.max_health > 0:
-                    life_w = max(0, int(bar_w * (seg.health / seg.max_health)))
-                    bar_color = (
-                        (80, 220, 80)
-                        if seg.health > seg.max_health * 0.5
-                        else (220, 160, 40)
-                        if seg.health > seg.max_health * 0.25
-                        else (220, 60, 60)
-                    )
-                    pygame.draw.rect(surface, bar_color, (bar_x, bar_y, life_w, bar_h))
-
-        # ── Cabeça ──────────────────────────────────────────────────────
         head_body_color = body_color
         if self.hit_flash > 0.0:
             head_body_color = tuple(
@@ -356,32 +303,17 @@ class MountainSerpentBoss:
         pygame.draw.circle(surface, glow_color, head_center, self.HEAD_RADIUS // 2)
 
         # Olhos
-        pygame.draw.circle(
-            surface,
-            colors.YELLOW,
-            (int(self.head_x - 10), int(self.head_y - 6)),
-            5,
-        )
-        pygame.draw.circle(
-            surface,
-            colors.YELLOW,
-            (int(self.head_x + 10), int(self.head_y - 6)),
-            5,
-        )
-        pygame.draw.circle(
-            surface,
-            colors.BLACK,
-            (int(self.head_x - 10), int(self.head_y - 6)),
-            2,
-        )
-        pygame.draw.circle(
-            surface,
-            colors.BLACK,
-            (int(self.head_x + 10), int(self.head_y - 6)),
-            2,
-        )
+        for dx in (-10, 10):
+            pygame.draw.circle(
+                surface, colors.YELLOW,
+                (int(self.head_x + dx), int(self.head_y - 6)), 5,
+            )
+            pygame.draw.circle(
+                surface, colors.BLACK,
+                (int(self.head_x + dx), int(self.head_y - 6)), 2,
+            )
 
-        # ── Barra de vida da cabeça ──────────────────────────────────────
+        # Barra de vida da cabeça
         bar_w = 140
         bar_h = 8
         bar_x = int(self.head_x - bar_w / 2)

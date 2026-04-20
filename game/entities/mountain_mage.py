@@ -1128,7 +1128,7 @@ class MountainMage:
         tip_y = cone_b - 24
 
         # Silhueta completa do chapéu
-        cone_pts = [
+        cone_pts: list[tuple[float, float]] = [
             (cx - bw, cone_b),
             (cx + bw, cone_b),
             (cx + 8, mid_y),
@@ -1138,7 +1138,7 @@ class MountainMage:
         pygame.draw.polygon(bs, hat_col, cone_pts)
 
         # Face frontal (iluminada)
-        face_pts = [
+        face_pts: list[tuple[float, float]] = [
             (cx - bw + 3, cone_b),
             (cx + bw, cone_b),
             (cx + 8, mid_y),

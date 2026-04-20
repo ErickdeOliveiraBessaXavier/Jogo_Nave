@@ -955,15 +955,17 @@ class PlayingScene(Scene):
             return
 
         from ..entities.giant_meteor_boss import GiantMeteorBoss
+        from ..entities.mountain_serpent_boss import MountainSerpentBoss
         from ..entities.slime_boss import SlimeBoss
         from ..entities.spike_boss import SpikeBoss
         from ..entities.stone_golem_boss import StoneGolemBoss
 
-        type_map = {
+        type_map: dict[type, str] = {
             SpikeBoss: "spike",
             SlimeBoss: "slime",
             GiantMeteorBoss: "giant_meteor",
             StoneGolemBoss: "stone_golem",
+            MountainSerpentBoss: "mountain_serpent",
         }
         for cls, name in type_map.items():
             if isinstance(boss, cls):
@@ -1229,6 +1231,17 @@ class PlayingScene(Scene):
                 self.entity_manager.floating_scores,
                 self.entity_manager,
             )
+        elif self._boss_type_cache == "mountain_serpent":
+            from ..entities.mountain_serpent_boss import MountainSerpentBoss
+
+            # Balas que acertam a cabeça são bloqueadas (cabeça é imune)
+            # Os blocos laterais são inimigos normais — processados por bullets_vs_enemies
+            score_gain = self.collisions.bullets_vs_mountain_serpent_boss(
+                self.entity_manager.bullets,
+                cast(MountainSerpentBoss, boss),
+                self.entity_manager.floating_scores,
+                self.entity_manager,
+            )
         else:
             score_gain = self.collisions.bullets_vs_boss(
                 self.entity_manager.bullets,
@@ -1243,36 +1256,39 @@ class PlayingScene(Scene):
                 self.entity_manager,
             )
 
-        score_gain += self.collisions.player_lasers_vs_boss(
-            self.entity_manager.player_lasers,
-            boss,  # type: ignore[arg-type]
-            self.entity_manager.floating_scores,
-            self.entity_manager,
-        )
-
-        if self.entity_manager.explosive_effects:
-            score_gain += self.collisions.explosive_effects_vs_boss(
-                self.entity_manager.explosive_effects,
-                boss,
+        # MountainSerpentBoss: cabeça é imune a tudo — lasers/explosões/minas
+        # atingem apenas os blocos laterais (inimigos normais em em.enemies).
+        if self._boss_type_cache != "mountain_serpent":
+            score_gain += self.collisions.player_lasers_vs_boss(
+                self.entity_manager.player_lasers,
+                boss,  # type: ignore[arg-type]
                 self.entity_manager.floating_scores,
                 self.entity_manager,
             )
 
-        if self.entity_manager.air_strike_bombs:
-            score_gain += self.collisions.air_strike_bombs_vs_boss(
-                self.entity_manager.air_strike_bombs,
-                boss,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
+            if self.entity_manager.explosive_effects:
+                score_gain += self.collisions.explosive_effects_vs_boss(
+                    self.entity_manager.explosive_effects,
+                    boss,
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
 
-        if self.entity_manager.cannon_mines:
-            score_gain += self.collisions.cannon_mines_vs_boss(
-                self.entity_manager.cannon_mines,
-                boss,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
+            if self.entity_manager.air_strike_bombs:
+                score_gain += self.collisions.air_strike_bombs_vs_boss(
+                    self.entity_manager.air_strike_bombs,
+                    boss,
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
+
+            if self.entity_manager.cannon_mines:
+                score_gain += self.collisions.cannon_mines_vs_boss(
+                    self.entity_manager.cannon_mines,
+                    boss,
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
 
         if self._boss_type_cache == "slime":
             from ..entities.slime_boss import SlimeBoss
@@ -1333,6 +1349,22 @@ class PlayingScene(Scene):
 
         if self._boss_type_cache == "stone_golem" and em.boss:
             self._check_stone_golem_sweep(em)
+
+        if self._boss_type_cache == "mountain_serpent" and em.boss:
+            from ..entities.mountain_serpent_boss import MountainSerpentBoss
+
+            serpent = cast(MountainSerpentBoss, em.boss)
+            if (
+                not serpent.dead
+                and self.ship.invuln <= 0
+                and self.ship.rect.colliderect(serpent.rect)
+            ):
+                self.entity_manager.spawn_explosion(
+                    self.ship.x + self.ship.w / 2,
+                    self.ship.y + self.ship.h / 2,
+                    size=30,
+                )
+                self._handle_ship_hit()
 
     def _check_stone_golem_sweep(self, em: EntityManager) -> None:
         """Verifica dano do feixe sweep do StoneGolemBoss."""
@@ -1663,6 +1695,7 @@ class PlayingScene(Scene):
         if not self.level_config.boss_type:
             return
 
+        from ..entities.mountain_serpent_boss import MountainSerpentBoss
         from ..entities.stone_golem_boss import StoneGolemBoss
 
         if self.level_config.boss_type == StoneGolemBoss:
@@ -1671,12 +1704,20 @@ class PlayingScene(Scene):
                 50,
                 difficulty_multiplier=self.enemy_health_multiplier,
             )
+            self.entity_manager.boss = boss
+        elif self.level_config.boss_type == MountainSerpentBoss:
+            # spawn_mountain_serpent_boss cria a cabeça E os blocos laterais
+            # Não passa x/y para usar os valores padrão centrados da classe
+            scaled_health = int(320 * self.enemy_health_multiplier)
+            boss = self.entity_manager.spawn_mountain_serpent_boss(
+                health=scaled_health
+            )
         else:
             boss = self.level_config.boss_type(Config.SCREEN_WIDTH / 2 - 50, 50)
             boss.health = int(boss.health * self.enemy_health_multiplier)
             boss.max_health = boss.health
+            self.entity_manager.boss = boss
 
-        self.entity_manager.boss = boss
         self._cache_boss_type()
 
         _boss_music_map = {
@@ -1699,12 +1740,16 @@ class PlayingScene(Scene):
 
     def _end_boss_fight(self) -> None:
         from ..entities.giant_meteor_boss import GiantMeteorBoss
+        from ..entities.mountain_serpent_boss import MountainSerpentBoss
 
         boss = self.entity_manager.boss
         if not boss:
             return
 
-        boss_center = (boss.x + boss.w / 2, boss.y + boss.h / 2)
+        if isinstance(boss, MountainSerpentBoss):
+            boss_center = (boss.head_x, boss.head_y)
+        else:
+            boss_center = (boss.x + boss.w / 2, boss.y + boss.h / 2)
         self.screen_shake_timer = Config.SCREEN_SHAKE_BOSS_DEATH_DURATION
         self.screen_shake_intensity = Config.SCREEN_SHAKE_BOSS_DEATH
         sound_manager.play_explosion_boss()

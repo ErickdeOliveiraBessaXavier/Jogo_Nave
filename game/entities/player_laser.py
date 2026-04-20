@@ -126,7 +126,11 @@ class PlayerLaser:
 
             # Otimização: usar hasattr uma única vez
             entity = self.target_entity
-            if hasattr(entity, "w"):
+            if hasattr(entity, "rect"):
+                rect = entity.rect
+                self.target_x = float(rect.centerx)
+                self.target_y = float(rect.centery)
+            elif hasattr(entity, "w") and hasattr(entity, "h"):
                 self.target_x = entity.x + entity.w * 0.5
                 self.target_y = entity.y + entity.h * 0.5
             elif hasattr(entity, "radius"):

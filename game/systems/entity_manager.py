@@ -34,7 +34,7 @@ from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.mountain_mage import MountainMage, MountainStalagmite
-from ..entities.mountain_serpent_boss import MountainSerpentBoss
+from ..entities.mountain_serpent_boss import MountainSerpentBoss, SerpentBlock
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
@@ -83,6 +83,7 @@ class EntityManager:
             | StoneSentry
             | MountainMage
             | MountainStalagmite
+            | SerpentBlock
         ] = []
         self.alien_bullets: list[AlienBullet] = []
         self.boss_lasers: list[BossLaser | SpikeBossLaser] = []
@@ -134,6 +135,7 @@ class EntityManager:
             | StoneSentry
             | MountainMage
             | MountainStalagmite
+            | SerpentBlock
             | Boulder
             | RockShard
             | OrbitalRock
@@ -552,6 +554,9 @@ class EntityManager:
                     self.rock_shards.extend(new_shards)
                 # Sincroniza a lista de pedras orbitais (gerenciada pelo boss)
                 self.orbital_rocks = orbital_rocks
+            # MountainSerpentBoss: apenas move a cabeça; blocos são inimigos separados
+            elif isinstance(self.boss, MountainSerpentBoss):
+                self.boss.update(enemy_dt, player_x, player_y)
             # Boss normal retorna (List[BossLaser], List[BossSquare])
             else:  # isinstance(self.boss, Boss)
                 lasers_fired, spawned_squares = self.boss.update(
@@ -888,6 +893,25 @@ class EntityManager:
         )
         self.enemies.append(robot)
         return robot
+
+    def spawn_mountain_serpent_boss(
+        self,
+        x: float | None = None,
+        y: float | None = None,
+        health: int | None = None,
+    ) -> MountainSerpentBoss:
+        """
+        Spawna o MountainSerpentBoss e registra automaticamente os blocos
+        de pedra das laterais como inimigos comuns em ``self.enemies``.
+
+        Os SerpentBlocks notificam o boss ao morrer via callback,
+        dispensando qualquer lógica extra no update.
+        """
+        boss = MountainSerpentBoss(x=x, y=y, health=health)
+        self.boss = boss
+        # Blocos são inimigos independentes — processados pelo fluxo normal
+        self.enemies.extend(boss.create_blocks())
+        return boss
 
     def spawn_meteor(
         self,
