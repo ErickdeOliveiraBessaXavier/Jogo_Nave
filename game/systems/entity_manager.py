@@ -33,9 +33,9 @@ from ..entities.meteor_pool import MeteorPool
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
+from ..entities.mountain_mage import MountainMage, MountainStalagmite
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
-from ..entities.mountain_mage import MountainMage, MountainStalagmite
 from ..entities.rock_glider import RockGlider
 from ..entities.rock_glider_pool import RockGliderPool
 from ..entities.slime_boss import SlimeBoss
@@ -341,34 +341,52 @@ class EntityManager:
 
     def _check_alien_collisions(self):
         """Verifica colisões entre aliens e inverte suas direções."""
-        # Coletar apenas aliens vivos e não controlados por formação
         aliens = [
             e
             for e in self.enemies
             if isinstance(e, Alien) and not e.dead and not e.formation_controlled
         ]
 
-        # Verificar colisões entre pares de aliens
-        for i in range(len(aliens)):
-            for j in range(i + 1, len(aliens)):
-                alien1 = aliens[i]
-                alien2 = aliens[j]
+        processed: set[tuple[int, int]] = set()
+        for alien in aliens:
+            rect = alien.rect
+            potential_enemies = self.enemy_spatial_grid.query(
+                rect.x - 1,
+                rect.y - 1,
+                rect.width + 2,
+                rect.height + 2,
+            )
 
-                # Verificar se os retângulos colidem
-                if alien1.rect.colliderect(alien2.rect):
-                    # Inverter direções horizontais de ambos
-                    alien1.speed_x *= -1
-                    alien2.speed_x *= -1
+            for other in potential_enemies:
+                if other is alien:
+                    continue
+                if other.dead or not isinstance(other, Alien):
+                    continue
+                if other.formation_controlled:
+                    continue
 
-                    # Separar aliens ligeiramente para evitar colisão contínua
-                    overlap_x = (alien1.w + alien2.w) / 2 - abs(alien1.x - alien2.x)
+                alien_id = id(alien)
+                other_id = id(other)
+                if alien_id >= other_id:
+                    continue
+
+                pair = (alien_id, other_id)
+                if pair in processed:
+                    continue
+
+                if rect.colliderect(other.rect):
+                    processed.add(pair)
+                    alien.speed_x *= -1
+                    other.speed_x *= -1
+
+                    overlap_x = (alien.w + other.w) / 2 - abs(alien.x - other.x)
                     if overlap_x > 0:
-                        if alien1.x < alien2.x:
-                            alien1.x -= overlap_x / 2
-                            alien2.x += overlap_x / 2
+                        if alien.x < other.x:
+                            alien.x -= overlap_x / 2
+                            other.x += overlap_x / 2
                         else:
-                            alien1.x += overlap_x / 2
-                            alien2.x -= overlap_x / 2
+                            alien.x += overlap_x / 2
+                            other.x -= overlap_x / 2
 
     def update(
         self,
@@ -763,7 +781,9 @@ class EntityManager:
             # Inimigos comuns e mini-bosses (como o ElementalRobot)
             for enemy in self.enemies:
                 # Estalagmites com fragmentos ativos sempre devem ser desenhadas
-                if isinstance(enemy, MountainStalagmite) and getattr(enemy, "_fragments", None):
+                if isinstance(enemy, MountainStalagmite) and getattr(
+                    enemy, "_fragments", None
+                ):
                     enemy.draw(surface)
                     continue
                 if not is_visible(enemy):
@@ -1062,8 +1082,7 @@ class EntityManager:
             if not (
                 e.dead
                 and not (
-                    isinstance(e, MountainStalagmite)
-                    and getattr(e, "_fragments", None)
+                    isinstance(e, MountainStalagmite) and getattr(e, "_fragments", None)
                 )
             )
             and not (isinstance(e, ExplosiveMine) and e.is_off_screen())

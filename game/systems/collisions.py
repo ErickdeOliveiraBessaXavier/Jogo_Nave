@@ -69,7 +69,7 @@ class Scoreable(Protocol):
 
     def get_points_value(self) -> int:
         """Retorna quantidade de pontos que a entidade gera."""
-        ...
+        raise NotImplementedError
 
 
 @runtime_checkable
@@ -108,6 +108,8 @@ class CollisionConstants:
 
 
 class Collisions:
+    _rect_mask_cache: dict[tuple[int, int], pygame.mask.Mask] = {}
+
     def __init__(self, is_side_scroll: bool = False) -> None:
         """Inicializa o sistema de colisões com suporte ao modo de jogo.
 
@@ -131,9 +133,7 @@ class Collisions:
         if callable(getter):
             raw_hitboxes = cast(Callable[[], Sequence[pygame.Rect]], getter)()
             hitboxes = tuple(
-                rect
-                for rect in raw_hitboxes
-                if rect.width > 0 and rect.height > 0
+                rect for rect in raw_hitboxes if rect.width > 0 and rect.height > 0
             )
             if hitboxes:
                 return hitboxes
@@ -171,6 +171,15 @@ class Collisions:
         return mask, offset
 
     @classmethod
+    def _get_rect_mask(cls, width: int, height: int) -> pygame.mask.Mask:
+        key = (width, height)
+        mask = cls._rect_mask_cache.get(key)
+        if mask is None:
+            mask = pygame.mask.Mask((width, height), fill=True)
+            cls._rect_mask_cache[key] = mask
+        return mask
+
+    @classmethod
     def _rect_collides_with_enemy(cls, rect: pygame.Rect, enemy: Any) -> bool:
         mask_data = cls._get_enemy_collision_mask_data(enemy)
         if mask_data is not None:
@@ -184,11 +193,15 @@ class Collisions:
             if not rect.colliderect(enemy_mask_rect):
                 return False
 
-            rect_mask = pygame.mask.Mask((rect.width, rect.height), fill=True)
-            overlap = rect_mask.overlap(enemy_mask, (enemy_x - rect.x, enemy_y - rect.y))
+            rect_mask = cls._get_rect_mask(rect.width, rect.height)
+            overlap = rect_mask.overlap(
+                enemy_mask, (enemy_x - rect.x, enemy_y - rect.y)
+            )
             return overlap is not None
 
-        return any(rect.colliderect(hitbox) for hitbox in cls._get_ship_contact_hitboxes(enemy))
+        return any(
+            rect.colliderect(hitbox) for hitbox in cls._get_ship_contact_hitboxes(enemy)
+        )
 
     @classmethod
     def _ship_collides_with_enemy(cls, ship_rect: pygame.Rect, enemy: Any) -> bool:
@@ -347,27 +360,25 @@ class Collisions:
         padding: int = CollisionConstants.SPATIAL_QUERY_PADDING,
     ) -> dict[int, list[Enemy]]:
         """
-        Faz query única expandida para todos os projéteis.
+        Faz uma query por projétil em vez de uma área única abrangente.
+        Isso evita que um conjunto disperso de balas crie uma área de consulta gigantesca.
+
         Retorna dicionário mapeando projectile_id -> potential_targets.
         """
         if not projectiles:
             return {}
 
-        # Calcular bounds de todos os projéteis
-        rects = [p.rect for p in projectiles]
-        min_x = min(r.x for r in rects) - padding
-        min_y = min(r.y for r in rects) - padding
-        max_x = max(r.x + r.width for r in rects) + padding
-        max_y = max(r.y + r.height for r in rects) + padding
-
-        # Query única
-        all_potential = grid.query(min_x, min_y, max_x - min_x, max_y - min_y)
-
-        # Mapear para cada projétil
         result: dict[int, list[Enemy]] = {}
         for p in projectiles:
+            r = p.rect
+            potential_enemies = grid.query(
+                r.x - padding,
+                r.y - padding,
+                r.width + padding * 2,
+                r.height + padding * 2,
+            )
             result[id(p)] = [
-                target for target in all_potential if p.rect.colliderect(target.rect)
+                target for target in potential_enemies if r.colliderect(target.rect)
             ]
 
         return result
@@ -442,7 +453,9 @@ class Collisions:
             return pts, score_event, part_destroyed
 
         # ElementalRobot, Boulder, StoneSentry e MountainStalagmite têm HP próprio.
-        if isinstance(enemy, (ElementalRobot, Boulder, StoneSentry, MountainStalagmite)):
+        if isinstance(
+            enemy, (ElementalRobot, Boulder, StoneSentry, MountainStalagmite)
+        ):
             prev_health = enemy.health if isinstance(enemy, MountainStalagmite) else 0
             enemy.take_damage(1)
             # ElementalRobot sinaliza morte via flag just_died no estado DYING.
@@ -455,7 +468,7 @@ class Collisions:
                     elemental_enemy.just_died = False  # consome a flag
             elif isinstance(enemy, MountainStalagmite):
                 # Para estalagmite, o hit fatal cruza HP > 0 para HP <= 0 e inicia shattering.
-                just_died = prev_health > 0 and enemy.health <= 0
+                just_died = prev_health > 0 >= enemy.health
             else:
                 # Boulder e StoneSentry marcam morte diretamente em .dead.
                 just_died = enemy.dead
@@ -564,8 +577,8 @@ class Collisions:
 
     def _apply_boss_damage(
         self,
-        projectiles: list[Bullet] | list[MiniShipBullet],
-        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss,
+        projectiles: list[Projectile],
+        boss: BossEnemy,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
         is_piercing_allowed: bool = False,
@@ -619,6 +632,25 @@ class Collisions:
                         entity_manager.spawn_explosion(cx, cy, size=100)
 
         return score_gain
+
+    def _boss_projectile_collision(
+        self,
+        projectiles: list[Projectile],
+        boss: BossEnemy,
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+    ) -> int:
+        if not projectiles:
+            return 0
+        if not boss or boss.dead:
+            return 0
+        return self._apply_boss_damage(
+            projectiles,
+            boss,
+            floating_scores,
+            entity_manager,
+            is_piercing_allowed=True,
+        )
 
     def bullets_vs_giant_meteor_boss(
         self,
@@ -1293,16 +1325,12 @@ class Collisions:
     def bullets_vs_boss(
         self,
         bullets: list[Bullet],
-        boss: Boss | GiantMeteorBoss,
+        boss: BossEnemy,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
-        if not bullets:
-            return 0
-        if not boss or boss.dead:
-            return 0
-        return self._apply_boss_damage(
-            bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True
+        return self._boss_projectile_collision(
+            bullets, boss, floating_scores, entity_manager
         )
 
     def ship_vs_boss(
@@ -1465,21 +1493,13 @@ class Collisions:
     def mini_ship_bullets_vs_boss(
         self,
         mini_ship_bullets: list[MiniShipBullet],
-        boss: Boss | GiantMeteorBoss,
+        boss: BossEnemy,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com Boss normal."""
-        if not mini_ship_bullets:
-            return 0
-        if not boss or boss.dead:
-            return 0
-        return self._apply_boss_damage(
-            mini_ship_bullets,
-            boss,
-            floating_scores,
-            entity_manager,
-            is_piercing_allowed=True,  # Allow piercing if bullets have piercing=True
+        return self._boss_projectile_collision(
+            mini_ship_bullets, boss, floating_scores, entity_manager
         )
 
     def mini_ship_bullets_vs_spike_boss(
@@ -1490,16 +1510,8 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com SpikeBoss."""
-        if not mini_ship_bullets:
-            return 0
-        if not boss or boss.dead:
-            return 0
-        return self._apply_boss_damage(
-            mini_ship_bullets,
-            boss,
-            floating_scores,
-            entity_manager,
-            is_piercing_allowed=True,  # Allow piercing if bullets have piercing=True
+        return self.mini_ship_bullets_vs_boss(
+            mini_ship_bullets, boss, floating_scores, entity_manager
         )
 
     def mini_ship_bullets_vs_spikes(
@@ -1627,13 +1639,7 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas com SpikeBoss."""
-        if not bullets:
-            return 0
-        if not boss or boss.dead:
-            return 0
-        return self._apply_boss_damage(
-            bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True
-        )
+        return self.bullets_vs_boss(bullets, boss, floating_scores, entity_manager)
 
     def bullets_vs_slime_boss(
         self,
@@ -1643,13 +1649,7 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas com SlimeBoss."""
-        if not bullets:
-            return 0
-        if not boss or boss.dead:
-            return 0
-        return self._apply_boss_damage(
-            bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True
-        )
+        return self.bullets_vs_boss(bullets, boss, floating_scores, entity_manager)
 
     def mini_ship_bullets_vs_slime_boss(
         self,
@@ -1659,16 +1659,8 @@ class Collisions:
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com SlimeBoss."""
-        if not mini_ship_bullets:
-            return 0
-        if not boss or boss.dead:
-            return 0
-        return self._apply_boss_damage(
-            mini_ship_bullets,
-            boss,
-            floating_scores,
-            entity_manager,
-            is_piercing_allowed=True,  # Allow piercing if bullets have piercing=True
+        return self.mini_ship_bullets_vs_boss(
+            mini_ship_bullets, boss, floating_scores, entity_manager
         )
 
     def ship_vs_spike_boss(

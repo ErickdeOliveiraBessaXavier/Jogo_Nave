@@ -6,9 +6,6 @@ from typing import TYPE_CHECKING, Any, Callable, List, Optional, TypedDict
 
 import pygame
 
-if TYPE_CHECKING:
-    from ..app import GameApp
-
 from ..core.assets import get_font
 from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.config import config as Config
@@ -25,6 +22,9 @@ from ..scenes.settings import SettingsScene
 from ..scenes.statistics import StatisticsScene
 from ..scenes.upgrades_selection import UpgradesSelectionScene
 from ..scenes.world_selection import WorldSelectionView
+
+if TYPE_CHECKING:
+    from ..app import GameApp
 
 logger = logging.getLogger(__name__)
 
@@ -634,7 +634,7 @@ class MainMenuScene(Scene):
 
     def exit(self):
         """Called when exiting the scene."""
-        pass
+        return None
 
     def handle_event(self, event: pygame.event.Event):
         """Handles user input events."""
@@ -646,7 +646,7 @@ class MainMenuScene(Scene):
         if self.current_view == MenuView.DIFFICULTY_SELECTION:
             self.difficulty_view.handle_event(event)
             return
-        elif self.current_view == MenuView.WORLD_SELECTION:
+        if self.current_view == MenuView.WORLD_SELECTION:
             self.world_selection_view.handle_event(event)
             return
 
