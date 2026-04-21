@@ -38,6 +38,7 @@ class BulletPool:
         explosive: bool = False,
         low_ammo: bool = False,
         is_side_scroll: bool = False,
+        direction: tuple[float, float] | None = None,
     ) -> Bullet:
         """
         Obtém uma bala do pool, reutilizando uma inativa ou criando nova.
@@ -50,6 +51,7 @@ class BulletPool:
             explosive: Se a bala é explosiva
             low_ammo: Se restam poucas cargas (efeito de piscar)
             is_side_scroll: Se está em modo side-scroll
+            direction: Direção cardinal do tiro, como (dx, dy)
 
         Returns:
             Bala ativa e configurada
@@ -66,6 +68,7 @@ class BulletPool:
                     explosive=explosive,
                     low_ammo=low_ammo,
                     is_side_scroll=is_side_scroll,
+                    direction=direction,
                 )
                 self.active.append(bullet)
                 return bullet
@@ -80,6 +83,7 @@ class BulletPool:
             explosive=explosive,
             low_ammo=low_ammo,
             is_side_scroll=is_side_scroll,
+            direction=direction,
         )
         self.pool.append(bullet)
         self.active.append(bullet)

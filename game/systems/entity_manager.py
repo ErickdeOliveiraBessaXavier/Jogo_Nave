@@ -307,7 +307,8 @@ class EntityManager:
 
         # Inserir inimigos normais
         for enemy in self.enemies:
-            self.enemy_spatial_grid.insert_from_rect(enemy)
+            if not enemy.dead:
+                self.enemy_spatial_grid.insert_from_rect(enemy)
 
         # Inserir minas do StoneGolemBoss (agora destrutíveis)
         for mine in self.boulders:
@@ -493,6 +494,9 @@ class EntityManager:
         for bullet in self.mini_ship_bullets:
             bullet.update(dt)
         for bullet in self.player_lasers:
+            target_entity = bullet.target_entity
+            if target_entity is not None and getattr(target_entity, "dead", False):
+                bullet.target_entity = None
             bullet.update(dt)
 
         # Atualizar projéteis inimigos (congelam)
@@ -948,6 +952,7 @@ class EntityManager:
         homing: bool = False,
         explosive: bool = False,
         low_ammo: bool = False,
+        direction: tuple[float, float] | None = None,
     ) -> Bullet:
         """
         Spawna uma bala usando o pool.
@@ -972,6 +977,7 @@ class EntityManager:
             explosive=explosive,
             low_ammo=low_ammo,
             is_side_scroll=self.is_side_scroll,
+            direction=direction,
         )
 
         # Se é um tiro teleguiado, atribuir alvo inteligentemente
@@ -1088,8 +1094,9 @@ class EntityManager:
         self.bullets = [b for b in self.bullets if not b.dead]
 
         # Marcar inimigos fora da tela como mortos ANTES de liberar ao pool
+        # SerpentBlocks são fixos na tela — nunca devem ser marcados como mortos por off-screen.
         for e in self.enemies:
-            if not e.dead and self._is_enemy_off_screen(e):
+            if not e.dead and not isinstance(e, SerpentBlock) and self._is_enemy_off_screen(e):
                 e.dead = True
 
         # Liberar meteoros dead ao pool
@@ -1110,10 +1117,13 @@ class EntityManager:
         self.enemies = [
             e
             for e in self.enemies
-            if not (
-                e.dead
-                and not (
-                    isinstance(e, MountainStalagmite) and getattr(e, "_fragments", None)
+            if (
+                isinstance(e, SerpentBlock)
+                or not (
+                    e.dead
+                    and not (
+                        isinstance(e, MountainStalagmite) and getattr(e, "_fragments", None)
+                    )
                 )
             )
             and not (isinstance(e, ExplosiveMine) and e.is_off_screen())

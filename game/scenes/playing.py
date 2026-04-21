@@ -169,9 +169,7 @@ class PlayingScene(Scene):
             auto_fire=self.app.preferences.auto_fire,
         )
         self.ship.is_entering = True
-        self.ship.is_side_scroll = self.is_side_scroll
-        if self.is_side_scroll:
-            self.ship.set_rotation(90.0)
+        self.ship.apply_world_mode(self.is_side_scroll)
 
         self.first_entry: bool = True
 
@@ -409,7 +407,7 @@ class PlayingScene(Scene):
             self.ship.x = Config.SCREEN_WIDTH / 2.0 - 20
             self.ship.y = float(Config.SCREEN_HEIGHT + 100)
         self.ship.is_entering = True
-        self.ship.is_side_scroll = self.is_side_scroll
+        self.ship.apply_world_mode(self.is_side_scroll)
 
     def _begin_playing_state(self) -> None:
         """Ativa o gameplay e registra a tentativa do nível uma única vez."""
@@ -892,7 +890,7 @@ class PlayingScene(Scene):
         """Dispara as balas da nave e reinicia o cooldown."""
         bullet_specs = self.ship.bullet_spawn()
         adjusted_damage = int(_BASE_BULLET_DAMAGE * self.player_damage_multiplier)
-        for x, y, is_piercing, is_homing, is_explosive, is_low_ammo in bullet_specs:
+        for x, y, direction, is_piercing, is_homing, is_explosive, is_low_ammo in bullet_specs:
             self.entity_manager.spawn_bullet(
                 x,
                 y,
@@ -901,6 +899,7 @@ class PlayingScene(Scene):
                 homing=is_homing,
                 explosive=is_explosive,
                 low_ammo=is_low_ammo,
+                direction=direction,
             )
             if is_explosive:
                 self.ship.consume_explosive_shot()
@@ -1190,6 +1189,8 @@ class PlayingScene(Scene):
         if not (boss and self._boss_type_cache):
             return gain
 
+        serpent_head_vulnerable = False
+
         if self._boss_type_cache == "spike":
             from ..entities.spike_boss import SpikeBoss
 
@@ -1234,14 +1235,26 @@ class PlayingScene(Scene):
         elif self._boss_type_cache == "mountain_serpent":
             from ..entities.mountain_serpent_boss import MountainSerpentBoss
 
+            serpent_boss = cast(MountainSerpentBoss, boss)
+            serpent_head_vulnerable = serpent_boss.is_vulnerable
+
             # Balas que acertam a cabeça são bloqueadas (cabeça é imune)
             # Os blocos laterais são inimigos normais — processados por bullets_vs_enemies
             score_gain = self.collisions.bullets_vs_mountain_serpent_boss(
                 self.entity_manager.bullets,
-                cast(MountainSerpentBoss, boss),
+                serpent_boss,
                 self.entity_manager.floating_scores,
                 self.entity_manager,
             )
+
+            # Mini ships também podem danificar a cabeça apenas na janela vulnerável.
+            if serpent_head_vulnerable:
+                score_gain += self.collisions.mini_ship_bullets_vs_boss(
+                    self.entity_manager.mini_ship_bullets,
+                    serpent_boss,
+                    self.entity_manager.floating_scores,
+                    self.entity_manager,
+                )
         else:
             score_gain = self.collisions.bullets_vs_boss(
                 self.entity_manager.bullets,
@@ -1256,9 +1269,9 @@ class PlayingScene(Scene):
                 self.entity_manager,
             )
 
-        # MountainSerpentBoss: cabeça é imune a tudo — lasers/explosões/minas
-        # atingem apenas os blocos laterais (inimigos normais em em.enemies).
-        if self._boss_type_cache != "mountain_serpent":
+        # MountainSerpentBoss: lasers/explosões/minas só danificam a cabeça
+        # durante a janela de vulnerabilidade (is_vulnerable).
+        if self._boss_type_cache != "mountain_serpent" or serpent_head_vulnerable:
             score_gain += self.collisions.player_lasers_vs_boss(
                 self.entity_manager.player_lasers,
                 boss,  # type: ignore[arg-type]
@@ -1900,20 +1913,33 @@ class PlayingScene(Scene):
                 )
             elif event.key == pygame.K_F8:
                 self._trigger_world_transition_debug_preview()
+            elif event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
+                if (
+                    not self.ship.is_entering
+                    and self._can_handle_gameplay_actions()
+                ):
+                    self.ship.cycle_facing()
 
             self._process_cheat_input(event)
 
             if self._can_handle_gameplay_actions() and not self.ship.is_entering:
                 self._handle_upgrade_key(event)
 
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if (
-                not self.ship.auto_fire
-                and self.shoot_cd == 0.0
-                and not self.ship.is_entering
-                and self._can_handle_gameplay_actions()
-            ):
-                self._fire_bullets()
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                if (
+                    not self.ship.auto_fire
+                    and self.shoot_cd == 0.0
+                    and not self.ship.is_entering
+                    and self._can_handle_gameplay_actions()
+                ):
+                    self._fire_bullets()
+            elif event.button == 2:
+                if (
+                    not self.ship.is_entering
+                    and self._can_handle_gameplay_actions()
+                ):
+                    self.ship.cycle_facing()
 
     def _handle_upgrade_key(self, event: pygame.event.Event) -> None:
         """Ativa o slot de upgrade correspondente à tecla pressionada."""

@@ -1,12 +1,12 @@
 {
   "resolution": [
-    1366,
-    768
+    1280,
+    720
   ],
   "fullscreen": true,
   "music_volume": 0.5,
   "sfx_volume": 0.7,
-  "shot_volume": 0.17307692307692307,
+  "shot_volume": 0.15985790408525755,
   "mouse_control": true,
   "auto_fire": false
 }

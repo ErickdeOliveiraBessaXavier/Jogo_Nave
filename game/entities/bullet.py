@@ -17,12 +17,9 @@ class Bullet:
         explosive: bool = False,
         low_ammo: bool = False,
         is_side_scroll: bool = False,
+        direction: tuple[float, float] | None = None,
     ):
         self.x, self.y = x, y
-        if is_side_scroll:
-            self.w, self.h = 10, 3
-        else:
-            self.w, self.h = 3, 10
         self.damage = damage
         self.dead = False
         self.piercing = piercing
@@ -36,6 +33,11 @@ class Bullet:
         self.homing_turn_rate = 4.0  # Taxa de rotação (radianos/s)
         self.rotation_angle = 0.0  # Ângulo de rotação visual (graus)
         self.is_side_scroll = is_side_scroll  # Se está em modo side-scroll
+        self.vx = 0.0
+        self.vy = 0.0
+        self.direction = direction
+
+        self._configure_shape_and_velocity(direction)
 
     @property
     def rect(self) -> pygame.Rect:
@@ -51,13 +53,10 @@ class Bullet:
         explosive: bool = False,
         low_ammo: bool = False,
         is_side_scroll: bool = False,
+        direction: tuple[float, float] | None = None,
     ):
         """Reconfigura a bala para reutilização no pool."""
         self.x, self.y = x, y
-        if is_side_scroll:
-            self.w, self.h = 10, 3
-        else:
-            self.w, self.h = 3, 10
         self.damage = damage
         self.dead = False
         self.piercing = piercing
@@ -69,6 +68,10 @@ class Bullet:
         self.target = None
         self.assigned_target_id = None
         self.rotation_angle = 0.0
+        self.vx = 0.0
+        self.vy = 0.0
+        self.direction = direction
+        self._configure_shape_and_velocity(direction)
 
     def update(self, dt: float, enemies: Optional[List[Any]] = None) -> None:
         if self.homing and enemies:
@@ -78,13 +81,17 @@ class Bullet:
             if self.rotation_angle >= 360.0:
                 self.rotation_angle -= 360.0
         else:
-            # Movimento baseado no modo de jogo
-            if self.is_side_scroll:
-                # Side-scroll: movimento para direita
-                self.x += Config.BULLET_SPEED * dt
+            if self.vx != 0.0 or self.vy != 0.0:
+                self.x += self.vx * dt
+                self.y += self.vy * dt
             else:
-                # Top-down: movimento para cima
-                self.y -= Config.BULLET_SPEED * dt
+                # Movimento baseado no modo de jogo
+                if self.is_side_scroll:
+                    # Side-scroll: movimento para direita
+                    self.x += Config.BULLET_SPEED * dt
+                else:
+                    # Top-down: movimento para cima
+                    self.y -= Config.BULLET_SPEED * dt
 
         if self.y + self.h < 0 or self.y > Config.SCREEN_HEIGHT:
             self.dead = True
@@ -130,6 +137,31 @@ class Bullet:
         else:
             # Sem alvo, move para cima normalmente
             self.y -= Config.BULLET_SPEED * dt
+
+    def _configure_shape_and_velocity(
+        self, direction: tuple[float, float] | None
+    ) -> None:
+        """Configura dimensões e velocidade do projétil com base na direção."""
+        if direction is None:
+            if self.is_side_scroll:
+                self.vx = Config.BULLET_SPEED
+                self.vy = 0.0
+                self.w, self.h = 10, 3
+            else:
+                self.vx = 0.0
+                self.vy = -Config.BULLET_SPEED
+                self.w, self.h = 3, 10
+            return
+
+        dx, dy = direction
+        if abs(dx) >= abs(dy):
+            self.w, self.h = 10, 3
+            self.vx = dx * Config.BULLET_SPEED
+            self.vy = dy * Config.BULLET_SPEED
+        else:
+            self.w, self.h = 3, 10
+            self.vx = dx * Config.BULLET_SPEED
+            self.vy = dy * Config.BULLET_SPEED
 
     def _find_closest_enemy(self, enemies: List[Any]) -> Optional[Any]:
         """Encontra o inimigo mais próximo disponível."""

@@ -37,7 +37,7 @@ from ..entities.meteor import Meteor
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.mountain_mage import MountainStalagmite
-from ..entities.mountain_serpent_boss import MountainSerpentBoss
+from ..entities.mountain_serpent_boss import MountainSerpentBoss, SerpentBlock
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
@@ -460,9 +460,9 @@ class Collisions:
 
             return pts, score_event, part_destroyed
 
-        # ElementalRobot, Boulder, StoneSentry e MountainStalagmite têm HP próprio.
+        # ElementalRobot, Boulder, StoneSentry, MountainStalagmite e SerpentBlock têm HP próprio.
         if isinstance(
-            enemy, (ElementalRobot, Boulder, StoneSentry, MountainStalagmite)
+            enemy, (ElementalRobot, Boulder, StoneSentry, MountainStalagmite, SerpentBlock)
         ):
             prev_health = enemy.health if isinstance(enemy, MountainStalagmite) else 0
             enemy.take_damage(1)
@@ -478,7 +478,7 @@ class Collisions:
                 # Para estalagmite, o hit fatal cruza HP > 0 para HP <= 0 e inicia shattering.
                 just_died = prev_health > 0 >= enemy.health
             else:
-                # Boulder e StoneSentry marcam morte diretamente em .dead.
+                # Boulder, StoneSentry e SerpentBlock marcam morte diretamente em .dead.
                 just_died = enemy.dead
 
             if not just_died:
@@ -1193,6 +1193,8 @@ class Collisions:
                 continue
 
             for enemy in potential_enemies:
+                if enemy.dead:
+                    continue
                 if self._projectile_collides_with_enemy(b.rect, enemy):
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
@@ -1250,6 +1252,8 @@ class Collisions:
                 continue
 
             for enemy in potential_enemies:
+                if enemy.dead:
+                    continue
                 if self._projectile_collides_with_enemy(b.rect, enemy):  # Usa cache
                     if isinstance(enemy, ExplosiveMine):
                         enemy.take_damage(1)
@@ -1351,14 +1355,11 @@ class Collisions:
         """Colisão de balas com a cabeça do MountainSerpentBoss.
 
         Regras:
-        - A cabeça é IMUNE a projéteis diretos — balas que a atingem são
-          absorvidas sem causar dano (feedback visual de ricochete).
-        - Os SerpentBlocks das laterais são inimigos independentes registrados
-          em entity_manager.enemies e processados pelo fluxo normal de colisão
-          (bullets_vs_enemies). Ao morrer, cada bloco notifica o boss via
-          ``boss.on_block_killed(side)``. Quando uma coluna inteira é zerada, o
-          boss recebe automaticamente 25 % do seu HP máximo como dano.
-        - O boss morre apenas pelo acúmulo desse dano de coluna.
+        - Enquanto qualquer SerpentBlock estiver vivo, a cabeça é IMUNE.
+          Balas que a atingem são absorvidas com feedback visual.
+        - Quando todos os blocos são destruídos (``boss.is_vulnerable == True``),
+          a cabeça passa a receber dano normalmente.
+        - Após 10 s os blocos renascem em grupo e a imunidade retorna.
         """
         if not bullets or not boss or boss.dead:
             return 0
@@ -1370,14 +1371,26 @@ class Collisions:
             if bullet.dead:
                 continue
 
-            if bullet.rect.colliderect(head_rect):
-                # Cabeça é imune — consome a bala e dá feedback visual
+            if not bullet.rect.colliderect(head_rect):
+                continue
+
+            if not boss.is_vulnerable:
+                # Cabeça imune — consome a bala e dá feedback visual
                 if not getattr(bullet, "piercing", False):
                     bullet.dead = True
                 entity_manager.spawn_explosion(bullet.x, bullet.y, size=10)
                 sound_manager.play_boss_damage()
+            else:
+                # Cabeça vulnerável — aplica dano real
+                if not getattr(bullet, "piercing", False):
+                    bullet.dead = True
+                damage = int(
+                    bullet.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER
+                )
+                boss.take_damage(damage)
+                sound_manager.play_boss_damage()
+                entity_manager.spawn_explosion(bullet.x, bullet.y, size=15)
 
-                # Verificar se o boss morreu (via dano de coluna acumulado)
                 if boss.dead:
                     cx = boss.head_x
                     cy = boss.head_y
@@ -1473,6 +1486,10 @@ class Collisions:
                 elif isinstance(enemy, MountainStalagmite):
                     # Trigger shatter animation with fragments on ship contact
                     enemy.take_damage(amount=999)
+                    sound_manager.play_explosion_asteroid()
+                elif isinstance(enemy, SerpentBlock):
+                    # SerpentBlock must die via take_damage to notify boss counters.
+                    enemy.take_damage(enemy.health)
                     sound_manager.play_explosion_asteroid()
                 else:
                     if isinstance(enemy, EyeEnemy):
@@ -1923,7 +1940,7 @@ class Collisions:
     def player_lasers_vs_boss(
         self,
         player_lasers: list[PlayerLaser],
-        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss,
+        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | MountainSerpentBoss,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -1942,7 +1959,9 @@ class Collisions:
                 continue
 
             line = laser.get_collision_line()
-            boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
+            boss_rect = getattr(boss, "rect", None)
+            if not isinstance(boss_rect, pygame.Rect):
+                boss_rect = pygame.Rect(boss.x, boss.y, boss.w, boss.h)
 
             collision_detected = False
 

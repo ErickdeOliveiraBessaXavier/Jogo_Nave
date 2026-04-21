@@ -98,6 +98,41 @@ class Ship:
         self.ship_image_rotated = self.ship_image  # Cache da imagem rotacionada
         self.is_side_scroll: bool = False  # Modo de jogo (top-down vs side-scroll)
 
+        # NOVO: Direção cardinal da nave para tiros e orientação
+        self.facing: str = "north"
+        self._cardinal_directions: tuple[str, ...] = (
+            "north",
+            "east",
+            "south",
+            "west",
+        )
+        self._cardinal_vectors: dict[str, tuple[float, float]] = {
+            "north": (0.0, -1.0),
+            "east": (1.0, 0.0),
+            "south": (0.0, 1.0),
+            "west": (-1.0, 0.0),
+        }
+        self._cardinal_angles: dict[str, float] = {
+            "north": 0.0,
+            "east": 90.0,
+            "south": 180.0,
+            "west": 270.0,
+        }
+        self.set_facing(self.facing)
+        self.speed_boost_timer: float = 0.0
+        self.piercing_shot_timer: float = 0.0
+        self.mini_ships_timer: float = 0.0
+        self.is_entering = False
+        self.entry_particles: list[ParticleDict] = []
+        self.thruster_particles: list[ParticleDict] = []
+
+        # NOVO: Rotação visual da nave (para side-scroll)
+        self.rotation_angle: float = (
+            0.0  # 0° = vertical (top-down), 90° = horizontal (side-scroll)
+        )
+        self.ship_image_rotated = self.ship_image  # Cache da imagem rotacionada
+        self.is_side_scroll: bool = False  # Modo de jogo (top-down vs side-scroll)
+
         # Shield system (from upgrades)
         self.shield_timer: float = 0.0
         self.shield_hp: int = 0  # Hits the shield can absorb
@@ -274,6 +309,28 @@ class Ship:
             # Então rotacionamos -angle para obter a rotação desejada
             self.ship_image_rotated = pygame.transform.rotate(self.ship_image, -angle)
 
+    def set_facing(self, facing: str) -> None:
+        """Define a direção cardinal da nave e atualiza sua rotação visual."""
+        if facing not in self._cardinal_directions:
+            return
+        self.facing = facing
+        self.set_rotation(self._cardinal_angles[facing])
+
+    def cycle_facing(self) -> None:
+        """Avança para a próxima direção cardinal."""
+        current_index = self._cardinal_directions.index(self.facing)
+        next_index = (current_index + 1) % len(self._cardinal_directions)
+        self.set_facing(self._cardinal_directions[next_index])
+
+    def apply_world_mode(self, is_side_scroll: bool) -> None:
+        """Sincroniza o modo do mundo e orientação inicial da nave."""
+        self.is_side_scroll = is_side_scroll
+        default_facing = "east" if is_side_scroll else "north"
+        self.set_facing(default_facing)
+
+    def get_facing_vector(self) -> tuple[float, float]:
+        return self._cardinal_vectors.get(self.facing, (0.0, -1.0))
+
     def _get_enemy_center(self, enemy: Any) -> Optional[Tuple[float, float]]:
         """Calcula o centro de um inimigo independente do tipo."""
         if hasattr(enemy, "w") and hasattr(enemy, "h"):
@@ -291,6 +348,8 @@ class Ship:
 
         # Buscar em todos os inimigos normais
         for enemy in entity_manager.enemies:
+            if getattr(enemy, "dead", False):
+                continue
             center = self._get_enemy_center(enemy)
             if center is None:
                 continue
@@ -304,6 +363,8 @@ class Ship:
         # Buscar em formações
         for formation in entity_manager.formations:
             for enemy in formation.get_enemies():
+                if getattr(enemy, "dead", False):
+                    continue
                 center = self._get_enemy_center(enemy)
                 if center is None:
                     continue
@@ -317,11 +378,12 @@ class Ship:
         # Verificar boss
         if entity_manager.boss is not None:
             boss = entity_manager.boss
-            dx = boss.x + boss.w / 2 - from_x
-            dy = boss.y + boss.h / 2 - from_y
-            dist = math.sqrt(dx * dx + dy * dy)
-            if dist < nearest_dist:
-                nearest_enemy = boss
+            if not getattr(boss, "dead", False):
+                dx = boss.x + boss.w / 2 - from_x
+                dy = boss.y + boss.h / 2 - from_y
+                dist = math.sqrt(dx * dx + dy * dy)
+                if dist < nearest_dist:
+                    nearest_enemy = boss
 
         return nearest_enemy
 
@@ -511,34 +573,49 @@ class Ship:
             if p["lifetime"] - dt > 0
         ]
 
-        # Gerar partículas de thruster
+        # Gerar partículas de thruster (sempre atrás da direção atual da nave)
         for _ in range(PARTICLE_THRUSTER_COUNT):
-            if is_side_scroll:
-                # Side-scroll: Thruster apontando para esquerda (direção oposta ao movimento)
+            if self.facing == "north":
                 particle = ParticleDict(
-                    x=self.x + random.uniform(-5, 5),  # Posição frontal da nave
-                    y=self.y
-                    + sprite_h / 2
-                    + random.uniform(-5, 5),  # Centrado verticalmente
-                    vx=-random.uniform(100, 200),  # Movimento para esquerda (negativo)
-                    vy=random.uniform(-50, 50),  # Pequena variação vertical
+                    x=self.x + sprite_w / 2 + random.uniform(-5, 5),
+                    y=self.y + sprite_h + random.uniform(-2, 3),
+                    vx=random.uniform(-40, 40),
+                    vy=random.uniform(100, 220),
                     lifetime=random.uniform(*PARTICLE_THRUSTER_LIFETIME),
                     size=random.uniform(*PARTICLE_THRUSTER_SIZE),
                     color=(255, random.randint(100, 200), 0),
                 )
-            else:
-                # Top-down: Thruster apontando para baixo (comportamento original)
+            elif self.facing == "south":
                 particle = ParticleDict(
-                    x=self.x
-                    + sprite_w / 2
-                    + random.uniform(-5, 5),  # Offset com variação para efeito natural
-                    y=self.y + sprite_h,
-                    vx=random.uniform(*PARTICLE_THRUSTER_VELOCITY_X),
-                    vy=random.uniform(*PARTICLE_THRUSTER_VELOCITY_Y),
+                    x=self.x + sprite_w / 2 + random.uniform(-5, 5),
+                    y=self.y + random.uniform(-3, 2),
+                    vx=random.uniform(-40, 40),
+                    vy=-random.uniform(100, 220),
                     lifetime=random.uniform(*PARTICLE_THRUSTER_LIFETIME),
                     size=random.uniform(*PARTICLE_THRUSTER_SIZE),
                     color=(255, random.randint(100, 200), 0),
                 )
+            elif self.facing == "east":
+                particle = ParticleDict(
+                    x=self.x + random.uniform(-3, 2),
+                    y=self.y + sprite_h / 2 + random.uniform(-5, 5),
+                    vx=-random.uniform(100, 220),
+                    vy=random.uniform(-40, 40),
+                    lifetime=random.uniform(*PARTICLE_THRUSTER_LIFETIME),
+                    size=random.uniform(*PARTICLE_THRUSTER_SIZE),
+                    color=(255, random.randint(100, 200), 0),
+                )
+            else:  # west
+                particle = ParticleDict(
+                    x=self.x + sprite_w + random.uniform(-2, 3),
+                    y=self.y + sprite_h / 2 + random.uniform(-5, 5),
+                    vx=random.uniform(100, 220),
+                    vy=random.uniform(-40, 40),
+                    lifetime=random.uniform(*PARTICLE_THRUSTER_LIFETIME),
+                    size=random.uniform(*PARTICLE_THRUSTER_SIZE),
+                    color=(255, random.randint(100, 200), 0),
+                )
+
             self.thruster_particles.append(particle)
 
         # Atualizar partículas de thruster
@@ -651,11 +728,11 @@ class Ship:
             # Em top-down, permitir sair pela parte inferior durante entrada
             self.y = Config.SCREEN_HEIGHT - self.h
 
-    def bullet_spawn(self) -> list[tuple[float, float, bool, bool, bool, bool]]:
+    def bullet_spawn(self) -> list[tuple[float, float, tuple[float, float], bool, bool, bool, bool]]:
         """Retorna posições para spawn de balas.
 
         Returns:
-            Lista de tuplas (x, y, is_piercing, is_homing, is_explosive, is_low_ammo)
+            Lista de tuplas (x, y, direction, is_piercing, is_homing, is_explosive, is_low_ammo)
         """
         is_piercing = self.piercing_shot_timer > 0
         is_homing = self.homing_shots_active
@@ -664,6 +741,8 @@ class Ship:
         )
         is_low_ammo = is_explosive and self.explosive_shots_remaining <= 5
 
+        facing_vector = self.get_facing_vector()
+
         # Obter tamanho real do sprite (ou fallback para dimensões lógicas)
         if self.ship_image is not None:
             sprite_w, sprite_h = self.ship_image.get_size()
@@ -671,47 +750,13 @@ class Ship:
             sprite_w = self.w
             sprite_h = self.h
 
-        # Em side-scroll, tiros saem pela frente (direita) da nave
-        if self.is_side_scroll:
-            # Side-scroll: tiros saem da direita da nave, verticalmente distribuídos
-            if self.double_shot_timer > 0:
-                return [
-                    (
-                        self.x + sprite_w + 5,  # Sair pela direita (frente)
-                        self.y + sprite_h * 0.3,  # Parte superior da nave
-                        is_piercing,
-                        is_homing,
-                        is_explosive,
-                        is_low_ammo,
-                    ),
-                    (
-                        self.x + sprite_w + 5,  # Sair pela direita (frente)
-                        self.y + sprite_h * 0.7,  # Parte inferior da nave
-                        is_piercing,
-                        is_homing,
-                        is_explosive,
-                        is_low_ammo,
-                    ),
-                ]
-            else:
-                return [
-                    (
-                        self.x + sprite_w + 5,  # Sair pela direita (frente)
-                        self.y + sprite_h / 2,  # Centro da nave
-                        is_piercing,
-                        is_homing,
-                        is_explosive,
-                        is_low_ammo,
-                    ),
-                ]
-        else:
-            # Top-down: tiros saem da frente (cima) da nave (comportamento original)
-            # Offset de -3.5 para centralizar a bala no canhão da nave, +1 para mover um píxel à direita
+        if self.facing == "north":
             if self.double_shot_timer > 0:
                 return [
                     (
                         self.x + sprite_w * 0.2 - 3.5 + 2.2,
                         self.y,
+                        facing_vector,
                         is_piercing,
                         is_homing,
                         is_explosive,
@@ -720,23 +765,124 @@ class Ship:
                     (
                         self.x + sprite_w * 0.8 - 3.5 + 2.2,
                         self.y,
+                        facing_vector,
                         is_piercing,
                         is_homing,
                         is_explosive,
                         is_low_ammo,
                     ),
                 ]
-            else:
+            return [
+                (
+                    self.x + sprite_w / 2 - 3.5 + 2.2,
+                    self.y,
+                    facing_vector,
+                    is_piercing,
+                    is_homing,
+                    is_explosive,
+                    is_low_ammo,
+                )
+            ]
+        elif self.facing == "south":
+            if self.double_shot_timer > 0:
                 return [
                     (
-                        self.x + sprite_w / 2 - 3.5 + 2.2,
-                        self.y,
+                        self.x + sprite_w * 0.2 - 3.5 + 2.2,
+                        self.y + sprite_h,
+                        facing_vector,
+                        is_piercing,
+                        is_homing,
+                        is_explosive,
+                        is_low_ammo,
+                    ),
+                    (
+                        self.x + sprite_w * 0.8 - 3.5 + 2.2,
+                        self.y + sprite_h,
+                        facing_vector,
                         is_piercing,
                         is_homing,
                         is_explosive,
                         is_low_ammo,
                     ),
                 ]
+            return [
+                (
+                    self.x + sprite_w / 2 - 3.5 + 2.2,
+                    self.y + sprite_h,
+                    facing_vector,
+                    is_piercing,
+                    is_homing,
+                    is_explosive,
+                    is_low_ammo,
+                )
+            ]
+        elif self.facing == "east":
+            if self.double_shot_timer > 0:
+                return [
+                    (
+                        self.x + sprite_w + 5,
+                        self.y + sprite_h * 0.3,
+                        facing_vector,
+                        is_piercing,
+                        is_homing,
+                        is_explosive,
+                        is_low_ammo,
+                    ),
+                    (
+                        self.x + sprite_w + 5,
+                        self.y + sprite_h * 0.7,
+                        facing_vector,
+                        is_piercing,
+                        is_homing,
+                        is_explosive,
+                        is_low_ammo,
+                    ),
+                ]
+            return [
+                (
+                    self.x + sprite_w + 5,
+                    self.y + sprite_h / 2,
+                    facing_vector,
+                    is_piercing,
+                    is_homing,
+                    is_explosive,
+                    is_low_ammo,
+                )
+            ]
+        else:  # west
+            offset_x = self.x - 15
+            if self.double_shot_timer > 0:
+                return [
+                    (
+                        offset_x,
+                        self.y + sprite_h * 0.3,
+                        facing_vector,
+                        is_piercing,
+                        is_homing,
+                        is_explosive,
+                        is_low_ammo,
+                    ),
+                    (
+                        offset_x,
+                        self.y + sprite_h * 0.7,
+                        facing_vector,
+                        is_piercing,
+                        is_homing,
+                        is_explosive,
+                        is_low_ammo,
+                    ),
+                ]
+            return [
+                (
+                    offset_x,
+                    self.y + sprite_h / 2,
+                    facing_vector,
+                    is_piercing,
+                    is_homing,
+                    is_explosive,
+                    is_low_ammo,
+                )
+            ]
 
     def draw(self, surface: pygame.Surface):
         if not self.visible:
