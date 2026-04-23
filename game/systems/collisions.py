@@ -74,6 +74,7 @@ class Scoreable(Protocol):
 
 
 @runtime_checkable
+
 class Enemy(Protocol):
     """Protocol para qualquer inimigo comum do jogo."""
 
@@ -163,20 +164,26 @@ class Collisions:
         enemy: Any,
     ) -> tuple[pygame.mask.Mask, tuple[int, int]] | None:
         getter = getattr(enemy, "get_collision_mask_data", None)
-        if not callable(getter):
-            return None
+        if callable(getter):
+            raw_data = cast(
+                tuple[pygame.mask.Mask, tuple[int, int]] | None,
+                getter(),
+            )
+            if raw_data is not None:
+                mask, offset = raw_data
+                if mask.get_size()[0] > 0 and mask.get_size()[1] > 0:
+                    return mask, offset
 
-        raw_data = cast(
-            tuple[pygame.mask.Mask, tuple[int, int]] | None,
-            getter(),
-        )
-        if raw_data is None:
-            return None
+        # Fallback: suporte a padrão do pygame com atributos .mask e .rect
+        if hasattr(enemy, "mask"):
+            mask = getattr(enemy, "mask")
+            if mask is not None:
+                if hasattr(enemy, "rect"):
+                    rect = getattr(enemy, "rect")
+                    if rect is not None:
+                        return cast(pygame.mask.Mask, mask), (rect.x, rect.y)
 
-        mask, offset = raw_data
-        if mask.get_size()[0] <= 0 or mask.get_size()[1] <= 0:
-            return None
-        return mask, offset
+        return None
 
     @classmethod
     def _get_rect_mask(cls, width: int, height: int) -> pygame.mask.Mask:
@@ -304,7 +311,7 @@ class Collisions:
         self,
         entity_rect: pygame.Rect,
         entity_mask: pygame.mask.Mask | None,
-        target_with_mask: BossEnemy,
+        target_with_mask: Any,
         entity_x: float,
         entity_y: float,
     ) -> bool:
@@ -312,7 +319,9 @@ class Collisions:
         Verifica colisão pixel-perfect entre entidade e alvo com máscara.
         Fallback para rect collision se máscara não disponível.
         """
-        if not isinstance(target_with_mask, SlimeBoss):
+        # Se não possui mask explícita, usa fallback de rect
+        mask = getattr(target_with_mask, "mask", None)  # type: ignore[attr-defined]
+        if mask is None:
             return entity_rect.colliderect(
                 pygame.Rect(
                     target_with_mask.x,
@@ -359,7 +368,8 @@ class Collisions:
             int(entity_x - target_with_mask.x),
             int(entity_y - target_with_mask.y),
         )
-        return target_with_mask.mask.overlap(entity_mask, offset) is not None
+        # mask is type: ignore for Pylance, since we checked above
+        return cast("pygame.mask.Mask", mask).overlap(entity_mask, offset) is not None  # type: ignore[attr-defined]
 
     def _batch_query_for_projectiles(
         self,
@@ -1365,13 +1375,13 @@ class Collisions:
             return 0
 
         score_gain = 0
-        head_rect = boss.rect
 
         for bullet in bullets[:]:
             if bullet.dead:
                 continue
 
-            if not bullet.rect.colliderect(head_rect):
+            # Usa colisão com máscara (pixel-perfect) em vez de apenas rect
+            if not self._check_mask_collision(bullet.rect, None, boss, bullet.x, bullet.y):
                 continue
 
             if not boss.is_vulnerable:
@@ -1940,19 +1950,21 @@ class Collisions:
     def player_lasers_vs_boss(
         self,
         player_lasers: list[PlayerLaser],
-        boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | MountainSerpentBoss,
+        boss: BossEnemy,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão dos lasers do jogador com o boss.
 
-        Usa pixel-perfect collision para SlimeBoss quando disponível.
+        Usa pixel-perfect collision se o boss possuir uma máscara definida.
         """
         if not player_lasers:
             return 0
         if not boss or boss.dead:
             return 0
         score_gain: int = 0
+
+        mask_data = self._get_enemy_collision_mask_data(boss)
 
         for laser in player_lasers:
             if laser.w <= 0:
@@ -1965,91 +1977,72 @@ class Collisions:
 
             collision_detected = False
 
-            # Pixel-perfect collision for SlimeBoss
-            if isinstance(boss, SlimeBoss) and hasattr(boss, "mask"):
+            if mask_data is not None:
+                mask, (bx, by) = mask_data
                 # Fast proximity check first (optimization)
-                boss_center_x = boss.x + boss.w / 2
-                boss_center_y = boss.y + boss.h / 2
+                bw, bh = mask.get_size()
+                boss_center_x = bx + bw / 2
+                boss_center_y = by + bh / 2
 
                 # Calculate distance from boss center to laser line
                 start_pos, end_pos = line
-                # Simple distance from point to line segment (approximation)
                 dx = end_pos[0] - start_pos[0]
                 dy = end_pos[1] - start_pos[1]
                 length_squared = dx * dx + dy * dy
 
                 if length_squared > 0:
-                    # Vector from start to boss center
                     vx = boss_center_x - start_pos[0]
                     vy = boss_center_y - start_pos[1]
-
-                    # Project point onto line
                     t = max(0, min(1, (vx * dx + vy * dy) / length_squared))
                     proj_x = start_pos[0] + t * dx
                     proj_y = start_pos[1] + t * dy
 
-                    # Distance from boss center to projected point
                     dist_dx = boss_center_x - proj_x
                     dist_dy = boss_center_y - proj_y
                     distance_squared = dist_dx * dist_dx + dist_dy * dist_dy
 
-                    # Only do expensive mask check if laser is reasonably close
-                    proximity_threshold = (
-                        boss.w / 2 + 50
-                    ) ** 2  # 50 pixel buffer for laser width
+                    # Buffer for laser width
+                    proximity_threshold = (bw / 2 + 50) ** 2
 
                     if distance_squared <= proximity_threshold:
-                        # Check rect collision first (additional optimization)
                         if boss_rect.clipline(line):
-                            # For pixel-perfect, we need to check if the laser line intersects non-transparent pixels
-                            # This is more complex - for now, we'll use a simplified approach
-                            # Check multiple points along the laser line
-                            steps = 10  # Check 10 points along the line
+                            # Sampling points along the laser line for mask check
+                            steps = 10
                             for i in range(steps + 1):
-                                t = i / steps
-                                check_x = start_pos[0] + t * (end_pos[0] - start_pos[0])
-                                check_y = start_pos[1] + t * (end_pos[1] - start_pos[1])
+                                t_step = i / steps
+                                cx = start_pos[0] + t_step * (end_pos[0] - start_pos[0])
+                                cy = start_pos[1] + t_step * (end_pos[1] - start_pos[1])
 
-                                # Convert to boss-relative coordinates
-                                relative_x = int(check_x - boss.x)
-                                relative_y = int(check_y - boss.y)
+                                rel_x = int(cx - bx)
+                                rel_y = int(cy - by)
 
-                                # Check if point is within boss bounds and mask
-                                if (
-                                    0 <= relative_x < boss.w
-                                    and 0 <= relative_y < boss.h
-                                ):
-                                    if boss.mask.get_at((relative_x, relative_y)):
+                                if 0 <= rel_x < bw and 0 <= rel_y < bh:
+                                    if mask.get_at((rel_x, rel_y)):
                                         collision_detected = True
                                         break
             else:
-                # Rectangular collision for other bosses
                 collision_detected = boss_rect.clipline(line)
 
             if collision_detected:
-                # Verificar se já atingiu o boss
                 boss_id = id(boss)
                 if boss_id in laser.hit_enemies:
                     continue
 
                 laser.hit_enemies.add(boss_id)
-                # Apply damage modifier for laser upgrade against boss
                 damage = int(
                     laser.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER
                 )
                 boss.take_damage(damage)
                 sound_manager.play_boss_damage()
 
-                # Explosão no ponto de impacto
-                cx: float = boss.x + boss.w / 2
-                cy: float = boss.y + boss.h / 2
-                entity_manager.spawn_explosion(cx, cy, size=30)
+                cx_hit: float = boss.x + boss.w / 2
+                cy_hit: float = boss.y + boss.h / 2
+                entity_manager.spawn_explosion(cx_hit, cy_hit, size=30)
 
                 if boss.dead:
-                    # Boss sempre dá pontos fixos ao morrer
                     pts: int = config_instance.BOSS_DEFEAT_SCORE
                     score_gain += pts
-                    floating_scores.append(FloatingScore(cx, cy, pts))
-                    entity_manager.spawn_explosion(cx, cy, size=100)
+                    floating_scores.append(FloatingScore(cx_hit, cy_hit, pts))
+                    entity_manager.spawn_explosion(cx_hit, cy_hit, size=100)
 
         return score_gain
