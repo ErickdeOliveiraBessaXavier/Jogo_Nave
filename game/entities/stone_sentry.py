@@ -7,6 +7,7 @@ import pygame
 
 from ..core import colors
 from ..core.config import config as Config
+from ..core.sound import sound_manager
 from ..entities.alien_bullet import AlienBullet
 
 
@@ -912,6 +913,8 @@ class StoneSentry:
         self._recoil_left = 25.0
         self._recoil_right = 25.0
         self._eye_spin_boost = max(self._eye_spin_boost, 220.0)
+
+        sound_manager.play_shot()
 
         # Pega a instância que estava sendo carregada (ou cria uma emergencial)
         if self._charging_bullet:
