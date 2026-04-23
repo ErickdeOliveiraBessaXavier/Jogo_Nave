@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Art - Cobra Melhorada</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #ffffff;
+            margin: 0;
+        }
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="c"></canvas>
+    <script>
+        const S = 18;
+        const _ = null;
+        const K = '#000000';
+        const E = '#D95102';
+        const D = '#4a3424';
+        const M = '#6e5138';
+        const L = '#a38466';
+        const Y = '#e5c065';
+        const Z = '#B8953E';
+        const W = '#FEFFF5';
+        const T = '#4a5378';
+        const N = '#c09070';
+        const B = '#1E212B';
+
+        const map = [
+            [_, _, _, _, _, _, _, _, _, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, _, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, K, K, K, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, K, K, K, _, _, _, _, _, _],
+            [_, _, _, _, _, K, D, D, D, M, M, L, L, M, M, M, M, M, L, M, M, M, M, L, L, M, M, D, D, D, K, _, _, _, _, _],
+            [_, _, _, _, K, D, L, L, L, M, L, L, L, L, M, L, M, L, L, M, M, M, L, L, L, L, M, L, M, M, D, K, _, _, _, _],
+            [_, _, _, K, D, L, L, L, M, M, L, L, L, M, M, M, M, M, L, L, M, L, L, L, L, L, M, M, L, M, L, D, K, _, _, _],
+            [_, _, K, D, M, M, M, M, M, M, M, L, M, M, L, L, L, M, M, L, M, M, L, L, L, L, L, M, M, M, L, L, D, K, _, _],
+            [_, K, D, M, M, M, K, K, K, M, M, M, M, L, L, L, L, L, M, M, M, M, M, M, L, L, M, K, K, K, M, L, M, D, K, _],
+            [_, K, D, M, M, K, K, K, K, K, K, L, M, M, L, L, L, L, M, L, L, L, L, M, M, K, K, K, K, K, K, M, M, D, K, _],
+            [K, D, M, L, M, K, W, Y, Y, Z, K, L, L, M, M, M, M, M, M, L, L, L, L, M, M, K, W, Y, Y, Z, K, M, L, L, D, K],
+            [K, D, L, L, M, K, Y, E, Y, Z, K, K, L, M, L, L, K, K, K, K, M, L, M, M, K, K, Y, Y, E, Z, K, M, M, L, D, K],
+            [K, D, M, M, M, K, Y, E, Z, Z, Z, K, K, K, K, K, D, D, D, D, K, K, K, K, K, Z, Z, Y, E, Z, K, M, M, M, D, K],
+            [K, M, M, M, K, K, Z, E, Z, Z, K, K, D, L, L, L, L, L, L, L, L, L, L, D, K, K, Z, Z, E, Z, K, K, M, L, M, K],
+            [K, L, M, K, L, L, K, K, K, K, K, L, L, L, L, L, L, L, L, L, L, L, L, L, L, K, K, K, K, K, L, L, K, M, M, K],
+            [K, M, K, L, L, L, K, K, K, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, K, K, K, L, L, L, K, M, K],
+            [_, K, K, L, L, L, L, K, L, L, L, K, L, L, L, L, L, L, L, L, L, L, L, L, K, L, L, L, K, L, L, L, L, K, K, _],
+            [_, K, D, K, L, L, K, D, L, L, K, K, L, L, D, D, D, D, D, D, D, D, L, L, K, K, L, L, D, K, L, L, K, D, K, _],
+            [_, _, K, D, L, K, D, D, D, L, L, L, L, D, K, K, K, K, K, K, K, K, D, L, L, L, L, D, D, D, K, L, D, K, _, _],
+            [_, _, K, K, D, L, K, D, D, D, D, D, D, K, K, B, B, B, B, B, B, K, K, D, D, D, D, D, D, K, L, D, K, K, _, _],
+            [_, _, _, K, K, D, L, K, K, D, D, D, K, K, T, T, T, T, B, B, B, B, K, K, D, D, D, K, K, L, D, K, K, _, _, _],
+            [_, _, _, _, K, K, D, L, L, K, K, K, K, K, T, T, T, T, B, B, B, B, K, K, K, K, K, L, L, D, K, K, _, _, _, _],
+            [_, _, _, _, _, K, K, D, L, L, L, L, L, L, K, K, T, T, B, B, K, K, L, L, L, L, L, L, D, K, K, _, _, _, _, _],
+            [_, _, _, _, _, _, K, K, D, D, D, D, D, D, D, K, T, T, T, B, K, D, D, D, D, D, D, D, K, K, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, K, K, K, K, K, K, K, K, T, T, T, B, K, K, K, K, K, K, K, K, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, _, _, _, _, _, _, K, K, T, T, T, B, K, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, K, T, T, T, B, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, K, T, T, T, B, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, K, T, T, T, B, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, K, T, T, T, B, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, _, _, _, _, _, _, K, T, T, T, T, T, B, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, _, _, _, _, _, _, K, T, K, K, K, K, T, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _],
+            [_, _, _, _, _, _, _, _, _, K, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _, K, K, _, _, _, _, _, _, _, _, _]
+        ];
+
+        const cols = map[0].length;
+        const rows = map.length;
+        const canvas = document.getElementById('c');
+        canvas.width  = cols * S;
+        canvas.height = rows * S;
+        const ctx = canvas.getContext('2d');
+
+
+
+        map.forEach((row, r) => {
+            row.forEach((color, c) => {
+                if (color) {
+                    ctx.fillStyle = color;
+                    ctx.fillRect(c * S, r * S, S, S);
+                }
+            });
+        });
+
+    </script>
+</body>
+</html>

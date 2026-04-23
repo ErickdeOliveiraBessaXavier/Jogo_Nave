@@ -1,0 +1,85 @@
+from typing import Final
+
+_ = None
+
+K = "K"
+E = "E"
+D = "D"
+M = "M"
+L = "L"
+Y = "Y"
+Z = "Z"
+W = "W"
+T = "T"
+N = "N"
+B = "B"
+
+PIXEL_MAP: list[list[str | None]] = [
+    [_, _, _, _, _, _, _, _, _, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, _, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, K, K, K, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, K, K, K, _, _, _, _, _, _],
+    [_, _, _, _, _, K, D, D, D, M, M, L, L, M, M, M, M, M, L, M, M, M, M, L, L, M, M, D, D, D, K, _, _, _, _, _],
+    [_, _, _, _, K, D, L, L, L, M, L, L, L, L, M, L, M, L, L, M, M, M, L, L, L, L, M, L, M, M, D, K, _, _, _, _],
+    [_, _, _, K, D, L, L, L, M, M, L, L, L, M, M, M, M, M, L, L, M, L, L, L, L, L, M, M, L, M, L, D, K, _, _, _],
+    [_, _, K, D, M, M, M, M, M, M, M, L, M, M, L, L, L, M, M, L, M, M, L, L, L, L, L, M, M, M, L, L, D, K, _, _],
+    [_, K, D, M, M, M, K, K, K, M, M, M, M, L, L, L, L, L, M, M, M, M, M, M, L, L, M, K, K, K, M, L, M, D, K, _],
+    [_, K, D, M, M, K, K, K, K, K, K, L, M, M, L, L, L, L, M, L, L, L, L, M, M, K, K, K, K, K, K, M, M, D, K, _],
+    [K, D, M, L, M, K, W, Y, Y, Z, K, L, L, M, M, M, M, M, M, L, L, L, L, M, M, K, W, Y, Y, Z, K, M, L, L, D, K],
+    [K, D, L, L, M, K, Y, E, Y, Z, K, K, L, M, L, L, K, K, K, K, M, L, M, M, K, K, Y, Y, E, Z, K, M, M, L, D, K],
+    [K, D, M, M, M, K, Y, E, Z, Z, Z, K, K, K, K, K, D, D, D, D, K, K, K, K, K, Z, Z, Y, E, Z, K, M, M, M, D, K],
+    [K, M, M, M, K, K, Z, E, Z, Z, K, K, D, L, L, L, L, L, L, L, L, L, L, D, K, K, Z, Z, E, Z, K, K, M, L, M, K],
+    [K, L, M, K, L, L, K, K, K, K, K, L, L, L, L, L, L, L, L, L, L, L, L, L, L, K, K, K, K, K, L, L, K, M, M, K],
+    [K, M, K, L, L, L, K, K, K, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, K, K, K, L, L, L, K, M, K],
+    [_, K, K, L, L, L, L, K, L, L, L, K, L, L, L, L, L, L, L, L, L, L, L, L, K, L, L, L, K, L, L, L, L, K, K, _],
+    [_, K, D, K, L, L, K, D, L, L, K, K, L, L, D, D, D, D, D, D, D, D, L, L, K, K, L, L, D, K, L, L, K, D, K, _],
+    [_, _, K, D, L, K, D, D, D, L, L, L, L, D, K, K, K, K, K, K, K, K, D, L, L, L, L, D, D, D, K, L, D, K, _, _],
+    [_, _, K, K, D, L, K, D, D, D, D, D, D, K, K, B, B, B, B, B, B, K, K, D, D, D, D, D, D, K, L, D, K, K, _, _],
+    [_, _, _, K, K, D, L, K, K, D, D, D, K, K, T, T, T, T, B, B, B, B, K, K, D, D, D, K, K, L, D, K, K, _, _, _],
+    [_, _, _, _, K, K, D, L, L, K, K, K, K, K, T, T, T, T, B, B, B, B, K, K, K, K, K, L, L, D, K, K, _, _, _, _],
+    [_, _, _, _, _, K, K, D, L, L, L, L, L, L, K, K, T, T, B, B, K, K, L, L, L, L, L, L, D, K, K, _, _, _, _, _],
+    [_, _, _, _, _, _, K, K, D, D, D, D, D, D, D, K, T, T, T, B, K, D, D, D, D, D, D, D, K, K, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, K, K, K, K, K, K, K, K, T, T, T, B, K, K, K, K, K, K, K, K, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, _, _, _, _, _, _, K, K, T, T, T, B, K, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, K, T, T, T, B, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, K, T, T, T, B, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, K, T, T, T, B, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, K, T, T, T, B, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, _, _, _, _, _, _, K, T, T, T, T, T, B, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, _, _, _, _, _, _, K, T, K, K, K, K, T, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _, _, _, _, K, T, K, _, _, _, _, _, _, _, _, _],
+    [_, _, _, _, _, _, _, _, _, K, K, _, _, _, _, _, _, _, _, _, _, _, _, _, _, K, K, _, _, _, _, _, _, _, _, _],
+]
+
+PIXEL_ROWS: Final[int] = len(PIXEL_MAP)
+PIXEL_COLS: Final[int] = len(PIXEL_MAP[0])
+
+# Região da lingua desenhada no pixel map (base 36x36)
+TONGUE_MIN_COL: Final[int] = 13
+TONGUE_MAX_COL: Final[int] = 22
+TONGUE_MIN_ROW: Final[int] = 22
+TONGUE_MAX_ROW: Final[int] = 35
+
+# Regioes dos olhos no pixel map (onde os pixels E podem se mover)
+LEFT_EYE_MIN_COL: Final[int] = 6
+LEFT_EYE_MAX_COL: Final[int] = 10
+RIGHT_EYE_MIN_COL: Final[int] = 25
+RIGHT_EYE_MAX_COL: Final[int] = 29
+EYE_MIN_ROW: Final[int] = 8
+EYE_MAX_ROW: Final[int] = 12
+
+C: dict[str, tuple[int, int, int]] = {
+    K: (0, 0, 0),
+    E: (217, 81, 2),
+    D: (74, 52, 36),
+    M: (110, 81, 56),
+    L: (163, 132, 102),
+    Y: (229, 192, 101),
+    Z: (184, 149, 62),
+    W: (254, 255, 245),
+    T: (74, 83, 120),
+    N: (192, 144, 112),
+    B: (30, 33, 43),
+}
