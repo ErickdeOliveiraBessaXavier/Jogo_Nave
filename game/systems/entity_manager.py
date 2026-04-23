@@ -560,7 +560,9 @@ class EntityManager:
                 self.orbital_rocks = orbital_rocks
             # MountainSerpentBoss: apenas move a cabeça; blocos são inimigos separados
             elif isinstance(self.boss, MountainSerpentBoss):
-                self.boss.update(enemy_dt, player_x, player_y)
+                boss_bullets, _ = self.boss.update(enemy_dt, player_x, player_y)
+                if boss_bullets:
+                    new_alien_bullets.extend(boss_bullets)
             # Boss normal retorna (List[BossLaser], List[BossSquare])
             else:  # isinstance(self.boss, Boss)
                 lasers_fired, spawned_squares = self.boss.update(
@@ -1096,7 +1098,11 @@ class EntityManager:
         # Marcar inimigos fora da tela como mortos ANTES de liberar ao pool
         # SerpentBlocks são fixos na tela — nunca devem ser marcados como mortos por off-screen.
         for e in self.enemies:
-            if not e.dead and not isinstance(e, SerpentBlock) and self._is_enemy_off_screen(e):
+            if (
+                not e.dead
+                and not isinstance(e, SerpentBlock)
+                and self._is_enemy_off_screen(e)
+            ):
                 e.dead = True
 
         # Liberar meteoros dead ao pool
@@ -1122,7 +1128,8 @@ class EntityManager:
                 or not (
                     e.dead
                     and not (
-                        isinstance(e, MountainStalagmite) and getattr(e, "_fragments", None)
+                        isinstance(e, MountainStalagmite)
+                        and getattr(e, "_fragments", None)
                     )
                 )
             )

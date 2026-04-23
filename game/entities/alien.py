@@ -4,6 +4,7 @@ import pygame
 
 from ..core.assets import BASE_DIR, get_image
 from ..core.config import config as Config
+from ..core.sound import sound_manager
 from ..core.sprite_loader import sprite_loader
 from .alien_bullet import AlienBullet
 
@@ -187,6 +188,7 @@ class Alien:
         bullets = None
         if self.should_shoot:
             self.should_shoot = False
+            sound_manager.play_shot()
             # Não aplicar cooldown aqui - será aplicado quando terminar a sequência
             bullets = [AlienBullet(self.x + self.w / 2, self.y + self.h)]
 

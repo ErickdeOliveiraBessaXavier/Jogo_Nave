@@ -890,7 +890,19 @@ class PlayingScene(Scene):
         """Dispara as balas da nave e reinicia o cooldown."""
         bullet_specs = self.ship.bullet_spawn()
         adjusted_damage = int(_BASE_BULLET_DAMAGE * self.player_damage_multiplier)
-        for x, y, direction, is_piercing, is_homing, is_explosive, is_low_ammo in bullet_specs:
+        
+        # Tocar som de tiro (uma vez por salva de tiros)
+        sound_manager.play_shot()
+        
+        for (
+            x,
+            y,
+            direction,
+            is_piercing,
+            is_homing,
+            is_explosive,
+            is_low_ammo,
+        ) in bullet_specs:
             self.entity_manager.spawn_bullet(
                 x,
                 y,
@@ -1721,10 +1733,10 @@ class PlayingScene(Scene):
         elif self.level_config.boss_type == MountainSerpentBoss:
             # spawn_mountain_serpent_boss cria a cabeça E os blocos laterais
             # Não passa x/y para usar os valores padrão centrados da classe
-            scaled_health = int(320 * self.enemy_health_multiplier)
-            boss = self.entity_manager.spawn_mountain_serpent_boss(
-                health=scaled_health
+            scaled_health = int(
+                MountainSerpentBoss.DEFAULT_HEALTH * self.enemy_health_multiplier
             )
+            boss = self.entity_manager.spawn_mountain_serpent_boss(health=scaled_health)
         else:
             boss = self.level_config.boss_type(Config.SCREEN_WIDTH / 2 - 50, 50)
             boss.health = int(boss.health * self.enemy_health_multiplier)
@@ -1914,10 +1926,7 @@ class PlayingScene(Scene):
             elif event.key == pygame.K_F8:
                 self._trigger_world_transition_debug_preview()
             elif event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
-                if (
-                    not self.ship.is_entering
-                    and self._can_handle_gameplay_actions()
-                ):
+                if not self.ship.is_entering and self._can_handle_gameplay_actions():
                     self.ship.cycle_facing()
 
             self._process_cheat_input(event)
@@ -1935,10 +1944,7 @@ class PlayingScene(Scene):
                 ):
                     self._fire_bullets()
             elif event.button == 2:
-                if (
-                    not self.ship.is_entering
-                    and self._can_handle_gameplay_actions()
-                ):
+                if not self.ship.is_entering and self._can_handle_gameplay_actions():
                     self.ship.cycle_facing()
 
     def _handle_upgrade_key(self, event: pygame.event.Event) -> None:

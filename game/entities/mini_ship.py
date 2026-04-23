@@ -4,6 +4,7 @@ import pygame
 
 from ..core.colors import LIGHT_BLUE
 from ..core.config import config as Config
+from ..core.sound import sound_manager
 from .alien import Alien
 from .explosive_mine import ExplosiveMine
 from .eye_enemy import EyeEnemy
@@ -104,6 +105,8 @@ class MiniShip:
         bullet_speed = Config.BULLET_SPEED * 1.2
         vx = math.cos(angle) * bullet_speed
         vy = math.sin(angle) * bullet_speed
+
+        sound_manager.play_shot()
 
         bullets.append(
             MiniShipBullet(

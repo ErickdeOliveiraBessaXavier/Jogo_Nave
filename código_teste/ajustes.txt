@@ -1,0 +1,188 @@
+Vou analisar os arquivos para entender a estrutura atual e então te dizer exatamente o que fazer.Perfeito! Agora entendi a estrutura. Vou te explicar **exatamente o que fazer**:
+
+---
+
+## 📋 **O QUE MUDAR:**
+
+### **1. ADICIONAR VARIÁVEIS PARA CONTROLAR O LOOP CONTÍNUO**
+
+No `MountainSerpentBoss.__init__()`, adicionar:
+
+```python
+# Movimento contínuo dos blocos (loop infinito)
+self._loop_movement_enabled = False  # Ativa após a animação de entrada
+self._loop_speed = 45.0  # Velocidade do movimento em pixels/segundo
+```
+
+---
+
+### **2. MODIFICAR A ANIMAÇÃO DE ENTRADA (convergência coordenada)**
+
+Na função `_respawn_all_blocks()` (linha 847), **substituir** o trecho que chama `revive_with_entry()` por uma nova função que faz a animação coordenada:
+
+```python
+def _respawn_all_blocks(self) -> None:
+    """Revive todos os blocos COM animação de entrada coordenada."""
+    self._start_coordinated_entry_animation()
+    self._dead_block_respawn_timers.clear()
+    self._left_alive = self.BLOCK_COUNT
+    self._right_alive = self.BLOCK_COUNT
+    self.is_vulnerable = False
+    self._respawn_timer = -1.0
+
+    if not self._swap_pattern_enabled:
+        self._swap_pattern_enabled = True
+    self._schedule_next_swap()
+```
+
+E criar essa **nova função**:
+
+```python
+def _start_coordinated_entry_animation(self) -> None:
+    """
+    Animação de entrada coordenada:
+    - Coluna direita: blocos entram de baixo para cima
+    - Coluna esquerda: blocos entram de cima para baixo
+    - Efeito de convergência no centro
+    """
+    base_delay = 0.08  # Delay entre cada bloco
+    
+    for block in self._all_blocks:
+        block.health = block.MAX_HEALTH
+        block.dead = False
+        block._hit_flash = 0.0
+        block._rotation_angle = random.uniform(0.0, 360.0)
+        block._rotation_dir = random.choice((-1.0, 1.0))
+        sprite_frames = block._load_animation_frames(block.w, block.h)
+        block._sprite_frame = random.choice(sprite_frames) if sprite_frames else None
+        block._swap_active = False
+        block._particles.clear()
+        
+        # Configurar animação de entrada com delay progressivo
+        block._entry_anim_active = True
+        block._entry_anim_duration = 0.85
+        
+        # COLUNA DIREITA: delay crescente de baixo pra cima
+        if block.side == "right":
+            # Bloco inferior (row_index alto) entra primeiro
+            delay = (self.BLOCK_COUNT - 1 - block.row_index) * base_delay
+        # COLUNA ESQUERDA: delay crescente de cima pra baixo
+        else:
+            # Bloco superior (row_index 0) entra primeiro
+            delay = block.row_index * base_delay
+        
+        block._entry_anim_timer = -delay  # Negativo = aguardar antes de começar
+        
+        # Posição inicial fora da tela
+        screen_w = Config.SCREEN_WIDTH
+        if block.side == "left":
+            block.cx = -block.RADIUS * 2.5
+        else:
+            block.cx = screen_w + block.RADIUS * 2.5
+        block.cy = block._origin_cy
+        block.x = block.cx - block.RADIUS
+        block.y = block.cy - block.RADIUS
+        block._rect.x = int(block.x)
+        block._rect.y = int(block.y)
+```
+
+---
+
+### **3. MODIFICAR O UPDATE DO BLOCO PARA RESPEITAR O DELAY**
+
+No `SerpentBlock.update()` (linha 440-462), **modificar a parte da animação de entrada**:
+
+```python
+if self._entry_anim_active:
+    self._entry_anim_timer += dt
+    
+    # Se ainda está no delay negativo, não move
+    if self._entry_anim_timer < 0.0:
+        return
+    
+    t = min(1.0, self._entry_anim_timer / max(0.001, self._entry_anim_duration))
+    # Ease-out
+    eased = 1.0 - (1.0 - t) ** 2
+    screen_w = Config.SCREEN_WIDTH
+    start_x = (
+        -self.RADIUS * 2.5
+        if self.side == "left"
+        else screen_w + self.RADIUS * 2.5
+    )
+    self.cx = start_x + (self._origin_cx - start_x) * eased
+    self.cy = self._origin_cy
+    self.x = self.cx - self.RADIUS
+    self.y = self.cy - self.RADIUS
+    self._rect.x = int(self.x)
+    self._rect.y = int(self.y)
+    
+    if t >= 1.0:
+        self._entry_anim_active = False
+        self.cx = self._origin_cx
+        self.x = self.cx - self.RADIUS
+        self._rect.x = int(self.x)
+        # ATIVAR O LOOP quando a última animação de entrada terminar
+        self.boss._check_if_all_entry_animations_finished()
+    return
+```
+
+---
+
+### **4. ADICIONAR A FUNÇÃO QUE VERIFICA SE TODOS OS BLOCOS TERMINARAM A ENTRADA**
+
+No `MountainSerpentBoss`:
+
+```python
+def _check_if_all_entry_animations_finished(self) -> None:
+    """Ativa o loop contínuo quando todos os blocos terminarem a entrada."""
+    if all(not block._entry_anim_active for block in self._all_blocks):
+        self._loop_movement_enabled = True
+```
+
+---
+
+### **5. IMPLEMENTAR O LOOP CONTÍNUO (movimento em corrente)**
+
+No `SerpentBlock.update()`, **após** a parte do swap (linha 464-466), adicionar:
+
+```python
+# Loop contínuo: blocos sobem e reaparecem embaixo
+if self.boss._loop_movement_enabled and not self._swap_active:
+    # Move pra cima
+    self._origin_cy -= self.boss._loop_speed * dt
+    
+    # Se passou do topo, reposiciona na base
+    if self._origin_cy < -self.RADIUS:
+        # Calcular a altura total ocupada pelos blocos
+        margin_y = self.RADIUS + 20
+        if self.boss.BLOCK_COUNT > 1:
+            available_height = Config.SCREEN_HEIGHT - (2 * margin_y)
+            total_height = available_height + (available_height / (self.boss.BLOCK_COUNT - 1))
+        else:
+            total_height = 0
+        
+        # Reposicionar na base
+        self._origin_cy = Config.SCREEN_HEIGHT + self.RADIUS + total_height
+    
+    # Continua com o wave offset normal
+    wave_offset_x, wave_offset_y = self.boss.get_block_wave_offset(
+        self.row_index, self.side
+    )
+    self.cx = self._origin_cx + wave_offset_x
+    self.cy = self._origin_cy + wave_offset_y
+    self.x = self.cx - self.RADIUS
+    self.y = self.cy - self.RADIUS
+    self._rect.x = int(self.x)
+    self._rect.y = int(self.y)
+    return
+```
+
+---
+
+## 🎯 **RESUMO DA LÓGICA:**
+
+1. **Entrada coordenada**: cada bloco tem um `_entry_anim_timer` negativo que funciona como delay. Direita entra de baixo pra cima, esquerda de cima pra baixo.
+
+2. **Após a entrada**: quando todos os blocos terminam, ativa `_loop_movement_enabled = True`.
+
+3. **Loop infinito**: todos os `_origin_cy` são decrementados continuamente. Quando um bloco sai do topo (cy < -RADIUS), ele é reposicionado na base (cy = SCREEN_HEIGHT + offset).
