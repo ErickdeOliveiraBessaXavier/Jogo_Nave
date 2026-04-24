@@ -6,8 +6,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from game.core.sound import sound_manager
 from game.entities.mountain_mage import MountainStalagmite
-from game.systems.entity_manager import EntityManager
 from game.systems.collisions import Collisions
+from game.systems.entity_manager import EntityManager
 
 
 class _DummyMeteorPool:

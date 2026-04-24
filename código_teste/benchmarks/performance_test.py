@@ -20,11 +20,8 @@ for path in (ROOT_DIR, COMMON_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from performance_common import (  # noqa: E402
-    parse_difficulty,
-    run_benchmark,
-    write_json,
-)
+from performance_common import (parse_difficulty, run_benchmark,  # noqa: E402
+                                write_json)
 
 from game.core.difficulty import DifficultyPreset  # noqa: E402
 

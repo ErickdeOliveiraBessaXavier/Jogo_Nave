@@ -9,7 +9,8 @@ if TYPE_CHECKING:
 from ..core import colors
 from ..core.assets import get_font
 from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
-from ..core.meta_progression import PerformanceState, PlayerProfile, WorldUnlockStatus
+from ..core.meta_progression import (PerformanceState, PlayerProfile,
+                                     WorldUnlockStatus)
 from ..core.paths import get_profile_path
 from ..core.state import Scene
 

@@ -5,22 +5,16 @@ from unittest.mock import patch
 # Permite importar pacote `game` quando rodando direto via pytest no workspace.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from game.core.levels import (
-    ACTIVE_ENEMY_TUNING_PROFILE,
-    DEFAULT_ENEMY_SPAWN_TIME,
-    DifficultyPreset,
-    ENEMY_STAGE_WEIGHT_MULTIPLIERS,
-    ENEMY_STAGE_WEIGHT_PROFILES,
-    ENEMY_THEME_WEIGHT_MULTIPLIERS,
-    ENEMY_THEME_WEIGHT_PROFILES,
-    LevelConfig,
-    ProceduralLevelGenerator,
-    _apply_theme_enemy_eligibility,
-    _apply_theme_enemy_rules,
-    _get_stage_band,
-    _resolve_tuning_profile,
-    get_level_config,
-)
+from game.core.levels import (ACTIVE_ENEMY_TUNING_PROFILE,
+                              DEFAULT_ENEMY_SPAWN_TIME,
+                              ENEMY_STAGE_WEIGHT_MULTIPLIERS,
+                              ENEMY_STAGE_WEIGHT_PROFILES,
+                              ENEMY_THEME_WEIGHT_MULTIPLIERS,
+                              ENEMY_THEME_WEIGHT_PROFILES, DifficultyPreset,
+                              LevelConfig, ProceduralLevelGenerator,
+                              _apply_theme_enemy_eligibility,
+                              _apply_theme_enemy_rules, _get_stage_band,
+                              _resolve_tuning_profile, get_level_config)
 from game.core.world_config import get_world_for_level
 from game.entities.alien import Alien
 from game.entities.bot_elemental import ElementalRobot

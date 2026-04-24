@@ -5,12 +5,12 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from game.core.levels import DifficultyConfig, LevelManager
+from game.entities.bot_elemental import ElementalRobot
 from game.entities.explosive_mine import ExplosiveMine
 from game.entities.meteor import Meteor
 from game.entities.mountain_geode import MountainGeode
-from game.entities.stone_sentry import StoneSentry
 from game.entities.square_minion_boss import SquareMinionBoss
-from game.entities.bot_elemental import ElementalRobot
+from game.entities.stone_sentry import StoneSentry
 from game.systems.spawner import EnemySpawner
 
 

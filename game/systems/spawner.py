@@ -1,19 +1,8 @@
 import logging
 import random
 from collections import deque
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    List,
-    Protocol,
-    Tuple,
-    Type,
-    TypedDict,
-    Union,
-    cast,
-)
+from typing import (TYPE_CHECKING, Any, Callable, Dict, List, Protocol, Tuple,
+                    Type, TypedDict, Union, cast)
 
 from ..core.config import PowerUpType
 from ..core.config import config as Config
@@ -26,8 +15,8 @@ from ..entities.bot_elemental import ElementalRobot
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.formation import Formation, FormationPattern
-from ..entities.mountain_geode import MountainGeode
 from ..entities.meteor_pool import MeteorPool
+from ..entities.mountain_geode import MountainGeode
 from ..entities.mountain_mage import MountainMage
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider

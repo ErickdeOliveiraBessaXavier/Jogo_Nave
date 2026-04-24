@@ -23,17 +23,17 @@ Padrões aplicados
 
 import math
 import random
-from typing import Final, Literal, Optional, List
+from typing import Final, List, Literal, Optional
 
 import pygame
 
 from ..core import colors
 from ..core.assets import BASE_DIR, get_image
 from ..core.config import config as Config
-from .mountain_serpent_pixel_map import C as _PIX_COLORS
 from .mountain_serpent_pixel_map import PIXEL_COLS as _PIXEL_COLS
 from .mountain_serpent_pixel_map import PIXEL_MAP as _PIXEL_MAP
 from .mountain_serpent_pixel_map import PIXEL_ROWS as _PIXEL_ROWS
+from .mountain_serpent_pixel_map import C as _PIX_COLORS
 
 # ---------------------------------------------------------------------------
 # Helpers de uso geral

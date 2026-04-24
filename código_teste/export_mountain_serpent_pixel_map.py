@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pygame
 
@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from game.entities.mountain_serpent_pixel_map import C, PIXEL_MAP
+from game.entities.mountain_serpent_pixel_map import PIXEL_MAP, C
 
 
 def export_svg(out_path: Path, scale: int) -> None:
