@@ -717,7 +717,7 @@ class PlayingScene(Scene):
             if self._game_over_triggered:
                 return
 
-        self.entity_manager.cleanup()
+        # self.entity_manager.cleanup()  # Removido: já chamado internamente em entity_manager.update()
         self._update_level_logic(dt)
         self.player_profile.auto_save()
 
@@ -1336,6 +1336,8 @@ class PlayingScene(Scene):
         em = self.entity_manager
 
         if self.collisions.alien_bullets_vs_ship(self.ship, em.alien_bullets):
+            self._handle_ship_hit()
+        if self.collisions.serpent_bullets_vs_ship(self.ship, em.serpent_bullets):
             self._handle_ship_hit()
         if self.collisions.eye_laser_vs_ship(self.ship, em.eye_lasers):
             self._handle_ship_hit()

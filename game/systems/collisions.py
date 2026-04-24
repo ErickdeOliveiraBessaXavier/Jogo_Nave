@@ -37,7 +37,11 @@ from ..entities.meteor import Meteor
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.mountain_mage import MountainStalagmite
-from ..entities.mountain_serpent_boss import MountainSerpentBoss, SerpentBlock
+from ..entities.mountain_serpent_boss import (
+    MountainSerpentBoss,
+    SerpentBlock,
+    SerpentRockBullet,
+)
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
@@ -1380,10 +1384,11 @@ class Collisions:
             if bullet.dead:
                 continue
 
-            # Usa colisão com máscara (pixel-perfect) em vez de apenas rect
-            if not self._check_mask_collision(
-                bullet.rect, None, boss, bullet.x, bullet.y
-            ):
+            # Usa o rect da cabeça (atualizado todo frame) para colisão precisa.
+            # _check_mask_collision com fallback para boss.x/y é evitado aqui porque
+            # boss.x/y/w/h são bounds de compatibilidade estáticos (toda a largura da
+            # tela), não a posição real da cabeça.
+            if not bullet.rect.colliderect(boss.rect):
                 continue
 
             if not boss.is_vulnerable:
@@ -1519,6 +1524,16 @@ class Collisions:
                 entity_manager.spawn_explosion(
                     ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
                 )
+                return True
+        return False
+
+    def serpent_bullets_vs_ship(self, ship: Ship, serpent_bullets: list[SerpentRockBullet]) -> bool:
+        """Verifica colisão entre as bolas de rocha da serpente e a nave."""
+        if ship.invuln > 0:
+            return False
+        for bullet in serpent_bullets[:]:
+            if ship.rect.colliderect(bullet.rect):
+                bullet.dead = True
                 return True
         return False
 
