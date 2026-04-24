@@ -353,8 +353,9 @@ class EntityManager:
                 if ns: self.rock_shards.extend(ns)
                 self.orbital_rocks = orks
             elif isinstance(self.boss, MountainSerpentBoss):
-                bb, _ = self.boss.update(enemy_dt, player_x, player_y)
+                bb, fragments = self.boss.update(enemy_dt, player_x, player_y)
                 if bb: self.serpent_bullets.extend(bb)
+                if fragments: self.enemies.extend(fragments)
             else:
                 ls, sqs = self.boss.update(enemy_dt, player_x, player_y)
                 if ls: self.boss_lasers.extend(ls)
@@ -590,8 +591,14 @@ class EntityManager:
         eh = getattr(enemy, "h", getattr(getattr(enemy, "rect", None), "height", 50))
         s = pygame.display.get_surface()
         sw, sh = (s.get_size() if s else (1600, 900))
+        
         if self.is_side_scroll:
             return enemy.x < -ew or enemy.y < -eh or enemy.y > sh
+            
+        # Para a Serpente, permitimos que os blocos existam abaixo do limite inferior (spawn)
+        if isinstance(enemy, SerpentBlock):
+            return enemy.y < -eh or enemy.x < -ew or enemy.x > sw
+            
         return enemy.y > sh or enemy.x < -ew or enemy.x > sw
 
     def cleanup(self) -> None:
@@ -619,8 +626,9 @@ class EntityManager:
         
         self.enemies = [
             e for e in self.enemies
-            if (isinstance(e, SerpentBlock) or not (e.dead and not (isinstance(e, MountainStalagmite) and getattr(e, "_fragments", None))))
-            and not (isinstance(e, ExplosiveMine) and e.is_off_screen())
+            if (isinstance(e, SerpentBlock) and not getattr(e, "is_fragment", False)) or 
+            (not (e.dead and not (isinstance(e, MountainStalagmite) and getattr(e, "_fragments", None)))
+            and not (isinstance(e, ExplosiveMine) and e.is_off_screen()))
         ]
         
         self.mine_explosions = [m for m in self.mine_explosions if not m.finished()]
