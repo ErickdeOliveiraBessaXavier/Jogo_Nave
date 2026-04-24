@@ -93,7 +93,9 @@ def test_ship_collision_with_rock_glider_applies_part_damage() -> None:
     enemy = RockGlider(x=260.0, y=180.0, vx=120.0, vy=0.0)
     enemy._update_collision_regions()
 
-    ship = _DummyShip(enemy._rock_hit_rect.centerx - 8, enemy._rock_hit_rect.centery - 8, w=16, h=16)
+    ship = _DummyShip(
+        enemy._rock_hit_rect.centerx - 8, enemy._rock_hit_rect.centery - 8, w=16, h=16
+    )
     entity_manager = _DummyEntityManager()
 
     grid: SpatialGrid[RockGlider] = SpatialGrid()

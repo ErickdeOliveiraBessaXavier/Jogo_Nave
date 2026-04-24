@@ -67,12 +67,12 @@ class EntityManager:
         self.is_side_scroll = is_side_scroll  # NOVO: Modo de jogo
         self.bullets: list[Bullet] = []
         self.emp_waves: list[EMPWave] = []  # Ondas visuais do EMP
-        self.energy_orbs: list[
-            EnergyOrb
-        ] = []  # Projéteis do ElementalRobot (mini-boss)
-        self.explosive_effects: list[
-            ExplosiveEffect
-        ] = []  # Efeitos visuais de explosão de área
+        self.energy_orbs: list[EnergyOrb] = (
+            []
+        )  # Projéteis do ElementalRobot (mini-boss)
+        self.explosive_effects: list[ExplosiveEffect] = (
+            []
+        )  # Efeitos visuais de explosão de área
         self.enemies: list[
             Meteor
             | Alien

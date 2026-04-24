@@ -1068,9 +1068,9 @@ class ProceduralLevelGenerator:
         self.difficulty_curves = DifficultyCurves()
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
-        self._difficulty_cache: dict[
-            Union[int, str], float
-        ] = {}  # Cache for difficulty and score multiplier calculations
+        self._difficulty_cache: dict[Union[int, str], float] = (
+            {}
+        )  # Cache for difficulty and score multiplier calculations
         self._level_cache: dict[int, LevelConfig] = {}
 
     def generate_level(self, level_number: int) -> LevelConfig:

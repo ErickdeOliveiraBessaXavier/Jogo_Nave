@@ -168,15 +168,19 @@ def run_benchmark(
         "fps": {
             "average": round(average_fps, 2),
             "minimum": round(
-                1000.0 / frame_time_stats["maximum"]
-                if frame_time_stats["maximum"] > 0
-                else 0.0,
+                (
+                    1000.0 / frame_time_stats["maximum"]
+                    if frame_time_stats["maximum"] > 0
+                    else 0.0
+                ),
                 2,
             ),
             "maximum": round(
-                1000.0 / frame_time_stats["minimum"]
-                if frame_time_stats["minimum"] > 0
-                else 0.0,
+                (
+                    1000.0 / frame_time_stats["minimum"]
+                    if frame_time_stats["minimum"] > 0
+                    else 0.0
+                ),
                 2,
             ),
         },

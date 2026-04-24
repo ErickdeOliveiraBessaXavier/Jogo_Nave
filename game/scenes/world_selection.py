@@ -124,7 +124,7 @@ class WorldCard:
         if self.hover:
             # Brightening effect ao passar o mouse (para todos os cards)
             bg_color = tuple(min(255, c + 100) for c in self.bg_color)
-        
+
         pygame.draw.rect(surface, bg_color, self.rect, border_radius=10)
 
         # Borda
@@ -168,7 +168,9 @@ class WorldCard:
             # Mostrar em duas linhas menores para caber sem abreviacao.
             checkpoint_font = get_font(14)
             line1 = checkpoint_font.render("Checkpoint", True, CUSTOM_GOLD)
-            line2 = checkpoint_font.render(f"Score: {self.best_score:,}", True, CUSTOM_GOLD)
+            line2 = checkpoint_font.render(
+                f"Score: {self.best_score:,}", True, CUSTOM_GOLD
+            )
 
             line2_rect = line2.get_rect(
                 centerx=self.rect.centerx, bottom=self.rect.bottom - 16
@@ -240,7 +242,7 @@ class WorldSelectionView:
         self.current_background = None
         self.previous_background = None
         self.last_selected = -1
-        
+
         # Transição de fade
         self.transition_progress = 0.0  # 0.0 a 1.0
         self.transition_duration = 0.3  # segundos
@@ -356,7 +358,7 @@ class WorldSelectionView:
             self.hovered_index = None
             for i, card in enumerate(self.world_cards):
                 card.update_hover(event.pos)
-                
+
                 if card.hover:
                     self.hovered_index = i
                     # Sempre atualiza selected_index quando hovereado (mesmo se LOCKED)
@@ -399,7 +401,7 @@ class WorldSelectionView:
             self.previous_background = self.current_background
             self.is_transitioning = True
             self.transition_progress = 0.0
-            
+
             if self.selected_index < len(self.world_cards):
                 world_config = self.world_cards[self.selected_index].world_config
                 theme_str = world_config.theme.value.lower()
@@ -448,7 +450,7 @@ class WorldSelectionView:
         # Desenhar background com transição de fade
         if self.is_transitioning:
             # Transição de fade em andamento
-            
+
             # Desenhar background antigo (desaparecendo)
             if self.previous_background is not None:
                 try:
@@ -474,7 +476,7 @@ class WorldSelectionView:
                     surface.blit(temp_surface, (0, 0))
                 except Exception:
                     pass
-            
+
             # Desenhar background novo (aparecendo)
             if self.current_background is not None:
                 try:
@@ -523,8 +525,10 @@ class WorldSelectionView:
             card.render(surface)
 
             # Destacar: seleção por teclado OU hover do mouse
-            is_keyboard_selected = (i == self.selected_index and self.hovered_index is None)
-            is_hovered = (i == self.hovered_index)
+            is_keyboard_selected = (
+                i == self.selected_index and self.hovered_index is None
+            )
+            is_hovered = i == self.hovered_index
 
             if is_keyboard_selected or is_hovered:
                 # Borda extra dourada

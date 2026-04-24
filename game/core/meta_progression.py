@@ -1018,7 +1018,9 @@ class PlayerProfile:
                         world_unlocks_raw_untyped,
                     )
                     for world_id_key, world_data_value in world_unlocks_dict.items():
-                        if isinstance(world_id_key, str) and isinstance(world_data_value, dict):
+                        if isinstance(world_id_key, str) and isinstance(
+                            world_data_value, dict
+                        ):
                             world_unlocks_raw[world_id_key] = world_data_value
                 for world_id_str, world_data_raw in world_unlocks_raw.items():
                     world_data: Dict[str, Any] = world_data_raw
@@ -1259,7 +1261,9 @@ class PlayerProfile:
                         from typing import cast
 
                         keys: List[int] = []
-                        for key in cast(List[Any], keybindings_raw)[:UPGRADE_SLOT_COUNT]:
+                        for key in cast(List[Any], keybindings_raw)[
+                            :UPGRADE_SLOT_COUNT
+                        ]:
                             if (
                                 isinstance(key, int) and 0 <= key <= 1000000
                             ):  # Valid pygame key range

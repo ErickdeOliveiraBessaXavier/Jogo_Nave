@@ -489,9 +489,17 @@ class RockGlider(Meteor):
             return ()
 
         hitboxes: list[pygame.Rect] = []
-        if not self._rock_destroyed and self._rock_hit_rect.width > 0 and self._rock_hit_rect.height > 0:
+        if (
+            not self._rock_destroyed
+            and self._rock_hit_rect.width > 0
+            and self._rock_hit_rect.height > 0
+        ):
             hitboxes.append(self._rock_hit_rect)
-        if not self._bot_destroyed and self._bot_hit_rect.width > 0 and self._bot_hit_rect.height > 0:
+        if (
+            not self._bot_destroyed
+            and self._bot_hit_rect.width > 0
+            and self._bot_hit_rect.height > 0
+        ):
             hitboxes.append(self._bot_hit_rect)
         return tuple(hitboxes)
 

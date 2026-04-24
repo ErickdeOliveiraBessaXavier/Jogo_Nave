@@ -890,10 +890,10 @@ class PlayingScene(Scene):
         """Dispara as balas da nave e reinicia o cooldown."""
         bullet_specs = self.ship.bullet_spawn()
         adjusted_damage = int(_BASE_BULLET_DAMAGE * self.player_damage_multiplier)
-        
+
         # Tocar som de tiro (uma vez por salva de tiros)
         sound_manager.play_shot()
-        
+
         for (
             x,
             y,

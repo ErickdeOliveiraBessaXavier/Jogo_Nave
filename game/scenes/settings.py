@@ -771,7 +771,9 @@ class SettingsView:
             surface, self.layout_rects["popup_no_button"], "Não", CUSTOM_PURPLE, 255, 0
         )
 
-    def _wrap_text(self, font: pygame.font.Font, text: str, max_width: int) -> list[str]:
+    def _wrap_text(
+        self, font: pygame.font.Font, text: str, max_width: int
+    ) -> list[str]:
         """Quebra texto em múltiplas linhas para caber na largura máxima."""
         words = text.split()
         if not words:

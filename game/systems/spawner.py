@@ -299,7 +299,10 @@ class EnemySpawner:
 
     def _is_storm_level(self) -> bool:
         theme_name = (self.config.theme_name or "").lower()
-        return "tempestade de meteoros" in theme_name or "tempestade de rock gliders" in theme_name
+        return (
+            "tempestade de meteoros" in theme_name
+            or "tempestade de rock gliders" in theme_name
+        )
 
     def _is_rock_glider_storm_level(self) -> bool:
         """Retorna True apenas para a fase temática de Tempestade de Rock Gliders."""
@@ -310,7 +313,9 @@ class EnemySpawner:
         """Retorna cap total de inimigos com override para fases de tempestade."""
         if self._is_storm_level():
             return 30
-        return calculate_dynamic_enemy_cap(self.current_level_number, self.difficulty_preset)
+        return calculate_dynamic_enemy_cap(
+            self.current_level_number, self.difficulty_preset
+        )
 
     @staticmethod
     def _percentile(values: list[int], percentile: float) -> float:

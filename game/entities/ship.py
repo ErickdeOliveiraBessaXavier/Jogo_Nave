@@ -728,7 +728,9 @@ class Ship:
             # Em top-down, permitir sair pela parte inferior durante entrada
             self.y = Config.SCREEN_HEIGHT - self.h
 
-    def bullet_spawn(self) -> list[tuple[float, float, tuple[float, float], bool, bool, bool, bool]]:
+    def bullet_spawn(
+        self,
+    ) -> list[tuple[float, float, tuple[float, float], bool, bool, bool, bool]]:
         """Retorna posições para spawn de balas.
 
         Returns:

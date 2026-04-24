@@ -74,7 +74,6 @@ class Scoreable(Protocol):
 
 
 @runtime_checkable
-
 class Enemy(Protocol):
     """Protocol para qualquer inimigo comum do jogo."""
 
@@ -472,7 +471,8 @@ class Collisions:
 
         # ElementalRobot, Boulder, StoneSentry, MountainStalagmite e SerpentBlock têm HP próprio.
         if isinstance(
-            enemy, (ElementalRobot, Boulder, StoneSentry, MountainStalagmite, SerpentBlock)
+            enemy,
+            (ElementalRobot, Boulder, StoneSentry, MountainStalagmite, SerpentBlock),
         ):
             prev_health = enemy.health if isinstance(enemy, MountainStalagmite) else 0
             enemy.take_damage(1)
@@ -1381,7 +1381,9 @@ class Collisions:
                 continue
 
             # Usa colisão com máscara (pixel-perfect) em vez de apenas rect
-            if not self._check_mask_collision(bullet.rect, None, boss, bullet.x, bullet.y):
+            if not self._check_mask_collision(
+                bullet.rect, None, boss, bullet.x, bullet.y
+            ):
                 continue
 
             if not boss.is_vulnerable:

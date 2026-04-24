@@ -31,10 +31,16 @@ class _DummyEntityManager:
         self.explosions.append((x, y, size, explosion_type))
 
 
-def test_stalagmite_fatal_hit_enters_shattering_instead_of_instant_dead(monkeypatch) -> None:
+def test_stalagmite_fatal_hit_enters_shattering_instead_of_instant_dead(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(sound_manager, "play_boss_damage", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sound_manager, "play_explosion_asteroid", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sound_manager, "play_explosion_alien", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        sound_manager, "play_explosion_asteroid", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        sound_manager, "play_explosion_alien", lambda *args, **kwargs: None
+    )
 
     collisions = Collisions()
     entity_manager = _DummyEntityManager()
@@ -70,8 +76,12 @@ def test_stalagmite_fatal_hit_enters_shattering_instead_of_instant_dead(monkeypa
 
 def test_dead_stalagmite_stays_loaded_while_fragments_are_active(monkeypatch) -> None:
     monkeypatch.setattr(sound_manager, "play_boss_damage", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sound_manager, "play_explosion_asteroid", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sound_manager, "play_explosion_alien", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        sound_manager, "play_explosion_asteroid", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        sound_manager, "play_explosion_alien", lambda *args, **kwargs: None
+    )
 
     manager = EntityManager(sound_manager=None)
     stalagmite = MountainStalagmite(x=320.0, ground_y=721.0, target_y=560.0)

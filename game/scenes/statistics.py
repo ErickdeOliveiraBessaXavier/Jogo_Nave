@@ -828,7 +828,9 @@ class ConfirmationDialog:
         self._draw_button(surface, self.yes_rect, "Sim", colors.GREEN)
         self._draw_button(surface, self.no_rect, "Não", colors.RED)
 
-    def _wrap_text(self, font: pygame.font.Font, text: str, max_width: int) -> list[str]:
+    def _wrap_text(
+        self, font: pygame.font.Font, text: str, max_width: int
+    ) -> list[str]:
         """Quebra texto em linhas para caber dentro do dialog."""
         words = text.split()
         if not words:

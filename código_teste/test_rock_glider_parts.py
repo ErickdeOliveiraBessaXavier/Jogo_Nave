@@ -17,16 +17,16 @@ def test_rock_glider_rock_needs_three_hits_independent_from_bot() -> None:
     rock_hit = _part_center(enemy, "rock")
 
     for _ in range(2):
-        points, part_destroyed, fully_destroyed, _center, part_name = enemy.take_part_damage(
-            rock_hit[0], rock_hit[1], amount=1
+        points, part_destroyed, fully_destroyed, _center, part_name = (
+            enemy.take_part_damage(rock_hit[0], rock_hit[1], amount=1)
         )
         assert points == 0
         assert part_destroyed is False
         assert fully_destroyed is False
         assert part_name == "rock"
 
-    points, part_destroyed, fully_destroyed, _center, part_name = enemy.take_part_damage(
-        rock_hit[0], rock_hit[1], amount=1
+    points, part_destroyed, fully_destroyed, _center, part_name = (
+        enemy.take_part_damage(rock_hit[0], rock_hit[1], amount=1)
     )
     assert points == enemy.get_part_points_value("rock")
     assert part_destroyed is True
@@ -40,16 +40,16 @@ def test_rock_glider_bot_needs_two_hits_independent_from_rock() -> None:
     enemy = RockGlider(x=900.0, y=240.0, vx=120.0, vy=0.0)
     bot_hit = _part_center(enemy, "bot")
 
-    points, part_destroyed, fully_destroyed, _center, part_name = enemy.take_part_damage(
-        bot_hit[0], bot_hit[1], amount=1
+    points, part_destroyed, fully_destroyed, _center, part_name = (
+        enemy.take_part_damage(bot_hit[0], bot_hit[1], amount=1)
     )
     assert points == 0
     assert part_destroyed is False
     assert fully_destroyed is False
     assert part_name == "bot"
 
-    points, part_destroyed, fully_destroyed, _center, part_name = enemy.take_part_damage(
-        bot_hit[0], bot_hit[1], amount=1
+    points, part_destroyed, fully_destroyed, _center, part_name = (
+        enemy.take_part_damage(bot_hit[0], bot_hit[1], amount=1)
     )
     assert points == enemy.get_part_points_value("bot")
     assert part_destroyed is True
