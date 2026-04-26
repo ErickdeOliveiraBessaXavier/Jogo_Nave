@@ -87,6 +87,13 @@ def _ease_out_quad(t: float) -> float:
     return 1.0 - (1.0 - t) ** 2
 
 
+def _make_white_sprite(surface: pygame.Surface) -> pygame.Surface:
+    """Gera uma versão totalmente branca do sprite para flash de dano."""
+    white = surface.copy()
+    white.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_ADD)
+    return white
+
+
 # ---------------------------------------------------------------------------
 # Sistema de particulas de poeira
 # ---------------------------------------------------------------------------
@@ -156,6 +163,7 @@ class SerpentBlock:
         "_rect",
         # Visual
         "_rotation_angle", "_rotation_dir", "_sprite_frame",
+        "_frame_index",
         # Particulas
         "_particles", "_particle_timer",
         # Animacao de troca de coluna
@@ -193,6 +201,8 @@ class SerpentBlock:
 
     # Cache de frames compartilhado entre instancias (carregado uma vez)
     _animation_frames: Optional[List[pygame.Surface]] = None
+    _white_animation_frames: Optional[List[pygame.Surface]] = None
+    _rotation_cache: dict[tuple[int, int, bool], pygame.Surface] = {}
 
     # ------------------------------------------------------------------
     # Inicializacao
@@ -243,6 +253,7 @@ class SerpentBlock:
         self._sprite_frame: Optional[pygame.Surface] = (
             random.choice(sprite_frames) if sprite_frames else None
         )
+        self._frame_index = sprite_frames.index(self._sprite_frame) if self._sprite_frame else 0
 
         # Rect de colisao calculado uma unica vez (atualizado in-place)
         self._rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
@@ -251,6 +262,14 @@ class SerpentBlock:
         self._entry_anim_active: bool = False
         self._entry_anim_timer: float = 0.0
         self._entry_anim_duration: float = 0.0
+
+    def _get_rotated_surface(self, surface: pygame.Surface, angle: float, is_white: bool = False) -> pygame.Surface:
+        """Retorna uma surface rotacionada do cache, com quantização de 5 graus."""
+        q_angle = (int(angle) // 5) * 5 % 360
+        key = (self._frame_index, q_angle, is_white)
+        if key not in self._rotation_cache:
+            self._rotation_cache[key] = pygame.transform.rotate(surface, q_angle)
+        return self._rotation_cache[key]
 
     def _reset_swap_state(self) -> None:
         """Zera todos os campos de troca de coluna para o estado padrao."""
@@ -287,6 +306,7 @@ class SerpentBlock:
                 frames.append(image)
 
         cls._animation_frames = frames
+        cls._white_animation_frames = [_make_white_sprite(f) for f in frames]
         return frames
 
     @classmethod
@@ -343,17 +363,20 @@ class SerpentBlock:
         self._rotation_dir = random.choice((-1.0, 1.0))
         sprite_frames = self._load_animation_frames(self.w, self.h)
         self._sprite_frame = random.choice(sprite_frames) if sprite_frames else None
+        self._frame_index = sprite_frames.index(self._sprite_frame) if self._sprite_frame else 0
         self._particles.clear()
         self._reset_swap_state()
 
     def revive_with_entry(self) -> None:
         """Revive o bloco reposicionado fora da tela e acelera o loop do boss."""
         self.revive()
-        # Cada coluna entra pelo lado oposto ao seu movimento normal
+        # Cada bloco entra escalonado pelo row_index para nao empilhar todos no mesmo ponto.
+        # Coluna esquerda sobe (entra por baixo), direita desce (entra por cima).
+        spacing = self.boss.block_spacing
         if self.side == "left":
-            self._origin_cy = Config.SCREEN_HEIGHT + self.RADIUS   # Entra por baixo
+            self._origin_cy = Config.SCREEN_HEIGHT + self.RADIUS + self.row_index * spacing
         else:
-            self._origin_cy = -self.RADIUS                          # Entra por cima
+            self._origin_cy = -self.RADIUS - self.row_index * spacing
         # Arranque de velocidade para re-entrada visualmente dramatica
         self.boss.loop_speed_multiplier = max(self.boss.loop_speed_multiplier, 12.0)
 
@@ -463,16 +486,19 @@ class SerpentBlock:
             self._rotation_angle + self.boss.BLOCK_ROTATION_SPEED * dt * self._rotation_dir
         ) % 360.0
 
-        # Particulas: emissao periodica + atualizacao in-place
+        # Particulas: emissao periodica + atualizacao in-place reversa (otimizado)
         self._particle_timer -= dt
         if self._particle_timer <= 0.0:
             self._spawn_particle()
             self._particle_timer = random.uniform(
                 self._PARTICLE_INTERVAL_MIN, self._PARTICLE_INTERVAL_MAX
             )
-        self._particles = [p for p in self._particles if not p.dead]
-        for particle in self._particles:
-            particle.update(dt)
+        
+        for i in range(len(self._particles) - 1, -1, -1):
+            p = self._particles[i]
+            p.update(dt)
+            if p.dead:
+                self._particles.pop(i)
 
         # Movimento de fragmento (invocado na vulnerabilidade)
         if self.is_fragment:
@@ -531,11 +557,16 @@ class SerpentBlock:
     def _draw_sprite(self, surface: pygame.Surface, cx: int, cy: int) -> None:
         if self._sprite_frame is None:
             return
-        rotated = pygame.transform.rotate(self._sprite_frame, self._rotation_angle)
+        
+        # Otimizado: usa cache de rotação e sprite branco se estiver em flash
+        if self._hit_flash > 0.0 and self._white_animation_frames:
+            white_sprite = self._white_animation_frames[self._frame_index]
+            rotated = self._get_rotated_surface(white_sprite, self._rotation_angle, is_white=True)
+        else:
+            rotated = self._get_rotated_surface(self._sprite_frame, self._rotation_angle, is_white=False)
+            
         dest = rotated.get_rect(center=(cx, cy))
         surface.blit(rotated, dest.topleft)
-        if self._hit_flash > 0.0:
-            surface.blit(rotated, dest.topleft, special_flags=pygame.BLEND_RGB_ADD)
 
     def _draw_fallback_circle(
         self, surface: pygame.Surface, cx: int, cy: int, r: int
@@ -575,11 +606,12 @@ class SerpentRockBullet:
 
     __slots__ = (
         "x", "y", "vx", "vy", "radius", "angle", "rot_speed", "dead", 
-        "_rect", "_sprite", "_afterimages", "_trail_timer"
+        "_rect", "_sprite", "_afterimages", "_trail_timer", "_frame_index"
     )
     
     # Cache para os sprites redimensionados
     _animation_frames: Optional[List[pygame.Surface]] = None
+    _rotation_cache: dict[tuple[int, int], pygame.Surface] = {}
     _TRAIL_INTERVAL: Final = 0.04 # Segundos entre cada "fantasma"
     _TRAIL_LIFETIME: Final = 0.3  # Duração de cada fantasma
 
@@ -601,10 +633,19 @@ class SerpentRockBullet:
             
         # Escolhe um sprite aleatório do set do SerpentBlock
         self._sprite = random.choice(SerpentRockBullet._animation_frames) if SerpentRockBullet._animation_frames else None
+        self._frame_index = SerpentRockBullet._animation_frames.index(self._sprite) if (self._sprite and SerpentRockBullet._animation_frames) else 0
         
         self._rect = pygame.Rect(
             int(x - self.radius), int(y - self.radius), self.radius * 2, self.radius * 2
         )
+
+    def _get_rotated_surface(self, surface: pygame.Surface, angle: float) -> pygame.Surface:
+        """Retorna uma surface rotacionada do cache, com quantização de 10 graus para balas."""
+        q_angle = (int(angle) // 10) * 10 % 360
+        key = (self._frame_index, q_angle)
+        if key not in self._rotation_cache:
+            self._rotation_cache[key] = pygame.transform.rotate(surface, q_angle)
+        return self._rotation_cache[key]
 
     @classmethod
     def _load_frames(cls) -> None:
@@ -635,10 +676,12 @@ class SerpentRockBullet:
         self._rect.x = int(self.x - self.radius)
         self._rect.y = int(self.y - self.radius)
 
-        # Atualiza o rastro fantasmagórico
-        for img in self._afterimages:
+        # Atualiza o rastro fantasmagórico (in-place reversa)
+        for i in range(len(self._afterimages) - 1, -1, -1):
+            img = self._afterimages[i]
             img["life"] -= dt
-        self._afterimages = [img for img in self._afterimages if img["life"] > 0]
+            if img["life"] <= 0:
+                self._afterimages.pop(i)
 
         self._trail_timer -= dt
         if self._trail_timer <= 0:
@@ -655,16 +698,19 @@ class SerpentRockBullet:
         if not self._sprite:
             return
 
-        # Desenha os fantasmas do rastro
+        # Otimizado: usa cache de rotação e set_alpha() sem copy()
         for img in self._afterimages:
             alpha = int((img["life"] / self._TRAIL_LIFETIME) * 128)
-            rotated = pygame.transform.rotate(self._sprite, img["angle"])
+            rotated = self._get_rotated_surface(self._sprite, img["angle"])
+            
+            old_alpha = rotated.get_alpha()
             rotated.set_alpha(alpha)
             dest = rotated.get_rect(center=(int(img["x"]), int(img["y"])))
             surface.blit(rotated, dest.topleft)
+            rotated.set_alpha(old_alpha)
 
         # Desenha a pedra principal
-        rotated = pygame.transform.rotate(self._sprite, self.angle)
+        rotated = self._get_rotated_surface(self._sprite, self.angle)
         dest = rotated.get_rect(center=(int(self.x), int(self.y)))
         surface.blit(rotated, dest.topleft)
 
@@ -718,9 +764,6 @@ class MountainSerpentBoss:
     VULNERABLE_BLOCK_SPAWN_COOLDOWN: Final[tuple[float, float]] = (0.6, 1.4) # s entre invocações
     VULNERABLE_BLOCK_ASCENT_SPEED: Final[tuple[float, float]] = (120.0, 180.0) # px/s
 
-    # Inimigos Extras (Fases 2 e 3)
-    SENTRY_SPAWN_INTERVAL: Final[tuple[float, float]] = (6.0, 12.0) # s entre sentinelas
-
     # Blocos laterais
     BLOCK_COUNT: Final[int] = 5              # blocos por coluna
     RESPAWN_DELAY: Final[float] = 15.0   
@@ -758,8 +801,11 @@ class MountainSerpentBoss:
 
     # Cache de frames (compartilhado entre instancias)
     _animation_frames: Optional[List[pygame.Surface]] = None
+    _white_animation_frames: Optional[List[pygame.Surface]] = None
     _spit_sprite: Optional[pygame.Surface] = None
+    _white_spit_sprite: Optional[pygame.Surface] = None
     _pain_sprite: Optional[pygame.Surface] = None
+    _white_pain_sprite: Optional[pygame.Surface] = None
 
     # ------------------------------------------------------------------
     # Inicializacao
@@ -796,6 +842,8 @@ class MountainSerpentBoss:
         # Blocos laterais
         self._all_blocks: List[SerpentBlock] = []
         self._block_map: dict[tuple[Side, int], SerpentBlock] = {}
+        self._left_alive = 0
+        self._right_alive = 0
         self._respawn_timer = -1.0
         self.is_vulnerable = False
         self._dead_block_respawn_timers: dict[SerpentBlock, float] = {}
@@ -871,6 +919,7 @@ class MountainSerpentBoss:
         sprites_dir = BASE_DIR / "assets" / "images" / "Sprites_Boss_Cobra"
         target_size = (cls.HEAD_PIXEL_SCALE * _PIXEL_COLS, cls.HEAD_PIXEL_SCALE * _PIXEL_ROWS)
         frames: List[pygame.Surface] = []
+        white_frames: List[pygame.Surface] = []
 
         if sprites_dir.exists():
             # Carrega frames de animação idle (exclui os novos sprites especiais)
@@ -881,17 +930,21 @@ class MountainSerpentBoss:
                 if image.get_size() != target_size:
                     image = pygame.transform.scale(image, target_size)
                 frames.append(image)
+                white_frames.append(_make_white_sprite(image))
             
             # Carrega sprites especiais
             spit_path = sprites_dir / "Animação_Cobra_Cuspindo a pedra.png"
             if spit_path.exists():
                 cls._spit_sprite = pygame.transform.scale(get_image(spit_path), target_size)
+                cls._white_spit_sprite = _make_white_sprite(cls._spit_sprite)
             
             pain_path = sprites_dir / "Animação_Cobra_Levando_Dano.png"
             if pain_path.exists():
                 cls._pain_sprite = pygame.transform.scale(get_image(pain_path), target_size)
+                cls._white_pain_sprite = _make_white_sprite(cls._pain_sprite)
 
         cls._animation_frames = frames
+        cls._white_animation_frames = white_frames
         return frames
 
     @staticmethod
@@ -953,11 +1006,14 @@ class MountainSerpentBoss:
 
         self._animation_timer += dt
         current_idx = self._frame_sequence[self._animation_seq_pos]
-
-        while self._animation_timer >= self._get_animation_frame_duration(current_idx):
-            self._animation_timer -= self._get_animation_frame_duration(current_idx)
+        
+        # Otimização: chama a duração uma vez por iteração
+        dur = self._get_animation_frame_duration(current_idx)
+        while self._animation_timer >= dur:
+            self._animation_timer -= dur
             self._animation_seq_pos = (self._animation_seq_pos + 1) % len(self._frame_sequence)
             current_idx = self._frame_sequence[self._animation_seq_pos]
+            dur = self._get_animation_frame_duration(current_idx)
 
         self._set_head_frame(current_idx)
 
@@ -997,6 +1053,8 @@ class MountainSerpentBoss:
             self._block_map[("right", i)] = right
 
         self._all_blocks = blocks
+        self._left_alive = self.BLOCK_COUNT
+        self._right_alive = self.BLOCK_COUNT
         return blocks
 
     # ------------------------------------------------------------------
@@ -1010,6 +1068,12 @@ class MountainSerpentBoss:
 
         self._dead_block_respawn_timers[block] = self.BLOCK_INDIVIDUAL_RESPAWN_DELAY
         self._head_pain_timer = self.HEAD_PAIN_SHAKE_DURATION
+        
+        # Atualiza contadores incrementais para performance
+        if side == "left":
+            self._left_alive -= 1
+        else:
+            self._right_alive -= 1
 
         # Ideia 2: Gerar estilhaços de pedra ao destruir um bloco
         num_shards = random.randint(3, 5)
@@ -1021,8 +1085,8 @@ class MountainSerpentBoss:
             shard = SerpentRockBullet(block.cx, block.cy, vx, vy)
             self._pending_shards.append(shard)
 
-        # FIX: Usamos a propriedade dinâmica em vez de contadores manuais
         if self.all_blocks_dead and not self.is_vulnerable:
+            self._dead_block_respawn_timers.clear()  # timers residuais nao devem interferir
             self.is_vulnerable = True
             self._respawn_timer = self._get_respawn_delay()
             self._loop_movement_enabled = False
@@ -1041,12 +1105,16 @@ class MountainSerpentBoss:
     def _update_dead_block_respawns(self, dt: float) -> None:
         if not self._dead_block_respawn_timers:
             return
-        for block, timer in list(self._dead_block_respawn_timers.items()):
-            timer -= dt
-            if timer > 0.0:
-                self._dead_block_respawn_timers[block] = timer
+        
+        # Itera o dicionário diretamente e coleta keys para remoção (mais rápido)
+        to_remove: list[SerpentBlock] = []
+        for block, timer in self._dead_block_respawn_timers.items():
+            new_timer = timer - dt
+            if new_timer > 0.0:
+                self._dead_block_respawn_timers[block] = new_timer
                 continue
-            del self._dead_block_respawn_timers[block]
+            
+            to_remove.append(block)
             if not block.dead:
                 continue
 
@@ -1070,11 +1138,17 @@ class MountainSerpentBoss:
                 else:
                     block.origin_cy = -SerpentBlock.RADIUS - block.row_index * self.block_spacing
 
-            block.revive() 
-            # Se um bloco renascer individualmente e o boss estava vulnerável, fechamos a janela
-            if self.is_vulnerable:
-                self.is_vulnerable = False
-                self._loop_movement_enabled = True
+            block.revive()
+            # Atualiza contadores ao reviver bloco individualmente
+            if block.side == "left":
+                self._left_alive += 1
+            else:
+                self._right_alive += 1
+            # Nota: encerramento da vulnerabilidade e responsabilidade exclusiva de
+            # _respawn_all_blocks (via _respawn_timer), nao do timer individual.
+        
+        for b in to_remove:
+            del self._dead_block_respawn_timers[b]  # type: ignore
 
     def _respawn_all_blocks(self) -> list[StoneSentry]:
         """Revive todos os blocos com arranque de velocidade (fim da janela de vulnerabilidade)."""
@@ -1088,6 +1162,10 @@ class MountainSerpentBoss:
         self._head_pain_timer = 0.0
         self._swap_event_active = False
         self._swap_event_rows.clear()
+
+        # Reseta contadores incrementais
+        self._left_alive = self.BLOCK_COUNT
+        self._right_alive = self.BLOCK_COUNT
 
         for block in self._all_blocks:
             block.revive()
@@ -1342,18 +1420,18 @@ class MountainSerpentBoss:
 
     @property
     def left_alive_count(self) -> int:
-        """Conta dinamicamente blocos vivos na esquerda para evitar desincronia."""
-        return sum(1 for b in self._all_blocks if b.side == "left" and not b.dead)
+        """Otimizado: retorna o contador incremental."""
+        return self._left_alive
 
     @property
     def right_alive_count(self) -> int:
-        """Conta dinamicamente blocos vivos na direita para evitar desincronia."""
-        return sum(1 for b in self._all_blocks if b.side == "right" and not b.dead)
+        """Otimizado: retorna o contador incremental."""
+        return self._right_alive
 
     @property
     def all_blocks_dead(self) -> bool:
-        """True se absolutamente nenhum bloco lateral estiver vivo."""
-        return all(b.dead for b in self._all_blocks)
+        """Otimizado: verifica se ambos os contadores são zero."""
+        return self._left_alive == 0 and self._right_alive == 0
 
     @property
     def block_wave_time(self) -> float:
@@ -1417,6 +1495,11 @@ class MountainSerpentBoss:
         if self._loop_speed_multiplier > 1.0:
             self._loop_speed_multiplier = max(1.0, self._loop_speed_multiplier - dt * 6.5)
 
+        self._phase = self._current_phase()
+
+        # Spawn de StoneSentry e tratado exclusivamente em _respawn_all_blocks,
+        # garantindo exatamente um por vulnerabilidade encerrada (fases 2 e 3).
+
         if self._head_intro_active:
             if self._loop_speed_multiplier <= 1.0:
                 self._head_intro_progress = min(1.0, self._head_intro_progress + dt * 1.5)
@@ -1461,9 +1544,12 @@ class MountainSerpentBoss:
                 self._vulnerable_block_timer = random.uniform(*self.VULNERABLE_BLOCK_SPAWN_COOLDOWN)
 
         # Lógica do rastro fantasmagórico da cabeça (Efeito Alucard)
-        for img in self._head_afterimages:
+        # Otimização: Remoção in-place com iteração reversa
+        for i in range(len(self._head_afterimages) - 1, -1, -1):
+            img = self._head_afterimages[i]
             img["life"] -= dt
-        self._head_afterimages = [img for img in self._head_afterimages if img["life"] > 0]
+            if img["life"] <= 0:
+                self._head_afterimages.pop(i)
 
         if current_speed > self.speed or self.is_vulnerable:
             self._head_trail_timer -= dt
@@ -1484,7 +1570,7 @@ class MountainSerpentBoss:
             self.direction = -1
 
         # Coleta estilhaços de pedra gerados pela destruição de blocos
-        if hasattr(self, "_pending_shards") and self._pending_shards:
+        if self._pending_shards: # Removido hasattr desnecessário
             new_entities.extend(self._pending_shards)
             self._pending_shards.clear()
 
@@ -1501,31 +1587,39 @@ class MountainSerpentBoss:
         shake_x, shake_y = self._compute_head_shake()
         
         # Desenha os fantasmas do rastro da cabeça (Efeito Alucard)
-        # Issue 7: Usamos copy() para isolar o alpha de cada fantasma com segurança
+        # Otimizado: set_alpha() direto no sprite original, evitando copy()
         for img in self._head_afterimages:
             alpha = int((img["life"] / 0.25) * 100)
-            # Criamos uma cópia para não afetar o sprite original da animação
-            ghost = img["sprite"].copy()
-            ghost.set_alpha(alpha)
+            sprite = img["sprite"]
+            old_alpha = sprite.get_alpha()
+            sprite.set_alpha(alpha)
             # O fantasma é desenhado centralizado na sua posição gravada
-            fx = int(img["x"]) - ghost.get_width() // 2
-            fy = int(img["y"]) - ghost.get_height() // 2
-            surface.blit(ghost, (fx, fy))
+            fx = int(img["x"]) - sprite.get_width() // 2
+            fy = int(img["y"]) - sprite.get_height() // 2
+            surface.blit(sprite, (fx, fy))
+            sprite.set_alpha(old_alpha)
 
         draw_x = int(self.head_x + shake_x) - self._head_half_w
         draw_y = int(self.head_y + shake_y) - self._head_half_h
 
         # Seleciona o sprite baseado no estado (Prioridade: Dor > Cuspida > Normal)
         current_sprite = self._head_sprite
+        white_sprite = None
+        
         if self._head_pain_timer > 0.0 and self._pain_sprite:
             current_sprite = self._pain_sprite
+            white_sprite = self._white_pain_sprite
         elif self._spit_anim_timer > 0.0 and self._spit_sprite:
             current_sprite = self._spit_sprite
+            white_sprite = self._white_spit_sprite
+        else:
+            # Pega o frame correspondente da animação atual para o flash
+            current_frame_idx = self._frame_sequence[self._animation_seq_pos]
+            if self._white_animation_frames and current_frame_idx < len(self._white_animation_frames):
+                white_sprite = self._white_animation_frames[current_frame_idx]
 
-        if self._hit_flash > 0.0:
-            flash = current_sprite.copy()
-            flash.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_ADD)
-            surface.blit(flash, (draw_x, draw_y))
+        if self._hit_flash > 0.0 and white_sprite:
+            surface.blit(white_sprite, (draw_x, draw_y))
         else:
             surface.blit(current_sprite, (draw_x, draw_y))
 
