@@ -135,6 +135,33 @@ class GolemMine:
         """Retorna pontos ao ser destruído."""
         return 50
 
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x, self.y, float(self.RADIUS)
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.take_damage(damage)
+        if self.dead:
+            return HitResult(
+                killed=True,
+                points=self.get_points_value(),
+                explosion_size=20,
+                sound=hit_sounds.EXPLOSION_ASTEROID,
+            )
+        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
+
+    def on_ship_contact(self, contact_x: float, contact_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.dead = True
+        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
+
+    def should_remove(self) -> bool:
+        return self.dead
+
     def update(self, dt: float) -> list["RockShard"]:
         self._pulse_t += dt
         if self._hit_flash > 0:
@@ -305,6 +332,23 @@ class RockShard:
         pygame.draw.rect(surface, c, (cx - s, cy - s, s * 2, s * 2))
         pygame.draw.rect(surface, core, (cx - s // 2, cy - s // 2, s, s))
 
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x, self.y, float(self.size)
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..systems.hit_result import NO_HIT
+        return NO_HIT  # imune a tiros
+
+    def on_ship_contact(self, contact_x: float, contact_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.dead = True
+        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
+
+    def should_remove(self) -> bool:
+        return self.dead
+
 
 class OrbitalRock:
     """
@@ -465,6 +509,23 @@ class OrbitalRock:
         rw, rh = rotated.get_size()
         surface.blit(rotated, (int(self.x) - rw // 2, int(self.y) - rh // 2))
 
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x, self.y, float(self._S * self._size)
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..systems.hit_result import NO_HIT
+        return NO_HIT  # imune a tiros
+
+    def on_ship_contact(self, contact_x: float, contact_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.dead = True
+        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
+
+    def should_remove(self) -> bool:
+        return self.dead
+
 
 class EntryDebris:
     """
@@ -574,6 +635,23 @@ class EntryDebris:
         rotated = pygame.transform.rotate(self._rock_surf, self.spin)
         rw, rh = rotated.get_size()
         surface.blit(rotated, (int(self.x) - rw // 2, int(self.y) - rh // 2))
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x, self.y, float(self.S * self.rock_size)
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..systems.hit_result import NO_HIT
+        return NO_HIT  # imune a tiros
+
+    def on_ship_contact(self, contact_x: float, contact_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.dead = True
+        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
+
+    def should_remove(self) -> bool:
+        return self.dead
 
 
 # ============================================================================
@@ -1677,6 +1755,26 @@ class StoneGolemBoss:
             and self.health <= half_health
         ):
             self._half_phase_pending = True
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.take_damage(damage)
+        if self.dead:
+            return HitResult(
+                killed=True,
+                points=Config.BOSS_DEFEAT_SCORE,
+                explosion_size=100,
+                sound=hit_sounds.EXPLOSION_BOSS,
+            )
+        return HitResult(explosion_size=15, sound=hit_sounds.BOSS_DAMAGE)
+
+    def should_remove(self) -> bool:
+        return self.dead
 
     def draw(self, surface: pygame.Surface) -> None:
         if self.dead:

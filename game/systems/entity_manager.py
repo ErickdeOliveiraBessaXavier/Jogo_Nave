@@ -165,6 +165,29 @@ class EntityManager:
     ) -> Explosion:
         return self.explosion_pool.get(x, y, size, explosion_type)
 
+    def absorb_fragments(self, fragments: tuple[Any, ...]) -> None:
+        """Materializa fragments oriundos de HitResult.
+
+        MeteorSpec → meteor_pool.get; entidades já alocadas → enemies.append.
+        Mantém o pool isolado das entidades (estas só geram specs).
+        """
+        if not fragments:
+            return
+        from .hit_result import MeteorSpec
+
+        for spec in fragments:
+            if isinstance(spec, MeteorSpec):
+                self.meteor_pool.get(
+                    size=spec.size, x=spec.x, y=spec.y, vx=spec.vx, vy=spec.vy
+                )
+            else:
+                self.enemies.append(spec)
+
+    def trigger_death_sequence(self, target: Any) -> None:
+        """Dispara cinemáticas de morte específicas (ex.: SlimeBoss)."""
+        if isinstance(target, SlimeBoss):
+            self.trigger_slime_boss_death(target)
+
     def trigger_slime_boss_death(self, boss: SlimeBoss) -> None:
         cx, cy = boss.x + boss.w / 2, boss.y + boss.h / 2
         self.spawn_explosion(cx, cy, size=140, explosion_type=ExplosionType.SLIME)
@@ -861,19 +884,15 @@ class EntityManager:
         self.eye_lasers = [e for e in self.eye_lasers if not e.dead]
         self.mini_ship_bullets = [b for b in self.mini_ship_bullets if not b.dead]
 
+        # Filtra inimigos via Removable.should_remove() — cada entidade decide
+        # se permanece. SerpentBlock retorna False (boss controla); ExplosiveMine
+        # respeita timer; MountainStalagmite mantém-se até fragments terminarem.
+        # Fallback para entidades não migradas: usar e.dead.
         self.enemies = [
             e
             for e in self.enemies
-            if (isinstance(e, SerpentBlock) and not getattr(e, "is_fragment", False))
-            or (
-                not (
-                    e.dead
-                    and not (
-                        isinstance(e, MountainStalagmite)
-                        and getattr(e, "_fragments", None)
-                    )
-                )
-                and not (isinstance(e, ExplosiveMine) and e.is_off_screen())
+            if not (
+                e.should_remove() if hasattr(e, "should_remove") else e.dead
             )
         ]
 

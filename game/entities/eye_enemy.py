@@ -448,3 +448,28 @@ class EyeEnemy:
         self.dead = True
         if self.active_laser:
             self.active_laser.dead = True
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.destroy()
+        return HitResult(
+            killed=True,
+            points=self.get_points_value(),
+            explosion_size=20,
+            sound=hit_sounds.EXPLOSION_ALIEN,
+        )
+
+    def on_ship_contact(self, contact_x: float, contact_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.destroy()
+        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ALIEN)
+
+    def should_remove(self) -> bool:
+        return self.dead

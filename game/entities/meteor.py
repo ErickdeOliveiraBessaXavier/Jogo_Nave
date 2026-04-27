@@ -136,6 +136,9 @@ class Meteor:
     def _configure_health(self) -> None:
         """Configure meteor health based on size."""
         self.health = int(10 + (self.size / Config.MAX_METEOR_SIZE) * 40)
+        # is_side_scroll é setado pelo MeteorPool/spawner; default seguro.
+        if not hasattr(self, "is_side_scroll"):
+            self.is_side_scroll = False
 
     def reset(
         self,
@@ -306,3 +309,72 @@ class Meteor:
     def _create_meteor(size: int, x: float, y: float, vx: float, vy: float) -> Meteor:
         """Default factory for creating fragment meteors."""
         return Meteor(size=size, x=x, y=y, vx=vx, vy=vy)
+
+    def _build_fragment_specs(self, is_side_scroll: bool):
+        """Constrói tuplas leves (size, x, y, vx, vy) para serem materializadas
+        pelo EntityManager via meteor_pool.get(*spec). Mantém o pool isolado
+        da entidade.
+        """
+        from ..systems.hit_result import MeteorSpec
+
+        if not self.can_split():
+            return ()
+
+        cx = self.x + self.w / 2
+        cy = self.y + self.h / 2
+        count = random.randint(*Config.FRAGMENT_COUNT_RANGE)
+        target_size = max(Config.MIN_METEOR_SIZE, int(self.size * 0.55))
+
+        parent_speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
+        base_speed = max(200.0, parent_speed * 0.8)
+
+        base_angle_rad = math.radians(random.uniform(0, 360))
+        half_spread_rad = math.radians(Config.FRAGMENT_SPREAD / 2)
+        size_offset_x = self.size * 0.5
+        size_offset_y = self.size * 0.3
+
+        specs: list[MeteorSpec] = []
+        for _ in range(count):
+            s = max(Config.MIN_METEOR_SIZE, int(target_size * random.uniform(0.8, 1.2)))
+            ang = base_angle_rad + random.uniform(-half_spread_rad, half_spread_rad)
+            cos_ang = math.cos(ang)
+            sin_ang = math.sin(ang)
+            speed = base_speed * random.uniform(0.8, 1.3)
+            vx = cos_ang * speed + self.vx * 0.3
+            if is_side_scroll:
+                vy = sin_ang * speed + self.vy * 0.2
+            else:
+                vy = abs(sin_ang * speed) + self.vy * 0.2 + 50.0
+            fx = cx + cos_ang * size_offset_x - s
+            fy = cy + sin_ang * size_offset_y - s
+            specs.append(MeteorSpec(s, fx, fy, vx, vy))
+
+        return tuple(specs)
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x + self.w / 2, self.y + self.h / 2, max(12, self.size)
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.dead = True
+        is_side_scroll = getattr(self, "is_side_scroll", False)
+        fragments = self._build_fragment_specs(is_side_scroll)
+        return HitResult(
+            killed=True,
+            points=self.get_points_value(),
+            explosion_size=max(12, int(self.w // 2)),
+            sound=hit_sounds.EXPLOSION_ASTEROID,
+            fragments=fragments,
+        )
+
+    def on_ship_contact(self, contact_x: float, contact_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.dead = True
+        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
+
+    def should_remove(self) -> bool:
+        return self.dead

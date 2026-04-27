@@ -828,3 +828,48 @@ class RockGlider(Meteor):
         size_factor = Config.MAX_METEOR_SIZE - self.size
         size_bonus = int(size_factor * Config.SIZE_BONUS_MULTIPLIER)
         return max(1, Config.BASE_POINTS + size_bonus)
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        r = self.rect
+        return r.centerx, r.centery, max(r.width, r.height) / 2
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        pts, part_destroyed, _full, _part_center, part_name = self.take_part_damage(
+            hit_x, hit_y, amount=damage
+        )
+
+        if not part_destroyed:
+            return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
+
+        is_rock = part_name == "rock"
+        return HitResult(
+            killed=part_destroyed,
+            points=pts,
+            explosion_size=35 if is_rock else 25,
+            sound=(
+                hit_sounds.EXPLOSION_ASTEROID if is_rock else hit_sounds.EXPLOSION_ALIEN
+            ),
+        )
+
+    def on_ship_contact(self, contact_x: float, contact_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        _pts, part_destroyed, _full, _center, part_name = self.take_part_damage(
+            contact_x, contact_y, amount=max(self.ROCK_MAX_HP, self.BOT_MAX_HP)
+        )
+        if part_destroyed:
+            sound = (
+                hit_sounds.EXPLOSION_ASTEROID
+                if part_name == "rock"
+                else hit_sounds.EXPLOSION_ALIEN
+            )
+        else:
+            sound = hit_sounds.BOSS_DAMAGE
+        return HitResult(killed=False, sound=sound)
+
+    def should_remove(self) -> bool:
+        return self.dead

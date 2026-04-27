@@ -387,6 +387,35 @@ class SerpentBlock:
             if not self.is_fragment:
                 self.boss.on_block_killed(self.side, self)
 
+    def collision_circle(self) -> tuple[float, float, float]:
+        r = self.rect
+        return r.centerx, r.centery, max(r.width, r.height) / 2
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.take_damage(damage)
+        if self.dead:
+            return HitResult(
+                killed=True,
+                points=self.get_points_value(),
+                explosion_size=30,
+                sound=hit_sounds.EXPLOSION_ASTEROID,
+            )
+        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
+
+    def on_ship_contact(self, contact_x: float, contact_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.take_damage(self.health)  # mata via take_damage para notificar boss
+        return HitResult(killed=False, sound=hit_sounds.EXPLOSION_ASTEROID)
+
+    def should_remove(self) -> bool:
+        # Boss controla o ciclo de vida — nunca remover via cleanup genérico.
+        return False
+
     # ------------------------------------------------------------------
     # Revive / Re-entrada
     # ------------------------------------------------------------------
@@ -1563,6 +1592,30 @@ class MountainSerpentBoss:
 
     def get_points_value(self) -> int:
         return 850
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        r = self.rect
+        return r.centerx, r.centery, max(r.width, r.height) / 2
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..core.config import config as cfg
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        if not self.is_vulnerable:
+            return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
+        self.take_damage(damage)
+        if self.dead:
+            return HitResult(
+                killed=True,
+                points=cfg.BOSS_DEFEAT_SCORE,
+                explosion_size=100,
+                sound=hit_sounds.EXPLOSION_BOSS,
+            )
+        return HitResult(explosion_size=15, sound=hit_sounds.BOSS_DAMAGE)
+
+    def should_remove(self) -> bool:
+        return self.dead
 
     @property
     def rect(self) -> pygame.Rect:

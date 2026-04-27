@@ -83,9 +83,34 @@ class GiantMeteorBoss:
         # Histórico de crescimento: {crack_index: stage_when_born}
         self._crack_birth_stage: dict[int, int] = {}
 
+        # Referência opcional ao EntityManager (capturada via update) para
+        # permitir spawn de fragmentos a partir de on_hit.
+        self._entity_manager: "EntityManager | None" = None
+
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        # take_damage usa o entity_manager capturado em update() para fragmentos.
+        self.take_damage(damage, self._entity_manager)
+        if self.dead:
+            return HitResult(
+                killed=True,
+                points=config.BOSS_DEFEAT_SCORE,
+                explosion_size=120,
+                sound=hit_sounds.EXPLOSION_BOSS,
+            )
+        return HitResult(explosion_size=18, sound=hit_sounds.BOSS_DAMAGE)
+
+    def should_remove(self) -> bool:
+        return self.dead
 
     def _interpolate_shapes(
         self,
@@ -444,6 +469,8 @@ class GiantMeteorBoss:
         Mantém a simplicidade: entra até o target_y, depois cai lentamente.
         Durante a queda, spawna meteoros normais periodicamente.
         """
+        # Captura referência do entity_manager para uso em on_hit (fragmentos).
+        self._entity_manager = entity_manager
         if self.dead:
             return
 

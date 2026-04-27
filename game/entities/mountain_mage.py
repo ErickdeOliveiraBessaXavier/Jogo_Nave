@@ -215,6 +215,39 @@ class MountainStalagmite:
             self.health = 0
             self._begin_shattering()
 
+    def collision_circle(self) -> tuple[float, float, float]:
+        r = self.rect
+        return r.centerx, r.centery, max(r.width, r.height) / 2
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        prev_health = self.health
+        self.take_damage(damage)
+        # Hit fatal: HP > 0 cruza para 0 (estalagmite começa a estilhaçar).
+        just_died = prev_health > 0 and self.health <= 0
+        if just_died:
+            return HitResult(
+                killed=True,
+                points=self.get_points_value(),
+                explosion_size=38,
+                sound=hit_sounds.EXPLOSION_ASTEROID,
+            )
+        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
+
+    def on_ship_contact(self, contact_x: float, contact_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        # Triggera shatter via dano massivo.
+        self.take_damage(amount=999)
+        return HitResult(killed=False, sound=hit_sounds.EXPLOSION_ASTEROID)
+
+    def should_remove(self) -> bool:
+        # Permite que a animação de fragmentos termine antes da remoção.
+        return self.dead and not self._fragments
+
     def update(self, dt: float) -> None:
         if self.dead and not self._fragments:
             return

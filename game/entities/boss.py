@@ -1328,6 +1328,27 @@ class Boss:
             return pygame.Rect(-1000, -1000, 0, 0)
         return pygame.Rect(self.x, self.y, self.w, self.h)
 
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..core.config import config as cfg
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.take_damage(damage)
+        if self.dead:
+            return HitResult(
+                killed=True,
+                points=cfg.BOSS_DEFEAT_SCORE,
+                explosion_size=100,
+                sound=hit_sounds.EXPLOSION_BOSS,
+            )
+        return HitResult(explosion_size=15, sound=hit_sounds.BOSS_DAMAGE)
+
+    def should_remove(self) -> bool:
+        return self.dead
+
     def take_damage(self, amount: int) -> None:
         """Apply damage and handle frenzy mode transition."""
         if not self.can_take_damage():

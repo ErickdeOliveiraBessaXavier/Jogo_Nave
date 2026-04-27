@@ -192,6 +192,28 @@ class SlimeBoss:
     def can_take_damage(self) -> bool:
         return self.current_state != SlimeBossState.ENTERING and not self.dead
 
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..core.config import config as cfg
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.take_damage(damage)
+        if self.dead and not getattr(self, "death_sequence_started", False):
+            self.death_sequence_started = True
+            return HitResult(
+                killed=True,
+                points=cfg.BOSS_DEFEAT_SCORE,
+                triggers_special_death=True,
+                sound=hit_sounds.BOSS_DAMAGE,
+            )
+        return HitResult(explosion_size=15, sound=hit_sounds.BOSS_DAMAGE)
+
+    def should_remove(self) -> bool:
+        return self.dead
+
     def take_damage(self, amount: int) -> None:
         if not self.can_take_damage():
             return

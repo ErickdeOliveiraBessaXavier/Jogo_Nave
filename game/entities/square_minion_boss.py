@@ -300,3 +300,23 @@ class SquareMinionBoss:
     def get_points_value(self) -> int:
         """Return points awarded for destroying this enemy."""
         return 50  # Similar to other enemies
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x + self.size / 2, self.y + self.size / 2, self.size / 2
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        # Imune — só feedback visual
+        return HitResult(explosion_size=20, sound=hit_sounds.BOSS_DAMAGE)
+
+    def on_ship_contact(self, contact_x: float, contact_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.dead = True
+        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ALIEN)
+
+    def should_remove(self) -> bool:
+        return self.dead

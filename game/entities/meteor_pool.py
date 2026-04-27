@@ -74,6 +74,7 @@ class MeteorPool:
         for meteor in self.pool:
             if not meteor.active:
                 meteor.reset(size=size, x=x, y=y, vx=vx, vy=vy)
+                meteor.is_side_scroll = self.is_side_scroll
                 self.active.append(meteor)
                 self.reused_count += 1
                 self._update_peak()
@@ -82,6 +83,7 @@ class MeteorPool:
         # Se não houver disponível, tenta criar novo
         if len(self.pool) < self.max_size:
             meteor = Meteor(size=size, x=x, y=y, vx=vx, vy=vy)
+            meteor.is_side_scroll = self.is_side_scroll
             self.pool.append(meteor)
             self.active.append(meteor)
             self.total_created += 1
@@ -92,12 +94,15 @@ class MeteorPool:
             if self.active:
                 meteor = self.active.pop(0)
                 meteor.reset(size=size, x=x, y=y, vx=vx, vy=vy)
+                meteor.is_side_scroll = self.is_side_scroll
                 self.active.append(meteor)
                 self._update_peak()
                 return meteor
             else:
                 # Nunca deve chegar aqui
-                return Meteor(size=size, x=x, y=y, vx=vx, vy=vy)
+                m = Meteor(size=size, x=x, y=y, vx=vx, vy=vy)
+                m.is_side_scroll = self.is_side_scroll
+                return m
 
     def release(self, meteor: Meteor):
         """

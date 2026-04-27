@@ -843,6 +843,36 @@ class ElementalRobot:
         """Retorna a paleta atual para a explosão."""
         return [self._palette["core"], self._palette["mid"], self._palette["outer"]]
 
+    def collision_circle(self) -> tuple[float, float, float]:
+        r = self.rect
+        return r.centerx, r.centery, max(r.width, r.height) / 2
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.take_damage(damage)
+        if self.fsm_state == "DYING" and self.just_died:
+            self.just_died = False  # consome a flag
+            return HitResult(
+                killed=True,
+                points=self.get_points_value(),
+                explosion_size=55,
+                explosion_type=self.get_explosion_type(),
+                sound=hit_sounds.EXPLOSION_ALIEN,
+            )
+        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
+
+    def on_ship_contact(self, contact_x: float, contact_y: float):
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.dead = True
+        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ALIEN)
+
+    def should_remove(self) -> bool:
+        return self.dead
+
     # =========================================================================
     # DRAW
     # =========================================================================

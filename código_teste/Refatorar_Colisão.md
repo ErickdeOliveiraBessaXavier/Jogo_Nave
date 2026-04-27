@@ -1,61 +1,210 @@
 # Plano de Refatoração — Sistema de Colisões
 
+## Diagnóstico
+
+`game/systems/collisions.py` cresceu para ~2085 linhas com 30+ imports de
+entidades concretas. Os sintomas são clássicos de god file:
+
+- `_destroy_enemy` (~145 linhas) — cascata de `isinstance` para definir HP,
+  som, tamanho de explosão, fragmentos.
+- `ship_vs_enemies` — cascata paralela e diferente do `_destroy_enemy`
+  (semântica de "morte por contato instantâneo").
+- `get_collision_info` — cascata só para extrair `(cx, cy, radius)`.
+- `_calculate_default_explosion_size` — cascata só para tamanho visual.
+- 4 métodos `*_vs_boss` duplicam a lógica de morte do boss
+  (`_apply_boss_damage`, `explosive_effects_vs_boss`,
+  `air_strike_bombs_vs_boss`, `cannon_mines_vs_boss`).
+- `bullets_vs_giant_meteor_boss` é totalmente bespoke (fragmentos por hit).
+
+Toda nova entidade exige edição de `collisions.py` em múltiplos pontos —
+violação direta de OCP. A causa-raiz é que **a lógica de reação ao dano
+pertence à entidade, não ao sistema de colisão**.
+
 ## Objetivo
-Remover todos os `isinstance` do `collisions.py` movendo a lógica de reação para cada entidade.
+
+Eliminar `isinstance` de `collisions.py` movendo a reação ao dano para cada
+entidade via Protocols. O sistema de colisão volta a fazer apenas
+**detecção** e **roteamento**; entidades respondem a eventos.
+
+## Princípios
+
+- Tell-Don't-Ask: o sistema **avisa** a entidade que foi atingida, não
+  pergunta o tipo dela.
+- Value objects imutáveis (`frozen=True`) para os resultados — evita
+  mutação acidental e permite reuso em testes.
+- Protocols estruturais (`runtime_checkable=False` por padrão — tipagem
+  estática, zero overhead em runtime).
+- Sem dispatch por string (`getattr(sound_manager, f"play_{...}")`). Som é
+  representado por enum ou `Callable[[], None]`.
+- `dt` continua passando explícito; nada nesta refatoração toca o loop.
+- Sem regressão de performance: nenhuma alocação extra no hot path
+  (`HitResult` é dataclass com `slots=True`).
 
 ---
 
-## Fase 1 — Criar a fundação
+## Fase 1 — Fundação
 
-### `src/systems/hit_result.py` (arquivo novo)
+### `game/systems/hit_result.py` (novo)
 
 ```python
-from dataclasses import dataclass, field
-from typing import Any
+from __future__ import annotations
 
-@dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from ..entities.explosion import ExplosionType
+
+
+@dataclass(frozen=True, slots=True)
 class HitResult:
+    """Resposta imutável de uma entidade a um evento de dano.
+
+    Campos:
+        killed: True se a entidade morreu neste hit (afeta score/cleanup).
+        points: pontos a conceder ao jogador (>0 implica FloatingScore).
+        explosion_size: raio em pixels da explosão visual (0 = nenhuma).
+        explosion_type: variante visual (ALIEN, SLIME, etc.) ou None.
+        sound: callable a tocar (ou None). Use HitSounds para padrões.
+        fragments: spawns derivados (ex.: meteoros menores). Cada item
+            deve ser uma entidade pronta para append em entity_manager.enemies.
+        triggers_special_death: a entidade quer um death-sequence custom
+            controlado pelo entity_manager (ex.: SlimeBoss).
+    """
+
     killed: bool = False
     points: int = 0
-    explosion_size: int = 20
-    explosion_type: Any = None        # ExplosionType | None
-    sound: str = "explosion_alien"    # método do sound_manager sem o prefixo "play_"
-    fragments: list = field(default_factory=list)
+    explosion_size: int = 0
+    explosion_type: "ExplosionType | None" = None
+    sound: Callable[[], None] | None = None
+    fragments: tuple[object, ...] = ()
+    triggers_special_death: bool = False
+
+
+# Resultado neutro reusado quando não há reação (alocação zero no hot path).
+NO_HIT = HitResult()
 ```
 
-### `src/systems/collision_behaviors.py` (arquivo novo)
+### `game/systems/hit_sounds.py` (novo)
+
+Encapsula o dispatch de som — evita stringly-typed code e dá completion no
+IDE. Cada constante é o método já bound do singleton `sound_manager`.
 
 ```python
-from typing import Protocol, runtime_checkable
-from .hit_result import HitResult
+from __future__ import annotations
 
-@runtime_checkable
-class Damageable(Protocol):
-    dead: bool
-    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult: ...
+from ..core.sound import sound_manager
 
-@runtime_checkable
-class AreaDamageable(Protocol):
-    dead: bool
-    def on_area_hit(self, source_x: float, source_y: float, radius: float) -> HitResult: ...
+# Bound methods — chamadas com custo idêntico a sound_manager.play_X().
+EXPLOSION_ALIEN = sound_manager.play_explosion_alien
+EXPLOSION_ASTEROID = sound_manager.play_explosion_asteroid
+EXPLOSION_BOSS = sound_manager.play_explosion_boss
+BOSS_DAMAGE = sound_manager.play_boss_damage
 ```
 
+### `game/systems/collision_protocols.py` (novo)
+
+```python
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Protocol
+
+import pygame
+
+if TYPE_CHECKING:
+    from .hit_result import HitResult
+
+
+class CollisionGeometry(Protocol):
+    """Contrato para extrair geometria de colisão circular.
+
+    Substitui o cascade `get_collision_info` em collisions.py.
+    """
+
+    @property
+    def rect(self) -> pygame.Rect: ...
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        """Retorna (center_x, center_y, radius) para checks de área."""
+        ...
+
+
+class Damageable(CollisionGeometry, Protocol):
+    """Contrato para entidades que recebem dano de projéteis/áreas.
+
+    `on_hit` decide o que acontece: morre? perde HP? explode em fragmentos?
+    O sistema apenas executa o HitResult retornado.
+    """
+
+    dead: bool
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult": ...
+
+
+class ShipDamageable(CollisionGeometry, Protocol):
+    """Contrato para o caminho 'morte por contato com a nave'.
+
+    Semântica diferente de `on_hit`: dano máximo, sem score, som específico
+    de impacto. RockGlider continua usando dano por partes; minas explodem
+    imediatamente; etc. Cada entidade decide.
+    """
+
+    dead: bool
+
+    def on_ship_contact(self) -> "HitResult": ...
+
+
+class Removable(Protocol):
+    """Substitui filtros `isinstance` no cleanup do EntityManager."""
+
+    def should_remove(self) -> bool: ...
+```
+
+### Por que dois métodos (`on_hit` vs `on_ship_contact`)?
+
+A semântica de morte é diferente:
+
+| Evento | Score | Dano | Som padrão |
+|---|---|---|---|
+| Tiro / área | Sim | `bullet.damage` | `EXPLOSION_ALIEN` |
+| Contato com nave | Não (jogador morreu) | Letal | varia (asteroid/alien) |
+
+Tentar unificar via `on_hit(damage=999)` mistura semânticas: o player morre
+mas o jogador "ganharia pontos" pelo que matou. Manter separado é mais
+limpo e cada entidade descreve sua própria reação a cada caso.
+
 ---
 
-## Fase 2 — Migrar as entidades
+## Fase 2 — Migração das entidades
 
-Adicione `on_hit` em cada entidade seguindo os exemplos abaixo.
-Mantenha o código antigo funcionando — a migração é incremental.
+Migração incremental: o caminho antigo continua funcionando até o
+`_destroy_enemy` ser substituído. Cada entidade migrada não precisa esperar
+pelas outras.
 
----
+### Helper geométrico padrão
 
-### Padrão simples (entidade morre no hit)
+A maioria das entidades usa `rect` retangular. Adicione na base / mixin:
 
-Usado por: `Alien`, `EyeEnemy`, `StoneSentry`
+```python
+def collision_circle(self) -> tuple[float, float, float]:
+    r = self.rect
+    return r.centerx, r.centery, max(r.width, r.height) / 2
+```
+
+Override apenas quando o `rect` mente sobre o tamanho real
+(ex.: `ExplosiveMine.radius`, `Boulder.RADIUS`, `RockShard.size`,
+`EntryDebris.S * rock_size`).
+
+### Padrão A — morre em um hit
+
+`Alien`, `EyeEnemy`, `Meteor` (sem fragmentos), `MountainPropeller` simples.
 
 ```python
 # alien.py
 from ..systems.hit_result import HitResult
+from ..systems import hit_sounds
+from .explosion import ExplosionType
+
 
 class Alien:
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
@@ -65,149 +214,173 @@ class Alien:
             points=self.get_points_value(),
             explosion_size=40,
             explosion_type=ExplosionType.ALIEN,
-            sound="explosion_alien",
+            sound=hit_sounds.EXPLOSION_ALIEN,
         )
+
+    def on_ship_contact(self) -> HitResult:
+        self.dead = True
+        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ALIEN)
 ```
 
----
+### Padrão B — HP múltiplo
 
-### Padrão com HP próprio (entidade aguenta múltiplos hits)
-
-Usado por: `ElementalRobot`, `Boulder`, `StoneSentry`, `MountainStalagmite`, `SerpentBlock`
+`Boss`, `SpikeBoss`, `StoneSentry`, `MountainStalagmite`, `SerpentBlock`,
+`Boulder`, `MountainPropeller`, `ElementalRobot`.
 
 ```python
 # stone_sentry.py
-from ..systems.hit_result import HitResult
-
 class StoneSentry:
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
-        self.take_damage(1)
+        self.take_damage(damage)
         if self.dead:
-            return HitResult(killed=True, points=self.get_points_value(), explosion_size=45)
-        return HitResult(killed=False, explosion_size=10, sound="boss_damage")
+            return HitResult(
+                killed=True,
+                points=self.get_points_value(),
+                explosion_size=45,
+                sound=hit_sounds.EXPLOSION_ALIEN,
+            )
+        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 ```
 
-```python
-# elemental_robot.py — FSM com flag just_died
-from ..systems.hit_result import HitResult
+### Padrão C — FSM com flag de morte
 
+`ElementalRobot` precisa consumir `just_died` (a morte só é fatal num
+frame específico do estado DYING).
+
+```python
+# bot_elemental.py
 class ElementalRobot:
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
-        self.take_damage(1)
+        self.take_damage(damage)
         if self.fsm_state == "DYING" and self.just_died:
-            self.just_died = False
+            self.just_died = False  # consumir
             return HitResult(
                 killed=True,
                 points=self.get_points_value(),
                 explosion_size=55,
                 explosion_type=self.get_explosion_type(),
+                sound=hit_sounds.EXPLOSION_ALIEN,
             )
-        return HitResult(killed=False, explosion_size=10, sound="boss_damage")
+        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 ```
 
----
+### Padrão D — dano por partes
 
-### Padrão imune (não recebe dano)
-
-Usado por: `SquareMinionBoss`, `RockShard`, `OrbitalRock`, `EntryDebris`
+`RockGlider`.
 
 ```python
-# square_minion_boss.py
-from ..systems.hit_result import HitResult
-
-class SquareMinionBoss:
+# rock_glider.py
+class RockGlider:
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
-        # Imune — só feedback visual
-        return HitResult(killed=False, points=0, explosion_size=20, sound="boss_damage")
+        pts, part_destroyed, _full, part_center, part_name = (
+            self.take_part_damage(hit_x, hit_y, amount=damage)
+        )
+
+        if not part_destroyed:
+            return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
+
+        is_rock = part_name == "rock"
+        return HitResult(
+            killed=part_destroyed,
+            points=pts,
+            explosion_size=35 if is_rock else 25,
+            sound=hit_sounds.EXPLOSION_ASTEROID if is_rock else hit_sounds.EXPLOSION_ALIEN,
+        )
+
+    def on_ship_contact(self) -> HitResult:
+        ship_cx, ship_cy = self.rect.centerx, self.rect.centery  # aproximação
+        _pts, part_destroyed, _full, _center, part_name = self.take_part_damage(
+            ship_cx, ship_cy, amount=max(self.ROCK_MAX_HP, self.BOT_MAX_HP)
+        )
+        sound = (
+            hit_sounds.EXPLOSION_ASTEROID if part_name == "rock"
+            else hit_sounds.EXPLOSION_ALIEN if part_destroyed
+            else hit_sounds.BOSS_DAMAGE
+        )
+        return HitResult(killed=False, sound=sound)
 ```
+
+> Observação: `on_ship_contact` aqui não tem acesso direto à posição da
+> nave. Solução: passar o ponto de contato como parâmetro opcional ou
+> calcular via `self.rect`. Prefira o parâmetro — mantém entidades sem
+> dependência da nave.
+
+Atualize a assinatura do protocol:
 
 ```python
-# rock_shard.py / orbital_rock.py / entry_debris.py
-from ..systems.hit_result import HitResult
-
-class RockShard:
-    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
-        return HitResult(killed=False, points=0, explosion_size=0, sound="")
+def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult": ...
 ```
 
----
-
-### Padrão com fragmentos
-
-Usado por: `Meteor`
+### Padrão E — Meteor (fragmentos na morte)
 
 ```python
 # meteor.py
-from ..systems.hit_result import HitResult
-
 class Meteor:
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
         self.dead = True
-        fragments = self.spawn_fragments(is_side_scroll=self._is_side_scroll)
+        fragments = tuple(self._build_fragment_specs())  # ver nota abaixo
         return HitResult(
             killed=True,
             points=self.get_points_value(),
             explosion_size=max(12, int(self.w // 2)),
-            sound="explosion_asteroid",
-            fragments=fragments,  # EntityManager vai fazer enemies.append em cada um
+            sound=hit_sounds.EXPLOSION_ASTEROID,
+            fragments=fragments,
         )
 ```
 
-> **Atenção:** `spawn_fragments` hoje recebe `meteor_factory` como argumento
-> (para usar o pool). Mova essa responsabilidade para o `EntityManager`:
-> após receber os fragments no `HitResult`, registre-os via `entity_manager.register_fragment(f)`.
+> **Atenção ao pool.** Hoje `spawn_fragments` recebe `meteor_factory=
+> entity_manager.meteor_pool.get` para reutilizar instâncias. O `HitResult`
+> não pode carregar a referência ao pool. Duas opções:
+>
+> 1. **`fragments` carrega specs**, não entidades. `Meteor._build_fragment_specs`
+>    retorna tuplas `(size, x, y, vx, vy)`. O `EntityManager.absorve_hit_result`
+>    chama `meteor_pool.get(...)` para cada spec. **Preferida** — mantém
+>    o pool isolado do hit_result.
+> 2. `fragments` carrega entidades já alocadas. `Meteor` recebe o pool no
+>    `__init__` (DI). Pior — acopla Meteor ao pool.
 
----
+### Padrão F — imune a dano comum
 
-### Padrão com dano parcial
-
-Usado por: `RockGlider`
+`SquareMinionBoss`, `RockShard`, `OrbitalRock`, `EntryDebris`.
 
 ```python
-# rock_glider.py
-from ..systems.hit_result import HitResult
-
-class RockGlider:
+# square_minion_boss.py
+class SquareMinionBoss:
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
-        pts, part_destroyed, _fully, part_center, part_name = \
-            self.take_part_damage(hit_x, hit_y, amount=1)
-
-        if not part_destroyed:
-            return HitResult(killed=False, explosion_size=10, sound="boss_damage")
-
-        sound = "explosion_asteroid" if part_name == "rock" else "explosion_alien"
-        size = 35 if part_name == "rock" else 25
-        return HitResult(killed=part_destroyed, points=pts, explosion_size=size, sound=sound)
+        return HitResult(explosion_size=20, sound=hit_sounds.BOSS_DAMAGE)
 ```
 
----
+```python
+# rock_shard.py
+class RockShard:
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
+        return NO_HIT  # absorve sem feedback
 
-### Padrão de mina (explode por conta própria)
+    def on_ship_contact(self, cx: float, cy: float) -> HitResult:
+        self.dead = True
+        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
+```
 
-Usado por: `ExplosiveMine`
+### Padrão G — explode por conta própria
+
+`ExplosiveMine`. A morte é controlada pelo timer interno, não pelo hit.
 
 ```python
 # explosive_mine.py
-from ..systems.hit_result import HitResult
-
 class ExplosiveMine:
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
         self.take_damage(damage)
-        # Não morre no hit — controla a própria morte via is_exploding
-        return HitResult(killed=False, points=0, explosion_size=0, sound="")
+        return NO_HIT  # quem mata é o timer, não o tiro
+
+    def on_ship_contact(self, cx: float, cy: float) -> HitResult:
+        self.dead = True  # explode imediatamente
+        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ALIEN)
 ```
 
----
-
-### Bosses
-
-Cada boss implementa `on_hit` com sua lógica de morte específica.
-O padrão é idêntico ao HP próprio, só muda o que acontece ao morrer.
+### Padrão H — bosses (unifica 4 métodos do Collisions)
 
 ```python
-# boss.py (e spike_boss.py, slime_boss.py — mesma estrutura)
-from ..systems.hit_result import HitResult
-
+# boss.py
 class Boss:
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
         self.take_damage(damage)
@@ -216,134 +389,434 @@ class Boss:
                 killed=True,
                 points=config.BOSS_DEFEAT_SCORE,
                 explosion_size=100,
-                sound="explosion_boss",
+                sound=hit_sounds.EXPLOSION_BOSS,
             )
-        return HitResult(killed=False, explosion_size=15, sound="boss_damage")
+        return HitResult(explosion_size=15, sound=hit_sounds.BOSS_DAMAGE)
 ```
 
-`SlimeBoss` — morte especial via `entity_manager`:
+`SlimeBoss` precisa de death-sequence (limpa drips, anima, etc.):
 
 ```python
-# slime_boss.py
-class SlimeBoss:
+class SlimeBoss(Boss):
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
         self.take_damage(damage)
         if self.dead and not self.death_sequence_started:
             self.death_sequence_started = True
-            # Sinaliza para o EntityManager via flag — ele chama trigger_slime_boss_death
-            return HitResult(killed=True, points=config.BOSS_DEFEAT_SCORE,
-                             explosion_size=0, sound="")
-        return HitResult(killed=False, explosion_size=15, sound="boss_damage")
+            return HitResult(
+                killed=True,
+                points=config.BOSS_DEFEAT_SCORE,
+                triggers_special_death=True,  # EntityManager dispara animação
+                sound=hit_sounds.BOSS_DAMAGE,
+            )
+        return HitResult(explosion_size=15, sound=hit_sounds.BOSS_DAMAGE)
+```
+
+`GiantMeteorBoss` solta fragmentos **a cada hit** (não só na morte):
+
+```python
+class GiantMeteorBoss:
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
+        self.take_damage(damage)
+
+        fragments: tuple = ()
+        if random.random() < Config.GIANT_METEOR_HIT_FRAGMENT_CHANCE:
+            fragments = tuple(self._build_fragment_specs(
+                count_range=Config.GIANT_METEOR_HIT_FRAGMENT_COUNT,
+                speed_range=(90.0, 180.0),
+            ))
+
+        if self.dead:
+            fragments += tuple(self._build_fragment_specs(
+                count_range=Config.GIANT_METEOR_DEATH_FRAGMENT_COUNT,
+                speed_range=(120.0, 240.0),
+            ))
+            return HitResult(
+                killed=True,
+                points=config.BOSS_DEFEAT_SCORE,
+                explosion_size=120,
+                sound=hit_sounds.EXPLOSION_BOSS,
+                fragments=fragments,
+            )
+
+        return HitResult(
+            explosion_size=18,
+            sound=hit_sounds.BOSS_DAMAGE,
+            fragments=fragments,
+        )
+```
+
+`MountainSerpentBoss` (cabeça invulnerável quando há blocos):
+
+```python
+class MountainSerpentBoss:
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
+        if not self.is_vulnerable:
+            return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
+        self.take_damage(damage)
+        if self.dead:
+            return HitResult(
+                killed=True,
+                points=config.BOSS_DEFEAT_SCORE,
+                explosion_size=100,
+                sound=hit_sounds.EXPLOSION_BOSS,
+            )
+        return HitResult(explosion_size=15, sound=hit_sounds.BOSS_DAMAGE)
 ```
 
 ---
 
-## Fase 3 — Refatorar o sistema
+## Fase 3 — Refatoração de `collisions.py`
 
-### `collisions.py` — substituir `_destroy_enemy`
+### `Collisions._apply_hit` (substitui `_destroy_enemy`)
 
 ```python
-def _destroy_enemy(
+def _apply_hit(
     self,
-    enemy: "Damageable",
+    target: "Damageable",
     damage: int,
     hit_x: float,
     hit_y: float,
     entity_manager: "EntityManager",
+    floating_scores: list[FloatingScore] | None = None,
 ) -> HitResult:
-    result = enemy.on_hit(damage, hit_x, hit_y)
+    """Roteador único: chama on_hit e materializa os efeitos."""
+    result = target.on_hit(damage, hit_x, hit_y)
 
     if result.explosion_size > 0:
         entity_manager.spawn_explosion(
-            hit_x, hit_y, result.explosion_size, result.explosion_type
+            hit_x, hit_y, size=result.explosion_size,
+            explosion_type=result.explosion_type,
         )
 
-    if result.sound:
-        getattr(sound_manager, f"play_{result.sound}")()
+    if result.sound is not None:
+        result.sound()
 
-    for fragment in result.fragments:
-        entity_manager.enemies.append(fragment)
+    if result.fragments:
+        entity_manager.absorb_fragments(result.fragments)
+
+    if result.killed and result.points > 0 and floating_scores is not None:
+        floating_scores.append(FloatingScore(hit_x, hit_y, result.points))
+
+    if result.triggers_special_death:
+        entity_manager.trigger_death_sequence(target)
 
     return result
 ```
 
-### `collisions.py` — exemplo de método público limpo
+### `Collisions._apply_ship_contact`
 
 ```python
-def bullets_vs_enemies(self, bullets, enemies, entity_manager, floating_scores):
+def _apply_ship_contact(
+    self,
+    target: "ShipDamageable",
+    contact_x: float,
+    contact_y: float,
+    entity_manager: "EntityManager",
+) -> HitResult:
+    result = target.on_ship_contact(contact_x, contact_y)
+
+    if result.explosion_size > 0:
+        entity_manager.spawn_explosion(contact_x, contact_y, size=result.explosion_size)
+    if result.sound is not None:
+        result.sound()
+    return result
+```
+
+### `bullets_vs_enemies` simplificado
+
+```python
+def bullets_vs_enemies(
+    self,
+    bullets: list[Bullet],
+    enemy_grid: SpatialGrid[Damageable],
+    floating_scores: list[FloatingScore],
+    entity_manager: "EntityManager",
+) -> tuple[int, int, list[tuple[float, float, int]]]:
+    if not bullets:
+        return 0, 0, []
+
     score_gain = 0
+    destroyed_count = 0
+    score_events: list[tuple[float, float, int]] = []
+
+    targets = self._batch_query_for_projectiles(bullets, enemy_grid)
 
     for bullet in bullets:
-        candidates = entity_manager.enemy_spatial_grid.query_from_rect(bullet.rect)
-        for enemy in candidates:
-            if enemy.dead:
-                continue
-            if not bullet.rect.colliderect(enemy.rect):
+        if bullet.dead:
+            continue
+        for enemy in targets.get(id(bullet), ()):
+            if enemy.dead or not self._projectile_collides_with_enemy(bullet.rect, enemy):
                 continue
 
-            result = self._destroy_enemy(
-                enemy, bullet.damage, bullet.x, bullet.y, entity_manager
+            result = self._apply_hit(
+                enemy, bullet.damage, bullet.x, bullet.y,
+                entity_manager, floating_scores,
             )
             score_gain += result.points
+            if result.killed:
+                destroyed_count += 1
+                score_events.append((bullet.x, bullet.y, result.points))
 
-            if result.points > 0:
-                floating_scores.append(FloatingScore(bullet.x, bullet.y, result.points))
+            if bullet.explosive and not bullet.dead:
+                self._apply_explosive_bullet_aoe(
+                    bullet, enemy_grid, floating_scores, entity_manager,
+                )
 
             if not bullet.piercing:
                 bullet.dead = True
                 break
 
+    return score_gain, destroyed_count, score_events
+```
+
+### Bosses — métodos `*_vs_boss` colapsam em um helper
+
+```python
+def _project_into_boss(
+    self,
+    projectiles: Sequence[Projectile],
+    boss: "Damageable",
+    entity_manager: "EntityManager",
+    floating_scores: list[FloatingScore],
+    is_piercing_allowed: bool = False,
+) -> int:
+    score_gain = 0
+    if not projectiles or boss.dead:
+        return 0
+
+    for proj in projectiles:
+        if proj.dead or not self._check_mask_collision(proj.rect, None, boss, proj.x, proj.y):
+            continue
+
+        if not (is_piercing_allowed and getattr(proj, "piercing", False)):
+            proj.dead = True
+
+        damage = int(proj.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+        result = self._apply_hit(boss, damage, proj.x, proj.y, entity_manager, floating_scores)
+        score_gain += result.points
+
     return score_gain
 ```
 
-### `entity_manager.py` — simplificar `cleanup`
+`bullets_vs_boss`, `mini_ship_bullets_vs_boss`, `*_vs_spike_boss`,
+`*_vs_slime_boss`, `bullets_vs_giant_meteor_boss` e
+`bullets_vs_mountain_serpent_boss` viram **wrappers de uma linha** apontando
+para `_project_into_boss`.
 
-Adicione `should_remove() -> bool` nas entidades que têm regras especiais de remoção
-(ex: `SerpentBlock`, `MountainStalagmite`, `ExplosiveMine`).
+`explosive_effects_vs_boss`, `air_strike_bombs_vs_boss` e
+`cannon_mines_vs_boss` viram um helper único `_aoe_into_boss` que aplica
+`_apply_hit(boss, damage, source_x, source_y, ...)`.
+
+### `ship_vs_enemies` simplificado
+
+```python
+def ship_vs_enemies(
+    self,
+    ship: Ship,
+    enemy_grid: SpatialGrid["ShipDamageable"],
+    entity_manager: "EntityManager",
+) -> bool:
+    if ship.invuln > 0:
+        return False
+
+    ship_rect = ship.rect
+    candidates = enemy_grid.query(
+        ship_rect.x - 10, ship_rect.y - 10,
+        ship_rect.width + 20, ship_rect.height + 20,
+    )
+    cx, cy = ship_rect.centerx, ship_rect.centery
+
+    for enemy in candidates:
+        if enemy.dead or not getattr(enemy, "causes_damage", True):
+            continue
+        if not self._ship_collides_with_enemy(ship_rect, enemy):
+            continue
+
+        self._apply_ship_contact(enemy, cx, cy, entity_manager)
+        entity_manager.spawn_explosion(cx, cy, size=30)
+        return True
+
+    return False
+```
+
+### `get_collision_info` desaparece
+
+Substituído por `enemy.collision_circle()` chamado diretamente.
+
+### `_calculate_default_explosion_size` desaparece
+
+Cada `on_hit` decide seu próprio `explosion_size` no `HitResult`.
+
+---
+
+## Fase 4 — Cleanup e remoção
+
+### `should_remove()` em entidades com lógica especial
 
 ```python
 # serpent_block.py
 def should_remove(self) -> bool:
-    return False  # nunca remove sozinho — o boss controla
+    return False  # boss controla — nunca remove via cleanup genérico
 
 # explosive_mine.py
 def should_remove(self) -> bool:
-    return self.dead or self.is_off_screen()
+    return self.dead and not self.is_exploding  # respeita timer
 
-# padrão para todas as outras entidades
+# default (mixin ou base)
 def should_remove(self) -> bool:
     return self.dead
 ```
 
+### `EntityManager` — cleanup unificado
+
 ```python
-# entity_manager.py — cleanup simplificado
-self.enemies = [e for e in self.enemies if not e.should_remove()]
+# entity_manager.py
+def cleanup(self) -> None:
+    self.enemies = [e for e in self.enemies if not e.should_remove()]
+    self.bullets = [b for b in self.bullets if not b.should_remove()]
+    # ...
+
+def absorb_fragments(self, fragments: tuple[object, ...]) -> None:
+    """Materializa fragments do HitResult (specs ou entidades prontas)."""
+    for spec in fragments:
+        if isinstance(spec, MeteorSpec):
+            self.spawn_meteor(**spec._asdict())
+        else:
+            self.enemies.append(spec)
+
+def trigger_death_sequence(self, target: object) -> None:
+    if isinstance(target, SlimeBoss):
+        self.trigger_slime_boss_death(target)
+    # outros bosses com cinemática especial entram aqui
 ```
+
+> Aqui sobra **um** `isinstance` (em `trigger_death_sequence`). É aceitável:
+> esses casos são genuinamente "comportamentos especiais que afetam o
+> mundo inteiro", não pertencem ao escopo da entidade. Limite: máximo 3-4
+> bosses ao longo da vida do jogo.
+
+---
+
+## Fase 5 — Limpeza final
+
+- Remover de `collisions.py` os imports concretos das entidades —
+  só sobram os necessários para type hints (`TYPE_CHECKING`) e os
+  poucos onde a colisão tem geometria especial não-circular
+  (lasers, ondas).
+- Remover `Collisions._is_invulnerable_to_damage` e
+  `_handle_invulnerable_hit` — `SquareMinionBoss.on_hit` resolve.
+- Adicionar `__slots__` nas entidades migradas que ainda não têm —
+  `HitResult` com `slots=True` só ajuda se as entidades também forem
+  slot-friendly no hot path.
+
+---
+
+## Ordem de execução recomendada
+
+A ordem importa: violar produz quebra silenciosa.
+
+1. **Infra (dia 1)**: `hit_result.py`, `hit_sounds.py`, `collision_protocols.py`.
+   Build verde sem mudar nada além de imports.
+2. **Coexistência (dia 1)**: adicionar `_apply_hit` ao lado de
+   `_destroy_enemy`. Nenhum caller usa ainda.
+3. **Migração entidade-por-entidade (dias 2-4)**: para cada entidade,
+   adicionar `on_hit`, `on_ship_contact`, `collision_circle`,
+   `should_remove`. Rodar o jogo e validar visualmente.
+4. **Switch dos métodos públicos (dia 4)**:
+   `bullets_vs_enemies` → `_apply_hit`,
+   `_apply_area_damage` → `_apply_hit`,
+   `player_lasers_vs_enemies` → `_apply_hit`,
+   `mini_ship_bullets_vs_enemies` → `_apply_hit`.
+5. **Bosses (dia 5)**: colapsar os 4 métodos `*_vs_boss` em
+   `_project_into_boss` + `_aoe_into_boss`.
+6. **Ship contact (dia 5)**: `ship_vs_enemies` → `_apply_ship_contact`.
+7. **Remoção (dia 6)**: deletar `_destroy_enemy`, `get_collision_info`,
+   `_calculate_default_explosion_size`, `_is_invulnerable_to_damage`.
+
+---
+
+## Validação
+
+A cada entidade migrada, jogar a fase onde ela aparece e validar:
+
+- [ ] Pontuação correta (FloatingScore aparece no lugar certo)
+- [ ] Som correto (asteroid vs alien vs boss_damage)
+- [ ] Tamanho de explosão idêntico ao anterior (lado a lado se preciso)
+- [ ] Fragmentos spawnam (Meteor, GiantMeteorBoss)
+- [ ] Death-sequence dispara (SlimeBoss)
+- [ ] Imunidade preserva (SquareMinionBoss vs laser, SerpentBoss head)
+- [ ] Multi-hit preserva HP (Boss, StoneSentry, Boulder)
+- [ ] FSM consome flag (ElementalRobot.just_died)
+- [ ] Dano por partes (RockGlider rock vs bot)
+- [ ] Cleanup não remove SerpentBlock prematuramente
+
+---
+
+## Métricas de sucesso
+
+| Antes | Alvo |
+|---|---|
+| `collisions.py` ~2085 linhas | < 1000 linhas |
+| 30+ imports de entidades | < 10 (só geometrias especiais) |
+| 25+ chamadas `isinstance` | 0 em métodos de hit, ≤ 3 em outros |
+| 4 métodos `*_vs_boss` duplicados | 1 helper genérico |
+| `_destroy_enemy` 145 linhas | `_apply_hit` ~25 linhas |
 
 ---
 
 ## Checklist de migração
 
 ```
-[ ] hit_result.py criado
-[ ] collision_behaviors.py criado
+Infra
+[ ] hit_result.py + NO_HIT singleton
+[ ] hit_sounds.py
+[ ] collision_protocols.py (Damageable, ShipDamageable, CollisionGeometry, Removable)
 
-[ ] Meteor
+Entidades — colocar on_hit + on_ship_contact + collision_circle + should_remove
 [ ] Alien
 [ ] EyeEnemy
+[ ] Meteor (specs de fragmentos)
 [ ] ExplosiveMine
 [ ] SquareMinionBoss
-[ ] ElementalRobot
-[ ] RockGlider
+[ ] ElementalRobot (consome just_died)
+[ ] RockGlider (dano por partes)
 [ ] StoneSentry
 [ ] MountainStalagmite
-[ ] SerpentBlock
-[ ] Boulder / RockShard / OrbitalRock / EntryDebris
-[ ] Boss / SpikeBoss / SlimeBoss / GiantMeteorBoss / StoneGolemBoss / MountainSerpentBoss
+[ ] MountainPropeller
+[ ] SerpentBlock (should_remove=False)
+[ ] Boulder
+[ ] RockShard
+[ ] OrbitalRock
+[ ] EntryDebris
 
-[ ] _destroy_enemy refatorado no collisions.py
-[ ] isinstance removidos dos métodos públicos
-[ ] cleanup simplificado no entity_manager.py
+Bosses
+[ ] Boss
+[ ] SpikeBoss
+[ ] SlimeBoss (triggers_special_death)
+[ ] GiantMeteorBoss (fragments por hit + morte)
+[ ] StoneGolemBoss
+[ ] MountainSerpentBoss (gating por is_vulnerable)
+
+Sistema
+[ ] Collisions._apply_hit
+[ ] Collisions._apply_ship_contact
+[ ] Collisions._project_into_boss (unifica 4 *_vs_boss)
+[ ] Collisions._aoe_into_boss (unifica 3 area-vs-boss)
+[ ] bullets_vs_enemies usa _apply_hit
+[ ] player_lasers_vs_enemies usa _apply_hit
+[ ] mini_ship_bullets_vs_enemies usa _apply_hit
+[ ] _apply_area_damage usa _apply_hit
+[ ] ship_vs_enemies usa _apply_ship_contact
+
+Cleanup
+[ ] EntityManager.absorb_fragments
+[ ] EntityManager.trigger_death_sequence
+[ ] EntityManager.cleanup usa should_remove
+[ ] DELETE _destroy_enemy
+[ ] DELETE get_collision_info
+[ ] DELETE _calculate_default_explosion_size
+[ ] DELETE _is_invulnerable_to_damage / _handle_invulnerable_hit
+[ ] Remover imports de entidades concretas em collisions.py
 ```
 
 ---
@@ -351,4 +824,8 @@ self.enemies = [e for e in self.enemies if not e.should_remove()]
 ## Regra de ouro
 
 > Se você está escrevendo `isinstance(enemy, X)` dentro de `collisions.py`,
-> esse código pertence ao `on_hit` de `X`.
+> esse comportamento pertence a um método de `X`. Sem exceção no hot path
+> de hit/contact. As únicas exceções aceitáveis são em
+> `EntityManager.trigger_death_sequence` (cinemática global) e em
+> geometrias verdadeiramente atípicas (lasers, ondas radiais), e mesmo
+> essas devem caber em ≤ 3 ramos.

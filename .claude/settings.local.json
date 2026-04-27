@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python *)",
+      "Bash(grep -nA 30 \"_spawn_damage_meteor\\\\|_spawn_death_fragment\" game/entities/giant_meteor_boss.py)"
+    ]
+  }
+}
