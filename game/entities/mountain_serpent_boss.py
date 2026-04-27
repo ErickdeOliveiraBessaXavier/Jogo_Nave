@@ -23,8 +23,7 @@ Padrões aplicados
 
 import math
 import random
-from typing import Final, List, Literal, Optional, TypedDict
-from typing import TypeAlias
+from typing import Final, List, Literal, Optional, TypeAlias, TypedDict
 
 import pygame
 
@@ -649,7 +648,9 @@ class SerpentBlock:
         bar_color = (
             self._COLOR_HP_HIGH
             if ratio > 0.5
-            else self._COLOR_HP_MID if ratio > 0.25 else self._COLOR_HP_LOW
+            else self._COLOR_HP_MID
+            if ratio > 0.25
+            else self._COLOR_HP_LOW
         )
         pygame.draw.rect(surface, colors.DARK_GRAY, (bar_x, bar_y, bar_w, bar_h))
         pygame.draw.rect(surface, bar_color, (bar_x, bar_y, life_w, bar_h))
