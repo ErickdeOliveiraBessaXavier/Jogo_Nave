@@ -698,6 +698,7 @@ class PlayingScene(Scene):
         self._update_preparing_state(dt)
         self._update_timers(dt)
         self._update_ship(dt)
+        self._apply_environmental_effects(dt)
         self._update_spawners(dt)
 
         self.entity_manager.update(
@@ -821,6 +822,22 @@ class PlayingScene(Scene):
                 and self.ship.speed_modifier_timer <= 0.0
             ):
                 self._fire_bullets()
+
+    def _apply_environmental_effects(self, dt: float) -> None:
+        """Aplica efeitos ambientais (como vento) à nave do jogador."""
+        if not self._can_handle_gameplay_actions() or self.ship.is_entering:
+            return
+
+        # Vento do MountainPropeller
+        wind_affecting = False
+        for prop in self.entity_manager.mountain_propellers:
+            if prop.is_blowing():
+                wind_rect = prop.get_wind_rect()
+                if self.ship.rect.colliderect(wind_rect):
+                    # Empurrar para a esquerda
+                    self.ship.x -= prop.PUSH_FORCE * dt
+                    wind_affecting = True
+        self.ship.wind_slow_factor = prop.SLOW_SPEED_MULT if wind_affecting else 1.0
 
     def _update_spawners(self, dt: float) -> None:
         if (

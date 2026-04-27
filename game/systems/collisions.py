@@ -37,6 +37,7 @@ from ..entities.meteor import Meteor
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.mountain_mage import MountainStalagmite
+from ..entities.mountain_propeller import MountainPropeller
 from ..entities.mountain_serpent_boss import (
     MountainSerpentBoss,
     SerpentBlock,
@@ -363,9 +364,7 @@ class Collisions:
 
         # Mask overlap check
         if entity_mask is None:
-            entity_mask = pygame.mask.Mask(
-                (entity_rect.width, entity_rect.height), fill=True
-            )
+            entity_mask = self._get_rect_mask(entity_rect.width, entity_rect.height)
 
         offset = (
             int(entity_x - target_with_mask.x),
@@ -473,10 +472,17 @@ class Collisions:
 
             return pts, score_event, part_destroyed
 
-        # ElementalRobot, Boulder, StoneSentry, MountainStalagmite e SerpentBlock têm HP próprio.
+        # ElementalRobot, Boulder, StoneSentry, MountainStalagmite, SerpentBlock e MountainPropeller têm HP próprio.
         if isinstance(
             enemy,
-            (ElementalRobot, Boulder, StoneSentry, MountainStalagmite, SerpentBlock),
+            (
+                ElementalRobot,
+                Boulder,
+                StoneSentry,
+                MountainStalagmite,
+                SerpentBlock,
+                MountainPropeller,
+            ),
         ):
             prev_health = enemy.health if isinstance(enemy, MountainStalagmite) else 0
             enemy.take_damage(1)
@@ -1289,8 +1295,8 @@ class Collisions:
                         if score_event is not None:
                             score_events.append(score_event)
 
-                    # Se é um tiro explosivo, causar dano em área
-                    if b.explosive:
+                    # Se é um tiro explosivo, causar dano em área (apenas uma vez por bala)
+                    if b.explosive and not b.dead:
                         explosion_cx = b.x + b.w / 2
                         explosion_cy = b.y + b.h / 2
                         explosion_radius = 60  # Raio da explosão
@@ -1908,6 +1914,7 @@ class Collisions:
         enemies: Sequence[Enemy],
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
+        enemy_grid: "SpatialGrid[Any] | None" = None,
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Colisão dos lasers do jogador com inimigos (atravessa múltiplos alvos)."""
         score_gain: int = 0
@@ -1920,7 +1927,17 @@ class Collisions:
 
             line = laser.get_collision_line()
 
-            for enemy in enemies[:]:
+            # Usa spatial grid para narrow candidates quando disponível
+            if enemy_grid is not None:
+                lx = int(laser.x)
+                ly = int(laser.y - laser.w / 2)
+                lw = int(laser.w)
+                lh = int(laser.w)
+                candidates: Sequence[Enemy] = enemy_grid.query(lx, ly, lw, lh)
+            else:
+                candidates = enemies
+
+            for enemy in candidates:
                 if enemy.dead:
                     continue
 

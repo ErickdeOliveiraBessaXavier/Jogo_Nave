@@ -532,6 +532,8 @@ class SerpentBlock:
     # ------------------------------------------------------------------
 
     def update(self, dt: float, *_args: object, **_kwargs: object) -> None:
+        if self.dead and not self.is_fragment:
+            return  # Blocos mortos da corrente principal não precisam atualizar
         self._hit_flash = max(0.0, self._hit_flash - dt)
         self._rotation_angle = (
             self._rotation_angle

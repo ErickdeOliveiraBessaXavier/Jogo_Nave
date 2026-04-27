@@ -12,6 +12,7 @@ from ..entities.eye_enemy import EyeEnemy
 from ..entities.giant_meteor_boss import GiantMeteorBoss
 from ..entities.meteor import Meteor
 from ..entities.mountain_mage import MountainMage
+from ..entities.mountain_propeller import MountainPropeller
 from ..entities.mountain_serpent_boss import MountainSerpentBoss
 from ..entities.rock_glider import RockGlider
 from ..entities.slime_boss import SlimeBoss
@@ -62,6 +63,7 @@ ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
     StoneSentry: {WorldTheme.MOUNTAINS},
     ElementalRobot: {WorldTheme.MOUNTAINS},
     MountainMage: {WorldTheme.MOUNTAINS},
+    MountainPropeller: {WorldTheme.MOUNTAINS},
 }
 
 # Multiplicadores de frequência por tema (camada 2), organizados por preset.
@@ -288,6 +290,7 @@ DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
     StoneSentry: 30.0,
     ElementalRobot: 2.6,
     MountainMage: 18.0,
+    MountainPropeller: 15.0,
 }
 
 THEME_ENEMY_REPLACEMENTS: dict[tuple[WorldTheme, type], type] = {
@@ -1068,9 +1071,9 @@ class ProceduralLevelGenerator:
         self.difficulty_curves = DifficultyCurves()
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
-        self._difficulty_cache: dict[Union[int, str], float] = (
-            {}
-        )  # Cache for difficulty and score multiplier calculations
+        self._difficulty_cache: dict[
+            Union[int, str], float
+        ] = {}  # Cache for difficulty and score multiplier calculations
         self._level_cache: dict[int, LevelConfig] = {}
 
     def generate_level(self, level_number: int) -> LevelConfig:
@@ -1239,6 +1242,7 @@ class ProceduralLevelGenerator:
                 | ElementalRobot
                 | StoneSentry
                 | MountainMage
+                | MountainPropeller
             ],
             float,
         ] = {}  # Tipo -> tempo de spawn
@@ -1329,6 +1333,16 @@ class ProceduralLevelGenerator:
                 mage_spawn_time = (mage_base_time / difficulty) / spawn_multiplier
                 enemy_spawn_config[MountainMage] = self._clamp_spawn_time(
                     mage_spawn_time
+                )
+
+            # Mountain Propeller
+            if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.35:
+                propeller_base_time = 20.0
+                propeller_spawn_time = (
+                    propeller_base_time / difficulty
+                ) / spawn_multiplier
+                enemy_spawn_config[MountainPropeller] = self._clamp_spawn_time(
+                    propeller_spawn_time
                 )
 
         # 2. Calcular quantidade de inimigos
@@ -1439,9 +1453,10 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             RockGlider: 0.6,
             # ElementalRobot: 1.0,  # Mini-boss
             # StoneSentry: 30.0,
-            MountainMage: 1.0,
+            # MountainMage: 1.0,
+            MountainPropeller: 0.8,
         },
-        enemies_to_clear=1,
+        enemies_to_clear=10,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
         # mines_enabled=True,
@@ -1450,7 +1465,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         # boss_type=GiantMeteorBoss,
         # boss_type=SpikeBoss,
         # boss_type=StoneGolemBoss,
-        boss_type=MountainSerpentBoss,
+        # boss_type=MountainSerpentBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),

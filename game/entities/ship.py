@@ -63,6 +63,7 @@ class Ship:
         self.fire_rate_modifier_timer: float = 0.0  # Inferno: sobreaquecimento
         self.invert_controls_timer: float = 0.0  # Toxina: interferência
         self.speed_modifier_timer: float = 0.0  # Nevasca: congelamento
+        self.wind_slow_factor: float = 1.0  # Vento: lentidão
 
         # Carregar imagem da nave
         try:
@@ -666,6 +667,7 @@ class Ship:
             base_speed_multiplier = 1.5
         if self.speed_modifier_timer > 0.0:
             base_speed_multiplier *= 0.3  # Nevasca: 70% de redução
+        base_speed_multiplier *= self.wind_slow_factor  # Vento: lentidão adicional
 
         current_speed = self.speed * base_speed_multiplier
         move_vec = pygame.math.Vector2(0, 0)

@@ -34,6 +34,7 @@ from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.mountain_mage import MountainMage, MountainStalagmite
+from ..entities.mountain_propeller import MountainPropeller
 from ..entities.mountain_serpent_boss import (
     MountainSerpentBoss,
     SerpentBlock,
@@ -106,6 +107,7 @@ class EntityManager:
 
         self.mini_ships: List[MiniShip] = []
         self.formations: List[Formation] = []
+        self.mountain_propellers: List[MountainPropeller] = []
         self.spikes: List[Spike] = []
         self.boulders: List[Boulder] = []
         self.rock_shards: List[RockShard] = []
@@ -135,6 +137,7 @@ class EntityManager:
                 StoneSentry,
                 MountainMage,
                 MountainStalagmite,
+                MountainPropeller,
                 SerpentBlock,
                 Boulder,
                 RockShard,
@@ -256,6 +259,9 @@ class EntityManager:
         for e in self.enemies:
             if not e.dead:
                 self.enemy_spatial_grid.insert_from_rect(e)
+        for prop in self.mountain_propellers:
+            if not prop.dead:
+                self.enemy_spatial_grid.insert_from_rect(prop)
         for m in self.boulders:
             if not m.dead:
                 self.enemy_spatial_grid.insert_from_rect(m)
@@ -488,6 +494,10 @@ class EntityManager:
             else:
                 en.update(sdt)
 
+        for prop in self.mountain_propellers:
+            prop.update(dt)
+        self.mountain_propellers = [p for p in self.mountain_propellers if not p.dead]
+
         # Atualizar projéteis adicionais e colisões
         for o in self.energy_orbs:
             o.update(dt)
@@ -647,6 +657,8 @@ class EntityManager:
             for f in self.formations:
                 if is_v(f):
                     f.draw(surface)
+            for prop in self.mountain_propellers:
+                prop.draw(surface)
 
         # 2. Desenhar projéteis que ficam por BAIXO do boss (como o ataque da serpente)
         for b in self.serpent_bullets:
@@ -722,6 +734,11 @@ class EntityManager:
         self.boss = boss
         self.enemies.extend(boss.create_blocks())
         return boss
+
+    def spawn_mountain_propeller(self, y: float | None = None) -> MountainPropeller:
+        prop = MountainPropeller(y=y)
+        self.mountain_propellers.append(prop)
+        return prop
 
     def spawn_meteor(
         self,

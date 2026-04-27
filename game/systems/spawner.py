@@ -29,6 +29,7 @@ from ..entities.formation import Formation, FormationPattern
 from ..entities.meteor_pool import MeteorPool
 from ..entities.mountain_geode import MountainGeode
 from ..entities.mountain_mage import MountainMage
+from ..entities.mountain_propeller import MountainPropeller
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
 from ..entities.square_minion_boss import SquareMinionBoss
@@ -192,6 +193,10 @@ class EnemySpawner:
         self.mine_spawn_timer = Timer(10.0)
         self.mine_spawn_timer.start()
 
+        # Timer para MountainPropeller (perigo ambiental)
+        self.propeller_spawn_timer = Timer(14.0)
+        self.propeller_spawn_timer.start()
+
         # Timer para formações
         min_t, max_t = Config.FORMATION_SPAWN_INTERVAL
         self.formation_spawn_timer = Timer(random.uniform(min_t, max_t))
@@ -337,6 +342,7 @@ class EnemySpawner:
             "elemental_robot": 0,
             "stone_sentry": 0,
             "mountain_mage": 0,
+            "mountain_propeller": 0,
             "total": 0,
         }
 
@@ -360,6 +366,12 @@ class EnemySpawner:
                     counts["stone_sentry"] += 1
                 elif isinstance(enemy, MountainMage):
                     counts["mountain_mage"] += 1
+        
+        # Contar propellers que estão em uma lista separada no entity_manager
+        for prop in entity_manager.mountain_propellers:
+            if not prop.dead:
+                counts["total"] += 1
+                counts["mountain_propeller"] += 1
 
         return counts
 
@@ -413,6 +425,8 @@ class EnemySpawner:
         if enemy_type == StoneSentry and counts["stone_sentry"] >= 2:
             return True
         if enemy_type == MountainMage and counts["mountain_mage"] >= 1:
+            return True
+        if enemy_type == MountainPropeller and counts["mountain_propeller"] >= 3:
             return True
 
         return False
@@ -596,6 +610,11 @@ class EnemySpawner:
             new_enemy = MountainMage(x, y)
             new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
             entity_manager.enemies.append(new_enemy)
+            return True
+
+        if enemy_type == MountainPropeller:
+            y = random.randint(100, Config.SCREEN_HEIGHT - 100)
+            entity_manager.spawn_mountain_propeller(y=y)
             return True
 
         new_enemy = cast(EnemyWithHealth, enemy_type())
@@ -806,6 +825,17 @@ class EnemySpawner:
                                 )
                                 break
                             attempts += 1
+
+        # Spawner de MountainPropeller (perigo ambiental)
+        world = get_world_for_level(self.current_level_number)
+        if world.theme == WorldTheme.MOUNTAINS:
+            self.propeller_spawn_timer.update(dt)
+            if self.propeller_spawn_timer.done():
+                self.propeller_spawn_timer.start()
+                if random.random() < self.spawn_intensity:
+                    # Verifica se já não tem muitos propellers na tela
+                    if len(entity_manager.mountain_propellers) < 3:
+                        entity_manager.spawn_mountain_propeller()
 
         # Spawner de formações
         if self.config.formations_enabled:
