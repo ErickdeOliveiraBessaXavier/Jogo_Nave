@@ -1,7 +1,15 @@
 import math
 import random
-from typing import (TYPE_CHECKING, Any, Callable, Protocol, Sequence,
-                    TypeAlias, cast, runtime_checkable)
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Protocol,
+    Sequence,
+    TypeAlias,
+    cast,
+    runtime_checkable,
+)
 
 import pygame
 
@@ -29,8 +37,11 @@ from ..entities.meteor import Meteor
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.mountain_mage import MountainStalagmite
-from ..entities.mountain_serpent_boss import (MountainSerpentBoss,
-                                              SerpentBlock, SerpentRockBullet)
+from ..entities.mountain_serpent_boss import (
+    MountainSerpentBoss,
+    SerpentBlock,
+    SerpentRockBullet,
+)
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
@@ -42,8 +53,13 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import (Boulder, EntryDebris, OrbitalRock,
-                                         RockShard, StoneGolemBoss)
+from ..entities.stone_golem_boss import (
+    Boulder,
+    EntryDebris,
+    OrbitalRock,
+    RockShard,
+    StoneGolemBoss,
+)
 from ..entities.stone_sentry import StoneSentry
 
 if TYPE_CHECKING:
@@ -1511,7 +1527,9 @@ class Collisions:
                 return True
         return False
 
-    def serpent_bullets_vs_ship(self, ship: Ship, serpent_bullets: list[SerpentRockBullet]) -> bool:
+    def serpent_bullets_vs_ship(
+        self, ship: Ship, serpent_bullets: list[SerpentRockBullet]
+    ) -> bool:
         """Verifica colisão entre as bolas de rocha da serpente e a nave."""
         if ship.invuln > 0:
             return False

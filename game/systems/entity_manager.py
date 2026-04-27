@@ -34,8 +34,11 @@ from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.mountain_mage import MountainMage, MountainStalagmite
-from ..entities.mountain_serpent_boss import (MountainSerpentBoss,
-                                              SerpentBlock, SerpentRockBullet)
+from ..entities.mountain_serpent_boss import (
+    MountainSerpentBoss,
+    SerpentBlock,
+    SerpentRockBullet,
+)
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
@@ -47,8 +50,13 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import (Boulder, EntryDebris, OrbitalRock,
-                                         RockShard, StoneGolemBoss)
+from ..entities.stone_golem_boss import (
+    Boulder,
+    EntryDebris,
+    OrbitalRock,
+    RockShard,
+    StoneGolemBoss,
+)
 from ..entities.stone_sentry import StoneSentry
 
 if TYPE_CHECKING:
@@ -84,7 +92,7 @@ class EntityManager:
         self.powerups: List[PowerUp] = []
         self.stars: List[Star] = []
         self.floating_scores: List[FloatingScore] = []
-        
+
         self.boss: Optional[
             Union[
                 Boss,
@@ -95,7 +103,7 @@ class EntityManager:
                 MountainSerpentBoss,
             ]
         ] = None
-        
+
         self.mini_ships: List[MiniShip] = []
         self.formations: List[Formation] = []
         self.spikes: List[Spike] = []
@@ -109,7 +117,9 @@ class EntityManager:
 
         # Pools de performance
         self.meteor_pool = MeteorPool(initial_size=100, is_side_scroll=is_side_scroll)
-        self.rock_glider_pool = RockGliderPool(initial_size=24, is_side_scroll=is_side_scroll)
+        self.rock_glider_pool = RockGliderPool(
+            initial_size=24, is_side_scroll=is_side_scroll
+        )
         self.bullet_pool = BulletPool(initial_size=50)
         self.explosion_pool = ExplosionPool(initial_size=50)
 
@@ -133,7 +143,7 @@ class EntityManager:
             ]
         ] = SpatialGrid()
         self.spike_spatial_grid: SpatialGrid[Spike] = SpatialGrid()
-        
+
         # Estado interno
         self._grid_needs_rebuild = True
         self._cached_formation_enemies: List[Any] = []
@@ -158,11 +168,15 @@ class EntityManager:
         for _ in range(12):
             ex = random.uniform(boss.x + boss.w * 0.1, boss.x + boss.w * 0.9)
             ey = random.uniform(boss.y + boss.h * 0.15, boss.y + boss.h * 0.85)
-            self.spawn_explosion(ex, ey, size=random.randint(70, 120), explosion_type=ExplosionType.SLIME)
+            self.spawn_explosion(
+                ex, ey, size=random.randint(70, 120), explosion_type=ExplosionType.SLIME
+            )
         for _ in range(8):
             ex = random.uniform(boss.x, boss.x + boss.w)
             ey = random.uniform(boss.y, boss.y + boss.h)
-            self.spawn_explosion(ex, ey, size=random.randint(40, 70), explosion_type=ExplosionType.SLIME)
+            self.spawn_explosion(
+                ex, ey, size=random.randint(40, 70), explosion_type=ExplosionType.SLIME
+            )
 
     def spawn_emp_wave(self, center_x: float, center_y: float) -> None:
         self.emp_waves.append(EMPWave(center_x, center_y))
@@ -172,72 +186,118 @@ class EntityManager:
 
     def spawn_air_strike(self, target_x: float, target_y: float) -> None:
         screen = pygame.display.get_surface()
-        sw, sh = (screen.get_size() if screen else (1600, 900))
+        sw, sh = screen.get_size() if screen else (1600, 900)
         tx = max(40, min(sw - 40, target_x))
         ty = max(60, min(sh - 40, target_y))
         self.spawn_air_strike_bomb(tx, ty)
 
     def spawn_air_strike_bomb(self, target_x: float, target_y: float) -> None:
-        on_explode = self.sound_manager.play_explosion_asteroid if self.sound_manager else None
+        on_explode = (
+            self.sound_manager.play_explosion_asteroid if self.sound_manager else None
+        )
         on_fall = self.sound_manager.play_meteor_rain if self.sound_manager else None
-        self.air_strike_bombs.append(AirStrikeBomb(target_x, target_y, on_explode=on_explode, on_fall=on_fall))
+        self.air_strike_bombs.append(
+            AirStrikeBomb(target_x, target_y, on_explode=on_explode, on_fall=on_fall)
+        )
 
     def spawn_black_hole(self, x: float, y: float, duration: float) -> None:
-        self.black_holes.append(BlackHole(x, y, duration, is_side_scroll=self.is_side_scroll))
+        self.black_holes.append(
+            BlackHole(x, y, duration, is_side_scroll=self.is_side_scroll)
+        )
 
     def spawn_cannon_tower(self, x: float, y: float) -> None:
         tower = CannonTower(x, y)
+
         def on_fire_mine(tx: float, ty: float) -> None:
             self._spawn_cannon_mine(x + 30, y, tx, ty, tower)
+
         tower.on_fire_mine = on_fire_mine
         self.cannon_towers.append(tower)
 
-    def _spawn_cannon_mine(self, lx: float, ly: float, tx: float, ty: float, tower: CannonTower) -> None:
-        on_explode = self.sound_manager.play_explosion_asteroid if self.sound_manager else None
+    def _spawn_cannon_mine(
+        self, lx: float, ly: float, tx: float, ty: float, tower: CannonTower
+    ) -> None:
+        on_explode = (
+            self.sound_manager.play_explosion_asteroid if self.sound_manager else None
+        )
         mine = CannonMine(tx, ty, lx, ly, on_explode=on_explode)
         self.cannon_mines.append(mine)
         tower.register_mine(mine)
 
-    def spawn_player_laser(self, x: float, y: float, tx: float, ty: float, damage: int = 50, ship: Optional["Ship"] = None, ball_index: int = -1, target_entity: Optional[Any] = None) -> PlayerLaser:
-        laser = PlayerLaser(x, y, tx, ty, damage=damage, ship=ship, ball_index=ball_index, target_entity=target_entity)
+    def spawn_player_laser(
+        self,
+        x: float,
+        y: float,
+        tx: float,
+        ty: float,
+        damage: int = 50,
+        ship: Optional["Ship"] = None,
+        ball_index: int = -1,
+        target_entity: Optional[Any] = None,
+    ) -> PlayerLaser:
+        laser = PlayerLaser(
+            x,
+            y,
+            tx,
+            ty,
+            damage=damage,
+            ship=ship,
+            ball_index=ball_index,
+            target_entity=target_entity,
+        )
         self.player_lasers.append(laser)
         return laser
 
     def rebuild_all_grids(self) -> None:
         if not self._grid_needs_rebuild:
             return
-        
+
         self.enemy_spatial_grid.clear()
         for e in self.enemies:
-            if not e.dead: self.enemy_spatial_grid.insert_from_rect(e)
+            if not e.dead:
+                self.enemy_spatial_grid.insert_from_rect(e)
         for m in self.boulders:
-            if not m.dead: self.enemy_spatial_grid.insert_from_rect(m)
+            if not m.dead:
+                self.enemy_spatial_grid.insert_from_rect(m)
         for s in self.rock_shards:
-            if not s.dead: self.enemy_spatial_grid.insert_from_rect(s)
+            if not s.dead:
+                self.enemy_spatial_grid.insert_from_rect(s)
         for r in self.orbital_rocks:
-            if not r.dead and getattr(r, "causes_damage", False): self.enemy_spatial_grid.insert_from_rect(r)
-        
+            if not r.dead and getattr(r, "causes_damage", False):
+                self.enemy_spatial_grid.insert_from_rect(r)
+
         if isinstance(self.boss, StoneGolemBoss):
             for d in self.boss.entry_debris:
                 if not d.dead:
                     self.enemy_spatial_grid.insert_from_rect(d)
-        
+
         for e in self._cached_formation_enemies:
             self.enemy_spatial_grid.insert_from_rect(e)
-            
+
         self.spike_spatial_grid.clear()
         for s in self.spikes:
             self.spike_spatial_grid.insert_from_rect(s)
-            
+
         self._grid_needs_rebuild = False
 
     def _check_alien_collisions(self) -> None:
-        aliens = [e for e in self.enemies if isinstance(e, Alien) and not e.dead and not e.formation_controlled]
+        aliens = [
+            e
+            for e in self.enemies
+            if isinstance(e, Alien) and not e.dead and not e.formation_controlled
+        ]
         processed: set[tuple[int, int]] = set()
         for a in aliens:
             r = a.rect
-            for o in self.enemy_spatial_grid.query(r.x-1, r.y-1, r.width+2, r.height+2):
-                if o is a or o.dead or not isinstance(o, Alien) or o.formation_controlled:
+            for o in self.enemy_spatial_grid.query(
+                r.x - 1, r.y - 1, r.width + 2, r.height + 2
+            ):
+                if (
+                    o is a
+                    or o.dead
+                    or not isinstance(o, Alien)
+                    or o.formation_controlled
+                ):
                     continue
                 aid, oid = id(a), id(o)
                 if aid >= oid or (aid, oid) in processed:
@@ -249,17 +309,25 @@ class EntityManager:
                     ox = (a.w + o.w) / 2 - abs(a.x - o.x)
                     if ox > 0:
                         if a.x < o.x:
-                            a.x -= ox/2
-                            o.x += ox/2
+                            a.x -= ox / 2
+                            o.x += ox / 2
                         else:
-                            a.x += ox/2
-                            o.x -= ox/2
+                            a.x += ox / 2
+                            o.x -= ox / 2
 
-    def update(self, dt: float, player_x: float, player_y: float, freeze_enemies: bool = False, screen_width: int = 1600, screen_height: int = 900) -> None:
+    def update(
+        self,
+        dt: float,
+        player_x: float,
+        player_y: float,
+        freeze_enemies: bool = False,
+        screen_width: int = 1600,
+        screen_height: int = 900,
+    ) -> None:
         enemy_dt = 0.0 if freeze_enemies else dt
         new_alien_bullets: List[AlienBullet] = []
         new_eye_lasers: List[EyeLaser] = []
-        
+
         # Cache de inimigos
         self._cached_formation_enemies = []
         self._cached_all_enemies = list(self.enemies)
@@ -273,10 +341,12 @@ class EntityManager:
         # Atualizar efeitos visuais
         for w in self.emp_waves[:]:
             w.update(dt)
-            if w.dead: self.emp_waves.remove(w)
+            if w.dead:
+                self.emp_waves.remove(w)
         for e in self.explosive_effects[:]:
             e.update(dt)
-            if e.dead: self.explosive_effects.remove(e)
+            if e.dead:
+                self.explosive_effects.remove(e)
 
         # Helper para lentidão (EMP)
         slow_active = getattr(self, "emp_active", False)
@@ -288,7 +358,11 @@ class EntityManager:
             if not slow_active:
                 return float(slow_factor) if linger > 0.0 else 1.0
             rect = getattr(entity, "rect", None)
-            ex, ey = (rect.centerx, rect.centery) if rect else (getattr(entity, "x", 0.0), getattr(entity, "y", 0.0))
+            ex, ey = (
+                (rect.centerx, rect.centery)
+                if rect
+                else (getattr(entity, "x", 0.0), getattr(entity, "y", 0.0))
+            )
             for w in emp_waves:
                 if w.is_affecting_position(float(ex), float(ey), dt):
                     setattr(entity, "emp_linger_timer", float(EMP_LINGER_DURATION))
@@ -297,39 +371,50 @@ class EntityManager:
 
         def update_linger(entity: Any, dt: float) -> None:
             l = getattr(entity, "emp_linger_timer", 0.0)
-            if l > 0.0: setattr(entity, "emp_linger_timer", max(0.0, l - dt))
+            if l > 0.0:
+                setattr(entity, "emp_linger_timer", max(0.0, l - dt))
 
         # Atualizar formações e naves aliadas
         for f in self.formations[:]:
             update_linger(f, dt)
             mul = emp_mul_for(f)
             shot = f.update(enemy_dt * mul)
-            if shot: new_alien_bullets.extend(shot)
-            
+            if shot:
+                new_alien_bullets.extend(shot)
+
         for b in self.bullets:
             b.update(dt, self._cached_all_enemies if b.homing else None)
-            
+
         for b in self.mini_ship_bullets:
             b.update(dt)
-            
+
         for b in self.player_lasers:
             if b.target_entity and getattr(b.target_entity, "dead", False):
                 b.target_entity = None
             b.update(dt)
 
         # Atualizar projéteis inimigos
-        for b in self.alien_bullets: b.update(enemy_dt)
-        for b in self.serpent_bullets: b.update(enemy_dt)
-        for b in self.boss_lasers: b.update(enemy_dt)
-        for b in self.eye_lasers: b.update(enemy_dt)
-        
+        for b in self.alien_bullets:
+            b.update(enemy_dt)
+        for b in self.serpent_bullets:
+            b.update(enemy_dt)
+        for b in self.boss_lasers:
+            b.update(enemy_dt)
+        for b in self.eye_lasers:
+            b.update(enemy_dt)
+
         self.explosion_pool.update(dt)
-        for me in self.mine_explosions: me.update(dt)
-        for p in self.powerups: p.update(dt)
-        for s in self.stars: s.update(dt)
-        for fs in self.floating_scores: fs.update(dt)
-        for ms in self.mini_ships: ms.update(dt, self._cached_all_enemies, self.mini_ship_bullets)
-        
+        for me in self.mine_explosions:
+            me.update(dt)
+        for p in self.powerups:
+            p.update(dt)
+        for s in self.stars:
+            s.update(dt)
+        for fs in self.floating_scores:
+            fs.update(dt)
+        for ms in self.mini_ships:
+            ms.update(dt, self._cached_all_enemies, self.mini_ship_bullets)
+
         # Atualizar Spikes
         ac = sum(1 for s in self.spikes if s.state in ("trembling", "flying"))
         for s in self.spikes:
@@ -341,27 +426,36 @@ class EntityManager:
         if self.boss:
             if isinstance(self.boss, SpikeBoss):
                 ss, bls = self.boss.update(enemy_dt, player_x, player_y, self.spikes)
-                if ss: self.spikes.extend(ss)
-                if bls: self.boss_lasers.extend(bls)
+                if ss:
+                    self.spikes.extend(ss)
+                if bls:
+                    self.boss_lasers.extend(bls)
             elif isinstance(self.boss, SlimeBoss):
                 self.boss.update(enemy_dt, player_x, player_y, self)
             elif isinstance(self.boss, GiantMeteorBoss):
                 self.boss.update(enemy_dt, self)
             elif isinstance(self.boss, StoneGolemBoss):
                 nb, ns, orks = self.boss.update(enemy_dt, player_x, player_y, self)
-                if nb: self.boulders.extend(nb)
-                if ns: self.rock_shards.extend(ns)
+                if nb:
+                    self.boulders.extend(nb)
+                if ns:
+                    self.rock_shards.extend(ns)
                 self.orbital_rocks = orks
             elif isinstance(self.boss, MountainSerpentBoss):
                 bb, fragments = self.boss.update(enemy_dt, player_x, player_y)
-                if bb: self.serpent_bullets.extend(bb)
-                if fragments: self.enemies.extend(fragments)
+                if bb:
+                    self.serpent_bullets.extend(bb)
+                if fragments:
+                    self.enemies.extend(fragments)
             else:
                 ls, sqs = self.boss.update(enemy_dt, player_x, player_y)
-                if ls: self.boss_lasers.extend(ls)
-                if sqs: self.boss_squares.extend(sqs)
+                if ls:
+                    self.boss_lasers.extend(ls)
+                if sqs:
+                    self.boss_squares.extend(sqs)
                 for q in self.boss.floating_squares:
-                    if q not in self.boss_squares: self.boss_squares.append(q)
+                    if q not in self.boss_squares:
+                        self.boss_squares.append(q)
 
         # Atualizar Inimigos Comuns
         for en in self.enemies:
@@ -369,114 +463,163 @@ class EntityManager:
             sdt = enemy_dt * mul
             if isinstance(en, Alien):
                 s = en.update(sdt)
-                if s: new_alien_bullets.extend(s)
+                if s:
+                    new_alien_bullets.extend(s)
             elif isinstance(en, EyeEnemy):
                 s = en.update(sdt, player_x, player_y)
-                if s: new_eye_lasers.extend(s)
+                if s:
+                    new_eye_lasers.extend(s)
             elif isinstance(en, GuidedMeteor):
                 en.update(sdt, self.is_side_scroll, player_x, player_y)
             elif isinstance(en, SquareMinionBoss):
                 en.update(sdt, screen_width, screen_height)
             elif isinstance(en, ElementalRobot):
                 no = en.update(dt, sdt, player_x, player_y)
-                if no: self.energy_orbs.extend(no)
+                if no:
+                    self.energy_orbs.extend(no)
             elif isinstance(en, StoneSentry):
                 s = en.update(sdt, (player_x, player_y), self.enemies)
-                if s: new_alien_bullets.extend(s)
+                if s:
+                    new_alien_bullets.extend(s)
             elif isinstance(en, MountainMage):
                 nst = en.update(sdt, (player_x, player_y))
-                if nst: self.enemies.extend(nst)
+                if nst:
+                    self.enemies.extend(nst)
             else:
                 en.update(sdt)
 
         # Atualizar projéteis adicionais e colisões
-        for o in self.energy_orbs: o.update(dt)
+        for o in self.energy_orbs:
+            o.update(dt)
         self._check_alien_collisions()
         self.alien_bullets.extend(new_alien_bullets)
         self.eye_lasers.extend(new_eye_lasers)
-        
+
         # Atualizar elementos dinâmicos da tela
         screen = pygame.display.get_surface()
-        sw, sh = (screen.get_size() if screen else (1600, 900))
-        
+        sw, sh = screen.get_size() if screen else (1600, 900)
+
         for q in self.boss_squares[:]:
             q.update(enemy_dt, sw, sh)
-            if q.dead: self.boss_squares.remove(q)
-            
+            if q.dead:
+                self.boss_squares.remove(q)
+
         for m in self.boulders:
             es = m.update(dt)
-            if es: self.rock_shards.extend(es)
-            
-        for s in self.rock_shards: s.update(dt)
-        
+            if es:
+                self.rock_shards.extend(es)
+
+        for s in self.rock_shards:
+            s.update(dt)
+
         for b in self.air_strike_bombs[:]:
             b.update(enemy_dt)
-            if b.dead: self.air_strike_bombs.remove(b)
-            
+            if b.dead:
+                self.air_strike_bombs.remove(b)
+
         for t in self.cannon_towers[:]:
             t.update(enemy_dt)
-            if t.dead: self.cannon_towers.remove(t)
-            
+            if t.dead:
+                self.cannon_towers.remove(t)
+
         for m in self.cannon_mines[:]:
             m.update(enemy_dt)
-            if m.dead: self.cannon_mines.remove(m)
-            
+            if m.dead:
+                self.cannon_mines.remove(m)
+
         for b in self.black_holes:
             b.update(dt)
         for b in self.black_holes:
-            b.process_all_enemies(self._cached_all_enemies, enemy_dt, self.spawn_explosion)
-            
+            b.process_all_enemies(
+                self._cached_all_enemies, enemy_dt, self.spawn_explosion
+            )
+
         self.cleanup()
         self.rebuild_all_grids()
 
-    def update_for_game_over_slow_motion(self, dt: float, player_x: float, player_y: float) -> None:
+    def update_for_game_over_slow_motion(
+        self, dt: float, player_x: float, player_y: float
+    ) -> None:
         # Atualizar todas as listas de perigos e projéteis
         groups: List[List[Any]] = [
-            self.enemies, self.bullets, self.alien_bullets, self.serpent_bullets,
-            self.boss_lasers, self.powerups, self.floating_scores, self.mini_ships,
-            self.spikes, self.boss_squares, self.eye_lasers, self.mini_ship_bullets,
-            self.cannon_towers, self.cannon_mines, self.energy_orbs, self.boulders,
-            self.rock_shards
+            self.enemies,
+            self.bullets,
+            self.alien_bullets,
+            self.serpent_bullets,
+            self.boss_lasers,
+            self.powerups,
+            self.floating_scores,
+            self.mini_ships,
+            self.spikes,
+            self.boss_squares,
+            self.eye_lasers,
+            self.mini_ship_bullets,
+            self.cannon_towers,
+            self.cannon_mines,
+            self.energy_orbs,
+            self.boulders,
+            self.rock_shards,
         ]
         for g in groups:
             for e in g:
                 if isinstance(e, (EyeEnemy, GuidedMeteor, ElementalRobot)):
-                    if isinstance(e, GuidedMeteor): e.update(dt, self.is_side_scroll, player_x, player_y)
-                    elif isinstance(e, ElementalRobot): e.update(dt, dt, player_x, player_y)
-                    else: e.update(dt, player_x, player_y)
-                elif isinstance(e, MiniShip): e.update(dt, [], [])
-                elif isinstance(e, Meteor): e.update(dt, self.is_side_scroll)
-                else: e.update(dt)
-                
-        for f in self.formations: f.update(dt)
+                    if isinstance(e, GuidedMeteor):
+                        e.update(dt, self.is_side_scroll, player_x, player_y)
+                    elif isinstance(e, ElementalRobot):
+                        e.update(dt, dt, player_x, player_y)
+                    else:
+                        e.update(dt, player_x, player_y)
+                elif isinstance(e, MiniShip):
+                    e.update(dt, [], [])
+                elif isinstance(e, Meteor):
+                    e.update(dt, self.is_side_scroll)
+                else:
+                    e.update(dt)
+
+        for f in self.formations:
+            f.update(dt)
         self.explosion_pool.update(dt)
-        
+
         if self.boss:
             if isinstance(self.boss, SpikeBoss):
                 ss, bls = self.boss.update(dt, player_x, player_y, self.spikes)
-                if ss: self.spikes.extend(ss)
-                if bls: self.boss_lasers.extend(bls)
+                if ss:
+                    self.spikes.extend(ss)
+                if bls:
+                    self.boss_lasers.extend(bls)
             elif isinstance(self.boss, SlimeBoss):
                 self.boss.update(dt, player_x, player_y, self)
             elif isinstance(self.boss, GiantMeteorBoss):
                 self.boss.update(dt, self)
             elif isinstance(self.boss, StoneGolemBoss):
                 nb, ns, orks = self.boss.update(dt, player_x, player_y, self)
-                if nb: self.boulders.extend(nb)
-                if ns: self.rock_shards.extend(ns)
+                if nb:
+                    self.boulders.extend(nb)
+                if ns:
+                    self.rock_shards.extend(ns)
                 self.orbital_rocks = orks
             elif isinstance(self.boss, MountainSerpentBoss):
                 bb, _ = self.boss.update(dt, player_x, player_y)
-                if bb: self.serpent_bullets.extend(bb)
+                if bb:
+                    self.serpent_bullets.extend(bb)
             else:
                 ls, sqs = self.boss.update(dt, player_x, player_y)
-                if ls: self.boss_lasers.extend(ls)
-                if sqs: self.boss_squares.extend(sqs)
+                if ls:
+                    self.boss_lasers.extend(ls)
+                if sqs:
+                    self.boss_squares.extend(sqs)
         self.cleanup()
 
-    def draw(self, surface: pygame.Surface, player_x: float, player_y: float, enemy_visible: bool = True, fps: float = 60.0) -> None:
+    def draw(
+        self,
+        surface: pygame.Surface,
+        player_x: float,
+        player_y: float,
+        enemy_visible: bool = True,
+        fps: float = 60.0,
+    ) -> None:
         sr = surface.get_rect()
-        
+
         def is_v(e: Any) -> bool:
             # Verifica visibilidade de forma robusta
             r = getattr(e, "rect", None)
@@ -488,7 +631,7 @@ class EntityManager:
             h = getattr(e, "h", None)
             if x is not None and y is not None and w is not None and h is not None:
                 return pygame.Rect(int(x), int(y), int(w), int(h)).colliderect(sr)
-            return True # Assume visível se não tiver geometria clara
+            return True  # Assume visível se não tiver geometria clara
 
         if enemy_visible:
             self.meteor_pool.draw(surface)
@@ -497,123 +640,200 @@ class EntityManager:
                     e.draw(surface)
                     continue
                 if is_v(e):
-                    if isinstance(e, EyeEnemy): e.draw(surface, player_x, player_y)
-                    else: e.draw(surface)
+                    if isinstance(e, EyeEnemy):
+                        e.draw(surface, player_x, player_y)
+                    else:
+                        e.draw(surface)
             for f in self.formations:
-                if is_v(f): f.draw(surface)
+                if is_v(f):
+                    f.draw(surface)
 
         # 2. Desenhar projéteis que ficam por BAIXO do boss (como o ataque da serpente)
         for b in self.serpent_bullets:
-            if is_v(b): b.draw(surface)
+            if is_v(b):
+                b.draw(surface)
 
         # 3. Desenhar o Boss (agora por cima das rochas da serpente)
         if self.boss:
-            if isinstance(self.boss, SlimeBoss): self.boss.draw(surface, fps)
-            else: self.boss.draw(surface)
+            if isinstance(self.boss, SlimeBoss):
+                self.boss.draw(surface, fps)
+            else:
+                self.boss.draw(surface)
 
-        for l in self.boss_lasers: l.draw(surface)
-        for b in self.black_holes: b.draw(surface)
-        for w in self.emp_waves: w.draw(surface)
-        
+        for l in self.boss_lasers:
+            l.draw(surface)
+        for b in self.black_holes:
+            b.draw(surface)
+        for w in self.emp_waves:
+            w.draw(surface)
+
         # 4. Desenhar projéteis e efeitos de impacto (devem ficar SOBRE os inimigos)
         lists: List[List[Any]] = [
-            self.bullets, self.alien_bullets, self.energy_orbs,
-            self.player_lasers, self.mini_ship_bullets, self.eye_lasers, self.boss_squares,
-            self.powerups, self.stars, self.floating_scores, self.mini_ships, self.spikes,
-            self.mine_explosions, self.air_strike_bombs, self.cannon_mines, self.cannon_towers,
-            self.boulders, self.rock_shards
+            self.bullets,
+            self.alien_bullets,
+            self.energy_orbs,
+            self.player_lasers,
+            self.mini_ship_bullets,
+            self.eye_lasers,
+            self.boss_squares,
+            self.powerups,
+            self.stars,
+            self.floating_scores,
+            self.mini_ships,
+            self.spikes,
+            self.mine_explosions,
+            self.air_strike_bombs,
+            self.cannon_mines,
+            self.cannon_towers,
+            self.boulders,
+            self.rock_shards,
         ]
         for l in lists:
             for e in l:
-                if is_v(e): e.draw(surface)
-                
-        self.explosion_pool.draw_all(surface)
-        for e in self.explosive_effects: e.draw(surface)
+                if is_v(e):
+                    e.draw(surface)
 
-    def spawn_elemental_robot(self, x: float | None = None, y: float | None = None, difficulty_multiplier: float = 1.0, start_visible: bool = False) -> ElementalRobot:
+        self.explosion_pool.draw_all(surface)
+        for e in self.explosive_effects:
+            e.draw(surface)
+
+    def spawn_elemental_robot(
+        self,
+        x: float | None = None,
+        y: float | None = None,
+        difficulty_multiplier: float = 1.0,
+        start_visible: bool = False,
+    ) -> ElementalRobot:
         screen = pygame.display.get_surface()
-        sw, sh = (screen.get_size() if screen else (1600, 900))
+        sw, sh = screen.get_size() if screen else (1600, 900)
         robot = ElementalRobot(
             x if x is not None else sw / 2 - 72,
             y if y is not None else sh * 0.15,
             difficulty_multiplier=difficulty_multiplier,
-            start_visible=start_visible
+            start_visible=start_visible,
         )
         self.enemies.append(robot)
         return robot
 
-    def spawn_mountain_serpent_boss(self, x: float | None = None, y: float | None = None, health: int | None = None) -> MountainSerpentBoss:
+    def spawn_mountain_serpent_boss(
+        self, x: float | None = None, y: float | None = None, health: int | None = None
+    ) -> MountainSerpentBoss:
         boss = MountainSerpentBoss(x=x, y=y, health=health)
         self.boss = boss
         self.enemies.extend(boss.create_blocks())
         return boss
 
-    def spawn_meteor(self, size: int | None = None, x: float | None = None, y: float | None = None, vx: float | None = None, vy: float | None = None, behind: bool = False) -> Meteor:
+    def spawn_meteor(
+        self,
+        size: int | None = None,
+        x: float | None = None,
+        y: float | None = None,
+        vx: float | None = None,
+        vy: float | None = None,
+        behind: bool = False,
+    ) -> Meteor:
         meteor = self.meteor_pool.get(size=size, x=x, y=y, vx=vx, vy=vy)
-        if behind: self.enemies.insert(0, meteor)
-        else: self.enemies.append(meteor)
+        if behind:
+            self.enemies.insert(0, meteor)
+        else:
+            self.enemies.append(meteor)
         return meteor
 
-    def spawn_bullet(self, x: float, y: float, damage: int = 10, piercing: bool = False, homing: bool = False, explosive: bool = False, low_ammo: bool = False, direction: Optional[tuple[float, float]] = None) -> Bullet:
-        bullet = self.bullet_pool.get(x=x, y=y, damage=damage, piercing=piercing, homing=homing, explosive=explosive, low_ammo=low_ammo, is_side_scroll=self.is_side_scroll, direction=direction)
+    def spawn_bullet(
+        self,
+        x: float,
+        y: float,
+        damage: int = 10,
+        piercing: bool = False,
+        homing: bool = False,
+        explosive: bool = False,
+        low_ammo: bool = False,
+        direction: Optional[tuple[float, float]] = None,
+    ) -> Bullet:
+        bullet = self.bullet_pool.get(
+            x=x,
+            y=y,
+            damage=damage,
+            piercing=piercing,
+            homing=homing,
+            explosive=explosive,
+            low_ammo=low_ammo,
+            is_side_scroll=self.is_side_scroll,
+            direction=direction,
+        )
         if homing:
             target = self._assign_homing_target(bullet)
-            if target: bullet.assign_target(target)
+            if target:
+                bullet.assign_target(target)
         self.bullets.append(bullet)
         return bullet
 
     def _assign_homing_target(self, bullet: Bullet) -> Any:
         all_e: List[Any] = list(self.enemies)
         for f in self.formations:
-            if not getattr(f, "dead", True): all_e.extend(f.get_enemies())
+            if not getattr(f, "dead", True):
+                all_e.extend(f.get_enemies())
         if self.boss and not getattr(self.boss, "dead", True):
             all_e.append(self.boss)
-            
+
         alive = [e for e in all_e if not getattr(e, "dead", True)]
-        if not alive: return None
-        
+        if not alive:
+            return None
+
         counts: Dict[int, int] = {}
         for b in self.bullets:
             if getattr(b, "homing", False) and b.assigned_target_id is not None:
                 counts[b.assigned_target_id] = counts.get(b.assigned_target_id, 0) + 1
-                
-        best = None; min_c = 999999; min_d = float("inf")
+
+        best = None
+        min_c = 999999
+        min_d = float("inf")
         for e in alive:
-            eid = id(e); c = counts.get(eid, 0)
-            ex, ey = e.x + getattr(e, "w", 0)/2, e.y + getattr(e, "h", 0)/2
-            d = ((ex - bullet.x)**2 + (ey - bullet.y)**2)**0.5
+            eid = id(e)
+            c = counts.get(eid, 0)
+            ex, ey = e.x + getattr(e, "w", 0) / 2, e.y + getattr(e, "h", 0) / 2
+            d = ((ex - bullet.x) ** 2 + (ey - bullet.y) ** 2) ** 0.5
             if c < min_c or (c == min_c and d < min_d):
-                min_c = c; min_d = d; best = e
+                min_c = c
+                min_d = d
+                best = e
         return best
 
     def _is_enemy_off_screen(self, enemy: Any) -> bool:
         ew = getattr(enemy, "w", getattr(getattr(enemy, "rect", None), "width", 50))
         eh = getattr(enemy, "h", getattr(getattr(enemy, "rect", None), "height", 50))
         s = pygame.display.get_surface()
-        sw, sh = (s.get_size() if s else (1600, 900))
-        
+        sw, sh = s.get_size() if s else (1600, 900)
+
         if self.is_side_scroll:
             return enemy.x < -ew or enemy.y < -eh or enemy.y > sh
-            
+
         # Para a Serpente, permitimos que os blocos existam abaixo do limite inferior (spawn)
         if isinstance(enemy, SerpentBlock):
             return enemy.y < -eh or enemy.x < -ew or enemy.x > sw
-            
+
         return enemy.y > sh or enemy.x < -ew or enemy.x > sw
 
     def cleanup(self) -> None:
         for b in self.bullets:
-            if b.dead: self.bullet_pool.release(b)
+            if b.dead:
+                self.bullet_pool.release(b)
         self.bullets = [b for b in self.bullets if not b.dead]
-        
+
         for e in self.enemies:
-            if not e.dead and not isinstance(e, SerpentBlock) and self._is_enemy_off_screen(e):
+            if (
+                not e.dead
+                and not isinstance(e, SerpentBlock)
+                and self._is_enemy_off_screen(e)
+            ):
                 e.dead = True
-                
+
         for e in self.enemies:
-            if isinstance(e, Meteor) and e.dead: self.meteor_pool.release(e)
-            elif isinstance(e, RockGlider) and e.dead: self.rock_glider_pool.release(e)
-            
+            if isinstance(e, Meteor) and e.dead:
+                self.meteor_pool.release(e)
+            elif isinstance(e, RockGlider) and e.dead:
+                self.rock_glider_pool.release(e)
+
         self.alien_bullets = [b for b in self.alien_bullets if not b.dead]
         self.serpent_bullets = [b for b in self.serpent_bullets if not b.dead]
         self.energy_orbs = [o for o in self.energy_orbs if not o.dead]
@@ -623,14 +843,23 @@ class EntityManager:
         self.slime_drips = [s for s in self.slime_drips if not s.dead]
         self.eye_lasers = [e for e in self.eye_lasers if not e.dead]
         self.mini_ship_bullets = [b for b in self.mini_ship_bullets if not b.dead]
-        
+
         self.enemies = [
-            e for e in self.enemies
-            if (isinstance(e, SerpentBlock) and not getattr(e, "is_fragment", False)) or 
-            (not (e.dead and not (isinstance(e, MountainStalagmite) and getattr(e, "_fragments", None)))
-            and not (isinstance(e, ExplosiveMine) and e.is_off_screen()))
+            e
+            for e in self.enemies
+            if (isinstance(e, SerpentBlock) and not getattr(e, "is_fragment", False))
+            or (
+                not (
+                    e.dead
+                    and not (
+                        isinstance(e, MountainStalagmite)
+                        and getattr(e, "_fragments", None)
+                    )
+                )
+                and not (isinstance(e, ExplosiveMine) and e.is_off_screen())
+            )
         ]
-        
+
         self.mine_explosions = [m for m in self.mine_explosions if not m.finished()]
         self.powerups = [p for p in self.powerups if not p.dead]
         self.stars = [s for s in self.stars if not s.dead]
@@ -681,9 +910,10 @@ class EntityManager:
 
     def clear_for_level_transition(self) -> None:
         for b in self.bullets[:]:
-            if b.dead: self.bullet_pool.release(b)
+            if b.dead:
+                self.bullet_pool.release(b)
         self.bullets = [b for b in self.bullets if not b.dead]
-        
+
         self.alien_bullets.clear()
         self.serpent_bullets.clear()
         self.energy_orbs.clear()
@@ -699,7 +929,7 @@ class EntityManager:
         self.explosion_pool.clear_active()
         self.spikes.clear()
         self.air_strike_bombs.clear()
-        
+
         self.cannon_towers = [t for t in self.cannon_towers if not t.dead]
         self.cannon_mines = [m for m in self.cannon_mines if not m.dead]
 
@@ -709,5 +939,5 @@ class EntityManager:
             "enemies": len(self.enemies),
             "formations": len(self.formations),
             "explosions_active": self.explosion_pool.get_stats()["active"],
-            "grid_stats": self.enemy_spatial_grid.get_statistics()
+            "grid_stats": self.enemy_spatial_grid.get_statistics(),
         }

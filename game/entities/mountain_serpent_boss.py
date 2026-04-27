@@ -47,6 +47,7 @@ Side = Literal["left", "right"]
 
 class _AfterImage(TypedDict):
     """Estrutura para rastro fantasmagorico da cabeca."""
+
     x: float
     y: float
     sprite: pygame.Surface
@@ -55,6 +56,7 @@ class _AfterImage(TypedDict):
 
 class _BulletAfterImage(TypedDict):
     """Estrutura para rastro fantasmagorico dos estilhacos."""
+
     x: float
     y: float
     angle: float
@@ -105,11 +107,11 @@ class _SerpentDustParticle:
     __slots__ = ("x", "y", "vx", "vy", "size", "life", "max_life")
 
     # Constantes de simulacao
-    _VX_RANGE: Final = (-16.0, 16.0)   # px/s
-    _VY_RANGE: Final = (44.0, 82.0)    # px/s (positivo = cai)
-    _GRAVITY: Final = 78.0             # px/s^2
-    _LIFE_RANGE: Final = (0.55, 1.0)   # segundos
-    _SIZE_RANGE: Final = (2, 4)        # pixels
+    _VX_RANGE: Final = (-16.0, 16.0)  # px/s
+    _VY_RANGE: Final = (44.0, 82.0)  # px/s (positivo = cai)
+    _GRAVITY: Final = 78.0  # px/s^2
+    _LIFE_RANGE: Final = (0.55, 1.0)  # segundos
+    _SIZE_RANGE: Final = (2, 4)  # pixels
 
     # Cor base da poeira de pedra (RGB)
     _BASE_COLOR: Final[_RGB] = (148, 122, 96)
@@ -139,7 +141,9 @@ class _SerpentDustParticle:
         fade = max(0.0, self.life / self.max_life)
         r, g, b = self._BASE_COLOR
         color: _RGB = (int(r * fade), int(g * fade), int(b * fade))
-        pygame.draw.rect(surface, color, (int(self.x), int(self.y), self.size, self.size))
+        pygame.draw.rect(
+            surface, color, (int(self.x), int(self.y), self.size, self.size)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -152,28 +156,52 @@ class SerpentBlock:
 
     __slots__ = (
         # Posicao e geometria
-        "x", "y", "w", "h", "cx", "cy",
+        "x",
+        "y",
+        "w",
+        "h",
+        "cx",
+        "cy",
         # Identidade
-        "side", "boss", "row_index", "is_fragment",
+        "side",
+        "boss",
+        "row_index",
+        "is_fragment",
         # Estado de combate
-        "health", "dead", "_hit_flash", "emp_linger_timer",
+        "health",
+        "dead",
+        "_hit_flash",
+        "emp_linger_timer",
         # Posicao de origem (loop continuo)
-        "origin_cx", "_origin_cy",
+        "origin_cx",
+        "_origin_cy",
         # Colisao
         "_rect",
         # Visual
-        "_rotation_angle", "_rotation_dir", "_sprite_frame",
+        "_rotation_angle",
+        "_rotation_dir",
+        "_sprite_frame",
         "_frame_index",
         # Particulas
-        "_particles", "_particle_timer",
+        "_particles",
+        "_particle_timer",
         # Animacao de troca de coluna
-        "_swap_active", "_swap_wait_timer", "_swap_elapsed",
-        "_swap_duration", "_swap_shake_duration",
-        "_swap_start_cx", "_swap_start_cy",
-        "_swap_target_cx", "_swap_target_cy",
-        "_swap_target_side", "_swap_arc_dir", "_swap_seed",
+        "_swap_active",
+        "_swap_wait_timer",
+        "_swap_elapsed",
+        "_swap_duration",
+        "_swap_shake_duration",
+        "_swap_start_cx",
+        "_swap_start_cy",
+        "_swap_target_cx",
+        "_swap_target_cy",
+        "_swap_target_side",
+        "_swap_arc_dir",
+        "_swap_seed",
         # Animacao de entrada (legado - mantido por compatibilidade)
-        "_entry_anim_active", "_entry_anim_timer", "_entry_anim_duration",
+        "_entry_anim_active",
+        "_entry_anim_timer",
+        "_entry_anim_duration",
         # Movimento de fragmento
         "_ascent_speed",
     )
@@ -181,9 +209,9 @@ class SerpentBlock:
     # ------------------------------------------------------------------
     # Constantes de gameplay
     # ------------------------------------------------------------------
-    RADIUS: Final[int] = 78          # px - raio do bloco circular
-    MAX_HEALTH: Final[int] = 20      # pontos de vida por bloco
-    POINTS_VALUE: Final[int] = 80    # pontos concedidos ao jogador na destruicao
+    RADIUS: Final[int] = 78  # px - raio do bloco circular
+    MAX_HEALTH: Final[int] = 20  # pontos de vida por bloco
+    POINTS_VALUE: Final[int] = 80  # pontos concedidos ao jogador na destruicao
 
     # Intervalo de emissao de particulas (segundos)
     _PARTICLE_INTERVAL_MIN: Final = 0.08
@@ -192,12 +220,12 @@ class SerpentBlock:
     _PARTICLE_SPAWN_Y_BIAS: Final = 0.35  # fracao do RADIUS abaixo do centro
 
     # Cores (constantes de classe - nunca recriadas por frame)
-    _COLOR_BODY:      Final[_RGB] = (106, 76, 125)
-    _COLOR_EDGE:      Final[_RGB] = (42, 24, 55)
+    _COLOR_BODY: Final[_RGB] = (106, 76, 125)
+    _COLOR_EDGE: Final[_RGB] = (42, 24, 55)
     _COLOR_HIGHLIGHT: Final[_RGB] = (224, 126, 116)
-    _COLOR_HP_HIGH:   Final[_RGB] = (80, 220, 80)
-    _COLOR_HP_MID:    Final[_RGB] = (220, 160, 40)
-    _COLOR_HP_LOW:    Final[_RGB] = (220, 60, 60)
+    _COLOR_HP_HIGH: Final[_RGB] = (80, 220, 80)
+    _COLOR_HP_MID: Final[_RGB] = (220, 160, 40)
+    _COLOR_HP_LOW: Final[_RGB] = (220, 60, 60)
 
     # Cache de frames compartilhado entre instancias (carregado uma vez)
     _animation_frames: Optional[List[pygame.Surface]] = None
@@ -253,7 +281,9 @@ class SerpentBlock:
         self._sprite_frame: Optional[pygame.Surface] = (
             random.choice(sprite_frames) if sprite_frames else None
         )
-        self._frame_index = sprite_frames.index(self._sprite_frame) if self._sprite_frame else 0
+        self._frame_index = (
+            sprite_frames.index(self._sprite_frame) if self._sprite_frame else 0
+        )
 
         # Rect de colisao calculado uma unica vez (atualizado in-place)
         self._rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
@@ -263,7 +293,9 @@ class SerpentBlock:
         self._entry_anim_timer: float = 0.0
         self._entry_anim_duration: float = 0.0
 
-    def _get_rotated_surface(self, surface: pygame.Surface, angle: float, is_white: bool = False) -> pygame.Surface:
+    def _get_rotated_surface(
+        self, surface: pygame.Surface, angle: float, is_white: bool = False
+    ) -> pygame.Surface:
         """Retorna uma surface rotacionada do cache, com quantização de 5 graus."""
         q_angle = (int(angle) // 5) * 5 % 360
         key = (self._frame_index, q_angle, is_white)
@@ -290,12 +322,18 @@ class SerpentBlock:
     # ------------------------------------------------------------------
 
     @classmethod
-    def _load_animation_frames(cls, target_w: int, target_h: int) -> List[pygame.Surface]:
+    def _load_animation_frames(
+        cls, target_w: int, target_h: int
+    ) -> List[pygame.Surface]:
         if cls._animation_frames is not None:
             return cls._animation_frames
 
         sprites_dir = (
-            BASE_DIR / "assets" / "images" / "Sprites_Boss_Cobra" / "Serpent_Block-Sprites"
+            BASE_DIR
+            / "assets"
+            / "images"
+            / "Sprites_Boss_Cobra"
+            / "Serpent_Block-Sprites"
         )
         frames: List[pygame.Surface] = []
         if sprites_dir.exists():
@@ -363,7 +401,9 @@ class SerpentBlock:
         self._rotation_dir = random.choice((-1.0, 1.0))
         sprite_frames = self._load_animation_frames(self.w, self.h)
         self._sprite_frame = random.choice(sprite_frames) if sprite_frames else None
-        self._frame_index = sprite_frames.index(self._sprite_frame) if self._sprite_frame else 0
+        self._frame_index = (
+            sprite_frames.index(self._sprite_frame) if self._sprite_frame else 0
+        )
         self._particles.clear()
         self._reset_swap_state()
 
@@ -374,7 +414,9 @@ class SerpentBlock:
         # Coluna esquerda sobe (entra por baixo), direita desce (entra por cima).
         spacing = self.boss.block_spacing
         if self.side == "left":
-            self._origin_cy = Config.SCREEN_HEIGHT + self.RADIUS + self.row_index * spacing
+            self._origin_cy = (
+                Config.SCREEN_HEIGHT + self.RADIUS + self.row_index * spacing
+            )
         else:
             self._origin_cy = -self.RADIUS - self.row_index * spacing
         # Arranque de velocidade para re-entrada visualmente dramatica
@@ -415,7 +457,9 @@ class SerpentBlock:
 
         if self._swap_wait_timer > 0.0:
             self._swap_wait_timer = max(0.0, self._swap_wait_timer - dt)
-            tremble = 1.0 - min(1.0, self._swap_wait_timer / max(0.001, self._swap_duration))
+            tremble = 1.0 - min(
+                1.0, self._swap_wait_timer / max(0.001, self._swap_duration)
+            )
             shake_x = math.sin(wave_time * 38.0 + self._swap_seed) * 4.0 * tremble
             shake_y = math.cos(wave_time * 44.0 + self._swap_seed * 1.3) * 2.5 * tremble
             self.cx = self._swap_start_cx + shake_x
@@ -434,7 +478,9 @@ class SerpentBlock:
         shake_dur = max(0.001, self._swap_shake_duration)
         tremble = 1.0 - (self._swap_elapsed / shake_dur)
         shake_x = math.sin(self._swap_elapsed * 52.0 + self._swap_seed) * 5.5 * tremble
-        shake_y = math.cos(self._swap_elapsed * 60.0 + self._swap_seed * 1.4) * 3.5 * tremble
+        shake_y = (
+            math.cos(self._swap_elapsed * 60.0 + self._swap_seed * 1.4) * 3.5 * tremble
+        )
         self.cx = self._swap_start_cx + shake_x
         self.cy = self._swap_start_cy + shake_y
 
@@ -446,7 +492,11 @@ class SerpentBlock:
 
         self.cx = self._swap_start_cx + (self._swap_target_cx - self._swap_start_cx) * t
         self.cy = self._swap_start_cy + (self._swap_target_cy - self._swap_start_cy) * t
-        self.cy += math.sin(t * math.pi) * self.boss.BLOCK_SWAP_ARC_AMPLITUDE * self._swap_arc_dir
+        self.cy += (
+            math.sin(t * math.pi)
+            * self.boss.BLOCK_SWAP_ARC_AMPLITUDE
+            * self._swap_arc_dir
+        )
 
         if raw_t >= 1.0:
             self._finalize_swap()
@@ -472,7 +522,9 @@ class SerpentBlock:
     # ------------------------------------------------------------------
 
     def _spawn_particle(self) -> None:
-        spawn_x = self.cx + random.uniform(-self._PARTICLE_SPAWN_RADIUS, self._PARTICLE_SPAWN_RADIUS)
+        spawn_x = self.cx + random.uniform(
+            -self._PARTICLE_SPAWN_RADIUS, self._PARTICLE_SPAWN_RADIUS
+        )
         spawn_y = self.cy + self.RADIUS * self._PARTICLE_SPAWN_Y_BIAS
         self._particles.append(_SerpentDustParticle(spawn_x, spawn_y))
 
@@ -483,7 +535,8 @@ class SerpentBlock:
     def update(self, dt: float, *_args: object, **_kwargs: object) -> None:
         self._hit_flash = max(0.0, self._hit_flash - dt)
         self._rotation_angle = (
-            self._rotation_angle + self.boss.BLOCK_ROTATION_SPEED * dt * self._rotation_dir
+            self._rotation_angle
+            + self.boss.BLOCK_ROTATION_SPEED * dt * self._rotation_dir
         ) % 360.0
 
         # Particulas: emissao periodica + atualizacao in-place reversa (otimizado)
@@ -493,7 +546,7 @@ class SerpentBlock:
             self._particle_timer = random.uniform(
                 self._PARTICLE_INTERVAL_MIN, self._PARTICLE_INTERVAL_MAX
             )
-        
+
         for i in range(len(self._particles) - 1, -1, -1):
             p = self._particles[i]
             p.update(dt)
@@ -557,14 +610,18 @@ class SerpentBlock:
     def _draw_sprite(self, surface: pygame.Surface, cx: int, cy: int) -> None:
         if self._sprite_frame is None:
             return
-        
+
         # Otimizado: usa cache de rotação e sprite branco se estiver em flash
         if self._hit_flash > 0.0 and self._white_animation_frames:
             white_sprite = self._white_animation_frames[self._frame_index]
-            rotated = self._get_rotated_surface(white_sprite, self._rotation_angle, is_white=True)
+            rotated = self._get_rotated_surface(
+                white_sprite, self._rotation_angle, is_white=True
+            )
         else:
-            rotated = self._get_rotated_surface(self._sprite_frame, self._rotation_angle, is_white=False)
-            
+            rotated = self._get_rotated_surface(
+                self._sprite_frame, self._rotation_angle, is_white=False
+            )
+
         dest = rotated.get_rect(center=(cx, cy))
         surface.blit(rotated, dest.topleft)
 
@@ -580,7 +637,9 @@ class SerpentBlock:
         pygame.draw.circle(surface, body_color, (cx, cy), r)
         pygame.draw.circle(surface, self._COLOR_HIGHLIGHT, (cx, cy), r // 2)
 
-    def _draw_health_bar(self, surface: pygame.Surface, cx: int, cy: int, r: int) -> None:
+    def _draw_health_bar(
+        self, surface: pygame.Surface, cx: int, cy: int, r: int
+    ) -> None:
         bar_w = r * 2
         bar_h = 4
         bar_x = cx - r
@@ -588,9 +647,9 @@ class SerpentBlock:
         ratio = self.health / self.MAX_HEALTH
         life_w = max(0, int(bar_w * ratio))
         bar_color = (
-            self._COLOR_HP_HIGH if ratio > 0.5
-            else self._COLOR_HP_MID if ratio > 0.25
-            else self._COLOR_HP_LOW
+            self._COLOR_HP_HIGH
+            if ratio > 0.5
+            else self._COLOR_HP_MID if ratio > 0.25 else self._COLOR_HP_LOW
         )
         pygame.draw.rect(surface, colors.DARK_GRAY, (bar_x, bar_y, bar_w, bar_h))
         pygame.draw.rect(surface, bar_color, (bar_x, bar_y, life_w, bar_h))
@@ -605,14 +664,25 @@ class SerpentRockBullet:
     """Projétil que usa os sprites do SerpentBlock, mas em tamanho reduzido."""
 
     __slots__ = (
-        "x", "y", "vx", "vy", "radius", "angle", "rot_speed", "dead", 
-        "_rect", "_sprite", "_afterimages", "_trail_timer", "_frame_index"
+        "x",
+        "y",
+        "vx",
+        "vy",
+        "radius",
+        "angle",
+        "rot_speed",
+        "dead",
+        "_rect",
+        "_sprite",
+        "_afterimages",
+        "_trail_timer",
+        "_frame_index",
     )
-    
+
     # Cache para os sprites redimensionados
     _animation_frames: Optional[List[pygame.Surface]] = None
     _rotation_cache: dict[tuple[int, int], pygame.Surface] = {}
-    _TRAIL_INTERVAL: Final = 0.04 # Segundos entre cada "fantasma"
+    _TRAIL_INTERVAL: Final = 0.04  # Segundos entre cada "fantasma"
     _TRAIL_LIFETIME: Final = 0.3  # Duração de cada fantasma
 
     def __init__(self, x: float, y: float, vx: float, vy: float) -> None:
@@ -626,20 +696,30 @@ class SerpentRockBullet:
         self.dead = False
         self._afterimages: List[_BulletAfterImage] = []
         self._trail_timer = 0.0
-        
+
         # Carrega os sprites se ainda não foram carregados
         if SerpentRockBullet._animation_frames is None:
             SerpentRockBullet._load_frames()
-            
+
         # Escolhe um sprite aleatório do set do SerpentBlock
-        self._sprite = random.choice(SerpentRockBullet._animation_frames) if SerpentRockBullet._animation_frames else None
-        self._frame_index = SerpentRockBullet._animation_frames.index(self._sprite) if (self._sprite and SerpentRockBullet._animation_frames) else 0
-        
+        self._sprite = (
+            random.choice(SerpentRockBullet._animation_frames)
+            if SerpentRockBullet._animation_frames
+            else None
+        )
+        self._frame_index = (
+            SerpentRockBullet._animation_frames.index(self._sprite)
+            if (self._sprite and SerpentRockBullet._animation_frames)
+            else 0
+        )
+
         self._rect = pygame.Rect(
             int(x - self.radius), int(y - self.radius), self.radius * 2, self.radius * 2
         )
 
-    def _get_rotated_surface(self, surface: pygame.Surface, angle: float) -> pygame.Surface:
+    def _get_rotated_surface(
+        self, surface: pygame.Surface, angle: float
+    ) -> pygame.Surface:
         """Retorna uma surface rotacionada do cache, com quantização de 10 graus para balas."""
         q_angle = (int(angle) // 10) * 10 % 360
         key = (self._frame_index, q_angle)
@@ -651,18 +731,22 @@ class SerpentRockBullet:
     def _load_frames(cls) -> None:
         """Carrega e redimensiona os mesmos sprites usados pelo SerpentBlock."""
         sprites_dir = (
-            BASE_DIR / "assets" / "images" / "Sprites_Boss_Cobra" / "Serpent_Block-Sprites"
+            BASE_DIR
+            / "assets"
+            / "images"
+            / "Sprites_Boss_Cobra"
+            / "Serpent_Block-Sprites"
         )
         frames: List[pygame.Surface] = []
-        target_size = (22, 22) # Diâmetro da bala (radius * 2)
-        
+        target_size = (22, 22)  # Diâmetro da bala (radius * 2)
+
         if sprites_dir.exists():
             for path in sorted(sprites_dir.glob("*.png")):
                 image = get_image(path)
                 if image.get_size() != target_size:
                     image = pygame.transform.scale(image, target_size)
                 frames.append(image)
-        
+
         cls._animation_frames = frames
 
     @property
@@ -685,13 +769,22 @@ class SerpentRockBullet:
 
         self._trail_timer -= dt
         if self._trail_timer <= 0:
-            self._afterimages.append({
-                "x": self.x, "y": self.y, "angle": self.angle, "life": self._TRAIL_LIFETIME
-            })
+            self._afterimages.append(
+                {
+                    "x": self.x,
+                    "y": self.y,
+                    "angle": self.angle,
+                    "life": self._TRAIL_LIFETIME,
+                }
+            )
             self._trail_timer = self._TRAIL_INTERVAL
 
-        if (self.y > Config.SCREEN_HEIGHT + 100 or self.y < -100 or 
-            self.x < -100 or self.x > Config.SCREEN_WIDTH + 100):
+        if (
+            self.y > Config.SCREEN_HEIGHT + 100
+            or self.y < -100
+            or self.x < -100
+            or self.x > Config.SCREEN_WIDTH + 100
+        ):
             self.dead = True
 
     def draw(self, surface: pygame.Surface) -> None:
@@ -702,7 +795,7 @@ class SerpentRockBullet:
         for img in self._afterimages:
             alpha = int((img["life"] / self._TRAIL_LIFETIME) * 128)
             rotated = self._get_rotated_surface(self._sprite, img["angle"])
-            
+
             old_alpha = rotated.get_alpha()
             rotated.set_alpha(alpha)
             dest = rotated.get_rect(center=(int(img["x"]), int(img["y"])))
@@ -735,64 +828,67 @@ class MountainSerpentBoss:
     # Constantes de gameplay
     # ------------------------------------------------------------------
 
-    HEAD_RADIUS: Final[int] = 45          # px
-    SIDE_MARGIN: Final[int] = 52          # px - distancia da borda lateral
-    HEAD_Y: Final[int] = 88              # px - posicao vertical em repouso
-    HEAD_SPEED: Final[float] = 24.0      # px/s - velocidade horizontal
-    HEAD_PIXEL_SCALE: Final[int] = 4     # escala do sprite pixel-art
-    HEAD_FRAME_REPEAT: Final[int] = 2    # quantas vezes cada frame e repetido
+    HEAD_RADIUS: Final[int] = 45  # px
+    SIDE_MARGIN: Final[int] = 52  # px - distancia da borda lateral
+    HEAD_Y: Final[int] = 88  # px - posicao vertical em repouso
+    HEAD_SPEED: Final[float] = 24.0  # px/s - velocidade horizontal
+    HEAD_PIXEL_SCALE: Final[int] = 4  # escala do sprite pixel-art
+    HEAD_FRAME_REPEAT: Final[int] = 2  # quantas vezes cada frame e repetido
     HEAD_ANIM_SLOW_FACTOR: Final[float] = 1.25  # multiplicador global da animacao
 
-    DEFAULT_HEALTH: Final[int] = 1200    # HP inicial do boss
+    DEFAULT_HEALTH: Final[int] = 1200  # HP inicial do boss
 
     # Ataques - fase 1 (cuspida simples)
-    ATTACK_SPIT_COOLDOWN: Final[float] = 4.0   # s entre cuspidas
-    SPIT_SPEED: Final[float] = 220.0            # px/s
+    ATTACK_SPIT_COOLDOWN: Final[float] = 4.0  # s entre cuspidas
+    SPIT_SPEED: Final[float] = 220.0  # px/s
 
     # Ataques - fase 2 (sopro em leque)
-    ATTACK_BREATH_COOLDOWN: Final[float] = 3.8   # s entre sopros (era 1.8)
-    BREATH_BULLET_COUNT: Final[int] = 5          # projeteis por sopro
+    ATTACK_BREATH_COOLDOWN: Final[float] = 3.8  # s entre sopros (era 1.8)
+    BREATH_BULLET_COUNT: Final[int] = 5  # projeteis por sopro
     BREATH_SPREAD_ANGLE: Final[float] = math.radians(45.0)  # angulo total do leque
-    BREATH_SPEED: Final[float] = 130.0           # px/s
+    BREATH_SPEED: Final[float] = 130.0  # px/s
 
     # Fase de furia (HP < 30%)
-    FURY_ATTACK_COOLDOWN: Final[float] = 2.8   # s entre ataques (era 1.8)
-    FURY_RESPAWN_DELAY: Final[float] = 8.0     # s para respawn dos blocos
+    FURY_ATTACK_COOLDOWN: Final[float] = 2.8  # s entre ataques (era 1.8)
+    FURY_RESPAWN_DELAY: Final[float] = 8.0  # s para respawn dos blocos
 
     # Vulnerabilidade (janela de dano)
     VULNERABLE_HEAD_SPEED_MOD: Final[float] = 2.8  # multiplicador de velocidade
-    VULNERABLE_BLOCK_SPAWN_COOLDOWN: Final[tuple[float, float]] = (0.6, 1.4) # s entre invocações
-    VULNERABLE_BLOCK_ASCENT_SPEED: Final[tuple[float, float]] = (120.0, 180.0) # px/s
+    VULNERABLE_BLOCK_SPAWN_COOLDOWN: Final[tuple[float, float]] = (
+        0.6,
+        1.4,
+    )  # s entre invocações
+    VULNERABLE_BLOCK_ASCENT_SPEED: Final[tuple[float, float]] = (120.0, 180.0)  # px/s
 
     # Blocos laterais
-    BLOCK_COUNT: Final[int] = 5              # blocos por coluna
-    RESPAWN_DELAY: Final[float] = 15.0   
+    BLOCK_COUNT: Final[int] = 5  # blocos por coluna
+    RESPAWN_DELAY: Final[float] = 15.0
     BLOCK_INDIVIDUAL_RESPAWN_DELAY: Final[float] = 65.0  # s - respawn individual
 
     # Movimento ondulatorio dos blocos
     BLOCK_WAVE_AMPLITUDE_X: Final[float] = 16.0  # px
-    BLOCK_WAVE_AMPLITUDE_Y: Final[float] = 9.0   # px
-    BLOCK_WAVE_SPEED: Final[float] = 1.9         # rad/s
-    BLOCK_WAVE_PHASE_STEP: Final[float] = 0.85   # rad por linha (cria ondulacao)
-    BLOCK_SIDE_PHASE_SHIFT: Final[float] = 1.6   # defasagem entre colunas
-    BLOCK_ROTATION_SPEED: Final[float] = 95.0    # graus/s
+    BLOCK_WAVE_AMPLITUDE_Y: Final[float] = 9.0  # px
+    BLOCK_WAVE_SPEED: Final[float] = 1.9  # rad/s
+    BLOCK_WAVE_PHASE_STEP: Final[float] = 0.85  # rad por linha (cria ondulacao)
+    BLOCK_SIDE_PHASE_SHIFT: Final[float] = 1.6  # defasagem entre colunas
+    BLOCK_ROTATION_SPEED: Final[float] = 95.0  # graus/s
 
     # Troca de colunas
-    BLOCK_SWAP_DURATION: Final[float] = 2.5         # s - duracao total do swap
-    BLOCK_SWAP_SHAKE_DURATION: Final[float] = 1.5   # s - fase de tremor
-    BLOCK_SWAP_ARC_AMPLITUDE: Final[float] = 75.0   # px - altura do arco
-    BLOCK_SWAP_INTERVAL_MIN: Final[float] = 8.0     # s entre swaps
-    BLOCK_SWAP_INTERVAL_MAX: Final[float] = 10.0    # s entre swaps
+    BLOCK_SWAP_DURATION: Final[float] = 2.5  # s - duracao total do swap
+    BLOCK_SWAP_SHAKE_DURATION: Final[float] = 1.5  # s - fase de tremor
+    BLOCK_SWAP_ARC_AMPLITUDE: Final[float] = 75.0  # px - altura do arco
+    BLOCK_SWAP_INTERVAL_MIN: Final[float] = 8.0  # s entre swaps
+    BLOCK_SWAP_INTERVAL_MAX: Final[float] = 10.0  # s entre swaps
     BLOCK_SWAP_MIN_ROWS: Final[int] = 1
     BLOCK_SWAP_MAX_ROWS: Final[int] = 1
-    BLOCK_SWAP_ROW_STAGGER: Final[float] = 0.14     # s de atraso entre linhas
+    BLOCK_SWAP_ROW_STAGGER: Final[float] = 0.14  # s de atraso entre linhas
 
     # Tremor da cabeca (sob pressao ou dano)
     HEAD_STRAIN_SHAKE_X: Final[float] = 6.0
     HEAD_STRAIN_SHAKE_Y: Final[float] = 2.5
     HEAD_STRAIN_SHAKE_FREQ_X: Final[float] = 46.0  # Hz
     HEAD_STRAIN_SHAKE_FREQ_Y: Final[float] = 61.0  # Hz
-    HEAD_PAIN_SHAKE_DURATION: Final[float] = 0.9   # s
+    HEAD_PAIN_SHAKE_DURATION: Final[float] = 0.9  # s
 
     # Cores
     _COLOR_BODY: Final[_RGB] = (106, 76, 125)
@@ -821,7 +917,7 @@ class MountainSerpentBoss:
 
         # Posicao e movimento da cabeca
         self.head_x = float(x if x is not None else Config.SCREEN_WIDTH / 2)
-        self.head_y = -200.0   # Comeca acima da tela (animacao de entrada)
+        self.head_y = -200.0  # Comeca acima da tela (animacao de entrada)
         self.direction: int = random.choice((-1, 1))
         self.speed = self.HEAD_SPEED
         self.left_x = float(self.SIDE_MARGIN)
@@ -917,7 +1013,10 @@ class MountainSerpentBoss:
             return cls._animation_frames
 
         sprites_dir = BASE_DIR / "assets" / "images" / "Sprites_Boss_Cobra"
-        target_size = (cls.HEAD_PIXEL_SCALE * _PIXEL_COLS, cls.HEAD_PIXEL_SCALE * _PIXEL_ROWS)
+        target_size = (
+            cls.HEAD_PIXEL_SCALE * _PIXEL_COLS,
+            cls.HEAD_PIXEL_SCALE * _PIXEL_ROWS,
+        )
         frames: List[pygame.Surface] = []
         white_frames: List[pygame.Surface] = []
 
@@ -931,16 +1030,20 @@ class MountainSerpentBoss:
                     image = pygame.transform.scale(image, target_size)
                 frames.append(image)
                 white_frames.append(_make_white_sprite(image))
-            
+
             # Carrega sprites especiais
             spit_path = sprites_dir / "Animação_Cobra_Cuspindo a pedra.png"
             if spit_path.exists():
-                cls._spit_sprite = pygame.transform.scale(get_image(spit_path), target_size)
+                cls._spit_sprite = pygame.transform.scale(
+                    get_image(spit_path), target_size
+                )
                 cls._white_spit_sprite = _make_white_sprite(cls._spit_sprite)
-            
+
             pain_path = sprites_dir / "Animação_Cobra_Levando_Dano.png"
             if pain_path.exists():
-                cls._pain_sprite = pygame.transform.scale(get_image(pain_path), target_size)
+                cls._pain_sprite = pygame.transform.scale(
+                    get_image(pain_path), target_size
+                )
                 cls._white_pain_sprite = _make_white_sprite(cls._pain_sprite)
 
         cls._animation_frames = frames
@@ -960,7 +1063,9 @@ class MountainSerpentBoss:
     def _build_head_sprite(self) -> pygame.Surface:
         """Constroi o sprite da cabeca a partir do pixel map (fallback sem arquivo)."""
         scale = self.HEAD_PIXEL_SCALE
-        sprite = pygame.Surface((_PIXEL_COLS * scale, _PIXEL_ROWS * scale), pygame.SRCALPHA)
+        sprite = pygame.Surface(
+            (_PIXEL_COLS * scale, _PIXEL_ROWS * scale), pygame.SRCALPHA
+        )
         for row_idx, row in enumerate(_PIXEL_MAP):
             for col_idx, key in enumerate(row):
                 if key is None:
@@ -968,7 +1073,9 @@ class MountainSerpentBoss:
                 color = _PIX_COLORS.get(key)
                 if color is None:
                     continue
-                pygame.draw.rect(sprite, color, (col_idx * scale, row_idx * scale, scale, scale))
+                pygame.draw.rect(
+                    sprite, color, (col_idx * scale, row_idx * scale, scale, scale)
+                )
         return sprite
 
     # ------------------------------------------------------------------
@@ -988,7 +1095,7 @@ class MountainSerpentBoss:
         max_idx = len(self._head_frames) - 1
         edge_dist = min(frame_idx, max_idx - frame_idx)
         if edge_dist == 0:
-            return base * 2.2   # Pausa nos frames extremos
+            return base * 2.2  # Pausa nos frames extremos
         if edge_dist == 1:
             return base * 1.45
         return base
@@ -1006,12 +1113,14 @@ class MountainSerpentBoss:
 
         self._animation_timer += dt
         current_idx = self._frame_sequence[self._animation_seq_pos]
-        
+
         # Otimização: chama a duração uma vez por iteração
         dur = self._get_animation_frame_duration(current_idx)
         while self._animation_timer >= dur:
             self._animation_timer -= dur
-            self._animation_seq_pos = (self._animation_seq_pos + 1) % len(self._frame_sequence)
+            self._animation_seq_pos = (self._animation_seq_pos + 1) % len(
+                self._frame_sequence
+            )
             current_idx = self._frame_sequence[self._animation_seq_pos]
             dur = self._get_animation_frame_duration(current_idx)
 
@@ -1068,7 +1177,7 @@ class MountainSerpentBoss:
 
         self._dead_block_respawn_timers[block] = self.BLOCK_INDIVIDUAL_RESPAWN_DELAY
         self._head_pain_timer = self.HEAD_PAIN_SHAKE_DURATION
-        
+
         # Atualiza contadores incrementais para performance
         if side == "left":
             self._left_alive -= 1
@@ -1105,7 +1214,7 @@ class MountainSerpentBoss:
     def _update_dead_block_respawns(self, dt: float) -> None:
         if not self._dead_block_respawn_timers:
             return
-        
+
         # Itera o dicionário diretamente e coleta keys para remoção (mais rápido)
         to_remove: list[SerpentBlock] = []
         for block, timer in self._dead_block_respawn_timers.items():
@@ -1113,13 +1222,16 @@ class MountainSerpentBoss:
             if new_timer > 0.0:
                 self._dead_block_respawn_timers[block] = new_timer
                 continue
-            
+
             to_remove.append(block)
             if not block.dead:
                 continue
 
             # FIX: Calcula a posição de origem para alinhar com o ciclo da coluna atual
-            anchor_block = next((b for b in self._all_blocks if b.side == block.side and not b.dead), None)
+            anchor_block = next(
+                (b for b in self._all_blocks if b.side == block.side and not b.dead),
+                None,
+            )
             total_area = self.BLOCK_COUNT * self.block_spacing
 
             if anchor_block:
@@ -1130,13 +1242,21 @@ class MountainSerpentBoss:
                 else:
                     new_y = anchor_block.origin_cy - (row_diff * self.block_spacing)
                 # Normaliza para dentro do loop infinito [-RADIUS, total_area - RADIUS]
-                block.origin_cy = ((new_y + SerpentBlock.RADIUS) % total_area) - SerpentBlock.RADIUS
+                block.origin_cy = (
+                    (new_y + SerpentBlock.RADIUS) % total_area
+                ) - SerpentBlock.RADIUS
             else:
                 # Se a coluna estava toda destruída, usamos o cálculo de entrada padrão
                 if block.side == "left":
-                    block.origin_cy = Config.SCREEN_HEIGHT + SerpentBlock.RADIUS + block.row_index * self.block_spacing
+                    block.origin_cy = (
+                        Config.SCREEN_HEIGHT
+                        + SerpentBlock.RADIUS
+                        + block.row_index * self.block_spacing
+                    )
                 else:
-                    block.origin_cy = -SerpentBlock.RADIUS - block.row_index * self.block_spacing
+                    block.origin_cy = (
+                        -SerpentBlock.RADIUS - block.row_index * self.block_spacing
+                    )
 
             block.revive()
             # Atualiza contadores ao reviver bloco individualmente
@@ -1146,7 +1266,7 @@ class MountainSerpentBoss:
                 self._right_alive += 1
             # Nota: encerramento da vulnerabilidade e responsabilidade exclusiva de
             # _respawn_all_blocks (via _respawn_timer), nao do timer individual.
-        
+
         for b in to_remove:
             del self._dead_block_respawn_timers[b]  # type: ignore
 
@@ -1157,7 +1277,7 @@ class MountainSerpentBoss:
         self._respawn_timer = -1.0
         self._loop_movement_enabled = True
         self._loop_speed_multiplier = 18.0  # boost dramatico de re-entrada
-        
+
         # Limpa estados de tremor e eventos pendentes
         self._head_pain_timer = 0.0
         self._swap_event_active = False
@@ -1171,13 +1291,17 @@ class MountainSerpentBoss:
             block.revive()
             # Reset critico: garante que o bloco volte para sua coluna de origem correta
             block.origin_cx = self.left_x if block.side == "left" else self.right_x
-            
+
             if block.side == "left":
                 block.origin_cy = (
-                    Config.SCREEN_HEIGHT + SerpentBlock.RADIUS + block.row_index * self._block_spacing
+                    Config.SCREEN_HEIGHT
+                    + SerpentBlock.RADIUS
+                    + block.row_index * self._block_spacing
                 )
             else:
-                block.origin_cy = -SerpentBlock.RADIUS - block.row_index * self._block_spacing
+                block.origin_cy = (
+                    -SerpentBlock.RADIUS - block.row_index * self._block_spacing
+                )
 
         if not self._swap_pattern_enabled:
             self._swap_pattern_enabled = True
@@ -1203,7 +1327,9 @@ class MountainSerpentBoss:
             self.BLOCK_SWAP_INTERVAL_MIN, self.BLOCK_SWAP_INTERVAL_MAX
         )
 
-    def _get_row_pair(self, row_index: int) -> tuple[Optional[SerpentBlock], Optional[SerpentBlock]]:
+    def _get_row_pair(
+        self, row_index: int
+    ) -> tuple[Optional[SerpentBlock], Optional[SerpentBlock]]:
         """Retorna o par (esquerdo, direito) de um indice de linha via dicionario O(1)."""
         return (
             self._block_map.get(("left", row_index)),
@@ -1215,10 +1341,12 @@ class MountainSerpentBoss:
             return
 
         valid_rows = [
-            i for i in range(self.BLOCK_COUNT)
+            i
+            for i in range(self.BLOCK_COUNT)
             if (lb := self._block_map.get(("left", i))) is not None
             and (rb := self._block_map.get(("right", i))) is not None
-            and not lb.dead and not rb.dead
+            and not lb.dead
+            and not rb.dead
         ]
 
         if not valid_rows:
@@ -1241,14 +1369,20 @@ class MountainSerpentBoss:
             delay = order * self.BLOCK_SWAP_ROW_STAGGER
             # Inicia o movimento, mas NÃO atualiza o mapa ainda (Issue 5)
             left.start_column_swap(
-                target_cx=self.right_x, target_cy=right.origin_cy,
-                target_side="right", row_delay=delay, arc_dir=-1.0,
+                target_cx=self.right_x,
+                target_cy=right.origin_cy,
+                target_side="right",
+                row_delay=delay,
+                arc_dir=-1.0,
                 swap_duration=self.BLOCK_SWAP_DURATION,
                 shake_duration=self.BLOCK_SWAP_SHAKE_DURATION,
             )
             right.start_column_swap(
-                target_cx=self.left_x, target_cy=left.origin_cy,
-                target_side="left", row_delay=delay, arc_dir=1.0,
+                target_cx=self.left_x,
+                target_cy=left.origin_cy,
+                target_side="left",
+                row_delay=delay,
+                arc_dir=1.0,
                 swap_duration=self.BLOCK_SWAP_DURATION,
                 shake_duration=self.BLOCK_SWAP_SHAKE_DURATION,
             )
@@ -1281,7 +1415,7 @@ class MountainSerpentBoss:
                     if left and right:
                         self._block_map[("left", row_i)] = right
                         self._block_map[("right", row_i)] = left
-                
+
                 self._swap_event_rows.clear()
                 self._schedule_next_swap()
                 if not self.is_vulnerable:
@@ -1314,7 +1448,7 @@ class MountainSerpentBoss:
     def _compute_head_shake(self) -> tuple[float, float]:
         """Calcula o tremor atual da cabeca (fúria, swap ou dano)."""
         wave = self._block_wave_time
-        
+
         # Tremor base de fúria (Fase 3 - HP < 30%)
         fury_x, fury_y = 0.0, 0.0
         if self._phase == 3:
@@ -1323,14 +1457,26 @@ class MountainSerpentBoss:
 
         if self._swap_event_active:
             return (
-                fury_x + math.sin(wave * self.HEAD_STRAIN_SHAKE_FREQ_X) * self.HEAD_STRAIN_SHAKE_X,
-                fury_y + math.cos(wave * self.HEAD_STRAIN_SHAKE_FREQ_Y) * self.HEAD_STRAIN_SHAKE_Y,
+                fury_x
+                + math.sin(wave * self.HEAD_STRAIN_SHAKE_FREQ_X)
+                * self.HEAD_STRAIN_SHAKE_X,
+                fury_y
+                + math.cos(wave * self.HEAD_STRAIN_SHAKE_FREQ_Y)
+                * self.HEAD_STRAIN_SHAKE_Y,
             )
         if self._head_pain_timer > 0.0:
-            intensity = 0.8 + 0.5 * (self._head_pain_timer / self.HEAD_PAIN_SHAKE_DURATION)
+            intensity = 0.8 + 0.5 * (
+                self._head_pain_timer / self.HEAD_PAIN_SHAKE_DURATION
+            )
             return (
-                fury_x + math.sin(wave * self.HEAD_STRAIN_SHAKE_FREQ_X) * self.HEAD_STRAIN_SHAKE_X * intensity,
-                fury_y + math.cos(wave * self.HEAD_STRAIN_SHAKE_FREQ_Y) * self.HEAD_STRAIN_SHAKE_Y * intensity,
+                fury_x
+                + math.sin(wave * self.HEAD_STRAIN_SHAKE_FREQ_X)
+                * self.HEAD_STRAIN_SHAKE_X
+                * intensity,
+                fury_y
+                + math.cos(wave * self.HEAD_STRAIN_SHAKE_FREQ_Y)
+                * self.HEAD_STRAIN_SHAKE_Y
+                * intensity,
             )
         return fury_x, fury_y
 
@@ -1358,7 +1504,9 @@ class MountainSerpentBoss:
             return self.ATTACK_BREATH_COOLDOWN
         return self.ATTACK_SPIT_COOLDOWN
 
-    def _execute_attack(self, player_x: float, player_y: float) -> List[SerpentRockBullet]:
+    def _execute_attack(
+        self, player_x: float, player_y: float
+    ) -> List[SerpentRockBullet]:
         if self._phase >= 2:
             return self._create_breath(player_x, player_y)
         return [self._create_spit(player_x, player_y)]
@@ -1375,7 +1523,9 @@ class MountainSerpentBoss:
         bullet = SerpentRockBullet(self.head_x, self.head_y, vx, vy)
         return bullet
 
-    def _create_breath(self, player_x: float, player_y: float) -> List[SerpentRockBullet]:
+    def _create_breath(
+        self, player_x: float, player_y: float
+    ) -> List[SerpentRockBullet]:
         base_angle = math.atan2(player_y - self.head_y, player_x - self.head_x)
         count = self.BREATH_BULLET_COUNT
         if count <= 1:
@@ -1474,8 +1624,10 @@ class MountainSerpentBoss:
 
         self._hit_flash = max(0.0, self._hit_flash - dt)
         self._head_pain_timer = max(0.0, self._head_pain_timer - dt)
-        self._spit_anim_timer = max(0.0, self._spit_anim_timer - dt) # Decrementa timer de cuspida
-        
+        self._spit_anim_timer = max(
+            0.0, self._spit_anim_timer - dt
+        )  # Decrementa timer de cuspida
+
         self._update_head_animation(dt)
         self._block_wave_time += dt * self.BLOCK_WAVE_SPEED
         self._update_dead_block_respawns(dt)
@@ -1493,7 +1645,9 @@ class MountainSerpentBoss:
 
         # Desacelera o loop gradualmente ate a velocidade nominal
         if self._loop_speed_multiplier > 1.0:
-            self._loop_speed_multiplier = max(1.0, self._loop_speed_multiplier - dt * 6.5)
+            self._loop_speed_multiplier = max(
+                1.0, self._loop_speed_multiplier - dt * 6.5
+            )
 
         self._phase = self._current_phase()
 
@@ -1502,7 +1656,9 @@ class MountainSerpentBoss:
 
         if self._head_intro_active:
             if self._loop_speed_multiplier <= 1.0:
-                self._head_intro_progress = min(1.0, self._head_intro_progress + dt * 1.5)
+                self._head_intro_progress = min(
+                    1.0, self._head_intro_progress + dt * 1.5
+                )
                 eased = _ease_out_quad(self._head_intro_progress)
                 self.head_y = -200.0 + (self._final_head_y + 200.0) * eased
                 if self._head_intro_progress >= 1.0:
@@ -1514,7 +1670,7 @@ class MountainSerpentBoss:
             return [], []
 
         self._phase = self._current_phase()
-        
+
         self._attack_timer -= dt
         new_bullets = []
         # O boss NÃO ataca enquanto estiver vulnerável. Frequência reduzida na fúria (fase 3).
@@ -1523,12 +1679,12 @@ class MountainSerpentBoss:
             self._attack_timer = self._cooldown_for_phase(self._phase)
             # Ativa o sprite de cuspida se houver disparos
             if new_bullets:
-                self._spit_anim_timer = 0.4 
+                self._spit_anim_timer = 0.4
 
         if self.is_vulnerable:
             # Velocidade aumentada significativamente para 2.8x
-            current_speed *= self.VULNERABLE_HEAD_SPEED_MOD 
-            
+            current_speed *= self.VULNERABLE_HEAD_SPEED_MOD
+
             # Invocação de blocos (fragmentos) que sobem do fundo
             self._vulnerable_block_timer -= dt
             if self._vulnerable_block_timer <= 0:
@@ -1536,12 +1692,19 @@ class MountainSerpentBoss:
                 ascent_speed = random.uniform(*self.VULNERABLE_BLOCK_ASCENT_SPEED)
                 # Cria o bloco com flag is_fragment=True para movimento ascendente
                 fragment = SerpentBlock(
-                    spawn_x, float(Config.SCREEN_HEIGHT + SerpentBlock.RADIUS),
-                    "left", self, row_index=-1, is_fragment=True, ascent_speed=ascent_speed
+                    spawn_x,
+                    float(Config.SCREEN_HEIGHT + SerpentBlock.RADIUS),
+                    "left",
+                    self,
+                    row_index=-1,
+                    is_fragment=True,
+                    ascent_speed=ascent_speed,
                 )
                 new_entities.append(fragment)
                 # Reseta o timer com intervalo aleatório
-                self._vulnerable_block_timer = random.uniform(*self.VULNERABLE_BLOCK_SPAWN_COOLDOWN)
+                self._vulnerable_block_timer = random.uniform(
+                    *self.VULNERABLE_BLOCK_SPAWN_COOLDOWN
+                )
 
         # Lógica do rastro fantasmagórico da cabeça (Efeito Alucard)
         # Otimização: Remoção in-place com iteração reversa
@@ -1554,12 +1717,16 @@ class MountainSerpentBoss:
         if current_speed > self.speed or self.is_vulnerable:
             self._head_trail_timer -= dt
             if self._head_trail_timer <= 0:
-                self._head_afterimages.append({
-                    "x": self.head_x, "y": self.head_y, 
-                    "sprite": self._head_sprite, "life": 0.25
-                })
+                self._head_afterimages.append(
+                    {
+                        "x": self.head_x,
+                        "y": self.head_y,
+                        "sprite": self._head_sprite,
+                        "life": 0.25,
+                    }
+                )
                 self._head_trail_timer = 0.05
-            
+
         self.head_x += self.direction * current_speed * dt
 
         if self.head_x <= self.left_x + self.HEAD_RADIUS:
@@ -1570,7 +1737,7 @@ class MountainSerpentBoss:
             self.direction = -1
 
         # Coleta estilhaços de pedra gerados pela destruição de blocos
-        if self._pending_shards: # Removido hasattr desnecessário
+        if self._pending_shards:  # Removido hasattr desnecessário
             new_entities.extend(self._pending_shards)
             self._pending_shards.clear()
 
@@ -1585,7 +1752,7 @@ class MountainSerpentBoss:
             return
 
         shake_x, shake_y = self._compute_head_shake()
-        
+
         # Desenha os fantasmas do rastro da cabeça (Efeito Alucard)
         # Otimizado: set_alpha() direto no sprite original, evitando copy()
         for img in self._head_afterimages:
@@ -1605,7 +1772,7 @@ class MountainSerpentBoss:
         # Seleciona o sprite baseado no estado (Prioridade: Dor > Cuspida > Normal)
         current_sprite = self._head_sprite
         white_sprite = None
-        
+
         if self._head_pain_timer > 0.0 and self._pain_sprite:
             current_sprite = self._pain_sprite
             white_sprite = self._white_pain_sprite
@@ -1615,7 +1782,9 @@ class MountainSerpentBoss:
         else:
             # Pega o frame correspondente da animação atual para o flash
             current_frame_idx = self._frame_sequence[self._animation_seq_pos]
-            if self._white_animation_frames and current_frame_idx < len(self._white_animation_frames):
+            if self._white_animation_frames and current_frame_idx < len(
+                self._white_animation_frames
+            ):
                 white_sprite = self._white_animation_frames[current_frame_idx]
 
         if self._hit_flash > 0.0 and white_sprite:
