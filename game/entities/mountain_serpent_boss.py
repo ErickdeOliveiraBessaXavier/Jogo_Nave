@@ -966,8 +966,6 @@ class MountainSerpentBoss:
 
         # Timer para spawn de blocos na vulnerabilidade
         self._vulnerable_block_timer = 0.0
-        self._phase2_sentry_spawned = False
-        self._phase3_sentry_spawned = False
         self._head_intro_active = True
         self._head_intro_progress = 0.0
 
@@ -1182,8 +1180,14 @@ class MountainSerpentBoss:
         # Atualiza contadores incrementais para performance
         if side == "left":
             self._left_alive -= 1
+            if self._left_alive == 0:
+                for b in [b for b in self._dead_block_respawn_timers if b.side == "left"]:
+                    del self._dead_block_respawn_timers[b]
         else:
             self._right_alive -= 1
+            if self._right_alive == 0:
+                for b in [b for b in self._dead_block_respawn_timers if b.side == "right"]:
+                    del self._dead_block_respawn_timers[b]
 
         # Ideia 2: Gerar estilhaços de pedra ao destruir um bloco
         num_shards = random.randint(3, 5)
@@ -1290,33 +1294,31 @@ class MountainSerpentBoss:
 
         for block in self._all_blocks:
             block.revive()
-            # Reset critico: garante que o bloco volte para sua coluna de origem correta
-            block.origin_cx = self.left_x if block.side == "left" else self.right_x
 
-            if block.side == "left":
-                block.origin_cy = (
-                    Config.SCREEN_HEIGHT
-                    + SerpentBlock.RADIUS
-                    + block.row_index * self._block_spacing
-                )
-            else:
-                block.origin_cy = (
-                    -SerpentBlock.RADIUS - block.row_index * self._block_spacing
-                )
+        # Usa _block_map como fonte autoritativa para reposicionar blocos.
+        # block.side pode estar incorreto se o bloco morreu durante animação de swap
+        # (antes de _finalize_swap atualizar o atributo side), por isso não confiamos
+        # em block.side aqui — confiamos apenas no mapa já consolidado.
+        for (side, row_i), block in self._block_map.items():
+            block.side = side
+            block.origin_cx = self.left_x if side == "left" else self.right_x
+            block.origin_cy = (
+                Config.SCREEN_HEIGHT + SerpentBlock.RADIUS + row_i * self._block_spacing
+                if side == "left"
+                else -SerpentBlock.RADIUS - row_i * self._block_spacing
+            )
+            block.cx = block.origin_cx
+            block.cy = block.origin_cy
+            block._sync_rect_from_center()
 
         if not self._swap_pattern_enabled:
             self._swap_pattern_enabled = True
         self._schedule_next_swap()
 
-        # Invocação ÚNICA de StoneSentry ao finalizar a vulnerabilidade baseada na fase
+        # Invoca um StoneSentry a cada vez que a vulnerabilidade termina (fase 2 ou 3)
         new_ents: list[StoneSentry] = []
-        phase = self._current_phase()
-        if phase == 2 and not self._phase2_sentry_spawned:
+        if self._current_phase() >= 2:
             new_ents.append(StoneSentry())
-            self._phase2_sentry_spawned = True
-        elif phase == 3 and not self._phase3_sentry_spawned:
-            new_ents.append(StoneSentry())
-            self._phase3_sentry_spawned = True
         return new_ents
 
     # ------------------------------------------------------------------
@@ -1581,8 +1583,10 @@ class MountainSerpentBoss:
 
     @property
     def all_blocks_dead(self) -> bool:
-        """Otimizado: verifica se ambos os contadores são zero."""
-        return self._left_alive == 0 and self._right_alive == 0
+        """Verifica diretamente se todos os blocos da corrente estão mortos.
+        Evita falsos negativos causados por mortes durante animação de swap,
+        quando block.side ainda não foi atualizado por _finalize_swap."""
+        return all(b.dead for b in self._all_blocks)
 
     @property
     def block_wave_time(self) -> float:
@@ -1651,9 +1655,6 @@ class MountainSerpentBoss:
             )
 
         self._phase = self._current_phase()
-
-        # Spawn de StoneSentry e tratado exclusivamente em _respawn_all_blocks,
-        # garantindo exatamente um por vulnerabilidade encerrada (fases 2 e 3).
 
         if self._head_intro_active:
             if self._loop_speed_multiplier <= 1.0:

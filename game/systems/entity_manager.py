@@ -370,9 +370,9 @@ class EntityManager:
             return float(slow_factor) if linger > 0.0 else 1.0
 
         def update_linger(entity: Any, dt: float) -> None:
-            l = getattr(entity, "emp_linger_timer", 0.0)
-            if l > 0.0:
-                setattr(entity, "emp_linger_timer", max(0.0, l - dt))
+            linger_t = getattr(entity, "emp_linger_timer", 0.0)
+            if linger_t > 0.0:
+                setattr(entity, "emp_linger_timer", max(0.0, linger_t - dt))
 
         # Atualizar formações e naves aliadas
         for f in self.formations[:]:
@@ -660,8 +660,8 @@ class EntityManager:
             else:
                 self.boss.draw(surface)
 
-        for l in self.boss_lasers:
-            l.draw(surface)
+        for laser in self.boss_lasers:
+            laser.draw(surface)
         for b in self.black_holes:
             b.draw(surface)
         for w in self.emp_waves:
@@ -688,8 +688,8 @@ class EntityManager:
             self.boulders,
             self.rock_shards,
         ]
-        for l in lists:
-            for e in l:
+        for lst in lists:
+            for e in lst:
                 if is_v(e):
                     e.draw(surface)
 
