@@ -8,10 +8,10 @@ from ..entities.alien import Alien
 from ..entities.boss import Boss
 from ..entities.bot_elemental import ElementalRobot
 from ..entities.explosive_mine import ExplosiveMine
-from ..entities.mountain_geode import MountainGeode
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.giant_meteor_boss import GiantMeteorBoss
 from ..entities.meteor import Meteor
+from ..entities.mountain_geode import MountainGeode
 from ..entities.mountain_mage import MountainMage
 from ..entities.mountain_propeller import MountainPropeller
 from ..entities.mountain_serpent_boss import MountainSerpentBoss
@@ -1080,9 +1080,9 @@ class ProceduralLevelGenerator:
         self.difficulty_curves = DifficultyCurves()
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
-        self._difficulty_cache: dict[
-            Union[int, str], float
-        ] = {}  # Cache for difficulty and score multiplier calculations
+        self._difficulty_cache: dict[Union[int, str], float] = (
+            {}
+        )  # Cache for difficulty and score multiplier calculations
         self._level_cache: dict[int, LevelConfig] = {}
 
     def generate_level(self, level_number: int) -> LevelConfig:

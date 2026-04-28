@@ -1,8 +1,19 @@
 import logging
 import random
 from collections import deque
-from typing import (TYPE_CHECKING, Any, Callable, Dict, List, Protocol, Tuple,
-                    Type, TypedDict, Union, cast)
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Protocol,
+    Tuple,
+    Type,
+    TypedDict,
+    Union,
+    cast,
+)
 
 from ..core.config import PowerUpType
 from ..core.config import config as Config
@@ -355,7 +366,7 @@ class EnemySpawner:
                     counts["stone_sentry"] += 1
                 elif isinstance(enemy, MountainMage):
                     counts["mountain_mage"] += 1
-        
+
         # Contar propellers que estão em uma lista separada no entity_manager
         for prop in entity_manager.mountain_propellers:
             if not prop.dead:

@@ -1,6 +1,14 @@
 import math
-from typing import (TYPE_CHECKING, Any, Callable, Protocol, Sequence,
-                    TypeAlias, cast, runtime_checkable)
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Protocol,
+    Sequence,
+    TypeAlias,
+    cast,
+    runtime_checkable,
+)
 
 import pygame
 
@@ -347,11 +355,7 @@ class Collisions:
         if result.fragments:
             entity_manager.absorb_fragments(result.fragments)
 
-        if (
-            result.killed
-            and result.points > 0
-            and floating_scores is not None
-        ):
+        if result.killed and result.points > 0 and floating_scores is not None:
             floating_scores.append(FloatingScore(hit_x, hit_y, result.points))
 
         if result.triggers_special_death:
@@ -370,7 +374,9 @@ class Collisions:
         contact = getattr(target, "on_ship_contact", None)
         if not callable(contact):
             return NO_HIT
-        result: HitResult = cast(Callable[[float, float], HitResult], contact)(contact_x, contact_y)
+        result: HitResult = cast(Callable[[float, float], HitResult], contact)(
+            contact_x, contact_y
+        )
         if result.explosion_size > 0:
             entity_manager.spawn_explosion(
                 contact_x, contact_y, size=result.explosion_size
@@ -416,7 +422,9 @@ class Collisions:
 
                 # Mines absorvem damage_to_mine; outros recebem dano nominal
                 # (1 = padrão da explosão). on_hit decide o resto.
-                hit_damage = damage_to_mine if getattr(enemy, 'is_explosive_mine', False) else 1
+                hit_damage = (
+                    damage_to_mine if getattr(enemy, "is_explosive_mine", False) else 1
+                )
                 result = self._apply_hit(
                     enemy,
                     hit_damage,
@@ -458,9 +466,7 @@ class Collisions:
             return 0
 
         scaled = int(damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
-        result = self._apply_hit(
-            boss, scaled, cx, cy, entity_manager, floating_scores
-        )
+        result = self._apply_hit(boss, scaled, cx, cy, entity_manager, floating_scores)
         hit_set.add(boss_id)
         return result.points
 
@@ -486,9 +492,7 @@ class Collisions:
             if not (is_piercing_allowed and getattr(proj, "piercing", False)):
                 proj.dead = True
 
-            damage = int(
-                proj.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER
-            )
+            damage = int(proj.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
             result = self._apply_hit(
                 boss, damage, proj.x, proj.y, entity_manager, floating_scores
             )
@@ -534,7 +538,7 @@ class Collisions:
 
         # 1) Criar explosões para minas cujo timer de explosão acabou
         for enemy in enemies[:]:
-            if getattr(enemy, 'is_explosive_mine', False):
+            if getattr(enemy, "is_explosive_mine", False):
                 mine: Any = enemy
                 # Verificar se está explodindo E timer acabou (mas ainda não marcada dead)
                 # OU já está dead (timer acabou no update anterior)
@@ -587,7 +591,9 @@ class Collisions:
                     # Mine explosion mata outras minas com dano = HP delas;
                     # demais inimigos recebem dano nominal e on_hit resolve.
                     hit_damage = (
-                        enemy.health if getattr(enemy, 'is_explosive_mine', False) else 1
+                        enemy.health
+                        if getattr(enemy, "is_explosive_mine", False)
+                        else 1
                     )
                     result = self._apply_hit(
                         enemy,
@@ -953,7 +959,7 @@ class Collisions:
                             if dist_sq < explosion_radius**2:
                                 hit_damage = (
                                     2
-                                    if getattr(nearby_enemy, 'is_explosive_mine', False)
+                                    if getattr(nearby_enemy, "is_explosive_mine", False)
                                     else 1
                                 )
                                 area_result = self._apply_hit(
@@ -1129,7 +1135,11 @@ class Collisions:
     ) -> int:
         """Colisão de balas das mini ships com Boss normal."""
         return self._project_into_boss(
-            mini_ship_bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True
+            mini_ship_bullets,
+            boss,
+            floating_scores,
+            entity_manager,
+            is_piercing_allowed=True,
         )
 
     def mini_ship_bullets_vs_spike_boss(

@@ -49,6 +49,7 @@ class _CustomHitboxEnemy:
 
     def on_ship_contact(self, contact_x: float, contact_y: float):
         from game.systems.hit_result import HitResult
+
         self.dead = True
         return HitResult(killed=True)
 

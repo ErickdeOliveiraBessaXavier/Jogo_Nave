@@ -340,6 +340,7 @@ class RockShard:
 
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems.hit_result import NO_HIT
+
         return NO_HIT  # imune a tiros
 
     def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
@@ -517,6 +518,7 @@ class OrbitalRock:
 
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems.hit_result import NO_HIT
+
         return NO_HIT  # imune a tiros
 
     def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
@@ -644,6 +646,7 @@ class EntryDebris:
 
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems.hit_result import NO_HIT
+
         return NO_HIT  # imune a tiros
 
     def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":

@@ -54,31 +54,23 @@ from typing import TYPE_CHECKING, Optional, Tuple
 import pygame
 
 from ..core.config import config as Config
-from ..entities.bot_elemental_pixel_map import \
-    ANTENNA_COL_END as _ANTENNA_COL_END
-from ..entities.bot_elemental_pixel_map import \
-    ANTENNA_COL_START as _ANTENNA_COL_START
-from ..entities.bot_elemental_pixel_map import \
-    ANTENNA_ROW_END as _ANTENNA_ROW_END
-from ..entities.bot_elemental_pixel_map import \
-    ANTENNA_ROW_START as _ANTENNA_ROW_START
-from ..entities.bot_elemental_pixel_map import \
-    ATTACK_PALETTES as _ATTACK_PALETTES
-from ..entities.bot_elemental_pixel_map import \
-    EYE_LEFT_COL_END as _EYE_LEFT_COL_END
-from ..entities.bot_elemental_pixel_map import \
-    EYE_LEFT_COL_START as _EYE_LEFT_COL_START
-from ..entities.bot_elemental_pixel_map import \
-    EYE_RIGHT_COL_END as _EYE_RIGHT_COL_END
-from ..entities.bot_elemental_pixel_map import \
-    EYE_RIGHT_COL_START as _EYE_RIGHT_COL_START
+from ..entities.bot_elemental_pixel_map import ANTENNA_COL_END as _ANTENNA_COL_END
+from ..entities.bot_elemental_pixel_map import ANTENNA_COL_START as _ANTENNA_COL_START
+from ..entities.bot_elemental_pixel_map import ANTENNA_ROW_END as _ANTENNA_ROW_END
+from ..entities.bot_elemental_pixel_map import ANTENNA_ROW_START as _ANTENNA_ROW_START
+from ..entities.bot_elemental_pixel_map import ATTACK_PALETTES as _ATTACK_PALETTES
+from ..entities.bot_elemental_pixel_map import EYE_LEFT_COL_END as _EYE_LEFT_COL_END
+from ..entities.bot_elemental_pixel_map import EYE_LEFT_COL_START as _EYE_LEFT_COL_START
+from ..entities.bot_elemental_pixel_map import EYE_RIGHT_COL_END as _EYE_RIGHT_COL_END
+from ..entities.bot_elemental_pixel_map import (
+    EYE_RIGHT_COL_START as _EYE_RIGHT_COL_START,
+)
 from ..entities.bot_elemental_pixel_map import EYE_ROW_END as _EYE_ROW_END
 from ..entities.bot_elemental_pixel_map import EYE_ROW_START as _EYE_ROW_START
 from ..entities.bot_elemental_pixel_map import PIXEL_COLS as _PIXEL_COLS
 from ..entities.bot_elemental_pixel_map import PIXEL_MAP as _PIXEL_MAP
 from ..entities.bot_elemental_pixel_map import PIXEL_ROWS as _PIXEL_ROWS
-from ..entities.bot_elemental_pixel_map import \
-    THRUSTER_NEUTRAL as _THRUSTER_NEUTRAL
+from ..entities.bot_elemental_pixel_map import THRUSTER_NEUTRAL as _THRUSTER_NEUTRAL
 from ..entities.bot_elemental_pixel_map import C as _C
 
 if TYPE_CHECKING:
