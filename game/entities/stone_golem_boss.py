@@ -8,7 +8,7 @@ Refatorado para seguir boas práticas de performance, robustez e legibilidade.
 import logging
 import math
 import random
-from typing import Any, List, Optional, Tuple, TypeAlias
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple, TypeAlias
 
 import pygame
 
@@ -23,6 +23,9 @@ from ..entities.stone_golem_pixel_map import PIXEL_COLS as _PIXEL_COLS
 from ..entities.stone_golem_pixel_map import PIXEL_MAP as _PIXEL_MAP
 from ..entities.stone_golem_pixel_map import PIXEL_ROWS as _PIXEL_ROWS
 from ..entities.stone_golem_pixel_map import C as _C
+
+if TYPE_CHECKING:
+    from ..systems.hit_result import HitResult
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +141,7 @@ class GolemMine:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x, self.y, float(self.RADIUS)
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -152,7 +155,7 @@ class GolemMine:
             )
         return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 
-    def on_ship_contact(self, contact_x: float, contact_y: float):
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -335,11 +338,11 @@ class RockShard:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x, self.y, float(self.size)
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems.hit_result import NO_HIT
         return NO_HIT  # imune a tiros
 
-    def on_ship_contact(self, contact_x: float, contact_y: float):
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -512,11 +515,11 @@ class OrbitalRock:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x, self.y, float(self._S * self._size)
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems.hit_result import NO_HIT
         return NO_HIT  # imune a tiros
 
-    def on_ship_contact(self, contact_x: float, contact_y: float):
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -639,11 +642,11 @@ class EntryDebris:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x, self.y, float(self.S * self.rock_size)
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems.hit_result import NO_HIT
         return NO_HIT  # imune a tiros
 
-    def on_ship_contact(self, contact_x: float, contact_y: float):
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -1759,7 +1762,7 @@ class StoneGolemBoss:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 

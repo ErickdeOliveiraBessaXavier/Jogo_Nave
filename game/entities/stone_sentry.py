@@ -1,7 +1,7 @@
 import math
 import random
 from dataclasses import dataclass
-from typing import Any, List, Tuple
+from typing import TYPE_CHECKING, Any, List, Tuple
 
 import pygame
 
@@ -9,6 +9,9 @@ from ..core import colors
 from ..core.config import config as Config
 from ..core.sound import sound_manager
 from ..entities.alien_bullet import AlienBullet
+
+if TYPE_CHECKING:
+    from ..systems.hit_result import HitResult
 
 
 @dataclass
@@ -1060,7 +1063,7 @@ class StoneSentry:
         r = self.rect
         return r.centerx, r.centery, max(r.width, r.height) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -1074,7 +1077,7 @@ class StoneSentry:
             )
         return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 
-    def on_ship_contact(self, contact_x: float, contact_y: float):
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 

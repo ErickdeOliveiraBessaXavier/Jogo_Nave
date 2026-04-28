@@ -1735,6 +1735,7 @@ class PlayingScene(Scene):
         if not self.level_config.boss_type:
             return
 
+        from ..entities.giant_meteor_boss import GiantMeteorBoss
         from ..entities.mountain_serpent_boss import MountainSerpentBoss
         from ..entities.stone_golem_boss import StoneGolemBoss
 
@@ -1752,6 +1753,11 @@ class PlayingScene(Scene):
                 MountainSerpentBoss.DEFAULT_HEALTH * self.enemy_health_multiplier
             )
             boss = self.entity_manager.spawn_mountain_serpent_boss(health=scaled_health)
+        elif self.level_config.boss_type == GiantMeteorBoss:
+            # spawn_giant_meteor_boss seta is_side_scroll corretamente
+            boss = self.entity_manager.spawn_giant_meteor_boss()
+            boss.health = int(boss.health * self.enemy_health_multiplier)
+            boss.max_health = boss.health
         else:
             boss = self.level_config.boss_type(Config.SCREEN_WIDTH / 2 - 50, 50)
             boss.health = int(boss.health * self.enemy_health_multiplier)

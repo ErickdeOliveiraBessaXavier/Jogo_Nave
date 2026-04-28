@@ -23,7 +23,7 @@ Padrões aplicados
 
 import math
 import random
-from typing import Final, List, Literal, Optional, TypeAlias, TypedDict
+from typing import TYPE_CHECKING, Final, List, Literal, Optional, TypeAlias, TypedDict
 
 import pygame
 
@@ -35,6 +35,9 @@ from .mountain_serpent_pixel_map import PIXEL_MAP as _PIXEL_MAP
 from .mountain_serpent_pixel_map import PIXEL_ROWS as _PIXEL_ROWS
 from .mountain_serpent_pixel_map import C as _PIX_COLORS
 from .stone_sentry import StoneSentry
+
+if TYPE_CHECKING:
+    from ..systems.hit_result import HitResult
 
 # ---------------------------------------------------------------------------
 # Tipagens e Estruturas de Dados
@@ -391,7 +394,7 @@ class SerpentBlock:
         r = self.rect
         return r.centerx, r.centery, max(r.width, r.height) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -405,7 +408,7 @@ class SerpentBlock:
             )
         return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 
-    def on_ship_contact(self, contact_x: float, contact_y: float):
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -499,7 +502,7 @@ class SerpentBlock:
             else:
                 self._apply_arc_movement()
 
-        self._sync_rect_from_center()
+        self.sync_rect_from_center()
 
     def _apply_pre_move_shake(self) -> None:
         """Tremor que antecede o movimento principal do swap."""
@@ -538,7 +541,7 @@ class SerpentBlock:
         self.cx = self._swap_target_cx
         self.cy = self._swap_target_cy
 
-    def _sync_rect_from_center(self) -> None:
+    def sync_rect_from_center(self) -> None:
         """Recalcula x, y e atualiza o rect de colisao in-place."""
         self.x = self.cx - self.RADIUS
         self.y = self.cy - self.RADIUS
@@ -586,7 +589,7 @@ class SerpentBlock:
         # Movimento de fragmento (invocado na vulnerabilidade)
         if self.is_fragment:
             self.cy -= self._ascent_speed * dt
-            self._sync_rect_from_center()
+            self.sync_rect_from_center()
             if self.cy < -self.RADIUS:
                 self.dead = True
             return
@@ -604,7 +607,7 @@ class SerpentBlock:
             self.cx = self.origin_cx + wave_x
             self.cy = self._origin_cy + wave_y
 
-        self._sync_rect_from_center()
+        self.sync_rect_from_center()
 
     def _apply_loop_movement(self, dt: float) -> None:
         """Avanca a posicao de origem na corrente infinita (wrap-around)."""
@@ -1341,7 +1344,7 @@ class MountainSerpentBoss:
             )
             block.cx = block.origin_cx
             block.cy = block.origin_cy
-            block._sync_rect_from_center()
+            block.sync_rect_from_center()
 
         if not self._swap_pattern_enabled:
             self._swap_pattern_enabled = True
@@ -1598,7 +1601,7 @@ class MountainSerpentBoss:
         r = self.rect
         return r.centerx, r.centery, max(r.width, r.height) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..core.config import config as cfg
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult

@@ -49,7 +49,7 @@ Animações implementadas (mapeamento HTML → Python):
 import logging
 import math
 import random
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 
 import pygame
 
@@ -80,6 +80,9 @@ from ..entities.bot_elemental_pixel_map import PIXEL_ROWS as _PIXEL_ROWS
 from ..entities.bot_elemental_pixel_map import \
     THRUSTER_NEUTRAL as _THRUSTER_NEUTRAL
 from ..entities.bot_elemental_pixel_map import C as _C
+
+if TYPE_CHECKING:
+    from ..systems.hit_result import HitResult
 
 logger = logging.getLogger(__name__)
 
@@ -855,7 +858,7 @@ class ElementalRobot:
         r = self.rect
         return r.centerx, r.centery, max(r.width, r.height) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -871,7 +874,7 @@ class ElementalRobot:
             )
         return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 
-    def on_ship_contact(self, contact_x: float, contact_y: float):
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 

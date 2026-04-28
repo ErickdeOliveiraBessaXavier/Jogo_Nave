@@ -104,7 +104,7 @@ class MeteorPool:
                 m.is_side_scroll = self.is_side_scroll
                 return m
 
-    def release(self, meteor: Meteor):
+    def release(self, meteor: Meteor) -> None:
         """
         Libera um meteoro de volta ao pool, marcando como inativo.
 

@@ -2,7 +2,7 @@ import logging
 import math
 import random
 from collections import deque
-from typing import Any, List
+from typing import TYPE_CHECKING, Any, List
 
 import pygame
 
@@ -14,6 +14,9 @@ from .boss_cannon import BossAttackSystem, BossCannon
 from .boss_laser import BossLaser
 from .boss_particles import BossParticleSystem
 from .boss_square import BossSquare
+
+if TYPE_CHECKING:
+    from ..systems.hit_result import HitResult
 
 
 class Boss:
@@ -1331,7 +1334,7 @@ class Boss:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..core.config import config as cfg
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult

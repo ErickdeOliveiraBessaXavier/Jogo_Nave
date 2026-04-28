@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Callable, List, Tuple
+from typing import TYPE_CHECKING, Callable, List, Tuple
 
 import pygame
 
 from ..core import colors
 from ..core.config import config as Config
+
+if TYPE_CHECKING:
+    from ..systems.entity_manager import EntityManager
+    from ..systems.hit_result import HitResult
 
 # Type alias for the meteor factory function
 MeteorFactory = Callable[[int, float, float, float, float], "Meteor"]
@@ -354,7 +358,7 @@ class Meteor:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(12, self.size)
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -369,7 +373,7 @@ class Meteor:
             fragments=fragments,
         )
 
-    def on_ship_contact(self, contact_x: float, contact_y: float):
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 

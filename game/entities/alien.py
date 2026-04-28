@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 import random
 
 import pygame
@@ -7,6 +8,9 @@ from ..core.config import config as Config
 from ..core.sound import sound_manager
 from ..core.sprite_loader import sprite_loader
 from .alien_bullet import AlienBullet
+
+if TYPE_CHECKING:
+    from ..systems.hit_result import HitResult
 
 
 class Alien:
@@ -227,7 +231,7 @@ class Alien:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
         from .explosion import ExplosionType
@@ -241,7 +245,7 @@ class Alien:
             sound=hit_sounds.EXPLOSION_ALIEN,
         )
 
-    def on_ship_contact(self, contact_x: float, contact_y: float):
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 

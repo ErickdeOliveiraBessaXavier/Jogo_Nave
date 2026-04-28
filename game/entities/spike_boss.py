@@ -1,6 +1,6 @@
 import math
 import random
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import pygame
 
@@ -9,6 +9,9 @@ from ..core.config import config as Config
 from ..core.sound import sound_manager
 from .spike import Spike
 from .spike_boss_laser import SpikeBossLaser
+
+if TYPE_CHECKING:
+    from ..systems.hit_result import HitResult
 
 
 class SpikeBoss:
@@ -114,7 +117,7 @@ class SpikeBoss:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..core.config import config as cfg
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult

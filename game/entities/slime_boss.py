@@ -13,6 +13,7 @@ from .slime_drip import SlimeDrippingEffect
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
+    from ..systems.hit_result import HitResult
 
 
 class SlimeBoss:
@@ -195,7 +196,7 @@ class SlimeBoss:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..core.config import config as cfg
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult

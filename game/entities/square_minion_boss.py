@@ -2,9 +2,12 @@
 
 import math
 import random
-from typing import List
+from typing import TYPE_CHECKING, List
 
 import pygame
+
+if TYPE_CHECKING:
+    from ..systems.hit_result import HitResult
 
 
 class TrailParticle:
@@ -304,14 +307,14 @@ class SquareMinionBoss:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.size / 2, self.y + self.size / 2, self.size / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
         # Imune — só feedback visual
         return HitResult(explosion_size=20, sound=hit_sounds.BOSS_DAMAGE)
 
-    def on_ship_contact(self, contact_x: float, contact_y: float):
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 

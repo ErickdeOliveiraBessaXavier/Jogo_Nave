@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 import random
 
 import pygame
@@ -6,6 +7,9 @@ from ..core import colors
 from ..core.assets import get_image
 from ..core.config import config as Config
 from ..core.sprite_loader import sprite_loader
+
+if TYPE_CHECKING:
+    from ..systems.hit_result import HitResult
 
 
 class ExplosiveMine:
@@ -246,14 +250,14 @@ class ExplosiveMine:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x, self.y, float(self.radius)
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems.hit_result import NO_HIT
 
         self.take_damage(damage)
         # Quem mata é o timer interno, não o tiro. Sem feedback aqui.
         return NO_HIT
 
-    def on_ship_contact(self, contact_x: float, contact_y: float):
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -261,7 +265,7 @@ class ExplosiveMine:
         return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ALIEN)
 
     def should_remove(self) -> bool:
-        return self.dead and not self.is_exploding
+        return self.dead
 
 
 # REGISTRAR no sistema de pré-carregamento

@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import math
 import random
+from typing import TYPE_CHECKING
 
 import pygame
 
 from ..core import colors
 from ..core.config import config as Config
 from .meteor import Meteor
+
+if TYPE_CHECKING:
+    from ..systems.entity_manager import EntityManager
+    from ..systems.hit_result import HitResult
 
 
 class RockGlider(Meteor):
@@ -833,7 +838,7 @@ class RockGlider(Meteor):
         r = self.rect
         return r.centerx, r.centery, max(r.width, r.height) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float):
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -854,7 +859,7 @@ class RockGlider(Meteor):
             ),
         )
 
-    def on_ship_contact(self, contact_x: float, contact_y: float):
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 

@@ -169,9 +169,10 @@ class EntityManager:
 
         for spec in fragments:
             if isinstance(spec, MeteorSpec):
-                self.meteor_pool.get(
+                meteor = self.meteor_pool.get(
                     size=spec.size, x=spec.x, y=spec.y, vx=spec.vx, vy=spec.vy
                 )
+                self.enemies.append(meteor)
             else:
                 self.enemies.append(spec)
 
@@ -506,6 +507,8 @@ class EntityManager:
                 nst = en.update(sdt, (player_x, player_y))
                 if nst:
                     self.enemies.extend(nst)
+            elif isinstance(en, Meteor):
+                en.update(sdt, self.is_side_scroll)
             else:
                 en.update(sdt)
 
@@ -659,8 +662,10 @@ class EntityManager:
             return True  # Assume visível se não tiver geometria clara
 
         if enemy_visible:
-            self.meteor_pool.draw(surface)
+            # Note: meteor_pool.draw removed from here to avoid duplicate and move to higher layer
             for e in self.enemies:
+                if isinstance(e, Meteor):
+                    continue  # Will be drawn later via meteor_pool
                 if isinstance(e, MountainStalagmite) and getattr(e, "_fragments", None):
                     e.draw(surface)
                     continue
@@ -686,6 +691,10 @@ class EntityManager:
                 self.boss.draw(surface, fps)
             else:
                 self.boss.draw(surface)
+
+        # 3.5 Desenhar Meteoros (agora sobre o boss para efeito de "breaking off")
+        if enemy_visible:
+            self.meteor_pool.draw(surface)
 
         for laser in self.boss_lasers:
             laser.draw(surface)
@@ -754,6 +763,14 @@ class EntityManager:
         prop = MountainPropeller(y=y)
         self.mountain_propellers.append(prop)
         return prop
+
+    def spawn_giant_meteor_boss(
+        self, x: float = 0.0, y: float = 0.0
+    ) -> GiantMeteorBoss:
+        boss = GiantMeteorBoss(x, y)
+        boss.is_side_scroll = self.is_side_scroll
+        self.boss = boss
+        return boss
 
     def spawn_meteor(
         self,
@@ -838,7 +855,7 @@ class EntityManager:
         sw, sh = s.get_size() if s else (1600, 900)
 
         if self.is_side_scroll:
-            return enemy.x < -ew or enemy.y < -eh or enemy.y > sh
+            return enemy.x < -(ew + sw * 0.2) or enemy.y < -eh or enemy.y > sh
 
         # Para a Serpente, permitimos que os blocos existam abaixo do limite inferior (spawn)
         if isinstance(enemy, SerpentBlock):

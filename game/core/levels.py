@@ -8,6 +8,7 @@ from ..entities.alien import Alien
 from ..entities.boss import Boss
 from ..entities.bot_elemental import ElementalRobot
 from ..entities.explosive_mine import ExplosiveMine
+from ..entities.mountain_geode import MountainGeode
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.giant_meteor_boss import GiantMeteorBoss
 from ..entities.meteor import Meteor
@@ -64,6 +65,13 @@ ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
     ElementalRobot: {WorldTheme.MOUNTAINS},
     MountainMage: {WorldTheme.MOUNTAINS},
     MountainPropeller: {WorldTheme.MOUNTAINS},
+    MountainGeode: {WorldTheme.MOUNTAINS},
+    ExplosiveMine: {
+        WorldTheme.STARFIELD,
+        WorldTheme.CITY,
+        WorldTheme.VOLCANIC,
+        WorldTheme.PROCEDURAL,
+    },
 }
 
 # Multiplicadores de frequência por tema (camada 2), organizados por preset.
@@ -295,6 +303,7 @@ DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
 
 THEME_ENEMY_REPLACEMENTS: dict[tuple[WorldTheme, type], type] = {
     (WorldTheme.MOUNTAINS, Meteor): RockGlider,
+    (WorldTheme.MOUNTAINS, ExplosiveMine): MountainGeode,
 }
 
 
@@ -1450,19 +1459,20 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     1: LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            RockGlider: 0.6,
+            # RockGlider: 0.6,
             # ElementalRobot: 1.0,  # Mini-boss
             # StoneSentry: 30.0,
             # MountainMage: 1.0,
-            MountainPropeller: 0.8,
+            # MountainPropeller: 0.8,
+            MountainGeode: 1.0,
         },
-        enemies_to_clear=10,
+        enemies_to_clear=1,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
-        # mines_enabled=True,
+        mines_enabled=True,
         # boss_type=SlimeBoss,
         # boss_type=Boss,
-        # boss_type=GiantMeteorBoss,
+        boss_type=GiantMeteorBoss,
         # boss_type=SpikeBoss,
         # boss_type=StoneGolemBoss,
         # boss_type=MountainSerpentBoss,
