@@ -2,7 +2,7 @@ import logging
 import math
 import random
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Type, Union
+from typing import TYPE_CHECKING, Type
 
 from ..entities.alien import Alien
 from ..entities.boss import Boss
@@ -95,7 +95,11 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             Meteor: 1.12,
             EyeEnemy: 1.05,
         },
-        WorldTheme.PROCEDURAL: {},
+        WorldTheme.PROCEDURAL: {
+            Meteor: 1.05,
+            Alien: 1.05,
+            EyeEnemy: 1.00,
+        },
     },
     "moderate": {
         WorldTheme.MOUNTAINS: {
@@ -115,7 +119,11 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             Meteor: 1.18,
             EyeEnemy: 1.08,
         },
-        WorldTheme.PROCEDURAL: {},
+        WorldTheme.PROCEDURAL: {
+            Meteor: 1.08,
+            Alien: 1.08,
+            EyeEnemy: 1.05,
+        },
     },
     "aggressive": {
         WorldTheme.MOUNTAINS: {
@@ -135,7 +143,11 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             Meteor: 1.25,
             EyeEnemy: 1.10,
         },
-        WorldTheme.PROCEDURAL: {},
+        WorldTheme.PROCEDURAL: {
+            Meteor: 1.12,
+            Alien: 1.12,
+            EyeEnemy: 1.08,
+        },
     },
 }
 
@@ -177,9 +189,9 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
             "late": {Meteor: 1.15, EyeEnemy: 1.08},
         },
         WorldTheme.PROCEDURAL: {
-            "early": {},
-            "mid": {},
-            "late": {},
+            "early": {Meteor: 1.05, Alien: 1.00, EyeEnemy: 0.90},
+            "mid": {Meteor: 1.02, Alien: 1.02, EyeEnemy: 1.00},
+            "late": {Meteor: 1.00, Alien: 1.05, EyeEnemy: 1.10},
         },
     },
     "moderate": {
@@ -216,9 +228,9 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
             "late": {Meteor: 1.20, EyeEnemy: 1.12},
         },
         WorldTheme.PROCEDURAL: {
-            "early": {},
-            "mid": {},
-            "late": {},
+            "early": {Meteor: 1.08, Alien: 1.00, EyeEnemy: 0.88},
+            "mid": {Meteor: 1.03, Alien: 1.04, EyeEnemy: 1.00},
+            "late": {Meteor: 0.98, Alien: 1.08, EyeEnemy: 1.15},
         },
     },
     "aggressive": {
@@ -255,9 +267,9 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
             "late": {Meteor: 1.25, EyeEnemy: 1.15},
         },
         WorldTheme.PROCEDURAL: {
-            "early": {},
-            "mid": {},
-            "late": {},
+            "early": {Meteor: 1.10, Alien: 1.00, EyeEnemy: 0.85},
+            "mid": {Meteor: 1.05, Alien: 1.05, EyeEnemy: 1.00},
+            "late": {Meteor: 0.96, Alien: 1.10, EyeEnemy: 1.20},
         },
     },
 }
@@ -979,10 +991,13 @@ class LevelConfig:
         return self.enemy_spawn_config.get(enemy_type, 1.0)
 
     def get_random_enemy_type(self) -> type:
-        """Retorna um tipo de inimigo aleatório da lista."""
+        """Retorna um tipo de inimigo aleatório ponderado pelo spawn_time configurado."""
         if not self.enemy_types:
             raise ValueError(f"Level {self.level_number} has no enemies configured!")
-        return random.choice(self.enemy_types)
+        weights_map = self.get_enemy_spawn_weights()
+        types = list(weights_map.keys())
+        weights = [weights_map[t] for t in types]
+        return random.choices(types, weights=weights, k=1)[0]
 
     def get_enemy_spawn_weights(self) -> dict[type, float]:
         """Retorna pesos base de spawn derivados do intervalo configurado.
@@ -1080,9 +1095,8 @@ class ProceduralLevelGenerator:
         self.difficulty_curves = DifficultyCurves()
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
-        self._difficulty_cache: dict[Union[int, str], float] = (
-            {}
-        )  # Cache for difficulty and score multiplier calculations
+        self._difficulty_cache: dict[int, float] = {}
+        self._score_cache: dict[int, float] = {}
         self._level_cache: dict[int, LevelConfig] = {}
 
     def generate_level(self, level_number: int) -> LevelConfig:
@@ -1197,20 +1211,14 @@ class ProceduralLevelGenerator:
 
     def _calculate_score_multiplier(self, level_number: int) -> float:
         """Calcula o multiplicador de pontuação baseado no nível."""
-        # OPT #9: Cache score multiplier calculations per level_number
-        cache_key = f"score_{level_number}"
-        if cache_key in self._difficulty_cache:
-            return self._difficulty_cache[cache_key]
+        if level_number in self._score_cache:
+            return self._score_cache[level_number]
 
-        # Multiplicador cresce logaritmicamente com o nível
-        # Nível 1: 1.0x, Nível 10: ~2.0x, Nível 20: ~2.5x, etc.
         base_multiplier = 1.0
-        level_bonus = math.log1p(level_number) * 0.3  # Crescimento logarítmico
+        level_bonus = math.log1p(level_number) * 0.3
         multiplier = base_multiplier + level_bonus
 
-        # Store in cache
-        self._difficulty_cache[cache_key] = multiplier
-
+        self._score_cache[level_number] = multiplier
         return multiplier
 
     def generate_config(
@@ -1459,8 +1467,11 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     1: LevelConfig(
         level_number=1,
         enemy_spawn_config={
+            # Meteor: 0.5,
+            # Alien: 1.5,
+            # EyeEnemy: 2.0,
             # RockGlider: 0.6,
-            # ElementalRobot: 1.0,  # Mini-boss
+            # ElementalRobot: 1.0,
             # StoneSentry: 30.0,
             # MountainMage: 1.0,
             # MountainPropeller: 0.8,
@@ -1470,12 +1481,14 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
         mines_enabled=True,
-        # boss_type=SlimeBoss,
         # boss_type=Boss,
-        boss_type=GiantMeteorBoss,
+        # boss_type=GiantMeteorBoss,
+        # boss_type=SlimeBoss,
         # boss_type=SpikeBoss,
+        # boss_type=SquareMinionBoss,
         # boss_type=StoneGolemBoss,
         # boss_type=MountainSerpentBoss,
+        boss_type=GiantMeteorBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),

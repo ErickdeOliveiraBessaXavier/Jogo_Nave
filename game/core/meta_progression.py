@@ -1,11 +1,12 @@
 import json
 import logging
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Tuple, cast
 
 import pygame
 
@@ -75,8 +76,10 @@ class LevelPerformance:
     total_damage_taken: int = 0
     total_powerups_collected: int = 0
 
-    # Histórico de tentativas (últimas 10)
-    recent_attempts: List[Dict[str, Any]] = field(default_factory=lambda: [])
+    # Histórico de tentativas (últimas 10) — deque com maxlen evita pop(0) O(n)
+    recent_attempts: Deque[Dict[str, Any]] = field(
+        default_factory=lambda: deque(maxlen=10)
+    )
 
     # Timestamps
     first_played: Optional[datetime] = None
@@ -119,9 +122,10 @@ class LevelPerformance:
             return 0.0
 
         # Comparar primeira metade vs segunda metade das tentativas recentes
-        mid = len(self.recent_attempts) // 2
-        first_half = self.recent_attempts[:mid]
-        second_half = self.recent_attempts[mid:]
+        attempts = list(self.recent_attempts)
+        mid = len(attempts) // 2
+        first_half = attempts[:mid]
+        second_half = attempts[mid:]
 
         first_success_rate = sum(
             1 for a in first_half if a.get("cleared", False)
@@ -857,8 +861,6 @@ class PlayerProfile:
             "powerups": powerups_collected,
         }
         stats.recent_attempts.append(attempt_data)
-        if len(stats.recent_attempts) > PerformanceAnalyzer.RECENT_ATTEMPTS_WINDOW:
-            stats.recent_attempts.pop(0)
 
         # Atualizar progresso
         self.highest_level_reached = max(self.highest_level_reached, level_number + 1)
@@ -888,8 +890,6 @@ class PlayerProfile:
             "cause": cause,
         }
         stats.recent_attempts.append(attempt_data)
-        if len(stats.recent_attempts) > PerformanceAnalyzer.RECENT_ATTEMPTS_WINDOW:
-            stats.recent_attempts.pop(0)
 
         # Sessão
         if self.current_session:
@@ -985,8 +985,6 @@ class PlayerProfile:
                 # Configurações de vídeo
                 resolution_raw = data.get("resolution")
                 if isinstance(resolution_raw, list):
-                    from typing import cast
-
                     resolution_list = cast(List[Any], resolution_raw)
                     if len(resolution_list) == 2:
                         self.resolution = (
@@ -1011,8 +1009,6 @@ class PlayerProfile:
                 world_unlocks_raw_untyped = data.get("world_unlocks", {})
                 world_unlocks_raw: Dict[str, Dict[str, Any]] = {}
                 if isinstance(world_unlocks_raw_untyped, dict):
-                    from typing import cast
-
                     world_unlocks_dict = cast(
                         Dict[Any, Any],
                         world_unlocks_raw_untyped,
@@ -1111,7 +1107,10 @@ class PlayerProfile:
                         stats.total_powerups_collected = int(
                             stats_data.get("total_powerups_collected", 0)
                         )
-                        stats.recent_attempts = stats_data.get("recent_attempts", [])
+                        stats.recent_attempts = deque(
+                            stats_data.get("recent_attempts", []),
+                            maxlen=PerformanceAnalyzer.RECENT_ATTEMPTS_WINDOW,
+                        )
                         stats.current_win_streak = int(
                             stats_data.get("current_win_streak", 0)
                         )
@@ -1211,8 +1210,6 @@ class PlayerProfile:
                     unlocked_raw = data.get("unlocked_upgrades")
                     if isinstance(unlocked_raw, list):
                         parsed: set[UpgradeType] = set()
-                        from typing import cast
-
                         for name in cast(List[Any], unlocked_raw):
                             try:
                                 parsed.add(UpgradeType[name])
@@ -1231,8 +1228,6 @@ class PlayerProfile:
 
                     loadout_raw = data.get("upgrade_loadout")
                     if isinstance(loadout_raw, list):
-                        from typing import cast
-
                         slots: List[Optional[UpgradeType]] = []
                         for item in cast(List[Any], loadout_raw)[:UPGRADE_SLOT_COUNT]:
                             if item is None:
@@ -1257,58 +1252,31 @@ class PlayerProfile:
                 # Keybindings (migração segura) — deve rodar independente do bloco de upgrades
                 try:
                     keybindings_raw = data.get("upgrade_keybindings")
+                    _kb_defaults: List[int] = [
+                        pygame.K_1,
+                        pygame.K_2,
+                        pygame.K_3,
+                        pygame.K_4,
+                        pygame.K_5,
+                        pygame.K_6,
+                        pygame.K_7,
+                        pygame.K_8,
+                        pygame.K_9,
+                    ]
                     if isinstance(keybindings_raw, list):
-                        from typing import cast
-
                         keys: List[int] = []
                         for key in cast(List[Any], keybindings_raw)[
                             :UPGRADE_SLOT_COUNT
                         ]:
-                            if (
-                                isinstance(key, int) and 0 <= key <= 1000000
-                            ):  # Valid pygame key range
+                            if isinstance(key, int) and 0 <= key <= 1000000:
                                 keys.append(key)
                             else:
-                                defaults_all: List[int] = [
-                                    pygame.K_1,
-                                    pygame.K_2,
-                                    pygame.K_3,
-                                    pygame.K_4,
-                                    pygame.K_5,
-                                    pygame.K_6,
-                                    pygame.K_7,
-                                    pygame.K_8,
-                                    pygame.K_9,
-                                ]
-                                keys.append(defaults_all[len(keys)])
-                        # Complete slot count
-                        defaults: List[int] = [
-                            pygame.K_1,
-                            pygame.K_2,
-                            pygame.K_3,
-                            pygame.K_4,
-                            pygame.K_5,
-                            pygame.K_6,
-                            pygame.K_7,
-                            pygame.K_8,
-                            pygame.K_9,
-                        ]
+                                keys.append(_kb_defaults[len(keys)])
                         while len(keys) < UPGRADE_SLOT_COUNT:
-                            keys.append(defaults[len(keys)])
+                            keys.append(_kb_defaults[len(keys)])
                         self.upgrade_keybindings = keys
                     else:
-                        defaults: List[int] = [
-                            pygame.K_1,
-                            pygame.K_2,
-                            pygame.K_3,
-                            pygame.K_4,
-                            pygame.K_5,
-                            pygame.K_6,
-                            pygame.K_7,
-                            pygame.K_8,
-                            pygame.K_9,
-                        ]
-                        self.upgrade_keybindings = defaults[:UPGRADE_SLOT_COUNT]
+                        self.upgrade_keybindings = _kb_defaults[:UPGRADE_SLOT_COUNT]
                 except (KeyError, ValueError, TypeError, IndexError):
                     defaults: List[int] = [
                         pygame.K_1,
@@ -1354,8 +1322,10 @@ class PlayerProfile:
             for key, value in stats.__dict__.items():
                 if isinstance(value, datetime):
                     stats_dict[key] = value.isoformat()
+                elif isinstance(value, deque):
+                    stats_dict[key] = list(value)
                 elif key == "best_time" and value is None:
-                    stats_dict[key] = None  # Save None as null
+                    stats_dict[key] = None
                 else:
                     stats_dict[key] = value
             level_stats_data[str(level_num)] = stats_dict
