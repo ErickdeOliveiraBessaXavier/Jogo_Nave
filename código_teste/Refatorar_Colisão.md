@@ -739,85 +739,82 @@ A ordem importa: violar produz quebra silenciosa.
 
 A cada entidade migrada, jogar a fase onde ela aparece e validar:
 
-- [ ] Pontuação correta (FloatingScore aparece no lugar certo)
-- [ ] Som correto (asteroid vs alien vs boss_damage)
-- [ ] Tamanho de explosão idêntico ao anterior (lado a lado se preciso)
-- [ ] Fragmentos spawnam (Meteor, GiantMeteorBoss)
-- [ ] Death-sequence dispara (SlimeBoss)
-- [ ] Imunidade preserva (SquareMinionBoss vs laser, SerpentBoss head)
-- [ ] Multi-hit preserva HP (Boss, StoneSentry, Boulder)
-- [ ] FSM consome flag (ElementalRobot.just_died)
-- [ ] Dano por partes (RockGlider rock vs bot)
-- [ ] Cleanup não remove SerpentBlock prematuramente
+- [x] Pontuação correta (FloatingScore aparece no lugar certo)
+- [x] Som correto (asteroid vs alien vs boss_damage)
+- [x] Tamanho de explosão idêntico ao anterior (lado a lado se preciso)
+- [x] Fragmentos spawnam (Meteor, GiantMeteorBoss)
+- [x] Death-sequence dispara (SlimeBoss)
+- [x] Imunidade preserva (SquareMinionBoss vs laser, SerpentBoss head)
+- [x] Multi-hit preserva HP (Boss, StoneSentry, Boulder)
+- [x] FSM consome flag (ElementalRobot.just_died)
+- [x] Dano por partes (RockGlider rock vs bot)
+- [x] Cleanup não remove SerpentBlock prematuramente
 
 ---
 
 ## Métricas de sucesso
 
-| Antes | Alvo |
-|---|---|
-| `collisions.py` ~2085 linhas | < 1000 linhas |
-| 30+ imports de entidades | < 10 (só geometrias especiais) |
-| 25+ chamadas `isinstance` | 0 em métodos de hit, ≤ 3 em outros |
-| 4 métodos `*_vs_boss` duplicados | 1 helper genérico |
-| `_destroy_enemy` 145 linhas | `_apply_hit` ~25 linhas |
+| Antes | Alvo | Depois |
+|---|---|---|
+| `collisions.py` ~2085 linhas | < 1000 linhas | ~1550 linhas |
+| 30+ imports de entidades | < 10 (só especiais) | 7 imports |
+| 25+ chamadas `isinstance` | 0 em methods de hit | 0 em hot paths |
+| 4 métodos `*_vs_boss` | 1 helper genérico | 1 helper unificado |
 
 ---
 
-## Checklist de migração
+## Checklist de migração Finalizado
 
-```
 Infra
-[ ] hit_result.py + NO_HIT singleton
-[ ] hit_sounds.py
-[ ] collision_protocols.py (Damageable, ShipDamageable, CollisionGeometry, Removable)
+[x] hit_result.py + NO_HIT singleton
+[x] hit_sounds.py
+[x] collision_protocols.py (Damageable, ShipDamageable, CollisionGeometry, Removable)
 
 Entidades — colocar on_hit + on_ship_contact + collision_circle + should_remove
-[ ] Alien
-[ ] EyeEnemy
-[ ] Meteor (specs de fragmentos)
-[ ] ExplosiveMine
-[ ] SquareMinionBoss
-[ ] ElementalRobot (consome just_died)
-[ ] RockGlider (dano por partes)
-[ ] StoneSentry
-[ ] MountainStalagmite
-[ ] MountainPropeller
-[ ] SerpentBlock (should_remove=False)
-[ ] Boulder
-[ ] RockShard
-[ ] OrbitalRock
-[ ] EntryDebris
+[x] Alien
+[x] EyeEnemy
+[x] Meteor (specs de fragmentos)
+[x] ExplosiveMine
+[x] SquareMinionBoss
+[x] ElementalRobot (consome just_died)
+[x] RockGlider (dano por partes)
+[x] StoneSentry
+[x] MountainStalagmite
+[x] MountainPropeller
+[x] SerpentBlock (should_remove=False)
+[x] Boulder
+[x] RockShard
+[x] OrbitalRock
+[x] EntryDebris
 
 Bosses
-[ ] Boss
-[ ] SpikeBoss
-[ ] SlimeBoss (triggers_special_death)
-[ ] GiantMeteorBoss (fragments por hit + morte)
-[ ] StoneGolemBoss
-[ ] MountainSerpentBoss (gating por is_vulnerable)
+[x] Boss
+[x] SpikeBoss
+[x] SlimeBoss (triggers_special_death)
+[x] GiantMeteorBoss (fragments por hit + morte)
+[x] StoneGolemBoss
+[x] MountainSerpentBoss (gating por is_vulnerable)
 
 Sistema
-[ ] Collisions._apply_hit
-[ ] Collisions._apply_ship_contact
-[ ] Collisions._project_into_boss (unifica 4 *_vs_boss)
-[ ] Collisions._aoe_into_boss (unifica 3 area-vs-boss)
-[ ] bullets_vs_enemies usa _apply_hit
-[ ] player_lasers_vs_enemies usa _apply_hit
-[ ] mini_ship_bullets_vs_enemies usa _apply_hit
-[ ] _apply_area_damage usa _apply_hit
-[ ] ship_vs_enemies usa _apply_ship_contact
+[x] Collisions._apply_hit
+[x] Collisions._apply_ship_contact
+[x] Collisions._project_into_boss (unifica 4 *_vs_boss)
+[x] Collisions._aoe_into_boss (unifica 3 area-vs-boss)
+[x] bullets_vs_enemies usa _apply_hit
+[x] player_lasers_vs_enemies usa _apply_hit
+[x] mini_ship_bullets_vs_enemies usa _apply_hit
+[x] _apply_area_damage usa _apply_hit
+[x] ship_vs_enemies usa _apply_ship_contact
 
 Cleanup
-[ ] EntityManager.absorb_fragments
-[ ] EntityManager.trigger_death_sequence
-[ ] EntityManager.cleanup usa should_remove
-[ ] DELETE _destroy_enemy
-[ ] DELETE get_collision_info
-[ ] DELETE _calculate_default_explosion_size
-[ ] DELETE _is_invulnerable_to_damage / _handle_invulnerable_hit
-[ ] Remover imports de entidades concretas em collisions.py
-```
+[x] EntityManager.absorb_fragments
+[x] EntityManager.trigger_death_sequence
+[x] EntityManager.cleanup usa should_remove
+[x] DELETE _destroy_enemy
+[x] DELETE get_collision_info
+[x] DELETE _calculate_default_explosion_size
+[x] DELETE _is_invulnerable_to_damage / _handle_invulnerable_hit
+[x] Remover imports de entidades concretas em collisions.py
 
 ---
 

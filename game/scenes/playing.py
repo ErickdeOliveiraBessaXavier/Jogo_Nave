@@ -41,14 +41,11 @@ from ..core.paths import get_profile_path
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
-from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
+from ..core.upgrades import (ActiveUpgrade, HealUpgrade, create_upgrade,
+                             get_upgrade_icon)
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
-from ..core.world_config import (
-    WorldConfig,
-    format_stage_name,
-    get_world_for_level,
-    is_side_scroll_mode,
-)
+from ..core.world_config import (WorldConfig, format_stage_name,
+                                 get_world_for_level, is_side_scroll_mode)
 from ..entities.floating_score import FloatingScore
 from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
@@ -829,15 +826,14 @@ class PlayingScene(Scene):
             return
 
         # Vento do MountainPropeller
-        wind_affecting = False
+        wind_slow_factor = 1.0
         for prop in self.entity_manager.mountain_propellers:
             if prop.is_blowing():
                 wind_rect = prop.get_wind_rect()
                 if self.ship.rect.colliderect(wind_rect):
-                    # Empurrar para a esquerda
                     self.ship.x -= prop.PUSH_FORCE * dt
-                    wind_affecting = True
-        self.ship.wind_slow_factor = prop.SLOW_SPEED_MULT if wind_affecting else 1.0
+                    wind_slow_factor = prop.SLOW_SPEED_MULT
+        self.ship.wind_slow_factor = wind_slow_factor
 
     def _update_spawners(self, dt: float) -> None:
         if (

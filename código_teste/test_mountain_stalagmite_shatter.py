@@ -47,17 +47,16 @@ def test_stalagmite_fatal_hit_enters_shattering_instead_of_instant_dead(
     stalagmite = MountainStalagmite(x=320.0, ground_y=721.0, target_y=560.0)
     stalagmite.health = 1
 
-    points, score_event, killed = collisions._destroy_enemy(
+    result = collisions._apply_hit(
         stalagmite,
-        [stalagmite],
+        1,
+        stalagmite.x,
+        stalagmite.ground_y,
         entity_manager,
-        hit_x=stalagmite.x,
-        hit_y=stalagmite.ground_y,
     )
 
-    assert killed is True
-    assert points == stalagmite.get_points_value()
-    assert score_event is not None
+    assert result.killed is True
+    assert result.points == stalagmite.get_points_value()
     assert stalagmite.dead is False
     assert stalagmite.health == 0
     assert stalagmite.active is False

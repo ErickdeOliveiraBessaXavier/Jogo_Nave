@@ -378,3 +378,8 @@ class Meteor:
 
     def should_remove(self) -> bool:
         return self.dead
+
+    def on_remove(self, entity_manager: "EntityManager") -> None:
+        """Callback chamado pelo EntityManager antes de remover a entidade."""
+        if hasattr(entity_manager, "meteor_pool"):
+            entity_manager.meteor_pool.release(self)

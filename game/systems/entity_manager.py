@@ -35,14 +35,10 @@ from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.mountain_mage import MountainMage, MountainStalagmite
 from ..entities.mountain_propeller import MountainPropeller
-from ..entities.mountain_serpent_boss import (
-    MountainSerpentBoss,
-    SerpentBlock,
-    SerpentRockBullet,
-)
+from ..entities.mountain_serpent_boss import (MountainSerpentBoss,
+                                              SerpentBlock, SerpentRockBullet)
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
-from ..entities.rock_glider import RockGlider
 from ..entities.rock_glider_pool import RockGliderPool
 from ..entities.slime_boss import SlimeBoss
 from ..entities.slime_drip import SlimeDrip
@@ -51,14 +47,10 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import (
-    Boulder,
-    EntryDebris,
-    OrbitalRock,
-    RockShard,
-    StoneGolemBoss,
-)
+from ..entities.stone_golem_boss import (Boulder, EntryDebris, OrbitalRock,
+                                         RockShard, StoneGolemBoss)
 from ..entities.stone_sentry import StoneSentry
+from .collision_protocols import Removable
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
@@ -860,6 +852,7 @@ class EntityManager:
                 self.bullet_pool.release(b)
         self.bullets = [b for b in self.bullets if not b.dead]
 
+        # Marcar como mortos inimigos que saíram da tela (exceto os controlados por boss)
         for e in self.enemies:
             if (
                 not e.dead
@@ -867,12 +860,6 @@ class EntityManager:
                 and self._is_enemy_off_screen(e)
             ):
                 e.dead = True
-
-        for e in self.enemies:
-            if isinstance(e, Meteor) and e.dead:
-                self.meteor_pool.release(e)
-            elif isinstance(e, RockGlider) and e.dead:
-                self.rock_glider_pool.release(e)
 
         self.alien_bullets = [b for b in self.alien_bullets if not b.dead]
         self.serpent_bullets = [b for b in self.serpent_bullets if not b.dead]
@@ -884,17 +871,19 @@ class EntityManager:
         self.eye_lasers = [e for e in self.eye_lasers if not e.dead]
         self.mini_ship_bullets = [b for b in self.mini_ship_bullets if not b.dead]
 
-        # Filtra inimigos via Removable.should_remove() — cada entidade decide
-        # se permanece. SerpentBlock retorna False (boss controla); ExplosiveMine
-        # respeita timer; MountainStalagmite mantém-se até fragments terminarem.
-        # Fallback para entidades não migradas: usar e.dead.
-        self.enemies = [
-            e
-            for e in self.enemies
-            if not (
-                e.should_remove() if hasattr(e, "should_remove") else e.dead
-            )
-        ]
+        # Processar remoção de inimigos via protocolos should_remove/on_remove
+        to_remove: list[Any] = []
+        for e in self.enemies:
+            should: bool = e.should_remove() if isinstance(e, Removable) else e.dead
+            if should:
+                # Chama callback de limpeza (ex: devolver ao pool)
+                if hasattr(e, "on_remove"):
+                    getattr(e, "on_remove")(self)
+                to_remove.append(e)
+
+        if to_remove:
+            remove_ids = {id(e) for e in to_remove}
+            self.enemies = [e for e in self.enemies if id(e) not in remove_ids]
 
         self.mine_explosions = [m for m in self.mine_explosions if not m.finished()]
         self.powerups = [p for p in self.powerups if not p.dead]

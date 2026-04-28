@@ -687,6 +687,7 @@ class SerpentBlock:
         pygame.draw.rect(surface, bar_color, (bar_x, bar_y, life_w, bar_h))
 
 
+
 # ---------------------------------------------------------------------------
 # Projétil temático: Bola de Rocha
 # ---------------------------------------------------------------------------

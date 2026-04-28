@@ -83,9 +83,6 @@ class GiantMeteorBoss:
         # Histórico de crescimento: {crack_index: stage_when_born}
         self._crack_birth_stage: dict[int, int] = {}
 
-        # Referência opcional ao EntityManager (capturada via update) para
-        # permitir spawn de fragmentos a partir de on_hit.
-        self._entity_manager: "EntityManager | None" = None
 
     @property
     def rect(self) -> pygame.Rect:
@@ -96,18 +93,25 @@ class GiantMeteorBoss:
 
     def on_hit(self, damage: int, hit_x: float, hit_y: float):
         from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult
+        from ..systems.hit_result import HitResult, MeteorSpec
 
-        # take_damage usa o entity_manager capturado em update() para fragmentos.
-        self.take_damage(damage, self._entity_manager)
+        self.take_damage(damage)
+
+        fragments: tuple[MeteorSpec, ...] = ()
         if self.dead:
+            fragments = self._build_death_fragment_specs()
             return HitResult(
                 killed=True,
                 points=config.BOSS_DEFEAT_SCORE,
                 explosion_size=120,
                 sound=hit_sounds.EXPLOSION_BOSS,
+                fragments=fragments,
             )
-        return HitResult(explosion_size=18, sound=hit_sounds.BOSS_DAMAGE)
+
+        if self.state == "falling" and random.random() < config.GIANT_METEOR_HIT_FRAGMENT_CHANCE:
+            fragments = self._build_damage_fragment_specs()
+
+        return HitResult(explosion_size=18, sound=hit_sounds.BOSS_DAMAGE, fragments=fragments)
 
     def should_remove(self) -> bool:
         return self.dead
@@ -434,30 +438,13 @@ class GiantMeteorBoss:
 
         return crack_points
 
-    def take_damage(
-        self, damage: int, entity_manager: "EntityManager | None" = None
-    ) -> None:
+    def take_damage(self, damage: int) -> None:
         if self.dead:
             return
         self.health -= damage
         if self.health <= 0:
             self.dead = True
             self.state = "dying"
-            # Spawn fragments na morte
-            if entity_manager:
-                min_count, max_count = config.GIANT_METEOR_DEATH_FRAGMENT_COUNT
-                num_fragments = random.randint(min_count, max_count)
-                for _ in range(num_fragments):
-                    self._spawn_death_fragment(entity_manager)
-            return
-
-        # Spawn de meteoros quando atingido
-        if entity_manager and self.state == "falling":
-            if random.random() < config.GIANT_METEOR_HIT_FRAGMENT_CHANCE:
-                min_count, max_count = config.GIANT_METEOR_HIT_FRAGMENT_COUNT
-                num_meteors = random.randint(min_count, max_count)
-                for _ in range(num_meteors):
-                    self._spawn_damage_meteor(entity_manager)
 
     def update(
         self,
@@ -469,8 +456,6 @@ class GiantMeteorBoss:
         Mantém a simplicidade: entra até o target_y, depois cai lentamente.
         Durante a queda, spawna meteoros normais periodicamente.
         """
-        # Captura referência do entity_manager para uso em on_hit (fragmentos).
-        self._entity_manager = entity_manager
         if self.dead:
             return
 
@@ -516,105 +501,90 @@ class GiantMeteorBoss:
         # Spawn o meteoro usando o entity_manager
         entity_manager.spawn_meteor(size=size, x=x, y=y, vx=vx, vy=vy)
 
-    def _spawn_damage_meteor(self, entity_manager: "EntityManager") -> None:
-        """Spawna um meteoro quando o boss é atingido - versão mais natural."""
-        # Inicializar variáveis para evitar erros do type checker
-        x = self.x + self.w / 2
-        y = self.y + self.h / 2
-        vx = 0.0
-        vy = 100.0
-        size = config.GIANT_METEOR_FRAGMENT_MIN_SIZE
+    def _build_damage_fragment_specs(self) -> "tuple[MeteorSpec, ...]":
+        """Specs de fragmentos para hits normais — saem das rachaduras existentes."""
+        from ..systems.hit_result import MeteorSpec
 
-        # Escolher uma rachadura existente ou ponto na borda para spawn mais natural
-        if (
-            self._crack_birth_stage and random.random() < 0.7
-        ):  # 70% chance de usar rachadura existente
-            # Spawn de rachadura existente (mais natural)
-            active_crack_indices = list(self._crack_birth_stage.keys())
-            if active_crack_indices:
-                crack_idx = random.choice(active_crack_indices)
-                crack_data = self._all_crack_positions[crack_idx]
+        min_count, max_count = config.GIANT_METEOR_HIT_FRAGMENT_COUNT
+        specs: list[MeteorSpec] = []
 
-                # Posição baseada na rachadura (com pequena variação)
-                x = self.x + crack_data["start_x"] + random.uniform(-10, 10)
-                y = self.y + crack_data["start_y"] + random.uniform(-10, 10)
+        for _ in range(random.randint(min_count, max_count)):
+            x = self.x + self.w / 2
+            y = self.y + self.h / 2
+            vx = 0.0
+            vy = 100.0
+            size = config.GIANT_METEOR_FRAGMENT_MIN_SIZE
 
-                # Velocidade baseada na direção da rachadura (saindo radialmente)
-                speed = random.uniform(120, 220)
-                # Direção oposta à rachadura (para fora do boss)
-                vx = -crack_data["dir_x"] * speed * random.uniform(0.8, 1.2)
-                vy = -crack_data["dir_y"] * speed * random.uniform(0.8, 1.2)
-
-                # Adicionar componente gravitacional (queda mais natural)
-                vy += random.uniform(50, 100)  # Componente para baixo
-
-                # CORREÇÃO 4: Usar variáveis do config com escala baseada na idade
-                birth_stage = self._crack_birth_stage[crack_idx]
-                current_stage = min(11, int((1.0 - self.health / self.max_health) * 12))
-                crack_age = current_stage - birth_stage
-
-                # Interpolar entre MIN e MAX baseado na idade
-                min_size = config.GIANT_METEOR_FRAGMENT_MIN_SIZE
-                max_size = config.GIANT_METEOR_FRAGMENT_MAX_SIZE
+            if self._crack_birth_stage and random.random() < 0.7:
+                active = list(self._crack_birth_stage.keys())
+                if active:
+                    crack_idx = random.choice(active)
+                    cd = self._all_crack_positions[crack_idx]
+                    x = self.x + cd["start_x"] + random.uniform(-10, 10)
+                    y = self.y + cd["start_y"] + random.uniform(-10, 10)
+                    speed = random.uniform(120, 220)
+                    vx = -cd["dir_x"] * speed * random.uniform(0.8, 1.2)
+                    vy = -cd["dir_y"] * speed * random.uniform(0.8, 1.2)
+                    vy += random.uniform(50, 100)
+                    birth_stage = self._crack_birth_stage[crack_idx]
+                    current_stage = min(11, int((1.0 - self.health / self.max_health) * 12))
+                    crack_age = current_stage - birth_stage
+                    mn = config.GIANT_METEOR_FRAGMENT_MIN_SIZE
+                    mx = config.GIANT_METEOR_FRAGMENT_MAX_SIZE
+                    size = random.randint(
+                        mn + crack_age * 2,
+                        mn + int((mx - mn) * (crack_age / 11.0)),
+                    )
+            else:
+                side = random.choice(["top", "bottom", "left", "right"])
+                if side == "top":
+                    x = self.x + random.uniform(0, self.w)
+                    y = self.y + random.uniform(-5, 15)
+                    vx = random.uniform(-100, 100)
+                    vy = random.uniform(80, 150)
+                elif side == "bottom":
+                    x = self.x + random.uniform(0, self.w)
+                    y = self.y + self.h + random.uniform(-15, 5)
+                    vx = random.uniform(-120, 120)
+                    vy = random.uniform(-50, 20)
+                elif side == "left":
+                    x = self.x + random.uniform(-5, 15)
+                    y = self.y + random.uniform(0, self.h)
+                    vx = random.uniform(80, 150)
+                    vy = random.uniform(-50, 50)
+                else:
+                    x = self.x + self.w + random.uniform(-15, 5)
+                    y = self.y + random.uniform(0, self.h)
+                    vx = random.uniform(-150, -80)
+                    vy = random.uniform(-50, 50)
                 size = random.randint(
-                    min_size + crack_age * 2,
-                    min_size + int((max_size - min_size) * (crack_age / 11.0)),
+                    config.GIANT_METEOR_FRAGMENT_MIN_SIZE,
+                    config.GIANT_METEOR_FRAGMENT_MAX_SIZE,
                 )
-        else:
-            # Fallback: spawn na borda externa (menos comum)
-            # Escolher um lado aleatório
-            side = random.choice(["top", "bottom", "left", "right"])
 
-            if side == "top":
-                x = self.x + random.uniform(0, self.w)
-                y = self.y + random.uniform(-5, 15)
-                vx = random.uniform(-100, 100)
-                vy = random.uniform(80, 150)
-            elif side == "bottom":
-                x = self.x + random.uniform(0, self.w)
-                y = self.y + self.h + random.uniform(-15, 5)
-                vx = random.uniform(-120, 120)
-                vy = random.uniform(-50, 20)  # Pode subir um pouco
-            elif side == "left":
-                x = self.x + random.uniform(-5, 15)
-                y = self.y + random.uniform(0, self.h)
-                vx = random.uniform(80, 150)
-                vy = random.uniform(-50, 50)
-            else:  # right
-                x = self.x + self.w + random.uniform(-15, 5)
-                y = self.y + random.uniform(0, self.h)
-                vx = random.uniform(-150, -80)
-                vy = random.uniform(-50, 50)
+            specs.append(MeteorSpec(size, x, y, vx, vy))
 
-            # CORREÇÃO 5: Usar variáveis do config
+        return tuple(specs)
+
+    def _build_death_fragment_specs(self) -> "tuple[MeteorSpec, ...]":
+        """Specs de fragmentos para a explosão de morte do boss."""
+        from ..systems.hit_result import MeteorSpec
+
+        min_count, max_count = config.GIANT_METEOR_DEATH_FRAGMENT_COUNT
+        specs: list[MeteorSpec] = []
+
+        for _ in range(random.randint(min_count, max_count)):
+            x = self.x + random.uniform(0, self.w)
+            y = self.y + random.uniform(0, self.h)
+            angle = random.uniform(0, 2 * math.pi)
+            speed = random.uniform(150, 300)
             size = random.randint(
-                config.GIANT_METEOR_FRAGMENT_MIN_SIZE,
-                config.GIANT_METEOR_FRAGMENT_MAX_SIZE,
+                config.GIANT_METEOR_FRAGMENT_MIN_SIZE + 10,
+                config.GIANT_METEOR_FRAGMENT_MAX_SIZE + 20,
             )
+            specs.append(MeteorSpec(size, x, y, math.cos(angle) * speed, math.sin(angle) * speed))
 
-        # Spawn o meteoro usando o entity_manager
-        entity_manager.spawn_meteor(size=size, x=x, y=y, vx=vx, vy=vy)
-
-    def _spawn_death_fragment(self, entity_manager: "EntityManager") -> None:
-        """Spawna um fragmento quando o boss morre."""
-        # Posição aleatória no boss
-        x = self.x + random.uniform(0, self.w)
-        y = self.y + random.uniform(0, self.h)
-
-        # Velocidade radial para fora
-        angle = random.uniform(0, 2 * 3.14159)
-        speed = random.uniform(150, 300)
-        vx = math.cos(angle) * speed
-        vy = math.sin(angle) * speed
-
-        # Tamanho maior para fragmentos de morte
-        size = random.randint(
-            config.GIANT_METEOR_FRAGMENT_MIN_SIZE + 10,
-            config.GIANT_METEOR_FRAGMENT_MAX_SIZE + 20,
-        )
-
-        # Spawn o meteoro
-        entity_manager.spawn_meteor(size=size, x=x, y=y, vx=vx, vy=vy)
+        return tuple(specs)
 
     def draw(self, surface: pygame.Surface) -> None:
         # Calcular estágio atual (0-11 para 12 estágios)

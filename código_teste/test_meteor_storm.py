@@ -1,3 +1,9 @@
+import os
+import sys
+
+# Permite importar pacote `game` quando rodando direto no workspace.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 from game.core.levels import DifficultyPreset, get_level_config
 
 # Força o procedural meteor_storm no nível 1

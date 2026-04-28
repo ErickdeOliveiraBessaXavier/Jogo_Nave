@@ -21,11 +21,8 @@ for path in (ROOT_DIR, COMMON_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from performance_common import (
-    classify_performance,  # noqa: E402
-    parse_difficulty,
-    run_benchmark,
-)
+from performance_common import classify_performance  # noqa: E402
+from performance_common import parse_difficulty, run_benchmark
 
 DEFAULT_PROFILE_PATH = SCRIPT_DIR / "profile_game.prof"
 DEFAULT_SUMMARY_PATH = SCRIPT_DIR / "profile_summary.txt"

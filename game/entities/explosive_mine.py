@@ -12,6 +12,7 @@ class ExplosiveMine:
     # Cache de sprites
     _normal_sprite: pygame.Surface | None = None
     _explosion_sprite: pygame.Surface | None = None
+    is_explosive_mine: bool = True
 
     @classmethod
     def load_sprites(cls) -> None:
@@ -260,7 +261,7 @@ class ExplosiveMine:
         return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ALIEN)
 
     def should_remove(self) -> bool:
-        return self.dead
+        return self.dead and not self.is_exploding
 
 
 # REGISTRAR no sistema de pré-carregamento

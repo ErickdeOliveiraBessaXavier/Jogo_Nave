@@ -47,6 +47,11 @@ class _CustomHitboxEnemy:
     def get_ship_contact_hitboxes(self) -> tuple[pygame.Rect, ...]:
         return (self._contact_rect,)
 
+    def on_ship_contact(self, contact_x: float, contact_y: float):
+        from game.systems.hit_result import HitResult
+        self.dead = True
+        return HitResult(killed=True)
+
 
 def test_ship_vs_enemies_prefers_custom_contact_hitboxes() -> None:
     collisions = Collisions()

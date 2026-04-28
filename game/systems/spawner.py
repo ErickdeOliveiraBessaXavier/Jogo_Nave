@@ -1,19 +1,8 @@
 import logging
 import random
 from collections import deque
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    List,
-    Protocol,
-    Tuple,
-    Type,
-    TypedDict,
-    Union,
-    cast,
-)
+from typing import (TYPE_CHECKING, Any, Callable, Dict, List, Protocol, Tuple,
+                    Type, TypedDict, Union, cast)
 
 from ..core.config import PowerUpType
 from ..core.config import config as Config

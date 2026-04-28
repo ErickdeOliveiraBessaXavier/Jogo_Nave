@@ -3,16 +3,8 @@ from typing import TYPE_CHECKING, Any, Callable, Dict
 import pygame
 
 from ..core.assets import get_font
-from ..core.colors import (
-    BLACK,
-    CUSTOM_DARK_BG,
-    CUSTOM_GOLD,
-    CUSTOM_PURPLE,
-    GREEN,
-    ORANGE,
-    RED,
-    YELLOW,
-)
+from ..core.colors import (BLACK, CUSTOM_DARK_BG, CUSTOM_GOLD, CUSTOM_PURPLE,
+                           GREEN, ORANGE, RED, YELLOW)
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
 from ..core.sound import sound_manager

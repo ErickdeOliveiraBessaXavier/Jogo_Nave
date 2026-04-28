@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import math
 import random
@@ -873,3 +873,8 @@ class RockGlider(Meteor):
 
     def should_remove(self) -> bool:
         return self.dead
+
+    def on_remove(self, entity_manager: "EntityManager") -> None:
+        """Callback chamado pelo EntityManager antes de remover a entidade."""
+        if hasattr(entity_manager, "rock_glider_pool"):
+            entity_manager.rock_glider_pool.release(self)
