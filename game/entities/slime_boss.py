@@ -64,6 +64,7 @@ class SlimeBoss:
         self.x = Config.SCREEN_WIDTH / 2 - self.w / 2  # Center the boss horizontally
         self.y = -self.h  # More off-screen from the top
         self.target_y = -100  # Final position higher up, not too low
+        self._rect = pygame.Rect(int(self.x), int(self.y), int(self.w), int(self.h))
 
         # ✅ PRÉ-CALCULAR VALORES CONSTANTES
         self.center_x = Config.SCREEN_WIDTH / 2 - self.w / 2
@@ -119,9 +120,9 @@ class SlimeBoss:
         # Mask cache for pixel-perfect collision optimization (limited to recent frames)
         self._mask_cache: dict[int, pygame.mask.Mask] = {}
         self._scaled_frame_cache: dict[int, pygame.Surface] = {}
-        self._outline_cache: dict[int, list[tuple[int, int]]] = (
+        self._outline_cache: dict[tuple[int, int], list[tuple[int, int]]] = (
             {}
-        )  # Cache for hit flash outlines
+        )  # Cache for hit flash outlines — keyed by (frame_idx, lod_level)
         self._last_mask_size = (int(self.w), int(self.h))
         self._mask_cache_max_size = (
             6  # Keep masks for last 6 frames to balance memory/performance
@@ -188,6 +189,7 @@ class SlimeBoss:
             dt, self.x, self.y, self.w, player_x, player_y or 0, entity_manager
         )
 
+        self._rect.x, self._rect.y = int(self.x), int(self.y)
         return [], [], []
 
     def can_take_damage(self) -> bool:
@@ -292,12 +294,12 @@ class SlimeBoss:
                         k: v for k, v in self._mask_cache.items() if k in frames_to_keep
                     }
 
-                # Limpar outlines antigos
-                if len(self._outline_cache) > 3:
+                # Limpar outlines antigos (chave = (frame_idx, lod_level))
+                if len(self._outline_cache) > 6:
                     self._outline_cache = {
                         k: v
                         for k, v in self._outline_cache.items()
-                        if k in frames_to_keep
+                        if k[0] in frames_to_keep
                     }
 
     def _check_transitions(self) -> SlimeBossState | None:
@@ -504,7 +506,7 @@ class SlimeBoss:
 
     @property
     def rect(self) -> pygame.Rect:
-        return pygame.Rect(int(self.x), int(self.y), int(self.w), int(self.h))
+        return self._rect
 
     @property
     def mask(self) -> pygame.mask.Mask:
@@ -582,58 +584,32 @@ class SlimeBoss:
         self._flash_surface.fill((0, 0, 0, 0))
 
         if scaled_frame is not None:
-            # ✅ LOD MAIS AGRESSIVO: simplificar outline baseado na distância
-            if self.y < -300:  # Muito distante, nem desenhar
+            if self.y < -300:
                 return
-            elif self.y < -200:  # Boss escondido, usar 1/4 dos pontos
-                outline = self._outline_cache.get(self.current_frame)
-                if outline is None:
-                    try:
-                        mask = pygame.mask.from_surface(scaled_frame)
-                        outline = mask.outline()
-                        outline = outline[::4]  # 1/4 dos pontos
-                        self._outline_cache[self.current_frame] = outline
-                    except (pygame.error, ValueError, TypeError) as e:
-                        logging.warning(
-                            f"SlimeBoss: Erro ao gerar outline simplificado: {e}"
-                        )
-                        outline = []
-                        self._outline_cache[self.current_frame] = outline
-
-                if len(outline) > 1:
-                    pygame.draw.lines(
-                        self._flash_surface,
-                        (255, 255, 255, alpha),
-                        True,
-                        outline,
-                        1,  # Espessura mínima
-                    )
-            else:
-                # Outline completo quando visível
-                outline = self._outline_cache.get(self.current_frame)
-                if outline is None:
-                    try:
-                        mask = pygame.mask.from_surface(scaled_frame)
-                        outline = mask.outline()
-
-                        # ✅ SIMPLIFICAR OUTLINE: pegar 1 a cada 2 pontos se muito grande
-                        if len(outline) > 200:
-                            outline = outline[::2]  # Pegar metade dos pontos
-
-                        self._outline_cache[self.current_frame] = outline
-                    except (pygame.error, ValueError, TypeError) as e:
-                        logging.warning(f"SlimeBoss: Erro ao gerar outline: {e}")
-                        outline = []
-                        self._outline_cache[self.current_frame] = outline
-
-                if len(outline) > 1:
-                    pygame.draw.lines(
-                        self._flash_surface,
-                        (255, 255, 255, alpha),
-                        True,
-                        outline,
-                        2,  # Espessura reduzida
-                    )
+            lod = 1 if self.y < -200 else 0
+            cache_key = (self.current_frame, lod)
+            outline = self._outline_cache.get(cache_key)
+            if outline is None:
+                try:
+                    mask = pygame.mask.from_surface(scaled_frame)
+                    outline = mask.outline()
+                    if lod == 1:
+                        outline = outline[::4]
+                    elif len(outline) > 200:
+                        outline = outline[::2]
+                    self._outline_cache[cache_key] = outline
+                except (pygame.error, ValueError, TypeError) as e:
+                    logging.warning(f"SlimeBoss: Erro ao gerar outline: {e}")
+                    outline = []
+                    self._outline_cache[cache_key] = outline
+            if len(outline) > 1:
+                pygame.draw.lines(
+                    self._flash_surface,
+                    (255, 255, 255, alpha),
+                    True,
+                    outline,
+                    1 if lod == 1 else 2,
+                )
         else:
             # Fallback: rect outline
             pygame.draw.rect(

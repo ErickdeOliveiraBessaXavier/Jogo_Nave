@@ -3,11 +3,9 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Protocol,
     Sequence,
     TypeAlias,
     cast,
-    runtime_checkable,
 )
 
 import pygame
@@ -37,47 +35,16 @@ from ..entities.slime_drip import SlimeDrip
 from ..entities.spike import Spike
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.star import Star
-from .collision_protocols import Damageable
+from .collision_protocols import Damageable, Enemy
 from .hit_result import NO_HIT, HitResult
 
 if TYPE_CHECKING:
     from .entity_manager import EntityManager
 
 
-# Protocol define um contrato estrutural (duck typing com type checking)
-# Qualquer classe que implemente get_points_value() satisfaz este contrato
-@runtime_checkable
-class Scoreable(Protocol):
-    """Contrato para entidades que geram pontos ao serem destruídas."""
-
-    def get_points_value(self) -> int:
-        """Retorna quantidade de pontos que a entidade gera."""
-        raise NotImplementedError
-
-
-@runtime_checkable
-class Enemy(Protocol):
-    """Protocol para qualquer inimigo comum do jogo."""
-
-    @property
-    def x(self) -> float: ...
-
-    @property
-    def y(self) -> float: ...
-
-    @property
-    def rect(self) -> pygame.Rect: ...
-
-    dead: bool
-    health: int
-
-    def collision_circle(self) -> tuple[float, float, float]: ...
-    def get_points_value(self) -> int: ...
-    def update(self, dt: float, *args: Any, **kwargs: Any) -> Any: ...
-
-
-BossEnemy: TypeAlias = Damageable
 Projectile: TypeAlias = Bullet | MiniShipBullet
+
+_RECT_MASK_CACHE: dict[tuple[int, int], pygame.mask.Mask] = {}
 
 
 # Constantes de colisão
@@ -92,7 +59,6 @@ class CollisionConstants:
 
 
 class Collisions:
-    _rect_mask_cache: dict[tuple[int, int], pygame.mask.Mask] = {}
 
     def __init__(self, is_side_scroll: bool = False) -> None:
         """Inicializa o sistema de colisões com suporte ao modo de jogo.
@@ -160,13 +126,13 @@ class Collisions:
 
         return None
 
-    @classmethod
-    def _get_rect_mask(cls, width: int, height: int) -> pygame.mask.Mask:
+    @staticmethod
+    def _get_rect_mask(width: int, height: int) -> pygame.mask.Mask:
         key = (width, height)
-        mask = cls._rect_mask_cache.get(key)
+        mask = _RECT_MASK_CACHE.get(key)
         if mask is None:
             mask = pygame.mask.Mask((width, height), fill=True)
-            cls._rect_mask_cache[key] = mask
+            _RECT_MASK_CACHE[key] = mask
         return mask
 
     @classmethod
@@ -248,14 +214,15 @@ class Collisions:
         # Se não possui mask explícita, usa fallback de rect
         mask = getattr(target_with_mask, "mask", None)  # type: ignore[attr-defined]
         if mask is None:
-            return entity_rect.colliderect(
-                pygame.Rect(
-                    target_with_mask.x,
-                    target_with_mask.y,
-                    target_with_mask.w,
-                    target_with_mask.h,
-                )
+            target_rect: pygame.Rect = getattr(
+                target_with_mask, "rect", None
+            ) or pygame.Rect(
+                target_with_mask.x,
+                target_with_mask.y,
+                target_with_mask.w,
+                target_with_mask.h,
             )
+            return entity_rect.colliderect(target_rect)
 
         # Fast distance check first
         target_center_x = target_with_mask.x + target_with_mask.w / 2
@@ -499,17 +466,6 @@ class Collisions:
             score_gain += result.points
 
         return score_gain
-
-    def bullets_vs_giant_meteor_boss(
-        self,
-        bullets: list[Bullet],
-        boss: Any,
-        floating_scores: list[FloatingScore],
-        entity_manager: "EntityManager",
-    ) -> int:
-        return self._project_into_boss(
-            bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True
-        )
 
     def check_mine_explosions(
         self,
@@ -842,7 +798,6 @@ class Collisions:
         self,
         mini_ship_bullets: list[MiniShipBullet],
         enemy_grid: SpatialGrid[Any],
-        enemies: Sequence[Enemy],  # noqa: ARG002
         entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
@@ -886,16 +841,47 @@ class Collisions:
                         break
         return score_gain, destroyed_count, score_events
 
+    def _handle_explosive_bullet(
+        self,
+        bullet: Bullet,
+        enemy_grid: SpatialGrid[Any],
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Materializa o efeito AoE de uma bala explosiva ao primeiro impacto."""
+        cx = bullet.x + bullet.w / 2
+        cy = bullet.y + bullet.h / 2
+        radius = 60
+
+        entity_manager.spawn_explosive_effect(cx, cy, radius=radius)
+        entity_manager.spawn_explosion(cx, cy, size=radius // 2)
+        sound_manager.play_explosion_asteroid()
+
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        for nearby in enemy_grid.query(cx - radius, cy - radius, radius * 2, radius * 2):
+            if nearby.dead:
+                continue
+            ncx, ncy, _ = nearby.collision_circle()
+            if (ncx - cx) ** 2 + (ncy - cy) ** 2 >= radius ** 2:
+                continue
+            hit_damage = 2 if getattr(nearby, "is_explosive_mine", False) else 1
+            r = self._apply_hit(nearby, hit_damage, ncx, ncy, entity_manager)
+            score_gain += r.points
+            if r.killed:
+                destroyed_count += 1
+                if r.points > 0:
+                    score_events.append((ncx, ncy, r.points))
+
+        return score_gain, destroyed_count, score_events
+
     def bullets_vs_enemies(
         self,
         bullets: list[Bullet],
-        mine_explosions: list[MineExplosion],  # noqa: ARG002
-        ship: Ship,  # noqa: ARG002
         enemy_grid: SpatialGrid[Any],
-        enemies: Sequence[Enemy],  # noqa: ARG002
         entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
-        _ = mine_explosions, ship
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
@@ -917,11 +903,7 @@ class Collisions:
                     continue
                 if self._projectile_collides_with_enemy(b.rect, enemy):
                     result = self._apply_hit(
-                        enemy,
-                        getattr(b, "damage", 1),
-                        b.x,
-                        b.y,
-                        entity_manager,
+                        enemy, getattr(b, "damage", 1), b.x, b.y, entity_manager
                     )
                     score_gain += result.points
                     if result.killed:
@@ -929,53 +911,13 @@ class Collisions:
                         if result.points > 0:
                             score_events.append((b.x, b.y, result.points))
 
-                    # Se é um tiro explosivo, causar dano em área (apenas uma vez por bala)
                     if b.explosive and not b.dead:
-                        explosion_cx = b.x + b.w / 2
-                        explosion_cy = b.y + b.h / 2
-                        explosion_radius = 60
-
-                        entity_manager.spawn_explosive_effect(
-                            explosion_cx, explosion_cy, radius=explosion_radius
+                        eg, ed, ee = self._handle_explosive_bullet(
+                            b, enemy_grid, entity_manager
                         )
-                        entity_manager.spawn_explosion(
-                            explosion_cx, explosion_cy, size=explosion_radius // 2
-                        )
-                        sound_manager.play_explosion_asteroid()
-
-                        area_query = enemy_grid.query(
-                            explosion_cx - explosion_radius,
-                            explosion_cy - explosion_radius,
-                            explosion_radius * 2,
-                            explosion_radius * 2,
-                        )
-                        for nearby_enemy in area_query:
-                            if nearby_enemy.dead:
-                                continue
-                            ncx, ncy, _ = nearby_enemy.collision_circle()
-                            dist_sq = (ncx - explosion_cx) ** 2 + (
-                                ncy - explosion_cy
-                            ) ** 2
-                            if dist_sq < explosion_radius**2:
-                                hit_damage = (
-                                    2
-                                    if getattr(nearby_enemy, "is_explosive_mine", False)
-                                    else 1
-                                )
-                                area_result = self._apply_hit(
-                                    nearby_enemy,
-                                    hit_damage,
-                                    ncx,
-                                    ncy,
-                                    entity_manager,
-                                )
-                                score_gain += area_result.points
-                                if area_result.killed:
-                                    destroyed_count += 1
-                                    if area_result.points > 0:
-                                        score_events.append(
-                                            (ncx, ncy, area_result.points)
-                                        )
+                        score_gain += eg
+                        destroyed_count += ed
+                        score_events.extend(ee)
 
                     if self._process_projectile_hit(
                         b, b.x, b.y, entity_manager, create_explosion=False
@@ -990,18 +932,6 @@ class Collisions:
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
-        return self._project_into_boss(
-            bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True
-        )
-
-    def bullets_vs_mountain_serpent_boss(
-        self,
-        bullets: list[Bullet],
-        boss: Any,
-        floating_scores: list[FloatingScore],
-        entity_manager: "EntityManager",
-    ) -> int:
-        """Colisão de balas com a cabeça do MountainSerpentBoss."""
         return self._project_into_boss(
             bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True
         )
@@ -1129,7 +1059,7 @@ class Collisions:
     def mini_ship_bullets_vs_boss(
         self,
         mini_ship_bullets: list[MiniShipBullet],
-        boss: BossEnemy,
+        boss: Damageable,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
@@ -1142,17 +1072,6 @@ class Collisions:
             is_piercing_allowed=True,
         )
 
-    def mini_ship_bullets_vs_spike_boss(
-        self,
-        mini_ship_bullets: list[MiniShipBullet],
-        boss: Any,
-        floating_scores: list[FloatingScore],
-        entity_manager: "EntityManager",
-    ) -> int:
-        """Colisão de balas das mini ships com SpikeBoss."""
-        return self.mini_ship_bullets_vs_boss(
-            mini_ship_bullets, boss, floating_scores, entity_manager
-        )
 
     def mini_ship_bullets_vs_spikes(
         self,
@@ -1270,38 +1189,6 @@ class Collisions:
                     score_gain += spike.get_points_value()
                     break  # Próxima bala
         return score_gain
-
-    def bullets_vs_spike_boss(
-        self,
-        bullets: list[Bullet],
-        boss: Any,
-        floating_scores: list[FloatingScore],
-        entity_manager: "EntityManager",
-    ) -> int:
-        """Colisão de balas com SpikeBoss."""
-        return self.bullets_vs_boss(bullets, boss, floating_scores, entity_manager)
-
-    def bullets_vs_slime_boss(
-        self,
-        bullets: list[Bullet],
-        boss: Any,
-        floating_scores: list[FloatingScore],
-        entity_manager: "EntityManager",
-    ) -> int:
-        """Colisão de balas com SlimeBoss."""
-        return self.bullets_vs_boss(bullets, boss, floating_scores, entity_manager)
-
-    def mini_ship_bullets_vs_slime_boss(
-        self,
-        mini_ship_bullets: list[MiniShipBullet],
-        boss: Any,
-        floating_scores: list[FloatingScore],
-        entity_manager: "EntityManager",
-    ) -> int:
-        """Colisão de balas das mini ships com SlimeBoss."""
-        return self.mini_ship_bullets_vs_boss(
-            mini_ship_bullets, boss, floating_scores, entity_manager
-        )
 
     def ship_vs_spike_boss(
         self, ship: Ship, boss: Any, entity_manager: "EntityManager"
@@ -1507,7 +1394,7 @@ class Collisions:
     def player_lasers_vs_boss(
         self,
         player_lasers: list[PlayerLaser],
-        boss: BossEnemy,
+        boss: Damageable,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:

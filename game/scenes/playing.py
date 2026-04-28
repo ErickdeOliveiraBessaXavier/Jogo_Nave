@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from ..app import GameApp
     from ..core.spatial_grid import SpatialGrid
-    from ..systems.collisions import Enemy
+    from ..systems.collision_protocols import Enemy
 
 # ---------------------------------------------------------------------------
 # Constantes de módulo (eliminam "magic numbers" espalhados pela classe)
@@ -1081,10 +1081,7 @@ class PlayingScene(Scene):
 
         gain, destroyed, score_events = self.collisions.bullets_vs_enemies(
             self.entity_manager.bullets,
-            self.entity_manager.mine_explosions,
-            self.ship,
             enemy_grid,
-            enemies_view,
             self.entity_manager,
         )
 
@@ -1092,7 +1089,6 @@ class PlayingScene(Scene):
             self.collisions.mini_ship_bullets_vs_enemies(
                 self.entity_manager.mini_ship_bullets,
                 enemy_grid,
-                enemies_view,
                 self.entity_manager,
             )
         )
@@ -1217,119 +1213,48 @@ class PlayingScene(Scene):
         if not (boss and self._boss_type_cache):
             return gain
 
-        serpent_head_vulnerable = False
+        score_gain = self.collisions.bullets_vs_boss(
+            self.entity_manager.bullets,
+            boss,  # type: ignore[arg-type]
+            self.entity_manager.floating_scores,
+            self.entity_manager,
+        )
+        score_gain += self.collisions.mini_ship_bullets_vs_boss(
+            self.entity_manager.mini_ship_bullets,
+            boss,  # type: ignore[arg-type]
+            self.entity_manager.floating_scores,
+            self.entity_manager,
+        )
+        score_gain += self.collisions.player_lasers_vs_boss(
+            self.entity_manager.player_lasers,
+            boss,  # type: ignore[arg-type]
+            self.entity_manager.floating_scores,
+            self.entity_manager,
+        )
 
-        if self._boss_type_cache == "spike":
-            from ..entities.spike_boss import SpikeBoss
-
-            spike_boss = cast(SpikeBoss, boss)
-            score_gain = self.collisions.bullets_vs_spike_boss(
-                self.entity_manager.bullets,
-                spike_boss,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
-            score_gain += self.collisions.mini_ship_bullets_vs_spike_boss(
-                self.entity_manager.mini_ship_bullets,
-                spike_boss,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
-        elif self._boss_type_cache == "slime":
-            from ..entities.slime_boss import SlimeBoss
-
-            slime_boss = cast(SlimeBoss, boss)
-            score_gain = self.collisions.bullets_vs_slime_boss(
-                self.entity_manager.bullets,
-                slime_boss,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
-            score_gain += self.collisions.mini_ship_bullets_vs_slime_boss(
-                self.entity_manager.mini_ship_bullets,
-                slime_boss,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
-        elif self._boss_type_cache == "giant_meteor":
-            from ..entities.giant_meteor_boss import GiantMeteorBoss
-
-            score_gain = self.collisions.bullets_vs_giant_meteor_boss(
-                self.entity_manager.bullets,
-                cast(GiantMeteorBoss, boss),
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
-        elif self._boss_type_cache == "mountain_serpent":
-            from ..entities.mountain_serpent_boss import MountainSerpentBoss
-
-            serpent_boss = cast(MountainSerpentBoss, boss)
-            serpent_head_vulnerable = serpent_boss.is_vulnerable
-
-            # Balas que acertam a cabeça são bloqueadas (cabeça é imune)
-            # Os blocos laterais são inimigos normais — processados por bullets_vs_enemies
-            score_gain = self.collisions.bullets_vs_mountain_serpent_boss(
-                self.entity_manager.bullets,
-                serpent_boss,
+        if self.entity_manager.explosive_effects:
+            score_gain += self.collisions.explosive_effects_vs_boss(
+                self.entity_manager.explosive_effects,
+                boss,
                 self.entity_manager.floating_scores,
                 self.entity_manager,
             )
 
-            # Mini ships também podem danificar a cabeça apenas na janela vulnerável.
-            if serpent_head_vulnerable:
-                score_gain += self.collisions.mini_ship_bullets_vs_boss(
-                    self.entity_manager.mini_ship_bullets,
-                    serpent_boss,
-                    self.entity_manager.floating_scores,
-                    self.entity_manager,
-                )
-        else:
-            score_gain = self.collisions.bullets_vs_boss(
-                self.entity_manager.bullets,
-                boss,  # type: ignore[arg-type]
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
-            score_gain += self.collisions.mini_ship_bullets_vs_boss(
-                self.entity_manager.mini_ship_bullets,
-                boss,  # type: ignore[arg-type]
+        if self.entity_manager.air_strike_bombs:
+            score_gain += self.collisions.air_strike_bombs_vs_boss(
+                self.entity_manager.air_strike_bombs,
+                boss,
                 self.entity_manager.floating_scores,
                 self.entity_manager,
             )
 
-        # MountainSerpentBoss: lasers/explosões/minas só danificam a cabeça
-        # durante a janela de vulnerabilidade (is_vulnerable).
-        if self._boss_type_cache != "mountain_serpent" or serpent_head_vulnerable:
-            score_gain += self.collisions.player_lasers_vs_boss(
-                self.entity_manager.player_lasers,
-                boss,  # type: ignore[arg-type]
+        if self.entity_manager.cannon_mines:
+            score_gain += self.collisions.cannon_mines_vs_boss(
+                self.entity_manager.cannon_mines,
+                boss,
                 self.entity_manager.floating_scores,
                 self.entity_manager,
             )
-
-            if self.entity_manager.explosive_effects:
-                score_gain += self.collisions.explosive_effects_vs_boss(
-                    self.entity_manager.explosive_effects,
-                    boss,
-                    self.entity_manager.floating_scores,
-                    self.entity_manager,
-                )
-
-            if self.entity_manager.air_strike_bombs:
-                score_gain += self.collisions.air_strike_bombs_vs_boss(
-                    self.entity_manager.air_strike_bombs,
-                    boss,
-                    self.entity_manager.floating_scores,
-                    self.entity_manager,
-                )
-
-            if self.entity_manager.cannon_mines:
-                score_gain += self.collisions.cannon_mines_vs_boss(
-                    self.entity_manager.cannon_mines,
-                    boss,
-                    self.entity_manager.floating_scores,
-                    self.entity_manager,
-                )
 
         if self._boss_type_cache == "slime":
             from ..entities.slime_boss import SlimeBoss
@@ -1394,19 +1319,7 @@ class PlayingScene(Scene):
             self._check_stone_golem_sweep(em)
 
         if self._boss_type_cache == "mountain_serpent" and em.boss:
-            from ..entities.mountain_serpent_boss import MountainSerpentBoss
-
-            serpent = cast(MountainSerpentBoss, em.boss)
-            if (
-                not serpent.dead
-                and self.ship.invuln <= 0
-                and self.ship.rect.colliderect(serpent.rect)
-            ):
-                self.entity_manager.spawn_explosion(
-                    self.ship.x + self.ship.w / 2,
-                    self.ship.y + self.ship.h / 2,
-                    size=30,
-                )
+            if self.collisions.ship_vs_boss(self.ship, em.boss, self.entity_manager):
                 self._handle_ship_hit()
 
     def _check_stone_golem_sweep(self, em: EntityManager) -> None:

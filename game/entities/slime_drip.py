@@ -278,8 +278,10 @@ class SlimeDrip:
             ):
                 self._spawn_detach_particle()
 
-        # Atualizar partículas desprendidas
-        self.detach_particles = [p for p in self.detach_particles if p.active]
+        # Atualizar partículas desprendidas (in-place reversa — sem alocação de lista)
+        for i in range(len(self.detach_particles) - 1, -1, -1):
+            if not self.detach_particles[i].active:
+                self.detach_particles.pop(i)
         for particle in self.detach_particles:
             particle.update(dt)
 
@@ -444,8 +446,12 @@ class SlimeDripPool:
 
         drip.active = False
         drip.dead = True
-        if drip in self.active:
-            self.active.remove(drip)
+        try:
+            idx = self.active.index(drip)
+            self.active[idx] = self.active[-1]
+            self.active.pop()
+        except ValueError:
+            pass
 
     def update(self, dt: float) -> None:
         """Atualiza todas as gotas ativas e reconstrói spatial grid."""
@@ -460,14 +466,14 @@ class SlimeDripPool:
         for drip in to_release:
             self.release(drip)
 
-        # Atualizar partículas órfãs
-        self.orphan_particles = [p for p in self.orphan_particles if p.active]
-        for particle in self.orphan_particles:
-            particle.update(dt)
-            # Verificar se partícula órfã saiu da tela
-            margin = Config.SLIME_DRIP_DEATH_MARGIN
-            if self._is_out_of_bounds(particle.x, particle.y, margin):
-                particle.active = False
+        # Atualizar partículas órfãs (in-place reversa — sem alocação de lista)
+        margin = Config.SLIME_DRIP_DEATH_MARGIN
+        for i in range(len(self.orphan_particles) - 1, -1, -1):
+            p = self.orphan_particles[i]
+            p.update(dt)
+            if not p.active or self._is_out_of_bounds(p.x, p.y, margin):
+                p.active = False
+                self.orphan_particles.pop(i)
 
         # Limitar número de partículas órfãs para performance (manter apenas as mais recentes)
         if len(self.orphan_particles) > self.max_orphan_particles:

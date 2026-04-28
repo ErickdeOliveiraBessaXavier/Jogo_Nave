@@ -21,8 +21,8 @@ class RockGlider(Meteor):
     Design: olhos laranja, corpo chumbo e thruster vermelho.
     """
 
-    ROCK_MAX_HP = 3
-    BOT_MAX_HP = 2
+    ROCK_MAX_HP = 8
+    BOT_MAX_HP = 6
     ROCK_SCORE_SHARE = 0.58
     # Mesma paleta de terra usada pelos fragmentos de entrada do StoneGolemBoss.
     STONE_FRAGMENT_COLORS = [
@@ -156,8 +156,6 @@ class RockGlider(Meteor):
             )
         )
         super().reset(size=glider_size, x=x, y=y, vx=vx, vy=vy)
-
-        self.health = 14
 
         # Pedras maiores ficam mais lentas; pedras menores, mais rapidas.
         min_size = 15
@@ -842,7 +840,7 @@ class RockGlider(Meteor):
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
-        pts, part_destroyed, _full, _part_center, part_name = self.take_part_damage(
+        pts, part_destroyed, fully_destroyed, _part_center, part_name = self.take_part_damage(
             hit_x, hit_y, amount=damage
         )
 
@@ -851,7 +849,7 @@ class RockGlider(Meteor):
 
         is_rock = part_name == "rock"
         return HitResult(
-            killed=part_destroyed,
+            killed=fully_destroyed,
             points=pts,
             explosion_size=35 if is_rock else 25,
             sound=(

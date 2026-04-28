@@ -7,7 +7,7 @@ materializa o HitResult retornado.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 import pygame
 
@@ -66,3 +66,31 @@ class Removable(Protocol):
     """Contrato para cleanup customizado no EntityManager."""
 
     def should_remove(self) -> bool: ...
+
+
+@runtime_checkable
+class Scoreable(Protocol):
+    """Contrato para entidades que geram pontos ao serem destruídas."""
+
+    def get_points_value(self) -> int: ...
+
+
+@runtime_checkable
+class Enemy(Protocol):
+    """Contrato estrutural para inimigos comuns do jogo."""
+
+    @property
+    def x(self) -> float: ...
+
+    @property
+    def y(self) -> float: ...
+
+    @property
+    def rect(self) -> pygame.Rect: ...
+
+    dead: bool
+    health: int
+
+    def collision_circle(self) -> tuple[float, float, float]: ...
+    def get_points_value(self) -> int: ...
+    def update(self, dt: float, *args: Any, **kwargs: Any) -> Any: ...
