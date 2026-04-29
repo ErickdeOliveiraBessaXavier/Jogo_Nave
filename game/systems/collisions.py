@@ -1,4 +1,3 @@
-import math
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -1262,10 +1261,7 @@ class Collisions:
             ship_center_y = ship.y + ship.h / 2
             dx = ship_center_x - boss_center_x
             dy = ship_center_y - boss_center_y
-            distance = math.sqrt(dx * dx + dy * dy)
-
-            # Se a nave está dentro da onda
-            if distance <= wave_radius:
+            if dx * dx + dy * dy <= wave_radius * wave_radius:
                 entity_manager.spawn_explosion(
                     ship.x + ship.w / 2, ship.y + ship.h / 2, size=20
                 )

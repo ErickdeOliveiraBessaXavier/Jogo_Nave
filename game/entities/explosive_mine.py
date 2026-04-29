@@ -17,6 +17,8 @@ class ExplosiveMine:
     _normal_sprite: pygame.Surface | None = None
     _explosion_sprite: pygame.Surface | None = None
     is_explosive_mine: bool = True
+    # Cache de transforms: (is_normal, scale_key, angle_key) -> Surface
+    _transform_cache: dict[tuple, pygame.Surface] = {}
 
     @classmethod
     def load_sprites(cls) -> None:
@@ -121,6 +123,11 @@ class ExplosiveMine:
         target_size = self.radius * 2  # 40 pixels diameter
         self.scale = target_size / self.sprite_width
 
+        # Surface pré-alocada para o indicador de explosão
+        self._indicator_surface = pygame.Surface(
+            (self.explosion_radius * 2, self.explosion_radius * 2), pygame.SRCALPHA
+        )
+
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(
@@ -195,28 +202,23 @@ class ExplosiveMine:
         else:
             current_sprite = self.normal_sprite
 
-        # Apply pulsing effect to scale
         scale = self.pulse_scale if not self.is_exploding else 1.0
+        scale_key = round(scale * 20) / 20           # passos de 0.05
+        angle_key = round(self.rotation_angle % 360 / 3) * 3  # passos de 3°
+        cache_key = (self.is_exploding, scale_key, angle_key)
 
-        # Get the scaled sprite
-        if scale != 1.0:
-            scaled_width = int(self.sprite_width * self.scale * scale)
-            scaled_height = int(self.sprite_height * self.scale * scale)
-            final_sprite = pygame.transform.scale(
-                current_sprite, (scaled_width, scaled_height)
-            )
-        else:
-            final_sprite = pygame.transform.scale(
-                current_sprite,
-                (
-                    int(self.sprite_width * self.scale),
-                    int(self.sprite_height * self.scale),
-                ),
-            )
-
-        # Apply rotation if not exploding
-        if not self.is_exploding:
-            final_sprite = pygame.transform.rotate(final_sprite, self.rotation_angle)
+        cache = self.__class__._transform_cache
+        final_sprite = cache.get(cache_key)
+        if final_sprite is None:
+            if len(cache) > 600:
+                cache.clear()
+            w = int(self.sprite_width * self.scale * scale)
+            h = int(self.sprite_height * self.scale * scale)
+            scaled = pygame.transform.scale(current_sprite, (w, h))
+            if not self.is_exploding:
+                scaled = pygame.transform.rotate(scaled, angle_key)
+            cache[cache_key] = scaled
+            final_sprite = scaled
 
         # Center the final sprite
         draw_x = int(x - final_sprite.get_width() / 2)
@@ -230,17 +232,15 @@ class ExplosiveMine:
             end_alpha = 0.7 * 255
             alpha = start_alpha + (end_alpha - start_alpha) * progress
 
-            indicator_surface = pygame.Surface(
-                (self.explosion_radius * 2, self.explosion_radius * 2), pygame.SRCALPHA
-            )
+            self._indicator_surface.fill((0, 0, 0, 0))
             pygame.draw.circle(
-                indicator_surface,
+                self._indicator_surface,
                 (255, 255, 255, int(alpha)),
                 (self.explosion_radius, self.explosion_radius),
                 self.explosion_radius,
             )
             surface.blit(
-                indicator_surface,
+                self._indicator_surface,
                 (self.x - self.explosion_radius, self.y - self.explosion_radius),
             )
 

@@ -14,6 +14,9 @@ if TYPE_CHECKING:
 class MountainGeode(ExplosiveMine):
     """Inimigo exclusivo de Cordilheiras que substitui minas explosivas."""
 
+    # Cache de shapes: (r, color_key) -> Surface  (0=normal, 1=flash)
+    _shape_cache: dict[tuple[int, int], pygame.Surface] = {}
+
     def __init__(self, x: float | None = None, y: float | None = None):
         self.radius = 26
         self.explosion_radius = self.radius * 6
@@ -47,6 +50,11 @@ class MountainGeode(ExplosiveMine):
         )
         self.stopped = False
         self.spawns_ice_zone: bool = True
+
+        # Surface pré-alocada para o indicador de explosão
+        self._indicator_surface = pygame.Surface(
+            (self.explosion_radius * 2, self.explosion_radius * 2), pygame.SRCALPHA
+        )
 
     @property
     def rect(self) -> pygame.Rect:
@@ -113,31 +121,39 @@ class MountainGeode(ExplosiveMine):
 
         scale = self.pulse_scale if not self.is_exploding else 1.0
         r = max(8, int(self.radius * scale))
+        color_key = 1 if (self.is_exploding and int(self.flash_timer * 20) % 2 == 0) else 0
+        shape_cache_key = (r, color_key)
 
-        draw_surface = pygame.Surface((r * 3, r * 3), pygame.SRCALPHA)
+        draw_surface = self.__class__._shape_cache.get(shape_cache_key)
+        if draw_surface is None:
+            if len(self.__class__._shape_cache) > 64:
+                self.__class__._shape_cache.clear()
+
+            draw_surface = pygame.Surface((r * 3, r * 3), pygame.SRCALPHA)
+            center = (r * 3 // 2, r * 3 // 2)
+
+            if color_key == 1:
+                geode_color = (255, 240, 180, 230)
+                glow_color = (255, 210, 130, 140)
+            else:
+                geode_color = (132, 186, 216, 220)
+                glow_color = (96, 142, 188, 90)
+
+            points: List[Tuple[int, int]] = []
+            for i in range(8):
+                angle = (math.tau * i / 8.0) - math.pi / 2
+                spike = 1.0 + (0.15 if i % 2 == 0 else -0.08)
+                px = int(center[0] + math.cos(angle) * r * spike)
+                py = int(center[1] + math.sin(angle) * r * spike)
+                points.append((px, py))
+
+            pygame.draw.polygon(draw_surface, glow_color, points)
+            pygame.draw.polygon(draw_surface, geode_color, points, width=2)
+            core_radius = max(4, int(r * 0.35))
+            pygame.draw.circle(draw_surface, (220, 245, 255, 180), center, core_radius)
+            self.__class__._shape_cache[shape_cache_key] = draw_surface
+
         center = (r * 3 // 2, r * 3 // 2)
-
-        if self.is_exploding and int(self.flash_timer * 20) % 2 == 0:
-            geode_color = (255, 240, 180, 230)
-            glow_color = (255, 210, 130, 140)
-        else:
-            geode_color = (132, 186, 216, 220)
-            glow_color = (96, 142, 188, 90)
-
-        points: List[Tuple[int, int]] = []
-        for i in range(8):
-            angle = (math.tau * i / 8.0) - math.pi / 2
-            spike = 1.0 + (0.15 if i % 2 == 0 else -0.08)
-            px = int(center[0] + math.cos(angle) * r * spike)
-            py = int(center[1] + math.sin(angle) * r * spike)
-            points.append((px, py))
-
-        pygame.draw.polygon(draw_surface, glow_color, points)
-        pygame.draw.polygon(draw_surface, geode_color, points, width=2)
-
-        core_radius = max(4, int(r * 0.35))
-        pygame.draw.circle(draw_surface, (220, 245, 255, 180), center, core_radius)
-
         surface.blit(draw_surface, (int(cx - center[0]), int(cy - center[1])))
 
         if self.is_exploding:
@@ -147,18 +163,16 @@ class MountainGeode(ExplosiveMine):
             end_alpha = int(0.75 * 255)
             alpha = int(start_alpha + (end_alpha - start_alpha) * progress)
 
-            indicator_surface = pygame.Surface(
-                (self.explosion_radius * 2, self.explosion_radius * 2), pygame.SRCALPHA
-            )
+            self._indicator_surface.fill((0, 0, 0, 0))
             pygame.draw.circle(
-                indicator_surface,
+                self._indicator_surface,
                 (180, 235, 255, alpha),
                 (self.explosion_radius, self.explosion_radius),
                 self.explosion_radius,
                 width=2,
             )
             surface.blit(
-                indicator_surface,
+                self._indicator_surface,
                 (self.x - self.explosion_radius, self.y - self.explosion_radius),
             )
 

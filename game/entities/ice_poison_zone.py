@@ -29,13 +29,10 @@ class _PlusParticle:
 
     @property
     def current_size(self) -> float:
-        # Cresce rápido no início, depois mantém
-        grow = min(1.0, self.progress * 2.5)
-        return self.base_size * grow
+        return self.base_size * min(1.0, self.progress * 2.5)
 
     @property
     def alpha(self) -> int:
-        # Aparece e some suavemente
         fade_in = min(1.0, self.progress * 4.0)
         fade_out = max(0.0, 1.0 - self.progress)
         return int(220 * fade_in * fade_out)
@@ -62,6 +59,8 @@ class IcePoisonZone:
         self.anim_timer = 0.0
         self._spawn_timer = 0.0
         self._particles: list[_PlusParticle] = []
+        # Surface única reutilizada a cada frame — evita alocação por partícula
+        self._surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
 
     def update(self, dt: float) -> None:
         if self.dead:
@@ -77,9 +76,14 @@ class IcePoisonZone:
             if self.hit_cooldowns[eid] <= 0:
                 del self.hit_cooldowns[eid]
 
-        for p in self._particles:
+        # Atualizar e remover partículas mortas in-place (sem recriar a lista)
+        i = len(self._particles) - 1
+        while i >= 0:
+            p = self._particles[i]
             p.update(dt)
-        self._particles = [p for p in self._particles if p.alive]
+            if not p.alive:
+                self._particles.pop(i)
+            i -= 1
 
         self._spawn_timer += dt
         while self._spawn_timer >= self._SPAWN_INTERVAL:
@@ -87,7 +91,6 @@ class IcePoisonZone:
             self._spawn_particle()
 
     def _spawn_particle(self) -> None:
-        # Posição aleatória dentro do raio
         angle = random.uniform(0.0, math.tau)
         dist = random.uniform(0.0, self.radius * 0.85)
         px = self.x + math.cos(angle) * dist
@@ -116,15 +119,20 @@ class IcePoisonZone:
         progress = max(0.0, self.timer / self.duration)
         r = self.radius
 
-        # Fundo translúcido
-        s = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
-        fill_alpha = int(40 * progress)
-        pygame.draw.circle(s, (30, 190, 210, fill_alpha), (r, r), r)
-        border_alpha = int(120 * progress)
-        pygame.draw.circle(s, (140, 230, 255, border_alpha), (r, r), r, 2)
-        surface.blit(s, (int(self.x) - r, int(self.y) - r))
+        # Limpar a surface reutilizável e desenhar tudo nela
+        s = self._surface
+        s.fill((0, 0, 0, 0))
 
-        # Partículas "+"
+        # Fundo translúcido
+        pygame.draw.circle(s, (30, 190, 210, int(40 * progress)), (r, r), r)
+        pygame.draw.circle(s, (140, 230, 255, int(120 * progress)), (r, r), r, 2)
+
+        # Partículas "+" — desenho direto sem surface por partícula
+        cr = self._PLUS_COLOR
+        lw = self._LINE_WIDTH
+        ox = self.x - r   # offset mundo→local
+        oy = self.y - r
+
         for p in self._particles:
             alpha = p.alpha
             if alpha <= 0:
@@ -133,32 +141,17 @@ class IcePoisonZone:
             if size < 1.0:
                 continue
 
-            color = (*self._PLUS_COLOR, alpha)
-            cx = int(p.x)
-            cy = int(p.y)
+            color = (cr[0], cr[1], cr[2], alpha)
+            lx = int(p.x - ox)
+            ly = int(p.y - oy)
             cos_r = math.cos(p.rotation)
             sin_r = math.sin(p.rotation)
-
-            # Braço horizontal do "+"
             ax = cos_r * size
             ay = sin_r * size
-            # Braço vertical do "+"
             bx = -sin_r * size
             by = cos_r * size
 
-            ps = pygame.Surface((int(size * 2 + 6), int(size * 2 + 6)), pygame.SRCALPHA)
-            oc = (int(size) + 3, int(size) + 3)  # centro local na surface
+            pygame.draw.line(s, color, (int(lx - ax), int(ly - ay)), (int(lx + ax), int(ly + ay)), lw)
+            pygame.draw.line(s, color, (int(lx - bx), int(ly - by)), (int(lx + bx), int(ly + by)), lw)
 
-            pygame.draw.line(
-                ps, color,
-                (int(oc[0] - ax), int(oc[1] - ay)),
-                (int(oc[0] + ax), int(oc[1] + ay)),
-                self._LINE_WIDTH,
-            )
-            pygame.draw.line(
-                ps, color,
-                (int(oc[0] - bx), int(oc[1] - by)),
-                (int(oc[0] + bx), int(oc[1] + by)),
-                self._LINE_WIDTH,
-            )
-            surface.blit(ps, (cx - oc[0], cy - oc[1]))
+        surface.blit(s, (int(self.x) - r, int(self.y) - r))

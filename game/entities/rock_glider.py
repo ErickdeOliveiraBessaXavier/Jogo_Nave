@@ -123,6 +123,13 @@ class RockGlider(Meteor):
         self._local_right_arm_rect = pygame.Rect(0, 0, 1, 1)
         self._local_left_nozzle_rect = pygame.Rect(0, 0, 1, 1)
         self._local_right_nozzle_rect = pygame.Rect(0, 0, 1, 1)
+        # Bounds pré-calculados dos rock points em coords locais
+        self._local_rock_min_x = 0
+        self._local_rock_max_x = 0
+        self._local_rock_min_y = 0
+        self._local_rock_max_y = 0
+        # União local do bot hitbox pré-calculada — evita Rect.union por frame
+        self._local_bot_hit_union = pygame.Rect(0, 0, 1, 1)
         self._eye_base_left_x = 0
         self._eye_base_right_x = 0
         self._eye_base_y = 0
@@ -269,13 +276,6 @@ class RockGlider(Meteor):
         self._rebuild_draw_cache()
         self._update_collision_regions()
 
-    def _build_geometry(self) -> tuple[list[tuple[int, int]], pygame.Rect, int, int]:
-        base_x = int(self.x)
-        base_y = int(self.y)
-        rock_points = [(base_x + px, base_y + py) for px, py in self._local_rock_points]
-        body_rect = self._local_body_rect.move(base_x, base_y)
-        return rock_points, body_rect, body_rect.centerx, body_rect.top
-
     def _rebuild_draw_cache(self) -> None:
         cx = self.size
         cy = self.size
@@ -284,9 +284,13 @@ class RockGlider(Meteor):
             (int(cx + px), int(cy + py - 5)) for px, py in self.rock_pts
         ]
 
-        rock_span_screen = max(x for x, _ in self._local_rock_points) - min(
-            x for x, _ in self._local_rock_points
-        )
+        # Pré-calcular bounds dos rock points — reutilizados em _update_collision_regions
+        self._local_rock_min_x = min(x for x, _ in self._local_rock_points)
+        self._local_rock_max_x = max(x for x, _ in self._local_rock_points)
+        self._local_rock_min_y = min(y for _, y in self._local_rock_points)
+        self._local_rock_max_y = max(y for _, y in self._local_rock_points)
+
+        rock_span_screen = self._local_rock_max_x - self._local_rock_min_x
         body_w = max(self._base_body_w, rock_span_screen + self._base_margin)
         body_h = self._base_body_h
         self._local_body_rect = pygame.Rect(cx - body_w // 2, cy, body_w, body_h)
@@ -413,27 +417,23 @@ class RockGlider(Meteor):
         def shift_bot(rect: pygame.Rect) -> pygame.Rect:
             return rect.move(-bot_min_x, -bot_min_y)
 
-        pygame.draw.rect(
-            self._bot_surface,
-            self.color_body,
-            shift_bot(self._local_body_rect),
-        )
-        pygame.draw.rect(
-            self._bot_surface,
-            colors.BLACK,
-            shift_bot(self._local_body_rect),
-            2,
-        )
-        pygame.draw.rect(
-            self._bot_surface,
-            self.color_body,
-            shift_bot(self._local_left_arm_rect),
-        )
-        pygame.draw.rect(
-            self._bot_surface,
-            self.color_body,
-            shift_bot(self._local_right_arm_rect),
-        )
+        # Polígono U contínuo: braço esq → topo aberto → braço dir → base
+        la = self._local_left_arm_rect
+        ra = self._local_right_arm_rect
+        bd = self._local_body_rect
+        u_pts = [
+            (la.left,  la.top),
+            (la.right, la.top),
+            (la.right, bd.top),
+            (ra.left,  bd.top),
+            (ra.left,  ra.top),
+            (ra.right, ra.top),
+            (ra.right, bd.bottom),
+            (la.left,  bd.bottom),
+        ]
+        shifted = [(x - bot_min_x, y - bot_min_y) for x, y in u_pts]
+        pygame.draw.polygon(self._bot_surface, self.color_body, shifted)
+        pygame.draw.polygon(self._bot_surface, colors.BLACK, shifted, 2)
         pygame.draw.rect(
             self._bot_surface,
             self.color_body,
@@ -452,39 +452,32 @@ class RockGlider(Meteor):
         self._thruster_left_center_x = self._local_left_nozzle_rect.centerx
         self._thruster_right_center_x = self._local_right_nozzle_rect.centerx
 
+        # Pré-calcular união local do bot hitbox — evita criar Rects por frame
+        _local_thruster = pygame.Rect(
+            self._local_body_rect.left,
+            self._local_body_rect.bottom,
+            self._local_body_rect.width,
+            14,
+        )
+        self._local_bot_hit_union = (
+            self._local_body_rect
+            .union(self._local_left_arm_rect)
+            .union(self._local_right_arm_rect)
+            .union(_local_thruster)
+        )
+
     def _update_collision_regions(self) -> None:
-        rock_points, body_rect, _cx, cy = self._build_geometry()
-
-        rock_min_x = min(x for x, _ in rock_points)
-        rock_max_x = max(x for x, _ in rock_points)
-        rock_min_y = min(y for _, y in rock_points)
-        rock_max_y = max(y for _, y in rock_points)
+        bx = int(self.x)
+        by = int(self.y)
         self._rock_hit_rect = pygame.Rect(
-            rock_min_x,
-            rock_min_y,
-            max(1, rock_max_x - rock_min_x),
-            max(1, rock_max_y - rock_min_y),
+            bx + self._local_rock_min_x,
+            by + self._local_rock_min_y,
+            max(1, self._local_rock_max_x - self._local_rock_min_x),
+            max(1, self._local_rock_max_y - self._local_rock_min_y),
         )
-
-        arm_w = 5
-        arm_h = 10
-        left_arm = pygame.Rect(body_rect.left, cy - 8, arm_w, arm_h)
-        right_arm = pygame.Rect(body_rect.right - arm_w, cy - 8, arm_w, arm_h)
-        thruster_zone = pygame.Rect(
-            body_rect.left, body_rect.bottom, body_rect.width, 14
-        )
-        self._bot_hit_rect = (
-            body_rect.union(left_arm).union(right_arm).union(thruster_zone)
-        )
-
-        self._rock_center = (
-            float(self._rock_hit_rect.centerx),
-            float(self._rock_hit_rect.centery),
-        )
-        self._bot_center = (
-            float(self._bot_hit_rect.centerx),
-            float(self._bot_hit_rect.centery),
-        )
+        self._bot_hit_rect = self._local_bot_hit_union.move(bx, by)
+        self._rock_center = (float(self._rock_hit_rect.centerx), float(self._rock_hit_rect.centery))
+        self._bot_center = (float(self._bot_hit_rect.centerx), float(self._bot_hit_rect.centery))
 
     def get_ship_contact_hitboxes(self) -> tuple[pygame.Rect, ...]:
         """Retorna hitboxes reais de contato para colisao com a nave."""
@@ -556,18 +549,16 @@ class RockGlider(Meteor):
 
     def _update_death_particles(self, dt: float) -> None:
         gravity = 210.0
-        alive_particles: list[
-            tuple[float, float, float, float, float, float, float, tuple[int, int, int]]
-        ] = []
-        for x, y, vx, vy, ttl, life, size, color in self._death_particles:
+        i = len(self._death_particles) - 1
+        while i >= 0:
+            x, y, vx, vy, ttl, life, size, color = self._death_particles[i]
             ttl -= dt
             if ttl <= 0.0:
-                continue
-            vy += gravity * dt
-            x += vx * dt
-            y += vy * dt
-            alive_particles.append((x, y, vx, vy, ttl, life, size, color))
-        self._death_particles = alive_particles
+                self._death_particles.pop(i)
+            else:
+                vy += gravity * dt
+                self._death_particles[i] = (x + vx * dt, y + vy * dt, vx, vy, ttl, life, size, color)
+            i -= 1
 
     def _draw_death_particles(self, screen: pygame.Surface) -> None:
         for x, y, _vx, _vy, ttl, life, size, color in self._death_particles:

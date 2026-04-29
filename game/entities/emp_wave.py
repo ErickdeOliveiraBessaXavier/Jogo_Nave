@@ -82,8 +82,4 @@ class EMPWave:
         # Calcular distância do ponto ao centro
         dx = x - self.center_x
         dy = y - self.center_y
-        distance = (dx * dx + dy * dy) ** 0.5
-
-        # Afetar tudo dentro do raio atual da onda
-        # Isso cria um efeito contínuo sem "saltos"
-        return distance <= self.radius
+        return dx * dx + dy * dy <= self.radius * self.radius
