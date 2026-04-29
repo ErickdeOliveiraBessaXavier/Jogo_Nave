@@ -24,8 +24,8 @@ class MountainGeode(ExplosiveMine):
             self.x = x
         self.y = -self.radius if y is None else y
 
-        self.health = 4
-        self.max_health = 4
+        self.health = 50
+        self.max_health = 50
         self.speed = 42
         self.dead = False
 
@@ -41,6 +41,12 @@ class MountainGeode(ExplosiveMine):
         self.sway_phase = random.uniform(0.0, math.tau)
         self.sway_freq = random.uniform(1.0, 1.4)
         self.sway_amplitude = random.uniform(10.0, 18.0)
+
+        self.stop_y = random.uniform(
+            Config.SCREEN_HEIGHT * 0.25, Config.SCREEN_HEIGHT * 0.60
+        )
+        self.stopped = False
+        self.spawns_ice_zone: bool = True
 
     @property
     def rect(self) -> pygame.Rect:
@@ -78,16 +84,23 @@ class MountainGeode(ExplosiveMine):
             return
 
         self.animation_timer += dt
+        self.pulse_scale = 1.0 + 0.16 * abs(math.sin(self.animation_timer * 4.0))
+
+        if self.shake_timer > 0:
+            self.shake_timer -= dt
+
+        if self.stopped:
+            return
+
         self.y += self.speed * dt
 
         sway = math.sin(self.sway_phase + self.animation_timer * self.sway_freq)
         self.x += sway * self.sway_amplitude * dt
         self.x = max(self.radius, min(Config.SCREEN_WIDTH - self.radius, self.x))
 
-        self.pulse_scale = 1.0 + 0.16 * abs(math.sin(self.animation_timer * 4.0))
-
-        if self.shake_timer > 0:
-            self.shake_timer -= dt
+        if self.y >= self.stop_y:
+            self.y = self.stop_y
+            self.stopped = True
 
     def is_off_screen(self) -> bool:
         return self.y > Config.SCREEN_HEIGHT + self.radius
@@ -163,7 +176,9 @@ class MountainGeode(ExplosiveMine):
 
         # Retorna HitResult com som de impacto mineral/boss
         # Se estiver prestes a explodir, pode retornar som de dano maior
-        sound = hit_sounds.BOSS_DAMAGE if self.health > 0 else hit_sounds.EXPLOSION_ASTEROID
+        sound = (
+            hit_sounds.BOSS_DAMAGE if self.health > 0 else hit_sounds.EXPLOSION_ASTEROID
+        )
         return HitResult(
             killed=False,  # O timer de explosão controla a morte real
             sound=sound,

@@ -31,6 +31,7 @@ from ..entities.giant_meteor_boss import GiantMeteorBoss
 from ..entities.guided_meteor import GuidedMeteor
 from ..entities.meteor import Meteor
 from ..entities.meteor_pool import MeteorPool
+from ..entities.ice_poison_zone import IcePoisonZone
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
@@ -87,6 +88,7 @@ class EntityManager:
         self.slime_drips: List[SlimeDrip] = []
         self.eye_lasers: List[EyeLaser] = []
         self.mine_explosions: List[MineExplosion] = []
+        self.ice_poison_zones: List[IcePoisonZone] = []
         self.mini_ship_bullets: List[MiniShipBullet] = []
 
         # Listas de entidades e coletáveis
@@ -211,6 +213,9 @@ class EntityManager:
 
     def spawn_explosive_effect(self, x: float, y: float, radius: float = 60.0) -> None:
         self.explosive_effects.append(ExplosiveEffect(x, y, radius=radius))
+
+    def spawn_ice_poison_zone(self, x: float, y: float, radius: int, duration: float = 5.0) -> None:
+        self.ice_poison_zones.append(IcePoisonZone(x, y, radius, duration))
 
     def spawn_air_strike(self, target_x: float, target_y: float) -> None:
         screen = pygame.display.get_surface()
@@ -378,6 +383,10 @@ class EntityManager:
             e.update(dt)
             if e.dead:
                 self.explosive_effects.remove(e)
+        for zone in self.ice_poison_zones[:]:
+            zone.update(dt)
+            if zone.dead:
+                self.ice_poison_zones.remove(zone)
 
         # Helper para lentidão (EMP)
         slow_active = getattr(self, "emp_active", False)
@@ -405,10 +414,20 @@ class EntityManager:
             if linger_t > 0.0:
                 setattr(entity, "emp_linger_timer", max(0.0, linger_t - dt))
 
+        def ice_mul_for(entity: Any) -> float:
+            ice_t = getattr(entity, "_ice_slow_timer", 0.0)
+            return IcePoisonZone.SLOW_FACTOR if ice_t > 0.0 else 1.0
+
+        def update_ice_linger(entity: Any, dt: float) -> None:
+            ice_t = getattr(entity, "_ice_slow_timer", 0.0)
+            if ice_t > 0.0:
+                setattr(entity, "_ice_slow_timer", max(0.0, ice_t - dt))
+
         # Atualizar formações e naves aliadas
         for f in self.formations[:]:
             update_linger(f, dt)
-            mul = emp_mul_for(f)
+            update_ice_linger(f, dt)
+            mul = emp_mul_for(f) * ice_mul_for(f)
             shot = f.update(enemy_dt * mul)
             if shot:
                 new_alien_bullets.extend(shot)
@@ -450,7 +469,8 @@ class EntityManager:
         ac = sum(1 for s in self.spikes if s.state in ("trembling", "flying"))
         for s in self.spikes:
             update_linger(s, dt)
-            mul = emp_mul_for(s)
+            update_ice_linger(s, dt)
+            mul = emp_mul_for(s) * ice_mul_for(s)
             s.update(enemy_dt * mul, player_x, player_y, ac)
 
         # Atualizar Boss
@@ -493,7 +513,8 @@ class EntityManager:
 
         # Atualizar Inimigos Comuns
         for en in self.enemies:
-            mul = emp_mul_for(en)
+            update_ice_linger(en, dt)
+            mul = emp_mul_for(en) * ice_mul_for(en)
             sdt = enemy_dt * mul
             if isinstance(en, Alien):
                 s = en.update(sdt)
@@ -735,6 +756,8 @@ class EntityManager:
             b.draw(surface)
         for w in self.emp_waves:
             w.draw(surface)
+        for zone in self.ice_poison_zones:
+            zone.draw(surface)
 
         # 4. Desenhar projéteis e efeitos de impacto (devem ficar SOBRE os inimigos)
         lists: List[List[Any]] = [
@@ -940,6 +963,7 @@ class EntityManager:
             self.enemies = [e for e in self.enemies if id(e) not in remove_ids]
 
         self.mine_explosions = [m for m in self.mine_explosions if not m.finished()]
+        self.ice_poison_zones = [z for z in self.ice_poison_zones if not z.dead]
         self.powerups = [p for p in self.powerups if not p.dead]
         self.stars = [s for s in self.stars if not s.dead]
         self.floating_scores = [f for f in self.floating_scores if not f.is_dead()]
@@ -973,6 +997,7 @@ class EntityManager:
         self.rock_shards.clear()
         self.orbital_rocks.clear()
         self.mine_explosions.clear()
+        self.ice_poison_zones.clear()
         self.explosive_effects.clear()
         self.air_strike_bombs.clear()
         self.cannon_towers.clear()

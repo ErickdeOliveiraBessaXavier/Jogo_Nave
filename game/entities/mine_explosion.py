@@ -9,6 +9,7 @@ class MineExplosion:
         self.duration = 0.5
         self.time = self.duration
         self.current_radius = 1.0
+        self.hit_ids: set[int] = set()
 
     def update(self, dt: float):
         self.time = max(0.0, self.time - dt)

@@ -25,6 +25,7 @@ from ..entities.explosion import ExplosionType
 from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.eye_laser import EyeLaser
 from ..entities.floating_score import FloatingScore
+from ..entities.ice_poison_zone import IcePoisonZone
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.mountain_serpent_boss import SerpentRockBullet
@@ -519,6 +520,8 @@ class Collisions:
 
                     # Marcar como dead DEPOIS de criar explosão
                     mine.dead = True
+                    if getattr(mine, "spawns_ice_zone", False):
+                        entity_manager.spawn_ice_poison_zone(cx, cy, explosion_radius)
 
                     pts = self._get_points_value(mine)
                     score_gain += pts
@@ -539,11 +542,16 @@ class Collisions:
                 if enemy.dead:
                     continue
 
+                enemy_id = id(enemy)
+                if enemy_id in explosion.hit_ids:
+                    continue
+
                 enemy_cx, enemy_cy, enemy_r = enemy.collision_circle()
 
                 dist_sq = (enemy_cx - explosion_x) ** 2 + (enemy_cy - explosion_y) ** 2
 
                 if dist_sq < (explosion_radius + enemy_r) ** 2:
+                    explosion.hit_ids.add(enemy_id)
                     # Mine explosion mata outras minas com dano = HP delas;
                     # demais inimigos recebem dano nominal e on_hit resolve.
                     hit_damage = (
@@ -565,6 +573,45 @@ class Collisions:
                             score_events.append((enemy_cx, enemy_cy, result.points))
 
         return score_gain, destroyed_count, score_events, ship_hit
+
+    def ice_poison_zones_vs_entities(
+        self,
+        zones: list[IcePoisonZone],
+        enemies: Sequence[Any],
+        ship: Ship,
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        for zone in zones:
+            if zone.dead:
+                continue
+
+            if zone.in_zone(ship.x, ship.y):
+                ship.speed_modifier_timer = max(ship.speed_modifier_timer, 0.15)
+
+            for enemy in enemies:
+                if enemy.dead:
+                    continue
+                cx, cy, r = enemy.collision_circle()
+                if not zone.in_zone(cx, cy, r):
+                    continue
+
+                setattr(enemy, "_ice_slow_timer", 0.15)
+
+                eid = id(enemy)
+                if zone.can_damage(eid):
+                    zone.register_hit(eid)
+                    result = self._apply_hit(enemy, 1, cx, cy, entity_manager)
+                    score_gain += result.points
+                    if result.killed:
+                        destroyed_count += 1
+                        if result.points > 0:
+                            score_events.append((cx, cy, result.points))
+
+        return score_gain, destroyed_count, score_events
 
     def handle_mine_explosion(
         self,

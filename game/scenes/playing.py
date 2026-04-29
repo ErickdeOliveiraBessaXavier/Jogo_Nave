@@ -1119,6 +1119,17 @@ class PlayingScene(Scene):
         destroyed += mine_destroyed
         score_events.extend(mine_events)
 
+        if self.entity_manager.ice_poison_zones:
+            iz_gain, iz_dest, iz_events = self.collisions.ice_poison_zones_vs_entities(
+                self.entity_manager.ice_poison_zones,
+                enemies_view,
+                self.ship,
+                self.entity_manager,
+            )
+            gain += iz_gain
+            destroyed += iz_dest
+            score_events.extend(iz_events)
+
         return gain, destroyed, score_events, ship_hit
 
     def _check_formation_collisions(
@@ -1153,6 +1164,17 @@ class PlayingScene(Scene):
             destroyed += f_dest
             score_events.extend(f_events)
             ship_hit = ship_hit or f_ship_hit
+
+            if self.entity_manager.ice_poison_zones:
+                iz_gain, iz_dest, iz_events = self.collisions.ice_poison_zones_vs_entities(
+                    self.entity_manager.ice_poison_zones,
+                    fe,
+                    self.ship,
+                    self.entity_manager,
+                )
+                gain += iz_gain
+                destroyed += iz_dest
+                score_events.extend(iz_events)
 
             if self.entity_manager.cannon_mines:
                 cg, cd, ce = self.collisions.cannon_mines_vs_enemies(
