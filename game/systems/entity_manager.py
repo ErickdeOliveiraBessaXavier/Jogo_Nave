@@ -678,11 +678,26 @@ class EntityManager:
                 return pygame.Rect(int(x), int(y), int(w), int(h)).colliderect(sr)
             return True  # Assume visível se não tiver geometria clara
 
+        # MountainMage em APPEARING é desenhado independente de enemy_visible e is_v:
+        # as partículas se espalham além do rect, e o efeito não deve piscar durante
+        # o blink de limpeza de fase nem ser cortado pelo culling de visibilidade.
+        for e in self.enemies:
+            if isinstance(e, MountainMage) and not e.dead and e.is_appearing:
+                e.draw(surface)
+
         if enemy_visible:
             # Note: meteor_pool.draw removed from here to avoid duplicate and move to higher layer
             for e in self.enemies:
                 if isinstance(e, Meteor):
                     continue  # Will be drawn later via meteor_pool
+                # MountainMage em APPEARING já foi desenhado acima — skip para evitar duplo draw
+                if isinstance(e, MountainMage) and not e.dead and e.is_appearing:
+                    continue
+                # MountainStalagmite: sempre desenha (com ou sem fragmentos) — o rect
+                # pode ser zero no início de RISING antes da máscara ser calculada.
+                if isinstance(e, MountainStalagmite) and not e.dead:
+                    e.draw(surface)
+                    continue
                 if isinstance(e, MountainStalagmite) and getattr(e, "_fragments", None):
                     e.draw(surface)
                     continue

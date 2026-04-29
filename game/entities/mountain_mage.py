@@ -58,6 +58,7 @@ class _StalagState(Enum):
 
 
 class _MageState(Enum):
+    APPEARING = auto()
     IDLE = auto()
     TELEGRAPH = auto()
     COOLDOWN = auto()
@@ -775,6 +776,8 @@ class MountainMage:
     _BOB_SPEED: Final = 1.7
     _BOB_AMPLITUDE: Final = 4.0
 
+    APPEAR_DURATION: Final = 1.2
+
     def __init__(self, x: float | None = None, y: float | None = None) -> None:
         screen_w = _cfg("SCREEN_WIDTH", 1280)
         screen_h = _cfg("SCREEN_HEIGHT", 720)
@@ -787,13 +790,16 @@ class MountainMage:
         self.y: float = float(
             y if y is not None else random.randint(70, max(90, int(screen_h * 0.24)))
         )
+        # Garante nascimento sempre dentro da tela, independente do spawner.
+        self.x = _clamp(self.x, self._BORDER_MARGIN, screen_w - self.WIDTH - self._BORDER_MARGIN)
+        self.y = _clamp(self.y, self._TOP_LIMIT, screen_h * 0.35)
 
         self.dead: bool = False
-        self.active: bool = True
+        self.active: bool = False
         self.health: int = self.MAX_HEALTH
 
-        self._state: _MageState = _MageState.IDLE
-        self._state_timer: float = random.uniform(1.1, 2.6)
+        self._state: _MageState = _MageState.APPEARING
+        self._state_timer: float = self.APPEAR_DURATION
         self._hit_flash: float = 0.0
         self._pulse_timer: float = random.uniform(0.0, math.tau)
         self._bob_phase: float = random.uniform(0.0, math.tau)
@@ -806,6 +812,16 @@ class MountainMage:
             self.y + self.h,
         )
         self._telegraph_charge: float = 0.0
+
+        # Partículas místicas de entrada
+        self._entry_particles: list[dict[str, float]] = []
+        for _ in range(18):
+            self._entry_particles.append({
+                "ang": random.uniform(0, math.tau),
+                "dist": random.uniform(90, 180),
+                "speed": random.uniform(1.4, 3.2),
+                "size": random.uniform(2, 5)
+            })
 
         self._body_color: tuple[int, int, int] = (62, 66, 78)
         self._robe_color: tuple[int, int, int] = (88, 92, 108)
@@ -824,11 +840,15 @@ class MountainMage:
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
+    @property
+    def is_appearing(self) -> bool:
+        return self._state is _MageState.APPEARING
+
     def get_points_value(self) -> int:
         return 320
 
     def take_damage(self, amount: int = 1) -> None:
-        if self.dead:
+        if self.dead or not self.active:
             return
         self.health -= amount
         self._hit_flash = 0.14
@@ -858,6 +878,9 @@ class MountainMage:
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
+        if not self.active:
+            return HitResult(explosion_size=0, killed=False)
+
         self.take_damage(self.health)
         return HitResult(killed=False, sound=hit_sounds.EXPLOSION_ALIEN)
 
@@ -870,25 +893,48 @@ class MountainMage:
         if self.dead:
             return []
 
-        self._pulse_timer += dt
-        self._hit_flash = max(0.0, self._hit_flash - dt)
+        # Cap dt para animação suave de entrada
+        actual_dt = min(dt, 0.05)
+        self._pulse_timer += actual_dt
+        self._hit_flash = max(0.0, self._hit_flash - actual_dt)
 
         if player_pos is not None:
             self._track_player(player_pos)
 
         orb_speed = 15.0 if self._state is _MageState.TELEGRAPH else 2.4
-        self._orb_angle += orb_speed * dt
-        self._update_movement(dt)
+        self._orb_angle += orb_speed * actual_dt
 
-        return self._update_state(dt, player_pos)
+        if self._state is _MageState.APPEARING:
+            # Partículas convergem para o centro e encolhem conforme chegam
+            for p in self._entry_particles:
+                p["dist"] = max(2.0, p["dist"] - p["speed"] * 125.0 * actual_dt)
+                p["ang"] += p["speed"] * 6.0 * actual_dt
+                dist_ratio = _clamp(p["dist"] / 140.0, 0.0, 1.0)
+                p["size"] = max(0.5, dist_ratio * 5.0 + 0.5)
+        else:
+            self._update_movement(actual_dt)
+
+        return self._update_state(actual_dt, player_pos)
 
     def draw(self, surface: pygame.Surface) -> None:
         if self.dead:
             return
-        self._draw_telegraph_marker(surface)
-        self._draw_orb(surface)
-        self._draw_body(surface)
-        self._draw_thruster(surface)
+
+        if self._state is _MageState.APPEARING:
+            appear_dur = max(0.001, self.APPEAR_DURATION)
+            progress = _clamp(1.0 - (self._state_timer / appear_dur), 0.0, 1.0)
+            alpha = int(_clamp(progress * 255 * 2.0, 0, 255))
+            scale = 0.3 + 0.7 * _ease_out_cubic(progress)
+            # Partículas: visíveis desde o frame 1, desvanecem ao fim quando o corpo materializa
+            particle_alpha = max(80, int(_clamp((1.0 - progress) * 255 * 1.6, 0, 255)))
+            self._draw_appearing_effect(surface, alpha=particle_alpha)
+            self._draw_orb(surface, alpha=alpha)
+            self._draw_body(surface, alpha=alpha, scale=scale)
+        else:
+            self._draw_telegraph_marker(surface)
+            self._draw_orb(surface)
+            self._draw_body(surface)
+            self._draw_thruster(surface)
 
     # ------------------------------------------------------------------
     # Private – state
@@ -910,7 +956,15 @@ class MountainMage:
     ) -> list[MountainStalagmite]:
         spawned: list[MountainStalagmite] = []
 
-        if self._state is _MageState.IDLE:
+        if self._state is _MageState.APPEARING:
+            self._state_timer -= dt
+            if self._state_timer <= 0.0:
+                self._state = _MageState.IDLE
+                self._state_timer = random.uniform(1.2, 2.8)
+                self.active = True
+                self._entry_particles.clear()
+
+        elif self._state is _MageState.IDLE:
             self._state_timer -= dt
             if self._state_timer <= 0.0:
                 self._begin_telegraph(player_pos)
@@ -986,7 +1040,7 @@ class MountainMage:
     # Private – drawing
     # ------------------------------------------------------------------
 
-    def _draw_orb(self, surface: pygame.Surface) -> None:
+    def _draw_orb(self, surface: pygame.Surface, alpha: int = 255) -> None:
         center_x = int(self.x + self.w / 2)
         center_y = int(self.y + self.h * 0.42)
         orb_x = center_x + math.cos(self._orb_angle) * self.ORBIT_RADIUS
@@ -995,25 +1049,32 @@ class MountainMage:
         is_telegraphing = self._state is _MageState.TELEGRAPH
         charge = self._telegraph_charge if is_telegraphing else 0.0
         glow_r = int(self.ORB_RADIUS * (2.0 + charge * 1.6))
-        glow_a = int(45 + charge * 135)
+        glow_a = int((45 + charge * 135) * (alpha / 255))
         glow_color = (
-            (255, 120, 120) if is_telegraphing else (*self._orb_base_color, glow_a)
+            (255, 120, 120, glow_a) if is_telegraphing else (*self._orb_base_color, glow_a)
         )
         glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
         pygame.draw.circle(glow_surf, glow_color, (glow_r, glow_r), glow_r)
         surface.blit(glow_surf, (int(orb_x) - glow_r, int(orb_y) - glow_r))
 
         orb_color = (
-            (255, 60, 60)
+            (255, 60, 60, alpha)
             if is_telegraphing
-            else (int(120 + charge * 70), int(210 + charge * 35), 255)
+            else (int(120 + charge * 70), int(210 + charge * 35), 255, alpha)
         )
-        pygame.draw.circle(
-            surface, orb_color, (int(orb_x), int(orb_y)), self.ORB_RADIUS
-        )
+        # Orb sólido (usando surface temporária para alpha se necessário ou draw.circle direto se alpha=255)
+        if alpha < 255:
+            os = pygame.Surface((self.ORB_RADIUS * 2, self.ORB_RADIUS * 2), pygame.SRCALPHA)
+            pygame.draw.circle(os, orb_color, (self.ORB_RADIUS, self.ORB_RADIUS), self.ORB_RADIUS)
+            surface.blit(os, (int(orb_x) - self.ORB_RADIUS, int(orb_y) - self.ORB_RADIUS))
+        else:
+            pygame.draw.circle(
+                surface, orb_color[:3], (int(orb_x), int(orb_y)), self.ORB_RADIUS
+            )
+
         pygame.draw.circle(
             surface,
-            colors.WHITE,
+            (255, 255, 255, alpha),
             (int(orb_x) - 3, int(orb_y) - 3),
             max(2, self.ORB_RADIUS // 4),
         )
@@ -1033,79 +1094,134 @@ class MountainMage:
         pygame.draw.line(ms, color, (0, mc[1]), (ms.get_width(), mc[1]), width=1)
         surface.blit(ms, (int(self._target_x) - mr * 2, screen_h - mr * 2))
 
-    def _draw_body(self, surface: pygame.Surface) -> None:
+    def _draw_appearing_effect(self, surface: pygame.Surface, alpha: int = 255) -> None:
+        """Desenha as partículas convergindo para o centro durante a entrada.
+
+        Usa surface local com SRCALPHA para que o alpha das cores funcione mesmo
+        quando 'surface' é uma game_surface sem SRCALPHA. O centro das partículas
+        é clampado à tela para o caso do mage ser spawnado temporariamente off-screen.
+        """
+        screen_w = int(_cfg("SCREEN_WIDTH", 1280))
+        screen_h = int(_cfg("SCREEN_HEIGHT", 720))
+
+        # Centro clampado: garante que as partículas apareçam na tela mesmo que o
+        # mage seja instanciado com coordenadas fora da área visível.
+        raw_cx = self.x + self.w / 2
+        raw_cy = self.y + self.h / 2
+        cx = int(_clamp(raw_cx, 0.0, float(screen_w)))
+        cy = int(_clamp(raw_cy, 0.0, float(screen_h)))
+
+        # Surface local centrada no mage — muito mais leve que uma full-screen.
+        # Raio máximo inicial das partículas é 180px; margem de 200 cobre com folga.
+        margin = 200
+        surf_w = margin * 2
+        surf_h = margin * 2
+        ox = cx - margin
+        oy = cy - margin
+
+        particle_surf = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA)
+
+        for p in self._entry_particles:
+            px = cx + math.cos(p["ang"]) * p["dist"]
+            py = cy + math.sin(p["ang"]) * (p["dist"] * 0.8)
+
+            p_alpha = int(alpha * 0.8)
+            size = max(1, int(p["size"]))
+            lx = int(px - ox)
+            ly = int(py - oy)
+            pygame.draw.circle(particle_surf, (*colors.CYAN, p_alpha), (lx, ly), size)
+            pygame.draw.circle(
+                particle_surf,
+                (255, 255, 255, int(p_alpha * 0.6)),
+                (lx, ly),
+                max(1, size // 2),
+            )
+
+        surface.blit(particle_surf, (ox, oy))
+
+    def _draw_body(
+        self, surface: pygame.Surface, alpha: int = 255, scale: float = 1.0
+    ) -> None:
         """Bloquinho fofinho com chapéu de mago pixel-art."""
-        body_x = int(self.x + self.w / 2)
-        body_y = int(self.y)
+        screen_w = int(_cfg("SCREEN_WIDTH", 1280))
+        screen_h = int(_cfg("SCREEN_HEIGHT", 720))
+
+        # Durante APPEARING o mage pode estar temporariamente fora da tela (spawn
+        # off-screen pelo spawner). Clampamos para que o corpo apareça visível.
+        body_x = int(_clamp(self.x + self.w / 2, 0.0, float(screen_w)))
+        body_y = int(_clamp(self.y, 0.0, float(screen_h)))
+
         pulse = 0.5 + 0.5 * math.sin(self._pulse_timer * math.tau * 1.1)
 
-        # Surface grande o suficiente para o corpo + chapéu acima
-        sw, sh = 56, 68
+        # Surface grande o suficiente para corpo + chapéu acima.
+        # Extra de 32px verticais garante que a ponta do chapéu não seja cortada.
+        sw = max(1, int(56 * scale))
+        sh = max(1, int(68 * scale) + 32)
         bs = pygame.Surface((sw, sh), pygame.SRCALPHA)
         cx = sw // 2
 
         flash = self._hit_flash > 0.0
 
         # ── Corpo: bloco quadrado fofinho ─────────────────────────────────────
-        body_top = 30  # onde o corpo começa verticalmente na surface
-        body_w, body_h = 34, 28
-        bx = cx - body_w // 2  # left do corpo
+        body_top = int(30 * scale)
+        body_w, body_h = int(34 * scale), int(28 * scale)
+        bx = cx - body_w // 2
 
         body_col = (220, 220, 220) if flash else (78, 82, 98)
         border = (255, 255, 255) if flash else (30, 32, 42)
 
+        # Aplicar alpha
+        body_col = (*body_col, alpha)
+        border = (*border, alpha)
+
         # Corpo principal
         pygame.draw.rect(
-            bs, body_col, (bx, body_top, body_w, body_h - 2), border_radius=4
+            bs, body_col, (bx, body_top, body_w, body_h - 2), border_radius=int(4 * scale)
         )
         # Borda escura
         pygame.draw.rect(
-            bs, border, (bx, body_top, body_w, body_h - 2), 2, border_radius=4
+            bs, border, (bx, body_top, body_w, body_h - 2), max(1, int(2 * scale)), border_radius=int(4 * scale)
         )
 
-        # Highlight superior (pixel-art especular)
+        # Highlight superior
         hi_col = (255, 255, 255) if flash else (110, 116, 140)
         pygame.draw.line(
-            bs, hi_col, (bx + 4, body_top + 2), (bx + body_w - 5, body_top + 2), 1
+            bs, (*hi_col, alpha), (bx + int(4 * scale), body_top + int(2 * scale)), (bx + body_w - int(5 * scale), body_top + int(2 * scale)), 1
         )
 
-        # ── Bochechas (Vergonha / Blush) ──────────────────────────────────────
+        # ── Bochechas ────────────────────────────────────────────────────────
         is_telegraph = self._state == _MageState.TELEGRAPH
         charge = self._telegraph_charge
 
-        cheek_radius = 3
+        cheek_radius = int(3 * scale)
         if flash:
             cheek_col = (255, 220, 220)
         elif is_telegraph:
-            # Fica bem vermelhinho de vergonha enquanto carrega o ataque
             r = min(255, int(180 + 75 * charge))
             g_b = max(80, int(180 - 100 * charge))
             cheek_col = (r, g_b, g_b)
-            # A bochecha incha um tiquinho conforme a vergonha "bate"
-            cheek_radius = 3 + int(charge * 1.5)
+            cheek_radius = int((3 + int(charge * 1.5)) * scale)
         else:
             cheek_col = (255, 180, 180)
 
-        pygame.draw.circle(bs, cheek_col, (bx + 5, body_top + 18), cheek_radius)
-        pygame.draw.circle(
-            bs, cheek_col, (bx + body_w - 6, body_top + 18), cheek_radius
-        )
+        pygame.draw.circle(bs, (*cheek_col, alpha), (bx + int(5 * scale), body_top + int(18 * scale)), cheek_radius)
+        pygame.draw.circle(bs, (*cheek_col, alpha), (bx + body_w - int(6 * scale), body_top + int(18 * scale)), cheek_radius)
 
-        # ── Olhos fofinhos (Movimento, Piscar e Recuperação) ─────────────────
+        # ── Olhos ────────────────────────────────────────────────────────────
         eye_glow = 0.6 + 0.4 * pulse + (charge * 0.6)
         if flash:
             eye_white = (255, 255, 255)
             pupil_col = (200, 200, 200)
             shine_col = (255, 255, 255)
         else:
-            ey_r = int(_clamp(255, 0, 255))
+            ey_r = 255
             ey_g = int(_clamp(200 + 30 * eye_glow, 0, 255))
             ey_b = int(_clamp(40 + 20 * eye_glow, 0, 255))
             eye_white = (ey_r, ey_g, ey_b)
             pupil_col = (30, 20, 10)
             shine_col = (255, 255, 220)
 
-        eye_y = body_top + 10
+        eye_y = body_top + int(10 * scale)
         is_recovering = self._state == _MageState.COOLDOWN
         recovery_time = 2.8 - self._state_timer if is_recovering else 0.0
         is_telegraphing = self._state == _MageState.TELEGRAPH
@@ -1117,127 +1233,87 @@ class MountainMage:
         )
 
         is_blinking = (self._pulse_timer % 4.0) < 0.15
-        look_x = int(math.sin(self._pulse_timer * 1.2) * 2.8)
-        look_y = int(math.cos(self._pulse_timer * 0.5) * 1.0)
+        look_x = int(math.sin(self._pulse_timer * 1.2) * 2.8 * scale)
+        look_y = int(math.cos(self._pulse_timer * 0.5) * 1.0 * scale)
         body_shake_x = (
-            int(math.sin(self._pulse_timer * 40.0) * 2.0) if tremor_window else 0
+            int(math.sin(self._pulse_timer * 40.0) * 2.0 * scale) if tremor_window else 0
         )
         body_shake_y = (
-            int(math.cos(self._pulse_timer * 40.0) * 1.0) if tremor_window else 0
+            int(math.cos(self._pulse_timer * 40.0) * 1.0 * scale) if tremor_window else 0
         )
 
-        for i, ex_base in enumerate((cx - 7, cx + 7)):
+        for i, ex_base in enumerate((cx - int(7 * scale), cx + int(7 * scale))):
             ex = ex_base
             ey = eye_y
-            pupil_x = ex + 1 + (0 if is_telegraph else look_x)
-            pupil_y = ey + 1 + (2 if is_telegraph else look_y)
+            pupil_x = ex + max(1, int(1 * scale)) + (0 if is_telegraph else look_x)
+            pupil_y = ey + max(1, int(1 * scale)) + (int(2 * scale) if is_telegraph else look_y)
 
-            if recovery_blink:
-                pygame.draw.line(bs, border, (ex - 4, ey), (ex + 4, ey), 2)
-            elif is_blinking and not is_telegraph and not is_recovering:
-                pygame.draw.line(bs, border, (ex - 4, ey), (ex + 4, ey), 2)
+            if recovery_blink or (is_blinking and not is_telegraph and not is_recovering):
+                pygame.draw.line(bs, (*border[:3], alpha), (ex - int(4 * scale), ey), (ex + int(4 * scale), ey), max(1, int(2 * scale)))
             elif is_telegraph:
-                squint_h = max(2, int(8 - 6 * charge))
+                squint_h = max(2, int((8 - 6 * charge) * scale))
                 pygame.draw.ellipse(
-                    bs, eye_white, (ex - 4, ey - squint_h // 2 + 2, 8, squint_h)
+                    bs, (*eye_white, alpha), (ex - int(4 * scale), ey - squint_h // 2 + int(2 * scale), int(8 * scale), squint_h)
                 )
-
-                px = ex + (1 if i == 0 else -1)
-                pygame.draw.circle(bs, pupil_col, (px, ey + 2), 1)
-
-                eyebrow_y = ey - squint_h // 2 + 1
-                if i == 0:
-                    pygame.draw.line(
-                        bs, border, (ex - 4, eyebrow_y - 1), (ex + 3, eyebrow_y + 1), 1
-                    )
-                else:
-                    pygame.draw.line(
-                        bs, border, (ex - 3, eyebrow_y + 1), (ex + 4, eyebrow_y - 1), 1
-                    )
+                px = ex + (int(1 * scale) if i == 0 else -int(1 * scale))
+                pygame.draw.circle(bs, (*pupil_col, alpha), (px, ey + int(2 * scale)), 1)
             else:
-                pygame.draw.circle(bs, eye_white, (ex, ey), 5)
-                pygame.draw.circle(bs, pupil_col, (pupil_x, pupil_y), 2)
-                pygame.draw.circle(bs, shine_col, (ex - 3, ey - 3), 1)
+                pygame.draw.circle(bs, (*eye_white, alpha), (ex, ey), int(5 * scale))
+                pygame.draw.circle(bs, (*pupil_col, alpha), (pupil_x, pupil_y), int(2 * scale))
+                pygame.draw.circle(bs, (*shine_col, alpha), (ex - int(3 * scale), ey - int(3 * scale)), 1)
 
-        # ── Chapéu de mago pixel-art (Descolado e com Inércia/Lerp) ────────────
-        hat_col = (45, 28, 80)  # roxo escuro
-        hat_col = (45, 28, 80)  # roxo escuro
-        hat_mid = (62, 40, 110)  # roxo médio (face frontal)
-        hat_border = (20, 10, 40)
-        star_col = (255, 220, 60)  # estrela amarela
+        # ── Chapéu de mago ───────────────────────────────────────────────────
+        hat_col = (45, 28, 80, alpha)
+        hat_mid = (62, 40, 110, alpha)
+        hat_border = (20, 10, 40, alpha)
+        star_col = (255, 220, 60, alpha)
 
-        # 1. Efeito de Lerp/Inércia vertical do chapéu inteiro
-        # O -1.5 cria o atraso em relação ao corpo. O * 2.5 é a força do elástico.
-        hat_float_offset = math.sin(self._bob_phase - 1.5) * 2.5
+        hat_float_offset = math.sin(self._bob_phase - 1.5) * 2.5 * scale
+        brim_y = body_top - int(8 * scale) + int(hat_float_offset)
 
-        # O -8 (em vez de -3) descola o chapéu fisicamente da cabeça do robô
-        brim_y = body_top - 8 + int(hat_float_offset)
-
-        # Aba do chapéu
-        brim_w, brim_h = 40, 5
+        # Aba
+        brim_w, brim_h = int(40 * scale), int(5 * scale)
         brim_x = cx - brim_w // 2
-        pygame.draw.rect(bs, hat_col, (brim_x, brim_y, brim_w, brim_h), border_radius=2)
-        pygame.draw.rect(
-            bs, hat_border, (brim_x, brim_y, brim_w, brim_h), 1, border_radius=2
-        )
-        pygame.draw.line(
-            bs, hat_mid, (brim_x + 2, brim_y + 1), (brim_x + brim_w - 3, brim_y + 1), 1
-        )
+        pygame.draw.rect(bs, hat_col, (brim_x, brim_y, brim_w, brim_h), border_radius=max(1, int(2 * scale)))
+        pygame.draw.rect(bs, hat_border, (brim_x, brim_y, brim_w, brim_h), 1, border_radius=max(1, int(2 * scale)))
 
         # Corpo do chapéu
-        cone_b = brim_y
+        wobble = math.sin(self._bob_phase - 2.5) * 3.5 * scale
+        bw = int(20 * scale)
+        mid_y = brim_y - int(12 * scale)
+        tip_x = cx + int(18 * scale) + wobble
+        tip_y = brim_y - int(24 * scale)
 
-        # 2. Wobble da ponta (inércia secundária apenas na pontinha)
-        # Usamos -2.5 para que a ponta atrase em relação ao próprio chapéu! (Efeito chicote)
-        wobble = math.sin(self._bob_phase - 2.5) * 3.5
-
-        bw = 20
-        mid_y = cone_b - 12
-        tip_x = cx + 18 + wobble
-        tip_y = cone_b - 24
-
-        # Silhueta completa do chapéu
         cone_pts: list[tuple[float, float]] = [
-            (cx - bw, cone_b),
-            (cx + bw, cone_b),
-            (cx + 8, mid_y),
-            (tip_x, tip_y),
-            (cx - 2, mid_y),
+            (float(cx - bw), float(brim_y)),
+            (float(cx + bw), float(brim_y)),
+            (float(cx + int(8 * scale)), float(mid_y)),
+            (float(tip_x), float(tip_y)),
+            (float(cx - int(2 * scale)), float(mid_y)),
         ]
         pygame.draw.polygon(bs, hat_col, cone_pts)
 
-        # Face frontal (iluminada)
+        # Face frontal (iluminada) para efeito 3D
         face_pts: list[tuple[float, float]] = [
-            (cx - bw + 3, cone_b),
-            (cx + bw, cone_b),
-            (cx + 8, mid_y),
-            (tip_x, tip_y),
-            (cx, mid_y),
+            (float(cx - bw + int(3 * scale)), float(brim_y)),
+            (float(cx + bw), float(brim_y)),
+            (float(cx + int(8 * scale)), float(mid_y)),
+            (float(tip_x), float(tip_y)),
+            (float(cx), float(mid_y)),
         ]
         pygame.draw.polygon(bs, hat_mid, face_pts)
         pygame.draw.polygon(bs, hat_border, cone_pts, 1)
 
-        # Faixa decorativa
-        band_y = cone_b - 5
-        pygame.draw.line(
-            bs, (100, 60, 160), (cx - bw + 4, band_y), (cx + bw - 2, band_y), 2
-        )
+        # Estrela
+        star_cx, star_cy = cx + int(3 * scale), brim_y - int(10 * scale)
+        pygame.draw.circle(bs, star_col, (star_cx, star_cy), max(1, int(2 * scale)))
 
-        # Estrela pixel-art
-        star_cx, star_cy = cx + 3, cone_b - 10
-        for angle_i in range(5):
-            ang = math.tau * angle_i / 5 - math.pi / 2
-            sx = star_cx + int(math.cos(ang) * 3)
-            sy = star_cy + int(math.sin(ang) * 3)
-            pygame.draw.circle(bs, star_col, (sx, sy), 1)
-        pygame.draw.circle(bs, star_col, (star_cx, star_cy), 1)
-
-        # ── Blit na surface principal ─────────────────────────────────────────
+        # ── Blit final ───────────────────────────────────────────────────────
         surface.blit(
             bs,
             (
                 body_x - cx + body_shake_x,
-                body_y - 10 + body_shake_y,
+                body_y - int(10 * scale) + body_shake_y,
             ),
         )
 

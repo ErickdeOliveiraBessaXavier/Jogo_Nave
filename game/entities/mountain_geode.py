@@ -1,11 +1,14 @@
 import math
 import random
-from typing import List, Tuple
+from typing import TYPE_CHECKING, List, Tuple
 
 import pygame
 
 from ..core.config import config as Config
 from .explosive_mine import ExplosiveMine
+
+if TYPE_CHECKING:
+    from ..systems.hit_result import HitResult
 
 
 class MountainGeode(ExplosiveMine):
@@ -148,3 +151,31 @@ class MountainGeode(ExplosiveMine):
 
     def get_points_value(self) -> int:
         return 280
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x, self.y, float(self.radius)
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.take_damage(damage)
+
+        # Retorna HitResult com som de impacto mineral/boss
+        # Se estiver prestes a explodir, pode retornar som de dano maior
+        sound = hit_sounds.BOSS_DAMAGE if self.health > 0 else hit_sounds.EXPLOSION_ASTEROID
+        return HitResult(
+            killed=False,  # O timer de explosão controla a morte real
+            sound=sound,
+            explosion_size=7 if self.health > 0 else 0,
+        )
+
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.dead = True  # Explode imediatamente no contato
+        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
+
+    def should_remove(self) -> bool:
+        return self.dead

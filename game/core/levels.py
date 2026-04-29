@@ -1466,7 +1466,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # MountainPropeller: 0.8,
             # MountainGeode: 1.0,
         },
-        enemies_to_clear=1,
+        enemies_to_clear=10,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
         # mines_enabled=True,
