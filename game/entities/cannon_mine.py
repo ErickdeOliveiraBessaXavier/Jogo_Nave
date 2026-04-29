@@ -1,21 +1,9 @@
 import math
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Callable, Optional, Set, Union
+from typing import Any, Callable, Optional, Set
 
 import pygame
-
-if TYPE_CHECKING:
-    from ..entities.alien import Alien
-    from ..entities.bot_elemental import ElementalRobot
-    from ..entities.explosive_mine import ExplosiveMine
-    from ..entities.eye_enemy import EyeEnemy
-    from ..entities.meteor import Meteor
-    from ..entities.square_minion_boss import SquareMinionBoss
-
-EnemyType = Union[
-    "Meteor", "Alien", "ExplosiveMine", "EyeEnemy", "SquareMinionBoss", "ElementalRobot"
-]
 
 
 class MineState(Enum):
@@ -163,7 +151,7 @@ class CannonMine:
             if self.damage_timer >= self.explosion_duration + self.damage_duration:
                 self.dead = True
 
-    def check_enemy_collision(self, enemy: EnemyType) -> bool:
+    def check_enemy_collision(self, enemy: Any) -> bool:
         if self.state != MineState.ARMED or self.dead:
             return False
 

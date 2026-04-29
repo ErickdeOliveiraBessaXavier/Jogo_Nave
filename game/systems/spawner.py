@@ -524,7 +524,10 @@ class EnemySpawner:
                     glider_size = self._pick_rock_glider_size(storm_small_bias)
                     glider = entity_manager.rock_glider_pool.get(size=glider_size)
 
-                glider.health = int(glider.health * self.enemy_health_multiplier)
+                if self.enemy_health_multiplier != 1.0:
+                    glider._rock_hp = int(glider._rock_hp * self.enemy_health_multiplier)
+                    glider._bot_hp = int(glider._bot_hp * self.enemy_health_multiplier)
+                    glider.health = glider._rock_hp + glider._bot_hp
                 entity_manager.enemies.append(glider)  # type: ignore[arg-type]
                 return True
 
@@ -828,12 +831,14 @@ class EnemySpawner:
 
         # Spawner de MountainPropeller (perigo ambiental)
         world = get_world_for_level(self.current_level_number)
-        if world.theme == WorldTheme.MOUNTAINS:
+        if (
+            world.theme == WorldTheme.MOUNTAINS
+            and MountainPropeller in self.config.enemy_spawn_config
+        ):
             self.propeller_spawn_timer.update(dt)
             if self.propeller_spawn_timer.done():
                 self.propeller_spawn_timer.start()
                 if random.random() < self.spawn_intensity:
-                    # Verifica se já não tem muitos propellers na tela
                     if len(entity_manager.mountain_propellers) < 3:
                         entity_manager.spawn_mountain_propeller()
 

@@ -11,7 +11,7 @@ class MiniShipBullet:
         y: float,
         vx: float,
         vy: float,
-        damage: int = 5,
+        damage: int = Config.MINI_SHIP_BULLET_DAMAGE,
         piercing: bool = False,
     ):
         self.x = x

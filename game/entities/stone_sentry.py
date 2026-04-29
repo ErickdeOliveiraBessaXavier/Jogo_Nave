@@ -187,7 +187,7 @@ class StoneSentry:
         self._claw_tips: Tuple[Tuple[float, float], Tuple[float, float]] | None = None
 
         self.dead = False
-        self.health = 30
+        self.health = 80
         self.active = True
         self.hit_timer = 0.0
 

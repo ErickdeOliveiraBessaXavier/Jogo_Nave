@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import pygame
 
+from ..core.config import config as Config
 from ..core.spatial_grid import SpatialGrid
 from ..core.upgrades_config import EMP_LINGER_DURATION
 from ..entities.air_strike_bomb import AirStrikeBomb
@@ -257,7 +258,7 @@ class EntityManager:
         y: float,
         tx: float,
         ty: float,
-        damage: int = 50,
+        damage: int = PlayerLaser.DAMAGE,
         ship: Optional["Ship"] = None,
         ball_index: int = -1,
         target_entity: Optional[Any] = None,
@@ -475,8 +476,11 @@ class EntityManager:
                 bb, fragments = self.boss.update(enemy_dt, player_x, player_y)
                 if bb:
                     self.serpent_bullets.extend(bb)
-                if fragments:
-                    self.enemies.extend(fragments)
+                for f in fragments:
+                    if isinstance(f, SerpentRockBullet):
+                        self.serpent_bullets.append(f)
+                    else:
+                        self.enemies.append(f)
             else:
                 ls, sqs = self.boss.update(enemy_dt, player_x, player_y)
                 if ls:
@@ -635,9 +639,14 @@ class EntityManager:
                     self.rock_shards.extend(ns)
                 self.orbital_rocks = orks
             elif isinstance(self.boss, MountainSerpentBoss):
-                bb, _ = self.boss.update(dt, player_x, player_y)
+                bb, fragments = self.boss.update(dt, player_x, player_y)
                 if bb:
                     self.serpent_bullets.extend(bb)
+                for f in fragments:
+                    if isinstance(f, SerpentRockBullet):
+                        self.serpent_bullets.append(f)
+                    else:
+                        self.enemies.append(f)
             else:
                 ls, sqs = self.boss.update(dt, player_x, player_y)
                 if ls:
@@ -669,11 +678,26 @@ class EntityManager:
                 return pygame.Rect(int(x), int(y), int(w), int(h)).colliderect(sr)
             return True  # Assume visível se não tiver geometria clara
 
+        # MountainMage em APPEARING é desenhado independente de enemy_visible e is_v:
+        # as partículas se espalham além do rect, e o efeito não deve piscar durante
+        # o blink de limpeza de fase nem ser cortado pelo culling de visibilidade.
+        for e in self.enemies:
+            if isinstance(e, MountainMage) and not e.dead and e.is_appearing:
+                e.draw(surface)
+
         if enemy_visible:
             # Note: meteor_pool.draw removed from here to avoid duplicate and move to higher layer
             for e in self.enemies:
                 if isinstance(e, Meteor):
                     continue  # Will be drawn later via meteor_pool
+                # MountainMage em APPEARING já foi desenhado acima — skip para evitar duplo draw
+                if isinstance(e, MountainMage) and not e.dead and e.is_appearing:
+                    continue
+                # MountainStalagmite: sempre desenha (com ou sem fragmentos) — o rect
+                # pode ser zero no início de RISING antes da máscara ser calculada.
+                if isinstance(e, MountainStalagmite) and not e.dead:
+                    e.draw(surface)
+                    continue
                 if isinstance(e, MountainStalagmite) and getattr(e, "_fragments", None):
                     e.draw(surface)
                     continue
@@ -703,6 +727,7 @@ class EntityManager:
         # 3.5 Desenhar Meteoros (agora sobre o boss para efeito de "breaking off")
         if enemy_visible:
             self.meteor_pool.draw(surface)
+            self.rock_glider_pool.draw(surface)
 
         for laser in self.boss_lasers:
             laser.draw(surface)
@@ -760,11 +785,15 @@ class EntityManager:
         return robot
 
     def spawn_mountain_serpent_boss(
-        self, x: float | None = None, y: float | None = None, health: int | None = None
+        self,
+        x: float | None = None,
+        y: float | None = None,
+        health: int | None = None,
+        block_health_multiplier: float = 1.0,
     ) -> MountainSerpentBoss:
         boss = MountainSerpentBoss(x=x, y=y, health=health)
         self.boss = boss
-        self.enemies.extend(boss.create_blocks())
+        self.enemies.extend(boss.create_blocks(block_health_multiplier))
         return boss
 
     def spawn_mountain_propeller(self, y: float | None = None) -> MountainPropeller:
@@ -800,7 +829,7 @@ class EntityManager:
         self,
         x: float,
         y: float,
-        damage: int = 10,
+        damage: int = Config.BULLET_BASE_DAMAGE,
         piercing: bool = False,
         homing: bool = False,
         explosive: bool = False,

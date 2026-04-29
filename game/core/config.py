@@ -69,6 +69,8 @@ class Config:
     # ENTITY MOVEMENT SPEEDS (pixels/second)
     # ========================================
     BULLET_SPEED: float = 480.0
+    BULLET_BASE_DAMAGE: int = 10
+    MINI_SHIP_BULLET_DAMAGE: int = 10
     FAST_METEOR_SPEED: float = 320.0  # meteoros pequenos
     SLOW_METEOR_SPEED: float = 25.0  # meteoros grandes
     POWERUP_SPEED: float = 100.0  # CORRIGIDO: float para consistência
@@ -303,14 +305,14 @@ class Config:
     # ========================================
     # STONE GOLEM BOSS
     # ========================================
-    GOLEM_HEALTH: int = 2500
+    GOLEM_HEALTH: int = 2200
     GOLEM_ENTRY_SPEED: float = 160.0
     GOLEM_SPEED: float = 75.0
     GOLEM_SHARD_SPEED: float = 420.0
     GOLEM_BOULDER_SPEED: float = 340.0
     GOLEM_BOULDER_GRAVITY: float = 30.0
-    GOLEM_EMERGE_DEBRIS_COUNT: int = 18
-    GOLEM_SUBMERGE_DEBRIS_COUNT: int = 14
+    GOLEM_EMERGE_DEBRIS_COUNT: int = 14
+    GOLEM_SUBMERGE_DEBRIS_COUNT: int = 12
 
     # ========================================
     # BLACK HOLE SYSTEM
