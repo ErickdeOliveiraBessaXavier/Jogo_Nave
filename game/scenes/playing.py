@@ -69,7 +69,6 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 _CHEAT_CODE = "271195"
 _CHEAT_BUFFER_MAX = len(_CHEAT_CODE)
-_BASE_BULLET_DAMAGE = 10
 _SCORE_MULTIPLIER_DURATION = 15.0
 _SIDE_SCROLL_SHIP_ENTRY_X = 100
 _TOP_DOWN_SHIP_TARGET_Y_OFFSET = 80
@@ -905,7 +904,7 @@ class PlayingScene(Scene):
     def _fire_bullets(self) -> None:
         """Dispara as balas da nave e reinicia o cooldown."""
         bullet_specs = self.ship.bullet_spawn()
-        adjusted_damage = int(_BASE_BULLET_DAMAGE * self.player_damage_multiplier)
+        adjusted_damage = int(Config.BULLET_BASE_DAMAGE * self.player_damage_multiplier)
 
         # Tocar som de tiro (uma vez por salva de tiros)
         sound_manager.play_shot()
@@ -1668,7 +1667,10 @@ class PlayingScene(Scene):
             scaled_health = int(
                 MountainSerpentBoss.DEFAULT_HEALTH * self.enemy_health_multiplier
             )
-            boss = self.entity_manager.spawn_mountain_serpent_boss(health=scaled_health)
+            boss = self.entity_manager.spawn_mountain_serpent_boss(
+                health=scaled_health,
+                block_health_multiplier=self.enemy_health_multiplier,
+            )
         elif self.level_config.boss_type == GiantMeteorBoss:
             # spawn_giant_meteor_boss seta is_side_scroll corretamente
             boss = self.entity_manager.spawn_giant_meteor_boss()

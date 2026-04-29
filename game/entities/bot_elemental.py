@@ -385,7 +385,7 @@ class ElementalRobot:
 
     SCALE = 6  # px por "pixel" do mapa
     # Mini-boss: precisa de 25 tiros para ser eliminado.
-    MAX_HEALTH = 25
+    MAX_HEALTH = 200
     HIT_SCORE = 5000
 
     # Durações dos estados (segundos)

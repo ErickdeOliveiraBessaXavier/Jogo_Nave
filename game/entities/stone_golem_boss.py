@@ -8,7 +8,7 @@ Refatorado para seguir boas práticas de performance, robustez e legibilidade.
 import logging
 import math
 import random
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple, TypeAlias
+from typing import TYPE_CHECKING, Any, Final, List, Optional, Tuple, TypeAlias
 
 import pygame
 
@@ -268,6 +268,8 @@ class RockShard:
     Fragmento de pedra disparado pelo boss.
     """
 
+    MAX_HEALTH: Final[int] = 50  # 5 hits com BULLET_BASE_DAMAGE=10
+
     def __init__(
         self,
         x: float,
@@ -279,6 +281,7 @@ class RockShard:
         self.x = x
         self.y = y
         self.size = random.randint(10, 16)
+        self.health: int = self.MAX_HEALTH
         self.dead = False
         self.color = color if color is not None else _get_random_earth_color()
 
@@ -339,9 +342,14 @@ class RockShard:
         return self.x, self.y, float(self.size)
 
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
-        from ..systems.hit_result import NO_HIT
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
 
-        return NO_HIT  # imune a tiros
+        self.health = max(0, self.health - damage)
+        if self.health <= 0:
+            self.dead = True
+            return HitResult(killed=True, points=20, explosion_size=18, sound=hit_sounds.EXPLOSION_ASTEROID)
+        return HitResult(explosion_size=8, sound=hit_sounds.BOSS_DAMAGE)
 
     def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
         from ..systems import hit_sounds

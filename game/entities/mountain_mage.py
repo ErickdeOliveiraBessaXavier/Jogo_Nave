@@ -90,6 +90,9 @@ class _StalagmiteFragment:
 class MountainStalagmite:
     """Pilar de pedra invocado pelo MountainMage, estilo low-poly terroso."""
 
+    # Combat
+    MAX_HEALTH: Final[int] = 20
+
     # Geometry
     BASE_WIDTH: Final = 48
     MIN_HEIGHT: Final = 62
@@ -118,7 +121,7 @@ class MountainStalagmite:
         self.target_y: float = float(target_y)
 
         self.w: int = self.BASE_WIDTH
-        self.health: int = 3
+        self.health: int = self.MAX_HEALTH
         self.dead: bool = False
         self.active: bool = True
 
@@ -758,6 +761,8 @@ class MountainStalagmite:
 class MountainMage:
     """Robo/mago exclusivo das montanhas que invoca estalagmites no alvo."""
 
+    MAX_HEALTH: Final[int] = 24
+
     WIDTH: Final = 54
     HEIGHT: Final = 58
     ORBIT_RADIUS: Final = 50.0
@@ -785,7 +790,7 @@ class MountainMage:
 
         self.dead: bool = False
         self.active: bool = True
-        self.health: int = 24
+        self.health: int = self.MAX_HEALTH
 
         self._state: _MageState = _MageState.IDLE
         self._state_timer: float = random.uniform(1.1, 2.6)
@@ -830,6 +835,34 @@ class MountainMage:
         if self.health <= 0:
             self.health = 0
             self.dead = True
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        r = self.rect
+        return r.centerx, r.centery, max(r.width, r.height) / 2
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.take_damage(damage)
+        if self.dead:
+            return HitResult(
+                killed=True,
+                points=self.get_points_value(),
+                explosion_size=35,
+                sound=hit_sounds.EXPLOSION_ALIEN,
+            )
+        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
+
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.take_damage(self.health)
+        return HitResult(killed=False, sound=hit_sounds.EXPLOSION_ALIEN)
+
+    def should_remove(self) -> bool:
+        return self.dead
 
     def update(
         self, dt: float, player_pos: tuple[float, float] | None = None

@@ -1,6 +1,6 @@
 import math
 import random
-from typing import TYPE_CHECKING, Any, List, Literal, Optional, Set, Tuple, TypedDict
+from typing import TYPE_CHECKING, Any, Final, List, Literal, Optional, Set, Tuple, TypedDict
 
 import pygame
 
@@ -10,23 +10,23 @@ if TYPE_CHECKING:
     from ..entities.ship import Ship
 
 
-# Constantes para configuração visual
-LIGHTNING_SEGMENT_LENGTH: int = 15
-LIGHTNING_MAX_OFFSET: int = 15
-PARTICLE_VELOCITY_RANGE: Tuple[int, int] = (-80, 80)
-PARTICLE_SIZE_RANGE: Tuple[int, int] = (2, 5)
-PARTICLE_LIFETIME_RANGE: Tuple[float, float] = (0.15, 0.4)
-GLOW_ALPHA_BASE: int = 100
-GLOW_ALPHA_AMPLITUDE: int = 100
-SPARK_CHANCE_PER_FRAME: float = 0.3
-SPARK_CHANCE_PER_POINT: float = 0.2
-SPARK_LENGTH_RANGE: Tuple[int, int] = (5, 12)
-LIGHTNING_REGENERATE_INTERVAL: float = 0.05
+# Constantes visuais
+LIGHTNING_SEGMENT_LENGTH: Final[int] = 15
+LIGHTNING_MAX_OFFSET: Final[int] = 15
+PARTICLE_VELOCITY_RANGE: Final[Tuple[int, int]] = (-80, 80)
+PARTICLE_SIZE_RANGE: Final[Tuple[int, int]] = (2, 5)
+PARTICLE_LIFETIME_RANGE: Final[Tuple[float, float]] = (0.15, 0.4)
+GLOW_ALPHA_BASE: Final[int] = 100
+GLOW_ALPHA_AMPLITUDE: Final[int] = 100
+SPARK_CHANCE_PER_FRAME: Final[float] = 0.3
+SPARK_CHANCE_PER_POINT: Final[float] = 0.2
+SPARK_LENGTH_RANGE: Final[Tuple[int, int]] = (5, 12)
+LIGHTNING_REGENERATE_INTERVAL: Final[float] = 0.05
 
 # Pré-computar valores para otimização
-TWO_PI = 2 * math.pi
-PARTICLE_SIZE_DECAY = 5.0
-MIN_POSITION_CHANGE = 1.0
+TWO_PI: Final[float] = 2 * math.pi
+PARTICLE_SIZE_DECAY: Final[float] = 5.0
+MIN_POSITION_CHANGE: Final[float] = 1.0
 
 
 class DeathParticle(TypedDict):
@@ -40,6 +40,15 @@ class DeathParticle(TypedDict):
 class PlayerLaser:
     """Laser disparado pelo jogador que atravessa múltiplos inimigos."""
 
+    # Gameplay
+    DAMAGE: Final[int] = 40
+    MAX_WIDTH: Final[int] = 10
+    LIFETIME: Final[float] = 0.8
+
+    # Animação de largura
+    EXPAND_TIME: Final[float] = 0.1
+    HOLD_TIME: Final[float] = 0.5
+
     # Cache de superfícies para reutilização (class-level)
     _glow_cache: dict[str, pygame.Surface] = {}
     _max_cache_size: int = 10
@@ -50,9 +59,9 @@ class PlayerLaser:
         y: float,
         target_x: float,
         target_y: float,
-        damage: int = 50,
-        max_w: int = 10,
-        lifetime: float = 0.8,
+        damage: int = DAMAGE,
+        max_w: int = MAX_WIDTH,
+        lifetime: float = LIFETIME,
         ship: Optional["Ship"] = None,
         ball_index: int = -1,
         target_entity: Optional[Any] = None,
@@ -71,8 +80,8 @@ class PlayerLaser:
         self.target_entity: Optional[Any] = target_entity
 
         self.lifetime: float = lifetime
-        self.expand_time: float = 0.1
-        self.hold_time: float = 0.5
+        self.expand_time: float = self.EXPAND_TIME
+        self.hold_time: float = self.HOLD_TIME
         self.timer: float = 0.0
 
         self.state: Literal["alive", "dying"] = "alive"

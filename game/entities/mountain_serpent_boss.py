@@ -170,6 +170,7 @@ class SerpentBlock:
         "row_index",
         "is_fragment",
         # Estado de combate
+        "max_health",
         "health",
         "dead",
         "_hit_flash",
@@ -212,7 +213,7 @@ class SerpentBlock:
     # Constantes de gameplay
     # ------------------------------------------------------------------
     RADIUS: Final[int] = 78  # px - raio do bloco circular
-    MAX_HEALTH: Final[int] = 20  # pontos de vida por bloco
+    MAX_HEALTH: Final[int] = 120  # pontos de vida por bloco
     POINTS_VALUE: Final[int] = 80  # pontos concedidos ao jogador na destruicao
 
     # Intervalo de emissao de particulas (segundos)
@@ -247,6 +248,7 @@ class SerpentBlock:
         row_index: int,
         is_fragment: bool = False,
         ascent_speed: float = 0.0,
+        max_health: int | None = None,
     ) -> None:
         diameter = self.RADIUS * 2
         self.w = diameter
@@ -261,7 +263,8 @@ class SerpentBlock:
         self.is_fragment = is_fragment
         self._ascent_speed = ascent_speed
 
-        self.health: int = self.MAX_HEALTH
+        self.max_health: int = max_health if max_health is not None else self.MAX_HEALTH
+        self.health: int = self.max_health
         self.dead: bool = False
         self._hit_flash: float = 0.0
         self.emp_linger_timer: float = 0.0
@@ -425,7 +428,7 @@ class SerpentBlock:
 
     def revive(self) -> None:
         """Restaura o bloco ao estado inicial (HP, visual, swap)."""
-        self.health = self.MAX_HEALTH
+        self.health = self.max_health
         self.dead = False
         self._hit_flash = 0.0
         self._rotation_angle = random.uniform(0.0, 360.0)
@@ -677,7 +680,7 @@ class SerpentBlock:
         bar_h = 4
         bar_x = cx - r
         bar_y = cy - r - 8
-        ratio = self.health / self.MAX_HEALTH
+        ratio = self.health / self.max_health
         life_w = max(0, int(bar_w * ratio))
         bar_color = (
             self._COLOR_HP_HIGH
@@ -1169,7 +1172,9 @@ class MountainSerpentBoss:
     # Fabrica de blocos
     # ------------------------------------------------------------------
 
-    def create_blocks(self) -> List[SerpentBlock]:
+    def create_blocks(
+        self, block_health_multiplier: float = 1.0
+    ) -> List[SerpentBlock]:
         """Instancia os blocos fora da tela para a entrada vertical acelerada.
 
         Retorna a lista de blocos para ser adicionada ao EntityManager.
@@ -1177,18 +1182,25 @@ class MountainSerpentBoss:
         total_area = Config.SCREEN_HEIGHT + 2 * SerpentBlock.RADIUS
         gap_y = total_area / self.BLOCK_COUNT
         self._block_spacing = gap_y
+        block_max_health = int(SerpentBlock.MAX_HEALTH * block_health_multiplier)
 
         blocks: List[SerpentBlock] = []
         for i in range(self.BLOCK_COUNT):
             # Coluna esquerda: sobe (entra por baixo)
             left_cy = Config.SCREEN_HEIGHT + SerpentBlock.RADIUS + i * gap_y
-            left = SerpentBlock(self.left_x, left_cy, "left", self, row_index=i)
+            left = SerpentBlock(
+                self.left_x, left_cy, "left", self, row_index=i,
+                max_health=block_max_health,
+            )
             blocks.append(left)
             self._block_map[("left", i)] = left
 
             # Coluna direita: desce (entra por cima)
             right_cy = -SerpentBlock.RADIUS - i * gap_y
-            right = SerpentBlock(self.right_x, right_cy, "right", self, row_index=i)
+            right = SerpentBlock(
+                self.right_x, right_cy, "right", self, row_index=i,
+                max_health=block_max_health,
+            )
             blocks.append(right)
             self._block_map[("right", i)] = right
 

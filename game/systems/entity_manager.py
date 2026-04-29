@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import pygame
 
+from ..core.config import config as Config
 from ..core.spatial_grid import SpatialGrid
 from ..core.upgrades_config import EMP_LINGER_DURATION
 from ..entities.air_strike_bomb import AirStrikeBomb
@@ -257,7 +258,7 @@ class EntityManager:
         y: float,
         tx: float,
         ty: float,
-        damage: int = 50,
+        damage: int = PlayerLaser.DAMAGE,
         ship: Optional["Ship"] = None,
         ball_index: int = -1,
         target_entity: Optional[Any] = None,
@@ -475,8 +476,11 @@ class EntityManager:
                 bb, fragments = self.boss.update(enemy_dt, player_x, player_y)
                 if bb:
                     self.serpent_bullets.extend(bb)
-                if fragments:
-                    self.enemies.extend(fragments)
+                for f in fragments:
+                    if isinstance(f, SerpentRockBullet):
+                        self.serpent_bullets.append(f)
+                    else:
+                        self.enemies.append(f)
             else:
                 ls, sqs = self.boss.update(enemy_dt, player_x, player_y)
                 if ls:
@@ -635,9 +639,14 @@ class EntityManager:
                     self.rock_shards.extend(ns)
                 self.orbital_rocks = orks
             elif isinstance(self.boss, MountainSerpentBoss):
-                bb, _ = self.boss.update(dt, player_x, player_y)
+                bb, fragments = self.boss.update(dt, player_x, player_y)
                 if bb:
                     self.serpent_bullets.extend(bb)
+                for f in fragments:
+                    if isinstance(f, SerpentRockBullet):
+                        self.serpent_bullets.append(f)
+                    else:
+                        self.enemies.append(f)
             else:
                 ls, sqs = self.boss.update(dt, player_x, player_y)
                 if ls:
@@ -703,6 +712,7 @@ class EntityManager:
         # 3.5 Desenhar Meteoros (agora sobre o boss para efeito de "breaking off")
         if enemy_visible:
             self.meteor_pool.draw(surface)
+            self.rock_glider_pool.draw(surface)
 
         for laser in self.boss_lasers:
             laser.draw(surface)
@@ -760,11 +770,15 @@ class EntityManager:
         return robot
 
     def spawn_mountain_serpent_boss(
-        self, x: float | None = None, y: float | None = None, health: int | None = None
+        self,
+        x: float | None = None,
+        y: float | None = None,
+        health: int | None = None,
+        block_health_multiplier: float = 1.0,
     ) -> MountainSerpentBoss:
         boss = MountainSerpentBoss(x=x, y=y, health=health)
         self.boss = boss
-        self.enemies.extend(boss.create_blocks())
+        self.enemies.extend(boss.create_blocks(block_health_multiplier))
         return boss
 
     def spawn_mountain_propeller(self, y: float | None = None) -> MountainPropeller:
@@ -800,7 +814,7 @@ class EntityManager:
         self,
         x: float,
         y: float,
-        damage: int = 10,
+        damage: int = Config.BULLET_BASE_DAMAGE,
         piercing: bool = False,
         homing: bool = False,
         explosive: bool = False,
