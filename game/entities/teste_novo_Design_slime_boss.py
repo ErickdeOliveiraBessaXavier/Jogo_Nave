@@ -7,7 +7,6 @@ Animações: pulsação do corpo, movimento dos tentáculos, brilho dos olhos.
 import pygame
 import math
 import sys
-import random
 
 # ---------------------------------------------------------------------------
 # Dados extraídos da imagem original (96x40 pixels, 16 cores)
@@ -124,25 +123,6 @@ class BossRenderer:
         # Na verdade, apenas blit rects coloridos diretamente — mais rápido.
         self._pixel_surf_cache: dict[tuple, pygame.Surface] = {}
 
-        # Partículas de gosma caindo (tentáculos inferiores)
-        self.drips: list[dict] = []
-        for _ in range(18):
-            self._spawn_drip()
-
-    # ------------------------------------------------------------------ drips
-    def _spawn_drip(self, force_x: int | None = None) -> None:
-        # Concentra os drips na metade inferior do mapa
-        x_pixel = force_x if force_x is not None else random.randint(10, MAP_W - 10)
-        self.drips.append({
-            "x": x_pixel * PIXEL_SIZE + PIXEL_SIZE // 2,
-            "y": random.uniform(MAP_H * PIXEL_SIZE * 0.55,
-                                MAP_H * PIXEL_SIZE * 0.85),
-            "vy": random.uniform(18, 55),
-            "size": random.randint(2, 5),
-            "color_idx": random.choice([2, 3, 6, 7]),
-            "alpha": random.randint(160, 255),
-        })
-
     # --------------------------------------------------------------- rendering
     def _get_pixel_surf(self, color: tuple) -> pygame.Surface:
         if color not in self._pixel_surf_cache:
@@ -201,37 +181,6 @@ class BossRenderer:
                     (x, y, PIXEL_SIZE, PIXEL_SIZE)
                 )
 
-        # Renderiza drips de gosma
-        self._update_drips(dt)
-
-    def _update_drips(self, dt: float) -> None:
-        alive = []
-        for drip in self.drips:
-            drip["y"] += drip["vy"] * dt
-            color = PALETTE[drip["color_idx"]]
-
-            # Glow roxo no drip
-            r = drip["size"] + 1
-            glow = pygame.Surface((r * 4, r * 4), pygame.SRCALPHA)
-            glow_color = (*color, 60)
-            pygame.draw.circle(glow, glow_color, (r * 2, r * 2), r * 2)
-            self.surface.blit(glow,
-                              (int(drip["x"]) - r * 2,
-                               int(drip["y"]) - r * 2))
-
-            pygame.draw.circle(
-                self.surface,
-                color,
-                (int(drip["x"]), int(drip["y"])),
-                drip["size"]
-            )
-
-            if drip["y"] < WIN_H + 20:
-                alive.append(drip)
-            else:
-                self._spawn_drip()
-
-        self.drips = alive
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +205,9 @@ def main() -> None:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
+                elif event.key == pygame.K_s:
+                    pygame.image.save(screen, "slime_boss.png")
+                    print("Salvo: slime_boss.png")
 
         renderer.render(dt)
         pygame.display.flip()

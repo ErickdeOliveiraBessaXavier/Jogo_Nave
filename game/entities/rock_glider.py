@@ -23,6 +23,8 @@ class RockGlider(Meteor):
 
     ROCK_MAX_HP = 30
     BOT_MAX_HP = 20
+    ROCK_MAX_HP_HARD = 40
+    BOT_MAX_HP_HARD = 30
     ROCK_SCORE_SHARE = 0.58
     # Mesma paleta de terra usada pelos fragmentos de entrada do StoneGolemBoss.
     STONE_FRAGMENT_COLORS = [
@@ -802,6 +804,11 @@ class RockGlider(Meteor):
 
         self._draw_death_particles(screen)
 
+    def set_hp(self, rock_hp: int, bot_hp: int) -> None:
+        self._rock_hp = rock_hp
+        self._bot_hp = bot_hp
+        self.health = rock_hp + bot_hp
+
     def can_split(self) -> bool:
         return False
 
@@ -831,7 +838,7 @@ class RockGlider(Meteor):
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
-        pts, part_destroyed, fully_destroyed, _part_center, part_name = self.take_part_damage(
+        pts, part_destroyed, _fully_destroyed, _part_center, part_name = self.take_part_damage(
             hit_x, hit_y, amount=damage
         )
 
@@ -840,7 +847,7 @@ class RockGlider(Meteor):
 
         is_rock = part_name == "rock"
         return HitResult(
-            killed=fully_destroyed,
+            killed=part_destroyed,
             points=pts,
             explosion_size=35 if is_rock else 25,
             sound=(
@@ -853,7 +860,7 @@ class RockGlider(Meteor):
         from ..systems.hit_result import HitResult
 
         _pts, part_destroyed, _full, _center, part_name = self.take_part_damage(
-            contact_x, contact_y, amount=max(self.ROCK_MAX_HP, self.BOT_MAX_HP)
+            contact_x, contact_y, amount=max(self._rock_hp, self._bot_hp)
         )
         if part_destroyed:
             sound = (
