@@ -835,6 +835,22 @@ class PlayingScene(Scene):
                 if self.ship.rect.colliderect(wind_rect):
                     self.ship.x -= prop.PUSH_FORCE * dt
                     wind_slow_factor = prop.SLOW_SPEED_MULT
+        
+        # Sifão do CloudArchmageBoss
+        if self.entity_manager.boss and hasattr(self.entity_manager.boss, "is_siphoning"):
+            if self.entity_manager.boss.is_siphoning:
+                # Puxa o jogador em direção ao boss (geralmente centro superior)
+                target_x = self.entity_manager.boss.x + self.entity_manager.boss.w/2
+                target_y = self.entity_manager.boss.y + self.entity_manager.boss.h/2
+                dx = target_x - self.ship.x
+                dy = target_y - self.ship.y
+                dist = math.hypot(dx, dy)
+                if dist > 10:
+                    force = 180.0 # Força de sucção
+                    self.ship.x += (dx / dist) * force * dt
+                    self.ship.y += (dy / dist) * force * dt
+                    wind_slow_factor = min(wind_slow_factor, 0.6)
+                    
         self.ship.wind_slow_factor = wind_slow_factor
 
     def _update_spawners(self, dt: float) -> None:
