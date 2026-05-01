@@ -1107,8 +1107,10 @@ class PlayerProfile:
                         stats.total_powerups_collected = int(
                             stats_data.get("total_powerups_collected", 0)
                         )
+                        # Cast the loaded list to the expected element type so the
+                        # type-checker can infer the deque element type correctly.
                         stats.recent_attempts = deque(
-                            stats_data.get("recent_attempts", []),
+                            cast(List[Dict[str, Any]], stats_data.get("recent_attempts", [])),
                             maxlen=PerformanceAnalyzer.RECENT_ATTEMPTS_WINDOW,
                         )
                         stats.current_win_streak = int(
@@ -1323,7 +1325,8 @@ class PlayerProfile:
                 if isinstance(value, datetime):
                     stats_dict[key] = value.isoformat()
                 elif isinstance(value, deque):
-                    stats_dict[key] = list(value)
+                    # Cast deque element type for the type-checker when serializing
+                    stats_dict[key] = list(cast(List[Dict[str, Any]], value))
                 elif key == "best_time" and value is None:
                     stats_dict[key] = None
                 else:

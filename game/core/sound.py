@@ -3,7 +3,7 @@ import random
 import sys
 import threading
 from functools import wraps
-from typing import Any, Callable, Dict, List, TypeVar, Union
+from typing import Any, Callable, Dict, List, TypeVar, Union, Optional
 
 import pygame
 import logging
@@ -332,6 +332,15 @@ class SoundManager:
         """Toca um som específico pelo nome."""
         if sound_name in self._sounds:
             self._sounds[sound_name].play()
+
+    @require_audio
+    def get_sound(self, sound_name: str) -> Optional[pygame.mixer.Sound]:
+        """Retorna o objeto `pygame.mixer.Sound` carregado ou `None` se não existir.
+
+        Use este método em vez de acessar internamente `._sounds` para evitar
+        avisos sobre uso de atributos protegidos.
+        """
+        return self._sounds.get(sound_name)
 
     def set_master_volume(self, volume: float):
         """Define o volume mestre (0.0 a 1.0)."""

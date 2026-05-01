@@ -18,6 +18,7 @@ from ..entities.bullet import Bullet
 from ..entities.bullet_pool import BulletPool
 from ..entities.cannon_mine import CannonMine
 from ..entities.cannon_tower import CannonTower
+from ..entities.cloud_archmage_boss import CloudArchmageBoss
 from ..entities.emp_wave import EMPWave
 from ..entities.explosion import Explosion, ExplosionType
 from ..entities.explosion_pool import ExplosionPool
@@ -105,6 +106,7 @@ class EntityManager:
                 GiantMeteorBoss,
                 StoneGolemBoss,
                 MountainSerpentBoss,
+                CloudArchmageBoss,
             ]
         ] = None
 
@@ -501,6 +503,11 @@ class EntityManager:
                         self.serpent_bullets.append(f)
                     else:
                         self.enemies.append(f)
+            elif isinstance(self.boss, CloudArchmageBoss):
+                spawned = self.boss.update(enemy_dt, (player_x, player_y))
+                # For now, CloudArchmage spawns stalagmites which go into enemies
+                if spawned:
+                    self.enemies.extend(spawned)
             else:
                 ls, sqs = self.boss.update(enemy_dt, player_x, player_y)
                 if ls:
@@ -668,8 +675,17 @@ class EntityManager:
                         self.serpent_bullets.append(f)
                     else:
                         self.enemies.append(f)
+            elif isinstance(self.boss, CloudArchmageBoss):
+                spawned = self.boss.update(dt, (player_x, player_y))
+                if spawned:
+                    for s in spawned:
+                        # Archmage spawns stalagmites and similar enemies
+                        self.enemies.append(s)
             else:
-                ls, sqs = self.boss.update(dt, player_x, player_y)
+                # Many boss subclasses return (lasers, squares). Use a cast
+                # to give the type-checker a concrete signature here.
+                result = self.boss.update(dt, player_x, player_y)
+                ls, sqs = result
                 if ls:
                     self.boss_lasers.extend(ls)
                 if sqs:

@@ -10,6 +10,7 @@ from ..entities.bot_elemental import ElementalRobot
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.giant_meteor_boss import GiantMeteorBoss
+from ..entities.cloud_archmage_boss import CloudArchmageBoss
 from ..entities.meteor import Meteor
 from ..entities.mountain_geode import MountainGeode
 from ..entities.mountain_mage import MountainMage
@@ -972,6 +973,7 @@ class LevelConfig:
             | GiantMeteorBoss
             | StoneGolemBoss
             | MountainSerpentBoss
+            | CloudArchmageBoss
         ]
         | None
     ) = None
@@ -997,7 +999,8 @@ class LevelConfig:
         weights_map = self.get_enemy_spawn_weights()
         types = list(weights_map.keys())
         weights = [weights_map[t] for t in types]
-        return random.choices(types, weights=weights, k=1)[0]
+        result: list[type] = random.choices(types, weights=weights, k=1)
+        return result[0]
 
     def get_enemy_spawn_weights(self) -> dict[type, float]:
         """Retorna pesos base de spawn derivados do intervalo configurado.
@@ -1470,14 +1473,14 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # Meteor: 0.5,
             # Alien: 1.5,
             # EyeEnemy: 2.0,
-            RockGlider: 0.6,
+            # RockGlider: 0.6,
             # ElementalRobot: 1.0,
             # StoneSentry: 30.0,
-            MountainMage: 10.0,
+            # MountainMage: 10.0,
             # MountainPropeller: 0.8,
             # MountainGeode: 1.0,
         },
-        enemies_to_clear=100,
+        enemies_to_clear=1,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
         mines_enabled=True,
@@ -1488,10 +1491,12 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         # boss_type=SquareMinionBoss,
         # boss_type=StoneGolemBoss,
         # boss_type=MountainSerpentBoss,
-        boss_type=GiantMeteorBoss,
+        # boss_type=GiantMeteorBoss,
+        boss_type=CloudArchmageBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),
+
     # Nível 3: Primeiro Boss - Stone Golem (Montanhas)
     3: LevelConfig(
         level_number=3,
@@ -1506,18 +1511,36 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         theme_name="Chefe do Golem de Pedra",
         score_multiplier=1.2,
     ),
-    5: LevelConfig(
-        level_number=5,
+    # Nível 6: Segundo Boss - Mountain Serpent
+    6: LevelConfig(
+        level_number=6,
         enemy_spawn_config={
             RockGlider: 0.6,
             ElementalRobot: 18.0,
             StoneSentry: 25.0,
         },
-        enemies_to_clear=240,
+        enemies_to_clear=300,
         boss_type=MountainSerpentBoss,
         mines_enabled=True,
         theme_name="Boss da Serpente de Pedra",
         score_multiplier=1.3,
+    ),
+    # Nível 10: Terceiro Boss - Cloud Archmage (Final do Mundo 1)
+    10: LevelConfig(
+        level_number=10,
+        enemy_spawn_config={
+            RockGlider: 0.5,
+            ElementalRobot: 15.0,
+            MountainMage: 12.0,
+            MountainPropeller: 10.0,
+        },
+        enemies_to_clear=400,
+        boss_type=CloudArchmageBoss,
+        mines_enabled=True,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v", "spiral_square"],
+        theme_name="O Arquimago das Nuvens",
+        score_multiplier=1.5,
     ),
     # Vazio Sideral - 4 Bosses
     # Nível 12: Boss clássico

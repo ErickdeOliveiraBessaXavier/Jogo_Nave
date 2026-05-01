@@ -298,8 +298,26 @@ class MusicManager:
         self.sound_manager.music_paused = False
 
     def play_warning(self) -> None:
+        # Stop any previous warning playback on the dedicated channel
+        # and play the warning SFX on that channel so it can be reliably stopped
+        # by `stop_warning()` later.
         self.sound_manager.warning_channel.stop()
-        self.sound_manager.play_sound("warning")
+        snd = None
+        # Use public accessor instead of touching protected `_sounds`
+        if hasattr(self.sound_manager, "get_sound"):
+            snd = self.sound_manager.get_sound("warning")
+        else:
+            # Fallback for older versions: access internal dict (best-effort)
+            snd = getattr(self.sound_manager, "_sounds", {}).get("warning")
+        if snd:
+            snd.set_volume(self.sound_manager.sfx_volume * self.sound_manager.master_volume)
+            # Loop the warning sound while the warning stage is active.
+            # It will be stopped explicitly via `stop_warning()`.
+            try:
+                self.sound_manager.warning_channel.play(snd, loops=-1)
+            except Exception:
+                # Fallback to a single play if channel play fails
+                snd.play()
 
     def play_powerup(self) -> None:
         self.sound_manager.play_sound("powerup")

@@ -69,9 +69,9 @@ class WorldConfig:
 def _get_worlds() -> dict[int, WorldConfig]:
     """Retorna dicionário de mundos configurados."""
     # Importações locais para evitar circular imports
+    from ..entities.cloud_archmage_boss import CloudArchmageBoss
     from ..entities.giant_meteor_boss import GiantMeteorBoss
     from ..entities.slime_boss import SlimeBoss
-    from ..entities.stone_golem_boss import StoneGolemBoss
 
     return {
         1: WorldConfig(
@@ -84,7 +84,7 @@ def _get_worlds() -> dict[int, WorldConfig]:
             start_level=1,
             end_level=10,
             boss_level=10,
-            boss_type=StoneGolemBoss,  # Boss das montanhas
+            boss_type=CloudArchmageBoss,  # Boss das montanhas
             theme_modifiers={
                 "alien_weight": 0.5,  # Menos aliens
             },

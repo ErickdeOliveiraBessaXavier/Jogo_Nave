@@ -1,5 +1,5 @@
 import random
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Tuple, cast
 
 import pygame
 
@@ -17,8 +17,10 @@ class ExplosiveMine:
     _normal_sprite: pygame.Surface | None = None
     _explosion_sprite: pygame.Surface | None = None
     is_explosive_mine: bool = True
-    # Cache de transforms: (is_normal, scale_key, angle_key) -> Surface
-    _transform_cache: dict[tuple, pygame.Surface] = {}
+    # Cache de transforms: (is_exploding: bool, scale_key: float, angle_key: int) -> Surface
+    _transform_cache: Dict[Tuple[bool, float, int], pygame.Surface] = cast(
+        Dict[Tuple[bool, float, int], pygame.Surface], {}
+    )
 
     @classmethod
     def load_sprites(cls) -> None:
