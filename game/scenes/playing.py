@@ -1710,10 +1710,14 @@ class PlayingScene(Scene):
             "spike": MusicState.SPIKE_BOSS,
             "slime": MusicState.SLIME_BOSS,
             "giant_meteor": MusicState.GIANT_METEOR_BOSS,
+            "mountain_serpent": MusicState.MOUNTAIN_SERPENT_BOSS,
         }
         boss_type = self._boss_type_cache or "normal"
+        boss_music_state = getattr(type(boss), "MUSIC_STATE", None)
+        if boss_music_state is None:
+            boss_music_state = _boss_music_map.get(boss_type, MusicState.BOSS)
         sound_manager.music_state_manager.transition_to(
-            _boss_music_map.get(boss_type, MusicState.BOSS)
+            boss_music_state
         )
         self.boss_music_started = True
 

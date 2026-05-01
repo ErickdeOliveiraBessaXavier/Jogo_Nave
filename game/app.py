@@ -15,6 +15,8 @@ from .scenes.main_menu import MainMenuScene
 
 class GameApp:
     def __init__(self):
+        # Melhor qualidade/latência para o mixer antes do pygame.init()
+        pygame.mixer.pre_init(44100, -16, 2, 4096)
         pygame.init()
 
         # Carregar preferências de sistema (vídeo, áudio, controles)
@@ -84,27 +86,31 @@ class GameApp:
         self.states.push(MainMenuScene(self))
 
     def run(self):
-        while self.running:
-            dt = self.clock.tick(Config.FPS) / 1000.0
+        from .core.sound import sound_manager
 
-            current_scene = self.states.current()
+        try:
+            while self.running:
+                dt = self.clock.tick(Config.FPS) / 1000.0
 
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.running = False
-                # Removido: ESC global que fechava o jogo
-                # elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                #     self.running = False
-                elif current_scene:
-                    current_scene.handle_event(event)
+                current_scene = self.states.current()
 
-            if current_scene:
-                current_scene.update(dt)
-                current_scene.render(self.screen)
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        self.running = False
+                    # Removido: ESC global que fechava o jogo
+                    # elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    #     self.running = False
+                    elif current_scene:
+                        current_scene.handle_event(event)
 
-            pygame.display.flip()
+                if current_scene:
+                    current_scene.update(dt)
+                    current_scene.render(self.screen)
 
-        pygame.quit()
+                pygame.display.flip()
+        finally:
+            sound_manager.shutdown()
+            pygame.quit()
 
 
 def main():

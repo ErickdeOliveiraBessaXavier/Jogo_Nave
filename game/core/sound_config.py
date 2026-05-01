@@ -13,6 +13,7 @@ class MusicState(Enum):
     SPIKE_BOSS = "spike_boss"
     SLIME_BOSS = "slime_boss"
     GIANT_METEOR_BOSS = "giant_meteor_boss"
+    MOUNTAIN_SERPENT_BOSS = "mountain_serpent_boss"
     SILENCE = "silence"
 
 
@@ -98,6 +99,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
         "spike_boss": "music/spike_boss_theme.mp3",
         "slime_boss": "music/Boss-Slime-Theme.mp3",
         "giant_meteor_boss": "music/Musica_Giant_Meteor_Boss.mp3",
+        "mountain_serpent_boss": "music/Stone_Snake_Themel.mp3",
     },
     # Efeitos sonoros
     "sfx": {
@@ -115,6 +117,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
         "ui": {
             "warning": "sfx/ui/warning.mp3",
             "powerup": "sfx/ui/powerUp.wav",
+            "button_click": "sfx/ui/button_click.wav",
             "button_hover": "sfx/ui/sound_hover.wav",
             "upgrade_activate": "sfx/ui/Ativação_Aprimoramentos.wav",
             "meteor_rain": "sfx/ui/som_chuva_meteoro_{}.wav",  # {} = 1,2,3,4

@@ -30,6 +30,7 @@ import pygame
 from ..core import colors
 from ..core.assets import BASE_DIR, get_image
 from ..core.config import config as Config
+from ..core.sound_config import MusicState
 from .mountain_serpent_pixel_map import PIXEL_COLS as _PIXEL_COLS
 from .mountain_serpent_pixel_map import PIXEL_MAP as _PIXEL_MAP
 from .mountain_serpent_pixel_map import PIXEL_ROWS as _PIXEL_ROWS
@@ -873,6 +874,16 @@ class MountainSerpentBoss:
     HEAD_ANIM_SLOW_FACTOR: Final[float] = 1.25  # multiplicador global da animacao
 
     DEFAULT_HEALTH: Final[int] = 1200  # HP inicial do boss
+    MUSIC_STATE: Final[MusicState] = MusicState.MOUNTAIN_SERPENT_BOSS
+
+    @classmethod
+    def get_music_state(cls) -> MusicState:
+        """Estado de música associado a este boss.
+
+        Mantém a regra junto da entidade para que novos bosses possam copiar
+        o mesmo padrão: definir `MUSIC_STATE` e expor `get_music_state()`.
+        """
+        return cls.MUSIC_STATE
 
     # Ataques - fase 1 (cuspida simples)
     ATTACK_SPIT_COOLDOWN: Final[float] = 4.0  # s entre cuspidas
