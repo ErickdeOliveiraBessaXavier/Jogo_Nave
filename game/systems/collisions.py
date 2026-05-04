@@ -214,14 +214,14 @@ class Collisions:
         # Se não possui mask explícita, usa fallback de rect
         mask = getattr(target_with_mask, "mask", None)  # type: ignore[attr-defined]
         if mask is None:
-            target_rect: pygame.Rect = getattr(
-                target_with_mask, "rect", None
-            ) or pygame.Rect(
-                target_with_mask.x,
-                target_with_mask.y,
-                target_with_mask.w,
-                target_with_mask.h,
-            )
+            target_rect: pygame.Rect | None = getattr(target_with_mask, "rect", None)
+            if target_rect is None:
+                target_rect = pygame.Rect(
+                    target_with_mask.x,
+                    target_with_mask.y,
+                    target_with_mask.w,
+                    target_with_mask.h,
+                )
             return entity_rect.colliderect(target_rect)
 
         # Fast distance check first

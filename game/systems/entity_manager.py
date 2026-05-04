@@ -36,7 +36,7 @@ from ..entities.ice_poison_zone import IcePoisonZone
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
-from ..entities.mountain_mage import MountainMage, MountainStalagmite
+from ..entities.mountain_mage import MountainMage, MountainStalagmite, MountainStalactite
 from ..entities.mountain_propeller import MountainPropeller
 from ..entities.mountain_serpent_boss import (
     MountainSerpentBoss,
@@ -142,6 +142,7 @@ class EntityManager:
                 StoneSentry,
                 MountainMage,
                 MountainStalagmite,
+                MountainStalactite,
                 MountainPropeller,
                 SerpentBlock,
                 Boulder,
@@ -730,12 +731,12 @@ class EntityManager:
                 # MountainMage em APPEARING já foi desenhado acima — skip para evitar duplo draw
                 if isinstance(e, MountainMage) and not e.dead and e.is_appearing:
                     continue
-                # MountainStalagmite: sempre desenha (com ou sem fragmentos) — o rect
+                # MountainStalagmite/Stalactite: sempre desenha (com ou sem fragmentos) — o rect
                 # pode ser zero no início de RISING antes da máscara ser calculada.
-                if isinstance(e, MountainStalagmite) and not e.dead:
+                if isinstance(e, (MountainStalagmite, MountainStalactite)) and not e.dead:
                     e.draw(surface)
                     continue
-                if isinstance(e, MountainStalagmite) and getattr(e, "_fragments", None):
+                if isinstance(e, (MountainStalagmite, MountainStalactite)) and getattr(e, "_fragments", None):
                     e.draw(surface)
                     continue
                 if is_v(e):
@@ -950,6 +951,9 @@ class EntityManager:
             if (
                 not e.dead
                 and not isinstance(e, SerpentBlock)
+                # Stalagmites/stalactites spawn off-screen intentionally (rise from below
+                # or fall from above) — let their own state machine handle removal.
+                and not isinstance(e, (MountainStalagmite, MountainStalactite))
                 and self._is_enemy_off_screen(e)
             ):
                 e.dead = True

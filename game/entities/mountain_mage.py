@@ -754,6 +754,489 @@ class MountainStalagmite:
         surface.blit(s, (ox, oy))
 
 
+
+# ---------------------------------------------------------------------------
+# MountainStalactite
+# ---------------------------------------------------------------------------
+
+
+class MountainStalactite:
+    """Estalactite que cai do teto — espelho invertido de MountainStalagmite."""
+
+    MAX_HEALTH: Final[int] = 20
+
+    BASE_WIDTH: Final = 48
+    MIN_HEIGHT: Final = 62
+
+    RISE_TIME: Final = 0.32        # tempo de "descida" até a posição alvo
+    LINGER_TIME: Final = 3.0
+    SHATTER_TIME: Final = 1.05
+
+    FRAGMENT_LIFE_MIN: Final = 0.62
+    FRAGMENT_LIFE_MAX: Final = 1.18
+
+    SECONDARY_DELAY_LEFT: Final = 0.0
+    SECONDARY_DELAY_RIGHT: Final = 0.2
+    MAIN_DELAY: Final = 0.3
+    SECONDARY_RISE_TIME: Final = 0.28
+    SECONDARY_MAX_RATIO: Final = 0.48
+
+    _EMPTY_HITBOXES: Final[tuple[pygame.Rect, ...]] = ()
+
+    def __init__(self, x: float, ceiling_y: float, target_y: float) -> None:
+        """
+        ceiling_y: posição Y de onde a estalactite nasce (topo da tela, valor baixo).
+        target_y:  posição Y alvo que a ponta deve atingir.
+        """
+        self.x: float = float(x)
+        self.ceiling_y: float = float(ceiling_y)  # análogo a ground_y, mas no teto
+        self.target_y: float = float(target_y)
+
+        self.w: int = self.BASE_WIDTH
+        self.health: int = self.MAX_HEALTH
+        self.dead: bool = False
+        self.active: bool = True
+
+        self._state: _StalagState = _StalagState.RISING
+        self._rise_timer: float = 0.0
+        self._linger_timer: float = 0.0
+        self._hit_flash: float = 0.0
+        self._pulse_timer: float = random.uniform(0.0, math.tau)
+        self._shape_phase: float = random.uniform(0.0, math.tau)
+        self._shatter_timer: float = 0.0
+        self._fragments: list[_StalagmiteFragment] = []
+        self._current_height: float = 1.0
+
+        self._secondary_left_timer: float = -self.SECONDARY_DELAY_LEFT
+        self._secondary_right_timer: float = -self.SECONDARY_DELAY_RIGHT
+        self._main_delay_timer: float = -self.MAIN_DELAY
+        self._secondary_left_height: float = 0.0
+        self._secondary_right_height: float = 0.0
+
+        # Altura = distância do teto até o alvo
+        screen_h = float(_cfg("SCREEN_HEIGHT", 720))
+        max_height = max(self.MIN_HEIGHT, screen_h - self.ceiling_y - 6.0)
+        desired_height = self.target_y - self.ceiling_y + 8.0
+        self._target_height: float = _clamp(desired_height, self.MIN_HEIGHT, max_height)
+
+        self._secondary_left_target: int = max(
+            20, int(self._target_height * self.SECONDARY_MAX_RATIO)
+        )
+        self._secondary_right_target: int = max(
+            20, int(self._target_height * self.SECONDARY_MAX_RATIO * 0.82)
+        )
+
+        self._collision_mask: pygame.mask.Mask | None = None
+        self._collision_mask_offset: tuple[int, int] = (0, 0)
+        self._collision_bounds_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
+        self._update_collision_regions()
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
+    @property
+    def rect(self) -> pygame.Rect:
+        if (
+            self._collision_bounds_rect.width <= 0
+            or self._collision_bounds_rect.height <= 0
+        ):
+            return pygame.Rect(int(self.x), int(self.ceiling_y), 0, 0)
+        return self._collision_bounds_rect
+
+    @property
+    def y(self) -> float:
+        """Topo visual da estalactite (junto ao teto)."""
+        return self.ceiling_y
+
+    @property
+    def h(self) -> float:
+        return self._current_height
+
+    @property
+    def causes_damage(self) -> bool:
+        return not self.dead and self._state in (
+            _StalagState.RISING,
+            _StalagState.ACTIVE,
+        )
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def get_points_value(self) -> int:
+        return 120
+
+    def get_ship_contact_hitboxes(self) -> tuple[pygame.Rect, ...]:
+        if (
+            self.dead
+            or self._state is _StalagState.SHATTERING
+            or self._collision_bounds_rect.width <= 0
+        ):
+            return self._EMPTY_HITBOXES
+        return (self._collision_bounds_rect,)
+
+    def get_collision_mask_data(
+        self,
+    ) -> tuple[pygame.mask.Mask, tuple[int, int]] | None:
+        if (
+            self.dead
+            or self._state is _StalagState.SHATTERING
+            or self._collision_mask is None
+        ):
+            return None
+        return self._collision_mask, self._collision_mask_offset
+
+    def take_damage(self, amount: int = 1) -> None:
+        if self.dead or self._state is _StalagState.SHATTERING:
+            return
+        self.health -= amount
+        self._hit_flash = 0.12
+        if self.health <= 0:
+            self.health = 0
+            self._begin_shattering()
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        r = self.rect
+        return r.centerx, r.centery, max(r.width, r.height) / 2
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        prev_health = self.health
+        self.take_damage(damage)
+        just_died = prev_health > 0 and self.health <= 0
+        if just_died:
+            return HitResult(
+                killed=True,
+                points=self.get_points_value(),
+                explosion_size=38,
+                sound=hit_sounds.EXPLOSION_ASTEROID,
+            )
+        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
+
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.take_damage(amount=999)
+        return HitResult(killed=False, sound=hit_sounds.EXPLOSION_ASTEROID)
+
+    def should_remove(self) -> bool:
+        return self.dead and not self._fragments
+
+    def update(self, dt: float) -> None:
+        if self.dead and not self._fragments:
+            return
+
+        if self.dead:
+            self._update_fragments(dt)
+            return
+
+        self._pulse_timer += dt
+        self._hit_flash = max(0.0, self._hit_flash - dt)
+        self._update_secondary_timers(dt)
+
+        if self._state is _StalagState.RISING:
+            self._update_rising(dt)
+        elif self._state is _StalagState.ACTIVE:
+            self._update_active(dt)
+        elif self._state is _StalagState.SHATTERING:
+            self._update_fragments(dt)
+            if self._shatter_timer >= self.SHATTER_TIME and not self._fragments:
+                self.dead = True
+
+        self._update_collision_regions()
+
+    def draw(self, surface: pygame.Surface) -> None:
+        if self.dead and not self._fragments:
+            return
+
+        if self._state is _StalagState.SHATTERING or (self.dead and self._fragments):
+            self._draw_fragments(surface)
+            return
+
+        cx = int(self.x)
+        height = max(8, int(self._current_height))
+
+        c_center, c_left, c_right, c_edge = self._resolve_colors()
+
+        screen_w = _cfg("SCREEN_WIDTH", 1280)
+        main_hw = min(int(self.w * 1.6), int(screen_w * 0.11))
+        left_hw = max(8, int(main_hw * 0.70))
+        right_hw = max(8, int(main_hw * 0.58))
+        left_h = int(self._secondary_left_height)
+        right_h = int(self._secondary_right_height)
+
+        # Desenha espelhado verticalmente: base no teto, ponta para baixo
+        if left_h >= 4:
+            self._draw_flat_spike_flipped(
+                surface, cx=cx - int(main_hw * 0.95), base_y=int(self.ceiling_y),
+                height=max(4, left_h), half_w=left_hw,
+                phase_seed=self._shape_phase + 1.2, color=c_left, edge=c_edge,
+                forced_lean_dir=-1,
+            )
+
+        if self._main_delay_timer >= 0.0:
+            self._draw_flat_spike_flipped(
+                surface, cx=cx, base_y=int(self.ceiling_y),
+                height=height, half_w=main_hw,
+                phase_seed=self._shape_phase, color=c_center, edge=c_edge,
+            )
+
+        if right_h >= 4:
+            self._draw_flat_spike_flipped(
+                surface, cx=cx + int(main_hw * 0.88), base_y=int(self.ceiling_y),
+                height=max(4, right_h), half_w=right_hw,
+                phase_seed=self._shape_phase - 0.9, color=c_right, edge=c_edge,
+                forced_lean_dir=1,
+            )
+
+    # ------------------------------------------------------------------
+    # Private — delegates to MountainStalagmite helpers via composition
+    # ------------------------------------------------------------------
+
+    def _resolve_colors(
+        self,
+    ) -> tuple[
+        tuple[int, int, int],
+        tuple[int, int, int],
+        tuple[int, int, int],
+        tuple[int, int, int],
+    ]:
+        if self._hit_flash > 0.0:
+            return (255, 255, 255), (210, 210, 210), (185, 185, 185), (160, 160, 160)
+        # Tons mais frios/azulados para diferenciar visualmente das estalagmites
+        return (
+            (80, 100, 140),
+            (100, 130, 170),
+            (60, 80, 120),
+            (15, 20, 40),
+        )
+
+    def _begin_shattering(self) -> None:
+        self._state = _StalagState.SHATTERING
+        self._shatter_timer = 0.0
+        self.active = False
+        self._spawn_fragments()
+
+    def _update_rising(self, dt: float) -> None:
+        self._main_delay_timer += dt
+        if self._main_delay_timer < 0.0:
+            return
+        self._rise_timer += dt
+        eased = _ease_out_cubic(self._rise_timer / self.RISE_TIME)
+        self._current_height = max(1.0, self._target_height * eased)
+        if self._rise_timer >= self.RISE_TIME:
+            self._state = _StalagState.ACTIVE
+            self._current_height = self._target_height
+
+    def _update_active(self, dt: float) -> None:
+        self._linger_timer += dt
+        if self._linger_timer >= self.LINGER_TIME:
+            self._begin_shattering()
+
+    def _update_secondary_timers(self, dt: float) -> None:
+        self._secondary_left_timer += dt
+        if self._secondary_left_timer >= 0.0:
+            progress = _clamp(
+                self._secondary_left_timer / self.SECONDARY_RISE_TIME, 0.0, 1.0
+            )
+            self._secondary_left_height = max(
+                1.0, self._secondary_left_target * _ease_out_cubic(progress)
+            )
+
+        self._secondary_right_timer += dt
+        if self._secondary_right_timer >= 0.0:
+            progress = _clamp(
+                self._secondary_right_timer / self.SECONDARY_RISE_TIME, 0.0, 1.0
+            )
+            self._secondary_right_height = max(
+                1.0, self._secondary_right_target * _ease_out_cubic(progress)
+            )
+
+    def _update_collision_regions(self) -> None:
+        _clear = pygame.Rect(0, 0, 0, 0)
+        if self.dead or self._state is _StalagState.SHATTERING:
+            self._collision_mask = None
+            self._collision_mask_offset = (0, 0)
+            self._collision_bounds_rect = _clear
+            return
+
+        polygons = self._build_visual_spike_polygons()
+        if not polygons:
+            self._collision_mask = None
+            self._collision_mask_offset = (0, 0)
+            self._collision_bounds_rect = _clear
+            return
+
+        all_pts = [(x, y) for poly in polygons for x, y in poly]
+        min_x = min(p[0] for p in all_pts)
+        max_x = max(p[0] for p in all_pts)
+        min_y = min(p[1] for p in all_pts)
+        max_y = max(p[1] for p in all_pts)
+
+        pad = 2
+        mask_x = min_x - pad
+        mask_y = min_y - pad
+        mask_w = max(1, (max_x - min_x) + 1 + pad * 2)
+        mask_h = max(1, (max_y - min_y) + 1 + pad * 2)
+
+        mask_surface = pygame.Surface((mask_w, mask_h), pygame.SRCALPHA)
+        for poly in polygons:
+            local = [(x - mask_x, y - mask_y) for x, y in poly]
+            pygame.draw.polygon(mask_surface, (255, 255, 255, 255), local)
+
+        self._collision_mask = pygame.mask.from_surface(mask_surface, 1)
+        self._collision_mask_offset = (mask_x, mask_y)
+        self._collision_bounds_rect = pygame.Rect(mask_x, mask_y, mask_w, mask_h)
+
+    def _spawn_fragments(self) -> None:
+        if self._fragments:
+            return
+        tip_y = self.ceiling_y + self._current_height
+        for _ in range(_FRAGMENT_COUNT):
+            life = random.uniform(self.FRAGMENT_LIFE_MIN, self.FRAGMENT_LIFE_MAX)
+            self._fragments.append(
+                _StalagmiteFragment(
+                    x=self.x + random.uniform(-self.w * 0.45, self.w * 0.45),
+                    y=random.uniform(self.ceiling_y, tip_y),
+                    vx=random.uniform(-150.0, 150.0),
+                    vy=random.uniform(55.0, 235.0),   # cai para baixo
+                    angle=random.uniform(0.0, math.tau),
+                    spin=random.uniform(-7.0, 7.0),
+                    life=life,
+                    max_life=life,
+                    size=random.uniform(3.0, 7.0),
+                    color=random.choice(_STONE_COLORS),
+                )
+            )
+
+    def _update_fragments(self, dt: float) -> None:
+        self._shatter_timer += dt
+        for f in self._fragments:
+            f.life = max(0.0, f.life - dt)
+            f.vy += _FRAGMENT_GRAVITY * dt
+            f.x += f.vx * dt
+            f.y += f.vy * dt
+            f.angle += f.spin * dt
+        self._fragments = [f for f in self._fragments if f.life > 0.0]
+
+    def _draw_fragments(self, surface: pygame.Surface) -> None:
+        for fragment in self._fragments:
+            life = fragment.life
+            max_life = max(0.001, fragment.max_life)
+            alpha = int(255 * (life / max_life))
+            size = max(1, int(fragment.size))
+            piece_w = max(4, size * 2)
+            piece_h = max(4, int(size * 1.5))
+
+            frag_surf = pygame.Surface((piece_w + 8, piece_h + 8), pygame.SRCALPHA)
+            frag_rect = pygame.Rect(0, 0, piece_w, piece_h)
+            frag_rect.center = ((piece_w + 8) // 2, (piece_h + 8) // 2)
+            br = max(1, size // 4)
+            pygame.draw.rect(frag_surf, (*fragment.color, alpha), frag_rect, border_radius=br)
+            rotated = pygame.transform.rotate(frag_surf, math.degrees(fragment.angle))
+            rr = rotated.get_rect(center=(int(fragment.x), int(fragment.y)))
+            surface.blit(rotated, rr)
+
+    def _build_visual_spike_polygons(self) -> list[list[tuple[int, int]]]:
+        cx = int(self.x)
+        base_y = int(self.ceiling_y)
+        height = max(8, int(self._current_height))
+
+        screen_w = _cfg("SCREEN_WIDTH", 1280)
+        main_hw = min(int(self.w * 1.6), int(screen_w * 0.11))
+        left_hw = max(8, int(main_hw * 0.70))
+        right_hw = max(8, int(main_hw * 0.58))
+        left_h = int(self._secondary_left_height)
+        right_h = int(self._secondary_right_height)
+
+        polygons: list[list[tuple[int, int]]] = []
+
+        if left_h >= 4:
+            polygons.append(self._build_flipped_pts(
+                cx - int(main_hw * 0.95), base_y, max(4, left_h), left_hw,
+                self._shape_phase + 1.2, forced_lean_dir=-1,
+            ))
+
+        if self._main_delay_timer >= 0.0:
+            polygons.append(self._build_flipped_pts(
+                cx, base_y, height, main_hw, self._shape_phase,
+            ))
+
+        if right_h >= 4:
+            polygons.append(self._build_flipped_pts(
+                cx + int(main_hw * 0.88), base_y, max(4, right_h), right_hw,
+                self._shape_phase - 0.9, forced_lean_dir=1,
+            ))
+
+        return polygons
+
+    def _build_flipped_pts(
+        self,
+        cx: int,
+        base_y: int,  # teto (y baixo)
+        height: int,
+        half_w: int,
+        phase_seed: float,
+        forced_lean_dir: int | None = None,
+    ) -> list[tuple[int, int]]:
+        """Vértices espelhados: base no teto, ponta apontando para baixo."""
+        lean_dir = (1 if forced_lean_dir >= 0 else -1) if forced_lean_dir is not None else (
+            1 if math.sin(phase_seed) >= 0 else -1
+        )
+        lean_top = int(half_w * (0.20 + 0.12 * abs(math.sin(phase_seed))))
+        lean_mid = int(half_w * (0.10 + 0.08 * abs(math.cos(phase_seed * 0.9))))
+        notch_cut = int(half_w * (0.28 + 0.14 * abs(math.sin(phase_seed * 1.4))))
+
+        # Espelha Y: tip aponta para baixo (base_y + height), base fica em base_y
+        y_tip = base_y + height
+        y_n1  = base_y + int(height * 0.73)
+        y_n2  = base_y + int(height * 0.46)
+        y_n3  = base_y + int(height * 0.20)
+
+        hw_base = half_w
+        hw_n3 = max(int(half_w * 0.80), 4)
+        hw_n2 = max(int(half_w * 0.54), 3)
+        hw_n1 = max(int(half_w * 0.30), 2)
+        zag_n2 = min(notch_cut, max(0, hw_n3 - hw_n2))
+
+        cx_tip = cx + lean_dir * lean_top
+        cx_n1  = cx + lean_dir * lean_mid
+        cx_n2  = cx - lean_dir * zag_n2
+        cx_n3  = cx + lean_dir * (lean_mid // 2)
+
+        return [
+            (cx_tip,        y_tip),
+            (cx_n1 - hw_n1, y_n1),
+            (cx_n2 - hw_n2, y_n2),
+            (cx_n3 - hw_n3, y_n3),
+            (cx - hw_base,  base_y),
+            (cx + hw_base,  base_y),
+            (cx_n3 + hw_n3, y_n3),
+            (cx_n2 + hw_n2, y_n2),
+            (cx_n1 + hw_n1, y_n1),
+        ]
+
+    def _draw_flat_spike_flipped(
+        self,
+        surface: pygame.Surface,
+        cx: int,
+        base_y: int,
+        height: int,
+        half_w: int,
+        phase_seed: float,
+        color: tuple[int, int, int],
+        edge: tuple[int, int, int],
+        forced_lean_dir: int | None = None,
+    ) -> None:
+        pts = self._build_flipped_pts(cx, base_y, height, half_w, phase_seed, forced_lean_dir)
+        pygame.draw.polygon(surface, color, pts)
+        pygame.draw.polygon(surface, edge, pts, width=2)
+
+
 # ---------------------------------------------------------------------------
 # MountainMage
 # ---------------------------------------------------------------------------

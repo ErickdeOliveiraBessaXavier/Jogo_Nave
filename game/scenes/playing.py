@@ -837,16 +837,17 @@ class PlayingScene(Scene):
                     wind_slow_factor = prop.SLOW_SPEED_MULT
         
         # Sifão do CloudArchmageBoss
-        if self.entity_manager.boss and hasattr(self.entity_manager.boss, "is_siphoning"):
-            if self.entity_manager.boss.is_siphoning:
-                # Puxa o jogador em direção ao boss (geralmente centro superior)
-                target_x = self.entity_manager.boss.x + self.entity_manager.boss.w/2
-                target_y = self.entity_manager.boss.y + self.entity_manager.boss.h/2
+        if self._boss_type_cache == "archmage" and self.entity_manager.boss:
+            from ..entities.cloud_archmage_boss import CloudArchmageBoss
+            archmage = cast(CloudArchmageBoss, self.entity_manager.boss)
+            if archmage.is_siphoning:
+                target_x = archmage.x + archmage.w / 2
+                target_y = archmage.y + archmage.h / 2
                 dx = target_x - self.ship.x
                 dy = target_y - self.ship.y
                 dist = math.hypot(dx, dy)
                 if dist > 10:
-                    force = 180.0 # Força de sucção
+                    force = 180.0
                     self.ship.x += (dx / dist) * force * dt
                     self.ship.y += (dy / dist) * force * dt
                     wind_slow_factor = min(wind_slow_factor, 0.6)
@@ -1001,6 +1002,7 @@ class PlayingScene(Scene):
         from ..entities.slime_boss import SlimeBoss
         from ..entities.spike_boss import SpikeBoss
         from ..entities.stone_golem_boss import StoneGolemBoss
+        from ..entities.cloud_archmage_boss import CloudArchmageBoss
 
         type_map: dict[type, str] = {
             SpikeBoss: "spike",
@@ -1008,6 +1010,7 @@ class PlayingScene(Scene):
             GiantMeteorBoss: "giant_meteor",
             StoneGolemBoss: "stone_golem",
             MountainSerpentBoss: "mountain_serpent",
+            CloudArchmageBoss: "archmage",
         }
         for cls, name in type_map.items():
             if isinstance(boss, cls):
