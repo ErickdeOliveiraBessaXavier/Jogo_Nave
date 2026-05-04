@@ -2,7 +2,6 @@ from typing import TYPE_CHECKING, Any, Callable, Sequence, TypeAlias, cast
 
 import pygame
 
-from ..core.config import Config
 from ..core.config import config as config_instance
 from ..core.sound import sound_manager
 from ..core.spatial_grid import SpatialGrid
@@ -49,17 +48,11 @@ class CollisionConstants:
     SPIKE_EXPLOSION_SIZE = 15
     MINE_DAMAGE_DEFAULT = 2
     MINE_DAMAGE_AIRSTRIKE = 5
+    EXPLOSIVE_BULLET_RADIUS = 60
+    ICE_SLOW_DURATION = 0.15
 
 
 class Collisions:
-
-    def __init__(self, is_side_scroll: bool = False) -> None:
-        """Inicializa o sistema de colisões com suporte ao modo de jogo.
-
-        Args:
-            is_side_scroll: True se em modo side-scroll, False se em modo top-down
-        """
-        self.is_side_scroll = is_side_scroll
 
     @staticmethod
     def _get_points_value(enemy: Any) -> int:
@@ -217,24 +210,6 @@ class Collisions:
                 )
             return entity_rect.colliderect(target_rect)
 
-        # Fast distance check first
-        target_center_x = target_with_mask.x + target_with_mask.w / 2
-        target_center_y = target_with_mask.y + target_with_mask.h / 2
-        entity_center_x = entity_x + entity_rect.width / 2
-        entity_center_y = entity_y + entity_rect.height / 2
-
-        dx = entity_center_x - target_center_x
-        dy = entity_center_y - target_center_y
-        distance_squared = dx * dx + dy * dy
-
-        proximity_threshold = (
-            target_with_mask.w / 2 + max(entity_rect.width, entity_rect.height)
-        ) ** 2
-
-        if distance_squared > proximity_threshold:
-            return False
-
-        # Rect collision check
         target_rect = pygame.Rect(
             target_with_mask.x,
             target_with_mask.y,
@@ -364,7 +339,7 @@ class Collisions:
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
 
-        for enemy in enemies[:]:
+        for enemy in enemies:
             if enemy.dead:
                 continue
 
@@ -486,16 +461,13 @@ class Collisions:
         ship_hit = False
 
         # 1) Criar explosões para minas cujo timer de explosão acabou
-        for enemy in enemies[:]:
+        for enemy in enemies:
             if getattr(enemy, "is_explosive_mine", False):
                 mine: Any = enemy
-                # Verificar se está explodindo E timer acabou (mas ainda não marcada dead)
-                # OU já está dead (timer acabou no update anterior)
-                should_explode = (
-                    mine.is_exploding
-                    and mine.pre_explosion_timer <= 0
-                    and not mine.dead
-                ) or mine.dead
+                should_explode = mine.is_exploding and (
+                    (mine.pre_explosion_timer <= 0 and not mine.dead)
+                    or mine.dead
+                )
                 if should_explode:
                     cx, cy = (mine.x, mine.y)
                     explosion_radius = mine.explosion_radius
@@ -530,7 +502,7 @@ class Collisions:
             explosion_x = explosion.x
             explosion_y = explosion.y
 
-            for enemy in enemies[:]:
+            for enemy in enemies:
                 if enemy.dead:
                     continue
 
@@ -591,7 +563,7 @@ class Collisions:
                 if not zone.in_zone(cx, cy, r):
                     continue
 
-                setattr(enemy, "_ice_slow_timer", 0.15)
+                setattr(enemy, "_ice_slow_timer", CollisionConstants.ICE_SLOW_DURATION)
 
                 eid = id(enemy)
                 if zone.can_damage(eid):
@@ -633,7 +605,7 @@ class Collisions:
             dist_sq = (ship_cx - explosion_x) ** 2 + (ship_cy - explosion_y) ** 2
             if dist_sq < (explosion_radius + ship_r) ** 2:
                 entity_manager.spawn_explosion(
-                    ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
+                    ship.x + ship.w / 2, ship.y + ship.h / 2, size=CollisionConstants.AREA_EXPLOSION_SIZE
                 )
                 ship_hit = True
         return ship_hit
@@ -668,7 +640,7 @@ class Collisions:
                 effect.hit_enemies,
                 enemies,
                 entity_manager,
-                damage_to_mine=2,
+                damage_to_mine=CollisionConstants.MINE_DAMAGE_DEFAULT,
             )
             score_gain += gain
             destroyed_count += destroyed
@@ -729,7 +701,7 @@ class Collisions:
                 bomb.hit_enemies,
                 enemies,
                 entity_manager,
-                damage_to_mine=5,  # Dano alto para minas
+                damage_to_mine=CollisionConstants.MINE_DAMAGE_AIRSTRIKE,
             )
             score_gain += gain
             destroyed_count += destroyed
@@ -889,7 +861,7 @@ class Collisions:
         """Materializa o efeito AoE de uma bala explosiva ao primeiro impacto."""
         cx = bullet.x + bullet.w / 2
         cy = bullet.y + bullet.h / 2
-        radius = 60
+        radius = CollisionConstants.EXPLOSIVE_BULLET_RADIUS
 
         entity_manager.spawn_explosive_effect(cx, cy, radius=radius)
         entity_manager.spawn_explosion(cx, cy, size=radius // 2)
@@ -994,7 +966,7 @@ class Collisions:
             # Iniciar morte da nave (trigger_death_sequence ou similar se existir)
             # Para boss, contato costuma ser letal instantâneo.
             entity_manager.spawn_explosion(
-                ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
+                ship.x + ship.w / 2, ship.y + ship.h / 2, size=CollisionConstants.AREA_EXPLOSION_SIZE
             )
             return True
         return False
@@ -1025,7 +997,7 @@ class Collisions:
                 continue
 
             self._apply_ship_contact(enemy, cx, cy, entity_manager)
-            entity_manager.spawn_explosion(cx, cy, size=30)
+            entity_manager.spawn_explosion(cx, cy, size=CollisionConstants.AREA_EXPLOSION_SIZE)
             return True
         return False
 
@@ -1115,38 +1087,32 @@ class Collisions:
     def mini_ship_bullets_vs_spikes(
         self,
         mini_ship_bullets: list[MiniShipBullet],
-        spike_grid: SpatialGrid[Spike],  # OPT #1: Recebe grid pronta
+        spike_grid: SpatialGrid[Spike],
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão de balas das mini ships com Spikes."""
         score_gain = 0
 
-        # OPT #2 & #3: Cache rect para evitar múltiplos acessos
         for b in mini_ship_bullets[:]:
-            b_rect = b.rect  # Cache uma vez
-            # Query potential spikes (expand by 10 pixels)
-            query_x = b_rect.x - 10
-            query_y = b_rect.y - 10
-            query_w = b_rect.width + 20
-            query_h = b_rect.height + 20
+            b_rect = b.rect
+            query_x = b_rect.x - CollisionConstants.SPATIAL_QUERY_PADDING
+            query_y = b_rect.y - CollisionConstants.SPATIAL_QUERY_PADDING
+            query_w = b_rect.width + CollisionConstants.SPATIAL_QUERY_PADDING * 2
+            query_h = b_rect.height + CollisionConstants.SPATIAL_QUERY_PADDING * 2
             potential_spikes = spike_grid.query(query_x, query_y, query_w, query_h)
             for spike in potential_spikes:
-                # Só colide se o spike estiver voando
-                if spike.state == "flying" and b_rect.colliderect(
-                    spike.rect
-                ):  # Usa cache
-                    # Destruir projétil se não for piercing
+                if spike.state == "flying" and b_rect.colliderect(spike.rect):
                     self._process_projectile_hit(
                         b,
                         spike.center_x,
                         spike.center_y,
                         entity_manager,
                         create_explosion=True,
-                        explosion_size=15,
+                        explosion_size=CollisionConstants.SPIKE_EXPLOSION_SIZE,
                     )
                     spike.dead = True
                     sound_manager.play_explosion_alien()
-                    score_gain += Config.SPIKE_POINTS
+                    score_gain += spike.get_points_value()
                     break
         return score_gain
 
@@ -1157,10 +1123,11 @@ class Collisions:
     ) -> list[str]:
         collected_kinds: list[str] = []
         for p in powerups[:]:
+            if p.dead:
+                continue
             if ship.rect.colliderect(p.rect):
                 p.dead = True
-                kind = getattr(p, "kind", "shield")
-                collected_kinds.append(kind)
+                collected_kinds.append(p.kind)
         return collected_kinds
 
     def ship_vs_stars(
@@ -1187,46 +1154,40 @@ class Collisions:
                 # Destruir o espinho ao acertar a nave
                 spike.dead = True
                 # Criar explosão no local do spike
-                entity_manager.spawn_explosion(spike.center_x, spike.center_y, size=15)
+                entity_manager.spawn_explosion(spike.center_x, spike.center_y, size=CollisionConstants.SPIKE_EXPLOSION_SIZE)
                 return True
         return False
 
     def bullets_vs_spikes(
         self,
         bullets: list[Bullet],
-        spike_grid: SpatialGrid[Spike],  # OPT #1: Recebe grid pronta
+        spike_grid: SpatialGrid[Spike],
         entity_manager: "EntityManager",
     ) -> int:
         """Verifica colisão entre balas e espinhos. Retorna pontos ganhos."""
         score_gain = 0
 
-        # OPT #2 & #3: Cache rect para evitar múltiplos acessos
         for b in bullets[:]:
-            b_rect = b.rect  # Cache uma vez
-            # Query potential spikes (expand by 10 pixels)
-            query_x = b_rect.x - 10
-            query_y = b_rect.y - 10
-            query_w = b_rect.width + 20
-            query_h = b_rect.height + 20
+            b_rect = b.rect
+            query_x = b_rect.x - CollisionConstants.SPATIAL_QUERY_PADDING
+            query_y = b_rect.y - CollisionConstants.SPATIAL_QUERY_PADDING
+            query_w = b_rect.width + CollisionConstants.SPATIAL_QUERY_PADDING * 2
+            query_h = b_rect.height + CollisionConstants.SPATIAL_QUERY_PADDING * 2
             potential_spikes = spike_grid.query(query_x, query_y, query_w, query_h)
             for spike in potential_spikes:
-                if b_rect.colliderect(spike.rect):  # Usa cache
-                    # Remover bala
+                if b_rect.colliderect(spike.rect):
                     self._process_projectile_hit(
                         b,
                         spike.center_x,
                         spike.center_y,
                         entity_manager,
                         create_explosion=True,
-                        explosion_size=15,
+                        explosion_size=CollisionConstants.SPIKE_EXPLOSION_SIZE,
                     )
-                    # Destruir espinho
                     spike.dead = True
-                    # Som
                     sound_manager.play_explosion_asteroid()
-                    # Pontos
                     score_gain += spike.get_points_value()
-                    break  # Próxima bala
+                    break
         return score_gain
 
     def ship_vs_spike_boss(
@@ -1241,7 +1202,7 @@ class Collisions:
         # Colisão com o corpo do boss
         if ship.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
             entity_manager.spawn_explosion(
-                ship.x + ship.w / 2, ship.y + ship.h / 2, size=30
+                ship.x + ship.w / 2, ship.y + ship.h / 2, size=CollisionConstants.AREA_EXPLOSION_SIZE
             )
             return True
 
@@ -1256,7 +1217,7 @@ class Collisions:
             dy = ship_center_y - boss_center_y
             if dx * dx + dy * dy <= wave_radius * wave_radius:
                 entity_manager.spawn_explosion(
-                    ship.x + ship.w / 2, ship.y + ship.h / 2, size=20
+                    ship.x + ship.w / 2, ship.y + ship.h / 2, size=CollisionConstants.DEFAULT_EXPLOSION_SIZE
                 )
                 return True
 
@@ -1288,7 +1249,7 @@ class Collisions:
                 square_rect = square.get_rect()
                 if bullet_rect.colliderect(square_rect):
                     # Criar explosão no ponto de impacto
-                    entity_manager.spawn_explosion(bullet.x, bullet.y, size=20)
+                    entity_manager.spawn_explosion(bullet.x, bullet.y, size=CollisionConstants.DEFAULT_EXPLOSION_SIZE)
 
                     # Destruir apenas a bala se não for piercing
                     if not bullet.piercing:
@@ -1332,7 +1293,7 @@ class Collisions:
 
                     # Criar explosão no ponto de impacto
                     entity_manager.spawn_explosion(
-                        bullet.x, bullet.y, size=20, explosion_type=ExplosionType.SLIME
+                        bullet.x, bullet.y, size=CollisionConstants.DEFAULT_EXPLOSION_SIZE, explosion_type=ExplosionType.SLIME
                     )
 
                     # Destruir apenas a bala se não for piercing

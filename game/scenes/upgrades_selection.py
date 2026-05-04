@@ -1,3 +1,4 @@
+import math
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -58,22 +59,17 @@ class FloatingMessage:
         self.message = message
         self.color = color
         self.alpha = 255
-        self.lifetime = 90  # Frames (1.5 segundos a 60fps)
-        self.initial_lifetime = self.lifetime
-        self.dy = -1.0  # Velocidade de subida
+        self.lifetime = 1.5  # seconds
+        self.dy = -60.0  # pixels per second
 
-        # Font para a mensagem
         self.font = get_font(20)
 
-        # Efeito de fade e movimento
-        self.fade_start = 30  # Começar fade nos últimos 30 frames
+        self.fade_start = 0.5  # seconds before expiry to begin fade
 
-    def update(self, _dt: float) -> None:
-        """Atualiza posição e fade da mensagem."""
-        self.y += self.dy
-        self.lifetime -= 1
+    def update(self, dt: float) -> None:
+        self.y += self.dy * dt
+        self.lifetime -= dt
 
-        # Calcular alpha baseado no lifetime
         if self.lifetime <= self.fade_start:
             fade_progress = self.lifetime / self.fade_start
             self.alpha = max(0, int(255 * fade_progress))
@@ -575,9 +571,16 @@ class UpgradesSelectionScene(Scene):
             # Se está arrastando, verificar se o drop seria inválido
             for i, slot_rect in enumerate(self.layout.active_slots):
                 if slot_rect.collidepoint(mouse_pos):
-                    # Slot bloqueado por estrelas ou sem peso suficiente = inválido
                     if i >= self.player_profile.unlocked_slots:
                         self.drag_invalid_target = True
+                    elif self.drag_source_slot is not None:
+                        original = self.player_profile.upgrade_loadout[self.drag_source_slot]
+                        self.player_profile.upgrade_loadout[self.drag_source_slot] = None
+                        can_equip = self.player_profile.can_equip_upgrade(
+                            self.dragging_upgrade.type, i
+                        )
+                        self.player_profile.upgrade_loadout[self.drag_source_slot] = original
+                        self.drag_invalid_target = not can_equip
                     elif not self.player_profile.can_equip_upgrade(
                         self.dragging_upgrade.type, i
                     ):
@@ -817,10 +820,7 @@ class UpgradesSelectionScene(Scene):
                 elapsed = time.time() - self.shake_start_time
                 progress = elapsed / self.shake_duration
                 if progress < 1.0:
-                    # Onda senoidal para movimento suave
-                    import math
-
-                    shake_intensity = 8 * (1.0 - progress)  # Diminui com o tempo
+                    shake_intensity = 8 * (1.0 - progress)
                     shake_offset = int(shake_intensity * math.sin(progress * 20))
                     draw_rect.x += shake_offset
 

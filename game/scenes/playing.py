@@ -307,7 +307,7 @@ class PlayingScene(Scene):
             self.enemy_health_multiplier,
         )
         self.powerup_spawner = PowerUpSpawner(self.difficulty_preset)
-        self.collisions = Collisions(is_side_scroll=self.is_side_scroll)
+        self.collisions = Collisions()
         self.star_spawner = StarSpawner()
 
         self._base_score_multiplier: float = (
