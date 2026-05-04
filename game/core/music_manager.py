@@ -16,8 +16,12 @@ from typing import TYPE_CHECKING, Dict, List, Union, cast
 
 import pygame
 
-from .sound_config import (BEHAVIOR_CONFIG, MUSIC_BEHAVIOR_CONFIG, SOUND_PATHS,
-                           MusicState)
+from .sound_config import (
+    BEHAVIOR_CONFIG,
+    MUSIC_BEHAVIOR_CONFIG,
+    SOUND_PATHS,
+    MusicState,
+)
 
 if TYPE_CHECKING:
     from .sound import SoundManager
@@ -65,7 +69,9 @@ class MusicStateManager:
             MusicState.MOUNTAIN_SERPENT_BOSS,
         ]
 
-        is_music_paused = bool(getattr(self.music_manager.sound_manager, "music_paused", False))
+        is_music_paused = bool(
+            getattr(self.music_manager.sound_manager, "music_paused", False)
+        )
         is_game_music_active = self.current_state in game_music_types or (
             is_music_paused and self.previous_state in game_music_types
         )
@@ -145,7 +151,10 @@ class MusicManager:
             music_path = get_resource_path(
                 os.path.join(str(SOUND_PATHS["base"]), chosen_music)
             )
-            if os.path.exists(music_path) and self.sound_manager.current_music != chosen_music:
+            if (
+                os.path.exists(music_path)
+                and self.sound_manager.current_music != chosen_music
+            ):
                 self._transition_to_music(music_path, "background")
 
     def play_boss_music_internal(self) -> None:
@@ -161,14 +170,22 @@ class MusicManager:
                 str(SOUND_PATHS["base"]), str(self._music_paths()["spike_boss"])
             )
         )
-        if os.path.exists(music_path) and self.sound_manager.current_music != "spike_boss":
+        if (
+            os.path.exists(music_path)
+            and self.sound_manager.current_music != "spike_boss"
+        ):
             self._transition_to_music(music_path, "spike_boss")
 
     def play_slime_boss_music_internal(self) -> None:
         music_path = get_resource_path(
-            os.path.join(str(SOUND_PATHS["base"]), str(self._music_paths()["slime_boss"]))
+            os.path.join(
+                str(SOUND_PATHS["base"]), str(self._music_paths()["slime_boss"])
+            )
         )
-        if os.path.exists(music_path) and self.sound_manager.current_music != "slime_boss":
+        if (
+            os.path.exists(music_path)
+            and self.sound_manager.current_music != "slime_boss"
+        ):
             self._transition_to_music(music_path, "slime_boss")
 
     def play_giant_meteor_boss_music_internal(self) -> None:
@@ -177,7 +194,10 @@ class MusicManager:
                 str(SOUND_PATHS["base"]), str(self._music_paths()["giant_meteor_boss"])
             )
         )
-        if os.path.exists(music_path) and self.sound_manager.current_music != "giant_meteor_boss":
+        if (
+            os.path.exists(music_path)
+            and self.sound_manager.current_music != "giant_meteor_boss"
+        ):
             self._transition_to_music(music_path, "giant_meteor_boss")
 
     def play_mountain_serpent_boss_music_internal(self) -> None:
@@ -224,13 +244,22 @@ class MusicManager:
             "slime_boss",
             "mountain_serpent_boss",
         ]:
-            boss_volume = self.sound_manager.music_volume * self.sound_manager.boss_music_multiplier
+            boss_volume = (
+                self.sound_manager.music_volume
+                * self.sound_manager.boss_music_multiplier
+            )
             final_volume = min(1.0, boss_volume)
-            pygame.mixer.music.set_volume(final_volume * self.sound_manager.master_volume)
+            pygame.mixer.music.set_volume(
+                final_volume * self.sound_manager.master_volume
+            )
         elif self.sound_manager.current_music is not None:
-            pygame.mixer.music.set_volume(self.sound_manager.music_volume * self.sound_manager.master_volume)
+            pygame.mixer.music.set_volume(
+                self.sound_manager.music_volume * self.sound_manager.master_volume
+            )
 
-    def load_config(self, music_vol: float, sfx_volume: float, shot_volume: float) -> None:
+    def load_config(
+        self, music_vol: float, sfx_volume: float, shot_volume: float
+    ) -> None:
         self.sound_manager.music_volume = max(0.0, min(1.0, music_vol))
         self.sound_manager.sfx_volume = max(0.0, min(1.0, sfx_volume))
         self.sound_manager.shot_volume_base = max(0.0, min(1.0, shot_volume))
@@ -244,10 +273,15 @@ class MusicManager:
                 "mountain_serpent_boss",
             ]:
                 base_volume *= self.sound_manager.boss_music_multiplier
-            pygame.mixer.music.set_volume(min(1.0, base_volume * self.sound_manager.master_volume))
+            pygame.mixer.music.set_volume(
+                min(1.0, base_volume * self.sound_manager.master_volume)
+            )
 
     def _transition_to_music(self, music_path: str, music_type: str) -> None:
-        if self.sound_manager.transition_thread and self.sound_manager.transition_thread.is_alive():
+        if (
+            self.sound_manager.transition_thread
+            and self.sound_manager.transition_thread.is_alive()
+        ):
             pygame.mixer.music.stop()
             self.sound_manager.transition_thread.join()
 
@@ -311,12 +345,14 @@ class MusicManager:
             # Fallback for older versions: access internal dict (best-effort)
             snd = getattr(self.sound_manager, "_sounds", {}).get("warning")
         if snd:
-            snd.set_volume(self.sound_manager.sfx_volume * self.sound_manager.master_volume)
+            snd.set_volume(
+                self.sound_manager.sfx_volume * self.sound_manager.master_volume
+            )
             # Loop the warning sound while the warning stage is active.
             # It will be stopped explicitly via `stop_warning()`.
             try:
                 self.sound_manager.warning_channel.play(snd, loops=-1)
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 # Fallback to a single play if channel play fails
                 snd.play()
 

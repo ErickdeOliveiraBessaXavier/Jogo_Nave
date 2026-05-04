@@ -459,11 +459,11 @@ class SoundManager:
             # Stop all sounds and music
             try:
                 self.stop_all()
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass
             try:
                 self.music_manager.stop_music_internal()
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass
 
             # Join transition thread if running
@@ -473,7 +473,7 @@ class SoundManager:
             # Quit the mixer
             try:
                 pygame.mixer.quit()
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass
         finally:
             # best-effort cleanup of resources
@@ -502,7 +502,7 @@ class AudioController:
         # Expor shutdown na fachada
         try:
             self._mgr.shutdown(wait=wait)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logging.exception("Erro ao encerrar o AudioController")
 
 

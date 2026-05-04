@@ -41,14 +41,14 @@ class _FireParticle:
 
 
 class FireZone:
-    DAMAGE_INTERVAL = 0.15   # Mais rápido que gelo (aprox 6.6 HP/s)
+    DAMAGE_INTERVAL = 0.15  # Mais rápido que gelo (aprox 6.6 HP/s)
 
     _SPAWN_INTERVAL = 0.08
     _PARTICLE_LIFETIME_MIN = 0.5
     _PARTICLE_LIFETIME_MAX = 1.0
     _FIRE_COLORS = [
-        (255, 60, 0),    # Vermelho fogo
-        (255, 150, 0),   # Laranja
+        (255, 60, 0),  # Vermelho fogo
+        (255, 150, 0),  # Laranja
         (255, 220, 50),  # Amarelo
     ]
     _LINE_WIDTH = 4
@@ -65,6 +65,11 @@ class FireZone:
         self._spawn_timer = 0.0
         self._particles: list[_FireParticle] = []
         self._surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+
+    @property
+    def rect(self) -> pygame.Rect:
+        r = self.radius
+        return pygame.Rect(int(self.x) - r, int(self.y) - r, r * 2, r * 2)
 
     def update(self, dt: float) -> None:
         if self.dead:
@@ -102,7 +107,9 @@ class FireZone:
             _FireParticle(
                 x=px,
                 y=py,
-                lifetime=random.uniform(self._PARTICLE_LIFETIME_MIN, self._PARTICLE_LIFETIME_MAX),
+                lifetime=random.uniform(
+                    self._PARTICLE_LIFETIME_MIN, self._PARTICLE_LIFETIME_MAX
+                ),
                 base_size=random.uniform(self.radius * 0.1, self.radius * 0.25),
                 rotation=random.uniform(0.0, math.tau),
                 rot_speed=random.uniform(-4.0, 4.0),
@@ -144,7 +151,7 @@ class FireZone:
             color = (*color_base, alpha)
             lx = int(p.x - ox)
             ly = int(p.y - oy)
-            
+
             # Desenha faíscas/chamas como pequenos polígonos ou linhas grossas
             points = []
             for i in range(3):

@@ -247,6 +247,7 @@ _CHAR_TO_KEY: Final[dict[str, str]] = {
     "D": "joint",
     "O": "gold",
     "G": "gola",
+    "B": "robe",
 }
 
 
@@ -609,8 +610,7 @@ class CloudArchmageBoss:
                 1.0, self._teleport_visual + _TELEPORT_FADE_SPEED * dt
             )
 
-        # Orbital speed scales with damage taken
-        self._orb_angle += dt * 1.2 * (1.0 + (1.0 - hp_ratio) * 1.5)
+        # Orbital speed scales with damage taken (handled in _update_orbs_positions)
 
         spawned: list[Any] = []
 
@@ -725,7 +725,8 @@ class CloudArchmageBoss:
         hp_ratio = self.health / self.max_health
 
         orbit_speed_mult = 1.0 + (1.0 - hp_ratio) * 1.5
-        self._orb_angle += dt * 1.2 * orbit_speed_mult
+        # Increased base angular velocity for more dynamic orbits
+        self._orb_angle += dt * 2.4 * orbit_speed_mult
 
         for orb in self._orbs:
             if orb.mode == OrbMode.ABSORBED:
@@ -1033,6 +1034,7 @@ class CloudArchmageBoss:
     def _begin_teleport(self) -> None:
         if self._shield_active or self._shield_spawning:
             self._shield_active = False
+            self._shield_spawning = False
             self._shield_hp = 0
             self._restore_orbs()
 

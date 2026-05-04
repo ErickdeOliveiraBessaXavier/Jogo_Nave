@@ -126,9 +126,9 @@ class Boss:
         self.squares_animation_timer = 0.0
 
         # Sistema de lançamento sequencial de quadrados
-        self.square_launch_queue: List[BossSquare] = (
-            []
-        )  # Fila de quadrados prontos para lançar
+        self.square_launch_queue: List[
+            BossSquare
+        ] = []  # Fila de quadrados prontos para lançar
         self.square_launch_timer = 0.0  # Timer para lançamento sequencial
         self.square_launch_delay = 0.15  # 150ms entre cada lançamento
 
@@ -350,8 +350,7 @@ class Boss:
 
         if self.frenzy_mode:
             return self._create_frenzy_lasers(face_x, face_y, laser_lifetime)
-        else:
-            return self._create_normal_laser(face_x, face_y, laser_lifetime)
+        return self._create_normal_laser(face_x, face_y, laser_lifetime)
 
     def _create_laser_pattern(
         self,
@@ -394,12 +393,12 @@ class Boss:
                 lasers.append(laser)
 
             return lasers
-        else:
-            # Modo calmo: laser único saindo da ponta do canhão
-            target_x = face_x + face_normal.x * self.LASER_DISTANCE
-            target_y = face_y + face_normal.y * self.LASER_DISTANCE
 
-            return [BossLaser(face_x, face_y, target_x, target_y, lifetime=lifetime)]
+        # Modo calmo: laser único saindo da ponta do canhão
+        target_x = face_x + face_normal.x * self.LASER_DISTANCE
+        target_y = face_y + face_normal.y * self.LASER_DISTANCE
+
+        return [BossLaser(face_x, face_y, target_x, target_y, lifetime=lifetime)]
 
     def _create_frenzy_lasers(
         self, face_x: float, face_y: float, lifetime: float
@@ -773,7 +772,6 @@ class Boss:
             and not self.pending_laser_data
             and player_y is not None
         ):  # E não tem laser pendente
-
             # Timer para selecionar novos quadrados para preparar
             self.square_attack_timer.update(dt)
             if self.square_attack_timer.done():
@@ -1334,7 +1332,7 @@ class Boss:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..core.config import config as cfg
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
