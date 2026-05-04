@@ -1,19 +1,8 @@
 import logging
 import random
 from collections import deque
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    List,
-    Protocol,
-    Tuple,
-    Type,
-    TypedDict,
-    Union,
-    cast,
-)
+from typing import (TYPE_CHECKING, Any, Callable, Dict, List, Protocol, Tuple,
+                    Type, TypedDict, Union, cast)
 
 # ---------------------------------------------------------------------------
 # Imports de entidades movidos para o topo — evita late imports em hot paths

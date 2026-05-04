@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING, Type
 from ..entities.alien import Alien
 from ..entities.boss import Boss
 from ..entities.bot_elemental import ElementalRobot
+from ..entities.cloud_archmage_boss import CloudArchmageBoss
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.giant_meteor_boss import GiantMeteorBoss
-from ..entities.cloud_archmage_boss import CloudArchmageBoss
 from ..entities.meteor import Meteor
 from ..entities.mountain_geode import MountainGeode
 from ..entities.mountain_mage import MountainMage

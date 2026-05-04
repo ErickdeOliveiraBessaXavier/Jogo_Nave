@@ -1,11 +1,4 @@
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Sequence,
-    TypeAlias,
-    cast,
-)
+from typing import TYPE_CHECKING, Any, Callable, Sequence, TypeAlias, cast
 
 import pygame
 

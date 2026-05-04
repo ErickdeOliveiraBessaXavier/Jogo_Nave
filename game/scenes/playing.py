@@ -41,14 +41,11 @@ from ..core.paths import get_profile_path
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
-from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
+from ..core.upgrades import (ActiveUpgrade, HealUpgrade, create_upgrade,
+                             get_upgrade_icon)
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
-from ..core.world_config import (
-    WorldConfig,
-    format_stage_name,
-    get_world_for_level,
-    is_side_scroll_mode,
-)
+from ..core.world_config import (WorldConfig, format_stage_name,
+                                 get_world_for_level, is_side_scroll_mode)
 from ..entities.floating_score import FloatingScore
 from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
@@ -997,12 +994,12 @@ class PlayingScene(Scene):
             self._boss_type_cache = None
             return
 
+        from ..entities.cloud_archmage_boss import CloudArchmageBoss
         from ..entities.giant_meteor_boss import GiantMeteorBoss
         from ..entities.mountain_serpent_boss import MountainSerpentBoss
         from ..entities.slime_boss import SlimeBoss
         from ..entities.spike_boss import SpikeBoss
         from ..entities.stone_golem_boss import StoneGolemBoss
-        from ..entities.cloud_archmage_boss import CloudArchmageBoss
 
         type_map: dict[type, str] = {
             SpikeBoss: "spike",

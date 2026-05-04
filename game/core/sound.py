@@ -1,20 +1,16 @@
+import logging
 import os
 import random
 import sys
 import threading
 from functools import wraps
-from typing import Any, Callable, Dict, List, TypeVar, Union, Optional
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 
 import pygame
-import logging
 
-from .sound_config import (
-    CHANNEL_CONFIG,
-    SOUND_PATHS,
-    VOLUME_CONFIG,
-)
 from .music_manager import MusicManager
 from .sfx_manager import load_sfx
+from .sound_config import CHANNEL_CONFIG, SOUND_PATHS, VOLUME_CONFIG
 
 MusicPaths = Dict[str, Union[str, List[str]]]
 

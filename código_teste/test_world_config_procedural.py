@@ -4,11 +4,8 @@ import sys
 # Permite importar pacote `game` quando rodando direto via pytest no workspace.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from game.core.world_config import (
-    WorldTheme,
-    get_world_for_level,
-    get_world_for_level_by_id,
-)
+from game.core.world_config import (WorldTheme, get_world_for_level,
+                                    get_world_for_level_by_id)
 
 
 def test_world_mapping_keeps_fixed_worlds_until_level_45() -> None:

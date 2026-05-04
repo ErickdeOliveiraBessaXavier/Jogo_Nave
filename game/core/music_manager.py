@@ -9,14 +9,15 @@ from __future__ import annotations
 import logging
 import os
 import random
+import sys
 import threading
 import time
-import sys
 from typing import TYPE_CHECKING, Dict, List, Union, cast
 
 import pygame
 
-from .sound_config import BEHAVIOR_CONFIG, MUSIC_BEHAVIOR_CONFIG, MusicState, SOUND_PATHS
+from .sound_config import (BEHAVIOR_CONFIG, MUSIC_BEHAVIOR_CONFIG, SOUND_PATHS,
+                           MusicState)
 
 if TYPE_CHECKING:
     from .sound import SoundManager

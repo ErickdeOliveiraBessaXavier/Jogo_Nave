@@ -4,9 +4,10 @@ Renderiza o boss usando pixel map extraído diretamente do sprite original.
 Animações: pulsação do corpo, movimento dos tentáculos, brilho dos olhos.
 """
 
-import pygame
 import math
 import sys
+
+import pygame
 
 # ---------------------------------------------------------------------------
 # Dados extraídos da imagem original (96x40 pixels, 16 cores)

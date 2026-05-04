@@ -7,9 +7,10 @@ dicionários `_sounds` e `_sound_groups` usados pelo `SoundManager`.
 O objetivo é permitir uma futura separação completa entre efeitos e música
 sem quebrar a API existente durante a migração.
 """
-from typing import Any, Dict, List, Tuple, cast
-import os
 import logging
+import os
+from typing import Any, Dict, List, Tuple, cast
+
 import pygame
 
 from .sound_config import SOUND_PATHS, VOLUME_CONFIG

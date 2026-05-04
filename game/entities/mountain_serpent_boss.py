@@ -23,7 +23,8 @@ Padrões aplicados
 
 import math
 import random
-from typing import TYPE_CHECKING, Final, List, Literal, Optional, TypeAlias, TypedDict
+from typing import (TYPE_CHECKING, Final, List, Literal, Optional, TypeAlias,
+                    TypedDict)
 
 import pygame
 
