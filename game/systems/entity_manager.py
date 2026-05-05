@@ -1038,10 +1038,14 @@ class EntityManager:
         self.orbital_rocks.clear()
         self.mine_explosions.clear()
         self.ice_poison_zones.clear()
+        self.fire_zones.clear()
+        self.mountain_propellers.clear()
         self.explosive_effects.clear()
         self.air_strike_bombs.clear()
         self.cannon_towers.clear()
         self.cannon_mines.clear()
+        self.black_holes.clear()
+        self.emp_waves.clear()
         self.boss = None
         self.mini_ships.clear()
         self.mini_ship_bullets.clear()
@@ -1051,12 +1055,14 @@ class EntityManager:
         self.rock_glider_pool.clear_active()
         self.bullet_pool.clear_active()
         self.explosion_pool.clear_active()
+        self.enemy_spatial_grid.clear()
+        self.spike_spatial_grid.clear()
+        self._grid_needs_rebuild = True
 
     def clear_for_level_transition(self) -> None:
-        for b in self.bullets[:]:
-            if b.dead:
-                self.bullet_pool.release(b)
-        self.bullets = [b for b in self.bullets if not b.dead]
+        # Limpar projéteis do jogador (opcional, mas evita balas flutuando na transição)
+        self.bullets.clear()
+        self.player_lasers.clear()
 
         self.alien_bullets.clear()
         self.serpent_bullets.clear()
@@ -1066,16 +1072,33 @@ class EntityManager:
         self.floating_scores.clear()
         self.enemies.clear()
         self.mine_explosions.clear()
+        self.ice_poison_zones.clear()
+        self.fire_zones.clear()
+        self.mountain_propellers.clear()
         self.boss = None
+        self.mini_ships.clear()
+        self.mini_ship_bullets.clear()
         self.formations.clear()
         self.meteor_pool.clear_active()
         self.rock_glider_pool.clear_active()
         self.explosion_pool.clear_active()
         self.spikes.clear()
         self.air_strike_bombs.clear()
+        self.boulders.clear()
+        self.rock_shards.clear()
+        self.orbital_rocks.clear()
+        self.black_holes.clear()
+        self.emp_waves.clear()
+        self.explosive_effects.clear()
+        self.powerups.clear()
+        self.stars.clear()
 
-        self.cannon_towers = [t for t in self.cannon_towers if not t.dead]
-        self.cannon_mines = [m for m in self.cannon_mines if not m.dead]
+        self.cannon_towers.clear()
+        self.cannon_mines.clear()
+
+        self.enemy_spatial_grid.clear()
+        self.spike_spatial_grid.clear()
+        self._grid_needs_rebuild = True
 
     def get_stats(self) -> Dict[str, Any]:
         return {
