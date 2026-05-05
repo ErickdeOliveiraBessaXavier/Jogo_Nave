@@ -423,6 +423,13 @@ class CloudArchmageBoss:
         self._slide_is_forced: bool = False
         self._hit_count: int = 0
 
+        self._player_pos: tuple[float, float] | None = None
+        # Mutable attack intervals — scaled down as HP drops
+        self._stalagmite_interval: float = _PHASE2_STALAGMITE_INTERVAL
+        self._firezone_interval: float = _PHASE3_FIREZONE_INTERVAL
+        self._overload_firezone_interval: float = 1.0
+        self._overload_stalagmite_interval: float = 0.9
+
         # Shield state
         self._shield_hp: int = 0
         self._shield_max_hp: int = self.SHIELD_MAX_HP
@@ -630,6 +637,7 @@ class CloudArchmageBoss:
         if self.dead:
             return []
 
+        self._player_pos = player_pos
         self._pulse_timer += dt
         self._gradient_timer += dt
         self._hit_flash = max(0.0, self._hit_flash - dt)
@@ -705,6 +713,7 @@ class CloudArchmageBoss:
         # Orbital speed scales with damage taken (handled in _update_orbs_positions)
 
         spawned: list[Any] = []
+        self._update_attack_intervals()
         self._update_phase2_telegraphs(dt, spawned)
         self._update_firezone_warnings(dt, spawned)
 
@@ -989,12 +998,33 @@ class CloudArchmageBoss:
         orb.target_y = self.y + self.h / 2
         self._white_dodge_active = False
 
+    def _update_attack_intervals(self) -> None:
+        scale = 0.55 + 0.45 * (self.health / self.max_health)
+        self._stalagmite_interval = _PHASE2_STALAGMITE_INTERVAL * scale
+        self._firezone_interval = _PHASE3_FIREZONE_INTERVAL * scale
+        self._overload_firezone_interval = 1.0 * scale
+        self._overload_stalagmite_interval = 0.9 * scale
+
     def _begin_phase1_cycle(self) -> None:
         active_orbs = [
             index for index, orb in enumerate(self._orbs) if orb.mode == OrbMode.ORBIT
         ]
         if active_orbs:
-            self._start_orb_absorption(random.choice(active_orbs))
+            hp_ratio = self.health / self.max_health
+            weights = []
+            for idx in active_orbs:
+                orb_type = self._orbs[idx].type
+                if orb_type == OrbType.CYAN:
+                    w = 1.0 if hp_ratio > 0.65 else 0.25
+                elif orb_type == OrbType.PURPLE:
+                    w = 1.0 + (1.0 - hp_ratio) * 0.6
+                elif orb_type == OrbType.ORANGE:
+                    w = 0.8 + (1.0 - hp_ratio) * 0.8
+                else:  # WHITE
+                    w = 0.7
+                weights.append(w)
+            chosen = random.choices(active_orbs, weights=weights, k=1)[0]
+            self._start_orb_absorption(chosen)
         else:
             # Orbs still returning — retry after a short delay instead of freezing in IDLE
             self._state = ArchmageState.IDLE
@@ -1186,8 +1216,8 @@ class CloudArchmageBoss:
             # (lines that tick _shield_spawn_t and flip _shield_active). No action needed here.
         elif power_type == OrbType.PURPLE:
             self._stalagmite_spawn_timer += dt
-            while self._stalagmite_spawn_timer >= _PHASE2_STALAGMITE_INTERVAL:
-                self._stalagmite_spawn_timer -= _PHASE2_STALAGMITE_INTERVAL
+            while self._stalagmite_spawn_timer >= self._stalagmite_interval:
+                self._stalagmite_spawn_timer -= self._stalagmite_interval
                 x_pos = float(
                     _clamp(
                         target_x + random.randint(-120, 120),
@@ -1247,8 +1277,8 @@ class CloudArchmageBoss:
             # não permitindo fuga enquanto o escudo estiver ativo.
             pass
 
-        while self._stalagmite_spawn_timer >= _PHASE2_STALAGMITE_INTERVAL:
-            self._stalagmite_spawn_timer -= _PHASE2_STALAGMITE_INTERVAL
+        while self._stalagmite_spawn_timer >= self._stalagmite_interval:
+            self._stalagmite_spawn_timer -= self._stalagmite_interval
             player_x, player_y = (
                 player_pos
                 if player_pos is not None
@@ -1408,8 +1438,7 @@ class CloudArchmageBoss:
         if random.random() < slide_chance:
             self._slide_start_x = self.x
             self._slide_start_y = self.y
-            self._slide_target_x = float(random.randint(100, Config.SCREEN_WIDTH - 100))
-            self._slide_target_y = float(random.randint(50, 200))
+            self._slide_target_x, self._slide_target_y = self._pick_teleport_position()
             self._slide_timer = 0.0
             self._state = ArchmageState.SLIDE
         else:
@@ -1440,8 +1469,8 @@ class CloudArchmageBoss:
 
         if self._phase3_combo_powers and OrbType.ORANGE in self._phase3_combo_powers:
             self._fire_zone_spawn_timer += dt
-            while self._fire_zone_spawn_timer >= _PHASE3_FIREZONE_INTERVAL:
-                self._fire_zone_spawn_timer -= _PHASE3_FIREZONE_INTERVAL
+            while self._fire_zone_spawn_timer >= self._firezone_interval:
+                self._fire_zone_spawn_timer -= self._firezone_interval
                 for _ in range(3):
                     self._queue_random_firezone_warning(
                         radius=int(60 * _FIREZONE_RADIUS_SCALE),
@@ -1450,8 +1479,8 @@ class CloudArchmageBoss:
 
         if self._phase3_combo_powers and OrbType.PURPLE in self._phase3_combo_powers:
             self._stalagmite_spawn_timer += dt
-            while self._stalagmite_spawn_timer >= _PHASE3_STALAGMITE_INTERVAL:
-                self._stalagmite_spawn_timer -= _PHASE3_STALAGMITE_INTERVAL
+            while self._stalagmite_spawn_timer >= self._stalagmite_interval:
+                self._stalagmite_spawn_timer -= self._stalagmite_interval
                 if random.random() < 0.5:
                     spawned.append(
                         MountainStalactite(float(target_x), -10.0, float(target_y))
@@ -1513,16 +1542,16 @@ class CloudArchmageBoss:
         self._fire_zone_spawn_timer += dt
         self._stalagmite_spawn_timer += dt
 
-        while self._fire_zone_spawn_timer >= 1.0:
-            self._fire_zone_spawn_timer -= 1.0
+        while self._fire_zone_spawn_timer >= self._overload_firezone_interval:
+            self._fire_zone_spawn_timer -= self._overload_firezone_interval
             for _ in range(3):
                 self._queue_random_firezone_warning(
                     radius=int(68 * _FIREZONE_RADIUS_SCALE),
                     duration=random.uniform(5.0, 8.0),
                 )
 
-        while self._stalagmite_spawn_timer >= 0.9:
-            self._stalagmite_spawn_timer -= 0.9
+        while self._stalagmite_spawn_timer >= self._overload_stalagmite_interval:
+            self._stalagmite_spawn_timer -= self._overload_stalagmite_interval
             if random.random() < 0.5:
                 spawned.append(
                     MountainStalactite(float(target_x), -10.0, float(target_y))
@@ -1545,10 +1574,35 @@ class CloudArchmageBoss:
 
         return spawned
 
+    def _calculate_vulnerable_duration(self) -> float:
+        hp_ratio = self.health / self.max_health
+        duration = _VULNERABLE_DURATION
+        if hp_ratio > 0.75:
+            duration *= 1.35
+        elif hp_ratio < 0.35:
+            duration *= 0.8
+        return max(2.0, duration + random.uniform(-0.3, 0.5))
+
+    def _pick_teleport_position(self) -> tuple[float, float]:
+        x_lo, x_hi = 100.0, float(Config.SCREEN_WIDTH - 100 - self.w)
+        y_lo, y_hi = 50.0, 200.0
+        if self._player_pos is None or random.random() < 0.25:
+            return float(random.uniform(x_lo, x_hi)), float(random.uniform(y_lo, y_hi))
+        px = self._player_pos[0]
+        hp_ratio = self.health / self.max_health
+        if hp_ratio < 0.35 and random.random() < 0.6:
+            # Escape to opposite side
+            target_x = x_hi if px < Config.SCREEN_WIDTH / 2 else x_lo
+        else:
+            # Flank: appear to a random side of the player
+            offset = random.choice([-1, 1]) * random.uniform(100.0, 200.0)
+            target_x = _clamp(px + offset, x_lo, x_hi)
+        return target_x, float(random.uniform(y_lo, y_hi))
+
     def _begin_phase3_vulnerable(self) -> None:
         self._restore_orbs()
         self._state = ArchmageState.PHASE3_VULNERABLE
-        self._state_timer = _VULNERABLE_DURATION
+        self._state_timer = self._calculate_vulnerable_duration()
         self._white_dodge_active = False
         self._phase3_combo_powers = None
 
@@ -1661,8 +1715,7 @@ class CloudArchmageBoss:
                     if self._teleport_wait_timer <= _TELEPORT_MAX_WAIT:
                         return
 
-                self.x = float(random.randint(100, Config.SCREEN_WIDTH - 100))
-                self.y = float(random.randint(50, 200))
+                self.x, self.y = self._pick_teleport_position()
                 self._sync_lerp_to_position()
                 self._teleport_repositioned = True
 
@@ -2215,7 +2268,7 @@ class CloudArchmageBoss:
                     self._state = ArchmageState.COOLDOWN
                     self._cooldown_timer = _ABSORPTION_COOLDOWN
                 elif self.health / self.max_health > self.PHASE3_THRESHOLD:
-                    self._vulnerable_timer = _VULNERABLE_DURATION
+                    self._vulnerable_timer = self._calculate_vulnerable_duration()
                     self._state = ArchmageState.PHASE2_VULNERABLE
                 else:
                     self._begin_phase3_vulnerable()
