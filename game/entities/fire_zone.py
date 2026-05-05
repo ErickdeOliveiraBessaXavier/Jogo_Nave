@@ -1,8 +1,12 @@
 import math
 import random
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import pygame
+
+if TYPE_CHECKING:
+    from ..systems.hit_result import HitResult
 
 
 @dataclass
@@ -100,7 +104,7 @@ class FireZone:
 
     def _spawn_particle(self) -> None:
         angle = random.uniform(0.0, math.tau)
-        dist = random.uniform(0.0, self.radius * 0.9)
+        dist = self.radius * 0.9 * math.sqrt(random.random())
         px = self.x + math.cos(angle) * dist
         py = self.y + math.sin(angle) * dist
         self._particles.append(
@@ -118,6 +122,9 @@ class FireZone:
 
     def in_zone(self, cx: float, cy: float, r: float = 0.0) -> bool:
         return (cx - self.x) ** 2 + (cy - self.y) ** 2 < (self.radius + r) ** 2
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x, self.y, float(self.radius)
 
     def can_damage(self, entity_id: int) -> bool:
         return entity_id not in self.hit_cooldowns
@@ -153,13 +160,17 @@ class FireZone:
             ly = int(p.y - oy)
 
             # Desenha faíscas/chamas como pequenos polígonos ou linhas grossas
-            points = []
+            points: list[tuple[float, float]] = []
             for i in range(3):
                 ang = p.rotation + i * (math.tau / 3)
                 points.append((lx + math.cos(ang) * size, ly + math.sin(ang) * size))
             pygame.draw.polygon(s, color, points)
 
         surface.blit(s, (int(self.x) - r, int(self.y) - r))
+
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
+        from ..systems.hit_result import NO_HIT
+        return NO_HIT
 
     def should_remove(self) -> bool:
         return self.dead

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 import pygame
 
+from ..core.assets import get_font
 from ..core.config import config as Config
 from .fire_zone import FireZone
 from .mountain_mage import MountainStalactite, MountainStalagmite
@@ -40,10 +41,19 @@ _OVERLOAD_DURATION: Final = 12.0
 _OVERLOAD_COOLDOWN: Final = 35.0
 _VULNERABLE_DURATION: Final = 5.0
 _CYAN_REPULSE_RADIUS: Final = 120.0
+_CYAN_SHIELD_COLOR: Final[tuple[int, int, int]] = (0, 220, 255)  # canonical cyan used for shield tint & particles
 _PHASE2_STALAGMITE_INTERVAL: Final = 1.4
 _PHASE3_FIREZONE_INTERVAL: Final = 2.0
 _PHASE3_STALAGMITE_INTERVAL: Final = 1.2
 _PHASE3_COMBO_COOLDOWN: Final = 1.0
+_FIREZONE_WARNING_DURATION: Final = 0.9
+_FIREZONE_RADIUS_SCALE: Final = 2.0
+_MAX_FIRE_ZONES: Final = 5
+
+# Wander movement
+_WANDER_SPEED: Final = 105.0
+_WANDER_INTERVAL_MIN: Final = 2.0
+_WANDER_INTERVAL_MAX: Final = 4.5
 
 # Particle emission
 _SHIELD_BREAK_PARTICLE_COUNT: Final = 10
@@ -64,6 +74,14 @@ _FLAP_BASE_HEIGHT: Final = 35
 # Teleport wait safety threshold
 _TELEPORT_MAX_WAIT: Final = 3.0
 
+# Intro sequence
+_INTRO_ORB_SPAWN_INTERVAL: Final = 1.5
+_INTRO_DIM_MAX: Final = 170
+_INTRO_DIM_FADE_IN: Final = 1.8
+_INTRO_DIM_FADE_OUT: Final = 0.45
+_INTRO_BOSS_FADE_IN: Final = 0.6
+_INTRO_ORB_BIRTH_DURATION: Final = 0.75
+
 # Eye geometry offsets (relative to boss center)
 _EYE_L_OFFSET_X: Final = -18.0
 _EYE_R_OFFSET_X: Final = 10.0
@@ -72,6 +90,7 @@ _EYE_SIZE: Final = 8
 
 class ArchmageState(Enum):
     APPEARING = auto()
+    INTRO = auto()
     IDLE = auto()
     ABSORBING_ORB = auto()
     USING_POWER = auto()
@@ -155,6 +174,16 @@ class Telegraph:
     timer: float
     charge: float
     target_y: float
+
+
+@dataclass
+class FireZoneWarning:
+    x: float
+    y: float
+    timer: float
+    charge: float
+    radius: int
+    duration: float
 
 
 # ---------------------------------------------------------------------------
@@ -347,23 +376,47 @@ class CloudArchmageBoss:
         self.dead: bool = False
         self.active: bool = False
 
-        self._state: ArchmageState = ArchmageState.APPEARING
+        self._state: ArchmageState = ArchmageState.INTRO
         self._state_timer: float = 2.5
         self._hit_flash: float = 0.0
         self._pulse_timer: float = 0.0
         self._orb_angle: float = 0.0
         self._mantle_timer: float = 0.0
         self._mantle_speed: float = 1.0
+        self._intro_spawn_timer: float = 0.0
+        self._intro_orbs_spawned: int = 0
+        self._intro_orb_births: list[Particle] = []
+        self._intro_dim_alpha: float = 0.0
+        self._intro_reveal_timer: float = 0.0
+        self._intro_boss_alpha: float = 0.0
+        self._miss_timer: float = 0.0
+        self._miss_x: float = 0.0
+        self._miss_y: float = 0.0
+        self._miss_dy: float = -0.5
+        self._white_dodge_was_miss: bool = False
+
+        self._gradient_timer: float = 0.0
+        # Cache: {(r, g, b, alpha_int): Surface} — reused across frames
+        # Cache: (qr, qg, qb, w, h) -> overlay já mascarado pela alpha do sprite
+        self._tint_cache: dict[tuple[int, int, int, int, int], pygame.Surface] = {}
 
         self._drift_timer: float = 0.0
+        self._wander_target_x: float = sw / 2.0
+        self._wander_target_y: float = 160.0
+        self._wander_timer: float = 0.0
         self._teleport_visual: float = 1.0
         self._teleport_repositioned: bool = False
         self._teleport_wait_timer: float = 0.0
+        self._resume_state: ArchmageState = ArchmageState.IDLE
 
         self._slide_target_x: float = 0.0
         self._slide_target_y: float = 0.0
+        self._slide_start_x: float = 0.0
+        self._slide_start_y: float = 0.0
         self._slide_timer: float = 0.0
-        self._slide_duration: float = 0.7
+        self._slide_duration: float = 0.42
+        self._slide_is_forced: bool = False
+        self._hit_count: int = 0
 
         # Shield state
         self._shield_hp: int = 0
@@ -390,7 +443,7 @@ class CloudArchmageBoss:
         self._vulnerable_timer: float = 0.0
         self._stalagmite_spawn_timer: float = 0.0
         self._fire_zone_spawn_timer: float = 0.0
-        self._phase3_combo_powers: tuple[OrbType, OrbType] | None = None
+        self._phase3_combo_powers: tuple[OrbType, ...] | None = None
         self._spawned_fire_zones: list[FireZone] = []
 
         # Particle lists — now typed as list[Particle]
@@ -402,7 +455,7 @@ class CloudArchmageBoss:
         self._white_dodge_active: bool = False
 
         _orb_defs: list[tuple[OrbType, Color]] = [
-            (OrbType.CYAN, (0, 255, 255)),
+            (OrbType.CYAN, _CYAN_SHIELD_COLOR),
             (OrbType.PURPLE, (180, 50, 255)),
             (OrbType.ORANGE, (255, 140, 0)),
             (OrbType.WHITE, (220, 240, 255)),
@@ -415,9 +468,14 @@ class CloudArchmageBoss:
             )
             for i, (orb_type, color) in enumerate(_orb_defs)
         ]
+        for orb in self._orbs:
+            orb.mode = OrbMode.ABSORBED
+            orb.x = self.x + self.w / 2
+            orb.y = self.y + self.h / 2
 
         self._target_pos: tuple[float, float] = (sw / 2.0, 160.0)
         self._active_telegraphs: list[Telegraph] = []
+        self._firezone_warnings: list[FireZoneWarning] = []
 
         # Pre-bake all sprites once; never recreate inside draw()
         self._sprites: dict[str, dict[str, pygame.Surface]] = {
@@ -429,6 +487,7 @@ class CloudArchmageBoss:
         self._teleport_cache: dict[tuple[str, str, int], pygame.Surface] = {}
         self._render_all_parts()
         self._sync_lerp_to_position()
+        self._start_intro_sequence()
 
     # ------------------------------------------------------------------
     # Sprite baking
@@ -461,7 +520,7 @@ class CloudArchmageBoss:
                         self._SCALE,
                     ),
                 )
-        if pygame.display.get_init() and pygame.display.get_surface() is not None:
+        if pygame.display.get_init():
             return surf.convert_alpha()
         return surf
 
@@ -476,7 +535,7 @@ class CloudArchmageBoss:
             w = max(1, int(base.get_width() * visual))
             h = max(1, int(base.get_height() * visual))
             scaled = pygame.transform.scale(base, (w, h))
-            if pygame.display.get_init() and pygame.display.get_surface() is not None:
+            if pygame.display.get_init():
                 scaled = scaled.convert_alpha()
             self._teleport_cache[cache_key] = scaled
         return self._teleport_cache[cache_key]
@@ -567,6 +626,7 @@ class CloudArchmageBoss:
             return []
 
         self._pulse_timer += dt
+        self._gradient_timer += dt
         self._hit_flash = max(0.0, self._hit_flash - dt)
         self._mantle_timer += dt * self._mantle_speed
         self._shield_timer += dt
@@ -582,18 +642,21 @@ class CloudArchmageBoss:
 
         self._update_shield_rings(dt)
         self._update_particles(dt)
+        self._update_miss_indicator(dt)
 
         if self._state not in (
             ArchmageState.PHASE2_DEFENSE,
             ArchmageState.PHASE2_VULNERABLE,
             ArchmageState.PHASE3_OVERLOAD,
             ArchmageState.PHASE3_VULNERABLE,
+            ArchmageState.INTRO,
         ):
             self._mantle_speed = max(1.0, self._mantle_speed - dt * 4.0)
         hp_ratio = self.health / self.max_health
 
         # Constant mystic drift (not during cinematic states)
         _CINEMATIC_STATES = (
+            ArchmageState.INTRO,
             ArchmageState.APPEARING,
             ArchmageState.TELEPORT,
             ArchmageState.SLIDE,
@@ -601,11 +664,27 @@ class CloudArchmageBoss:
         )
         if self._state not in _CINEMATIC_STATES:
             self._drift_timer += dt
-            self.x += math.sin(self._drift_timer * 1.5) * 40.0 * dt
-            self.y += math.cos(self._drift_timer * 1.2) * 25.0 * dt
+            self._wander_timer -= dt
+            cx = self.x + self.w / 2
+            cy = self.y + self.h / 2
+            dist_to_wander = math.hypot(self._wander_target_x - cx, self._wander_target_y - cy)
+            if self._wander_timer <= 0.0 or dist_to_wander < 40.0:
+                self._wander_target_x = random.uniform(120.0, Config.SCREEN_WIDTH - 120.0)
+                self._wander_target_y = random.uniform(60.0, Config.SCREEN_HEIGHT * 0.55)
+                self._wander_timer = random.uniform(_WANDER_INTERVAL_MIN, _WANDER_INTERVAL_MAX)
+            if dist_to_wander > 10.0:
+                wander_spd = _WANDER_SPEED * (1.0 + (1.0 - hp_ratio) * 0.8)
+                nx = (self._wander_target_x - cx) / dist_to_wander
+                ny = (self._wander_target_y - cy) / dist_to_wander
+                self.x += nx * wander_spd * dt
+                self.y += ny * wander_spd * dt
+            self.x += math.sin(self._drift_timer * 2.3) * 12.0 * dt
+            self.y += math.cos(self._drift_timer * 1.7) * 8.0 * dt
+            self.x = _clamp(self.x, 50.0, Config.SCREEN_WIDTH - self.w - 50.0)
+            self.y = _clamp(self.y, 30.0, Config.SCREEN_HEIGHT * 0.6 - self.h)
 
         # Fade-in recovery outside teleport
-        if self._state != ArchmageState.TELEPORT:
+        if self._state not in (ArchmageState.TELEPORT, ArchmageState.INTRO):
             self._teleport_visual = min(
                 1.0, self._teleport_visual + _TELEPORT_FADE_SPEED * dt
             )
@@ -613,8 +692,12 @@ class CloudArchmageBoss:
         # Orbital speed scales with damage taken (handled in _update_orbs_positions)
 
         spawned: list[Any] = []
+        self._update_phase2_telegraphs(dt, spawned)
+        self._update_firezone_warnings(dt, spawned)
 
         match self._state:
+            case ArchmageState.INTRO:
+                self._update_intro(dt)
             case ArchmageState.APPEARING:
                 self._update_appearing(dt)
             case ArchmageState.IDLE:
@@ -622,17 +705,17 @@ class CloudArchmageBoss:
             case ArchmageState.ABSORBING_ORB:
                 self._update_absorbing_orb(dt)
             case ArchmageState.USING_POWER:
-                spawned = self._update_using_power(dt, player_pos)
+                spawned.extend(self._update_using_power(dt, player_pos))
             case ArchmageState.COOLDOWN:
                 self._update_cooldown(dt)
             case ArchmageState.PHASE2_DEFENSE:
-                spawned = self._update_phase2_defense(dt, player_pos)
+                spawned.extend(self._update_phase2_defense(dt, player_pos))
             case ArchmageState.PHASE2_VULNERABLE:
                 self._update_phase2_vulnerable(dt)
             case ArchmageState.PHASE3_COMBOS:
-                spawned = self._update_phase3_combos(dt, player_pos)
+                spawned.extend(self._update_phase3_combos(dt, player_pos))
             case ArchmageState.PHASE3_OVERLOAD:
-                spawned = self._update_phase3_overload(dt, player_pos)
+                spawned.extend(self._update_phase3_overload(dt, player_pos))
             case ArchmageState.PHASE3_VULNERABLE:
                 self._update_phase3_vulnerable(dt)
             case ArchmageState.TELEPORT:
@@ -642,7 +725,8 @@ class CloudArchmageBoss:
             case ArchmageState.DEFEATED:
                 pass
 
-        self._update_orbs_positions(dt)
+        if self._state != ArchmageState.INTRO:
+            self._update_orbs_positions(dt)
         self._update_lerp_physics(dt)
         return spawned
 
@@ -681,6 +765,104 @@ class CloudArchmageBoss:
             p.x += p.vx * dt
             p.y += p.vy * dt
         self._trail_particles = [p for p in self._trail_particles if p.life > 0]
+
+        for p in self._intro_orb_births:
+            p.life -= dt
+            p.x += p.vx * dt
+            p.y += p.vy * dt
+        self._intro_orb_births = [p for p in self._intro_orb_births if p.life > 0]
+
+    def _start_intro_sequence(self) -> None:
+        self._state = ArchmageState.INTRO
+        self.active = False
+        self._state_timer = 0.0
+        self._intro_spawn_timer = 0.0
+        self._intro_orbs_spawned = 0
+        self._intro_dim_alpha = 0.0
+        self._intro_reveal_timer = 0.0
+        self._intro_boss_alpha = 0.0
+        self._teleport_visual = 0.0
+        self._hit_flash = 0.0
+        self._white_dodge_active = False
+
+    def _spawn_intro_orb_birth(self, orb: Orb) -> None:
+        for _ in range(18):
+            angle = random.uniform(0.0, math.tau)
+            speed = random.uniform(70.0, 180.0)
+            life = random.uniform(0.35, _INTRO_ORB_BIRTH_DURATION)
+            self._intro_orb_births.append(
+                Particle(
+                    x=orb.x,
+                    y=orb.y,
+                    vx=math.cos(angle) * speed,
+                    vy=math.sin(angle) * speed - 50.0,
+                    life=life,
+                    max_life=life,
+                    color=orb.color,
+                    radius=4,
+                )
+            )
+
+    def _update_intro(self, dt: float) -> None:
+        self._intro_spawn_timer += dt
+        self._intro_dim_alpha = min(
+            _INTRO_DIM_MAX,
+            self._intro_dim_alpha + (_INTRO_DIM_MAX / _INTRO_DIM_FADE_IN) * dt,
+        )
+
+        if self._intro_orbs_spawned < len(self._orbs):
+            if self._intro_spawn_timer >= _INTRO_ORB_SPAWN_INTERVAL:
+                self._intro_spawn_timer -= _INTRO_ORB_SPAWN_INTERVAL
+                orb = self._orbs[self._intro_orbs_spawned]
+                self._intro_orbs_spawned += 1
+                orb.mode = OrbMode.ORBIT
+                orb.timer = 0.0
+                cx_orb = self.x + self.w / 2
+                cy_orb = self.y + self.h / 2
+                orb.x = cx_orb + math.cos(orb.base_angle) * self.ORBIT_RADIUS
+                orb.y = cy_orb + math.sin(orb.base_angle) * (self.ORBIT_RADIUS * 0.5)
+                self._spawn_intro_orb_birth(orb)
+
+        for orb in self._orbs:
+            if orb.mode == OrbMode.ORBIT:
+                orb.timer += dt
+
+        if self._intro_orbs_spawned >= len(self._orbs):
+            if not self._intro_orb_births:
+                self._intro_reveal_timer += dt
+                self._intro_boss_alpha = min(
+                    1.0, self._intro_boss_alpha + dt / _INTRO_BOSS_FADE_IN
+                )
+                self._teleport_visual = self._intro_boss_alpha
+                self._intro_dim_alpha = max(
+                    0.0,
+                    self._intro_dim_alpha - (_INTRO_DIM_MAX / _INTRO_DIM_FADE_OUT) * dt,
+                )
+                if self._intro_dim_alpha <= 0.0:
+                    self._state = ArchmageState.IDLE
+                    self.active = True
+                    self._state_timer = 0.6
+                    self._teleport_visual = 1.0
+
+    def get_intro_dim_alpha(self) -> int:
+        if self._state == ArchmageState.INTRO:
+            return max(0, min(_INTRO_DIM_MAX, int(self._intro_dim_alpha)))
+        return 0
+
+    @property
+    def is_intro_active(self) -> bool:
+        return self._state == ArchmageState.INTRO
+
+    def _update_miss_indicator(self, dt: float) -> None:
+        self._miss_timer = max(0.0, self._miss_timer - dt * 60.0)
+        self._miss_y += self._miss_dy
+
+    def _trigger_miss_indicator(self, hit_x: float | None, hit_y: float | None) -> None:
+        self._miss_timer = 60.0
+        center_x = self.x + self.w / 2
+        center_y = self.y + self.h / 2
+        self._miss_x = hit_x if hit_x is not None else center_x
+        self._miss_y = (hit_y if hit_y is not None else center_y) - 56.0
 
     @property
     def rect(self) -> pygame.Rect:
@@ -744,6 +926,7 @@ class CloudArchmageBoss:
                 orb.x += (tx - orb.x) * 10.0 * dt
                 orb.y += (ty - orb.y) * 10.0 * dt
                 if math.hypot(tx - orb.x, ty - orb.y) < 6.0:
+                    self._emit_orb_burst(orb.x, orb.y, orb.color)
                     orb.mode = OrbMode.ABSORBED
             elif orb.mode == OrbMode.RETURN:
                 tx = cx + math.cos(angle) * self.ORBIT_RADIUS
@@ -798,12 +981,16 @@ class CloudArchmageBoss:
         ]
         if active_orbs:
             self._start_orb_absorption(random.choice(active_orbs))
+        else:
+            # Orbs still returning — retry after a short delay instead of freezing in IDLE
+            self._state = ArchmageState.IDLE
+            self._state_timer = 0.4
 
     def _begin_phase2_defense(self) -> None:
         self._phase3_combo_powers = None
         self._state = ArchmageState.PHASE2_DEFENSE
-        self._state_timer = 0.0
-        self._shield_max_hp = max(30, int(self.health * 0.15))
+        self._state_timer = random.uniform(2.4, 3.6)
+        self._shield_max_hp = self.SHIELD_MAX_HP + int(self.health * 0.5)
         self._shield_hp = self._shield_max_hp
         self._shield_active = False
         self._shield_spawning = True
@@ -813,7 +1000,15 @@ class CloudArchmageBoss:
         ]
         self._vulnerable_timer = 0.0
         self._stalagmite_spawn_timer = 0.0
+        self._active_telegraphs.clear()
         self._white_dodge_active = False
+        cx = self.x + self.w / 2
+        cy = self.y + self.h / 2
+        for orb in self._orbs:
+            if orb.mode == OrbMode.ORBIT:
+                orb.mode = OrbMode.ATTACK
+                orb.target_x = cx
+                orb.target_y = cy
 
     def _begin_phase3_combos(self) -> None:
         self._phase3_combo_powers = None
@@ -826,32 +1021,67 @@ class CloudArchmageBoss:
         self._stalagmite_spawn_timer = 0.0
         self._white_dodge_active = False
 
-    def _choose_phase3_combo(self) -> tuple[OrbType, OrbType]:
+    def _choose_phase3_combo(self) -> tuple[OrbType, ...]:
         return random.choice(
             (
-                (OrbType.WHITE, OrbType.ORANGE),
-                (OrbType.WHITE, OrbType.PURPLE),
-                (OrbType.ORANGE, OrbType.PURPLE),
+                (OrbType.PURPLE, OrbType.ORANGE),  # Roxo + Laranja
+                (OrbType.ORANGE, OrbType.WHITE),   # Laranja + Branco
+                (OrbType.CYAN, OrbType.ORANGE),    # Azul + Laranja
+                (OrbType.CYAN, OrbType.PURPLE),    # Azul + Roxo
+                (OrbType.CYAN, OrbType.WHITE),     # Azul + Branco
+                (OrbType.PURPLE, OrbType.WHITE),   # Roxo + Branco
+                # Triplos para intensidade máxima
+                (OrbType.PURPLE, OrbType.ORANGE, OrbType.WHITE),
+                (OrbType.CYAN, OrbType.ORANGE, OrbType.PURPLE),
+                (OrbType.CYAN, OrbType.WHITE, OrbType.ORANGE),
             )
         )
 
-    def _activate_combo_effects(self, powers: tuple[OrbType, OrbType]) -> None:
+    def _activate_combo_effects(self, powers: tuple[OrbType, ...]) -> None:
+        self._restore_orbs()
         self._phase3_combo_powers = powers
         self._white_dodge_active = OrbType.WHITE in powers
+
+        if OrbType.CYAN in powers:
+            # Em combos da fase 3, o escudo é um pouco mais fraco que na defesa pura da fase 2
+            self._shield_max_hp = self.SHIELD_MAX_HP + int(self.health * 0.4)
+            self._shield_hp = self._shield_max_hp
+            self._shield_active = False
+            self._shield_spawning = True
+            self._shield_spawn_t = 0.0
+            self._shield_rings = [
+                ShieldRing(r=8.0, alpha=200.0) for _ in range(_SHIELD_RING_COUNT)
+            ]
+
         self._fire_zone_spawn_timer = 0.0
         self._stalagmite_spawn_timer = 0.0
+        cx = self.x + self.w / 2
+        cy = self.y + self.h / 2
+        for orb in self._orbs:
+            if orb.type in powers and orb.mode == OrbMode.ORBIT:
+                orb.mode = OrbMode.ATTACK
+                orb.target_x = cx
+                orb.target_y = cy
 
     def _finish_phase1_power(self) -> None:
         if self._active_orb_index is None:
             return
 
         orb = self._orbs[self._active_orb_index]
-        orb.mode = OrbMode.RETURN
-        orb.timer = 0.0
         if orb.type == OrbType.CYAN:
             self._shield_active = False
             self._shield_spawning = False
             self._shield_hp = 0
+        # If orb was fully absorbed, snap it back to an orbital position
+        # so the RETURN lerp has a sensible starting point
+        if orb.mode == OrbMode.ABSORBED:
+            angle = self._orb_angle + orb.base_angle
+            cx = self.x + self.w / 2
+            cy = self.y + self.h / 2
+            orb.x = cx + math.cos(angle) * self.ORBIT_RADIUS
+            orb.y = cy + math.sin(angle) * (self.ORBIT_RADIUS * 0.5)
+        orb.mode = OrbMode.RETURN
+        orb.timer = 0.0
         self._active_orb_index = None
         self._active_power = None
         self._white_dodge_active = False
@@ -879,7 +1109,7 @@ class CloudArchmageBoss:
                         vy=math.sin(a) * speed,
                         life=life,
                         max_life=life,
-                        color=(0, 200, 255),
+                        color=_CYAN_SHIELD_COLOR,
                     )
                 )
 
@@ -907,6 +1137,13 @@ class CloudArchmageBoss:
             self._state = ArchmageState.USING_POWER
             self._power_timer = random.uniform(_POWER_DURATION_MIN, _POWER_DURATION_MAX)
             self._state_timer = self._power_timer
+            if self._active_power is not None and self._active_power.type == OrbType.CYAN:
+                self._shield_max_hp = self.SHIELD_MAX_HP + int(self.health * 0.5)
+                self._shield_hp = self._shield_max_hp
+                self._shield_active = False
+                self._shield_spawning = True
+                self._shield_spawn_t = 0.0
+                self._shield_timer = 0.0
 
     def _update_using_power(
         self, dt: float, player_pos: tuple[float, float] | None
@@ -928,47 +1165,36 @@ class CloudArchmageBoss:
             self._white_dodge_active = True
         elif power_type == OrbType.CYAN:
             self._white_dodge_active = False
-            if self._shield_spawning and self._shield_spawn_t >= 1.0:
-                self._shield_active = True
+            # Shield spawn/active state is managed entirely by the update loop
+            # (lines that tick _shield_spawn_t and flip _shield_active). No action needed here.
         elif power_type == OrbType.PURPLE:
             self._stalagmite_spawn_timer += dt
             while self._stalagmite_spawn_timer >= _PHASE2_STALAGMITE_INTERVAL:
                 self._stalagmite_spawn_timer -= _PHASE2_STALAGMITE_INTERVAL
-                if random.random() < 0.5:
-                    spawned.append(
-                        MountainStalactite(
-                            float(target_x + random.randint(-120, 120)),
-                            -10.0,
-                            float(target_y),
-                        )
+                x_pos = float(
+                    _clamp(
+                        target_x + random.randint(-120, 120),
+                        60.0,
+                        Config.SCREEN_WIDTH - 60.0,
                     )
-                else:
-                    spawned.append(
-                        MountainStalagmite(
-                            float(target_x + random.randint(-120, 120)),
-                            float(Config.SCREEN_HEIGHT) + 10.0,
-                            float(target_y),
-                        )
+                )
+                y_pos = float(_clamp(target_y, 80.0, Config.SCREEN_HEIGHT - 120.0))
+                self._active_telegraphs.append(
+                    Telegraph(
+                        x=x_pos,
+                        is_stalactite=random.random() < 0.5,
+                        timer=Config.MOUNTAIN_MAGE_WARNING_DURATION,
+                        charge=0.0,
+                        target_y=y_pos,
                     )
+                )
         elif power_type == OrbType.ORANGE:
-            if not self._spawned_fire_zones:
-                offsets = (-80, 0, 80)
-                for offset in offsets:
-                    zone_x = float(
-                        _clamp(target_x + offset, 80.0, Config.SCREEN_WIDTH - 80.0)
+            if not self._spawned_fire_zones and not self._firezone_warnings:
+                for _ in range(3):
+                    self._queue_random_firezone_warning(
+                        radius=int(64 * _FIREZONE_RADIUS_SCALE),
+                        duration=random.uniform(5.0, 8.0),
                     )
-                    zone_y = float(
-                        _clamp(
-                            target_y + random.randint(-60, 60),
-                            80.0,
-                            Config.SCREEN_HEIGHT - 120.0,
-                        )
-                    )
-                    zone = FireZone(
-                        zone_x, zone_y, radius=64, duration=random.uniform(5.0, 8.0)
-                    )
-                    self._spawned_fire_zones.append(zone)
-                    spawned.append(zone)
 
         self._spawned_fire_zones = [
             zone for zone in self._spawned_fire_zones if not zone.should_remove()
@@ -983,43 +1209,123 @@ class CloudArchmageBoss:
         self._cooldown_timer = max(0.0, self._cooldown_timer - dt)
         if self._cooldown_timer > 0.0:
             return
-
-        hp_ratio = self.health / self.max_health
-        if hp_ratio > self.PHASE2_THRESHOLD:
-            self._begin_phase1_cycle()
-        elif hp_ratio > self.PHASE3_THRESHOLD:
-            self._begin_phase2_defense()
-        else:
-            self._begin_phase3_combos()
+        self._begin_teleport()
 
     def _update_phase2_defense(
         self, dt: float, player_pos: tuple[float, float] | None
     ) -> list[Any]:
         spawned: list[Any] = []
         self._stalagmite_spawn_timer += dt
+        self._state_timer -= dt
         self._shield_timer += dt
         self._white_dodge_active = False
 
         if self.health / self.max_health <= self.PHASE3_THRESHOLD:
+            self._active_telegraphs.clear()
             self._begin_phase3_combos()
             return spawned
 
+        if self._state_timer <= 0.0:
+            # O teletransporte agora só acontece em estados de repouso (Vulnerable), 
+            # não permitindo fuga enquanto o escudo estiver ativo.
+            pass
+
         while self._stalagmite_spawn_timer >= _PHASE2_STALAGMITE_INTERVAL:
             self._stalagmite_spawn_timer -= _PHASE2_STALAGMITE_INTERVAL
-            anchor_x = self.x + self.w / 2
-            target_y = player_pos[1] if player_pos else Config.SCREEN_HEIGHT * 0.55
-            x_offset = random.randint(-170, 170)
-            x_pos = float(_clamp(anchor_x + x_offset, 60.0, Config.SCREEN_WIDTH - 60.0))
-            if random.random() < 0.5:
-                spawned.append(MountainStalactite(x_pos, -10.0, float(target_y)))
+            player_x, player_y = (
+                player_pos
+                if player_pos is not None
+                else (self.x + self.w / 2, self.y + self.h / 2)
+            )
+            x_pos = float(_clamp(player_x, 60.0, Config.SCREEN_WIDTH - 60.0))
+            target_y = float(_clamp(player_y, 80.0, Config.SCREEN_HEIGHT - 120.0))
+            self._active_telegraphs.append(
+                Telegraph(
+                    x=x_pos,
+                    is_stalactite=random.random() < 0.5,
+                    timer=Config.MOUNTAIN_MAGE_WARNING_DURATION,
+                    charge=0.0,
+                    target_y=target_y,
+                )
+            )
+
+        return spawned
+
+    def _update_phase2_telegraphs(
+        self, dt: float, spawned: list[Any]
+    ) -> None:
+        if not self._active_telegraphs:
+            return
+
+        warning_duration = max(0.1, float(Config.MOUNTAIN_MAGE_WARNING_DURATION))
+        remaining_telegraphs: list[Telegraph] = []
+
+        for telegraph in self._active_telegraphs:
+            telegraph.timer -= dt
+            telegraph.charge = min(1.0, 1.0 - max(0.0, telegraph.timer) / warning_duration)
+
+            if telegraph.timer > 0.0:
+                remaining_telegraphs.append(telegraph)
+                continue
+
+            if telegraph.is_stalactite:
+                spawned.append(
+                    MountainStalactite(telegraph.x, -10.0, float(telegraph.target_y))
+                )
             else:
                 spawned.append(
                     MountainStalagmite(
-                        x_pos, float(Config.SCREEN_HEIGHT) + 10.0, float(target_y)
+                        telegraph.x,
+                        float(Config.SCREEN_HEIGHT) + 10.0,
+                        float(telegraph.target_y),
                     )
                 )
 
-        return spawned
+        self._active_telegraphs = remaining_telegraphs
+
+    def _queue_random_firezone_warning(self, radius: int, duration: float) -> None:
+        active = sum(1 for z in self._spawned_fire_zones if not z.should_remove())
+        if active + len(self._firezone_warnings) >= _MAX_FIRE_ZONES:
+            return
+        margin = max(90.0, float(radius) + 24.0)
+        x = random.uniform(margin, Config.SCREEN_WIDTH - margin)
+        y = random.uniform(margin, Config.SCREEN_HEIGHT - margin)
+        self._firezone_warnings.append(
+            FireZoneWarning(
+                x=x,
+                y=y,
+                timer=_FIREZONE_WARNING_DURATION,
+                charge=0.0,
+                radius=radius,
+                duration=duration,
+            )
+        )
+
+    def _update_firezone_warnings(self, dt: float, spawned: list[Any]) -> None:
+        if not self._firezone_warnings:
+            return
+
+        warning_duration = max(0.1, _FIREZONE_WARNING_DURATION)
+        remaining: list[FireZoneWarning] = []
+
+        for warning in self._firezone_warnings:
+            warning.timer -= dt
+            warning.charge = min(1.0, 1.0 - max(0.0, warning.timer) / warning_duration)
+
+            if warning.timer > 0.0:
+                remaining.append(warning)
+                continue
+
+            zone = FireZone(
+                warning.x,
+                warning.y,
+                radius=warning.radius,
+                duration=warning.duration,
+            )
+            self._spawned_fire_zones.append(zone)
+            spawned.append(zone)
+
+        self._firezone_warnings = remaining
 
     def _update_phase2_vulnerable(self, dt: float) -> None:
         self._vulnerable_timer = max(0.0, self._vulnerable_timer - dt)
@@ -1029,14 +1335,44 @@ class CloudArchmageBoss:
         if self.health / self.max_health <= self.PHASE3_THRESHOLD:
             self._begin_phase3_combos()
         else:
-            self._begin_phase2_defense()
+            self._begin_teleport()
 
     def _begin_teleport(self) -> None:
-        if self._shield_active or self._shield_spawning:
+        _ATTACKING_STATES = (
+            ArchmageState.ABSORBING_ORB,
+            ArchmageState.USING_POWER,
+            ArchmageState.PHASE2_DEFENSE,
+            ArchmageState.PHASE3_COMBOS,
+            ArchmageState.PHASE3_OVERLOAD,
+        )
+        if self._state in _ATTACKING_STATES:
+            return
+
+        # Determinamos o estado de retorno baseado no estado ATUAL (antes do teleport)
+        if self._state in (ArchmageState.PHASE2_DEFENSE, ArchmageState.PHASE2_VULNERABLE):
+            self._resume_state = ArchmageState.PHASE2_DEFENSE
+        elif self._state in (
+            ArchmageState.PHASE3_COMBOS,
+            ArchmageState.PHASE3_OVERLOAD,
+            ArchmageState.PHASE3_VULNERABLE,
+        ):
+            self._resume_state = ArchmageState.PHASE3_COMBOS
+        else:
+            self._resume_state = ArchmageState.IDLE
+
+        if self._resume_state == ArchmageState.IDLE:
+            # Phase 1 / cooldown teleport: fully reset active power and shield
             self._shield_active = False
             self._shield_spawning = False
             self._shield_hp = 0
-            self._restore_orbs()
+            self._active_orb_index = None
+            self._active_power = None
+            self._white_dodge_active = False
+            self._active_telegraphs.clear()
+            self._firezone_warnings.clear()
+        # No Phase 2/3 teleport, we preserve shield and attack states entirely
+
+        self._restore_orbs()
 
         for orb in self._orbs:
             if orb.mode in (OrbMode.ATTACK, OrbMode.RETURN):
@@ -1050,6 +1386,8 @@ class CloudArchmageBoss:
         slide_chance = 0.65 if white_orbiting else 0.4
 
         if random.random() < slide_chance:
+            self._slide_start_x = self.x
+            self._slide_start_y = self.y
             self._slide_target_x = float(random.randint(100, Config.SCREEN_WIDTH - 100))
             self._slide_target_y = float(random.randint(50, 200))
             self._slide_timer = 0.0
@@ -1084,22 +1422,11 @@ class CloudArchmageBoss:
             self._fire_zone_spawn_timer += dt
             while self._fire_zone_spawn_timer >= _PHASE3_FIREZONE_INTERVAL:
                 self._fire_zone_spawn_timer -= _PHASE3_FIREZONE_INTERVAL
-                for offset in (-90, 0, 90):
-                    zone_x = float(
-                        _clamp(target_x + offset, 80.0, Config.SCREEN_WIDTH - 80.0)
+                for _ in range(3):
+                    self._queue_random_firezone_warning(
+                        radius=int(60 * _FIREZONE_RADIUS_SCALE),
+                        duration=random.uniform(5.0, 8.0),
                     )
-                    zone_y = float(
-                        _clamp(
-                            target_y + random.randint(-40, 40),
-                            80.0,
-                            Config.SCREEN_HEIGHT - 120.0,
-                        )
-                    )
-                    zone = FireZone(
-                        zone_x, zone_y, radius=60, duration=random.uniform(5.0, 8.0)
-                    )
-                    self._spawned_fire_zones.append(zone)
-                    spawned.append(zone)
 
         if self._phase3_combo_powers and OrbType.PURPLE in self._phase3_combo_powers:
             self._stalagmite_spawn_timer += dt
@@ -1134,6 +1461,7 @@ class CloudArchmageBoss:
         return spawned
 
     def _begin_phase3_overload(self) -> None:
+        self._restore_orbs()
         self._phase3_combo_powers = None
         self._state = ArchmageState.PHASE3_OVERLOAD
         self._state_timer = _OVERLOAD_DURATION
@@ -1141,6 +1469,13 @@ class CloudArchmageBoss:
         self._white_dodge_active = True
         self._fire_zone_spawn_timer = 0.0
         self._stalagmite_spawn_timer = 0.0
+        cx = self.x + self.w / 2
+        cy = self.y + self.h / 2
+        for orb in self._orbs:
+            if orb.mode == OrbMode.ORBIT:
+                orb.mode = OrbMode.ATTACK
+                orb.target_x = cx
+                orb.target_y = cy
 
     def _update_phase3_overload(
         self, dt: float, player_pos: tuple[float, float] | None
@@ -1160,22 +1495,11 @@ class CloudArchmageBoss:
 
         while self._fire_zone_spawn_timer >= 1.0:
             self._fire_zone_spawn_timer -= 1.0
-            for offset in (-110, 0, 110):
-                zone_x = float(
-                    _clamp(target_x + offset, 80.0, Config.SCREEN_WIDTH - 80.0)
+            for _ in range(3):
+                self._queue_random_firezone_warning(
+                    radius=int(68 * _FIREZONE_RADIUS_SCALE),
+                    duration=random.uniform(5.0, 8.0),
                 )
-                zone_y = float(
-                    _clamp(
-                        target_y + random.randint(-60, 60),
-                        80.0,
-                        Config.SCREEN_HEIGHT - 120.0,
-                    )
-                )
-                zone = FireZone(
-                    zone_x, zone_y, radius=68, duration=random.uniform(5.0, 8.0)
-                )
-                self._spawned_fire_zones.append(zone)
-                spawned.append(zone)
 
         while self._stalagmite_spawn_timer >= 0.9:
             self._stalagmite_spawn_timer -= 0.9
@@ -1202,6 +1526,7 @@ class CloudArchmageBoss:
         return spawned
 
     def _begin_phase3_vulnerable(self) -> None:
+        self._restore_orbs()
         self._state = ArchmageState.PHASE3_VULNERABLE
         self._state_timer = _VULNERABLE_DURATION
         self._white_dodge_active = False
@@ -1213,24 +1538,85 @@ class CloudArchmageBoss:
             return
 
         self._overload_cooldown = _OVERLOAD_COOLDOWN
-        self._begin_phase3_combos()
+        self._begin_teleport()
+
+    def _trigger_forced_slide(self) -> None:
+        if self._state in (
+            ArchmageState.INTRO,
+            ArchmageState.APPEARING,
+            ArchmageState.DEFEATED,
+            ArchmageState.SLIDE,
+            ArchmageState.ABSORBING_ORB,
+            ArchmageState.USING_POWER,
+            ArchmageState.PHASE2_DEFENSE,
+            ArchmageState.PHASE3_COMBOS,
+            ArchmageState.PHASE3_OVERLOAD,
+        ):
+            return
+        self._restore_orbs()
+        self._active_orb_index = None
+        self._active_power = None
+        self._white_dodge_active = False
+        self._active_telegraphs.clear()
+        self._firezone_warnings.clear()
+        self._slide_start_x = self.x
+        self._slide_start_y = self.y
+        tx, ty = self.x, self.y
+        for _ in range(20):
+            tx = random.uniform(80.0, Config.SCREEN_WIDTH - 80.0 - self.w)
+            ty = random.uniform(40.0, Config.SCREEN_HEIGHT * 0.55 - self.h)
+            if math.hypot(tx - self.x, ty - self.y) >= 320.0:
+                break
+        self._slide_target_x = tx
+        self._slide_target_y = ty
+        self._slide_timer = 0.0
+        self._slide_duration = 0.65
+        self._slide_is_forced = True
+        self._state = ArchmageState.SLIDE
 
     def _update_slide(self, dt: float) -> None:
         """Glides boss smoothly to a new position without fading out."""
         self._slide_timer += dt
         t = min(1.0, self._slide_timer / self._slide_duration)
-        eased = t * t * (3.0 - 2.0 * t)  # Smoothstep
+        eased = 1.0 - (1.0 - t) ** 3  # Ease-out cubic: arranca rápido, freia no fim
 
-        speed = 8.0 + eased * 14.0
-        self.x += (self._slide_target_x - self.x) * speed * dt
-        self.y += (self._slide_target_y - self.y) * speed * dt
+        self.x = self._slide_start_x + (self._slide_target_x - self._slide_start_x) * eased
+        self.y = self._slide_start_y + (self._slide_target_y - self._slide_start_y) * eased
         self._teleport_repositioned = True
+
+        cx = self.x + self.w / 2
+        cy = self.y + self.h / 2
+        for _ in range(3):
+            angle = random.uniform(0.0, math.tau)
+            spd = random.uniform(20.0, 55.0)
+            life = random.uniform(0.15, 0.30)
+            self._trail_particles.append(
+                Particle(
+                    x=cx + random.uniform(-12.0, 12.0),
+                    y=cy + random.uniform(-12.0, 12.0),
+                    vx=math.cos(angle) * spd,
+                    vy=math.sin(angle) * spd,
+                    life=life,
+                    max_life=life,
+                    color=(140, 190, 255),
+                    radius=5,
+                )
+            )
 
         if t >= 1.0:
             self.x = self._slide_target_x
             self.y = self._slide_target_y
-            self._state = ArchmageState.IDLE
-            self._state_timer = 0.6 + random.uniform(0.0, 0.3)
+            if self._slide_is_forced:
+                self._slide_duration = 0.42
+                self._slide_is_forced = False
+            if self._resume_state == ArchmageState.PHASE2_DEFENSE:
+                self._begin_phase2_defense()
+            elif self._resume_state == ArchmageState.PHASE3_COMBOS:
+                self._begin_phase3_combos()
+            else:
+                self._state = ArchmageState.IDLE
+                self._state_timer = 0.6 + random.uniform(0.0, 0.3)
+            self._resume_state = ArchmageState.IDLE
 
     def _update_teleport(self, dt: float) -> None:
         self._state_timer -= dt
@@ -1261,22 +1647,133 @@ class CloudArchmageBoss:
             )
 
         if self._state_timer <= 0.0 and self._teleport_repositioned:
-            self._state = ArchmageState.IDLE
-            self._state_timer = 0.8 + random.uniform(0.0, 0.4)
+            if self._resume_state == ArchmageState.PHASE2_DEFENSE:
+                self._begin_phase2_defense()
+            elif self._resume_state == ArchmageState.PHASE3_COMBOS:
+                self._begin_phase3_combos()
+            else:
+                self._state = ArchmageState.IDLE
+                self._state_timer = 0.8 + random.uniform(0.0, 0.4)
+            self._resume_state = ArchmageState.IDLE
+
+    # ------------------------------------------------------------------
+    # Gradient tint helpers
+    # ------------------------------------------------------------------
+
+    _GRADIENT_CYCLE: Final = 2.0
+    _GRADIENT_ALPHA: Final = 110  # 0-255; tune for intensity
+
+    def _get_gradient_color(self) -> Color | None:
+        colors: list[Color] = []
+
+        if self._state in (ArchmageState.ABSORBING_ORB, ArchmageState.USING_POWER):
+            if self._active_power is not None:
+                colors = [self._active_power.color]
+        elif self._state in (ArchmageState.PHASE2_DEFENSE, ArchmageState.PHASE2_VULNERABLE):
+            colors = [_CYAN_SHIELD_COLOR]
+        elif self._state in (ArchmageState.PHASE3_COMBOS, ArchmageState.PHASE3_VULNERABLE):
+            if self._phase3_combo_powers:
+                colors = [
+                    orb.color for orb in self._orbs
+                    if orb.type in self._phase3_combo_powers
+                ]
+        elif self._state == ArchmageState.PHASE3_OVERLOAD:
+            colors = [orb.color for orb in self._orbs]
+
+        if not colors:
+            return None
+        if len(colors) == 1:
+            return colors[0]
+
+        steps = 64
+        t_raw = (self._gradient_timer % self._GRADIENT_CYCLE) / self._GRADIENT_CYCLE
+        t = int(t_raw * steps) / steps
+        n = len(colors)
+        segment = t * n
+        idx = int(segment) % n
+        local_t = segment - int(segment)
+        c0 = colors[idx]
+        c1 = colors[(idx + 1) % n]
+        return (
+            int(c0[0] + (c1[0] - c0[0]) * local_t),
+            int(c0[1] + (c1[1] - c0[1]) * local_t),
+            int(c0[2] + (c1[2] - c0[2]) * local_t),
+        )
+
+    def _blit_tinted(
+        self,
+        dest: pygame.Surface,
+        surf: pygame.Surface,
+        pos: tuple[int, int],
+        tint: Color,
+    ) -> None:
+        """Blits surf onto dest at pos com tint aplicado apenas a pixels opacos.
+
+        O overlay é mascarado pelo alpha do sprite (MULT) antes do ADD —
+        pixels transparentes ficam alpha=0 e não recebem cor da orb.
+        O cache usa tint quantizado (steps de 8) para limitar crescimento.
+        """
+        w, h = surf.get_width(), surf.get_height()
+        qr, qg, qb = tint[0] >> 3 << 3, tint[1] >> 3 << 3, tint[2] >> 3 << 3
+        key = (qr, qg, qb, w, h)
+        masked = self._tint_cache.get(key)
+        if masked is None:
+            masked = pygame.Surface((w, h), pygame.SRCALPHA)
+            masked.fill((qr, qg, qb, self._GRADIENT_ALPHA))
+            masked.blit(surf, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+            if pygame.display.get_init():
+                masked = masked.convert_alpha()
+            self._tint_cache[key] = masked
+
+        temp = surf.copy()
+        temp.blit(masked, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+        dest.blit(temp, pos)
 
     # ------------------------------------------------------------------
     # Draw
     # ------------------------------------------------------------------
 
+    _INTRO_ORB_FADE_DUR: Final = 0.45
+
+    def _draw_intro(self, surface: pygame.Surface) -> None:
+        """Desenha apenas partículas de nascimento e orbs durante a sequência de intro."""
+        self._draw_particle_list(
+            surface, self._intro_orb_births, base_alpha=220, size_base=3, size_range=4
+        )
+        self._draw_intro_orbs(surface)
+
+    def _draw_intro_orbs(self, surface: pygame.Surface) -> None:
+        sz = self.ORB_SIZE
+        for orb in self._orbs:
+            if orb.mode != OrbMode.ORBIT:
+                continue
+            alpha = int(255 * min(1.0, orb.timer / self._INTRO_ORB_FADE_DUR))
+            if alpha <= 0:
+                continue
+            ox, oy = int(orb.x), int(orb.y)
+            glow_diam = sz * 2 + 16
+            glow = pygame.Surface((glow_diam, glow_diam), pygame.SRCALPHA)
+            pygame.draw.circle(glow, (*orb.color, int(40 * alpha / 255)), (sz + 8, sz + 8), sz + 8)
+            surface.blit(glow, (ox - sz - 8, oy - sz - 8))
+            orb_surf = pygame.Surface((sz * 2, sz * 2), pygame.SRCALPHA)
+            pygame.draw.circle(orb_surf, (*orb.color, alpha), (sz, sz), sz)
+            surface.blit(orb_surf, (ox - sz, oy - sz))
+
     def draw(self, surface: pygame.Surface) -> None:
         if self.dead and self._state != ArchmageState.DEFEATED:
             return
+
+        if self._state == ArchmageState.INTRO:
+            self._draw_intro(surface)
+            return
+
         if self._teleport_visual <= 0.02:
             return
 
         state_key = (
             "flash"
             if self._hit_flash > 0.0
+            or (self._active_power is not None and self._active_power.type == OrbType.WHITE)
             else (
                 "phase3"
                 if self._state
@@ -1300,8 +1797,10 @@ class CloudArchmageBoss:
         if self._shield_active or self._shield_spawning:
             self._draw_shield(surface)
 
+        gradient_tint = self._get_gradient_color()
+
         if self._state != ArchmageState.DEFEATED:
-            self._draw_flowing_mantle(surface, state_key)
+            self._draw_flowing_mantle(surface, state_key, gradient_tint)
 
         fading = self._teleport_visual < 1.0
 
@@ -1311,7 +1810,7 @@ class CloudArchmageBoss:
             ("body", self._body_x, self._body_y),
         ]
         for part, px, py in parts:
-            self._draw_fading_part(surface, part, state_key, px, py, fading)
+            self._draw_fading_part(surface, part, state_key, px, py, fading, gradient_tint)
 
         if self._hit_flash <= 0.0 and self._teleport_visual > 0.5:
             eye_color = (255, 230, 0)
@@ -1327,12 +1826,15 @@ class CloudArchmageBoss:
             )
 
         self._draw_fading_part(
-            surface, "hat", state_key, self._hat_x, self._hat_y, fading
+            surface, "hat", state_key, self._hat_x, self._hat_y, fading, gradient_tint
         )
         self._draw_health_bar(surface)
+        self._draw_miss_indicator(surface)
 
         for t in self._active_telegraphs:
             self._draw_telegraph_marker(surface, t)
+        for warning in self._firezone_warnings:
+            self._draw_firezone_warning(surface, warning)
 
     def _draw_fading_part(
         self,
@@ -1342,6 +1844,7 @@ class CloudArchmageBoss:
         px: float,
         py: float,
         fading: bool,
+        gradient_tint: Color | None = None,
     ) -> None:
         """Draw a sprite part, applying teleport scale-shrink if fading."""
         if fading:
@@ -1349,9 +1852,18 @@ class CloudArchmageBoss:
             base = self._sprites[part][state_key]
             offset_x = (base.get_width() - s.get_width()) // 2
             offset_y = (base.get_height() - s.get_height()) // 2
-            surface.blit(s, (int(px) + offset_x, int(py) + offset_y))
+            pos = (int(px) + offset_x, int(py) + offset_y)
+            if gradient_tint:
+                self._blit_tinted(surface, s, pos, gradient_tint)
+            else:
+                surface.blit(s, pos)
         else:
-            surface.blit(self._sprites[part][state_key], (int(px), int(py)))
+            base = self._sprites[part][state_key]
+            pos = (int(px), int(py))
+            if gradient_tint:
+                self._blit_tinted(surface, base, pos, gradient_tint)
+            else:
+                surface.blit(base, pos)
 
     def _draw_particle_list(
         self,
@@ -1373,7 +1885,7 @@ class CloudArchmageBoss:
     def _draw_shield(self, surface: pygame.Surface) -> None:
         """Hexagonal shield with spawn animation (scale-in + burst rings) and HP opacity."""
         cx = int(self.x + self.w / 2)
-        cy = int(self.y + self.h / 2)
+        cy = int(self._body_y + (len(BODY_MAP) * self._SCALE) / 2)
         hp_pct = max(0.0, self._shield_hp / self._shield_max_hp)
 
         if self._shield_spawning:
@@ -1461,8 +1973,25 @@ class CloudArchmageBoss:
             pygame.draw.circle(s, core_color, (radius + 1, radius + 1), radius)
             surface.blit(s, (int(p.x) - radius - 1, int(p.y) - radius - 1))
 
+    def _draw_miss_indicator(self, surface: pygame.Surface) -> None:
+        if self._miss_timer <= 0.0:
+            return
+
+        alpha = int(255 * (self._miss_timer / 60.0))
+        font = get_font(28)
+        miss_surface = font.render("MISS", True, (255, 70, 70))
+        miss_surface.set_alpha(alpha)
+
+        x = int(self._miss_x)
+        y = int(self._miss_y)
+        miss_rect = miss_surface.get_rect(center=(x, y))
+        surface.blit(miss_surface, miss_rect)
+
     def _draw_health_bar(self, surface: pygame.Surface) -> None:
-        if self.health <= 0 or self._state == ArchmageState.APPEARING:
+        if self.health <= 0 or self._state in (
+            ArchmageState.APPEARING,
+            ArchmageState.INTRO,
+        ):
             return
         hp_ratio = max(0.0, self.health / self.max_health)
         bar_w, bar_h = 240, 8
@@ -1490,9 +2019,31 @@ class CloudArchmageBoss:
         draw_y = Config.SCREEN_HEIGHT - mr * 2 if not t.is_stalactite else mr * 2
         surface.blit(ms, (int(t.x) - mc, draw_y - mc))
 
-    def _draw_flowing_mantle(self, surface: pygame.Surface, state_key: str) -> None:
-        if state_key == "flash":
-            color: Color = (255, 255, 255)
+    def _draw_firezone_warning(
+        self, surface: pygame.Surface, warning: FireZoneWarning
+    ) -> None:
+        radius = max(20, int(warning.radius))
+        pulse = 0.78 + 0.22 * math.sin(self._pulse_timer * 16.0 + warning.charge * math.pi)
+        alpha_outer = int((70 + warning.charge * 120) * pulse)
+        alpha_inner = int(45 + warning.charge * 110)
+
+        diam = radius * 2 + 16
+        marker = pygame.Surface((diam, diam), pygame.SRCALPHA)
+        center = diam // 2
+        ring_color = (255, 120, 40, max(0, min(255, alpha_outer)))
+        fill_color = (255, 80, 20, max(0, min(255, alpha_inner)))
+
+        pygame.draw.circle(marker, fill_color, (center, center), radius)
+        pygame.draw.circle(marker, ring_color, (center, center), radius, width=4)
+        surface.blit(marker, (int(warning.x) - center, int(warning.y) - center))
+
+    def _draw_flowing_mantle(self, surface: pygame.Surface, state_key: str, gradient_tint: Color | None = None) -> None:
+        if gradient_tint:
+            r, g, b = gradient_tint
+            # Blend gradient tint with a dark base so mantle stays readable
+            color: Color = (r // 2, g // 2, b // 2)
+        elif state_key == "flash":
+            color = (255, 255, 255)
         elif state_key == "normal":
             color = (80, 60, 150)
         else:
@@ -1536,7 +2087,6 @@ class CloudArchmageBoss:
     # ------------------------------------------------------------------
 
     def _restore_orbs(self) -> None:
-        """Reativa as esferas absorvidas quando o escudo é destruído."""
         self._shield_spawning = False
         self._shield_spawn_t = 0.0
         cx = self.x + self.w / 2
@@ -1547,6 +2097,9 @@ class CloudArchmageBoss:
                 orb.x = cx + math.cos(angle) * self.ORBIT_RADIUS
                 orb.y = cy + math.sin(angle) * (self.ORBIT_RADIUS * 0.5)
                 orb.mode = OrbMode.ORBIT
+            elif orb.mode == OrbMode.ATTACK:
+                orb.mode = OrbMode.RETURN
+                orb.timer = 0.0
 
     def take_damage(
         self, amount: int = 1, hit_x: float | None = None, hit_y: float | None = None
@@ -1557,8 +2110,11 @@ class CloudArchmageBoss:
         # White Power: 50% chance to dodge
         if self._white_dodge_active and random.random() < 0.5:
             # Mostra um flash rápido branco para indicar esquiva
-            self._hit_flash = 0.05
+            self._white_dodge_was_miss = True
+            self._trigger_miss_indicator(hit_x, hit_y)
             return
+
+        self._white_dodge_was_miss = False
 
         # Phase 1 Protection: Cyan orb intercepts hits if nearby
         if self.health / self.max_health > self.PHASE2_THRESHOLD:
@@ -1579,9 +2135,28 @@ class CloudArchmageBoss:
                 self._shield_active = False
                 self._shield_spawning = False
                 self._emit_shield_break()
+                # Snap the cyan orb back to orbit before restoring all orbs
+                if self._active_orb_index is not None:
+                    cyan_orb = self._orbs[self._active_orb_index]
+                    angle = self._orb_angle + cyan_orb.base_angle
+                    cx = self.x + self.w / 2
+                    cy = self.y + self.h / 2
+                    cyan_orb.x = cx + math.cos(angle) * self.ORBIT_RADIUS
+                    cyan_orb.y = cy + math.sin(angle) * (self.ORBIT_RADIUS * 0.5)
+                    cyan_orb.mode = OrbMode.RETURN
+                self._active_orb_index = None
+                self._active_power = None
+                self._white_dodge_active = False
                 self._restore_orbs()
-                self._vulnerable_timer = _VULNERABLE_DURATION
-                self._state = ArchmageState.PHASE2_VULNERABLE
+                # In phase 1, go back to cooldown → idle rather than jumping to phase 2
+                if self.health / self.max_health > self.PHASE2_THRESHOLD:
+                    self._state = ArchmageState.COOLDOWN
+                    self._cooldown_timer = _ABSORPTION_COOLDOWN
+                elif self.health / self.max_health > self.PHASE3_THRESHOLD:
+                    self._vulnerable_timer = _VULNERABLE_DURATION
+                    self._state = ArchmageState.PHASE2_VULNERABLE
+                else:
+                    self._begin_phase3_vulnerable()
             return
 
         self.health -= amount
@@ -1589,16 +2164,14 @@ class CloudArchmageBoss:
         if self.health <= 0:
             self.dead = True
             self._state = ArchmageState.DEFEATED
+            return
+        self._hit_count += 1
+        if self._hit_count % 30 == 0:
+            self._trigger_forced_slide()
 
     # ------------------------------------------------------------------
     # Passive orb-effect API (consumed by systems)
     # ------------------------------------------------------------------
-
-    def get_cyan_repulsion_zone(self) -> tuple[float, float, float] | None:
-        """Retorna (x, y, radius) da aura de repulsão se o escudo estiver ativo."""
-        if self._shield_active or self._shield_spawning:
-            return (self.x + self.w / 2, self.y + self.h / 2, self.SHIELD_RADIUS)
-        return None
 
     def get_orange_trail_hazards(self) -> list[tuple[float, float, float]]:
         """Retorna lista de círculos (x, y, radius) das zonas de fogo ativas."""
@@ -1610,7 +2183,11 @@ class CloudArchmageBoss:
 
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult
+        from ..systems.hit_result import HitResult, NO_HIT
+
+        if self._white_dodge_was_miss:
+            self._white_dodge_was_miss = False
+            return NO_HIT
 
         self.take_damage(damage, hit_x, hit_y)
         if self.dead:

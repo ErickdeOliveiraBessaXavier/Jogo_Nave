@@ -1146,6 +1146,18 @@ class PlayingScene(Scene):
             destroyed += iz_dest
             score_events.extend(iz_events)
 
+        if self.entity_manager.fire_zones:
+            fz_gain, fz_dest, fz_events, fz_ship_hit = self.collisions.fire_zones_vs_entities(
+                self.entity_manager.fire_zones,
+                enemies_view,
+                self.ship,
+                self.entity_manager,
+            )
+            gain += fz_gain
+            destroyed += fz_dest
+            score_events.extend(fz_events)
+            ship_hit = ship_hit or fz_ship_hit
+
         return gain, destroyed, score_events, ship_hit
 
     def _check_formation_collisions(
@@ -1191,6 +1203,18 @@ class PlayingScene(Scene):
                 gain += iz_gain
                 destroyed += iz_dest
                 score_events.extend(iz_events)
+
+            if self.entity_manager.fire_zones:
+                fz_gain, fz_dest, fz_events, fz_ship_hit = self.collisions.fire_zones_vs_entities(
+                    self.entity_manager.fire_zones,
+                    fe,
+                    self.ship,
+                    self.entity_manager,
+                )
+                gain += fz_gain
+                destroyed += fz_dest
+                score_events.extend(fz_events)
+                ship_hit = ship_hit or fz_ship_hit
 
             if self.entity_manager.cannon_mines:
                 cg, cd, ce = self.collisions.cannon_mines_vs_enemies(
@@ -1239,6 +1263,18 @@ class PlayingScene(Scene):
             gain += mg
             destroyed += md
             score_events.extend(me)
+
+        if self.entity_manager.fire_zones:
+            fz_gain, fz_dest, fz_events, fz_ship_hit = self.collisions.fire_zones_vs_entities(
+                self.entity_manager.fire_zones,
+                enemies_view,
+                self.ship,
+                self.entity_manager,
+            )
+            gain += fz_gain
+            destroyed += fz_dest
+            score_events.extend(fz_events)
+            ship_hit = ship_hit or fz_ship_hit
 
         return gain, destroyed, score_events, ship_hit
 
@@ -2066,12 +2102,17 @@ class PlayingScene(Scene):
         )
 
         current_fps = self.r.current_fps if self.r.current_fps > 0 else 60.0
+        intro_active = bool(
+            self.entity_manager.boss
+            and getattr(self.entity_manager.boss, "is_intro_active", False)
+        )
         self.entity_manager.draw(
             self.game_surface,
             self.ship.rect.centerx,
             self.ship.rect.centery,
             self.enemy_visible,
             fps=current_fps,
+            draw_boss=not intro_active,
         )
 
         if self.show_enemy_hitboxes:
@@ -2088,6 +2129,22 @@ class PlayingScene(Scene):
             )
 
         self.ship.draw(self.game_surface)
+
+        if intro_active:
+            boss = self.entity_manager.boss
+            if boss:
+                from ..entities.cloud_archmage_boss import CloudArchmageBoss
+
+                archmage = cast(CloudArchmageBoss, boss)
+                overlay_alpha = archmage.get_intro_dim_alpha()
+                if overlay_alpha > 0:
+                    overlay = pygame.Surface(
+                        (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+                    )
+                    overlay.fill((0, 0, 0, overlay_alpha))
+                    self.game_surface.blit(overlay, (0, 0))
+                archmage.draw(self.game_surface)
+
         self.r.update_fps(dt)
 
         stage_name = format_stage_name(self.level_config.level_number)

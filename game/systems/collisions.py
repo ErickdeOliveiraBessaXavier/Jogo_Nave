@@ -16,6 +16,7 @@ from ..entities.explosion import ExplosionType
 from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.eye_laser import EyeLaser
 from ..entities.floating_score import FloatingScore
+from ..entities.fire_zone import FireZone
 from ..entities.ice_poison_zone import IcePoisonZone
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
@@ -576,6 +577,50 @@ class Collisions:
                             score_events.append((cx, cy, result.points))
 
         return score_gain, destroyed_count, score_events
+
+    def fire_zones_vs_entities(
+        self,
+        zones: list[FireZone],
+        enemies: Sequence[Any],
+        ship: Ship,
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+        ship_hit = False
+
+        for zone in zones:
+            if zone.dead:
+                continue
+
+            if ship.invuln <= 0:
+                ship_cx = ship.x + ship.w / 2
+                ship_cy = ship.y + ship.h / 2
+                if zone.in_zone(ship_cx, ship_cy):
+                    ship_eid = id(ship)
+                    if zone.can_damage(ship_eid):
+                        zone.register_hit(ship_eid)
+                        ship_hit = True
+
+            for enemy in enemies:
+                if enemy.dead:
+                    continue
+                cx, cy, r = enemy.collision_circle()
+                if not zone.in_zone(cx, cy, r):
+                    continue
+
+                eid = id(enemy)
+                if zone.can_damage(eid):
+                    zone.register_hit(eid)
+                    result = self._apply_hit(enemy, 1, cx, cy, entity_manager)
+                    score_gain += result.points
+                    if result.killed:
+                        destroyed_count += 1
+                        if result.points > 0:
+                            score_events.append((cx, cy, result.points))
+
+        return score_gain, destroyed_count, score_events, ship_hit
 
     def handle_mine_explosion(
         self,

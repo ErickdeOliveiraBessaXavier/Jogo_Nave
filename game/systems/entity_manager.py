@@ -30,6 +30,7 @@ from ..entities.floating_score import FloatingScore
 from ..entities.formation import Formation
 from ..entities.giant_meteor_boss import GiantMeteorBoss
 from ..entities.guided_meteor import GuidedMeteor
+from ..entities.fire_zone import FireZone
 from ..entities.ice_poison_zone import IcePoisonZone
 from ..entities.meteor import Meteor
 from ..entities.meteor_pool import MeteorPool
@@ -83,6 +84,7 @@ class EntityManager:
         self.eye_lasers: List[EyeLaser] = []
         self.mine_explosions: List[MineExplosion] = []
         self.ice_poison_zones: List[IcePoisonZone] = []
+        self.fire_zones: List[FireZone] = []
         self.mini_ship_bullets: List[MiniShipBullet] = []
 
         # Listas de entidades e coletáveis
@@ -383,6 +385,10 @@ class EntityManager:
             zone.update(dt)
             if zone.dead:
                 self.ice_poison_zones.remove(zone)
+        for zone in self.fire_zones[:]:
+            zone.update(dt)
+            if zone.dead:
+                self.fire_zones.remove(zone)
 
         # Helper para lentidão (EMP)
         slow_active = getattr(self, "emp_active", False)
@@ -693,6 +699,7 @@ class EntityManager:
         player_y: float,
         enemy_visible: bool = True,
         fps: float = 60.0,
+        draw_boss: bool = True,
     ) -> None:
         sr = surface.get_rect()
 
@@ -749,7 +756,7 @@ class EntityManager:
                 b.draw(surface)
 
         # 3. Desenhar o Boss (agora por cima das rochas da serpente)
-        if self.boss:
+        if draw_boss and self.boss:
             if isinstance(self.boss, SlimeBoss):
                 self.boss.draw(surface, fps)
             else:
@@ -767,6 +774,8 @@ class EntityManager:
         for w in self.emp_waves:
             w.draw(surface)
         for zone in self.ice_poison_zones:
+            zone.draw(surface)
+        for zone in self.fire_zones:
             zone.draw(surface)
 
         # 4. Desenhar projéteis e efeitos de impacto (devem ficar SOBRE os inimigos)

@@ -92,7 +92,7 @@ class IcePoisonZone:
 
     def _spawn_particle(self) -> None:
         angle = random.uniform(0.0, math.tau)
-        dist = random.uniform(0.0, self.radius * 0.85)
+        dist = self.radius * 0.85 * math.sqrt(random.random())
         px = self.x + math.cos(angle) * dist
         py = self.y + math.sin(angle) * dist
         self._particles.append(
@@ -108,6 +108,9 @@ class IcePoisonZone:
 
     def in_zone(self, cx: float, cy: float, r: float = 0.0) -> bool:
         return (cx - self.x) ** 2 + (cy - self.y) ** 2 < (self.radius + r) ** 2
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        return self.x, self.y, float(self.radius)
 
     def can_damage(self, entity_id: int) -> bool:
         return entity_id not in self.hit_cooldowns
