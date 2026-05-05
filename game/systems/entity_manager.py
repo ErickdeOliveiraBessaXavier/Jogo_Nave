@@ -37,11 +37,17 @@ from ..entities.meteor_pool import MeteorPool
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
-from ..entities.mountain_mage import (MountainMage, MountainStalactite,
-                                      MountainStalagmite)
+from ..entities.mountain_mage import (
+    MountainMage,
+    MountainStalactite,
+    MountainStalagmite,
+)
 from ..entities.mountain_propeller import MountainPropeller
-from ..entities.mountain_serpent_boss import (MountainSerpentBoss,
-                                              SerpentBlock, SerpentRockBullet)
+from ..entities.mountain_serpent_boss import (
+    MountainSerpentBoss,
+    SerpentBlock,
+    SerpentRockBullet,
+)
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider_pool import RockGliderPool
@@ -52,8 +58,13 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import (Boulder, EntryDebris, OrbitalRock,
-                                         RockShard, StoneGolemBoss)
+from ..entities.stone_golem_boss import (
+    Boulder,
+    EntryDebris,
+    OrbitalRock,
+    RockShard,
+    StoneGolemBoss,
+)
 from ..entities.stone_sentry import StoneSentry
 from .collision_protocols import Removable
 
@@ -212,7 +223,9 @@ class EntityManager:
     def spawn_explosive_effect(self, x: float, y: float, radius: float = 60.0) -> None:
         self.explosive_effects.append(ExplosiveEffect(x, y, radius=radius))
 
-    def spawn_ice_poison_zone(self, x: float, y: float, radius: int, duration: float = 5.0) -> None:
+    def spawn_ice_poison_zone(
+        self, x: float, y: float, radius: int, duration: float = 5.0
+    ) -> None:
         self.ice_poison_zones.append(IcePoisonZone(x, y, radius, duration))
 
     def spawn_air_strike(self, target_x: float, target_y: float) -> None:
@@ -733,10 +746,15 @@ class EntityManager:
                     continue
                 # MountainStalagmite/Stalactite: sempre desenha (com ou sem fragmentos) — o rect
                 # pode ser zero no início de RISING antes da máscara ser calculada.
-                if isinstance(e, (MountainStalagmite, MountainStalactite)) and not e.dead:
+                if (
+                    isinstance(e, (MountainStalagmite, MountainStalactite))
+                    and not e.dead
+                ):
                     e.draw(surface)
                     continue
-                if isinstance(e, (MountainStalagmite, MountainStalactite)) and getattr(e, "_fragments", None):
+                if isinstance(e, (MountainStalagmite, MountainStalactite)) and getattr(
+                    e, "_fragments", None
+                ):
                     e.draw(surface)
                     continue
                 if is_v(e):

@@ -1,8 +1,19 @@
 import logging
 import random
 from collections import deque
-from typing import (TYPE_CHECKING, Any, Callable, Dict, List, Protocol, Tuple,
-                    Type, TypedDict, Union, cast)
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Protocol,
+    Tuple,
+    Type,
+    TypedDict,
+    Union,
+    cast,
+)
 
 # ---------------------------------------------------------------------------
 # Imports de entidades movidos para o topo — evita late imports em hot paths
@@ -49,13 +60,17 @@ SPAWNER_STORM_ENEMY_CAP: int = 30
 
 # EnemySpawner — spawn de minas
 MINE_NUM_OPTIONS: list[int] = [2, 3, 5]
-MINE_NUM_WEIGHTS: list[float] = [0.50, 0.25, 0.10]  # não somam 1 intencionalmente (choices normaliza)
-MINE_SPAWN_CHANCE: float = 0.5           # chance extra além de spawn_intensity
-MINE_MIN_DISTANCE: int = 60             # pixels mínimos entre minas na mesma leva
-MINE_MAX_POSITION_ATTEMPTS: int = 10    # tentativas para achar posição válida
+MINE_NUM_WEIGHTS: list[float] = [
+    0.50,
+    0.25,
+    0.10,
+]  # não somam 1 intencionalmente (choices normaliza)
+MINE_SPAWN_CHANCE: float = 0.5  # chance extra além de spawn_intensity
+MINE_MIN_DISTANCE: int = 60  # pixels mínimos entre minas na mesma leva
+MINE_MAX_POSITION_ATTEMPTS: int = 10  # tentativas para achar posição válida
 MINE_Y_OFFSET_MIN: float = 10.0
 MINE_Y_OFFSET_MAX: float = 100.0
-MINE_X_MARGIN: int = 20                 # margem lateral para spawn de minas
+MINE_X_MARGIN: int = 20  # margem lateral para spawn de minas
 
 # EnemySpawner — spawn de meteoros guiados
 GUIDED_METEOR_SIZE_MIN: int = 15
@@ -65,9 +80,9 @@ GUIDED_METEOR_INITIAL_VX: float = 0.0
 GUIDED_METEOR_INITIAL_VY: float = 50.0
 
 # EnemySpawner — formações
-FORMATION_MIN_DISTANCE: int = 300       # pixels mínimos entre centros de formação
+FORMATION_MIN_DISTANCE: int = 300  # pixels mínimos entre centros de formação
 FORMATION_MAX_POSITION_ATTEMPTS: int = 10
-FORMATION_DEFAULT_COUNT: int = 5        # fallback quando config não especifica count
+FORMATION_DEFAULT_COUNT: int = 5  # fallback quando config não especifica count
 FORMATION_SCREEN_MARGIN_BUFFER: int = 100  # buffer extra ao limitar safe_margin
 
 # EnemySpawner — spawn lateral (side scroll)
@@ -89,7 +104,7 @@ FORMATION_UNKNOWN_MARGIN_FALLBACK: float = 200.0
 # EyeEnemy — posições de spawn
 EYE_SIDE_SCROLL_Y_MIN: int = 60
 EYE_NORMAL_X_MIN: int = 40
-EYE_NORMAL_X_MAX_OFFSET: int = 80       # subtrai da largura da tela
+EYE_NORMAL_X_MAX_OFFSET: int = 80  # subtrai da largura da tela
 EYE_NORMAL_Y_MIN: int = 40
 EYE_NORMAL_Y_MAX: int = 100
 
@@ -99,7 +114,7 @@ SQUARE_MINION_X_MIN: int = 40
 SQUARE_MINION_X_MAX_OFFSET: int = 80
 
 # PowerUpSpawner
-POWERUP_SPAWN_FALLBACK_COUNT: int = 1   # choices retorna lista, pegar índice 0
+POWERUP_SPAWN_FALLBACK_COUNT: int = 1  # choices retorna lista, pegar índice 0
 
 # StarSpawner
 STAR_X_MIN: int = 40
@@ -110,6 +125,7 @@ STAR_Y_OFFSET_MAX: float = 100.0
 # ---------------------------------------------------------------------------
 # Tipos / Protocols
 # ---------------------------------------------------------------------------
+
 
 class EnemyWithHealth(Protocol):
     """Protocol para inimigos que têm atributo health."""
@@ -163,6 +179,7 @@ FORMATION_CONFIGS: Dict[str, FormationConfig] = {
 # EnemySpawner
 # ---------------------------------------------------------------------------
 
+
 class EnemySpawner:
     def __init__(
         self,
@@ -195,11 +212,14 @@ class EnemySpawner:
             self.spawn_intensity = 1.0
 
         # Pré-calcular margens e entry_y de formações
-        self._formation_safe_margins: Dict[str, Union[float, Callable[[int], float]]] = {
+        self._formation_safe_margins: Dict[
+            str, Union[float, Callable[[int], float]]
+        ] = {
             "spiral_circle": Config.FORMATION_CIRCLE_RADIUS,
             "spiral_v": lambda count: (count // 2) * Config.FORMATION_V_SPACING,
             "spiral_square": Config.FORMATION_SQUARE_SIZE / 2,
-            "spiral_line": lambda count: ((count - 1) * Config.FORMATION_LINE_SPACING) / 2,
+            "spiral_line": lambda count: ((count - 1) * Config.FORMATION_LINE_SPACING)
+            / 2,
             "full_cycle": Config.FORMATION_CIRCLE_RADIUS,
         }
         self._formation_entry_y: Dict[str, float] = {
@@ -215,7 +235,9 @@ class EnemySpawner:
         self.recent_enemy_types: deque[type] = deque(
             maxlen=DifficultyConfig.WEIGHTED_RECENT_MEMORY
         )
-        self.weighted_telemetry_enabled: bool = DifficultyConfig.WEIGHTED_SPAWN_TELEMETRY
+        self.weighted_telemetry_enabled: bool = (
+            DifficultyConfig.WEIGHTED_SPAWN_TELEMETRY
+        )
         self.weighted_telemetry_timer: float = 0.0
         self.weighted_spawn_attempts: int = 0
         self.weighted_spawn_success: int = 0
@@ -251,7 +273,9 @@ class EnemySpawner:
 
     def _validate_formation_types(self) -> None:
         """Filtra tipos de formação inválidos e desativa formações se necessário."""
-        if not (self.level_config.formations_enabled and self.level_config.formation_types):
+        if not (
+            self.level_config.formations_enabled and self.level_config.formation_types
+        ):
             return
 
         invalid_types = self.level_config.validate_formation_types(
@@ -348,7 +372,9 @@ class EnemySpawner:
 
     def _register_spawn(self, enemy_type: type) -> None:
         self.last_spawn_clock = self.spawn_clock
-        self.last_spawn_clock_by_type[self._enemy_type_key(enemy_type)] = self.spawn_clock
+        self.last_spawn_clock_by_type[self._enemy_type_key(enemy_type)] = (
+            self.spawn_clock
+        )
 
     # ------------------------------------------------------------------
     # Caps e contagem
@@ -356,15 +382,21 @@ class EnemySpawner:
 
     def _is_storm_level(self) -> bool:
         theme = (self.level_config.theme_name or "").lower()
-        return "tempestade de meteoros" in theme or "tempestade de rock gliders" in theme
+        return (
+            "tempestade de meteoros" in theme or "tempestade de rock gliders" in theme
+        )
 
     def _is_rock_glider_storm_level(self) -> bool:
-        return (self.level_config.theme_name or "").strip().casefold() == "tempestade de rock gliders"
+        return (
+            self.level_config.theme_name or ""
+        ).strip().casefold() == "tempestade de rock gliders"
 
     def _get_current_enemy_cap(self) -> int:
         if self._is_storm_level():
             return SPAWNER_STORM_ENEMY_CAP
-        return calculate_dynamic_enemy_cap(self.current_level_number, self.difficulty_preset)
+        return calculate_dynamic_enemy_cap(
+            self.current_level_number, self.difficulty_preset
+        )
 
     def _count_enemies_by_type(self, entity_manager: "EntityManager") -> dict[str, int]:
         counts: dict[str, int] = {
@@ -408,28 +440,51 @@ class EnemySpawner:
     def _is_hard_capped(self, enemy_type: type, counts: dict[str, int]) -> bool:
         if counts["total"] >= self._get_current_enemy_cap():
             return True
-        if enemy_type == ElementalRobot and counts["elemental_robot"] >= SPAWNER_CAP_ELEMENTAL_ROBOT:
+        if (
+            enemy_type == ElementalRobot
+            and counts["elemental_robot"] >= SPAWNER_CAP_ELEMENTAL_ROBOT
+        ):
             return True
-        if enemy_type == StoneSentry and counts["stone_sentry"] >= SPAWNER_CAP_STONE_SENTRY:
+        if (
+            enemy_type == StoneSentry
+            and counts["stone_sentry"] >= SPAWNER_CAP_STONE_SENTRY
+        ):
             return True
-        if enemy_type == MountainMage and counts["mountain_mage"] >= SPAWNER_CAP_MOUNTAIN_MAGE:
+        if (
+            enemy_type == MountainMage
+            and counts["mountain_mage"] >= SPAWNER_CAP_MOUNTAIN_MAGE
+        ):
             return True
-        if enemy_type == MountainPropeller and counts["mountain_propeller"] >= SPAWNER_CAP_MOUNTAIN_PROPELLER:
+        if (
+            enemy_type == MountainPropeller
+            and counts["mountain_propeller"] >= SPAWNER_CAP_MOUNTAIN_PROPELLER
+        ):
             return True
         return False
 
-    def _should_spawn_enemy(self, enemy_type: type, entity_manager: "EntityManager") -> bool:
+    def _should_spawn_enemy(
+        self, enemy_type: type, entity_manager: "EntityManager"
+    ) -> bool:
         if not DifficultyConfig.ADAPTIVE_SPAWN_ENABLED:
             return True
 
         counts = self._count_enemies_by_type(entity_manager)
 
         # Caps rígidos de instâncias únicas/duplas
-        if enemy_type == ElementalRobot and counts["elemental_robot"] >= SPAWNER_CAP_ELEMENTAL_ROBOT:
+        if (
+            enemy_type == ElementalRobot
+            and counts["elemental_robot"] >= SPAWNER_CAP_ELEMENTAL_ROBOT
+        ):
             return False
-        if enemy_type == StoneSentry and counts["stone_sentry"] >= SPAWNER_CAP_STONE_SENTRY:
+        if (
+            enemy_type == StoneSentry
+            and counts["stone_sentry"] >= SPAWNER_CAP_STONE_SENTRY
+        ):
             return False
-        if enemy_type == MountainMage and counts["mountain_mage"] >= SPAWNER_CAP_MOUNTAIN_MAGE:
+        if (
+            enemy_type == MountainMage
+            and counts["mountain_mage"] >= SPAWNER_CAP_MOUNTAIN_MAGE
+        ):
             return False
 
         max_enemies = self._get_current_enemy_cap()
@@ -461,7 +516,9 @@ class EnemySpawner:
         if total >= total_cap:
             self.weighted_hard_cap_samples += 1
 
-    def _get_dynamic_enemy_weights(self, entity_manager: "EntityManager") -> dict[type, float]:
+    def _get_dynamic_enemy_weights(
+        self, entity_manager: "EntityManager"
+    ) -> dict[type, float]:
         counts = self._count_enemies_by_type(entity_manager)
         base_weights = self.level_config.get_enemy_spawn_weights()
         dynamic_weights: dict[type, float] = {}
@@ -470,7 +527,7 @@ class EnemySpawner:
             if base_weight <= 0 or self._is_hard_capped(enemy_type, counts):
                 continue
             repeat_count = sum(1 for t in self.recent_enemy_types if t == enemy_type)
-            penalty = DifficultyConfig.WEIGHTED_REPEAT_PENALTY ** repeat_count
+            penalty = DifficultyConfig.WEIGHTED_REPEAT_PENALTY**repeat_count
             dynamic_weights[enemy_type] = max(0.01, base_weight * penalty)
 
         return dynamic_weights
@@ -485,7 +542,9 @@ class EnemySpawner:
 
     def _record_weighted_spawn(self, enemy_type: type) -> None:
         type_name = enemy_type.__name__
-        self.weighted_spawn_by_type[type_name] = self.weighted_spawn_by_type.get(type_name, 0) + 1
+        self.weighted_spawn_by_type[type_name] = (
+            self.weighted_spawn_by_type.get(type_name, 0) + 1
+        )
 
     @staticmethod
     def _percentile(values: list[int], percentile: float) -> float:
@@ -552,7 +611,9 @@ class EnemySpawner:
                 weights=Config.ROCK_GLIDER_STORM_SIZE_WEIGHTS,
                 k=1,
             )[0]
-        return random.randint(Config.ROCK_GLIDER_NORMAL_MIN_SIZE, Config.ROCK_GLIDER_NORMAL_MAX_SIZE)
+        return random.randint(
+            Config.ROCK_GLIDER_NORMAL_MIN_SIZE, Config.ROCK_GLIDER_NORMAL_MAX_SIZE
+        )
 
     def _spawn_enemy_of_type(
         self,
@@ -569,7 +630,9 @@ class EnemySpawner:
             return self._spawn_meteor_type(enemy_type, entity_manager, is_side_scroll)
 
         if enemy_type == SquareMinionBoss:
-            return self._spawn_square_minion(entity_manager, player_x, player_y, is_side_scroll)
+            return self._spawn_square_minion(
+                entity_manager, player_x, player_y, is_side_scroll
+            )
 
         if enemy_type == ElementalRobot:
             return self._spawn_elemental_robot(entity_manager)
@@ -581,7 +644,9 @@ class EnemySpawner:
             return self._spawn_mountain_mage(entity_manager, is_side_scroll)
 
         if enemy_type == MountainPropeller:
-            y = random.randint(SIDE_SCROLL_Y_MIN, Config.SCREEN_HEIGHT - SIDE_SCROLL_Y_MIN)
+            y = random.randint(
+                SIDE_SCROLL_Y_MIN, Config.SCREEN_HEIGHT - SIDE_SCROLL_Y_MIN
+            )
             entity_manager.spawn_mountain_propeller(y=y)
             return True
 
@@ -591,12 +656,18 @@ class EnemySpawner:
         entity_manager.enemies.append(new_enemy)  # type: ignore[arg-type]
         return True
 
-    def _spawn_eye_enemy(self, entity_manager: "EntityManager", is_side_scroll: bool) -> bool:
+    def _spawn_eye_enemy(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
         if is_side_scroll:
             x = Config.SCREEN_WIDTH + SIDE_SCROLL_SPAWN_X_OFFSET
-            y = random.randint(EYE_SIDE_SCROLL_Y_MIN, Config.SCREEN_HEIGHT - EYE_SIDE_SCROLL_Y_MIN)
+            y = random.randint(
+                EYE_SIDE_SCROLL_Y_MIN, Config.SCREEN_HEIGHT - EYE_SIDE_SCROLL_Y_MIN
+            )
         else:
-            x = random.randint(EYE_NORMAL_X_MIN, Config.SCREEN_WIDTH - EYE_NORMAL_X_MAX_OFFSET)
+            x = random.randint(
+                EYE_NORMAL_X_MIN, Config.SCREEN_WIDTH - EYE_NORMAL_X_MAX_OFFSET
+            )
             y = random.randint(EYE_NORMAL_Y_MIN, EYE_NORMAL_Y_MAX)
         new_enemy = EyeEnemy(x, y)
         new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
@@ -623,8 +694,10 @@ class EnemySpawner:
                 enemy_type(
                     size=size,
                     x=Config.SCREEN_WIDTH + SIDE_SCROLL_SPAWN_X_OFFSET,
-                    y=random.randint(SIDE_SCROLL_Y_MIN, Config.SCREEN_HEIGHT - SIDE_SCROLL_Y_MIN),
-                    vx=None,   # RockGlider controla velocidade horizontal internamente
+                    y=random.randint(
+                        SIDE_SCROLL_Y_MIN, Config.SCREEN_HEIGHT - SIDE_SCROLL_Y_MIN
+                    ),
+                    vx=None,  # RockGlider controla velocidade horizontal internamente
                     vy=random.uniform(-50, 50),
                 ),
             )
@@ -635,7 +708,9 @@ class EnemySpawner:
         entity_manager.enemies.append(meteor)  # type: ignore[arg-type]
         return True
 
-    def _spawn_rock_glider(self, entity_manager: "EntityManager", is_side_scroll: bool) -> bool:
+    def _spawn_rock_glider(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
         storm_bias = self._is_rock_glider_storm_level()
         glider_size = self._pick_rock_glider_size(storm_bias)
 
@@ -643,26 +718,35 @@ class EnemySpawner:
             glider = entity_manager.rock_glider_pool.get(
                 size=glider_size,
                 x=Config.SCREEN_WIDTH + SIDE_SCROLL_SPAWN_X_OFFSET,
-                y=random.randint(SIDE_SCROLL_Y_MIN, Config.SCREEN_HEIGHT - SIDE_SCROLL_Y_MIN),
+                y=random.randint(
+                    SIDE_SCROLL_Y_MIN, Config.SCREEN_HEIGHT - SIDE_SCROLL_Y_MIN
+                ),
                 vx=None,
                 vy=random.uniform(-50, 50),
             )
         else:
             glider = entity_manager.rock_glider_pool.get(size=glider_size)
 
-        if self.difficulty_preset in (DifficultyPreset.HARDCORE, DifficultyPreset.NIGHTMARE):
+        if self.difficulty_preset in (
+            DifficultyPreset.HARDCORE,
+            DifficultyPreset.NIGHTMARE,
+        ):
             glider.set_hp(RockGlider.ROCK_MAX_HP_HARD, RockGlider.BOT_MAX_HP_HARD)
 
         entity_manager.enemies.append(glider)  # type: ignore[arg-type]
         return True
 
-    def _spawn_meteor(self, entity_manager: "EntityManager", is_side_scroll: bool) -> bool:
+    def _spawn_meteor(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
         if is_side_scroll:
             size = random.randint(Config.MIN_METEOR_SIZE, Config.MAX_METEOR_SIZE)
             meteor = self.meteor_pool.get(
                 size=size,
                 x=Config.SCREEN_WIDTH + SIDE_SCROLL_SPAWN_X_OFFSET,
-                y=random.randint(SIDE_SCROLL_Y_MIN, Config.SCREEN_HEIGHT - SIDE_SCROLL_Y_MIN),
+                y=random.randint(
+                    SIDE_SCROLL_Y_MIN, Config.SCREEN_HEIGHT - SIDE_SCROLL_Y_MIN
+                ),
                 vx=-random.uniform(150, 300),
                 vy=random.uniform(-50, 50),
             )
@@ -684,9 +768,13 @@ class EnemySpawner:
             return False
         if is_side_scroll:
             x = Config.SCREEN_WIDTH + SIDE_SCROLL_SPAWN_X_OFFSET
-            y = random.randint(SIDE_SCROLL_Y_MIN, Config.SCREEN_HEIGHT - SIDE_SCROLL_Y_MIN)
+            y = random.randint(
+                SIDE_SCROLL_Y_MIN, Config.SCREEN_HEIGHT - SIDE_SCROLL_Y_MIN
+            )
         else:
-            x = random.randint(SQUARE_MINION_X_MIN, Config.SCREEN_WIDTH - SQUARE_MINION_X_MAX_OFFSET)
+            x = random.randint(
+                SQUARE_MINION_X_MIN, Config.SCREEN_WIDTH - SQUARE_MINION_X_MAX_OFFSET
+            )
             y = SQUARE_MINION_SPAWN_Y
         new_enemy = SquareMinionBoss(x, y, player_x, player_y)
         new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
@@ -700,7 +788,8 @@ class EnemySpawner:
         )
         target_y = Config.SCREEN_HEIGHT * ELEMENTAL_ROBOT_Y_FRACTION
         robot = ElementalRobot(
-            spawn_x, target_y,
+            spawn_x,
+            target_y,
             difficulty_multiplier=self.enemy_health_multiplier,
         )
         entity_manager.enemies.append(robot)
@@ -712,7 +801,9 @@ class EnemySpawner:
         entity_manager.enemies.append(new_enemy)
         return True
 
-    def _spawn_mountain_mage(self, entity_manager: "EntityManager", is_side_scroll: bool) -> bool:
+    def _spawn_mountain_mage(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
         y_max = int(Config.SCREEN_HEIGHT * MOUNTAIN_MAGE_Y_MAX_FRACTION)
         if is_side_scroll:
             x = Config.SCREEN_WIDTH + SIDE_SCROLL_SPAWN_X_OFFSET
@@ -720,7 +811,10 @@ class EnemySpawner:
         else:
             x = random.randint(
                 MOUNTAIN_MAGE_X_MIN,
-                max(MOUNTAIN_MAGE_X_MIN_FALLBACK, Config.SCREEN_WIDTH - MOUNTAIN_MAGE_X_MARGIN),
+                max(
+                    MOUNTAIN_MAGE_X_MIN_FALLBACK,
+                    Config.SCREEN_WIDTH - MOUNTAIN_MAGE_X_MARGIN,
+                ),
             )
             y = random.randint(SIDE_SCROLL_Y_MIN, y_max)
         new_enemy = MountainMage(x, y)
@@ -754,8 +848,10 @@ class EnemySpawner:
                 continue
 
             self._spawn_enemy_of_type(
-                enemy_type, entity_manager,
-                player_x=player_x, player_y=player_y,
+                enemy_type,
+                entity_manager,
+                player_x=player_x,
+                player_y=player_y,
                 is_side_scroll=is_side_scroll,
             )
             self._register_spawn(enemy_type)
@@ -780,7 +876,9 @@ class EnemySpawner:
             return
 
         enemy_type = self._pick_weighted_enemy_type(entity_manager)
-        if enemy_type is None or not self._should_spawn_enemy(enemy_type, entity_manager):
+        if enemy_type is None or not self._should_spawn_enemy(
+            enemy_type, entity_manager
+        ):
             self.weighted_spawn_blocked += 1
             self.weighted_spawn_timer.start()
             return
@@ -791,8 +889,10 @@ class EnemySpawner:
             return
 
         did_spawn = self._spawn_enemy_of_type(
-            enemy_type, entity_manager,
-            player_x=player_x, player_y=player_y,
+            enemy_type,
+            entity_manager,
+            player_x=player_x,
+            player_y=player_y,
             is_side_scroll=is_side_scroll,
         )
         if did_spawn:
@@ -832,10 +932,14 @@ class EnemySpawner:
         # Spawn principal (ponderado ou legado)
         if self.use_weighted_spawn:
             self._record_pressure_sample(entity_manager)
-            self._update_weighted_enemy_spawn(dt, entity_manager, player_x, player_y, is_side_scroll)
+            self._update_weighted_enemy_spawn(
+                dt, entity_manager, player_x, player_y, is_side_scroll
+            )
             self._flush_weighted_telemetry(dt)
         else:
-            self._update_legacy_enemy_spawn(dt, entity_manager, player_x, player_y, is_side_scroll)
+            self._update_legacy_enemy_spawn(
+                dt, entity_manager, player_x, player_y, is_side_scroll
+            )
 
         self._update_mine_spawner(entity_manager)
         self._update_propeller_spawner(entity_manager)
@@ -846,14 +950,19 @@ class EnemySpawner:
         if not self.level_config.mines_enabled:
             return
 
-        self.mine_spawn_timer.update(1 / 60)  # dt não disponível aqui — ver nota abaixo*
+        self.mine_spawn_timer.update(
+            1 / 60
+        )  # dt não disponível aqui — ver nota abaixo*
         # *Idealmente receber dt; por ora mantém compatibilidade com lógica anterior
         # TODO: passar dt para _update_mine_spawner quando refatorar assinatura
         if not self.mine_spawn_timer.done():
             return
 
         self.mine_spawn_timer.start()
-        if random.random() >= self.spawn_intensity or random.random() >= MINE_SPAWN_CHANCE:
+        if (
+            random.random() >= self.spawn_intensity
+            or random.random() >= MINE_SPAWN_CHANCE
+        ):
             return
 
         mine_type = self._get_theme_mine_type()
@@ -866,7 +975,9 @@ class EnemySpawner:
                 if all(abs(x - px) > MINE_MIN_DISTANCE for px in positions):
                     positions.append(x)
                     entity_manager.enemies.append(
-                        mine_type(x=x, y=-random.uniform(MINE_Y_OFFSET_MIN, MINE_Y_OFFSET_MAX))
+                        mine_type(
+                            x=x, y=-random.uniform(MINE_Y_OFFSET_MIN, MINE_Y_OFFSET_MAX)
+                        )
                     )
                     break
 
@@ -924,22 +1035,32 @@ class EnemySpawner:
         margin_value = self._formation_safe_margins.get(
             formation_type, FORMATION_UNKNOWN_MARGIN_FALLBACK
         )
-        safe_margin = float(margin_value(count) if callable(margin_value) else margin_value)
-        safe_margin = min(safe_margin, Config.SCREEN_WIDTH / 2 - FORMATION_SCREEN_MARGIN_BUFFER)
+        safe_margin = float(
+            margin_value(count) if callable(margin_value) else margin_value
+        )
+        safe_margin = min(
+            safe_margin, Config.SCREEN_WIDTH / 2 - FORMATION_SCREEN_MARGIN_BUFFER
+        )
 
         # Tentar posição que não sobreponha formações existentes
         existing_xs = [f.center_x for f in entity_manager.formations]
         entry_x: int | None = None
         for _ in range(FORMATION_MAX_POSITION_ATTEMPTS):
-            candidate = random.randint(int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin))
+            candidate = random.randint(
+                int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
+            )
             if all(abs(candidate - ex) >= FORMATION_MIN_DISTANCE for ex in existing_xs):
                 entry_x = candidate
                 break
         if entry_x is None:
-            entry_x = random.randint(int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin))
+            entry_x = random.randint(
+                int(safe_margin), int(Config.SCREEN_WIDTH - safe_margin)
+            )
 
         entry_y = float(self._formation_entry_y.get(formation_type, 80.0))
-        entity_manager.formations.append(Formation(Alien, count, entry_x, entry_y, patterns))
+        entity_manager.formations.append(
+            Formation(Alien, count, entry_x, entry_y, patterns)
+        )
 
     def _update_guided_meteor_spawner(
         self,
@@ -997,6 +1118,7 @@ class EnemySpawner:
 # PowerUpSpawner
 # ---------------------------------------------------------------------------
 
+
 class PowerUpSpawner:
     def __init__(self, difficulty: DifficultyPreset = DifficultyPreset.NORMAL) -> None:
         self.difficulty = difficulty
@@ -1004,7 +1126,9 @@ class PowerUpSpawner:
 
     def _select_powerup_by_rarity(self) -> PowerUpType:
         powerup_weights = get_powerup_weights(self.difficulty)
-        return random.choices(list(powerup_weights.keys()), weights=list(powerup_weights.values()))[0]
+        return random.choices(
+            list(powerup_weights.keys()), weights=list(powerup_weights.values())
+        )[0]
 
     def _reset_timer(self) -> None:
         min_t, max_t = Config.POWERUP_SPAWN_INTERVAL
@@ -1022,6 +1146,7 @@ class PowerUpSpawner:
 # ---------------------------------------------------------------------------
 # StarSpawner
 # ---------------------------------------------------------------------------
+
 
 class StarSpawner:
     def __init__(self) -> None:
