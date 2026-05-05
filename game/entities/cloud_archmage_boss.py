@@ -400,6 +400,7 @@ class CloudArchmageBoss:
         self._white_dodge_was_miss: bool = False
 
         self._gradient_timer: float = 0.0
+        self._displayed_tint: tuple[float, float, float] | None = None
         # Cache: {(r, g, b, alpha_int): Surface} — reused across frames
         # Cache: (qr, qg, qb, w, h) -> overlay já mascarado pela alpha do sprite
         self._tint_cache: dict[tuple[int, int, int, int, int], pygame.Surface] = {}
@@ -740,6 +741,7 @@ class CloudArchmageBoss:
         if self._state != ArchmageState.INTRO:
             self._update_orbs_positions(dt)
         self._update_lerp_physics(dt)
+        self._update_displayed_tint(dt)
         return spawned
 
     def _update_shield_rings(self, dt: float) -> None:
@@ -1684,6 +1686,23 @@ class CloudArchmageBoss:
 
     _GRADIENT_CYCLE: Final = 2.0
     _GRADIENT_ALPHA: Final = 110  # 0-255; tune for intensity
+    _TINT_LERP_SPEED: Final = 10.0
+
+    def _update_displayed_tint(self, dt: float) -> None:
+        target = self._get_gradient_color()
+        if target is None:
+            self._displayed_tint = None
+            return
+        if self._displayed_tint is None:
+            self._displayed_tint = (float(target[0]), float(target[1]), float(target[2]))
+            return
+        k = min(1.0, self._TINT_LERP_SPEED * dt)
+        r, g, b = self._displayed_tint
+        self._displayed_tint = (
+            r + (float(target[0]) - r) * k,
+            g + (float(target[1]) - g) * k,
+            b + (float(target[2]) - b) * k,
+        )
 
     def _get_gradient_color(self) -> Color | None:
         colors: list[Color] = []
@@ -1804,10 +1823,6 @@ class CloudArchmageBoss:
         state_key = (
             "flash"
             if self._hit_flash > 0.0
-            or (
-                self._active_power is not None
-                and self._active_power.type == OrbType.WHITE
-            )
             else (
                 "phase3"
                 if self._state
@@ -1831,7 +1846,11 @@ class CloudArchmageBoss:
         if self._shield_active or self._shield_spawning:
             self._draw_shield(surface)
 
-        gradient_tint = self._get_gradient_color()
+        gradient_tint = (
+            (int(self._displayed_tint[0]), int(self._displayed_tint[1]), int(self._displayed_tint[2]))
+            if self._displayed_tint is not None
+            else None
+        )
 
         if self._state != ArchmageState.DEFEATED:
             self._draw_flowing_mantle(surface, state_key, gradient_tint)
