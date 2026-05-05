@@ -348,7 +348,12 @@ class RockShard:
         self.health = max(0, self.health - damage)
         if self.health <= 0:
             self.dead = True
-            return HitResult(killed=True, points=20, explosion_size=18, sound=hit_sounds.EXPLOSION_ASTEROID)
+            return HitResult(
+                killed=True,
+                points=20,
+                explosion_size=18,
+                sound=hit_sounds.EXPLOSION_ASTEROID,
+            )
         return HitResult(explosion_size=8, sound=hit_sounds.BOSS_DAMAGE)
 
     def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":

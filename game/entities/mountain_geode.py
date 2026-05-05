@@ -23,27 +23,27 @@ GEODE_HEALTH: int = 50
 GEODE_SPEED: int = 42
 
 # Animação principal
-GEODE_PULSE_MAGNITUDE: float = 0.16   # amplitude do pulso (fator sobre sin)
-GEODE_PULSE_FREQUENCY: float = 4.0    # Hz do pulso
+GEODE_PULSE_MAGNITUDE: float = 0.16  # amplitude do pulso (fator sobre sin)
+GEODE_PULSE_FREQUENCY: float = 4.0  # Hz do pulso
 GEODE_SWAY_FREQ_MIN: float = 1.0
 GEODE_SWAY_FREQ_MAX: float = 1.4
 GEODE_SWAY_AMP_MIN: float = 10.0
 GEODE_SWAY_AMP_MAX: float = 18.0
 
 # Explosão / shake
-GEODE_PRE_EXPLOSION_DURATION: float = 2.2   # segundos até explodir após HP=0
-GEODE_FLASH_INTERVAL: float = 0.11          # intervalo entre flashes
-GEODE_SHAKE_DURATION_HIT: float = 0.18      # shake ao tomar hit normal
-GEODE_SHAKE_INTENSITY_EXPLODING: int = 9    # intensidade do shake na pré-explosão
-GEODE_SHAKE_INTENSITY_MAX: int = 5          # cap do shake ao tomar dano (pixels)
+GEODE_PRE_EXPLOSION_DURATION: float = 2.2  # segundos até explodir após HP=0
+GEODE_FLASH_INTERVAL: float = 0.11  # intervalo entre flashes
+GEODE_SHAKE_DURATION_HIT: float = 0.18  # shake ao tomar hit normal
+GEODE_SHAKE_INTENSITY_EXPLODING: int = 9  # intensidade do shake na pré-explosão
+GEODE_SHAKE_INTENSITY_MAX: int = 5  # cap do shake ao tomar dano (pixels)
 
 # Posição de parada (fração da altura da tela)
 GEODE_STOP_Y_MIN: float = 0.25
 GEODE_STOP_Y_MAX: float = 0.60
 
 # Indicador de raio de explosão
-GEODE_INDICATOR_ALPHA_START: float = 0.22   # alpha inicial (normalizado 0–1)
-GEODE_INDICATOR_ALPHA_END: float = 0.75     # alpha final   (normalizado 0–1)
+GEODE_INDICATOR_ALPHA_START: float = 0.22  # alpha inicial (normalizado 0–1)
+GEODE_INDICATOR_ALPHA_END: float = 0.75  # alpha final   (normalizado 0–1)
 GEODE_INDICATOR_COLOR: tuple[int, int, int] = (180, 235, 255)
 
 # Aparência do geode (normal)
@@ -52,10 +52,10 @@ GEODE_GLOW_NORMAL: tuple[int, int, int, int] = (96, 142, 188, 90)
 GEODE_COLOR_FLASH: tuple[int, int, int, int] = (255, 240, 180, 230)
 GEODE_GLOW_FLASH: tuple[int, int, int, int] = (255, 210, 130, 140)
 GEODE_CORE_COLOR: tuple[int, int, int, int] = (220, 245, 255, 180)
-GEODE_CORE_RADIUS_FACTOR: float = 0.35   # raio do núcleo relativo ao radius
+GEODE_CORE_RADIUS_FACTOR: float = 0.35  # raio do núcleo relativo ao radius
 GEODE_SPIKE_COUNT: int = 8
-GEODE_SPIKE_OUT_FACTOR: float = 1.15     # ponta saliente
-GEODE_SPIKE_IN_FACTOR: float = 0.92     # ponta reentrante
+GEODE_SPIKE_OUT_FACTOR: float = 1.15  # ponta saliente
+GEODE_SPIKE_IN_FACTOR: float = 0.92  # ponta reentrante
 
 # Cache
 GEODE_SHAPE_CACHE_MAX: int = 64
@@ -78,7 +78,8 @@ class MountainGeode(ExplosiveMine):
         self.explosion_radius: int = int(self.radius * GEODE_EXPLOSION_RADIUS_FACTOR)
 
         self.x: float = (
-            x if x is not None
+            x
+            if x is not None
             else float(random.randint(self.radius, Config.SCREEN_WIDTH - self.radius))
         )
         self.y: float = float(y) if y is not None else float(-self.radius)
@@ -104,7 +105,9 @@ class MountainGeode(ExplosiveMine):
         self.pulse_scale: float = 1.0
         self.sway_phase: float = random.uniform(0.0, math.tau)
         self.sway_freq: float = random.uniform(GEODE_SWAY_FREQ_MIN, GEODE_SWAY_FREQ_MAX)
-        self.sway_amplitude: float = random.uniform(GEODE_SWAY_AMP_MIN, GEODE_SWAY_AMP_MAX)
+        self.sway_amplitude: float = random.uniform(
+            GEODE_SWAY_AMP_MIN, GEODE_SWAY_AMP_MAX
+        )
 
         # Posição de parada
         self.stop_y: float = random.uniform(
@@ -186,9 +189,7 @@ class MountainGeode(ExplosiveMine):
 
         self.take_damage(damage)
         sound = (
-            hit_sounds.BOSS_DAMAGE
-            if self.health > 0
-            else hit_sounds.EXPLOSION_ASTEROID
+            hit_sounds.BOSS_DAMAGE if self.health > 0 else hit_sounds.EXPLOSION_ASTEROID
         )
         return HitResult(
             killed=False,

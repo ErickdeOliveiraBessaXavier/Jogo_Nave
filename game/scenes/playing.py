@@ -41,11 +41,14 @@ from ..core.paths import get_profile_path
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
-from ..core.upgrades import (ActiveUpgrade, HealUpgrade, create_upgrade,
-                             get_upgrade_icon)
+from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
-from ..core.world_config import (WorldConfig, format_stage_name,
-                                 get_world_for_level, is_side_scroll_mode)
+from ..core.world_config import (
+    WorldConfig,
+    format_stage_name,
+    get_world_for_level,
+    is_side_scroll_mode,
+)
 from ..entities.floating_score import FloatingScore
 from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
@@ -832,10 +835,11 @@ class PlayingScene(Scene):
                 if self.ship.rect.colliderect(wind_rect):
                     self.ship.x -= prop.PUSH_FORCE * dt
                     wind_slow_factor = prop.SLOW_SPEED_MULT
-        
+
         # Sifão do CloudArchmageBoss
         if self._boss_type_cache == "archmage" and self.entity_manager.boss:
             from ..entities.cloud_archmage_boss import CloudArchmageBoss
+
             archmage = cast(CloudArchmageBoss, self.entity_manager.boss)
             if archmage.is_siphoning:
                 target_x = archmage.x + archmage.w / 2
@@ -848,7 +852,7 @@ class PlayingScene(Scene):
                     self.ship.x += (dx / dist) * force * dt
                     self.ship.y += (dy / dist) * force * dt
                     wind_slow_factor = min(wind_slow_factor, 0.6)
-                    
+
         self.ship.wind_slow_factor = wind_slow_factor
 
     def _update_spawners(self, dt: float) -> None:
@@ -1147,11 +1151,13 @@ class PlayingScene(Scene):
             score_events.extend(iz_events)
 
         if self.entity_manager.fire_zones:
-            fz_gain, fz_dest, fz_events, fz_ship_hit = self.collisions.fire_zones_vs_entities(
-                self.entity_manager.fire_zones,
-                enemies_view,
-                self.ship,
-                self.entity_manager,
+            fz_gain, fz_dest, fz_events, fz_ship_hit = (
+                self.collisions.fire_zones_vs_entities(
+                    self.entity_manager.fire_zones,
+                    enemies_view,
+                    self.ship,
+                    self.entity_manager,
+                )
             )
             gain += fz_gain
             destroyed += fz_dest
@@ -1194,22 +1200,26 @@ class PlayingScene(Scene):
             ship_hit = ship_hit or f_ship_hit
 
             if self.entity_manager.ice_poison_zones:
-                iz_gain, iz_dest, iz_events = self.collisions.ice_poison_zones_vs_entities(
-                    self.entity_manager.ice_poison_zones,
-                    fe,
-                    self.ship,
-                    self.entity_manager,
+                iz_gain, iz_dest, iz_events = (
+                    self.collisions.ice_poison_zones_vs_entities(
+                        self.entity_manager.ice_poison_zones,
+                        fe,
+                        self.ship,
+                        self.entity_manager,
+                    )
                 )
                 gain += iz_gain
                 destroyed += iz_dest
                 score_events.extend(iz_events)
 
             if self.entity_manager.fire_zones:
-                fz_gain, fz_dest, fz_events, fz_ship_hit = self.collisions.fire_zones_vs_entities(
-                    self.entity_manager.fire_zones,
-                    fe,
-                    self.ship,
-                    self.entity_manager,
+                fz_gain, fz_dest, fz_events, fz_ship_hit = (
+                    self.collisions.fire_zones_vs_entities(
+                        self.entity_manager.fire_zones,
+                        fe,
+                        self.ship,
+                        self.entity_manager,
+                    )
                 )
                 gain += fz_gain
                 destroyed += fz_dest
@@ -1265,11 +1275,13 @@ class PlayingScene(Scene):
             score_events.extend(me)
 
         if self.entity_manager.fire_zones:
-            fz_gain, fz_dest, fz_events, fz_ship_hit = self.collisions.fire_zones_vs_entities(
-                self.entity_manager.fire_zones,
-                enemies_view,
-                self.ship,
-                self.entity_manager,
+            fz_gain, fz_dest, fz_events, fz_ship_hit = (
+                self.collisions.fire_zones_vs_entities(
+                    self.entity_manager.fire_zones,
+                    enemies_view,
+                    self.ship,
+                    self.entity_manager,
+                )
             )
             gain += fz_gain
             destroyed += fz_dest
@@ -1768,9 +1780,7 @@ class PlayingScene(Scene):
         boss_music_state = getattr(type(boss), "MUSIC_STATE", None)
         if boss_music_state is None:
             boss_music_state = _boss_music_map.get(boss_type, MusicState.BOSS)
-        sound_manager.music_state_manager.transition_to(
-            boss_music_state
-        )
+        sound_manager.music_state_manager.transition_to(boss_music_state)
         self.boss_music_started = True
 
     def _explode_entities(self, entities: list[Any], size: int = 15) -> None:

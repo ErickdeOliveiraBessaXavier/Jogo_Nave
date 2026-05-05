@@ -23,8 +23,7 @@ Padrões aplicados
 
 import math
 import random
-from typing import (TYPE_CHECKING, Final, List, Literal, Optional, TypeAlias,
-                    TypedDict)
+from typing import TYPE_CHECKING, Final, List, Literal, Optional, TypeAlias, TypedDict
 
 import pygame
 
@@ -1184,9 +1183,7 @@ class MountainSerpentBoss:
     # Fabrica de blocos
     # ------------------------------------------------------------------
 
-    def create_blocks(
-        self, block_health_multiplier: float = 1.0
-    ) -> List[SerpentBlock]:
+    def create_blocks(self, block_health_multiplier: float = 1.0) -> List[SerpentBlock]:
         """Instancia os blocos fora da tela para a entrada vertical acelerada.
 
         Retorna a lista de blocos para ser adicionada ao EntityManager.
@@ -1201,7 +1198,11 @@ class MountainSerpentBoss:
             # Coluna esquerda: sobe (entra por baixo)
             left_cy = Config.SCREEN_HEIGHT + SerpentBlock.RADIUS + i * gap_y
             left = SerpentBlock(
-                self.left_x, left_cy, "left", self, row_index=i,
+                self.left_x,
+                left_cy,
+                "left",
+                self,
+                row_index=i,
                 max_health=block_max_health,
             )
             blocks.append(left)
@@ -1210,7 +1211,11 @@ class MountainSerpentBoss:
             # Coluna direita: desce (entra por cima)
             right_cy = -SerpentBlock.RADIUS - i * gap_y
             right = SerpentBlock(
-                self.right_x, right_cy, "right", self, row_index=i,
+                self.right_x,
+                right_cy,
+                "right",
+                self,
+                row_index=i,
                 max_health=block_max_health,
             )
             blocks.append(right)

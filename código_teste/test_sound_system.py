@@ -117,4 +117,6 @@ def test_sound_config_includes_button_click() -> None:
 
 def test_mountain_serpent_boss_declares_music_state() -> None:
     assert MountainSerpentBoss.MUSIC_STATE.value == "mountain_serpent_boss"
-    assert SOUND_PATHS["music"]["mountain_serpent_boss"] == "music/Stone_Snake_Themel.mp3"
+    assert (
+        SOUND_PATHS["music"]["mountain_serpent_boss"] == "music/Stone_Snake_Themel.mp3"
+    )

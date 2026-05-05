@@ -754,7 +754,6 @@ class MountainStalagmite:
         surface.blit(s, (ox, oy))
 
 
-
 # ---------------------------------------------------------------------------
 # MountainStalactite
 # ---------------------------------------------------------------------------
@@ -768,7 +767,7 @@ class MountainStalactite:
     BASE_WIDTH: Final = 48
     MIN_HEIGHT: Final = 62
 
-    RISE_TIME: Final = 0.32        # tempo de "descida" até a posição alvo
+    RISE_TIME: Final = 0.32  # tempo de "descida" até a posição alvo
     LINGER_TIME: Final = 3.0
     SHATTER_TIME: Final = 1.05
 
@@ -972,24 +971,39 @@ class MountainStalactite:
         # Desenha espelhado verticalmente: base no teto, ponta para baixo
         if left_h >= 4:
             self._draw_flat_spike_flipped(
-                surface, cx=cx - int(main_hw * 0.95), base_y=int(self.ceiling_y),
-                height=max(4, left_h), half_w=left_hw,
-                phase_seed=self._shape_phase + 1.2, color=c_left, edge=c_edge,
+                surface,
+                cx=cx - int(main_hw * 0.95),
+                base_y=int(self.ceiling_y),
+                height=max(4, left_h),
+                half_w=left_hw,
+                phase_seed=self._shape_phase + 1.2,
+                color=c_left,
+                edge=c_edge,
                 forced_lean_dir=-1,
             )
 
         if self._main_delay_timer >= 0.0:
             self._draw_flat_spike_flipped(
-                surface, cx=cx, base_y=int(self.ceiling_y),
-                height=height, half_w=main_hw,
-                phase_seed=self._shape_phase, color=c_center, edge=c_edge,
+                surface,
+                cx=cx,
+                base_y=int(self.ceiling_y),
+                height=height,
+                half_w=main_hw,
+                phase_seed=self._shape_phase,
+                color=c_center,
+                edge=c_edge,
             )
 
         if right_h >= 4:
             self._draw_flat_spike_flipped(
-                surface, cx=cx + int(main_hw * 0.88), base_y=int(self.ceiling_y),
-                height=max(4, right_h), half_w=right_hw,
-                phase_seed=self._shape_phase - 0.9, color=c_right, edge=c_edge,
+                surface,
+                cx=cx + int(main_hw * 0.88),
+                base_y=int(self.ceiling_y),
+                height=max(4, right_h),
+                half_w=right_hw,
+                phase_seed=self._shape_phase - 0.9,
+                color=c_right,
+                edge=c_edge,
                 forced_lean_dir=1,
             )
 
@@ -1103,7 +1117,7 @@ class MountainStalactite:
                     x=self.x + random.uniform(-self.w * 0.45, self.w * 0.45),
                     y=random.uniform(self.ceiling_y, tip_y),
                     vx=random.uniform(-150.0, 150.0),
-                    vy=random.uniform(55.0, 235.0),   # cai para baixo
+                    vy=random.uniform(55.0, 235.0),  # cai para baixo
                     angle=random.uniform(0.0, math.tau),
                     spin=random.uniform(-7.0, 7.0),
                     life=life,
@@ -1136,7 +1150,9 @@ class MountainStalactite:
             frag_rect = pygame.Rect(0, 0, piece_w, piece_h)
             frag_rect.center = ((piece_w + 8) // 2, (piece_h + 8) // 2)
             br = max(1, size // 4)
-            pygame.draw.rect(frag_surf, (*fragment.color, alpha), frag_rect, border_radius=br)
+            pygame.draw.rect(
+                frag_surf, (*fragment.color, alpha), frag_rect, border_radius=br
+            )
             rotated = pygame.transform.rotate(frag_surf, math.degrees(fragment.angle))
             rr = rotated.get_rect(center=(int(fragment.x), int(fragment.y)))
             surface.blit(rotated, rr)
@@ -1156,21 +1172,39 @@ class MountainStalactite:
         polygons: list[list[tuple[int, int]]] = []
 
         if left_h >= 4:
-            polygons.append(self._build_flipped_pts(
-                cx - int(main_hw * 0.95), base_y, max(4, left_h), left_hw,
-                self._shape_phase + 1.2, forced_lean_dir=-1,
-            ))
+            polygons.append(
+                self._build_flipped_pts(
+                    cx - int(main_hw * 0.95),
+                    base_y,
+                    max(4, left_h),
+                    left_hw,
+                    self._shape_phase + 1.2,
+                    forced_lean_dir=-1,
+                )
+            )
 
         if self._main_delay_timer >= 0.0:
-            polygons.append(self._build_flipped_pts(
-                cx, base_y, height, main_hw, self._shape_phase,
-            ))
+            polygons.append(
+                self._build_flipped_pts(
+                    cx,
+                    base_y,
+                    height,
+                    main_hw,
+                    self._shape_phase,
+                )
+            )
 
         if right_h >= 4:
-            polygons.append(self._build_flipped_pts(
-                cx + int(main_hw * 0.88), base_y, max(4, right_h), right_hw,
-                self._shape_phase - 0.9, forced_lean_dir=1,
-            ))
+            polygons.append(
+                self._build_flipped_pts(
+                    cx + int(main_hw * 0.88),
+                    base_y,
+                    max(4, right_h),
+                    right_hw,
+                    self._shape_phase - 0.9,
+                    forced_lean_dir=1,
+                )
+            )
 
         return polygons
 
@@ -1184,8 +1218,10 @@ class MountainStalactite:
         forced_lean_dir: int | None = None,
     ) -> list[tuple[int, int]]:
         """Vértices espelhados: base no teto, ponta apontando para baixo."""
-        lean_dir = (1 if forced_lean_dir >= 0 else -1) if forced_lean_dir is not None else (
-            1 if math.sin(phase_seed) >= 0 else -1
+        lean_dir = (
+            (1 if forced_lean_dir >= 0 else -1)
+            if forced_lean_dir is not None
+            else (1 if math.sin(phase_seed) >= 0 else -1)
         )
         lean_top = int(half_w * (0.20 + 0.12 * abs(math.sin(phase_seed))))
         lean_mid = int(half_w * (0.10 + 0.08 * abs(math.cos(phase_seed * 0.9))))
@@ -1193,9 +1229,9 @@ class MountainStalactite:
 
         # Espelha Y: tip aponta para baixo (base_y + height), base fica em base_y
         y_tip = base_y + height
-        y_n1  = base_y + int(height * 0.73)
-        y_n2  = base_y + int(height * 0.46)
-        y_n3  = base_y + int(height * 0.20)
+        y_n1 = base_y + int(height * 0.73)
+        y_n2 = base_y + int(height * 0.46)
+        y_n3 = base_y + int(height * 0.20)
 
         hw_base = half_w
         hw_n3 = max(int(half_w * 0.80), 4)
@@ -1204,17 +1240,17 @@ class MountainStalactite:
         zag_n2 = min(notch_cut, max(0, hw_n3 - hw_n2))
 
         cx_tip = cx + lean_dir * lean_top
-        cx_n1  = cx + lean_dir * lean_mid
-        cx_n2  = cx - lean_dir * zag_n2
-        cx_n3  = cx + lean_dir * (lean_mid // 2)
+        cx_n1 = cx + lean_dir * lean_mid
+        cx_n2 = cx - lean_dir * zag_n2
+        cx_n3 = cx + lean_dir * (lean_mid // 2)
 
         return [
-            (cx_tip,        y_tip),
+            (cx_tip, y_tip),
             (cx_n1 - hw_n1, y_n1),
             (cx_n2 - hw_n2, y_n2),
             (cx_n3 - hw_n3, y_n3),
-            (cx - hw_base,  base_y),
-            (cx + hw_base,  base_y),
+            (cx - hw_base, base_y),
+            (cx + hw_base, base_y),
             (cx_n3 + hw_n3, y_n3),
             (cx_n2 + hw_n2, y_n2),
             (cx_n1 + hw_n1, y_n1),
@@ -1232,7 +1268,9 @@ class MountainStalactite:
         edge: tuple[int, int, int],
         forced_lean_dir: int | None = None,
     ) -> None:
-        pts = self._build_flipped_pts(cx, base_y, height, half_w, phase_seed, forced_lean_dir)
+        pts = self._build_flipped_pts(
+            cx, base_y, height, half_w, phase_seed, forced_lean_dir
+        )
         pygame.draw.polygon(surface, color, pts)
         pygame.draw.polygon(surface, edge, pts, width=2)
 
@@ -1274,7 +1312,9 @@ class MountainMage:
             y if y is not None else random.randint(70, max(90, int(screen_h * 0.24)))
         )
         # Garante nascimento sempre dentro da tela, independente do spawner.
-        self.x = _clamp(self.x, self._BORDER_MARGIN, screen_w - self.WIDTH - self._BORDER_MARGIN)
+        self.x = _clamp(
+            self.x, self._BORDER_MARGIN, screen_w - self.WIDTH - self._BORDER_MARGIN
+        )
         self.y = _clamp(self.y, self._TOP_LIMIT, screen_h * 0.35)
 
         self.dead: bool = False
@@ -1299,12 +1339,14 @@ class MountainMage:
         # Partículas místicas de entrada
         self._entry_particles: list[dict[str, float]] = []
         for _ in range(18):
-            self._entry_particles.append({
-                "ang": random.uniform(0, math.tau),
-                "dist": random.uniform(90, 180),
-                "speed": random.uniform(1.4, 3.2),
-                "size": random.uniform(2, 5)
-            })
+            self._entry_particles.append(
+                {
+                    "ang": random.uniform(0, math.tau),
+                    "dist": random.uniform(90, 180),
+                    "speed": random.uniform(1.4, 3.2),
+                    "size": random.uniform(2, 5),
+                }
+            )
 
         self._body_color: tuple[int, int, int] = (62, 66, 78)
         self._robe_color: tuple[int, int, int] = (88, 92, 108)
@@ -1534,7 +1576,9 @@ class MountainMage:
         glow_r = int(self.ORB_RADIUS * (2.0 + charge * 1.6))
         glow_a = int((45 + charge * 135) * (alpha / 255))
         glow_color = (
-            (255, 120, 120, glow_a) if is_telegraphing else (*self._orb_base_color, glow_a)
+            (255, 120, 120, glow_a)
+            if is_telegraphing
+            else (*self._orb_base_color, glow_a)
         )
         glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
         pygame.draw.circle(glow_surf, glow_color, (glow_r, glow_r), glow_r)
@@ -1547,9 +1591,15 @@ class MountainMage:
         )
         # Orb sólido (usando surface temporária para alpha se necessário ou draw.circle direto se alpha=255)
         if alpha < 255:
-            os = pygame.Surface((self.ORB_RADIUS * 2, self.ORB_RADIUS * 2), pygame.SRCALPHA)
-            pygame.draw.circle(os, orb_color, (self.ORB_RADIUS, self.ORB_RADIUS), self.ORB_RADIUS)
-            surface.blit(os, (int(orb_x) - self.ORB_RADIUS, int(orb_y) - self.ORB_RADIUS))
+            os = pygame.Surface(
+                (self.ORB_RADIUS * 2, self.ORB_RADIUS * 2), pygame.SRCALPHA
+            )
+            pygame.draw.circle(
+                os, orb_color, (self.ORB_RADIUS, self.ORB_RADIUS), self.ORB_RADIUS
+            )
+            surface.blit(
+                os, (int(orb_x) - self.ORB_RADIUS, int(orb_y) - self.ORB_RADIUS)
+            )
         else:
             pygame.draw.circle(
                 surface, orb_color[:3], (int(orb_x), int(orb_y)), self.ORB_RADIUS
@@ -1659,17 +1709,28 @@ class MountainMage:
 
         # Corpo principal
         pygame.draw.rect(
-            bs, body_col, (bx, body_top, body_w, body_h - 2), border_radius=int(4 * scale)
+            bs,
+            body_col,
+            (bx, body_top, body_w, body_h - 2),
+            border_radius=int(4 * scale),
         )
         # Borda escura
         pygame.draw.rect(
-            bs, border, (bx, body_top, body_w, body_h - 2), max(1, int(2 * scale)), border_radius=int(4 * scale)
+            bs,
+            border,
+            (bx, body_top, body_w, body_h - 2),
+            max(1, int(2 * scale)),
+            border_radius=int(4 * scale),
         )
 
         # Highlight superior
         hi_col = (255, 255, 255) if flash else (110, 116, 140)
         pygame.draw.line(
-            bs, (*hi_col, alpha), (bx + int(4 * scale), body_top + int(2 * scale)), (bx + body_w - int(5 * scale), body_top + int(2 * scale)), 1
+            bs,
+            (*hi_col, alpha),
+            (bx + int(4 * scale), body_top + int(2 * scale)),
+            (bx + body_w - int(5 * scale), body_top + int(2 * scale)),
+            1,
         )
 
         # ── Bochechas ────────────────────────────────────────────────────────
@@ -1687,8 +1748,18 @@ class MountainMage:
         else:
             cheek_col = (255, 180, 180)
 
-        pygame.draw.circle(bs, (*cheek_col, alpha), (bx + int(5 * scale), body_top + int(18 * scale)), cheek_radius)
-        pygame.draw.circle(bs, (*cheek_col, alpha), (bx + body_w - int(6 * scale), body_top + int(18 * scale)), cheek_radius)
+        pygame.draw.circle(
+            bs,
+            (*cheek_col, alpha),
+            (bx + int(5 * scale), body_top + int(18 * scale)),
+            cheek_radius,
+        )
+        pygame.draw.circle(
+            bs,
+            (*cheek_col, alpha),
+            (bx + body_w - int(6 * scale), body_top + int(18 * scale)),
+            cheek_radius,
+        )
 
         # ── Olhos ────────────────────────────────────────────────────────────
         eye_glow = 0.6 + 0.4 * pulse + (charge * 0.6)
@@ -1719,31 +1790,63 @@ class MountainMage:
         look_x = int(math.sin(self._pulse_timer * 1.2) * 2.8 * scale)
         look_y = int(math.cos(self._pulse_timer * 0.5) * 1.0 * scale)
         body_shake_x = (
-            int(math.sin(self._pulse_timer * 40.0) * 2.0 * scale) if tremor_window else 0
+            int(math.sin(self._pulse_timer * 40.0) * 2.0 * scale)
+            if tremor_window
+            else 0
         )
         body_shake_y = (
-            int(math.cos(self._pulse_timer * 40.0) * 1.0 * scale) if tremor_window else 0
+            int(math.cos(self._pulse_timer * 40.0) * 1.0 * scale)
+            if tremor_window
+            else 0
         )
 
         for i, ex_base in enumerate((cx - int(7 * scale), cx + int(7 * scale))):
             ex = ex_base
             ey = eye_y
             pupil_x = ex + max(1, int(1 * scale)) + (0 if is_telegraph else look_x)
-            pupil_y = ey + max(1, int(1 * scale)) + (int(2 * scale) if is_telegraph else look_y)
+            pupil_y = (
+                ey
+                + max(1, int(1 * scale))
+                + (int(2 * scale) if is_telegraph else look_y)
+            )
 
-            if recovery_blink or (is_blinking and not is_telegraph and not is_recovering):
-                pygame.draw.line(bs, (*border[:3], alpha), (ex - int(4 * scale), ey), (ex + int(4 * scale), ey), max(1, int(2 * scale)))
+            if recovery_blink or (
+                is_blinking and not is_telegraph and not is_recovering
+            ):
+                pygame.draw.line(
+                    bs,
+                    (*border[:3], alpha),
+                    (ex - int(4 * scale), ey),
+                    (ex + int(4 * scale), ey),
+                    max(1, int(2 * scale)),
+                )
             elif is_telegraph:
                 squint_h = max(2, int((8 - 6 * charge) * scale))
                 pygame.draw.ellipse(
-                    bs, (*eye_white, alpha), (ex - int(4 * scale), ey - squint_h // 2 + int(2 * scale), int(8 * scale), squint_h)
+                    bs,
+                    (*eye_white, alpha),
+                    (
+                        ex - int(4 * scale),
+                        ey - squint_h // 2 + int(2 * scale),
+                        int(8 * scale),
+                        squint_h,
+                    ),
                 )
                 px = ex + (int(1 * scale) if i == 0 else -int(1 * scale))
-                pygame.draw.circle(bs, (*pupil_col, alpha), (px, ey + int(2 * scale)), 1)
+                pygame.draw.circle(
+                    bs, (*pupil_col, alpha), (px, ey + int(2 * scale)), 1
+                )
             else:
                 pygame.draw.circle(bs, (*eye_white, alpha), (ex, ey), int(5 * scale))
-                pygame.draw.circle(bs, (*pupil_col, alpha), (pupil_x, pupil_y), int(2 * scale))
-                pygame.draw.circle(bs, (*shine_col, alpha), (ex - int(3 * scale), ey - int(3 * scale)), 1)
+                pygame.draw.circle(
+                    bs, (*pupil_col, alpha), (pupil_x, pupil_y), int(2 * scale)
+                )
+                pygame.draw.circle(
+                    bs,
+                    (*shine_col, alpha),
+                    (ex - int(3 * scale), ey - int(3 * scale)),
+                    1,
+                )
 
         # ── Chapéu de mago ───────────────────────────────────────────────────
         hat_col = (45, 28, 80, alpha)
@@ -1757,8 +1860,19 @@ class MountainMage:
         # Aba
         brim_w, brim_h = int(40 * scale), int(5 * scale)
         brim_x = cx - brim_w // 2
-        pygame.draw.rect(bs, hat_col, (brim_x, brim_y, brim_w, brim_h), border_radius=max(1, int(2 * scale)))
-        pygame.draw.rect(bs, hat_border, (brim_x, brim_y, brim_w, brim_h), 1, border_radius=max(1, int(2 * scale)))
+        pygame.draw.rect(
+            bs,
+            hat_col,
+            (brim_x, brim_y, brim_w, brim_h),
+            border_radius=max(1, int(2 * scale)),
+        )
+        pygame.draw.rect(
+            bs,
+            hat_border,
+            (brim_x, brim_y, brim_w, brim_h),
+            1,
+            border_radius=max(1, int(2 * scale)),
+        )
 
         # Corpo do chapéu
         wobble = math.sin(self._bob_phase - 2.5) * 3.5 * scale

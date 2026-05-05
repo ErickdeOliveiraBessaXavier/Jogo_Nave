@@ -40,7 +40,7 @@ class _PlusParticle:
 
 class IcePoisonZone:
     SLOW_FACTOR = 0.4
-    DAMAGE_INTERVAL = 0.2   # 1 dano a cada 0.2s = 5 HP/s
+    DAMAGE_INTERVAL = 0.2  # 1 dano a cada 0.2s = 5 HP/s
 
     _SPAWN_INTERVAL = 0.12
     _PARTICLE_LIFETIME_MIN = 0.7
@@ -99,7 +99,9 @@ class IcePoisonZone:
             _PlusParticle(
                 x=px,
                 y=py,
-                lifetime=random.uniform(self._PARTICLE_LIFETIME_MIN, self._PARTICLE_LIFETIME_MAX),
+                lifetime=random.uniform(
+                    self._PARTICLE_LIFETIME_MIN, self._PARTICLE_LIFETIME_MAX
+                ),
                 base_size=random.uniform(self.radius * 0.06, self.radius * 0.14),
                 rotation=random.uniform(0.0, math.tau),
                 rot_speed=random.uniform(-2.5, 2.5),
@@ -133,7 +135,7 @@ class IcePoisonZone:
         # Partículas "+" — desenho direto sem surface por partícula
         cr = self._PLUS_COLOR
         lw = self._LINE_WIDTH
-        ox = self.x - r   # offset mundo→local
+        ox = self.x - r  # offset mundo→local
         oy = self.y - r
 
         for p in self._particles:
@@ -154,7 +156,11 @@ class IcePoisonZone:
             bx = -sin_r * size
             by = cos_r * size
 
-            pygame.draw.line(s, color, (int(lx - ax), int(ly - ay)), (int(lx + ax), int(ly + ay)), lw)
-            pygame.draw.line(s, color, (int(lx - bx), int(ly - by)), (int(lx + bx), int(ly + by)), lw)
+            pygame.draw.line(
+                s, color, (int(lx - ax), int(ly - ay)), (int(lx + ax), int(ly + ay)), lw
+            )
+            pygame.draw.line(
+                s, color, (int(lx - bx), int(ly - by)), (int(lx + bx), int(ly + by)), lw
+            )
 
         surface.blit(s, (int(self.x) - r, int(self.y) - r))

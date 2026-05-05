@@ -126,9 +126,9 @@ class Boss:
         self.squares_animation_timer = 0.0
 
         # Sistema de lançamento sequencial de quadrados
-        self.square_launch_queue: List[
-            BossSquare
-        ] = []  # Fila de quadrados prontos para lançar
+        self.square_launch_queue: List[BossSquare] = (
+            []
+        )  # Fila de quadrados prontos para lançar
         self.square_launch_timer = 0.0  # Timer para lançamento sequencial
         self.square_launch_delay = 0.15  # 150ms entre cada lançamento
 

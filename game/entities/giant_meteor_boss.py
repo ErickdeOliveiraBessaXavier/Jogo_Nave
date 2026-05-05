@@ -165,9 +165,14 @@ class GiantMeteorBoss:
                 sound=hit_sounds.EXPLOSION_BOSS,
                 fragments=self._build_death_fragment_specs(),
             )
-        if self.state == "falling" and random.random() < config.GIANT_METEOR_HIT_FRAGMENT_CHANCE:
+        if (
+            self.state == "falling"
+            and random.random() < config.GIANT_METEOR_HIT_FRAGMENT_CHANCE
+        ):
             fragments = self._build_damage_fragment_specs()
-        return HitResult(explosion_size=18, sound=hit_sounds.BOSS_DAMAGE, fragments=fragments)
+        return HitResult(
+            explosion_size=18, sound=hit_sounds.BOSS_DAMAGE, fragments=fragments
+        )
 
     def should_remove(self) -> bool:
         return self.dead
@@ -191,7 +196,9 @@ class GiantMeteorBoss:
             self._target_shape = self._apply_damage_cracks(hp_pct)
             self._transition_timer = 0.0
             self._shake_timer = _SHAKE_DURATION
-            self._shake_intensity = _SHAKE_BASE_INTENSITY + stage * _SHAKE_INTENSITY_PER_STAGE
+            self._shake_intensity = (
+                _SHAKE_BASE_INTENSITY + stage * _SHAKE_INTENSITY_PER_STAGE
+            )
             self._last_damage_stage = stage
             self._surface_dirty = True
             if hasattr(sound_manager, "play_meteor_boss_crack"):
@@ -219,7 +226,9 @@ class GiantMeteorBoss:
                 self.y, self.state = self.target_y, "falling"
         elif self.state == "falling":
             self.y += self.speed * dt
-            self.meteor_spawn_interval = _SPAWN_INTERVAL_BASE - _SPAWN_INTERVAL_SCALE * (1 - hp_pct)
+            self.meteor_spawn_interval = (
+                _SPAWN_INTERVAL_BASE - _SPAWN_INTERVAL_SCALE * (1 - hp_pct)
+            )
             self.meteor_spawn_timer += dt
             if self.meteor_spawn_timer >= self.meteor_spawn_interval:
                 self.meteor_spawn_timer = 0.0
@@ -233,7 +242,9 @@ class GiantMeteorBoss:
         if self._surface_dirty or self._surface is None:
             surf_w = max(1, self.w + _SURFACE_PADDING)
             surf_h = max(1, self.h + _SURFACE_PADDING)
-            self._surface = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA).convert_alpha()
+            self._surface = pygame.Surface(
+                (surf_w, surf_h), pygame.SRCALPHA
+            ).convert_alpha()
             if len(self._current_shape) >= 3:
                 pygame.draw.polygon(self._surface, _COLOR_BODY, self._current_shape)
                 pygame.draw.polygon(self._surface, colors.RED, self._current_shape, 3)
@@ -278,16 +289,18 @@ class GiantMeteorBoss:
             if dist == 0:
                 continue
             ux, uy = dx / dist, dy / dist
-            cracks.append({
-                "edge_idx": idx,
-                "start_x": sx,
-                "start_y": sy,
-                "dir_x": ux,
-                "dir_y": uy,
-                "perp_x": -uy,
-                "perp_y": ux,
-                "base_width": rng.uniform(_CRACK_WIDTH_MIN, _CRACK_WIDTH_MAX),
-            })
+            cracks.append(
+                {
+                    "edge_idx": idx,
+                    "start_x": sx,
+                    "start_y": sy,
+                    "dir_x": ux,
+                    "dir_y": uy,
+                    "perp_x": -uy,
+                    "perp_y": ux,
+                    "base_width": rng.uniform(_CRACK_WIDTH_MIN, _CRACK_WIDTH_MAX),
+                }
+            )
         return cracks
 
     def _apply_damage_cracks(self, hp_pct: float) -> list[tuple[float, float]]:
@@ -308,7 +321,8 @@ class GiantMeteorBoss:
                     math.hypot(
                         pos["start_x"] - self._all_crack_positions[a]["start_x"],
                         pos["start_y"] - self._all_crack_positions[a]["start_y"],
-                    ) < min_dist
+                    )
+                    < min_dist
                     for a in self._crack_birth_stage
                 )
                 if not too_close:
@@ -328,14 +342,21 @@ class GiantMeteorBoss:
             width = self._all_crack_positions[i]["base_width"] * (
                 _CRACK_WIDTH_SCALE_BASE + t * _CRACK_WIDTH_SCALE_RANGE
             )
-            depth = rng.uniform(
-                _CRACK_DEPTH_MIN_BASE + t * _CRACK_DEPTH_MIN_SCALE,
-                _CRACK_DEPTH_MAX_BASE + t * _CRACK_DEPTH_MAX_SCALE,
-            ) * max_d
-            crks.append((
-                self._all_crack_positions[i]["edge_idx"],
-                self._generate_crack_path(self._all_crack_positions[i], width, depth, rng),
-            ))
+            depth = (
+                rng.uniform(
+                    _CRACK_DEPTH_MIN_BASE + t * _CRACK_DEPTH_MIN_SCALE,
+                    _CRACK_DEPTH_MAX_BASE + t * _CRACK_DEPTH_MAX_SCALE,
+                )
+                * max_d
+            )
+            crks.append(
+                (
+                    self._all_crack_positions[i]["edge_idx"],
+                    self._generate_crack_path(
+                        self._all_crack_positions[i], width, depth, rng
+                    ),
+                )
+            )
 
         crks.sort(key=lambda x: x[0], reverse=True)
         res: list[tuple[float, float]] = list(self._base_shape)
@@ -350,22 +371,27 @@ class GiantMeteorBoss:
         line: list[tuple[float, float]] = []
         for i in range(s + 1):
             p = i / s
-            off = (
-                w * 0.4 * 0.3 * rng.choice([-1, 1]) * (0.5 + 0.5 * (1 - abs(2 * p - 1)))
-                + w * 0.4 * 0.5 * rng.uniform(-1, 1)
+            off = w * 0.4 * 0.3 * rng.choice([-1, 1]) * (
+                0.5 + 0.5 * (1 - abs(2 * p - 1))
+            ) + w * 0.4 * 0.5 * rng.uniform(-1, 1)
+            line.append(
+                (
+                    data["start_x"] + data["dir_x"] * d * p + data["perp_x"] * off,
+                    data["start_y"] + data["dir_y"] * d * p + data["perp_y"] * off,
+                )
             )
-            line.append((
-                data["start_x"] + data["dir_x"] * d * p + data["perp_x"] * off,
-                data["start_y"] + data["dir_y"] * d * p + data["perp_y"] * off,
-            ))
 
         pts: list[tuple[float, float]] = []
         for i in range(s + 1):
             hw = w * (1 - (i / s) ** 1.5) * 0.5
-            pts.append((line[i][0] + data["perp_x"] * hw, line[i][1] + data["perp_y"] * hw))
+            pts.append(
+                (line[i][0] + data["perp_x"] * hw, line[i][1] + data["perp_y"] * hw)
+            )
         for i in range(s - 1, -1, -1):
             hw = w * (1 - (i / s) ** 1.5) * 0.5
-            pts.append((line[i][0] - data["perp_x"] * hw, line[i][1] - data["perp_y"] * hw))
+            pts.append(
+                (line[i][0] - data["perp_x"] * hw, line[i][1] - data["perp_y"] * hw)
+            )
         return pts
 
     def _interpolate_shapes(
@@ -384,7 +410,10 @@ class GiantMeteorBoss:
 
     def _spawn_normal_meteor(self, em: "EntityManager") -> None:
         em.spawn_meteor(
-            size=random.randint(config.GIANT_METEOR_FRAGMENT_MIN_SIZE, config.GIANT_METEOR_FRAGMENT_MAX_SIZE),
+            size=random.randint(
+                config.GIANT_METEOR_FRAGMENT_MIN_SIZE,
+                config.GIANT_METEOR_FRAGMENT_MAX_SIZE,
+            ),
             x=random.uniform(0, config.SCREEN_WIDTH - _NORMAL_METEOR_X_MARGIN),
             y=random.uniform(-_NORMAL_METEOR_Y_JITTER, _NORMAL_METEOR_Y_JITTER),
             vx=random.uniform(-_NORMAL_METEOR_VX_RANGE, _NORMAL_METEOR_VX_RANGE),
@@ -412,7 +441,9 @@ class GiantMeteorBoss:
                 vy = -cd["dir_y"] * spd * spread
                 if self.is_side_scroll:
                     vx -= random.uniform(_DMGFRAG_SIDE_VX_MIN, _DMGFRAG_SIDE_VX_MAX)
-                vy += self.speed + random.uniform(_DMGFRAG_VY_BIAS_MIN, _DMGFRAG_VY_BIAS_MAX)
+                vy += self.speed + random.uniform(
+                    _DMGFRAG_VY_BIAS_MIN, _DMGFRAG_VY_BIAS_MAX
+                )
                 age = max(0, self._last_damage_stage - self._crack_birth_stage[idx])
                 size = random.randint(
                     mn + age * 2,
@@ -422,9 +453,13 @@ class GiantMeteorBoss:
                 x = self.x + random.uniform(0, self.w)
                 y = self.y + random.uniform(0, self.h)
                 vx = (
-                    random.uniform(-_DMGFRAG_GENERIC_VX_SIDE_MAX, -_DMGFRAG_GENERIC_VX_SIDE_MIN)
+                    random.uniform(
+                        -_DMGFRAG_GENERIC_VX_SIDE_MAX, -_DMGFRAG_GENERIC_VX_SIDE_MIN
+                    )
                     if self.is_side_scroll
-                    else random.uniform(-_DMGFRAG_GENERIC_VX_RANGE, _DMGFRAG_GENERIC_VX_RANGE)
+                    else random.uniform(
+                        -_DMGFRAG_GENERIC_VX_RANGE, _DMGFRAG_GENERIC_VX_RANGE
+                    )
                 )
                 vy = random.uniform(_DMGFRAG_GENERIC_VY_MIN, _DMGFRAG_GENERIC_VY_MAX)
                 size = random.randint(mn, mx)
@@ -442,18 +477,22 @@ class GiantMeteorBoss:
         for _ in range(random.randint(*config.GIANT_METEOR_DEATH_FRAGMENT_COUNT)):
             angle = random.uniform(0, math.tau)
             speed = random.uniform(_DEATHFRAG_SPEED_MIN, _DEATHFRAG_SPEED_MAX)
-            size = random.randint(mn + _DEATHFRAG_SIZE_BONUS_MIN, mx + _DEATHFRAG_SIZE_BONUS_MAX)
+            size = random.randint(
+                mn + _DEATHFRAG_SIZE_BONUS_MIN, mx + _DEATHFRAG_SIZE_BONUS_MAX
+            )
             vx = math.cos(angle) * speed
             vy = math.sin(angle) * speed
             if self.is_side_scroll:
                 vx -= random.uniform(_DEATHFRAG_SIDE_VX_MIN, _DEATHFRAG_SIDE_VX_MAX)
             vy += _DEATHFRAG_VY_BIAS
-            specs.append(MeteorSpec(
-                size,
-                self.x + random.uniform(0, self.w),
-                self.y + random.uniform(0, self.h),
-                vx,
-                vy,
-            ))
+            specs.append(
+                MeteorSpec(
+                    size,
+                    self.x + random.uniform(0, self.w),
+                    self.y + random.uniform(0, self.h),
+                    vx,
+                    vy,
+                )
+            )
 
         return tuple(specs)

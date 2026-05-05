@@ -170,6 +170,7 @@ class FireZone:
 
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems.hit_result import NO_HIT
+
         return NO_HIT
 
     def should_remove(self) -> bool:

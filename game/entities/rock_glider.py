@@ -424,14 +424,14 @@ class RockGlider(Meteor):
         ra = self._local_right_arm_rect
         bd = self._local_body_rect
         u_pts = [
-            (la.left,  la.top),
+            (la.left, la.top),
             (la.right, la.top),
             (la.right, bd.top),
-            (ra.left,  bd.top),
-            (ra.left,  ra.top),
+            (ra.left, bd.top),
+            (ra.left, ra.top),
             (ra.right, ra.top),
             (ra.right, bd.bottom),
-            (la.left,  bd.bottom),
+            (la.left, bd.bottom),
         ]
         shifted = [(x - bot_min_x, y - bot_min_y) for x, y in u_pts]
         pygame.draw.polygon(self._bot_surface, self.color_body, shifted)
@@ -462,8 +462,7 @@ class RockGlider(Meteor):
             14,
         )
         self._local_bot_hit_union = (
-            self._local_body_rect
-            .union(self._local_left_arm_rect)
+            self._local_body_rect.union(self._local_left_arm_rect)
             .union(self._local_right_arm_rect)
             .union(_local_thruster)
         )
@@ -478,8 +477,14 @@ class RockGlider(Meteor):
             max(1, self._local_rock_max_y - self._local_rock_min_y),
         )
         self._bot_hit_rect = self._local_bot_hit_union.move(bx, by)
-        self._rock_center = (float(self._rock_hit_rect.centerx), float(self._rock_hit_rect.centery))
-        self._bot_center = (float(self._bot_hit_rect.centerx), float(self._bot_hit_rect.centery))
+        self._rock_center = (
+            float(self._rock_hit_rect.centerx),
+            float(self._rock_hit_rect.centery),
+        )
+        self._bot_center = (
+            float(self._bot_hit_rect.centerx),
+            float(self._bot_hit_rect.centery),
+        )
 
     def get_ship_contact_hitboxes(self) -> tuple[pygame.Rect, ...]:
         """Retorna hitboxes reais de contato para colisao com a nave."""
@@ -559,7 +564,16 @@ class RockGlider(Meteor):
                 self._death_particles.pop(i)
             else:
                 vy += gravity * dt
-                self._death_particles[i] = (x + vx * dt, y + vy * dt, vx, vy, ttl, life, size, color)
+                self._death_particles[i] = (
+                    x + vx * dt,
+                    y + vy * dt,
+                    vx,
+                    vy,
+                    ttl,
+                    life,
+                    size,
+                    color,
+                )
             i -= 1
 
     def _draw_death_particles(self, screen: pygame.Surface) -> None:
@@ -838,8 +852,8 @@ class RockGlider(Meteor):
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
-        pts, part_destroyed, _fully_destroyed, _part_center, part_name = self.take_part_damage(
-            hit_x, hit_y, amount=damage
+        pts, part_destroyed, _fully_destroyed, _part_center, part_name = (
+            self.take_part_damage(hit_x, hit_y, amount=damage)
         )
 
         if not part_destroyed:

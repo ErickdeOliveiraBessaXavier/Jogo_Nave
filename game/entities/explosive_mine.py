@@ -110,9 +110,9 @@ class ExplosiveMine:
         explosion_temp = self.__class__._explosion_sprite
 
         assert normal_temp is not None, "Normal sprite for explosive mine not loaded"
-        assert explosion_temp is not None, (
-            "Explosion sprite for explosive mine not loaded"
-        )
+        assert (
+            explosion_temp is not None
+        ), "Explosion sprite for explosive mine not loaded"
 
         self.normal_sprite = normal_temp
         self.explosion_sprite = explosion_temp
@@ -205,7 +205,7 @@ class ExplosiveMine:
             current_sprite = self.normal_sprite
 
         scale = self.pulse_scale if not self.is_exploding else 1.0
-        scale_key = round(scale * 20) / 20           # passos de 0.05
+        scale_key = round(scale * 20) / 20  # passos de 0.05
         angle_key = round(self.rotation_angle % 360 / 3) * 3  # passos de 3°
         cache_key = (self.is_exploding, scale_key, angle_key)
 

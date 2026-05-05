@@ -7,6 +7,7 @@ dicionários `_sounds` e `_sound_groups` usados pelo `SoundManager`.
 O objetivo é permitir uma futura separação completa entre efeitos e música
 sem quebrar a API existente durante a migração.
 """
+
 import logging
 import os
 from typing import Any, Dict, List, Tuple, cast
@@ -16,7 +17,9 @@ import pygame
 from .sound_config import SOUND_PATHS, VOLUME_CONFIG
 
 
-def load_sfx(base_path: str, sfx_volume: float, master_volume: float) -> Tuple[Dict[str, pygame.mixer.Sound], Dict[str, List[pygame.mixer.Sound]]]:
+def load_sfx(
+    base_path: str, sfx_volume: float, master_volume: float
+) -> Tuple[Dict[str, pygame.mixer.Sound], Dict[str, List[pygame.mixer.Sound]]]:
     """Carrega os SFX e retorna dois dicionários: (sounds, sound_groups).
 
     - `sounds`: mapeia nome -> pygame.mixer.Sound

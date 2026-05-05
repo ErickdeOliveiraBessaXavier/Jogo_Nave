@@ -1496,7 +1496,6 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),
-
     # Nível 3: Primeiro Boss - Stone Golem (Montanhas)
     3: LevelConfig(
         level_number=3,

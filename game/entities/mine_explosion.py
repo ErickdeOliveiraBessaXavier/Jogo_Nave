@@ -38,4 +38,7 @@ class MineExplosion:
             (self.max_radius, self.max_radius),
             radius,
         )
-        screen.blit(self._surface, (int(self.x) - self.max_radius, int(self.y) - self.max_radius))
+        screen.blit(
+            self._surface,
+            (int(self.x) - self.max_radius, int(self.y) - self.max_radius),
+        )

@@ -12,8 +12,12 @@ from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_profile_path
 from ..core.state import Scene
-from ..core.upgrades import (UpgradeCategory, UpgradeMeta, get_upgrade_icon,
-                             list_all_upgrades_meta)
+from ..core.upgrades import (
+    UpgradeCategory,
+    UpgradeMeta,
+    get_upgrade_icon,
+    list_all_upgrades_meta,
+)
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 
 if TYPE_CHECKING:
@@ -574,12 +578,18 @@ class UpgradesSelectionScene(Scene):
                     if i >= self.player_profile.unlocked_slots:
                         self.drag_invalid_target = True
                     elif self.drag_source_slot is not None:
-                        original = self.player_profile.upgrade_loadout[self.drag_source_slot]
-                        self.player_profile.upgrade_loadout[self.drag_source_slot] = None
+                        original = self.player_profile.upgrade_loadout[
+                            self.drag_source_slot
+                        ]
+                        self.player_profile.upgrade_loadout[self.drag_source_slot] = (
+                            None
+                        )
                         can_equip = self.player_profile.can_equip_upgrade(
                             self.dragging_upgrade.type, i
                         )
-                        self.player_profile.upgrade_loadout[self.drag_source_slot] = original
+                        self.player_profile.upgrade_loadout[self.drag_source_slot] = (
+                            original
+                        )
                         self.drag_invalid_target = not can_equip
                     elif not self.player_profile.can_equip_upgrade(
                         self.dragging_upgrade.type, i

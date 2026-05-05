@@ -466,8 +466,7 @@ class Collisions:
             if getattr(enemy, "is_explosive_mine", False):
                 mine: Any = enemy
                 should_explode = mine.is_exploding and (
-                    (mine.pre_explosion_timer <= 0 and not mine.dead)
-                    or mine.dead
+                    (mine.pre_explosion_timer <= 0 and not mine.dead) or mine.dead
                 )
                 if should_explode:
                     cx, cy = (mine.x, mine.y)
@@ -650,7 +649,9 @@ class Collisions:
             dist_sq = (ship_cx - explosion_x) ** 2 + (ship_cy - explosion_y) ** 2
             if dist_sq < (explosion_radius + ship_r) ** 2:
                 entity_manager.spawn_explosion(
-                    ship.x + ship.w / 2, ship.y + ship.h / 2, size=CollisionConstants.AREA_EXPLOSION_SIZE
+                    ship.x + ship.w / 2,
+                    ship.y + ship.h / 2,
+                    size=CollisionConstants.AREA_EXPLOSION_SIZE,
                 )
                 ship_hit = True
         return ship_hit
@@ -916,11 +917,13 @@ class Collisions:
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
 
-        for nearby in enemy_grid.query(cx - radius, cy - radius, radius * 2, radius * 2):
+        for nearby in enemy_grid.query(
+            cx - radius, cy - radius, radius * 2, radius * 2
+        ):
             if nearby.dead:
                 continue
             ncx, ncy, _ = nearby.collision_circle()
-            if (ncx - cx) ** 2 + (ncy - cy) ** 2 >= radius ** 2:
+            if (ncx - cx) ** 2 + (ncy - cy) ** 2 >= radius**2:
                 continue
             hit_damage = 2 if getattr(nearby, "is_explosive_mine", False) else 1
             r = self._apply_hit(nearby, hit_damage, ncx, ncy, entity_manager)
@@ -1011,7 +1014,9 @@ class Collisions:
             # Iniciar morte da nave (trigger_death_sequence ou similar se existir)
             # Para boss, contato costuma ser letal instantâneo.
             entity_manager.spawn_explosion(
-                ship.x + ship.w / 2, ship.y + ship.h / 2, size=CollisionConstants.AREA_EXPLOSION_SIZE
+                ship.x + ship.w / 2,
+                ship.y + ship.h / 2,
+                size=CollisionConstants.AREA_EXPLOSION_SIZE,
             )
             return True
         return False
@@ -1042,7 +1047,9 @@ class Collisions:
                 continue
 
             self._apply_ship_contact(enemy, cx, cy, entity_manager)
-            entity_manager.spawn_explosion(cx, cy, size=CollisionConstants.AREA_EXPLOSION_SIZE)
+            entity_manager.spawn_explosion(
+                cx, cy, size=CollisionConstants.AREA_EXPLOSION_SIZE
+            )
             return True
         return False
 
@@ -1128,7 +1135,6 @@ class Collisions:
             is_piercing_allowed=True,
         )
 
-
     def mini_ship_bullets_vs_spikes(
         self,
         mini_ship_bullets: list[MiniShipBullet],
@@ -1199,7 +1205,11 @@ class Collisions:
                 # Destruir o espinho ao acertar a nave
                 spike.dead = True
                 # Criar explosão no local do spike
-                entity_manager.spawn_explosion(spike.center_x, spike.center_y, size=CollisionConstants.SPIKE_EXPLOSION_SIZE)
+                entity_manager.spawn_explosion(
+                    spike.center_x,
+                    spike.center_y,
+                    size=CollisionConstants.SPIKE_EXPLOSION_SIZE,
+                )
                 return True
         return False
 
@@ -1247,7 +1257,9 @@ class Collisions:
         # Colisão com o corpo do boss
         if ship.rect.colliderect(pygame.Rect(boss.x, boss.y, boss.w, boss.h)):
             entity_manager.spawn_explosion(
-                ship.x + ship.w / 2, ship.y + ship.h / 2, size=CollisionConstants.AREA_EXPLOSION_SIZE
+                ship.x + ship.w / 2,
+                ship.y + ship.h / 2,
+                size=CollisionConstants.AREA_EXPLOSION_SIZE,
             )
             return True
 
@@ -1262,7 +1274,9 @@ class Collisions:
             dy = ship_center_y - boss_center_y
             if dx * dx + dy * dy <= wave_radius * wave_radius:
                 entity_manager.spawn_explosion(
-                    ship.x + ship.w / 2, ship.y + ship.h / 2, size=CollisionConstants.DEFAULT_EXPLOSION_SIZE
+                    ship.x + ship.w / 2,
+                    ship.y + ship.h / 2,
+                    size=CollisionConstants.DEFAULT_EXPLOSION_SIZE,
                 )
                 return True
 
@@ -1294,7 +1308,11 @@ class Collisions:
                 square_rect = square.get_rect()
                 if bullet_rect.colliderect(square_rect):
                     # Criar explosão no ponto de impacto
-                    entity_manager.spawn_explosion(bullet.x, bullet.y, size=CollisionConstants.DEFAULT_EXPLOSION_SIZE)
+                    entity_manager.spawn_explosion(
+                        bullet.x,
+                        bullet.y,
+                        size=CollisionConstants.DEFAULT_EXPLOSION_SIZE,
+                    )
 
                     # Destruir apenas a bala se não for piercing
                     if not bullet.piercing:
@@ -1338,7 +1356,10 @@ class Collisions:
 
                     # Criar explosão no ponto de impacto
                     entity_manager.spawn_explosion(
-                        bullet.x, bullet.y, size=CollisionConstants.DEFAULT_EXPLOSION_SIZE, explosion_type=ExplosionType.SLIME
+                        bullet.x,
+                        bullet.y,
+                        size=CollisionConstants.DEFAULT_EXPLOSION_SIZE,
+                        explosion_type=ExplosionType.SLIME,
                     )
 
                     # Destruir apenas a bala se não for piercing

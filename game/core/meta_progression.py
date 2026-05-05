@@ -13,8 +13,11 @@ import pygame
 from .difficulty import DifficultyPreset
 from .levels import DifficultyConfig, LevelConfig
 from .upgrades import UpgradeType
-from .upgrades_config import (DEFAULT_UNLOCKED, INITIAL_UNLOCKED_SLOTS,
-                              UPGRADE_SLOT_COUNT)
+from .upgrades_config import (
+    DEFAULT_UNLOCKED,
+    INITIAL_UNLOCKED_SLOTS,
+    UPGRADE_SLOT_COUNT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1107,7 +1110,10 @@ class PlayerProfile:
                         # Cast the loaded list to the expected element type so the
                         # type-checker can infer the deque element type correctly.
                         stats.recent_attempts = deque(
-                            cast(List[Dict[str, Any]], stats_data.get("recent_attempts", [])),
+                            cast(
+                                List[Dict[str, Any]],
+                                stats_data.get("recent_attempts", []),
+                            ),
                             maxlen=PerformanceAnalyzer.RECENT_ATTEMPTS_WINDOW,
                         )
                         stats.current_win_streak = int(
