@@ -910,6 +910,28 @@ class PlayingScene(Scene):
                 self.enemy_visible = not self.enemy_visible
         elif time_remaining <= 0.0:
             self.enemy_visible = True
+            self._force_kill_stage_hostiles()
+            self.enemy_cleanup_active = False
+
+    def _force_kill_stage_hostiles(self) -> None:
+        em = self.entity_manager
+        for e in em.enemies:
+            if not getattr(e, "dead", False):
+                e.dead = True
+        for f in em.formations:
+            if not getattr(f, "dead", False):
+                for e in f.get_enemies():
+                    if not getattr(e, "dead", False):
+                        e.dead = True
+        for m in em.boulders:
+            if not m.dead:
+                m.dead = True
+        for s in em.rock_shards:
+            if not s.dead:
+                s.dead = True
+        for r in em.orbital_rocks:
+            if not r.dead and getattr(r, "causes_damage", False):
+                r.dead = True
 
     # ------------------------------------------------------------------
     # Tiro
