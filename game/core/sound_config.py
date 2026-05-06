@@ -14,6 +14,7 @@ class MusicState(Enum):
     SLIME_BOSS = "slime_boss"
     GIANT_METEOR_BOSS = "giant_meteor_boss"
     MOUNTAIN_SERPENT_BOSS = "mountain_serpent_boss"
+    CLOUD_ARCHMAGE_BOSS = "cloud_archmage_boss"
     SILENCE = "silence"
 
 
@@ -100,6 +101,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
         "slime_boss": "music/Boss-Slime-Theme.mp3",
         "giant_meteor_boss": "music/Musica_Giant_Meteor_Boss.mp3",
         "mountain_serpent_boss": "music/Stone_Snake_Themel.mp3",
+        "cloud_archmage_boss": "music/Mago_Robo_Boss.mp3",
     },
     # Efeitos sonoros
     "sfx": {

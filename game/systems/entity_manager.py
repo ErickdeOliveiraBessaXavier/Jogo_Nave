@@ -50,6 +50,7 @@ from ..entities.mountain_serpent_boss import (
 )
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
+from ..entities.rock_glider import RockGlider
 from ..entities.rock_glider_pool import RockGliderPool
 from ..entities.slime_boss import SlimeBoss
 from ..entities.slime_drip import SlimeDrip
@@ -518,9 +519,16 @@ class EntityManager:
                         self.enemies.append(f)
             elif isinstance(self.boss, CloudArchmageBoss):
                 spawned = self.boss.update(enemy_dt, (player_x, player_y))
-                # For now, CloudArchmage spawns stalagmites which go into enemies
                 if spawned:
-                    self.enemies.extend(spawned)
+                    for s in spawned:
+                        if isinstance(s, RockGlider):
+                            self.rock_glider_pool.pool.append(s)
+                            self.rock_glider_pool.active.append(s)
+                            self.enemies.append(s)  # type: ignore[arg-type]
+                        elif isinstance(s, MountainPropeller):
+                            self.mountain_propellers.append(s)
+                        else:
+                            self.enemies.append(s)
             else:
                 ls, sqs = self.boss.update(enemy_dt, player_x, player_y)
                 if ls:
@@ -692,8 +700,14 @@ class EntityManager:
                 spawned = self.boss.update(dt, (player_x, player_y))
                 if spawned:
                     for s in spawned:
-                        # Archmage spawns stalagmites and similar enemies
-                        self.enemies.append(s)
+                        if isinstance(s, RockGlider):
+                            self.rock_glider_pool.pool.append(s)
+                            self.rock_glider_pool.active.append(s)
+                            self.enemies.append(s)  # type: ignore[arg-type]
+                        elif isinstance(s, MountainPropeller):
+                            self.mountain_propellers.append(s)
+                        else:
+                            self.enemies.append(s)
             else:
                 # Many boss subclasses return (lasers, squares). Use a cast
                 # to give the type-checker a concrete signature here.

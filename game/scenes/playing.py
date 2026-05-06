@@ -1797,6 +1797,7 @@ class PlayingScene(Scene):
             "slime": MusicState.SLIME_BOSS,
             "giant_meteor": MusicState.GIANT_METEOR_BOSS,
             "mountain_serpent": MusicState.MOUNTAIN_SERPENT_BOSS,
+            "archmage": MusicState.CLOUD_ARCHMAGE_BOSS,
         }
         boss_type = self._boss_type_cache or "normal"
         boss_music_state = getattr(type(boss), "MUSIC_STATE", None)

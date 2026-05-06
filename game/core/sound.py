@@ -397,6 +397,10 @@ class SoundManager:
         self.music_manager.play_mountain_serpent_boss_music()
 
     @require_audio
+    def play_cloud_archmage_boss_music(self):
+        self.music_manager.play_cloud_archmage_boss_music()
+
+    @require_audio
     def play_menu_music(self, force: bool = False):
         self.music_manager.play_menu_music(force=force)
 

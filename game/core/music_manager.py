@@ -67,6 +67,7 @@ class MusicStateManager:
             MusicState.SLIME_BOSS,
             MusicState.GIANT_METEOR_BOSS,
             MusicState.MOUNTAIN_SERPENT_BOSS,
+            MusicState.CLOUD_ARCHMAGE_BOSS,
         ]
 
         is_music_paused = bool(
@@ -96,6 +97,8 @@ class MusicStateManager:
             self.music_manager.play_giant_meteor_boss_music_internal()
         elif new_state == MusicState.MOUNTAIN_SERPENT_BOSS:
             self.music_manager.play_mountain_serpent_boss_music_internal()
+        elif new_state == MusicState.CLOUD_ARCHMAGE_BOSS:
+            self.music_manager.play_cloud_archmage_boss_music_internal()
         elif new_state == MusicState.SILENCE:
             self.music_manager.stop_music_internal()
 
@@ -131,6 +134,9 @@ class MusicManager:
 
     def play_mountain_serpent_boss_music(self) -> None:
         self.music_state_manager.transition_to(MusicState.MOUNTAIN_SERPENT_BOSS)
+
+    def play_cloud_archmage_boss_music(self) -> None:
+        self.music_state_manager.transition_to(MusicState.CLOUD_ARCHMAGE_BOSS)
 
     def play_menu_music(self, force: bool = False) -> None:
         self.music_state_manager.transition_to(MusicState.MENU, force=force)
@@ -213,6 +219,19 @@ class MusicManager:
         ):
             self._transition_to_music(music_path, "mountain_serpent_boss")
 
+    def play_cloud_archmage_boss_music_internal(self) -> None:
+        music_path = get_resource_path(
+            os.path.join(
+                str(SOUND_PATHS["base"]),
+                str(self._music_paths()["cloud_archmage_boss"]),
+            )
+        )
+        if (
+            os.path.exists(music_path)
+            and self.sound_manager.current_music != "cloud_archmage_boss"
+        ):
+            self._transition_to_music(music_path, "cloud_archmage_boss")
+
     def play_menu_music_internal(self) -> None:
         music_path = get_resource_path(
             os.path.join(str(SOUND_PATHS["base"]), str(self._music_paths()["menu"]))
@@ -243,6 +262,7 @@ class MusicManager:
             "spike_boss",
             "slime_boss",
             "mountain_serpent_boss",
+            "cloud_archmage_boss",
         ]:
             boss_volume = (
                 self.sound_manager.music_volume
@@ -271,6 +291,7 @@ class MusicManager:
                 "spike_boss",
                 "slime_boss",
                 "mountain_serpent_boss",
+                "cloud_archmage_boss",
             ]:
                 base_volume *= self.sound_manager.boss_music_multiplier
             pygame.mixer.music.set_volume(
@@ -303,7 +324,7 @@ class MusicManager:
                 pygame.mixer.music.load(music_path)
 
                 base_volume = self.sound_manager.music_volume
-                if music_type in ["boss", "spike_boss", "slime_boss"]:
+                if music_type in ["boss", "spike_boss", "slime_boss", "mountain_serpent_boss", "cloud_archmage_boss"]:
                     base_volume *= self.sound_manager.boss_music_multiplier
 
                 target_volume = min(1.0, base_volume * self.sound_manager.master_volume)

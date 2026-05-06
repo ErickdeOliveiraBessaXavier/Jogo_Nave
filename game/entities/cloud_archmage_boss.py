@@ -10,8 +10,11 @@ import pygame
 
 from ..core.assets import get_font
 from ..core.config import config as Config
+from ..core.sound_config import MusicState
 from .fire_zone import FireZone
 from .mountain_mage import MountainStalactite, MountainStalagmite
+from .mountain_propeller import MountainPropeller
+from .rock_glider import RockGlider
 
 if TYPE_CHECKING:
     from ..systems.hit_result import HitResult
@@ -48,6 +51,8 @@ _CYAN_SHIELD_COLOR: Final[tuple[int, int, int]] = (
 )  # canonical cyan used for shield tint & particles
 _PHASE2_STALAGMITE_INTERVAL: Final = 1.4
 _PHASE3_FIREZONE_INTERVAL: Final = 2.0
+_PHASE1_ROCK_GLIDER_INTERVAL: Final = 4.0
+_PHASE1_PROPELLER_INTERVAL: Final = 9.0
 _PHASE3_STALAGMITE_INTERVAL: Final = 1.2
 _PHASE3_COMBO_COOLDOWN: Final = 1.0
 _FIREZONE_WARNING_DURATION: Final = 0.9
@@ -269,6 +274,17 @@ _PALETTES: Final[dict[str, dict[str, Color]]] = {
             "gola",
         )
     },
+    "white": {
+        "robe": (90, 100, 120),
+        "metal": (130, 140, 155),
+        "visor": (20, 25, 40),
+        "core": (180, 210, 240),
+        "hat": (80, 90, 110),
+        "hat_hl": (150, 170, 190),
+        "joint": (50, 55, 70),
+        "gold": (160, 170, 180),
+        "gola": (110, 125, 145),
+    },
 }
 
 _CHAR_TO_KEY: Final[dict[str, str]] = {
@@ -346,6 +362,7 @@ class ResonanceWave:
 
 
 class CloudArchmageBoss:
+    MUSIC_STATE: Final = MusicState.CLOUD_ARCHMAGE_BOSS
     MAX_HEALTH: Final[int] = 1200
     WIDTH: Final[int] = 80
     HEIGHT: Final[int] = 110
@@ -402,8 +419,8 @@ class CloudArchmageBoss:
         self._gradient_timer: float = 0.0
         self._displayed_tint: tuple[float, float, float] | None = None
         # Cache: {(r, g, b, alpha_int): Surface} — reused across frames
-        # Cache: (qr, qg, qb, w, h) -> overlay já mascarado pela alpha do sprite
-        self._tint_cache: dict[tuple[int, int, int, int, int], pygame.Surface] = {}
+        # Cache: (qr, qg, qb, w, h, a) -> overlay já mascarado pela alpha do sprite
+        self._tint_cache: dict[tuple[int, int, int, int, int, int], pygame.Surface] = {}
 
         self._drift_timer: float = 0.0
         self._wander_target_x: float = sw / 2.0
@@ -455,6 +472,8 @@ class CloudArchmageBoss:
         self._vulnerable_timer: float = 0.0
         self._stalagmite_spawn_timer: float = 0.0
         self._fire_zone_spawn_timer: float = 0.0
+        self._phase1_rock_glider_timer: float = 0.0
+        self._phase1_propeller_timer: float = 0.0
         self._phase3_combo_powers: tuple[OrbType, ...] | None = None
         self._spawned_fire_zones: list[FireZone] = []
 
@@ -1011,7 +1030,7 @@ class CloudArchmageBoss:
         ]
         if active_orbs:
             hp_ratio = self.health / self.max_health
-            weights = []
+            weights: list[float] = []
             for idx in active_orbs:
                 orb_type = self._orbs[idx].type
                 if orb_type == OrbType.CYAN:
@@ -1185,12 +1204,14 @@ class CloudArchmageBoss:
                 self._active_power is not None
                 and self._active_power.type == OrbType.CYAN
             ):
-                self._shield_max_hp = self.SHIELD_MAX_HP + int(self.health * 0.5)
+                self._shield_max_hp = self.SHIELD_MAX_HP + int(self.health * 0.2)
                 self._shield_hp = self._shield_max_hp
                 self._shield_active = False
                 self._shield_spawning = True
                 self._shield_spawn_t = 0.0
                 self._shield_timer = 0.0
+                self._phase1_rock_glider_timer = 0.0
+                self._phase1_propeller_timer = 0.0
 
     def _update_using_power(
         self, dt: float, player_pos: tuple[float, float] | None
@@ -1212,8 +1233,15 @@ class CloudArchmageBoss:
             self._white_dodge_active = True
         elif power_type == OrbType.CYAN:
             self._white_dodge_active = False
-            # Shield spawn/active state is managed entirely by the update loop
-            # (lines that tick _shield_spawn_t and flip _shield_active). No action needed here.
+            if self._shield_active or self._shield_spawning:
+                self._phase1_rock_glider_timer += dt
+                self._phase1_propeller_timer += dt
+                while self._phase1_rock_glider_timer >= _PHASE1_ROCK_GLIDER_INTERVAL:
+                    self._phase1_rock_glider_timer -= _PHASE1_ROCK_GLIDER_INTERVAL
+                    spawned.append(RockGlider())
+                while self._phase1_propeller_timer >= _PHASE1_PROPELLER_INTERVAL:
+                    self._phase1_propeller_timer -= _PHASE1_PROPELLER_INTERVAL
+                    spawned.append(MountainPropeller())
         elif power_type == OrbType.PURPLE:
             self._stalagmite_spawn_timer += dt
             while self._stalagmite_spawn_timer >= self._stalagmite_interval:
@@ -1247,7 +1275,7 @@ class CloudArchmageBoss:
             zone for zone in self._spawned_fire_zones if not zone.should_remove()
         ]
 
-        if self._power_timer <= 0.0:
+        if self._power_timer <= 0.0 and power_type != OrbType.CYAN:
             self._finish_phase1_power()
 
         return spawned
@@ -1331,22 +1359,34 @@ class CloudArchmageBoss:
         self._active_telegraphs = remaining_telegraphs
 
     def _queue_random_firezone_warning(self, radius: int, duration: float) -> None:
-        active = sum(1 for z in self._spawned_fire_zones if not z.should_remove())
-        if active + len(self._firezone_warnings) >= _MAX_FIRE_ZONES:
+        active_zones = [z for z in self._spawned_fire_zones if not z.should_remove()]
+        if len(active_zones) + len(self._firezone_warnings) >= _MAX_FIRE_ZONES:
             return
+
         margin = max(90.0, float(radius) + 24.0)
-        x = random.uniform(margin, Config.SCREEN_WIDTH - margin)
-        y = random.uniform(margin, Config.SCREEN_HEIGHT - margin)
-        self._firezone_warnings.append(
-            FireZoneWarning(
-                x=x,
-                y=y,
-                timer=_FIREZONE_WARNING_DURATION,
-                charge=0.0,
-                radius=radius,
-                duration=duration,
+        # Combina zonas já ativas e avisos pendentes para garantir que a nova posição seja segura
+        check_list = active_zones + self._firezone_warnings
+
+        found_pos = None
+        for _ in range(20):  # Tenta até 20 vezes encontrar um local desobstruído
+            tx = random.uniform(margin, Config.SCREEN_WIDTH - margin)
+            ty = random.uniform(margin, Config.SCREEN_HEIGHT - margin)
+
+            if FireZone.is_position_safe(tx, ty, float(radius), check_list):
+                found_pos = (tx, ty)
+                break
+
+        if found_pos:
+            self._firezone_warnings.append(
+                FireZoneWarning(
+                    x=found_pos[0],
+                    y=found_pos[1],
+                    timer=_FIREZONE_WARNING_DURATION,
+                    charge=0.0,
+                    radius=radius,
+                    duration=duration,
+                )
             )
-        )
 
     def _update_firezone_warnings(self, dt: float, spawned: list[Any]) -> None:
         if not self._firezone_warnings:
@@ -1807,6 +1847,7 @@ class CloudArchmageBoss:
         surf: pygame.Surface,
         pos: tuple[int, int],
         tint: Color,
+        alpha: int | None = None,
     ) -> None:
         """Blits surf onto dest at pos com tint aplicado apenas a pixels opacos.
 
@@ -1816,11 +1857,12 @@ class CloudArchmageBoss:
         """
         w, h = surf.get_width(), surf.get_height()
         qr, qg, qb = tint[0] >> 3 << 3, tint[1] >> 3 << 3, tint[2] >> 3 << 3
-        key = (qr, qg, qb, w, h)
+        a = alpha if alpha is not None else self._GRADIENT_ALPHA
+        key = (qr, qg, qb, w, h, a)
         masked = self._tint_cache.get(key)
         if masked is None:
             masked = pygame.Surface((w, h), pygame.SRCALPHA)
-            masked.fill((qr, qg, qb, self._GRADIENT_ALPHA))
+            masked.fill((qr, qg, qb, a))
             masked.blit(surf, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
             if pygame.display.get_init():
                 masked = masked.convert_alpha()
@@ -1888,7 +1930,12 @@ class CloudArchmageBoss:
                     self._active_power is not None
                     and self._active_power.type in (OrbType.ORANGE, OrbType.PURPLE)
                 )
-                else "normal"
+                else (
+                    "white"
+                    if self._active_power is not None
+                    and self._active_power.type == OrbType.WHITE
+                    else "normal"
+                )
             )
         )
 
@@ -1953,6 +2000,7 @@ class CloudArchmageBoss:
         py: float,
         fading: bool,
         gradient_tint: Color | None = None,
+        tint_alpha: int | None = None,
     ) -> None:
         """Draw a sprite part, applying teleport scale-shrink if fading."""
         if fading:
@@ -1962,14 +2010,14 @@ class CloudArchmageBoss:
             offset_y = (base.get_height() - s.get_height()) // 2
             pos = (int(px) + offset_x, int(py) + offset_y)
             if gradient_tint:
-                self._blit_tinted(surface, s, pos, gradient_tint)
+                self._blit_tinted(surface, s, pos, gradient_tint, alpha=tint_alpha)
             else:
                 surface.blit(s, pos)
         else:
             base = self._sprites[part][state_key]
             pos = (int(px), int(py))
             if gradient_tint:
-                self._blit_tinted(surface, base, pos, gradient_tint)
+                self._blit_tinted(surface, base, pos, gradient_tint, alpha=tint_alpha)
             else:
                 surface.blit(base, pos)
 

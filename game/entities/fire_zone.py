@@ -1,12 +1,19 @@
 import math
 import random
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, Sequence
 
 import pygame
 
 if TYPE_CHECKING:
     from ..systems.hit_result import HitResult
+
+
+class Positionable(Protocol):
+    """Protocolo para objetos que possuem coordenadas x e y."""
+
+    x: float
+    y: float
 
 
 @dataclass
@@ -131,6 +138,21 @@ class FireZone:
 
     def register_hit(self, entity_id: int) -> None:
         self.hit_cooldowns[entity_id] = self.DAMAGE_INTERVAL
+
+    @staticmethod
+    def is_position_safe(
+        x: float,
+        y: float,
+        radius: float,
+        entities: Sequence[Positionable],
+        min_dist_mult: float = 2.2,
+    ) -> bool:
+        """Verifica se a posição (x, y) está a uma distância segura de outras entidades (que tenham x, y)."""
+        min_dist = radius * min_dist_mult
+        for ent in entities:
+            if math.hypot(x - ent.x, y - ent.y) < min_dist:
+                return False
+        return True
 
     def draw(self, surface: pygame.Surface) -> None:
         progress = max(0.0, self.timer / self.duration)
