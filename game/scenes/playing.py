@@ -1055,7 +1055,7 @@ class PlayingScene(Scene):
 
     def _process_cheat_input(self, event: pygame.event.Event) -> None:
         """Detecta o cheat code '271195' para ativar/desativar god mode."""
-        if not (pygame.K_0 <= event.key <= pygame.K_9):
+        if not pygame.K_0 <= event.key <= pygame.K_9:
             return
 
         self.cheat_buffer += chr(event.key)
@@ -2282,7 +2282,7 @@ class PlayingScene(Scene):
                 upg.cooldown_left = min(upg.cooldown_left, 1.0)
 
     def _activate_upgrade_slot(self, idx: int) -> None:
-        if not (0 <= idx < len(self.upgrade_slots)):
+        if not 0 <= idx < len(self.upgrade_slots):
             return
         upg = self.upgrade_slots[idx]
         if upg is None:

@@ -198,7 +198,7 @@ class SlimeBoss:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..core.config import config as cfg
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
@@ -540,9 +540,7 @@ class SlimeBoss:
                     frame = self.animation_frames[self.current_frame]
                     scaled_frame = pygame.transform.smoothscale(frame, current_size)
                 except (pygame.error, ValueError, TypeError) as e:
-                    logging.warning(
-                        f"SlimeBoss: Erro ao escalar frame {self.current_frame}: {e}"
-                    )
+                    logging.warning("SlimeBoss: Erro ao escalar frame %s: %s", self.current_frame, e)
                     scaled_frame = pygame.Surface(current_size)
                     scaled_frame.fill((255, 255, 255, 255))
 
@@ -554,7 +552,7 @@ class SlimeBoss:
                 self._scaled_frame_cache[self.current_frame]
             )
         except (pygame.error, ValueError, TypeError) as e:
-            logging.warning(f"SlimeBoss: Erro ao criar máscara: {e}")
+            logging.warning("SlimeBoss: Erro ao criar máscara: %s", e)
             mask = pygame.mask.Mask(current_size, fill=True)
 
         # ✅ NÃO LIMITAR CACHE AQUI: deixar para _update_animation
@@ -599,7 +597,7 @@ class SlimeBoss:
                         outline = outline[::2]
                     self._outline_cache[cache_key] = outline
                 except (pygame.error, ValueError, TypeError) as e:
-                    logging.warning(f"SlimeBoss: Erro ao gerar outline: {e}")
+                    logging.warning("SlimeBoss: Erro ao gerar outline: %s", e)
                     outline = []
                     self._outline_cache[cache_key] = outline
             if len(outline) > 1:

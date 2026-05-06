@@ -2,7 +2,7 @@ import logging
 import math
 import random
 from collections import deque
-from typing import TYPE_CHECKING, Any, List
+from typing import Any, List
 
 import pygame
 
@@ -11,15 +11,14 @@ from ..core.config import config as Config
 from ..core.sound import sound_manager
 from ..core.time import Timer
 from .boss_cannon import BossAttackSystem, BossCannon
+from .boss_hit_mixin import BossHitMixin
 from .boss_laser import BossLaser
 from .boss_particles import BossParticleSystem
 from .boss_square import BossSquare
-
-if TYPE_CHECKING:
-    from ..systems.hit_result import HitResult
+from .draw_utils import rotated_square_corners
 
 
-class Boss:
+class Boss(BossHitMixin):
     """
     Boss entity with face-oriented combat system.
 
@@ -1082,28 +1081,9 @@ class Boss:
         center_y = square.y + offset_y
         angle_rad = math.radians(square.rotation)
 
-        # Calcular os 4 cantos do quadrado rotacionado
-        half_size = size / 2
-        corners = [
-            (-half_size, -half_size),
-            (half_size, -half_size),
-            (half_size, half_size),
-            (-half_size, half_size),
-        ]
-
-        # Rotacionar cada canto
-        rotated_corners: list[tuple[float, float]] = []
-        for cx, cy in corners:
-            # Aplicar rotação
-            rx = cx * math.cos(angle_rad) - cy * math.sin(angle_rad)
-            ry = cx * math.sin(angle_rad) + cy * math.cos(angle_rad)
-            rotated_corners.append((center_x + rx, center_y + ry))
-
-        # Desenhar polígono preenchido
-        pygame.draw.polygon(surface, color, rotated_corners)
-
-        # Desenhar borda
-        pygame.draw.polygon(surface, border_color, rotated_corners, 2)
+        rotated = rotated_square_corners(center_x, center_y, size / 2, angle_rad)
+        pygame.draw.polygon(surface, color, rotated)
+        pygame.draw.polygon(surface, border_color, rotated, 2)
 
     def _draw_cannon(
         self, surface: pygame.Surface, offset_x: float, offset_y: float
@@ -1331,24 +1311,6 @@ class Boss:
 
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
-
-    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
-        from ..core.config import config as cfg
-        from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult
-
-        self.take_damage(damage)
-        if self.dead:
-            return HitResult(
-                killed=True,
-                points=cfg.BOSS_DEFEAT_SCORE,
-                explosion_size=100,
-                sound=hit_sounds.EXPLOSION_BOSS,
-            )
-        return HitResult(explosion_size=15, sound=hit_sounds.BOSS_DAMAGE)
-
-    def should_remove(self) -> bool:
-        return self.dead
 
     def take_damage(self, amount: int) -> None:
         """Apply damage and handle frenzy mode transition."""

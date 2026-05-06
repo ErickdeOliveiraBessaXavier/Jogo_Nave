@@ -1956,9 +1956,9 @@ class LevelAnalyzer:
         start: int, end: int, generator: ProceduralLevelGenerator
     ):
         """Imprime progressão de dificuldade para análise."""
-        logger.info(f"\n{'=' * 80}")
-        logger.info(f"ANÁLISE DE PROGRESSÃO: Níveis {start} a {end}")
-        logger.info(f"{'=' * 80}\n")
+        logger.info("\n%s", '=' * 80)
+        logger.info("ANÁLISE DE PROGRESSÃO: Níveis %s a %s", start, end)
+        logger.info("%s\n", '=' * 80)
 
         for level_num in range(start, end + 1):
             config = generator.generate_level(level_num)
@@ -1983,16 +1983,12 @@ class LevelAnalyzer:
             warning_icon = "⚠️" if warnings else "✓"
 
             logger.info(
-                f"{warning_icon} Nv.{level_num:2d} │ "
-                f"{theme_name:22s} │ "
-                f"{stats['enemies_to_clear']:3d} │ "
-                f"{spawn_rate:.1f}/s │ "
-                f"~{max_enemies:2d} tela │ "
-                f"{duration / 60:.1f}min │ "
-                f"{features:5s}"
+                "%s Nv.%2d │ %-22s │ %3d │ %.1f/s │ ~%2d tela │ %.1fmin │ %-5s",
+                warning_icon, level_num, theme_name, stats['enemies_to_clear'],
+                spawn_rate, max_enemies, duration / 60, features,
             )
 
             # Mostrar avisos se houver
             if warnings:
                 for warning in warnings:
-                    logger.info(f"    └─ ⚠️  {warning}")
+                    logger.info("    └─ ⚠️  %s", warning)

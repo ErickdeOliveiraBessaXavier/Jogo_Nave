@@ -34,9 +34,9 @@ class SpriteLoader:
 
         logging.info("🎮 Carregando sprites animados...")
         for name, loader_func in self.loaders:
-            logging.info(f"  ⏳ Carregando {name}...")
+            logging.info("  ⏳ Carregando %s...", name)
             loader_func()
-            logging.info(f"  ✅ {name} carregado!")
+            logging.info("  ✅ %s carregado!", name)
 
         SpriteLoader._loaded = True
         self.loaders.clear()
@@ -72,26 +72,22 @@ class SpriteLoader:
             path = BASE_DIR / "assets" / "images" / base_path / filename
 
             if not path.exists():
-                logging.warning(f"{name}: Frame {i} não encontrado: {path}")
+                logging.warning("%s: Frame %s não encontrado: %s", name, i, path)
                 continue
 
             try:
                 image = get_image(path)
                 frames.append(image)
             except Exception as e:  # pylint: disable=broad-exception-caught
-                logging.error(f"{name}: Erro ao carregar frame {i}: {e}")
+                logging.error("%s: Erro ao carregar frame %s: %s", name, i, e)
                 continue
 
         if not frames:
-            logging.error(
-                f"{name}: NENHUM frame foi carregado! Verifique o caminho dos sprites."
-            )
+            logging.error("%s: NENHUM frame foi carregado! Verifique o caminho dos sprites.", name)
         elif len(frames) < num_frames:
-            logging.warning(
-                f"{name}: Apenas {len(frames)}/{num_frames} frames foram carregados."
-            )
+            logging.warning("%s: Apenas %s/%s frames foram carregados.", name, len(frames), num_frames)
         else:
-            logging.info(f"{name}: {len(frames)} frames carregados com sucesso.")
+            logging.info("%s: %s frames carregados com sucesso.", name, len(frames))
 
         cls._animation_cache[cache_key] = list(frames)
         return frames

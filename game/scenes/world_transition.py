@@ -35,7 +35,7 @@ class WorldTransitionScene(Scene):
     def enter(self) -> None:
         """Ativada ao entrar na cena."""
         pygame.mouse.set_visible(True)
-        logger.info(f"🌍 Entrando no mundo: {self.new_world.name}")
+        logger.info("🌍 Entrando no mundo: %s", self.new_world.name)
 
     def exit(self) -> None:
         """Ativada ao sair da cena."""

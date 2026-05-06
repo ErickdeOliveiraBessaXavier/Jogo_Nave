@@ -455,7 +455,7 @@ class EyeEnemy:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
+    def on_hit(self, _damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -467,7 +467,7 @@ class EyeEnemy:
             sound=hit_sounds.EXPLOSION_ALIEN,
         )
 
-    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
+    def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 

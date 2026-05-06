@@ -7,6 +7,11 @@ from typing import TYPE_CHECKING, Optional, TypedDict
 
 import pygame
 
+from ..core import colors
+from ..core.assets import get_font, get_image
+from ..core.config import config as Config
+from ..core.difficulty import DifficultyPreset, DifficultySettings
+from ..core.render_config import RenderConfig
 from ..core.sprite_loader import sprite_loader
 from ..core.world_config import WorldTheme
 from .backgrounds import (
@@ -18,12 +23,6 @@ from .backgrounds import (
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
-
-from ..core import colors
-from ..core.assets import get_font, get_image
-from ..core.config import config as Config
-from ..core.difficulty import DifficultyPreset, DifficultySettings
-from ..core.render_config import RenderConfig
 
 
 class Star(TypedDict):

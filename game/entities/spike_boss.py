@@ -1,20 +1,18 @@
 import math
 import random
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import pygame
 
 from ..core import colors
 from ..core.config import config as Config
 from ..core.sound import sound_manager
+from .boss_hit_mixin import BossHitMixin
 from .spike import Spike
 from .spike_boss_laser import SpikeBossLaser
 
-if TYPE_CHECKING:
-    from ..systems.hit_result import HitResult
 
-
-class SpikeBoss:
+class SpikeBoss(BossHitMixin):
     """
     Boss que gerencia espinhos nas laterais da tela.
 
@@ -116,24 +114,6 @@ class SpikeBoss:
 
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
-
-    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
-        from ..core.config import config as cfg
-        from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult
-
-        self.take_damage(damage)
-        if self.dead:
-            return HitResult(
-                killed=True,
-                points=cfg.BOSS_DEFEAT_SCORE,
-                explosion_size=100,
-                sound=hit_sounds.EXPLOSION_BOSS,
-            )
-        return HitResult(explosion_size=15, sound=hit_sounds.BOSS_DAMAGE)
-
-    def should_remove(self) -> bool:
-        return self.dead
 
     def take_damage(self, damage: int):
         """Recebe dano e verifica se entra em frenzy."""

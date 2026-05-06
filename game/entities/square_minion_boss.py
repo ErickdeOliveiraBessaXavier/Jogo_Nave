@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, List
 
 import pygame
 
+from .draw_utils import draw_square_trail_particle, rotated_square_corners
+
 if TYPE_CHECKING:
     from ..systems.hit_result import HitResult
 
@@ -186,19 +188,9 @@ class SquareMinionBoss:
         if self.state == "charging" and self.trail_particles:
             for p in self.trail_particles:
                 if p.alpha > 0:
-                    # Cor vermelha/laranja com alpha
                     color_intensity = int(128 + 127 * p.life)
                     trail_color = (255, color_intensity // 2, 0)
-                    particle_size = max(2, int(p.size))
-                    if particle_size > 0:
-                        particle_surf = pygame.Surface(
-                            (particle_size, particle_size), pygame.SRCALPHA
-                        )
-                        particle_surf.fill((*trail_color, p.alpha))
-                        surface.blit(
-                            particle_surf,
-                            (p.x - particle_size // 2, p.y - particle_size // 2),
-                        )
+                    draw_square_trail_particle(surface, p.x, p.y, p.size, trail_color, p.alpha)
 
         # Color: Red for enemy
         anim_value = (self.animation_timer + self.animation_offset) * 57.3
@@ -206,29 +198,9 @@ class SquareMinionBoss:
         color = (intensity, 0, 0)  # Red pulsating
         border_color = (255, 255, 255)
 
-        # Pré-calcular valores para rotação (uma única vez)
-        angle_rad = math.radians(self.rotation)
-        cos_angle = math.cos(angle_rad)
-        sin_angle = math.sin(angle_rad)
-        half_size = self.size / 2
-
-        # Corners base (constantes)
-        base_corners = [
-            (-half_size, -half_size),
-            (half_size, -half_size),
-            (half_size, half_size),
-            (-half_size, half_size),
-        ]
-
-        # Rotacionar corners usando list comprehension (mais rápido)
-        rotated_corners = [
-            (
-                self.x + cx * cos_angle - cy * sin_angle,
-                self.y + cx * sin_angle + cy * cos_angle,
-            )
-            for cx, cy in base_corners
-        ]
-
+        rotated_corners = rotated_square_corners(
+            self.x, self.y, self.size / 2, math.radians(self.rotation)
+        )
         pygame.draw.polygon(surface, color, rotated_corners)
 
         # Desenhar borda animada (efeito de quadradinhos deslizando)
@@ -307,14 +279,14 @@ class SquareMinionBoss:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.size / 2, self.y + self.size / 2, self.size / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
+    def on_hit(self, _damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
         # Imune — só feedback visual
         return HitResult(explosion_size=20, sound=hit_sounds.BOSS_DAMAGE)
 
-    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
+    def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 

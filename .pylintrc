@@ -1,6 +1,7 @@
 [MASTER]
 # Pasta a analisar
 ignore-patterns=test_.*?\.py
+extension-pkg-allow-list=pygame
 
 [MESSAGES CONTROL]
 # Desabilitar warnings menos importantes

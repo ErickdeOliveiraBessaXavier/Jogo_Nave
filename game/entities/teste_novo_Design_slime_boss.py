@@ -150,6 +150,49 @@ def _brighten(color: tuple[int, int, int], factor: float) -> tuple[int, int, int
     )
 
 
+
+# ---------------------------------------------------------------------------
+# Internal state dataclasses (EyeLayer)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class _LerpOffset:
+    ox: float = 0.0
+    oy: float = 0.0
+    target_ox: float = 0.0
+    target_oy: float = 0.0
+
+    def step(self, dt: float) -> None:
+        self.ox += (self.target_ox - self.ox) * _EYE_LERP_SPEED * dt
+        self.oy += (self.target_oy - self.oy) * _EYE_LERP_SPEED * dt
+
+
+@dataclass
+class _BlinkState:
+    t: float = 1.0
+    timer: float = 0.0
+    next_blink: float = 0.0
+    active: bool = False
+    phase: float = 0.0
+
+    def __post_init__(self) -> None:
+        self.next_blink = random.uniform(_EYE_BLINK_MIN, _EYE_BLINK_MAX)
+
+    def step(self, dt: float) -> None:
+        self.timer += dt
+        if not self.active and self.timer >= self.next_blink:
+            self.active = True
+            self.phase = 0.0
+            self.next_blink = random.uniform(_EYE_BLINK_MIN, _EYE_BLINK_MAX)
+            self.timer = 0.0
+        if self.active:
+            self.phase = min(1.0, self.phase + dt / _EYE_BLINK_DURATION)
+            self.t = 1.0 - math.sin(self.phase * math.pi)
+            if self.phase >= 1.0:
+                self.active = False
+                self.t = 1.0
+
+
 # ---------------------------------------------------------------------------
 # BodyLayer
 # ---------------------------------------------------------------------------
@@ -206,101 +249,60 @@ class EyeLayer:
 
     def __init__(self, eye_positions: list[tuple[int, int]]) -> None:
         self._positions = eye_positions
-
-        # Lerp offset relativo à origem do corpo
-        self._lerp_ox: float = 0.0
-        self._lerp_oy: float = 0.0
-        self._target_ox: float = 0.0
-        self._target_oy: float = 0.0
-
+        self._offset = _LerpOffset()
         self._pulse: float = 0.0
-
-        # Piscar
-        self._blink_t: float = 1.0      # 1 = aberto, 0 = fechado
-        self._blink_timer: float = 0.0
-        self._next_blink: float = random.uniform(_EYE_BLINK_MIN, _EYE_BLINK_MAX)
-        self._blinking: bool = False
-        self._blink_phase: float = 0.0
-
-        # Cache de surfaces para não alocar por frame
+        self._blink = _BlinkState()
         self._glow_surf: pygame.Surface | None = None
         self._glow_radius: int = PIXEL_SIZE + _EYE_GLOW_RADIUS_PAD
+        self._eye_surf_cache: tuple[int, pygame.Surface] | None = None
 
-    # ------------------------------------------------------------------
-    # API pública — move os olhos em relação ao corpo
     def set_target_offset(self, ox: float, oy: float) -> None:
-        self._target_ox = ox
-        self._target_oy = oy
+        self._offset.target_ox = ox
+        self._offset.target_oy = oy
 
-    # ------------------------------------------------------------------
     def update(self, dt: float, t: float) -> None:
         self._pulse = (math.sin(t * _EYE_PULSE_FREQ) + 1.0) / 2.0
+        self._offset.step(dt)
+        self._blink.step(dt)
 
-        # Lerp mais lento que o corpo → lag que dá sensação de "nadar"
-        self._lerp_ox += (self._target_ox - self._lerp_ox) * _EYE_LERP_SPEED * dt
-        self._lerp_oy += (self._target_oy - self._lerp_oy) * _EYE_LERP_SPEED * dt
+    def _draw_glow(self, surface: pygame.Surface, ox: float, oy: float, glow_alpha: int) -> None:
+        r = self._glow_radius
+        if self._glow_surf is None:
+            self._glow_surf = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+        self._glow_surf.fill((0, 0, 0, 0))
+        pygame.draw.circle(self._glow_surf, (*EYE_GLOW_COLOR, glow_alpha), (r, r), r)
+        for col_i, row_i in self._positions:
+            cx = int(ox + col_i * PIXEL_SIZE + PIXEL_SIZE // 2)
+            cy = int(oy + row_i * PIXEL_SIZE + PIXEL_SIZE // 2)
+            surface.blit(self._glow_surf, (cx - r, cy - r))
 
-        # Piscar
-        self._blink_timer += dt
-        if not self._blinking and self._blink_timer >= self._next_blink:
-            self._blinking = True
-            self._blink_phase = 0.0
-            self._next_blink = random.uniform(_EYE_BLINK_MIN, _EYE_BLINK_MAX)
-            self._blink_timer = 0.0
-
-        if self._blinking:
-            self._blink_phase = min(1.0, self._blink_phase + dt / _EYE_BLINK_DURATION)
-            # sin(0→π) descreve fechar e reabrir suavemente
-            self._blink_t = 1.0 - math.sin(self._blink_phase * math.pi)
-            if self._blink_phase >= 1.0:
-                self._blinking = False
-                self._blink_t = 1.0
-
-    def draw(self, surface: pygame.Surface, body_ox: float, body_oy: float) -> None:
-        if self._blink_t <= 0.01:
-            return
-
-        ox = body_ox + self._lerp_ox
-        oy = body_oy + self._lerp_oy
-
-        eye_color = _lerp_color(PALETTE[EYE_COLOR_IDX], EYE_GLOW_COLOR, self._pulse)
-        eye_color = _brighten(eye_color, 1.0 + 0.5 * self._pulse)
-
-        # --- Glow pass (surface reutilizada, alpha recalculado via fill) ---
-        glow_alpha = int(_EYE_GLOW_ALPHA_MAX * self._pulse * self._blink_t)
-        if glow_alpha > 4:
-            r = self._glow_radius
-            if self._glow_surf is None:
-                diam = r * 2
-                self._glow_surf = pygame.Surface((diam, diam), pygame.SRCALPHA)
-            self._glow_surf.fill((0, 0, 0, 0))
-            pygame.draw.circle(
-                self._glow_surf, (*EYE_GLOW_COLOR, glow_alpha),
-                (r, r), r,
-            )
-            for col_i, row_i in self._positions:
-                cx = int(ox + col_i * PIXEL_SIZE + PIXEL_SIZE // 2)
-                cy = int(oy + row_i * PIXEL_SIZE + PIXEL_SIZE // 2)
-                surface.blit(self._glow_surf, (cx - r, cy - r))
-
-        # --- Pixel pass com squish vertical (blink) ---
-        ph = max(1, int(PIXEL_SIZE * self._blink_t))
-        y_pad = (PIXEL_SIZE - ph) // 2
-        alpha = int(200 + 55 * self._pulse)
-
-        # Surface de um único pixel re-usada abaixo (recriada só se ph muda)
-        if not hasattr(self, "_eye_surf_cache") or self._eye_surf_cache[0] != ph:
+    def _draw_pixels(self, surface: pygame.Surface, ox: float, oy: float,
+                     eye_color: tuple[int, int, int], ph: int, y_pad: int, alpha: int) -> None:
+        if self._eye_surf_cache is None or self._eye_surf_cache[0] != ph:
             px_surf = pygame.Surface((PIXEL_SIZE, ph), pygame.SRCALPHA)
             self._eye_surf_cache = (ph, px_surf)
         else:
             px_surf = self._eye_surf_cache[1]
-
         px_surf.fill((*eye_color, alpha))
-
         for col_i, row_i in self._positions:
             x = int(ox + col_i * PIXEL_SIZE)
             y = int(oy + row_i * PIXEL_SIZE) + y_pad
             surface.blit(px_surf, (x, y))
+
+    def draw(self, surface: pygame.Surface, body_ox: float, body_oy: float) -> None:
+        if self._blink.t <= 0.01:
+            return
+        ox = body_ox + self._offset.ox
+        oy = body_oy + self._offset.oy
+        eye_color = _lerp_color(PALETTE[EYE_COLOR_IDX], EYE_GLOW_COLOR, self._pulse)
+        eye_color = _brighten(eye_color, 1.0 + 0.5 * self._pulse)
+        glow_alpha = int(_EYE_GLOW_ALPHA_MAX * self._pulse * self._blink.t)
+        if glow_alpha > 4:
+            self._draw_glow(surface, ox, oy, glow_alpha)
+        ph = max(1, int(PIXEL_SIZE * self._blink.t))
+        y_pad = (PIXEL_SIZE - ph) // 2
+        alpha = int(200 + 55 * self._pulse)
+        self._draw_pixels(surface, ox, oy, eye_color, ph, y_pad, alpha)
 
 
 # ---------------------------------------------------------------------------

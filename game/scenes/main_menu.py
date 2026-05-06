@@ -499,7 +499,7 @@ class MainMenuScene(Scene):
         """Callback quando um mundo é selecionado."""
         # Salvar seleção no perfil
         self.app.player_profile.selected_world_id = world_id
-        logger.info(f"Mundo {world_id} selecionado")
+        logger.info("Mundo %s selecionado", world_id)
 
         # Avançar para seleção de dificuldade
         self.fade_out = True

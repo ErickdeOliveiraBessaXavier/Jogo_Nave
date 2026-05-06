@@ -226,7 +226,7 @@ class MountainStalagmite:
         r = self.rect
         return r.centerx, r.centery, max(r.width, r.height) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -243,7 +243,7 @@ class MountainStalagmite:
             )
         return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 
-    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
+    def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -675,7 +675,7 @@ class MountainStalagmite:
         alpha: int,
         color_base: tuple[int, int, int],
         color_mid: tuple[int, int, int],
-        color_light: tuple[int, int, int],
+        _color_light: tuple[int, int, int],
     ) -> None:
         """Estalagmite fantasma low-poly para efeito de profundidade."""
         cx = int(self.x + offset_x)
@@ -899,7 +899,7 @@ class MountainStalactite:
         r = self.rect
         return r.centerx, r.centery, max(r.width, r.height) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -915,7 +915,7 @@ class MountainStalactite:
             )
         return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 
-    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
+    def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -1385,7 +1385,7 @@ class MountainMage:
         r = self.rect
         return r.centerx, r.centery, max(r.width, r.height) / 2
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -1399,7 +1399,7 @@ class MountainMage:
             )
         return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 
-    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
+    def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 

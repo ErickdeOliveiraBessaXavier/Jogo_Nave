@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Protocol, Sequence
 
 import pygame
 
+from .zone_base import ZoneBase
+
 if TYPE_CHECKING:
     from ..systems.hit_result import HitResult
 
@@ -51,7 +53,7 @@ class _FireParticle:
         return int(255 * fade_out)
 
 
-class FireZone:
+class FireZone(ZoneBase):
     DAMAGE_INTERVAL = 0.15  # Mais rápido que gelo (aprox 6.6 HP/s)
 
     _SPAWN_INTERVAL = 0.08
@@ -82,33 +84,6 @@ class FireZone:
         r = self.radius
         return pygame.Rect(int(self.x) - r, int(self.y) - r, r * 2, r * 2)
 
-    def update(self, dt: float) -> None:
-        if self.dead:
-            return
-        self.timer -= dt
-        self.anim_timer += dt
-        if self.timer <= 0:
-            self.dead = True
-            return
-
-        for eid in list(self.hit_cooldowns):
-            self.hit_cooldowns[eid] -= dt
-            if self.hit_cooldowns[eid] <= 0:
-                del self.hit_cooldowns[eid]
-
-        i = len(self._particles) - 1
-        while i >= 0:
-            p = self._particles[i]
-            p.update(dt)
-            if not p.alive:
-                self._particles.pop(i)
-            i -= 1
-
-        self._spawn_timer += dt
-        while self._spawn_timer >= self._SPAWN_INTERVAL:
-            self._spawn_timer -= self._SPAWN_INTERVAL
-            self._spawn_particle()
-
     def _spawn_particle(self) -> None:
         angle = random.uniform(0.0, math.tau)
         dist = self.radius * 0.9 * math.sqrt(random.random())
@@ -126,18 +101,6 @@ class FireZone:
                 rot_speed=random.uniform(-4.0, 4.0),
             )
         )
-
-    def in_zone(self, cx: float, cy: float, r: float = 0.0) -> bool:
-        return (cx - self.x) ** 2 + (cy - self.y) ** 2 < (self.radius + r) ** 2
-
-    def collision_circle(self) -> tuple[float, float, float]:
-        return self.x, self.y, float(self.radius)
-
-    def can_damage(self, entity_id: int) -> bool:
-        return entity_id not in self.hit_cooldowns
-
-    def register_hit(self, entity_id: int) -> None:
-        self.hit_cooldowns[entity_id] = self.DAMAGE_INTERVAL
 
     @staticmethod
     def is_position_safe(
@@ -190,7 +153,7 @@ class FireZone:
 
         surface.blit(s, (int(self.x) - r, int(self.y) - r))
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
+    def on_hit(self, _damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems.hit_result import NO_HIT
 
         return NO_HIT

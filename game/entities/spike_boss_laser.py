@@ -4,6 +4,7 @@ from typing import List, Tuple, TypedDict
 import pygame
 
 from ..core import colors
+from .laser_utils import compute_laser_width
 
 
 class DeathParticle(TypedDict):
@@ -92,22 +93,9 @@ class SpikeBossLaser:
                     self.death_particles.append(particle)
                 return
 
-            # Cálculo da largura com suavização
-            if self.timer < self.expand_time:
-                # Expansão suave (ease-out)
-                progress = self.timer / self.expand_time
-                self.w = self.max_w * (1 - (1 - progress) ** 2)
-            elif self.timer < self.expand_time + self.hold_time:
-                self.w = self.max_w
-            else:
-                # Retração suave (ease-in)
-                shrink_duration = self.lifetime - (self.expand_time + self.hold_time)
-                if shrink_duration > 0:
-                    progress = (
-                        self.timer - (self.expand_time + self.hold_time)
-                    ) / shrink_duration
-                    self.w = self.max_w * (1 - progress**2)
-            self.w = max(0, self.w)
+            self.w = compute_laser_width(
+                self.timer, self.expand_time, self.hold_time, self.lifetime, self.max_w
+            )
 
         elif self.state == "dying":
             for p in self.death_particles[:]:

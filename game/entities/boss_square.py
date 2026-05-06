@@ -6,6 +6,8 @@ from typing import List
 
 import pygame
 
+from .draw_utils import draw_square_trail_particle, rotated_square_corners
+
 
 class TrailParticle:
     """Partícula simples para efeito de cauda - otimizada."""
@@ -222,21 +224,9 @@ class BossSquare:
         # Desenhar partículas de trail primeiro (atrás do quadrado)
         for p in self.trail_particles:
             if p.alpha > 0:
-                # Cor vermelha/laranja com alpha baseado na vida
                 color_intensity = int(128 + 127 * p.life)
                 trail_color = (255, color_intensity, int(color_intensity * 0.5))
-                # Criar superfície com alpha
-                particle_size = max(2, int(p.size))
-                if particle_size > 0:
-                    # Desenhar partícula quadrada com alpha
-                    particle_surf = pygame.Surface(
-                        (particle_size, particle_size), pygame.SRCALPHA
-                    )
-                    particle_surf.fill((*trail_color, p.alpha))
-                    surface.blit(
-                        particle_surf,
-                        (p.x - particle_size // 2, p.y - particle_size // 2),
-                    )
+                draw_square_trail_particle(surface, p.x, p.y, p.size, trail_color, p.alpha)
 
         # Calcular cor com intensidade alternada (usa offset para dessincronizar)
         anim_value = (self.animation_timer + self.animation_offset) * 57.3
@@ -244,32 +234,10 @@ class BossSquare:
         color = (255, intensity, intensity)
         border_color = (255, 255, 255)
 
-        # Desenhar quadrado rotacionado
-        center_x = self.x
-        center_y = self.y
-        angle_rad = math.radians(self.rotation)
-
-        # Calcular os 4 cantos do quadrado rotacionado
-        half_size = self.size / 2
-        corners = [
-            (-half_size, -half_size),
-            (half_size, -half_size),
-            (half_size, half_size),
-            (-half_size, half_size),
-        ]
-
-        # Rotacionar cada canto
-        rotated_corners: list[tuple[float, float]] = []
-        for cx, cy in corners:
-            # Aplicar rotação
-            rx = cx * math.cos(angle_rad) - cy * math.sin(angle_rad)
-            ry = cx * math.sin(angle_rad) + cy * math.cos(angle_rad)
-            rotated_corners.append((center_x + rx, center_y + ry))
-
-        # Desenhar polígono preenchido
+        rotated_corners = rotated_square_corners(
+            self.x, self.y, self.size / 2, math.radians(self.rotation)
+        )
         pygame.draw.polygon(surface, color, rotated_corners)
-
-        # Desenhar borda animada (efeito de quadradinhos deslizando)
         self._draw_animated_border(surface, rotated_corners, border_color)
 
     def _draw_animated_border(

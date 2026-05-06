@@ -607,9 +607,7 @@ class PlayerProfile:
             # Atualizar checkpoint para o novo mundo
             self.current_checkpoint_world = next_world_id
             self.save()
-            logger.info(
-                f"🌍 Mundo {next_world_id} desbloqueado! Checkpoint atualizado."
-            )
+            logger.info("🌍 Mundo %s desbloqueado! Checkpoint atualizado.", next_world_id)
 
     def set_checkpoint_on_level_start(self, level_number: int):
         """Chamado quando jogador inicia um novo nível - marca checkpoint se primeira vez neste mundo."""
@@ -628,15 +626,13 @@ class PlayerProfile:
             )
             self.current_checkpoint_world = world_config.world_id
             self.save()
-            logger.info(
-                f"🌍 Primeiro acesso ao Mundo {world_config.world_id} - checkpoint definido!"
-            )
+            logger.info("🌍 Primeiro acesso ao Mundo %s - checkpoint definido!", world_config.world_id)
         elif not self.world_unlocks[world_config.world_id].checkpoint_set:
             # Já existe mas não era checkpoint ainda
             self.world_unlocks[world_config.world_id].checkpoint_set = True
             self.current_checkpoint_world = world_config.world_id
             self.save()
-            logger.info(f"🌍 Checkpoint definido no Mundo {world_config.world_id}!")
+            logger.info("🌍 Checkpoint definido no Mundo %s!", world_config.world_id)
 
     def reset_to_checkpoint(self) -> int:
         """Jogador perdeu: retorna nível inicial do mundo checkpoint atual."""
@@ -650,7 +646,8 @@ class PlayerProfile:
                 self.current_session.deaths += 1
 
             logger.info(
-                f"💀 Reset para checkpoint: Mundo {checkpoint_world.world_id}, Nível {checkpoint_world.start_level}"
+                "💀 Reset para checkpoint: Mundo %s, Nível %s",
+                checkpoint_world.world_id, checkpoint_world.start_level,
             )
             return checkpoint_world.start_level
 
@@ -929,9 +926,10 @@ class PlayerProfile:
             # Log para debug
             direction = "mais fácil" if new_adjustment < 1.0 else "mais difícil"
             logging.info(
-                f"[Meta-Progression] Level {level_num} ajustado {abs(new_adjustment - 1.0) * 100:.0f}% {direction}"
+                "[Meta-Progression] Level %s ajustado %.0f%% %s",
+                level_num, abs(new_adjustment - 1.0) * 100, direction,
             )
-            logging.info(f"  Motivo: {analysis['reason']}")
+            logging.info("  Motivo: %s", analysis['reason'])
 
         return adjusted_config
 
@@ -1037,9 +1035,7 @@ class PlayerProfile:
                         )
                         self.world_unlocks[world_id] = status
                     except (ValueError, TypeError, KeyError):
-                        logger.warning(
-                            f"Skipping corrupt world data for world {world_id_str}"
-                        )
+                        logger.warning("Skipping corrupt world data for world %s", world_id_str)
                         continue
 
                 # Inicializar mundo 1 se não existir (mundo padrão sempre desbloqueado)
@@ -1138,9 +1134,7 @@ class PlayerProfile:
 
                         self.level_stats[level_num] = stats
                     except (ValueError, TypeError, KeyError):
-                        logger.warning(
-                            f"Skipping corrupt level data for level {level_num_str}"
-                        )
+                        logger.warning("Skipping corrupt level data for level %s", level_num_str)
                         continue
 
                 # Ajustes
@@ -1207,7 +1201,7 @@ class PlayerProfile:
 
                         self.session_history.append(session)
                     except (ValueError, TypeError, KeyError) as ve:
-                        logger.warning(f"Skipping corrupt session data: {ve}")
+                        logger.warning("Skipping corrupt session data: %s", ve)
                         continue
 
                 # Aprimoramentos: unlocked + loadout (migração segura)
@@ -1219,7 +1213,7 @@ class PlayerProfile:
                             try:
                                 parsed.add(UpgradeType[name])
                             except KeyError:
-                                logger.warning(f"Skipping unknown upgrade: {name}")
+                                logger.warning("Skipping unknown upgrade: %s", name)
                                 continue
                         # Fazer merge com DEFAULT_UNLOCKED para adicionar novos upgrades
                         # Isso garante que upgrades novos sejam automaticamente desbloqueados
@@ -1242,7 +1236,7 @@ class PlayerProfile:
                                 slots.append(UpgradeType[item])
                             except KeyError:
                                 slots.append(None)
-                                logger.warning(f"Skipping unknown upgrade: {item}")
+                                logger.warning("Skipping unknown upgrade: %s", item)
                         # Completar tamanho de slots
                         while len(slots) < UPGRADE_SLOT_COUNT:
                             slots.append(None)
@@ -1303,14 +1297,14 @@ class PlayerProfile:
                     ]
 
         except (OSError, ValueError, KeyError, TypeError) as e:
-            logger.error(f"Erro ao carregar perfil: {e}")
+            logger.error("Erro ao carregar perfil: %s", e)
             # Fazer backup
             if self.profile_path.exists():
                 backup_path = self.profile_path.with_suffix(".backup.json")
                 import shutil
 
                 shutil.copy2(self.profile_path, backup_path)
-                logger.info(f"Backup salvo em: {backup_path}")
+                logger.info("Backup salvo em: %s", backup_path)
             # Carregar defaults ao invés de resetar
             self._ensure_safe_world_defaults()
             return  # Mantém valores inicializados no __init__

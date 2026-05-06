@@ -252,14 +252,14 @@ class ExplosiveMine:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x, self.y, float(self.radius)
 
-    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems.hit_result import NO_HIT
 
         self.take_damage(damage)
         # Quem mata é o timer interno, não o tiro. Sem feedback aqui.
         return NO_HIT
 
-    def on_ship_contact(self, contact_x: float, contact_y: float) -> "HitResult":
+    def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 

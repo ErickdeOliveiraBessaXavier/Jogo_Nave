@@ -58,7 +58,7 @@ class SoundManager:
             if not pygame.mixer.get_init():
                 pygame.mixer.init()
         except pygame.error as e:
-            logging.warning(f"Não foi possível inicializar o sistema de áudio: {e}")
+            logging.warning("Não foi possível inicializar o sistema de áudio: %s", e)
             logging.warning("O jogo continuará sem som.")
             self.audio_available = False
             # Inicializar variáveis mínimas necessárias

@@ -2,10 +2,11 @@ from typing import List
 
 import pygame
 
+from .pool_stats_mixin import PoolStatsMixin
 from .rock_glider import RockGlider
 
 
-class RockGliderPool:
+class RockGliderPool(PoolStatsMixin):
     """Object pool para RockGliders, reduzindo alocacao repetida em enxames."""
 
     def __init__(
@@ -91,24 +92,3 @@ class RockGliderPool:
         for glider in self.active[:]:
             self.release(glider)
 
-    def get_active_count(self) -> int:
-        return len(self.active)
-
-    def get_pool_size(self) -> int:
-        return len(self.pool)
-
-    def _update_peak(self) -> None:
-        self.peak_active = max(self.peak_active, len(self.active))
-
-    def get_stats(self) -> dict[str, int | float]:
-        total = max(1, self.total_created)
-        return {
-            "active": len(self.active),
-            "inactive": len(self.pool) - len(self.active),
-            "pool_total": len(self.pool),
-            "peak_active": self.peak_active,
-            "max_size": self.max_size,
-            "total_created": self.total_created,
-            "reused": self.reused_count,
-            "efficiency_percent": (self.reused_count / total) * 100,
-        }

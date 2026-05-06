@@ -10,6 +10,7 @@ from ..core.paths import get_preferences_path, get_profile_path
 from ..core.preferences import UserPreferences
 from ..core.sound import sound_manager
 from ..core.state import Scene
+from .ui_helpers import draw_bordered_button, render_with_fade
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -431,35 +432,7 @@ class SettingsView:
         alpha: int = 255,
         offset_y: int = 0,
     ):
-        adjusted_rect = rect.copy()
-        adjusted_rect.y += offset_y
-
-        is_hovered = adjusted_rect.collidepoint(pygame.mouse.get_pos())
-        # Inverter cores ao passar o mouse
-        if color == CUSTOM_PURPLE:
-            border_color = CUSTOM_GOLD if is_hovered else CUSTOM_PURPLE
-        else:
-            border_color = color
-
-        # Criar surface temporária para aplicar alpha
-        temp_surface = pygame.Surface(
-            (adjusted_rect.width + 4, adjusted_rect.height + 4), pygame.SRCALPHA
-        )
-        temp_rect = pygame.Rect(2, 2, adjusted_rect.width, adjusted_rect.height)
-        pygame.draw.rect(
-            temp_surface, (*border_color, alpha), temp_rect, 2, border_radius=8
-        )
-        surface.blit(temp_surface, (adjusted_rect.x - 2, adjusted_rect.y - 2))
-
-        text_surf = self.item_font.render(text, True, colors.WHITE)
-        text_surf.set_alpha(alpha)
-        surface.blit(
-            text_surf,
-            (
-                adjusted_rect.centerx - text_surf.get_width() / 2,
-                adjusted_rect.centery - text_surf.get_height() / 2,
-            ),
-        )
+        draw_bordered_button(surface, rect, text, self.item_font, color, alpha, offset_y)
 
     def _draw_card(
         self,
@@ -852,20 +825,7 @@ class SettingsScene(Scene):
         self.view.update(dt)
 
     def render(self, surface: pygame.Surface):
-        surface.fill(BLACK)
-        self.r.starfield.draw(surface)
-
-        if self.transitioning:
-            alpha_mult = (
-                1.0 - self.transition_progress
-                if self.fade_out
-                else self.transition_progress
-            )
-            temp_surface = pygame.Surface(
-                (surface.get_width(), surface.get_height()), pygame.SRCALPHA
-            )
-            self.view.render(temp_surface)
-            temp_surface.set_alpha(int(255 * alpha_mult))
-            surface.blit(temp_surface, (0, 0))
-        else:
-            self.view.render(surface)
+        render_with_fade(
+            surface, self.view, self.r.starfield,
+            self.transitioning, self.fade_out, self.transition_progress, BLACK
+        )

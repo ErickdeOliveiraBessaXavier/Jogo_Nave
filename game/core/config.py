@@ -628,7 +628,7 @@ class Config:
         ]
 
         for name, value in thresholds:
-            if not (0.0 <= value <= 1.0):
+            if not 0.0 <= value <= 1.0:
                 errors.append(f"{name} deve estar entre 0.0 e 1.0, mas é {value}")
 
         # Validar valores positivos

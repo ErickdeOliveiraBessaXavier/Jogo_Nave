@@ -432,14 +432,14 @@ class WorldSelectionView:
                 if self.previous_background is not None:
                     try:
                         self.previous_background.update(_dt, 0.5)
-                    except Exception:
+                    except Exception:  # pylint: disable=broad-exception-caught
                         pass
 
         # Atualizar animação do background
         if self.current_background is not None:
             try:
                 self.current_background.update(_dt, 0.5)  # Animação mais fluida
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass
 
     def render(self, surface: pygame.Surface) -> None:
@@ -461,7 +461,7 @@ class WorldSelectionView:
                     old_alpha = int(76 * (1.0 - self.transition_progress))  # Fade out
                     bg_surface_old.set_alpha(old_alpha)
                     surface.blit(bg_surface_old, (0, 0))
-                except Exception:
+                except Exception:  # pylint: disable=broad-exception-caught
                     # Se houver erro no draw, ignorar
                     pass
             else:
@@ -474,7 +474,7 @@ class WorldSelectionView:
                     self.renderer.starfield.draw(temp_surface)
                     temp_surface.set_alpha(starfield_alpha)
                     surface.blit(temp_surface, (0, 0))
-                except Exception:
+                except Exception:  # pylint: disable=broad-exception-caught
                     pass
 
             # Desenhar background novo (aparecendo)
@@ -487,7 +487,7 @@ class WorldSelectionView:
                     new_alpha = int(76 * self.transition_progress)  # Fade in
                     bg_surface_new.set_alpha(new_alpha)
                     surface.blit(bg_surface_new, (0, 0))
-                except Exception:
+                except Exception:  # pylint: disable=broad-exception-caught
                     # Se houver erro no draw, ignorar
                     pass
             else:
@@ -500,7 +500,7 @@ class WorldSelectionView:
                     self.renderer.starfield.draw(temp_surface)
                     temp_surface.set_alpha(starfield_alpha)
                     surface.blit(temp_surface, (0, 0))
-                except Exception:
+                except Exception:  # pylint: disable=broad-exception-caught
                     pass
         else:
             # Sem transição: desenhar normalmente
@@ -513,7 +513,7 @@ class WorldSelectionView:
                     self.current_background.draw(bg_surface)
                     bg_surface.set_alpha(76)  # 30% opacidade
                     surface.blit(bg_surface, (0, 0))
-                except Exception:
+                except Exception:  # pylint: disable=broad-exception-caught
                     # Fallback ao starfield
                     self.renderer.starfield.draw(surface)
             else:
