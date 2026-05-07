@@ -1473,14 +1473,14 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # Meteor: 0.5,
             # Alien: 1.5,
             # EyeEnemy: 2.0,
-            RockGlider: 0.6,
+            # RockGlider: 0.6,
             # ElementalRobot: 1.0,
             # StoneSentry: 30.0,
-            MountainMage: 10.0,
-            # MountainPropeller: 0.8,
+            # MountainMage: 10.0,
+            MountainPropeller: 0.8,
             # MountainGeode: 1.0,
         },
-        enemies_to_clear=1,
+        enemies_to_clear=10,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
         mines_enabled=True,
@@ -1492,7 +1492,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         # boss_type=StoneGolemBoss,
         # boss_type=MountainSerpentBoss,
         # boss_type=GiantMeteorBoss,
-        boss_type=CloudArchmageBoss,
+        # boss_type=CloudArchmageBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),
@@ -1956,9 +1956,9 @@ class LevelAnalyzer:
         start: int, end: int, generator: ProceduralLevelGenerator
     ):
         """Imprime progressão de dificuldade para análise."""
-        logger.info("\n%s", '=' * 80)
+        logger.info("\n%s", "=" * 80)
         logger.info("ANÁLISE DE PROGRESSÃO: Níveis %s a %s", start, end)
-        logger.info("%s\n", '=' * 80)
+        logger.info("%s\n", "=" * 80)
 
         for level_num in range(start, end + 1):
             config = generator.generate_level(level_num)
@@ -1984,8 +1984,14 @@ class LevelAnalyzer:
 
             logger.info(
                 "%s Nv.%2d │ %-22s │ %3d │ %.1f/s │ ~%2d tela │ %.1fmin │ %-5s",
-                warning_icon, level_num, theme_name, stats['enemies_to_clear'],
-                spawn_rate, max_enemies, duration / 60, features,
+                warning_icon,
+                level_num,
+                theme_name,
+                stats["enemies_to_clear"],
+                spawn_rate,
+                max_enemies,
+                duration / 60,
+                features,
             )
 
             # Mostrar avisos se houver

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import random
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Final
@@ -22,53 +21,156 @@ class _PropellerState(Enum):
 
 
 class MountainPropeller:
-    """
-    Inimigo de suporte das Cordilheiras.
-    Fica na borda direita, movendo-se verticalmente.
-    Cria uma corrente de vento que empurra o jogador para a esquerda e o torna lento.
-    """
-
-    # Equilíbrio e Timing
     WIND_DURATION: Final = 3.5
     WIND_UP_TIME: Final = 1.2
     COOLDOWN_TIME: Final = 3.0
 
-    # Física do Vento
-    PUSH_FORCE: Final = 220.0  # Pixels/seg para a esquerda
-    SLOW_SPEED_MULT: Final = 0.45  # Velocidade do jogador = 45% do normal
-
-    BODY_W: Final = 42
-    BODY_H: Final = 56
+    PUSH_FORCE: Final = 220.0
+    SLOW_SPEED_MULT: Final = 0.45
     EDGE_MARGIN: Final = 60
+    PIXEL_SCALE: Final = 3
+
+    LERP_FACTOR: Final = 0.12
+
+    PALETTE: Final = {
+        "0": None,
+        "1": (20, 20, 25),
+        "2": (220, 160, 40),
+        "3": (170, 110, 20),
+        "4": (210, 40, 40),
+        "5": (130, 140, 130),
+        "6": (90, 100, 90),
+    }
+
+    BODY_MAP = [
+        "000000111111000000",
+        "000011222222110000",
+        "000122222222221000",
+        "001221122221122100",
+        "001214412214412100",
+        "001214412214412100",
+        "001221122221122100",
+        "001222222222233100",
+        "001222222222333100",
+        "000122222223331000",
+        "000011111111110000",
+        "000155551155551000",
+        "001551100001155100",
+        "015510000000015510",
+        "015100000000001510",
+        "155100000000001551",
+    ]
+
+    BLADES_MAP = [
+        "000000000111100000000",
+        "000000001666611000000",
+        "000000016666666100000",
+        "000000016666661000000",
+        "000000001666610000000",
+        "000000000116100000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "001110000000000000000",
+        "016666100000000011100",
+        "166666100000000166610",
+        "166661000000000166661",
+        "016610000000001666661",
+        "001100000000000166661",
+        "000000000000000011100",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+    ]
+
+    HUB_MAP = [
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000001111100000000",
+        "000000016666610000000",
+        "000000166666661000000",
+        "000000166666661000000",
+        "000000166666661000000",
+        "000000016666610000000",
+        "000000001111100000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+        "000000000000000000000",
+    ]
+
+    def is_blowing(self) -> bool:
+        return self.state == _PropellerState.BLOWING
+
+    def get_wind_rect(self) -> pygame.Rect:
+        if not self.is_blowing():
+            return pygame.Rect(0, 0, 0, 0)
+        w_h = 90
+        return pygame.Rect(
+            0, int(self.prop_curr_y - w_h // 2), int(self.prop_curr_x), w_h
+        )
 
     def __init__(self, y: float | None = None):
+        self.body_surf = self._create_surface_from_map(self.BODY_MAP)
+        self.blades_surf = self._create_surface_from_map(self.BLADES_MAP)
+        self.hub_surf = self._create_surface_from_map(self.HUB_MAP)
+
+        self.BODY_W = self.body_surf.get_width()
+        self.BODY_H = self.body_surf.get_height()
+
         self.x = Config.SCREEN_WIDTH + self.BODY_W
         self.target_x = Config.SCREEN_WIDTH - self.EDGE_MARGIN
         self.y = y if y is not None else random.randint(100, Config.SCREEN_HEIGHT - 100)
 
+        self.prop_curr_x = self.x
+        self.prop_curr_y = self.y
+
         self.health = 6
-        self.max_health = 6
         self.dead = False
-        self.causes_damage = (
-            False  # O vento é o perigo, não o corpo (evita mortes injustas na borda)
-        )
+        self.causes_damage = False
 
         self.state = _PropellerState.ENTERING
         self.timer = 0.0
-
         self.move_speed = 140.0
         self.move_dir = random.choice([-1, 1])
 
-        # Animação da Hélice
         self.prop_angle = 0.0
-        self.prop_speed = 0.0  # Graus por segundo
+        self.prop_speed = 0.0
 
-        # Partículas de Vento (Riscos/Streaks)
         self.wind_streaks: list[dict[str, float]] = []
         self._init_streaks()
 
+    def _create_surface_from_map(self, pixel_map: list[str]) -> pygame.Surface:
+        width = len(pixel_map[0]) * self.PIXEL_SCALE
+        height = len(pixel_map) * self.PIXEL_SCALE
+        surf = pygame.Surface((width, height), pygame.SRCALPHA)
+        for row_idx, row in enumerate(pixel_map):
+            for col_idx, char in enumerate(row):
+                color = self.PALETTE.get(char)
+                if color:
+                    pygame.draw.rect(
+                        surf,
+                        color,
+                        (
+                            col_idx * self.PIXEL_SCALE,
+                            row_idx * self.PIXEL_SCALE,
+                            self.PIXEL_SCALE,
+                            self.PIXEL_SCALE,
+                        ),
+                    )
+        return surf
+
     def _init_streaks(self) -> None:
-        """Inicializa riscos de vento que cruzam a tela."""
         for _ in range(30):
             self.wind_streaks.append(
                 {
@@ -89,88 +191,34 @@ class MountainPropeller:
             self.BODY_H,
         )
 
-    def is_blowing(self) -> bool:
-        return self.state == _PropellerState.BLOWING
-
-    def get_wind_rect(self) -> pygame.Rect:
-        """Retorna o retângulo da corrente de vento (da hélice até a borda esquerda)."""
-        if not self.is_blowing():
-            return pygame.Rect(0, 0, 0, 0)
-        # O vento sopra da frente da hélice (x-20) até o fim da tela à esquerda
-        return pygame.Rect(0, int(self.y - 45), int(self.x - 10), 90)
-
-    def take_damage(self, amount: int) -> None:
-        self.health -= amount
-        if self.health <= 0:
-            self.dead = True
-
-    def get_points_value(self) -> int:
-        return 250
-
-    def collision_circle(self) -> tuple[float, float, float]:
-        r = self.rect
-        return r.centerx, r.centery, max(r.width, r.height) / 2
-
-    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
-        from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult
-
-        self.take_damage(damage)
-        if self.dead:
-            return HitResult(
-                killed=True,
-                points=self.get_points_value(),
-                explosion_size=35,
-                sound=hit_sounds.EXPLOSION_ALIEN,
-            )
-        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
-
-    def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
-        from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult
-
-        self.dead = True
-        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ALIEN)
-
-    def should_remove(self) -> bool:
-        return self.dead
-
     def update(self, dt: float) -> None:
         self.timer += dt
 
-        # FSM de Estados
         if self.state == _PropellerState.ENTERING:
             self.x -= 180 * dt
             if self.x <= self.target_x:
                 self.x = self.target_x
                 self.state = _PropellerState.PATROLLING
                 self.timer = 0.0
-
         elif self.state == _PropellerState.PATROLLING:
             self._update_movement(dt)
             self.prop_speed = 250.0
             if self.timer > 1.8:
                 self.state = _PropellerState.WIND_UP
                 self.timer = 0.0
-
         elif self.state == _PropellerState.WIND_UP:
-            # Desacelera movimento vertical ao carregar
             self._update_movement(dt * 0.4)
-            # Acelera hélice
             progress = self.timer / self.WIND_UP_TIME
             self.prop_speed = 250.0 + (1800.0 * (progress**2))
             if self.timer >= self.WIND_UP_TIME:
                 self.state = _PropellerState.BLOWING
                 self.timer = 0.0
-
         elif self.state == _PropellerState.BLOWING:
             self.prop_speed = 2200.0
             self._update_streaks(dt)
-            # Fica parado enquanto sopra para manter o foco do perigo
             if self.timer >= self.WIND_DURATION:
                 self.state = _PropellerState.COOLDOWN
                 self.timer = 0.0
-
         elif self.state == _PropellerState.COOLDOWN:
             self._update_movement(dt)
             progress = self.timer / 1.0
@@ -181,9 +229,14 @@ class MountainPropeller:
 
         self.prop_angle += self.prop_speed * dt
 
+        target_x = self.x
+        target_y = self.y + (self.BODY_H // 3)
+
+        self.prop_curr_x += (target_x - self.prop_curr_x) * self.LERP_FACTOR
+        self.prop_curr_y += (target_y - self.prop_curr_y) * self.LERP_FACTOR
+
     def _update_movement(self, dt: float) -> None:
         self.y += self.move_speed * self.move_dir * dt
-        # Bounce nas bordas verticais
         if self.y < 100:
             self.y = 100
             self.move_dir = 1
@@ -195,89 +248,76 @@ class MountainPropeller:
         for s in self.wind_streaks:
             s["x"] -= s["speed"] * dt
             if s["x"] + s["len"] < 0:
-                s["x"] = self.x - 20
-                s["y_offset"] = random.uniform(-40, 40)
+                s["x"] = self.prop_curr_x - 10
+                s["y_offset"] = random.uniform(-35, 35)
 
     def draw(self, surface: pygame.Surface) -> None:
-        # 1. Efeito Visual do Vento (Blur + Riscos)
-        if self.is_blowing():
+        if self.state == _PropellerState.BLOWING:
             self._draw_wind_effect(surface)
 
-        # 2. Corpo do Inimigo (Estilo Industrial/Pedra)
-        self._draw_body(surface)
+        body_rect = self.body_surf.get_rect(center=(int(self.x), int(self.y)))
+        surface.blit(self.body_surf, body_rect.topleft)
 
-        # 3. Hélice
-        self._draw_propeller(surface)
+        center_pos = (int(self.prop_curr_x), int(self.prop_curr_y))
+
+        rotated_blades = pygame.transform.rotate(self.blades_surf, -self.prop_angle)
+        blades_rect = rotated_blades.get_rect(center=center_pos)
+        surface.blit(rotated_blades, blades_rect.topleft)
+
+        hub_rect = self.hub_surf.get_rect(center=center_pos)
+        surface.blit(self.hub_surf, hub_rect.topleft)
 
     def _draw_wind_effect(self, surface: pygame.Surface) -> None:
-        w_rect = self.get_wind_rect()
-        # Camada de Blur (Várias faixas semi-transparentes)
-        # Criamos uma surface temporária para o blend
+        w_h = 90
+        w_rect = pygame.Rect(
+            0, int(self.prop_curr_y - w_h // 2), int(self.prop_curr_x), w_h
+        )
         wind_surf = pygame.Surface((w_rect.width, w_rect.height), pygame.SRCALPHA)
-
-        # Centro mais denso, bordas mais suaves
         for i in range(5):
-            alpha = 12 - (i * 2)
+            alpha = 10 - (i * 2)
             h = w_rect.height - (i * 15)
-            y = (w_rect.height - h) // 2
             if h > 0:
                 pygame.draw.rect(
-                    wind_surf, (220, 240, 255, alpha), (0, y, w_rect.width, h)
+                    wind_surf,
+                    (220, 240, 255, alpha),
+                    (0, (w_rect.height - h) // 2, w_rect.width, h),
                 )
-
         surface.blit(wind_surf, (w_rect.x, w_rect.y))
-
-        # Desenhar os Riscos (Streaks)
         for s in self.wind_streaks:
-            if 0 < s["x"] < self.x:
-                start = (s["x"], self.y + s["y_offset"])
-                end = (s["x"] + s["len"], self.y + s["y_offset"])
+            if 0 < s["x"] < self.prop_curr_x:
                 pygame.draw.line(
-                    surface, (255, 255, 255, int(s["alpha"])), start, end, 1
+                    surface,
+                    (255, 255, 255, int(s["alpha"])),
+                    (s["x"], self.prop_curr_y + s["y_offset"]),
+                    (s["x"] + s["len"], self.prop_curr_y + s["y_offset"]),
+                    1,
                 )
 
-    def _draw_body(self, surface: pygame.Surface) -> None:
+    def take_damage(self, amount: int) -> None:
+        self.health -= amount
+        if self.health <= 0:
+            self.dead = True
+
+    def collision_circle(self) -> tuple[float, float, float]:
         r = self.rect
-        # Base principal
-        pygame.draw.rect(surface, (70, 70, 85), r, border_radius=6)
-        pygame.draw.rect(surface, (40, 40, 50), r, width=2, border_radius=6)
+        return r.centerx, r.centery, max(r.width, r.height) / 2
 
-        # Detalhes de ventilação/grelha
-        for i in range(3):
-            gy = r.top + 10 + (i * 14)
-            pygame.draw.line(
-                surface, (30, 30, 40), (r.left + 8, gy), (r.right - 8, gy), 3
-            )
+    def on_hit(self, damage: int, _x: float, _y: float) -> "HitResult":
+        from ..systems import hit_result, hit_sounds
 
-        # Luz indicadora de estado
-        light_color = (100, 255, 100)  # Idle
-        if self.state == _PropellerState.WIND_UP:
-            light_color = (
-                (255, 150, 0) if (pygame.time.get_ticks() // 100) % 2 else (50, 30, 0)
-            )
-        elif self.state == _PropellerState.BLOWING:
-            light_color = (0, 200, 255)
+        self.take_damage(damage)
+        return hit_result.HitResult(
+            killed=self.dead,
+            points=250 if self.dead else 0,
+            explosion_size=35 if self.dead else 10,
+            sound=hit_sounds.EXPLOSION_ALIEN if self.dead else hit_sounds.BOSS_DAMAGE,
+        )
 
-        pygame.draw.circle(surface, light_color, (int(self.x), int(r.bottom - 12)), 4)
+    def on_ship_contact(self, _x: float, _y: float) -> "HitResult":
+        from ..systems import hit_result, hit_sounds
 
-    def _draw_propeller(self, surface: pygame.Surface) -> None:
-        # A hélice fica na frente (lado esquerdo do inimigo)
-        px, py = self.x - 15, self.y
-        num_blades = 3
-        blade_length = 32
+        self.dead = True
+        return hit_result.HitResult(killed=True, sound=hit_sounds.EXPLOSION_ALIEN)
 
-        for i in range(num_blades):
-            angle_rad = math.radians(self.prop_angle + (i * 360 / num_blades))
-
-            # Cálculo dos pontos da lâmina (triângulo alongado)
-            end_x = px + math.cos(angle_rad) * blade_length
-            end_y = py + math.sin(angle_rad) * blade_length
-
-            # Lâmina
-            pygame.draw.line(surface, (160, 160, 175), (px, py), (end_x, end_y), 5)
-            # Ponta da lâmina com cor diferente
-            pygame.draw.circle(surface, (200, 200, 210), (int(end_x), int(end_y)), 3)
-
-        # Eixo central
-        pygame.draw.circle(surface, (50, 50, 60), (int(px), int(py)), 8)
-        pygame.draw.circle(surface, (100, 100, 110), (int(px), int(py)), 4)
+    def should_remove(self) -> bool:
+        return self.dead
