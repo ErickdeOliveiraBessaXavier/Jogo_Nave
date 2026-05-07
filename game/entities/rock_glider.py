@@ -21,10 +21,10 @@ class RockGlider(Meteor):
     Design: olhos laranja, corpo chumbo e thruster vermelho.
     """
 
-    ROCK_MAX_HP = 30
-    BOT_MAX_HP = 20
-    ROCK_MAX_HP_HARD = 40
-    BOT_MAX_HP_HARD = 30
+    ROCK_MAX_HP = 20
+    BOT_MAX_HP = 10
+    ROCK_MAX_HP_HARD = 24
+    BOT_MAX_HP_HARD = 16
     ROCK_SCORE_SHARE = 0.58
     # Mesma paleta de terra usada pelos fragmentos de entrada do StoneGolemBoss.
     STONE_FRAGMENT_COLORS = [

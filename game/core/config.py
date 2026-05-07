@@ -45,6 +45,7 @@ class PowerUpType(Enum):
     MINI_SHIPS = "mini_ships"
     COOLDOWN_HASTE = "cooldown_haste"  # Reduz tempo de recarga
     TIME_STOP = "time_stop"  # Congela inimigos e projéteis
+    DAMAGE_BOOST = "damage_boost"  # Dobra o dano das balas temporariamente
 
 
 @dataclass(frozen=True)
@@ -154,6 +155,8 @@ class Config:
     MINI_SHIPS_DURATION: float = 25.0
     COOLDOWN_HASTE_REDUCTION: float = 20.0  # Redução fixa em segundos
     TIME_STOP_DURATION: float = 3.0
+    DAMAGE_BOOST_DURATION: float = 8.0
+    DAMAGE_BOOST_MULTIPLIER: float = 2.0
     SPEED_ATTACK_MULTIPLIER: float = 2.0
     PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER: float = 1.5
     EXPLOSIVE_SHOT_FIRE_RATE_PENALTY: float = (

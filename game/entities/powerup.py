@@ -16,6 +16,7 @@ from ..core.colors import (
     POWERUP_SHIELD,
     POWERUP_SPEED,
     POWERUP_TIME_STOP,
+    POWERUP_DAMAGE_BOOST,
     RAINBOW_COLORS,
 )
 from ..core.config import PowerUpType
@@ -59,6 +60,7 @@ class PowerUp:
             "rainbow": POWERUP_RAINBOW,
             "cooldown_haste": POWERUP_COOLDOWN_HASTE,
             "time_stop": POWERUP_TIME_STOP,
+            "damage_boost": POWERUP_DAMAGE_BOOST,
         }
 
         text_map = {
@@ -72,6 +74,7 @@ class PowerUp:
             "rainbow": "[ALL]",
             "cooldown_haste": "[CD]",
             "time_stop": "[STOP]",
+            "damage_boost": "[DMG]",
         }
 
         # Desenha o fundo do power-up com pulsação

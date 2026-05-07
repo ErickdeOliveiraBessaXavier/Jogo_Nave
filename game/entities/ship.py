@@ -88,6 +88,7 @@ class Ship:
         self.speed_boost_timer: float = 0.0
         self.piercing_shot_timer: float = 0.0
         self.mini_ships_timer: float = 0.0
+        self.damage_boost_timer: float = 0.0
         self.is_entering = False
         self.entry_particles: list[ParticleDict] = []
         self.thruster_particles: list[ParticleDict] = []
@@ -123,6 +124,7 @@ class Ship:
         self.speed_boost_timer: float = 0.0
         self.piercing_shot_timer: float = 0.0
         self.mini_ships_timer: float = 0.0
+        self.damage_boost_timer: float = 0.0
         self.is_entering = False
         self.entry_particles: list[ParticleDict] = []
         self.thruster_particles: list[ParticleDict] = []
@@ -397,6 +399,7 @@ class Ship:
         self.speed_boost_timer = max(0.0, self.speed_boost_timer - dt)
         self.piercing_shot_timer = max(0.0, self.piercing_shot_timer - dt)
         self.mini_ships_timer = max(0.0, self.mini_ships_timer - dt)
+        self.damage_boost_timer = max(0.0, self.damage_boost_timer - dt)
 
         # Update shield timer
         self.shield_timer = max(0.0, self.shield_timer - dt)

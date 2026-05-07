@@ -244,6 +244,7 @@ class PlayingScene(Scene):
             "rainbow_score": Config.POWERUP_SCORE_BONUS * 2,
             "cooldown_haste_reduction": Config.COOLDOWN_HASTE_REDUCTION,
             "time_stop_duration": Config.TIME_STOP_DURATION,
+            "damage_boost_duration": Config.DAMAGE_BOOST_DURATION,
         }
 
     def _init_transition_state(self) -> None:
@@ -944,7 +945,8 @@ class PlayingScene(Scene):
     def _fire_bullets(self) -> None:
         """Dispara as balas da nave e reinicia o cooldown."""
         bullet_specs = self.ship.bullet_spawn()
-        adjusted_damage = int(Config.BULLET_BASE_DAMAGE * self.player_damage_multiplier)
+        damage_mult = Config.DAMAGE_BOOST_MULTIPLIER if self.ship.damage_boost_timer > 0.0 else 1.0
+        adjusted_damage = int(Config.BULLET_BASE_DAMAGE * self.player_damage_multiplier * damage_mult)
 
         # Tocar som de tiro (uma vez por salva de tiros)
         sound_manager.play_shot()
@@ -1597,6 +1599,11 @@ class PlayingScene(Scene):
             self.time_stop_timer = max(self.time_stop_timer, pv["time_stop_duration"])
             self.freeze_active = True
 
+        def _apply_damage_boost() -> None:
+            self.ship.damage_boost_timer = max(
+                self.ship.damage_boost_timer, pv["damage_boost_duration"]
+            )
+
         def _apply_life() -> None:
             self.lives += 1
             self.ship.lives = self.lives
@@ -1623,6 +1630,7 @@ class PlayingScene(Scene):
             "cooldown_haste": _apply_cooldown_haste,
             "time_stop": _apply_time_stop,
             "rainbow": _apply_rainbow,
+            "damage_boost": _apply_damage_boost,
         }
 
         handler = dispatch.get(kind)

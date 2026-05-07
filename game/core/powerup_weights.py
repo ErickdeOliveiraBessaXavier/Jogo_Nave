@@ -19,6 +19,7 @@ def get_powerup_weights(difficulty: DifficultyPreset) -> dict[PowerUpType, int]:
         PowerUpType.SCORE: 20,
         PowerUpType.TIME_STOP: 20,
         PowerUpType.RAINBOW: 10,
+        PowerUpType.DAMAGE_BOOST: 80,
     }
 
     # Multiplicadores para raridade por dificuldade
