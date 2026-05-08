@@ -842,6 +842,8 @@ class StoneGolemBoss:
         self._half_phase_bots_spawned: bool = False
         self._half_phase_summon_timer: float = 0.0
         self._half_phase_wave_timer: float = 0.0
+        self._half_mine_queue: int = 0
+        self._half_mine_timer: float = 0.0
         self._third_phase_triggered: bool = False
         self._third_phase_pending: bool = False
         self._current_half_phase: int = 0
@@ -926,6 +928,8 @@ class StoneGolemBoss:
         self._half_phase_bots_spawned = False
         self._half_phase_summon_timer = 0.0
         self._half_phase_wave_timer = 0.0
+        self._half_mine_queue = 0
+        self._half_mine_timer = 0.0
         self._third_phase_triggered = False
         self._third_phase_pending = False
         self._current_half_phase = 0
@@ -1059,6 +1063,8 @@ class StoneGolemBoss:
             self._half_phase_summon_timer = 0.0
         elif new_state == "HALF_VOLLEY":
             self._half_phase_wave_timer = 0.0
+            self._half_mine_queue = 0
+            self._half_mine_timer = 0.0
 
     def _start_half_phase(self) -> None:
         self._half_phase_triggered = True
@@ -1122,6 +1128,8 @@ class StoneGolemBoss:
         self._half_phase_bots_spawned = False
         self._half_phase_summon_timer = 0.0
         self._half_phase_wave_timer = 0.0
+        self._half_mine_queue = 0
+        self._half_mine_timer = 0.0
         self._entry_debris.clear()
         self._charge_particles.clear()
         self._orbital_rocks.clear()
@@ -1375,15 +1383,29 @@ class StoneGolemBoss:
         new_mines: List["GolemMine"],
         _shards: List[RockShard],
     ) -> None:
-        self._half_phase_wave_timer -= dt
         active_bots = self._active_half_phase_bots()
         self._half_phase_mines = [m for m in self._half_phase_mines if not m.dead]
 
-        if active_bots and self._half_phase_wave_timer <= 0.0:
-            self._spawn_half_phase_mines(new_mines, player_x, player_y)
-            self._half_phase_wave_timer = 1.5
+        if active_bots:
+            # Kick off a new volley of 3 when the previous one is fully gone and no queue pending
+            if self._half_mine_queue == 0 and not self._half_phase_mines:
+                self._half_mine_queue = 3
+                self._half_mine_timer = 0.0
 
-        if not active_bots and not self._half_phase_mines:
+            if self._half_mine_queue > 0:
+                self._half_mine_timer -= dt
+                if self._half_mine_timer <= 0.0:
+                    base_x = self.x + self.w / 2
+                    base_y = self.y + self.h / 2
+                    target_x = random.uniform(90, self._screen_w - 90)
+                    target_y = random.uniform(90, self._screen_h - 120)
+                    mine = GolemMine(base_x, base_y, target_x, target_y)
+                    self._half_phase_mines.append(mine)
+                    new_mines.append(mine)
+                    self._half_mine_queue -= 1
+                    self._half_mine_timer = 1.0
+
+        if not active_bots and not self._half_phase_mines and self._half_mine_queue == 0:
             self._finish_half_phase()
 
     def _spawn_debris_cluster(
@@ -1577,7 +1599,7 @@ class StoneGolemBoss:
             new_mines.append(mine)
             self._mines.append(mine)
             self._fire_shots_count += 1
-            self._fire_shot_timer = 0.6 / spd
+            self._fire_shot_timer = 1.0 / spd
         if self._fire_shots_count >= 3 and self._fire_shot_timer <= -0.3:
             self._change_fsm("CLOSING")
 

@@ -3,6 +3,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, cast
 
+from .sound_config import VOLUME_CONFIG
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,10 +18,10 @@ class UserPreferences:
         self.resolution: Tuple[int, int] = (1280, 720)
         self.fullscreen: bool = True
 
-        # Áudio
-        self.music_volume: float = 0.5
-        self.sfx_volume: float = 0.7
-        self.shot_volume: float = 0.4
+        # Áudio — defaults vindos de VOLUME_CONFIG (fonte única de verdade)
+        self.music_volume: float = VOLUME_CONFIG["music"]
+        self.sfx_volume: float = VOLUME_CONFIG["sfx"]
+        self.shot_volume: float = VOLUME_CONFIG["shots"]
 
         # Controles
         self.mouse_control: bool = False
@@ -87,9 +89,9 @@ class UserPreferences:
         """Redefine para os padrões de fábrica."""
         self.resolution = (1280, 720)
         self.fullscreen = True
-        self.music_volume = 0.5
-        self.sfx_volume = 0.7
-        self.shot_volume = 0.4
+        self.music_volume = VOLUME_CONFIG["music"]
+        self.sfx_volume = VOLUME_CONFIG["sfx"]
+        self.shot_volume = VOLUME_CONFIG["shots"]
         self.mouse_control = False
         self.auto_fire = False
         self.save()
