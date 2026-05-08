@@ -93,6 +93,7 @@ class WorldCard:
         self.title_font = get_font(24)
         self.desc_font = get_font(16)
         self.score_font = get_font(18)
+        self.checkpoint_font = get_font(14)
 
     def _update_colors(self) -> None:
         """Atualiza cores baseado no estado atual."""
@@ -166,9 +167,8 @@ class WorldCard:
         # Status/Score
         if self.state == WorldCardState.CHECKPOINT:
             # Mostrar em duas linhas menores para caber sem abreviacao.
-            checkpoint_font = get_font(14)
-            line1 = checkpoint_font.render("Checkpoint", True, CUSTOM_GOLD)
-            line2 = checkpoint_font.render(
+            line1 = self.checkpoint_font.render("Checkpoint", True, CUSTOM_GOLD)
+            line2 = self.checkpoint_font.render(
                 f"Score: {self.best_score:,}", True, CUSTOM_GOLD
             )
 
@@ -248,16 +248,58 @@ class WorldSelectionView:
         self.transition_duration = 0.3  # segundos
         self.is_transitioning = False
 
+        # Superfícies reutilizáveis — evita malloc por frame
+        self._bg_scratch_a = pygame.Surface(
+            (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+        )
+        self._bg_scratch_b = pygame.Surface(
+            (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+        )
+
+        # Fontes cacheadas fora do caminho de render
+        self._inst_font = get_font(20)
+
+        # Cache de backgrounds pré-construídos por índice de card
+        self._background_cache: List[Any] = []
+
+    @staticmethod
+    def _resolve_theme(world_config: Any) -> str:
+        """Retorna o theme_str resolvido (expande 'procedural')."""
+        theme_str = world_config.theme.value.lower()
+        if theme_str == "procedural":
+            themes = ["mountains", "city", "volcanic"]
+            return themes[(world_config.world_id - 5) % len(themes)]
+        return theme_str
+
+    def _build_background_for(self, index: int) -> None:
+        """Aponta current_background para a entrada pré-construída do cache."""
+        if index < len(self._background_cache):
+            self.current_background = self._background_cache[index]
+
+    def _prebuild_all_backgrounds(self) -> None:
+        """Constrói todos os backgrounds durante reset (tela preta)."""
+        self._background_cache = []
+        for card in self.world_cards:
+            theme_str = self._resolve_theme(card.world_config)
+            if theme_str == "starfield":
+                self._background_cache.append(None)
+            else:
+                try:
+                    bg = create_background(
+                        theme_str, Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+                    )
+                    self._background_cache.append(bg)
+                except ValueError:
+                    self._background_cache.append(None)
+
     def reset(self) -> None:
         """Reinicia a view com dados atualizados."""
         self.world_cards.clear()
         self.selected_index = 0
 
-        # Obter mundos disponíveis
         worlds = get_all_worlds()
 
         for world_config in worlds:
-            # Obter status real do perfil
             if world_config.world_id in self.player_profile.world_unlocks:
                 unlock_status = self.player_profile.world_unlocks[world_config.world_id]
                 if unlock_status.is_unlocked:
@@ -273,7 +315,6 @@ class WorldSelectionView:
                     state = WorldCardState.LOCKED
                     best_score = 0
             else:
-                # Mundo não inicializado ainda
                 state = WorldCardState.LOCKED
                 best_score = 0
 
@@ -281,6 +322,14 @@ class WorldSelectionView:
             self.world_cards.append(card)
 
         self._layout_cards()
+
+        # Constrói todos os backgrounds enquanto a tela ainda está preta.
+        # Navegar entre cards vira uma simples atribuição de ponteiro.
+        self._prebuild_all_backgrounds()
+        self._build_background_for(self.selected_index)
+        self.last_selected = self.selected_index
+        self.previous_background = None
+        self.is_transitioning = False
 
     def _layout_cards(self) -> None:
         """Posiciona os cards em grid."""
@@ -401,24 +450,7 @@ class WorldSelectionView:
             self.previous_background = self.current_background
             self.is_transitioning = True
             self.transition_progress = 0.0
-
-            if self.selected_index < len(self.world_cards):
-                world_config = self.world_cards[self.selected_index].world_config
-                theme_str = world_config.theme.value.lower()
-                if theme_str == "procedural":
-                    # Cycle through themes for procedural worlds
-                    themes = ["mountains", "city", "volcanic"]
-                    theme_str = themes[(world_config.world_id - 5) % len(themes)]
-                elif theme_str == "starfield":
-                    # Para STARFIELD, usar o starfield do renderer (mesmo do menu)
-                    self.current_background = None
-                else:
-                    try:
-                        self.current_background = create_background(
-                            theme_str, Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-                        )
-                    except ValueError:
-                        self.current_background = None
+            self._build_background_for(self.selected_index)
 
         # Animar transição de fade
         if self.is_transitioning:
@@ -454,70 +486,51 @@ class WorldSelectionView:
             # Desenhar background antigo (desaparecendo)
             if self.previous_background is not None:
                 try:
-                    bg_surface_old = pygame.Surface(
-                        (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
-                    )
-                    self.previous_background.draw(bg_surface_old)
-                    old_alpha = int(76 * (1.0 - self.transition_progress))  # Fade out
-                    bg_surface_old.set_alpha(old_alpha)
-                    surface.blit(bg_surface_old, (0, 0))
+                    self._bg_scratch_a.fill((0, 0, 0, 0))
+                    self.previous_background.draw(self._bg_scratch_a)
+                    self._bg_scratch_a.set_alpha(int(76 * (1.0 - self.transition_progress)))
+                    surface.blit(self._bg_scratch_a, (0, 0))
                 except Exception:  # pylint: disable=broad-exception-caught
-                    # Se houver erro no draw, ignorar
                     pass
             else:
                 # Background antigo era starfield (que é None)
-                starfield_alpha = int(76 * (1.0 - self.transition_progress))
-                temp_surface = pygame.Surface(
-                    (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
-                )
                 try:
-                    self.renderer.starfield.draw(temp_surface)
-                    temp_surface.set_alpha(starfield_alpha)
-                    surface.blit(temp_surface, (0, 0))
+                    self._bg_scratch_a.fill((0, 0, 0, 0))
+                    self.renderer.starfield.draw(self._bg_scratch_a)
+                    self._bg_scratch_a.set_alpha(int(76 * (1.0 - self.transition_progress)))
+                    surface.blit(self._bg_scratch_a, (0, 0))
                 except Exception:  # pylint: disable=broad-exception-caught
                     pass
 
             # Desenhar background novo (aparecendo)
             if self.current_background is not None:
                 try:
-                    bg_surface_new = pygame.Surface(
-                        (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
-                    )
-                    self.current_background.draw(bg_surface_new)
-                    new_alpha = int(76 * self.transition_progress)  # Fade in
-                    bg_surface_new.set_alpha(new_alpha)
-                    surface.blit(bg_surface_new, (0, 0))
+                    self._bg_scratch_b.fill((0, 0, 0, 0))
+                    self.current_background.draw(self._bg_scratch_b)
+                    self._bg_scratch_b.set_alpha(int(76 * self.transition_progress))
+                    surface.blit(self._bg_scratch_b, (0, 0))
                 except Exception:  # pylint: disable=broad-exception-caught
-                    # Se houver erro no draw, ignorar
                     pass
             else:
                 # Novo background é starfield
-                starfield_alpha = int(76 * self.transition_progress)
-                temp_surface = pygame.Surface(
-                    (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
-                )
                 try:
-                    self.renderer.starfield.draw(temp_surface)
-                    temp_surface.set_alpha(starfield_alpha)
-                    surface.blit(temp_surface, (0, 0))
+                    self._bg_scratch_b.fill((0, 0, 0, 0))
+                    self.renderer.starfield.draw(self._bg_scratch_b)
+                    self._bg_scratch_b.set_alpha(int(76 * self.transition_progress))
+                    surface.blit(self._bg_scratch_b, (0, 0))
                 except Exception:  # pylint: disable=broad-exception-caught
                     pass
         else:
             # Sem transição: desenhar normalmente
             if self.current_background is not None:
-                # Background temático (MOUNTAINS, CITY, VOLCANIC, PROCEDURAL)
                 try:
-                    bg_surface = pygame.Surface(
-                        (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
-                    )
-                    self.current_background.draw(bg_surface)
-                    bg_surface.set_alpha(76)  # 30% opacidade
-                    surface.blit(bg_surface, (0, 0))
+                    self._bg_scratch_a.fill((0, 0, 0, 0))
+                    self.current_background.draw(self._bg_scratch_a)
+                    self._bg_scratch_a.set_alpha(76)  # 30% opacidade
+                    surface.blit(self._bg_scratch_a, (0, 0))
                 except Exception:  # pylint: disable=broad-exception-caught
-                    # Fallback ao starfield
                     self.renderer.starfield.draw(surface)
             else:
-                # Para STARFIELD, usar o starfield do renderer (mesmo do menu)
                 self.renderer.starfield.draw(surface)
 
         # Renderizar cards
@@ -535,8 +548,7 @@ class WorldSelectionView:
                 pygame.draw.rect(surface, CUSTOM_GOLD, card.rect, 4, border_radius=12)
 
         # Instruções
-        font = get_font(20)
-        instructions = font.render(
+        instructions = self._inst_font.render(
             "Use setas para navegar, ENTER para confirmar, ESC para voltar",
             True,
             (200, 200, 200),

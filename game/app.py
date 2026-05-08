@@ -16,7 +16,7 @@ from .scenes.main_menu import MainMenuScene
 class GameApp:
     def __init__(self):
         # Melhor qualidade/latência para o mixer antes do pygame.init()
-        pygame.mixer.pre_init(44100, -16, 2, 4096)
+        pygame.mixer.pre_init(44100, -16, 2, 1024)
         pygame.init()
 
         # Carregar preferências de sistema (vídeo, áudio, controles)

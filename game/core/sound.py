@@ -125,8 +125,30 @@ class SoundManager:
         # Carregar sons
         self._load_sounds()
 
+        # Abre o dispositivo de áudio do SO imediatamente, evitando o stutter
+        # na primeira chamada real a play() (Windows inicializa o stream tarde).
+        self._warm_up_audio()
+
         # Gerenciador de estado da música
         self.music_state_manager = self.music_manager.music_state_manager
+
+    @require_audio
+    def _warm_up_audio(self) -> None:
+        """Força a abertura do dispositivo de áudio do SO jogando um frame silencioso.
+
+        No Windows, SDL/DirectSound só inicializa o stream físico na primeira
+        chamada a Sound.play(). Sem isso, o primeiro som real do jogo causa um
+        stutter de 20–50 ms enquanto o hardware acorda.
+        """
+        if not self._sounds:
+            return
+        sound = next(iter(self._sounds.values()))
+        saved = sound.get_volume()
+        sound.set_volume(0.0)
+        ch = sound.play()
+        if ch:
+            ch.stop()
+        sound.set_volume(saved)
 
     @require_audio
     def _load_sounds(self):

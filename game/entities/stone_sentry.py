@@ -175,7 +175,7 @@ class StoneSentry:
         self.h = 40
         self.x = random.randint(50, Config.SCREEN_WIDTH - 50 - self.w)
         self.y = -self.h
-        self.target_y = random.randint(50, 200)
+        self.target_y: float = float(random.randint(50, 200))
         self.speed_y = 150.0
 
         self.float_amplitude = 10.0
