@@ -308,7 +308,7 @@ class Config:
     # ========================================
     # STONE GOLEM BOSS
     # ========================================
-    GOLEM_HEALTH: int = 2200
+    GOLEM_HEALTH: int = 400
     GOLEM_ENTRY_SPEED: float = 160.0
     GOLEM_SPEED: float = 75.0
     GOLEM_SHARD_SPEED: float = 420.0

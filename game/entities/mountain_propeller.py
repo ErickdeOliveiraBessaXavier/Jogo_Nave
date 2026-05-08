@@ -11,6 +11,7 @@ from ..core.config import config as Config
 if TYPE_CHECKING:
     from ..systems.hit_result import HitResult
 
+
 class _PropellerState(Enum):
     ENTERING = auto()
     PATROLLING = auto()
@@ -18,8 +19,8 @@ class _PropellerState(Enum):
     BLOWING = auto()
     COOLDOWN = auto()
 
-class MountainPropeller:
 
+class MountainPropeller:
     WIND_DURATION: Final = 3.5
     WIND_UP_TIME: Final = 1.2
     COOLDOWN_TIME: Final = 3.0
@@ -155,7 +156,7 @@ class MountainPropeller:
         "000000000000000011110",
         "000000000000000000000",
         "000000000000000000000",
-        "000000000000000000000"
+        "000000000000000000000",
     ]
 
     HUB_MAP = [
@@ -179,7 +180,7 @@ class MountainPropeller:
         "000000000000000000000",
         "000000000000000000000",
         "000000000000000000000",
-        "000000000000000000000"
+        "000000000000000000000",
     ]
 
     def is_blowing(self) -> bool:
