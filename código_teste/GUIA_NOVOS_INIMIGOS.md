@@ -1,181 +1,244 @@
-# Guia Moderno para Criar Novos Inimigos (v3.0)
-
-Este guia resume o fluxo atual do projeto para adicionar inimigos com segurança,
-incluindo o padrão composto (inimigo principal + ataque/entidade invocada),
-compatibilidade com **EMP (slow motion)** e integração com spawn procedural.
+# Guia: Criar Novo Inimigo
 
 ---
 
-## 1. Contrato Mínimo do Inimigo
+## 1. Arquivo da entidade (`game/entities/nome_inimigo.py`)
 
-Para um objeto ser tratado como inimigo no jogo, ele deve expor:
-
-- `x, y, w, h`
-- `rect` (de preferência `@property` retornando `pygame.Rect`)
-- `dead` (bool)
-- `health` (int)
-- `get_points_value() -> int`
-- `update(dt, ...)`
-
-Se o inimigo usa HP real, implemente também:
-
-- `take_damage(amount: int)`
-
-Estrutura base:
+Interface mínima obrigatória:
 
 ```python
-import pygame
-
-
-class NovoInimigo:
-    def __init__(self, x: float, y: float):
-        self.x, self.y = x, y
-        self.w, self.h = 40, 40
-        self.health = 10
-        self.dead = False
-        self.active = True
+class MeuInimigo:
+    dead: bool
+    health: int
+    active: bool
 
     @property
-    def rect(self) -> pygame.Rect:
-        return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+    def rect(self) -> pygame.Rect: ...
 
-    def take_damage(self, amount: int) -> None:
-        self.health -= amount
-        if self.health <= 0:
-            self.dead = True
+    def update(self, dt: float) -> list[Projectile]:  # retorna projéteis gerados
+        ...
 
-    def update(self, dt: float) -> None:
-        pass
+    def collision_circle(self) -> tuple[float, float, float]:  # cx, cy, radius
+        ...
 
-    def draw(self, screen: pygame.Surface) -> None:
-        pass
+    def on_hit(self, damage: int, hit_x: float, hit_y: float) -> HitResult:
+        ...
 
-    def get_points_value(self) -> int:
-        return 100
+    def on_ship_contact(self, contact_x: float, contact_y: float) -> HitResult:
+        ...
+
+    def should_remove(self) -> bool:
+        return self.dead
+```
+
+`HitResult` vem de `game/systems/hit_result.py`. Campos úteis:
+```python
+HitResult(
+    killed=True/False,
+    points=250,
+    explosion_size=35,
+    sound=hit_sounds.EXPLOSION_ALIEN,
+)
 ```
 
 ---
 
-## 2. Padrão Composto (Recomendado)
+## 2. Registrar no Spawner (`game/systems/spawner.py`)
 
-Quando o inimigo cria ataques persistentes (ex.: estalagmite, mina, totem, drone),
-use **duas entidades**:
+### 2a. Import no topo
+```python
+from ..entities.meu_inimigo import MeuInimigo
+```
 
-- entidade A: inimigo principal (decide quando atacar)
-- entidade B: entidade do ataque (tem `dead/health/rect/update/draw` próprios)
+### 2b. Adicionar ao `_count_enemies_by_type`
+```python
+counts: dict[str, int] = {
+    ...
+    "meu_inimigo": 0,
+}
+# dentro do loop:
+elif isinstance(enemy, MeuInimigo):
+    counts["meu_inimigo"] += 1
+```
 
-Vantagens:
+### 2c. Definir cap (topo do arquivo)
+```python
+SPAWNER_CAP_MEU_INIMIGO: int = 2
+```
 
-- colisão e pontuação ficam previsíveis
-- mais fácil balancear HP do ataque separado do inimigo
-- integração limpa no grid espacial e no EMP
+### 2d. Adicionar ao `_is_hard_capped` e `_should_spawn_enemy`
+```python
+if enemy_type == MeuInimigo and counts["meu_inimigo"] >= SPAWNER_CAP_MEU_INIMIGO:
+    return True  # (em _is_hard_capped)
+    # return False  (em _should_spawn_enemy)
+```
+
+### 2e. Adicionar ao `_enemy_type_key`
+```python
+aliases = {
+    ...
+    "MeuInimigo": "meu_inimigo",
+}
+```
+
+### 2f. Adicionar ao `_spawn_enemy_of_type`
+```python
+if enemy_type == MeuInimigo:
+    return self._spawn_meu_inimigo(entity_manager)
+```
+
+### 2g. Implementar `_spawn_meu_inimigo`
+```python
+def _spawn_meu_inimigo(self, entity_manager: "EntityManager") -> bool:
+    enemy = MeuInimigo(...)
+    enemy.health = int(enemy.health * self.enemy_health_multiplier)
+    entity_manager.enemies.append(enemy)
+    return True
+```
 
 ---
 
-## 3. Integração em `levels.py`
+## 3. Registrar no sistema de progressão (`game/core/levels.py`)
 
-1. Importe o novo tipo.
-2. Inclua no tema certo (`ENEMY_THEME_ALLOWLIST`).
-3. Adicione pesos em perfis de tema/estágio quando necessário.
-4. Inclua fallback para evitar pool vazio no tema.
-5. Se for exclusivo de um mundo, inclua nas regras do `_create_world_boss_level` também.
+### 3a. Import
+```python
+from ..entities.meu_inimigo import MeuInimigo
+```
 
-Observação importante (tipagem):
+### 3b. `ENEMY_THEME_ALLOWLIST` — restringir ao(s) mundo(s) válidos
+```python
+MeuInimigo: {WorldTheme.MOUNTAINS},
+```
+Omitir a entrada = permitido em todos os mundos.
 
-- Hoje `LevelConfig.enemy_spawn_config` usa `dict[type, float]`.
-- Isso evita churn de unions gigantes e reduz erros de tipagem ao adicionar novos tipos.
+### 3c. `DEFAULT_ENEMY_SPAWN_TIME` — tempo base de fallback
+```python
+MeuInimigo: 20.0,
+```
+
+### 3d. `ENEMY_PRESSURE_TIER_BY_KEY` — tier de progressão
+```python
+"meu_inimigo": "strong",  # "volume" | "intermediate" | "strong"
+```
+| Tier | Curva (início→fim) | Uso típico |
+|---|---|---|
+| volume | 1.25 → 0.90 | inimigos de volume (meteoros, gliders) |
+| intermediate | 0.55 → 1.15 | inimigos médios (aliens) |
+| strong | 0.20 → 0.95 | inimigos especiais / mini-bosses |
+
+### 3e. `ENEMY_PRESSURE_UNLOCK_START` e `ENEMY_PRESSURE_UNLOCK_WINDOW`
+```python
+# Quando no mundo o inimigo começa a aparecer (0.0 = início, 1.0 = fim)
+"meu_inimigo": 0.45,   # UNLOCK_START
+
+# Janela de ramp-up: quanto tempo leva para atingir presença plena
+"meu_inimigo": 0.30,   # UNLOCK_WINDOW
+```
+
+### 3f. `ENEMY_THEME_WEIGHT_PROFILES` — multiplicadores por perfil de tuning
+```python
+"conservative": { WorldTheme.MOUNTAINS: { MeuInimigo: 1.10 } },
+"moderate":      { WorldTheme.MOUNTAINS: { MeuInimigo: 1.25 } },
+"aggressive":    { WorldTheme.MOUNTAINS: { MeuInimigo: 1.40 } },
+```
+
+### 3g. `ENEMY_STAGE_WEIGHT_PROFILES` — ajuste por estágio dentro do mundo
+```python
+"moderate": { WorldTheme.MOUNTAINS: {
+    "early": { MeuInimigo: 0.85 },
+    "mid":   { MeuInimigo: 1.05 },
+    "late":  { MeuInimigo: 1.20 },
+}}
+```
+
+### 3h. `THEME_FALLBACK_ENEMIES` — lista de fallback
+```python
+WorldTheme.MOUNTAINS: [RockGlider, MountainMage, StoneSentry, ElementalRobot, MeuInimigo],
+```
+
+### 3i. `MIN_SPAWN_GAP_BY_TYPE` (em `DifficultyConfig`) — gap mínimo entre spawns
+```python
+"meu_inimigo": 15.0,  # segundos
+```
+Para inimigos especiais (ElementalRobot, StoneSentry), o gap é automaticamente
+`max(gap_definido, spawn_time_calculado)` — basta adicionar ao bloco `if enemy_type in (ElementalRobot, StoneSentry, MeuInimigo)` em `_get_min_spawn_gap`.
 
 ---
 
-## 4. Integração em `spawner.py`
-
-Checklist:
-
-- [ ] adicionar contagem no `_count_enemies_by_type`
-- [ ] definir cap em `_should_spawn_enemy` e `_is_hard_capped`
-- [ ] implementar instanciamento em `_spawn_enemy_of_type`
-- [ ] aplicar `enemy_health_multiplier` no spawn
-
-Regra prática:
-
-- inimigo forte/controlador de campo: cap baixo (1 ou 2)
-
----
-
-## 5. Integração em `entity_manager.py`
-
-Checklist:
-
-- [ ] adicionar tipo em `self.enemies` (type hint)
-- [ ] adicionar tipo em `enemy_spatial_grid` (type hint)
-- [ ] no loop principal de update, usar `scaled_dt` para respeitar EMP
-- [ ] se o update retornar entidades novas (ataques), anexar em `self.enemies`
-- [ ] garantir que o rebuild do grid inclui essas entidades
-
-Exemplo:
+## 4. Inserir no gerador procedural (`game/core/levels.py`, método `generate`)
 
 ```python
-elif isinstance(enemy, NovoInimigo):
-    spawned = enemy.update(scaled_dt, (player_x, player_y))
-    if spawned:
-        self.enemies.extend(spawned)
+if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.43:
+    weight = _get_progressive_enemy_weight("meu_inimigo", 1.0, stage_progress)
+    spawn_time = (BASE_TIME / difficulty / spawn_multiplier) * (2.0 / weight)
+    enemy_spawn_config[MeuInimigo] = self._clamp_spawn_time(spawn_time)
 ```
 
----
+`BASE_TIME` é o spawn_time em segundos quando `weight == 2.0` (ponto neutro).
+Regra de ouro para escolher `BASE_TIME`:
 
-## 6. Integração em `collisions.py`
+| Tipo | BASE_TIME sugerido |
+|---|---|
+| Inimigo de volume | 0.8 – 2.0 |
+| Inimigo médio | 3.0 – 8.0 |
+| Inimigo especial | 10.0 – 18.0 |
+| Mini-boss | 15.0 – 25.0 |
 
-Checklist:
-
-- [ ] importar tipo se houver regra especial por `isinstance`
-- [ ] definir tamanho padrão de explosão em `_calculate_default_explosion_size`
-- [ ] se tiver HP próprio, incluir no branch de `_destroy_enemy` que chama `take_damage(1)`
-- [ ] validar colisão com nave em `ship_vs_enemies` quando necessário
-
-Regra prática:
-
-- ataque invocado com HP (ex.: estalagmite) deve entrar na mesma lógica de HP de inimigos especiais
+O threshold (`stage_progress >= X`) deve ser ligeiramente abaixo do `UNLOCK_START`
+para que o ramp-up suave da `gate_mult` (que começa em 0.15) tenha espaço.
 
 ---
 
-## 7. Configuração Recomendada
+## 5. Adicionar ao config manual de nível (opcional)
 
-Para inimigos novos com mecânicas de telegraph/cooldown, adicione constantes em
-`game/core/config.py` em vez de hardcode:
+Em `LEVEL_CONFIGS` dentro de `levels.py`, se quiser que o inimigo apareça em
+uma fase fixa independente do procedural:
 
-- `WARNING_DURATION`
-- `COOLDOWN`
-- `ATTACK_HEALTH`
-- `MIN/MAX_ATTACK_SIZE`
-
-Isso facilita tuning sem quebrar o comportamento.
-
----
-
-## 8. Checklist Final de Entrega
-
-- [ ] spawn no tema correto
-- [ ] não aparece em temas errados
-- [ ] respeita EMP/slow motion
-- [ ] colisão com bala funciona
-- [ ] colisão com nave funciona
-- [ ] pontuação e explosão corretas
-- [ ] sem erros de análise (`get_errors`)
-
----
-
-## 9. Bloco de Briefing para IA (Copiar e Colar)
-
-Use este bloco quando pedir para criar inimigos novos:
-
-```text
-Crie um novo inimigo seguindo o padrão do projeto:
-- Classe principal em game/entities
-- Se houver ataque persistente, criar entidade separada para o ataque
-- Integrar em levels.py (allowlist, pesos, fallback)
-- Integrar em spawner.py (count, cap, spawn)
-- Integrar em entity_manager.py (update com scaled_dt, grid, append de entidades geradas)
-- Integrar em collisions.py (explosion size, HP branch com take_damage)
-- Adicionar constantes de tuning em core/config.py
-- Rodar validação de erros e corrigir antes de finalizar
+```python
+3: LevelConfig(
+    level_number=3,
+    enemy_spawn_config={
+        RockGlider: 0.7,
+        MeuInimigo: 12.0,  # spawn_time em segundos
+    },
+    ...
+)
 ```
+
+O valor é o **intervalo em segundos** no modo legado e o **inverso do peso**
+(`1/spawn_time`) no modo ponderado.
+
+---
+
+## 6. Checklist final
+
+- [ ] Entidade implementa a interface mínima (`rect`, `on_hit`, `on_ship_contact`, `should_remove`)
+- [ ] Import no `spawner.py` e em `levels.py`
+- [ ] Cap definido e aplicado em `_is_hard_capped` + `_should_spawn_enemy`
+- [ ] Alias em `_enemy_type_key`
+- [ ] Rota em `_spawn_enemy_of_type`
+- [ ] `ENEMY_THEME_ALLOWLIST` (se mundo específico)
+- [ ] `DEFAULT_ENEMY_SPAWN_TIME`
+- [ ] `ENEMY_PRESSURE_TIER_BY_KEY` + `UNLOCK_START` + `UNLOCK_WINDOW`
+- [ ] `ENEMY_THEME_WEIGHT_PROFILES` (conservative/moderate/aggressive)
+- [ ] `ENEMY_STAGE_WEIGHT_PROFILES` (early/mid/late)
+- [ ] `MIN_SPAWN_GAP_BY_TYPE`
+- [ ] Bloco no gerador procedural com `_get_progressive_enemy_weight`
+- [ ] `_get_min_spawn_gap`: adicionar ao `if enemy_type in (...)` se gap = spawn_time
+
+---
+
+## Armadilhas conhecidas
+
+**Spawn imediato no início da fase**
+`last_spawn_clock_by_type` usa `-9999.0` como sentinel para tipos nunca spawnados,
+fazendo `_can_spawn_now` retornar `True` imediatamente. **Isso está corrigido** —
+`_reset_spawn_pipeline` inicializa o dict com `0.0` para todos os tipos do nível.
+Não introduza novos sentinels negativos nesse dict.
+
+**MountainPropeller tem spawner duplo**
+Spawna tanto pelo pipeline ponderado quanto por `_update_propeller_spawner` (timer 14s).
+Se criar inimigo com spawner dedicado separado, garanta que o cap impeça duplicação.
+
+**`_update_mine_spawner` usa `1/60` fixo como dt**
+Bug conhecido. Não copiar esse padrão — passar `dt` real.

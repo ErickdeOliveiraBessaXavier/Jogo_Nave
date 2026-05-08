@@ -11,7 +11,6 @@ from ..core.config import config as Config
 if TYPE_CHECKING:
     from ..systems.hit_result import HitResult
 
-
 class _PropellerState(Enum):
     ENTERING = auto()
     PATROLLING = auto()
@@ -19,20 +18,18 @@ class _PropellerState(Enum):
     BLOWING = auto()
     COOLDOWN = auto()
 
-
 class MountainPropeller:
+
     WIND_DURATION: Final = 3.5
     WIND_UP_TIME: Final = 1.2
     COOLDOWN_TIME: Final = 3.0
-
     PUSH_FORCE: Final = 220.0
     SLOW_SPEED_MULT: Final = 0.45
     EDGE_MARGIN: Final = 60
     PIXEL_SCALE: Final = 3
-
     LERP_FACTOR: Final = 0.12
 
-    PALETTE: Final = {
+    PALETTE: Final[dict[str, tuple[int, int, int] | None]] = {
         "0": None,
         "1": (20, 20, 25),
         "2": (220, 160, 40),
@@ -46,10 +43,10 @@ class MountainPropeller:
         "000000111111000000",
         "000011222222110000",
         "000122222222221000",
-        "001221122221122100",
-        "001214412214412100",
-        "001214412214412100",
-        "001221122221122100",
+        "001222222222222100",
+        "001222222222222100",
+        "001222222222222100",
+        "001222222222222100",
         "001222222222233100",
         "001222222222333100",
         "000122222223331000",
@@ -61,28 +58,104 @@ class MountainPropeller:
         "155100000000001551",
     ]
 
+    EYES_OPEN_MAP = [
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000001100001100000",
+        "000014410014410000",
+        "000014410014410000",
+        "000001100001100000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+    ]
+
+    EYES_LEFT_MAP = [
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000001100001100000",
+        "000044100044100000",
+        "000044100044100000",
+        "000001100001100000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+    ]
+
+    EYES_RIGHT_MAP = [
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000001100001100000",
+        "000001440001440000",
+        "000001440001440000",
+        "000001100001100000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+    ]
+
+    EYES_CLOSED_MAP = [
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000011000000110000",
+        "000001100001100000",
+        "000011000000110000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+        "000000000000000000",
+    ]
+
     BLADES_MAP = [
         "000000000111100000000",
-        "000000001666611000000",
+        "000000001666661000000",
         "000000016666666100000",
         "000000016666661000000",
         "000000001666610000000",
-        "000000000116100000000",
+        "000000000166100000000",
+        "000000000011000000000",
         "000000000000000000000",
         "000000000000000000000",
         "000000000000000000000",
-        "000000000000000000000",
-        "000000000000000000000",
-        "001110000000000000000",
-        "016666100000000011100",
-        "166666100000000166610",
-        "166661000000000166661",
+        "000111000000000000000",
+        "001666100000000111000",
+        "016666100000000166100",
+        "166666100000001666610",
+        "166661000000001666661",
         "016610000000001666661",
         "001100000000000166661",
-        "000000000000000011100",
+        "000000000000000011110",
         "000000000000000000000",
         "000000000000000000000",
-        "000000000000000000000",
+        "000000000000000000000"
     ]
 
     HUB_MAP = [
@@ -93,20 +166,20 @@ class MountainPropeller:
         "000000000000000000000",
         "000000000000000000000",
         "000000000000000000000",
-        "000000001111100000000",
+        "000000000111000000000",
+        "000000001555100000000",
+        "000000016555510000000",
+        "000000016665510000000",
         "000000016666610000000",
-        "000000166666661000000",
-        "000000166666661000000",
-        "000000166666661000000",
-        "000000016666610000000",
-        "000000001111100000000",
+        "000000001666100000000",
+        "000000000111000000000",
         "000000000000000000000",
         "000000000000000000000",
         "000000000000000000000",
         "000000000000000000000",
         "000000000000000000000",
         "000000000000000000000",
-        "000000000000000000000",
+        "000000000000000000000"
     ]
 
     def is_blowing(self) -> bool:
@@ -122,6 +195,10 @@ class MountainPropeller:
 
     def __init__(self, y: float | None = None):
         self.body_surf = self._create_surface_from_map(self.BODY_MAP)
+        self.eyes_open_surf = self._create_surface_from_map(self.EYES_OPEN_MAP)
+        self.eyes_left_surf = self._create_surface_from_map(self.EYES_LEFT_MAP)
+        self.eyes_right_surf = self._create_surface_from_map(self.EYES_RIGHT_MAP)
+        self.eyes_closed_surf = self._create_surface_from_map(self.EYES_CLOSED_MAP)
         self.blades_surf = self._create_surface_from_map(self.BLADES_MAP)
         self.hub_surf = self._create_surface_from_map(self.HUB_MAP)
 
@@ -147,7 +224,15 @@ class MountainPropeller:
         self.prop_angle = 0.0
         self.prop_speed = 0.0
 
+        # Animation states
+        self.blink_timer = random.uniform(2.0, 5.0)
+        self.is_blinking = False
+        self.blink_duration = 0.15
+        self.look_state = "center"
+        self.look_timer = random.uniform(1.0, 3.0)
+
         self.wind_streaks: list[dict[str, float]] = []
+        self.sweat_particles: list[dict[str, float]] = []
         self._init_streaks()
 
     def _create_surface_from_map(self, pixel_map: list[str]) -> pygame.Surface:
@@ -235,6 +320,28 @@ class MountainPropeller:
         self.prop_curr_x += (target_x - self.prop_curr_x) * self.LERP_FACTOR
         self.prop_curr_y += (target_y - self.prop_curr_y) * self.LERP_FACTOR
 
+        self._update_animations(dt)
+        self._update_particles(dt)
+
+    def _update_animations(self, dt: float) -> None:
+        if self.is_blinking:
+            self.blink_timer -= dt
+            if self.blink_timer <= 0:
+                self.is_blinking = False
+                self.blink_timer = random.uniform(2.0, 5.0)
+        else:
+            self.blink_timer -= dt
+            if self.blink_timer <= 0:
+                self.is_blinking = True
+                self.blink_timer = self.blink_duration
+
+        self.look_timer -= dt
+        if self.look_timer <= 0:
+            self.look_state = random.choices(
+                ["center", "left", "right"], weights=[0.6, 0.2, 0.2]
+            )[0]
+            self.look_timer = random.uniform(1.0, 3.0)
+
     def _update_movement(self, dt: float) -> None:
         self.y += self.move_speed * self.move_dir * dt
         if self.y < 100:
@@ -251,12 +358,56 @@ class MountainPropeller:
                 s["x"] = self.prop_curr_x - 10
                 s["y_offset"] = random.uniform(-35, 35)
 
+    def _update_particles(self, dt: float) -> None:
+        is_effort = self.state in (_PropellerState.WIND_UP, _PropellerState.BLOWING)
+        if is_effort and random.random() < 15 * dt:
+            self.sweat_particles.append(
+                {
+                    "x": self.x + random.uniform(-20, 20),
+                    "y": self.y - self.BODY_H // 3,
+                    "vx": random.uniform(-180, 180),
+                    "vy": random.uniform(-300, -100),
+                    "life": random.uniform(0.3, 0.7),
+                }
+            )
+
+        for p in self.sweat_particles[:]:
+            p["vy"] += 800 * dt
+            p["x"] += p["vx"] * dt
+            p["y"] += p["vy"] * dt
+            p["life"] -= dt
+            if p["life"] <= 0:
+                self.sweat_particles.remove(p)
+
     def draw(self, surface: pygame.Surface) -> None:
         if self.state == _PropellerState.BLOWING:
             self._draw_wind_effect(surface)
 
-        body_rect = self.body_surf.get_rect(center=(int(self.x), int(self.y)))
+        shake_x, shake_y = 0, 0
+        is_effort = self.state in (_PropellerState.WIND_UP, _PropellerState.BLOWING)
+        if is_effort:
+            shake_x = random.randint(-2, 2)
+            shake_y = random.randint(-2, 2)
+
+        body_rect = self.body_surf.get_rect(
+            center=(int(self.x) + shake_x, int(self.y) + shake_y)
+        )
         surface.blit(self.body_surf, body_rect.topleft)
+
+        if is_effort or self.is_blinking:
+            eye_surf = self.eyes_closed_surf
+        else:
+            if self.look_state == "left":
+                eye_surf = self.eyes_left_surf
+            elif self.look_state == "right":
+                eye_surf = self.eyes_right_surf
+            else:
+                eye_surf = self.eyes_open_surf
+
+        surface.blit(eye_surf, body_rect.topleft)
+
+        for p in self.sweat_particles:
+            pygame.draw.rect(surface, (20, 20, 25), (int(p["x"]), int(p["y"]), 4, 4))
 
         center_pos = (int(self.prop_curr_x), int(self.prop_curr_y))
 

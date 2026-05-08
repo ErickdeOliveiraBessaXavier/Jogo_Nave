@@ -128,6 +128,9 @@ def load_sfx(
         "boss_laser_charging": sfx_paths.get("boss_laser_charging"),
         "boss_laser_fire": sfx_paths.get("boss_laser_fire"),
         "spike_boss_laser": sfx_paths.get("spike_boss_laser"),
+        "golem_mine_timer": sfx_paths.get("golem_mine_timer"),
+        "golem_orb_purple": sfx_paths.get("golem_orb_purple"),
+        "golem_eruption": sfx_paths.get("golem_eruption"),
     }
     for key, rel in laser_map.items():
         if not rel:

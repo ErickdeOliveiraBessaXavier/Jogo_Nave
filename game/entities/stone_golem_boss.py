@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Final, List, Optional, Tuple, TypeAlias
 import pygame
 
 from ..core.config import config as Config
+from ..core.sound_config import MusicState
 from ..entities.bot_elemental import ElementalRobot
 from ..entities.stone_golem_pixel_map import EYE_COL_END as _EYE_COL_END
 from ..entities.stone_golem_pixel_map import EYE_COL_START as _EYE_COL_START
@@ -97,12 +98,13 @@ class GolemMine:
         self.target_x = float(target_x)
         self.target_y = float(target_y)
         self.dead = False
-        self.health = 5  # Mini-boss projectile: can be destroyed with 5 shots
+        self.health = 50
         self._hit_flash = 0.0
 
         self._phase = "landing"
         self._fuse_timer = 0.0
         self._pulse_t = 0.0
+        self._tick_timer: float = 0.0
 
         self.rect = pygame.Rect(
             int(self.x - self.RADIUS),
@@ -129,10 +131,12 @@ class GolemMine:
         if self._phase == "exploded":
             return
         self.health -= amount
-        self._hit_flash = 0.15  # Flash visual de hit
+        self._hit_flash = 0.15
         if self.health <= 0:
             self.health = 0
             self.dead = True
+            from ..systems import hit_sounds as _hs
+            _hs.GOLEM_STOP_MINE_TIMER()
 
     def get_points_value(self) -> int:
         """Retorna pontos ao ser destruído."""
@@ -186,7 +190,16 @@ class GolemMine:
 
         elif self._phase == "armed":
             self._fuse_timer += dt
+            blink_freq = 4.0 + (self._fuse_timer / self.FUSE_TIME) * 14.0
+            self._tick_timer -= dt
+            if self._tick_timer <= 0:
+                from ..systems import hit_sounds as _hs
+                _hs.GOLEM_MINE_TIMER()
+                self._tick_timer = 1.0 / blink_freq
             if self._fuse_timer >= self.FUSE_TIME:
+                from ..systems import hit_sounds as _hs
+                _hs.GOLEM_STOP_MINE_TIMER()
+                _hs.GOLEM_ORB_PURPLE()
                 self._phase = "exploded"
                 for i in range(self.EXPL_SHARDS):
                     angle_deg = (360.0 / self.EXPL_SHARDS) * i + random.uniform(-5, 5)
@@ -754,6 +767,8 @@ class StoneGolemBoss:
     SCALE = 10
     MAX_CHARGE_PARTICLES = 100
 
+    MUSIC_STATE: Final = MusicState.STONE_GOLEM_BOSS
+
     # Otimização: Estados onde o boss deve flutuar ou ficar ancorado
     _ANCHORED_STATES = frozenset(
         {
@@ -827,6 +842,12 @@ class StoneGolemBoss:
         self._half_phase_bots_spawned: bool = False
         self._half_phase_summon_timer: float = 0.0
         self._half_phase_wave_timer: float = 0.0
+        self._third_phase_triggered: bool = False
+        self._third_phase_pending: bool = False
+        self._current_half_phase: int = 0
+        self._sentry_active: bool = False
+        self._sentry_spawn_timer: float = 0.0
+        self._active_sentry: Any | None = None
         self._entity_manager: Any | None = None
         self._time: float = 0.0
         self.rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
@@ -905,6 +926,12 @@ class StoneGolemBoss:
         self._half_phase_bots_spawned = False
         self._half_phase_summon_timer = 0.0
         self._half_phase_wave_timer = 0.0
+        self._third_phase_triggered = False
+        self._third_phase_pending = False
+        self._current_half_phase = 0
+        self._sentry_active = False
+        self._sentry_spawn_timer = 0.0
+        self._active_sentry = None
         self._time = 0.0
         self.rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
         self.emp_linger_timer = 0.0
@@ -964,8 +991,10 @@ class StoneGolemBoss:
             new_state,
             0.0,
         )
+        from ..systems import hit_sounds as _hs
         if new_state == "CHARGE":
             self._charge_particles.clear()
+            _hs.GOLEM_CHARGING()
         elif new_state == "FIRE":
             self._fire_shots_count, self._fire_shot_timer, self._cycles_since_fire = (
                 0,
@@ -973,15 +1002,19 @@ class StoneGolemBoss:
                 0,
             )
             self._fire_ready = False
+            _hs.GOLEM_STOP_CHARGING()
         elif new_state == "ORB_SPAWN":
             self._orb_rotation, self._orb_shots_done = 0.0, 0
         elif new_state == "SWEEP_CHARGE":
             self._sweep_locked_angle, self._sweep_lock_done = math.pi / 2, False
+            _hs.GOLEM_CHARGING()
         elif new_state == "SWEEP_FIRE":
             self._sweep_angle, self._shards_fired_at = (
                 self._sweep_locked_angle - self._sweep_total / 2,
                 set[int](),
             )
+            _hs.GOLEM_STOP_CHARGING()
+            _hs.GOLEM_SWEEP_LASER()
         elif new_state == "EARTH_PULL":
             self._orbital_rocks.clear()
             cx, cy, S = *self._shared_center(), self.SCALE
@@ -1029,6 +1062,12 @@ class StoneGolemBoss:
 
     def _start_half_phase(self) -> None:
         self._half_phase_triggered = True
+        self._current_half_phase = 1
+        self._change_fsm("HALF_RETREAT")
+
+    def _start_third_phase(self) -> None:
+        self._third_phase_triggered = True
+        self._current_half_phase = 2
         self._change_fsm("HALF_RETREAT")
 
     def _spawn_half_phase_bots(self) -> None:
@@ -1077,6 +1116,7 @@ class StoneGolemBoss:
             new_mines.append(mine)
 
     def _finish_half_phase(self) -> None:
+        was_third_phase = self._current_half_phase == 2
         self._half_phase_mines.clear()
         self._half_phase_bots.clear()
         self._half_phase_bots_spawned = False
@@ -1102,8 +1142,28 @@ class StoneGolemBoss:
         self._jitter_x = 0.0
         self._jitter_y = 0.0
         self._burst_done = False
+        self._current_half_phase = 0
         self.y = float(self._screen_h + 100)
+        if was_third_phase:
+            self._sentry_active = True
+            self._sentry_spawn_timer = 0.0
+            self._active_sentry = None
         self._change_fsm("ENTERING")
+
+    def _update_sentry_spawn(self, dt: float, entity_manager: Any | None) -> None:
+        if not self._sentry_active or entity_manager is None:
+            return
+
+        # Cull reference if the sentry died
+        if self._active_sentry is not None and getattr(self._active_sentry, "dead", True):
+            self._active_sentry = None
+
+        # If no sentry alive, count down and spawn one
+        if self._active_sentry is None:
+            self._sentry_spawn_timer += dt
+            if self._sentry_spawn_timer >= 10.0:
+                self._sentry_spawn_timer = 0.0
+                self._active_sentry = entity_manager.spawn_stone_sentry()
 
     @property
     def entry_debris(self) -> List[EntryDebris]:
@@ -1165,6 +1225,9 @@ class StoneGolemBoss:
         for r in self._orbital_rocks:
             r.update(dt, cx, cy, player_x, player_y)
         self._orbital_rocks = [r for r in self._orbital_rocks if not r.dead]
+
+        self._update_sentry_spawn(dt, entity_manager)
+
         self.rect.x, self.rect.y = int(self.x), int(self.y)
         self._entity_manager = None
         return new_mines, new_shards, self._orbital_rocks
@@ -1219,6 +1282,8 @@ class StoneGolemBoss:
                     _py,
                 )
                 self._burst_done = True
+                from ..systems import hit_sounds as _hs
+                _hs.GOLEM_ERUPTION()
 
             # Detritos contínuos durante a subida explosiva (intervalo fixo de 0.12s)
             self._entry_debris_timer += dt
@@ -1263,6 +1328,8 @@ class StoneGolemBoss:
                     spawn_from_bottom=True,
                 )
                 self._burst_done = True
+                from ..systems import hit_sounds as _hs
+                _hs.GOLEM_ERUPTION()
             elif self._entry_debris_timer >= 0.18:
                 self._entry_debris_timer = 0.0
                 self._spawn_debris_cluster(
@@ -1390,6 +1457,11 @@ class StoneGolemBoss:
         if self._half_phase_pending:
             self._half_phase_pending = False
             self._start_half_phase()
+            return
+
+        if self._third_phase_pending:
+            self._third_phase_pending = False
+            self._start_third_phase()
             return
 
         self._move_vertical(dt)
@@ -1623,6 +1695,8 @@ class StoneGolemBoss:
                     )
                 )
             self._orb_shots_done += 1
+            from ..systems import hit_sounds as _hs
+            _hs.GOLEM_ORB_PURPLE()
 
         if self._orb_shots_done >= max_waves and self.fsm_ticks > (
             max_waves * wave_interval + 0.4
@@ -1762,6 +1836,7 @@ class StoneGolemBoss:
             return
 
         half_health = self.max_health * 0.5
+        third_health = self.max_health * 0.3
         prev_health = self.health
         self.health -= amount
         if self.health <= 0:
@@ -1774,6 +1849,13 @@ class StoneGolemBoss:
             and self.health <= half_health
         ):
             self._half_phase_pending = True
+        elif (
+            self._half_phase_triggered
+            and not self._third_phase_triggered
+            and prev_health > third_health
+            and self.health <= third_health
+        ):
+            self._third_phase_pending = True
 
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2

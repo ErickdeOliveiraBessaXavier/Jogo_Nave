@@ -325,7 +325,11 @@ class EnemySpawner:
         self.weighted_hard_cap_samples = 0
         self.spawn_clock = 0.0
         self.last_spawn_clock = -9999.0
-        self.last_spawn_clock_by_type = {}
+        self.last_spawn_clock_by_type = {
+            self._enemy_type_key(et): 0.0
+            for et in self.level_config.enemy_types
+        }
+        self._last_enemy_counts: dict[str, int] = {}
 
     # ------------------------------------------------------------------
     # Helpers de cadência / gaps
@@ -375,6 +379,12 @@ class EnemySpawner:
         self.last_spawn_clock_by_type[self._enemy_type_key(enemy_type)] = (
             self.spawn_clock
         )
+
+    def _refresh_death_clocks(self, counts: dict[str, int]) -> None:
+        for key, prev in self._last_enemy_counts.items():
+            if prev > 0 and counts.get(key, 0) == 0:
+                self.last_spawn_clock_by_type[key] = self.spawn_clock
+        self._last_enemy_counts = counts
 
     # ------------------------------------------------------------------
     # Caps e contagem
@@ -921,6 +931,7 @@ class EnemySpawner:
             return
 
         self.spawn_clock += dt
+        self._refresh_death_clocks(self._count_enemies_by_type(entity_manager))
 
         # Warm-up: mantém intensidade em 0 sem early return (timers precisam atualizar)
         if self.warm_up_timer > 0:

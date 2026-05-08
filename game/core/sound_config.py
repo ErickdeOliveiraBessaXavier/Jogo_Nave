@@ -15,6 +15,7 @@ class MusicState(Enum):
     GIANT_METEOR_BOSS = "giant_meteor_boss"
     MOUNTAIN_SERPENT_BOSS = "mountain_serpent_boss"
     CLOUD_ARCHMAGE_BOSS = "cloud_archmage_boss"
+    STONE_GOLEM_BOSS = "stone_golem_boss"
     SILENCE = "silence"
 
 
@@ -78,6 +79,8 @@ CHANNEL_CONFIG: Dict[str, int] = {
     "warning": 1,  # Canal dedicado para warning
     "boss_laser": 2,  # Canal dedicado para carregamento do laser do boss
     "boss_laser_fire": 3,  # Canal dedicado para disparo do laser do boss
+    "golem_mine": 4,  # Canal dedicado para tick da mina do Golem
+    "golem_orb": 5,  # Canal dedicado para rajada do orbe roxo do Golem
     "max_channels": 8,  # Número máximo de canais
 }
 
@@ -102,6 +105,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
         "giant_meteor_boss": "music/Musica_Giant_Meteor_Boss.mp3",
         "mountain_serpent_boss": "music/Stone_Snake_Themel.mp3",
         "cloud_archmage_boss": "music/Mago_Robo_Boss.mp3",
+        "stone_golem_boss": "music/Stone_Golem_Music.mp3",
     },
     # Efeitos sonoros
     "sfx": {
@@ -109,6 +113,9 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
         "boss_laser_charging": "sfx/shots/som_laser_carregando.mp3",
         "boss_laser_fire": "sfx/shots/som_laser.mp3",
         "spike_boss_laser": "sfx/shots/laser_spike_boss.wav",  # Adicionado
+        "golem_mine_timer": "sfx/explosions/Timer_orb_Stone_Boss.wav",
+        "golem_orb_purple": "sfx/explosions/Rajada_orb_Roxa_Stone_Boss.wav",
+        "golem_eruption": "sfx/explosions/Som_Erupção_Solo.wav",
         "explosions": {
             "asteroid": "sfx/explosions/explosão_asteroides_{}.wav",  # {} = 0,1,2,3
             "alien": "sfx/explosions/explosão_naves_alienigenas.wav",

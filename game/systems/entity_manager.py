@@ -858,6 +858,19 @@ class EntityManager:
         self.enemies.append(robot)
         return robot
 
+    def spawn_stone_sentry(
+        self,
+        x: float | None = None,
+        y: float | None = None,
+    ) -> StoneSentry:
+        sentry = StoneSentry()
+        if x is not None:
+            sentry.x = x
+        if y is not None:
+            sentry.target_y = y
+        self.enemies.append(sentry)
+        return sentry
+
     def spawn_mountain_serpent_boss(
         self,
         x: float | None = None,

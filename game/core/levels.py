@@ -1345,15 +1345,15 @@ class ProceduralLevelGenerator:
                         base_square_time * (2.0 / square_weight)
                     )
 
-            if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.35:
-                if stage_progress < 0.7:
-                    mage_base_time = 14.0
+            if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.15:
+                if stage_progress < 0.40:
+                    mage_base_time = 22.0   # raro no early
+                elif stage_progress < 0.70:
+                    mage_base_time = 14.0   # moderado no mid
                 else:
-                    mage_base_time = 10.0
+                    mage_base_time = 10.0   # frequente no late
                 mage_spawn_time = (mage_base_time / difficulty) / spawn_multiplier
-                enemy_spawn_config[MountainMage] = self._clamp_spawn_time(
-                    mage_spawn_time
-                )
+                enemy_spawn_config[MountainMage] = self._clamp_spawn_time(mage_spawn_time)
 
             # Mountain Propeller
             if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.35:
@@ -1363,6 +1363,30 @@ class ProceduralLevelGenerator:
                 ) / spawn_multiplier
                 enemy_spawn_config[MountainPropeller] = self._clamp_spawn_time(
                     propeller_spawn_time
+                )
+
+            # StoneSentry — entra a partir de 40% do mundo (gate suavizado por 0.42)
+            if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.40:
+                sentry_weight = _get_progressive_enemy_weight(
+                    "stone_sentry", 1.0, stage_progress
+                )
+                sentry_spawn_time = (10.0 / difficulty / spawn_multiplier) * (
+                    2.0 / sentry_weight
+                )
+                enemy_spawn_config[StoneSentry] = self._clamp_spawn_time(
+                    sentry_spawn_time
+                )
+
+            # ElementalRobot — mini-boss, entra a partir de 53% (gate suavizado por 0.55)
+            if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.53:
+                robot_weight = _get_progressive_enemy_weight(
+                    "elemental_robot", 1.0, stage_progress
+                )
+                robot_spawn_time = (15.0 / difficulty / spawn_multiplier) * (
+                    2.0 / robot_weight
+                )
+                enemy_spawn_config[ElementalRobot] = self._clamp_spawn_time(
+                    robot_spawn_time
                 )
 
         # 2. Calcular quantidade de inimigos
@@ -1473,23 +1497,23 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # Meteor: 0.5,
             # Alien: 1.5,
             # EyeEnemy: 2.0,
-            # RockGlider: 0.6,
+            RockGlider: 0.6,
             # ElementalRobot: 1.0,
             # StoneSentry: 30.0,
             # MountainMage: 10.0,
-            MountainPropeller: 0.8,
+            # MountainPropeller: 0.8,
             # MountainGeode: 1.0,
         },
-        enemies_to_clear=10,
+        enemies_to_clear=1,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
-        mines_enabled=True,
+        # mines_enabled=True,
         # boss_type=Boss,
         # boss_type=GiantMeteorBoss,
         # boss_type=SlimeBoss,
         # boss_type=SpikeBoss,
         # boss_type=SquareMinionBoss,
-        # boss_type=StoneGolemBoss,
+        boss_type=StoneGolemBoss,
         # boss_type=MountainSerpentBoss,
         # boss_type=GiantMeteorBoss,
         # boss_type=CloudArchmageBoss,
@@ -1501,8 +1525,8 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         level_number=3,
         enemy_spawn_config={
             RockGlider: 0.7,
-            ElementalRobot: 25.0,
-            StoneSentry: 30.0,
+            ElementalRobot: 12.0,
+            StoneSentry: 18.0,
         },
         enemies_to_clear=250,
         boss_type=StoneGolemBoss,
@@ -1515,8 +1539,8 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         level_number=6,
         enemy_spawn_config={
             RockGlider: 0.6,
-            ElementalRobot: 18.0,
-            StoneSentry: 25.0,
+            MountainPropeller: 4.0,
+            MountainMage: 10.0,
         },
         enemies_to_clear=300,
         boss_type=MountainSerpentBoss,
@@ -1529,15 +1553,12 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         level_number=10,
         enemy_spawn_config={
             RockGlider: 0.5,
-            ElementalRobot: 15.0,
             MountainMage: 12.0,
             MountainPropeller: 10.0,
         },
-        enemies_to_clear=400,
+        enemies_to_clear=350,
         boss_type=CloudArchmageBoss,
         mines_enabled=True,
-        formations_enabled=True,
-        formation_types=["spiral_circle", "spiral_v", "spiral_square"],
         theme_name="O Arquimago das Nuvens",
         score_multiplier=1.5,
     ),
@@ -1547,14 +1568,13 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         level_number=12,
         enemy_spawn_config={
             Meteor: 0.8,
-            Alien: 3.0,
-            EyeEnemy: 2.0,
+            Alien: 3.0,            
         },
-        enemies_to_clear=400,
+        enemies_to_clear=350,
         boss_type=Boss,
         mines_enabled=True,
-        formations_enabled=True,
-        formation_types=["spiral_circle", "spiral_v"],
+        formations_enabled=False,
+        # formation_types=["spiral_circle", "spiral_v"],
         theme_name="Chefe Clássico do Espaço",
         score_multiplier=1.3,
     ),
@@ -1578,11 +1598,9 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     20: LevelConfig(
         level_number=20,
         enemy_spawn_config={
-            Meteor: 1.2,
-            Alien: 1.5,
-            EyeEnemy: 3.0,
+            Meteor: 0.5,
         },
-        enemies_to_clear=350,
+        enemies_to_clear=300,
         boss_type=GiantMeteorBoss,
         mines_enabled=True,
         formations_enabled=False,
@@ -1595,7 +1613,6 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         enemy_spawn_config={
             Meteor: 0.6,
             Alien: 2.5,
-            EyeEnemy: 3.0,
         },
         enemies_to_clear=420,
         boss_type=SlimeBoss,

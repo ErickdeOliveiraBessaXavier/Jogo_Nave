@@ -105,6 +105,12 @@ class SoundManager:
         self.boss_laser_fire_channel: pygame.mixer.Channel = pygame.mixer.Channel(
             CHANNEL_CONFIG["boss_laser_fire"]
         )
+        self.golem_mine_channel: pygame.mixer.Channel = pygame.mixer.Channel(
+            CHANNEL_CONFIG["golem_mine"]
+        )
+        self.golem_orb_channel: pygame.mixer.Channel = pygame.mixer.Channel(
+            CHANNEL_CONFIG["golem_orb"]
+        )
         self.last_shot_time: float = 0.0
         self.shot_volume_base: float = VOLUME_CONFIG["shots"]
 
@@ -253,6 +259,35 @@ class SoundManager:
             self.boss_laser_fire_channel.play(sound)
 
     @require_audio
+    def play_golem_mine_timer(self):
+        """Toca um tick da mina do Golem no canal dedicado (interrompe tick anterior)."""
+        if "golem_mine_timer" in self._sounds:
+            sound = self._sounds["golem_mine_timer"]
+            sound.set_volume(self.sfx_volume * self.master_volume)
+            self.golem_mine_channel.play(sound)
+
+    @require_audio
+    def stop_golem_mine_timer(self):
+        """Para o som de tick da mina do Golem."""
+        self.golem_mine_channel.stop()
+
+    @require_audio
+    def play_golem_orb_purple(self):
+        """Toca o som de rajada do orbe roxo do Golem."""
+        if "golem_orb_purple" in self._sounds:
+            sound = self._sounds["golem_orb_purple"]
+            sound.set_volume(self.sfx_volume * self.master_volume)
+            self.golem_orb_channel.play(sound)
+
+    @require_audio
+    def play_golem_eruption(self):
+        """Toca o som de erupção do solo do Golem (emergência e submersão)."""
+        if "golem_eruption" in self._sounds:
+            sound = self._sounds["golem_eruption"]
+            sound.set_volume(self.sfx_volume * self.master_volume)
+            sound.play()
+
+    @require_audio
     def play_spike_boss_laser(self):
         """Toca som de disparo do laser do Spike Boss."""
         if "spike_boss_laser" in self._sounds:
@@ -274,7 +309,7 @@ class SoundManager:
         if duck:
             # Reduzir volume da música para 60% do normal
             base_volume = self.music_volume
-            if self.current_music in ["boss", "spike_boss", "slime_boss"]:
+            if self.current_music in ["boss", "spike_boss", "slime_boss", "stone_golem_boss"]:
                 base_volume *= self.boss_music_multiplier
 
             duck_volume = base_volume * 0.6
@@ -283,7 +318,7 @@ class SoundManager:
         else:
             # Restaurar volume original da música
             base_volume = self.music_volume
-            if self.current_music in ["boss", "spike_boss", "slime_boss"]:
+            if self.current_music in ["boss", "spike_boss", "slime_boss", "stone_golem_boss"]:
                 base_volume *= self.boss_music_multiplier
 
             final_volume = min(1.0, base_volume * self.master_volume)
@@ -401,6 +436,10 @@ class SoundManager:
         self.music_manager.play_cloud_archmage_boss_music()
 
     @require_audio
+    def play_stone_golem_boss_music(self):
+        self.music_manager.play_stone_golem_boss_music()
+
+    @require_audio
     def play_menu_music(self, force: bool = False):
         self.music_manager.play_menu_music(force=force)
 
@@ -447,6 +486,8 @@ class SoundManager:
         self.shot_channel.stop()
         self.boss_laser_channel.stop()
         self.boss_laser_fire_channel.stop()
+        self.golem_mine_channel.stop()
+        self.golem_orb_channel.stop()
         for sound in self._sounds.values():
             sound.stop()
 
