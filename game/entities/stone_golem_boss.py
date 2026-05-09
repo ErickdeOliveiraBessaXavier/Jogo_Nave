@@ -136,6 +136,7 @@ class GolemMine:
             self.health = 0
             self.dead = True
             from ..systems import hit_sounds as _hs
+
             _hs.GOLEM_STOP_MINE_TIMER()
 
     def get_points_value(self) -> int:
@@ -194,10 +195,12 @@ class GolemMine:
             self._tick_timer -= dt
             if self._tick_timer <= 0:
                 from ..systems import hit_sounds as _hs
+
                 _hs.GOLEM_MINE_TIMER()
                 self._tick_timer = 1.0 / blink_freq
             if self._fuse_timer >= self.FUSE_TIME:
                 from ..systems import hit_sounds as _hs
+
                 _hs.GOLEM_STOP_MINE_TIMER()
                 _hs.GOLEM_ORB_PURPLE()
                 self._phase = "exploded"
@@ -996,6 +999,7 @@ class StoneGolemBoss:
             0.0,
         )
         from ..systems import hit_sounds as _hs
+
         if new_state == "CHARGE":
             self._charge_particles.clear()
             _hs.GOLEM_CHARGING()
@@ -1163,7 +1167,9 @@ class StoneGolemBoss:
             return
 
         # Cull reference if the sentry died
-        if self._active_sentry is not None and getattr(self._active_sentry, "dead", True):
+        if self._active_sentry is not None and getattr(
+            self._active_sentry, "dead", True
+        ):
             self._active_sentry = None
 
         # If no sentry alive, count down and spawn one
@@ -1291,6 +1297,7 @@ class StoneGolemBoss:
                 )
                 self._burst_done = True
                 from ..systems import hit_sounds as _hs
+
                 _hs.GOLEM_ERUPTION()
 
             # Detritos contínuos durante a subida explosiva (intervalo fixo de 0.12s)
@@ -1337,6 +1344,7 @@ class StoneGolemBoss:
                 )
                 self._burst_done = True
                 from ..systems import hit_sounds as _hs
+
                 _hs.GOLEM_ERUPTION()
             elif self._entry_debris_timer >= 0.18:
                 self._entry_debris_timer = 0.0
@@ -1405,7 +1413,11 @@ class StoneGolemBoss:
                     self._half_mine_queue -= 1
                     self._half_mine_timer = 1.0
 
-        if not active_bots and not self._half_phase_mines and self._half_mine_queue == 0:
+        if (
+            not active_bots
+            and not self._half_phase_mines
+            and self._half_mine_queue == 0
+        ):
             self._finish_half_phase()
 
     def _spawn_debris_cluster(
@@ -1718,6 +1730,7 @@ class StoneGolemBoss:
                 )
             self._orb_shots_done += 1
             from ..systems import hit_sounds as _hs
+
             _hs.GOLEM_ORB_PURPLE()
 
         if self._orb_shots_done >= max_waves and self.fsm_ticks > (

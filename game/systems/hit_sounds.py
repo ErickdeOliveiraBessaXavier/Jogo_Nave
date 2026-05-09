@@ -7,18 +7,20 @@ custo de chamada é idêntico a sound_manager.play_X().
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from ..core.sound import sound_manager
 
-EXPLOSION_ALIEN = sound_manager.play_explosion_alien
-EXPLOSION_ASTEROID = sound_manager.play_explosion_asteroid
-EXPLOSION_BOSS = sound_manager.play_explosion_boss
-BOSS_DAMAGE = sound_manager.play_boss_damage
+EXPLOSION_ALIEN: Callable[[], None] = sound_manager.play_explosion_alien
+EXPLOSION_ASTEROID: Callable[[], None] = sound_manager.play_explosion_asteroid
+EXPLOSION_BOSS: Callable[[], None] = sound_manager.play_explosion_boss
+BOSS_DAMAGE: Callable[[], None] = sound_manager.play_boss_damage
 
 # StoneGolemBoss
-GOLEM_MINE_TIMER = sound_manager.play_golem_mine_timer
-GOLEM_STOP_MINE_TIMER = sound_manager.stop_golem_mine_timer
-GOLEM_CHARGING = sound_manager.play_boss_laser_charging
-GOLEM_STOP_CHARGING = sound_manager.stop_boss_laser_charging
-GOLEM_SWEEP_LASER = sound_manager.play_boss_laser_fire
-GOLEM_ORB_PURPLE = sound_manager.play_golem_orb_purple
-GOLEM_ERUPTION = sound_manager.play_golem_eruption
+GOLEM_MINE_TIMER: Callable[[], None] = sound_manager.play_golem_mine_timer
+GOLEM_STOP_MINE_TIMER: Callable[[], None] = sound_manager.stop_golem_mine_timer
+GOLEM_CHARGING: Callable[[], None] = sound_manager.play_boss_laser_charging
+GOLEM_STOP_CHARGING: Callable[[], None] = sound_manager.stop_boss_laser_charging
+GOLEM_SWEEP_LASER: Callable[[], None] = sound_manager.play_boss_laser_fire
+GOLEM_ORB_PURPLE: Callable[[], None] = sound_manager.play_golem_orb_purple
+GOLEM_ERUPTION: Callable[[], None] = sound_manager.play_golem_eruption

@@ -23,7 +23,11 @@ def draw_bordered_button(
 
     temp = pygame.Surface((adjusted.width + 4, adjusted.height + 4), pygame.SRCALPHA)
     pygame.draw.rect(
-        temp, (*border_color, alpha), pygame.Rect(2, 2, adjusted.width, adjusted.height), 2, border_radius=8
+        temp,
+        (*border_color, alpha),
+        pygame.Rect(2, 2, adjusted.width, adjusted.height),
+        2,
+        border_radius=8,
     )
     surface.blit(temp, (adjusted.x - 2, adjusted.y - 2))
 
@@ -31,7 +35,10 @@ def draw_bordered_button(
     text_surf.set_alpha(alpha)
     surface.blit(
         text_surf,
-        (adjusted.centerx - text_surf.get_width() / 2, adjusted.centery - text_surf.get_height() / 2),
+        (
+            adjusted.centerx - text_surf.get_width() / 2,
+            adjusted.centery - text_surf.get_height() / 2,
+        ),
     )
 
 
@@ -49,7 +56,9 @@ def render_with_fade(
 
     if transitioning:
         alpha_mult = (1.0 - transition_progress) if fade_out else transition_progress
-        temp = pygame.Surface((surface.get_width(), surface.get_height()), pygame.SRCALPHA)
+        temp = pygame.Surface(
+            (surface.get_width(), surface.get_height()), pygame.SRCALPHA
+        )
         view.render(temp)
         temp.set_alpha(int(255 * alpha_mult))
         surface.blit(temp, (0, 0))

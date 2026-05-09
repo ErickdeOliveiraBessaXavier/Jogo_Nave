@@ -224,7 +224,9 @@ class StatisticsView:
         alpha: int = 255,
         offset_y: int = 0,
     ):
-        draw_bordered_button(surface, rect, text, self.item_font, color, alpha, offset_y)
+        draw_bordered_button(
+            surface, rect, text, self.item_font, color, alpha, offset_y
+        )
 
     def _draw_tabs(self, surface: pygame.Surface, alpha: int = 255, offset_y: int = 0):
         for i, tab in enumerate(StatTab):
@@ -683,8 +685,13 @@ class StatisticsScene(Scene):
 
     def render(self, surface: pygame.Surface):
         render_with_fade(
-            surface, self.view, self.r.starfield,
-            self.transitioning, self.fade_out, self.transition_progress, BLACK
+            surface,
+            self.view,
+            self.r.starfield,
+            self.transitioning,
+            self.fade_out,
+            self.transition_progress,
+            BLACK,
         )
 
 

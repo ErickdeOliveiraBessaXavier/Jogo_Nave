@@ -91,4 +91,3 @@ class RockGliderPool(PoolStatsMixin):
     def clear_active(self) -> None:
         for glider in self.active[:]:
             self.release(glider)
-

@@ -3,13 +3,17 @@ from typing import TYPE_CHECKING, Any, Callable, Sequence, TypeAlias, cast
 import pygame
 
 from ..core.config import config as config_instance
+from ..core.upgrades_config import (
+    EXPLOSIVE_BULLET_DAMAGE,
+    EXPLOSIVE_BULLET_RADIUS as _EXPLOSIVE_BULLET_RADIUS,
+)
 from ..core.sound import sound_manager
 from ..core.spatial_grid import SpatialGrid
 from ..entities.air_strike_bomb import AirStrikeBomb
 from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
 from ..entities.boss_square import BossSquare
-from ..entities.bot_elemental import EnergyOrb
+from ..entities.bot_elemental_attacks import EnergyOrb
 from ..entities.bullet import Bullet
 from ..entities.cannon_mine import CannonMine, MineState
 from ..entities.explosion import ExplosionType
@@ -49,7 +53,7 @@ class CollisionConstants:
     SPIKE_EXPLOSION_SIZE = 15
     MINE_DAMAGE_DEFAULT = 2
     MINE_DAMAGE_AIRSTRIKE = 5
-    EXPLOSIVE_BULLET_RADIUS = 60
+    EXPLOSIVE_BULLET_RADIUS = _EXPLOSIVE_BULLET_RADIUS
     ICE_SLOW_DURATION = 0.15
 
 
@@ -925,7 +929,7 @@ class Collisions:
             ncx, ncy, _ = nearby.collision_circle()
             if (ncx - cx) ** 2 + (ncy - cy) ** 2 >= radius**2:
                 continue
-            hit_damage = 2 if getattr(nearby, "is_explosive_mine", False) else 1
+            hit_damage = EXPLOSIVE_BULLET_DAMAGE
             r = self._apply_hit(nearby, hit_damage, ncx, ncy, entity_manager)
             score_gain += r.points
             if r.killed:

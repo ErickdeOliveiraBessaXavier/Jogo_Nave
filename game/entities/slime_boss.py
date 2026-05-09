@@ -540,7 +540,9 @@ class SlimeBoss:
                     frame = self.animation_frames[self.current_frame]
                     scaled_frame = pygame.transform.smoothscale(frame, current_size)
                 except (pygame.error, ValueError, TypeError) as e:
-                    logging.warning("SlimeBoss: Erro ao escalar frame %s: %s", self.current_frame, e)
+                    logging.warning(
+                        "SlimeBoss: Erro ao escalar frame %s: %s", self.current_frame, e
+                    )
                     scaled_frame = pygame.Surface(current_size)
                     scaled_frame.fill((255, 255, 255, 255))
 

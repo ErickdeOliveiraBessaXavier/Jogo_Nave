@@ -683,11 +683,19 @@ class Ship:
             # Usar sensibilidade para movimento proporcional à distância
             sensitivity = 0.02  # 2% de sensibilidade
 
-            # Toxina debuff: Inverte a direção do movimento em relação ao mouse
-            dir_mult = -1.0 if self.invert_controls_timer > 0.0 else 1.0
+            if self.invert_controls_timer > 0.0:
+                # Toxina debuff: espelha o cursor em relação ao centro da tela
+                # para manter o movimento estável (foge para o "anti-cursor")
+                screen_cx = getattr(Config, "SCREEN_WIDTH", 480) / 2
+                screen_cy = getattr(Config, "SCREEN_HEIGHT", 800) / 2
+                target_x = 2 * screen_cx - mouse_x
+                target_y = 2 * screen_cy - mouse_y
+            else:
+                target_x = mouse_x
+                target_y = mouse_y
 
-            move_vec.x = (mouse_x - ship_center_x) * sensitivity * dir_mult
-            move_vec.y = (mouse_y - ship_center_y) * sensitivity * dir_mult
+            move_vec.x = (target_x - ship_center_x) * sensitivity
+            move_vec.y = (target_y - ship_center_y) * sensitivity
         else:
             # Movimento por teclado
             # Toxina debuff: Inverte mapeamento de teclas

@@ -607,7 +607,9 @@ class PlayerProfile:
             # Atualizar checkpoint para o novo mundo
             self.current_checkpoint_world = next_world_id
             self.save()
-            logger.info("🌍 Mundo %s desbloqueado! Checkpoint atualizado.", next_world_id)
+            logger.info(
+                "🌍 Mundo %s desbloqueado! Checkpoint atualizado.", next_world_id
+            )
 
     def set_checkpoint_on_level_start(self, level_number: int):
         """Chamado quando jogador inicia um novo nível - marca checkpoint se primeira vez neste mundo."""
@@ -626,7 +628,10 @@ class PlayerProfile:
             )
             self.current_checkpoint_world = world_config.world_id
             self.save()
-            logger.info("🌍 Primeiro acesso ao Mundo %s - checkpoint definido!", world_config.world_id)
+            logger.info(
+                "🌍 Primeiro acesso ao Mundo %s - checkpoint definido!",
+                world_config.world_id,
+            )
         elif not self.world_unlocks[world_config.world_id].checkpoint_set:
             # Já existe mas não era checkpoint ainda
             self.world_unlocks[world_config.world_id].checkpoint_set = True
@@ -647,7 +652,8 @@ class PlayerProfile:
 
             logger.info(
                 "💀 Reset para checkpoint: Mundo %s, Nível %s",
-                checkpoint_world.world_id, checkpoint_world.start_level,
+                checkpoint_world.world_id,
+                checkpoint_world.start_level,
             )
             return checkpoint_world.start_level
 
@@ -927,9 +933,11 @@ class PlayerProfile:
             direction = "mais fácil" if new_adjustment < 1.0 else "mais difícil"
             logging.info(
                 "[Meta-Progression] Level %s ajustado %.0f%% %s",
-                level_num, abs(new_adjustment - 1.0) * 100, direction,
+                level_num,
+                abs(new_adjustment - 1.0) * 100,
+                direction,
             )
-            logging.info("  Motivo: %s", analysis['reason'])
+            logging.info("  Motivo: %s", analysis["reason"])
 
         return adjusted_config
 
@@ -1035,7 +1043,9 @@ class PlayerProfile:
                         )
                         self.world_unlocks[world_id] = status
                     except (ValueError, TypeError, KeyError):
-                        logger.warning("Skipping corrupt world data for world %s", world_id_str)
+                        logger.warning(
+                            "Skipping corrupt world data for world %s", world_id_str
+                        )
                         continue
 
                 # Inicializar mundo 1 se não existir (mundo padrão sempre desbloqueado)
@@ -1134,7 +1144,9 @@ class PlayerProfile:
 
                         self.level_stats[level_num] = stats
                     except (ValueError, TypeError, KeyError):
-                        logger.warning("Skipping corrupt level data for level %s", level_num_str)
+                        logger.warning(
+                            "Skipping corrupt level data for level %s", level_num_str
+                        )
                         continue
 
                 # Ajustes

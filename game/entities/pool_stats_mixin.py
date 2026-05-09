@@ -1,6 +1,9 @@
+from typing import Any
+
+
 class PoolStatsMixin:
-    active: list
-    pool: list
+    active: list[Any]
+    pool: list[Any]
     peak_active: int
     max_size: int
     total_created: int

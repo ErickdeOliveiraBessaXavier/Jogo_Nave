@@ -268,7 +268,8 @@ class WorldSelectionView:
         theme_str = world_config.theme.value.lower()
         if theme_str == "procedural":
             themes = ["mountains", "city", "volcanic"]
-            return themes[(world_config.world_id - 5) % len(themes)]
+            idx = int((world_config.world_id - 5) % len(themes))
+            return themes[idx]
         return theme_str
 
     def _build_background_for(self, index: int) -> None:
@@ -488,7 +489,9 @@ class WorldSelectionView:
                 try:
                     self._bg_scratch_a.fill((0, 0, 0, 0))
                     self.previous_background.draw(self._bg_scratch_a)
-                    self._bg_scratch_a.set_alpha(int(76 * (1.0 - self.transition_progress)))
+                    self._bg_scratch_a.set_alpha(
+                        int(76 * (1.0 - self.transition_progress))
+                    )
                     surface.blit(self._bg_scratch_a, (0, 0))
                 except Exception:  # pylint: disable=broad-exception-caught
                     pass
@@ -497,7 +500,9 @@ class WorldSelectionView:
                 try:
                     self._bg_scratch_a.fill((0, 0, 0, 0))
                     self.renderer.starfield.draw(self._bg_scratch_a)
-                    self._bg_scratch_a.set_alpha(int(76 * (1.0 - self.transition_progress)))
+                    self._bg_scratch_a.set_alpha(
+                        int(76 * (1.0 - self.transition_progress))
+                    )
                     surface.blit(self._bg_scratch_a, (0, 0))
                 except Exception:  # pylint: disable=broad-exception-caught
                     pass

@@ -326,8 +326,7 @@ class EnemySpawner:
         self.spawn_clock = 0.0
         self.last_spawn_clock = -9999.0
         self.last_spawn_clock_by_type = {
-            self._enemy_type_key(et): 0.0
-            for et in self.level_config.enemy_types
+            self._enemy_type_key(et): 0.0 for et in self.level_config.enemy_types
         }
         self._last_enemy_counts: dict[str, int] = {}
 

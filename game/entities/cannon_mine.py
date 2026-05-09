@@ -5,6 +5,8 @@ from typing import Any, Callable, Optional, Set
 
 import pygame
 
+from ..core.upgrades_config import CANNON_MINE_DAMAGE, CANNON_MINE_RADIUS
+
 
 class MineState(Enum):
     """Estados possíveis da mina."""
@@ -49,8 +51,8 @@ class CannonMine:
         target_y: float,
         launch_x: float,
         launch_y: float,
-        explosion_radius: float = 70.0,  # Aumentei um pouco
-        damage: int = 80,
+        explosion_radius: float = CANNON_MINE_RADIUS,
+        damage: int = CANNON_MINE_DAMAGE,
         on_explode: Optional[Callable[[], None]] = None,
     ):
         self.target_x = target_x

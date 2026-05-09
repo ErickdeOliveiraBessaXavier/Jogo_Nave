@@ -286,10 +286,19 @@ def print_world_summary() -> None:
     for world in get_all_worlds():
         logger.info("\n🌍 Mundo %s: %s", world.world_id, world.name)
         logger.info("   Descrição: %s", world.description)
-        logger.info("   Níveis: %s-%s (Total: %s)", world.start_level, world.end_level, world.total_stages)
-        logger.info("   Boss: %s", world.boss_type.__name__ if world.boss_type else 'Procedural')
+        logger.info(
+            "   Níveis: %s-%s (Total: %s)",
+            world.start_level,
+            world.end_level,
+            world.total_stages,
+        )
+        logger.info(
+            "   Boss: %s", world.boss_type.__name__ if world.boss_type else "Procedural"
+        )
         logger.info("   Tema: %s", world.theme.value)
-        logger.info("   Cores: RGB%s / RGB%s", world.primary_color, world.secondary_color)
+        logger.info(
+            "   Cores: RGB%s / RGB%s", world.primary_color, world.secondary_color
+        )
 
         if world.theme_modifiers:
             logger.info("   Modificadores: %s", world.theme_modifiers)

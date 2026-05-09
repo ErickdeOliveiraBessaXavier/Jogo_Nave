@@ -47,6 +47,19 @@ HOMING_FIRE_RATE_PENALTY: float = (
     1.2  # Leva 20% mais tempo para atirar (cadência reduzida)
 )
 
+# Parâmetros de balanceamento do Tiro Explosivo
+EXPLOSIVE_BULLET_DAMAGE: int = 15  # Dano aplicado a cada inimigo na área
+EXPLOSIVE_BULLET_RADIUS: int = 60  # Raio da explosão em pixels
+
+# Parâmetros de balanceamento do Air Strike
+AIR_STRIKE_BOMB_DAMAGE: int = 100
+AIR_STRIKE_BOMB_RADIUS: float = 80.0
+AIR_STRIKE_BOMB_FALL_SPEED: float = 800.0
+
+# Parâmetros de balanceamento da Cannon Tower
+CANNON_MINE_DAMAGE: int = 80
+CANNON_MINE_RADIUS: float = 70.0
+
 # Futuro: overrides por dificuldade ou progressão
 # Example structure (não usado no MVP):
 # PER_UPGRADE_BALANCE: dict[UpgradeType, dict[str, float | int]] = {

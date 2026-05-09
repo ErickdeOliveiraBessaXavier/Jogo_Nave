@@ -1,21 +1,22 @@
 from abc import ABC, abstractmethod
+from typing import Any, ClassVar
 
 
 class ZoneBase(ABC):
-    DAMAGE_INTERVAL: float
-    _SPAWN_INTERVAL: float
+    DAMAGE_INTERVAL: ClassVar[float]
+    _SPAWN_INTERVAL: ClassVar[float]
 
-    # Subclass __init__ must set these before update() is called
-    x: float
-    y: float
-    radius: int
-    duration: float
-    timer: float
-    dead: bool
-    hit_cooldowns: dict[int, float]
-    anim_timer: float
-    _spawn_timer: float
-    _particles: list
+    def __init__(self, x: float, y: float, radius: int, duration: float) -> None:
+        self.x = x
+        self.y = y
+        self.radius = radius
+        self.duration = duration
+        self.timer = duration
+        self.dead = False
+        self.hit_cooldowns: dict[int, float] = {}
+        self.anim_timer = 0.0
+        self._spawn_timer = 0.0
+        self._particles: list[Any] = []
 
     def update(self, dt: float) -> None:
         if self.dead:

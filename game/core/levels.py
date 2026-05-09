@@ -1347,13 +1347,15 @@ class ProceduralLevelGenerator:
 
             if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.15:
                 if stage_progress < 0.40:
-                    mage_base_time = 22.0   # raro no early
+                    mage_base_time = 22.0  # raro no early
                 elif stage_progress < 0.70:
-                    mage_base_time = 14.0   # moderado no mid
+                    mage_base_time = 14.0  # moderado no mid
                 else:
-                    mage_base_time = 10.0   # frequente no late
+                    mage_base_time = 10.0  # frequente no late
                 mage_spawn_time = (mage_base_time / difficulty) / spawn_multiplier
-                enemy_spawn_config[MountainMage] = self._clamp_spawn_time(mage_spawn_time)
+                enemy_spawn_config[MountainMage] = self._clamp_spawn_time(
+                    mage_spawn_time
+                )
 
             # Mountain Propeller
             if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.35:
@@ -1497,8 +1499,8 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # Meteor: 0.5,
             # Alien: 1.5,
             # EyeEnemy: 2.0,
-            RockGlider: 0.6,
-            # ElementalRobot: 1.0,
+            # RockGlider: 0.6,
+            ElementalRobot: 1.0,
             # StoneSentry: 30.0,
             # MountainMage: 10.0,
             # MountainPropeller: 0.8,
@@ -1568,7 +1570,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         level_number=12,
         enemy_spawn_config={
             Meteor: 0.8,
-            Alien: 3.0,            
+            Alien: 3.0,
         },
         enemies_to_clear=350,
         boss_type=Boss,

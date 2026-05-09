@@ -1,26 +1,3 @@
-"""Boss Serpente de Pedra das Cordilheiras.
-
-Estrutura:
-  - _SerpentDustParticle  — partícula de poeira (sistema de partículas)
-  - SerpentBlock          — bloco de pedra lateral (entidade inimiga independente)
-  - MountainSerpentBoss   — cabeça do boss (entidade principal)
-  - SerpentRockBullet     — projétil temático de rocha (fragmento de bloco)
-
-Padrões aplicados
------------------
-* Constantes de física/gameplay centralizadas e comentadas com unidades.
-* ``__slots__`` em todas as classes de dados/entidades para reduzir overhead de memória.
-* Anotações de tipo explícitas; sem ``Any`` desnecessário.
-* Separação clara de responsabilidades: cada método faz uma coisa só.
-* Nomes de variáveis em português, alinhados ao restante do projeto.
-* Tipos de retorno explícitos em todos os métodos públicos.
-* Remoção de código morto (métodos legado vazios substituídos por comentário).
-* ``_get_row_pair`` usa dicionário pré-construído em vez de loop O(n).
-* Partículas gerenciadas in-place para evitar realocações de lista por frame.
-* Easing centralizado em helper estático.
-* Fase do boss calculada via método dedicado, sem bloco ternário aninhado.
-"""
-
 import math
 import random
 from typing import TYPE_CHECKING, Final, List, Literal, Optional, TypeAlias, TypedDict

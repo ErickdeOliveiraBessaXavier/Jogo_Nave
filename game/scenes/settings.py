@@ -432,7 +432,9 @@ class SettingsView:
         alpha: int = 255,
         offset_y: int = 0,
     ):
-        draw_bordered_button(surface, rect, text, self.item_font, color, alpha, offset_y)
+        draw_bordered_button(
+            surface, rect, text, self.item_font, color, alpha, offset_y
+        )
 
     def _draw_card(
         self,
@@ -826,6 +828,11 @@ class SettingsScene(Scene):
 
     def render(self, surface: pygame.Surface):
         render_with_fade(
-            surface, self.view, self.r.starfield,
-            self.transitioning, self.fade_out, self.transition_progress, BLACK
+            surface,
+            self.view,
+            self.r.starfield,
+            self.transitioning,
+            self.fade_out,
+            self.transition_progress,
+            BLACK,
         )

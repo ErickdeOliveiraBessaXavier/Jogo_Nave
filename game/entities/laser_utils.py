@@ -15,7 +15,7 @@ def compute_laser_width(
         shrink_duration = lifetime - (expand_time + hold_time)
         if shrink_duration > 0:
             progress = (timer - (expand_time + hold_time)) / shrink_duration
-            w = max_w * (1 - progress ** 2)
+            w = max_w * (1 - progress**2)
         else:
             w = 0.0
     return max(0.0, w)

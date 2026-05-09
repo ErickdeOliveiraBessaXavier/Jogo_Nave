@@ -345,7 +345,15 @@ class MusicManager:
                 pygame.mixer.music.load(music_path)
 
                 base_volume = self.sound_manager.music_volume
-                if music_type in ["boss", "spike_boss", "slime_boss", "giant_meteor_boss", "mountain_serpent_boss", "cloud_archmage_boss", "stone_golem_boss"]:
+                if music_type in [
+                    "boss",
+                    "spike_boss",
+                    "slime_boss",
+                    "giant_meteor_boss",
+                    "mountain_serpent_boss",
+                    "cloud_archmage_boss",
+                    "stone_golem_boss",
+                ]:
                     base_volume *= self.sound_manager.boss_music_multiplier
 
                 target_volume = min(1.0, base_volume * self.sound_manager.master_volume)

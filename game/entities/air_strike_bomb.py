@@ -3,6 +3,12 @@ from typing import Callable, Optional, Set
 
 import pygame
 
+from ..core.upgrades_config import (
+    AIR_STRIKE_BOMB_DAMAGE,
+    AIR_STRIKE_BOMB_FALL_SPEED,
+    AIR_STRIKE_BOMB_RADIUS,
+)
+
 
 class AirStrikeBomb:
     """Bomba do bombardeio aéreo - estilo simplificado como MineExplosion."""
@@ -11,9 +17,9 @@ class AirStrikeBomb:
         self,
         target_x: float,
         target_y: float,
-        explosion_radius: float = 80.0,
-        fall_speed: float = 800.0,
-        damage: int = 100,
+        explosion_radius: float = AIR_STRIKE_BOMB_RADIUS,
+        fall_speed: float = AIR_STRIKE_BOMB_FALL_SPEED,
+        damage: int = AIR_STRIKE_BOMB_DAMAGE,
         on_explode: Optional[Callable[[], None]] = None,
         on_fall: Optional[Callable[[], None]] = None,
     ):

@@ -51,17 +51,8 @@ class IcePoisonZone(ZoneBase):
     _LINE_WIDTH = 3
 
     def __init__(self, x: float, y: float, radius: int, duration: float = 5.0):
-        self.x = x
-        self.y = y
-        self.radius = radius
-        self.duration = duration
-        self.timer = duration
-        self.dead = False
-        self.hit_cooldowns: dict[int, float] = {}
-        self.anim_timer = 0.0
-        self._spawn_timer = 0.0
+        super().__init__(x, y, radius, duration)
         self._particles: list[_PlusParticle] = []
-        # Surface única reutilizada a cada frame — evita alocação por partícula
         self._surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
 
     def _spawn_particle(self) -> None:

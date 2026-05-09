@@ -226,7 +226,9 @@ class BossSquare:
             if p.alpha > 0:
                 color_intensity = int(128 + 127 * p.life)
                 trail_color = (255, color_intensity, int(color_intensity * 0.5))
-                draw_square_trail_particle(surface, p.x, p.y, p.size, trail_color, p.alpha)
+                draw_square_trail_particle(
+                    surface, p.x, p.y, p.size, trail_color, p.alpha
+                )
 
         # Calcular cor com intensidade alternada (usa offset para dessincronizar)
         anim_value = (self.animation_timer + self.animation_offset) * 57.3

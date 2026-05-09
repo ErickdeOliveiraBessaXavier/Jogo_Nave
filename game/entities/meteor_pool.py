@@ -147,4 +147,3 @@ class MeteorPool(PoolStatsMixin):
         """Remove todos os meteoros ativos, devolvendo-os ao pool."""
         for meteor in self.active[:]:
             self.release(meteor)
-

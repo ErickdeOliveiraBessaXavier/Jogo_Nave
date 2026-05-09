@@ -945,8 +945,14 @@ class PlayingScene(Scene):
     def _fire_bullets(self) -> None:
         """Dispara as balas da nave e reinicia o cooldown."""
         bullet_specs = self.ship.bullet_spawn()
-        damage_mult = Config.DAMAGE_BOOST_MULTIPLIER if self.ship.damage_boost_timer > 0.0 else 1.0
-        adjusted_damage = int(Config.BULLET_BASE_DAMAGE * self.player_damage_multiplier * damage_mult)
+        damage_mult = (
+            Config.DAMAGE_BOOST_MULTIPLIER
+            if self.ship.damage_boost_timer > 0.0
+            else 1.0
+        )
+        adjusted_damage = int(
+            Config.BULLET_BASE_DAMAGE * self.player_damage_multiplier * damage_mult
+        )
 
         # Tocar som de tiro (uma vez por salva de tiros)
         sound_manager.play_shot()
@@ -1396,12 +1402,7 @@ class PlayingScene(Scene):
         if orb_hit:
             self._handle_ship_hit()
             if self.ship.invuln > 0:
-                if orb_hit.theme == "inferno":
-                    self.ship.fire_rate_modifier_timer = 5
-                elif orb_hit.theme == "toxina":
-                    self.ship.invert_controls_timer = 4
-                elif orb_hit.theme == "nevasca":
-                    self.ship.speed_modifier_timer = 3
+                orb_hit.apply_effect(self.ship)
 
         from ..entities.boss_laser import BossLaser
 

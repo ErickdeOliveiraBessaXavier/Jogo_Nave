@@ -331,7 +331,12 @@ class SoundManager:
         if duck:
             # Reduzir volume da música para 60% do normal
             base_volume = self.music_volume
-            if self.current_music in ["boss", "spike_boss", "slime_boss", "stone_golem_boss"]:
+            if self.current_music in [
+                "boss",
+                "spike_boss",
+                "slime_boss",
+                "stone_golem_boss",
+            ]:
                 base_volume *= self.boss_music_multiplier
 
             duck_volume = base_volume * 0.6
@@ -340,7 +345,12 @@ class SoundManager:
         else:
             # Restaurar volume original da música
             base_volume = self.music_volume
-            if self.current_music in ["boss", "spike_boss", "slime_boss", "stone_golem_boss"]:
+            if self.current_music in [
+                "boss",
+                "spike_boss",
+                "slime_boss",
+                "stone_golem_boss",
+            ]:
                 base_volume *= self.boss_music_multiplier
 
             final_volume = min(1.0, base_volume * self.master_volume)

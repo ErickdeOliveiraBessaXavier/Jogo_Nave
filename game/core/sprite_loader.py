@@ -83,9 +83,16 @@ class SpriteLoader:
                 continue
 
         if not frames:
-            logging.error("%s: NENHUM frame foi carregado! Verifique o caminho dos sprites.", name)
+            logging.error(
+                "%s: NENHUM frame foi carregado! Verifique o caminho dos sprites.", name
+            )
         elif len(frames) < num_frames:
-            logging.warning("%s: Apenas %s/%s frames foram carregados.", name, len(frames), num_frames)
+            logging.warning(
+                "%s: Apenas %s/%s frames foram carregados.",
+                name,
+                len(frames),
+                num_frames,
+            )
         else:
             logging.info("%s: %s frames carregados com sucesso.", name, len(frames))
 

@@ -190,7 +190,9 @@ class SquareMinionBoss:
                 if p.alpha > 0:
                     color_intensity = int(128 + 127 * p.life)
                     trail_color = (255, color_intensity // 2, 0)
-                    draw_square_trail_particle(surface, p.x, p.y, p.size, trail_color, p.alpha)
+                    draw_square_trail_particle(
+                        surface, p.x, p.y, p.size, trail_color, p.alpha
+                    )
 
         # Color: Red for enemy
         anim_value = (self.animation_timer + self.animation_offset) * 57.3

@@ -5,6 +5,7 @@ Usage:
 
 It finds the repo root (a parent that contains `game/`) then scans `game/assets` recursively.
 """
+
 from pathlib import Path
 from PIL import Image
 

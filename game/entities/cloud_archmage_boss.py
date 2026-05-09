@@ -1787,7 +1787,11 @@ class CloudArchmageBoss:
             self._displayed_tint = None
             return
         if self._displayed_tint is None:
-            self._displayed_tint = (float(target[0]), float(target[1]), float(target[2]))
+            self._displayed_tint = (
+                float(target[0]),
+                float(target[1]),
+                float(target[2]),
+            )
             return
         k = min(1.0, self._TINT_LERP_SPEED * dt)
         r, g, b = self._displayed_tint
@@ -1947,7 +1951,11 @@ class CloudArchmageBoss:
             self._draw_shield(surface)
 
         gradient_tint = (
-            (int(self._displayed_tint[0]), int(self._displayed_tint[1]), int(self._displayed_tint[2]))
+            (
+                int(self._displayed_tint[0]),
+                int(self._displayed_tint[1]),
+                int(self._displayed_tint[2]),
+            )
             if self._displayed_tint is not None
             else None
         )
