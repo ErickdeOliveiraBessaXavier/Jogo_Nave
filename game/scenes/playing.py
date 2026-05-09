@@ -927,10 +927,10 @@ class PlayingScene(Scene):
         for m in em.boulders:
             if not m.dead:
                 m.dead = True
-        for s in em.rock_shards:
+        for s in em.attack_debris:
             if not s.dead:
                 s.dead = True
-        for r in em.orbital_rocks:
+        for r in em.orbital_debris:
             if not r.dead and getattr(r, "causes_damage", False):
                 r.dead = True
 
@@ -1710,10 +1710,10 @@ class PlayingScene(Scene):
             if not getattr(e, "dead", False)
         )
         active_boulders = sum(1 for m in em.boulders if not m.dead)
-        active_rock_shards = sum(1 for s in em.rock_shards if not s.dead)
-        active_orbital_rocks = sum(
+        active_attack_debris = sum(1 for s in em.attack_debris if not s.dead)
+        active_orbital_debris = sum(
             1
-            for r in em.orbital_rocks
+            for r in em.orbital_debris
             if not r.dead and getattr(r, "causes_damage", False)
         )
 
@@ -1721,8 +1721,8 @@ class PlayingScene(Scene):
             active_enemies
             + active_formation_enemies
             + active_boulders
-            + active_rock_shards
-            + active_orbital_rocks
+            + active_attack_debris
+            + active_orbital_debris
         )
 
     def _check_level_progression(self) -> None:

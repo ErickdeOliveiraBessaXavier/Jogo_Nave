@@ -8,7 +8,7 @@ Refatorado para seguir boas práticas de performance, robustez e legibilidade.
 import logging
 import math
 import random
-from typing import TYPE_CHECKING, Any, Final, List, Optional, Tuple, TypeAlias
+from typing import TYPE_CHECKING, Any, Final, List, Optional, Tuple
 
 import pygame
 
@@ -170,12 +170,12 @@ class GolemMine:
     def should_remove(self) -> bool:
         return self.dead
 
-    def update(self, dt: float) -> list["RockShard"]:
+    def update(self, dt: float) -> list["AttackDebris"]:
         self._pulse_t += dt
         if self._hit_flash > 0:
             self._hit_flash -= dt
 
-        spawned: list[RockShard] = []
+        spawned: list[AttackDebris] = []
 
         if self._phase == "landing":
             dx = self.target_x - self.x
@@ -207,7 +207,7 @@ class GolemMine:
                 for i in range(self.EXPL_SHARDS):
                     angle_deg = (360.0 / self.EXPL_SHARDS) * i + random.uniform(-5, 5)
                     spawned.append(
-                        RockShard(
+                        AttackDebris(
                             self.x,
                             self.y,
                             angle_deg,
@@ -275,11 +275,7 @@ class GolemMine:
                 surface.blit(self._arc_surf, (cx - r * 2, cy - r * 2))
 
 
-# Alias de compatibilidade — EntityManager referencia o nome Boulder
-Boulder: TypeAlias = GolemMine
-
-
-class RockShard:
+class AttackDebris:
     """
     Fragmento de pedra disparado pelo boss.
     """
@@ -305,7 +301,7 @@ class RockShard:
         self._screen_w = getattr(Config, "SCREEN_WIDTH", 480)
         self._screen_h = getattr(Config, "SCREEN_HEIGHT", 800)
 
-        speed = getattr(Config, "GOLEM_SHARD_SPEED", 420) * speed_mult
+        speed = getattr(Config, "GOLEM_ATTACK_DEBRIS_SPEED", 300) * speed_mult
         rad = math.radians(angle_deg)
         self.vx = math.cos(rad) * speed
         self.vy = math.sin(rad) * speed
@@ -383,7 +379,7 @@ class RockShard:
         return self.dead
 
 
-class OrbitalRock:
+class OrbitalDebris:
     """
     Pedra de terra usada no ataque Earth do Golem.
     """
@@ -429,7 +425,7 @@ class OrbitalRock:
         self._fire_perp_x = 0.0
         self._fire_perp_y = 0.0
         self._fire_perp_decay = 3.5
-        self._fire_gravity = getattr(Config, "GOLEM_BOULDER_GRAVITY", 30)
+        self._fire_gravity = getattr(Config, "GOLEM_DEBRIS_GRAVITY", 30)
 
         hit = S * self._size
         self.rect = pygame.Rect(int(self.x) - hit, int(self.y) - hit, hit * 2, hit * 2)
@@ -455,7 +451,7 @@ class OrbitalRock:
 
     def fire_at(self, target_x: float, target_y: float) -> None:
         self.phase = "fired"
-        base_speed = getattr(Config, "GOLEM_BOULDER_SPEED", 340) * 1.15
+        base_speed = getattr(Config, "GOLEM_ORBITAL_DEBRIS_SPEED", 340) * 1.15
         spread_x = target_x + random.uniform(-250, 250)
         spread_y = target_y + random.uniform(-100, 250)
         dx, dy = spread_x - self.x, spread_y - self.y
@@ -561,10 +557,10 @@ class OrbitalRock:
         return self.dead
 
 
-class EntryDebris:
+class EmergeDebris:
     """
     Detritos lançados quando o boss irrompe do chão.
-    Design similar ao OrbitalRock, com gravidade.
+    Design similar ao OrbitalDebris, com gravidade.
     """
 
     TRAIL_FADE_SPEED = 600.0
@@ -601,7 +597,7 @@ class EntryDebris:
         self._gravity = (
             gravity
             if gravity is not None
-            else getattr(Config, "GOLEM_BOULDER_GRAVITY", 30) * 5.0
+            else getattr(Config, "GOLEM_DEBRIS_GRAVITY", 30) * 5.0
         )
 
         self._screen_w = getattr(Config, "SCREEN_WIDTH", 480)
@@ -826,7 +822,7 @@ class StoneGolemBoss:
         self._shards_fired_at: set[int] = set()
         self._sweep_locked_angle: float = 0.0
         self._sweep_lock_done: bool = False
-        self._orbital_rocks: List[OrbitalRock] = []
+        self._orbital_debris: List[OrbitalDebris] = []
         self._mines: List[GolemMine] = []
         self._half_phase_mines: List[GolemMine] = []
         self._half_phase_bots: List[ElementalRobot] = []
@@ -837,9 +833,12 @@ class StoneGolemBoss:
         self._orb_shots_done: int = 0
         self._orb_rotation: float = 0.0
         self._charge_particles: List[_ChargeParticle] = []
-        self._entry_debris: List[EntryDebris] = []
-        self._entry_debris_timer: float = 0.0
+        self._emerge_debris: List[EmergeDebris] = []
+        self._emerge_debris_timer: float = 0.0
         self._burst_done: bool = False
+        self._retreat_step: int = 0
+        self._retreat_waiting: bool = False
+        self._retreat_wait_timer: float = 0.0
         self._half_phase_triggered: bool = False
         self._half_phase_pending: bool = False
         self._half_phase_bots_spawned: bool = False
@@ -911,7 +910,7 @@ class StoneGolemBoss:
         self._sweep_total = math.radians(30)
         self._shards_fired_at: set[int] = set()
         self._sweep_locked_angle, self._sweep_lock_done = math.pi / 2, False
-        self._orbital_rocks = []
+        self._orbital_debris = []
         self._mines = []
         self._half_phase_mines = []
         self._half_phase_bots = []
@@ -923,9 +922,12 @@ class StoneGolemBoss:
         self._fire_ready = False
         self._orb_shots_done, self._orb_rotation = 0, 0.0
         self._charge_particles = []
-        self._entry_debris: List[EntryDebris] = []
-        self._entry_debris_timer: float = 0.0
+        self._emerge_debris: List[EmergeDebris] = []
+        self._emerge_debris_timer: float = 0.0
         self._burst_done: bool = False
+        self._retreat_step = 0
+        self._retreat_waiting = False
+        self._retreat_wait_timer = 0.0
         self._half_phase_triggered = False
         self._half_phase_pending = False
         self._half_phase_bots_spawned = False
@@ -1024,15 +1026,15 @@ class StoneGolemBoss:
             _hs.GOLEM_STOP_CHARGING()
             _hs.GOLEM_SWEEP_LASER()
         elif new_state == "EARTH_PULL":
-            self._orbital_rocks.clear()
+            self._orbital_debris.clear()
             cx, cy, S = *self._shared_center(), self.SCALE
             for _ in range(15):
                 rx, ry = (
                     self.w * 0.45 + random.random() * self.w * 0.2,
                     self.w * 0.12 + random.random() * self.w * 0.1,
                 )
-                self._orbital_rocks.append(
-                    OrbitalRock(
+                self._orbital_debris.append(
+                    OrbitalDebris(
                         self._screen_w,
                         self._screen_h,
                         cx,
@@ -1046,10 +1048,10 @@ class StoneGolemBoss:
                     )
                 )
         elif new_state == "EARTH_ORBIT":
-            for r in self._orbital_rocks:
+            for r in self._orbital_debris:
                 r.phase = "orbiting"
         elif new_state == "EARTH_FIRE":
-            for r in self._orbital_rocks:
+            for r in self._orbital_debris:
                 if r.phase == "orbiting":
                     r.fire_delay = random.uniform(0.1, 1.2)
         elif new_state == "HALF_RETREAT":
@@ -1058,11 +1060,15 @@ class StoneGolemBoss:
             self._half_phase_bots_spawned = False
             self._half_phase_mines.clear()
             self._half_phase_bots.clear()
-            self._orbital_rocks.clear()
+            self._orbital_debris.clear()
             self._mines.clear()
             self._charge_particles.clear()
-            self._entry_debris.clear()
+            self._emerge_debris.clear()
             self._burst_done = False
+            self._retreat_step = 0
+            self._retreat_waiting = False
+            self._retreat_wait_timer = 0.0
+            self._emerge_debris_timer = 0.0
         elif new_state == "HALF_SUMMON":
             self._half_phase_summon_timer = 0.0
         elif new_state == "HALF_VOLLEY":
@@ -1134,9 +1140,9 @@ class StoneGolemBoss:
         self._half_phase_wave_timer = 0.0
         self._half_mine_queue = 0
         self._half_mine_timer = 0.0
-        self._entry_debris.clear()
+        self._emerge_debris.clear()
         self._charge_particles.clear()
-        self._orbital_rocks.clear()
+        self._orbital_debris.clear()
         self._mines.clear()
         self._attack_bag.clear()
         self._last_attack = ""
@@ -1180,9 +1186,9 @@ class StoneGolemBoss:
                 self._active_sentry = entity_manager.spawn_stone_sentry()
 
     @property
-    def entry_debris(self) -> List[EntryDebris]:
-        """Expõe os detritos de entrada para colisão externa."""
-        return self._entry_debris
+    def emerge_debris(self) -> List[EmergeDebris]:
+        """Expõe os detritos de emerge/submerge para colisão externa."""
+        return self._emerge_debris
 
     def update(
         self,
@@ -1190,9 +1196,9 @@ class StoneGolemBoss:
         player_x: float,
         player_y: float,
         entity_manager: Any | None = None,
-    ) -> Tuple[List["GolemMine"], List[RockShard], List[OrbitalRock]]:
+    ) -> Tuple[List["GolemMine"], List[AttackDebris], List[OrbitalDebris]]:
         new_mines: List[GolemMine] = []
-        new_shards: List[RockShard] = []
+        new_shards: List[AttackDebris] = []
         self._entity_manager = entity_manager
         self._time += dt
         self.fsm_ticks += dt
@@ -1230,21 +1236,21 @@ class StoneGolemBoss:
             p.update(dt, px, py)
         self._charge_particles = [p for p in self._charge_particles if not p.dead]
 
-        for d in self._entry_debris:
+        for d in self._emerge_debris:
             d.update(dt)
-        self._entry_debris = [d for d in self._entry_debris if not d.dead]
+        self._emerge_debris = [d for d in self._emerge_debris if not d.dead]
 
         self._mines = [m for m in self._mines if not m.dead]
         cx, cy = self._shared_center()
-        for r in self._orbital_rocks:
+        for r in self._orbital_debris:
             r.update(dt, cx, cy, player_x, player_y)
-        self._orbital_rocks = [r for r in self._orbital_rocks if not r.dead]
+        self._orbital_debris = [r for r in self._orbital_debris if not r.dead]
 
         self._update_sentry_spawn(dt, entity_manager)
 
         self.rect.x, self.rect.y = int(self.x), int(self.y)
         self._entity_manager = None
-        return new_mines, new_shards, self._orbital_rocks
+        return new_mines, new_shards, self._orbital_debris
 
     def _run_fsm(
         self,
@@ -1252,7 +1258,7 @@ class StoneGolemBoss:
         player_x: float,
         player_y: float,
         new_mines: List["GolemMine"],
-        new_shards: List[RockShard],
+        new_shards: List[AttackDebris],
     ) -> None:
         """Delegador da FSM para métodos específicos de estado."""
         handler = getattr(self, f"_fsm_{self.fsm_state.lower()}", None)
@@ -1265,7 +1271,7 @@ class StoneGolemBoss:
         _px: float,
         _py: float,
         _mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         # Posição onde o "burst" acontece (quando o topo do boss toca a borda da tela)
         burst_y = self._screen_h - 20
@@ -1277,9 +1283,9 @@ class StoneGolemBoss:
             self._jitter_y = random.uniform(-2, 2)
 
             # Alguns detritos prévios (intervalo fixo de 0.25s)
-            self._entry_debris_timer += dt
-            if self._entry_debris_timer >= 0.25:
-                self._entry_debris_timer = 0.0
+            self._emerge_debris_timer += dt
+            if self._emerge_debris_timer >= 0.25:
+                self._emerge_debris_timer = 0.0
                 self._spawn_debris_cluster(1, _px, _py)
         else:
             # O BURST: Sobe muito rápido
@@ -1301,9 +1307,9 @@ class StoneGolemBoss:
                 _hs.GOLEM_ERUPTION()
 
             # Detritos contínuos durante a subida explosiva (intervalo fixo de 0.12s)
-            self._entry_debris_timer += dt
-            if self._entry_debris_timer >= 0.12:
-                self._entry_debris_timer = 0.0
+            self._emerge_debris_timer += dt
+            if self._emerge_debris_timer >= 0.12:
+                self._emerge_debris_timer = 0.0
                 self._spawn_debris_cluster(
                     2,
                     _px,
@@ -1322,46 +1328,82 @@ class StoneGolemBoss:
         _px: float,
         _py: float,
         _mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
+        # Profundidades de parada intermediárias (quanto o fundo do boss ultrapassa screen_h)
+        _SINK_OFFSETS = (self.h * 0.38, self.h * 0.74)
+        _BASE = getattr(Config, "GOLEM_SUBMERGE_DEBRIS_COUNT", 8)
+        _BURST_COUNTS = (_BASE, _BASE + 4, _BASE + 8)
+        _WAIT = 3.0
         retreat_speed = getattr(Config, "GOLEM_ENTRY_SPEED", 160) * 1.8
-        self.y += retreat_speed * dt
-        self._jitter_x = random.uniform(-6, 6)
-        self._jitter_y = random.uniform(-3, 3)
 
-        # Só dispara fragmentos quando o boss estiver realmente próximo do chão,
-        # simulando a perfuração da terra na borda inferior da tela.
-        near_floor_line = self._screen_h - (self.h * 0.15)
-        is_near_floor = (self.y + self.h) >= near_floor_line
-        if is_near_floor:
-            self._entry_debris_timer += dt
-            if not self._burst_done:
+        if self._retreat_waiting:
+            # Tremor de "luta" — intensidade cresce por step
+            intensity = 3.5 + self._retreat_step * 2.0
+            self._jitter_x = random.uniform(-intensity, intensity)
+            self._jitter_y = random.uniform(-intensity * 0.45, intensity * 0.45)
+
+            # Detritos contínuos durante a pausa, cadência aumenta por step
+            self._emerge_debris_timer += dt
+            interval = max(0.12, 0.22 - self._retreat_step * 0.05)
+            if self._emerge_debris_timer >= interval:
+                self._emerge_debris_timer = 0.0
                 self._spawn_debris_cluster(
-                    Config.GOLEM_SUBMERGE_DEBRIS_COUNT,
+                    2 + self._retreat_step,
                     _px,
                     _py,
                     spawn_from_bottom=True,
                 )
-                self._burst_done = True
-                from ..systems import hit_sounds as _hs
 
-                _hs.GOLEM_ERUPTION()
-            elif self._entry_debris_timer >= 0.18:
-                self._entry_debris_timer = 0.0
-                self._spawn_debris_cluster(
-                    2,
-                    _px,
-                    _py,
-                    spawn_from_bottom=True,
-                )
+            self._retreat_wait_timer += dt
+            if self._retreat_wait_timer >= _WAIT:
+                self._retreat_step += 1
+                self._retreat_waiting = False
+                self._retreat_wait_timer = 0.0
+                self._emerge_debris_timer = 0.0
         else:
-            self._entry_debris_timer = 0.0
+            # Descida ativa
+            self.y += retreat_speed * dt
+            self._jitter_x = random.uniform(-6, 6)
+            self._jitter_y = random.uniform(-3, 3)
 
-        if self.y >= self._screen_h + self.h + 60:
-            self.y = float(self._screen_h + self.h + 60)
-            self._jitter_x = 0.0
-            self._jitter_y = 0.0
-            self._change_fsm("HALF_SUMMON")
+            # Detritos contínuos durante a descida
+            self._emerge_debris_timer += dt
+            if self._emerge_debris_timer >= 0.18:
+                self._emerge_debris_timer = 0.0
+                self._spawn_debris_cluster(2, _px, _py, spawn_from_bottom=True)
+
+            if self._retreat_step < 2:
+                # Parada intermediária
+                target_bottom = self._screen_h + _SINK_OFFSETS[self._retreat_step]
+                if (self.y + self.h) >= target_bottom:
+                    self.y = target_bottom - self.h
+                    self._retreat_waiting = True
+                    self._retreat_wait_timer = 0.0
+                    self._emerge_debris_timer = 0.0
+                    self._spawn_debris_cluster(
+                        _BURST_COUNTS[self._retreat_step],
+                        _px,
+                        _py,
+                        spawn_from_bottom=True,
+                    )
+                    from ..systems import hit_sounds as _hs
+                    _hs.GOLEM_ERUPTION()
+            else:
+                # Terceira descida — submersão completa
+                if self.y >= self._screen_h + self.h + 60:
+                    self._spawn_debris_cluster(
+                        _BURST_COUNTS[2],
+                        _px,
+                        _py,
+                        spawn_from_bottom=True,
+                    )
+                    from ..systems import hit_sounds as _hs
+                    _hs.GOLEM_ERUPTION()
+                    self.y = float(self._screen_h + self.h + 60)
+                    self._jitter_x = 0.0
+                    self._jitter_y = 0.0
+                    self._change_fsm("HALF_SUMMON")
 
     def _fsm_half_summon(
         self,
@@ -1369,7 +1411,7 @@ class StoneGolemBoss:
         _px: float,
         _py: float,
         _mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         self._half_phase_summon_timer += dt
 
@@ -1389,7 +1431,7 @@ class StoneGolemBoss:
         player_x: float,
         player_y: float,
         new_mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         active_bots = self._active_half_phase_bots()
         self._half_phase_mines = [m for m in self._half_phase_mines if not m.dead]
@@ -1440,7 +1482,7 @@ class StoneGolemBoss:
             cy = self.y + self.SCALE * 2
 
         # Gravidade reduzida para arco mais amplo
-        gravity = getattr(Config, "GOLEM_BOULDER_GRAVITY", 30) * 5.0
+        gravity = getattr(Config, "GOLEM_DEBRIS_GRAVITY", 30) * 5.0
 
         for _ in range(count):
             aimed = player_x != 0.0 and random.random() < 0.4
@@ -1467,8 +1509,8 @@ class StoneGolemBoss:
 
             start_x = cx + random.uniform(-self.w / 4, self.w / 4)
 
-            self._entry_debris.append(
-                EntryDebris(
+            self._emerge_debris.append(
+                EmergeDebris(
                     start_x,
                     cy,
                     vx,
@@ -1486,7 +1528,7 @@ class StoneGolemBoss:
         player_x: float,
         player_y: float,
         _mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         if self._half_phase_pending:
             self._half_phase_pending = False
@@ -1551,7 +1593,7 @@ class StoneGolemBoss:
         _px: float,
         _py: float,
         _mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
         spd = self.difficulty_multiplier
@@ -1567,7 +1609,7 @@ class StoneGolemBoss:
         _player_x: float,
         _player_y: float,
         _mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
         px, py = self._pupil_pos()
@@ -1596,7 +1638,7 @@ class StoneGolemBoss:
         player_x: float,
         player_y: float,
         new_mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         self._fire_shot_timer -= dt
         spd = self.difficulty_multiplier
@@ -1621,7 +1663,7 @@ class StoneGolemBoss:
         _px: float,
         _py: float,
         _mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
         if self.fsm_ticks > (0.8 / self.difficulty_multiplier):
@@ -1633,7 +1675,7 @@ class StoneGolemBoss:
         _px: float,
         _py: float,
         _mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
         if self.fsm_ticks > (1.33 / self.difficulty_multiplier):
@@ -1645,7 +1687,7 @@ class StoneGolemBoss:
         _px: float,
         _py: float,
         _mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
         if self.fsm_ticks > (1.5 / self.difficulty_multiplier):
@@ -1657,12 +1699,12 @@ class StoneGolemBoss:
         _px: float,
         _py: float,
         _mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
         if (
-            not self._orbital_rocks
-            or all(r.phase == "fired" and r.dead for r in self._orbital_rocks)
+            not self._orbital_debris
+            or all(r.phase == "fired" and r.dead for r in self._orbital_debris)
             or self.fsm_ticks > (5.0 / self.difficulty_multiplier)
         ):
             self._cycles_since_fire += 1
@@ -1675,7 +1717,7 @@ class StoneGolemBoss:
         _px: float,
         _py: float,
         _mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         spd = self.difficulty_multiplier
         self.eye_growth = _ease_out_cubic(_clamp(self.fsm_ticks / (0.8 / spd), 0, 1))
@@ -1702,7 +1744,7 @@ class StoneGolemBoss:
         _px: float,
         _py: float,
         _mines: List["GolemMine"],
-        new_shards: List[RockShard],
+        new_shards: List[AttackDebris],
     ) -> None:
         px, py = self._pupil_pos()
         spd = self.difficulty_multiplier
@@ -1720,7 +1762,7 @@ class StoneGolemBoss:
             for i in range(8):
                 angle = (i * 45.0) + self._orb_rotation
                 new_shards.append(
-                    RockShard(
+                    AttackDebris(
                         px,
                         py,
                         angle,
@@ -1744,7 +1786,7 @@ class StoneGolemBoss:
         player_x: float,
         player_y: float,
         _mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
         spd = self.difficulty_multiplier
@@ -1783,7 +1825,7 @@ class StoneGolemBoss:
         _px: float,
         _py: float,
         _mines: List["GolemMine"],
-        new_shards: List[RockShard],
+        new_shards: List[AttackDebris],
     ) -> None:
         px, py = self._pupil_pos()
         fire_duration = 0.9 / self.difficulty_multiplier
@@ -1797,7 +1839,7 @@ class StoneGolemBoss:
         if bucket not in self._shards_fired_at:
             self._shards_fired_at.add(bucket)
             new_shards.append(
-                RockShard(
+                AttackDebris(
                     px,
                     py,
                     math.degrees(self._sweep_angle),
@@ -1845,7 +1887,7 @@ class StoneGolemBoss:
         _px: float,
         _py: float,
         _mines: List["GolemMine"],
-        _shards: List[RockShard],
+        _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
         spd = self.difficulty_multiplier
@@ -1920,7 +1962,7 @@ class StoneGolemBoss:
             int(self.x + self._jitter_x),
             int(self.y + self._current_float_y + self._jitter_y),
         )
-        for r in self._orbital_rocks:
+        for r in self._orbital_debris:
             if r.behind_boss:
                 r.draw(surface)
         if self._body_surf_top:
@@ -1947,11 +1989,11 @@ class StoneGolemBoss:
         # 1. Desenhar rastros de poeira PRIMEIRO (atrás de tudo)
         for p in self._charge_particles:
             p.draw(surface)
-        for d in self._entry_debris:
+        for d in self._emerge_debris:
             d.draw_trail(surface)
 
         # 2. Desenhar corpos sólidos por CIMA da poeira
-        for d in self._entry_debris:
+        for d in self._emerge_debris:
             d.draw(surface)
 
         if self.fsm_state in ("SWEEP_CHARGE", "SWEEP_FIRE"):
@@ -1964,7 +2006,7 @@ class StoneGolemBoss:
             self._draw_red_orb(surface)
         if self.fsm_state in ("ORB_SPAWN", "ORB_HOLD"):
             self._draw_purple_orb(surface)
-        for r in self._orbital_rocks:
+        for r in self._orbital_debris:
             if not r.behind_boss:
                 r.draw(surface)
         self._draw_health_bar(surface, ox, oy)

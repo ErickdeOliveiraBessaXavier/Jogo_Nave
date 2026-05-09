@@ -60,10 +60,10 @@ from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
 from ..entities.stone_golem_boss import (
-    Boulder,
-    EntryDebris,
-    OrbitalRock,
-    RockShard,
+    AttackDebris,
+    EmergeDebris,
+    GolemMine,
+    OrbitalDebris,
     StoneGolemBoss,
 )
 from ..entities.stone_sentry import StoneSentry
@@ -121,9 +121,9 @@ class EntityManager:
         self.formations: List[Formation] = []
         self.mountain_propellers: List[MountainPropeller] = []
         self.spikes: List[Spike] = []
-        self.boulders: List[Boulder] = []
-        self.rock_shards: List[RockShard] = []
-        self.orbital_rocks: List[OrbitalRock] = []
+        self.boulders: List[GolemMine] = []
+        self.attack_debris: List[AttackDebris] = []
+        self.orbital_debris: List[OrbitalDebris] = []
         self.air_strike_bombs: List[AirStrikeBomb] = []
         self.cannon_towers: List[CannonTower] = []
         self.cannon_mines: List[CannonMine] = []
@@ -152,10 +152,10 @@ class EntityManager:
                 MountainStalactite,
                 MountainPropeller,
                 SerpentBlock,
-                Boulder,
-                RockShard,
-                OrbitalRock,
-                EntryDebris,
+                GolemMine,
+                AttackDebris,
+                OrbitalDebris,
+                EmergeDebris,
             ]
         ] = SpatialGrid()
         self.spike_spatial_grid: SpatialGrid[Spike] = SpatialGrid()
@@ -307,15 +307,15 @@ class EntityManager:
         for m in self.boulders:
             if not m.dead:
                 self.enemy_spatial_grid.insert_from_rect(m)
-        for s in self.rock_shards:
+        for s in self.attack_debris:
             if not s.dead:
                 self.enemy_spatial_grid.insert_from_rect(s)
-        for r in self.orbital_rocks:
+        for r in self.orbital_debris:
             if not r.dead and getattr(r, "causes_damage", False):
                 self.enemy_spatial_grid.insert_from_rect(r)
 
         if isinstance(self.boss, StoneGolemBoss):
-            for d in self.boss.entry_debris:
+            for d in self.boss.emerge_debris:
                 if not d.dead:
                     self.enemy_spatial_grid.insert_from_rect(d)
 
@@ -506,8 +506,8 @@ class EntityManager:
                 if nb:
                     self.boulders.extend(nb)
                 if ns:
-                    self.rock_shards.extend(ns)
-                self.orbital_rocks = orks
+                    self.attack_debris.extend(ns)
+                self.orbital_debris = orks
             elif isinstance(self.boss, MountainSerpentBoss):
                 bb, fragments = self.boss.update(enemy_dt, player_x, player_y)
                 if bb:
@@ -596,9 +596,9 @@ class EntityManager:
         for m in self.boulders:
             es = m.update(dt)
             if es:
-                self.rock_shards.extend(es)
+                self.attack_debris.extend(es)
 
-        for s in self.rock_shards:
+        for s in self.attack_debris:
             s.update(dt)
 
         for b in self.air_strike_bombs[:]:
@@ -647,7 +647,7 @@ class EntityManager:
             self.cannon_mines,
             self.energy_orbs,
             self.boulders,
-            self.rock_shards,
+            self.attack_debris,
         ]
         for g in groups:
             for e in g:
@@ -685,8 +685,8 @@ class EntityManager:
                 if nb:
                     self.boulders.extend(nb)
                 if ns:
-                    self.rock_shards.extend(ns)
-                self.orbital_rocks = orks
+                    self.attack_debris.extend(ns)
+                self.orbital_debris = orks
             elif isinstance(self.boss, MountainSerpentBoss):
                 bb, fragments = self.boss.update(dt, player_x, player_y)
                 if bb:
@@ -829,7 +829,7 @@ class EntityManager:
             self.cannon_mines,
             self.cannon_towers,
             self.boulders,
-            self.rock_shards,
+            self.attack_debris,
         ]
         for lst in lists:
             for e in lst:
@@ -1040,8 +1040,8 @@ class EntityManager:
         self.cannon_towers = [t for t in self.cannon_towers if not t.dead]
         self.cannon_mines = [m for m in self.cannon_mines if not m.dead]
         self.boulders = [b for b in self.boulders if not b.dead]
-        self.rock_shards = [s for s in self.rock_shards if not s.dead]
-        self.orbital_rocks = [r for r in self.orbital_rocks if not r.dead]
+        self.attack_debris = [s for s in self.attack_debris if not s.dead]
+        self.orbital_debris = [r for r in self.orbital_debris if not r.dead]
         self._grid_needs_rebuild = True
 
     def clear_all(self) -> None:
@@ -1061,8 +1061,8 @@ class EntityManager:
             self.boss._all_blocks.clear()  # type: ignore[attr-defined]
         self.enemies.clear()
         self.boulders.clear()
-        self.rock_shards.clear()
-        self.orbital_rocks.clear()
+        self.attack_debris.clear()
+        self.orbital_debris.clear()
         self.mine_explosions.clear()
         self.ice_poison_zones.clear()
         self.fire_zones.clear()
@@ -1112,8 +1112,8 @@ class EntityManager:
         self.spikes.clear()
         self.air_strike_bombs.clear()
         self.boulders.clear()
-        self.rock_shards.clear()
-        self.orbital_rocks.clear()
+        self.attack_debris.clear()
+        self.orbital_debris.clear()
         self.black_holes.clear()
         self.emp_waves.clear()
         self.explosive_effects.clear()
