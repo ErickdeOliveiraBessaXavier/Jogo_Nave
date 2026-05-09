@@ -311,11 +311,11 @@ class Config:
     GOLEM_HEALTH: int = 1800
     GOLEM_ENTRY_SPEED: float = 160.0
     GOLEM_SPEED: float = 75.0
-    GOLEM_SHARD_SPEED: float = 420.0
+    GOLEM_SHARD_SPEED: float = 300.0
     GOLEM_BOULDER_SPEED: float = 340.0
     GOLEM_BOULDER_GRAVITY: float = 30.0
-    GOLEM_EMERGE_DEBRIS_COUNT: int = 14
-    GOLEM_SUBMERGE_DEBRIS_COUNT: int = 12
+    GOLEM_EMERGE_DEBRIS_COUNT: int = 8
+    GOLEM_SUBMERGE_DEBRIS_COUNT: int = 8
 
     # ========================================
     # BLACK HOLE SYSTEM
