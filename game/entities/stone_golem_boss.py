@@ -1002,6 +1002,9 @@ class StoneGolemBoss:
         )
         from ..systems import hit_sounds as _hs
 
+        if self._prev_fsm_state == "SWEEP_FIRE":
+            _hs.GOLEM_STOP_SWEEP_LASER()
+
         if new_state == "CHARGE":
             self._charge_particles.clear()
             _hs.GOLEM_CHARGING()
@@ -1186,6 +1189,17 @@ class StoneGolemBoss:
                 self._active_sentry = entity_manager.spawn_stone_sentry()
 
     @property
+    def _rage_mult(self) -> float:
+        """Multiplicador ativo abaixo de 30% de HP: velocidade de movimento e scan."""
+        return 1.5 if self.health <= self.max_health * 0.3 else 1.0
+
+    @property
+    def _attack_spd(self) -> float:
+        """difficulty_multiplier × 1.25x rage — aplicado nas durações dos estados de ataque."""
+        rage = 1.25 if self.health <= self.max_health * 0.3 else 1.0
+        return self.difficulty_multiplier * rage
+
+    @property
     def emerge_debris(self) -> List[EmergeDebris]:
         """Expõe os detritos de emerge/submerge para colisão externa."""
         return self._emerge_debris
@@ -1331,9 +1345,11 @@ class StoneGolemBoss:
         _shards: List[AttackDebris],
     ) -> None:
         # Profundidades de parada intermediárias (quanto o fundo do boss ultrapassa screen_h)
+        # Step 0: afunda até h*0.38 abaixo da tela | Step 1: afunda até h*0.74 abaixo | Step 2: desaparece
         _SINK_OFFSETS = (self.h * 0.38, self.h * 0.74)
         _BASE = getattr(Config, "GOLEM_SUBMERGE_DEBRIS_COUNT", 8)
-        _BURST_COUNTS = (_BASE, _BASE + 4, _BASE + 8)
+        # Use exactly the configured base count for each submerge burst
+        _BURST_COUNTS = (_BASE, _BASE, _BASE)
         _WAIT = 3.0
         retreat_speed = getattr(Config, "GOLEM_ENTRY_SPEED", 160) * 1.8
 
@@ -1343,7 +1359,7 @@ class StoneGolemBoss:
             self._jitter_x = random.uniform(-intensity, intensity)
             self._jitter_y = random.uniform(-intensity * 0.45, intensity * 0.45)
 
-            # Detritos contínuos durante a pausa, cadência aumenta por step
+            # Detritos contínuos durante a pausa — cadência aumenta por step
             self._emerge_debris_timer += dt
             interval = max(0.12, 0.22 - self._retreat_step * 0.05)
             if self._emerge_debris_timer >= interval:
@@ -1367,36 +1383,34 @@ class StoneGolemBoss:
             self._jitter_x = random.uniform(-6, 6)
             self._jitter_y = random.uniform(-3, 3)
 
-            # Detritos contínuos durante a descida
-            self._emerge_debris_timer += dt
-            if self._emerge_debris_timer >= 0.18:
-                self._emerge_debris_timer = 0.0
-                self._spawn_debris_cluster(2, _px, _py, spawn_from_bottom=True)
-
             if self._retreat_step < 2:
-                # Parada intermediária
+                # Parada intermediária: afunda até _SINK_OFFSETS[step] abaixo da screen
                 target_bottom = self._screen_h + _SINK_OFFSETS[self._retreat_step]
                 if (self.y + self.h) >= target_bottom:
-                    self.y = target_bottom - self.h
+                    self.y = float(target_bottom - self.h)
                     self._retreat_waiting = True
                     self._retreat_wait_timer = 0.0
                     self._emerge_debris_timer = 0.0
+                    # Burst de detritos quando toca o piso — força spawn independente do cap
                     self._spawn_debris_cluster(
                         _BURST_COUNTS[self._retreat_step],
                         _px,
                         _py,
                         spawn_from_bottom=True,
+                        force=True,
                     )
                     from ..systems import hit_sounds as _hs
                     _hs.GOLEM_ERUPTION()
             else:
                 # Terceira descida — submersão completa
                 if self.y >= self._screen_h + self.h + 60:
+                    # Burst final quando desaparece totalmente — força spawn independente do cap
                     self._spawn_debris_cluster(
                         _BURST_COUNTS[2],
                         _px,
                         _py,
                         spawn_from_bottom=True,
+                        force=True,
                     )
                     from ..systems import hit_sounds as _hs
                     _hs.GOLEM_ERUPTION()
@@ -1442,18 +1456,20 @@ class StoneGolemBoss:
                 self._half_mine_queue = 3
                 self._half_mine_timer = 0.0
 
-            if self._half_mine_queue > 0:
-                self._half_mine_timer -= dt
-                if self._half_mine_timer <= 0.0:
-                    base_x = self.x + self.w / 2
-                    base_y = self.y + self.h / 2
-                    target_x = random.uniform(90, self._screen_w - 90)
-                    target_y = random.uniform(90, self._screen_h - 120)
-                    mine = GolemMine(base_x, base_y, target_x, target_y)
-                    self._half_phase_mines.append(mine)
-                    new_mines.append(mine)
-                    self._half_mine_queue -= 1
-                    self._half_mine_timer = 1.0
+        # Drena a queue independente do status dos bots — evita travar quando
+        # os bots morrem com _half_mine_queue > 0.
+        if self._half_mine_queue > 0:
+            self._half_mine_timer -= dt
+            if self._half_mine_timer <= 0.0:
+                base_x = self.x + self.w / 2
+                base_y = self.y + self.h / 2
+                target_x = random.uniform(90, self._screen_w - 90)
+                target_y = random.uniform(90, self._screen_h - 120)
+                mine = GolemMine(base_x, base_y, target_x, target_y)
+                self._half_phase_mines.append(mine)
+                new_mines.append(mine)
+                self._half_mine_queue -= 1
+                self._half_mine_timer = 1.0
 
         if (
             not active_bots
@@ -1468,23 +1484,38 @@ class StoneGolemBoss:
         player_x: float = 0.0,
         player_y: float = 0.0,
         spawn_from_bottom: bool = False,
+        force: bool = False,
     ) -> None:
         """
         Cria detritos com trajetória parabólica a partir do TOPO do boss.
         ~40% dos fragmentos têm mira parcial no player; o restante é aleatório.
+        force=True bypassa o cap — usado em bursts de impacto para garantir sincronização visual.
         """
         cx = self.x + self.w / 2
         # Entrada normal: topo (boss irrompendo de baixo para cima).
-        # Submersão dos 50%: base (boss perfurando o chão para baixo).
+        # Submersão: base do boss, clampeada à borda visível para que detritos
+        # não spawnem abaixo do threshold de morte do EmergeDebris (screen_h+100).
         if spawn_from_bottom:
-            cy = self.y + self.h - self.SCALE * 2
+            cy = min(self.y + self.h - self.SCALE * 2, self._screen_h + 50)
         else:
             cy = self.y + self.SCALE * 2
 
         # Gravidade reduzida para arco mais amplo
         gravity = getattr(Config, "GOLEM_DEBRIS_GRAVITY", 30) * 5.0
 
-        for _ in range(count):
+        if force:
+            spawn_times = count
+        else:
+            # Enforce an active cap so on-screen debris matches config
+            cap = (
+                getattr(Config, "GOLEM_SUBMERGE_DEBRIS_COUNT", 8)
+                if spawn_from_bottom
+                else getattr(Config, "GOLEM_EMERGE_DEBRIS_COUNT", 8)
+            )
+            allowed = max(0, cap - len(self._emerge_debris))
+            spawn_times = min(count, allowed)
+
+        for _ in range(spawn_times):
             aimed = player_x != 0.0 and random.random() < 0.4
 
             if aimed:
@@ -1543,7 +1574,7 @@ class StoneGolemBoss:
         self._move_vertical(dt)
         self.eye_growth = 0.0
         spd = self.difficulty_multiplier
-        if self.fsm_ticks > (1.8 / spd):  # Reduzido de 2.0
+        if self.fsm_ticks > (1.4 / (spd * self._rage_mult)):
             # Laser forçado se faz muito tempo que não dispara
             if self._cycles_since_fire >= 2:
                 self._change_fsm("OPENING")
@@ -1596,7 +1627,7 @@ class StoneGolemBoss:
         _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
-        spd = self.difficulty_multiplier
+        spd = self._attack_spd
         # Abertura mais rápida: 1.5s -> 0.7s
         dur = 0.7 / spd
         self.eye_growth = _ease_out_cubic(_clamp(self.fsm_ticks / dur, 0, 1))
@@ -1641,7 +1672,7 @@ class StoneGolemBoss:
         _shards: List[AttackDebris],
     ) -> None:
         self._fire_shot_timer -= dt
-        spd = self.difficulty_multiplier
+        spd = self._attack_spd
         if self._fire_shot_timer <= 0 and self._fire_shots_count < 3:
             px, py = self._pupil_pos()
             mine = GolemMine(
@@ -1666,7 +1697,7 @@ class StoneGolemBoss:
         _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
-        if self.fsm_ticks > (0.8 / self.difficulty_multiplier):
+        if self.fsm_ticks > (0.8 / self._attack_spd):
             self._change_fsm("EARTH_PULL")
 
     def _fsm_earth_pull(
@@ -1678,7 +1709,7 @@ class StoneGolemBoss:
         _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
-        if self.fsm_ticks > (1.33 / self.difficulty_multiplier):
+        if self.fsm_ticks > (1.33 / self._attack_spd):
             self._change_fsm("EARTH_ORBIT")
 
     def _fsm_earth_orbit(
@@ -1690,7 +1721,7 @@ class StoneGolemBoss:
         _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
-        if self.fsm_ticks > (1.5 / self.difficulty_multiplier):
+        if self.fsm_ticks > (1.5 / self._attack_spd):
             self._change_fsm("EARTH_FIRE")
 
     def _fsm_earth_fire(
@@ -1705,7 +1736,7 @@ class StoneGolemBoss:
         if (
             not self._orbital_debris
             or all(r.phase == "fired" and r.dead for r in self._orbital_debris)
-            or self.fsm_ticks > (5.0 / self.difficulty_multiplier)
+            or self.fsm_ticks > (5.0 / self._attack_spd)
         ):
             self._cycles_since_fire += 1
             self._last_attack = "EARTH_FIRE"
@@ -1719,7 +1750,7 @@ class StoneGolemBoss:
         _mines: List["GolemMine"],
         _shards: List[AttackDebris],
     ) -> None:
-        spd = self.difficulty_multiplier
+        spd = self._attack_spd
         self.eye_growth = _ease_out_cubic(_clamp(self.fsm_ticks / (0.8 / spd), 0, 1))
 
         # Burst único de partículas roxas na abertura
@@ -1747,7 +1778,7 @@ class StoneGolemBoss:
         new_shards: List[AttackDebris],
     ) -> None:
         px, py = self._pupil_pos()
-        spd = self.difficulty_multiplier
+        spd = self._attack_spd
         wave_interval = 0.22 / spd
         max_waves = 15
 
@@ -1789,7 +1820,7 @@ class StoneGolemBoss:
         _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
-        spd = self.difficulty_multiplier
+        spd = self._attack_spd
         track_duration = 1.2 / spd  # tempo rastreando o jogador
         freeze_duration = 1.0 / spd  # tempo parado antes de disparar
         total_duration = track_duration + freeze_duration
@@ -1828,7 +1859,7 @@ class StoneGolemBoss:
         new_shards: List[AttackDebris],
     ) -> None:
         px, py = self._pupil_pos()
-        fire_duration = 0.9 / self.difficulty_multiplier
+        fire_duration = 0.9 / self._attack_spd
         sweep_progress = _clamp(self.fsm_ticks / fire_duration, 0, 1)
         self._sweep_angle = (
             self._sweep_locked_angle
@@ -1890,7 +1921,7 @@ class StoneGolemBoss:
         _shards: List[AttackDebris],
     ) -> None:
         self._move_vertical(dt)
-        spd = self.difficulty_multiplier
+        spd = self._attack_spd
         self.eye_growth = 1.0 - _ease_out_cubic(
             _clamp(self.fsm_ticks / (0.6 / spd), 0, 1)
         )
@@ -1903,9 +1934,10 @@ class StoneGolemBoss:
             self._change_fsm("SCAN")
 
     def _move_vertical(self, dt: float) -> None:
-        speed = getattr(Config, "GOLEM_SPEED", 75)
+        speed = getattr(Config, "GOLEM_SPEED", 75) * self._rage_mult
         self.y += self.direction * speed * dt
-        if self.y <= 40 or self.y >= self._screen_h // 2:
+        lower = int(self._screen_h * (0.65 if self._rage_mult > 1.0 else 0.5))
+        if self.y <= 40 or self.y >= lower:
             self.direction *= -1
 
     def take_damage(self, amount: int) -> None:
@@ -2198,7 +2230,7 @@ class StoneGolemBoss:
             alpha = 220
 
         else:  # SWEEP_FIRE
-            fire_duration = 0.9 / self.difficulty_multiplier
+            fire_duration = 0.9 / self._attack_spd
             progress = _clamp(self.fsm_ticks / fire_duration, 0, 1)
             radius = int(S * 4 * (1.0 - progress))
             alpha = int(220 * (1.0 - progress))

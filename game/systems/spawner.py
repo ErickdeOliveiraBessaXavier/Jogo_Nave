@@ -21,7 +21,12 @@ from typing import (
 from ..core.config import PowerUpType
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset
-from ..core.levels import DifficultyConfig, calculate_dynamic_enemy_cap
+from ..core.levels import (
+    DifficultyConfig,
+    THEME_ENEMY_REPLACEMENTS,
+    THEME_FEATURES,
+    calculate_dynamic_enemy_cap,
+)
 from ..core.powerup_weights import get_powerup_weights
 from ..core.time import Timer
 from ..core.world_config import WorldTheme, get_world_for_level
@@ -609,9 +614,7 @@ class EnemySpawner:
 
     def _get_theme_mine_type(self) -> type[ExplosiveMine]:
         world = get_world_for_level(self.current_level_number)
-        if world.theme == WorldTheme.MOUNTAINS:
-            return MountainGeode
-        return ExplosiveMine
+        return THEME_ENEMY_REPLACEMENTS.get((world.theme, ExplosiveMine), ExplosiveMine)
 
     def _pick_rock_glider_size(self, storm_small_bias: bool) -> int:
         if storm_small_bias:
@@ -993,7 +996,7 @@ class EnemySpawner:
 
     def _update_propeller_spawner(self, entity_manager: "EntityManager") -> None:
         world = get_world_for_level(self.current_level_number)
-        if world.theme != WorldTheme.MOUNTAINS:
+        if "propellers" not in THEME_FEATURES.get(world.theme, set()):
             return
         if MountainPropeller not in self.level_config.enemy_spawn_config:
             return
@@ -1011,6 +1014,9 @@ class EnemySpawner:
 
     def _update_formation_spawner(self, entity_manager: "EntityManager") -> None:
         if not self.level_config.formations_enabled:
+            return
+        world = get_world_for_level(self.current_level_number)
+        if "formations" not in THEME_FEATURES.get(world.theme, set()):
             return
 
         self.formation_spawn_timer.update(1 / 60)  # TODO: passar dt
@@ -1079,6 +1085,9 @@ class EnemySpawner:
         player_x: float | None,
         player_y: float | None,
     ) -> None:
+        world = get_world_for_level(self.current_level_number)
+        if "guided_meteors" not in THEME_FEATURES.get(world.theme, set()):
+            return
         if Meteor not in self.level_config.enemy_types:
             return
         if player_x is None or player_y is None:

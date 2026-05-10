@@ -1,0 +1,11 @@
+Inimigos do tema das Cordilheiras são: game\entities\rock_glider.py, game\entities\mountain_geode.py, game\entities\mountain_propeller.py, game\entities\stone_sentry.py, game\entities\mountain_mage.py, game\entities\mountain_geode.py, game\entities\bot_elemental.py
+
+Boss das Cordilheiras são: game\entities\stone_golem_boss.py, game\entities\mountain_serpent_boss.py e o game\entities\cloud_archmage_boss.py
+
+Inimigos do tema do Espaço Sideral: game\entities\alien.py, game\entities\meteor.py, game\entities\eye_enemy.py, game\entities\guided_meteor.py, game\entities\explosive_mine.py, game\entities\formation.py, game\entities\square_minion_boss.py
+
+Boss do tema Espaço Sideral: game\entities\boss.py, game\entities\spike_boss.py, game\entities\slime_boss.py, game\entities\giant_meteor_boss.py
+
+
+
+Os outros dois temas ainda não tem boss ou inimigos para eles. Então ou deixa vazio ou usa inimiogs dos outros temas por enquanto.

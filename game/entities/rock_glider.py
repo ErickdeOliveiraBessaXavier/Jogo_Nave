@@ -35,6 +35,20 @@ class RockGlider(Meteor):
         (139, 115, 85),
         (160, 82, 45),
     ]
+    # Paletas para o sistema externo de explosão (Explosion/ExplosionType).
+    EXPLOSION_TYPE_ROCK: list[tuple[int, int, int]] = [
+        (205, 190, 160),
+        (139, 115, 85),
+        (101, 67, 33),
+        (65, 65, 65),
+        (45, 45, 45),
+    ]
+    EXPLOSION_TYPE_BOT: list[tuple[int, int, int]] = [
+        (255, 220, 120),
+        (255, 140, 0),
+        (210, 60, 50),
+        (80, 80, 80),
+    ]
 
     @classmethod
     def _random_fragment_palette_color(cls) -> tuple[int, int, int]:
@@ -102,9 +116,6 @@ class RockGlider(Meteor):
         )
         self._bot_center: tuple[float, float] = (self.x + self.size, self.y + self.size)
 
-        self._death_particles: list[
-            tuple[float, float, float, float, float, float, float, tuple[int, int, int]]
-        ] = []
         self._outro_timer = 0.0
         self._rock_falling = False
         self._rock_fall_vy = 0.0
@@ -257,9 +268,6 @@ class RockGlider(Meteor):
         )
         self._bot_center: tuple[float, float] = (self.x + self.size, self.y + self.size)
 
-        self._death_particles: list[
-            tuple[float, float, float, float, float, float, float, tuple[int, int, int]]
-        ] = []
         self._outro_timer = 0.0
         self._rock_falling = False
         self._rock_fall_vy = 0.0
@@ -518,72 +526,6 @@ class RockGlider(Meteor):
             aggregated_rect.union_ip(hitbox)
         return aggregated_rect
 
-    def _spawn_death_particles(self, part: str) -> None:
-        if part == "rock":
-            count = 18
-            colors_cycle = [
-                self._random_fragment_palette_color(),
-                self._random_fragment_palette_color(),
-                self._random_fragment_palette_color(),
-                self._random_fragment_palette_color(),
-            ]
-            center_x, center_y = self._rock_center
-            speed_min, speed_max = 70.0, 180.0
-            ttl_min, ttl_max = 0.22, 0.42
-        else:
-            count = 14
-            colors_cycle = [(200, 200, 200), (120, 120, 120), (255, 120, 70)]
-            center_x, center_y = self._bot_center
-            speed_min, speed_max = 60.0, 150.0
-            ttl_min, ttl_max = 0.20, 0.36
-
-        for i in range(count):
-            ang = random.uniform(0.0, math.tau)
-            speed = random.uniform(speed_min, speed_max)
-            life = random.uniform(ttl_min, ttl_max)
-            self._death_particles.append(
-                (
-                    center_x,
-                    center_y,
-                    math.cos(ang) * speed,
-                    math.sin(ang) * speed,
-                    life,
-                    life,
-                    random.uniform(2.0, 4.0),
-                    colors_cycle[i % len(colors_cycle)],
-                )
-            )
-
-    def _update_death_particles(self, dt: float) -> None:
-        gravity = 210.0
-        i = len(self._death_particles) - 1
-        while i >= 0:
-            x, y, vx, vy, ttl, life, size, color = self._death_particles[i]
-            ttl -= dt
-            if ttl <= 0.0:
-                self._death_particles.pop(i)
-            else:
-                vy += gravity * dt
-                self._death_particles[i] = (
-                    x + vx * dt,
-                    y + vy * dt,
-                    vx,
-                    vy,
-                    ttl,
-                    life,
-                    size,
-                    color,
-                )
-            i -= 1
-
-    def _draw_death_particles(self, screen: pygame.Surface) -> None:
-        for x, y, _vx, _vy, ttl, life, size, color in self._death_particles:
-            life_ratio = max(0.0, min(1.0, ttl / max(life, 1e-6)))
-            px_size = max(1, int(size * life_ratio + 1))
-            px = int(x - px_size * 0.5)
-            py = int(y - px_size * 0.5)
-            pygame.draw.rect(screen, color, (px, py, px_size, px_size))
-
     def _resolve_hit_part(self, hit_x: float, hit_y: float) -> str | None:
         point = (int(hit_x), int(hit_y))
         rock_alive = not self._rock_destroyed
@@ -639,7 +581,6 @@ class RockGlider(Meteor):
                 self._rock_destroyed = True
                 part_destroyed = True
                 points = self.get_part_points_value("rock")
-                self._spawn_death_particles("rock")
         elif target == "bot" and not self._bot_destroyed:
             self._bot_hp -= amount
             if self._bot_hp <= 0:
@@ -647,7 +588,6 @@ class RockGlider(Meteor):
                 self._bot_destroyed = True
                 part_destroyed = True
                 points = self.get_part_points_value("bot")
-                self._spawn_death_particles("bot")
                 if not self._rock_destroyed:
                     self._rock_falling = True
                     self._rock_fall_vy = max(0.0, self.vy)
@@ -670,8 +610,7 @@ class RockGlider(Meteor):
                 self.w = 0
                 self.h = 0
             self._outro_timer += dt
-            self._update_death_particles(dt)
-            if self._outro_timer >= 0.35 and not self._death_particles:
+            if self._outro_timer >= 0.35:
                 self.dead = True
             return
 
@@ -691,7 +630,6 @@ class RockGlider(Meteor):
             )
 
         self._update_collision_regions()
-        self._update_death_particles(dt)
 
         if self._rock_destroyed and self._bot_destroyed:
             self._fully_destroyed = True
@@ -816,8 +754,6 @@ class RockGlider(Meteor):
                     )
                     pygame.draw.rect(screen, ring_color, ring_rect, 1)
 
-        self._draw_death_particles(screen)
-
     def set_hp(self, rock_hp: int, bot_hp: int) -> None:
         self._rock_hp = rock_hp
         self._bot_hp = bot_hp
@@ -864,6 +800,7 @@ class RockGlider(Meteor):
             killed=part_destroyed,
             points=pts,
             explosion_size=35 if is_rock else 25,
+            explosion_type=self.EXPLOSION_TYPE_ROCK if is_rock else self.EXPLOSION_TYPE_BOT,
             sound=(
                 hit_sounds.EXPLOSION_ASTEROID if is_rock else hit_sounds.EXPLOSION_ALIEN
             ),

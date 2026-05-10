@@ -1087,10 +1087,6 @@ class EntityManager:
         self._grid_needs_rebuild = True
 
     def clear_for_level_transition(self) -> None:
-        # Limpar projéteis do jogador (opcional, mas evita balas flutuando na transição)
-        self.bullets.clear()
-        self.player_lasers.clear()
-
         self.alien_bullets.clear()
         self.serpent_bullets.clear()
         self.energy_orbs.clear()

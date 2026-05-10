@@ -319,6 +319,16 @@ THEME_ENEMY_REPLACEMENTS: dict[tuple[WorldTheme, type], type] = {
     (WorldTheme.MOUNTAINS, ExplosiveMine): MountainGeode,
 }
 
+# Features de spawn especial disponíveis por tema.
+# Consultado pelos spawners especiais — adicionar tema novo = uma entrada aqui.
+THEME_FEATURES: dict[WorldTheme, set[str]] = {
+    WorldTheme.STARFIELD:  {"formations", "mines", "guided_meteors"},
+    WorldTheme.MOUNTAINS:  {"mines", "propellers"},
+    WorldTheme.CITY:       {"formations", "mines", "guided_meteors"},
+    WorldTheme.VOLCANIC:   {"formations", "mines"},
+    WorldTheme.PROCEDURAL: {"formations", "mines", "guided_meteors"},
+}
+
 
 def _is_enemy_allowed_in_theme(enemy_type: type, world_theme: WorldTheme) -> bool:
     """Valida se um tipo de inimigo é permitido no tema informado."""
@@ -1445,6 +1455,7 @@ class ProceduralLevelGenerator:
 
             formations_enabled = (
                 level_number >= DifficultyConfig.FORMATIONS_UNLOCK_LEVEL
+                and "formations" in THEME_FEATURES.get(world.theme, set())
             )
             if theme and theme.special_feature == "formations_heavy":
                 formations_enabled = True
