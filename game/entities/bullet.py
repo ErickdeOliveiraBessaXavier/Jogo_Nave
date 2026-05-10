@@ -269,6 +269,13 @@ class Bullet:
             surface, (150, 255, 150), (int(center_x), int(center_y)), thickness
         )
 
+        # Aro vermelho/laranja quando combo homing+explosive — indica que o tiro
+        # vai perseguir e explodir no impacto.
+        if self.explosive:
+            pygame.draw.circle(
+                surface, (255, 80, 0), (int(center_x), int(center_y)), 9, 1
+            )
+
     def _draw_explosive_bullet(self, surface: pygame.Surface):
         """Desenha o tiro explosivo com visual de granada/bomba."""
         import math

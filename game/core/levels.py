@@ -329,6 +329,25 @@ THEME_FEATURES: dict[WorldTheme, set[str]] = {
     WorldTheme.PROCEDURAL: {"formations", "mines", "guided_meteors"},
 }
 
+# Limite de variedade de inimigos simultâneos por estágio (por dificuldade).
+# Evita que late-stages acumulem tipos demais em tela ao mesmo tempo.
+MAX_ENEMY_VARIETY_BY_DIFFICULTY: dict[DifficultyPreset, int] = {
+    DifficultyPreset.CASUAL:    3,
+    DifficultyPreset.NORMAL:    3,
+    DifficultyPreset.HARDCORE:  4,
+    DifficultyPreset.NIGHTMARE: 4,
+}
+
+# Inimigo "base" garantido em cada tema — sempre ocupa um slot do trio se
+# estiver no pool após filtragem. Os demais slots são sorteados ponderados.
+THEME_BASE_ENEMY: dict[WorldTheme, type] = {
+    WorldTheme.MOUNTAINS:  RockGlider,
+    WorldTheme.STARFIELD:  Meteor,
+    WorldTheme.CITY:       Meteor,
+    WorldTheme.VOLCANIC:   Meteor,
+    WorldTheme.PROCEDURAL: Meteor,
+}
+
 
 def _is_enemy_allowed_in_theme(enemy_type: type, world_theme: WorldTheme) -> bool:
     """Valida se um tipo de inimigo é permitido no tema informado."""
@@ -567,13 +586,66 @@ def _apply_stage_progression_enemy_weights(
     )
 
 
-def _apply_theme_enemy_rules(
-    config: "LevelConfig", world: "WorldConfig"
+def _apply_enemy_variety_cap(
+    config: "LevelConfig",
+    world: "WorldConfig",
+    difficulty_preset: DifficultyPreset,
 ) -> "LevelConfig":
-    """Pipeline único: elegibilidade + pesos por tema + pesos por estágio."""
+    """Limita o spawn_config a N tipos diferentes (N = cap por dificuldade).
+
+    Lógica:
+      1. Inimigo base do tema (THEME_BASE_ENEMY) sempre ocupa um slot se estiver no pool.
+      2. Slots restantes são preenchidos por sampling ponderado (1/spawn_time):
+         inimigos mais frequentes têm mais chance de serem escolhidos.
+      3. Determinístico: mesmo level_number + tema sempre gera o mesmo set.
+    """
+    cap = MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3)
+    spawn_config = config.enemy_spawn_config
+
+    if len(spawn_config) <= cap:
+        return config
+
+    rng = random.Random(config.level_number * 7919 + hash(world.theme.value))
+
+    chosen: list[type] = []
+    base = THEME_BASE_ENEMY.get(world.theme)
+    if base is not None and base in spawn_config:
+        chosen.append(base)
+
+    candidates = [t for t in spawn_config if t not in chosen]
+    weights = [1.0 / max(spawn_config[t], 0.01) for t in candidates]
+
+    remaining_slots = cap - len(chosen)
+    for _ in range(min(remaining_slots, len(candidates))):
+        idx = rng.choices(range(len(candidates)), weights=weights, k=1)[0]
+        chosen.append(candidates.pop(idx))
+        weights.pop(idx)
+
+    adjusted_spawn_config = {t: spawn_config[t] for t in chosen}
+
+    return LevelConfig(
+        level_number=config.level_number,
+        enemy_spawn_config=adjusted_spawn_config,
+        enemies_to_clear=config.enemies_to_clear,
+        boss_type=config.boss_type,
+        mines_enabled=config.mines_enabled,
+        formations_enabled=config.formations_enabled,
+        formation_types=config.formation_types,
+        theme_name=config.theme_name,
+        score_multiplier=config.score_multiplier,
+    )
+
+
+def _apply_theme_enemy_rules(
+    config: "LevelConfig",
+    world: "WorldConfig",
+    difficulty_preset: DifficultyPreset,
+) -> "LevelConfig":
+    """Pipeline único: elegibilidade + pesos por tema + pesos por estágio + cap de variedade."""
     config = _apply_theme_enemy_eligibility(config, world)
     config = _apply_theme_enemy_weights(config, world)
     config = _apply_stage_progression_enemy_weights(config, world)
+    config = _apply_enemy_variety_cap(config, world, difficulty_preset)
     return config
 
 
@@ -1401,6 +1473,55 @@ class ProceduralLevelGenerator:
                     robot_spawn_time
                 )
 
+            # ----------------------------------------------------------------
+            # PROGRESSÃO POR ESTÁGIO — temas que herdam o pool do Espaço Sideral
+            # (STARFIELD/CITY/VOLCANIC/PROCEDURAL). Espelha a lógica de bandas
+            # explícitas usada em MOUNTAINS: cada inimigo tem gate de entrada
+            # e tempos base que variam entre early/mid/late do mundo.
+            # ----------------------------------------------------------------
+            if world.theme in (
+                WorldTheme.STARFIELD,
+                WorldTheme.CITY,
+                WorldTheme.VOLCANIC,
+                WorldTheme.PROCEDURAL,
+            ):
+                # Alien — presente do início, escala para o late-stage
+                if stage_progress < 0.40:
+                    alien_base = 3.0  # padrão
+                elif stage_progress < 0.70:
+                    alien_base = 2.2  # moderado
+                else:
+                    alien_base = 1.6  # frequente
+                enemy_spawn_config[Alien] = self._clamp_spawn_time(
+                    (alien_base / difficulty) / spawn_multiplier
+                )
+
+                # EyeEnemy — entra após 25% do mundo, intensifica no fim
+                if stage_progress >= 0.25:
+                    if stage_progress < 0.55:
+                        eye_base = 8.0  # raro
+                    elif stage_progress < 0.80:
+                        eye_base = 5.5  # moderado
+                    else:
+                        eye_base = 3.8  # frequente
+                    enemy_spawn_config[EyeEnemy] = self._clamp_spawn_time(
+                        (eye_base / difficulty) / spawn_multiplier
+                    )
+                else:
+                    enemy_spawn_config.pop(EyeEnemy, None)
+
+                # SquareMinionBoss — mini-boss tardio (entra após 45% do mundo)
+                if stage_progress >= 0.45:
+                    if stage_progress < 0.75:
+                        square_base = 14.0  # raro
+                    else:
+                        square_base = 9.0  # mais frequente
+                    enemy_spawn_config[SquareMinionBoss] = self._clamp_spawn_time(
+                        (square_base / difficulty) / spawn_multiplier
+                    )
+                else:
+                    enemy_spawn_config.pop(SquareMinionBoss, None)
+
         # 2. Calcular quantidade de inimigos
         curve = DifficultyConfig.ENEMY_COUNT_CURVE
         if curve == "square_root":
@@ -1517,7 +1638,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # MountainPropeller: 0.8,
             # MountainGeode: 1.0,
         },
-        enemies_to_clear=1,
+        enemies_to_clear=75,
         # formations_enabled=True,
         # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
         # mines_enabled=True,
@@ -1526,7 +1647,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         # boss_type=SlimeBoss,
         # boss_type=SpikeBoss,
         # boss_type=SquareMinionBoss,
-        boss_type=StoneGolemBoss,
+        # boss_type=StoneGolemBoss,
         # boss_type=MountainSerpentBoss,
         # boss_type=GiantMeteorBoss,
         # boss_type=CloudArchmageBoss,
@@ -1541,7 +1662,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             ElementalRobot: 12.0,
             StoneSentry: 18.0,
         },
-        enemies_to_clear=250,
+        enemies_to_clear=10,
         boss_type=StoneGolemBoss,
         mines_enabled=True,
         theme_name="Chefe do Golem de Pedra",
@@ -1823,7 +1944,7 @@ def get_level_config(
         and not force_meteor_storm
     ):
         config = _create_world_boss_level(world, level_number, difficulty_preset)
-        return _apply_theme_enemy_rules(config, world)
+        return _apply_theme_enemy_rules(config, world, difficulty_preset)
 
     # Para Hardcore e Nightmare, o nível 1 é sempre procedural (sem tutorial)
     if (
@@ -1838,7 +1959,7 @@ def get_level_config(
         config = FIXED_LEVELS[level_number]
         # NOVO: Aplicar tema do mundo ao nível fixo
         config = _apply_world_theme_to_config(config, world)
-        config = _apply_theme_enemy_rules(config, world)
+        config = _apply_theme_enemy_rules(config, world, difficulty_preset)
         # Aplicar modificadores do preset aos níveis fixos também
         return _apply_difficulty_to_fixed_level(config, difficulty_preset)
 
@@ -1861,13 +1982,13 @@ def get_level_config(
             random.Random(generator.seed * 10_000 + level_number),
         )
         config = _apply_world_theme_to_config(config, world)
-        config = _apply_theme_enemy_rules(config, world)
+        config = _apply_theme_enemy_rules(config, world, difficulty_preset)
         return config
 
     # NOVO: Gerar com tema do mundo aplicado
     config = generator.generate_level(level_number)
     config = _apply_world_theme_to_config(config, world)
-    config = _apply_theme_enemy_rules(config, world)
+    config = _apply_theme_enemy_rules(config, world, difficulty_preset)
     return config
 
 

@@ -4,9 +4,9 @@
     720
   ],
   "fullscreen": true,
-  "music_volume": 0.75,
-  "sfx_volume": 0.5,
-  "shot_volume": 0.2,
+  "music_volume": 0.9980769230769231,
+  "sfx_volume": 0.06346153846153846,
+  "shot_volume": 0.05,
   "mouse_control": true,
   "auto_fire": true
 }

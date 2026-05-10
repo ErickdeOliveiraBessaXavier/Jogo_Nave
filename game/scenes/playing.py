@@ -42,7 +42,7 @@ from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
 from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
-from ..core.upgrades_config import UPGRADE_SLOT_COUNT
+from ..core.upgrades_config import HOMING_DAMAGE_MULTIPLIER, UPGRADE_SLOT_COUNT
 from ..core.world_config import (
     WorldConfig,
     format_stage_name,
@@ -520,6 +520,10 @@ class PlayingScene(Scene):
         self.world_transition_thruster_particles.clear()
         self.ship.is_entering = True
         self.ship.is_side_scroll = self.is_side_scroll
+        # Força o sprite a apontar na direção do launch — evita que uma rotação
+        # CTRL anterior do jogador faça a nave voar de costas/de lado durante a
+        # cutscene. O facing volta ao default no próximo mundo via apply_world_mode.
+        self.ship.set_facing("east" if self.is_side_scroll else "north")
         logger.info(
             "[CUTSCENE] Iniciando saída da nave para %s (debug=%s)",
             target_world.name,
@@ -966,10 +970,18 @@ class PlayingScene(Scene):
             is_explosive,
             is_low_ammo,
         ) in bullet_specs:
+            # Tiros teleguiados levam multiplicador de dano direto.
+            # Quando combinados com explosivo, o impacto direto fica mais forte
+            # (a explosão em área usa EXPLOSIVE_BULLET_DAMAGE no collision system).
+            bullet_damage = (
+                int(adjusted_damage * HOMING_DAMAGE_MULTIPLIER)
+                if is_homing
+                else adjusted_damage
+            )
             self.entity_manager.spawn_bullet(
                 x,
                 y,
-                damage=adjusted_damage,
+                damage=bullet_damage,
                 piercing=is_piercing,
                 homing=is_homing,
                 explosive=is_explosive,

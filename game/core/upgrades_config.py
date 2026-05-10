@@ -46,9 +46,10 @@ HOMING_SPEED_PENALTY: float = 0.75  # Nave fica a 75% da velocidade normal
 HOMING_FIRE_RATE_PENALTY: float = (
     1.2  # Leva 20% mais tempo para atirar (cadência reduzida)
 )
+HOMING_DAMAGE_MULTIPLIER: float = 1.5  # Tiros teleguiados causam 50% mais dano direto
 
 # Parâmetros de balanceamento do Tiro Explosivo
-EXPLOSIVE_BULLET_DAMAGE: int = 15  # Dano aplicado a cada inimigo na área
+EXPLOSIVE_BULLET_DAMAGE: int = 30  # Dano aplicado a cada inimigo na área
 EXPLOSIVE_BULLET_RADIUS: int = 60  # Raio da explosão em pixels
 
 # Parâmetros de balanceamento do Air Strike
