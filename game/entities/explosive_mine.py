@@ -149,8 +149,11 @@ class ExplosiveMine:
             self.shake_timer = 3.0
             self.shake_intensity = 10
         else:
-            self.shake_timer = 0.2
-            self.shake_intensity = (self.max_health - self.health) * 2
+            self.shake_timer = 0.15
+            # Escala proporcional ao dano acumulado, mas com teto baixo
+            # para feedback sutil — sem teleporte visual.
+            damage_taken = self.max_health - self.health
+            self.shake_intensity = min(6, max(1, damage_taken // 5))
 
     def update(self, dt: float):
         if self.is_exploding:

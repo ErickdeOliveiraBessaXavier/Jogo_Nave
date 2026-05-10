@@ -310,6 +310,11 @@ class PlayingScene(Scene):
             self.difficulty_preset,
             self.enemy_health_multiplier,
         )
+        # Sincroniza o spawner com o starting_level — sem isto o spawner usa o
+        # config do nível 1 por default, o que quebra inicializações em mundos
+        # diferentes do primeiro (ex.: começar em STARFIELD via world select).
+        if not is_initial_level:
+            self.enemy_spawner.set_level(self.current_level_index + 1)
         self.powerup_spawner = PowerUpSpawner(self.difficulty_preset)
         self.collisions = Collisions()
         self.star_spawner = StarSpawner()
