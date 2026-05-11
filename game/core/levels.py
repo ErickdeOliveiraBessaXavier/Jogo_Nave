@@ -1633,7 +1633,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             ElementalRobot: 12.0,
             StoneSentry: 18.0,
         },
-        enemies_to_clear=10,
+        enemies_to_clear=250,
         boss_type=StoneGolemBoss,
         mines_enabled=True,
         theme_name="Chefe do Golem de Pedra",

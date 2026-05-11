@@ -1,245 +1,236 @@
-Boa exploração. Agora vou ler os arquivos críticos diretamente para fazer uma análise de código real, não baseada em resumo.
+# Revisão dos Ajustes — Spawner + Levels
 
-Agora vou ler o spawner para completar a análise.
+## Context
 
-Tenho o suficiente para uma análise completa. Vou documentar os problemas encontrados.
-
----
-
-## Análise: Sistema Procedural + Inimigos por Tema
-
-### Bugs Críticos
+O usuário aplicou ajustes após análise de bugs e melhorias no sistema procedural e de inimigos por tema.
+Este plano documenta o resultado da revisão do commit HEAD~1 (`levels.py`) e aponta o que foi feito
+corretamente, o que introduziu novos problemas, e o que ainda precisa ser corrigido.
 
 ---
 
-**1. Timers frame-rate dependentes em `spawner.py`** — o mais crítico
+## O que foi feito corretamente
 
-`_update_mine_spawner`, `_update_propeller_spawner` e `_update_formation_spawner` passam `1/60` fixo ao invés de `dt`:
+### 1. `_apply_theme_enemy_rules` agora aceita `difficulty_preset`
+Antes a assinatura não aceitava o parâmetro, mas era chamada de 4 lugares que precisavam passá-lo.
+O usuário corrigiu a assinatura e propagou o argumento em todos os call sites:
+- `get_level_config` (boss level, fixed levels, force_meteor_storm, procedural)
 
-```python
-# spawner.py:967, 1004, 1022
-self.mine_spawn_timer.update(1 / 60)   # BUG: deveria ser dt
-self.propeller_spawn_timer.update(1 / 60)
-self.formation_spawn_timer.update(1 / 60)
-```
+### 2. Level 1 corrigido
+- `enemies_to_clear` estava como `1` → corrigido para `75`
+- `boss_type=StoneGolemBoss` estava acidentalmente no nível 1 → removido
 
-A consequência: o jogo roda a 120 FPS. Cada frame avança `1/60s` no timer, mas o tempo real decorrido é `1/120s`. Os timers correm 2x mais rápido que o esperado — minas surgem a cada ~5s (não 10s), formações a cada ~5-7s (não 10-15s). A `_update_guided_meteor_spawner` está correta porque recebe `dt` explicitamente. Os demais têm inclusive um `# TODO: passar dt` nos comentários, o que confirma que é um bug reconhecido e não uma decisão intencional.
+### 3. Sistema de variety cap adicionado
+`_apply_enemy_variety_cap` + `MAX_ENEMY_VARIETY_BY_DIFFICULTY` + `THEME_BASE_ENEMY` são uma adição
+sólida — limita a variedade de inimigos simultâneos e garante que o inimigo base do tema sempre
+tenha um slot reservado. O design é correto.
 
----
-
-**2. `spawn_rate_multiplier` do `WorldConfig` aplicado duas vezes** — `levels.py`
-
-Em `generate_config` (linha 1327-1332):
-```python
-world_spawn_mult = float(world.theme_modifiers.get("spawn_rate_multiplier", 1.0))
-spawn_multiplier = theme_spawn_mult * preset_spawn_mult * world_spawn_mult
-```
-
-Depois em `get_level_config` (linha 1989-1991):
-```python
-config = generator.generate_level(level_number)
-config = _apply_world_theme_to_config(config, world)  # aplica spawn_rate_multiplier de novo
-```
-
-E `_apply_world_theme_to_config` (linha 1815-1818):
-```python
-spawn_rate_mult = world.theme_modifiers.get("spawn_rate_multiplier", 1.0)
-if spawn_rate_mult != 1.0:
-    for enemy_type in adjusted_spawn_config:
-        adjusted_spawn_config[enemy_type] /= spawn_rate_mult
-```
-
-Para o World 4 com `spawn_rate_multiplier: 1.15`, o spawn_time é dividido por `1.15²` = `1.3225` ao invés de `1.15`. O mundo vulcânico é ~15% mais agressivo do que foi configurado.
+### 4. Bloco de progressão por estágio (STARFIELD/CITY/VOLCANIC/PROCEDURAL)
+A intenção é boa — usar bandas hardcoded de stage_progress ao invés da função genérica de pesos,
+oferecendo maior controle sobre a curva de spawn.
 
 ---
 
-**3. Dois blocos de cálculo de inimigos em `generate_config` — o primeiro é descartado para temas não-MOUNTAINS**
+## Problemas encontrados nos novos ajustes
 
-O método calcula alien/eye/SquareMinionBoss no bloco genérico (linhas 1387–1428), depois para `STARFIELD/CITY/VOLCANIC/PROCEDURAL` sobrescreve todos esses valores (linhas 1482–1523):
+### BUG 1 — `hash()` não-determinístico em `_apply_enemy_variety_cap` [P3]
 
-```python
-# Bloco 1 (linha 1387): calcula com _get_progressive_enemy_weight + difficulty
-if level_number >= 2:
-    alien_weight = _get_progressive_enemy_weight("alien", alien_weight, stage_progress)
-    enemy_spawn_config[Alien] = ...  # calculado, mas...
-
-# Bloco 2 (linha 1495): sobrescreve com lógica diferente (bandas hardcoded)
-if world.theme in (STARFIELD, CITY, VOLCANIC, PROCEDURAL):
-    enemy_spawn_config[Alien] = ...  # ...descartado aqui
-```
-
-O Bloco 1 ainda aplica `_get_progressive_enemy_weight` com `stage_progress`, mas o Bloco 2 usa bandas hardcoded (`< 0.40`, `< 0.70`). São duas implementações inconsistentes da mesma lógica, e a do Bloco 1 é computação desperdiçada para esses temas. O Meteor não é sobrescrito, então fica com o cálculo do Bloco 1.
-
----
-
-**4. `FIXED_LEVELS[1]` tem `enemy_spawn_config` vazio**
-
-```python
-1: LevelConfig(
-    level_number=1,
-    enemy_spawn_config={},  # vazio
-    enemies_to_clear=75,
-    theme_name="Tutorial",
-)
-```
-
-O pipeline de `get_level_config` passa pelo `_apply_theme_enemy_eligibility` → `_filter_enemy_spawn_for_theme`, que ao receber config vazio cai no fallback e injeta `RockGlider` com `spawn_time=1.05`. Um nível tutorial com um RockGlider aparecendo a cada ~1s não é tutorial — é comportamento não-intencional disfarçado de segurança. O código comentado confirma que está em estado de desenvolvimento.
-
----
-
-### Problemas de Design
-
----
-
-**5. `_count_enemies_by_type` chamado 3+ vezes por frame**
-
-No `update()` (spawner.py:936):
-```python
-self._refresh_death_clocks(self._count_enemies_by_type(entity_manager))  # travessia 1
-# depois:
-self._record_pressure_sample(entity_manager)  # → _count_enemies_by_type() travessia 2
-# depois, dentro de _update_weighted_enemy_spawn:
-self._pick_weighted_enemy_type(entity_manager)  # → _get_dynamic_enemy_weights → _is_hard_capped → travessia 3
-```
-
-A correção é trivial: calcular uma vez por tick e passar o resultado:
-
-```python
-def update(self, dt, entity_manager, ...) -> None:
-    self.spawn_clock += dt
-    counts = self._count_enemies_by_type(entity_manager)  # uma vez
-    self._refresh_death_clocks(counts)
-    ...
-    self._record_pressure_sample_with_counts(counts)
-    self._update_weighted_enemy_spawn(..., counts)
-```
-
----
-
-**6. `_is_storm_level()` acoplado a strings de exibição em português**
-
-```python
-def _is_storm_level(self) -> bool:
-    theme = (self.level_config.theme_name or "").lower()
-    return (
-        "tempestade de meteoros" in theme or "tempestade de rock gliders" in theme
-    )
-```
-
-Se o nome mudar (tradução, refactor de UI), a lógica de cap quebra silenciosamente. `LevelConfig` já tem `theme_name` mas não tem um campo semântico. A solução adequada é adicionar um campo `is_storm: bool = False` na `LevelConfig` e setá-lo no `generate_config` quando `special_feature in ("meteor_only", "rock_glider_only")`.
-
----
-
-**7. Mutação direta de `LevelConfig` no spawner**
-
-`_validate_formation_types` (spawner.py:298):
-```python
-self.level_config.formation_types = [...]   # mutação direta
-self.level_config.formations_enabled = False  # mutação direta
-```
-
-O pipeline de `levels.py` cria instâncias novas a cada transformação para evitar side effects, mas o spawner contorna isso mutando o dataclass. Se a `LevelConfig` for compartilhada ou reusada (o cache em `_level_cache` a guarda), essa mutação persiste e afeta invocações futuras do mesmo nível.
-
----
-
-**8. `hash()` não-determinístico em `_apply_enemy_variety_cap`**
+**Arquivo:** `game/core/levels.py:608`
 
 ```python
 rng = random.Random(config.level_number * 7919 + hash(world.theme.value))
 ```
 
-`hash()` de strings é randomizado por padrão desde Python 3.3 (PYTHONHASHSEED). Isso significa que o "conjunto determinístico" de inimigos por nível é determinístico só dentro de um processo, não entre sessões. Dois runs do jogo com o mesmo nível podem ter pools de inimigos diferentes. Usar `zlib.adler32(world.theme.value.encode())` ou o valor do índice do enum resolveria isso.
+`hash()` de strings é randomizado por PYTHONHASHSEED desde Python 3.3. Dois runs do jogo com o
+mesmo nível podem gerar pools de inimigos diferentes, quebrando a garantia de determinismo.
 
----
-
-**9. Cache chamado de LRU não é LRU**
-
+**Fix:**
 ```python
-# levels.py:1197-1199
-if len(self._level_cache) > 50:
-    self._level_cache.pop(next(iter(self._level_cache)))  # FIFO, não LRU
-```
-
-Dicts em Python 3.7+ mantêm ordem de inserção. `next(iter(...))` é o item mais antigo inserido — FIFO, não o menos recentemente acessado. Para um jogo com acesso sequencial de níveis, FIFO funciona bem na prática, mas o comentário no código ("LRU simples") é enganoso. Se LRU real for necessário, use `functools.lru_cache` ou `collections.OrderedDict` com move-to-end.
-
----
-
-**10. `StarSpawner.update` tem parâmetro `dt` morto**
-
-```python
-def update(self, dt: float, stars: List[Star]) -> None:
-    """No-op: estrelas só aparecem por abates, não por timer."""
-```
-
-O método existe só para compatibilidade de interface, mas aceita `dt` que nunca usa. A docstring já admite que é no-op. Remove o `dt` ou usa um Protocol/ABC adequado para deixar a intenção clara.
-
----
-
-**11. Log incorreto em `world_config.py`**
-
-```python
-# linha 307
-logger.info("Níveis 41+: Mundos procedurais infinitos")
-```
-
-O procedural começa no nível 46, não 41. World 4 vai de 36 a 45. A função `get_world_for_level` usa `offset = level_number - 46`.
-
----
-
-### Problemas Menores
-
----
-
-**12. Type hints verbosos repetidos — deveriam ser TypeAlias**
-
-Esse padrão aparece em pelo menos 8 funções:
-```python
-dict[
-    Type[Meteor | Alien | ExplosiveMine | EyeEnemy | SquareMinionBoss | ElementalRobot | StoneSentry],
-    float,
-]
-```
-
-Deveria ser definido uma vez:
-```python
-EnemySpawnConfig = dict[Type[Meteor | Alien | ...], float]
+import zlib
+theme_seed = zlib.adler32(world.theme.value.encode())
+rng = random.Random(config.level_number * 7919 + theme_seed)
 ```
 
 ---
 
-**13. `MINE_NUM_WEIGHTS` não somam 1 sem intenção documentada**
+### BUG 2 — Primeiro bloco de `generate_config` é computação morta para temas não-MOUNTAINS [P1]
+
+**Arquivo:** `game/core/levels.py:1387–1428` vs `1482–1523`
+
+O bloco genérico (linhas 1387–1428) calcula `Alien`, `EyeEnemy`, e `SquareMinionBoss` com
+`_get_progressive_enemy_weight`. Imediatamente depois, para STARFIELD/CITY/VOLCANIC/PROCEDURAL
+(linhas 1482–1523 — novo código), esses mesmos três inimigos são sobrescritos com valores fixos.
+
+Resultado:
+- A computação do Bloco 1 (com progressive weights) é descartada.
+- Só o `Meteor` vem do Bloco 1 para esses temas.
+- Os dois blocos são inconsistentes: Bloco 1 usa `_get_progressive_enemy_weight`, Bloco 2 usa
+  bandas hardcoded de `stage_progress`.
+
+**Fix:** Extrair o Bloco 2 para ser a única fonte de verdade para esses temas, removendo o
+cálculo redundante do Bloco 1 para Alien/EyeEnemy/SquareMinionBoss quando o tema não é MOUNTAINS.
+Adicionar uma guarda no início do bloco genérico:
 
 ```python
-MINE_NUM_WEIGHTS: list[float] = [0.50, 0.25, 0.10]  # somam 0.85
-# comentário: "não somam 1 intencionalmente (choices normaliza)"
-```
+is_space_theme = world.theme in (
+    WorldTheme.STARFIELD, WorldTheme.CITY, WorldTheme.VOLCANIC, WorldTheme.PROCEDURAL
+)
 
-`random.choices` normaliza, então os valores reais são `~59%, ~29%, ~12%`. Mas por que não usar `[0.59, 0.29, 0.12]` diretamente? O comentário diz "intencional" mas não explica a intenção. Se for para codificar "probabilidades independentes" (cada conta tem X% de chance, não condicionado aos outros), a abordagem correta seria outra (verificações independentes por mine count).
+# Aliens (nível 2+) — apenas para MOUNTAINS; temas espaciais usam bloco dedicado abaixo
+if level_number >= 2 and not is_space_theme:
+    ...  # bloco genérico existente
+
+# Eyes (nível 5+)
+if level_number >= 5 and not is_space_theme:
+    ...
+
+# SquareMinionBoss (nível 3+)
+if level_number >= 3 and not is_space_theme:
+    ...
+
+# ...depois o bloco dedicado para temas espaciais mantido como está
+```
 
 ---
 
-**14. `LevelAnalyzer.estimate_duration` matematicamente impreciso**
+### BUG 3 — Level 3 `enemies_to_clear=10` deve ser revertido para `250`
 
-```python
-avg_spawn = sum(config.enemy_spawn_config.values()) / len(...)  # média de TEMPOS de spawn
-return (config.enemies_to_clear / 0.8) * avg_spawn
-```
+**Arquivo:** `game/core/levels.py:1663`
 
-Média de tempos de spawn não é o inverso da taxa média de spawn. Para múltiplos tipos: taxa total = `Σ(1/t_i)`, tempo médio entre spawns = `1/taxa_total`. O método `estimate_spawn_rate` já calcula corretamente. `estimate_duration` deveria usar `1 / estimate_spawn_rate(config)` ao invés de `avg_spawn`.
+O valor foi alterado de `250` para `10` durante testes. Deve voltar para `250`.
 
 ---
 
-### Resumo de Prioridades
+## Bugs pré-existentes que ainda precisam ser corrigidos
 
-| Prioridade | Problema |
+### P0 — Timers de mine/propeller/formation usam `1/60` hardcoded
+
+**Arquivo:** `game/systems/spawner.py:967, 1004, 1022`
+
+A frequência de minas, propellers e formações é frame-rate dependente. A 120 FPS, esses timers
+correm 2x mais rápido que o esperado. Existem inclusive TODOs no próprio código.
+
+**Fix:** Passar `dt` para os três métodos, mudando a assinatura:
+
+```python
+# Antes
+def _update_mine_spawner(self, entity_manager: "EntityManager") -> None:
+    self.mine_spawn_timer.update(1 / 60)
+
+# Depois
+def _update_mine_spawner(self, dt: float, entity_manager: "EntityManager") -> None:
+    self.mine_spawn_timer.update(dt)
+```
+
+E ajustar as chamadas em `update()`:
+```python
+self._update_mine_spawner(dt, entity_manager)
+self._update_propeller_spawner(dt, entity_manager)
+self._update_formation_spawner(dt, entity_manager)
+```
+
+---
+
+### P0 — `spawn_rate_multiplier` do WorldConfig aplicado duas vezes
+
+**Arquivo:** `game/core/levels.py:1327–1332` + `game/core/levels.py:1815–1818`
+
+Em `generate_config`, o multiplicador é aplicado via `world_spawn_mult`:
+```python
+world_spawn_mult = float(world.theme_modifiers.get("spawn_rate_multiplier", 1.0))
+spawn_multiplier = theme_spawn_mult * preset_spawn_mult * world_spawn_mult
+```
+
+Depois `_apply_world_theme_to_config` aplica novamente:
+```python
+spawn_rate_mult = world.theme_modifiers.get("spawn_rate_multiplier", 1.0)
+adjusted_spawn_config[enemy_type] /= spawn_rate_mult
+```
+
+Para o World 4 (VOLCANIC, `spawn_rate_multiplier: 1.15`), o spawn é dividido por `1.15²=1.3225`
+ao invés de `1.15`.
+
+**Fix (opção A — remover de `generate_config`):**
+```python
+# Remover world_spawn_mult do generate_config — deixar _apply_world_theme_to_config como única fonte
+spawn_multiplier = theme_spawn_mult * preset_spawn_mult  # sem world_spawn_mult
+```
+
+**Fix (opção B — remover de `_apply_world_theme_to_config`):**
+Remover o bloco `spawn_rate_mult` de `_apply_world_theme_to_config`, mantendo apenas
+`meteor_weight`, `alien_weight` e `eye_weight`.
+
+Opção A é preferível pois `_apply_world_theme_to_config` é o lugar natural para aplicar
+modificadores de WorldConfig.
+
+---
+
+### P2 — `_count_enemies_by_type` chamado 3x por frame
+
+**Arquivo:** `game/systems/spawner.py` — método `update()`
+
+Por frame: `_refresh_death_clocks`, `_record_pressure_sample`, e `_get_dynamic_enemy_weights`
+chamam `_count_enemies_by_type` independentemente.
+
+**Fix:** Calcular uma vez por tick:
+```python
+def update(self, dt, entity_manager, ...) -> None:
+    self.spawn_clock += dt
+    counts = self._count_enemies_by_type(entity_manager)
+    self._refresh_death_clocks(counts)
+    if self.use_weighted_spawn:
+        self._record_pressure_sample_from_counts(counts)
+        self._update_weighted_enemy_spawn(..., precomputed_counts=counts)
+```
+
+---
+
+### P2 — `_is_storm_level()` acoplado a string de exibição em português
+
+**Arquivo:** `game/systems/spawner.py:398–406`
+
+```python
+def _is_storm_level(self) -> bool:
+    theme = (self.level_config.theme_name or "").lower()
+    return "tempestade de meteoros" in theme or "tempestade de rock gliders" in theme
+```
+
+Se o nome da LevelTheme mudar, a lógica de cap quebra silenciosamente.
+
+**Fix:** Adicionar `is_storm: bool = False` em `LevelConfig` e setar no `generate_config`
+quando `special_feature in ("meteor_only", "rock_glider_only")`.
+
+---
+
+### P3 — Log incorreto em `world_config.py:307`
+
+```python
+logger.info("Níveis 41+: Mundos procedurais infinitos")  # ERRADO — é 46+
+```
+
+**Fix:** Mudar para `"Níveis 46+: ..."`.
+
+---
+
+## Arquivos a modificar
+
+| Arquivo | Mudanças |
 |---|---|
-| P0 | Timers de mine/propeller/formation usam `1/60` hardcoded — frame-rate dependente |
-| P0 | `spawn_rate_multiplier` aplicado duas vezes — World 4 ~32% mais rápido que configurado |
-| P1 | Bloco genérico de spawn (STARFIELD+) calculado e descartado — inconsistência |
-| P1 | Level 1 sem inimigos cai em fallback não-intencional |
-| P2 | `_count_enemies_by_type` 3x por frame — otimização com impacto real a 120 FPS |
-| P2 | `_is_storm_level` acoplado a string de display |
-| P2 | Mutação de `LevelConfig` no spawner contorna imutabilidade do pipeline |
-| P3 | `hash()` não-determinístico entre sessões — bug de reprodutibilidade |
-| P3 | Log diz "41+" quando é "46+" |
-| P3 | StarSpawner.update tem `dt` morto |
+| `game/core/levels.py` | Fix `hash()` → `zlib.adler32`; remover bloco redundante no Bloco 1; remover `world_spawn_mult` de `generate_config`; restaurar Level 3 `enemies_to_clear=250` |
+| `game/systems/spawner.py` | Passar `dt` para mine/propeller/formation spawners; cache de `_count_enemies_by_type`; `is_storm` via campo em vez de string |
+| `game/core/world_config.py` | Fix log "41+" → "46+" |
+
+## Prioridade de execução
+
+1. `1/60` → `dt` nos spawners (P0, impacto direto no gameplay)
+2. `spawn_rate_multiplier` duplo (P0, World 4 errado)
+3. Bloco redundante em `generate_config` (P1, limpeza + consistência)
+4. `hash()` → `zlib.adler32` (P3, determinismo entre sessões)
+5. Log "41+" (P3, cosmético)
+
+## Verificação
+
+Após implementar:
+1. Confirmar que minas surgem a ~10s reais (não 5s) a 120 FPS
+2. Confirmar que World 4 spawn rate bate com `1/1.15` (não `1/1.3225`) — logar spawn times do nível 36 antes e depois
+3. No nível 12 (STARFIELD), verificar que só os inimigos do Bloco 2 estão presentes (sem dupla entrada de Alien)
+4. Executar o jogo duas vezes e confirmar que o mesmo nível tem o mesmo pool de inimigos (teste de determinismo)
