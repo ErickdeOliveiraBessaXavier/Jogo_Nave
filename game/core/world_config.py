@@ -304,7 +304,7 @@ def print_world_summary() -> None:
             logger.info("   Modificadores: %s", world.theme_modifiers)
 
     logger.info("\n%s", "=" * 70)
-    logger.info("Níveis 41+: Mundos procedurais infinitos")
+    logger.info("Níveis 46+: Mundos procedurais infinitos")
     logger.info("=" * 70)
 
 

@@ -884,7 +884,7 @@ class PlayingScene(Scene):
             if not self._no_powerups_mode:
                 self.powerup_spawner.update(dt, self.entity_manager.powerups)
 
-            self.star_spawner.update(dt, self.entity_manager.stars)
+            self.star_spawner.update(self.entity_manager.stars)
 
     def _update_level_logic(self, dt: float) -> None:
         if self.boss_fight_active:

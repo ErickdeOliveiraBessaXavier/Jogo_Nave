@@ -1,6 +1,7 @@
 import logging
 import math
 import random
+import zlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Type
 
@@ -30,6 +31,24 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+# TypeAlias para mapas de spawn `Type[Inimigo] -> tempo_em_segundos`.
+# Centraliza a união anteriormente repetida em ~8 assinaturas/anotações.
+EnemySpawnConfig = dict[
+    Type[
+        Meteor
+        | RockGlider
+        | Alien
+        | ExplosiveMine
+        | EyeEnemy
+        | SquareMinionBoss
+        | ElementalRobot
+        | StoneSentry
+        | MountainMage
+        | MountainPropeller
+    ],
+    float,
+]
 
 ACTIVE_ENEMY_TUNING_PROFILE = "moderate"
 
@@ -358,44 +377,11 @@ def _is_enemy_allowed_in_theme(enemy_type: type, world_theme: WorldTheme) -> boo
 
 
 def _filter_enemy_spawn_for_theme(
-    enemy_spawn_config: dict[
-        Type[
-            Meteor
-            | Alien
-            | ExplosiveMine
-            | EyeEnemy
-            | SquareMinionBoss
-            | ElementalRobot
-            | StoneSentry
-        ],
-        float,
-    ],
+    enemy_spawn_config: EnemySpawnConfig,
     world_theme: WorldTheme,
-) -> dict[
-    Type[
-        Meteor
-        | Alien
-        | ExplosiveMine
-        | EyeEnemy
-        | SquareMinionBoss
-        | ElementalRobot
-        | StoneSentry
-    ],
-    float,
-]:
+) -> EnemySpawnConfig:
     """Filtra inimigos proibidos no tema e garante fallback mínimo."""
-    filtered: dict[
-        Type[
-            Meteor
-            | Alien
-            | ExplosiveMine
-            | EyeEnemy
-            | SquareMinionBoss
-            | ElementalRobot
-            | StoneSentry
-        ],
-        float,
-    ] = {}
+    filtered: EnemySpawnConfig = {}
     removed: list[str] = []
 
     for enemy_type, spawn_time in enemy_spawn_config.items():
@@ -462,6 +448,7 @@ def _apply_theme_enemy_eligibility(
         formation_types=config.formation_types,
         theme_name=config.theme_name,
         score_multiplier=config.score_multiplier,
+        storm_kind=config.storm_kind,
     )
 
 
@@ -473,19 +460,7 @@ def _apply_theme_enemy_weights(
     if not theme_weights:
         return config
 
-    adjusted_spawn_config: dict[
-        Type[
-            Meteor
-            | RockGlider
-            | Alien
-            | ExplosiveMine
-            | EyeEnemy
-            | SquareMinionBoss
-            | ElementalRobot
-            | StoneSentry
-        ],
-        float,
-    ] = {}
+    adjusted_spawn_config: EnemySpawnConfig = {}
     changed = False
 
     for enemy_type, spawn_time in config.enemy_spawn_config.items():
@@ -514,6 +489,7 @@ def _apply_theme_enemy_weights(
         formation_types=config.formation_types,
         theme_name=config.theme_name,
         score_multiplier=config.score_multiplier,
+        storm_kind=config.storm_kind,
     )
 
 
@@ -543,18 +519,7 @@ def _apply_stage_progression_enemy_weights(
     if not stage_weights:
         return config
 
-    adjusted_spawn_config: dict[
-        Type[
-            Meteor
-            | Alien
-            | ExplosiveMine
-            | EyeEnemy
-            | SquareMinionBoss
-            | ElementalRobot
-            | StoneSentry
-        ],
-        float,
-    ] = {}
+    adjusted_spawn_config: EnemySpawnConfig = {}
     changed = False
 
     for enemy_type, spawn_time in config.enemy_spawn_config.items():
@@ -583,6 +548,7 @@ def _apply_stage_progression_enemy_weights(
         formation_types=config.formation_types,
         theme_name=config.theme_name,
         score_multiplier=config.score_multiplier,
+        storm_kind=config.storm_kind,
     )
 
 
@@ -605,7 +571,10 @@ def _apply_enemy_variety_cap(
     if len(spawn_config) <= cap:
         return config
 
-    rng = random.Random(config.level_number * 7919 + hash(world.theme.value))
+    # `hash(str)` é randomizado por processo desde Python 3.3 (PYTHONHASHSEED),
+    # então usar adler32 para manter o seed determinístico entre sessões.
+    theme_seed = zlib.adler32(world.theme.value.encode("utf-8"))
+    rng = random.Random(config.level_number * 7919 + theme_seed)
 
     chosen: list[type] = []
     base = THEME_BASE_ENEMY.get(world.theme)
@@ -633,6 +602,7 @@ def _apply_enemy_variety_cap(
         formation_types=config.formation_types,
         theme_name=config.theme_name,
         score_multiplier=config.score_multiplier,
+        storm_kind=config.storm_kind,
     )
 
 
@@ -1064,6 +1034,17 @@ class LevelConfig:
     formation_types: list[str] | None = None
     theme_name: str | None = None  # Para UI mostrar "Invasão Alienígena!"
     score_multiplier: float = 1.0  # Multiplicador de pontuação para o nível
+    # "meteor" para tempestade de meteoros, "rock_glider" para tempestade de RockGliders;
+    # None para níveis normais. Use is_storm / is_rock_glider_storm para checagem.
+    storm_kind: str | None = None
+
+    @property
+    def is_storm(self) -> bool:
+        return self.storm_kind is not None
+
+    @property
+    def is_rock_glider_storm(self) -> bool:
+        return self.storm_kind == "rock_glider"
 
     @property
     def enemy_types(self) -> list[type]:
@@ -1193,7 +1174,9 @@ class ProceduralLevelGenerator:
         config = self._generate_level_impl(level_number)
         self._level_cache[level_number] = config
 
-        # LRU simples: remove o item mais antigo quando excede 50 entradas.
+        # Eviction FIFO: dict mantém ordem de inserção; o item mais antigo (não o
+        # menos recentemente acessado) é descartado. Acesso sequencial de níveis
+        # torna o impacto desprezível na prática.
         if len(self._level_cache) > 50:
             self._level_cache.pop(next(iter(self._level_cache)))
 
@@ -1322,32 +1305,17 @@ class ProceduralLevelGenerator:
         # Multiplicadores do preset
         preset_spawn_mult = self.difficulty_settings["spawn_rate_multiplier"]
 
-        # Multiplicador global do mundo (quando configurado em world_config).
+        # `world.theme_modifiers["spawn_rate_multiplier"]` é aplicado depois em
+        # `_apply_world_theme_to_config` — não incluir aqui evita aplicação dupla.
         world = get_world_for_level(level_number)
-        world_spawn_mult = float(
-            world.theme_modifiers.get("spawn_rate_multiplier", 1.0)
-        )
 
         # Multiplicador final combinado
-        spawn_multiplier = theme_spawn_mult * preset_spawn_mult * world_spawn_mult
+        spawn_multiplier = theme_spawn_mult * preset_spawn_mult
         enemies_multiplier = theme_enemies_mult
         stage_progress = _get_world_stage_progress(level_number)
 
         # 1. Calcular spawn times com pesos do tema
-        enemy_spawn_config: dict[
-            Type[
-                Meteor
-                | Alien
-                | ExplosiveMine
-                | EyeEnemy
-                | SquareMinionBoss
-                | ElementalRobot
-                | StoneSentry
-                | MountainMage
-                | MountainPropeller
-            ],
-            float,
-        ] = {}  # Tipo -> tempo de spawn
+        enemy_spawn_config: EnemySpawnConfig = {}  # Tipo -> tempo de spawn
 
         # Verificar se é fase especial de inimigo único
         if theme and theme.special_feature in ("meteor_only", "rock_glider_only"):
@@ -1383,49 +1351,64 @@ class ProceduralLevelGenerator:
                     base_meteor_time * (2.0 / meteor_weight)
                 )
 
-            # Aliens (nível 2+)
-            if level_number >= 2:
-                alien_weight = theme.enemy_weight.get("alien", 1.0) if theme else 1.0
-                alien_weight = _get_progressive_enemy_weight(
-                    "alien", alien_weight, stage_progress
-                )
-                if alien_weight > 0.0:
-                    base_alien_time = (
-                        DifficultyConfig.BASE_ALIEN_SPAWN_TIME / difficulty
-                    ) / spawn_multiplier
-                    enemy_spawn_config[Alien] = self._clamp_spawn_time(
-                        base_alien_time * (2.0 / alien_weight)
+            # Alien/Eye/SquareMinionBoss: para STARFIELD/CITY/VOLCANIC/PROCEDURAL,
+            # esses valores são sobrescritos por bandas de stage_progress abaixo.
+            # Computar apenas para os demais temas (MOUNTAINS e variantes) — onde
+            # serão filtrados depois pela elegibilidade por tema, caso não permitidos.
+            _stage_banded_themes = (
+                WorldTheme.STARFIELD,
+                WorldTheme.CITY,
+                WorldTheme.VOLCANIC,
+                WorldTheme.PROCEDURAL,
+            )
+            if world.theme not in _stage_banded_themes:
+                # Aliens (nível 2+)
+                if level_number >= 2:
+                    alien_weight = (
+                        theme.enemy_weight.get("alien", 1.0) if theme else 1.0
                     )
+                    alien_weight = _get_progressive_enemy_weight(
+                        "alien", alien_weight, stage_progress
+                    )
+                    if alien_weight > 0.0:
+                        base_alien_time = (
+                            DifficultyConfig.BASE_ALIEN_SPAWN_TIME / difficulty
+                        ) / spawn_multiplier
+                        enemy_spawn_config[Alien] = self._clamp_spawn_time(
+                            base_alien_time * (2.0 / alien_weight)
+                        )
 
-            # Eyes (nível 5+)
-            if level_number >= 5:
-                eye_weight = theme.enemy_weight.get("eye", 1.0) if theme else 1.0
-                eye_weight = _get_progressive_enemy_weight(
-                    "eye", eye_weight, stage_progress
-                )
-                if eye_weight > 0.0:
-                    base_eye_time = (
-                        DifficultyConfig.BASE_EYE_SPAWN_TIME / difficulty
-                    ) / spawn_multiplier
-                    enemy_spawn_config[EyeEnemy] = self._clamp_spawn_time(
-                        base_eye_time * (2.0 / eye_weight)
+                # Eyes (nível 5+)
+                if level_number >= 5:
+                    eye_weight = theme.enemy_weight.get("eye", 1.0) if theme else 1.0
+                    eye_weight = _get_progressive_enemy_weight(
+                        "eye", eye_weight, stage_progress
                     )
+                    if eye_weight > 0.0:
+                        base_eye_time = (
+                            DifficultyConfig.BASE_EYE_SPAWN_TIME / difficulty
+                        ) / spawn_multiplier
+                        enemy_spawn_config[EyeEnemy] = self._clamp_spawn_time(
+                            base_eye_time * (2.0 / eye_weight)
+                        )
 
-            # Square Minion Boss (nível 3+)
-            if level_number >= 3:
-                square_weight = (
-                    theme.enemy_weight.get("square_minion_boss", 0.1) if theme else 0.1
-                )
-                square_weight = _get_progressive_enemy_weight(
-                    "square_minion_boss", square_weight, stage_progress
-                )
-                if square_weight > 0.0:
-                    base_square_time = (
-                        8.0 / difficulty  # Spawn time base
-                    ) / spawn_multiplier
-                    enemy_spawn_config[SquareMinionBoss] = self._clamp_spawn_time(
-                        base_square_time * (2.0 / square_weight)
+                # Square Minion Boss (nível 3+)
+                if level_number >= 3:
+                    square_weight = (
+                        theme.enemy_weight.get("square_minion_boss", 0.1)
+                        if theme
+                        else 0.1
                     )
+                    square_weight = _get_progressive_enemy_weight(
+                        "square_minion_boss", square_weight, stage_progress
+                    )
+                    if square_weight > 0.0:
+                        base_square_time = (
+                            8.0 / difficulty  # Spawn time base
+                        ) / spawn_multiplier
+                        enemy_spawn_config[SquareMinionBoss] = self._clamp_spawn_time(
+                            base_square_time * (2.0 / square_weight)
+                        )
 
             if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.15:
                 if stage_progress < 0.40:
@@ -1615,6 +1598,13 @@ class ProceduralLevelGenerator:
             formation_types=formation_types,
             theme_name=theme.name if theme else LEVEL_THEMES["balanced"].name,
             score_multiplier=self._calculate_score_multiplier(level_number),
+            storm_kind=(
+                "meteor"
+                if theme and theme.special_feature == "meteor_only"
+                else "rock_glider"
+                if theme and theme.special_feature == "rock_glider_only"
+                else None
+            ),
         )
 
 
@@ -1624,33 +1614,14 @@ class ProceduralLevelGenerator:
 
 
 FIXED_LEVELS: dict[int, LevelConfig] = {
-    # Nível 1: Tutorial - Apenas meteoros, ritmo controlado
+    # Nível 1: Tutorial — RockGlider em ritmo controlado (MOUNTAINS).
+    # Pool intencionalmente único para o jogador absorver o básico de movimento e tiro.
     1: LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            # Meteor: 0.5,
-            # Alien: 1.5,
-            # EyeEnemy: 2.0,
-            # RockGlider: 0.6,
-            # ElementalRobot: 1.0,
-            # StoneSentry: 30.0,
-            # MountainMage: 10.0,
-            # MountainPropeller: 0.8,
-            # MountainGeode: 1.0,
+            RockGlider: 1.5,
         },
         enemies_to_clear=75,
-        # formations_enabled=True,
-        # formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle", "spiral_line"],
-        # mines_enabled=True,
-        # boss_type=Boss,
-        # boss_type=GiantMeteorBoss,
-        # boss_type=SlimeBoss,
-        # boss_type=SpikeBoss,
-        # boss_type=SquareMinionBoss,
-        # boss_type=StoneGolemBoss,
-        # boss_type=MountainSerpentBoss,
-        # boss_type=GiantMeteorBoss,
-        # boss_type=CloudArchmageBoss,
         theme_name="Tutorial",
         score_multiplier=1.0,
     ),
@@ -1782,18 +1753,7 @@ def _apply_world_theme_to_config(
         return config
 
     # Copiar config de spawn com type hint
-    adjusted_spawn_config: dict[
-        Type[
-            Meteor
-            | Alien
-            | ExplosiveMine
-            | EyeEnemy
-            | SquareMinionBoss
-            | ElementalRobot
-            | StoneSentry
-        ],
-        float,
-    ] = dict(config.enemy_spawn_config)
+    adjusted_spawn_config: EnemySpawnConfig = dict(config.enemy_spawn_config)
 
     # Aplicar multiplicadores de peso (RockGlider agora compartilha com Meteor)
     meteor_mult = world.theme_modifiers.get("meteor_weight", 1.0)
@@ -1834,6 +1794,7 @@ def _apply_world_theme_to_config(
         formation_types=config.formation_types,
         theme_name=world.name,  # Usar nome do mundo
         score_multiplier=config.score_multiplier,
+        storm_kind=config.storm_kind,
     )
 
 
@@ -1847,18 +1808,7 @@ def _create_world_boss_level(
     base_enemies_to_clear = 200 + (world.world_id - 1) * 50
 
     # Montagem de spawn config baseado no tema
-    enemy_spawn_config: dict[
-        Type[
-            Meteor
-            | Alien
-            | ExplosiveMine
-            | EyeEnemy
-            | SquareMinionBoss
-            | ElementalRobot
-            | StoneSentry
-        ],
-        float,
-    ]  # Tipo -> tempo de spawn
+    enemy_spawn_config: EnemySpawnConfig  # Tipo -> tempo de spawn
 
     if world.theme == WorldTheme.MOUNTAINS:
         enemy_spawn_config = {
@@ -2022,6 +1972,7 @@ def _apply_difficulty_to_fixed_level(
         formation_types=config.formation_types,
         theme_name=config.theme_name,
         score_multiplier=config.score_multiplier,
+        storm_kind=config.storm_kind,
     )
 
 
@@ -2076,11 +2027,14 @@ class LevelAnalyzer:
         if not config.enemy_spawn_config:
             return 0.0
 
-        avg_spawn = sum(config.enemy_spawn_config.values()) / len(
-            config.enemy_spawn_config
-        )
+        # Tempo médio entre spawns = 1 / taxa total (= Σ 1/tᵢ). A média aritmética
+        # de spawn_times é incorreta para múltiplos tipos concorrentes.
+        spawn_rate = LevelAnalyzer.estimate_spawn_rate(config)
+        if spawn_rate <= 0:
+            return 0.0
+        avg_inter_spawn = 1.0 / spawn_rate
         # Assume que jogador mata ~80% dos inimigos que spawnam
-        return (config.enemies_to_clear / 0.8) * avg_spawn
+        return (config.enemies_to_clear / 0.8) * avg_inter_spawn
 
     @staticmethod
     def estimate_spawn_rate(config: LevelConfig) -> float:

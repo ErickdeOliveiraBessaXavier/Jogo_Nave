@@ -50,7 +50,7 @@ def test_weighted_spawn_penalizes_recent_repetition() -> None:
         "total": 0,
     }
 
-    base_weights = spawner.config.get_enemy_spawn_weights()
+    base_weights = spawner.level_config.get_enemy_spawn_weights()
     meteor_like_type = next(
         (enemy_type for enemy_type in base_weights if issubclass(enemy_type, Meteor)),
         None,
@@ -76,7 +76,7 @@ def test_weighted_spawn_filters_hard_capped_type() -> None:
     meteor_like_type = next(
         (
             enemy_type
-            for enemy_type in spawner.config.enemy_types
+            for enemy_type in spawner.level_config.enemy_types
             if issubclass(enemy_type, Meteor)
         ),
         None,
@@ -131,7 +131,7 @@ def test_stone_sentry_min_spawn_gap_is_30_seconds() -> None:
 
 def test_elemental_robot_respects_level_config_spawn_gap() -> None:
     spawner = _make_spawner()
-    spawner.config.enemy_spawn_config[ElementalRobot] = 25.0
+    spawner.level_config.enemy_spawn_config[ElementalRobot] = 25.0
 
     gap = spawner._get_min_spawn_gap(ElementalRobot)
     expected = (
@@ -145,20 +145,20 @@ def test_elemental_robot_respects_level_config_spawn_gap() -> None:
 def test_storm_levels_override_total_enemy_cap_to_30() -> None:
     spawner = _make_spawner()
 
-    spawner.config.theme_name = "Tempestade de Meteoros"
+    spawner.level_config.storm_kind = "meteor"
     assert spawner._get_current_enemy_cap() == 30
 
-    spawner.config.theme_name = "Tempestade de Rock Gliders"
+    spawner.level_config.storm_kind = "rock_glider"
     assert spawner._get_current_enemy_cap() == 30
 
 
 def test_rock_glider_small_bias_only_in_rock_glider_storm() -> None:
     spawner = _make_spawner()
 
-    spawner.config.theme_name = "Tutorial"
+    spawner.level_config.storm_kind = None
     assert spawner._is_rock_glider_storm_level() is False
 
-    spawner.config.theme_name = "Tempestade de Rock Gliders"
+    spawner.level_config.storm_kind = "rock_glider"
     assert spawner._is_rock_glider_storm_level() is True
 
 

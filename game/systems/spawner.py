@@ -1,6 +1,7 @@
 import logging
 import random
 from collections import deque
+from dataclasses import replace
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -29,7 +30,7 @@ from ..core.levels import (
 )
 from ..core.powerup_weights import get_powerup_weights
 from ..core.time import Timer
-from ..core.world_config import WorldTheme, get_world_for_level
+from ..core.world_config import get_world_for_level
 from ..entities.alien import Alien
 from ..entities.bot_elemental import ElementalRobot
 from ..entities.explosive_mine import ExplosiveMine
@@ -38,7 +39,6 @@ from ..entities.formation import Formation, FormationPattern
 from ..entities.guided_meteor import GuidedMeteor
 from ..entities.meteor import Meteor
 from ..entities.meteor_pool import MeteorPool
-from ..entities.mountain_geode import MountainGeode
 from ..entities.mountain_mage import MountainMage
 from ..entities.mountain_propeller import MountainPropeller
 from ..entities.powerup import PowerUp
@@ -63,13 +63,11 @@ SPAWNER_CAP_MOUNTAIN_MAGE: int = 1
 SPAWNER_CAP_MOUNTAIN_PROPELLER: int = 3
 SPAWNER_STORM_ENEMY_CAP: int = 30
 
-# EnemySpawner — spawn de minas
+# EnemySpawner — spawn de minas. Pesos relativos para o número de minas spawnadas
+# em cada leva: 2 é o caso comum (~59%), 3 é frequente (~29%), 5 é raro (~12%).
+# random.choices normaliza, então os valores absolutos só importam pela proporção.
 MINE_NUM_OPTIONS: list[int] = [2, 3, 5]
-MINE_NUM_WEIGHTS: list[float] = [
-    0.50,
-    0.25,
-    0.10,
-]  # não somam 1 intencionalmente (choices normaliza)
+MINE_NUM_WEIGHTS: list[float] = [0.59, 0.29, 0.12]
 MINE_SPAWN_CHANCE: float = 0.5  # chance extra além de spawn_intensity
 MINE_MIN_DISTANCE: int = 60  # pixels mínimos entre minas na mesma leva
 MINE_MAX_POSITION_ATTEMPTS: int = 10  # tentativas para achar posição válida
@@ -295,17 +293,27 @@ class EnemySpawner:
             invalid_types,
             list(FORMATION_CONFIGS.keys()),
         )
-        self.level_config.formation_types = [
+        # `level_config` é cacheada por `LevelManager`. Em vez de mutar a instância
+        # (vazaria entre invocações), substitui-se a referência local por uma cópia
+        # com os campos saneados.
+        sanitized_types = [
             t for t in self.level_config.formation_types if t in FORMATION_CONFIGS
         ]
-        if not self.level_config.formation_types:
+        if not sanitized_types:
             logger.warning(
                 "No valid formation types remain — disabling formations for level %s.",
                 self.level_config.level_number,
             )
-            self.level_config.formations_enabled = False
+            self.level_config = replace(
+                self.level_config,
+                formation_types=[],
+                formations_enabled=False,
+            )
         else:
-            logger.warning("Using valid types: %s", self.level_config.formation_types)
+            logger.warning("Using valid types: %s", sanitized_types)
+            self.level_config = replace(
+                self.level_config, formation_types=sanitized_types
+            )
 
     def _reset_spawn_pipeline(self) -> None:
         """Recria timers para o modo ativo de spawn."""
@@ -395,15 +403,10 @@ class EnemySpawner:
     # ------------------------------------------------------------------
 
     def _is_storm_level(self) -> bool:
-        theme = (self.level_config.theme_name or "").lower()
-        return (
-            "tempestade de meteoros" in theme or "tempestade de rock gliders" in theme
-        )
+        return self.level_config.is_storm
 
     def _is_rock_glider_storm_level(self) -> bool:
-        return (
-            self.level_config.theme_name or ""
-        ).strip().casefold() == "tempestade de rock gliders"
+        return self.level_config.is_rock_glider_storm
 
     def _get_current_enemy_cap(self) -> int:
         if self._is_storm_level():
@@ -477,12 +480,16 @@ class EnemySpawner:
         return False
 
     def _should_spawn_enemy(
-        self, enemy_type: type, entity_manager: "EntityManager"
+        self,
+        enemy_type: type,
+        entity_manager: "EntityManager",
+        counts: dict[str, int] | None = None,
     ) -> bool:
         if not DifficultyConfig.ADAPTIVE_SPAWN_ENABLED:
             return True
 
-        counts = self._count_enemies_by_type(entity_manager)
+        if counts is None:
+            counts = self._count_enemies_by_type(entity_manager)
 
         # Caps rígidos de instâncias únicas/duplas
         if (
@@ -517,8 +524,11 @@ class EnemySpawner:
     # Pipeline ponderado
     # ------------------------------------------------------------------
 
-    def _record_pressure_sample(self, entity_manager: "EntityManager") -> None:
-        counts = self._count_enemies_by_type(entity_manager)
+    def _record_pressure_sample(
+        self, entity_manager: "EntityManager", counts: dict[str, int] | None = None
+    ) -> None:
+        if counts is None:
+            counts = self._count_enemies_by_type(entity_manager)
         total = counts["total"]
         self.weighted_occupancy_samples.append(total)
         self.weighted_peak_occupancy = max(self.weighted_peak_occupancy, total)
@@ -531,9 +541,12 @@ class EnemySpawner:
             self.weighted_hard_cap_samples += 1
 
     def _get_dynamic_enemy_weights(
-        self, entity_manager: "EntityManager"
+        self,
+        entity_manager: "EntityManager",
+        counts: dict[str, int] | None = None,
     ) -> dict[type, float]:
-        counts = self._count_enemies_by_type(entity_manager)
+        if counts is None:
+            counts = self._count_enemies_by_type(entity_manager)
         base_weights = self.level_config.get_enemy_spawn_weights()
         dynamic_weights: dict[type, float] = {}
 
@@ -546,8 +559,12 @@ class EnemySpawner:
 
         return dynamic_weights
 
-    def _pick_weighted_enemy_type(self, entity_manager: "EntityManager") -> type | None:
-        weights_by_type = self._get_dynamic_enemy_weights(entity_manager)
+    def _pick_weighted_enemy_type(
+        self,
+        entity_manager: "EntityManager",
+        counts: dict[str, int] | None = None,
+    ) -> type | None:
+        weights_by_type = self._get_dynamic_enemy_weights(entity_manager, counts=counts)
         if not weights_by_type:
             return None
         enemy_types = list(weights_by_type.keys())
@@ -845,6 +862,7 @@ class EnemySpawner:
         player_x: float | None,
         player_y: float | None,
         is_side_scroll: bool,
+        counts: dict[str, int] | None = None,
     ) -> None:
         for enemy_type, timer in self.enemy_timers.items():
             timer.update(dt)
@@ -854,7 +872,7 @@ class EnemySpawner:
 
             if random.random() >= self.spawn_intensity:
                 continue
-            if not self._should_spawn_enemy(enemy_type, entity_manager):
+            if not self._should_spawn_enemy(enemy_type, entity_manager, counts=counts):
                 continue
             if not self._can_spawn_now(enemy_type):
                 continue
@@ -875,6 +893,7 @@ class EnemySpawner:
         player_x: float | None,
         player_y: float | None,
         is_side_scroll: bool,
+        counts: dict[str, int] | None = None,
     ) -> None:
         self.weighted_spawn_timer.update(dt)
         if not self.weighted_spawn_timer.done():
@@ -887,9 +906,9 @@ class EnemySpawner:
             self.weighted_spawn_timer.start()
             return
 
-        enemy_type = self._pick_weighted_enemy_type(entity_manager)
+        enemy_type = self._pick_weighted_enemy_type(entity_manager, counts=counts)
         if enemy_type is None or not self._should_spawn_enemy(
-            enemy_type, entity_manager
+            enemy_type, entity_manager, counts=counts
         ):
             self.weighted_spawn_blocked += 1
             self.weighted_spawn_timer.start()
@@ -933,7 +952,9 @@ class EnemySpawner:
             return
 
         self.spawn_clock += dt
-        self._refresh_death_clocks(self._count_enemies_by_type(entity_manager))
+        # Conta inimigos uma única vez por frame e propaga para os consumidores.
+        counts = self._count_enemies_by_type(entity_manager)
+        self._refresh_death_clocks(counts)
 
         # Warm-up: mantém intensidade em 0 sem early return (timers precisam atualizar)
         if self.warm_up_timer > 0:
@@ -944,30 +965,36 @@ class EnemySpawner:
 
         # Spawn principal (ponderado ou legado)
         if self.use_weighted_spawn:
-            self._record_pressure_sample(entity_manager)
+            self._record_pressure_sample(entity_manager, counts=counts)
             self._update_weighted_enemy_spawn(
-                dt, entity_manager, player_x, player_y, is_side_scroll
+                dt,
+                entity_manager,
+                player_x,
+                player_y,
+                is_side_scroll,
+                counts=counts,
             )
             self._flush_weighted_telemetry(dt)
         else:
             self._update_legacy_enemy_spawn(
-                dt, entity_manager, player_x, player_y, is_side_scroll
+                dt,
+                entity_manager,
+                player_x,
+                player_y,
+                is_side_scroll,
+                counts=counts,
             )
 
-        self._update_mine_spawner(entity_manager)
-        self._update_propeller_spawner(entity_manager)
-        self._update_formation_spawner(entity_manager)
+        self._update_mine_spawner(dt, entity_manager)
+        self._update_propeller_spawner(dt, entity_manager)
+        self._update_formation_spawner(dt, entity_manager)
         self._update_guided_meteor_spawner(dt, entity_manager, player_x, player_y)
 
-    def _update_mine_spawner(self, entity_manager: "EntityManager") -> None:
+    def _update_mine_spawner(self, dt: float, entity_manager: "EntityManager") -> None:
         if not self.level_config.mines_enabled:
             return
 
-        self.mine_spawn_timer.update(
-            1 / 60
-        )  # dt não disponível aqui — ver nota abaixo*
-        # *Idealmente receber dt; por ora mantém compatibilidade com lógica anterior
-        # TODO: passar dt para _update_mine_spawner quando refatorar assinatura
+        self.mine_spawn_timer.update(dt)
         if not self.mine_spawn_timer.done():
             return
 
@@ -994,14 +1021,16 @@ class EnemySpawner:
                     )
                     break
 
-    def _update_propeller_spawner(self, entity_manager: "EntityManager") -> None:
+    def _update_propeller_spawner(
+        self, dt: float, entity_manager: "EntityManager"
+    ) -> None:
         world = get_world_for_level(self.current_level_number)
         if "propellers" not in THEME_FEATURES.get(world.theme, set()):
             return
         if MountainPropeller not in self.level_config.enemy_spawn_config:
             return
 
-        self.propeller_spawn_timer.update(1 / 60)  # TODO: passar dt
+        self.propeller_spawn_timer.update(dt)
         if not self.propeller_spawn_timer.done():
             return
 
@@ -1012,14 +1041,16 @@ class EnemySpawner:
         ):
             entity_manager.spawn_mountain_propeller()
 
-    def _update_formation_spawner(self, entity_manager: "EntityManager") -> None:
+    def _update_formation_spawner(
+        self, dt: float, entity_manager: "EntityManager"
+    ) -> None:
         if not self.level_config.formations_enabled:
             return
         world = get_world_for_level(self.current_level_number)
         if "formations" not in THEME_FEATURES.get(world.theme, set()):
             return
 
-        self.formation_spawn_timer.update(1 / 60)  # TODO: passar dt
+        self.formation_spawn_timer.update(dt)
         if not self.formation_spawn_timer.done():
             return
 
@@ -1172,7 +1203,7 @@ class StarSpawner:
         self.kill_counter: int = 0
         self.kill_threshold: int = getattr(Config, "STAR_SPAWN_KILL_THRESHOLD", 200)
 
-    def update(self, dt: float, stars: List[Star]) -> None:
+    def update(self, stars: List[Star]) -> None:
         """No-op: estrelas só aparecem por abates, não por timer."""
 
     def add_kills(self, count: int, stars: List[Star]) -> None:
