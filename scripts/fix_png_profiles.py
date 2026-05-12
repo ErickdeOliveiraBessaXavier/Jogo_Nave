@@ -7,6 +7,7 @@ It finds the repo root (a parent that contains `game/`) then scans `game/assets`
 """
 
 from pathlib import Path
+
 from PIL import Image
 
 

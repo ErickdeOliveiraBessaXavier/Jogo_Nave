@@ -1,7 +1,7 @@
 import math
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional, Tuple, Callable
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import pygame
 
@@ -12,11 +12,8 @@ from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_profile_path
 from ..core.ship_types import ShipProfile, all_ship_profiles, get_ship_profile
 from ..core.state import Scene
-from ..core.upgrades import (
-    UpgradeMeta,
-    get_upgrade_icon,
-    list_all_upgrades_meta,
-)
+from ..core.upgrades import (UpgradeMeta, get_upgrade_icon,
+                             list_all_upgrades_meta)
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 
 if TYPE_CHECKING:
@@ -26,7 +23,7 @@ if TYPE_CHECKING:
 @dataclass
 class UILayout:
     """Estrutura para as 3 colunas da Central de Loadout."""
-    
+
     # Áreas principais
     left_area: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
     center_area: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
@@ -34,19 +31,27 @@ class UILayout:
 
     # Esquerda: Arsenal
     active_slots: List[pygame.Rect] = field(default_factory=lambda: [])
-    active_slots_header: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
+    active_slots_header: pygame.Rect = field(
+        default_factory=lambda: pygame.Rect(0, 0, 0, 0)
+    )
     upgrade_grid_cells: List[pygame.Rect] = field(default_factory=lambda: [])
     visible_upgrades: List[UpgradeMeta] = field(default_factory=lambda: [])
-    upgrade_scroll_area: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
+    upgrade_scroll_area: pygame.Rect = field(
+        default_factory=lambda: pygame.Rect(0, 0, 0, 0)
+    )
 
     # Direita: Hangar
     stats_area: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
     ship_grid_cells: List[pygame.Rect] = field(default_factory=lambda: [])
     visible_ships: List[ShipProfile] = field(default_factory=lambda: [])
-    ship_scroll_area: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
+    ship_scroll_area: pygame.Rect = field(
+        default_factory=lambda: pygame.Rect(0, 0, 0, 0)
+    )
 
     # Centro: Preview
-    ship_preview_rect: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
+    ship_preview_rect: pygame.Rect = field(
+        default_factory=lambda: pygame.Rect(0, 0, 0, 0)
+    )
 
     # Botão de voltar
     back_button: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
@@ -54,7 +59,14 @@ class UILayout:
 
 class FloatingMessage:
     """Mensagem flutuante para feedback visual."""
-    def __init__(self, x: float, y: float, message: str, color: Tuple[int, int, int] = (255, 100, 100)):
+
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        message: str,
+        color: Tuple[int, int, int] = (255, 100, 100),
+    ):
         self.x, self.y, self.message, self.color = x, y, message, color
         self.alpha, self.lifetime, self.dy = 255, 1.5, -60.0
         self.font, self.fade_start = get_font(20), 0.5
@@ -66,12 +78,14 @@ class FloatingMessage:
             self.alpha = max(0, int(255 * (self.lifetime / self.fade_start)))
 
     def draw(self, surface: pygame.Surface) -> None:
-        if self.alpha <= 0: return
+        if self.alpha <= 0:
+            return
         surf = self.font.render(self.message, True, self.color)
         surf.set_alpha(self.alpha)
         surface.blit(surf, surf.get_rect(center=(int(self.x), int(self.y))))
 
-    def is_dead(self) -> bool: return self.lifetime <= 0
+    def is_dead(self) -> bool:
+        return self.lifetime <= 0
 
 
 class UpgradesSelectionScene(Scene):
@@ -90,23 +104,29 @@ class UpgradesSelectionScene(Scene):
         self.MARGIN = 24
         self.GAP = 12
         self.RADIUS = 8
-        
-        self.locked_icon = get_image(BASE_DIR / "assets" / "images" / "icons" / "icon_bloqueado.png")
-        self.star_icon = get_image(BASE_DIR / "assets" / "images" / "icons" / "icon_star.png")
+
+        self.locked_icon = get_image(
+            BASE_DIR / "assets" / "images" / "icons" / "icon_bloqueado.png"
+        )
+        self.star_icon = get_image(
+            BASE_DIR / "assets" / "images" / "icons" / "icon_star.png"
+        )
         self.star_icon_small = pygame.transform.scale(self.star_icon, (18, 18))
 
         self.player_profile = PlayerProfile(get_profile_path())
         self._ensure_slots()
 
         # Todos os upgrades em ordem alfabética
-        self.all_upgrades = sorted(list_all_upgrades_meta(), key=lambda u: u.name.lower())
+        self.all_upgrades = sorted(
+            list_all_upgrades_meta(), key=lambda u: u.name.lower()
+        )
 
         # Estado do Scroll e UI
         self.upgrade_scroll = 0
         self.ship_scroll = 0
         self.max_upgrade_scroll = 0
         self.max_ship_scroll = 0
-        
+
         # Drag and Drop para upgrades
         self.dragging_upgrade: Optional[UpgradeMeta] = None
         self.drag_offset: Tuple[int, int] = (0, 0)
@@ -116,7 +136,7 @@ class UpgradesSelectionScene(Scene):
         self.hovered_upgrade: Optional[UpgradeMeta] = None
         self.hovered_ship: Optional[ShipProfile] = None
         self.hovered_slot_idx: Optional[int] = None
-        
+
         self.shaking_slot: Optional[int] = None
         self.shaking_ship_id: Optional[str] = None
         self.shake_start_time = 0.0
@@ -124,7 +144,7 @@ class UpgradesSelectionScene(Scene):
 
         self.layout = UILayout()
         self._calculate_layout()
-        
+
         self.floating_messages: List[FloatingMessage] = []
         self.transitioning, self.transition_progress, self.fade_out = False, 0.0, False
         self.transition_duration = 0.3
@@ -134,7 +154,9 @@ class UpgradesSelectionScene(Scene):
         while len(self.player_profile.upgrade_loadout) < UPGRADE_SLOT_COUNT:
             self.player_profile.upgrade_loadout.append(None)
         if len(self.player_profile.upgrade_loadout) > UPGRADE_SLOT_COUNT:
-            self.player_profile.upgrade_loadout = self.player_profile.upgrade_loadout[:UPGRADE_SLOT_COUNT]
+            self.player_profile.upgrade_loadout = self.player_profile.upgrade_loadout[
+                :UPGRADE_SLOT_COUNT
+            ]
 
     def _calculate_layout(self):
         sw, sh = self.app.screen.get_size()
@@ -144,7 +166,7 @@ class UpgradesSelectionScene(Scene):
         lw = int(sw * 0.33)
         rw = int(sw * 0.33)
         cw = sw - lw - rw
-        
+
         self.layout = UILayout()
         self.layout.left_area = pygame.Rect(0, 0, lw, sh)
         self.layout.center_area = pygame.Rect(lw, 0, cw, sh)
@@ -156,21 +178,35 @@ class UpgradesSelectionScene(Scene):
         cols_slots = 4
         size_slots = (lw - self.MARGIN * 2 - (cols_slots - 1) * self.GAP) // cols_slots
         lx_slots = self.MARGIN
-        
+
         # Alinhamento dos Cabeçalhos: y = 100
         header_y = 100
-        self.layout.active_slots_header = pygame.Rect(self.MARGIN, header_y, lw - self.MARGIN*2, 25)
-        
+        self.layout.active_slots_header = pygame.Rect(
+            self.MARGIN, header_y, lw - self.MARGIN * 2, 25
+        )
+
         # Conteúdo começa abaixo do cabeçalho
         ly = header_y + 40
         for i in range(UPGRADE_SLOT_COUNT):
             r, c = i // cols_slots, i % cols_slots
-            self.layout.active_slots.append(pygame.Rect(lx_slots + c*(size_slots+self.GAP), ly + r*(size_slots+self.GAP), size_slots, size_slots))
+            self.layout.active_slots.append(
+                pygame.Rect(
+                    lx_slots + c * (size_slots + self.GAP),
+                    ly + r * (size_slots + self.GAP),
+                    size_slots,
+                    size_slots,
+                )
+            )
 
         # 2. Estoque (Starting after slots)
         stock_header_y = self.layout.active_slots[-1].bottom + 35
         self._stock_start_y = stock_header_y + 35
-        self.layout.upgrade_scroll_area = pygame.Rect(self.MARGIN, self._stock_start_y, lw - self.MARGIN*2, sh - self._stock_start_y - 80)
+        self.layout.upgrade_scroll_area = pygame.Rect(
+            self.MARGIN,
+            self._stock_start_y,
+            lw - self.MARGIN * 2,
+            sh - self._stock_start_y - 80,
+        )
         self._rebuild_upgrade_grid()
 
         # --- NAVE (Centro) ---
@@ -184,12 +220,14 @@ class UpgradesSelectionScene(Scene):
         # --- HANGAR (Direita) ---
         # 1. Atributos
         rx = self.layout.right_area.x + self.MARGIN
-        ry = header_y # Alinhado com Arsenal Ativo
+        ry = header_y  # Alinhado com Arsenal Ativo
         self.layout.stats_area = pygame.Rect(rx, ry, rw - self.MARGIN * 2, 110)
 
         # 2. Ship Collection
         self._ship_start_y = self.layout.stats_area.bottom + 70
-        self.layout.ship_scroll_area = pygame.Rect(rx, self._ship_start_y, rw - self.MARGIN*2, sh - self._ship_start_y - 80)
+        self.layout.ship_scroll_area = pygame.Rect(
+            rx, self._ship_start_y, rw - self.MARGIN * 2, sh - self._ship_start_y - 80
+        )
         self._rebuild_ship_grid()
 
         self.layout.back_button = pygame.Rect(self.MARGIN, sh - 55, 140, 35)
@@ -199,17 +237,24 @@ class UpgradesSelectionScene(Scene):
         self.layout.visible_upgrades.clear()
         cols = 4
         area = self.layout.upgrade_scroll_area
-        size = (area.width - (cols-1)*self.GAP) // cols
+        size = (area.width - (cols - 1) * self.GAP) // cols
         visible_rows = area.height // (size + self.GAP)
-        
+
         total_rows = math.ceil(len(self.all_upgrades) / cols)
         self.max_upgrade_scroll = max(0, total_rows - visible_rows)
         start_idx = self.upgrade_scroll * cols
-        visible_items = self.all_upgrades[start_idx : start_idx + (visible_rows + 1) * cols]
-        
+        visible_items = self.all_upgrades[
+            start_idx : start_idx + (visible_rows + 1) * cols
+        ]
+
         for i, upg in enumerate(visible_items):
             r, c = i // cols, i % cols
-            rect = pygame.Rect(area.x + c*(size+self.GAP), area.y + r*(size+self.GAP), size, size)
+            rect = pygame.Rect(
+                area.x + c * (size + self.GAP),
+                area.y + r * (size + self.GAP),
+                size,
+                size,
+            )
             self.layout.upgrade_grid_cells.append(rect)
             self.layout.visible_upgrades.append(upg)
 
@@ -219,27 +264,34 @@ class UpgradesSelectionScene(Scene):
         ships = list(all_ship_profiles())
         cols = 4
         area = self.layout.ship_scroll_area
-        size = (area.width - (cols-1)*self.GAP) // cols
+        size = (area.width - (cols - 1) * self.GAP) // cols
         visible_rows = area.height // (size + self.GAP)
-        
+
         total_rows = math.ceil(len(ships) / cols)
         self.max_ship_scroll = max(0, total_rows - visible_rows)
         start_idx = self.ship_scroll * cols
         visible_ships = ships[start_idx : start_idx + (visible_rows + 1) * cols]
-        
+
         for i, ship in enumerate(visible_ships):
             r, c = i // cols, i % cols
-            rect = pygame.Rect(area.x + c*(size+self.GAP), area.y + r*(size+self.GAP), size, size)
+            rect = pygame.Rect(
+                area.x + c * (size + self.GAP),
+                area.y + r * (size + self.GAP),
+                size,
+                size,
+            )
             self.layout.ship_grid_cells.append(rect)
             self.layout.visible_ships.append(ship)
 
     def handle_event(self, event: pygame.event.Event):
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE: self._return_to_menu()
-        
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self._return_to_menu()
+
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             pos = event.pos
-            if self.layout.back_button.collidepoint(pos): self._return_to_menu()
-            
+            if self.layout.back_button.collidepoint(pos):
+                self._return_to_menu()
+
             for i, rect in enumerate(self.layout.ship_grid_cells):
                 if rect.collidepoint(pos):
                     self._handle_ship_click(self.layout.visible_ships[i], rect)
@@ -248,7 +300,11 @@ class UpgradesSelectionScene(Scene):
                 if rect.collidepoint(pos):
                     upg = self.layout.visible_upgrades[i]
                     if upg.type in self.player_profile.unlocked_upgrades:
-                        self.dragging_upgrade, self.drag_offset, self.drag_source_slot = upg, (pos[0]-rect.x, pos[1]-rect.y), None
+                        (
+                            self.dragging_upgrade,
+                            self.drag_offset,
+                            self.drag_source_slot,
+                        ) = (upg, (pos[0] - rect.x, pos[1] - rect.y), None)
                     return
             for i, rect in enumerate(self.layout.active_slots):
                 if rect.collidepoint(pos):
@@ -256,17 +312,24 @@ class UpgradesSelectionScene(Scene):
                     return
 
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            if self.dragging_upgrade: self._handle_drop_upgrade(event.pos)
+            if self.dragging_upgrade:
+                self._handle_drop_upgrade(event.pos)
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             sw = self.app.screen.get_size()[0]
             if event.pos[0] < sw * 0.3:
-                if event.button == 4: self.upgrade_scroll = max(0, self.upgrade_scroll - 1)
-                elif event.button == 5: self.upgrade_scroll = min(self.max_upgrade_scroll, self.upgrade_scroll + 1)
+                if event.button == 4:
+                    self.upgrade_scroll = max(0, self.upgrade_scroll - 1)
+                elif event.button == 5:
+                    self.upgrade_scroll = min(
+                        self.max_upgrade_scroll, self.upgrade_scroll + 1
+                    )
                 self._rebuild_upgrade_grid()
             elif event.pos[0] > sw * 0.7:
-                if event.button == 4: self.ship_scroll = max(0, self.ship_scroll - 1)
-                elif event.button == 5: self.ship_scroll = min(self.max_ship_scroll, self.ship_scroll + 1)
+                if event.button == 4:
+                    self.ship_scroll = max(0, self.ship_scroll - 1)
+                elif event.button == 5:
+                    self.ship_scroll = min(self.max_ship_scroll, self.ship_scroll + 1)
                 self._rebuild_ship_grid()
 
     def _handle_ship_click(self, ship: ShipProfile, rect: pygame.Rect):
@@ -276,24 +339,43 @@ class UpgradesSelectionScene(Scene):
         elif profile.can_unlock_ship(ship.id):
             if profile.unlock_ship(ship.id):
                 profile.select_ship(ship.id)
-                self.floating_messages.append(FloatingMessage(rect.centerx, rect.top, f"{ship.display_name} Adquirida!", colors.GREEN))
+                self.floating_messages.append(
+                    FloatingMessage(
+                        rect.centerx,
+                        rect.top,
+                        f"{ship.display_name} Adquirida!",
+                        colors.GREEN,
+                    )
+                )
         else:
             self.shaking_ship_id, self.shake_start_time = ship.id, time.time()
-            self.floating_messages.append(FloatingMessage(rect.centerx, rect.top, "Saldo Insuficiente", colors.RED))
+            self.floating_messages.append(
+                FloatingMessage(
+                    rect.centerx, rect.top, "Saldo Insuficiente", colors.RED
+                )
+            )
 
     def _handle_slot_click(self, idx: int, rect: pygame.Rect, pos: tuple[int, int]):
         profile = self.player_profile
         if idx >= profile.unlocked_slots:
-            if profile.can_unlock_slot(idx): profile.unlock_slot(idx)
-            else: self.shaking_slot, self.shake_start_time = idx, time.time()
+            if profile.can_unlock_slot(idx):
+                profile.unlock_slot(idx)
+            else:
+                self.shaking_slot, self.shake_start_time = idx, time.time()
             return
         equipped_type = profile.upgrade_loadout[idx]
         if equipped_type:
             upg = next((u for u in self.all_upgrades if u.type == equipped_type), None)
-            if upg: self.dragging_upgrade, self.drag_offset, self.drag_source_slot = upg, (pos[0]-rect.x, pos[1]-rect.y), idx
+            if upg:
+                self.dragging_upgrade, self.drag_offset, self.drag_source_slot = (
+                    upg,
+                    (pos[0] - rect.x, pos[1] - rect.y),
+                    idx,
+                )
 
     def _handle_drop_upgrade(self, pos: tuple[int, int]):
-        if self.dragging_upgrade is None: return
+        if self.dragging_upgrade is None:
+            return
         profile, dropped = self.player_profile, False
         for i, rect in enumerate(self.layout.active_slots):
             if rect.collidepoint(pos) and i < profile.unlocked_slots:
@@ -310,13 +392,15 @@ class UpgradesSelectionScene(Scene):
                         self.shaking_slot, self.shake_start_time = i, time.time()
                 elif profile.can_equip_upgrade(self.dragging_upgrade.type, i):
                     for j in range(UPGRADE_SLOT_COUNT):
-                        if profile.upgrade_loadout[j] == self.dragging_upgrade.type: profile.equip_upgrade(None, j)
+                        if profile.upgrade_loadout[j] == self.dragging_upgrade.type:
+                            profile.equip_upgrade(None, j)
                     profile.equip_upgrade(self.dragging_upgrade.type, i)
                     dropped = True
                 else:
                     self.shaking_slot, self.shake_start_time = i, time.time()
                 break
-        if not dropped and self.drag_source_slot is not None: profile.equip_upgrade(None, self.drag_source_slot)
+        if not dropped and self.drag_source_slot is not None:
+            profile.equip_upgrade(None, self.drag_source_slot)
         self.dragging_upgrade = None
 
     def exit(self):
@@ -329,12 +413,16 @@ class UpgradesSelectionScene(Scene):
     def update(self, dt: float):
         self.r.starfield.update(dt)
         if self.is_entering:
-            self.entry_progress = min(1.0, self.entry_progress + dt / self.entry_duration)
-            if self.entry_progress >= 1.0: self.is_entering = False
+            self.entry_progress = min(
+                1.0, self.entry_progress + dt / self.entry_duration
+            )
+            if self.entry_progress >= 1.0:
+                self.is_entering = False
         if self.transitioning:
             self.transition_progress += dt / self.transition_duration
             if self.transition_progress >= 1.0:
                 from .main_menu import MainMenuScene
+
                 # Persistência defensiva: garante save antes do switch — algumas
                 # implementações de Scene não chamam exit() na transição.
                 self.player_profile.save()
@@ -342,38 +430,83 @@ class UpgradesSelectionScene(Scene):
                 return
         for m in self.floating_messages[:]:
             m.update(dt)
-            if m.is_dead(): self.floating_messages.remove(m)
-        if self.shaking_ship_id and time.time() - self.shake_start_time > self.shake_duration: self.shaking_ship_id = None
-        if self.shaking_slot is not None and time.time() - self.shake_start_time > self.shake_duration: self.shaking_slot = None
+            if m.is_dead():
+                self.floating_messages.remove(m)
+        if (
+            self.shaking_ship_id
+            and time.time() - self.shake_start_time > self.shake_duration
+        ):
+            self.shaking_ship_id = None
+        if (
+            self.shaking_slot is not None
+            and time.time() - self.shake_start_time > self.shake_duration
+        ):
+            self.shaking_slot = None
 
         m_pos = pygame.mouse.get_pos()
         self.hovered_upgrade = self.hovered_ship = self.hovered_slot_idx = None
         if not self.dragging_upgrade:
             for i, r in enumerate(self.layout.upgrade_grid_cells):
-                if r.collidepoint(m_pos): self.hovered_upgrade = self.layout.visible_upgrades[i]; break
+                if r.collidepoint(m_pos):
+                    self.hovered_upgrade = self.layout.visible_upgrades[i]
+                    break
             for i, r in enumerate(self.layout.ship_grid_cells):
-                if r.collidepoint(m_pos): self.hovered_ship = self.layout.visible_ships[i]; break
+                if r.collidepoint(m_pos):
+                    self.hovered_ship = self.layout.visible_ships[i]
+                    break
             for i, r in enumerate(self.layout.active_slots):
-                if r.collidepoint(m_pos) and i < self.player_profile.unlocked_slots: self.hovered_slot_idx = i; break
+                if r.collidepoint(m_pos) and i < self.player_profile.unlocked_slots:
+                    self.hovered_slot_idx = i
+                    break
         else:
             self.drag_invalid_target = True
             for i, r in enumerate(self.layout.active_slots):
                 if r.collidepoint(m_pos) and i < self.player_profile.unlocked_slots:
                     if self.drag_source_slot is not None:
-                        orig = self.player_profile.upgrade_loadout[self.drag_source_slot]
-                        self.player_profile.upgrade_loadout[self.drag_source_slot] = None
-                        self.drag_invalid_target = not self.player_profile.can_equip_upgrade(self.dragging_upgrade.type, i)
-                        self.player_profile.upgrade_loadout[self.drag_source_slot] = orig
+                        orig = self.player_profile.upgrade_loadout[
+                            self.drag_source_slot
+                        ]
+                        self.player_profile.upgrade_loadout[self.drag_source_slot] = (
+                            None
+                        )
+                        self.drag_invalid_target = (
+                            not self.player_profile.can_equip_upgrade(
+                                self.dragging_upgrade.type, i
+                            )
+                        )
+                        self.player_profile.upgrade_loadout[self.drag_source_slot] = (
+                            orig
+                        )
                     else:
-                        self.drag_invalid_target = not self.player_profile.can_equip_upgrade(self.dragging_upgrade.type, i)
+                        self.drag_invalid_target = (
+                            not self.player_profile.can_equip_upgrade(
+                                self.dragging_upgrade.type, i
+                            )
+                        )
                     break
 
     def render(self, surface: pygame.Surface):
-        surface.fill(BLACK); self.r.starfield.draw(surface)
-        alpha_mult = (1.0 - self.transition_progress if self.fade_out else self.transition_progress) if self.transitioning else self.entry_progress if self.is_entering else 1.0
+        surface.fill(BLACK)
+        self.r.starfield.draw(surface)
+        alpha_mult = (
+            (
+                1.0 - self.transition_progress
+                if self.fade_out
+                else self.transition_progress
+            )
+            if self.transitioning
+            else self.entry_progress
+            if self.is_entering
+            else 1.0
+        )
         alpha = int(255 * alpha_mult)
         title = self.title_font.render("Central de Loadout", True, CUSTOM_GOLD)
-        surface.blit(title, title.get_rect(centerx=surface.get_width()//2, top=24 + int(20 * (1.0 - alpha_mult))))
+        surface.blit(
+            title,
+            title.get_rect(
+                centerx=surface.get_width() // 2, top=24 + int(20 * (1.0 - alpha_mult))
+            ),
+        )
 
         content_surf = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
         self._draw_lateral_panels(content_surf)
@@ -382,9 +515,12 @@ class UpgradesSelectionScene(Scene):
         self._draw_right_column(content_surf)
         self._draw_back_button(content_surf)
         self._draw_floating_messages(content_surf)
-        if self.dragging_upgrade: self._draw_dragging_upgrade(content_surf)
-        elif self.hovered_upgrade: self._draw_tooltip(content_surf)
-        content_surf.set_alpha(alpha); surface.blit(content_surf, (0, 0))
+        if self.dragging_upgrade:
+            self._draw_dragging_upgrade(content_surf)
+        elif self.hovered_upgrade:
+            self._draw_tooltip(content_surf)
+        content_surf.set_alpha(alpha)
+        surface.blit(content_surf, (0, 0))
 
     def _draw_lateral_panels(self, surface: pygame.Surface):
         # Padding consistente: 10px horizontal, top em 80 (logo abaixo do título da tela)
@@ -401,8 +537,12 @@ class UpgradesSelectionScene(Scene):
             self.layout.left_area.width - side_pad * 2,
             panel_h,
         )
-        pygame.draw.rect(surface, (20, 20, 25, 180), panel_l, border_radius=self.RADIUS * 2)
-        pygame.draw.rect(surface, border_color, panel_l, 1, border_radius=self.RADIUS * 2)
+        pygame.draw.rect(
+            surface, (20, 20, 25, 180), panel_l, border_radius=self.RADIUS * 2
+        )
+        pygame.draw.rect(
+            surface, border_color, panel_l, 1, border_radius=self.RADIUS * 2
+        )
 
         panel_r = pygame.Rect(
             self.layout.right_area.x + side_pad,
@@ -410,8 +550,12 @@ class UpgradesSelectionScene(Scene):
             self.layout.right_area.width - side_pad * 2,
             panel_h,
         )
-        pygame.draw.rect(surface, (20, 20, 25, 180), panel_r, border_radius=self.RADIUS * 2)
-        pygame.draw.rect(surface, border_color, panel_r, 1, border_radius=self.RADIUS * 2)
+        pygame.draw.rect(
+            surface, (20, 20, 25, 180), panel_r, border_radius=self.RADIUS * 2
+        )
+        pygame.draw.rect(
+            surface, border_color, panel_r, 1, border_radius=self.RADIUS * 2
+        )
 
     def _draw_center_column(self, surface: pygame.Surface):
         ship = self.hovered_ship or get_ship_profile(self.player_profile.selected_ship)
@@ -426,7 +570,9 @@ class UpgradesSelectionScene(Scene):
         finally:
             surface.set_clip(previous_clip)
 
-    def _draw_center_column_body(self, surface: pygame.Surface, ship: ShipProfile, rect: pygame.Rect):
+    def _draw_center_column_body(
+        self, surface: pygame.Surface, ship: ShipProfile, rect: pygame.Rect
+    ):
         # Ícone da nave pulsando no preview.
         pulse = 1.0 + 0.04 * math.sin(time.time() * 3)
         try:
@@ -442,7 +588,9 @@ class UpgradesSelectionScene(Scene):
         cx = rect.centerx
         y = rect.bottom + 8
         name_surf = self.title_font.render(ship.display_name.upper(), True, CUSTOM_GOLD)
-        surface.blit(name_surf, name_surf.get_rect(center=(cx, y + name_surf.get_height() // 2)))
+        surface.blit(
+            name_surf, name_surf.get_rect(center=(cx, y + name_surf.get_height() // 2))
+        )
         y += name_surf.get_height() + 6
 
         # Largura máxima para todo o texto: respeita a coluna central com folga.
@@ -454,21 +602,36 @@ class UpgradesSelectionScene(Scene):
         text_right = center_x + center_w - 20
 
         # Helper local: renderiza texto centralizado com wrap respeitando max_w.
-        def _draw_wrapped(text: str, font: pygame.font.Font, color: tuple[int, int, int], y_pos: int, max_lines: int = 3) -> int:
+        def _draw_wrapped(
+            text: str,
+            font: pygame.font.Font,
+            color: tuple[int, int, int],
+            y_pos: int,
+            max_lines: int = 3,
+        ) -> int:
             for line in self._wrap_text(text, font, max_w)[:max_lines]:
                 line_surf = font.render(line, True, color)
                 # Clip garante que nada vaze mesmo se a palavra individual exceder.
-                surface.blit(line_surf, line_surf.get_rect(center=(cx, y_pos + line_surf.get_height() // 2)))
+                surface.blit(
+                    line_surf,
+                    line_surf.get_rect(
+                        center=(cx, y_pos + line_surf.get_height() // 2)
+                    ),
+                )
                 y_pos += line_surf.get_height() + 2
             return y_pos
 
         # Tags (categoria) em uma linha discreta.
         if ship.tags:
-            y = _draw_wrapped(" · ".join(ship.tags), self.small_font, (160, 160, 200), y, max_lines=1)
+            y = _draw_wrapped(
+                " · ".join(ship.tags), self.small_font, (160, 160, 200), y, max_lines=1
+            )
             y += 6
 
         # Descrição (até 2 linhas, centralizada).
-        y = _draw_wrapped(ship.description, self.small_font, colors.WHITE, y, max_lines=2)
+        y = _draw_wrapped(
+            ship.description, self.small_font, colors.WHITE, y, max_lines=2
+        )
         y += 6
 
         # Linha divisória sutil.
@@ -487,7 +650,9 @@ class UpgradesSelectionScene(Scene):
             stat_rows.append(("Vidas", f"{ship.extra_lives:+d}"))
 
         for label, value in stat_rows:
-            y = _draw_wrapped(f"{label}: {value}", self.small_font, (210, 210, 210), y, max_lines=1)
+            y = _draw_wrapped(
+                f"{label}: {value}", self.small_font, (210, 210, 210), y, max_lines=1
+            )
 
         if stat_rows:
             y += 8
@@ -496,11 +661,15 @@ class UpgradesSelectionScene(Scene):
         ability_rows = self._ship_ability_descriptions(ship)
         if ability_rows:
             header = self.small_font.render("HABILIDADES", True, CUSTOM_GOLD)
-            surface.blit(header, header.get_rect(center=(cx, y + header.get_height() // 2)))
+            surface.blit(
+                header, header.get_rect(center=(cx, y + header.get_height() // 2))
+            )
             y += header.get_height() + 4
             for line in ability_rows:
                 # Cada habilidade pode quebrar em até 2 linhas se for longa.
-                y = _draw_wrapped(line, self.small_font, (200, 220, 255), y, max_lines=2)
+                y = _draw_wrapped(
+                    line, self.small_font, (200, 220, 255), y, max_lines=2
+                )
                 y += 1
 
     @staticmethod
@@ -531,7 +700,9 @@ class UpgradesSelectionScene(Scene):
             lines.append(f"Q/E: usa {ship.powerup_slots} slots de powerup")
         if ship.permanent_mini_ships > 0:
             n = ship.permanent_mini_ships
-            lines.append(f"{n} mini-nave{'s' if n > 1 else ''} permanente{'s' if n > 1 else ''}")
+            lines.append(
+                f"{n} mini-nave{'s' if n > 1 else ''} permanente{'s' if n > 1 else ''}"
+            )
         if ship.pickup_radius_mult > 1.5:
             lines.append("Raio amplo de coleta")
         if ship.combo_damage_per_kill > 0:
@@ -545,7 +716,9 @@ class UpgradesSelectionScene(Scene):
         h = self.layout.active_slots_header
         total_weight = self.player_profile.get_total_equipped_weight()
         cap = self.player_profile.unlocked_slots
-        txt = self.header_font.render(f"Arsenal ({total_weight}/{cap})", True, colors.WHITE)
+        txt = self.header_font.render(
+            f"Arsenal ({total_weight}/{cap})", True, colors.WHITE
+        )
         surface.blit(txt, h)
 
         # Barra de capacidade de peso logo abaixo do título.
@@ -553,7 +726,9 @@ class UpgradesSelectionScene(Scene):
         bar_y = h.bottom + 4
         bar_w = h.width
         bar_h = 6
-        pygame.draw.rect(surface, (40, 40, 50), (bar_x, bar_y, bar_w, bar_h), border_radius=3)
+        pygame.draw.rect(
+            surface, (40, 40, 50), (bar_x, bar_y, bar_w, bar_h), border_radius=3
+        )
         if cap > 0:
             fill_w = int(bar_w * min(1.0, total_weight / cap))
             # Verde quando há folga; amarelo perto do limite; vermelho cheio.
@@ -565,41 +740,80 @@ class UpgradesSelectionScene(Scene):
             else:
                 fill_color = (100, 200, 120)
             if fill_w > 0:
-                pygame.draw.rect(surface, fill_color, (bar_x, bar_y, fill_w, bar_h), border_radius=3)
+                pygame.draw.rect(
+                    surface, fill_color, (bar_x, bar_y, fill_w, bar_h), border_radius=3
+                )
 
         for i, r in enumerate(self.layout.active_slots):
-            eq = self.player_profile.upgrade_loadout[i] if i < len(self.player_profile.upgrade_loadout) else None
+            eq = (
+                self.player_profile.upgrade_loadout[i]
+                if i < len(self.player_profile.upgrade_loadout)
+                else None
+            )
             lock, dr = i >= self.player_profile.unlocked_slots, r.copy()
-            if self.shaking_slot == i: dr.x += int(8*math.sin((time.time()-self.shake_start_time)*40))
+            if self.shaking_slot == i:
+                dr.x += int(8 * math.sin((time.time() - self.shake_start_time) * 40))
 
             is_valid_target = False
             if self.dragging_upgrade and not lock:
                 if dr.collidepoint(pygame.mouse.get_pos()):
                     is_valid_target = not self.drag_invalid_target
-            bg = (45, 60, 45) if (is_valid_target and not self.drag_invalid_target) else (40, 50, 40) if (eq and self.hovered_slot_idx != i) else (30, 30, 30)
+            bg = (
+                (45, 60, 45)
+                if (is_valid_target and not self.drag_invalid_target)
+                else (
+                    (40, 50, 40)
+                    if (eq and self.hovered_slot_idx != i)
+                    else (30, 30, 30)
+                )
+            )
             pygame.draw.rect(surface, bg, dr, border_radius=self.RADIUS)
-            color = colors.YELLOW if (self.hovered_slot_idx == i or is_valid_target) else (80, 80, 80) if lock else colors.GRAY
-            pygame.draw.rect(surface, color, dr, 2 if eq else 1, border_radius=self.RADIUS)
-            if lock: self._draw_lock_indicator(surface, dr, self.player_profile.get_slot_cost(i))
+            color = (
+                colors.YELLOW
+                if (self.hovered_slot_idx == i or is_valid_target)
+                else (80, 80, 80)
+                if lock
+                else colors.GRAY
+            )
+            pygame.draw.rect(
+                surface, color, dr, 2 if eq else 1, border_radius=self.RADIUS
+            )
+            if lock:
+                self._draw_lock_indicator(
+                    surface, dr, self.player_profile.get_slot_cost(i)
+                )
             elif eq:
                 meta = next((u for u in self.all_upgrades if u.type == eq), None)
                 if meta:
                     icon_radius = int(dr.width * 0.35)
-                    pygame.draw.circle(surface, CUSTOM_PURPLE, (dr.centerx, dr.centery-4), icon_radius)
-                    surf = self.header_font.render(get_upgrade_icon(meta.name, meta.icon_id), True, CUSTOM_GOLD)
-                    surface.blit(surf, surf.get_rect(center=(dr.centerx, dr.centery-4)))
+                    pygame.draw.circle(
+                        surface,
+                        CUSTOM_PURPLE,
+                        (dr.centerx, dr.centery - 4),
+                        icon_radius,
+                    )
+                    surf = self.header_font.render(
+                        get_upgrade_icon(meta.name, meta.icon_id), True, CUSTOM_GOLD
+                    )
+                    surface.blit(
+                        surf, surf.get_rect(center=(dr.centerx, dr.centery - 4))
+                    )
                     # Badge de peso no canto inferior esquerdo (consistente com Estoque).
                     self._draw_weight_badge(surface, dr, meta.slot_weight, dim=False)
                     self._draw_equipped_badge(surface, dr)
 
-        surface.blit(self.header_font.render("Estoque", True, colors.WHITE), (self.MARGIN, self._stock_start_y - 35))
+        surface.blit(
+            self.header_font.render("Estoque", True, colors.WHITE),
+            (self.MARGIN, self._stock_start_y - 35),
+        )
         area = self.layout.upgrade_scroll_area
         surface.set_clip(area)
         # Pré-calcula peso atual equipado para decidir se cada upgrade ainda cabe.
         current_weight = self.player_profile.get_total_equipped_weight()
         slot_cap = self.player_profile.unlocked_slots
         for i, rect in enumerate(self.layout.upgrade_grid_cells):
-            if rect.bottom < area.y or rect.top > area.bottom: continue
+            if rect.bottom < area.y or rect.top > area.bottom:
+                continue
             upg = self.layout.visible_upgrades[i]
             unl = upg.type in self.player_profile.unlocked_upgrades
             eq = self.player_profile.get_equipped_slot(upg.type) is not None
@@ -607,16 +821,32 @@ class UpgradesSelectionScene(Scene):
             # se equipado agora. Não se aplica se já está equipado.
             no_fit = unl and not eq and (current_weight + upg.slot_weight > slot_cap)
 
-            bg = (60, 60, 60) if self.hovered_upgrade == upg else (40, 40, 40) if unl else (25, 25, 25)
+            bg = (
+                (60, 60, 60)
+                if self.hovered_upgrade == upg
+                else (40, 40, 40)
+                if unl
+                else (25, 25, 25)
+            )
             pygame.draw.rect(surface, bg, rect, border_radius=self.RADIUS)
-            border = colors.YELLOW if eq else colors.RED if not unl else (130, 90, 50) if no_fit else colors.GRAY
+            border = (
+                colors.YELLOW
+                if eq
+                else colors.RED
+                if not unl
+                else (130, 90, 50)
+                if no_fit
+                else colors.GRAY
+            )
             pygame.draw.rect(surface, border, rect, 2, border_radius=self.RADIUS)
 
             icon_radius = int(rect.width * 0.35)
             icon_color = (80, 80, 80) if (not unl or no_fit) else CUSTOM_PURPLE
             pygame.draw.circle(surface, icon_color, rect.center, icon_radius)
             icon_text_color = CUSTOM_GOLD if unl and not no_fit else (50, 50, 50)
-            icon_text = self.header_font.render(get_upgrade_icon(upg.name, upg.icon_id), True, icon_text_color)
+            icon_text = self.header_font.render(
+                get_upgrade_icon(upg.name, upg.icon_id), True, icon_text_color
+            )
             surface.blit(icon_text, icon_text.get_rect(center=rect.center))
 
             # Badge de peso no canto inferior esquerdo (sempre visível).
@@ -632,61 +862,164 @@ class UpgradesSelectionScene(Scene):
             if eq:
                 self._draw_equipped_badge(surface, rect)
         surface.set_clip(None)
-        self._draw_scrollbar(surface, area, self.upgrade_scroll, self.max_upgrade_scroll)
+        self._draw_scrollbar(
+            surface, area, self.upgrade_scroll, self.max_upgrade_scroll
+        )
 
     def _draw_right_column(self, surface: pygame.Surface):
         ship = self.hovered_ship or get_ship_profile(self.player_profile.selected_ship)
         curr = get_ship_profile(self.player_profile.selected_ship)
-        surface.blit(self.header_font.render("Atributos", True, colors.WHITE), self.layout.stats_area.topleft)
+        surface.blit(
+            self.header_font.render("Atributos", True, colors.WHITE),
+            self.layout.stats_area.topleft,
+        )
         sy = self.layout.stats_area.y + 35
-        self._draw_stat_bar(surface, self.layout.stats_area.x, sy, self.layout.stats_area.width, "POTÊNCIA", ship.damage_mult, curr.damage_mult)
-        self._draw_stat_bar(surface, self.layout.stats_area.x, sy+30, self.layout.stats_area.width, "CADÊNCIA", ship.fire_rate_mult, curr.fire_rate_mult)
-        self._draw_stat_bar(surface, self.layout.stats_area.x, sy+60, self.layout.stats_area.width, "AGILIDADE", ship.speed_mult, curr.speed_mult)
+        self._draw_stat_bar(
+            surface,
+            self.layout.stats_area.x,
+            sy,
+            self.layout.stats_area.width,
+            "POTÊNCIA",
+            ship.damage_mult,
+            curr.damage_mult,
+        )
+        self._draw_stat_bar(
+            surface,
+            self.layout.stats_area.x,
+            sy + 30,
+            self.layout.stats_area.width,
+            "CADÊNCIA",
+            ship.fire_rate_mult,
+            curr.fire_rate_mult,
+        )
+        self._draw_stat_bar(
+            surface,
+            self.layout.stats_area.x,
+            sy + 60,
+            self.layout.stats_area.width,
+            "AGILIDADE",
+            ship.speed_mult,
+            curr.speed_mult,
+        )
 
-        surface.blit(self.header_font.render("Hangar", True, colors.WHITE), (self.layout.right_area.x+self.MARGIN, self.layout.stats_area.bottom+30))
+        surface.blit(
+            self.header_font.render("Hangar", True, colors.WHITE),
+            (
+                self.layout.right_area.x + self.MARGIN,
+                self.layout.stats_area.bottom + 30,
+            ),
+        )
         area = self.layout.ship_scroll_area
         surface.set_clip(area)
         for i, rect in enumerate(self.layout.ship_grid_cells):
-            if rect.bottom < area.y or rect.top > area.bottom: continue
+            if rect.bottom < area.y or rect.top > area.bottom:
+                continue
             s = self.layout.visible_ships[i]
-            unl, sel = self.player_profile.is_ship_unlocked(s.id), self.player_profile.selected_ship == s.id
-            dr = rect.move(int(6*math.sin((time.time()-self.shake_start_time)*40)) if self.shaking_ship_id == s.id else 0, 0)
-            bg = (40, 60, 40) if sel else (60, 60, 70) if self.hovered_ship == s else (30, 30, 35)
+            unl, sel = (
+                self.player_profile.is_ship_unlocked(s.id),
+                self.player_profile.selected_ship == s.id,
+            )
+            dr = rect.move(
+                (
+                    int(6 * math.sin((time.time() - self.shake_start_time) * 40))
+                    if self.shaking_ship_id == s.id
+                    else 0
+                ),
+                0,
+            )
+            bg = (
+                (40, 60, 40)
+                if sel
+                else (60, 60, 70)
+                if self.hovered_ship == s
+                else (30, 30, 35)
+            )
             pygame.draw.rect(surface, bg, dr, border_radius=self.RADIUS)
-            pygame.draw.rect(surface, colors.YELLOW if sel else CUSTOM_PURPLE if (unl and self.hovered_ship == s) else colors.GRAY, dr, 2, border_radius=self.RADIUS)
-            if not unl: self._draw_lock_indicator(surface, dr, s.unlock_cost)
+            pygame.draw.rect(
+                surface,
+                (
+                    colors.YELLOW
+                    if sel
+                    else (
+                        CUSTOM_PURPLE
+                        if (unl and self.hovered_ship == s)
+                        else colors.GRAY
+                    )
+                ),
+                dr,
+                2,
+                border_radius=self.RADIUS,
+            )
+            if not unl:
+                self._draw_lock_indicator(surface, dr, s.unlock_cost)
             else:
                 try:
                     img_s = int(dr.width * 0.6)
-                    img = pygame.transform.scale(get_image(BASE_DIR / "assets" / "images" / "icons" / "ship_icon.png"), (img_s, img_s))
+                    img = pygame.transform.scale(
+                        get_image(
+                            BASE_DIR / "assets" / "images" / "icons" / "ship_icon.png"
+                        ),
+                        (img_s, img_s),
+                    )
                     surface.blit(img, img.get_rect(center=dr.center))
-                except: pass
-                if sel: self._draw_equipped_badge(surface, dr)
+                except Exception:
+                    pass
+                if sel:
+                    self._draw_equipped_badge(surface, dr)
         surface.set_clip(None)
         self._draw_scrollbar(surface, area, self.ship_scroll, self.max_ship_scroll)
         bal_y = self.app.screen.get_height() - 55
-        surface.blit(self.star_icon_small, (self.layout.right_area.x+self.MARGIN, bal_y))
-        surface.blit(self.item_font.render(f"{self.player_profile.available_stars} Estrelas", True, CUSTOM_GOLD), (self.layout.right_area.x+self.MARGIN+25, bal_y+1))
+        surface.blit(
+            self.star_icon_small, (self.layout.right_area.x + self.MARGIN, bal_y)
+        )
+        surface.blit(
+            self.item_font.render(
+                f"{self.player_profile.available_stars} Estrelas", True, CUSTOM_GOLD
+            ),
+            (self.layout.right_area.x + self.MARGIN + 25, bal_y + 1),
+        )
 
-    def _draw_scrollbar(self, surface: pygame.Surface, area: pygame.Rect, current: int, max_s: int):
-        if max_s <= 0: return
+    def _draw_scrollbar(
+        self, surface: pygame.Surface, area: pygame.Rect, current: int, max_s: int
+    ):
+        if max_s <= 0:
+            return
         sb_w, sb_x = 4, area.right + 6
-        pygame.draw.rect(surface, (40, 40, 40), (sb_x, area.y, sb_w, area.height), border_radius=2)
+        pygame.draw.rect(
+            surface, (40, 40, 40), (sb_x, area.y, sb_w, area.height), border_radius=2
+        )
         hh = max(20, area.height // (max_s + 1))
-        pygame.draw.rect(surface, CUSTOM_PURPLE, (sb_x, area.y + (current / max_s) * (area.height - hh), sb_w, hh), border_radius=2)
+        pygame.draw.rect(
+            surface,
+            CUSTOM_PURPLE,
+            (sb_x, area.y + (current / max_s) * (area.height - hh), sb_w, hh),
+            border_radius=2,
+        )
 
-    def _draw_lock_indicator(self, surface: pygame.Surface, rect: pygame.Rect, cost: int):
+    def _draw_lock_indicator(
+        self, surface: pygame.Surface, rect: pygame.Rect, cost: int
+    ):
         can = self.player_profile.available_stars >= cost
-        surface.blit(self.star_icon_small, (rect.centerx-18, rect.y+4))
-        surface.blit(self.tiny_font.render(str(cost), True, colors.GREEN if can else colors.RED), (rect.centerx+4, rect.y+6))
+        surface.blit(self.star_icon_small, (rect.centerx - 18, rect.y + 4))
+        surface.blit(
+            self.tiny_font.render(str(cost), True, colors.GREEN if can else colors.RED),
+            (rect.centerx + 4, rect.y + 6),
+        )
         icon_s = int(rect.width * 0.4)
-        surface.blit(pygame.transform.scale(self.locked_icon, (icon_s, icon_s)), (rect.centerx-icon_s//2, rect.centery-2))
+        surface.blit(
+            pygame.transform.scale(self.locked_icon, (icon_s, icon_s)),
+            (rect.centerx - icon_s // 2, rect.centery - 2),
+        )
 
     def _draw_equipped_badge(self, surface: pygame.Surface, rect: pygame.Rect):
         pygame.draw.circle(surface, colors.YELLOW, (rect.right - 8, rect.y + 8), 7)
-        surface.blit(self.tiny_font.render("E", True, BLACK), (rect.right - 12, rect.y + 2))
+        surface.blit(
+            self.tiny_font.render("E", True, BLACK), (rect.right - 12, rect.y + 2)
+        )
 
-    def _draw_weight_badge(self, surface: pygame.Surface, rect: pygame.Rect, weight: int, dim: bool):
+    def _draw_weight_badge(
+        self, surface: pygame.Surface, rect: pygame.Rect, weight: int, dim: bool
+    ):
         """Badge circular com o peso do upgrade no canto inferior esquerdo."""
         cx, cy = rect.x + 10, rect.bottom - 10
         bg = (90, 60, 30) if dim else (50, 50, 70)
@@ -708,11 +1041,25 @@ class UpgradesSelectionScene(Scene):
         tinted.fill((255, 150, 150), special_flags=pygame.BLEND_MULT)
         surface.blit(tinted, tinted.get_rect(center=rect.center))
 
-    def _draw_stat_bar(self, surface: pygame.Surface, x: int, y: int, w: int, label: str, val: float, curr: float):
+    def _draw_stat_bar(
+        self,
+        surface: pygame.Surface,
+        x: int,
+        y: int,
+        w: int,
+        label: str,
+        val: float,
+        curr: float,
+    ):
         surface.blit(self.tiny_font.render(label, True, (180, 180, 180)), (x, y))
         by, bh = y + 14, 6
-        pygame.draw.rect(surface, (40, 40, 40), (x, by, w, bh), border_radius=self.RADIUS)
-        norm: Callable[[float], float] = lambda v: max(0.1, min(1.0, float((v - 0.5) / 1.5)))
+        pygame.draw.rect(
+            surface, (40, 40, 40), (x, by, w, bh), border_radius=self.RADIUS
+        )
+
+        def norm(v: float) -> float:
+            return max(0.1, min(1.0, float((v - 0.5) / 1.5)))
+
         fw, cw = int(w * norm(val)), int(w * norm(curr))
         if fw > cw:
             pygame.draw.rect(surface, (40, 180, 40), (x + cw, by, fw - cw, bh))
@@ -720,41 +1067,64 @@ class UpgradesSelectionScene(Scene):
         elif fw < cw:
             pygame.draw.rect(surface, (180, 40, 40), (x + fw, by, cw - fw, bh))
             pygame.draw.rect(surface, (100, 100, 100), (x, by, fw, bh))
-        else: pygame.draw.rect(surface, (100, 100, 100), (x, by, fw, bh))
+        else:
+            pygame.draw.rect(surface, (100, 100, 100), (x, by, fw, bh))
 
     def _draw_back_button(self, surface: pygame.Surface):
         r = self.layout.back_button
-        pygame.draw.rect(surface, CUSTOM_GOLD if r.collidepoint(pygame.mouse.get_pos()) else CUSTOM_PURPLE, r, 2, border_radius=8)
+        pygame.draw.rect(
+            surface,
+            CUSTOM_GOLD if r.collidepoint(pygame.mouse.get_pos()) else CUSTOM_PURPLE,
+            r,
+            2,
+            border_radius=8,
+        )
         txt = self.item_font.render("VOLTAR", True, colors.WHITE)
         surface.blit(txt, txt.get_rect(center=r.center))
 
     def _draw_dragging_upgrade(self, surface: pygame.Surface):
-        if self.dragging_upgrade is None: return
+        if self.dragging_upgrade is None:
+            return
         pos = pygame.mouse.get_pos()
-        rect = pygame.Rect(pos[0]-self.drag_offset[0], pos[1]-self.drag_offset[1], 55, 55)
+        rect = pygame.Rect(
+            pos[0] - self.drag_offset[0], pos[1] - self.drag_offset[1], 55, 55
+        )
         bg = (80, 40, 40, 200) if self.drag_invalid_target else (60, 60, 60, 200)
         pygame.draw.rect(surface, bg, rect, border_radius=self.RADIUS)
-        pygame.draw.circle(surface, (150, 50, 50) if self.drag_invalid_target else CUSTOM_PURPLE, rect.center, 18)
-        initial = get_upgrade_icon(self.dragging_upgrade.name, self.dragging_upgrade.icon_id)
+        pygame.draw.circle(
+            surface,
+            (150, 50, 50) if self.drag_invalid_target else CUSTOM_PURPLE,
+            rect.center,
+            18,
+        )
+        initial = get_upgrade_icon(
+            self.dragging_upgrade.name, self.dragging_upgrade.icon_id
+        )
         surf = self.header_font.render(initial, True, CUSTOM_GOLD)
         surface.blit(surf, surf.get_rect(center=rect.center))
 
     def _draw_tooltip(self, surface: pygame.Surface):
-        if self.hovered_upgrade is None: return
+        if self.hovered_upgrade is None:
+            return
         pos, upg = pygame.mouse.get_pos(), self.hovered_upgrade
         w, h = 260, 100
-        x, y = pos[0]+20, pos[1]+20
+        x, y = pos[0] + 20, pos[1] + 20
         if y + h > surface.get_height():
             y = pos[1] - h - 20
         if x + w > surface.get_width():
             x = pos[0] - w - 20
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
-        pygame.draw.rect(surf, (20, 20, 30, 240), surf.get_rect(), border_radius=self.RADIUS)
-        pygame.draw.rect(surf, (255, 255, 255, 220), surf.get_rect(), 2, border_radius=self.RADIUS)
+        pygame.draw.rect(
+            surf, (20, 20, 30, 240), surf.get_rect(), border_radius=self.RADIUS
+        )
+        pygame.draw.rect(
+            surf, (255, 255, 255, 220), surf.get_rect(), 2, border_radius=self.RADIUS
+        )
         surf.blit(self.item_font.render(upg.name, True, colors.YELLOW), (10, 10))
         dy = 40
         for line in self._wrap_text(upg.desc, self.small_font, w - 20)[:2]:
-            surf.blit(self.small_font.render(line, True, colors.WHITE), (10, dy)); dy += 18
+            surf.blit(self.small_font.render(line, True, colors.WHITE), (10, dy))
+            dy += 18
         surface.blit(surf, (x, y))
 
     def _wrap_text(self, text: str, font: pygame.font.Font, max_w: int) -> list[str]:
@@ -763,14 +1133,19 @@ class UpgradesSelectionScene(Scene):
         cur = ""
         for w in words:
             test = cur + w + " "
-            if font.size(test)[0] < max_w: cur = test
+            if font.size(test)[0] < max_w:
+                cur = test
             else:
-                if cur: lines.append(cur.strip())
+                if cur:
+                    lines.append(cur.strip())
                 cur = w + " "
-        if cur: lines.append(cur.strip())
+        if cur:
+            lines.append(cur.strip())
         return lines
 
-    def _return_to_menu(self): self.fade_out, self.transitioning, self.transition_progress = True, True, 0.0
+    def _return_to_menu(self):
+        self.fade_out, self.transitioning, self.transition_progress = True, True, 0.0
 
     def _draw_floating_messages(self, surface: pygame.Surface):
-        for m in self.floating_messages: m.draw(surface)
+        for m in self.floating_messages:
+            m.draw(surface)

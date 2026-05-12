@@ -16,12 +16,8 @@ from typing import TYPE_CHECKING, Dict, List, Union, cast
 
 import pygame
 
-from .sound_config import (
-    BEHAVIOR_CONFIG,
-    MUSIC_BEHAVIOR_CONFIG,
-    SOUND_PATHS,
-    MusicState,
-)
+from .sound_config import (BEHAVIOR_CONFIG, MUSIC_BEHAVIOR_CONFIG, SOUND_PATHS,
+                           MusicState)
 
 if TYPE_CHECKING:
     from .sound import SoundManager

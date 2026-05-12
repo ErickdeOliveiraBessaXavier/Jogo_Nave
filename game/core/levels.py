@@ -341,29 +341,29 @@ THEME_ENEMY_REPLACEMENTS: dict[tuple[WorldTheme, type], type] = {
 # Features de spawn especial disponíveis por tema.
 # Consultado pelos spawners especiais — adicionar tema novo = uma entrada aqui.
 THEME_FEATURES: dict[WorldTheme, set[str]] = {
-    WorldTheme.STARFIELD:  {"formations", "mines", "guided_meteors"},
-    WorldTheme.MOUNTAINS:  {"mines", "propellers"},
-    WorldTheme.CITY:       {"formations", "mines", "guided_meteors"},
-    WorldTheme.VOLCANIC:   {"formations", "mines"},
+    WorldTheme.STARFIELD: {"formations", "mines", "guided_meteors"},
+    WorldTheme.MOUNTAINS: {"mines", "propellers"},
+    WorldTheme.CITY: {"formations", "mines", "guided_meteors"},
+    WorldTheme.VOLCANIC: {"formations", "mines"},
     WorldTheme.PROCEDURAL: {"formations", "mines", "guided_meteors"},
 }
 
 # Limite de variedade de inimigos simultâneos por estágio (por dificuldade).
 # Evita que late-stages acumulem tipos demais em tela ao mesmo tempo.
 MAX_ENEMY_VARIETY_BY_DIFFICULTY: dict[DifficultyPreset, int] = {
-    DifficultyPreset.CASUAL:    3,
-    DifficultyPreset.NORMAL:    3,
-    DifficultyPreset.HARDCORE:  4,
+    DifficultyPreset.CASUAL: 3,
+    DifficultyPreset.NORMAL: 3,
+    DifficultyPreset.HARDCORE: 4,
     DifficultyPreset.NIGHTMARE: 4,
 }
 
 # Inimigo "base" garantido em cada tema — sempre ocupa um slot do trio se
 # estiver no pool após filtragem. Os demais slots são sorteados ponderados.
 THEME_BASE_ENEMY: dict[WorldTheme, type] = {
-    WorldTheme.MOUNTAINS:  RockGlider,
-    WorldTheme.STARFIELD:  Meteor,
-    WorldTheme.CITY:       Meteor,
-    WorldTheme.VOLCANIC:   Meteor,
+    WorldTheme.MOUNTAINS: RockGlider,
+    WorldTheme.STARFIELD: Meteor,
+    WorldTheme.CITY: Meteor,
+    WorldTheme.VOLCANIC: Meteor,
     WorldTheme.PROCEDURAL: Meteor,
 }
 
@@ -1601,9 +1601,11 @@ class ProceduralLevelGenerator:
             storm_kind=(
                 "meteor"
                 if theme and theme.special_feature == "meteor_only"
-                else "rock_glider"
-                if theme and theme.special_feature == "rock_glider_only"
-                else None
+                else (
+                    "rock_glider"
+                    if theme and theme.special_feature == "rock_glider_only"
+                    else None
+                )
             ),
         )
 

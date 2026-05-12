@@ -3,12 +3,11 @@ from typing import TYPE_CHECKING, Any, Callable, Sequence, TypeAlias, cast
 import pygame
 
 from ..core.config import config as config_instance
-from ..core.upgrades_config import (
-    EXPLOSIVE_BULLET_DAMAGE,
-    EXPLOSIVE_BULLET_RADIUS as _EXPLOSIVE_BULLET_RADIUS,
-)
 from ..core.sound import sound_manager
 from ..core.spatial_grid import SpatialGrid
+from ..core.upgrades_config import EXPLOSIVE_BULLET_DAMAGE
+from ..core.upgrades_config import \
+    EXPLOSIVE_BULLET_RADIUS as _EXPLOSIVE_BULLET_RADIUS
 from ..entities.air_strike_bomb import AirStrikeBomb
 from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
@@ -19,8 +18,8 @@ from ..entities.cannon_mine import CannonMine, MineState
 from ..entities.explosion import ExplosionType
 from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.eye_laser import EyeLaser
-from ..entities.floating_score import FloatingScore
 from ..entities.fire_zone import FireZone
+from ..entities.floating_score import FloatingScore
 from ..entities.ice_poison_zone import IcePoisonZone
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet

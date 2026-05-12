@@ -1400,6 +1400,7 @@ class StoneGolemBoss:
                         force=True,
                     )
                     from ..systems import hit_sounds as _hs
+
                     _hs.GOLEM_ERUPTION()
             else:
                 # Terceira descida — submersão completa
@@ -1413,6 +1414,7 @@ class StoneGolemBoss:
                         force=True,
                     )
                     from ..systems import hit_sounds as _hs
+
                     _hs.GOLEM_ERUPTION()
                     self.y = float(self._screen_h + self.h + 60)
                     self._jitter_x = 0.0

@@ -643,7 +643,7 @@ class MainMenuScene(Scene):
         """Detecta o cheat code '271195' para ativar god mode e adicionar 9999 estrelas."""
         _CHEAT_CODE = "271195"
         _CHEAT_BUFFER_MAX = len(_CHEAT_CODE)
-        
+
         if not pygame.K_0 <= event.key <= pygame.K_9:
             # Se apertar uma tecla que não é número, reseta o buffer
             self.cheat_buffer = ""
@@ -717,10 +717,10 @@ class MainMenuScene(Scene):
                 sound_manager.play_sound("button_click")
             elif event.key == pygame.K_ESCAPE:
                 self.app.running = False
-            
+
             # Processar cheat code
             self._process_cheat_input(event)
-            
+
             # Update focused states
             for i, button in enumerate(self.buttons):
                 button.focused = i == self.focused_button_index

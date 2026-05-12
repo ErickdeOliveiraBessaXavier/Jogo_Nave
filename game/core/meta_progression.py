@@ -12,18 +12,11 @@ import pygame
 
 from .difficulty import DifficultyPreset
 from .levels import DifficultyConfig, LevelConfig
-from .ship_types import (
-    DEFAULT_SHIP_ID,
-    ShipProfile,
-    get_ship_profile,
-    is_valid_ship_id,
-)
+from .ship_types import (DEFAULT_SHIP_ID, ShipProfile, get_ship_profile,
+                         is_valid_ship_id)
 from .upgrades import UpgradeType
-from .upgrades_config import (
-    DEFAULT_UNLOCKED,
-    INITIAL_UNLOCKED_SLOTS,
-    UPGRADE_SLOT_COUNT,
-)
+from .upgrades_config import (DEFAULT_UNLOCKED, INITIAL_UNLOCKED_SLOTS,
+                              UPGRADE_SLOT_COUNT)
 
 logger = logging.getLogger(__name__)
 

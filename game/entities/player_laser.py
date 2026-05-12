@@ -1,16 +1,7 @@
 import math
 import random
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Final,
-    List,
-    Literal,
-    Optional,
-    Set,
-    Tuple,
-    TypedDict,
-)
+from typing import (TYPE_CHECKING, Any, Final, List, Literal, Optional, Set,
+                    Tuple, TypedDict)
 
 import pygame
 

@@ -41,14 +41,11 @@ from ..core.paths import get_profile_path
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
-from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
+from ..core.upgrades import (ActiveUpgrade, HealUpgrade, create_upgrade,
+                             get_upgrade_icon)
 from ..core.upgrades_config import HOMING_DAMAGE_MULTIPLIER, UPGRADE_SLOT_COUNT
-from ..core.world_config import (
-    WorldConfig,
-    format_stage_name,
-    get_world_for_level,
-    is_side_scroll_mode,
-)
+from ..core.world_config import (WorldConfig, format_stage_name,
+                                 get_world_for_level, is_side_scroll_mode)
 from ..entities.floating_score import FloatingScore
 from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
@@ -819,7 +816,8 @@ class PlayingScene(Scene):
             # Powerup expirou: se há mini-naves temporárias, troca-as pelas
             # permanentes do Engenheiro (se a nave atual tiver alguma).
             has_temps = any(
-                not getattr(m, "permanent", False) for m in self.entity_manager.mini_ships
+                not getattr(m, "permanent", False)
+                for m in self.entity_manager.mini_ships
             )
             if has_temps:
                 self.entity_manager.mini_ships.clear()
@@ -837,7 +835,9 @@ class PlayingScene(Scene):
 
             # Caçador: enquanto a carga está acumulando, suprime auto-fire/hold-shoot.
             # O disparo carregado sai no MOUSEBUTTONUP.
-            charging = self.ship.profile.has_charge_shot and self.ship.charge_shot_active
+            charging = (
+                self.ship.profile.has_charge_shot and self.ship.charge_shot_active
+            )
             if (
                 ("hold_shoot" in held or self.ship.should_auto_fire())
                 and self.shoot_cd == 0.0
@@ -1723,7 +1723,9 @@ class PlayingScene(Scene):
             # Cofre: guarda no slot livre em vez de aplicar imediato. Se todos
             # estão ocupados, cai no comportamento padrão (consumo imediato)
             # para não desperdiçar o powerup coletado.
-            if not (self.ship.has_storage_slots() and self.ship.try_store_powerup(kind)):
+            if not (
+                self.ship.has_storage_slots() and self.ship.try_store_powerup(kind)
+            ):
                 self._apply_powerup(kind)
             self.level_powerups_collected += 1
 
@@ -2469,9 +2471,7 @@ class PlayingScene(Scene):
         surface.blit(label, (x, y))
 
         bonus_pct = int(round(bonus * 100))
-        text = font_value.render(
-            f"x{kills}  +{bonus_pct}%", True, color
-        )
+        text = font_value.render(f"x{kills}  +{bonus_pct}%", True, color)
         surface.blit(text, (x, y + 16))
 
     def _render_storage_slots_hud(self, surface: pygame.Surface) -> None:
@@ -2484,19 +2484,12 @@ class PlayingScene(Scene):
             return
 
         from ..core import colors as _colors
-        from ..core.colors import (
-            POWERUP_COOLDOWN_HASTE,
-            POWERUP_DAMAGE_BOOST,
-            POWERUP_DOUBLE_SHOT,
-            POWERUP_LIFE,
-            POWERUP_MINI_SHIPS,
-            POWERUP_PIERCING_SHOT,
-            POWERUP_RAINBOW,
-            POWERUP_SCORE,
-            POWERUP_SHIELD,
-            POWERUP_SPEED,
-            POWERUP_TIME_STOP,
-        )
+        from ..core.colors import (POWERUP_COOLDOWN_HASTE,
+                                   POWERUP_DAMAGE_BOOST, POWERUP_DOUBLE_SHOT,
+                                   POWERUP_LIFE, POWERUP_MINI_SHIPS,
+                                   POWERUP_PIERCING_SHOT, POWERUP_RAINBOW,
+                                   POWERUP_SCORE, POWERUP_SHIELD,
+                                   POWERUP_SPEED, POWERUP_TIME_STOP)
 
         font_label = get_font(20)
         font_hint = get_font(12)
@@ -2564,9 +2557,7 @@ class PlayingScene(Scene):
 
             # Letra de tecla no canto superior esquerdo
             key_label = hint_keys[i] if i < len(hint_keys) else str(i + 1)
-            slot_surface.blit(
-                font_hint.render(key_label, True, _colors.WHITE), (5, 3)
-            )
+            slot_surface.blit(font_hint.render(key_label, True, _colors.WHITE), (5, 3))
 
             if kind is not None:
                 # Círculo colorido com a cor do powerup (mesma usada no drop).

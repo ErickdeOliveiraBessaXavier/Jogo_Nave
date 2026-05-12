@@ -10,7 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable
 
-
 DEFAULT_SHIP_ID: str = "padrao"
 
 
@@ -81,9 +80,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
     ShipProfile(
         id="ariete",
         display_name="Aríete",
-        description=(
-            "Dano +80% e +1 vida, mas é 30% mais lenta e atira 25% menos."
-        ),
+        description=("Dano +80% e +1 vida, mas é 30% mais lenta e atira 25% menos."),
         unlock_cost=60,
         fire_rate_mult=0.75,
         damage_mult=1.80,

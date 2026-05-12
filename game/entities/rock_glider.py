@@ -800,7 +800,9 @@ class RockGlider(Meteor):
             killed=part_destroyed,
             points=pts,
             explosion_size=35 if is_rock else 25,
-            explosion_type=self.EXPLOSION_TYPE_ROCK if is_rock else self.EXPLOSION_TYPE_BOT,
+            explosion_type=(
+                self.EXPLOSION_TYPE_ROCK if is_rock else self.EXPLOSION_TYPE_BOT
+            ),
             sound=(
                 hit_sounds.EXPLOSION_ASTEROID if is_rock else hit_sounds.EXPLOSION_ALIEN
             ),

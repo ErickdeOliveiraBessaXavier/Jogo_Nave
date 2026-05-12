@@ -2354,7 +2354,7 @@ class CloudArchmageBoss:
 
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult, NO_HIT
+        from ..systems.hit_result import NO_HIT, HitResult
 
         if self._white_dodge_was_miss:
             self._white_dodge_was_miss = False

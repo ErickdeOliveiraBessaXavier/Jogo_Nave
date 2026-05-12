@@ -26,28 +26,22 @@ from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.eye_laser import EyeLaser
+from ..entities.fire_zone import FireZone
 from ..entities.floating_score import FloatingScore
 from ..entities.formation import Formation
 from ..entities.giant_meteor_boss import GiantMeteorBoss
 from ..entities.guided_meteor import GuidedMeteor
-from ..entities.fire_zone import FireZone
 from ..entities.ice_poison_zone import IcePoisonZone
 from ..entities.meteor import Meteor
 from ..entities.meteor_pool import MeteorPool
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
-from ..entities.mountain_mage import (
-    MountainMage,
-    MountainStalactite,
-    MountainStalagmite,
-)
+from ..entities.mountain_mage import (MountainMage, MountainStalactite,
+                                      MountainStalagmite)
 from ..entities.mountain_propeller import MountainPropeller
-from ..entities.mountain_serpent_boss import (
-    MountainSerpentBoss,
-    SerpentBlock,
-    SerpentRockBullet,
-)
+from ..entities.mountain_serpent_boss import (MountainSerpentBoss,
+                                              SerpentBlock, SerpentRockBullet)
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
@@ -59,13 +53,8 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import (
-    AttackDebris,
-    EmergeDebris,
-    GolemMine,
-    OrbitalDebris,
-    StoneGolemBoss,
-)
+from ..entities.stone_golem_boss import (AttackDebris, EmergeDebris, GolemMine,
+                                         OrbitalDebris, StoneGolemBoss)
 from ..entities.stone_sentry import StoneSentry
 from .collision_protocols import Removable
 

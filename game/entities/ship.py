@@ -194,9 +194,7 @@ class Ship:
 
         # Cofre (powerup storage): slots para guardar powerups e ativar com Q/E.
         # Lista de strings (kind do PowerUp) ou None para slot vazio.
-        self.stored_powerups: list[Optional[str]] = (
-            [None] * self.profile.powerup_slots
-        )
+        self.stored_powerups: list[Optional[str]] = [None] * self.profile.powerup_slots
 
         # Fantasma: dash com i-frames.
         self.dash_timer: float = 0.0  # tempo restante de dash ativo
@@ -378,7 +376,7 @@ class Ship:
         # Reverberador: bônus aditivo escalando o multiplicador (combo_kills × per_kill).
         bonus = self.combo_damage_bonus
         if bonus > 0:
-            multiplier *= (1.0 + bonus)
+            multiplier *= 1.0 + bonus
         return multiplier
 
     @property

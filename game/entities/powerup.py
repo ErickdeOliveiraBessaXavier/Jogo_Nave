@@ -5,20 +5,11 @@ from typing import Tuple
 import pygame
 
 from ..core.assets import get_font
-from ..core.colors import (
-    POWERUP_COOLDOWN_HASTE,
-    POWERUP_DOUBLE_SHOT,
-    POWERUP_LIFE,
-    POWERUP_MINI_SHIPS,
-    POWERUP_PIERCING_SHOT,
-    POWERUP_RAINBOW,
-    POWERUP_SCORE,
-    POWERUP_SHIELD,
-    POWERUP_SPEED,
-    POWERUP_TIME_STOP,
-    POWERUP_DAMAGE_BOOST,
-    RAINBOW_COLORS,
-)
+from ..core.colors import (POWERUP_COOLDOWN_HASTE, POWERUP_DAMAGE_BOOST,
+                           POWERUP_DOUBLE_SHOT, POWERUP_LIFE,
+                           POWERUP_MINI_SHIPS, POWERUP_PIERCING_SHOT,
+                           POWERUP_RAINBOW, POWERUP_SCORE, POWERUP_SHIELD,
+                           POWERUP_SPEED, POWERUP_TIME_STOP, RAINBOW_COLORS)
 from ..core.config import PowerUpType
 from ..core.config import config as Config
 

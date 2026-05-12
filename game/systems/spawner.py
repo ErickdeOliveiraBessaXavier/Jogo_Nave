@@ -2,19 +2,8 @@ import logging
 import random
 from collections import deque
 from dataclasses import replace
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    List,
-    Protocol,
-    Tuple,
-    Type,
-    TypedDict,
-    Union,
-    cast,
-)
+from typing import (TYPE_CHECKING, Any, Callable, Dict, List, Protocol, Tuple,
+                    Type, TypedDict, Union, cast)
 
 # ---------------------------------------------------------------------------
 # Imports de entidades movidos para o topo — evita late imports em hot paths
@@ -22,12 +11,8 @@ from typing import (
 from ..core.config import PowerUpType
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset
-from ..core.levels import (
-    DifficultyConfig,
-    THEME_ENEMY_REPLACEMENTS,
-    THEME_FEATURES,
-    calculate_dynamic_enemy_cap,
-)
+from ..core.levels import (THEME_ENEMY_REPLACEMENTS, THEME_FEATURES,
+                           DifficultyConfig, calculate_dynamic_enemy_cap)
 from ..core.powerup_weights import get_powerup_weights
 from ..core.time import Timer
 from ..core.world_config import get_world_for_level
