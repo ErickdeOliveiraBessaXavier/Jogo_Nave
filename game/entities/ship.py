@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Optional, Tuple, TypedDict
 import pygame
 
 from ..core.config import config as Config
+from ..core.ship_types import ShipProfile, get_ship_profile
 from ..core.sound import sound_manager
 
 if TYPE_CHECKING:
@@ -41,16 +42,26 @@ class ParticleDict(TypedDict):
 
 class Ship:
     def __init__(
-        self, x: float, y: float, mouse_control: bool = False, auto_fire: bool = False
+        self,
+        x: float,
+        y: float,
+        mouse_control: bool = False,
+        auto_fire: bool = False,
+        profile: Optional[ShipProfile] = None,
     ):
+        # ShipProfile aplica multiplicadores às stats base (velocidade, fire rate,
+        # dano) e habilita mecânicas especiais (Cofre, Fantasma, Caçador, etc).
+        self.profile: ShipProfile = profile or get_ship_profile("padrao")
+
         # Dimensões da nave (baseadas na imagem)
-        self.w = 35
-        self.h = 35
+        self.w = 60
+        self.h = 60
         self.x = x
         self.y = y
-        self.speed = 250
+        # Multiplicadores do profile aplicados sobre os valores-base.
+        self.speed = 250 * self.profile.speed_mult
         self.invuln = 0  # ms
-        self.lives = Config.INITIAL_LIVES
+        self.lives = max(1, Config.INITIAL_LIVES + self.profile.extra_lives)
         self.visible = True
         self.move_vec = pygame.math.Vector2(0, 0)
 
@@ -145,6 +156,7 @@ class Ship:
         self.homing_shots_timer: float = 0.0
         self.homing_speed_penalty: float = 1.0
         self.homing_fire_rate_penalty: float = 1.0
+        # `original_speed` reflete a velocidade base após profile (sem penalidades).
         self.original_speed: float = self.speed
 
         # Orbital lasers system (from upgrades)
@@ -180,10 +192,145 @@ class Ship:
         self.explosive_shots_active: bool = False
         self.explosive_shots_remaining: int = 0
 
+        # Cofre (powerup storage): slots para guardar powerups e ativar com Q/E.
+        # Lista de strings (kind do PowerUp) ou None para slot vazio.
+        self.stored_powerups: list[Optional[str]] = (
+            [None] * self.profile.powerup_slots
+        )
+
+        # Fantasma: dash com i-frames.
+        self.dash_timer: float = 0.0  # tempo restante de dash ativo
+        self.dash_cooldown_left: float = 0.0  # cooldown até próximo dash
+        self.dash_dir: pygame.math.Vector2 = pygame.math.Vector2(0, -1)
+        self.dash_duration: float = 0.2
+        self.dash_speed_mult: float = 3.5  # multiplicador da velocidade base no dash
+        # Rastro de partículas do dash (decaem após o dash terminar).
+        self.dash_trail_particles: list[ParticleDict] = []
+
+        # Caçador: charge shot.
+        self.charge_shot_active: bool = False
+        self.charge_shot_timer: float = 0.0  # tempo acumulado de carga
+
+        # Reverberador: combo de dano sem tomar hit.
+        self.combo_kills: int = 0  # abates consecutivos sem dano
+
+    def has_storage_slots(self) -> bool:
+        return self.profile.powerup_slots > 0
+
+    def try_store_powerup(self, kind: str) -> bool:
+        """Tenta guardar um powerup no primeiro slot vazio.
+
+        Returns:
+            True se o powerup foi armazenado (slot livre encontrado),
+            False se a nave não tem slots ou todos estão ocupados.
+        """
+        if not self.has_storage_slots():
+            return False
+        for i, slot in enumerate(self.stored_powerups):
+            if slot is None:
+                self.stored_powerups[i] = kind
+                return True
+        return False
+
+    def consume_stored_powerup(self, slot_index: int) -> Optional[str]:
+        """Remove e retorna o powerup do slot. None se o slot estava vazio."""
+        if not (0 <= slot_index < len(self.stored_powerups)):
+            return None
+        kind = self.stored_powerups[slot_index]
+        if kind is not None:
+            self.stored_powerups[slot_index] = None
+        return kind
+
+    @property
+    def is_dashing(self) -> bool:
+        return self.dash_timer > 0.0
+
+    @property
+    def charge_shot_progress(self) -> float:
+        """Progresso da carga normalizado em [0.0, 1.0]."""
+        max_t = self.profile.charge_shot_max_time
+        if max_t <= 0:
+            return 0.0
+        return min(1.0, self.charge_shot_timer / max_t)
+
+    def start_charge(self) -> bool:
+        """Inicia acúmulo do charge shot. Retorna True se a nave suporta carga."""
+        if not self.profile.has_charge_shot:
+            return False
+        self.charge_shot_active = True
+        self.charge_shot_timer = 0.0
+        return True
+
+    def consume_charge(self) -> float:
+        """Encerra o charge e retorna o multiplicador de dano deste disparo.
+
+        Interpola linearmente entre 1.0 (sem carga) e `charge_shot_damage_mult`
+        (carga máxima). Reseta o estado.
+        """
+        if not self.profile.has_charge_shot or not self.charge_shot_active:
+            return 1.0
+        progress = self.charge_shot_progress
+        mult = 1.0 + (self.profile.charge_shot_damage_mult - 1.0) * progress
+        self.charge_shot_active = False
+        self.charge_shot_timer = 0.0
+        return mult
+
+    def register_kill(self) -> None:
+        """Incrementa o contador de combo do Reverberador (clamped)."""
+        if self.profile.combo_damage_per_kill <= 0:
+            return
+        self.combo_kills += 1
+
+    def reset_combo(self) -> None:
+        """Reseta o combo do Reverberador (chamado ao tomar dano)."""
+        self.combo_kills = 0
+
+    @property
+    def combo_damage_bonus(self) -> float:
+        """Bônus aditivo de dano do Reverberador (0.0 a `combo_damage_cap`)."""
+        if self.profile.combo_damage_per_kill <= 0:
+            return 0.0
+        raw = self.combo_kills * self.profile.combo_damage_per_kill
+        cap = self.profile.combo_damage_cap
+        return min(raw, cap) if cap > 0 else raw
+
+    def try_dash(self, current_move_vec: pygame.math.Vector2) -> bool:
+        """Ativa o dash do Fantasma se o cooldown permitir.
+
+        Args:
+            current_move_vec: vetor de movimento atual (do input). Se zero,
+                              usa a direção cardinal atual (`facing`).
+
+        Returns:
+            True se o dash foi iniciado, False se em cooldown ou nave sem dash.
+        """
+        if not self.profile.has_dash:
+            return False
+        if self.dash_cooldown_left > 0.0 or self.is_dashing:
+            return False
+
+        if current_move_vec.length_squared() > 0:
+            direction = current_move_vec.normalize()
+        else:
+            # Sem input: dasha na direção em que a nave está apontando.
+            vx, vy = self._cardinal_vectors.get(self.facing, (0.0, -1.0))
+            direction = pygame.math.Vector2(vx, vy)
+
+        self.dash_dir = direction
+        self.dash_timer = self.dash_duration
+        self.dash_cooldown_left = self.profile.dash_cooldown
+        # I-frames: invuln expressa em ms.
+        self.invuln = max(self.invuln, int(self.dash_duration * 1000))
+        return True
+
     @property
     def attack_speed_multiplier(self) -> float:
-        """Retorna o multiplicador de velocidade de ataque baseado nos power-ups ativos."""
-        multiplier = 1.0
+        """Retorna o multiplicador de velocidade de ataque baseado nos power-ups ativos.
+
+        Multiplicativo com o `fire_rate_mult` do `ShipProfile` — powerups herdam
+        os stats da nave (Estilete +60% combinado com double_shot, etc).
+        """
+        multiplier = self.profile.fire_rate_mult
 
         if self.speed_boost_timer > 0.0:
             multiplier *= (
@@ -202,6 +349,36 @@ class Ship:
         if self.fire_rate_modifier_timer > 0.0:
             multiplier *= 0.5
 
+        return multiplier
+
+    @property
+    def pickup_rect(self) -> pygame.Rect:
+        """Retângulo de coleta de powerups/estrelas, inflado pelo profile.
+
+        Magneto tem `pickup_radius_mult` > 1, resultando em uma hitbox de
+        coleta maior que a hitbox de colisão (`rect`).
+        """
+        mult = self.profile.pickup_radius_mult
+        if mult <= 1.0:
+            return self.rect
+        extra = int(self.w * (mult - 1.0))
+        return self.rect.inflate(extra, extra)
+
+    @property
+    def damage_multiplier(self) -> float:
+        """Multiplicador de dano efetivo: profile × powerup × combo do Reverberador.
+
+        Powerups herdam o stat da nave — Aríete + damage_boost compõem por
+        multiplicação (1.80 × Config.DAMAGE_BOOST_MULTIPLIER). O combo do
+        Reverberador é aplicado como bônus aditivo no fator final.
+        """
+        multiplier = self.profile.damage_mult
+        if self.damage_boost_timer > 0.0:
+            multiplier *= Config.DAMAGE_BOOST_MULTIPLIER
+        # Reverberador: bônus aditivo escalando o multiplicador (combo_kills × per_kill).
+        bonus = self.combo_damage_bonus
+        if bonus > 0:
+            multiplier *= (1.0 + bonus)
         return multiplier
 
     @property
@@ -637,6 +814,74 @@ class Ship:
             if p["lifetime"] - dt > 0 and p["size"] - dt > 0
         ]
 
+    def _draw_charge_indicator(self, surface: pygame.Surface) -> None:
+        """Anel de progresso da carga ao redor da nave (Caçador)."""
+        progress = self.charge_shot_progress
+        if progress <= 0:
+            return
+
+        cx = int(self.x + self.w / 2)
+        cy = int(self.y + self.h / 2)
+        radius = max(self.w, self.h) // 2 + 10
+
+        # Cor evolui de azul fraco (carga baixa) para ciano brilhante (carga cheia).
+        r = int(60 + 60 * progress)
+        g = int(180 + 60 * progress)
+        b = 255
+        color = (r, g, b)
+
+        # Arco de progresso desenhado como segmentos curtos (fallback portável).
+        segments = 36
+        active_segments = max(1, int(segments * progress))
+        for i in range(active_segments):
+            angle = -math.pi / 2 + (i / segments) * math.tau
+            px = cx + int(math.cos(angle) * radius)
+            py = cy + int(math.sin(angle) * radius)
+            pygame.draw.circle(surface, color, (px, py), 2)
+
+        # Quando a carga atinge o máximo, pulso branco indica "pronto para soltar".
+        if progress >= 1.0:
+            pulse = int(2 + 2 * abs(math.sin(time.time() * 8)))
+            pygame.draw.circle(surface, (255, 255, 255), (cx, cy), radius + 2, pulse)
+
+    def _update_dash_trail(self, dt: float) -> None:
+        """Emite partículas durante o dash do Fantasma e decai as existentes."""
+        if self.is_dashing:
+            cx = self.x + self.w / 2
+            cy = self.y + self.h / 2
+            # Velocidade contrária à direção do dash (rastro fica para trás).
+            back_x = -self.dash_dir.x * random.uniform(60, 160)
+            back_y = -self.dash_dir.y * random.uniform(60, 160)
+            for _ in range(3):
+                self.dash_trail_particles.append(
+                    ParticleDict(
+                        x=cx + random.uniform(-4, 4),
+                        y=cy + random.uniform(-4, 4),
+                        vx=back_x + random.uniform(-30, 30),
+                        vy=back_y + random.uniform(-30, 30),
+                        lifetime=random.uniform(0.18, 0.32),
+                        size=random.uniform(3.0, 5.5),
+                        color=(160, 220, 255),
+                    )
+                )
+
+        if not self.dash_trail_particles:
+            return
+
+        self.dash_trail_particles = [
+            ParticleDict(
+                x=p["x"] + p["vx"] * dt,
+                y=p["y"] + p["vy"] * dt,
+                vx=p["vx"] * 0.92,
+                vy=p["vy"] * 0.92,
+                lifetime=p["lifetime"] - dt,
+                size=max(0.0, p["size"] - dt * 12.0),
+                color=p["color"],
+            )
+            for p in self.dash_trail_particles
+            if p["lifetime"] - dt > 0 and p["size"] - dt * 12.0 > 0
+        ]
+
     def update(
         self,
         dt: float,
@@ -644,6 +889,20 @@ class Ship:
         is_side_scroll: bool = False,
     ):
         self._update_timers(dt)
+        # Avança dash/cooldown do Fantasma.
+        if self.dash_timer > 0.0:
+            self.dash_timer = max(0.0, self.dash_timer - dt)
+        if self.dash_cooldown_left > 0.0:
+            self.dash_cooldown_left = max(0.0, self.dash_cooldown_left - dt)
+        # Emite e atualiza partículas do rastro do dash.
+        self._update_dash_trail(dt)
+
+        # Avança charge do Caçador (cap em charge_shot_max_time).
+        if self.charge_shot_active:
+            self.charge_shot_timer = min(
+                self.profile.charge_shot_max_time,
+                self.charge_shot_timer + dt,
+            )
         self._update_orbital_lasers(dt, entity_manager)
         self._update_particles(dt, is_side_scroll)
 
@@ -664,6 +923,14 @@ class Ship:
             is_side_scroll: Se True, usa movimentação horizontal (left-right com up-down)
                            Se False, usa movimentação vertical (top-down)
         """
+        # Fantasma em dash: força velocidade alta na direção travada e ignora input.
+        if self.is_dashing:
+            dash_speed = self.speed * self.dash_speed_mult
+            self.x += self.dash_dir.x * dash_speed * dt
+            self.y += self.dash_dir.y * dash_speed * dt
+            self._keep_in_bounds(is_side_scroll)
+            return
+
         # Calcular velocidade atual considerando boost e debuff de congelamento (Nevasca)
         base_speed_multiplier = 1.0
         if self.speed_boost_timer > 0:
@@ -902,6 +1169,17 @@ class Ship:
     def draw(self, surface: pygame.Surface):
         if not self.visible:
             return
+
+        # Rastro do dash: desenhado antes do blink de invuln para garantir visibilidade
+        # mesmo quando a nave em si está piscando durante os i-frames.
+        for p in self.dash_trail_particles:
+            pygame.draw.circle(
+                surface, p["color"], (int(p["x"]), int(p["y"])), int(p["size"])
+            )
+
+        # Indicador de carga do Caçador: anel de progresso ao redor da nave.
+        if self.charge_shot_active:
+            self._draw_charge_indicator(surface)
 
         if self.invuln > 0 and int(self.invuln / 100) % 2 == 0:
             return

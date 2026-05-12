@@ -15,10 +15,19 @@ from .stone_sentry import StoneSentry
 
 
 class MiniShip:
-    def __init__(self, player_ship: Ship, side: str, is_side_scroll: bool = False):
+    def __init__(
+        self,
+        player_ship: Ship,
+        side: str,
+        is_side_scroll: bool = False,
+        permanent: bool = False,
+    ):
         self.player = player_ship
         self.side = side  # 'left' or 'right'
         self.is_side_scroll = is_side_scroll
+        # `permanent` = não é removida quando o timer do powerup `mini_ships`
+        # expira. Usado pela nave Engenheiro.
+        self.permanent = permanent
         self.w = 20
         self.h = 20
         self.x = self.player.x

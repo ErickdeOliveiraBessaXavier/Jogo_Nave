@@ -159,6 +159,9 @@ def test_upgrade_keybindings_load_independently_from_upgrades(tmp_path: Path) ->
         pygame.K_7,
         pygame.K_8,
         pygame.K_9,
+        pygame.K_0,
+        pygame.K_MINUS,
+        pygame.K_EQUALS,
     ]
     custom_keys = [
         pygame.K_q,
@@ -170,6 +173,9 @@ def test_upgrade_keybindings_load_independently_from_upgrades(tmp_path: Path) ->
         pygame.K_u,
         pygame.K_i,
         pygame.K_o,
+        pygame.K_p,
+        pygame.K_a,
+        pygame.K_s,
     ][:UPGRADE_SLOT_COUNT]
 
     profile_payload = {

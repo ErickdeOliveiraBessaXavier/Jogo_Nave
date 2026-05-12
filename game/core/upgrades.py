@@ -790,7 +790,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_cooldown=80.0,
         base_duration=7.0,
         base_charges=None,
-        slot_weight=3,  # Ofensivo potente com desvantagens
+        slot_weight=2,  # Ofensivo com penalidades próprias (lentidão + fire rate)
     ),
     UpgradeType.LASER_SHOT: UpgradeMeta(
         type=UpgradeType.LASER_SHOT,
@@ -812,7 +812,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_cooldown=90.0,
         base_duration=0.0,  # Baseado em cargas, não em duração
         base_charges=30,
-        slot_weight=3,  # Explosões em área são muito fortes
+        slot_weight=2,  # Explosões em área limitadas a 30 cargas
     ),
     UpgradeType.AIR_STRIKE: UpgradeMeta(
         type=UpgradeType.AIR_STRIKE,
@@ -823,7 +823,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_cooldown=180.0,  # 3 minutos de cooldown
         base_duration=0.0,
         base_charges=30,  # 30 bombas por ativação
-        slot_weight=5,  # Ultimate extremamente poderoso
+        slot_weight=3,  # Ultimate por cargas com cooldown longo
     ),
     UpgradeType.BLACK_HOLE: UpgradeMeta(
         type=UpgradeType.BLACK_HOLE,
@@ -834,7 +834,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_cooldown=120.0,  # 2 minutos de cooldown
         base_duration=8.0,  # Dura 8 segundos
         base_charges=None,
-        slot_weight=4,  # Ultimate poderoso mas com cooldown menor que Air Strike
+        slot_weight=3,  # Ultimate temporário (8s)
     ),
     UpgradeType.CANNON_TOWER: UpgradeMeta(
         type=UpgradeType.CANNON_TOWER,
@@ -845,7 +845,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_cooldown=200.0,  # 3.3 minutos de cooldown
         base_duration=0.0,  # Baseado na duração das torres
         base_charges=None,
-        slot_weight=5,  # Ultimate extremamente poderoso com área de controle
+        slot_weight=3,  # Ultimate de controle de área
     ),
 }
 

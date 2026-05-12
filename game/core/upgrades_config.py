@@ -5,7 +5,7 @@ from typing import List
 from .upgrades import UpgradeType
 
 # Quantidade de slots de aprimoramentos ativos
-UPGRADE_SLOT_COUNT: int = 9
+UPGRADE_SLOT_COUNT: int = 12
 
 # Sistema de desbloqueio de slots com estrelas
 INITIAL_UNLOCKED_SLOTS = 2  # Slots inicialmente desbloqueados
@@ -19,6 +19,9 @@ SLOT_UNLOCK_COSTS = [
     35,  # Slot 7 - custa 35 estrelas
     50,  # Slot 8 - custa 50 estrelas
     75,  # Slot 9 - custa 75 estrelas
+    100,  # Slot 10
+    130,  # Slot 11
+    170,  # Slot 12
 ]
 
 # Quais upgrades vêm desbloqueados por padrão (MVP)

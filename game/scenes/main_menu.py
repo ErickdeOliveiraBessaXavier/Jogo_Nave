@@ -345,6 +345,9 @@ class MainMenuScene(Scene):
         self.focused_border_color = CUSTOM_GOLD
         self.focused_button_index = 0
 
+        # Cheat code buffer
+        self.cheat_buffer: str = ""
+
         # Auto-play visual
         self.auto_play = AutoPlay()
 
@@ -636,6 +639,28 @@ class MainMenuScene(Scene):
         """Called when exiting the scene."""
         return None
 
+    def _process_cheat_input(self, event: pygame.event.Event) -> None:
+        """Detecta o cheat code '271195' para ativar god mode e adicionar 9999 estrelas."""
+        _CHEAT_CODE = "271195"
+        _CHEAT_BUFFER_MAX = len(_CHEAT_CODE)
+        
+        if not pygame.K_0 <= event.key <= pygame.K_9:
+            # Se apertar uma tecla que não é número, reseta o buffer
+            self.cheat_buffer = ""
+            return
+
+        self.cheat_buffer += chr(event.key)
+        logger.debug(f"Cheat buffer: '{self.cheat_buffer}'")
+        if len(self.cheat_buffer) > _CHEAT_BUFFER_MAX:
+            self.cheat_buffer = self.cheat_buffer[-_CHEAT_BUFFER_MAX:]
+
+        if self.cheat_buffer == _CHEAT_CODE:
+            self.cheat_buffer = ""
+            self.app.player_profile.add_stars(9999)
+            self.app.player_profile.auto_save()
+            logger.info("⭐ CHEAT ATIVADO - +9999 Estrelas adicionadas e salvas!")
+            sound_manager.play_sound("button_click")
+
     def handle_event(self, event: pygame.event.Event):
         """Handles user input events."""
         # Não processar eventos durante transição
@@ -692,6 +717,10 @@ class MainMenuScene(Scene):
                 sound_manager.play_sound("button_click")
             elif event.key == pygame.K_ESCAPE:
                 self.app.running = False
+            
+            # Processar cheat code
+            self._process_cheat_input(event)
+            
             # Update focused states
             for i, button in enumerate(self.buttons):
                 button.focused = i == self.focused_button_index

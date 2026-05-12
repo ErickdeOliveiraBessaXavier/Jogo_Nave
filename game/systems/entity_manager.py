@@ -1099,6 +1099,8 @@ class EntityManager:
         self.fire_zones.clear()
         self.mountain_propellers.clear()
         self.boss = None
+        # Mini-naves são limpas completamente; a cena reconstrói o estado
+        # correto após o clear (permanentes vs par temporário do powerup ativo).
         self.mini_ships.clear()
         self.mini_ship_bullets.clear()
         self.formations.clear()
@@ -1113,8 +1115,8 @@ class EntityManager:
         self.black_holes.clear()
         self.emp_waves.clear()
         self.explosive_effects.clear()
-        self.powerups.clear()
-        self.stars.clear()
+        # Powerups e estrelas em tela são preservados — não é justo o jogador
+        # perder um pickup pendente porque a fase terminou no momento errado.
 
         self.cannon_towers.clear()
         self.cannon_mines.clear()

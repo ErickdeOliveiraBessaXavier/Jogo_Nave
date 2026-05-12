@@ -1,8 +1,7 @@
 import math
 import time
-from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple, Callable
 
 import pygame
 
@@ -11,9 +10,9 @@ from ..core.assets import BASE_DIR, get_font, get_image
 from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_profile_path
+from ..core.ship_types import ShipProfile, all_ship_profiles, get_ship_profile
 from ..core.state import Scene
 from ..core.upgrades import (
-    UpgradeCategory,
     UpgradeMeta,
     get_upgrade_icon,
     list_all_upgrades_meta,
@@ -26,1159 +25,752 @@ if TYPE_CHECKING:
 
 @dataclass
 class UILayout:
-    """Estrutura para armazenar os retângulos da UI com tipos definidos."""
+    """Estrutura para as 3 colunas da Central de Loadout."""
+    
+    # Áreas principais
+    left_area: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
+    center_area: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
+    right_area: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
 
-    # Tabs (abas de categorias)
-    tab_buttons: List[pygame.Rect] = field(default_factory=lambda: [])
-
-    # Grid de upgrades (lado esquerdo)
-    upgrade_grid_cells: List[pygame.Rect] = field(default_factory=lambda: [])
-    upgrade_grid_area: pygame.Rect = field(
-        default_factory=lambda: pygame.Rect(0, 0, 0, 0)
-    )
-    visible_upgrades: List[UpgradeMeta] = field(default_factory=lambda: [])
-
-    # Grid 2x2 de slots ativos (lado direito)
+    # Esquerda: Arsenal
     active_slots: List[pygame.Rect] = field(default_factory=lambda: [])
-    active_slots_header: pygame.Rect = field(
-        default_factory=lambda: pygame.Rect(0, 0, 0, 0)
-    )
+    active_slots_header: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
+    upgrade_grid_cells: List[pygame.Rect] = field(default_factory=lambda: [])
+    visible_upgrades: List[UpgradeMeta] = field(default_factory=lambda: [])
+    upgrade_scroll_area: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
+
+    # Direita: Hangar
+    stats_area: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
+    ship_grid_cells: List[pygame.Rect] = field(default_factory=lambda: [])
+    visible_ships: List[ShipProfile] = field(default_factory=lambda: [])
+    ship_scroll_area: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
+
+    # Centro: Preview
+    ship_preview_rect: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
 
     # Botão de voltar
     back_button: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
 
 
 class FloatingMessage:
-    """Mensagem flutuante similar ao FloatingScore para feedback visual."""
-
-    def __init__(
-        self,
-        x: float,
-        y: float,
-        message: str,
-        color: Tuple[int, int, int] = (255, 100, 100),
-    ):
-        self.x = x
-        self.y = y
-        self.message = message
-        self.color = color
-        self.alpha = 255
-        self.lifetime = 1.5  # seconds
-        self.dy = -60.0  # pixels per second
-
-        self.font = get_font(20)
-
-        self.fade_start = 0.5  # seconds before expiry to begin fade
+    """Mensagem flutuante para feedback visual."""
+    def __init__(self, x: float, y: float, message: str, color: Tuple[int, int, int] = (255, 100, 100)):
+        self.x, self.y, self.message, self.color = x, y, message, color
+        self.alpha, self.lifetime, self.dy = 255, 1.5, -60.0
+        self.font, self.fade_start = get_font(20), 0.5
 
     def update(self, dt: float) -> None:
         self.y += self.dy * dt
         self.lifetime -= dt
-
         if self.lifetime <= self.fade_start:
-            fade_progress = self.lifetime / self.fade_start
-            self.alpha = max(0, int(255 * fade_progress))
-        else:
-            self.alpha = 255
+            self.alpha = max(0, int(255 * (self.lifetime / self.fade_start)))
 
     def draw(self, surface: pygame.Surface) -> None:
-        """Desenha a mensagem na tela."""
-        if self.alpha <= 0:
-            return
+        if self.alpha <= 0: return
+        surf = self.font.render(self.message, True, self.color)
+        surf.set_alpha(self.alpha)
+        surface.blit(surf, surf.get_rect(center=(int(self.x), int(self.y))))
 
-        # Renderizar texto com alpha
-        text_surf = self.font.render(self.message, True, self.color)
-        text_surf.set_alpha(self.alpha)
-
-        # Centralizar horizontalmente
-        text_rect = text_surf.get_rect(center=(int(self.x), int(self.y)))
-        surface.blit(text_surf, text_rect)
-
-    def is_dead(self) -> bool:
-        """Retorna True se a mensagem deve ser removida."""
-        return self.lifetime <= 0
+    def is_dead(self) -> bool: return self.lifetime <= 0
 
 
 class UpgradesSelectionScene(Scene):
-    """Cena de seleção de aprimoramentos com drag-and-drop e grid 2x2."""
+    """Central de Loadout Unificada (Refinamento Visual e Alinhamento)."""
 
     def __init__(self, app: "GameApp"):
         super().__init__(app)
-        self.r = app.renderer  # Usar renderer compartilhado
+        self.r = app.renderer
+        self.title_font = get_font(36)
+        self.header_font = get_font(18)
+        self.item_font = get_font(16)
+        self.small_font = get_font(13)
+        self.tiny_font = get_font(11)
 
-        # Fonts (consistentes com settings/statistics)
-        self.title_font = get_font(40)
-        self.header_font = get_font(24)
-        self.item_font = get_font(20)
-        self.small_font = get_font(14)
-        self.tiny_font = get_font(14)
+        # Metrics para consistência total
+        self.MARGIN = 24
+        self.GAP = 12
+        self.RADIUS = 8
+        
+        self.locked_icon = get_image(BASE_DIR / "assets" / "images" / "icons" / "icon_bloqueado.png")
+        self.star_icon = get_image(BASE_DIR / "assets" / "images" / "icons" / "icon_star.png")
+        self.star_icon_small = pygame.transform.scale(self.star_icon, (18, 18))
 
-        # Ícone de bloqueado
-        icon_path = BASE_DIR / "assets" / "images" / "icons" / "icon_bloqueado.png"
-        self.locked_icon = get_image(icon_path)
-
-        # Ícone de estrela (moeda)
-        star_path = BASE_DIR / "assets" / "images" / "icons" / "icon_star.png"
-        self.star_icon = get_image(star_path)
-        self.star_icon_small = pygame.transform.scale(self.star_icon, (20, 20))
-
-        # Perfil do Jogador
         self.player_profile = PlayerProfile(get_profile_path())
+        self._ensure_slots()
 
-        # Garantir que o loadout tem exatamente UPGRADE_SLOT_COUNT slots
+        # Todos os upgrades em ordem alfabética
+        self.all_upgrades = sorted(list_all_upgrades_meta(), key=lambda u: u.name.lower())
+
+        # Estado do Scroll e UI
+        self.upgrade_scroll = 0
+        self.ship_scroll = 0
+        self.max_upgrade_scroll = 0
+        self.max_ship_scroll = 0
+        
+        # Drag and Drop para upgrades
+        self.dragging_upgrade: Optional[UpgradeMeta] = None
+        self.drag_offset: Tuple[int, int] = (0, 0)
+        self.drag_source_slot: Optional[int] = None
+        self.drag_invalid_target = False
+
+        self.hovered_upgrade: Optional[UpgradeMeta] = None
+        self.hovered_ship: Optional[ShipProfile] = None
+        self.hovered_slot_idx: Optional[int] = None
+        
+        self.shaking_slot: Optional[int] = None
+        self.shaking_ship_id: Optional[str] = None
+        self.shake_start_time = 0.0
+        self.shake_duration = 0.3
+
+        self.layout = UILayout()
+        self._calculate_layout()
+        
+        self.floating_messages: List[FloatingMessage] = []
+        self.transitioning, self.transition_progress, self.fade_out = False, 0.0, False
+        self.transition_duration = 0.3
+        self.entry_progress, self.is_entering, self.entry_duration = 0.0, True, 0.4
+
+    def _ensure_slots(self):
         while len(self.player_profile.upgrade_loadout) < UPGRADE_SLOT_COUNT:
             self.player_profile.upgrade_loadout.append(None)
         if len(self.player_profile.upgrade_loadout) > UPGRADE_SLOT_COUNT:
-            self.player_profile.upgrade_loadout = self.player_profile.upgrade_loadout[
-                :UPGRADE_SLOT_COUNT
-            ]
-
-        # Organizar upgrades por categoria
-        # Ordenação alfabética (case-insensitive) para consistência
-        self.all_upgrades = sorted(
-            list_all_upgrades_meta(), key=lambda u: u.name.lower()
-        )
-        self.categorized_upgrades: Dict[UpgradeCategory, List[UpgradeMeta]] = (
-            defaultdict(list)
-        )
-        for upg in self.all_upgrades:
-            self.categorized_upgrades[upg.category].append(upg)
-
-        # Adicionar aba 'All' para listar todos os upgrades
-        base_categories = sorted(
-            list(self.categorized_upgrades.keys()), key=lambda c: c.name.lower()
-        )
-        # Lista de categorias pode conter o rótulo "All" como str
-        self.categories: List[UpgradeCategory | str] = ["All"] + base_categories
-
-        # Estado da UI - Tabs
-        self.selected_category_idx = 0
-        self.scroll_offset = 0
-
-        # Estado de Drag and Drop
-        self.dragging_upgrade: Optional[UpgradeMeta] = None
-        self.drag_offset: Tuple[int, int] = (0, 0)
-        self.drag_source_slot: Optional[int] = None  # Se veio da grid direita
-        self.drag_invalid_target: bool = (
-            False  # Se o drop atual seria inválido por peso
-        )
-
-        # Shake effect para slots bloqueados
-        self.shaking_slot: Optional[int] = None
-        self.shake_start_time: float = 0.0
-        self.shake_duration: float = 0.3  # segundos
-
-        # Tooltip
-        self.hovered_upgrade: Optional[UpgradeMeta] = None
-        self.hovered_slot_idx: Optional[int] = None
-
-        # Layout
-        self.layout = UILayout()
-        self._calculate_layout()
-
-        # Sistema de mensagens flutuantes
-        self.floating_messages: List[FloatingMessage] = []
-
-        # Sistema de transição
-        self.transitioning = False
-        self.transition_progress = 0.0
-        self.transition_duration = 0.3
-        self.fade_out = False
-
-        # Animação de entrada
-        self.entry_progress = 0.0
-        self.is_entering = True
-        self.entry_duration = 0.4
+            self.player_profile.upgrade_loadout = self.player_profile.upgrade_loadout[:UPGRADE_SLOT_COUNT]
 
     def _calculate_layout(self):
-        """Calcula as posições e tamanhos dos elementos da UI."""
-        screen_w, screen_h = self.app.screen.get_size()
+        sw, sh = self.app.screen.get_size()
 
-        # Dividir tela: 65% esquerda (seleção), 35% direita (ativos)
-        left_w = int(screen_w * 0.65)
-        right_w = screen_w - left_w
-        pad = 20
-
-        # Limpar listas antes de recalcular
+        # 33% | 34% | 33% split — laterais com mais respiro para acomodar os
+        # títulos sem vazar do painel. Centro ainda comporta o preview (até 400px).
+        lw = int(sw * 0.33)
+        rw = int(sw * 0.33)
+        cw = sw - lw - rw
+        
         self.layout = UILayout()
+        self.layout.left_area = pygame.Rect(0, 0, lw, sh)
+        self.layout.center_area = pygame.Rect(lw, 0, cw, sh)
+        self.layout.right_area = pygame.Rect(sw - rw, 0, rw, sh)
 
-        # === LADO ESQUERDO - TABS ===
-        tab_h = 50
-        tab_y = 80
-        tab_w = (left_w - pad * 2) // len(self.categories)
-        for i in range(len(self.categories)):
-            tab_rect = pygame.Rect(pad + i * tab_w, tab_y, tab_w - 5, tab_h)
-            self.layout.tab_buttons.append(tab_rect)
+        # --- ARSENAL (Esquerda) ---
+        # Slots Ativos em grid 4×3 (12 slots), com tamanho de célula idêntico aos
+        # demais grids (Estoque/Hangar também usam 4 colunas).
+        cols_slots = 4
+        size_slots = (lw - self.MARGIN * 2 - (cols_slots - 1) * self.GAP) // cols_slots
+        lx_slots = self.MARGIN
+        
+        # Alinhamento dos Cabeçalhos: y = 100
+        header_y = 100
+        self.layout.active_slots_header = pygame.Rect(self.MARGIN, header_y, lw - self.MARGIN*2, 25)
+        
+        # Conteúdo começa abaixo do cabeçalho
+        ly = header_y + 40
+        for i in range(UPGRADE_SLOT_COUNT):
+            r, c = i // cols_slots, i % cols_slots
+            self.layout.active_slots.append(pygame.Rect(lx_slots + c*(size_slots+self.GAP), ly + r*(size_slots+self.GAP), size_slots, size_slots))
 
-        # === LADO ESQUERDO - GRID DE UPGRADES ===
-        grid_start_y = tab_y + tab_h + 20
-
-        self.layout.upgrade_grid_area = pygame.Rect(
-            pad, grid_start_y, left_w - pad * 2, screen_h - grid_start_y - 80
-        )
-
-        # Preencher grid com upgrades da categoria atual
+        # 2. Estoque (Starting after slots)
+        stock_header_y = self.layout.active_slots[-1].bottom + 35
+        self._stock_start_y = stock_header_y + 35
+        self.layout.upgrade_scroll_area = pygame.Rect(self.MARGIN, self._stock_start_y, lw - self.MARGIN*2, sh - self._stock_start_y - 80)
         self._rebuild_upgrade_grid()
 
-        # === LADO DIREITO - HEADER ===
-        header_y = 100
-        self.layout.active_slots_header = pygame.Rect(
-            left_w + pad, header_y, right_w - pad * 2, 40
+        # --- NAVE (Centro) ---
+        # Preview menor para liberar espaço abaixo para descrição e habilidades.
+        preview_s = min(260, cw - 60)
+        preview_y = 110
+        self.layout.ship_preview_rect = pygame.Rect(
+            lw + cw // 2 - preview_s // 2, preview_y, preview_s, preview_s
         )
 
-        # === LADO DIREITO - GRID 3x3 ===
-        cols = 3
-        rows = 3
-        slot_gap = 25
-        inner_left = left_w + pad
-        inner_width = right_w - pad * 2
+        # --- HANGAR (Direita) ---
+        # 1. Atributos
+        rx = self.layout.right_area.x + self.MARGIN
+        ry = header_y # Alinhado com Arsenal Ativo
+        self.layout.stats_area = pygame.Rect(rx, ry, rw - self.MARGIN * 2, 110)
 
-        # Tamanho do slot calculado para ocupar toda a largura disponível
-        slot_size = max(40, (inner_width - (cols - 1) * slot_gap) // cols)
-        grid_start_x = inner_left
-        grid_start_y = header_y + 80
+        # 2. Ship Collection
+        self._ship_start_y = self.layout.stats_area.bottom + 70
+        self.layout.ship_scroll_area = pygame.Rect(rx, self._ship_start_y, rw - self.MARGIN*2, sh - self._ship_start_y - 80)
+        self._rebuild_ship_grid()
 
-        for row in range(rows):
-            for col in range(cols):
-                x = grid_start_x + col * (slot_size + slot_gap)
-                y = grid_start_y + row * (slot_size + slot_gap)
-                slot_rect = pygame.Rect(x, y, slot_size, slot_size)
-                self.layout.active_slots.append(slot_rect)
-
-        # === BOTÃO DE VOLTAR ===
-        self.layout.back_button = pygame.Rect(pad, screen_h - 60, 150, 40)
+        self.layout.back_button = pygame.Rect(self.MARGIN, sh - 55, 140, 35)
 
     def _rebuild_upgrade_grid(self):
-        """Reconstrói a grid de upgrades baseado na categoria atual e scroll."""
         self.layout.upgrade_grid_cells.clear()
         self.layout.visible_upgrades.clear()
-
-        category = self.categories[self.selected_category_idx]
-        if isinstance(category, str) and category.lower() == "all":
-            current_upgrades = self.all_upgrades
-        else:
-            # Garantir tipo UpgradeCategory para indexar corretamente
-            current_upgrades = self.categorized_upgrades[category]  # type: ignore[index]
-
-        grid_area = self.layout.upgrade_grid_area
-        cell_size = 80
-        cell_padding = 15
-        grid_cols = 4
-
-        start_x = grid_area.x
-        start_y = grid_area.y
-
-        # Calcular quantidade visível corretamente
-        rows_visible = grid_area.height // (cell_size + cell_padding)
-        visible_count = rows_visible * grid_cols
-        visible_upgrades = current_upgrades[
-            self.scroll_offset : self.scroll_offset + visible_count
-        ]
-
-        for i, upgrade in enumerate(visible_upgrades):
-            row = i // grid_cols
-            col = i % grid_cols
-            x = start_x + col * (cell_size + cell_padding)
-            y = start_y + row * (cell_size + cell_padding)
-            rect = pygame.Rect(x, y, cell_size, cell_size)
+        cols = 4
+        area = self.layout.upgrade_scroll_area
+        size = (area.width - (cols-1)*self.GAP) // cols
+        visible_rows = area.height // (size + self.GAP)
+        
+        total_rows = math.ceil(len(self.all_upgrades) / cols)
+        self.max_upgrade_scroll = max(0, total_rows - visible_rows)
+        start_idx = self.upgrade_scroll * cols
+        visible_items = self.all_upgrades[start_idx : start_idx + (visible_rows + 1) * cols]
+        
+        for i, upg in enumerate(visible_items):
+            r, c = i // cols, i % cols
+            rect = pygame.Rect(area.x + c*(size+self.GAP), area.y + r*(size+self.GAP), size, size)
             self.layout.upgrade_grid_cells.append(rect)
-            self.layout.visible_upgrades.append(upgrade)
+            self.layout.visible_upgrades.append(upg)
 
-    def _reset_selection(self):
-        """Reseta seleção para o topo da grid."""
-        self.scroll_offset = 0
-        self._rebuild_upgrade_grid()
-
-    def enter(self):
-        pygame.mouse.set_visible(True)
-        self._calculate_layout()
-        self._reset_selection()
-
-        # Resetar animação de entrada
-        self.entry_progress = 0.0
-        self.is_entering = True
-        self.transitioning = False
-        self.fade_out = False
-
-    def exit(self):
-        self.player_profile.save()
+    def _rebuild_ship_grid(self):
+        self.layout.ship_grid_cells.clear()
+        self.layout.visible_ships.clear()
+        ships = list(all_ship_profiles())
+        cols = 4
+        area = self.layout.ship_scroll_area
+        size = (area.width - (cols-1)*self.GAP) // cols
+        visible_rows = area.height // (size + self.GAP)
+        
+        total_rows = math.ceil(len(ships) / cols)
+        self.max_ship_scroll = max(0, total_rows - visible_rows)
+        start_idx = self.ship_scroll * cols
+        visible_ships = ships[start_idx : start_idx + (visible_rows + 1) * cols]
+        
+        for i, ship in enumerate(visible_ships):
+            r, c = i // cols, i % cols
+            rect = pygame.Rect(area.x + c*(size+self.GAP), area.y + r*(size+self.GAP), size, size)
+            self.layout.ship_grid_cells.append(rect)
+            self.layout.visible_ships.append(ship)
 
     def handle_event(self, event: pygame.event.Event):
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                self._return_to_menu()
-
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE: self._return_to_menu()
+        
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             pos = event.pos
-
-            # Botão de Voltar
-            if self.layout.back_button.collidepoint(pos):
-                self._return_to_menu()
-                return
-
-            # Clicar em Tabs (trocar categoria)
-            for i, tab_rect in enumerate(self.layout.tab_buttons):
-                if tab_rect.collidepoint(pos):
-                    if self.selected_category_idx != i:
-                        self.selected_category_idx = i
-                        self._reset_selection()
+            if self.layout.back_button.collidepoint(pos): self._return_to_menu()
+            
+            for i, rect in enumerate(self.layout.ship_grid_cells):
+                if rect.collidepoint(pos):
+                    self._handle_ship_click(self.layout.visible_ships[i], rect)
                     return
-
-            # Iniciar Drag: Upgrade da grid esquerda
-            for i, cell_rect in enumerate(self.layout.upgrade_grid_cells):
-                if cell_rect.collidepoint(pos):
-                    upgrade = self.layout.visible_upgrades[i]
-                    if upgrade.type in self.player_profile.unlocked_upgrades:
-                        self.dragging_upgrade = upgrade
-                        self.drag_offset = (pos[0] - cell_rect.x, pos[1] - cell_rect.y)
-                        self.drag_source_slot = None
+            for i, rect in enumerate(self.layout.upgrade_grid_cells):
+                if rect.collidepoint(pos):
+                    upg = self.layout.visible_upgrades[i]
+                    if upg.type in self.player_profile.unlocked_upgrades:
+                        self.dragging_upgrade, self.drag_offset, self.drag_source_slot = upg, (pos[0]-rect.x, pos[1]-rect.y), None
                     return
-
-            # Iniciar Drag: Upgrade da grid 2x2 (slots ativos)
-            total_equipped_weight = self.player_profile.get_total_equipped_weight()
-            for i, slot_rect in enumerate(self.layout.active_slots):
-                if slot_rect.collidepoint(pos):
-                    # Verificar se slot está bloqueado por estrelas
-                    locked_by_stars = i >= self.player_profile.unlocked_slots
-
-                    # Verificar se slot está bloqueado por peso (sem upgrade equipado)
-                    slot_consumed_by_weight = i >= (
-                        len(self.layout.active_slots) - total_equipped_weight
-                    )
-                    has_equipped = (
-                        i < len(self.player_profile.upgrade_loadout)
-                        and self.player_profile.upgrade_loadout[i] is not None
-                    )
-
-                    # Se o slot está bloqueado por estrelas, tentar desbloquear
-                    if locked_by_stars:
-                        if self.player_profile.can_unlock_slot(i):
-                            # Desbloquear slot
-                            if self.player_profile.unlock_slot(i):
-                                # Som de sucesso ou feedback visual
-                                pass
-                        else:
-                            # Não tem estrelas suficientes, tremer
-                            self.shaking_slot = i
-                            self.shake_start_time = time.time()
-                        return
-
-                    # Se slot está consumido por peso mas não tem upgrade, não pode interagir
-                    if slot_consumed_by_weight and not has_equipped:
-                        return
-
-                    # Proteção contra índice fora do range
-                    if i >= len(self.player_profile.upgrade_loadout):
-                        equipped_type = None
-                    else:
-                        equipped_type = self.player_profile.upgrade_loadout[i]
-                    if equipped_type:
-                        upgrade_meta = next(
-                            (u for u in self.all_upgrades if u.type == equipped_type),
-                            None,
-                        )
-                        if upgrade_meta:
-                            self.dragging_upgrade = upgrade_meta
-                            self.drag_offset = (
-                                pos[0] - slot_rect.x,
-                                pos[1] - slot_rect.y,
-                            )
-                            self.drag_source_slot = i
+            for i, rect in enumerate(self.layout.active_slots):
+                if rect.collidepoint(pos):
+                    self._handle_slot_click(i, rect, pos)
                     return
 
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            if self.dragging_upgrade:
-                pos = event.pos
+            if self.dragging_upgrade: self._handle_drop_upgrade(event.pos)
 
-                # Soltar em um dos slots da grid 2x2
-                dropped_in_slot = False
-                total_equipped_weight = self.player_profile.get_total_equipped_weight()
-                for i, slot_rect in enumerate(self.layout.active_slots):
-                    if slot_rect.collidepoint(pos):
-                        # Verificar se slot está bloqueado por estrelas
-                        locked_by_stars = i >= self.player_profile.unlocked_slots
-                        if locked_by_stars:
-                            self.shaking_slot = i
-                            self.shake_start_time = time.time()
-                            continue
-
-                        # Verificar se pode equipar considerando o peso
-                        # Se estamos arrastando de um slot equipado, temporariamente considerar que aquele slot ficará livre
-                        can_equip = False
-                        if self.drag_source_slot is not None:
-                            # Temporariamente remover do slot de origem para verificar
-                            original_upgrade = self.player_profile.upgrade_loadout[
-                                self.drag_source_slot
-                            ]
-                            self.player_profile.upgrade_loadout[
-                                self.drag_source_slot
-                            ] = None
-                            can_equip = self.player_profile.can_equip_upgrade(
-                                self.dragging_upgrade.type, i
-                            )
-                            self.player_profile.upgrade_loadout[
-                                self.drag_source_slot
-                            ] = original_upgrade
-                        else:
-                            can_equip = self.player_profile.can_equip_upgrade(
-                                self.dragging_upgrade.type, i
-                            )
-
-                        if not can_equip:
-                            # Shake effect e som de erro
-                            self.shaking_slot = i
-                            self.shake_start_time = time.time()
-
-                            # Adicionar mensagem flutuante "Sem espaço"
-                            slot_center = slot_rect.center
-                            self.floating_messages.append(
-                                FloatingMessage(
-                                    slot_center[0],
-                                    slot_center[1] - 20,
-                                    "Sem espaço",
-                                    (255, 100, 100),
-                                )
-                            )
-
-                            try:
-                                if hasattr(self.app, "sound_manager"):
-                                    self.app.sound_manager.play_upgrade_denied()  # type: ignore
-                            except (AttributeError, TypeError, pygame.error):
-                                pass
-                            continue
-
-                        # Se o slot de destino tem um upgrade e a origem também é um slot
-                        target_upgrade = (
-                            self.player_profile.upgrade_loadout[i]
-                            if i < len(self.player_profile.upgrade_loadout)
-                            else None
-                        )
-                        if target_upgrade and self.drag_source_slot is not None:
-                            # Trocar upgrades entre slots
-                            source_upgrade = self.dragging_upgrade.type
-                            self.player_profile.equip_upgrade(
-                                target_upgrade, self.drag_source_slot
-                            )
-                            self.player_profile.equip_upgrade(source_upgrade, i)
-                            dropped_in_slot = True
-                            break
-
-                        # Remover de outros slots se já estiver equipado
-                        for slot_idx in range(UPGRADE_SLOT_COUNT):
-                            if (
-                                self.player_profile.upgrade_loadout[slot_idx]
-                                == self.dragging_upgrade.type
-                            ):
-                                self.player_profile.equip_upgrade(None, slot_idx)
-
-                        self.player_profile.equip_upgrade(self.dragging_upgrade.type, i)
-                        dropped_in_slot = True
-                        break
-
-                # Se veio de um slot e não foi solto em nenhum, remove
-                if self.drag_source_slot is not None and not dropped_in_slot:
-                    self.player_profile.equip_upgrade(None, self.drag_source_slot)
-
-                # Limpar estado de drag
-                self.dragging_upgrade = None
-                self.drag_offset = (0, 0)
-                self.drag_source_slot = None
-
-        # Scroll na grid de upgrades
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 4:  # Scroll para cima
-                if self.layout.upgrade_grid_area.collidepoint(event.pos):
-                    self.scroll_offset = max(0, self.scroll_offset - 1)
-                    self._rebuild_upgrade_grid()
-            elif event.button == 5:  # Scroll para baixo
-                if self.layout.upgrade_grid_area.collidepoint(event.pos):
-                    category = self.categories[self.selected_category_idx]
-                    if isinstance(category, str) and category.lower() == "all":
-                        current_upgrades = self.all_upgrades
+            sw = self.app.screen.get_size()[0]
+            if event.pos[0] < sw * 0.3:
+                if event.button == 4: self.upgrade_scroll = max(0, self.upgrade_scroll - 1)
+                elif event.button == 5: self.upgrade_scroll = min(self.max_upgrade_scroll, self.upgrade_scroll + 1)
+                self._rebuild_upgrade_grid()
+            elif event.pos[0] > sw * 0.7:
+                if event.button == 4: self.ship_scroll = max(0, self.ship_scroll - 1)
+                elif event.button == 5: self.ship_scroll = min(self.max_ship_scroll, self.ship_scroll + 1)
+                self._rebuild_ship_grid()
+
+    def _handle_ship_click(self, ship: ShipProfile, rect: pygame.Rect):
+        profile = self.player_profile
+        if profile.is_ship_unlocked(ship.id):
+            profile.select_ship(ship.id)
+        elif profile.can_unlock_ship(ship.id):
+            if profile.unlock_ship(ship.id):
+                profile.select_ship(ship.id)
+                self.floating_messages.append(FloatingMessage(rect.centerx, rect.top, f"{ship.display_name} Adquirida!", colors.GREEN))
+        else:
+            self.shaking_ship_id, self.shake_start_time = ship.id, time.time()
+            self.floating_messages.append(FloatingMessage(rect.centerx, rect.top, "Saldo Insuficiente", colors.RED))
+
+    def _handle_slot_click(self, idx: int, rect: pygame.Rect, pos: tuple[int, int]):
+        profile = self.player_profile
+        if idx >= profile.unlocked_slots:
+            if profile.can_unlock_slot(idx): profile.unlock_slot(idx)
+            else: self.shaking_slot, self.shake_start_time = idx, time.time()
+            return
+        equipped_type = profile.upgrade_loadout[idx]
+        if equipped_type:
+            upg = next((u for u in self.all_upgrades if u.type == equipped_type), None)
+            if upg: self.dragging_upgrade, self.drag_offset, self.drag_source_slot = upg, (pos[0]-rect.x, pos[1]-rect.y), idx
+
+    def _handle_drop_upgrade(self, pos: tuple[int, int]):
+        if self.dragging_upgrade is None: return
+        profile, dropped = self.player_profile, False
+        for i, rect in enumerate(self.layout.active_slots):
+            if rect.collidepoint(pos) and i < profile.unlocked_slots:
+                if self.drag_source_slot is not None:
+                    orig = profile.upgrade_loadout[self.drag_source_slot]
+                    profile.upgrade_loadout[self.drag_source_slot] = None
+                    if profile.can_equip_upgrade(self.dragging_upgrade.type, i):
+                        target = profile.upgrade_loadout[i]
+                        profile.equip_upgrade(self.dragging_upgrade.type, i)
+                        profile.equip_upgrade(target, self.drag_source_slot)
+                        dropped = True
                     else:
-                        current_upgrades = self.categorized_upgrades[category]  # type: ignore[index]
+                        profile.upgrade_loadout[self.drag_source_slot] = orig
+                        self.shaking_slot, self.shake_start_time = i, time.time()
+                elif profile.can_equip_upgrade(self.dragging_upgrade.type, i):
+                    for j in range(UPGRADE_SLOT_COUNT):
+                        if profile.upgrade_loadout[j] == self.dragging_upgrade.type: profile.equip_upgrade(None, j)
+                    profile.equip_upgrade(self.dragging_upgrade.type, i)
+                    dropped = True
+                else:
+                    self.shaking_slot, self.shake_start_time = i, time.time()
+                break
+        if not dropped and self.drag_source_slot is not None: profile.equip_upgrade(None, self.drag_source_slot)
+        self.dragging_upgrade = None
 
-                    # Calcular max_scroll dinamicamente
-                    grid_area = self.layout.upgrade_grid_area
-                    cell_size = 80
-                    cell_padding = 15
-                    grid_cols = 4
-                    rows_visible = grid_area.height // (cell_size + cell_padding)
-                    visible_count = rows_visible * grid_cols
-                    max_scroll = max(0, len(current_upgrades) - visible_count)
-
-                    self.scroll_offset = min(max_scroll, self.scroll_offset + 1)
-                    self._rebuild_upgrade_grid()
-
-    def _return_to_menu(self):
-        """Retorna ao menu principal de forma segura."""
-        # Iniciar transição de saída
-        self.fade_out = True
-        self.transitioning = True
-        self.transition_progress = 0.0
+    def exit(self):
+        """Garante que loadout/desbloqueios/seleção de nave sejam persistidos
+        ao deixar a cena — sem isso o `auto_save` (gated por 10s) pode descartar
+        mudanças recentes ao trocar de cena rapidamente.
+        """
+        self.player_profile.save()
 
     def update(self, dt: float):
         self.r.starfield.update(dt)
-
-        # Atualizar animação de entrada
-        if self.is_entering and self.entry_progress < 1.0:
-            self.entry_progress = min(
-                1.0, self.entry_progress + dt / self.entry_duration
-            )
-            if self.entry_progress >= 1.0:
-                self.is_entering = False
-
-        # Atualizar transição de saída
+        if self.is_entering:
+            self.entry_progress = min(1.0, self.entry_progress + dt / self.entry_duration)
+            if self.entry_progress >= 1.0: self.is_entering = False
         if self.transitioning:
             self.transition_progress += dt / self.transition_duration
-
             if self.transition_progress >= 1.0:
-                # Completou o fade out, voltar ao menu
                 from .main_menu import MainMenuScene
-
+                # Persistência defensiva: garante save antes do switch — algumas
+                # implementações de Scene não chamam exit() na transição.
+                self.player_profile.save()
                 self.app.states.switch(MainMenuScene(self.app))
                 return
+        for m in self.floating_messages[:]:
+            m.update(dt)
+            if m.is_dead(): self.floating_messages.remove(m)
+        if self.shaking_ship_id and time.time() - self.shake_start_time > self.shake_duration: self.shaking_ship_id = None
+        if self.shaking_slot is not None and time.time() - self.shake_start_time > self.shake_duration: self.shaking_slot = None
 
-        # Atualizar e limpar mensagens flutuantes
-        for message in self.floating_messages[:]:
-            message.update(dt)
-            if message.is_dead():
-                self.floating_messages.remove(message)
-
-        # Limpar shake se o tempo expirou
-        if self.shaking_slot is not None:
-            if time.time() - self.shake_start_time >= self.shake_duration:
-                self.shaking_slot = None
-
-        # Atualizar hover state
-        mouse_pos = pygame.mouse.get_pos()
-        self.hovered_upgrade = None
-        self.hovered_slot_idx = None
-        self.drag_invalid_target = False
-
+        m_pos = pygame.mouse.get_pos()
+        self.hovered_upgrade = self.hovered_ship = self.hovered_slot_idx = None
         if not self.dragging_upgrade:
-            # Hover sobre upgrades da grid
-            for i, cell_rect in enumerate(self.layout.upgrade_grid_cells):
-                if cell_rect.collidepoint(mouse_pos):
-                    self.hovered_upgrade = self.layout.visible_upgrades[i]
-                    break
-
-            # Hover sobre slots ativos
-            for i, slot_rect in enumerate(self.layout.active_slots):
-                if slot_rect.collidepoint(mouse_pos):
-                    # Só permite hover se não estiver bloqueado por estrelas
-                    # Slots bloqueados por peso ainda podem fazer hover se tiverem upgrade equipado
-                    locked_by_stars = i >= self.player_profile.unlocked_slots
-                    if not locked_by_stars:
-                        self.hovered_slot_idx = i
-                    break
+            for i, r in enumerate(self.layout.upgrade_grid_cells):
+                if r.collidepoint(m_pos): self.hovered_upgrade = self.layout.visible_upgrades[i]; break
+            for i, r in enumerate(self.layout.ship_grid_cells):
+                if r.collidepoint(m_pos): self.hovered_ship = self.layout.visible_ships[i]; break
+            for i, r in enumerate(self.layout.active_slots):
+                if r.collidepoint(m_pos) and i < self.player_profile.unlocked_slots: self.hovered_slot_idx = i; break
         else:
-            # Se está arrastando, verificar se o drop seria inválido
-            for i, slot_rect in enumerate(self.layout.active_slots):
-                if slot_rect.collidepoint(mouse_pos):
-                    if i >= self.player_profile.unlocked_slots:
-                        self.drag_invalid_target = True
-                    elif self.drag_source_slot is not None:
-                        original = self.player_profile.upgrade_loadout[
-                            self.drag_source_slot
-                        ]
-                        self.player_profile.upgrade_loadout[self.drag_source_slot] = (
-                            None
-                        )
-                        can_equip = self.player_profile.can_equip_upgrade(
-                            self.dragging_upgrade.type, i
-                        )
-                        self.player_profile.upgrade_loadout[self.drag_source_slot] = (
-                            original
-                        )
-                        self.drag_invalid_target = not can_equip
-                    elif not self.player_profile.can_equip_upgrade(
-                        self.dragging_upgrade.type, i
-                    ):
-                        self.drag_invalid_target = True
+            self.drag_invalid_target = True
+            for i, r in enumerate(self.layout.active_slots):
+                if r.collidepoint(m_pos) and i < self.player_profile.unlocked_slots:
+                    if self.drag_source_slot is not None:
+                        orig = self.player_profile.upgrade_loadout[self.drag_source_slot]
+                        self.player_profile.upgrade_loadout[self.drag_source_slot] = None
+                        self.drag_invalid_target = not self.player_profile.can_equip_upgrade(self.dragging_upgrade.type, i)
+                        self.player_profile.upgrade_loadout[self.drag_source_slot] = orig
+                    else:
+                        self.drag_invalid_target = not self.player_profile.can_equip_upgrade(self.dragging_upgrade.type, i)
                     break
 
     def render(self, surface: pygame.Surface):
-        surface.fill(BLACK)
-        self.r.starfield.draw(surface)
-
-        # Calcular alpha baseado nas transições
-        if self.transitioning:
-            alpha_mult = (
-                1.0 - self.transition_progress
-                if self.fade_out
-                else self.transition_progress
-            )
-        elif self.is_entering:
-            alpha_mult = self.entry_progress
-        else:
-            alpha_mult = 1.0
-
+        surface.fill(BLACK); self.r.starfield.draw(surface)
+        alpha_mult = (1.0 - self.transition_progress if self.fade_out else self.transition_progress) if self.transitioning else self.entry_progress if self.is_entering else 1.0
         alpha = int(255 * alpha_mult)
-        offset_y = int(30 * (1.0 - alpha_mult))
+        title = self.title_font.render("Central de Loadout", True, CUSTOM_GOLD)
+        surface.blit(title, title.get_rect(centerx=surface.get_width()//2, top=24 + int(20 * (1.0 - alpha_mult))))
 
-        # Título
-        title = self.title_font.render("Arsenal de Aprimoramentos", True, CUSTOM_GOLD)
-        title.set_alpha(alpha)
-        surface.blit(title, (20, 20 + offset_y))
+        content_surf = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+        self._draw_lateral_panels(content_surf)
+        self._draw_center_column(content_surf)
+        self._draw_left_column(content_surf)
+        self._draw_right_column(content_surf)
+        self._draw_back_button(content_surf)
+        self._draw_floating_messages(content_surf)
+        if self.dragging_upgrade: self._draw_dragging_upgrade(content_surf)
+        elif self.hovered_upgrade: self._draw_tooltip(content_surf)
+        content_surf.set_alpha(alpha); surface.blit(content_surf, (0, 0))
 
-        # Criar surface temporária para aplicar alpha global
-        if alpha < 255:
-            temp_surface = pygame.Surface(
-                (surface.get_width(), surface.get_height()), pygame.SRCALPHA
+    def _draw_lateral_panels(self, surface: pygame.Surface):
+        # Padding consistente: 10px horizontal, top em 80 (logo abaixo do título da tela)
+        # e bottom em sh-70 (logo acima do botão Voltar). Engloba header + conteúdo.
+        sh = surface.get_height()
+        panel_top = 80
+        panel_h = sh - panel_top - 70
+        side_pad = 10
+        border_color = (255, 255, 255, 30)
+
+        panel_l = pygame.Rect(
+            self.layout.left_area.x + side_pad,
+            panel_top,
+            self.layout.left_area.width - side_pad * 2,
+            panel_h,
+        )
+        pygame.draw.rect(surface, (20, 20, 25, 180), panel_l, border_radius=self.RADIUS * 2)
+        pygame.draw.rect(surface, border_color, panel_l, 1, border_radius=self.RADIUS * 2)
+
+        panel_r = pygame.Rect(
+            self.layout.right_area.x + side_pad,
+            panel_top,
+            self.layout.right_area.width - side_pad * 2,
+            panel_h,
+        )
+        pygame.draw.rect(surface, (20, 20, 25, 180), panel_r, border_radius=self.RADIUS * 2)
+        pygame.draw.rect(surface, border_color, panel_r, 1, border_radius=self.RADIUS * 2)
+
+    def _draw_center_column(self, surface: pygame.Surface):
+        ship = self.hovered_ship or get_ship_profile(self.player_profile.selected_ship)
+        rect = self.layout.ship_preview_rect
+
+        # Clip à coluna central garante que nenhum texto/imagem vaze para as
+        # colunas vizinhas, mesmo se uma palavra exceder o wrap.
+        previous_clip = surface.get_clip()
+        surface.set_clip(self.layout.center_area)
+        try:
+            self._draw_center_column_body(surface, ship, rect)
+        finally:
+            surface.set_clip(previous_clip)
+
+    def _draw_center_column_body(self, surface: pygame.Surface, ship: ShipProfile, rect: pygame.Rect):
+        # Ícone da nave pulsando no preview.
+        pulse = 1.0 + 0.04 * math.sin(time.time() * 3)
+        try:
+            img = pygame.transform.scale(
+                get_image(BASE_DIR / "assets" / "images" / "icons" / "ship_icon.png"),
+                (int(rect.width * pulse), int(rect.height * pulse)),
             )
-            self._draw_tabs(temp_surface)
-            self._draw_upgrade_grid(temp_surface)
-            self._draw_active_slots(temp_surface)
-            self._draw_back_button(temp_surface)
+            surface.blit(img, img.get_rect(center=rect.center))
+        except Exception:
+            pass
 
-            if self.dragging_upgrade:
-                self._draw_dragging_upgrade(temp_surface)
+        # Nome da nave logo abaixo do preview.
+        cx = rect.centerx
+        y = rect.bottom + 8
+        name_surf = self.title_font.render(ship.display_name.upper(), True, CUSTOM_GOLD)
+        surface.blit(name_surf, name_surf.get_rect(center=(cx, y + name_surf.get_height() // 2)))
+        y += name_surf.get_height() + 6
 
-            if self.hovered_upgrade and not self.dragging_upgrade:
-                self._draw_tooltip(temp_surface)
+        # Largura máxima para todo o texto: respeita a coluna central com folga.
+        # Mantém uma margem interna de 20px de cada lado.
+        center_x = self.layout.center_area.x
+        center_w = self.layout.center_area.width
+        max_w = max(120, center_w - 40)
+        text_left = center_x + 20
+        text_right = center_x + center_w - 20
 
-            self._draw_floating_messages(temp_surface)
+        # Helper local: renderiza texto centralizado com wrap respeitando max_w.
+        def _draw_wrapped(text: str, font: pygame.font.Font, color: tuple[int, int, int], y_pos: int, max_lines: int = 3) -> int:
+            for line in self._wrap_text(text, font, max_w)[:max_lines]:
+                line_surf = font.render(line, True, color)
+                # Clip garante que nada vaze mesmo se a palavra individual exceder.
+                surface.blit(line_surf, line_surf.get_rect(center=(cx, y_pos + line_surf.get_height() // 2)))
+                y_pos += line_surf.get_height() + 2
+            return y_pos
 
-            temp_surface.set_alpha(alpha)
-            surface.blit(temp_surface, (0, offset_y))
-        else:
-            # Desenhar elementos normalmente
-            self._draw_tabs(surface)
-            self._draw_upgrade_grid(surface)
-            self._draw_active_slots(surface)
-            self._draw_back_button(surface)
+        # Tags (categoria) em uma linha discreta.
+        if ship.tags:
+            y = _draw_wrapped(" · ".join(ship.tags), self.small_font, (160, 160, 200), y, max_lines=1)
+            y += 6
 
-            # Desenhar upgrade sendo arrastado (último para ficar por cima)
-            if self.dragging_upgrade:
-                self._draw_dragging_upgrade(surface)
+        # Descrição (até 2 linhas, centralizada).
+        y = _draw_wrapped(ship.description, self.small_font, colors.WHITE, y, max_lines=2)
+        y += 6
 
-            # Desenhar tooltip
-            if self.hovered_upgrade and not self.dragging_upgrade:
-                self._draw_tooltip(surface)
+        # Linha divisória sutil.
+        pygame.draw.line(surface, (90, 90, 110), (text_left, y), (text_right, y), 1)
+        y += 8
 
-            # Desenhar mensagens flutuantes
-            self._draw_floating_messages(surface)
+        # Atributos numéricos: só os que diferem do padrão.
+        stat_rows: list[tuple[str, str]] = []
+        if abs(ship.damage_mult - 1.0) > 1e-6:
+            stat_rows.append(("Dano", self._fmt_mult(ship.damage_mult)))
+        if abs(ship.fire_rate_mult - 1.0) > 1e-6:
+            stat_rows.append(("Cadência", self._fmt_mult(ship.fire_rate_mult)))
+        if abs(ship.speed_mult - 1.0) > 1e-6:
+            stat_rows.append(("Velocidade", self._fmt_mult(ship.speed_mult)))
+        if ship.extra_lives != 0:
+            stat_rows.append(("Vidas", f"{ship.extra_lives:+d}"))
 
-    def _draw_tabs(self, surface: pygame.Surface):
-        """Desenha as abas de categorias."""
-        for i, cat in enumerate(self.categories):
-            is_selected = i == self.selected_category_idx
-            rect = self.layout.tab_buttons[i]
-            is_hovered = rect.collidepoint(pygame.mouse.get_pos())
+        for label, value in stat_rows:
+            y = _draw_wrapped(f"{label}: {value}", self.small_font, (210, 210, 210), y, max_lines=1)
 
-            # Borda: CUSTOM_PURPLE se selecionado/hover, GRAY caso contrário
-            border_color = CUSTOM_PURPLE if (is_selected or is_hovered) else colors.GRAY
-            text_color = CUSTOM_GOLD if (is_selected or is_hovered) else colors.GRAY
+        if stat_rows:
+            y += 8
 
-            pygame.draw.rect(surface, border_color, rect, 2, border_radius=8)
+        # Habilidades especiais com as teclas necessárias.
+        ability_rows = self._ship_ability_descriptions(ship)
+        if ability_rows:
+            header = self.small_font.render("HABILIDADES", True, CUSTOM_GOLD)
+            surface.blit(header, header.get_rect(center=(cx, y + header.get_height() // 2)))
+            y += header.get_height() + 4
+            for line in ability_rows:
+                # Cada habilidade pode quebrar em até 2 linhas se for longa.
+                y = _draw_wrapped(line, self.small_font, (200, 220, 255), y, max_lines=2)
+                y += 1
 
-            tab_label_text = cat.upper() if isinstance(cat, str) else cat.name.upper()
-            text = self.item_font.render(tab_label_text, True, text_color)
-            surface.blit(
-                text,
-                (
-                    rect.x + (rect.w - text.get_width()) // 2,
-                    rect.y + (rect.h - text.get_height()) // 2,
-                ),
+    @staticmethod
+    def _fmt_mult(value: float) -> str:
+        """1.6 → '+60%', 0.65 → '-35%', 1.0 → '—'."""
+        if abs(value - 1.0) < 1e-6:
+            return "—"
+        pct = (value - 1.0) * 100.0
+        sign = "+" if pct >= 0 else ""
+        return f"{sign}{pct:.0f}%"
+
+    @staticmethod
+    def _ship_ability_descriptions(ship: ShipProfile) -> list[str]:
+        """Retorna instruções curtas das mecânicas especiais da nave.
+
+        Mantém cada linha sob ~40 chars para caber em coluna estreita sem
+        depender de quebra automática.
+        """
+        lines: list[str] = []
+        if ship.has_dash:
+            lines.append(f"SHIFT: dash i-frames ({ship.dash_cooldown:.0f}s cd)")
+        if ship.has_charge_shot:
+            lines.append(
+                f"Segure tiro: até {ship.charge_shot_damage_mult:.0f}× dano "
+                f"({ship.charge_shot_max_time:.1f}s)"
             )
-
-    def _draw_upgrade_grid(self, surface: pygame.Surface):
-        """Desenha a grid de upgrades do lado esquerdo."""
-        for i, cell_rect in enumerate(self.layout.upgrade_grid_cells):
-            upgrade = self.layout.visible_upgrades[i]
-            unlocked = upgrade.type in self.player_profile.unlocked_upgrades
-            equipped = self.player_profile.get_equipped_slot(upgrade.type) is not None
-            is_hovered = self.hovered_upgrade == upgrade
-
-            # Background
-            bg_color = (40, 40, 40) if unlocked else (25, 25, 25)
-            if is_hovered and unlocked:
-                bg_color = (60, 60, 60)
-
-            border_color = colors.GRAY
-            if equipped:
-                border_color = colors.YELLOW
-            elif not unlocked:
-                border_color = colors.RED
-
-            pygame.draw.rect(surface, bg_color, cell_rect, border_radius=6)
-            pygame.draw.rect(surface, border_color, cell_rect, 2, border_radius=6)
-
-            # Ícone (círculo colorido)
-            icon_center = cell_rect.center
-            icon_radius = 25
-            icon_color = CUSTOM_PURPLE if unlocked else (80, 80, 80)
-            pygame.draw.circle(surface, icon_color, icon_center, icon_radius)
-
-            # Letra inicial do nome (usando função centralizada)
-            initial = get_upgrade_icon(upgrade.name, upgrade.icon_id)
-            initial_text = self.header_font.render(
-                initial, True, CUSTOM_GOLD if unlocked else (50, 50, 50)
-            )
-            surface.blit(
-                initial_text,
-                (
-                    icon_center[0] - initial_text.get_width() // 2,
-                    icon_center[1] - initial_text.get_height() // 2,
-                ),
-            )
-
-            # Indicador de equipado
-            if equipped:
-                badge_rect = pygame.Rect(cell_rect.right - 20, cell_rect.y + 5, 15, 15)
-                pygame.draw.circle(surface, colors.YELLOW, badge_rect.center, 7)
-                check_text = self.tiny_font.render("E", True, colors.BLACK)
-                surface.blit(check_text, (badge_rect.x + 3, badge_rect.y + 1))
-
-            # Mostrar peso do upgrade (canto inferior direito)
-            weight_text = self.tiny_font.render(
-                f"{upgrade.slot_weight}",
-                True,
-                colors.WHITE if unlocked else colors.GRAY,
-            )
-            weight_bg = pygame.Rect(
-                cell_rect.right - weight_text.get_width() - 8,
-                cell_rect.bottom - weight_text.get_height() - 5,
-                weight_text.get_width() + 6,
-                weight_text.get_height() + 4,
-            )
-            pygame.draw.rect(surface, (20, 20, 20), weight_bg, border_radius=3)
-            surface.blit(weight_text, (weight_bg.x + 3, weight_bg.y + 2))
-
-    def _draw_active_slots(self, surface: pygame.Surface):
-        """Desenha a grid 2x2 de slots ativos do lado direito."""
-        # Header
-        header_rect = self.layout.active_slots_header
-        header_text = self.header_font.render("APRIMORAMENTOS", True, colors.WHITE)
-        surface.blit(header_text, (header_rect.x, header_rect.y))
-
-        # Contador de slots e estrelas (mostra peso usado/total)
-        total_weight = self.player_profile.get_total_equipped_weight()
-        counter_text = self.item_font.render(
-            f"{total_weight}/{self.player_profile.unlocked_slots}", True, colors.GRAY
-        )
-        surface.blit(
-            counter_text,
-            (header_rect.right - counter_text.get_width(), header_rect.y + 5),
-        )
-
-        # Mostrar estrelas disponíveis com ícone
-        star_y = header_rect.y + 30
-        surface.blit(self.star_icon_small, (header_rect.x, star_y))
-        stars_text = self.small_font.render(
-            str(self.player_profile.available_stars), True, colors.YELLOW
-        )
-        surface.blit(
-            stars_text,
-            (header_rect.x + 24, star_y + (20 - stars_text.get_height()) // 2),
-        )
-
-        # Slots
-        total_equipped_weight = self.player_profile.get_total_equipped_weight()
-
-        # Se estamos arrastando um upgrade de um slot equipado, temporariamente excluir seu peso
-        if self.dragging_upgrade and self.drag_source_slot is not None:
-            total_equipped_weight -= self.dragging_upgrade.slot_weight
-            total_equipped_weight = max(0, total_equipped_weight)  # Nunca negativo
-
-        # Calcular quais slots vazios devem aparecer bloqueados por peso
-        # Primeiro, identificar slots vazios desbloqueados
-        empty_slots: List[int] = []
-        for idx in range(len(self.layout.active_slots)):
-            if (
-                idx >= len(self.player_profile.upgrade_loadout)
-                or self.player_profile.upgrade_loadout[idx] is None
-            ):
-                if (
-                    idx < self.player_profile.unlocked_slots
-                ):  # Só considerar slots desbloqueados
-                    empty_slots.append(idx)
-
-        # Calcular quantos slots ainda estão disponíveis para novos upgrades
-        slots_disponiveis = self.player_profile.unlocked_slots - total_equipped_weight
-        slots_disponiveis = max(0, slots_disponiveis)  # Nunca negativo
-
-        # Bloquear os slots vazios que excedem a disponibilidade
-        # Se temos 7 slots vazios e 2 disponíveis, bloqueamos os últimos 5
-        num_slots_a_bloquear = max(0, len(empty_slots) - slots_disponiveis)
-        slots_to_block_by_weight: set[int] = (
-            set(empty_slots[-num_slots_a_bloquear:])
-            if num_slots_a_bloquear > 0
-            else set()
-        )
-
-        for i, slot_rect in enumerate(self.layout.active_slots):
-            # Proteção contra índice fora do range
-            if i >= len(self.player_profile.upgrade_loadout):
-                equipped_type = None
-            else:
-                equipped_type = self.player_profile.upgrade_loadout[i]
-
-            # Determinar se slot está bloqueado por estrelas
-            locked_by_stars = i >= self.player_profile.unlocked_slots
-
-            # Determinar se slot está "ocupado" visualmente pelo peso
-            # Apenas slots vazios podem estar bloqueados por peso
-            slot_consumed_by_weight = i in slots_to_block_by_weight
-
-            # Considerar hover apenas se não estiver bloqueado por estrelas
-            is_hovered = (self.hovered_slot_idx == i) and (not locked_by_stars)
-
-            # Aplicar shake effect se este slot está tremendo
-            draw_rect = slot_rect.copy()
-            if self.shaking_slot == i:
-                elapsed = time.time() - self.shake_start_time
-                progress = elapsed / self.shake_duration
-                if progress < 1.0:
-                    shake_intensity = 8 * (1.0 - progress)
-                    shake_offset = int(shake_intensity * math.sin(progress * 20))
-                    draw_rect.x += shake_offset
-
-            # Background
-            if equipped_type:
-                bg_color = (40, 50, 40) if not is_hovered else (50, 60, 50)
-            else:
-                bg_color = (30, 30, 30) if not is_hovered else (40, 40, 40)
-
-            border_color = (
-                colors.YELLOW
-                if is_hovered
-                else (80, 80, 80) if locked_by_stars else colors.GRAY
-            )
-            border_style = 2 if equipped_type else 1
-
-            pygame.draw.rect(surface, bg_color, draw_rect, border_radius=10)
-
-            # Borda tracejada para slots vazios (não bloqueados por estrelas nem por peso)
-            if (
-                not equipped_type
-                and not locked_by_stars
-                and not slot_consumed_by_weight
-            ):
-                self._draw_dashed_rect(surface, draw_rect, border_color)
-            else:
-                pygame.draw.rect(
-                    surface, border_color, draw_rect, border_style, border_radius=10
-                )
-
-            # Label do slot com custo se bloqueado por estrelas
-            if locked_by_stars:
-                cost = self.player_profile.get_slot_cost(i)
-                can_unlock = self.player_profile.can_unlock_slot(i)
-                cost_color = colors.GREEN if can_unlock else colors.RED
-
-                # Centralizar ícone e valor na parte superior
-                icon_y = draw_rect.y + 5
-                qty_text = self.small_font.render(f"{cost}", True, cost_color)
-
-                # Centralizar ambos (ícone + texto) horizontalmente
-                total_width = 20 + 6 + qty_text.get_width()  # ícone + espaço + texto
-                start_x = draw_rect.centerx - total_width // 2
-
-                # Ícone estrela
-                surface.blit(self.star_icon_small, (start_x, icon_y))
-
-                # Quantidade
-                surface.blit(
-                    qty_text, (start_x + 26, icon_y + (20 - qty_text.get_height()) // 2)
-                )
-            elif slot_consumed_by_weight and not equipped_type:
-                # Slot consumido pelo peso: mostrar texto "PESO" em vez de número do slot
-                slot_label = self.small_font.render("PESO", True, (120, 80, 80))
-                surface.blit(slot_label, (draw_rect.x + 10, draw_rect.y + 5))
-            else:
-                # Slot normal disponível
-                slot_label = self.small_font.render(f"SLOT {i + 1}", True, colors.GRAY)
-                surface.blit(slot_label, (draw_rect.x + 10, draw_rect.y + 5))
-
-            # Conteúdo do slot
-            if equipped_type:
-                upgrade_meta = next(
-                    (u for u in self.all_upgrades if u.type == equipped_type), None
-                )
-                if upgrade_meta:
-                    # Ícone
-                    icon_center = (draw_rect.centerx, draw_rect.centery - 10)
-                    pygame.draw.circle(surface, CUSTOM_PURPLE, icon_center, 30)
-
-                    initial = get_upgrade_icon(upgrade_meta.name, upgrade_meta.icon_id)
-                    initial_text = self.header_font.render(initial, True, CUSTOM_GOLD)
-                    surface.blit(
-                        initial_text,
-                        (
-                            icon_center[0] - initial_text.get_width() // 2,
-                            icon_center[1] - initial_text.get_height() // 2,
-                        ),
-                    )
-
-                    # Nome e Peso
-                    name_text = self.small_font.render(
-                        upgrade_meta.name, True, colors.YELLOW
-                    )
-                    surface.blit(
-                        name_text,
-                        (
-                            draw_rect.centerx - name_text.get_width() // 2,
-                            draw_rect.bottom - 25,
-                        ),
-                    )
-
-                    # Peso (canto inferior direito)
-                    weight_text = self.tiny_font.render(
-                        f"{upgrade_meta.slot_weight}", True, colors.WHITE
-                    )
-                    weight_bg = pygame.Rect(
-                        draw_rect.right - weight_text.get_width() - 8,
-                        draw_rect.bottom - weight_text.get_height() - 5,
-                        weight_text.get_width() + 6,
-                        weight_text.get_height() + 4,
-                    )
-                    pygame.draw.rect(surface, (20, 20, 20), weight_bg, border_radius=3)
-                    surface.blit(weight_text, (weight_bg.x + 3, weight_bg.y + 2))
-            else:
-                if locked_by_stars:
-                    # Desenhar ícone de bloqueado por estrelas centralizado
-                    icon_size = min(draw_rect.width, draw_rect.height) // 2
-                    icon_scaled = pygame.transform.scale(
-                        self.locked_icon, (icon_size, icon_size)
-                    )
-                    icon_x = draw_rect.centerx - icon_size // 2
-                    icon_y = draw_rect.centery - icon_size // 2
-                    surface.blit(icon_scaled, (icon_x, icon_y))
-                elif slot_consumed_by_weight:
-                    # Desenhar ícone de bloqueado por peso (menor e cor diferente)
-                    icon_size = min(draw_rect.width, draw_rect.height) // 3
-                    icon_scaled = pygame.transform.scale(
-                        self.locked_icon, (icon_size, icon_size)
-                    )
-                    # Aplicar tint avermelhado para distinguir do bloqueio por estrelas
-                    icon_tinted = icon_scaled.copy()
-                    icon_tinted.fill((255, 150, 150), special_flags=pygame.BLEND_MULT)
-                    icon_x = draw_rect.centerx - icon_size // 2
-                    icon_y = draw_rect.centery - icon_size // 2
-                    surface.blit(icon_tinted, (icon_x, icon_y))
-                else:
-                    # Slot vazio e disponível
-                    empty_text = self.item_font.render("VAZIO", True, (60, 60, 60))
-                    surface.blit(
-                        empty_text,
-                        (
-                            draw_rect.centerx - empty_text.get_width() // 2,
-                            draw_rect.centery - empty_text.get_height() // 2,
-                        ),
-                    )
-
-    def _draw_back_button(self, surface: pygame.Surface):
-        """Desenha o botão de voltar."""
-        back_rect = self.layout.back_button
-        is_hovered = back_rect.collidepoint(pygame.mouse.get_pos())
-
-        # Apenas borda, sem preenchimento
-        border_color = CUSTOM_GOLD if is_hovered else CUSTOM_PURPLE
-
-        pygame.draw.rect(surface, border_color, back_rect, 2, border_radius=8)
-        back_text = self.item_font.render("Voltar", True, colors.WHITE)
-        surface.blit(
-            back_text,
-            (
-                back_rect.x + (back_rect.w - back_text.get_width()) // 2,
-                back_rect.y + (back_rect.h - back_text.get_height()) // 2,
-            ),
-        )
-
-    def _draw_dragging_upgrade(self, surface: pygame.Surface):
-        """Desenha o upgrade sendo arrastado."""
-        if not self.dragging_upgrade:
-            return
-
-        mouse_pos = pygame.mouse.get_pos()
-        drag_x = mouse_pos[0] - self.drag_offset[0]
-        drag_y = mouse_pos[1] - self.drag_offset[1]
-        drag_rect = pygame.Rect(drag_x, drag_y, 80, 80)
-
-        # Sombra
-        shadow_rect = drag_rect.copy()
-        shadow_rect.x += 5
-        shadow_rect.y += 5
-        shadow_surf = pygame.Surface((80, 80), pygame.SRCALPHA)
-        pygame.draw.rect(
-            shadow_surf, (0, 0, 0, 100), shadow_surf.get_rect(), border_radius=6
-        )
-        surface.blit(shadow_surf, shadow_rect.topleft)
-
-        # Upgrade com transparência (vermelho se inválido)
-        drag_surf = pygame.Surface((80, 80), pygame.SRCALPHA)
-
-        # Cor de fundo e borda dependem se o drop é válido
-        if self.drag_invalid_target:
-            bg_color = (80, 40, 40, 200)  # Vermelho escuro
-            border_color = (255, 80, 80, 220)  # Vermelho
-            icon_color = (150, 50, 50)  # Roxo avermelhado
-        else:
-            bg_color = (60, 60, 60, 200)  # Cinza normal
-            border_color = (colors.YELLOW[0], colors.YELLOW[1], colors.YELLOW[2], 220)
-            icon_color = CUSTOM_PURPLE
-
-        pygame.draw.rect(drag_surf, bg_color, drag_surf.get_rect(), border_radius=6)
-        pygame.draw.rect(
-            drag_surf,
-            border_color,
-            drag_surf.get_rect(),
-            3,
-            border_radius=6,
-        )
-
-        # Ícone
-        pygame.draw.circle(drag_surf, icon_color, (40, 40), 25)
-        initial = get_upgrade_icon(
-            self.dragging_upgrade.name, self.dragging_upgrade.icon_id
-        )
-        initial_text = self.header_font.render(initial, True, CUSTOM_GOLD)
-        drag_surf.blit(
-            initial_text,
-            (40 - initial_text.get_width() // 2, 40 - initial_text.get_height() // 2),
-        )
-
-        surface.blit(drag_surf, drag_rect.topleft)
-
-    def _draw_tooltip(self, surface: pygame.Surface):
-        """Desenha tooltip ao passar mouse sobre upgrade."""
-        if not self.hovered_upgrade:
-            return
-
-        mouse_pos = pygame.mouse.get_pos()
-        upgrade = self.hovered_upgrade
-
-        # Tamanho do tooltip
-        tooltip_w = 300
-        tooltip_h = 150
-        tooltip_x = mouse_pos[0] + 20
-        tooltip_y = mouse_pos[1] + 20
-
-        # Ajustar para não sair da tela
-        screen_w, screen_h = self.app.screen.get_size()
-        if tooltip_x + tooltip_w > screen_w:
-            tooltip_x = mouse_pos[0] - tooltip_w - 20
-        if tooltip_y + tooltip_h > screen_h:
-            tooltip_y = mouse_pos[1] - tooltip_h - 20
-
-        tooltip_rect = pygame.Rect(tooltip_x, tooltip_y, tooltip_w, tooltip_h)
-
-        # Background semi-transparente
-        tooltip_surf = pygame.Surface((tooltip_w, tooltip_h), pygame.SRCALPHA)
-        pygame.draw.rect(
-            tooltip_surf, (20, 20, 30, 240), tooltip_surf.get_rect(), border_radius=8
-        )
-        pygame.draw.rect(
-            tooltip_surf,
-            (colors.WHITE[0], colors.WHITE[1], colors.WHITE[2], 220),
-            tooltip_surf.get_rect(),
-            2,
-            border_radius=8,
-        )
-
-        # Nome
-        name_text = self.item_font.render(upgrade.name, True, colors.YELLOW)
-        tooltip_surf.blit(name_text, (10, 10))
-
-        # Descrição
-        desc_y = 40
-        desc_lines = self._wrap_text(upgrade.desc, self.small_font, tooltip_w - 20)
-        for line in desc_lines[:3]:  # Máximo 3 linhas
-            line_text = self.small_font.render(line, True, colors.WHITE)
-            tooltip_surf.blit(line_text, (10, desc_y))
-            desc_y += 18
-
-        # Atributos
-        attr_y = desc_y + 10
-        attrs: List[str] = []
-        attrs.append(f"Cooldown: {upgrade.base_cooldown}s")
-        if upgrade.base_duration > 0:
-            attrs.append(f"Duracao: {upgrade.base_duration}s")
-        attrs.append(f"Cargas: {upgrade.base_charges or 'ilim'}")
-
-        for attr in attrs:
-            attr_text = self.tiny_font.render(attr, True, colors.GRAY)
-            tooltip_surf.blit(attr_text, (10, attr_y))
-            attr_y += 15
-
-        surface.blit(tooltip_surf, tooltip_rect.topleft)
-
-    def _draw_dashed_rect(
-        self, surface: pygame.Surface, rect: pygame.Rect, color: Tuple[int, int, int]
-    ):
-        """Desenha borda tracejada."""
-        dash_length = 10
-        gap_length = 5
-
-        # Top
-        x = rect.x
-        while x < rect.right:
-            pygame.draw.line(
-                surface,
-                color,
-                (x, rect.y),
-                (min(x + dash_length, rect.right), rect.y),
-                2,
-            )
-            x += dash_length + gap_length
-
-        # Bottom
-        x = rect.x
-        while x < rect.right:
-            pygame.draw.line(
-                surface,
-                color,
-                (x, rect.bottom),
-                (min(x + dash_length, rect.right), rect.bottom),
-                2,
-            )
-            x += dash_length + gap_length
-
-        # Left
-        y = rect.y
-        while y < rect.bottom:
-            pygame.draw.line(
-                surface,
-                color,
-                (rect.x, y),
-                (rect.x, min(y + dash_length, rect.bottom)),
-                2,
-            )
-            y += dash_length + gap_length
-
-        # Right
-        y = rect.y
-        while y < rect.bottom:
-            pygame.draw.line(
-                surface,
-                color,
-                (rect.right, y),
-                (rect.right, min(y + dash_length, rect.bottom)),
-                2,
-            )
-            y += dash_length + gap_length
-
-    def _wrap_text(
-        self, text: str, font: pygame.font.Font, max_width: int
-    ) -> List[str]:
-        """Quebra o texto em várias linhas para caber na largura máxima."""
-        words = text.split(" ")
-        lines: List[str] = []
-        current_line = ""
-        for word in words:
-            test_line = current_line + word + " "
-            if font.size(test_line)[0] < max_width:
-                current_line = test_line
-            else:
-                if current_line:
-                    lines.append(current_line.strip())
-                current_line = word + " "
-        if current_line:
-            lines.append(current_line.strip())
+        if ship.powerup_slots > 0:
+            lines.append(f"Q/E: usa {ship.powerup_slots} slots de powerup")
+        if ship.permanent_mini_ships > 0:
+            n = ship.permanent_mini_ships
+            lines.append(f"{n} mini-nave{'s' if n > 1 else ''} permanente{'s' if n > 1 else ''}")
+        if ship.pickup_radius_mult > 1.5:
+            lines.append("Raio amplo de coleta")
+        if ship.combo_damage_per_kill > 0:
+            per_kill = int(ship.combo_damage_per_kill * 100)
+            cap = int(ship.combo_damage_cap * 100) if ship.combo_damage_cap > 0 else 0
+            cap_txt = f", máx +{cap}%" if cap else ""
+            lines.append(f"Combo: +{per_kill}%/abate{cap_txt}")
         return lines
 
-    def _draw_floating_messages(self, surface: pygame.Surface) -> None:
-        """Desenha todas as mensagens flutuantes."""
-        for message in self.floating_messages:
-            message.draw(surface)
+    def _draw_left_column(self, surface: pygame.Surface):
+        h = self.layout.active_slots_header
+        total_weight = self.player_profile.get_total_equipped_weight()
+        cap = self.player_profile.unlocked_slots
+        txt = self.header_font.render(f"Arsenal ({total_weight}/{cap})", True, colors.WHITE)
+        surface.blit(txt, h)
+
+        # Barra de capacidade de peso logo abaixo do título.
+        bar_x = h.x
+        bar_y = h.bottom + 4
+        bar_w = h.width
+        bar_h = 6
+        pygame.draw.rect(surface, (40, 40, 50), (bar_x, bar_y, bar_w, bar_h), border_radius=3)
+        if cap > 0:
+            fill_w = int(bar_w * min(1.0, total_weight / cap))
+            # Verde quando há folga; amarelo perto do limite; vermelho cheio.
+            ratio = total_weight / cap
+            if ratio >= 1.0:
+                fill_color = (220, 80, 80)
+            elif ratio >= 0.8:
+                fill_color = (220, 200, 80)
+            else:
+                fill_color = (100, 200, 120)
+            if fill_w > 0:
+                pygame.draw.rect(surface, fill_color, (bar_x, bar_y, fill_w, bar_h), border_radius=3)
+
+        for i, r in enumerate(self.layout.active_slots):
+            eq = self.player_profile.upgrade_loadout[i] if i < len(self.player_profile.upgrade_loadout) else None
+            lock, dr = i >= self.player_profile.unlocked_slots, r.copy()
+            if self.shaking_slot == i: dr.x += int(8*math.sin((time.time()-self.shake_start_time)*40))
+
+            is_valid_target = False
+            if self.dragging_upgrade and not lock:
+                if dr.collidepoint(pygame.mouse.get_pos()):
+                    is_valid_target = not self.drag_invalid_target
+            bg = (45, 60, 45) if (is_valid_target and not self.drag_invalid_target) else (40, 50, 40) if (eq and self.hovered_slot_idx != i) else (30, 30, 30)
+            pygame.draw.rect(surface, bg, dr, border_radius=self.RADIUS)
+            color = colors.YELLOW if (self.hovered_slot_idx == i or is_valid_target) else (80, 80, 80) if lock else colors.GRAY
+            pygame.draw.rect(surface, color, dr, 2 if eq else 1, border_radius=self.RADIUS)
+            if lock: self._draw_lock_indicator(surface, dr, self.player_profile.get_slot_cost(i))
+            elif eq:
+                meta = next((u for u in self.all_upgrades if u.type == eq), None)
+                if meta:
+                    icon_radius = int(dr.width * 0.35)
+                    pygame.draw.circle(surface, CUSTOM_PURPLE, (dr.centerx, dr.centery-4), icon_radius)
+                    surf = self.header_font.render(get_upgrade_icon(meta.name, meta.icon_id), True, CUSTOM_GOLD)
+                    surface.blit(surf, surf.get_rect(center=(dr.centerx, dr.centery-4)))
+                    # Badge de peso no canto inferior esquerdo (consistente com Estoque).
+                    self._draw_weight_badge(surface, dr, meta.slot_weight, dim=False)
+                    self._draw_equipped_badge(surface, dr)
+
+        surface.blit(self.header_font.render("Estoque", True, colors.WHITE), (self.MARGIN, self._stock_start_y - 35))
+        area = self.layout.upgrade_scroll_area
+        surface.set_clip(area)
+        # Pré-calcula peso atual equipado para decidir se cada upgrade ainda cabe.
+        current_weight = self.player_profile.get_total_equipped_weight()
+        slot_cap = self.player_profile.unlocked_slots
+        for i, rect in enumerate(self.layout.upgrade_grid_cells):
+            if rect.bottom < area.y or rect.top > area.bottom: continue
+            upg = self.layout.visible_upgrades[i]
+            unl = upg.type in self.player_profile.unlocked_upgrades
+            eq = self.player_profile.get_equipped_slot(upg.type) is not None
+            # `no_fit`: upgrade desbloqueado mas que excederia o peso disponível
+            # se equipado agora. Não se aplica se já está equipado.
+            no_fit = unl and not eq and (current_weight + upg.slot_weight > slot_cap)
+
+            bg = (60, 60, 60) if self.hovered_upgrade == upg else (40, 40, 40) if unl else (25, 25, 25)
+            pygame.draw.rect(surface, bg, rect, border_radius=self.RADIUS)
+            border = colors.YELLOW if eq else colors.RED if not unl else (130, 90, 50) if no_fit else colors.GRAY
+            pygame.draw.rect(surface, border, rect, 2, border_radius=self.RADIUS)
+
+            icon_radius = int(rect.width * 0.35)
+            icon_color = (80, 80, 80) if (not unl or no_fit) else CUSTOM_PURPLE
+            pygame.draw.circle(surface, icon_color, rect.center, icon_radius)
+            icon_text_color = CUSTOM_GOLD if unl and not no_fit else (50, 50, 50)
+            icon_text = self.header_font.render(get_upgrade_icon(upg.name, upg.icon_id), True, icon_text_color)
+            surface.blit(icon_text, icon_text.get_rect(center=rect.center))
+
+            # Badge de peso no canto inferior esquerdo (sempre visível).
+            self._draw_weight_badge(surface, rect, upg.slot_weight, no_fit)
+
+            if no_fit:
+                # Overlay escuro semi-transparente + ícone de cadeado de peso.
+                overlay = pygame.Surface(rect.size, pygame.SRCALPHA)
+                overlay.fill((0, 0, 0, 130))
+                surface.blit(overlay, rect.topleft)
+                self._draw_weight_lock(surface, rect)
+
+            if eq:
+                self._draw_equipped_badge(surface, rect)
+        surface.set_clip(None)
+        self._draw_scrollbar(surface, area, self.upgrade_scroll, self.max_upgrade_scroll)
+
+    def _draw_right_column(self, surface: pygame.Surface):
+        ship = self.hovered_ship or get_ship_profile(self.player_profile.selected_ship)
+        curr = get_ship_profile(self.player_profile.selected_ship)
+        surface.blit(self.header_font.render("Atributos", True, colors.WHITE), self.layout.stats_area.topleft)
+        sy = self.layout.stats_area.y + 35
+        self._draw_stat_bar(surface, self.layout.stats_area.x, sy, self.layout.stats_area.width, "POTÊNCIA", ship.damage_mult, curr.damage_mult)
+        self._draw_stat_bar(surface, self.layout.stats_area.x, sy+30, self.layout.stats_area.width, "CADÊNCIA", ship.fire_rate_mult, curr.fire_rate_mult)
+        self._draw_stat_bar(surface, self.layout.stats_area.x, sy+60, self.layout.stats_area.width, "AGILIDADE", ship.speed_mult, curr.speed_mult)
+
+        surface.blit(self.header_font.render("Hangar", True, colors.WHITE), (self.layout.right_area.x+self.MARGIN, self.layout.stats_area.bottom+30))
+        area = self.layout.ship_scroll_area
+        surface.set_clip(area)
+        for i, rect in enumerate(self.layout.ship_grid_cells):
+            if rect.bottom < area.y or rect.top > area.bottom: continue
+            s = self.layout.visible_ships[i]
+            unl, sel = self.player_profile.is_ship_unlocked(s.id), self.player_profile.selected_ship == s.id
+            dr = rect.move(int(6*math.sin((time.time()-self.shake_start_time)*40)) if self.shaking_ship_id == s.id else 0, 0)
+            bg = (40, 60, 40) if sel else (60, 60, 70) if self.hovered_ship == s else (30, 30, 35)
+            pygame.draw.rect(surface, bg, dr, border_radius=self.RADIUS)
+            pygame.draw.rect(surface, colors.YELLOW if sel else CUSTOM_PURPLE if (unl and self.hovered_ship == s) else colors.GRAY, dr, 2, border_radius=self.RADIUS)
+            if not unl: self._draw_lock_indicator(surface, dr, s.unlock_cost)
+            else:
+                try:
+                    img_s = int(dr.width * 0.6)
+                    img = pygame.transform.scale(get_image(BASE_DIR / "assets" / "images" / "icons" / "ship_icon.png"), (img_s, img_s))
+                    surface.blit(img, img.get_rect(center=dr.center))
+                except: pass
+                if sel: self._draw_equipped_badge(surface, dr)
+        surface.set_clip(None)
+        self._draw_scrollbar(surface, area, self.ship_scroll, self.max_ship_scroll)
+        bal_y = self.app.screen.get_height() - 55
+        surface.blit(self.star_icon_small, (self.layout.right_area.x+self.MARGIN, bal_y))
+        surface.blit(self.item_font.render(f"{self.player_profile.available_stars} Estrelas", True, CUSTOM_GOLD), (self.layout.right_area.x+self.MARGIN+25, bal_y+1))
+
+    def _draw_scrollbar(self, surface: pygame.Surface, area: pygame.Rect, current: int, max_s: int):
+        if max_s <= 0: return
+        sb_w, sb_x = 4, area.right + 6
+        pygame.draw.rect(surface, (40, 40, 40), (sb_x, area.y, sb_w, area.height), border_radius=2)
+        hh = max(20, area.height // (max_s + 1))
+        pygame.draw.rect(surface, CUSTOM_PURPLE, (sb_x, area.y + (current / max_s) * (area.height - hh), sb_w, hh), border_radius=2)
+
+    def _draw_lock_indicator(self, surface: pygame.Surface, rect: pygame.Rect, cost: int):
+        can = self.player_profile.available_stars >= cost
+        surface.blit(self.star_icon_small, (rect.centerx-18, rect.y+4))
+        surface.blit(self.tiny_font.render(str(cost), True, colors.GREEN if can else colors.RED), (rect.centerx+4, rect.y+6))
+        icon_s = int(rect.width * 0.4)
+        surface.blit(pygame.transform.scale(self.locked_icon, (icon_s, icon_s)), (rect.centerx-icon_s//2, rect.centery-2))
+
+    def _draw_equipped_badge(self, surface: pygame.Surface, rect: pygame.Rect):
+        pygame.draw.circle(surface, colors.YELLOW, (rect.right - 8, rect.y + 8), 7)
+        surface.blit(self.tiny_font.render("E", True, BLACK), (rect.right - 12, rect.y + 2))
+
+    def _draw_weight_badge(self, surface: pygame.Surface, rect: pygame.Rect, weight: int, dim: bool):
+        """Badge circular com o peso do upgrade no canto inferior esquerdo."""
+        cx, cy = rect.x + 10, rect.bottom - 10
+        bg = (90, 60, 30) if dim else (50, 50, 70)
+        fg = (200, 150, 100) if dim else colors.WHITE
+        pygame.draw.circle(surface, bg, (cx, cy), 8)
+        pygame.draw.circle(surface, fg, (cx, cy), 8, 1)
+        txt = self.tiny_font.render(str(weight), True, fg)
+        surface.blit(txt, txt.get_rect(center=(cx, cy)))
+
+    def _draw_weight_lock(self, surface: pygame.Surface, rect: pygame.Rect):
+        """Ícone de cadeado "sem peso disponível" centralizado sobre o card.
+
+        Reusa `self.locked_icon` com tint avermelhado para distinguir do
+        bloqueio por estrelas (que mantém o tom original).
+        """
+        size = int(min(rect.width, rect.height) * 0.45)
+        icon = pygame.transform.scale(self.locked_icon, (size, size))
+        tinted = icon.copy()
+        tinted.fill((255, 150, 150), special_flags=pygame.BLEND_MULT)
+        surface.blit(tinted, tinted.get_rect(center=rect.center))
+
+    def _draw_stat_bar(self, surface: pygame.Surface, x: int, y: int, w: int, label: str, val: float, curr: float):
+        surface.blit(self.tiny_font.render(label, True, (180, 180, 180)), (x, y))
+        by, bh = y + 14, 6
+        pygame.draw.rect(surface, (40, 40, 40), (x, by, w, bh), border_radius=self.RADIUS)
+        norm: Callable[[float], float] = lambda v: max(0.1, min(1.0, float((v - 0.5) / 1.5)))
+        fw, cw = int(w * norm(val)), int(w * norm(curr))
+        if fw > cw:
+            pygame.draw.rect(surface, (40, 180, 40), (x + cw, by, fw - cw, bh))
+            pygame.draw.rect(surface, (100, 100, 100), (x, by, cw, bh))
+        elif fw < cw:
+            pygame.draw.rect(surface, (180, 40, 40), (x + fw, by, cw - fw, bh))
+            pygame.draw.rect(surface, (100, 100, 100), (x, by, fw, bh))
+        else: pygame.draw.rect(surface, (100, 100, 100), (x, by, fw, bh))
+
+    def _draw_back_button(self, surface: pygame.Surface):
+        r = self.layout.back_button
+        pygame.draw.rect(surface, CUSTOM_GOLD if r.collidepoint(pygame.mouse.get_pos()) else CUSTOM_PURPLE, r, 2, border_radius=8)
+        txt = self.item_font.render("VOLTAR", True, colors.WHITE)
+        surface.blit(txt, txt.get_rect(center=r.center))
+
+    def _draw_dragging_upgrade(self, surface: pygame.Surface):
+        if self.dragging_upgrade is None: return
+        pos = pygame.mouse.get_pos()
+        rect = pygame.Rect(pos[0]-self.drag_offset[0], pos[1]-self.drag_offset[1], 55, 55)
+        bg = (80, 40, 40, 200) if self.drag_invalid_target else (60, 60, 60, 200)
+        pygame.draw.rect(surface, bg, rect, border_radius=self.RADIUS)
+        pygame.draw.circle(surface, (150, 50, 50) if self.drag_invalid_target else CUSTOM_PURPLE, rect.center, 18)
+        initial = get_upgrade_icon(self.dragging_upgrade.name, self.dragging_upgrade.icon_id)
+        surf = self.header_font.render(initial, True, CUSTOM_GOLD)
+        surface.blit(surf, surf.get_rect(center=rect.center))
+
+    def _draw_tooltip(self, surface: pygame.Surface):
+        if self.hovered_upgrade is None: return
+        pos, upg = pygame.mouse.get_pos(), self.hovered_upgrade
+        w, h = 260, 100
+        x, y = pos[0]+20, pos[1]+20
+        if y + h > surface.get_height():
+            y = pos[1] - h - 20
+        if x + w > surface.get_width():
+            x = pos[0] - w - 20
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(surf, (20, 20, 30, 240), surf.get_rect(), border_radius=self.RADIUS)
+        pygame.draw.rect(surf, (255, 255, 255, 220), surf.get_rect(), 2, border_radius=self.RADIUS)
+        surf.blit(self.item_font.render(upg.name, True, colors.YELLOW), (10, 10))
+        dy = 40
+        for line in self._wrap_text(upg.desc, self.small_font, w - 20)[:2]:
+            surf.blit(self.small_font.render(line, True, colors.WHITE), (10, dy)); dy += 18
+        surface.blit(surf, (x, y))
+
+    def _wrap_text(self, text: str, font: pygame.font.Font, max_w: int) -> list[str]:
+        words: list[str] = text.split(" ")
+        lines: list[str] = []
+        cur = ""
+        for w in words:
+            test = cur + w + " "
+            if font.size(test)[0] < max_w: cur = test
+            else:
+                if cur: lines.append(cur.strip())
+                cur = w + " "
+        if cur: lines.append(cur.strip())
+        return lines
+
+    def _return_to_menu(self): self.fade_out, self.transitioning, self.transition_progress = True, True, 0.0
+
+    def _draw_floating_messages(self, surface: pygame.Surface):
+        for m in self.floating_messages: m.draw(surface)

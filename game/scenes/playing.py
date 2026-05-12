@@ -143,6 +143,9 @@ class PlayingScene(Scene):
         self._init_transition_state()
         self._init_fade()
         self._init_systems()
+        # Engenheiro: mini-naves permanentes só podem ser spawnadas depois que
+        # `entity_manager` existe (criado em `_init_systems`).
+        self._build_permanent_mini_ships()
         self._init_upgrades_from_profile()
 
     # ------------------------------------------------------------------
@@ -166,6 +169,7 @@ class PlayingScene(Scene):
             ship_y,
             mouse_control=self.app.preferences.mouse_control,
             auto_fire=self.app.preferences.auto_fire,
+            profile=self.player_profile.get_selected_ship_profile(),
         )
         self.ship.is_entering = True
         self.ship.apply_world_mode(self.is_side_scroll)
@@ -812,7 +816,14 @@ class PlayingScene(Scene):
     def _update_ship(self, dt: float) -> None:
         self.ship.update(dt, self.entity_manager, is_side_scroll=self.is_side_scroll)
         if self.ship.mini_ships_timer == 0.0 and self.entity_manager.mini_ships:
-            self.entity_manager.mini_ships.clear()
+            # Powerup expirou: se há mini-naves temporárias, troca-as pelas
+            # permanentes do Engenheiro (se a nave atual tiver alguma).
+            has_temps = any(
+                not getattr(m, "permanent", False) for m in self.entity_manager.mini_ships
+            )
+            if has_temps:
+                self.entity_manager.mini_ships.clear()
+                self._build_permanent_mini_ships()
 
         boss_pausing = False
         if self._boss_type_cache == "spike" and self.entity_manager.boss:
@@ -824,11 +835,15 @@ class PlayingScene(Scene):
             held = self.app.input.poll_held()
             self.ship.move(held, dt, is_side_scroll=self.is_side_scroll)
 
+            # Caçador: enquanto a carga está acumulando, suprime auto-fire/hold-shoot.
+            # O disparo carregado sai no MOUSEBUTTONUP.
+            charging = self.ship.profile.has_charge_shot and self.ship.charge_shot_active
             if (
                 ("hold_shoot" in held or self.ship.should_auto_fire())
                 and self.shoot_cd == 0.0
                 and not boss_pausing
                 and self.ship.speed_modifier_timer <= 0.0
+                and not charging
             ):
                 self._fire_bullets()
 
@@ -954,13 +969,15 @@ class PlayingScene(Scene):
     def _fire_bullets(self) -> None:
         """Dispara as balas da nave e reinicia o cooldown."""
         bullet_specs = self.ship.bullet_spawn()
-        damage_mult = (
-            Config.DAMAGE_BOOST_MULTIPLIER
-            if self.ship.damage_boost_timer > 0.0
-            else 1.0
-        )
+        # Caçador: se há carga ativa, consome o fator e multiplica neste disparo.
+        charge_factor = self.ship.consume_charge()
+        # `ship.damage_multiplier` já compõe o profile da nave com o damage_boost
+        # ativo (powerup multiplicativo sobre o stat da nave).
         adjusted_damage = int(
-            Config.BULLET_BASE_DAMAGE * self.player_damage_multiplier * damage_mult
+            Config.BULLET_BASE_DAMAGE
+            * self.player_damage_multiplier
+            * self.ship.damage_multiplier
+            * charge_factor
         )
 
         # Tocar som de tiro (uma vez por salva de tiros)
@@ -1081,9 +1098,12 @@ class PlayingScene(Scene):
     def _process_cheat_input(self, event: pygame.event.Event) -> None:
         """Detecta o cheat code '271195' para ativar/desativar god mode."""
         if not pygame.K_0 <= event.key <= pygame.K_9:
+            # Se apertar uma tecla que não é número, reseta o buffer
+            self.cheat_buffer = ""
             return
 
         self.cheat_buffer += chr(event.key)
+        logger.debug(f"Cheat buffer: '{self.cheat_buffer}'")
         if len(self.cheat_buffer) > _CHEAT_BUFFER_MAX:
             self.cheat_buffer = self.cheat_buffer[-_CHEAT_BUFFER_MAX:]
 
@@ -1093,6 +1113,9 @@ class PlayingScene(Scene):
             if self.god_mode:
                 logger.info("GOD MODE ATIVADO - Invulnerabilidade ligada!")
                 self._apply_god_mode_cooldowns()
+                self.player_profile.add_stars(9999)
+                self.player_profile.auto_save()  # Força save imediato
+                logger.info("⭐ +9999 Estrelas adicionadas e salvas!")
                 if hasattr(sound_manager, "play_powerup"):
                     sound_manager.play_powerup()  # type: ignore
             else:
@@ -1520,6 +1543,9 @@ class PlayingScene(Scene):
 
         if destroyed > 0:
             self.star_spawner.add_kills(destroyed, self.entity_manager.stars)
+            # Reverberador: cada inimigo abatido conta para o combo.
+            for _ in range(destroyed):
+                self.ship.register_kill()
 
         if self.entity_manager.spikes:
             spike_gain = self.collisions.mini_ship_bullets_vs_spikes(
@@ -1571,11 +1597,33 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
 
     def _build_mini_ships(self) -> None:
-        """Cria par de mini-naves flanqueando a nave principal."""
+        """Cria o par temporário do powerup `mini_ships` (left + right).
+
+        Remove qualquer mini-nave existente — inclusive as permanentes do
+        Engenheiro — para evitar sobreposição visual. As permanentes voltam
+        automaticamente quando o timer do powerup expira.
+        """
         self.entity_manager.mini_ships.clear()
         for side in ("left", "right"):
             self.entity_manager.mini_ships.append(
                 MiniShip(self.ship, side, is_side_scroll=self.is_side_scroll)
+            )
+
+    def _build_permanent_mini_ships(self) -> None:
+        """Spawn das mini-naves permanentes conforme `profile.permanent_mini_ships`."""
+        count = self.ship.profile.permanent_mini_ships
+        if count <= 0:
+            return
+        # Alterna lados começando pela esquerda; com 1 = só esquerda, 2 = ambas.
+        sides = ("left", "right")
+        for i in range(min(count, len(sides))):
+            self.entity_manager.mini_ships.append(
+                MiniShip(
+                    self.ship,
+                    sides[i],
+                    is_side_scroll=self.is_side_scroll,
+                    permanent=True,
+                )
             )
 
     def _apply_powerup(self, kind: str) -> None:
@@ -1672,7 +1720,11 @@ class PlayingScene(Scene):
 
         for kind in collected_powerups:
             sound_manager.play_powerup()
-            self._apply_powerup(kind)
+            # Cofre: guarda no slot livre em vez de aplicar imediato. Se todos
+            # estão ocupados, cai no comportamento padrão (consumo imediato)
+            # para não desperdiçar o powerup coletado.
+            if not (self.ship.has_storage_slots() and self.ship.try_store_powerup(kind)):
+                self._apply_powerup(kind)
             self.level_powerups_collected += 1
 
     # ------------------------------------------------------------------
@@ -1685,6 +1737,9 @@ class PlayingScene(Scene):
             return
 
         sound_manager.play_boss_damage()
+
+        # Reverberador: qualquer hit que efetivamente conta reseta o combo.
+        self.ship.reset_combo()
 
         if self.ship.has_shield:
             self.ship.shield_hp -= 1
@@ -1973,6 +2028,14 @@ class PlayingScene(Scene):
 
         self.entity_manager.clear_for_level_transition()
 
+        # Restaura mini-naves após a limpeza:
+        #  - Powerup `mini_ships` ainda ativo → recria o par temporário (left+right).
+        #  - Senão → restaura as permanentes do Engenheiro (se a nave tiver).
+        if self.ship.mini_ships_timer > 0.0:
+            self._build_mini_ships()
+        else:
+            self._build_permanent_mini_ships()
+
         if theme_changed:
             self._start_world_transition_cutscene(new_world)
         else:
@@ -2004,6 +2067,29 @@ class PlayingScene(Scene):
             elif event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
                 if not self.ship.is_entering and self._can_handle_gameplay_actions():
                     self.ship.cycle_facing()
+            elif event.key in (pygame.K_q, pygame.K_e):
+                # Cofre: Q usa slot 0, E usa slot 1.
+                if not self.ship.is_entering and self._can_handle_gameplay_actions():
+                    slot = 0 if event.key == pygame.K_q else 1
+                    self._activate_stored_powerup(slot)
+            elif event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT):
+                # Fantasma: dash com i-frames.
+                if (
+                    not self.ship.is_entering
+                    and self._can_handle_gameplay_actions()
+                    and self.ship.profile.has_dash
+                ):
+                    held = self.app.input.poll_held()
+                    move_vec = pygame.math.Vector2(0, 0)
+                    if "hold_left" in held:
+                        move_vec.x -= 1
+                    if "hold_right" in held:
+                        move_vec.x += 1
+                    if "hold_up" in held:
+                        move_vec.y -= 1
+                    if "hold_down" in held:
+                        move_vec.y += 1
+                    self.ship.try_dash(move_vec)
 
             self._process_cheat_input(event)
 
@@ -2012,16 +2098,36 @@ class PlayingScene(Scene):
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
-                if (
-                    not self.ship.auto_fire
-                    and self.shoot_cd == 0.0
-                    and not self.ship.is_entering
-                    and self._can_handle_gameplay_actions()
-                ):
-                    self._fire_bullets()
+                if not self.ship.is_entering and self._can_handle_gameplay_actions():
+                    # Caçador: clique inicia carga em vez de disparar.
+                    if self.ship.profile.has_charge_shot:
+                        self.ship.start_charge()
+                    elif not self.ship.auto_fire and self.shoot_cd == 0.0:
+                        self._fire_bullets()
             elif event.button == 2:
                 if not self.ship.is_entering and self._can_handle_gameplay_actions():
                     self.ship.cycle_facing()
+
+        elif event.type == pygame.MOUSEBUTTONUP:
+            # Caçador: soltar o botão dispara o tiro carregado.
+            if (
+                event.button == 1
+                and self.ship.profile.has_charge_shot
+                and self.ship.charge_shot_active
+                and not self.ship.is_entering
+                and self._can_handle_gameplay_actions()
+            ):
+                self._fire_bullets()
+
+    def _activate_stored_powerup(self, slot_index: int) -> None:
+        """Consome o powerup do slot indicado e aplica seu efeito (Cofre)."""
+        if not self.ship.has_storage_slots():
+            return
+        kind = self.ship.consume_stored_powerup(slot_index)
+        if kind is None:
+            return
+        sound_manager.play_powerup()
+        self._apply_powerup(kind)
 
     def _handle_upgrade_key(self, event: pygame.event.Event) -> None:
         """Ativa o slot de upgrade correspondente à tecla pressionada."""
@@ -2224,6 +2330,8 @@ class PlayingScene(Scene):
         )
 
         self._render_upgrades_hud(self.game_surface)
+        self._render_storage_slots_hud(self.game_surface)
+        self._render_combo_hud(self.game_surface)
 
         if self.show_fps:
             fps_stats = self.r.get_fps_stats()
@@ -2320,6 +2428,164 @@ class PlayingScene(Scene):
                 self.app.heal_usage_count = upg.usage_count
         except (AttributeError, TypeError):
             pass
+
+    def _render_combo_hud(self, surface: pygame.Surface) -> None:
+        """Indicador do combo do Reverberador (canto inferior esquerdo).
+
+        Mostra contagem de abates consecutivos sem dano e bônus de dano resultante.
+        Só aparece para naves com `combo_damage_per_kill > 0`.
+        """
+        if self.ship.profile.combo_damage_per_kill <= 0:
+            return
+
+        from ..core import colors as _colors
+
+        kills = self.ship.combo_kills
+        bonus = self.ship.combo_damage_bonus
+        cap = self.ship.profile.combo_damage_cap
+
+        font_label = get_font(14)
+        font_value = get_font(22)
+
+        # Cores: cinza se sem combo, dourado em escala conforme se aproxima do cap.
+        if kills == 0:
+            color = (160, 160, 160)
+        elif cap > 0 and bonus >= cap:
+            # Cap atingido: pulso amarelo brilhante.
+            pulse = int(40 + 40 * abs(math.sin(time.time() * 6)))
+            color = (255, 220 - pulse // 4, 60)
+        else:
+            fade = min(1.0, bonus / cap) if cap > 0 else min(1.0, bonus)
+            color = (
+                int(180 + 75 * fade),
+                int(180 + 40 * fade),
+                int(140 - 80 * fade),
+            )
+
+        x = 16
+        y = Config.SCREEN_HEIGHT - 70
+
+        label = font_label.render("COMBO", True, _colors.WHITE)
+        surface.blit(label, (x, y))
+
+        bonus_pct = int(round(bonus * 100))
+        text = font_value.render(
+            f"x{kills}  +{bonus_pct}%", True, color
+        )
+        surface.blit(text, (x, y + 16))
+
+    def _render_storage_slots_hud(self, surface: pygame.Surface) -> None:
+        """Desenha as caixas dos slots de powerup do Cofre (estilo Mario World).
+
+        Cada slot mostra o ícone colorido do powerup armazenado, espelhando a
+        aparência do PowerUp coletável (círculo colorido + símbolo).
+        """
+        if not self.ship.has_storage_slots():
+            return
+
+        from ..core import colors as _colors
+        from ..core.colors import (
+            POWERUP_COOLDOWN_HASTE,
+            POWERUP_DAMAGE_BOOST,
+            POWERUP_DOUBLE_SHOT,
+            POWERUP_LIFE,
+            POWERUP_MINI_SHIPS,
+            POWERUP_PIERCING_SHOT,
+            POWERUP_RAINBOW,
+            POWERUP_SCORE,
+            POWERUP_SHIELD,
+            POWERUP_SPEED,
+            POWERUP_TIME_STOP,
+        )
+
+        font_label = get_font(20)
+        font_hint = get_font(12)
+        font_icon = get_font(18)
+
+        slot_size = 56
+        gap = 12
+        slots = self.ship.stored_powerups
+        total_w = len(slots) * slot_size + (len(slots) - 1) * gap
+
+        start_x = (Config.SCREEN_WIDTH - total_w) // 2
+        y = 8
+
+        # Cor e símbolo de cada powerup — alinhados com PowerUp.draw.
+        powerup_colors: dict[str, tuple[int, int, int]] = {
+            "life": POWERUP_LIFE,
+            "shield": POWERUP_SHIELD,
+            "double_shot": POWERUP_DOUBLE_SHOT,
+            "speed": POWERUP_SPEED,
+            "score": POWERUP_SCORE,
+            "piercing_shot": POWERUP_PIERCING_SHOT,
+            "mini_ships": POWERUP_MINI_SHIPS,
+            "rainbow": POWERUP_RAINBOW,
+            "cooldown_haste": POWERUP_COOLDOWN_HASTE,
+            "time_stop": POWERUP_TIME_STOP,
+            "damage_boost": POWERUP_DAMAGE_BOOST,
+        }
+        powerup_symbols: dict[str, str] = {
+            "life": "+",
+            "shield": "S",
+            "double_shot": "2X",
+            "speed": "V",
+            "score": "$",
+            "piercing_shot": "P",
+            "mini_ships": "M",
+            "rainbow": "*",
+            "cooldown_haste": "CD",
+            "time_stop": "T",
+            "damage_boost": "DMG",
+        }
+        hint_keys = ("Q", "E")
+
+        for i, kind in enumerate(slots):
+            x = start_x + i * (slot_size + gap)
+            slot_surface = pygame.Surface((slot_size, slot_size), pygame.SRCALPHA)
+
+            # Fundo escuro semi-transparente
+            pygame.draw.rect(
+                slot_surface,
+                (20, 20, 30, 200),
+                (0, 0, slot_size, slot_size),
+                border_radius=8,
+            )
+            # Borda amarela (cheia) ou cinza (vazia)
+            border_color = (
+                (*_colors.YELLOW, 230) if kind is not None else (*_colors.GRAY, 160)
+            )
+            pygame.draw.rect(
+                slot_surface,
+                border_color,
+                (0, 0, slot_size, slot_size),
+                2,
+                border_radius=8,
+            )
+
+            # Letra de tecla no canto superior esquerdo
+            key_label = hint_keys[i] if i < len(hint_keys) else str(i + 1)
+            slot_surface.blit(
+                font_hint.render(key_label, True, _colors.WHITE), (5, 3)
+            )
+
+            if kind is not None:
+                # Círculo colorido com a cor do powerup (mesma usada no drop).
+                color = powerup_colors.get(kind, (200, 200, 200))
+                center = (slot_size // 2, slot_size // 2 + 4)
+                pygame.draw.circle(slot_surface, color, center, 16)
+                pygame.draw.circle(slot_surface, _colors.WHITE, center, 16, 2)
+                # Símbolo central
+                symbol = powerup_symbols.get(kind, kind[:2].upper())
+                content = font_icon.render(symbol, True, _colors.BLACK)
+                slot_surface.blit(content, content.get_rect(center=center))
+            else:
+                # Slot vazio: traço discreto
+                dash = font_label.render("—", True, (90, 90, 90))
+                slot_surface.blit(
+                    dash, dash.get_rect(center=(slot_size // 2, slot_size // 2))
+                )
+
+            surface.blit(slot_surface, (x, y))
 
     def _render_upgrades_hud(self, surface: pygame.Surface) -> None:
         from ..core import colors as _colors

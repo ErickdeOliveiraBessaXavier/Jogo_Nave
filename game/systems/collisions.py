@@ -1176,11 +1176,13 @@ class Collisions:
         ship: Ship,
         powerups: list[PowerUp],
     ) -> list[str]:
+        # Magneto: `pickup_rect` é inflado por `profile.pickup_radius_mult`.
+        pickup_box = ship.pickup_rect
         collected_kinds: list[str] = []
         for p in powerups[:]:
             if p.dead:
                 continue
-            if ship.rect.colliderect(p.rect):
+            if pickup_box.colliderect(p.rect):
                 p.dead = True
                 collected_kinds.append(p.kind)
         return collected_kinds
@@ -1191,9 +1193,10 @@ class Collisions:
         stars: list[Star],
     ) -> int:
         """Verifica colisão entre nave e estrelas. Retorna quantidade coletada."""
+        pickup_box = ship.pickup_rect
         collected = 0
         for star in stars[:]:
-            if ship.rect.colliderect(star.get_rect()):
+            if pickup_box.colliderect(star.get_rect()):
                 star.dead = True
                 collected += 1
         return collected

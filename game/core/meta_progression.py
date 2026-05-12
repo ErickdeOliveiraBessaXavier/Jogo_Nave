@@ -12,6 +12,12 @@ import pygame
 
 from .difficulty import DifficultyPreset
 from .levels import DifficultyConfig, LevelConfig
+from .ship_types import (
+    DEFAULT_SHIP_ID,
+    ShipProfile,
+    get_ship_profile,
+    is_valid_ship_id,
+)
 from .upgrades import UpgradeType
 from .upgrades_config import (
     DEFAULT_UNLOCKED,
@@ -545,6 +551,10 @@ class PlayerProfile:
             INITIAL_UNLOCKED_SLOTS  # Número de slots desbloqueados
         )
 
+        # Naves desbloqueadas + nave atualmente selecionada.
+        self.unlocked_ships: set[str] = {DEFAULT_SHIP_ID}
+        self.selected_ship: str = DEFAULT_SHIP_ID
+
         # Teclas para ativar aprimoramentos (1-9), limitadas por UPGRADE_SLOT_COUNT
         default_keys: list[int] = [
             pygame.K_1,
@@ -556,6 +566,9 @@ class PlayerProfile:
             pygame.K_7,
             pygame.K_8,
             pygame.K_9,
+            pygame.K_0,
+            pygame.K_MINUS,
+            pygame.K_EQUALS,
         ]
         self.upgrade_keybindings: list[int] = default_keys[:UPGRADE_SLOT_COUNT]
 
@@ -771,6 +784,43 @@ class PlayerProfile:
         if slot_index < 0 or slot_index >= len(SLOT_UNLOCK_COSTS):
             return 0
         return SLOT_UNLOCK_COSTS[slot_index]
+
+    # ------------------------------------------------------------------
+    # Naves
+    # ------------------------------------------------------------------
+
+    def is_ship_unlocked(self, ship_id: str) -> bool:
+        return ship_id in self.unlocked_ships
+
+    def can_unlock_ship(self, ship_id: str) -> bool:
+        """True se a nave existe, não está desbloqueada e há estrelas suficientes."""
+        if not is_valid_ship_id(ship_id) or ship_id in self.unlocked_ships:
+            return False
+        return self.available_stars >= get_ship_profile(ship_id).unlock_cost
+
+    def unlock_ship(self, ship_id: str) -> bool:
+        """Compra a nave deduzindo o custo. Retorna False se não puder."""
+        if not self.can_unlock_ship(ship_id):
+            return False
+
+        self.stars_spent += get_ship_profile(ship_id).unlock_cost
+        self.unlocked_ships.add(ship_id)
+        self._mark_dirty()
+        return True
+
+    def select_ship(self, ship_id: str) -> bool:
+        """Define a nave ativa. Só funciona se a nave estiver desbloqueada."""
+        if ship_id not in self.unlocked_ships:
+            return False
+        if self.selected_ship == ship_id:
+            return True
+        self.selected_ship = ship_id
+        self._mark_dirty()
+        return True
+
+    def get_selected_ship_profile(self) -> ShipProfile:
+        """Retorna o ShipProfile correspondente à nave selecionada."""
+        return get_ship_profile(self.selected_ship)
 
     def start_session(self):
         """Inicia uma nova sessão de jogo."""
@@ -1010,6 +1060,25 @@ class PlayerProfile:
                 self.stars_collected = data.get("stars_collected", 0)
                 self.stars_spent = data.get("stars_spent", 0)
                 self.unlocked_slots = data.get("unlocked_slots", INITIAL_UNLOCKED_SLOTS)
+
+                # Naves (com fallback defensivo para ids inválidos)
+                unlocked_ships_raw = data.get("unlocked_ships")
+                if isinstance(unlocked_ships_raw, list):
+                    unlocked_ships_list = cast(List[Any], unlocked_ships_raw)
+                    self.unlocked_ships = {
+                        sid
+                        for sid in unlocked_ships_list
+                        if isinstance(sid, str) and is_valid_ship_id(sid)
+                    }
+                    self.unlocked_ships.add(DEFAULT_SHIP_ID)
+                else:
+                    self.unlocked_ships = {DEFAULT_SHIP_ID}
+
+                selected = data.get("selected_ship", DEFAULT_SHIP_ID)
+                if isinstance(selected, str) and selected in self.unlocked_ships:
+                    self.selected_ship = selected
+                else:
+                    self.selected_ship = DEFAULT_SHIP_ID
 
                 # Sistema de mundos e savepoints
                 world_unlocks_raw_untyped = data.get("world_unlocks", {})
@@ -1273,6 +1342,9 @@ class PlayerProfile:
                         pygame.K_7,
                         pygame.K_8,
                         pygame.K_9,
+                        pygame.K_0,
+                        pygame.K_MINUS,
+                        pygame.K_EQUALS,
                     ]
                     if isinstance(keybindings_raw, list):
                         keys: List[int] = []
@@ -1299,6 +1371,9 @@ class PlayerProfile:
                         pygame.K_7,
                         pygame.K_8,
                         pygame.K_9,
+                        pygame.K_0,
+                        pygame.K_MINUS,
+                        pygame.K_EQUALS,
                     ]
                     self.upgrade_keybindings = defaults[:UPGRADE_SLOT_COUNT]
 
@@ -1384,6 +1459,8 @@ class PlayerProfile:
             "stars_collected": self.stars_collected,
             "stars_spent": self.stars_spent,
             "unlocked_slots": self.unlocked_slots,
+            "unlocked_ships": sorted(self.unlocked_ships),
+            "selected_ship": self.selected_ship,
             "world_unlocks": {
                 str(world_id): {
                     "world_id": status.world_id,
@@ -1448,12 +1525,21 @@ class PlayerProfile:
             pygame.K_7,
             pygame.K_8,
             pygame.K_9,
+            pygame.K_0,
+            pygame.K_MINUS,
+            pygame.K_EQUALS,
         ][:UPGRADE_SLOT_COUNT]
 
         # Resetar sistema de estrelas
         self.stars_collected = 0
         self.stars_spent = 0
         self.unlocked_slots = INITIAL_UNLOCKED_SLOTS
+
+        # Resetar naves
+        from .ship_types import DEFAULT_SHIP_ID
+
+        self.unlocked_ships = {DEFAULT_SHIP_ID}
+        self.selected_ship = DEFAULT_SHIP_ID
 
         self.profile_created = datetime.now()
         self.last_played = None
