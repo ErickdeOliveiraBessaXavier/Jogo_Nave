@@ -111,7 +111,10 @@ class StatisticsView:
         """Reseta o estado da view para reiniciar animação."""
         self.entry_progress = 0.0
         self.is_entering = True
-        self.profile = PlayerProfile(get_profile_path())
+        if self._app and hasattr(self._app, "player_profile"):
+            self.profile = self._app.player_profile
+        else:
+            self.profile = PlayerProfile(get_profile_path())
         self.dialog = None
         self.scroll_y = 0
 

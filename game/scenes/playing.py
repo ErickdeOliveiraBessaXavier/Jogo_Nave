@@ -1128,7 +1128,7 @@ class PlayingScene(Scene):
                 logger.info("GOD MODE ATIVADO - Invulnerabilidade ligada!")
                 self._apply_god_mode_cooldowns()
                 self.player_profile.add_stars(9999)
-                self.player_profile.auto_save()  # Força save imediato
+                self.player_profile.save()  # Força save imediato
                 logger.info("⭐ +9999 Estrelas adicionadas e salvas!")
                 if hasattr(sound_manager, "play_powerup"):
                     sound_manager.play_powerup()  # type: ignore

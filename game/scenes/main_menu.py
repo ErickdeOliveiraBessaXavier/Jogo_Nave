@@ -657,7 +657,7 @@ class MainMenuScene(Scene):
         if self.cheat_buffer == _CHEAT_CODE:
             self.cheat_buffer = ""
             self.app.player_profile.add_stars(9999)
-            self.app.player_profile.auto_save()
+            self.app.player_profile.save()
             logger.info("⭐ CHEAT ATIVADO - +9999 Estrelas adicionadas e salvas!")
             sound_manager.play_sound("button_click")
 
