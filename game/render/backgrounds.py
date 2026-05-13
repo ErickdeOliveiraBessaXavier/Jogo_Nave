@@ -534,7 +534,8 @@ class CityBackground(Background):
         self.blink_timer: float = 0.0
 
         # Pré-calcular padrão de piscar para evitar cálculos repetidos
-        self.blink_pattern_cache: Dict[int, bool] = {}
+        self.blink_pattern_cache: Dict[tuple[int, int], bool] = {}
+        self._cache_clear_timer: float = 0.0
 
         self._create_buildings()
 
@@ -575,9 +576,11 @@ class CityBackground(Background):
         """Atualiza timer de piscar."""
         self.blink_timer += dt * self.BLINK_SPEED * speed_mult
 
-        # Limpar cache periodicamente para economizar memória
-        if int(self.blink_timer * 100) % 500 == 0:
+        # Limpar cache periodicamente com timer fixo (5 segundos)
+        self._cache_clear_timer += dt
+        if self._cache_clear_timer > 5.0:
             self.blink_pattern_cache.clear()
+            self._cache_clear_timer = 0.0
 
     def draw(self, surface: pygame.Surface) -> None:
         """Desenha cidade com janelas piscantes."""
@@ -637,11 +640,11 @@ class CityBackground(Background):
 
         for wy in range(y_start, y_end, spacing + window_h):
             for wx in range(x_start, x_end, spacing):
-                # Otimizar cálculo de piscar usando cache
-                window_key = wx + wy
+                # Otimizar cálculo de piscar usando cache (tupla evita colisão)
+                window_key = (wx, wy)
 
                 if window_key not in self.blink_pattern_cache:
-                    blink_offset = window_key % 100
+                    blink_offset = (wx + wy) % 100
                     self.blink_pattern_cache[window_key] = (
                         blink_time + blink_offset
                     ) % 200 < 150

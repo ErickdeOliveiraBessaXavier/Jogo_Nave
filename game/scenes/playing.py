@@ -1130,10 +1130,48 @@ class PlayingScene(Scene):
         score_events: list[tuple[float, float, int]],
         proximity_threshold: float = 60.0,
     ) -> list[tuple[float, float, int]]:
-        """Agrupa score events próximos num único evento somado (O(n²) intencional)."""
+        """Agrupa score events próximos num único evento somado.
+
+        Para poucos eventos (≤8), usa O(n²) simples.
+        Para muitos eventos, usa grid spatial para melhor performance.
+        """
         if not score_events:
             return []
 
+        # Para poucos eventos, o custo O(n²) é negligenciável
+        if len(score_events) <= 8:
+            return self._batch_floating_scores_quadratic(
+                score_events, proximity_threshold
+            )
+
+        # Grid binning para muitos eventos (picos de dano)
+        cell_size = proximity_threshold
+        buckets: dict[tuple[int, int], list[tuple[float, float, int]]] = {}
+
+        for x, y, pts in score_events:
+            key = (int(x // cell_size), int(y // cell_size))
+            if key not in buckets:
+                buckets[key] = []
+            buckets[key].append((x, y, pts))
+
+        # Agregar pontos dentro de cada célula
+        batched: list[tuple[float, float, int]] = []
+        for events in buckets.values():
+            if not events:
+                continue
+            avg_x = sum(e[0] for e in events) / len(events)
+            avg_y = sum(e[1] for e in events) / len(events)
+            total_pts = sum(e[2] for e in events)
+            batched.append((avg_x, avg_y, total_pts))
+
+        return batched
+
+    def _batch_floating_scores_quadratic(
+        self,
+        score_events: list[tuple[float, float, int]],
+        proximity_threshold: float,
+    ) -> list[tuple[float, float, int]]:
+        """Batching O(n²) para poucos eventos (manutenção de compatibilidade)."""
         batched: list[tuple[float, float, int]] = []
         used = [False] * len(score_events)
 

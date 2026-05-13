@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -1389,11 +1390,8 @@ class PlayerProfile:
             self._ensure_safe_world_defaults()
             return  # Mantém valores inicializados no __init__
 
-    def save(self):
-        """Salva perfil no disco."""
-        # Criar diretório se não existir
-        self.profile_path.parent.mkdir(parents=True, exist_ok=True)
-
+    def _prepare_save_data(self) -> Dict[str, Any]:
+        """Prepara dados do perfil para serialização (sincronous, side-effect free)."""
         # Serializar level stats
         level_stats_data: Dict[str, Dict[str, Any]] = {}
         for level_num, stats in self.level_stats.items():
@@ -1470,10 +1468,44 @@ class PlayerProfile:
             },
             "current_checkpoint_world": self.current_checkpoint_world,
         }
+        return data
+
+    def save(self):
+        """Salva perfil no disco (síncrono, bloqueante)."""
+        # Criar diretório se não existir
+        self.profile_path.parent.mkdir(parents=True, exist_ok=True)
+
+        data = self._prepare_save_data()
 
         with open(self.profile_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
+        self._dirty = False
+        self._last_save = time.time()
+
+    def save_async(self) -> None:
+        """Salva perfil em thread separada (não-bloqueante).
+
+        Útil para auto-save durante gameplay. Para sessão/exit, use save().
+        """
+        # Preparar dados de forma síncrona (sem efeitos colaterais)
+        data = self._prepare_save_data()
+        path = self.profile_path
+
+        def _write_to_disk():
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                logger.debug(f"Async save completed for {path}")
+            except Exception as e:
+                logger.error(f"Async save failed for {path}: {e}")
+
+        # Executar escrita em daemon thread (não bloqueia exit)
+        thread = threading.Thread(target=_write_to_disk, daemon=True)
+        thread.start()
+
+        # Marcar como saved mesmo que a escrita ainda esteja em progresso
         self._dirty = False
         self._last_save = time.time()
 

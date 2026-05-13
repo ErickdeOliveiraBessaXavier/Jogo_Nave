@@ -172,80 +172,31 @@ class MusicManager:
         if os.path.exists(music_path) and self.sound_manager.current_music != "boss":
             self._transition_to_music(music_path, "boss")
 
-    def play_spike_boss_music_internal(self) -> None:
+    def _play_boss_music_by_key(self, key: str) -> None:
+        """Generic handler for all boss music playback."""
         music_path = get_resource_path(
-            os.path.join(
-                str(SOUND_PATHS["base"]), str(self._music_paths()["spike_boss"])
-            )
+            os.path.join(str(SOUND_PATHS["base"]), str(self._music_paths()[key]))
         )
-        if (
-            os.path.exists(music_path)
-            and self.sound_manager.current_music != "spike_boss"
-        ):
-            self._transition_to_music(music_path, "spike_boss")
+        if os.path.exists(music_path) and self.sound_manager.current_music != key:
+            self._transition_to_music(music_path, key)
+
+    def play_spike_boss_music_internal(self) -> None:
+        self._play_boss_music_by_key("spike_boss")
 
     def play_slime_boss_music_internal(self) -> None:
-        music_path = get_resource_path(
-            os.path.join(
-                str(SOUND_PATHS["base"]), str(self._music_paths()["slime_boss"])
-            )
-        )
-        if (
-            os.path.exists(music_path)
-            and self.sound_manager.current_music != "slime_boss"
-        ):
-            self._transition_to_music(music_path, "slime_boss")
+        self._play_boss_music_by_key("slime_boss")
 
     def play_giant_meteor_boss_music_internal(self) -> None:
-        music_path = get_resource_path(
-            os.path.join(
-                str(SOUND_PATHS["base"]), str(self._music_paths()["giant_meteor_boss"])
-            )
-        )
-        if (
-            os.path.exists(music_path)
-            and self.sound_manager.current_music != "giant_meteor_boss"
-        ):
-            self._transition_to_music(music_path, "giant_meteor_boss")
+        self._play_boss_music_by_key("giant_meteor_boss")
 
     def play_mountain_serpent_boss_music_internal(self) -> None:
-        music_path = get_resource_path(
-            os.path.join(
-                str(SOUND_PATHS["base"]),
-                str(self._music_paths()["mountain_serpent_boss"]),
-            )
-        )
-        if (
-            os.path.exists(music_path)
-            and self.sound_manager.current_music != "mountain_serpent_boss"
-        ):
-            self._transition_to_music(music_path, "mountain_serpent_boss")
+        self._play_boss_music_by_key("mountain_serpent_boss")
 
     def play_cloud_archmage_boss_music_internal(self) -> None:
-        music_path = get_resource_path(
-            os.path.join(
-                str(SOUND_PATHS["base"]),
-                str(self._music_paths()["cloud_archmage_boss"]),
-            )
-        )
-        if (
-            os.path.exists(music_path)
-            and self.sound_manager.current_music != "cloud_archmage_boss"
-        ):
-            self._transition_to_music(music_path, "cloud_archmage_boss")
+        self._play_boss_music_by_key("cloud_archmage_boss")
 
     def play_stone_golem_boss_music_internal(self) -> None:
-        music_path = get_resource_path(
-            os.path.join(
-                str(SOUND_PATHS["base"]),
-                str(self._music_paths()["stone_golem_boss"]),
-            )
-        )
-        if (
-            os.path.exists(music_path)
-            and self.sound_manager.current_music != "stone_golem_boss"
-        ):
-            self._transition_to_music(music_path, "stone_golem_boss")
+        self._play_boss_music_by_key("stone_golem_boss")
 
     def play_menu_music_internal(self) -> None:
         music_path = get_resource_path(

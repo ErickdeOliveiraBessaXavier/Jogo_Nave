@@ -976,11 +976,35 @@ class EntityManager:
 
         return enemy.y > sh or enemy.x < -ew or enemy.x > sw
 
+    @staticmethod
+    def _filter_dead_inplace(lst: list[Any], is_dead_fn=None) -> None:
+        """Filter dead entities in-place using swap-and-pop to reduce GC pressure.
+
+        Args:
+            lst: List to filter
+            is_dead_fn: Optional callable that returns True if entity is dead.
+                       If None, checks lst[i].dead attribute.
+        """
+
+        def default_is_dead(x: Any) -> bool:
+            return getattr(x, "dead", False)
+
+        if not is_dead_fn:
+            is_dead_fn = default_is_dead
+
+        i = 0
+        while i < len(lst):
+            if is_dead_fn(lst[i]):
+                lst[i] = lst[-1]
+                lst.pop()
+            else:
+                i += 1
+
     def cleanup(self) -> None:
         for b in self.bullets:
             if b.dead:
                 self.bullet_pool.release(b)
-        self.bullets = [b for b in self.bullets if not b.dead]
+        self._filter_dead_inplace(self.bullets)
 
         # Marcar como mortos inimigos que saíram da tela (exceto os controlados por boss)
         for e in self.enemies:
@@ -994,15 +1018,15 @@ class EntityManager:
             ):
                 e.dead = True
 
-        self.alien_bullets = [b for b in self.alien_bullets if not b.dead]
-        self.serpent_bullets = [b for b in self.serpent_bullets if not b.dead]
-        self.energy_orbs = [o for o in self.energy_orbs if not o.dead]
-        self.boss_lasers = [b for b in self.boss_lasers if not b.dead]
-        self.player_lasers = [p for p in self.player_lasers if not p.dead]
-        self.boss_squares = [b for b in self.boss_squares if not b.dead]
-        self.slime_drips = [s for s in self.slime_drips if not s.dead]
-        self.eye_lasers = [e for e in self.eye_lasers if not e.dead]
-        self.mini_ship_bullets = [b for b in self.mini_ship_bullets if not b.dead]
+        self._filter_dead_inplace(self.alien_bullets)
+        self._filter_dead_inplace(self.serpent_bullets)
+        self._filter_dead_inplace(self.energy_orbs)
+        self._filter_dead_inplace(self.boss_lasers)
+        self._filter_dead_inplace(self.player_lasers)
+        self._filter_dead_inplace(self.boss_squares)
+        self._filter_dead_inplace(self.slime_drips)
+        self._filter_dead_inplace(self.eye_lasers)
+        self._filter_dead_inplace(self.mini_ship_bullets)
 
         # Processar remoção de inimigos via protocolos should_remove/on_remove
         to_remove: list[Any] = []
@@ -1016,21 +1040,21 @@ class EntityManager:
 
         if to_remove:
             remove_ids = {id(e) for e in to_remove}
-            self.enemies = [e for e in self.enemies if id(e) not in remove_ids]
+            self._filter_dead_inplace(self.enemies, lambda e: id(e) in remove_ids)
 
-        self.mine_explosions = [m for m in self.mine_explosions if not m.finished()]
-        self.ice_poison_zones = [z for z in self.ice_poison_zones if not z.dead]
-        self.powerups = [p for p in self.powerups if not p.dead]
-        self.stars = [s for s in self.stars if not s.dead]
-        self.floating_scores = [f for f in self.floating_scores if not f.is_dead()]
-        self.formations = [f for f in self.formations if not f.dead]
-        self.spikes = [s for s in self.spikes if not s.dead]
-        self.air_strike_bombs = [b for b in self.air_strike_bombs if not b.dead]
-        self.cannon_towers = [t for t in self.cannon_towers if not t.dead]
-        self.cannon_mines = [m for m in self.cannon_mines if not m.dead]
-        self.boulders = [b for b in self.boulders if not b.dead]
-        self.attack_debris = [s for s in self.attack_debris if not s.dead]
-        self.orbital_debris = [r for r in self.orbital_debris if not r.dead]
+        self._filter_dead_inplace(self.mine_explosions, lambda m: m.finished())
+        self._filter_dead_inplace(self.ice_poison_zones)
+        self._filter_dead_inplace(self.powerups)
+        self._filter_dead_inplace(self.stars)
+        self._filter_dead_inplace(self.floating_scores, lambda f: f.is_dead())
+        self._filter_dead_inplace(self.formations)
+        self._filter_dead_inplace(self.spikes)
+        self._filter_dead_inplace(self.air_strike_bombs)
+        self._filter_dead_inplace(self.cannon_towers)
+        self._filter_dead_inplace(self.cannon_mines)
+        self._filter_dead_inplace(self.boulders)
+        self._filter_dead_inplace(self.attack_debris)
+        self._filter_dead_inplace(self.orbital_debris)
         self._grid_needs_rebuild = True
 
     def clear_all(self) -> None:

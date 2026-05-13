@@ -206,8 +206,9 @@ class EnemySpawner:
             "spiral_circle": Config.FORMATION_CIRCLE_RADIUS,
             "spiral_v": lambda count: (count // 2) * Config.FORMATION_V_SPACING,
             "spiral_square": Config.FORMATION_SQUARE_SIZE / 2,
-            "spiral_line": lambda count: ((count - 1) * Config.FORMATION_LINE_SPACING)
-            / 2,
+            "spiral_line": lambda count: (
+                ((count - 1) * Config.FORMATION_LINE_SPACING) / 2
+            ),
             "full_cycle": Config.FORMATION_CIRCLE_RADIUS,
         }
         self._formation_entry_y: Dict[str, float] = {
@@ -970,12 +971,19 @@ class EnemySpawner:
                 counts=counts,
             )
 
-        self._update_mine_spawner(dt, entity_manager)
-        self._update_propeller_spawner(dt, entity_manager)
-        self._update_formation_spawner(dt, entity_manager)
-        self._update_guided_meteor_spawner(dt, entity_manager, player_x, player_y)
+        self._update_mine_spawner(dt, entity_manager, counts=counts)
+        self._update_propeller_spawner(dt, entity_manager, counts=counts)
+        self._update_formation_spawner(dt, entity_manager, counts=counts)
+        self._update_guided_meteor_spawner(
+            dt, entity_manager, player_x, player_y, counts=counts
+        )
 
-    def _update_mine_spawner(self, dt: float, entity_manager: "EntityManager") -> None:
+    def _update_mine_spawner(
+        self,
+        dt: float,
+        entity_manager: "EntityManager",
+        counts: dict[str, int] | None = None,
+    ) -> None:
         if not self.level_config.mines_enabled:
             return
 
@@ -1007,7 +1015,10 @@ class EnemySpawner:
                     break
 
     def _update_propeller_spawner(
-        self, dt: float, entity_manager: "EntityManager"
+        self,
+        dt: float,
+        entity_manager: "EntityManager",
+        counts: dict[str, int] | None = None,
     ) -> None:
         world = get_world_for_level(self.current_level_number)
         if "propellers" not in THEME_FEATURES.get(world.theme, set()):
@@ -1027,7 +1038,10 @@ class EnemySpawner:
             entity_manager.spawn_mountain_propeller()
 
     def _update_formation_spawner(
-        self, dt: float, entity_manager: "EntityManager"
+        self,
+        dt: float,
+        entity_manager: "EntityManager",
+        counts: dict[str, int] | None = None,
     ) -> None:
         if not self.level_config.formations_enabled:
             return
@@ -1100,6 +1114,7 @@ class EnemySpawner:
         entity_manager: "EntityManager",
         player_x: float | None,
         player_y: float | None,
+        counts: dict[str, int] | None = None,
     ) -> None:
         world = get_world_for_level(self.current_level_number)
         if "guided_meteors" not in THEME_FEATURES.get(world.theme, set()):
