@@ -315,20 +315,24 @@ class UpgradesSelectionScene(Scene):
             if self.dragging_upgrade:
                 self._handle_drop_upgrade(event.pos)
 
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            sw = self.app.screen.get_size()[0]
-            if event.pos[0] < sw * 0.3:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button in (4, 5):
+            # Divisão simples pelo meio horizontal: mouse à esquerda do centro
+            # rola o Estoque; à direita, rola o Hangar. A coluna central só
+            # mostra preview/descrição (nada scrollável), então a fronteira
+            # exata não importa — eliminando qualquer zona morta.
+            mid_x = self.app.screen.get_width() // 2
+            if event.pos[0] < mid_x:
                 if event.button == 4:
                     self.upgrade_scroll = max(0, self.upgrade_scroll - 1)
-                elif event.button == 5:
+                else:
                     self.upgrade_scroll = min(
                         self.max_upgrade_scroll, self.upgrade_scroll + 1
                     )
                 self._rebuild_upgrade_grid()
-            elif event.pos[0] > sw * 0.7:
+            else:
                 if event.button == 4:
                     self.ship_scroll = max(0, self.ship_scroll - 1)
-                elif event.button == 5:
+                else:
                     self.ship_scroll = min(self.max_ship_scroll, self.ship_scroll + 1)
                 self._rebuild_ship_grid()
 
@@ -577,7 +581,7 @@ class UpgradesSelectionScene(Scene):
         pulse = 1.0 + 0.04 * math.sin(time.time() * 3)
         try:
             img = pygame.transform.scale(
-                get_image(BASE_DIR / "assets" / "images" / "icons" / "ship_icon.png"),
+                get_image(BASE_DIR / "assets" / "icons" / ship.sprite_filename),
                 (int(rect.width * pulse), int(rect.height * pulse)),
             )
             surface.blit(img, img.get_rect(center=rect.center))
@@ -628,9 +632,11 @@ class UpgradesSelectionScene(Scene):
             )
             y += 6
 
-        # Descrição (até 2 linhas, centralizada).
+        # Descrição: cap alto o suficiente para caber as descrições mais longas
+        # (Reverberador, Caçador) sem truncar. Clip da coluna garante que nada
+        # vaze lateralmente; o eixo vertical empurra o conteúdo seguinte.
         y = _draw_wrapped(
-            ship.description, self.small_font, colors.WHITE, y, max_lines=2
+            ship.description, self.small_font, colors.WHITE, y, max_lines=4
         )
         y += 6
 
@@ -957,7 +963,7 @@ class UpgradesSelectionScene(Scene):
                     img_s = int(dr.width * 0.6)
                     img = pygame.transform.scale(
                         get_image(
-                            BASE_DIR / "assets" / "images" / "icons" / "ship_icon.png"
+                            BASE_DIR / "assets" / "icons" / s.sprite_filename
                         ),
                         (img_s, img_s),
                     )

@@ -26,6 +26,10 @@ class ShipProfile:
     display_name: str
     description: str
 
+    # Nome do arquivo de sprite em `game/assets/icons/`. Default reaproveita
+    # o ícone da nave padrão para naves sem arte dedicada.
+    sprite_filename: str = "ship_icon.png"
+
     # Custo em estrelas (0 para a nave inicial). Fixo — não escala.
     unlock_cost: int = 0
 
@@ -33,6 +37,7 @@ class ShipProfile:
     fire_rate_mult: float = 1.0  # >1 = atira mais rápido
     damage_mult: float = 1.0  # >1 = mais dano por tiro
     speed_mult: float = 1.0  # >1 = mais rápida
+    agility_mult: float = 1.0  # >1 = responde mais rápido ao mouse/inércia
     extra_lives: int = 0  # vidas extra além do padrão
 
     # Mecânicas especiais (mutuamente exclusivas na maioria das naves).
@@ -47,6 +52,11 @@ class ShipProfile:
     combo_damage_per_kill: float = 0.0  # Reverberador
     combo_damage_cap: float = 0.0  # cap aditivo (0.0 = desativado)
 
+    # Lag de reação ao mouse (segundos). A nave persegue a posição que o cursor
+    # estava há `reaction_delay` segundos atrás. 0.0 = reação imediata.
+    # Range útil: 0.0–0.12 (acima de ~0.15 parece bug).
+    reaction_delay: float = 0.0
+
     # Tags para UI (atributos destacados nos cards).
     tags: tuple[str, ...] = field(default_factory=tuple)
 
@@ -58,6 +68,9 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         display_name="Padrão",
         description="Nave inicial balanceada. Sem multiplicadores; bom para aprender.",
         unlock_cost=0,
+        speed_mult=1.0,
+        agility_mult=1.2,  # Ponto de equilíbrio (1.2 = resposta firme e rápida)
+        reaction_delay=0.03,  # Imperceptível, suaviza micromovimentos
         tags=("Equilibrada",),
     ),
     ShipProfile(
@@ -66,48 +79,68 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         description="Atrai estrelas e powerups num raio amplo. Stats normais.",
         unlock_cost=50,
         pickup_radius_mult=2.5,
+        speed_mult=1.0,
+        agility_mult=1.3,  # Coleta exige alcançar drops rapidamente
+        reaction_delay=0.04,  # Levemente estável
         tags=("Coleta", "Farm"),
     ),
     ShipProfile(
         id="estilete",
         display_name="Estilete",
         description="Atira 60% mais rápido, mas cada tiro causa 35% menos dano.",
+        sprite_filename="ship_estilete.png",
         unlock_cost=30,
         fire_rate_mult=1.60,
         damage_mult=0.65,
+        speed_mult=1.2,    # Mais rápida que a padrão
+        agility_mult=1.6,  # Máxima agilidade (quase instantânea)
+        reaction_delay=0.0,  # Reage instantaneamente
         tags=("Rápida", "DPS sustentado"),
     ),
     ShipProfile(
         id="ariete",
         display_name="Aríete",
         description=("Dano +80% e +1 vida, mas é 30% mais lenta e atira 25% menos."),
+        sprite_filename="ship_ariete.png",
         unlock_cost=60,
         fire_rate_mult=0.75,
         damage_mult=1.80,
         speed_mult=0.70,
+        agility_mult=0.75,  # Tanque de verdade — peso sentido no controle
         extra_lives=1,
+        reaction_delay=0.12,  # A mais lenta a reagir — tanque total
         tags=("Tanque", "Burst"),
     ),
     ShipProfile(
         id="cofre",
         display_name="Cofre",
         description=(
-            "Powerups coletados vão para 2 slots; ative com Q e E na hora certa."
+            "Powerups coletados vão para 2 slots; ative com Q e E na hora certa. "
+            "Velocidade -15% pelo peso do cofre."
         ),
+        sprite_filename="ship_cofre.png",
         unlock_cost=80,
+        speed_mult=0.85,
+        agility_mult=0.9,  # Pesada pelo carregamento
         powerup_slots=2,
+        reaction_delay=0.10,  # Pesada em todos os sentidos
         tags=("Gerenciamento",),
     ),
     ShipProfile(
         id="fantasma",
         display_name="Fantasma",
         description=(
-            "Dash com invulnerabilidade (cooldown 4s). Atravessa minas. -1 vida."
+            "Dash com invulnerabilidade (cooldown 4s). Atravessa minas. "
+            "-1 vida e dano -20%."
         ),
         unlock_cost=100,
+        damage_mult=0.80,
+        speed_mult=1.1,
+        agility_mult=1.5,  # Muito ágil para compensar fragilidade
         extra_lives=-1,
         has_dash=True,
         dash_cooldown=4.0,
+        reaction_delay=0.0,  # Reage instantaneamente — mobilidade é o tema
         tags=("Mobilidade", "Frágil"),
     ),
     ShipProfile(
@@ -118,7 +151,10 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         ),
         unlock_cost=120,
         damage_mult=0.85,
+        speed_mult=1.0,
+        agility_mult=1.05,  # Mini-nave cobre área; jogador pode ser mais conservador
         permanent_mini_ships=1,
+        reaction_delay=0.06,  # Nave de suporte, não precisa de reflexo
         tags=("Drone", "Suporte"),
     ),
     ShipProfile(
@@ -130,9 +166,12 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         ),
         unlock_cost=150,
         fire_rate_mult=0.70,
+        speed_mult=1.0,
+        agility_mult=1.0,  # Charge shot exige posicionamento deliberado, não reflexo
         has_charge_shot=True,
         charge_shot_max_time=0.8,
         charge_shot_damage_mult=3.0,
+        reaction_delay=0.08,  # Reforça o estilo deliberado do charge shot
         tags=("Precisão", "Burst"),
     ),
     ShipProfile(
@@ -146,8 +185,10 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         fire_rate_mult=0.90,
         damage_mult=0.90,
         speed_mult=0.90,
+        agility_mult=0.95,  # Combo pune erros; movimento conservador reforça cautela
         combo_damage_per_kill=0.02,
         combo_damage_cap=1.0,
+        reaction_delay=0.07,  # Cautela reforçada
         tags=("Combo", "Escalada"),
     ),
 )

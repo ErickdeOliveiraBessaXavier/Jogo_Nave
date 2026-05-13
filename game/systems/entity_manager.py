@@ -1097,18 +1097,17 @@ class EntityManager:
         self.rock_glider_pool.clear_active()
         self.explosion_pool.clear_active()
         self.spikes.clear()
-        self.air_strike_bombs.clear()
         self.boulders.clear()
         self.attack_debris.clear()
         self.orbital_debris.clear()
-        self.black_holes.clear()
-        self.emp_waves.clear()
-        self.explosive_effects.clear()
-        # Powerups e estrelas em tela são preservados — não é justo o jogador
-        # perder um pickup pendente porque a fase terminou no momento errado.
-
-        self.cannon_towers.clear()
-        self.cannon_mines.clear()
+        # Entidades spawnadas por upgrades do jogador são preservadas —
+        # o slot do upgrade mantém duration_left/active, então limpar a
+        # entidade em tela "rouba" o efeito que o jogador acabou de pagar
+        # em cooldown. Air strikes em queda, black holes ativos, torres
+        # de canhão com mines, ondas EMP e resíduos de tiro explosivo
+        # continuam até expirarem naturalmente.
+        # Powerups e estrelas em tela também são preservados — não é
+        # justo perder um pickup pendente por timing de transição.
 
         self.enemy_spatial_grid.clear()
         self.spike_spatial_grid.clear()

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 import random
 import time
@@ -28,6 +30,14 @@ ORBITAL_COOLDOWN_MIN = 2.0
 ORBITAL_COOLDOWN_MAX = 4.0
 ORBITAL_INITIAL_COOLDOWN_MIN = 2.0
 ORBITAL_INITIAL_COOLDOWN_MAX = 5.0
+
+# Controle por mouse — sistema spring
+# BASE_STIFFNESS: rigidez base do spring (px/s por px de distância).
+#   Suba para resposta mais imediata em geral (range seguro: 6.0–12.0).
+# MOUSE_DEAD_ZONE: raio de snap em pixels — elimina jitter próximo ao cursor.
+#   Aumente se a nave "vibrar" parada (range seguro: 1.0–4.0).
+MOUSE_BASE_STIFFNESS: float = 8.5
+MOUSE_DEAD_ZONE: float = 2.0
 
 
 class ParticleDict(TypedDict):
@@ -80,7 +90,7 @@ class Ship:
         try:
             from ..core.assets import BASE_DIR, get_image
 
-            icon_path = BASE_DIR / "assets" / "icons" / "ship_icon.png"
+            icon_path = BASE_DIR / "assets" / "icons" / self.profile.sprite_filename
             self.ship_image = get_image(icon_path).convert_alpha()
             # Redimensionar para o tamanho apropriado (manter proporções)
             original_size = self.ship_image.get_size()
@@ -132,20 +142,6 @@ class Ship:
             "west": 270.0,
         }
         self.set_facing(self.facing)
-        self.speed_boost_timer: float = 0.0
-        self.piercing_shot_timer: float = 0.0
-        self.mini_ships_timer: float = 0.0
-        self.damage_boost_timer: float = 0.0
-        self.is_entering = False
-        self.entry_particles: list[ParticleDict] = []
-        self.thruster_particles: list[ParticleDict] = []
-
-        # NOVO: Rotação visual da nave (para side-scroll)
-        self.rotation_angle: float = (
-            0.0  # 0° = vertical (top-down), 90° = horizontal (side-scroll)
-        )
-        self.ship_image_rotated = self.ship_image  # Cache da imagem rotacionada
-        self.is_side_scroll: bool = False  # Modo de jogo (top-down vs side-scroll)
 
         # Shield system (from upgrades)
         self.shield_timer: float = 0.0
@@ -209,6 +205,9 @@ class Ship:
         self.charge_shot_active: bool = False
         self.charge_shot_timer: float = 0.0  # tempo acumulado de carga
 
+        # Buffer de posições do cursor para reaction_delay (x, y, timestamp).
+        self._mouse_history: list[tuple[float, float, float]] = []
+
         # Reverberador: combo de dano sem tomar hit.
         self.combo_kills: int = 0  # abates consecutivos sem dano
 
@@ -241,15 +240,15 @@ class Ship:
 
     @property
     def is_dashing(self) -> bool:
-        return self.dash_timer > 0.0
+        return bool(self.dash_timer > 0.0)
 
     @property
     def charge_shot_progress(self) -> float:
         """Progresso da carga normalizado em [0.0, 1.0]."""
-        max_t = self.profile.charge_shot_max_time
+        max_t: float = float(self.profile.charge_shot_max_time)
         if max_t <= 0:
             return 0.0
-        return min(1.0, self.charge_shot_timer / max_t)
+        return float(min(1.0, self.charge_shot_timer / max_t))
 
     def start_charge(self) -> bool:
         """Inicia acúmulo do charge shot. Retorna True se a nave suporta carga."""
@@ -288,9 +287,9 @@ class Ship:
         """Bônus aditivo de dano do Reverberador (0.0 a `combo_damage_cap`)."""
         if self.profile.combo_damage_per_kill <= 0:
             return 0.0
-        raw = self.combo_kills * self.profile.combo_damage_per_kill
-        cap = self.profile.combo_damage_cap
-        return min(raw, cap) if cap > 0 else raw
+        raw: float = float(self.combo_kills * self.profile.combo_damage_per_kill)
+        cap: float = float(self.profile.combo_damage_cap)
+        return float(min(raw, cap) if cap > 0 else raw)
 
     def try_dash(self, current_move_vec: pygame.math.Vector2) -> bool:
         """Ativa o dash do Fantasma se o cooldown permitir.
@@ -941,16 +940,11 @@ class Ship:
         move_vec = pygame.math.Vector2(0, 0)
 
         if self.mouse_control:
-            # Mover em direção ao mouse com precisão
+            # Spring-follow: velocidade proporcional à distância ao cursor,
+            # escalada por agility_mult do profile. Sem input lag.
             mouse_x, mouse_y = pygame.mouse.get_pos()
-            ship_center_x = self.x + self.w / 2
-            ship_center_y = self.y + self.h / 2
-            # Usar sensibilidade para movimento proporcional à distância
-            sensitivity = 0.02  # 2% de sensibilidade
 
             if self.invert_controls_timer > 0.0:
-                # Toxina debuff: espelha o cursor em relação ao centro da tela
-                # para manter o movimento estável (foge para o "anti-cursor")
                 screen_cx = getattr(Config, "SCREEN_WIDTH", 480) / 2
                 screen_cy = getattr(Config, "SCREEN_HEIGHT", 800) / 2
                 target_x = 2 * screen_cx - mouse_x
@@ -959,8 +953,36 @@ class Ship:
                 target_x = mouse_x
                 target_y = mouse_y
 
-            move_vec.x = (target_x - ship_center_x) * sensitivity
-            move_vec.y = (target_y - ship_center_y) * sensitivity
+            # Reaction delay: registrar posição atual e buscar posição atrasada.
+            delay = self.profile.reaction_delay
+            if delay > 0.0:
+                now = time.time()
+                self._mouse_history.append((target_x, target_y, now))
+                # Descartar entradas antigas (manter apenas janela relevante).
+                cutoff = now - (delay + 0.1)
+                self._mouse_history = [
+                    e for e in self._mouse_history if e[2] >= cutoff
+                ]
+                # Buscar a posição mais próxima de `delay` segundos atrás.
+                for x, y, t in reversed(self._mouse_history):
+                    if now - t >= delay:
+                        target_x, target_y = x, y
+                        break
+
+            ship_center_x = self.x + self.w / 2
+            ship_center_y = self.y + self.h / 2
+
+            dx = target_x - ship_center_x
+            dy = target_y - ship_center_y
+            dist = math.sqrt(dx * dx + dy * dy)
+
+            if dist >= MOUSE_DEAD_ZONE:
+                # Sensitivity proporcional à distância, escalada por agility_mult.
+                # Resgata a sensação "flutuante" do código original:
+                # velocidade = distância × sensitivity × agility × current_speed.
+                sensitivity = MOUSE_BASE_STIFFNESS * 0.002 * self.profile.agility_mult
+                move_vec.x = dx * sensitivity
+                move_vec.y = dy * sensitivity
         else:
             # Movimento por teclado
             # Toxina debuff: Inverte mapeamento de teclas
