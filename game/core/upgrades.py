@@ -143,6 +143,30 @@ class ActiveUpgrade:
                 self.active = False
                 self.on_expire(ctx)
 
+    @staticmethod
+    def _ctx_ship(ctx: Optional[UpgradeContext]) -> Any:
+        if ctx is None:
+            return None
+        return getattr(ctx, "ship", None)
+
+    @staticmethod
+    def _ctx_entity_manager(ctx: Optional[UpgradeContext]) -> Any:
+        if ctx is None:
+            return None
+        return getattr(ctx, "entity_manager", None)
+
+    @staticmethod
+    def _ctx_scene(ctx: Optional[UpgradeContext]) -> Any:
+        if ctx is None:
+            return None
+        return getattr(ctx, "scene", None)
+
+    @staticmethod
+    def _ctx_attr(ctx: Optional[UpgradeContext], name: str, default: Any = None) -> Any:
+        if ctx is None:
+            return default
+        return getattr(ctx, name, default)
+
     # ----- Hooks for subclasses -----------------------------------------
     def additional_can_activate(self, _ctx: UpgradeContext) -> bool:
         return True
@@ -156,15 +180,17 @@ class ActiveUpgrade:
     def on_after_activate(self, ctx: UpgradeContext) -> None:
         # SFX/VFX padrão podem ser disparados aqui se desejado
         try:
-            if hasattr(ctx, "sound_manager"):
-                ctx.sound_manager.play_upgrade_activate()
+            sound_manager = self._ctx_attr(ctx, "sound_manager")
+            if sound_manager is not None:
+                sound_manager.play_upgrade_activate()
         except (AttributeError, TypeError):
             pass
 
     def on_denied(self, ctx: UpgradeContext) -> None:
         try:
-            if hasattr(ctx, "sound_manager"):
-                ctx.sound_manager.play_upgrade_denied()
+            sound_manager = self._ctx_attr(ctx, "sound_manager")
+            if sound_manager is not None:
+                sound_manager.play_upgrade_denied()
         except (AttributeError, TypeError):
             pass
 
@@ -177,11 +203,12 @@ class ActiveUpgrade:
         cd = self.meta.base_cooldown
         try:
             # Modo GOD: cooldown de apenas 1 segundo
-            if ctx and hasattr(ctx, "god_mode") and ctx.god_mode:
+            if self._ctx_attr(ctx, "god_mode", False):
                 return 1.0
 
-            if ctx and hasattr(ctx, "difficulty_settings"):
-                rules: Any = ctx.difficulty_settings.get("special_rules", [])
+            difficulty_settings = self._ctx_attr(ctx, "difficulty_settings")
+            if difficulty_settings is not None:
+                rules: Any = difficulty_settings.get("special_rules", [])
                 if "no_powerups" in rules:
                     cd *= 1.5  # MVP: +50% cooldown
         except (AttributeError, TypeError, KeyError):
@@ -240,7 +267,7 @@ class ShieldBurstUpgrade(ActiveUpgrade):
 
     def on_activate_effect(self, ctx: UpgradeContext) -> None:
         # Ativa escudo que absorve 1 hit de dano (sem limite de tempo)
-        ship = getattr(ctx, "ship", None)
+        ship = self._ctx_ship(ctx)
         if ship is None:
             return
 
@@ -261,7 +288,7 @@ class ShieldBurstUpgrade(ActiveUpgrade):
 
         # Se está monitorando escudo, verificar se foi consumido
         if self._monitoring_shield and ctx is not None:
-            ship = getattr(ctx, "ship", None)
+            ship = self._ctx_ship(ctx)
             if ship is not None:
                 has_shield = getattr(ship, "has_shield", False)
 
@@ -285,19 +312,10 @@ class HealUpgrade(ActiveUpgrade):
     def additional_can_activate(self, ctx: UpgradeContext) -> bool:
         if self.usage_count >= 2:
             return False
-        ship = getattr(ctx, "ship", None)
+        ship = self._ctx_ship(ctx)
         if ship is None:
             return False
-        # Descobrir limite de vidas: usar cena ou Config como fallback
-        scene = getattr(ctx, "scene", None)
-        max_lives = None
-        if scene and hasattr(scene, "lives"):
-            # Heurística: assumir que o cap é no mínimo a maior vida observada ou INITIAL_LIVES
-            max_lives = getattr(scene, "lives_cap", None) or getattr(
-                Config, "INITIAL_LIVES", 5
-            )
-        else:
-            max_lives = getattr(Config, "INITIAL_LIVES", 5)
+        max_lives = getattr(ship, "max_lives", getattr(Config, "INITIAL_LIVES", 5))
         current_lives = getattr(ship, "lives", None)
         if current_lives is None:
             return False
@@ -305,20 +323,18 @@ class HealUpgrade(ActiveUpgrade):
 
     def on_activate_effect(self, ctx: UpgradeContext) -> None:
         self.usage_count += 1
-        ship = getattr(ctx, "ship", None)
+        ship = self._ctx_ship(ctx)
         if ship is None:
             return
-        scene = getattr(ctx, "scene", None)
-        # Incrementa vida com cap
-        cap = getattr(Config, "INITIAL_LIVES", 5)
-        if scene and hasattr(scene, "lives"):
-            cap = getattr(scene, "lives_cap", cap)
+        scene = self._ctx_scene(ctx)
         try:
-            if getattr(ship, "lives", 0) < cap:
-                ship.lives = getattr(ship, "lives", 0) + 1
-                # Se a cena espelha `lives`, sincronizar
-                if scene and hasattr(scene, "lives"):
-                    scene.lives = getattr(scene, "lives", 0) + 1
+            cap = getattr(ship, "max_lives", getattr(Config, "INITIAL_LIVES", 5))
+            current_lives = getattr(ship, "lives", 0)
+            if current_lives < cap:
+                if scene is not None and hasattr(scene, "_change_lives"):
+                    scene._change_lives(1)
+                else:
+                    ship.lives = current_lives + 1
         except (AttributeError, TypeError):
             pass
 
@@ -328,7 +344,7 @@ class EMPUpgrade(ActiveUpgrade):
         return True
 
     def on_activate_effect(self, ctx: UpgradeContext) -> None:
-        em = getattr(ctx, "entity_manager", None)
+        em = self._ctx_entity_manager(ctx)
         if em is None:
             return
         duration = self.get_effective_duration(ctx)
@@ -340,7 +356,7 @@ class EMPUpgrade(ActiveUpgrade):
             slow_factor = 0.4  # fallback
 
         # Spawnar onda visual do EMP
-        ship = getattr(ctx, "ship", None)
+        ship = self._ctx_ship(ctx)
         if ship and hasattr(em, "spawn_emp_wave"):
             try:
                 center_x = ship.x + ship.w / 2
@@ -367,7 +383,7 @@ class EMPUpgrade(ActiveUpgrade):
     def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
         if not ctx:
             return
-        em = getattr(ctx, "entity_manager", None)
+        em = self._ctx_entity_manager(ctx)
         if em is None:
             return
         # Reverter flags de EMP se forem nossos fallbacks
@@ -385,15 +401,14 @@ class HomingShotUpgrade(ActiveUpgrade):
         return True
 
     def on_activate_effect(self, ctx: UpgradeContext) -> None:
-        ship = getattr(ctx, "ship", None)
+        ship = self._ctx_ship(ctx)
         if ship is None:
             return
 
         duration = self.get_effective_duration(ctx)
 
         try:
-            from .upgrades_config import (HOMING_FIRE_RATE_PENALTY,
-                                          HOMING_SPEED_PENALTY)
+            from .upgrades_config import HOMING_FIRE_RATE_PENALTY, HOMING_SPEED_PENALTY
 
             speed_penalty = float(HOMING_SPEED_PENALTY)
             fire_rate_penalty = float(HOMING_FIRE_RATE_PENALTY)
@@ -425,7 +440,7 @@ class HomingShotUpgrade(ActiveUpgrade):
     def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
         if not ctx:
             return
-        ship = getattr(ctx, "ship", None)
+        ship = self._ctx_ship(ctx)
         if ship is None:
             return
 
@@ -449,7 +464,7 @@ class LaserShotUpgrade(ActiveUpgrade):
 
     def on_activate_effect(self, ctx: UpgradeContext) -> None:
         """Ativa o sistema de bolas elétricas orbitais (3 bolas, 3 cargas cada)."""
-        ship = getattr(ctx, "ship", None)
+        ship = self._ctx_ship(ctx)
 
         if ship is None:
             return
@@ -516,7 +531,7 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
 
     def on_activate_effect(self, ctx: UpgradeContext) -> None:
         """Ativa o sistema de tiros explosivos na nave."""
-        ship = getattr(ctx, "ship", None)
+        ship = self._ctx_ship(ctx)
 
         if ship is None:
             return
@@ -544,7 +559,7 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
 
         # Se está aguardando cargas acabarem, verificar se acabaram
         if self._waiting_for_charges_depleted and ctx is not None:
-            ship = getattr(ctx, "ship", None)
+            ship = self._ctx_ship(ctx)
             if ship is not None:
                 remaining = getattr(ship, "explosive_shots_remaining", 0)
                 is_active = getattr(ship, "explosive_shots_active", False)
@@ -606,7 +621,7 @@ class AirStrikeUpgrade(ActiveUpgrade):
         """Inicia o bombardeio aéreo."""
         import pygame
 
-        entity_manager = getattr(ctx, "entity_manager", None)
+        entity_manager = self._ctx_entity_manager(ctx)
         if entity_manager is None:
             return
 
@@ -646,7 +661,7 @@ class AirStrikeUpgrade(ActiveUpgrade):
             if self._bombs_remaining > 0 and self._spawn_timer >= self._spawn_interval:
                 import pygame
 
-                entity_manager = getattr(ctx, "entity_manager", None)
+                entity_manager = self._ctx_entity_manager(ctx)
                 if entity_manager is not None:
                     screen = pygame.display.get_surface()
                     screen_width = screen.get_width() if screen else 1600
@@ -684,8 +699,8 @@ class BlackHoleUpgrade(ActiveUpgrade):
 
     def on_activate_effect(self, ctx: UpgradeContext) -> None:
         """Ativa o buraco negro."""
-        entity_manager = getattr(ctx, "entity_manager", None)
-        ship = getattr(ctx, "ship", None)
+        entity_manager = self._ctx_entity_manager(ctx)
+        ship = self._ctx_ship(ctx)
 
         if entity_manager is None or ship is None:
             return
@@ -720,7 +735,7 @@ class CannonTowerUpgrade(ActiveUpgrade):
 
     def on_activate_effect(self, ctx: UpgradeContext) -> None:
         """Spawna duas torres de canhão fixas."""
-        entity_manager = getattr(ctx, "entity_manager", None)
+        entity_manager = self._ctx_entity_manager(ctx)
         if entity_manager is None:
             return
 

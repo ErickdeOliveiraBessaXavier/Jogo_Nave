@@ -1,236 +1,421 @@
-# Revisão dos Ajustes — Spawner + Levels
-
-## Context
-
-O usuário aplicou ajustes após análise de bugs e melhorias no sistema procedural e de inimigos por tema.
-Este plano documenta o resultado da revisão do commit HEAD~1 (`levels.py`) e aponta o que foi feito
-corretamente, o que introduziu novos problemas, e o que ainda precisa ser corrigido.
+# Revisão Técnica Sênior — Space Shooter (Pygame/Python)
 
 ---
 
-## O que foi feito corretamente
+## Status das correções aplicadas
 
-### 1. `_apply_theme_enemy_rules` agora aceita `difficulty_preset`
-Antes a assinatura não aceitava o parâmetro, mas era chamada de 4 lugares que precisavam passá-lo.
-O usuário corrigiu a assinatura e propagou o argumento em todos os call sites:
-- `get_level_config` (boss level, fixed levels, force_meteor_storm, procedural)
-
-### 2. Level 1 corrigido
-- `enemies_to_clear` estava como `1` → corrigido para `75`
-- `boss_type=StoneGolemBoss` estava acidentalmente no nível 1 → removido
-
-### 3. Sistema de variety cap adicionado
-`_apply_enemy_variety_cap` + `MAX_ENEMY_VARIETY_BY_DIFFICULTY` + `THEME_BASE_ENEMY` são uma adição
-sólida — limita a variedade de inimigos simultâneos e garante que o inimigo base do tema sempre
-tenha um slot reservado. O design é correto.
-
-### 4. Bloco de progressão por estágio (STARFIELD/CITY/VOLCANIC/PROCEDURAL)
-A intenção é boa — usar bandas hardcoded de stage_progress ao invés da função genérica de pesos,
-oferecendo maior controle sobre a curva de spawn.
+- `game/systems/entity_manager.py`: a função auxiliar `_filter_dead_inplace()` foi ajustada para usar `def` em vez de `lambda`, removendo o alerta do Ruff E731.
+- `game/scenes/playing.py`: a pontuação de colisões com boss agora passa por `_apply_score_multiplier()`, ficando consistente com o multiplicador base usado no restante do jogo.
+- `game/scenes/playing.py`: as flags legadas de transição passaram a ser propriedades derivadas de `transition_phase`, removendo o estado duplicado mais direto.
+- `game/core/upgrades.py` + `game/scenes/playing.py` + `game/entities/ship.py`: o `HealUpgrade` deixou de escrever diretamente em `scene.lives`; agora usa `ship.max_lives` como cap e a cena sincroniza vidas via helper centralizado.
+- `game/core/upgrades.py`: o acesso ao contexto foi centralizado em helpers internos (`_ctx_ship`, `_ctx_entity_manager`, `_ctx_scene`) para reduzir repetição e tornar as dependências mais explícitas.
+- `game/core/upgrades.py`: a leitura de atributos opcionais do contexto também foi centralizada em `_ctx_attr()`, reduzindo `getattr` espalhado nos hooks comuns.
+- As sugestões estruturais maiores abaixo continuam válidas como backlog técnico, mas não foram aplicadas nesta rodada.
 
 ---
 
-## Problemas encontrados nos novos ajustes
+## 1. ARQUITETURA GERAL — Problemas Críticos
 
-### BUG 1 — `hash()` não-determinístico em `_apply_enemy_variety_cap` [P3]
+### 1.1 `PlayingScene` é um God Object (CRÍTICO)
 
-**Arquivo:** `game/core/levels.py:608`
+`playing.py` tem aproximadamente **1.100 linhas** e acumula responsabilidades que deveriam pertencer a sistemas separados: física, progressão, spawn, lógica de boss, cutscene, screen shake, HUD de upgrades, gerenciamento de fade, cheat codes, input, etc.
 
+**Impacto:** Impossível testar isoladamente qualquer subsistema. Qualquer bug exige navegar toda a classe. Adicionar uma nova feature aumenta ainda mais a massa. Esse arquivo vai continuar crescendo indefinidamente.
+
+**Refatoração sugerida:**
 ```python
-rng = random.Random(config.level_number * 7919 + hash(world.theme.value))
+# Separar em sistemas com responsabilidade única:
+class BossTransitionSystem:   # cutscene, warning, música
+class LevelProgressionSystem: # enemies_to_clear, cleanup, next level
+class ScreenEffectsSystem:    # shake, fade, preparation
+class HUDSystem:              # render de HUD, upgrades, combo
 ```
 
-`hash()` de strings é randomizado por PYTHONHASHSEED desde Python 3.3. Dois runs do jogo com o
-mesmo nível podem gerar pools de inimigos diferentes, quebrando a garantia de determinismo.
+### 1.2 `EntityManager` também é um God Object (CRÍTICO)
 
-**Fix:**
+`entity_manager.py` gerencia **30+ tipos de entidades** com lógica de update específica por tipo espalhada em cascatas de `isinstance`. O método `update()` tem ~150 linhas de `if isinstance(...)`.
+
 ```python
-import zlib
-theme_seed = zlib.adler32(world.theme.value.encode())
-rng = random.Random(config.level_number * 7919 + theme_seed)
+# Padrão atual — anti-pattern severo
+if isinstance(en, Alien):
+    s = en.update(sdt)
+elif isinstance(en, EyeEnemy):
+    s = en.update(sdt, player_x, player_y)
+elif isinstance(en, GuidedMeteor):
+    en.update(sdt, self.is_side_scroll, player_x, player_y)
+elif isinstance(en, SquareMinionBoss):
+    en.update(sdt, screen_width, screen_height)
+# ... continua por mais 30 linhas
+```
+
+**Problema:** Toda vez que um novo inimigo é adicionado, `EntityManager.update()` precisa ser modificado. Isso viola o Princípio Aberto/Fechado e torna o método um ponto central de falha.
+
+**Solução:** Protocolo polimórfico unificado.
+```python
+class Updatable(Protocol):
+    def update(self, ctx: UpdateContext) -> list[SpawnRequest]: ...
+
+# Cada entidade recebe um UpdateContext com tudo que precisa
+@dataclass
+class UpdateContext:
+    dt: float
+    player_pos: tuple[float, float]
+    screen_size: tuple[int, int]
+    is_side_scroll: bool
+    entity_manager: 'EntityManager'
 ```
 
 ---
 
-### BUG 2 — Primeiro bloco de `generate_config` é computação morta para temas não-MOUNTAINS [P1]
+## 2. GERENCIAMENTO DE ESTADO — Problemas Sérios
 
-**Arquivo:** `game/core/levels.py:1387–1428` vs `1482–1523`
+### 2.1 Flags de Estado Duplicadas e Inconsistentes (ALTO)
 
-O bloco genérico (linhas 1387–1428) calcula `Alien`, `EyeEnemy`, e `SquareMinionBoss` com
-`_get_progressive_enemy_weight`. Imediatamente depois, para STARFIELD/CITY/VOLCANIC/PROCEDURAL
-(linhas 1482–1523 — novo código), esses mesmos três inimigos são sobrescritos com valores fixos.
-
-Resultado:
-- A computação do Bloco 1 (com progressive weights) é descartada.
-- Só o `Meteor` vem do Bloco 1 para esses temas.
-- Os dois blocos são inconsistentes: Bloco 1 usa `_get_progressive_enemy_weight`, Bloco 2 usa
-  bandas hardcoded de `stage_progress`.
-
-**Fix:** Extrair o Bloco 2 para ser a única fonte de verdade para esses temas, removendo o
-cálculo redundante do Bloco 1 para Alien/EyeEnemy/SquareMinionBoss quando o tema não é MOUNTAINS.
-Adicionar uma guarda no início do bloco genérico:
+Em `playing.py`, a máquina de estados de transição usa **duas representações paralelas** que precisam ser mantidas sincronizadas manualmente:
 
 ```python
-is_space_theme = world.theme in (
-    WorldTheme.STARFIELD, WorldTheme.CITY, WorldTheme.VOLCANIC, WorldTheme.PROCEDURAL
+# TransitionPhase (enum correto)
+self.transition_phase: TransitionPhase = TransitionPhase.LEVEL_ENTRY
+
+# Flags legadas duplicadas (frágeis)
+self.level_transition_pending = phase == TransitionPhase.POST_VICTORY_DELAY
+self.level_transition_active = phase == TransitionPhase.LEVEL_TRANSITION_WAIT
+self.world_transition_cutscene_active = phase == TransitionPhase.CUTSCENE_EXIT
+self.awaiting_world_transition_panel = phase == TransitionPhase.WORLD_PANEL
+```
+
+`_set_transition_phase()` tenta manter sincronismo, mas qualquer acesso direto às flags legadas fora desse método cria inconsistência. Há vários locais que leem `self.world_transition_cutscene_active` e `self.awaiting_world_transition_panel` diretamente.
+
+**Risco real:** Race condition lógica onde a fase enum diz uma coisa e as flags dizem outra — comportamento indefinido difícil de debugar.
+
+**Correção:** Eliminar as flags legadas completamente. Usar properties que derivam de `transition_phase`:
+```python
+@property
+def level_transition_active(self) -> bool:
+    return self.transition_phase == TransitionPhase.LEVEL_TRANSITION_WAIT
+```
+
+### 2.2 Estado de Jogo Inicializado em Múltiplos Métodos (MÉDIO)
+
+`__init__` chama `_init_player_profile()`, `_init_ship()`, `_init_game_state()`, `_init_transition_state()`, `_init_fade()`, `_init_systems()`. O problema é que `_apply_difficulty_settings()` (chamado dentro de `_init_game_state()`) reconfigura campos como `self.score`, `self.lives`, `self.state`, que depois são sobrescritos novamente pelo próprio `__init__`. Há redundância e risco de inicialização fora de ordem.
+
+---
+
+## 3. SISTEMA DE COLISÃO — Problemas de Performance e Design
+
+### 3.1 `_handle_collisions()` é Monolítico com Efeitos Colaterais Implícitos (ALTO)
+
+O método chama `_check_projectile_vs_enemies()`, `_check_formation_collisions()`, `_check_boss_collisions()`, `_check_ship_damage()` e `_process_powerups_and_stars()` em sequência, mas os resultados parciais são acumulados com mutação inplace. Não há garantia de ordem de processamento e o método acumula score de formas diferentes em cada branch.
+
+```python
+# Diferentes pontos acumulam score com lógicas diferentes
+self.score += self._apply_score_multiplier(gain)  # inimigos normais
+self.score += self._check_boss_collisions(0)        # boss (sem multiplicador base!)
+spike_gain = ...
+self.score += spike_gain                            # spikes (sem score_multiplier!)
+```
+
+**Bug oculto:** `_check_boss_collisions()` aplica `score_multiplier_value` mas **não** aplica `_base_score_multiplier` (que inclui o multiplicador de dificuldade e nível). Inimigos normais recebem ambos. Isso significa que golpes no boss valem proporcionalmente menos em níveis avançados.
+
+### 3.2 `_batch_query_for_projectiles()` Recriado a Cada Frame (MÉDIO)
+
+```python
+def _batch_query_for_projectiles(self, projectiles, grid, padding):
+    result: dict[int, list[Enemy]] = {}
+    for p in projectiles:
+        # Query por projétil — O(n×m) no pior caso
+        result[id(p)] = [target for target in potential_enemies if r.colliderect(target.rect)]
+    return result
+```
+
+O dicionário é criado e descartado a cada frame. Para 50 balas e 25 inimigos, são 1250 verificações + alocação de dict a cada 120 fps. Considere cache por região ou broad-phase mais eficiente.
+
+### 3.3 `_RECT_MASK_CACHE` é Global Sem Limite (MÉDIO)
+
+```python
+_RECT_MASK_CACHE: dict[tuple[int, int], pygame.mask.Mask] = {}
+```
+
+Cache cresce indefinidamente. Se houver muitos tamanhos de rect diferentes, isso vaza memória silenciosamente.
+
+---
+
+## 4. CONFIGURAÇÃO — Problemas de Design
+
+### 4.1 `Config` é um Dataclass Frozen mas com `ConfigProxy` que Bypassa o Contrato (ALTO)
+
+```python
+@dataclass(frozen=True)
+class Config:
+    SCREEN_WIDTH: int = 1280
+    ...
+
+class ConfigProxy:
+    def __getattr__(self, name: str) -> Any:
+        if name == "SCREEN_WIDTH":
+            return _runtime_screen["width"]  # Ignora o frozen!
+```
+
+O `ConfigProxy` viola completamente o contrato de imutabilidade do dataclass. Qualquer parte do código que assume que `Config.SCREEN_WIDTH` é constante (ex: sistemas de colisão pré-calculados) pode ter comportamento incorreto após uma mudança de resolução em runtime. Além disso, o `ConfigProxy.__setattr__` lança `AttributeError`, mas `_runtime_screen` é mutável globalmente via `set_screen_resolution()`.
+
+**Problema adicional:** `config` é um módulo-level singleton. Em testes unitários, qualquer teste que chame código dependente de `Config.SCREEN_WIDTH` vai ler o estado global mutável.
+
+### 4.2 `Config` Mistura Constantes de Gameplay com Constantes de Partícula (MÉDIO)
+
+```python
+PARTICLE_ENTRY_COUNT = 3
+PARTICLE_THRUSTER_COUNT = 2
+PARTICLE_ENTRY_VELOCITY = (-80, 80)
+# ... ao lado de:
+BOSS_HEALTH: int = 1000
+FPS: int = 120
+```
+
+Isso torna `config.py` um dumping ground. Constantes de partícula pertencem ao sistema de partículas. Constantes de boss pertencem à configuração de boss.
+
+---
+
+## 5. SISTEMA DE UPGRADES — Problemas de Acoplamento
+
+### 5.1 `UpgradeContext` é um Protocol mas o Código Usa `getattr` com Fallbacks (ALTO)
+
+```python
+class UpgradeContext(Protocol):
+    ship: Any
+    entity_manager: Any
+    ...
+
+# Mas todo uso real é:
+ship = getattr(ctx, "ship", None)
+if ship is None:
+    return
+em = getattr(ctx, "entity_manager", None)
+```
+
+Se `UpgradeContext` é um Protocol, por que não usar type checking real? O uso excessivo de `getattr` com fallback `None` indica que o protocol não é realmente enforced. Isso é pior que não ter o Protocol — dá falsa segurança estática enquanto falha silenciosamente em runtime.
+
+**Solução:** Usar o dataclass `UpgradeContext` que já existe em `playing.py` (não o Protocol em `upgrades.py`) e passar o tipo correto. Remover o Protocol de `upgrades.py` completamente ou torná-lo um ABC concreto.
+
+### 5.2 `HealUpgrade` Acessa `scene.lives` via `getattr` (ALTO)
+
+```python
+def on_activate_effect(self, ctx: UpgradeContext) -> None:
+    scene = getattr(ctx, "scene", None)
+    if scene and hasattr(scene, "lives"):
+        scene.lives = getattr(scene, "lives", 0) + 1
+```
+
+Um upgrade modifica diretamente a cena de gameplay. Isso é acoplamento severo — `upgrades.py` tem dependência implícita em `PlayingScene`. Upgrades deveriam emitir eventos ou retornar efeitos que a cena aplica.
+
+```python
+# Melhor: upgrade retorna um efeito
+@dataclass
+class UpgradeEffect:
+    heal_amount: int = 0
+    shield_hp: int = 0
+    # ...
+
+def activate(self, ctx) -> UpgradeEffect:
+    return UpgradeEffect(heal_amount=1)
+```
+
+---
+
+## 6. GERENCIAMENTO DE MEMÓRIA E PERFORMANCE
+
+### 6.1 `PlayerProfile.load()` é um Método de 300 Linhas com Parsing Manual (ALTO)
+
+```python
+def load(self):
+    # 300+ linhas de parsing manual com dicionários raw
+    level_stats_raw: Dict[str, Dict[str, Any]] = data.get("level_stats", {})
+    for level_num_str, stats_data_raw in level_stats_raw.items():
+        stats_data: Dict[str, Any] = stats_data_raw
+        try:
+            level_num = int(level_num_str)
+            stats = LevelPerformance(level_number=level_num)
+            stats.attempts = int(stats_data.get("attempts", 0))
+            # ... 20 linhas mais de parsing manual
+```
+
+Isso é `from_dict()` manual, frágil e não testável. Qualquer mudança no schema de `LevelPerformance` exige atualização manual aqui. Usar `dacite`, `pydantic` ou pelo menos `dataclasses.asdict`/`from_dict` pattern.
+
+### 6.2 `_update_particles()` Cria Listas Novas a Cada Frame (MÉDIO)
+
+```python
+self.entry_particles = [
+    ParticleDict(...)
+    for p in self.entry_particles
+    if p["lifetime"] - dt > 0
+]
+self.thruster_particles = [
+    ParticleDict(...)
+    for p in self.thruster_particles
+    ...
+]
+```
+
+List comprehension + GC pressure a cada frame. Para 120fps com partículas constantes, isso gera pressão significativa no garbage collector. Use object pools ou update inplace com deque.
+
+### 6.3 `ProceduralLevelGenerator._level_cache` Tem Eviction FIFO Incorreto (MÉDIO)
+
+```python
+if len(self._level_cache) > 50:
+    self._level_cache.pop(next(iter(self._level_cache)))
+```
+
+O comentário diz "FIFO", mas o comportamento é LRU simulado de forma incorreta — remove o item mais antigo por ordem de inserção, não o menos acessado. Use `functools.lru_cache` ou `collections.OrderedDict` com eviction real se LRU for necessário.
+
+---
+
+## 7. SISTEMA DE SOM — Problemas de Robustez
+
+### 7.1 `AudioController.__getattr__` Delega Tudo para `SoundManager` (MÉDIO)
+
+```python
+class AudioController:
+    def __getattr__(self, name: str):
+        return getattr(self._mgr, name)
+```
+
+Isso quebra completamente type checking, autocompletion e refactoring. Qualquer typo em uma chamada de método (`sound_manager.play_explosure_boss()`) falha silenciosamente em runtime ao invés de ser capturado pelo linter. Fachada deve expor métodos explícitos.
+
+### 7.2 Thread de Transição de Música Sem Cancelamento Adequado (ALTO)
+
+```python
+def _transition_to_music(self, music_path: str, music_type: str) -> None:
+    if self.sound_manager.transition_thread and self.sound_manager.transition_thread.is_alive():
+        pygame.mixer.music.stop()
+        self.sound_manager.transition_thread.join()  # BLOCKING JOIN na thread principal!
+```
+
+`join()` sem timeout na thread principal pode causar freeze do jogo se a thread de transição travar. Além disso, `_smooth_transition` usa `time.sleep()` dentro do lock, o que bloqueia outras transições pelo tempo do fade completo.
+
+```python
+# Solução: sempre usar timeout
+self.sound_manager.transition_thread.join(timeout=1.0)
+if self.sound_manager.transition_thread.is_alive():
+    # Forçar cancelamento via event
+```
+
+---
+
+## 8. SISTEMA DE COLETA DE DADOS — `LevelPerformance`
+
+### 8.1 `deque` com `maxlen` mas Serializado como Lista (BAIXO-MÉDIO)
+
+```python
+recent_attempts: Deque[Dict[str, Any]] = field(
+    default_factory=lambda: deque(maxlen=10)
 )
 
-# Aliens (nível 2+) — apenas para MOUNTAINS; temas espaciais usam bloco dedicado abaixo
-if level_number >= 2 and not is_space_theme:
-    ...  # bloco genérico existente
+# Na serialização:
+stats_dict[key] = list(cast(List[Dict[str, Any]], value))
 
-# Eyes (nível 5+)
-if level_number >= 5 and not is_space_theme:
-    ...
-
-# SquareMinionBoss (nível 3+)
-if level_number >= 3 and not is_space_theme:
-    ...
-
-# ...depois o bloco dedicado para temas espaciais mantido como está
+# No carregamento:
+stats.recent_attempts = deque(
+    cast(..., stats_data.get("recent_attempts", [])),
+    maxlen=PerformanceAnalyzer.RECENT_ATTEMPTS_WINDOW,  # 10
+)
 ```
+
+`RECENT_ATTEMPTS_WINDOW = 10` mas `deque(maxlen=10)` é hardcoded. Se alguém mudar a constante, o `deque` carregado do disco pode ter mais elementos que o maxlen atual, perdendo dados silenciosamente.
 
 ---
 
-### BUG 3 — Level 3 `enemies_to_clear=10` deve ser revertido para `250`
+## 9. BUGS OCULTOS
 
-**Arquivo:** `game/core/levels.py:1663`
+### 9.1 `Ship.bullet_spawn()` Usa `sprite_w` da Imagem Original, Não da Rotacionada
 
-O valor foi alterado de `250` para `10` durante testes. Deve voltar para `250`.
+```python
+if self.ship_image is not None:
+    sprite_w, sprite_h = self.ship_image.get_size()  # imagem ORIGINAL
+```
+
+Quando a nave está rotacionada (facing "east" ou "west"), `ship_image_rotated` pode ter dimensões diferentes de `ship_image`. O spawn de balas usa as dimensões da imagem não-rotacionada, causando offset visual quando o sprite é maior/menor após rotação.
+
+### 9.2 `_keep_in_bounds()` Ignora o Parâmetro `is_side_scroll`
+
+```python
+def _keep_in_bounds(self, _is_side_scroll: bool = False):
+    if self.x < 0:
+        self.x = 0
+    # ... bounds normais
+    if self.y + self.h > Config.SCREEN_HEIGHT and not self.is_entering:
+        self.y = Config.SCREEN_HEIGHT - self.h
+```
+
+O parâmetro `_is_side_scroll` é recebido mas completamente ignorado (prefixo `_`). O comentário diz "permite movimento livre em todos os eixos" mas a implementação aplica os mesmos limites independente do modo.
+
+### 9.3 `_apply_pending_world_transition()` tem Lógica Contraditória
+
+```python
+def _apply_pending_world_transition(self) -> None:
+    if (
+        self.pending_world_transition is None
+        and self.transition_phase == TransitionPhase.PLAYING
+    ):
+        return  # Early return correto
+
+    if self.pending_world_transition is None:
+        self.awaiting_world_transition_panel = False
+        self._begin_playing_state()
+        return  # Mas aqui pending é None E phase NÃO é PLAYING
+    # ...
+```
+
+O segundo `if` é alcançado apenas quando `pending_world_transition is None` mas `transition_phase != PLAYING`. Nesse caso, vai para `_begin_playing_state()` sem ter um mundo para aplicar. Esse caminho indica lógica de estado incorreta.
 
 ---
 
-## Bugs pré-existentes que ainda precisam ser corrigidos
+## 10. VIOLAÇÕES DE BOAS PRÁTICAS
 
-### P0 — Timers de mine/propeller/formation usam `1/60` hardcoded
-
-**Arquivo:** `game/systems/spawner.py:967, 1004, 1022`
-
-A frequência de minas, propellers e formações é frame-rate dependente. A 120 FPS, esses timers
-correm 2x mais rápido que o esperado. Existem inclusive TODOs no próprio código.
-
-**Fix:** Passar `dt` para os três métodos, mudando a assinatura:
+### 10.1 Imports Condicionais Dentro de Métodos Hot-Path
 
 ```python
-# Antes
-def _update_mine_spawner(self, entity_manager: "EntityManager") -> None:
-    self.mine_spawn_timer.update(1 / 60)
-
-# Depois
-def _update_mine_spawner(self, dt: float, entity_manager: "EntityManager") -> None:
-    self.mine_spawn_timer.update(dt)
+def _start_boss_fight(self) -> None:
+    from ..entities.giant_meteor_boss import GiantMeteorBoss
+    from ..entities.mountain_serpent_boss import MountainSerpentBoss
+    from ..entities.stone_golem_boss import StoneGolemBoss
 ```
 
-E ajustar as chamadas em `update()`:
+Imports dinâmicos têm overhead de lookup e são difíceis de rastrear. Devem ser resolvidos no carregamento do módulo. O argumento de "evitar circular imports" deve ser resolvido via reorganização de módulos, não com imports lazy espalhados.
+
+### 10.2 `playing.py` usa `cast(Any, ...)` como Escape Hatch
+
 ```python
-self._update_mine_spawner(dt, entity_manager)
-self._update_propeller_spawner(dt, entity_manager)
-self._update_formation_spawner(dt, entity_manager)
+boss = cast(Any, self.entity_manager.boss)
 ```
+
+`cast(Any, x)` é uma declaração de falência do type system. Se o tipo de `boss` é incerto, o problema está na modelagem — `EntityManager.boss` deveria ser um Union tipo específico ou uma interface comum.
+
+### 10.3 `MountainsBackground._create_sky_gradient()` é O(height) a Cada Instanciação
+
+```python
+def _create_sky_gradient(self) -> None:
+    for y in range(self.height):  # 720 iterações de pygame.draw.line
+        pygame.draw.line(self.sky_gradient, color, (0, y), (self.width, y))
+```
+
+Isso é executado no construtor, não a cada frame — mas é lento na instanciação e pode ser substituído por um shader-like approach usando `pygame.surfarray` para preencher pixels diretamente, que seria 10-50x mais rápido.
 
 ---
 
-### P0 — `spawn_rate_multiplier` do WorldConfig aplicado duas vezes
+## Resumo de Prioridades
 
-**Arquivo:** `game/core/levels.py:1327–1332` + `game/core/levels.py:1815–1818`
+| Prioridade | Problema |
+|-----------|----------|
+| 🔴 Crítico | `PlayingScene` God Object — fragmentar em sistemas |
+| 🔴 Crítico | `EntityManager` com `isinstance` em cascade — protocolo polimórfico |
+| 🔴 Alto | Flags de estado duplicadas em `playing.py` — eliminar legado |
+| 🔴 Alto | `HealUpgrade` acoplado diretamente à `PlayingScene` |
+| 🔴 Alto | Thread de música com `join()` bloqueante sem timeout |
+| 🟡 Médio | `ConfigProxy` viola contrato de imutabilidade |
+| 🟡 Médio | Pressão de GC nas partículas a 120fps |
+| 🟡 Médio | Bug de score inconsistente em colisões boss vs inimigos normais |
+| 🟡 Médio | `_keep_in_bounds` ignora parâmetro `is_side_scroll` |
+| 🟡 Médio | `PlayerProfile.load()` de 300 linhas sem schema validation |
+| 🟢 Baixo | `_RECT_MASK_CACHE` sem limite de tamanho |
+| 🟢 Baixo | `AudioController.__getattr__` quebra type safety |
 
-Em `generate_config`, o multiplicador é aplicado via `world_spawn_mult`:
-```python
-world_spawn_mult = float(world.theme_modifiers.get("spawn_rate_multiplier", 1.0))
-spawn_multiplier = theme_spawn_mult * preset_spawn_mult * world_spawn_mult
-```
-
-Depois `_apply_world_theme_to_config` aplica novamente:
-```python
-spawn_rate_mult = world.theme_modifiers.get("spawn_rate_multiplier", 1.0)
-adjusted_spawn_config[enemy_type] /= spawn_rate_mult
-```
-
-Para o World 4 (VOLCANIC, `spawn_rate_multiplier: 1.15`), o spawn é dividido por `1.15²=1.3225`
-ao invés de `1.15`.
-
-**Fix (opção A — remover de `generate_config`):**
-```python
-# Remover world_spawn_mult do generate_config — deixar _apply_world_theme_to_config como única fonte
-spawn_multiplier = theme_spawn_mult * preset_spawn_mult  # sem world_spawn_mult
-```
-
-**Fix (opção B — remover de `_apply_world_theme_to_config`):**
-Remover o bloco `spawn_rate_mult` de `_apply_world_theme_to_config`, mantendo apenas
-`meteor_weight`, `alien_weight` e `eye_weight`.
-
-Opção A é preferível pois `_apply_world_theme_to_config` é o lugar natural para aplicar
-modificadores de WorldConfig.
-
----
-
-### P2 — `_count_enemies_by_type` chamado 3x por frame
-
-**Arquivo:** `game/systems/spawner.py` — método `update()`
-
-Por frame: `_refresh_death_clocks`, `_record_pressure_sample`, e `_get_dynamic_enemy_weights`
-chamam `_count_enemies_by_type` independentemente.
-
-**Fix:** Calcular uma vez por tick:
-```python
-def update(self, dt, entity_manager, ...) -> None:
-    self.spawn_clock += dt
-    counts = self._count_enemies_by_type(entity_manager)
-    self._refresh_death_clocks(counts)
-    if self.use_weighted_spawn:
-        self._record_pressure_sample_from_counts(counts)
-        self._update_weighted_enemy_spawn(..., precomputed_counts=counts)
-```
-
----
-
-### P2 — `_is_storm_level()` acoplado a string de exibição em português
-
-**Arquivo:** `game/systems/spawner.py:398–406`
-
-```python
-def _is_storm_level(self) -> bool:
-    theme = (self.level_config.theme_name or "").lower()
-    return "tempestade de meteoros" in theme or "tempestade de rock gliders" in theme
-```
-
-Se o nome da LevelTheme mudar, a lógica de cap quebra silenciosamente.
-
-**Fix:** Adicionar `is_storm: bool = False` em `LevelConfig` e setar no `generate_config`
-quando `special_feature in ("meteor_only", "rock_glider_only")`.
-
----
-
-### P3 — Log incorreto em `world_config.py:307`
-
-```python
-logger.info("Níveis 41+: Mundos procedurais infinitos")  # ERRADO — é 46+
-```
-
-**Fix:** Mudar para `"Níveis 46+: ..."`.
-
----
-
-## Arquivos a modificar
-
-| Arquivo | Mudanças |
-|---|---|
-| `game/core/levels.py` | Fix `hash()` → `zlib.adler32`; remover bloco redundante no Bloco 1; remover `world_spawn_mult` de `generate_config`; restaurar Level 3 `enemies_to_clear=250` |
-| `game/systems/spawner.py` | Passar `dt` para mine/propeller/formation spawners; cache de `_count_enemies_by_type`; `is_storm` via campo em vez de string |
-| `game/core/world_config.py` | Fix log "41+" → "46+" |
-
-## Prioridade de execução
-
-1. `1/60` → `dt` nos spawners (P0, impacto direto no gameplay)
-2. `spawn_rate_multiplier` duplo (P0, World 4 errado)
-3. Bloco redundante em `generate_config` (P1, limpeza + consistência)
-4. `hash()` → `zlib.adler32` (P3, determinismo entre sessões)
-5. Log "41+" (P3, cosmético)
-
-## Verificação
-
-Após implementar:
-1. Confirmar que minas surgem a ~10s reais (não 5s) a 120 FPS
-2. Confirmar que World 4 spawn rate bate com `1/1.15` (não `1/1.3225`) — logar spawn times do nível 36 antes e depois
-3. No nível 12 (STARFIELD), verificar que só os inimigos do Bloco 2 estão presentes (sem dupla entrada de Alien)
-4. Executar o jogo duas vezes e confirmar que o mesmo nível tem o mesmo pool de inimigos (teste de determinismo)
+O projeto tem uma base funcional sólida, mas o crescimento orgânico criou acoplamentos severos que vão dificultar cada nova feature adicionada. A refatoração mais urgente é quebrar `PlayingScene` e introduzir o protocolo polimórfico em `EntityManager` — essas duas mudanças sozinhas removeriam a maior parte do débito técnico acumulado.

@@ -72,6 +72,7 @@ class Ship:
         self.speed = 250 * self.profile.speed_mult
         self.invuln = 0  # ms
         self.lives = max(1, Config.INITIAL_LIVES + self.profile.extra_lives)
+        self.max_lives = self.lives
         self.visible = True
         self.move_vec = pygame.math.Vector2(0, 0)
 
@@ -960,9 +961,7 @@ class Ship:
                 self._mouse_history.append((target_x, target_y, now))
                 # Descartar entradas antigas (manter apenas janela relevante).
                 cutoff = now - (delay + 0.1)
-                self._mouse_history = [
-                    e for e in self._mouse_history if e[2] >= cutoff
-                ]
+                self._mouse_history = [e for e in self._mouse_history if e[2] >= cutoff]
                 # Buscar a posição mais próxima de `delay` segundos atrás.
                 for x, y, t in reversed(self._mouse_history):
                     if now - t >= delay:

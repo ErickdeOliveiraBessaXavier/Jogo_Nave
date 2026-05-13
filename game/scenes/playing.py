@@ -41,11 +41,14 @@ from ..core.paths import get_profile_path
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
-from ..core.upgrades import (ActiveUpgrade, HealUpgrade, create_upgrade,
-                             get_upgrade_icon)
+from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
 from ..core.upgrades_config import HOMING_DAMAGE_MULTIPLIER, UPGRADE_SLOT_COUNT
-from ..core.world_config import (WorldConfig, format_stage_name,
-                                 get_world_for_level, is_side_scroll_mode)
+from ..core.world_config import (
+    WorldConfig,
+    format_stage_name,
+    get_world_for_level,
+    is_side_scroll_mode,
+)
 from ..entities.floating_score import FloatingScore
 from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
@@ -250,10 +253,8 @@ class PlayingScene(Scene):
 
     def _init_transition_state(self) -> None:
         """Inicializa timers e flags de transição de nível/mundo."""
-        self.level_transition_active: bool = False
         self.level_transition_timer: float = 0.0
         self.level_transition_delay: float = Config.LEVEL_TRANSITION_DELAY
-        self.level_transition_pending: bool = False
         self.level_transition_pending_timer: float = 0.0
         self.level_transition_pending_delay: float = (
             Config.LEVEL_TRANSITION_PENDING_DELAY
@@ -262,9 +263,7 @@ class PlayingScene(Scene):
             Config.LEVEL_TRANSITION_ANIMATION_TIMEOUT
         )
         self.pending_world_transition: Optional[WorldConfig] = None
-        self.awaiting_world_transition_panel: bool = False
 
-        self.world_transition_cutscene_active: bool = False
         self.world_transition_cutscene_timer: float = 0.0
         self.world_transition_cutscene_duration: float = (
             Config.WORLD_TRANSITION_CUTSCENE_DURATION
@@ -337,7 +336,7 @@ class PlayingScene(Scene):
         self.enemy_health_multiplier: float = settings["enemy_health_multiplier"]
 
         self.score: int = 0
-        self.ship.lives = self.lives
+        self._sync_lives(self.lives)
         self.total_enemies_destroyed: int = 0
         self.shoot_cd = 0.0
         self.cheat_buffer = ""
@@ -375,15 +374,38 @@ class PlayingScene(Scene):
     def _set_transition_phase(self, phase: TransitionPhase) -> None:
         """Atualiza a fase de transição e sincroniza os flags legados."""
         self.transition_phase = phase
-        self.level_transition_pending = phase == TransitionPhase.POST_VICTORY_DELAY
-        self.level_transition_active = phase == TransitionPhase.LEVEL_TRANSITION_WAIT
-        self.world_transition_cutscene_active = phase == TransitionPhase.CUTSCENE_EXIT
-        self.awaiting_world_transition_panel = phase == TransitionPhase.WORLD_PANEL
 
         if phase != TransitionPhase.POST_VICTORY_DELAY:
             self.level_transition_pending_timer = 0.0
         if phase != TransitionPhase.LEVEL_TRANSITION_WAIT:
             self.level_transition_timer = 0.0
+
+    @property
+    def level_transition_pending(self) -> bool:
+        return self.transition_phase == TransitionPhase.POST_VICTORY_DELAY
+
+    @property
+    def level_transition_active(self) -> bool:
+        return self.transition_phase == TransitionPhase.LEVEL_TRANSITION_WAIT
+
+    @property
+    def world_transition_cutscene_active(self) -> bool:
+        return self.transition_phase == TransitionPhase.CUTSCENE_EXIT
+
+    @world_transition_cutscene_active.setter
+    def world_transition_cutscene_active(self, value: bool) -> None:
+        if value:
+            self.transition_phase = TransitionPhase.CUTSCENE_EXIT
+        elif self.transition_phase == TransitionPhase.CUTSCENE_EXIT:
+            self.transition_phase = (
+                TransitionPhase.WORLD_PANEL
+                if self.pending_world_transition is not None
+                else TransitionPhase.LEVEL_ENTRY
+            )
+
+    @property
+    def awaiting_world_transition_panel(self) -> bool:
+        return self.transition_phase == TransitionPhase.WORLD_PANEL
 
     def _can_handle_gameplay_actions(self) -> bool:
         """Retorna True quando o jogador pode agir normalmente."""
@@ -392,9 +414,6 @@ class PlayingScene(Scene):
     def _begin_level_preparation(self) -> None:
         """Coloca a cena em modo de preparação para o próximo nível."""
         self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
-        self.level_transition_pending = False
-        self.level_transition_active = False
-        self.awaiting_world_transition_panel = False
         self.state = "preparing"
         self.preparation_time_left = Config.PREPARATION_TIME
         self.level_start_time = None
@@ -435,7 +454,6 @@ class PlayingScene(Scene):
             return
 
         if self.pending_world_transition is None:
-            self.awaiting_world_transition_panel = False
             self._begin_playing_state()
             return
 
@@ -544,7 +562,6 @@ class PlayingScene(Scene):
         target_world = self.world_transition_cutscene_target_world
         debug_mode = self.world_transition_cutscene_debug_mode
 
-        self.world_transition_cutscene_active = False
         self.world_transition_cutscene_timer = 0.0
         self.world_transition_cutscene_target_world = None
         self.world_transition_cutscene_debug_mode = False
@@ -1460,8 +1477,7 @@ class PlayingScene(Scene):
                 self._handle_ship_hit()
                 self.level_damage_taken += drip_damage
 
-        if self.score_multiplier_active:
-            score_gain = int(score_gain * self.score_multiplier_value)
+        score_gain = self._apply_score_multiplier(score_gain)
 
         return gain + score_gain
 
@@ -1709,8 +1725,7 @@ class PlayingScene(Scene):
             )
 
         def _apply_life() -> None:
-            self.lives += 1
-            self.ship.lives = self.lives
+            self._change_lives(1)
 
         def _apply_rainbow() -> None:
             _apply_life()
@@ -1788,8 +1803,7 @@ class PlayingScene(Scene):
             sound_manager.play_powerup()
             return
 
-        self.lives -= 1
-        self.ship.lives = self.lives
+        self._change_lives(-1)
         self.player_profile.record_death(self.current_level_index + 1, "collision")
 
         if self.lives > 0:
@@ -2443,6 +2457,13 @@ class PlayingScene(Scene):
             if upg is not None:
                 upg.update(dt, ctx)
 
+    def _sync_lives(self, lives: int) -> None:
+        self.lives = max(0, lives)
+        self.ship.lives = self.lives
+
+    def _change_lives(self, delta: int) -> None:
+        self._sync_lives(self.lives + delta)
+
     def _apply_cooldown_reduction(self, reduction: float) -> None:
         """Reduz instantaneamente o cooldown de todos os upgrades ativos."""
         for upg in self.upgrade_slots:
@@ -2522,12 +2543,19 @@ class PlayingScene(Scene):
             return
 
         from ..core import colors as _colors
-        from ..core.colors import (POWERUP_COOLDOWN_HASTE,
-                                   POWERUP_DAMAGE_BOOST, POWERUP_DOUBLE_SHOT,
-                                   POWERUP_LIFE, POWERUP_MINI_SHIPS,
-                                   POWERUP_PIERCING_SHOT, POWERUP_RAINBOW,
-                                   POWERUP_SCORE, POWERUP_SHIELD,
-                                   POWERUP_SPEED, POWERUP_TIME_STOP)
+        from ..core.colors import (
+            POWERUP_COOLDOWN_HASTE,
+            POWERUP_DAMAGE_BOOST,
+            POWERUP_DOUBLE_SHOT,
+            POWERUP_LIFE,
+            POWERUP_MINI_SHIPS,
+            POWERUP_PIERCING_SHOT,
+            POWERUP_RAINBOW,
+            POWERUP_SCORE,
+            POWERUP_SHIELD,
+            POWERUP_SPEED,
+            POWERUP_TIME_STOP,
+        )
 
         font_label = get_font(20)
         font_hint = get_font(12)
