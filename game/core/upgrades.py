@@ -408,7 +408,8 @@ class HomingShotUpgrade(ActiveUpgrade):
         duration = self.get_effective_duration(ctx)
 
         try:
-            from .upgrades_config import HOMING_FIRE_RATE_PENALTY, HOMING_SPEED_PENALTY
+            from .upgrades_config import (HOMING_FIRE_RATE_PENALTY,
+                                          HOMING_SPEED_PENALTY)
 
             speed_penalty = float(HOMING_SPEED_PENALTY)
             fire_rate_penalty = float(HOMING_FIRE_RATE_PENALTY)

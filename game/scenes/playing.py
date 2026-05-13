@@ -41,14 +41,11 @@ from ..core.paths import get_profile_path
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
-from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
+from ..core.upgrades import (ActiveUpgrade, HealUpgrade, create_upgrade,
+                             get_upgrade_icon)
 from ..core.upgrades_config import HOMING_DAMAGE_MULTIPLIER, UPGRADE_SLOT_COUNT
-from ..core.world_config import (
-    WorldConfig,
-    format_stage_name,
-    get_world_for_level,
-    is_side_scroll_mode,
-)
+from ..core.world_config import (WorldConfig, format_stage_name,
+                                 get_world_for_level, is_side_scroll_mode)
 from ..entities.floating_score import FloatingScore
 from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
@@ -2543,19 +2540,12 @@ class PlayingScene(Scene):
             return
 
         from ..core import colors as _colors
-        from ..core.colors import (
-            POWERUP_COOLDOWN_HASTE,
-            POWERUP_DAMAGE_BOOST,
-            POWERUP_DOUBLE_SHOT,
-            POWERUP_LIFE,
-            POWERUP_MINI_SHIPS,
-            POWERUP_PIERCING_SHOT,
-            POWERUP_RAINBOW,
-            POWERUP_SCORE,
-            POWERUP_SHIELD,
-            POWERUP_SPEED,
-            POWERUP_TIME_STOP,
-        )
+        from ..core.colors import (POWERUP_COOLDOWN_HASTE,
+                                   POWERUP_DAMAGE_BOOST, POWERUP_DOUBLE_SHOT,
+                                   POWERUP_LIFE, POWERUP_MINI_SHIPS,
+                                   POWERUP_PIERCING_SHOT, POWERUP_RAINBOW,
+                                   POWERUP_SCORE, POWERUP_SHIELD,
+                                   POWERUP_SPEED, POWERUP_TIME_STOP)
 
         font_label = get_font(20)
         font_hint = get_font(12)
