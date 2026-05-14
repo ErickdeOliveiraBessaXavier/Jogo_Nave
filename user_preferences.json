@@ -7,6 +7,6 @@
   "music_volume": 0.75,
   "sfx_volume": 0.5,
   "shot_volume": 0.2,
-  "mouse_control": true,
+  "mouse_control": false,
   "auto_fire": false
 }

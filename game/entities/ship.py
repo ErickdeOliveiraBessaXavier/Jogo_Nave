@@ -405,6 +405,21 @@ class Ship:
     def get_invulnerable_time(self) -> float:
         return self.invuln / 1000.0
 
+    def get_double_shot_time(self) -> float:
+        return self.double_shot_timer
+
+    def get_speed_boost_time(self) -> float:
+        return self.speed_boost_timer
+
+    def get_piercing_shot_time(self) -> float:
+        return self.piercing_shot_timer
+
+    def get_mini_ships_time(self) -> float:
+        return self.mini_ships_timer
+
+    def get_damage_boost_time(self) -> float:
+        return self.damage_boost_timer
+
     @property
     def has_shield(self) -> bool:
         return self.shield_timer > 0.0 and self.shield_hp > 0
