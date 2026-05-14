@@ -270,15 +270,23 @@ class SoundManager:
         self.boss_laser_channel.stop()
 
     @require_audio
-    def play_boss_laser_fire(self):
-        """Toca som de disparo do laser do boss com volume balanceado e controle."""
+    def play_boss_laser_fire(self, return_channel: bool = False):
+        """Toca som de disparo do laser do boss com volume balanceado e controle.
+
+        Args:
+            return_channel: Se True, retorna o channel dedicado após tocar,
+                para que o caller possa interromper o som quando quiser.
+        """
         if "boss_laser_fire" in self._sounds:
             # Volume ligeiramente mais alto para o disparo (momento de impacto)
             sound = self._sounds["boss_laser_fire"]
             fire_volume = min(1.0, self.sfx_volume * 1.2)  # 20% mais alto
             sound.set_volume(fire_volume * self.master_volume)
-            # Tocar no canal dedicado para controle
+            # Sempre usa o canal dedicado do laser para evitar conflito com
+            # canais usados por tiros comuns.
             self.boss_laser_fire_channel.play(sound)
+            if return_channel:
+                return self.boss_laser_fire_channel
 
     @require_audio
     def play_golem_mine_timer(self):

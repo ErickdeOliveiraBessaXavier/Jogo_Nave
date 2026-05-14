@@ -1,5 +1,5 @@
 import random
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 import pygame
 
@@ -43,6 +43,7 @@ from ..entities.mountain_propeller import MountainPropeller
 from ..entities.mountain_serpent_boss import (MountainSerpentBoss,
                                               SerpentBlock, SerpentRockBullet)
 from ..entities.player_laser import PlayerLaser
+from ..entities.homing_bullet import HomingBullet
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
 from ..entities.rock_glider_pool import RockGliderPool
@@ -73,6 +74,7 @@ class EntityManager:
 
         # Listas de projéteis e efeitos
         self.bullets: List[Bullet] = []
+        self.homing_bullets: List[HomingBullet] = []
         self.emp_waves: List[EMPWave] = []
         self.energy_orbs: List[EnergyOrb] = []
         self.explosive_effects: List[ExplosiveEffect] = []
@@ -80,6 +82,7 @@ class EntityManager:
         self.serpent_bullets: List[SerpentRockBullet] = []
         self.boss_lasers: List[Union[BossLaser, SpikeBossLaser]] = []
         self.player_lasers: List[PlayerLaser] = []
+        self.cacador_lasers: List[BossLaser] = []
         self.boss_squares: List[BossSquare] = []
         self.slime_drips: List[SlimeDrip] = []
         self.eye_lasers: List[EyeLaser] = []
@@ -282,6 +285,46 @@ class EntityManager:
         self.player_lasers.append(laser)
         return laser
 
+    def spawn_cacador_laser(
+        self,
+        x: float,
+        y: float,
+        direction: tuple[float, float],
+        damage: int,
+    ) -> BossLaser:
+        # Mesmo comportamento visual/temporal do BossLaser, mas usado como poder do jogador.
+        distance = float(max(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT) * 2)
+        dx, dy = direction
+        laser = BossLaser(
+            x=x,
+            y=y,
+            target_x=x + dx * distance,
+            target_y=y + dy * distance,
+            damage=damage,
+        )
+        self.cacador_lasers.append(laser)
+        return laser
+
+    def spawn_homing_bullet(
+        self,
+        x: float,
+        y: float,
+        damage: int,
+        lifetime: float = 1.5,
+        direction: tuple[float, float] | None = None,
+    ) -> HomingBullet:
+        """Spawna um tiro teleguiado consumível (Caçador)."""
+        homing = HomingBullet(
+            x=x,
+            y=y,
+            damage=damage,
+            lifetime=lifetime,
+            is_side_scroll=self.is_side_scroll,
+            direction=direction,
+        )
+        self.homing_bullets.append(homing)
+        return homing
+
     def rebuild_all_grids(self) -> None:
         if not self._grid_needs_rebuild:
             return
@@ -360,6 +403,7 @@ class EntityManager:
         freeze_enemies: bool = False,
         screen_width: int = 1600,
         screen_height: int = 900,
+        attraction_mult: float = 1.0,
     ) -> None:
         enemy_dt = 0.0 if freeze_enemies else dt
         new_alien_bullets: List[AlienBullet] = []
@@ -440,12 +484,17 @@ class EntityManager:
         for b in self.bullets:
             b.update(dt, self._cached_all_enemies if b.homing else None)
 
+        for b in self.homing_bullets:
+            b.update(dt, self._cached_all_enemies)
+
         for b in self.mini_ship_bullets:
             b.update(dt)
 
         for b in self.player_lasers:
             if b.target_entity and getattr(b.target_entity, "dead", False):
                 b.target_entity = None
+            b.update(dt)
+        for b in self.cacador_lasers:
             b.update(dt)
 
         # Atualizar projéteis inimigos
@@ -461,10 +510,14 @@ class EntityManager:
         self.explosion_pool.update(dt)
         for me in self.mine_explosions:
             me.update(dt)
+        
+        # Coletáveis com suporte a atração (Magneto)
+        player_pos = (player_x, player_y)
         for p in self.powerups:
-            p.update(dt)
+            p.update(dt, attraction_pos=player_pos, attraction_mult=attraction_mult)
         for s in self.stars:
-            s.update(dt)
+            s.update(dt, screen_width, screen_height, attraction_pos=player_pos, attraction_mult=attraction_mult)
+            
         for fs in self.floating_scores:
             fs.update(dt)
         for ms in self.mini_ships:
@@ -790,6 +843,10 @@ class EntityManager:
 
         for laser in self.boss_lasers:
             laser.draw(surface)
+        for laser in self.cacador_lasers:
+            # Laser em linha pode ter rect com altura/largura zero;
+            # não usar culling por rect para não sumir no draw.
+            laser.draw(surface)
         for b in self.black_holes:
             b.draw(surface)
         for w in self.emp_waves:
@@ -802,6 +859,7 @@ class EntityManager:
         # 4. Desenhar projéteis e efeitos de impacto (devem ficar SOBRE os inimigos)
         lists: List[List[Any]] = [
             self.bullets,
+            self.homing_bullets,
             self.alien_bullets,
             self.energy_orbs,
             self.player_lasers,
@@ -911,6 +969,7 @@ class EntityManager:
         explosive: bool = False,
         low_ammo: bool = False,
         direction: Optional[tuple[float, float]] = None,
+        ship_id: str = "padrao",
     ) -> Bullet:
         bullet = self.bullet_pool.get(
             x=x,
@@ -922,6 +981,7 @@ class EntityManager:
             low_ammo=low_ammo,
             is_side_scroll=self.is_side_scroll,
             direction=direction,
+            ship_id=ship_id,
         )
         if homing:
             target = self._assign_homing_target(bullet)
@@ -977,7 +1037,9 @@ class EntityManager:
         return enemy.y > sh or enemy.x < -ew or enemy.x > sw
 
     @staticmethod
-    def _filter_dead_inplace(lst: list[Any], is_dead_fn=None) -> None:
+    def _filter_dead_inplace(
+        lst: list[Any], is_dead_fn: Callable[[Any], bool] | None = None
+    ) -> None:
         """Filter dead entities in-place using swap-and-pop to reduce GC pressure.
 
         Args:
@@ -989,7 +1051,7 @@ class EntityManager:
         def default_is_dead(x: Any) -> bool:
             return getattr(x, "dead", False)
 
-        if not is_dead_fn:
+        if is_dead_fn is None:
             is_dead_fn = default_is_dead
 
         i = 0
@@ -1023,6 +1085,8 @@ class EntityManager:
         self._filter_dead_inplace(self.energy_orbs)
         self._filter_dead_inplace(self.boss_lasers)
         self._filter_dead_inplace(self.player_lasers)
+        self._filter_dead_inplace(self.cacador_lasers)
+        self._filter_dead_inplace(self.homing_bullets)
         self._filter_dead_inplace(self.boss_squares)
         self._filter_dead_inplace(self.slime_drips)
         self._filter_dead_inplace(self.eye_lasers)
@@ -1059,10 +1123,12 @@ class EntityManager:
 
     def clear_all(self) -> None:
         self.bullets.clear()
+        self.homing_bullets.clear()
         self.alien_bullets.clear()
         self.serpent_bullets.clear()
         self.energy_orbs.clear()
         self.boss_lasers.clear()
+        self.cacador_lasers.clear()
         self.boss_squares.clear()
         self.slime_drips.clear()
         self.eye_lasers.clear()
@@ -1101,8 +1167,10 @@ class EntityManager:
 
     def clear_for_level_transition(self) -> None:
         self.alien_bullets.clear()
+        self.homing_bullets.clear()
         self.serpent_bullets.clear()
         self.energy_orbs.clear()
+        self.cacador_lasers.clear()
         self.boss_squares.clear()
         self.eye_lasers.clear()
         self.floating_scores.clear()

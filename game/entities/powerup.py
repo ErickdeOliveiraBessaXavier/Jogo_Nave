@@ -16,22 +16,66 @@ from ..core.config import config as Config
 
 class PowerUp:
     def __init__(self, powerup_type: PowerUpType):
-        self.type = powerup_type
-        self.kind = powerup_type.value  # Mantém compatibilidade com código existente
-        self.w, self.h = Config.POWERUP_SIZE, Config.POWERUP_SIZE
-        self.x = random.randint(0, Config.SCREEN_WIDTH - self.w)
-        self.y = -self.h
-        self.speed = Config.POWERUP_SPEED
-        self.rect = pygame.Rect(self.x, self.y, self.w, self.h)
+        self.type: PowerUpType = powerup_type
+        self.kind: str = powerup_type.value  # Mantém compatibilidade com código existente
+        self.w: int = Config.POWERUP_SIZE
+        self.h: int = Config.POWERUP_SIZE
+        self.x: float = float(random.randint(0, Config.SCREEN_WIDTH - self.w))
+        self.y: float = float(-self.h)
+        self.speed: float = float(Config.POWERUP_SPEED)
+        self.rect: pygame.Rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
         # Animação/pulsação
-        self.animation_timer = 0.0
-        self.pulse_scale = 1.0
-        self.dead = False
+        self.animation_timer: float = 0.0
+        self.pulse_scale: float = 1.0
+        self.dead: bool = False
 
-    def update(self, dt: float):
-        self.y += self.speed * dt
+        # Atração magnética
+        self._is_being_attracted: bool = False
+        self.attraction_shake_timer: float = 0.0
+
+    def update(
+        self,
+        dt: float,
+        attraction_pos: tuple[float, float] | None = None,
+        attraction_mult: float = 1.0,
+    ):
+        # Movimento básico para baixo
+        base_speed_y = self.speed
+
+        if attraction_pos and attraction_mult > 1.0:
+            # Lógica de atração magnética (Magneto)
+            attraction_range = 120.0 * attraction_mult
+            
+            target_x: float = float(attraction_pos[0])
+            target_y: float = float(attraction_pos[1])
+
+            dx = target_x - float(self.rect.centerx)
+            dy = target_y - float(self.rect.centery)
+            dist_sq = dx * dx + dy * dy
+            
+            if dist_sq < attraction_range**2:
+                # Efeito de tremor inicial ao entrar no campo
+                if not self._is_being_attracted:
+                    self._is_being_attracted = True
+                    self.attraction_shake_timer = 0.4  # Dura 0.4 segundos
+                
+                dist = dist_sq**0.5
+                if dist > 0:
+                    force_factor = 3.0 + (5.0 * (1.0 - dist / attraction_range))
+                    attract_speed = self.speed * force_factor * (attraction_mult * 0.8)
+                    
+                    self.x += (dx / dist) * attract_speed * dt
+                    self.y += (dy / dist) * attract_speed * dt
+            else:
+                self._is_being_attracted = False
+                self.y += base_speed_y * dt
+        else:
+            self._is_being_attracted = False
+            self.y += base_speed_y * dt
+
         self.rect.topleft = (int(self.x), int(self.y))
+        self.attraction_shake_timer = max(0.0, self.attraction_shake_timer - dt)
 
         # Animação de pulsação
         self.animation_timer += dt * 5  # velocidade da pulsação
@@ -68,11 +112,18 @@ class PowerUp:
             "damage_boost": "[DMG]",
         }
 
+        # Aplicar tremor visual se estiver no início da atração
+        draw_x, draw_y = self.rect.x, self.rect.y
+        if self.attraction_shake_timer > 0:
+            intensity = int(8 * (self.attraction_shake_timer / 0.4))
+            draw_x += random.randint(-intensity, intensity)
+            draw_y += random.randint(-intensity, intensity)
+
         # Desenha o fundo do power-up com pulsação
         pulse_size = int(min(self.w, self.h) * self.pulse_scale)
         pulse_rect = pygame.Rect(
-            self.rect.centerx - pulse_size // 2,
-            self.rect.centery - pulse_size // 2,
+            draw_x + self.w // 2 - pulse_size // 2,
+            draw_y + self.h // 2 - pulse_size // 2,
             pulse_size,
             pulse_size,
         )

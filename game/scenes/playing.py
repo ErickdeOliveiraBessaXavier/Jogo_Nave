@@ -207,6 +207,7 @@ class PlayingScene(Scene):
 
         self.time_stop_timer: float = 0.0
         self.freeze_active: bool = False
+        self._cacador_laser_channel: Any | None = None
 
         self.enemy_cleanup_active: bool = False
         self.enemy_cleanup_timer: float = 0.0
@@ -732,8 +733,20 @@ class PlayingScene(Scene):
             freeze_enemies=self.freeze_active,
             screen_width=Config.SCREEN_WIDTH,
             screen_height=Config.SCREEN_HEIGHT,
+            attraction_mult=self.ship.profile.pickup_radius_mult,
         )
 
+        if self._cacador_laser_channel is not None:
+            has_alive_cacador_laser = any(
+                getattr(laser, "state", "") == "alive"
+                for laser in self.entity_manager.cacador_lasers
+            )
+            if not has_alive_cacador_laser:
+                self._cacador_laser_channel.stop()
+                self._cacador_laser_channel = None
+
+        # Sincronizar volume do laser carregado se estiver ativo (opcional, mantendo compatibilidade)
+        
         if self.transition_phase in (
             TransitionPhase.PLAYING,
             TransitionPhase.LEVEL_ENTRY,
@@ -981,9 +994,12 @@ class PlayingScene(Scene):
         return 1.0 / (self.ship.attack_speed_multiplier * Config.FIRE_RATE)
 
     def _fire_bullets(self) -> None:
-        """Dispara as balas da nave e reinicia o cooldown."""
+        """Dispara as balas da nave e reinicia o cooldown.
+
+        Para o Caçador, o tiro carregado vira um laser especial separado.
+        """
         bullet_specs = self.ship.bullet_spawn()
-        # Caçador: se há carga ativa, consome o fator e multiplica neste disparo.
+        # Caçador: se há carga ativa, consome o fator e ativa o tiro carregado.
         charge_factor = self.ship.consume_charge()
         # `ship.damage_multiplier` já compõe o profile da nave com o damage_boost
         # ativo (powerup multiplicativo sobre o stat da nave).
@@ -993,6 +1009,54 @@ class PlayingScene(Scene):
             * self.ship.damage_multiplier
             * charge_factor
         )
+
+        # Charge shot: behavior depends on ship type. Magneto => laser, Caçador => 5 homing bullets.
+        is_charge_shot = self.ship.profile.has_charge_shot and charge_factor > 1.0
+        if is_charge_shot:
+            ship_id = getattr(self.ship.profile, "id", "")
+            # Magneto keeps the continuous boss-laser behaviour
+            if ship_id == "magneto":
+                if self._cacador_laser_channel is not None:
+                    self._cacador_laser_channel.stop()
+                self._cacador_laser_channel = sound_manager.play_boss_laser_fire(
+                    return_channel=True
+                )
+                for x, y, direction, *_ in bullet_specs:
+                    dx, dy = direction
+                    mag = math.hypot(dx, dy)
+                    if mag == 0.0:
+                        continue
+                    unit_dir = (dx / mag, dy / mag)
+                    self.entity_manager.spawn_cacador_laser(
+                        x,
+                        y,
+                        direction=unit_dir,
+                        damage=adjusted_damage,
+                    )
+                self.shoot_cd = self._get_shoot_cooldown()
+                return
+
+            # Caçador: dispara múltiplos tiros teleguiados consumíveis
+            if ship_id == "cacador":
+                # 5 projéteis em spread (90 graus total)
+                count = 5
+                spread = math.radians(90)
+                divisor = max(1, count - 1)
+                for x, y, direction, *_ in bullet_specs:
+                    dx, dy = direction
+                    mag = math.hypot(dx, dy)
+                    if mag == 0.0:
+                        continue
+                    base_angle = math.atan2(dy, dx)
+                    for i in range(count):
+                        t = i / divisor
+                        angle = base_angle - spread / 2 + t * spread
+                        dir_vec = (math.cos(angle), math.sin(angle))
+                        self.entity_manager.spawn_homing_bullet(
+                            x, y, damage=adjusted_damage, lifetime=1.5, direction=dir_vec
+                        )
+                self.shoot_cd = self._get_shoot_cooldown()
+                return
 
         # Tocar som de tiro (uma vez por salva de tiros)
         sound_manager.play_shot()
@@ -1023,6 +1087,7 @@ class PlayingScene(Scene):
                 explosive=is_explosive,
                 low_ammo=is_low_ammo,
                 direction=direction,
+                ship_id=self.ship.profile.id,
             )
             if is_explosive:
                 self.ship.consume_explosive_shot()
@@ -1117,7 +1182,7 @@ class PlayingScene(Scene):
             return
 
         self.cheat_buffer += chr(event.key)
-        logger.debug(f"Cheat buffer: '{self.cheat_buffer}'")
+        logger.debug("Cheat buffer: '%s'", self.cheat_buffer)
         if len(self.cheat_buffer) > _CHEAT_BUFFER_MAX:
             self.cheat_buffer = self.cheat_buffer[-_CHEAT_BUFFER_MAX:]
 
@@ -1243,11 +1308,36 @@ class PlayingScene(Scene):
                 enemies_view,
                 self.entity_manager.floating_scores,
                 self.entity_manager,
+                enemy_grid,
             )
         )
         gain += laser_gain
         destroyed += laser_destroyed
         score_events.extend(laser_events)
+
+        cacador_gain, cacador_destroyed, cacador_events = (
+            self.collisions.cacador_lasers_vs_enemies(
+                self.entity_manager.cacador_lasers,
+                enemies_view,
+                self.entity_manager.floating_scores,
+                self.entity_manager,
+                enemy_grid,
+            )
+        )
+        gain += cacador_gain
+        destroyed += cacador_destroyed
+        score_events.extend(cacador_events)
+
+        homing_gain, homing_destroyed, homing_events = (
+            self.collisions.homing_bullets_vs_enemies(
+                self.entity_manager.homing_bullets,
+                enemy_grid,
+                self.entity_manager,
+            )
+        )
+        gain += homing_gain
+        destroyed += homing_destroyed
+        score_events.extend(homing_events)
 
         mine_gain, mine_destroyed, mine_events, ship_hit = (
             self.collisions.check_mine_explosions(
@@ -1434,6 +1524,18 @@ class PlayingScene(Scene):
         )
         score_gain += self.collisions.player_lasers_vs_boss(
             self.entity_manager.player_lasers,
+            boss,  # type: ignore[arg-type]
+            self.entity_manager.floating_scores,
+            self.entity_manager,
+        )
+        score_gain += self.collisions.cacador_lasers_vs_boss(
+            self.entity_manager.cacador_lasers,
+            boss,  # type: ignore[arg-type]
+            self.entity_manager.floating_scores,
+            self.entity_manager,
+        )
+        score_gain += self.collisions.homing_bullets_vs_boss(
+            self.entity_manager.homing_bullets,
             boss,  # type: ignore[arg-type]
             self.entity_manager.floating_scores,
             self.entity_manager,
@@ -2508,7 +2610,7 @@ class PlayingScene(Scene):
         # Cores: cinza se sem combo, dourado em escala conforme se aproxima do cap.
         if kills == 0:
             color = (160, 160, 160)
-        elif cap > 0 and bonus >= cap:
+        elif 0 < cap <= bonus:
             # Cap atingido: pulso amarelo brilhante.
             pulse = int(40 + 40 * abs(math.sin(time.time() * 6)))
             color = (255, 220 - pulse // 4, 60)

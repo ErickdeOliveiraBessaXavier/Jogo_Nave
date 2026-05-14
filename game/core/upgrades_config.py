@@ -61,7 +61,7 @@ AIR_STRIKE_BOMB_RADIUS: float = 80.0
 AIR_STRIKE_BOMB_FALL_SPEED: float = 800.0
 
 # Parâmetros de balanceamento da Cannon Tower
-CANNON_MINE_DAMAGE: int = 80
+CANNON_MINE_DAMAGE: int = 120
 CANNON_MINE_RADIUS: float = 70.0
 
 # Futuro: overrides por dificuldade ou progressão

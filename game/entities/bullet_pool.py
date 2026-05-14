@@ -39,6 +39,7 @@ class BulletPool:
         low_ammo: bool = False,
         is_side_scroll: bool = False,
         direction: tuple[float, float] | None = None,
+        ship_id: str = "padrao",
     ) -> Bullet:
         """
         Obtém uma bala do pool, reutilizando uma inativa ou criando nova.
@@ -52,6 +53,7 @@ class BulletPool:
             low_ammo: Se restam poucas cargas (efeito de piscar)
             is_side_scroll: Se está em modo side-scroll
             direction: Direção cardinal do tiro, como (dx, dy)
+            ship_id: ID da nave que atirou para definir o visual
 
         Returns:
             Bala ativa e configurada
@@ -69,6 +71,7 @@ class BulletPool:
                     low_ammo=low_ammo,
                     is_side_scroll=is_side_scroll,
                     direction=direction,
+                    ship_id=ship_id,
                 )
                 self.active.append(bullet)
                 return bullet
@@ -84,6 +87,7 @@ class BulletPool:
             low_ammo=low_ammo,
             is_side_scroll=is_side_scroll,
             direction=direction,
+            ship_id=ship_id,
         )
         self.pool.append(bullet)
         self.active.append(bullet)
@@ -96,6 +100,9 @@ class BulletPool:
         Args:
             bullet: Bala a ser desativada
         """
+        if bullet.laser_sound_channel is not None:
+            bullet.laser_sound_channel.stop()
+            bullet.laser_sound_channel = None
         if bullet in self.active:
             bullet.active = False
             bullet.dead = True

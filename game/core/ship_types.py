@@ -46,6 +46,7 @@ class ShipProfile:
     dash_cooldown: float = 4.0
     permanent_mini_ships: int = 0  # Engenheiro: 1
     pickup_radius_mult: float = 1.0  # Magneto
+    thruster_intensity_mult: float = 1.0  # Força visual do thruster
     has_charge_shot: bool = False  # Caçador
     charge_shot_max_time: float = 0.8
     charge_shot_damage_mult: float = 3.0
@@ -70,19 +71,25 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         unlock_cost=0,
         speed_mult=1.0,
         agility_mult=1.2,  # Ponto de equilíbrio (1.2 = resposta firme e rápida)
+        thruster_intensity_mult=1.0,
         reaction_delay=0.03,  # Imperceptível, suaviza micromovimentos
         tags=("Equilibrada",),
     ),
     ShipProfile(
         id="magneto",
         display_name="Magneto",
-        description="Atrai estrelas e powerups num raio amplo. Stats normais.",
+        description="Atrai estrelas/powerups e possui um laser carregado devastador.",
+        sprite_filename="ship_magnetico.png",
         unlock_cost=50,
         pickup_radius_mult=2.5,
         speed_mult=1.0,
         agility_mult=1.3,  # Coleta exige alcançar drops rapidamente
+        thruster_intensity_mult=1.0,
+        has_charge_shot=True,
+        charge_shot_max_time=0.8,
+        charge_shot_damage_mult=3.0,
         reaction_delay=0.04,  # Levemente estável
-        tags=("Coleta", "Farm"),
+        tags=("Coleta", "Laser"),
     ),
     ShipProfile(
         id="estilete",
@@ -94,6 +101,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         damage_mult=0.65,
         speed_mult=1.2,    # Mais rápida que a padrão
         agility_mult=1.6,  # Máxima agilidade (quase instantânea)
+        thruster_intensity_mult=1.2,
         reaction_delay=0.0,  # Reage instantaneamente
         tags=("Rápida", "DPS sustentado"),
     ),
@@ -107,6 +115,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         damage_mult=1.80,
         speed_mult=0.70,
         agility_mult=0.75,  # Tanque de verdade — peso sentido no controle
+        thruster_intensity_mult=0.8,
         extra_lives=1,
         reaction_delay=0.12,  # A mais lenta a reagir — tanque total
         tags=("Tanque", "Burst"),
@@ -122,6 +131,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         unlock_cost=80,
         speed_mult=0.85,
         agility_mult=0.9,  # Pesada pelo carregamento
+        thruster_intensity_mult=0.75,
         powerup_slots=2,
         reaction_delay=0.10,  # Pesada em todos os sentidos
         tags=("Gerenciamento",),
@@ -133,10 +143,12 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
             "Dash com invulnerabilidade (cooldown 4s). Atravessa minas. "
             "-1 vida e dano -20%."
         ),
+        sprite_filename="ship_fantasma.png",
         unlock_cost=100,
         damage_mult=0.80,
         speed_mult=1.1,
         agility_mult=1.5,  # Muito ágil para compensar fragilidade
+        thruster_intensity_mult=1.25,
         extra_lives=-1,
         has_dash=True,
         dash_cooldown=4.0,
@@ -149,10 +161,12 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         description=(
             "1 mini-nave permanente orbitando. Tiros principais causam 15% menos dano."
         ),
+        sprite_filename="ship_engenheiro.png",
         unlock_cost=120,
         damage_mult=0.85,
         speed_mult=1.0,
         agility_mult=1.05,  # Mini-nave cobre área; jogador pode ser mais conservador
+        thruster_intensity_mult=0.9,
         permanent_mini_ships=1,
         reaction_delay=0.06,  # Nave de suporte, não precisa de reflexo
         tags=("Drone", "Suporte"),
@@ -164,10 +178,12 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
             "Charge shot: segure o tiro até 0.8s para causar 3× dano. "
             "Fire rate base -30%."
         ),
+        sprite_filename="ship_caçador.png",
         unlock_cost=150,
         fire_rate_mult=0.70,
         speed_mult=1.0,
         agility_mult=1.0,  # Charge shot exige posicionamento deliberado, não reflexo
+        thruster_intensity_mult=0.95,
         has_charge_shot=True,
         charge_shot_max_time=0.8,
         charge_shot_damage_mult=3.0,
@@ -181,11 +197,13 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
             "Cada abate sem tomar dano adiciona +2% de dano (máx +100%). "
             "Reset ao ser atingida. Stats base -10%."
         ),
+        sprite_filename="ship_reveberador.png",
         unlock_cost=200,
         fire_rate_mult=0.90,
         damage_mult=0.90,
         speed_mult=0.90,
         agility_mult=0.95,  # Combo pune erros; movimento conservador reforça cautela
+        thruster_intensity_mult=0.85,
         combo_damage_per_kill=0.02,
         combo_damage_cap=1.0,
         reaction_delay=0.07,  # Cautela reforçada

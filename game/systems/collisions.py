@@ -31,6 +31,7 @@ from ..entities.slime_drip import SlimeDrip
 from ..entities.spike import Spike
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.star import Star
+from ..entities.homing_bullet import HomingBullet
 from .collision_protocols import Damageable, Enemy
 from .hit_result import NO_HIT, HitResult
 
@@ -332,7 +333,7 @@ class Collisions:
         hit_tracking_set: set[int],
         enemies: Sequence[Enemy],
         entity_manager: "EntityManager",
-        damage_to_mine: int = 2,
+        damage: int = 1,
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Helper para aplicar dano em área a inimigos.
 
@@ -359,10 +360,11 @@ class Collisions:
             if dist_sq < (damage_radius + radius) ** 2:
                 hit_tracking_set.add(enemy_id)
 
-                # Mines absorvem damage_to_mine; outros recebem dano nominal
-                # (1 = padrão da explosão). on_hit decide o resto.
+                # Aplicar o dano real da explosão (inimigos comuns recebem 'damage')
                 hit_damage = (
-                    damage_to_mine if getattr(enemy, "is_explosive_mine", False) else 1
+                    enemy.health
+                    if getattr(enemy, "is_explosive_mine", False)
+                    else damage
                 )
                 result = self._apply_hit(
                     enemy,
@@ -524,7 +526,7 @@ class Collisions:
                     hit_damage = (
                         enemy.health
                         if getattr(enemy, "is_explosive_mine", False)
-                        else 1
+                        else 50 # Dano fixo de explosão de mina inimiga
                     )
                     result = self._apply_hit(
                         enemy,
@@ -689,7 +691,7 @@ class Collisions:
                 effect.hit_enemies,
                 enemies,
                 entity_manager,
-                damage_to_mine=CollisionConstants.MINE_DAMAGE_DEFAULT,
+                damage=effect.damage,
             )
             score_gain += gain
             destroyed_count += destroyed
@@ -750,7 +752,7 @@ class Collisions:
                 bomb.hit_enemies,
                 enemies,
                 entity_manager,
-                damage_to_mine=CollisionConstants.MINE_DAMAGE_AIRSTRIKE,
+                damage=bomb.damage,
             )
             score_gain += gain
             destroyed_count += destroyed
@@ -781,7 +783,7 @@ class Collisions:
                     mine.hit_tracking_set,
                     enemies,
                     entity_manager,
-                    damage_to_mine=damage_info.damage,
+                    damage=damage_info.damage,
                 )
                 score_gain += gain
                 destroyed_count += destroyed
@@ -937,6 +939,108 @@ class Collisions:
                     score_events.append((ncx, ncy, r.points))
 
         return score_gain, destroyed_count, score_events
+
+    def homing_bullets_vs_enemies(
+        self,
+        homing_bullets: list[HomingBullet],
+        enemy_grid: SpatialGrid[Any],
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Colisão de tiros teleguiados consumíveis com inimigos.
+        Consome vida do projétil baseada no HP do inimigo.
+        """
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        if not homing_bullets:
+            return 0, 0, []
+
+        for b in homing_bullets[:]:
+            if b.dead or b.life <= 0:
+                continue
+
+            r = b.rect
+            potential_enemies = enemy_grid.query(
+                r.x - 10, r.y - 10, r.width + 20, r.height + 20
+            )
+
+            for enemy in potential_enemies:
+                if enemy.dead:
+                    continue
+                
+                # Evitar múltiplos hits no mesmo inimigo no mesmo frame
+                if id(enemy) in b.hit_this_frame:
+                    continue
+
+                if self._projectile_collides_with_enemy(r, enemy):
+                    b.hit_this_frame.add(id(enemy))
+                    
+                    # HP do inimigo antes do hit para saber quanto consumir
+                    enemy_hp = getattr(enemy, "health", 1)
+                    
+                    # Aplicar hit
+                    result = self._apply_hit(
+                        enemy, b.damage, b.x, b.y, entity_manager
+                    )
+                    
+                    # Consumir vida do projétil: se matou, consome o HP total do inimigo.
+                    # Se não matou, consome o dano que a bala causou (b.damage).
+                    amount_to_consume = enemy_hp if result.killed else b.damage
+                    b.consume_life(amount_to_consume)
+                    
+                    score_gain += result.points
+                    if result.killed:
+                        destroyed_count += 1
+                        if result.points > 0:
+                            score_events.append((b.x, b.y, result.points))
+
+                    # Se a bala morreu por falta de vida, para de processar inimigos para ela
+                    if b.life <= 0:
+                        b.dead = True
+                        break
+        
+        return score_gain, destroyed_count, score_events
+
+    def homing_bullets_vs_boss(
+        self,
+        homing_bullets: list[HomingBullet],
+        boss: Any,
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+    ) -> int:
+        """Colisão de tiros teleguiados consumíveis com boss."""
+        if not homing_bullets or not boss or boss.dead:
+            return 0
+        
+        score_gain = 0
+        for b in homing_bullets[:]:
+            if b.dead or b.life <= 0:
+                continue
+            
+            # Evitar multi-hit no boss no mesmo frame
+            if id(boss) in b.hit_this_frame:
+                continue
+
+            if self._check_mask_collision(b.rect, None, boss, b.x, b.y):
+                b.hit_this_frame.add(id(boss))
+                
+                damage = int(b.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                
+                # Boss tem muito HP, geralmente a bala vai consumir toda sua vida restante
+                # ou o máximo de dano que ela pode causar.
+                amount_to_consume = b.life # Simplificação: boss sempre consome o que resta da bala se hitar
+                b.consume_life(amount_to_consume)
+                
+                result = self._apply_hit(
+                    boss, damage, b.x, b.y, entity_manager, floating_scores
+                )
+                score_gain += result.points
+                
+                if b.life <= 0:
+                    b.dead = True
+        
+        return score_gain
 
     def bullets_vs_enemies(
         self,
@@ -1549,5 +1653,146 @@ class Collisions:
                     boss, damage, cx_hit, cy_hit, entity_manager, floating_scores
                 )
                 score_gain += result.points
+
+        return score_gain
+
+    def cacador_lasers_vs_enemies(
+        self,
+        lasers: list[BossLaser],
+        enemies: Sequence[Enemy],
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+        enemy_grid: "SpatialGrid[Any] | None" = None,
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Colisão dos lasers especiais do Caçador (BossLaser) com inimigos."""
+        score_gain: int = 0
+        destroyed_count: int = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        for laser in lasers:
+            if laser.w <= 0:
+                continue
+
+            line = laser.get_collision_line()
+
+            if enemy_grid is not None:
+                lx = int(min(laser.x, laser.target_x))
+                ly = int(min(laser.y, laser.target_y) - laser.w / 2)
+                lw = int(abs(laser.target_x - laser.x))
+                lh = int(abs(laser.target_y - laser.y) + laser.w)
+                candidates: Sequence[Enemy] = enemy_grid.query(lx, ly, lw, lh)
+            else:
+                candidates = enemies
+
+            for enemy in candidates:
+                if enemy.dead:
+                    continue
+
+                enemy_id = id(enemy)
+                if enemy_id in laser.hit_enemies:
+                    continue
+
+                enemy_rect: pygame.Rect = (
+                    enemy.rect
+                    if hasattr(enemy, "rect")
+                    else cast(
+                        pygame.Rect,
+                        getattr(enemy, "get_rect", lambda: pygame.Rect(0, 0, 0, 0))(),
+                    )
+                )
+                if enemy_rect.clipline(line):
+                    laser.hit_enemies.add(enemy_id)
+                    cx, cy, _ = enemy.collision_circle()
+                    result = self._apply_hit(
+                        enemy,
+                        laser.damage,
+                        cx,
+                        cy,
+                        entity_manager,
+                    )
+                    score_gain += result.points
+                    if result.killed:
+                        destroyed_count += 1
+                        if result.points > 0:
+                            score_events.append((cx, cy, result.points))
+                            floating_scores.append(FloatingScore(cx, cy, result.points))
+        return score_gain, destroyed_count, score_events
+
+    def cacador_lasers_vs_boss(
+        self,
+        lasers: list[BossLaser],
+        boss: Damageable,
+        floating_scores: list[FloatingScore],
+        entity_manager: "EntityManager",
+    ) -> int:
+        """Colisão dos lasers especiais do Caçador (BossLaser) com o boss."""
+        if not lasers:
+            return 0
+        if not boss or boss.dead:
+            return 0
+
+        score_gain: int = 0
+        mask_data = self._get_enemy_collision_mask_data(boss)
+
+        for laser in lasers:
+            if laser.w <= 0:
+                continue
+
+            line = laser.get_collision_line()
+            boss_rect: pygame.Rect = boss.rect
+            collision_detected = False
+
+            if mask_data is not None:
+                mask, (bx, by) = mask_data
+                bw, bh = mask.get_size()
+                boss_center_x = bx + bw / 2
+                boss_center_y = by + bh / 2
+
+                start_pos, end_pos = line
+                dx = end_pos[0] - start_pos[0]
+                dy = end_pos[1] - start_pos[1]
+                length_squared = dx * dx + dy * dy
+
+                if length_squared > 0:
+                    vx = boss_center_x - start_pos[0]
+                    vy = boss_center_y - start_pos[1]
+                    t = max(0, min(1, (vx * dx + vy * dy) / length_squared))
+                    proj_x = start_pos[0] + t * dx
+                    proj_y = start_pos[1] + t * dy
+
+                    dist_dx = boss_center_x - proj_x
+                    dist_dy = boss_center_y - proj_y
+                    distance_squared = dist_dx * dist_dx + dist_dy * dist_dy
+                    proximity_threshold = (bw / 2 + 50) ** 2
+
+                    if distance_squared <= proximity_threshold and boss_rect.clipline(line):
+                        steps = 10
+                        for i in range(steps + 1):
+                            t_step = i / steps
+                            cx = start_pos[0] + t_step * (end_pos[0] - start_pos[0])
+                            cy = start_pos[1] + t_step * (end_pos[1] - start_pos[1])
+                            rel_x = int(cx - bx)
+                            rel_y = int(cy - by)
+                            if 0 <= rel_x < bw and 0 <= rel_y < bh and mask.get_at((rel_x, rel_y)):
+                                collision_detected = True
+                                break
+            else:
+                collision_detected = boss_rect.clipline(line)
+
+            if not collision_detected:
+                continue
+
+            boss_id = id(boss)
+            if boss_id in laser.hit_enemies:
+                continue
+
+            laser.hit_enemies.add(boss_id)
+            damage = int(laser.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+            cx_hit: float = float(boss.rect.centerx)
+            cy_hit: float = float(boss.rect.centery)
+            result = self._apply_hit(
+                boss, damage, cx_hit, cy_hit, entity_manager, floating_scores
+            )
+            score_gain += result.points
 
         return score_gain

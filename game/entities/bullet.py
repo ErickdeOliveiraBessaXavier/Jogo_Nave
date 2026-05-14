@@ -18,6 +18,7 @@ class Bullet:
         low_ammo: bool = False,
         is_side_scroll: bool = False,
         direction: tuple[float, float] | None = None,
+        ship_id: str = "padrao",
     ):
         self.x, self.y = x, y
         self.damage = damage
@@ -33,9 +34,11 @@ class Bullet:
         self.homing_turn_rate = 4.0  # Taxa de rotação (radianos/s)
         self.rotation_angle = 0.0  # Ângulo de rotação visual (graus)
         self.is_side_scroll = is_side_scroll  # Se está em modo side-scroll
+        self.laser_sound_channel: Optional[pygame.mixer.Channel] = None
         self.vx = 0.0
         self.vy = 0.0
         self.direction = direction
+        self.ship_id = ship_id
 
         self._configure_shape_and_velocity(direction)
 
@@ -54,6 +57,7 @@ class Bullet:
         low_ammo: bool = False,
         is_side_scroll: bool = False,
         direction: tuple[float, float] | None = None,
+        ship_id: str = "padrao",
     ):
         """Reconfigura a bala para reutilização no pool."""
         self.x, self.y = x, y
@@ -68,9 +72,11 @@ class Bullet:
         self.target = None
         self.assigned_target_id = None
         self.rotation_angle = 0.0
+        self.laser_sound_channel = None
         self.vx = 0.0
         self.vy = 0.0
         self.direction = direction
+        self.ship_id = ship_id
         self._configure_shape_and_velocity(direction)
 
     def update(self, dt: float, enemies: Optional[List[Any]] = None) -> None:
@@ -141,27 +147,41 @@ class Bullet:
     def _configure_shape_and_velocity(
         self, direction: tuple[float, float] | None
     ) -> None:
-        """Configura dimensões e velocidade do projétil com base na direção."""
+        """Configura dimensões e velocidade do projétil com base na direção e nave."""
+        # Dimensões baseadas na nave
+        base_w, base_h = 10, 3  # Padrão
+        
+        if self.ship_id == "estilete":
+            base_w, base_h = 14, 2
+        elif self.ship_id == "ariete":
+            base_w, base_h = 8, 6
+        elif self.ship_id == "magneto":
+            base_w, base_h = 8, 8
+        elif self.ship_id == "cacador":
+            base_w, base_h = 12, 4
+        elif self.ship_id == "engenheiro":
+            base_w, base_h = 6, 6
+            
         if direction is None:
             if self.is_side_scroll:
                 self.vx = Config.BULLET_SPEED
                 self.vy = 0.0
-                self.w, self.h = 10, 3
+                self.w, self.h = base_w, base_h
             else:
                 self.vx = 0.0
                 self.vy = -Config.BULLET_SPEED
-                self.w, self.h = 3, 10
+                self.w, self.h = base_h, base_w
             return
 
         dx, dy = direction
+        # Ajustar orientação baseada na direção predominante
         if abs(dx) >= abs(dy):
-            self.w, self.h = 10, 3
-            self.vx = dx * Config.BULLET_SPEED
-            self.vy = dy * Config.BULLET_SPEED
+            self.w, self.h = base_w, base_h
         else:
-            self.w, self.h = 3, 10
-            self.vx = dx * Config.BULLET_SPEED
-            self.vy = dy * Config.BULLET_SPEED
+            self.w, self.h = base_h, base_w
+            
+        self.vx = dx * Config.BULLET_SPEED
+        self.vy = dy * Config.BULLET_SPEED
 
     def _find_closest_enemy(self, enemies: List[Any]) -> Optional[Any]:
         """Encontra o inimigo mais próximo disponível."""
@@ -195,10 +215,61 @@ class Bullet:
             self._draw_homing_bullet(surface)
         elif self.explosive:
             self._draw_explosive_bullet(surface)
-        elif self.piercing:
-            pygame.draw.rect(surface, colors.PURPLE, self.rect)
         else:
-            pygame.draw.rect(surface, colors.YELLOW, self.rect)
+            self._draw_ship_specific_bullet(surface)
+
+    def _draw_ship_specific_bullet(self, surface: pygame.Surface):
+        """Desenha o projétil básico customizado conforme a nave."""
+        rect = self.rect
+        center = rect.center
+        
+        if self.ship_id == "magneto":
+            # Magneto: Tiro ovalado roxo/azul
+            pygame.draw.ellipse(surface, (100, 100, 255), rect)
+            pygame.draw.ellipse(surface, (200, 200, 255), rect.inflate(-4, -4))
+        elif self.ship_id == "estilete":
+            # Estilete: Laser fino verde
+            pygame.draw.rect(surface, (0, 255, 100), rect)
+            # Brilho central
+            pygame.draw.line(surface, (200, 255, 200), rect.topleft, rect.bottomleft, 1)
+        elif self.ship_id == "ariete":
+            # Aríete: Retângulo largo laranja intenso
+            pygame.draw.rect(surface, (255, 80, 0), rect)
+            pygame.draw.rect(surface, (255, 150, 50), rect.inflate(-2, -2))
+        elif self.ship_id == "cofre":
+            # Cofre: Amarelo claro arredondado
+            pygame.draw.rect(surface, (255, 220, 100), rect, border_radius=3)
+        elif self.ship_id == "fantasma":
+            # Fantasma: Ciano pálido translúcido
+            s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+            pygame.draw.rect(s, (180, 255, 255, 160), s.get_rect(), border_radius=2)
+            surface.blit(s, rect.topleft)
+        elif self.ship_id == "engenheiro":
+            # Engenheiro: Azul elétrico com núcleo branco
+            pygame.draw.circle(surface, (0, 150, 255), center, rect.width // 2)
+            pygame.draw.circle(surface, (255, 255, 255), center, rect.width // 4)
+        elif self.ship_id == "cacador":
+            # Caçador: Formato em seta/V prata
+            points = []
+            if self.vx > 0:  # Direita
+                points = [rect.topleft, (rect.right, rect.centery), rect.bottomleft]
+            elif self.vx < 0:  # Esquerda
+                points = [rect.topright, (rect.left, rect.centery), rect.bottomright]
+            elif self.vy < 0:  # Cima
+                points = [rect.bottomleft, (rect.centerx, rect.top), rect.bottomright]
+            else:  # Baixo
+                points = [rect.topleft, (rect.centerx, rect.bottom), rect.topright]
+            pygame.draw.polygon(surface, (192, 192, 220), points)
+        elif self.ship_id == "reverberador":
+            # Reverberador: Magenta com anéis
+            pygame.draw.rect(surface, (255, 0, 255), rect)
+            for i in range(1, 3):
+                ring_rect = rect.inflate(i * 4, i * 4)
+                pygame.draw.rect(surface, (255, 100, 255, 100), ring_rect, 1)
+        else:
+            # Padrão / Outros
+            color = colors.PURPLE if self.piercing else colors.YELLOW
+            pygame.draw.rect(surface, color, rect)
 
     def _draw_homing_bullet(self, surface: pygame.Surface):
         """Desenha o tiro teleguiado como um '+' pixelizado que gira."""

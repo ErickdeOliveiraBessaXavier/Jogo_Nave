@@ -1,5 +1,5 @@
 import random
-from typing import List, Tuple, TypedDict
+from typing import List, Set, Tuple, TypedDict
 
 import pygame
 
@@ -24,6 +24,7 @@ class BossLaser:
         target_x: float,
         target_y: float,
         lifetime: float = Config.BOSS_LASER_LIFETIME,
+        damage: int = 0,
     ):
         self.x = x
         self.y = y
@@ -32,6 +33,8 @@ class BossLaser:
         self.w = 0
         self.max_w = 18
         self.dead = False
+        self.damage = damage
+        self.hit_enemies: Set[int] = set()
 
         self.lifetime = lifetime
         self.expand_time = 0.1

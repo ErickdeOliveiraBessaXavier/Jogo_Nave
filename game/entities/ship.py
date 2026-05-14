@@ -255,8 +255,11 @@ class Ship:
         """Inicia acúmulo do charge shot. Retorna True se a nave suporta carga."""
         if not self.profile.has_charge_shot:
             return False
+        if self.charge_shot_active:
+            return True
         self.charge_shot_active = True
         self.charge_shot_timer = 0.0
+        sound_manager.play_boss_laser_charging()
         return True
 
     def consume_charge(self) -> float:
@@ -271,6 +274,7 @@ class Ship:
         mult = 1.0 + (self.profile.charge_shot_damage_mult - 1.0) * progress
         self.charge_shot_active = False
         self.charge_shot_timer = 0.0
+        sound_manager.stop_boss_laser_charging()
         return mult
 
     def register_kill(self) -> None:
@@ -509,6 +513,14 @@ class Ship:
     def get_facing_vector(self) -> tuple[float, float]:
         return self._cardinal_vectors.get(self.facing, (0.0, -1.0))
 
+    def _get_rendered_sprite_size(self) -> tuple[int, int]:
+        """Retorna o tamanho do sprite atualmente desenhado na tela."""
+        if self.ship_image is None:
+            return self.w, self.h
+        if self.rotation_angle != 0.0 and self.ship_image_rotated is not None:
+            return self.ship_image_rotated.get_size()
+        return self.ship_image.get_size()
+
     def _get_enemy_center(self, enemy: Any) -> Optional[Tuple[float, float]]:
         """Calcula o centro de um inimigo independente do tipo."""
         if hasattr(enemy, "w") and hasattr(enemy, "h"):
@@ -722,6 +734,10 @@ class Ship:
         else:
             sprite_w, sprite_h = self.w, self.h
 
+        thruster_count = max(
+            0, int(round(PARTICLE_THRUSTER_COUNT * self.profile.thruster_intensity_mult))
+        )
+
         # Partículas de entrada (desabilitar em side-scroll)
         if self.is_entering and not is_side_scroll:
             for _ in range(PARTICLE_ENTRY_COUNT):
@@ -753,7 +769,7 @@ class Ship:
         ]
 
         # Gerar partículas de thruster (sempre atrás da direção atual da nave)
-        for _ in range(PARTICLE_THRUSTER_COUNT):
+        for _ in range(thruster_count):
             if self.facing == "north":
                 particle = ParticleDict(
                     x=self.x + sprite_w / 2 + random.uniform(-5, 5),
@@ -1044,12 +1060,8 @@ class Ship:
 
         facing_vector = self.get_facing_vector()
 
-        # Obter tamanho real do sprite (ou fallback para dimensões lógicas)
-        if self.ship_image is not None:
-            sprite_w, sprite_h = self.ship_image.get_size()
-        else:
-            sprite_w = self.w
-            sprite_h = self.h
+        # Obter tamanho visual atual do sprite (leva em conta rotação 90°/270°).
+        sprite_w, sprite_h = self._get_rendered_sprite_size()
 
         if self.facing == "north":
             if self.double_shot_timer > 0:

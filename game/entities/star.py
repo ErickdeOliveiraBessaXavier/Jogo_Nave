@@ -26,9 +26,9 @@ class Star:
         """
         # Tamanho e posição seguindo mesma lógica do PowerUp
         self.w, self.h = Config.POWERUP_SIZE, Config.POWERUP_SIZE
-        self.x = x
-        self.y = y
-        self.speed = Config.POWERUP_SPEED
+        self.x: float = float(x)
+        self.y: float = float(y)
+        self.speed: float = float(Config.POWERUP_SPEED)
         self.rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
         # Carregar imagem
@@ -36,18 +36,27 @@ class Star:
         self.base_image = get_image(icon_path)
         self.current_image = self.base_image
 
-        self.dead = False
+        self.dead: bool = False
 
         # Animação/pulsação (igual ao PowerUp)
-        self.animation_timer = 0.0
-        self.pulse_scale = 1.0
+        self.animation_timer: float = 0.0
+        self.pulse_scale: float = 1.0
 
         # Rotação da imagem da estrela
-        self.rotation = random.uniform(0, 360)
-        self.rotation_speed = random.uniform(-180, 180)  # graus por segundo
+        self.rotation: float = random.uniform(0, 360)
+        self.rotation_speed: float = random.uniform(-180, 180)  # graus por segundo
+
+        # Atração magnética
+        self._is_being_attracted: bool = False
+        self.attraction_shake_timer: float = 0.0
 
     def update(
-        self, dt: float, screen_width: int = 1600, screen_height: int = 900
+        self,
+        dt: float,
+        screen_width: int = 1600,
+        screen_height: int = 900,
+        attraction_pos: tuple[float, float] | None = None,
+        attraction_mult: float = 1.0,
     ) -> None:
         """
         Atualiza posição e animação da estrela.
@@ -56,10 +65,45 @@ class Star:
             dt: Delta time
             screen_width: Largura da tela
             screen_height: Altura da tela
+            attraction_pos: Posição do jogador para atração
+            attraction_mult: Multiplicador de atração da nave
         """
-        # Movimento (igual ao PowerUp)
-        self.y += self.speed * dt
+        # Movimento básico
+        base_speed_y = self.speed
+
+        if attraction_pos and attraction_mult > 1.0:
+            # Lógica de atração magnética (Magneto)
+            attraction_range = 120.0 * attraction_mult
+            
+            target_x: float = float(attraction_pos[0])
+            target_y: float = float(attraction_pos[1])
+
+            dx = target_x - self.rect.centerx
+            dy = target_y - self.rect.centery
+            dist_sq = dx * dx + dy * dy
+            
+            if dist_sq < attraction_range**2:
+                # Efeito de tremor inicial ao entrar no campo
+                if not self._is_being_attracted:
+                    self._is_being_attracted = True
+                    self.attraction_shake_timer = 0.4
+                
+                dist = dist_sq**0.5
+                if dist > 0:
+                    force_factor = 3.0 + (5.0 * (1.0 - dist / attraction_range))
+                    attract_speed = self.speed * force_factor * (attraction_mult * 0.8)
+                    
+                    self.x += (dx / dist) * attract_speed * dt
+                    self.y += (dy / dist) * attract_speed * dt
+            else:
+                self._is_being_attracted = False
+                self.y += base_speed_y * dt
+        else:
+            self._is_being_attracted = False
+            self.y += base_speed_y * dt
+
         self.rect.topleft = (int(self.x), int(self.y))
+        self.attraction_shake_timer = max(0.0, self.attraction_shake_timer - dt)
 
         # Rotação da estrela (imagem interna)
         self.rotation += self.rotation_speed * dt
@@ -92,11 +136,18 @@ class Star:
         if self.dead:
             return
 
+        # Aplicar tremor visual se estiver no início da atração
+        draw_x, draw_y = self.rect.x, self.rect.y
+        if self.attraction_shake_timer > 0:
+            intensity = int(8 * (self.attraction_shake_timer / 0.4))
+            draw_x += random.randint(-intensity, intensity)
+            draw_y += random.randint(-intensity, intensity)
+
         # Desenhar o fundo pulsante (igual ao PowerUp), usando elipse
         pulse_size = int(min(self.w, self.h) * self.pulse_scale)
         pulse_rect = pygame.Rect(
-            self.rect.centerx - pulse_size // 2,
-            self.rect.centery - pulse_size // 2,
+            draw_x + self.w // 2 - pulse_size // 2,
+            draw_y + self.h // 2 - pulse_size // 2,
             pulse_size,
             pulse_size,
         )
