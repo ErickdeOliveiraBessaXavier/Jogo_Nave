@@ -69,10 +69,10 @@ from ..entities.stone_golem_boss import (
 )
 from ..entities.stone_sentry import StoneSentry
 from .collision_protocols import Removable
+from .hit_result import MeteorSpec
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
-    from .hit_result import MeteorSpec
 
 
 class EntityManager:

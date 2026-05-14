@@ -1621,7 +1621,8 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     1: LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            RockGlider: 1.5,
+            #RockGlider: 1.5,
+            StoneSentry: 1.0,
         },
         enemies_to_clear=75,
         theme_name="Tutorial",
