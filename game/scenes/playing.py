@@ -87,6 +87,12 @@ class TransitionPhase(Enum):
     LEVEL_ENTRY = auto()
 
 
+class GameState(Enum):
+    """Estado de jogo interno da cena (fase de preparação vs gameplay ativo)."""
+    PREPARING = auto()
+    PLAYING = auto()
+
+
 class ThrusterParticle(TypedDict):
     offset_x: float
     offset_y: float
@@ -178,7 +184,7 @@ class PlayingScene(Scene):
         self.shoot_cd: float = 0.0
         self.cheat_buffer: str = ""
         self.god_mode: bool = False
-        self.state: str = "preparing"
+        self.state: GameState = GameState.PREPARING
         self.preparation_time_left: float = Config.PREPARATION_TIME
         self.level_start_time: Optional[float] = None
         self.level_damage_taken: int = 0
@@ -339,7 +345,7 @@ class PlayingScene(Scene):
         self.shoot_cd = 0.0
         self.cheat_buffer = ""
         self.god_mode = False
-        self.state = "preparing"
+        self.state = GameState.PREPARING
         self.preparation_time_left = Config.PREPARATION_TIME
         self.level_start_time = None
         self.level_damage_taken = 0
@@ -412,7 +418,7 @@ class PlayingScene(Scene):
     def _begin_level_preparation(self) -> None:
         """Coloca a cena em modo de preparação para o próximo nível."""
         self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
-        self.state = "preparing"
+        self.state = GameState.PREPARING
         self.preparation_time_left = Config.PREPARATION_TIME
         self.level_start_time = None
         self.level_damage_taken = 0
@@ -435,7 +441,7 @@ class PlayingScene(Scene):
     def _begin_playing_state(self) -> None:
         """Ativa o gameplay e registra a tentativa do nível uma única vez."""
         self._set_transition_phase(TransitionPhase.PLAYING)
-        self.state = "playing"
+        self.state = GameState.PLAYING
         self.ship.is_entering = False
         if self.level_start_time is None:
             self.level_start_time = time.time()
@@ -773,7 +779,7 @@ class PlayingScene(Scene):
             self.start_fade_active = False
 
     def _update_preparing_state(self, dt: float) -> None:
-        if self.state != "preparing":
+        if self.state != GameState.PREPARING:
             return
 
         self.preparation_time_left -= dt
@@ -2411,7 +2417,7 @@ class PlayingScene(Scene):
         speed_multiplier = 1.0
         boss_active = False
 
-        if self.state == "preparing":
+        if self.state == GameState.PREPARING:
             progress = min(
                 1.0,
                 max(
@@ -2531,7 +2537,7 @@ class PlayingScene(Scene):
             )
             surface.blit(warning_text, text_rect)
 
-        if self.state == "preparing":
+        if self.state == GameState.PREPARING:
             self.r.preparation(surface, self.preparation_time_left)
 
         if self.start_fade_active:

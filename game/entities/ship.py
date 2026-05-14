@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import random
 import time
-from typing import TYPE_CHECKING, Any, Optional, Tuple, TypedDict
+from typing import TYPE_CHECKING, Any, Optional, TypedDict
 
 import pygame
 
@@ -47,7 +47,7 @@ class ParticleDict(TypedDict):
     vy: float
     lifetime: float
     size: float
-    color: Tuple[int, int, int]
+    color: tuple[int, int, int]
 
 
 class Ship:
@@ -211,6 +211,10 @@ class Ship:
 
         # Reverberador: combo de dano sem tomar hit.
         self.combo_kills: int = 0  # abates consecutivos sem dano
+
+        # Acumulador de tempo para animações no draw() — substitui time.time()
+        # e garante compatibilidade com pausa/slow-motion.
+        self._draw_time: float = 0.0
 
     def has_storage_slots(self) -> bool:
         return self.profile.powerup_slots > 0
@@ -467,24 +471,18 @@ class Ship:
 
     @property
     def is_homing_shots_active(self) -> bool:
+        """True se o modo de tiros teleguiados está ativo."""
         return self.homing_shots_active
-
-    def get_homing_shots_time(self) -> float:
-        return self.homing_shots_timer
 
     @property
     def is_double_shot_active(self) -> bool:
+        """True se o double shot está ativo. Use `double_shot_timer` para o tempo restante."""
         return self.double_shot_timer > 0.0
-
-    def get_double_shot_time(self) -> float:
-        return self.double_shot_timer
 
     @property
     def is_speed_boost_active(self) -> bool:
+        """True se o boost de velocidade está ativo. Use `speed_boost_timer` para o tempo restante."""
         return self.speed_boost_timer > 0.0
-
-    def get_speed_boost_time(self) -> float:
-        return self.speed_boost_timer
 
     def set_rotation(self, angle: float) -> None:
         """Define o ângulo de rotação visual da nave.
@@ -492,7 +490,7 @@ class Ship:
         Args:
             angle: Ângulo em graus (0° = vertical/top-down, 90° = horizontal/side-scroll)
         """
-        if self.rotation_angle != angle and self.ship_image is not None:
+        if abs(self.rotation_angle - angle) > 0.01 and self.ship_image is not None:
             self.rotation_angle = angle
             # Rotacionar imagem: pygame.transform.rotate() usa rotação no sentido contrário
             # Então rotacionamos -angle para obter a rotação desejada
@@ -528,7 +526,7 @@ class Ship:
             return self.ship_image_rotated.get_size()
         return self.ship_image.get_size()
 
-    def _get_enemy_center(self, enemy: Any) -> Optional[Tuple[float, float]]:
+    def _get_enemy_center(self, enemy: Any) -> Optional[tuple[float, float]]:
         """Calcula o centro de um inimigo independente do tipo."""
         if hasattr(enemy, "w") and hasattr(enemy, "h"):
             return float(enemy.x + enemy.w / 2), float(enemy.y + enemy.h / 2)
@@ -539,9 +537,12 @@ class Ship:
     def _find_nearest_enemy(
         self, from_x: float, from_y: float, entity_manager: "EntityManager"
     ) -> Optional[Any]:
-        """Encontra o inimigo mais próximo de uma posição."""
+        """Encontra o inimigo mais próximo de uma posição.
+
+        Usa distância ao quadrado internamente para evitar sqrt por inimigo.
+        """
         nearest_enemy: Optional[Any] = None
-        nearest_dist = float("inf")
+        nearest_dist_sq = float("inf")
 
         # Buscar em todos os inimigos normais
         for enemy in entity_manager.enemies:
@@ -552,9 +553,9 @@ class Ship:
                 continue
             dx = center[0] - from_x
             dy = center[1] - from_y
-            dist = math.sqrt(dx * dx + dy * dy)
-            if dist < nearest_dist:
-                nearest_dist = dist
+            dist_sq = dx * dx + dy * dy
+            if dist_sq < nearest_dist_sq:
+                nearest_dist_sq = dist_sq
                 nearest_enemy = enemy
 
         # Buscar em formações
@@ -567,9 +568,9 @@ class Ship:
                     continue
                 dx = center[0] - from_x
                 dy = center[1] - from_y
-                dist = math.sqrt(dx * dx + dy * dy)
-                if dist < nearest_dist:
-                    nearest_dist = dist
+                dist_sq = dx * dx + dy * dy
+                if dist_sq < nearest_dist_sq:
+                    nearest_dist_sq = dist_sq
                     nearest_enemy = enemy
 
         # Verificar boss
@@ -578,8 +579,8 @@ class Ship:
             if not getattr(boss, "dead", False):
                 dx = boss.x + boss.w / 2 - from_x
                 dy = boss.y + boss.h / 2 - from_y
-                dist = math.sqrt(dx * dx + dy * dy)
-                if dist < nearest_dist:
+                dist_sq = dx * dx + dy * dy
+                if dist_sq < nearest_dist_sq:
                     nearest_enemy = boss
 
         return nearest_enemy
@@ -862,7 +863,7 @@ class Ship:
 
         # Quando a carga atinge o máximo, pulso branco indica "pronto para soltar".
         if progress >= 1.0:
-            pulse = int(2 + 2 * abs(math.sin(time.time() * 8)))
+            pulse = int(2 + 2 * abs(math.sin(self._draw_time * 8)))
             pygame.draw.circle(surface, (255, 255, 255), (cx, cy), radius + 2, pulse)
 
     def _update_dash_trail(self, dt: float) -> None:
@@ -909,6 +910,7 @@ class Ship:
         entity_manager: Optional["EntityManager"] = None,
         is_side_scroll: bool = False,
     ):
+        self._draw_time += dt
         self._update_timers(dt)
         # Avança dash/cooldown do Fantasma.
         if self.dash_timer > 0.0:
@@ -1229,7 +1231,7 @@ class Ship:
         # Desenhar escudo (se ativo)
         if self.has_shield:
             # Efeito pulsante
-            pulse = abs((time.time() * 4) % 2 - 1)  # Oscila entre 0 e 1
+            pulse = abs((self._draw_time * 4) % 2 - 1)  # Oscila entre 0 e 1
 
             # Calcular centro baseado no tamanho real do sprite (se existir)
             if self.ship_image is not None:
@@ -1271,7 +1273,7 @@ class Ship:
 
         # Desenhar bolas elétricas orbitais
         if self.orbital_lasers_active:
-            current_time = time.time()
+            current_time = self._draw_time
 
             # Obter tamanho real do sprite para centralizar corretamente
             if self.ship_image is not None:

@@ -7,8 +7,7 @@ pygame, sem entities) para permitir importação cedo e em testes.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Iterable
+from dataclasses import dataclass
 
 DEFAULT_SHIP_ID: str = "padrao"
 
@@ -59,7 +58,7 @@ class ShipProfile:
     reaction_delay: float = 0.0
 
     # Tags para UI (atributos destacados nos cards).
-    tags: tuple[str, ...] = field(default_factory=tuple)
+    tags: tuple[str, ...] = ()
 
 
 # Ordem do registry define a ordem exibida na UI.
@@ -220,7 +219,7 @@ def get_ship_profile(ship_id: str) -> ShipProfile:
     return _SHIPS_BY_ID.get(ship_id, _SHIPS_BY_ID[DEFAULT_SHIP_ID])
 
 
-def all_ship_profiles() -> Iterable[ShipProfile]:
+def all_ship_profiles() -> tuple[ShipProfile, ...]:
     """Itera sobre todas as naves na ordem de registro."""
     return SHIP_REGISTRY
 

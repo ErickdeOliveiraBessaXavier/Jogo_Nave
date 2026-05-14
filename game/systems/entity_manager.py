@@ -1,5 +1,5 @@
 import random
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import pygame
 
@@ -61,65 +61,65 @@ from .collision_protocols import Removable
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
+    from .hit_result import MeteorSpec
 
 
 class EntityManager:
     """Gerencia todas as entidades do jogo, coordenando update, draw e cleanup."""
 
     def __init__(
-        self, sound_manager: Optional[Any] = None, is_side_scroll: bool = False
+        self, sound_manager: Any | None = None, is_side_scroll: bool = False
     ) -> None:
         self.sound_manager = sound_manager
         self.is_side_scroll = is_side_scroll
 
         # Listas de projéteis e efeitos
-        self.bullets: List[Bullet] = []
-        self.homing_bullets: List[HomingBullet] = []
-        self.emp_waves: List[EMPWave] = []
-        self.energy_orbs: List[EnergyOrb] = []
-        self.explosive_effects: List[ExplosiveEffect] = []
-        self.alien_bullets: List[AlienBullet] = []
-        self.serpent_bullets: List[SerpentRockBullet] = []
-        self.boss_lasers: List[Union[BossLaser, SpikeBossLaser]] = []
-        self.player_lasers: List[PlayerLaser] = []
-        self.cacador_lasers: List[BossLaser] = []
-        self.boss_squares: List[BossSquare] = []
-        self.slime_drips: List[SlimeDrip] = []
-        self.eye_lasers: List[EyeLaser] = []
-        self.mine_explosions: List[MineExplosion] = []
-        self.ice_poison_zones: List[IcePoisonZone] = []
-        self.fire_zones: List[FireZone] = []
-        self.mini_ship_bullets: List[MiniShipBullet] = []
+        self.bullets: list[Bullet] = []
+        self.homing_bullets: list[HomingBullet] = []
+        self.emp_waves: list[EMPWave] = []
+        self.energy_orbs: list[EnergyOrb] = []
+        self.explosive_effects: list[ExplosiveEffect] = []
+        self.alien_bullets: list[AlienBullet] = []
+        self.serpent_bullets: list[SerpentRockBullet] = []
+        self.boss_lasers: list[Union[BossLaser, SpikeBossLaser]] = []
+        self.player_lasers: list[PlayerLaser] = []
+        self.cacador_lasers: list[BossLaser] = []
+        self.boss_squares: list[BossSquare] = []
+        self.slime_drips: list[SlimeDrip] = []
+        self.eye_lasers: list[EyeLaser] = []
+        self.mine_explosions: list[MineExplosion] = []
+        self.ice_poison_zones: list[IcePoisonZone] = []
+        self.fire_zones: list[FireZone] = []
+        self.mini_ship_bullets: list[MiniShipBullet] = []
 
         # Listas de entidades e coletáveis
-        self.enemies: List[Any] = []
-        self.powerups: List[PowerUp] = []
-        self.stars: List[Star] = []
-        self.floating_scores: List[FloatingScore] = []
+        self.enemies: list[Any] = []
+        self.powerups: list[PowerUp] = []
+        self.stars: list[Star] = []
+        self.floating_scores: list[FloatingScore] = []
 
-        self.boss: Optional[
-            Union[
-                Boss,
-                SpikeBoss,
-                SlimeBoss,
-                GiantMeteorBoss,
-                StoneGolemBoss,
-                MountainSerpentBoss,
-                CloudArchmageBoss,
-            ]
+        self.boss: Union[
+            Boss,
+            SpikeBoss,
+            SlimeBoss,
+            GiantMeteorBoss,
+            StoneGolemBoss,
+            MountainSerpentBoss,
+            CloudArchmageBoss,
+            None,
         ] = None
 
-        self.mini_ships: List[MiniShip] = []
-        self.formations: List[Formation] = []
-        self.mountain_propellers: List[MountainPropeller] = []
-        self.spikes: List[Spike] = []
-        self.boulders: List[GolemMine] = []
-        self.attack_debris: List[AttackDebris] = []
-        self.orbital_debris: List[OrbitalDebris] = []
-        self.air_strike_bombs: List[AirStrikeBomb] = []
-        self.cannon_towers: List[CannonTower] = []
-        self.cannon_mines: List[CannonMine] = []
-        self.black_holes: List[BlackHole] = []
+        self.mini_ships: list[MiniShip] = []
+        self.formations: list[Formation] = []
+        self.mountain_propellers: list[MountainPropeller] = []
+        self.spikes: list[Spike] = []
+        self.boulders: list[GolemMine] = []
+        self.attack_debris: list[AttackDebris] = []
+        self.orbital_debris: list[OrbitalDebris] = []
+        self.air_strike_bombs: list[AirStrikeBomb] = []
+        self.cannon_towers: list[CannonTower] = []
+        self.cannon_mines: list[CannonMine] = []
+        self.black_holes: list[BlackHole] = []
 
         # Pools de performance
         self.meteor_pool = MeteorPool(initial_size=100, is_side_scroll=is_side_scroll)
@@ -154,8 +154,54 @@ class EntityManager:
 
         # Estado interno
         self._grid_needs_rebuild = True
-        self._cached_formation_enemies: List[Any] = []
-        self._cached_all_enemies: List[Any] = []
+        self._cached_formation_enemies: list[Any] = []
+        self._cached_all_enemies: list[Any] = []
+
+        # Cache do tamanho da tela — evita pygame.display.get_surface() por inimigo/frame.
+        self._screen_size: tuple[int, int] = (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
+
+    def _emp_multiplier(
+        self,
+        entity: Any,
+        slow_active: bool,
+        slow_factor: float,
+        dt: float,
+    ) -> float:
+        """Retorna o multiplicador de velocidade por EMP para uma entidade."""
+        linger = getattr(entity, "emp_linger_timer", 0.0)
+        if not slow_active:
+            return float(slow_factor) if linger > 0.0 else 1.0
+        rect = getattr(entity, "rect", None)
+        ex, ey = (
+            (rect.centerx, rect.centery)
+            if rect
+            else (getattr(entity, "x", 0.0), getattr(entity, "y", 0.0))
+        )
+        for w in self.emp_waves:
+            if w.is_affecting_position(float(ex), float(ey), dt):
+                setattr(entity, "emp_linger_timer", float(EMP_LINGER_DURATION))
+                return float(slow_factor)
+        return float(slow_factor) if linger > 0.0 else 1.0
+
+    @staticmethod
+    def _update_emp_linger(entity: Any, dt: float) -> None:
+        """Decrementa o timer de linger EMP da entidade."""
+        linger_t = getattr(entity, "emp_linger_timer", 0.0)
+        if linger_t > 0.0:
+            setattr(entity, "emp_linger_timer", max(0.0, linger_t - dt))
+
+    @staticmethod
+    def _ice_multiplier(entity: Any) -> float:
+        """Retorna o multiplicador de velocidade por zona de gelo para uma entidade."""
+        ice_t = getattr(entity, "_ice_slow_timer", 0.0)
+        return IcePoisonZone.SLOW_FACTOR if ice_t > 0.0 else 1.0
+
+    @staticmethod
+    def _update_ice_linger(entity: Any, dt: float) -> None:
+        """Decrementa o timer de slow de gelo da entidade."""
+        ice_t = getattr(entity, "_ice_slow_timer", 0.0)
+        if ice_t > 0.0:
+            setattr(entity, "_ice_slow_timer", max(0.0, ice_t - dt))
 
     @property
     def eye_enemy_count(self) -> int:
@@ -166,7 +212,7 @@ class EntityManager:
         x: float,
         y: float,
         size: int = 30,
-        explosion_type: Optional[List[tuple[int, int, int]]] = None,
+        explosion_type: list[tuple[int, int, int]] | None = None,
     ) -> Explosion:
         return self.explosion_pool.get(x, y, size, explosion_type)
 
@@ -178,7 +224,6 @@ class EntityManager:
         """
         if not fragments:
             return
-        from .hit_result import MeteorSpec
 
         for spec in fragments:
             if isinstance(spec, MeteorSpec):
@@ -270,7 +315,7 @@ class EntityManager:
         damage: int = PlayerLaser.DAMAGE,
         ship: Optional["Ship"] = None,
         ball_index: int = -1,
-        target_entity: Optional[Any] = None,
+        target_entity: Any | None = None,
     ) -> PlayerLaser:
         laser = PlayerLaser(
             x,
@@ -406,8 +451,11 @@ class EntityManager:
         attraction_mult: float = 1.0,
     ) -> None:
         enemy_dt = 0.0 if freeze_enemies else dt
-        new_alien_bullets: List[AlienBullet] = []
-        new_eye_lasers: List[EyeLaser] = []
+        new_alien_bullets: list[AlienBullet] = []
+        new_eye_lasers: list[EyeLaser] = []
+
+        # Atualiza cache de tamanho de tela (seguro chamar uma vez por frame).
+        self._screen_size = (screen_width, screen_height)
 
         # Cache de inimigos
         self._cached_formation_enemies = []
@@ -440,37 +488,18 @@ class EntityManager:
         # Helper para lentidão (EMP)
         slow_active = getattr(self, "emp_active", False)
         slow_factor = getattr(self, "emp_slow_factor", 1.0) if slow_active else 1.0
-        emp_waves = self.emp_waves
 
         def emp_mul_for(entity: Any) -> float:
-            linger = getattr(entity, "emp_linger_timer", 0.0)
-            if not slow_active:
-                return float(slow_factor) if linger > 0.0 else 1.0
-            rect = getattr(entity, "rect", None)
-            ex, ey = (
-                (rect.centerx, rect.centery)
-                if rect
-                else (getattr(entity, "x", 0.0), getattr(entity, "y", 0.0))
-            )
-            for w in emp_waves:
-                if w.is_affecting_position(float(ex), float(ey), dt):
-                    setattr(entity, "emp_linger_timer", float(EMP_LINGER_DURATION))
-                    return float(slow_factor)
-            return float(slow_factor) if linger > 0.0 else 1.0
+            return self._emp_multiplier(entity, slow_active, slow_factor, dt)
 
         def update_linger(entity: Any, dt: float) -> None:
-            linger_t = getattr(entity, "emp_linger_timer", 0.0)
-            if linger_t > 0.0:
-                setattr(entity, "emp_linger_timer", max(0.0, linger_t - dt))
+            self._update_emp_linger(entity, dt)
 
         def ice_mul_for(entity: Any) -> float:
-            ice_t = getattr(entity, "_ice_slow_timer", 0.0)
-            return IcePoisonZone.SLOW_FACTOR if ice_t > 0.0 else 1.0
+            return self._ice_multiplier(entity)
 
         def update_ice_linger(entity: Any, dt: float) -> None:
-            ice_t = getattr(entity, "_ice_slow_timer", 0.0)
-            if ice_t > 0.0:
-                setattr(entity, "_ice_slow_timer", max(0.0, ice_t - dt))
+            self._update_ice_linger(entity, dt)
 
         # Atualizar formações e naves aliadas
         for f in self.formations[:]:
@@ -627,8 +656,7 @@ class EntityManager:
         self.eye_lasers.extend(new_eye_lasers)
 
         # Atualizar elementos dinâmicos da tela
-        screen = pygame.display.get_surface()
-        sw, sh = screen.get_size() if screen else (1600, 900)
+        sw, sh = self._screen_size
 
         for q in self.boss_squares[:]:
             q.update(enemy_dt, sw, sh)
@@ -672,7 +700,7 @@ class EntityManager:
         self, dt: float, player_x: float, player_y: float
     ) -> None:
         # Atualizar todas as listas de perigos e projéteis
-        groups: List[List[Any]] = [
+        groups: list[list[Any]] = [
             self.enemies,
             self.bullets,
             self.alien_bullets,
@@ -857,7 +885,7 @@ class EntityManager:
             zone.draw(surface)
 
         # 4. Desenhar projéteis e efeitos de impacto (devem ficar SOBRE os inimigos)
-        lists: List[List[Any]] = [
+        lists: list[list[Any]] = [
             self.bullets,
             self.homing_bullets,
             self.alien_bullets,
@@ -968,7 +996,7 @@ class EntityManager:
         homing: bool = False,
         explosive: bool = False,
         low_ammo: bool = False,
-        direction: Optional[tuple[float, float]] = None,
+        direction: tuple[float, float] | None = None,
         ship_id: str = "padrao",
     ) -> Bullet:
         bullet = self.bullet_pool.get(
@@ -991,7 +1019,7 @@ class EntityManager:
         return bullet
 
     def _assign_homing_target(self, bullet: Bullet) -> Any:
-        all_e: List[Any] = list(self.enemies)
+        all_e: list[Any] = list(self.enemies)
         for f in self.formations:
             if not getattr(f, "dead", True):
                 all_e.extend(f.get_enemies())
@@ -1002,7 +1030,7 @@ class EntityManager:
         if not alive:
             return None
 
-        counts: Dict[int, int] = {}
+        counts: dict[int, int] = {}
         for b in self.bullets:
             if getattr(b, "homing", False) and b.assigned_target_id is not None:
                 counts[b.assigned_target_id] = counts.get(b.assigned_target_id, 0) + 1
@@ -1024,8 +1052,7 @@ class EntityManager:
     def _is_enemy_off_screen(self, enemy: Any) -> bool:
         ew = getattr(enemy, "w", getattr(getattr(enemy, "rect", None), "width", 50))
         eh = getattr(enemy, "h", getattr(getattr(enemy, "rect", None), "height", 50))
-        s = pygame.display.get_surface()
-        sw, sh = s.get_size() if s else (1600, 900)
+        sw, sh = self._screen_size
 
         if self.is_side_scroll:
             return enemy.x < -(ew + sw * 0.2) or enemy.y < -eh or enemy.y > sh
@@ -1167,12 +1194,12 @@ class EntityManager:
 
     def clear_for_level_transition(self) -> None:
         self.alien_bullets.clear()
-        self.homing_bullets.clear()
         self.serpent_bullets.clear()
         self.energy_orbs.clear()
-        self.cacador_lasers.clear()
         self.boss_squares.clear()
         self.eye_lasers.clear()
+        # homing_bullets e cacador_lasers são projéteis do jogador — preservados
+        # pela mesma razão que air_strike_bombs e black_holes (ver comentário abaixo).
         self.floating_scores.clear()
         self.enemies.clear()
         self.mine_explosions.clear()
@@ -1205,7 +1232,7 @@ class EntityManager:
         self.spike_spatial_grid.clear()
         self._grid_needs_rebuild = True
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         return {
             "bullets": len(self.bullets),
             "enemies": len(self.enemies),
