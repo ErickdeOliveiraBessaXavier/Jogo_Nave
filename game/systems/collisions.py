@@ -20,6 +20,7 @@ from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.eye_laser import EyeLaser
 from ..entities.fire_zone import FireZone
 from ..entities.floating_score import FloatingScore
+from ..entities.homing_bullet import HomingBullet
 from ..entities.ice_poison_zone import IcePoisonZone
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
@@ -31,7 +32,6 @@ from ..entities.slime_drip import SlimeDrip
 from ..entities.spike import Spike
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.star import Star
-from ..entities.homing_bullet import HomingBullet
 from .collision_protocols import Damageable, Enemy
 from .hit_result import NO_HIT, HitResult
 

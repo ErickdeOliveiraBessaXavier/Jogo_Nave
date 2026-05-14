@@ -31,6 +31,7 @@ from ..entities.floating_score import FloatingScore
 from ..entities.formation import Formation
 from ..entities.giant_meteor_boss import GiantMeteorBoss
 from ..entities.guided_meteor import GuidedMeteor
+from ..entities.homing_bullet import HomingBullet
 from ..entities.ice_poison_zone import IcePoisonZone
 from ..entities.meteor import Meteor
 from ..entities.meteor_pool import MeteorPool
@@ -43,7 +44,6 @@ from ..entities.mountain_propeller import MountainPropeller
 from ..entities.mountain_serpent_boss import (MountainSerpentBoss,
                                               SerpentBlock, SerpentRockBullet)
 from ..entities.player_laser import PlayerLaser
-from ..entities.homing_bullet import HomingBullet
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
 from ..entities.rock_glider_pool import RockGliderPool

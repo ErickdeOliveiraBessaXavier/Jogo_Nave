@@ -78,7 +78,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
     ShipProfile(
         id="magneto",
         display_name="Magneto",
-        description="Atrai estrelas/powerups e possui um laser carregado devastador.",
+        description="Atrai estrelas/powerups e possui um laser carregado (Alt + Espaço ou Mouse) devastador.",
         sprite_filename="ship_magnetico.png",
         unlock_cost=50,
         pickup_radius_mult=2.5,
@@ -175,8 +175,8 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         id="cacador",
         display_name="Caçador",
         description=(
-            "Charge shot: segure o tiro até 0.8s para causar 3× dano. "
-            "Fire rate base -30%."
+            "Charge shot: segure Alt + Espaço (ou Mouse) até 0.8s para 3× dano. "
+            "Falha se soltar antes. Fire rate base -30%."
         ),
         sprite_filename="ship_caçador.png",
         unlock_cost=150,

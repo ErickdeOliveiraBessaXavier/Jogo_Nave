@@ -262,6 +262,13 @@ class Ship:
         sound_manager.play_boss_laser_charging()
         return True
 
+    def cancel_charge(self) -> None:
+        """Cancela o charge sem disparar, caso solte o botão antes de completar."""
+        if self.charge_shot_active:
+            self.charge_shot_active = False
+            self.charge_shot_timer = 0.0
+            sound_manager.stop_boss_laser_charging()
+
     def consume_charge(self) -> float:
         """Encerra o charge e retorna o multiplicador de dano deste disparo.
 

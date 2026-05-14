@@ -2243,6 +2243,10 @@ class PlayingScene(Scene):
                     if "hold_down" in held:
                         move_vec.y += 1
                     self.ship.try_dash(move_vec)
+            elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
+                if not self.ship.is_entering and self._can_handle_gameplay_actions():
+                    if self.ship.profile.has_charge_shot and (event.mod & pygame.KMOD_ALT):
+                        self.ship.start_charge()
 
             self._process_cheat_input(event)
 
@@ -2252,8 +2256,8 @@ class PlayingScene(Scene):
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
                 if not self.ship.is_entering and self._can_handle_gameplay_actions():
-                    # Caçador: clique inicia carga em vez de disparar.
-                    if self.ship.profile.has_charge_shot:
+                    # Caçador: clique com Alt inicia carga em vez de disparar normal.
+                    if self.ship.profile.has_charge_shot and (pygame.key.get_mods() & pygame.KMOD_ALT):
                         self.ship.start_charge()
                     elif not self.ship.auto_fire and self.shoot_cd == 0.0:
                         self._fire_bullets()
@@ -2270,7 +2274,23 @@ class PlayingScene(Scene):
                 and not self.ship.is_entering
                 and self._can_handle_gameplay_actions()
             ):
-                self._fire_bullets()
+                if self.ship.charge_shot_progress >= 1.0:
+                    self._fire_bullets()
+                else:
+                    self.ship.cancel_charge()
+
+        elif event.type == pygame.KEYUP:
+            if event.key in (pygame.K_SPACE, pygame.K_RETURN):
+                if (
+                    self.ship.profile.has_charge_shot
+                    and self.ship.charge_shot_active
+                    and not self.ship.is_entering
+                    and self._can_handle_gameplay_actions()
+                ):
+                    if self.ship.charge_shot_progress >= 1.0:
+                        self._fire_bullets()
+                    else:
+                        self.ship.cancel_charge()
 
     def _activate_stored_powerup(self, slot_index: int) -> None:
         """Consome o powerup do slot indicado e aplica seu efeito (Cofre)."""
