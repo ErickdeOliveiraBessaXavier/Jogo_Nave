@@ -38,11 +38,17 @@ from ..entities.meteor_pool import MeteorPool
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship import MiniShip
 from ..entities.mini_ship_bullet import MiniShipBullet
-from ..entities.mountain_mage import (MountainMage, MountainStalactite,
-                                      MountainStalagmite)
+from ..entities.mountain_mage import (
+    MountainMage,
+    MountainStalactite,
+    MountainStalagmite,
+)
 from ..entities.mountain_propeller import MountainPropeller
-from ..entities.mountain_serpent_boss import (MountainSerpentBoss,
-                                              SerpentBlock, SerpentRockBullet)
+from ..entities.mountain_serpent_boss import (
+    MountainSerpentBoss,
+    SerpentBlock,
+    SerpentRockBullet,
+)
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
@@ -54,8 +60,13 @@ from ..entities.spike_boss import SpikeBoss
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
-from ..entities.stone_golem_boss import (AttackDebris, EmergeDebris, GolemMine,
-                                         OrbitalDebris, StoneGolemBoss)
+from ..entities.stone_golem_boss import (
+    AttackDebris,
+    EmergeDebris,
+    GolemMine,
+    OrbitalDebris,
+    StoneGolemBoss,
+)
 from ..entities.stone_sentry import StoneSentry
 from .collision_protocols import Removable
 
@@ -539,14 +550,20 @@ class EntityManager:
         self.explosion_pool.update(dt)
         for me in self.mine_explosions:
             me.update(dt)
-        
+
         # Coletáveis com suporte a atração (Magneto)
         player_pos = (player_x, player_y)
         for p in self.powerups:
             p.update(dt, attraction_pos=player_pos, attraction_mult=attraction_mult)
         for s in self.stars:
-            s.update(dt, screen_width, screen_height, attraction_pos=player_pos, attraction_mult=attraction_mult)
-            
+            s.update(
+                dt,
+                screen_width,
+                screen_height,
+                attraction_pos=player_pos,
+                attraction_mult=attraction_mult,
+            )
+
         for fs in self.floating_scores:
             fs.update(dt)
         for ms in self.mini_ships:

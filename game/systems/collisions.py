@@ -6,8 +6,7 @@ from ..core.config import config as config_instance
 from ..core.sound import sound_manager
 from ..core.spatial_grid import SpatialGrid
 from ..core.upgrades_config import EXPLOSIVE_BULLET_DAMAGE
-from ..core.upgrades_config import \
-    EXPLOSIVE_BULLET_RADIUS as _EXPLOSIVE_BULLET_RADIUS
+from ..core.upgrades_config import EXPLOSIVE_BULLET_RADIUS as _EXPLOSIVE_BULLET_RADIUS
 from ..entities.air_strike_bomb import AirStrikeBomb
 from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
@@ -526,7 +525,7 @@ class Collisions:
                     hit_damage = (
                         enemy.health
                         if getattr(enemy, "is_explosive_mine", False)
-                        else 50 # Dano fixo de explosão de mina inimiga
+                        else 50  # Dano fixo de explosão de mina inimiga
                     )
                     result = self._apply_hit(
                         enemy,
@@ -968,27 +967,25 @@ class Collisions:
             for enemy in potential_enemies:
                 if enemy.dead:
                     continue
-                
+
                 # Evitar múltiplos hits no mesmo inimigo no mesmo frame
                 if id(enemy) in b.hit_this_frame:
                     continue
 
                 if self._projectile_collides_with_enemy(r, enemy):
                     b.hit_this_frame.add(id(enemy))
-                    
+
                     # HP do inimigo antes do hit para saber quanto consumir
                     enemy_hp = getattr(enemy, "health", 1)
-                    
+
                     # Aplicar hit
-                    result = self._apply_hit(
-                        enemy, b.damage, b.x, b.y, entity_manager
-                    )
-                    
+                    result = self._apply_hit(enemy, b.damage, b.x, b.y, entity_manager)
+
                     # Consumir vida do projétil: se matou, consome o HP total do inimigo.
                     # Se não matou, consome o dano que a bala causou (b.damage).
                     amount_to_consume = enemy_hp if result.killed else b.damage
                     b.consume_life(amount_to_consume)
-                    
+
                     score_gain += result.points
                     if result.killed:
                         destroyed_count += 1
@@ -999,7 +996,7 @@ class Collisions:
                     if b.life <= 0:
                         b.dead = True
                         break
-        
+
         return score_gain, destroyed_count, score_events
 
     def homing_bullets_vs_boss(
@@ -1012,34 +1009,36 @@ class Collisions:
         """Colisão de tiros teleguiados consumíveis com boss."""
         if not homing_bullets or not boss or boss.dead:
             return 0
-        
+
         score_gain = 0
         for b in homing_bullets[:]:
             if b.dead or b.life <= 0:
                 continue
-            
+
             # Evitar multi-hit no boss no mesmo frame
             if id(boss) in b.hit_this_frame:
                 continue
 
             if self._check_mask_collision(b.rect, None, boss, b.x, b.y):
                 b.hit_this_frame.add(id(boss))
-                
+
                 damage = int(b.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
-                
+
                 # Boss tem muito HP, geralmente a bala vai consumir toda sua vida restante
                 # ou o máximo de dano que ela pode causar.
-                amount_to_consume = b.life # Simplificação: boss sempre consome o que resta da bala se hitar
+                amount_to_consume = (
+                    b.life
+                )  # Simplificação: boss sempre consome o que resta da bala se hitar
                 b.consume_life(amount_to_consume)
-                
+
                 result = self._apply_hit(
                     boss, damage, b.x, b.y, entity_manager, floating_scores
                 )
                 score_gain += result.points
-                
+
                 if b.life <= 0:
                     b.dead = True
-        
+
         return score_gain
 
     def bullets_vs_enemies(
@@ -1765,7 +1764,9 @@ class Collisions:
                     distance_squared = dist_dx * dist_dx + dist_dy * dist_dy
                     proximity_threshold = (bw / 2 + 50) ** 2
 
-                    if distance_squared <= proximity_threshold and boss_rect.clipline(line):
+                    if distance_squared <= proximity_threshold and boss_rect.clipline(
+                        line
+                    ):
                         steps = 10
                         for i in range(steps + 1):
                             t_step = i / steps
@@ -1773,7 +1774,11 @@ class Collisions:
                             cy = start_pos[1] + t_step * (end_pos[1] - start_pos[1])
                             rel_x = int(cx - bx)
                             rel_y = int(cy - by)
-                            if 0 <= rel_x < bw and 0 <= rel_y < bh and mask.get_at((rel_x, rel_y)):
+                            if (
+                                0 <= rel_x < bw
+                                and 0 <= rel_y < bh
+                                and mask.get_at((rel_x, rel_y))
+                            ):
                                 collision_detected = True
                                 break
             else:

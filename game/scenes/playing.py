@@ -41,11 +41,14 @@ from ..core.paths import get_profile_path
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
-from ..core.upgrades import (ActiveUpgrade, HealUpgrade, create_upgrade,
-                             get_upgrade_icon)
+from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
 from ..core.upgrades_config import HOMING_DAMAGE_MULTIPLIER, UPGRADE_SLOT_COUNT
-from ..core.world_config import (WorldConfig, format_stage_name,
-                                 get_world_for_level, is_side_scroll_mode)
+from ..core.world_config import (
+    WorldConfig,
+    format_stage_name,
+    get_world_for_level,
+    is_side_scroll_mode,
+)
 from ..entities.floating_score import FloatingScore
 from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
@@ -89,6 +92,7 @@ class TransitionPhase(Enum):
 
 class GameState(Enum):
     """Estado de jogo interno da cena (fase de preparação vs gameplay ativo)."""
+
     PREPARING = auto()
     PLAYING = auto()
 
@@ -752,7 +756,7 @@ class PlayingScene(Scene):
                 self._cacador_laser_channel = None
 
         # Sincronizar volume do laser carregado se estiver ativo (opcional, mantendo compatibilidade)
-        
+
         if self.transition_phase in (
             TransitionPhase.PLAYING,
             TransitionPhase.LEVEL_ENTRY,
@@ -1059,7 +1063,11 @@ class PlayingScene(Scene):
                         angle = base_angle - spread / 2 + t * spread
                         dir_vec = (math.cos(angle), math.sin(angle))
                         self.entity_manager.spawn_homing_bullet(
-                            x, y, damage=adjusted_damage, lifetime=1.5, direction=dir_vec
+                            x,
+                            y,
+                            damage=adjusted_damage,
+                            lifetime=1.5,
+                            direction=dir_vec,
                         )
                 self.shoot_cd = self._get_shoot_cooldown()
                 return
@@ -2251,7 +2259,9 @@ class PlayingScene(Scene):
                     self.ship.try_dash(move_vec)
             elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
                 if not self.ship.is_entering and self._can_handle_gameplay_actions():
-                    if self.ship.profile.has_charge_shot and (event.mod & pygame.KMOD_ALT):
+                    if self.ship.profile.has_charge_shot and (
+                        event.mod & pygame.KMOD_ALT
+                    ):
                         self.ship.start_charge()
 
             self._process_cheat_input(event)
@@ -2263,7 +2273,9 @@ class PlayingScene(Scene):
             if event.button == 1:
                 if not self.ship.is_entering and self._can_handle_gameplay_actions():
                     # Caçador: clique com Alt inicia carga em vez de disparar normal.
-                    if self.ship.profile.has_charge_shot and (pygame.key.get_mods() & pygame.KMOD_ALT):
+                    if self.ship.profile.has_charge_shot and (
+                        pygame.key.get_mods() & pygame.KMOD_ALT
+                    ):
                         self.ship.start_charge()
                     elif not self.ship.auto_fire and self.shoot_cd == 0.0:
                         self._fire_bullets()
@@ -2668,12 +2680,19 @@ class PlayingScene(Scene):
             return
 
         from ..core import colors as _colors
-        from ..core.colors import (POWERUP_COOLDOWN_HASTE,
-                                   POWERUP_DAMAGE_BOOST, POWERUP_DOUBLE_SHOT,
-                                   POWERUP_LIFE, POWERUP_MINI_SHIPS,
-                                   POWERUP_PIERCING_SHOT, POWERUP_RAINBOW,
-                                   POWERUP_SCORE, POWERUP_SHIELD,
-                                   POWERUP_SPEED, POWERUP_TIME_STOP)
+        from ..core.colors import (
+            POWERUP_COOLDOWN_HASTE,
+            POWERUP_DAMAGE_BOOST,
+            POWERUP_DOUBLE_SHOT,
+            POWERUP_LIFE,
+            POWERUP_MINI_SHIPS,
+            POWERUP_PIERCING_SHOT,
+            POWERUP_RAINBOW,
+            POWERUP_SCORE,
+            POWERUP_SHIELD,
+            POWERUP_SPEED,
+            POWERUP_TIME_STOP,
+        )
 
         font_label = get_font(20)
         font_hint = get_font(12)

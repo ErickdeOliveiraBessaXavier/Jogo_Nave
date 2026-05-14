@@ -36,8 +36,10 @@ class HomingBullet:
         self.age = 0.0
         self.is_side_scroll = is_side_scroll
 
-        speed = homing_speed if homing_speed is not None else float(
-            getattr(Config, "HOMING_BULLET_SPEED", 300)
+        speed = (
+            homing_speed
+            if homing_speed is not None
+            else float(getattr(Config, "HOMING_BULLET_SPEED", 300))
         )
         self.homing_speed = float(speed)
         self.turn_rate = float(turn_rate)
@@ -102,7 +104,11 @@ class HomingBullet:
                 cx = self.x + self.w / 2
                 cy = self.y + self.h / 2
                 desired = math.atan2(ty - cy, tx - cx)
-                current = math.atan2(self.vy, self.vx) if (self.vx or self.vy) else -math.pi / 2
+                current = (
+                    math.atan2(self.vy, self.vx)
+                    if (self.vx or self.vy)
+                    else -math.pi / 2
+                )
                 diff = (desired - current + math.pi) % (2 * math.pi) - math.pi
                 max_turn = self.turn_rate * dt
                 if diff > max_turn:
@@ -123,5 +129,7 @@ class HomingBullet:
         alpha = int(200 * max(0.0, min(1.0, self.life / float(self.max_life))))
         col = (0, 200, 255)
         s = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
-        pygame.draw.circle(s, (col[0], col[1], col[2], alpha), (self.w // 2, self.h // 2), self.w // 2)
+        pygame.draw.circle(
+            s, (col[0], col[1], col[2], alpha), (self.w // 2, self.h // 2), self.w // 2
+        )
         surface.blit(s, (int(self.x), int(self.y)))

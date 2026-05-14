@@ -743,7 +743,8 @@ class Ship:
             sprite_w, sprite_h = self.w, self.h
 
         thruster_count = max(
-            0, int(round(PARTICLE_THRUSTER_COUNT * self.profile.thruster_intensity_mult))
+            0,
+            int(round(PARTICLE_THRUSTER_COUNT * self.profile.thruster_intensity_mult)),
         )
 
         # Partículas de entrada (desabilitar em side-scroll)

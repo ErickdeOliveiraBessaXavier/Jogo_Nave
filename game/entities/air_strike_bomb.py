@@ -3,9 +3,11 @@ from typing import Callable, Optional, Set
 
 import pygame
 
-from ..core.upgrades_config import (AIR_STRIKE_BOMB_DAMAGE,
-                                    AIR_STRIKE_BOMB_FALL_SPEED,
-                                    AIR_STRIKE_BOMB_RADIUS)
+from ..core.upgrades_config import (
+    AIR_STRIKE_BOMB_DAMAGE,
+    AIR_STRIKE_BOMB_FALL_SPEED,
+    AIR_STRIKE_BOMB_RADIUS,
+)
 
 
 class AirStrikeBomb:

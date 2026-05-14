@@ -12,8 +12,7 @@ from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_profile_path
 from ..core.ship_types import ShipProfile, all_ship_profiles, get_ship_profile
 from ..core.state import Scene
-from ..core.upgrades import (UpgradeMeta, get_upgrade_icon,
-                             list_all_upgrades_meta)
+from ..core.upgrades import UpgradeMeta, get_upgrade_icon, list_all_upgrades_meta
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 
 if TYPE_CHECKING:
@@ -499,9 +498,7 @@ class UpgradesSelectionScene(Scene):
                 else self.transition_progress
             )
             if self.transitioning
-            else self.entry_progress
-            if self.is_entering
-            else 1.0
+            else self.entry_progress if self.is_entering else 1.0
         )
         alpha = int(255 * alpha_mult)
         title = self.title_font.render("Central de Loadout", True, CUSTOM_GOLD)
@@ -777,9 +774,7 @@ class UpgradesSelectionScene(Scene):
             color = (
                 colors.YELLOW
                 if (self.hovered_slot_idx == i or is_valid_target)
-                else (80, 80, 80)
-                if lock
-                else colors.GRAY
+                else (80, 80, 80) if lock else colors.GRAY
             )
             pygame.draw.rect(
                 surface, color, dr, 2 if eq else 1, border_radius=self.RADIUS
@@ -830,19 +825,13 @@ class UpgradesSelectionScene(Scene):
             bg = (
                 (60, 60, 60)
                 if self.hovered_upgrade == upg
-                else (40, 40, 40)
-                if unl
-                else (25, 25, 25)
+                else (40, 40, 40) if unl else (25, 25, 25)
             )
             pygame.draw.rect(surface, bg, rect, border_radius=self.RADIUS)
             border = (
                 colors.YELLOW
                 if eq
-                else colors.RED
-                if not unl
-                else (130, 90, 50)
-                if no_fit
-                else colors.GRAY
+                else colors.RED if not unl else (130, 90, 50) if no_fit else colors.GRAY
             )
             pygame.draw.rect(surface, border, rect, 2, border_radius=self.RADIUS)
 
@@ -936,9 +925,7 @@ class UpgradesSelectionScene(Scene):
             bg = (
                 (40, 60, 40)
                 if sel
-                else (60, 60, 70)
-                if self.hovered_ship == s
-                else (30, 30, 35)
+                else (60, 60, 70) if self.hovered_ship == s else (30, 30, 35)
             )
             pygame.draw.rect(surface, bg, dr, border_radius=self.RADIUS)
             pygame.draw.rect(
@@ -962,9 +949,7 @@ class UpgradesSelectionScene(Scene):
                 try:
                     img_s = int(dr.width * 0.6)
                     img = pygame.transform.scale(
-                        get_image(
-                            BASE_DIR / "assets" / "icons" / s.sprite_filename
-                        ),
+                        get_image(BASE_DIR / "assets" / "icons" / s.sprite_filename),
                         (img_s, img_s),
                     )
                     surface.blit(img, img.get_rect(center=dr.center))

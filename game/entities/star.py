@@ -74,25 +74,25 @@ class Star:
         if attraction_pos and attraction_mult > 1.0:
             # Lógica de atração magnética (Magneto)
             attraction_range = 120.0 * attraction_mult
-            
+
             target_x: float = float(attraction_pos[0])
             target_y: float = float(attraction_pos[1])
 
             dx = target_x - self.rect.centerx
             dy = target_y - self.rect.centery
             dist_sq = dx * dx + dy * dy
-            
+
             if dist_sq < attraction_range**2:
                 # Efeito de tremor inicial ao entrar no campo
                 if not self._is_being_attracted:
                     self._is_being_attracted = True
                     self.attraction_shake_timer = 0.4
-                
+
                 dist = dist_sq**0.5
                 if dist > 0:
                     force_factor = 3.0 + (5.0 * (1.0 - dist / attraction_range))
                     attract_speed = self.speed * force_factor * (attraction_mult * 0.8)
-                    
+
                     self.x += (dx / dist) * attract_speed * dt
                     self.y += (dy / dist) * attract_speed * dt
             else:

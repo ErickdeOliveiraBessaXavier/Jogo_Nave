@@ -150,7 +150,7 @@ class Bullet:
         """Configura dimensões e velocidade do projétil com base na direção e nave."""
         # Dimensões baseadas na nave
         base_w, base_h = 10, 3  # Padrão
-        
+
         if self.ship_id == "estilete":
             base_w, base_h = 14, 2
         elif self.ship_id == "ariete":
@@ -161,7 +161,7 @@ class Bullet:
             base_w, base_h = 12, 4
         elif self.ship_id == "engenheiro":
             base_w, base_h = 6, 6
-            
+
         if direction is None:
             if self.is_side_scroll:
                 self.vx = Config.BULLET_SPEED
@@ -179,7 +179,7 @@ class Bullet:
             self.w, self.h = base_w, base_h
         else:
             self.w, self.h = base_h, base_w
-            
+
         self.vx = dx * Config.BULLET_SPEED
         self.vy = dy * Config.BULLET_SPEED
 
@@ -222,7 +222,7 @@ class Bullet:
         """Desenha o projétil básico customizado conforme a nave."""
         rect = self.rect
         center = rect.center
-        
+
         if self.ship_id == "magneto":
             # Magneto: Tiro ovalado roxo/azul
             pygame.draw.ellipse(surface, (100, 100, 255), rect)
