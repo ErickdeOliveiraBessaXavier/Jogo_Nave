@@ -113,8 +113,10 @@ class Ship:
         self.damage_boost_timer: float = 0.0
         # Chain Shot power-up
         self.chain_shot_timer: float = 0.0
-        # Repulsion Shield power-up
+        # Repulsion Shield power-up (Vento Constante)
         self.repulsion_shield_timer: float = 0.0
+        self.repulsion_wind_streaks: list[dict[str, Any]] = []
+        
         self.is_entering = False
         self.entry_particles: list[ParticleDict] = []
         self.thruster_particles: list[ParticleDict] = []
@@ -951,37 +953,63 @@ class Ship:
         ]
 
     def _update_repulsion_shield(self, dt: float, entity_manager: Optional["EntityManager"]) -> None:
-        if self.repulsion_shield_timer <= 0.0 or entity_manager is None:
+        if entity_manager is None:
             return
 
-        center_x = self.x + self.w / 2
-        center_y = self.y + self.h / 2
-        radius = Config.REPULSION_SHIELD_RADIUS
-        force = Config.REPULSION_FORCE
+        # 1. Gerenciar o spawn de rastros de vento (streaks) enquanto o power-up estiver ativo
+        if self.repulsion_shield_timer > 0.0:
+            # Gerar novos rastros continuamente para dar aspecto de vento constante
+            spawn_rate = 60 # Muitos rastros por segundo
+            for _ in range(int(spawn_rate * dt) + (1 if random.random() < (spawn_rate * dt) % 1 else 0)):
+                sprite_w, sprite_h = self._get_rendered_sprite_size()
+                angle = random.uniform(0, math.tau)
+                self.repulsion_wind_streaks.append({
+                    "angle": angle,
+                    "dist": random.uniform(5.0, 30.0), # Começa bem perto da nave
+                    "speed": random.uniform(900, 1500),
+                    "len": random.uniform(40, 90),
+                    "alpha": random.randint(120, 200),
+                    "cx": self.x + sprite_w / 2,
+                    "cy": self.y + sprite_h / 2
+                })
 
-        enemies = entity_manager.enemy_spatial_grid.query(
-            center_x - radius, center_y - radius, radius * 2, radius * 2
-        )
+            # 2. Aplicar força de "sopro" CONSTANTE em todos os inimigos no raio
+            radius = Config.REPULSION_SHIELD_RADIUS * 1.5
+            cx = self.x + self.w / 2
+            cy = self.y + self.h / 2
+            
+            enemies = entity_manager.enemy_spatial_grid.query(
+                cx - radius, cy - radius, radius * 2, radius * 2
+            )
 
-        for enemy in enemies:
-            if getattr(enemy, "dead", False):
-                continue
+            for enemy in enemies:
+                if getattr(enemy, "dead", False): continue
+                class_name = enemy.__class__.__name__
+                if (hasattr(enemy, "boss") or "Boss" in class_name or "Mountain" in class_name):
+                    continue
 
-            center = self._get_enemy_center(enemy)
-            ex = center[0] if center is not None else float(getattr(enemy, "x", 0.0))
-            ey = center[1] if center is not None else float(getattr(enemy, "y", 0.0))
+                center = self._get_enemy_center(enemy)
+                ex = center[0] if center is not None else float(getattr(enemy, "x", 0.0))
+                ey = center[1] if center is not None else float(getattr(enemy, "y", 0.0))
 
-            dx = ex - center_x
-            dy = ey - center_y
-            dist_sq = dx * dx + dy * dy
+                dx = ex - cx; dy = ey - cy
+                dist_sq = dx * dx + dy * dy
+                
+                if 0 < dist_sq < radius**2:
+                    dist = math.sqrt(dist_sq)
+                    # Força constante: quanto mais perto, mais forte
+                    blow_force = Config.REPULSION_FORCE * 2.8 * (1.0 - (dist / radius))
+                    try:
+                        setattr(enemy, "x", getattr(enemy, "x") + (dx / dist) * blow_force * dt)
+                        setattr(enemy, "y", getattr(enemy, "y") + (dy / dist) * blow_force * dt)
+                    except (AttributeError, TypeError): continue
 
-            if 0 < dist_sq < radius ** 2:
-                dist = math.sqrt(dist_sq)
-                push_factor = (1.0 - (dist / radius)) * force * dt
-                # setattr evita falso-positivo do Pylance em entidades com
-                # `y` como @property somente-leitura (ex.: MountainStalagmite).
-                setattr(enemy, "x", getattr(enemy, "x") + (dx / dist) * push_factor)
-                setattr(enemy, "y", getattr(enemy, "y") + (dy / dist) * push_factor)
+        # 3. Atualizar rastros visuais (streaks) - decaem independente do timer do power-up
+        for s in self.repulsion_wind_streaks[:]:
+            s["dist"] += s["speed"] * dt
+            s["alpha"] -= 400 * dt 
+            if s["alpha"] <= 0 or s["dist"] > Config.REPULSION_SHIELD_RADIUS * 2.5:
+                self.repulsion_wind_streaks.remove(s)
 
     def update(
         self,
@@ -1335,7 +1363,7 @@ class Ship:
                     surface, shield_color, (center_x, center_y), radius - i, 2
                 )
 
-        # Repulsion Shield (campo de força verde/amarelo)
+        # Repulsion Shield (Vento)
         if self.has_repulsion_shield:
             if self.ship_image is not None:
                 sprite_w, sprite_h = self.ship_image.get_size()
@@ -1345,23 +1373,30 @@ class Ship:
                 cx = int(self.x + self.w / 2)
                 cy = int(self.y + self.h / 2)
 
-            field_radius = int(Config.REPULSION_SHIELD_RADIUS)
-            pulse = abs((self._draw_time * 3) % 2 - 1)
+            # Visual suave de brilho no centro durante o sopro
+            pulse = abs((self._draw_time * 6) % 2 - 1)
+            glow_r = 30 + int(pulse * 10)
+            
+            # Surface para brilho radial
+            glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(glow_surf, (200, 255, 255, 40), (glow_r, glow_r), glow_r)
+            surface.blit(glow_surf, (cx - glow_r, cy - glow_r))
 
-            outer_r = field_radius + int(pulse * 6)
-            pygame.draw.circle(surface, (180, 255, 60), (cx, cy), outer_r, 2)
-            pygame.draw.circle(surface, (100, 220, 30), (cx, cy), outer_r - 4, 1)
-
-            # Arcos radiais para aspecto de campo de força
-            segments = 24
-            active = int(segments * (0.6 + 0.4 * pulse))
-            for i in range(0, active, 2):
-                angle = (i / segments) * math.tau
-                px1 = cx + int(math.cos(angle) * (field_radius - 6))
-                py1 = cy + int(math.sin(angle) * (field_radius - 6))
-                px2 = cx + int(math.cos(angle) * (field_radius + 2))
-                py2 = cy + int(math.sin(angle) * (field_radius + 2))
-                pygame.draw.line(surface, (160, 255, 70), (px1, py1), (px2, py2), 2)
+        # Rastros de Vento Constante (Omnidirecional)
+        for s in self.repulsion_wind_streaks:
+            start_x = s["cx"] + math.cos(s["angle"]) * s["dist"]
+            start_y = s["cy"] + math.sin(s["angle"]) * s["dist"]
+            
+            end_x = s["cx"] + math.cos(s["angle"]) * (s["dist"] + s["len"])
+            end_y = s["cy"] + math.sin(s["angle"]) * (s["dist"] + s["len"])
+            
+            pygame.draw.line(
+                surface,
+                (255, 255, 255, int(s["alpha"])),
+                (start_x, start_y),
+                (end_x, end_y),
+                1
+            )
 
         # Calcular tremor
         shake_x, shake_y = 0, 0
@@ -1565,3 +1600,29 @@ class Ship:
         # Desenhar partículas de entrada (acima da nave)
         for p in self.entry_particles:
             pygame.draw.circle(surface, p["color"], (p["x"], p["y"]), p["size"])
+
+    def take_damage(self, amount: int = 1) -> bool:
+        """Aplica dano à nave. Retorna True se perdeu uma vida."""
+        if self.is_invulnerable:
+            return False
+
+        # Absorção pelo escudo
+        if self.has_shield:
+            self.shield_hp -= amount
+            if self.shield_hp <= 0:
+                self.shield_timer = 0.0
+            sound_manager.play_shield_hit()
+            self.invuln = 1000  # Pequena invuln após quebra
+            return False
+
+        self.lives -= amount
+        self.invuln = Config.INVULN_TIME * 1000
+        self.reset_combo()  # Reverberador perde o bônus ao tomar dano.
+        return True
+
+    def recover_life(self, amount: int = 1) -> None:
+        """Recupera vidas da nave (respeitando o máximo inicial)."""
+        self.lives = min(self.max_lives, self.lives + amount)
+
+    def is_dead(self) -> bool:
+        return self.lives <= 0

@@ -958,8 +958,17 @@ class EntityManager:
         self.explosion_pool.draw_all(surface)
         for e in self.explosive_effects:
             e.draw(surface)
-        for cl in self.chain_lightnings:
-            cl.draw(surface)
+
+        # 5. Batch draw Chain Lightnings (Otimização de Performance)
+        if self.chain_lightnings:
+            sw, sh = surface.get_size()
+            overlay = ChainLightning.get_shared_overlay(sw, sh)
+            overlay.fill((0, 0, 0, 0))
+            
+            for cl in self.chain_lightnings:
+                cl.draw_to_surface(overlay)
+                
+            surface.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
 
     def spawn_elemental_robot(
         self,

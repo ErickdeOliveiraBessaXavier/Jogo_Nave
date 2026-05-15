@@ -168,7 +168,7 @@ class Config:
     CHAIN_SHOT_DAMAGE_FACTOR: float = 0.6  # Multiplicativo por salto
 
     # Repulsion Shield power-up
-    REPULSION_SHIELD_DURATION: float = 10.0
+    REPULSION_SHIELD_DURATION: float = 8.0
     REPULSION_SHIELD_RADIUS: float = 140.0
     REPULSION_FORCE: float = 420.0  # px/s a distância mínima
     PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER: float = 1.5
