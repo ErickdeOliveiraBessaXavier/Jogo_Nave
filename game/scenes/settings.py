@@ -655,8 +655,9 @@ class SettingsView:
         # Instruções de controles
         instructions = [
             "CONTROLES:",
-            "• WASD / Setas: Mover",
-            "• Espaço: Atirar",
+            "• Mouse ou WASD/Setas: Mover",
+            "• Espaço: Atirar | Ctrl: Girar",
+            "• Shift: Dash | Teclado Num: Poderes",
             "• P: Pausar | ESC: Sair",
             "",
             "NOTA: Mudar resolução",

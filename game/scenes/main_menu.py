@@ -459,6 +459,8 @@ class MainMenuScene(Scene):
 
     def _start_game_with_preset(self, preset: DifficultyPreset) -> None:
         """Inicia o jogo com o preset já selecionado."""
+        from ..scenes.controls_modal import ControlsModalScene
+
         # Garante tela preta caso este frame ainda renderize o menu.
         self.force_blackout_frame = True
         self.pending_game_start = False
@@ -481,16 +483,25 @@ class MainMenuScene(Scene):
         if self.app.player_profile.current_session:
             self.app.player_profile.current_session.score = 0
 
-        # Criar e empurrar a cena de jogo
-        self.app.states.pop()  # Remove menu
-        self.app.states.push(
-            PlayingScene(
-                self.app,
-                self.app.level_manager,
-                difficulty_preset=preset,
-                starting_level=starting_level,
+        def _push_playing_scene():
+            self.app.states.push(
+                PlayingScene(
+                    self.app,
+                    self.app.level_manager,
+                    difficulty_preset=preset,
+                    starting_level=starting_level,
+                )
             )
-        )
+
+        # Se as preferências indicarem para mostrar o modal de controles
+        if self.app.preferences.show_controls_modal:
+            self.app.states.pop()  # Remove menu
+            self.app.states.push(
+                ControlsModalScene(self.app, on_finish=_push_playing_scene)
+            )
+        else:
+            self.app.states.pop()  # Remove menu
+            _push_playing_scene()
 
     def _on_difficulty_back(self):
         """Callback quando o usuário quer voltar da seleção de dificuldade."""

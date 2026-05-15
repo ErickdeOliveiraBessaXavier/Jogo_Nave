@@ -263,20 +263,36 @@ class DifficultySelectionScene(Scene):
 
     def start_game(self, preset: DifficultyPreset):
         """Inicia o jogo com a dificuldade selecionada."""
+        from ..scenes.controls_modal import ControlsModalScene
         from ..scenes.playing import PlayingScene
 
         # Armazenar dificuldade no app
         self.app.selected_difficulty = preset
 
-        # Criar e empurrar a cena de jogo
-        self.app.states.pop()  # Remove difficulty selection
-        self.app.states.push(
-            PlayingScene(
-                self.app,
-                self.app.level_manager,
-                difficulty_preset=preset,
+        def _push_playing_scene():
+            self.app.states.push(
+                PlayingScene(
+                    self.app,
+                    self.app.level_manager,
+                    difficulty_preset=preset,
+                )
             )
-        )
+
+        # Se as preferências indicarem para mostrar o modal de controles
+        if self.app.preferences.show_controls_modal:
+            # Substitui a seleção de dificuldade pelo modal
+            self.app.states.switch(
+                ControlsModalScene(self.app, on_finish=_push_playing_scene)
+            )
+        else:
+            # Substitui a seleção de dificuldade pela cena de jogo
+            self.app.states.switch(
+                PlayingScene(
+                    self.app,
+                    self.app.level_manager,
+                    difficulty_preset=preset,
+                )
+            )
 
     def update(self, dt: float):
         self.view.update(dt)
