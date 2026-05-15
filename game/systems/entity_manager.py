@@ -1,5 +1,5 @@
 import random
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence, Union
 
 import pygame
 
@@ -172,6 +172,21 @@ class EntityManager:
 
         # Cache do tamanho da tela — evita pygame.display.get_surface() por inimigo/frame.
         self._screen_size: tuple[int, int] = (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
+
+    def _dispatch_boss_sound_events(self, sound_events: Sequence[str]) -> None:
+        """Executa eventos de som emitidos por Boss.update()."""
+        if not sound_events or not self.sound_manager:
+            return
+        dispatch = {
+            "play_charging": self.sound_manager.play_boss_laser_charging,
+            "stop_charging": self.sound_manager.stop_boss_laser_charging,
+            "play_fire": self.sound_manager.play_boss_laser_fire,
+            "stop_fire": self.sound_manager.stop_boss_laser_fire,
+        }
+        for ev in sound_events:
+            fn = dispatch.get(ev)
+            if fn:
+                fn()
 
     def _emp_multiplier(
         self,
@@ -628,11 +643,12 @@ class EntityManager:
                         else:
                             self.enemies.append(s)
             else:
-                ls, sqs = self.boss.update(enemy_dt, player_x, player_y)
+                ls, sqs, sound_events = self.boss.update(enemy_dt, player_x, player_y)
                 if ls:
                     self.boss_lasers.extend(ls)
                 if sqs:
                     self.boss_squares.extend(sqs)
+                self._dispatch_boss_sound_events(sound_events)
                 for q in self.boss.floating_squares:
                     if q not in self.boss_squares:
                         self.boss_squares.append(q)
@@ -809,11 +825,12 @@ class EntityManager:
                 # Many boss subclasses return (lasers, squares). Use a cast
                 # to give the type-checker a concrete signature here.
                 result = self.boss.update(dt, player_x, player_y)
-                ls, sqs = result
+                ls, sqs, sound_events = result
                 if ls:
                     self.boss_lasers.extend(ls)
                 if sqs:
                     self.boss_squares.extend(sqs)
+                self._dispatch_boss_sound_events(sound_events)
         self.cleanup()
 
     def draw(

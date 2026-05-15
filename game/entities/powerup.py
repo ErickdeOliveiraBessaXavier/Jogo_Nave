@@ -21,6 +21,7 @@ from ..core.colors import (
 )
 from ..core.config import PowerUpType
 from ..core.config import config as Config
+from .attraction_utils import get_attraction_pulse_rect, update_magnetic_attraction
 
 
 class PowerUp:
@@ -51,42 +52,7 @@ class PowerUp:
         attraction_pos: tuple[float, float] | None = None,
         attraction_mult: float = 1.0,
     ):
-        # Movimento básico para baixo
-        base_speed_y = self.speed
-
-        if attraction_pos and attraction_mult > 1.0:
-            # Lógica de atração magnética (Magneto)
-            attraction_range = 120.0 * attraction_mult
-
-            target_x: float = float(attraction_pos[0])
-            target_y: float = float(attraction_pos[1])
-
-            dx = target_x - float(self.rect.centerx)
-            dy = target_y - float(self.rect.centery)
-            dist_sq = dx * dx + dy * dy
-
-            if dist_sq < attraction_range**2:
-                # Efeito de tremor inicial ao entrar no campo
-                if not self._is_being_attracted:
-                    self._is_being_attracted = True
-                    self.attraction_shake_timer = 0.4  # Dura 0.4 segundos
-
-                dist = dist_sq**0.5
-                if dist > 0:
-                    force_factor = 3.0 + (5.0 * (1.0 - dist / attraction_range))
-                    attract_speed = self.speed * force_factor * (attraction_mult * 0.8)
-
-                    self.x += (dx / dist) * attract_speed * dt
-                    self.y += (dy / dist) * attract_speed * dt
-            else:
-                self._is_being_attracted = False
-                self.y += base_speed_y * dt
-        else:
-            self._is_being_attracted = False
-            self.y += base_speed_y * dt
-
-        self.rect.topleft = (int(self.x), int(self.y))
-        self.attraction_shake_timer = max(0.0, self.attraction_shake_timer - dt)
+        update_magnetic_attraction(self, dt, attraction_pos, attraction_mult)
 
         # Animação de pulsação
         self.animation_timer += dt * 5  # velocidade da pulsação
@@ -125,21 +91,9 @@ class PowerUp:
             "repulsion_shield": "[🛡️]",
         }
 
-        # Aplicar tremor visual se estiver no início da atração
-        draw_x, draw_y = self.rect.x, self.rect.y
-        if self.attraction_shake_timer > 0:
-            intensity = int(8 * (self.attraction_shake_timer / 0.4))
-            draw_x += random.randint(-intensity, intensity)
-            draw_y += random.randint(-intensity, intensity)
-
-        # Desenha o fundo do power-up com pulsação
-        pulse_size = int(min(self.w, self.h) * self.pulse_scale)
-        pulse_rect = pygame.Rect(
-            draw_x + self.w // 2 - pulse_size // 2,
-            draw_y + self.h // 2 - pulse_size // 2,
-            pulse_size,
-            pulse_size,
-        )
+        # Aplicar tremor visual e calcular o retângulo pulsante compartilhado
+        _, _, pulse_rect = get_attraction_pulse_rect(self)
+        pulse_size = pulse_rect.width
 
         # Criar superfície com alpha para blur/transparência
         blur_surface = pygame.Surface((pulse_size, pulse_size), pygame.SRCALPHA)

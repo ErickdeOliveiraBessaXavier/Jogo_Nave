@@ -165,11 +165,8 @@ class BossSquare:
             pulse_scale = 1.0 + 0.4 * abs(math.sin(self.prepare_timer * 10))
             self.prepare_timer += dt
         else:
-            # Usar offset para dessincronizar pulsação entre quadrados
-            anim_value = (self.animation_timer + self.animation_offset) * 57.3
-            pulse_scale = 1.0 + 0.2 * abs(
-                pygame.math.Vector2(1, 0).rotate(anim_value).x
-            )
+            anim_value = self.animation_timer + self.animation_offset
+            pulse_scale = 1.0 + 0.2 * abs(math.cos(anim_value))
 
         # Combina crescimento com pulsação
         self.size = self.base_size * growth_scale * pulse_scale
@@ -231,8 +228,8 @@ class BossSquare:
                 )
 
         # Calcular cor com intensidade alternada (usa offset para dessincronizar)
-        anim_value = (self.animation_timer + self.animation_offset) * 57.3
-        intensity = int(128 + 127 * abs(pygame.math.Vector2(1, 0).rotate(anim_value).x))
+        anim_value = self.animation_timer + self.animation_offset
+        intensity = int(128 + 127 * abs(math.cos(anim_value)))
         color = (255, intensity, intensity)
         border_color = (255, 255, 255)
 

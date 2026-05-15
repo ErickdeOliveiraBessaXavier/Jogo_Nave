@@ -2,19 +2,27 @@ import logging
 import math
 import random
 from collections import deque
-from typing import Any, List
+from typing import Any, List, Literal
+
+# Sound events emitted by Boss.update() — executed by EntityManager
+BossSoundEvent = Literal[
+    "play_charging",
+    "stop_charging",
+    "play_fire",
+    "stop_fire",
+]
 
 import pygame
 
 from ..core import colors
 from ..core.config import config as Config
-from ..core.sound import sound_manager
 from ..core.time import Timer
-from .boss_cannon import BossAttackSystem, BossCannon
+from .boss_cannon import BossCannon
 from .boss_hit_mixin import BossHitMixin
 from .boss_laser import BossLaser
 from .boss_particles import BossParticleSystem
 from .boss_square import BossSquare
+from .boss_state import BossState
 from .draw_utils import rotated_square_corners
 
 
@@ -30,9 +38,9 @@ class Boss(BossHitMixin):
     - Frenzy mode with enhanced attacks
     """
 
-    # Use constants from BossAttackSystem
-    FRENZY_LASER_ANGLES = BossAttackSystem.FRENZY_LASER_ANGLES
-    LASER_DISTANCE = BossAttackSystem.LASER_DISTANCE
+    # Attack constants (boss-specific values)
+    FRENZY_LASER_ANGLES: List[float] = [-0.349, 0, 0.349]  # 20 degrees in radians
+    LASER_DISTANCE: int = 2000  # Maximum laser reach (visual, boss-specific)
     FACE_DISTANCE_RATIO: float = 0.5  # Face distance from center as ratio of size
     MAX_CHARGE_RADIUS: float = 15.0  # Maximum charging circle radius
     LASER_SPREAD_OFFSET: int = 10  # Offset between frenzy lasers
@@ -63,9 +71,12 @@ class Boss(BossHitMixin):
         self.player_y: float | None = None
 
         # State machine
-        self.state = "entering"
+        self.state = BossState.ENTERING
         self.frenzy_mode = False
         self.frenzy_shake_timer = 0.0
+        self._shake_offset_x: int = 0
+        self._shake_offset_y: int = 0
+        self._frenzy_square_green: int = 0
         self.pending_frenzy = (
             False  # Flag para ativar frenzy quando action atual acabar
         )
@@ -98,11 +109,6 @@ class Boss(BossHitMixin):
             0, 1
         )  # Direção que a face principal está voltada
         self.face_center = pygame.Vector2(0, 0)  # Centro da face principal
-
-        # Cannon position (fixed at the top center of the boss)
-        self.cannon_x = self.x + self.w / 2
-        self.cannon_y = self.y  # Canhão sempre no topo
-        self.cannon_rotation = 0.0  # Ângulo de rotação do canhão
 
         # Laser delay system for better player reaction time
         self.laser_delay_timer = 0.0
@@ -262,11 +268,11 @@ class Boss(BossHitMixin):
         """Check if boss is currently in an attack sequence that shouldn't be interrupted."""
         # Estados que representam uma sequência de ataque em andamento
         return self.state in (
-            "aiming",
-            "charging",
-            "converging",
-            "preparing_to_fire",
-            "firing",
+            BossState.AIMING,
+            BossState.CHARGING,
+            BossState.CONVERGING,
+            BossState.PREPARING_TO_FIRE,
+            BossState.FIRING,
         )
 
     def _can_activate_frenzy_now(self) -> bool:
@@ -289,12 +295,12 @@ class Boss(BossHitMixin):
         self._update_frenzy_timings()
 
         # Limpar ataques apenas se estiver em estado ativo
-        if self.state == "active":
+        if self.state == BossState.ACTIVE:
             # Se está em estado ativo, pode resetar normalmente
             self.fired_lasers.clear()
             # Parar sons do boss laser
-            sound_manager.stop_boss_laser_charging()
-            sound_manager.stop_boss_laser_fire()
+            self._sound_events.append("stop_charging")
+            self._sound_events.append("stop_fire")
             self.particle_system.clear_all()
 
             # Resetar timers de ataque para começar após o tremor
@@ -346,10 +352,7 @@ class Boss(BossHitMixin):
             if self.frenzy_mode
             else Config.BOSS_LASER_LIFETIME
         )
-
-        if self.frenzy_mode:
-            return self._create_frenzy_lasers(face_x, face_y, laser_lifetime)
-        return self._create_normal_laser(face_x, face_y, laser_lifetime)
+        return self._create_laser_pattern(face_x, face_y, laser_lifetime, self.frenzy_mode)
 
     def _create_laser_pattern(
         self,
@@ -399,24 +402,27 @@ class Boss(BossHitMixin):
 
         return [BossLaser(face_x, face_y, target_x, target_y, lifetime=lifetime)]
 
-    def _create_frenzy_lasers(
-        self, face_x: float, face_y: float, lifetime: float
-    ) -> List[BossLaser]:
-        """Create multiple lasers for frenzy mode."""
-        return self._create_laser_pattern(face_x, face_y, lifetime, is_frenzy=True)
+    def _enter_charging(self) -> None:
+        """Ações executadas ao entrar no estado CHARGING."""
+        self._sound_events.append("stop_charging")
+        self._sound_events.append("play_charging")
+        self.charge_duration = self._get_charge_duration()
+        self.charge_timer.duration = self.charge_duration
+        self.charge_timer.start()
+        self.charge_progress = 0.0
+        self.particle_system.clear_all()
+        self.state = BossState.CHARGING
 
-    def _create_normal_laser(
-        self, face_x: float, face_y: float, lifetime: float
-    ) -> List[BossLaser]:
-        """Create single laser for normal mode."""
-        return self._create_laser_pattern(face_x, face_y, lifetime, is_frenzy=False)
+    def _update_aiming_state(self) -> None:
+        """AIMING é um estado de transição — entra em CHARGING imediatamente."""
+        self._enter_charging()
 
     def _update_entering_state(self, dt: float) -> None:
         """Handle boss entry animation."""
         self.y += self.entry_speed * dt
         if self.y >= self.target_y:
             self.y = self.target_y
-            self.state = "active"
+            self.state = BossState.ACTIVE
             self.attack_timer.start()
 
             # Verificar se há frenzy pendente
@@ -432,7 +438,7 @@ class Boss(BossHitMixin):
         if self.frenzy_shake_timer <= 0:
             self.attack_timer.update(dt)
             if self.attack_timer.done():
-                self.state = "aiming"
+                self.state = BossState.AIMING
 
     def _update_charging_state(self, dt: float) -> None:
         """Handle charging animation."""
@@ -453,16 +459,16 @@ class Boss(BossHitMixin):
 
         if self.charge_timer.done():
             # Parar o som de carregamento quando a animação termina
-            sound_manager.stop_boss_laser_charging()
-            self.state = "converging"
+            self._sound_events.append("stop_charging")
+            self.state = BossState.CONVERGING
 
     def _get_charge_circle_radius(self) -> float:
         """Calculate the charging circle radius based on charge progress."""
-        if self.state not in ("charging", "converging"):
+        if self.state not in (BossState.CHARGING, BossState.CONVERGING):
             return 0.0
 
         # During charging, grows from 0 to max radius
-        if self.state == "charging":
+        if self.state == BossState.CHARGING:
             return self.charge_progress * Config.BOSS_CHARGE_CIRCLE_MAX_RADIUS
 
         # During converging, maintains max radius
@@ -494,7 +500,7 @@ class Boss(BossHitMixin):
 
             # Preparar dados do laser para disparo atrasado
             self.pending_laser_data = self._prepare_laser_data()
-            self.state = "preparing_to_fire"
+            self.state = BossState.PREPARING_TO_FIRE
             # Usar delay dinâmico baseado no modo frenzy
             self.laser_delay_timer = self._get_laser_delay()
 
@@ -540,13 +546,13 @@ class Boss(BossHitMixin):
             new_lasers = self._create_lasers_from_data(self.pending_laser_data)
 
             # Tocar som de disparo do laser
-            sound_manager.play_boss_laser_fire()
+            self._sound_events.append("play_fire")
 
             self.fired_lasers.extend(new_lasers)
             self.fire_timer = Timer(self.pending_laser_data["lifetime"])
             self.fire_timer.start()
 
-            self.state = "firing"
+            self.state = BossState.FIRING
             self.pending_laser_data = None
 
             return new_lasers
@@ -572,22 +578,20 @@ class Boss(BossHitMixin):
         # Desativar efeito de brilho do canhão durante o disparo
         self.cannon.set_charging(False, 0.0)
 
-        for laser in self.fired_lasers[:]:
+        for laser in self.fired_lasers:
             laser.update(dt)
-            if laser.dead:
-                self.fired_lasers.remove(laser)
-                # Se não há mais lasers ativos, parar som de disparo
-                if not self.fired_lasers:
-                    sound_manager.stop_boss_laser_fire()
+        self.fired_lasers = [l for l in self.fired_lasers if not l.dead]
+        if not self.fired_lasers:
+            self._sound_events.append("stop_fire")
 
         if self.fire_timer.done() and all(
             laser.is_animation_finished() for laser in self.fired_lasers
         ):
-            self.state = "active"
+            self.state = BossState.ACTIVE
             self._reset_attack_timer()
             self.fired_lasers.clear()
             # Garantir que o som pare quando limpar todos os lasers
-            sound_manager.stop_boss_laser_fire()
+            self._sound_events.append("stop_fire")
 
             # Verificar se há frenzy pendente
             self._check_pending_frenzy()
@@ -601,16 +605,6 @@ class Boss(BossHitMixin):
         else:
             self.attack_timer = Timer(random.uniform(*Config.BOSS_CALM_ATTACK_INTERVAL))
         self.attack_timer.start()
-
-    def _launch_square_projectiles(
-        self, _player_x: float, _player_y: float
-    ) -> List[BossSquare]:
-        """
-        Launch one or more floating squares as projectiles towards the player.
-        DEPRECATED: Use inline logic in update() instead.
-        """
-        # Este método não é mais usado - a lógica está inline no update()
-        return []
 
     def _create_square_projectile(
         self, square: BossSquare, player_x: float, player_y: float
@@ -653,11 +647,20 @@ class Boss(BossHitMixin):
 
     def update(
         self, dt: float, player_x: float, player_y: float | None = None
-    ) -> tuple[List[BossLaser], List[BossSquare]]:
+    ) -> tuple[List[BossLaser], List[BossSquare], List[BossSoundEvent]]:
         """Main update method - state machine."""
         spawned_squares: List[BossSquare] = []
         lasers_fired: List[BossLaser] = []
+        self._sound_events: List[BossSoundEvent] = []
         self.frenzy_shake_timer = max(0.0, self.frenzy_shake_timer - dt)
+
+        # Pre-compute shake offset for draw()
+        if self.frenzy_shake_timer > 0:
+            self._shake_offset_x = random.randint(-3, 3)
+            self._shake_offset_y = random.randint(-3, 3)
+        else:
+            self._shake_offset_x = 0
+            self._shake_offset_y = 0
 
         # Store player position for drawing
         self.player_x = player_x
@@ -670,9 +673,7 @@ class Boss(BossHitMixin):
 
         # Atualizar animação de pulsação dos quadrados (mesma lógica do power-up)
         self.squares_animation_timer += dt * 5  # Velocidade da pulsação
-        pulse_scale = 1.0 + 0.2 * abs(
-            pygame.math.Vector2(1, 0).rotate(self.squares_animation_timer * 57.3).x
-        )
+        pulse_scale = 1.0 + 0.2 * abs(math.cos(self.squares_animation_timer))
 
         # Atualizar posições e estados dos quadrados flutuantes
         for square in self.floating_squares:
@@ -767,7 +768,7 @@ class Boss(BossHitMixin):
             self.frenzy_mode
             and self.frenzy_shake_timer <= 0
             and self.state
-            in ("active", "aiming")  # Só quando não está atacando com laser
+            in (BossState.ACTIVE, BossState.AIMING)  # Só quando não está atacando com laser
             and not self.pending_laser_data
             and player_y is not None
         ):  # E não tem laser pendente
@@ -803,42 +804,23 @@ class Boss(BossHitMixin):
         # Sempre atualizar partículas de desaparecimento do círculo
         self._update_circle_disappear_particles(dt)
 
-        # Update fired lasers
-        for laser in self.fired_lasers[:]:
-            laser.update(dt)
-            if laser.dead:
-                self.fired_lasers.remove(laser)
-                # Se não há mais lasers ativos, parar som de disparo
-                if not self.fired_lasers:
-                    sound_manager.stop_boss_laser_fire()
-
-        if self.state == "entering":
+        if self.state == BossState.ENTERING:
             self._update_entering_state(dt)
-        elif self.state == "active":
+        elif self.state == BossState.ACTIVE:
             self._update_active_state(dt)
-        elif self.state == "aiming":
-            self.state = "charging"
-            # Parar qualquer som de carregamento anterior antes de começar novo
-            sound_manager.stop_boss_laser_charging()
-            # Tocar som de carregamento do laser
-            sound_manager.play_boss_laser_charging()
-            # Atualizar duração do carregamento baseada no modo frenzy
-            self.charge_duration = self._get_charge_duration()
-            self.charge_timer.duration = self.charge_duration
-            self.charge_timer.start()
-            self.charge_progress = 0.0  # Reset progress
-            self.particle_system.clear_all()
-        elif self.state == "charging":
+        elif self.state == BossState.AIMING:
+            self._update_aiming_state()
+        elif self.state == BossState.CHARGING:
             self._update_charging_state(dt)
-        elif self.state == "converging":
+        elif self.state == BossState.CONVERGING:
             lasers_fired = self._update_converging_state(dt)
-        elif self.state == "preparing_to_fire":
+        elif self.state == BossState.PREPARING_TO_FIRE:
             lasers_fired = self._update_preparing_to_fire_state(dt)
-        elif self.state == "firing":
+        elif self.state == BossState.FIRING:
             self._update_firing_state(dt)
 
         # Atualizar animação da linha de mira (acelera gradualmente com o progresso)
-        if self.state in ("aiming", "charging", "converging", "preparing_to_fire"):
+        if self.state in (BossState.AIMING, BossState.CHARGING, BossState.CONVERGING, BossState.PREPARING_TO_FIRE):
             # Interpolar velocidade baseado no charge_progress
             current_speed = (
                 self.aim_anim_base_speed
@@ -854,7 +836,10 @@ class Boss(BossHitMixin):
         border_speed = self.border_anim_speed * (2.0 if self.frenzy_mode else 1.0)
         self.border_anim_offset += dt * border_speed
 
-        return (lasers_fired, spawned_squares)
+        # Pre-compute frenzy square color variation for draw()
+        self._frenzy_square_green = random.randint(0, 100) if self.frenzy_mode else 0
+
+        return (lasers_fired, spawned_squares, self._sound_events)
 
     def _draw_aiming_line(self, surface: pygame.Surface) -> None:
         """Draw the animated aiming line(s)."""
@@ -1018,7 +1003,7 @@ class Boss(BossHitMixin):
             elif self.frenzy_mode:
                 # No frenzy, cores mais intensas e variadas
                 base_red = 255
-                base_green = random.randint(0, 100)
+                base_green = self._frenzy_square_green
                 base_blue = 0
                 intensity = 0.7 + (i / len(self.floating_squares)) * 0.3
                 color = (
@@ -1084,32 +1069,6 @@ class Boss(BossHitMixin):
         rotated = rotated_square_corners(center_x, center_y, size / 2, angle_rad)
         pygame.draw.polygon(surface, color, rotated)
         pygame.draw.polygon(surface, border_color, rotated, 2)
-
-    def _draw_cannon(
-        self, surface: pygame.Surface, offset_x: float, offset_y: float
-    ) -> None:
-        """Draw the boss's cannon."""
-        if self.state != "entering":
-            # Desenhar base do canhão (círculo)
-            pygame.draw.circle(
-                surface,
-                (200, 200, 200),
-                (int(self.cannon_x + offset_x), int(self.cannon_y + offset_y)),
-                10,
-            )
-
-            # Desenhar cano do canhão (linha na direção do alvo)
-            cannon_length = 20
-            end_x = self.cannon_x + math.cos(self.cannon_rotation) * cannon_length
-            end_y = self.cannon_y + math.sin(self.cannon_rotation) * cannon_length
-
-            pygame.draw.line(
-                surface,
-                (200, 200, 200),
-                (int(self.cannon_x + offset_x), int(self.cannon_y + offset_y)),
-                (int(end_x + offset_x), int(end_y + offset_y)),
-                4,
-            )
 
     def _draw_pixelated_boss(
         self, surface: pygame.Surface, offset_x: float, offset_y: float
@@ -1178,10 +1137,8 @@ class Boss(BossHitMixin):
 
     def draw(self, surface: pygame.Surface) -> None:
         """Render the boss and its effects."""
-        offset_x, offset_y = 0, 0
-        if self.frenzy_shake_timer > 0:
-            offset_x = random.randint(-3, 3)
-            offset_y = random.randint(-3, 3)
+        offset_x = self._shake_offset_x
+        offset_y = self._shake_offset_y
 
         # Lasers são desenhados pelo entity_manager ANTES do boss
 
@@ -1198,15 +1155,15 @@ class Boss(BossHitMixin):
         self.cannon.draw(surface, offset_x, offset_y)
 
         # Health bar (except during entry)
-        if self.state != "entering":
+        if self.state != BossState.ENTERING:
             self._draw_health_bar(surface)
 
         # Aiming line (desaparece antes do disparo)
-        if self.state in ("aiming", "charging", "converging"):
+        if self.state in (BossState.AIMING, BossState.CHARGING, BossState.CONVERGING):
             self._draw_aiming_line(surface)
 
         # Charging circle - círculo que cresce durante o carregamento
-        if self.state in ("charging", "converging", "preparing_to_fire"):
+        if self.state in (BossState.CHARGING, BossState.CONVERGING, BossState.PREPARING_TO_FIRE):
             # O círculo aparece na face principal do boss
             face_x, face_y = self._get_face_position()
             circle_x = face_x + offset_x
@@ -1235,11 +1192,11 @@ class Boss(BossHitMixin):
                     )
 
         # Charging particles
-        if self.state in ("charging", "converging", "preparing_to_fire"):
+        if self.state in (BossState.CHARGING, BossState.CONVERGING, BossState.PREPARING_TO_FIRE):
             self._draw_particles(surface, offset_x, offset_y)
 
         # Efeito visual de "prestes a disparar" durante o delay
-        if self.state in ("preparing_to_fire"):
+        if self.state == BossState.PREPARING_TO_FIRE:
             self._draw_firing_warning(surface, offset_x, offset_y)
 
         # Circle disappear particles
@@ -1298,7 +1255,7 @@ class Boss(BossHitMixin):
 
     def can_take_damage(self) -> bool:
         """Check if boss can currently take damage."""
-        if self.state == "entering":
+        if self.state == BossState.ENTERING:
             return False
         return not self.dead
 

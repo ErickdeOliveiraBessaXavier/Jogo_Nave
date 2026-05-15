@@ -71,7 +71,7 @@ class MountainGeode(ExplosiveMine):
     """Inimigo exclusivo de Cordilheiras que substitui minas explosivas."""
 
     # Cache compartilhado entre instâncias: (r, color_key) -> Surface
-    _shape_cache: dict[tuple[int, int], pygame.Surface] = {}
+    SHAPE_CACHE: dict[tuple[int, int], pygame.Surface] = {}
 
     def __init__(self, x: float | None = None, y: float | None = None) -> None:
         self.radius: int = GEODE_RADIUS
@@ -299,7 +299,7 @@ class MountainGeode(ExplosiveMine):
     # ------------------------------------------------------------------
 
     def _get_or_build_shape(self, r: int, color_key: int) -> pygame.Surface:
-        cache = self.__class__._shape_cache
+        cache = self.__class__.SHAPE_CACHE
         key = (r, color_key)
         surf = cache.get(key)
         if surf is not None:

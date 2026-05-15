@@ -123,7 +123,11 @@ class GameOverScene(Scene):
             self.playing_scene.lives,
             self.playing_scene.total_enemies_destroyed,
             self.playing_scene.ship,
-            format_stage_name(self.playing_scene.level_config.level_number),
+            format_stage_name(
+                self.playing_scene.level_config.level_number
+                if self.playing_scene.level_config is not None
+                else 1
+            ),
             self.playing_scene.difficulty_preset,
         )
 
@@ -204,3 +208,9 @@ class GameOverScene(Scene):
             btn_text = btn_font.render("Voltar ao Menu", True, (255, 255, 255))
             btn_rect = btn_text.get_rect(center=self.back_to_menu_button.center)
             surface.blit(btn_text, btn_rect)
+
+    def exit(self):
+        pygame.mouse.set_visible(False)
+        self.playing_scene.ship.visible = True
+        self.playing_scene.screen_shake_timer = 0.0
+        self.playing_scene.screen_shake_intensity = 0

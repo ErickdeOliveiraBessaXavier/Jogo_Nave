@@ -112,12 +112,14 @@ class BossLaser:
 
         elif self.state == "dying":
             # Atualiza as partículas de dissipação
-            for p in self.death_particles[:]:
+            for p in self.death_particles:
                 p["pos"] += p["vel"] * dt
                 p["lifespan"] -= dt
                 p["size"] -= 3 * dt  # Encolhem rapidamente
-                if p["lifespan"] <= 0 or p["size"] <= 0:
-                    self.death_particles.remove(p)
+
+            self.death_particles = [
+                p for p in self.death_particles if p["lifespan"] > 0 and p["size"] > 0
+            ]
 
             # Quando todas as partículas somem, a entidade pode ser removida
             if not self.death_particles:

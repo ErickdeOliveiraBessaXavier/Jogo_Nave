@@ -1861,10 +1861,9 @@ class MountainSerpentBoss:
         else:
             # Pega o frame correspondente da animação atual para o flash
             current_frame_idx = self._frame_sequence[self._animation_seq_pos]
-            if self._white_animation_frames and current_frame_idx < len(
-                self._white_animation_frames
-            ):
-                white_sprite = self._white_animation_frames[current_frame_idx]
+            white_frames = self._white_animation_frames
+            if white_frames is not None and current_frame_idx < len(white_frames):
+                white_sprite = white_frames[current_frame_idx]
 
         if self._hit_flash > 0.0 and white_sprite:
             surface.blit(white_sprite, (draw_x, draw_y))

@@ -38,7 +38,7 @@ class BossParticleSystem:
         self, dt: float, face_x: float, face_y: float
     ) -> None:
         """Update charging particles animation."""
-        for particle in self.charging_particles[:]:
+        for particle in self.charging_particles:
             # Move particle towards face center
             direction = pygame.Vector2(face_x, face_y) - particle["pos"]
             if direction.length() > 0:
@@ -52,9 +52,12 @@ class BossParticleSystem:
             if distance_to_center < 10:
                 particle["size"] = max(0.5, particle["size"] * 0.95)
 
-            # Remove particles that are too close or too small
-            if distance_to_center < 5 or particle["size"] < 1:
-                self.charging_particles.remove(particle)
+        # Remove particles that are too close or too small
+        self.charging_particles = [
+            p for p in self.charging_particles
+            if (pygame.Vector2(face_x, face_y) - p["pos"]).length() >= 5
+            and p["size"] >= 1
+        ]
 
     def generate_charging_particles(self, face_x: float, face_y: float) -> None:
         """Generate new charging particles around the boss face."""
@@ -107,7 +110,7 @@ class BossParticleSystem:
 
     def update_circle_disappear_particles(self, dt: float) -> None:
         """Update circle disappear particles."""
-        for particle in self.circle_disappear_particles[:]:
+        for particle in self.circle_disappear_particles:
             particle["pos"] += particle["velocity"] * dt
             particle["lifetime"] += dt
 
@@ -115,9 +118,11 @@ class BossParticleSystem:
             progress = particle["lifetime"] / particle["max_lifetime"]
             particle["size"] = max(0.5, particle["size"] * (1 - progress * 0.1))
 
-            # Remove expired particles
-            if particle["lifetime"] >= particle["max_lifetime"]:
-                self.circle_disappear_particles.remove(particle)
+        # Remove expired particles
+        self.circle_disappear_particles = [
+            p for p in self.circle_disappear_particles
+            if p["lifetime"] < p["max_lifetime"]
+        ]
 
     def draw_particles(
         self, surface: pygame.Surface, offset_x: float, offset_y: float
@@ -135,28 +140,13 @@ class BossParticleSystem:
     ) -> None:
         """Draw circle disappear particles."""
         for particle in self.circle_disappear_particles:
-            # Calculate alpha based on lifetime
             progress = particle["lifetime"] / particle["max_lifetime"]
-            alpha = int(255 * (1 - progress))
-
-            color_with_alpha = (*particle["color"], alpha)
+            alpha_factor = 1 - progress
+            r, g, b = particle["color"]
+            faded_color = (int(r * alpha_factor), int(g * alpha_factor), int(b * alpha_factor))
             pos_x = int(particle["pos"].x + offset_x)
             pos_y = int(particle["pos"].y + offset_y)
-
-            # Draw with alpha (requires creating a surface)
-            particle_surface = pygame.Surface(
-                (int(particle["size"]) * 2, int(particle["size"]) * 2), pygame.SRCALPHA
-            )
-            pygame.draw.circle(
-                particle_surface,
-                color_with_alpha,
-                (int(particle["size"]), int(particle["size"])),
-                int(particle["size"]),
-            )
-            surface.blit(
-                particle_surface,
-                (pos_x - int(particle["size"]), pos_y - int(particle["size"])),
-            )
+            pygame.draw.circle(surface, faded_color, (pos_x, pos_y), max(1, int(particle["size"])))
 
     def clear_all(self) -> None:
         """Clear all particles."""
