@@ -1444,8 +1444,8 @@ class StoneGolemBoss:
     def _fsm_half_volley(
         self,
         dt: float,
-        player_x: float,
-        player_y: float,
+        _player_x: float,
+        _player_y: float,
         new_mines: List["GolemMine"],
         _shards: List[AttackDebris],
     ) -> None:

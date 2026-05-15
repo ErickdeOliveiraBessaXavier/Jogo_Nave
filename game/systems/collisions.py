@@ -25,6 +25,7 @@ from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.mountain_serpent_boss import SerpentRockBullet
 from ..entities.player_laser import PlayerLaser
+from ..entities.chain_lightning import ChainLightning
 from ..entities.powerup import PowerUp
 from ..entities.ship import Ship
 from ..entities.slime_drip import SlimeDrip
@@ -1041,11 +1042,92 @@ class Collisions:
 
         return score_gain
 
+    def _trigger_chain_shot(
+        self,
+        hit_x: float,
+        hit_y: float,
+        source_enemy: Any,
+        bullet_damage: int,
+        jumps_left: int,
+        already_hit: set[int],
+        enemy_grid: "SpatialGrid[Any]",
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Executa os saltos do Chain Shot iterativamente.
+
+        Cada salto busca o inimigo vivo mais próximo dentro de CHAIN_SHOT_RADIUS
+        que ainda não foi atingido nesta cadeia, aplica dano escalado e cria o
+        efeito visual ChainLightning.
+        """
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        radius = config_instance.CHAIN_SHOT_RADIUS
+        damage_factor = config_instance.CHAIN_SHOT_DAMAGE_FACTOR
+
+        current_x = hit_x
+        current_y = hit_y
+        current_damage = int(bullet_damage * damage_factor)
+        already_hit.add(id(source_enemy))
+
+        for _ in range(jumps_left):
+            if current_damage < 1:
+                break
+
+            candidates = enemy_grid.query(
+                current_x - radius,
+                current_y - radius,
+                radius * 2,
+                radius * 2,
+            )
+
+            best: Any = None
+            best_dist_sq = radius * radius
+
+            for cand in candidates:
+                if cand.dead or id(cand) in already_hit:
+                    continue
+                cx, cy, _ = cand.collision_circle()
+                dx = cx - current_x
+                dy = cy - current_y
+                dist_sq = dx * dx + dy * dy
+                if dist_sq < best_dist_sq:
+                    best_dist_sq = dist_sq
+                    best = cand
+
+            if best is None:
+                break
+
+            best_cx, best_cy, _ = best.collision_circle()
+            already_hit.add(id(best))
+
+            entity_manager.chain_lightnings.append(
+                ChainLightning(
+                    start_pos=(current_x, current_y),
+                    end_pos=(best_cx, best_cy),
+                )
+            )
+
+            result = self._apply_hit(best, current_damage, best_cx, best_cy, entity_manager)
+            score_gain += result.points
+            if result.killed:
+                destroyed_count += 1
+                if result.points > 0:
+                    score_events.append((best_cx, best_cy, result.points))
+
+            current_x = best_cx
+            current_y = best_cy
+            current_damage = int(current_damage * damage_factor)
+
+        return score_gain, destroyed_count, score_events
+
     def bullets_vs_enemies(
         self,
         bullets: list[Bullet],
-        enemy_grid: SpatialGrid[Any],
+        enemy_grid: "SpatialGrid[Any]",
         entity_manager: "EntityManager",
+        ship: Any = None,
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
         destroyed_count = 0
@@ -1053,6 +1135,9 @@ class Collisions:
 
         if not bullets:
             return 0, 0, []
+
+        chain_active = ship is not None and getattr(ship, "has_chain_shot", False)
+        max_jumps = config_instance.CHAIN_SHOT_MAX_JUMPS if chain_active else 0
 
         projectile_targets = self._batch_query_for_projectiles(
             bullets, enemy_grid, padding=CollisionConstants.SPATIAL_QUERY_PADDING
@@ -1075,6 +1160,22 @@ class Collisions:
                         destroyed_count += 1
                         if result.points > 0:
                             score_events.append((b.x, b.y, result.points))
+
+                    if chain_active and max_jumps > 0:
+                        already_hit: set[int] = set()
+                        eg, ed, ee = self._trigger_chain_shot(
+                            hit_x=b.x,
+                            hit_y=b.y,
+                            source_enemy=enemy,
+                            bullet_damage=getattr(b, "damage", 1),
+                            jumps_left=max_jumps,
+                            already_hit=already_hit,
+                            enemy_grid=enemy_grid,
+                            entity_manager=entity_manager,
+                        )
+                        score_gain += eg
+                        destroyed_count += ed
+                        score_events.extend(ee)
 
                     if b.explosive and not b.dead:
                         eg, ed, ee = self._handle_explosive_bullet(

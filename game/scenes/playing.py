@@ -117,6 +117,7 @@ class UpgradeContext:
     sound_manager: Any
     scene: "PlayingScene"
     god_mode: bool
+    permadeath_mode: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +139,66 @@ class PlayingScene(Scene):
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
         self.last_dt: float = 1.0 / Config.FPS
         self.r = app.renderer
+        self.first_entry: bool = True
+        self.shoot_cd: float = 0.0
+        self.cheat_buffer: str = ""
+        self.god_mode: bool = False
+        self.state: GameState = GameState.PREPARING
+        self.preparation_time_left: float = Config.PREPARATION_TIME
+        self.level_start_time: Optional[float] = None
+        self.level_damage_taken: int = 0
+        self.level_powerups_collected: int = 0
+        self.level_attempt_recorded: bool = False
+        self.transition_phase: TransitionPhase = TransitionPhase.LEVEL_ENTRY
+        self.enemies_destroyed_in_level: int = 0
+        self.boss_fight_active: bool = False
+        self.pre_boss_transition: bool = False
+        self.pre_boss_timer: float = 0.0
+        self.warning_sound_played: bool = False
+        self.warning_stage: int = 0
+        self.warning_stage_timer: float = 0.0
+        self.music_fade_started: bool = False
+        self.boss_music_started: bool = False
+        self.screen_shake_timer: float = 0.0
+        self.screen_shake_intensity: int = Config.SCREEN_SHAKE_NORMAL
+        self.warning_timer: float = 0.0
+        self.time_stop_timer: float = 0.0
+        self.freeze_active: bool = False
+        self._cacador_laser_channel: Any | None = None
+        self.enemy_cleanup_active: bool = False
+        self.enemy_cleanup_timer: float = 0.0
+        self.enemy_blink_timer: float = 0.0
+        self.enemy_blink_interval: float = 0.2
+        self.enemy_visible: bool = True
+        self.show_fps: bool = False
+        self.show_enemy_hitboxes: bool = False
+        self._game_over_triggered: bool = False
+        self.score_multiplier_timer: float = 0.0
+        self.score_multiplier_active: bool = False
+        self._boss_type_cache: Optional[str] = None
+        self.level_transition_timer: float = 0.0
+        self.level_transition_pending_timer: float = 0.0
+        self.pending_world_transition: Optional[WorldConfig] = None
+        self.world_transition_cutscene_timer: float = 0.0
+        self.world_transition_cutscene_launch_speed: float = 0.0
+        self.world_transition_cutscene_origin: tuple[float, float] = (0.0, 0.0)
+        self.world_transition_cutscene_recoil_offset: float = 0.0
+        self.world_transition_cutscene_launch_distance: float = 0.0
+        self.world_transition_cutscene_target_world: Optional[WorldConfig] = None
+        self.world_transition_cutscene_debug_mode: bool = False
+        self.world_transition_thruster_particles: list[ThrusterParticle] = []
+        self.start_fade_active: bool = False
+        self.start_fade_alpha: float = 255.0
+        self.start_fade_elapsed: float = 0.0
+        self.level_config: LevelConfig | None = None
+        self._base_score_multiplier: float = 1.0
+        self.lives: int = 0
+        self.player_damage_multiplier: float = 1.0
+        self.enemy_health_multiplier: float = 1.0
+        self.score: int = 0
+        self.total_enemies_destroyed: int = 0
+        self.enemies_to_clear: int = 0
+        self.has_boss: bool = False
 
         # Índice 0-based; starting_level é 1-based
         self.current_level_index: int = starting_level - 1
@@ -243,6 +304,7 @@ class PlayingScene(Scene):
             "special_rules", []
         )
         self._no_powerups_mode: bool = "no_powerups" in self._special_rules
+        self._permadeath_mode: bool = "permadeath" in self._special_rules
 
         # Pré-calcula valores de power-up para evitar lookups repetidos
         self._powerup_values: dict[str, float] = {
@@ -358,8 +420,10 @@ class PlayingScene(Scene):
 
     def _cache_level_thresholds(self) -> None:
         """Pré-calcula valores usados em verificações frequentes."""
-        self.enemies_to_clear: int = self.level_config.enemies_to_clear
-        self.has_boss: bool = bool(self.level_config.boss_type)
+        level_config = self.level_config
+        assert level_config is not None
+        self.enemies_to_clear = level_config.enemies_to_clear
+        self.has_boss = bool(level_config.boss_type)
 
     def _get_adjusted_level_config(self, level_number: int) -> LevelConfig:
         """Obtém configuração de nível ajustada pelo meta-progression."""
@@ -1324,6 +1388,7 @@ class PlayingScene(Scene):
             self.entity_manager.bullets,
             enemy_grid,
             self.entity_manager,
+            ship=self.ship,
         )
 
         vector_gain, vector_destroyed, vector_events = (
@@ -1858,6 +1923,12 @@ class PlayingScene(Scene):
                 self.ship.damage_boost_timer, pv["damage_boost_duration"]
             )
 
+        def _apply_chain_shot() -> None:
+            self.ship.activate_chain_shot()
+
+        def _apply_repulsion_shield() -> None:
+            self.ship.activate_repulsion_shield()
+
         def _apply_life() -> None:
             self._change_lives(1)
 
@@ -1884,6 +1955,8 @@ class PlayingScene(Scene):
             "time_stop": _apply_time_stop,
             "rainbow": _apply_rainbow,
             "damage_boost": _apply_damage_boost,
+            "chain_shot": _apply_chain_shot,
+            "repulsion_shield": _apply_repulsion_shield,
         }
 
         handler = dispatch.get(kind)
@@ -1943,6 +2016,10 @@ class PlayingScene(Scene):
         if self.lives > 0:
             self.ship.invuln = Config.INVULN_TIME * 1000
         else:
+            # Em permadeath (NIGHTMARE), reset_to_checkpoint já devolve ao início
+            # do mundo atual — comportamento correto. Tornar a intenção explícita.
+            if self._permadeath_mode:
+                self.score = 0
             next_level = self.player_profile.reset_to_checkpoint()
             logger.info("Game Over! Reinício preparado para nível %d", next_level)
             self._game_over_triggered = True
@@ -2008,6 +2085,9 @@ class PlayingScene(Scene):
                 self._advance_to_next_level(with_delay=False)
 
     def _start_boss_fight(self) -> None:
+        level_config = self.level_config
+        assert level_config is not None
+
         self.pre_boss_transition = False
         self.pre_boss_timer = 0.0
         self.warning_sound_played = False
@@ -2024,21 +2104,21 @@ class PlayingScene(Scene):
         sound_manager.stop_warning()
         sound_manager.stop_all_sfx()
 
-        if not self.level_config.boss_type:
+        if not level_config.boss_type:
             return
 
         from ..entities.giant_meteor_boss import GiantMeteorBoss
         from ..entities.mountain_serpent_boss import MountainSerpentBoss
         from ..entities.stone_golem_boss import StoneGolemBoss
 
-        if self.level_config.boss_type == StoneGolemBoss:
+        if level_config.boss_type == StoneGolemBoss:
             boss = StoneGolemBoss(
                 Config.SCREEN_WIDTH / 2 - 50,
                 50,
                 difficulty_multiplier=self.enemy_health_multiplier,
             )
             self.entity_manager.boss = boss
-        elif self.level_config.boss_type == MountainSerpentBoss:
+        elif level_config.boss_type == MountainSerpentBoss:
             # spawn_mountain_serpent_boss cria a cabeça E os blocos laterais
             # Não passa x/y para usar os valores padrão centrados da classe
             scaled_health = int(
@@ -2048,13 +2128,13 @@ class PlayingScene(Scene):
                 health=scaled_health,
                 block_health_multiplier=self.enemy_health_multiplier,
             )
-        elif self.level_config.boss_type == GiantMeteorBoss:
+        elif level_config.boss_type == GiantMeteorBoss:
             # spawn_giant_meteor_boss seta is_side_scroll corretamente
             boss = self.entity_manager.spawn_giant_meteor_boss()
             boss.health = int(boss.health * self.enemy_health_multiplier)
             boss.max_health = boss.health
         else:
-            boss = self.level_config.boss_type(Config.SCREEN_WIDTH / 2 - 50, 50)
+            boss = level_config.boss_type(Config.SCREEN_WIDTH / 2 - 50, 50)
             boss.health = int(boss.health * self.enemy_health_multiplier)
             boss.max_health = boss.health
             self.entity_manager.boss = boss
@@ -2536,7 +2616,9 @@ class PlayingScene(Scene):
 
         self.r.update_fps(dt)
 
-        stage_name = format_stage_name(self.level_config.level_number)
+        level_config = self.level_config
+        assert level_config is not None
+        stage_name = format_stage_name(level_config.level_number)
         self.r.hud(
             self.game_surface,
             self.score,
@@ -2617,6 +2699,7 @@ class PlayingScene(Scene):
             sound_manager=sound_manager,
             scene=self,
             god_mode=self.god_mode,
+            permadeath_mode=self._permadeath_mode,
         )
 
     def _update_upgrades(self, dt: float) -> None:
@@ -2752,6 +2835,8 @@ class PlayingScene(Scene):
             "cooldown_haste": POWERUP_COOLDOWN_HASTE,
             "time_stop": POWERUP_TIME_STOP,
             "damage_boost": POWERUP_DAMAGE_BOOST,
+            "chain_shot": (80, 220, 255),
+            "repulsion_shield": (100, 255, 80),
         }
         powerup_symbols: dict[str, str] = {
             "life": "+",
@@ -2765,6 +2850,8 @@ class PlayingScene(Scene):
             "cooldown_haste": "CD",
             "time_stop": "T",
             "damage_boost": "DMG",
+            "chain_shot": "⚡",
+            "repulsion_shield": "🛡",
         }
         hint_keys = ("Q", "E")
 

@@ -121,6 +121,8 @@ class PowerUp:
             "cooldown_haste": "[CD]",
             "time_stop": "[STOP]",
             "damage_boost": "[DMG]",
+            "chain_shot": "[⚡]",
+            "repulsion_shield": "[🛡️]",
         }
 
         # Aplicar tremor visual se estiver no início da atração

@@ -582,7 +582,7 @@ class UpgradesSelectionScene(Scene):
                 (int(rect.width * pulse), int(rect.height * pulse)),
             )
             surface.blit(img, img.get_rect(center=rect.center))
-        except Exception:
+        except (OSError, pygame.error, ValueError):
             pass
 
         # Nome da nave logo abaixo do preview.
@@ -953,7 +953,7 @@ class UpgradesSelectionScene(Scene):
                         (img_s, img_s),
                     )
                     surface.blit(img, img.get_rect(center=dr.center))
-                except Exception:
+                except (OSError, pygame.error, ValueError):
                     pass
                 if sel:
                     self._draw_equipped_badge(surface, dr)

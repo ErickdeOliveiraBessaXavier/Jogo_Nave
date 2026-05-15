@@ -46,6 +46,8 @@ class PowerUpType(Enum):
     COOLDOWN_HASTE = "cooldown_haste"  # Reduz tempo de recarga
     TIME_STOP = "time_stop"  # Congela inimigos e projéteis
     DAMAGE_BOOST = "damage_boost"  # Dobra o dano das balas temporariamente
+    CHAIN_SHOT = "chain_shot"  # Tiros encadeiam raios entre inimigos
+    REPULSION_SHIELD = "repulsion_shield"  # Escudo que empurra inimigos
 
 
 @dataclass(frozen=True)
@@ -158,6 +160,17 @@ class Config:
     DAMAGE_BOOST_DURATION: float = 8.0
     DAMAGE_BOOST_MULTIPLIER: float = 2.0
     SPEED_ATTACK_MULTIPLIER: float = 2.0
+
+    # Chain Shot power-up
+    CHAIN_SHOT_DURATION: float = 8.0
+    CHAIN_SHOT_MAX_JUMPS: int = 4
+    CHAIN_SHOT_RADIUS: float = 220.0
+    CHAIN_SHOT_DAMAGE_FACTOR: float = 0.6  # Multiplicativo por salto
+
+    # Repulsion Shield power-up
+    REPULSION_SHIELD_DURATION: float = 10.0
+    REPULSION_SHIELD_RADIUS: float = 140.0
+    REPULSION_FORCE: float = 420.0  # px/s a distância mínima
     PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER: float = 1.5
     EXPLOSIVE_SHOT_FIRE_RATE_PENALTY: float = (
         0.5  # Tiros explosivos são 50% mais lentos

@@ -14,7 +14,7 @@ class DifficultySettingsDict(TypedDict):
     player_damage_multiplier: float
     lives: int
     rewards_multiplier: float
-    special_rules: NotRequired[list[str]]  # Optional, only for NIGHTMARE
+    special_rules: NotRequired[list[str]]  # Regras especiais opcionais (ex.: "permadeath")
 
 
 class DifficultyPreset(Enum):
@@ -69,7 +69,7 @@ class DifficultySettings:
             "player_damage_multiplier": 0.8,
             "lives": 1,  # Permadeath!
             "rewards_multiplier": 3.0,  # Alta recompensa, alto risco
-            "special_rules": ["permadeath", "no_powerups"],
+            "special_rules": ["permadeath"],
         },
     }
 

@@ -1517,7 +1517,7 @@ class PlayerProfile:
                 with open(path, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
                 logger.debug(f"Async save completed for {path}")
-            except Exception as e:
+            except OSError as e:
                 logger.error(f"Async save failed for {path}: {e}")
 
         # Executar escrita em daemon thread (não bloqueia exit)
@@ -1580,8 +1580,6 @@ class PlayerProfile:
         self.unlocked_slots = INITIAL_UNLOCKED_SLOTS
 
         # Resetar naves
-        from .ship_types import DEFAULT_SHIP_ID
-
         self.unlocked_ships = {DEFAULT_SHIP_ID}
         self.selected_ship = DEFAULT_SHIP_ID
 

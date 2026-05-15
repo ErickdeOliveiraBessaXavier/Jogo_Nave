@@ -258,6 +258,17 @@ class SerpentBlock:
 
         # Semente deterministica por bloco para shakes independentes
         self._swap_seed: float = (row_index + (0.0 if side == "left" else 0.5)) * 11.0
+        self._swap_active: bool = False
+        self._swap_wait_timer: float = 0.0
+        self._swap_elapsed: float = 0.0
+        self._swap_duration: float = 0.0
+        self._swap_shake_duration: float = 0.0
+        self._swap_start_cx: float = self.cx
+        self._swap_start_cy: float = self.cy
+        self._swap_target_cx: float = self.cx
+        self._swap_target_cy: float = self.cy
+        self._swap_target_side: Side = self.side
+        self._swap_arc_dir: float = 0.0
         self._reset_swap_state()
 
         sprite_frames = self._load_animation_frames(self.w, self.h)

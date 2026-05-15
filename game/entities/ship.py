@@ -111,6 +111,10 @@ class Ship:
         self.piercing_shot_timer: float = 0.0
         self.mini_ships_timer: float = 0.0
         self.damage_boost_timer: float = 0.0
+        # Chain Shot power-up
+        self.chain_shot_timer: float = 0.0
+        # Repulsion Shield power-up
+        self.repulsion_shield_timer: float = 0.0
         self.is_entering = False
         self.entry_particles: list[ParticleDict] = []
         self.thruster_particles: list[ParticleDict] = []
@@ -420,6 +424,12 @@ class Ship:
     def get_damage_boost_time(self) -> float:
         return self.damage_boost_timer
 
+    def get_chain_shot_time(self) -> float:
+        return self.chain_shot_timer
+
+    def get_repulsion_shield_time(self) -> float:
+        return self.repulsion_shield_timer
+
     @property
     def has_shield(self) -> bool:
         return self.shield_timer > 0.0 and self.shield_hp > 0
@@ -474,6 +484,24 @@ class Ship:
         """Ativa sistema de tiros explosivos com número limitado de cargas."""
         self.explosive_shots_active = True
         self.explosive_shots_remaining = charges
+
+    def activate_chain_shot(self, duration: float | None = None) -> None:
+        """Ativa Chain Shot: balas encadeiam raios entre inimigos próximos."""
+        d = duration if duration is not None else Config.CHAIN_SHOT_DURATION
+        self.chain_shot_timer = max(self.chain_shot_timer, d)
+
+    def activate_repulsion_shield(self, duration: float | None = None) -> None:
+        """Ativa Repulsion Shield: campo de força empurra inimigos próximos."""
+        d = duration if duration is not None else Config.REPULSION_SHIELD_DURATION
+        self.repulsion_shield_timer = max(self.repulsion_shield_timer, d)
+
+    @property
+    def has_chain_shot(self) -> bool:
+        return self.chain_shot_timer > 0.0
+
+    @property
+    def has_repulsion_shield(self) -> bool:
+        return self.repulsion_shield_timer > 0.0
 
     def consume_explosive_shot(self) -> bool:
         """Consome uma carga de tiro explosivo. Retorna True se ainda há cargas."""
@@ -610,6 +638,8 @@ class Ship:
         self.piercing_shot_timer = max(0.0, self.piercing_shot_timer - dt)
         self.mini_ships_timer = max(0.0, self.mini_ships_timer - dt)
         self.damage_boost_timer = max(0.0, self.damage_boost_timer - dt)
+        self.chain_shot_timer = max(0.0, self.chain_shot_timer - dt)
+        self.repulsion_shield_timer = max(0.0, self.repulsion_shield_timer - dt)
 
         # Update shield timer
         self.shield_timer = max(0.0, self.shield_timer - dt)
@@ -920,6 +950,39 @@ class Ship:
             if p["lifetime"] - dt > 0 and p["size"] - dt * 12.0 > 0
         ]
 
+    def _update_repulsion_shield(self, dt: float, entity_manager: Optional["EntityManager"]) -> None:
+        if self.repulsion_shield_timer <= 0.0 or entity_manager is None:
+            return
+
+        center_x = self.x + self.w / 2
+        center_y = self.y + self.h / 2
+        radius = Config.REPULSION_SHIELD_RADIUS
+        force = Config.REPULSION_FORCE
+
+        enemies = entity_manager.enemy_spatial_grid.query(
+            center_x - radius, center_y - radius, radius * 2, radius * 2
+        )
+
+        for enemy in enemies:
+            if getattr(enemy, "dead", False):
+                continue
+
+            center = self._get_enemy_center(enemy)
+            ex = center[0] if center is not None else float(getattr(enemy, "x", 0.0))
+            ey = center[1] if center is not None else float(getattr(enemy, "y", 0.0))
+
+            dx = ex - center_x
+            dy = ey - center_y
+            dist_sq = dx * dx + dy * dy
+
+            if 0 < dist_sq < radius ** 2:
+                dist = math.sqrt(dist_sq)
+                push_factor = (1.0 - (dist / radius)) * force * dt
+                # setattr evita falso-positivo do Pylance em entidades com
+                # `y` como @property somente-leitura (ex.: MountainStalagmite).
+                setattr(enemy, "x", getattr(enemy, "x") + (dx / dist) * push_factor)
+                setattr(enemy, "y", getattr(enemy, "y") + (dy / dist) * push_factor)
+
     def update(
         self,
         dt: float,
@@ -928,6 +991,7 @@ class Ship:
     ):
         self._draw_time += dt
         self._update_timers(dt)
+        self._update_repulsion_shield(dt, entity_manager)
         # Avança dash/cooldown do Fantasma.
         if self.dash_timer > 0.0:
             self.dash_timer = max(0.0, self.dash_timer - dt)
@@ -1270,6 +1334,34 @@ class Ship:
                 pygame.draw.circle(
                     surface, shield_color, (center_x, center_y), radius - i, 2
                 )
+
+        # Repulsion Shield (campo de força verde/amarelo)
+        if self.has_repulsion_shield:
+            if self.ship_image is not None:
+                sprite_w, sprite_h = self.ship_image.get_size()
+                cx = int(self.x + sprite_w / 2)
+                cy = int(self.y + sprite_h / 2)
+            else:
+                cx = int(self.x + self.w / 2)
+                cy = int(self.y + self.h / 2)
+
+            field_radius = int(Config.REPULSION_SHIELD_RADIUS)
+            pulse = abs((self._draw_time * 3) % 2 - 1)
+
+            outer_r = field_radius + int(pulse * 6)
+            pygame.draw.circle(surface, (180, 255, 60), (cx, cy), outer_r, 2)
+            pygame.draw.circle(surface, (100, 220, 30), (cx, cy), outer_r - 4, 1)
+
+            # Arcos radiais para aspecto de campo de força
+            segments = 24
+            active = int(segments * (0.6 + 0.4 * pulse))
+            for i in range(0, active, 2):
+                angle = (i / segments) * math.tau
+                px1 = cx + int(math.cos(angle) * (field_radius - 6))
+                py1 = cy + int(math.sin(angle) * (field_radius - 6))
+                px2 = cx + int(math.cos(angle) * (field_radius + 2))
+                py2 = cy + int(math.sin(angle) * (field_radius + 2))
+                pygame.draw.line(surface, (160, 255, 70), (px1, py1), (px2, py2), 2)
 
         # Calcular tremor
         shake_x, shake_y = 0, 0

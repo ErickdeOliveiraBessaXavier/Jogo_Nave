@@ -405,10 +405,12 @@ class EnemySpawner:
         )
 
     def _refresh_death_clocks(self, counts: dict[str, int]) -> None:
-        for key, prev in self._last_enemy_counts.items():
+        previous_counts = self._last_enemy_counts
+        for key, prev in previous_counts.items():
             if prev > 0 and counts.get(key, 0) == 0:
                 self.last_spawn_clock_by_type[key] = self.spawn_clock
-        self._last_enemy_counts = counts
+        previous_counts.clear()
+        previous_counts.update(counts)
 
     # ------------------------------------------------------------------
     # Caps e contagem
@@ -1024,6 +1026,7 @@ class EnemySpawner:
         entity_manager: "EntityManager",
         counts: dict[str, int] | None = None,
     ) -> None:
+        del counts
         if not self.level_config.mines_enabled:
             return
 
@@ -1060,6 +1063,7 @@ class EnemySpawner:
         entity_manager: "EntityManager",
         counts: dict[str, int] | None = None,
     ) -> None:
+        del counts
         world = get_world_for_level(self.current_level_number)
         if "propellers" not in THEME_FEATURES.get(world.theme, set()):
             return
@@ -1083,6 +1087,7 @@ class EnemySpawner:
         entity_manager: "EntityManager",
         counts: dict[str, int] | None = None,
     ) -> None:
+        del counts
         if not self.level_config.formations_enabled:
             return
         world = get_world_for_level(self.current_level_number)
@@ -1160,6 +1165,7 @@ class EnemySpawner:
         player_y: float | None,
         counts: dict[str, int] | None = None,
     ) -> None:
+        del counts
         world = get_world_for_level(self.current_level_number)
         if "guided_meteors" not in THEME_FEATURES.get(world.theme, set()):
             return

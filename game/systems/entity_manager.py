@@ -50,6 +50,7 @@ from ..entities.mountain_serpent_boss import (
     SerpentRockBullet,
 )
 from ..entities.player_laser import PlayerLaser
+from ..entities.chain_lightning import ChainLightning
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
 from ..entities.rock_glider_pool import RockGliderPool
@@ -102,6 +103,7 @@ class EntityManager:
         self.ice_poison_zones: list[IcePoisonZone] = []
         self.fire_zones: list[FireZone] = []
         self.mini_ship_bullets: list[MiniShipBullet] = []
+        self.chain_lightnings: list[ChainLightning] = []
 
         # Listas de entidades e coletáveis
         self.enemies: list[Any] = []
@@ -499,6 +501,10 @@ class EntityManager:
             zone.update(dt)
             if zone.dead:
                 self.fire_zones.remove(zone)
+        for cl in self.chain_lightnings[:]:
+            cl.update(dt)
+            if cl.dead:
+                self.chain_lightnings.remove(cl)
 
         # Helper para lentidão (EMP)
         slow_active = getattr(self, "emp_active", False)
@@ -935,6 +941,8 @@ class EntityManager:
         self.explosion_pool.draw_all(surface)
         for e in self.explosive_effects:
             e.draw(surface)
+        for cl in self.chain_lightnings:
+            cl.draw(surface)
 
     def spawn_elemental_robot(
         self,
@@ -1139,6 +1147,7 @@ class EntityManager:
         self._filter_dead_inplace(self.slime_drips)
         self._filter_dead_inplace(self.eye_lasers)
         self._filter_dead_inplace(self.mini_ship_bullets)
+        self._filter_dead_inplace(self.chain_lightnings)
 
         # Processar remoção de inimigos via protocolos should_remove/on_remove
         to_remove: list[Any] = []
@@ -1203,6 +1212,7 @@ class EntityManager:
         self.boss = None
         self.mini_ships.clear()
         self.mini_ship_bullets.clear()
+        self.chain_lightnings.clear()
         self.formations.clear()
         self.spikes.clear()
         self.meteor_pool.clear_active()
