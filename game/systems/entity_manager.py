@@ -366,17 +366,21 @@ class EntityManager:
         x: float,
         y: float,
         damage: int,
-        lifetime: float = 1.5,
         direction: tuple[float, float] | None = None,
+        locked_target: Any | None = None,
     ) -> HomingBullet:
-        """Spawna um tiro teleguiado consumível (Caçador)."""
+        """Spawna um tiro teleguiado consumível (Caçador).
+
+        locked_target: inimigo que este projétil perseguirá exclusivamente enquanto
+        estiver vivo. Permite distribuir alvos entre múltiplos projéteis simultâneos.
+        """
         homing = HomingBullet(
             x=x,
             y=y,
             damage=damage,
-            lifetime=lifetime,
             is_side_scroll=self.is_side_scroll,
             direction=direction,
+            locked_target=locked_target,
         )
         self.homing_bullets.append(homing)
         return homing

@@ -552,7 +552,7 @@ class Config:
     # ========================================
     # FORMATION SYSTEM
     # ========================================
-    FORMATION_SPAWN_INTERVAL: Tuple[float, float] = (10.0, 15.0)
+    FORMATION_SPAWN_INTERVAL: Tuple[float, float] = (25.0, 35.0)
 
     # Entry pattern settings - Curved path
     FORMATION_ENTRY_CURVE_AMPLITUDE: float = 150.0

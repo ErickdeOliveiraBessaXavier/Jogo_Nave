@@ -61,6 +61,9 @@ SPAWNER_CAP_ELEMENTAL_ROBOT: int = 1
 SPAWNER_CAP_STONE_SENTRY: int = 2
 SPAWNER_CAP_MOUNTAIN_MAGE: int = 1
 SPAWNER_CAP_MOUNTAIN_PROPELLER: int = 3
+SPAWNER_CAP_ALIEN: int = 4  # Limite máximo de Aliens simultâneos
+SPAWNER_CAP_EYE_ENEMY: int = 3  # Limite máximo de EyeEnemies simultâneos
+SPAWNER_CAP_FORMATIONS: int = 2  # Limite máximo de Formações ativas simultâneas
 SPAWNER_STORM_ENEMY_CAP: int = 30
 
 # EnemySpawner — spawn de minas. Pesos relativos para o número de minas spawnadas
@@ -124,6 +127,13 @@ STAR_X_MIN: int = 40
 STAR_Y_OFFSET_MIN: float = 20.0
 STAR_Y_OFFSET_MAX: float = 100.0
 
+# EnemySpawner — warm-up e rampa de intensidade para transição de mundo.
+# Troca de mundo = silêncio extra + rampa mais lenta para não jogar o jogador
+# direto no máximo de pressão logo na primeira fase do novo mundo.
+WORLD_TRANSITION_WARMUP_EXTRA: float = 4.0   # segundos extras de silêncio pós-boss
+WORLD_TRANSITION_RAMP_DURATION: float = 25.0  # segundos para atingir spawn_intensity=1.0
+NORMAL_RAMP_DURATION: float = 15.0            # rampa padrão (troca de fase normal)
+
 
 # ---------------------------------------------------------------------------
 # Tipos / Protocols
@@ -153,19 +163,19 @@ class FormationConfig(TypedDict, total=False):
 FORMATION_CONFIGS: Dict[str, FormationConfig] = {
     "spiral_circle": {
         "patterns": [FormationPattern.SPIRAL_ENTRY, FormationPattern.CIRCLE],
-        "count_range": (5, 8),
+        "count_range": (4, 6),  # Reduzido de (5, 8)
     },
     "spiral_v": {
         "patterns": [FormationPattern.SPIRAL_ENTRY, FormationPattern.V_SHAPE],
-        "count_options": [5, 7],
+        "count_options": [3, 5],  # Reduzido de [5, 7]
     },
     "spiral_square": {
         "patterns": [FormationPattern.SPIRAL_ENTRY, FormationPattern.SQUARE],
-        "count_options": [4, 8, 12],
+        "count_options": [4, 8],  # Removido 12
     },
     "spiral_line": {
         "patterns": [FormationPattern.SPIRAL_ENTRY, FormationPattern.LINE],
-        "count_range": (5, 8),
+        "count_range": (4, 6),  # Reduzido de (5, 8)
     },
     "full_cycle": {
         "patterns": [
@@ -173,7 +183,7 @@ FORMATION_CONFIGS: Dict[str, FormationConfig] = {
             FormationPattern.CIRCLE,
             FormationPattern.V_SHAPE,
         ],
-        "count_options": [5, 7],
+        "count_options": [4, 5],  # Reduzido de [5, 7]
     },
 }
 
@@ -206,6 +216,7 @@ class EnemySpawner:
 
         # Sistema de intensidade gradual para spawn orgânico
         self.spawn_intensity: float = 0.0
+        self._is_world_transition: bool = False  # sinaliza rampa mais lenta
         if is_initial_level:
             self.warm_up_duration: float = Config.INITIAL_GAME_DELAY
             self.warm_up_timer: float = self.warm_up_duration
@@ -477,6 +488,10 @@ class EnemySpawner:
             enemy_type == MountainPropeller
             and counts["mountain_propeller"] >= SPAWNER_CAP_MOUNTAIN_PROPELLER
         ):
+            return True
+        if enemy_type == Alien and counts["alien"] >= SPAWNER_CAP_ALIEN:
+            return True
+        if enemy_type == EyeEnemy and counts["eye"] >= SPAWNER_CAP_EYE_ENEMY:
             return True
         return False
 
@@ -962,10 +977,14 @@ class EnemySpawner:
             self.warm_up_timer -= dt
             self.spawn_intensity = 0.0
         else:
-            # Rampa de intensidade orgânica: de 0.1 a 1.0 em 15 segundos após o warmup.
-            # Evita o "paredão" de inimigos logo que a fase começa.
-            ramp_duration = 15.0
-            # warm_up_timer continua diminuindo (fica negativo) após o warmup.
+            # Rampa de intensidade orgânica: de 0.1 a 1.0 após o warmup.
+            # Troca de mundo usa rampa mais lenta para não sobrecarregar o jogador
+            # logo nas primeiras fases do novo mundo.
+            ramp_duration = (
+                WORLD_TRANSITION_RAMP_DURATION
+                if self._is_world_transition
+                else NORMAL_RAMP_DURATION
+            )
             ramp_elapsed = abs(self.warm_up_timer)
             self.spawn_intensity = min(1.0, 0.1 + (ramp_elapsed / ramp_duration) * 0.9)
             self.warm_up_timer -= dt  # Continua decrementando para a rampa funcionar
@@ -1082,6 +1101,10 @@ class EnemySpawner:
         if random.random() >= self.spawn_intensity:
             return
 
+        # Aplicar limite máximo de formações ativas
+        if len(entity_manager.formations) >= SPAWNER_CAP_FORMATIONS:
+            return
+
         formation_type = self.level_config.get_random_formation_type()
         if not formation_type:
             return
@@ -1173,13 +1196,27 @@ class EnemySpawner:
     def stop(self) -> None:
         self.stopped = True
 
-    def set_level(self, level_number: int) -> None:
+    def set_level(
+        self,
+        level_number: int,
+        is_world_transition: bool = False,
+        level_config: Any | None = None,
+    ) -> None:
         self.current_level_number = level_number
-        self.level_config = self.level_manager.get_level(
-            self.current_level_number, self.difficulty_preset
+        # Se um LevelConfig pré-ajustado (ex: com meta-progression aplicado) for
+        # fornecido, usá-lo diretamente em vez de recalcular do zero. Isso garante
+        # que o ajuste adaptativo do PerformanceAnalyzer chegue de fato ao spawner.
+        self.level_config = (
+            level_config
+            if level_config is not None
+            else self.level_manager.get_level(self.current_level_number, self.difficulty_preset)
         )
         self.stopped = False
-        self.warm_up_timer = Config.PREPARATION_TIME
+        self._is_world_transition = is_world_transition
+        # Troca de mundo: warm-up estendido para dar ao jogador tempo de respirar
+        # antes que o novo mundo ganhe pressão máxima.
+        extra = WORLD_TRANSITION_WARMUP_EXTRA if is_world_transition else 0.0
+        self.warm_up_timer = Config.PREPARATION_TIME + extra
         self.spawn_intensity = 0.0
         self._reset_spawn_pipeline()
         self.guided_meteor_timer.start()

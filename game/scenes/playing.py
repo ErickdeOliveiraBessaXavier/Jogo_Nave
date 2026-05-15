@@ -322,7 +322,7 @@ class PlayingScene(Scene):
         # config do nível 1 por default, o que quebra inicializações em mundos
         # diferentes do primeiro (ex.: começar em STARFIELD via world select).
         if not is_initial_level:
-            self.enemy_spawner.set_level(self.current_level_index + 1)
+            self.enemy_spawner.set_level(self.current_level_index + 1, level_config=self.level_config)
         self.powerup_spawner = PowerUpSpawner(self.difficulty_preset)
         self.collisions = Collisions()
         self.star_spawner = StarSpawner()
@@ -1046,12 +1046,28 @@ class PlayingScene(Scene):
                 self.shoot_cd = self._get_shoot_cooldown()
                 return
 
-            # Caçador: dispara múltiplos tiros teleguiados consumíveis
+            # Caçador: dispara múltiplos tiros teleguiados com alvos independentes.
+            # Cada projétil recebe um alvo exclusivo (round-robin sobre os inimigos
+            # vivos em tela), evitando que todos persigam o mesmo inimigo.
+            # Não dispara se já há projéteis teleguiados vivos — evita acúmulo.
             if ship_id == "cacador":
-                # 5 projéteis em spread (90 graus total)
+                if self.entity_manager.homing_bullets:
+                    self.shoot_cd = self._get_shoot_cooldown()
+                    return
                 count = 5
                 spread = math.radians(90)
                 divisor = max(1, count - 1)
+
+                # Coletar inimigos válidos para distribuição de alvos.
+                live_enemies = [
+                    e for e in self.entity_manager.enemies
+                    if not getattr(e, "dead", False)
+                ]
+                if self.entity_manager.boss and not getattr(
+                    self.entity_manager.boss, "dead", False
+                ):
+                    live_enemies.append(self.entity_manager.boss)
+
                 for x, y, direction, *_ in bullet_specs:
                     dx, dy = direction
                     mag = math.hypot(dx, dy)
@@ -1062,12 +1078,16 @@ class PlayingScene(Scene):
                         t = i / divisor
                         angle = base_angle - spread / 2 + t * spread
                         dir_vec = (math.cos(angle), math.sin(angle))
+                        # Distribuição round-robin: projétil i persegue inimigo i % n.
+                        # Se não há inimigos, locked_target=None e o projétil busca
+                        # o mais próximo dinamicamente (comportamento padrão).
+                        target = live_enemies[i % len(live_enemies)] if live_enemies else None
                         self.entity_manager.spawn_homing_bullet(
                             x,
                             y,
                             damage=adjusted_damage,
-                            lifetime=1.5,
                             direction=dir_vec,
+                            locked_target=target,
                         )
                 self.shoot_cd = self._get_shoot_cooldown()
                 return
@@ -2181,7 +2201,7 @@ class PlayingScene(Scene):
             * self.difficulty_settings["rewards_multiplier"]
         )
 
-        self.enemy_spawner.set_level(self.current_level_index + 1)
+        self.enemy_spawner.set_level(self.current_level_index + 1, is_world_transition=theme_changed, level_config=self.level_config)
         self.enemies_destroyed_in_level = 0
         self.level_start_time = None
         self.level_damage_taken = 0
@@ -2263,6 +2283,7 @@ class PlayingScene(Scene):
                     if self.ship.profile.has_charge_shot and (
                         event.mod & pygame.KMOD_ALT
                     ):
+                        # Só ativa charge com Space + Alt pressionados juntos.
                         self.ship.start_charge()
 
             self._process_cheat_input(event)
@@ -2273,21 +2294,32 @@ class PlayingScene(Scene):
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
                 if not self.ship.is_entering and self._can_handle_gameplay_actions():
-                    # Caçador: clique com Alt inicia carga em vez de disparar normal.
-                    if self.ship.profile.has_charge_shot and (
-                        pygame.key.get_mods() & pygame.KMOD_ALT
+                    if (
+                        self.ship.profile.has_charge_shot
+                        and not self.ship.charge_shot_active
+                        and pygame.key.get_mods() & pygame.KMOD_ALT
                     ):
+                        # Botão esquerdo + Alt: inicia charge (espelho do Space+Alt).
                         self.ship.start_charge()
                     elif not self.ship.auto_fire and self.shoot_cd == 0.0:
                         self._fire_bullets()
             elif event.button == 2:
                 if not self.ship.is_entering and self._can_handle_gameplay_actions():
                     self.ship.cycle_facing()
+            elif event.button == 3:
+                # Botão direito: inicia charge no Caçador/Magneto.
+                if (
+                    not self.ship.is_entering
+                    and self._can_handle_gameplay_actions()
+                    and self.ship.profile.has_charge_shot
+                    and not self.ship.charge_shot_active
+                ):
+                    self.ship.start_charge()
 
         elif event.type == pygame.MOUSEBUTTONUP:
-            # Caçador: soltar o botão dispara o tiro carregado.
+            # Caçador/Magneto: soltar botão esquerdo ou direito dispara o charge.
             if (
-                event.button == 1
+                event.button in (1, 3)
                 and self.ship.profile.has_charge_shot
                 and self.ship.charge_shot_active
                 and not self.ship.is_entering

@@ -87,6 +87,7 @@ def _get_worlds() -> dict[int, WorldConfig]:
             boss_type=CloudArchmageBoss,  # Boss das montanhas
             theme_modifiers={
                 "alien_weight": 0.5,  # Menos aliens
+                "formation_chance": 0.5,  # Formações muito raras no começo
             },
         ),
         2: WorldConfig(
@@ -103,7 +104,7 @@ def _get_worlds() -> dict[int, WorldConfig]:
             theme_modifiers={
                 "meteor_weight": 1.0,
                 "alien_weight": 1.15,  # Reduzido de 1.5 para suavizar entrada no mundo
-                "formation_chance": 1.1,
+                "formation_chance": 0.8,  # Reduzido de 1.1
             },
         ),
         3: WorldConfig(

@@ -209,7 +209,8 @@ class Formation:
             self.dead = True
 
         # Formação morre se sair completamente da tela (desceu demais)
-        if self.center_y > Config.SCREEN_HEIGHT + 150:
+        # Reduzido de 150 para 50 para que as formações sumam mais rápido
+        if self.center_y > Config.SCREEN_HEIGHT + 50:
             self.dead = True
 
         return all_bullets

@@ -9,6 +9,10 @@ from ..core.config import config as Config
 class HomingBullet:
     """Tiro teleguiado com vida consumível que é reduzida pelo dano causado.
 
+    Sem tempo de morte fixo: o projétil vive até acertar algo (consume_life)
+    ou sair da tela. Cada instância pode ter um alvo fixo (locked_target) para
+    garantir que múltiplos projéteis simultâneos não persigam o mesmo inimigo.
+
     Interfaces esperadas pelo sistema de colisões:
     - atributos: x, y, w, h, rect, damage, life
     - métodos: update(dt, enemies), consume_life(amount), draw(surface)
@@ -19,12 +23,13 @@ class HomingBullet:
         x: float,
         y: float,
         damage: int = 10,
-        lifetime: float = 1.5,
+        lifetime: float = 6.0,
         is_side_scroll: bool = False,
         direction: tuple[float, float] | None = None,
         max_life: int = 100,
         homing_speed: float | None = None,
         turn_rate: float = 5.0,
+        locked_target: Any | None = None,
     ) -> None:
         self.x = float(x)
         self.y = float(y)
@@ -35,6 +40,9 @@ class HomingBullet:
         self.lifetime = float(lifetime)
         self.age = 0.0
         self.is_side_scroll = is_side_scroll
+        # Alvo fixo: quando definido, o projétil ignora outros inimigos enquanto
+        # o alvo estiver vivo. Ao morrer, cai no _find_best_target normal.
+        self.locked_target: Any | None = locked_target
 
         speed = (
             homing_speed
@@ -87,17 +95,40 @@ class HomingBullet:
                 best = e
         return best
 
+    def _is_off_screen(self, screen_w: int, screen_h: int) -> bool:
+        """Verifica se o projétil saiu completamente da tela."""
+        return (
+            self.x + self.w < 0
+            or self.x > screen_w
+            or self.y + self.h < 0
+            or self.y > screen_h
+        )
+
     def update(self, dt: float, enemies: list[Any] | None = None) -> None:
         if self.dead:
             return
+
         self.age += dt
         if self.age >= self.lifetime:
             self.dead = True
             return
 
-        # Homing logic
+        # Morte por saída de tela.
+        sw = int(getattr(Config, "SCREEN_WIDTH", 1600))
+        sh = int(getattr(Config, "SCREEN_HEIGHT", 900))
+        if self._is_off_screen(sw, sh):
+            self.dead = True
+            return
+
+        # Homing logic: preferir locked_target se ainda vivo, senão buscar o mais próximo.
         if enemies:
-            target = self._find_best_target(enemies)
+            if self.locked_target is not None and getattr(self.locked_target, "dead", False):
+                self.locked_target = None  # alvo morreu — libera para busca livre
+            target = (
+                self.locked_target
+                if self.locked_target is not None
+                else self._find_best_target(enemies)
+            )
             if target is not None:
                 tx = getattr(target, "x", 0) + getattr(target, "w", 0) / 2
                 ty = getattr(target, "y", 0) + getattr(target, "h", 0) / 2

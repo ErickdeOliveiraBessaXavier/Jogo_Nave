@@ -33,9 +33,9 @@ class EyeEnemy:
         self.state: str = (
             "entering"  # entering, moving, aiming, charging, firing, waiting
         )
-        self.timer: float = random.uniform(1.0, 3.0)  # Time until next action
+        self.timer: float = random.uniform(2.0, 4.0)  # Time until next action
 
-        self.aim_duration: float = 1.0
+        self.aim_duration: float = 1.5
         self.charge_duration: float = 1.5
         self.active_laser: EyeLaser | None = None
         self.locked_player_pos: tuple[float, float] | None = None

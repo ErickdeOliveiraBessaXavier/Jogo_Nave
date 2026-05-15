@@ -2,7 +2,7 @@ import logging
 import math
 import random
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Type
 
 from ..entities.alien import Alien
@@ -357,6 +357,19 @@ MAX_ENEMY_VARIETY_BY_DIFFICULTY: dict[DifficultyPreset, int] = {
     DifficultyPreset.NIGHTMARE: 4,
 }
 
+# Variedade de inimigos por faixa de estágio dentro do mundo.
+# "early" = primeiras fases do mundo (recém-chegou): apresenta inimigos gradualmente.
+# "mid"   = meio do mundo: variedade cresce.
+# "late"  = fases finais: atingem o cap máximo do preset.
+# Os valores aqui SUBSTITUEM MAX_ENEMY_VARIETY_BY_DIFFICULTY nas fases early/mid;
+# late usa o valor do dict acima para manter compatibilidade com o cap original.
+MAX_ENEMY_VARIETY_BY_STAGE: dict[DifficultyPreset, dict[str, int]] = {
+    DifficultyPreset.CASUAL:    {"early": 1, "mid": 2, "late": 3},
+    DifficultyPreset.NORMAL:    {"early": 1, "mid": 2, "late": 3},
+    DifficultyPreset.HARDCORE:  {"early": 2, "mid": 3, "late": 4},
+    DifficultyPreset.NIGHTMARE: {"early": 2, "mid": 3, "late": 4},
+}
+
 # Inimigo "base" garantido em cada tema — sempre ocupa um slot do trio se
 # estiver no pool após filtragem. Os demais slots são sorteados ponderados.
 THEME_BASE_ENEMY: dict[WorldTheme, type] = {
@@ -557,15 +570,22 @@ def _apply_enemy_variety_cap(
     world: "WorldConfig",
     difficulty_preset: DifficultyPreset,
 ) -> "LevelConfig":
-    """Limita o spawn_config a N tipos diferentes (N = cap por dificuldade).
+    """Limita o spawn_config a N tipos diferentes (N = cap por dificuldade + stage).
 
     Lógica:
-      1. Inimigo base do tema (THEME_BASE_ENEMY) sempre ocupa um slot se estiver no pool.
-      2. Slots restantes são preenchidos por sampling ponderado (1/spawn_time):
+      1. Cap varia por faixa de estágio dentro do mundo (early < mid < late), garantindo
+         que fases iniciais de um novo mundo apresentem inimigos gradualmente.
+      2. Inimigo base do tema (THEME_BASE_ENEMY) sempre ocupa um slot se estiver no pool.
+      3. Slots restantes são preenchidos por sampling ponderado (1/spawn_time):
          inimigos mais frequentes têm mais chance de serem escolhidos.
-      3. Determinístico: mesmo level_number + tema sempre gera o mesmo set.
+      4. Determinístico: mesmo level_number + tema sempre gera o mesmo set.
     """
-    cap = MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3)
+    stage_band = _get_stage_band(world, config.level_number)
+    variety_by_stage = MAX_ENEMY_VARIETY_BY_STAGE.get(difficulty_preset)
+    if variety_by_stage is not None:
+        cap = variety_by_stage.get(stage_band, MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3))
+    else:
+        cap = MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3)
     spawn_config = config.enemy_spawn_config
 
     if len(spawn_config) <= cap:
@@ -1229,9 +1249,13 @@ class ProceduralLevelGenerator:
     def _choose_theme(self, level_number: int, rng: random.Random) -> LevelTheme | None:
         """Escolhe um tema baseado no nível."""
         world = get_world_for_level(level_number)
+        stage_number = world.get_stage_number(level_number)
 
-        # Níveis iniciais: sempre balanceado
-        if level_number <= 2:
+        # Fases iniciais absolutas ou primeiras fases de qualquer mundo: sempre balanceado.
+        # level_number <= 2 preserva o tutorial; stage_number <= 2 garante que a entrada
+        # de qualquer mundo novo não sorteie temas de alta pressão (eye_swarm,
+        # formation_hell, minefield) independente do level absoluto.
+        if level_number <= 2 or stage_number <= 2:
             return LEVEL_THEMES["balanced"]
 
         # A cada 5 níveis, chance de tempestade temática por mundo (nível 8+)
@@ -1916,7 +1940,33 @@ def get_level_config(
         config = _apply_world_theme_to_config(config, world)
         config = _apply_theme_enemy_rules(config, world, difficulty_preset)
         # Aplicar modificadores do preset aos níveis fixos também
-        return _apply_difficulty_to_fixed_level(config, difficulty_preset)
+        config = _apply_difficulty_to_fixed_level(config, difficulty_preset)
+        # Aplicar grace de entrada de mundo também em fixed levels.
+        # Sem isso, níveis handcrafted no stage 1 de um mundo novo chegam com
+        # spawn rate e volume cheios, desfazendo o efeito do grace procedural.
+        fixed_stage = world.get_stage_number(level_number)
+        fixed_grace = 1.0
+        if fixed_stage == 1:
+            fixed_grace = 0.70
+        elif fixed_stage == 2:
+            fixed_grace = 0.80
+        elif fixed_stage == 3:
+            fixed_grace = 0.90
+        if fixed_grace < 1.0:
+            adjusted_spawn = {
+                et: spawn_time / fixed_grace
+                for et, spawn_time in config.enemy_spawn_config.items()
+            }
+            adjusted_to_clear = max(
+                DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
+                int(config.enemies_to_clear * fixed_grace),
+            )
+            config = replace(
+                config,
+                enemy_spawn_config=adjusted_spawn,
+                enemies_to_clear=adjusted_to_clear,
+            )
+        return config
 
     # Obter ou criar gerador para este preset
     if difficulty_preset not in _procedural_generators:
@@ -1948,8 +1998,20 @@ def get_level_config(
         )
         config = _apply_world_theme_to_config(config, world)
         # Aplicar grace de entrada
-        for et in config.enemy_spawn_config:
-            config.enemy_spawn_config[et] /= world_entry_grace
+        if world_entry_grace < 1.0:
+            adjusted_spawn = {
+                et: spawn_time / world_entry_grace
+                for et, spawn_time in config.enemy_spawn_config.items()
+            }
+            adjusted_to_clear = max(
+                DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
+                int(config.enemies_to_clear * world_entry_grace),
+            )
+            config = replace(
+                config,
+                enemy_spawn_config=adjusted_spawn,
+                enemies_to_clear=adjusted_to_clear,
+            )
         config = _apply_theme_enemy_rules(config, world, difficulty_preset)
         return config
 
@@ -1957,10 +2019,23 @@ def get_level_config(
     config = generator.generate_level(level_number)
     config = _apply_world_theme_to_config(config, world)
 
-    # Aplicar grace de entrada no spawn_config (aumenta spawn_time = menos spawn)
+    # Aplicar grace de entrada: spawn_time maior (= menos inimigos por segundo)
+    # e enemies_to_clear reduzido (= fase mais curta), evitando sessões longas e
+    # opressoras nas primeiras fases de cada mundo.
     if world_entry_grace < 1.0:
-        for et in config.enemy_spawn_config:
-            config.enemy_spawn_config[et] /= world_entry_grace
+        adjusted_spawn = {
+            et: spawn_time / world_entry_grace
+            for et, spawn_time in config.enemy_spawn_config.items()
+        }
+        adjusted_to_clear = max(
+            DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
+            int(config.enemies_to_clear * world_entry_grace),
+        )
+        config = replace(
+            config,
+            enemy_spawn_config=adjusted_spawn,
+            enemies_to_clear=adjusted_to_clear,
+        )
 
     config = _apply_theme_enemy_rules(config, world, difficulty_preset)
     return config
