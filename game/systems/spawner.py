@@ -962,7 +962,13 @@ class EnemySpawner:
             self.warm_up_timer -= dt
             self.spawn_intensity = 0.0
         else:
-            self.spawn_intensity = 1.0
+            # Rampa de intensidade orgânica: de 0.1 a 1.0 em 15 segundos após o warmup.
+            # Evita o "paredão" de inimigos logo que a fase começa.
+            ramp_duration = 15.0
+            # warm_up_timer continua diminuindo (fica negativo) após o warmup.
+            ramp_elapsed = abs(self.warm_up_timer)
+            self.spawn_intensity = min(1.0, 0.1 + (ramp_elapsed / ramp_duration) * 0.9)
+            self.warm_up_timer -= dt  # Continua decrementando para a rampa funcionar
 
         # Spawn principal (ponderado ou legado)
         if self.use_weighted_spawn:

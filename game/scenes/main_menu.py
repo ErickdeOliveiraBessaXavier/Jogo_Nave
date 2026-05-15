@@ -640,7 +640,7 @@ class MainMenuScene(Scene):
         return None
 
     def _process_cheat_input(self, event: pygame.event.Event) -> None:
-        """Detecta o cheat code '271195' para ativar god mode e adicionar 9999 estrelas."""
+        """Detecta o cheat code '271195' para adicionar 9999 estrelas e desbloquear todos os mundos."""
         _CHEAT_CODE = "271195"
         _CHEAT_BUFFER_MAX = len(_CHEAT_CODE)
 
@@ -657,8 +657,9 @@ class MainMenuScene(Scene):
         if self.cheat_buffer == _CHEAT_CODE:
             self.cheat_buffer = ""
             self.app.player_profile.add_stars(9999)
+            self.app.player_profile.unlock_all_worlds()
             self.app.player_profile.save()
-            logger.info("⭐ CHEAT ATIVADO - +9999 Estrelas adicionadas e salvas!")
+            logger.info("⭐ CHEAT ATIVADO - +9999 Estrelas e todos os mundos desbloqueados!")
             sound_manager.play_sound("button_click")
 
     def handle_event(self, event: pygame.event.Event):

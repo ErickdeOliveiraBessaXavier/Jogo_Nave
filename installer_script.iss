@@ -1,7 +1,7 @@
 ; Script atualizado para Inno Setup
 [Setup]
 ; AppId único (identifica o app no Windows). Gere um novo em Tools -> Generate GUID se desejar.
-AppId={{A1B2C3D4-E5F6-4789-ABCD-EF0123456789}
+AppId={A1B2C3D4-E5F6-4789-ABCD-EF0123456789}
 AppName=Space Shooter
 AppVersion=1.0
 AppPublisher=Erick de Oliveira Bessa Xavier

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Dict, Tuple, cast
 import pygame
 
 from ..core import colors
-from ..core.assets import get_image
+from ..core.assets import BASE_DIR, get_image
 from ..core.config import config as Config
 from ..core.sprite_loader import sprite_loader
 
@@ -27,11 +27,15 @@ class ExplosiveMine:
         """Carrega os sprites da mina explosiva."""
         if cls._normal_sprite is None:
             cls._normal_sprite = get_image(
-                "game/assets/images/mines/minas_explosivas.png"
+                BASE_DIR / "assets" / "images" / "mines" / "minas_explosivas.png"
             )
         if cls._explosion_sprite is None:
             cls._explosion_sprite = get_image(
-                "game/assets/images/mines/minas_explosivas_sprite_explosão.png"
+                BASE_DIR
+                / "assets"
+                / "images"
+                / "mines"
+                / "minas_explosivas_sprite_explosao.png"
             )
 
     def __init__(self, x: float | None = None, y: float | None = None):

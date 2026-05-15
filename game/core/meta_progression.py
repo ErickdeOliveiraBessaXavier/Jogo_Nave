@@ -593,6 +593,25 @@ class PlayerProfile:
     # SISTEMA DE MUNDOS E SAVEPOINTS
     # ============================================================================
 
+    def unlock_all_worlds(self):
+        """Desbloqueia todos os 4 mundos e marca o checkpoint no último."""
+        for world_id in range(1, 5):
+            if world_id not in self.world_unlocks:
+                self.world_unlocks[world_id] = WorldUnlockStatus(
+                    world_id=world_id,
+                    is_unlocked=True,
+                    first_accessed_at=datetime.now(),
+                    checkpoint_set=True if world_id == 4 else False,
+                )
+            else:
+                self.world_unlocks[world_id].is_unlocked = True
+                if world_id == 4:
+                    self.world_unlocks[world_id].checkpoint_set = True
+
+        self.current_checkpoint_world = 4
+        self._mark_dirty()
+        logger.info("🌍 Todos os mundos foram desbloqueados via cheat!")
+
     def unlock_next_world(self, current_world_id: int | None = None):
         """Desbloqueia o próximo mundo após completar o boss final do mundo atual."""
         if current_world_id is None:

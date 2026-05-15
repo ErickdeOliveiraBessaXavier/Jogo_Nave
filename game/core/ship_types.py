@@ -177,7 +177,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
             "Charge shot: segure Alt + Espaço (ou Mouse) até 0.8s para 3× dano. "
             "Falha se soltar antes. Fire rate base -30%."
         ),
-        sprite_filename="ship_caçador.png",
+        sprite_filename="ship_cacador.png",
         unlock_cost=150,
         fire_rate_mult=0.70,
         speed_mult=1.0,

@@ -102,8 +102,8 @@ def _get_worlds() -> dict[int, WorldConfig]:
             boss_type=None,  # Bosses determinados por FIXED_LEVELS
             theme_modifiers={
                 "meteor_weight": 1.0,
-                "alien_weight": 1.5,  # Mais aliens no espaço
-                "formation_chance": 1.2,
+                "alien_weight": 1.15,  # Reduzido de 1.5 para suavizar entrada no mundo
+                "formation_chance": 1.1,
             },
         ),
         3: WorldConfig(

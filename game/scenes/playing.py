@@ -1189,7 +1189,7 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
 
     def _process_cheat_input(self, event: pygame.event.Event) -> None:
-        """Detecta o cheat code '271195' para ativar/desativar god mode."""
+        """Detecta o cheat code '271195' para ativar/desativar god mode, adicionar 9999 estrelas e desbloquear todos os mundos."""
         if not pygame.K_0 <= event.key <= pygame.K_9:
             # Se apertar uma tecla que não é número, reseta o buffer
             self.cheat_buffer = ""
@@ -1207,8 +1207,9 @@ class PlayingScene(Scene):
                 logger.info("GOD MODE ATIVADO - Invulnerabilidade ligada!")
                 self._apply_god_mode_cooldowns()
                 self.player_profile.add_stars(9999)
+                self.player_profile.unlock_all_worlds()
                 self.player_profile.save()  # Força save imediato
-                logger.info("⭐ +9999 Estrelas adicionadas e salvas!")
+                logger.info("⭐ CHEAT ATIVADO - +9999 Estrelas e todos os mundos desbloqueados!")
                 if hasattr(sound_manager, "play_powerup"):
                     sound_manager.play_powerup()  # type: ignore
             else:

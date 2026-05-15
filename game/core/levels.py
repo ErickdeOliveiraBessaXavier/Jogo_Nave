@@ -987,17 +987,18 @@ def calculate_dynamic_enemy_cap(
     world = get_world_for_level(level_number)
 
     # Bonus por mundo com teto para evitar cap excessivo em mundos procedurais.
-    world_bonus = min(world.world_id - 1, 6)
+    world_bonus = min(world.world_id - 1, 4)  # Reduzido de 6 para 4
 
-    # Bonus por progresso dentro do mundo: cresce de 0 a 2 do início ao fim
+    # Bonus por progresso dentro do mundo: cresce de 0 a 4 do início ao fim
     # Este bonus REINICIA para cada novo mundo
     stage = world.get_stage_number(level_number)
     total_stages = world.total_stages
     if total_stages > 1:
-        # Normalizar progresso 0..1 dentro do mundo e multiplicar por 2 para range 0..2
+        # Normalizar progresso 0..1 dentro do mundo e multiplicar por 4 para range 0..4
+        # (Isso torna a progressão dentro do mundo mais relevante e orgânica)
         stage_progress = (stage - 1) / (total_stages - 1)
         stage_bonus = min(
-            2, int(stage_progress * 2 + 0.5)
+            4, int(stage_progress * 4 + 0.5)
         )  # +0.5 para arredondar corretamente
     else:
         stage_bonus = 0
@@ -1621,8 +1622,9 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     1: LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            #RockGlider: 1.5,
-            StoneSentry: 1.0,
+            RockGlider: 1.5,
+            Meteor: 1.0,
+            EyeEnemy: 2.0,
         },
         enemies_to_clear=75,
         theme_name="Tutorial",
@@ -1924,6 +1926,16 @@ def get_level_config(
 
     generator = _procedural_generators[difficulty_preset]
 
+    # NOVO: Calcular Grace Multiplier de entrada no mundo (primeiros 3 estágios mais fáceis)
+    stage_number = world.get_stage_number(level_number)
+    world_entry_grace = 1.0
+    if stage_number == 1:
+        world_entry_grace = 0.70  # 30% menos inimigos no início do mundo
+    elif stage_number == 2:
+        world_entry_grace = 0.80
+    elif stage_number == 3:
+        world_entry_grace = 0.90
+
     # Forçar tema meteor_storm no procedural
     if force_meteor_storm:
         difficulty = generator.calculate_difficulty(level_number)
@@ -1935,12 +1947,21 @@ def get_level_config(
             random.Random(generator.seed * 10_000 + level_number),
         )
         config = _apply_world_theme_to_config(config, world)
+        # Aplicar grace de entrada
+        for et in config.enemy_spawn_config:
+            config.enemy_spawn_config[et] /= world_entry_grace
         config = _apply_theme_enemy_rules(config, world, difficulty_preset)
         return config
 
     # NOVO: Gerar com tema do mundo aplicado
     config = generator.generate_level(level_number)
     config = _apply_world_theme_to_config(config, world)
+
+    # Aplicar grace de entrada no spawn_config (aumenta spawn_time = menos spawn)
+    if world_entry_grace < 1.0:
+        for et in config.enemy_spawn_config:
+            config.enemy_spawn_config[et] /= world_entry_grace
+
     config = _apply_theme_enemy_rules(config, world, difficulty_preset)
     return config
 
