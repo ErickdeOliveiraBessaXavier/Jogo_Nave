@@ -1647,8 +1647,8 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         level_number=1,
         enemy_spawn_config={
             RockGlider: 1.5,
-            Meteor: 1.0,
-            EyeEnemy: 2.0,
+            # Meteor: 1.0,
+            # EyeEnemy: 2.0,
         },
         enemies_to_clear=75,
         theme_name="Tutorial",
@@ -1936,9 +1936,8 @@ def get_level_config(
         and not force_meteor_storm
     ):
         config = FIXED_LEVELS[level_number]
-        # NOVO: Aplicar tema do mundo ao nível fixo
+        # NOVO: Aplicar tema do mundo ao nível fixo (apenas UI e modifiers de score/volume, sem rules de spawn limitantes)
         config = _apply_world_theme_to_config(config, world)
-        config = _apply_theme_enemy_rules(config, world, difficulty_preset)
         # Aplicar modificadores do preset aos níveis fixos também
         config = _apply_difficulty_to_fixed_level(config, difficulty_preset)
         # Aplicar grace de entrada de mundo também em fixed levels.
