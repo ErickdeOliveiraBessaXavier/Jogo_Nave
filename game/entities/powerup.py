@@ -77,18 +77,18 @@ class PowerUp:
 
         text_map = {
             "life": "[+]",
-            "shield": "[S]",
-            "double_shot": "[2X]",
-            "speed": "[V]",
-            "score": "[x1.5]",
-            "piercing_shot": "[P]",
-            "mini_ships": "[M]",
-            "rainbow": "[ALL]",
+            "shield": "[SHLD]",
+            "double_shot": "[DS]",
+            "speed": "[SPD]",
+            "score": "[SCR]",
+            "piercing_shot": "[PS]",
+            "mini_ships": "[MS]",
+            "rainbow": "[?]",
             "cooldown_haste": "[CD]",
             "time_stop": "[STOP]",
             "damage_boost": "[DMG]",
-            "chain_shot": "[⚡]",
-            "repulsion_shield": "[🛡️]",
+            "chain_shot": "[CS]",
+            "repulsion_shield": "[RS]",
         }
 
         # Aplicar tremor visual e calcular o retângulo pulsante compartilhado
