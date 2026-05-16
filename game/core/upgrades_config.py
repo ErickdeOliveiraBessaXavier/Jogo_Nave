@@ -47,6 +47,9 @@ HOMING_FIRE_RATE_PENALTY: float = (
 )
 HOMING_DAMAGE_MULTIPLIER: float = 1.5  # Tiros teleguiados causam 50% mais dano direto
 
+# Parâmetros de balanceamento do Laser Shot
+LASER_SHOT_DAMAGE: int = 80  # Dano do laser disparado pelas orbes
+
 # Parâmetros de balanceamento do Tiro Explosivo
 EXPLOSIVE_BULLET_DAMAGE: int = 30  # Dano aplicado a cada inimigo na área
 EXPLOSIVE_BULLET_RADIUS: int = 60  # Raio da explosão em pixels

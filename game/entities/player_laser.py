@@ -14,7 +14,7 @@ from typing import (
 
 import pygame
 
-from ..core import colors
+from ..core import colors, upgrades_config
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
@@ -51,7 +51,7 @@ class PlayerLaser:
     """Laser disparado pelo jogador que atravessa múltiplos inimigos."""
 
     # Gameplay
-    DAMAGE: Final[int] = 40
+    DAMAGE: Final[int] = upgrades_config.LASER_SHOT_DAMAGE
     MAX_WIDTH: Final[int] = 10
     LIFETIME: Final[float] = 0.8
 
