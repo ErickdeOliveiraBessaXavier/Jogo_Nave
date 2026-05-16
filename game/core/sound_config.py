@@ -69,9 +69,9 @@ class SoundCategory(Enum):
 VOLUME_CONFIG: Dict[str, float] = {
     "master": 0.8,  # Multiplicador global (não exposto na UI)
     "music": 0.75,  # Música de background
-    "sfx": 0.5,  # Efeitos sonoros
+    "sfx": 0.3,  # Efeitos sonoros
     "shots": 0.2,  # Tiros (canal separado)
-    "boss_music": 0.7,  # Multiplicador da música de boss sobre "music"
+    "boss_music": 0.8,  # Multiplicador da música de boss sobre "music"
 }
 
 # Configurações de canais
@@ -98,6 +98,10 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "music/Event_Horizon_Pulse.mp3",
             "music/Rising_From_Restraint_War.mp3",
             "music/Rising_From_Restraint.mp3",
+            "music/Cloud_Peak_Circuit.mp3",
+            "music/Cloud_Pass_Relay.mp3",
+            "music/Cloud_Peak_Circuit_Intenso.mp3",
+            "music/Twelve_Alarms_Musica_Cordilheira.mp3"
         ],
         "boss": "music/boss.mp3",
         "menu": "music/menu-music.mp3",

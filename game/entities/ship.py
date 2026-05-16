@@ -1382,6 +1382,34 @@ class Ship:
             pygame.draw.circle(glow_surf, (200, 255, 255, 40), (glow_r, glow_r), glow_r)
             surface.blit(glow_surf, (cx - glow_r, cy - glow_r))
 
+        # Chain Shot (Efeito Estático/Elétrico)
+        if self.has_chain_shot:
+            # Pegar centro e dimensões do sprite
+            sprite_w, sprite_h = self._get_rendered_sprite_size()
+            cx, cy = int(self.x + sprite_w / 2), int(self.y + sprite_h / 2)
+            radius = max(sprite_w, sprite_h) // 2 + 5
+            
+            # Gerar pequenos arcos elétricos aleatórios
+            # Apenas em alguns frames para efeito de flickering (estático)
+            if random.random() < 0.8:
+                num_arcs = random.randint(2, 4)
+                for _ in range(num_arcs):
+                    # Ângulo inicial e final do arco
+                    angle1 = random.uniform(0, math.tau)
+                    angle2 = angle1 + random.uniform(0.2, 0.8)
+                    
+                    # Pontos do arco
+                    p1 = (cx + math.cos(angle1) * radius, cy + math.sin(angle1) * radius)
+                    # Ponto intermediário com "jitter" para parecer eletricidade
+                    mid_angle = (angle1 + angle2) / 2
+                    mid_radius = radius + random.uniform(2, 8)
+                    p_mid = (cx + math.cos(mid_angle) * mid_radius, cy + math.sin(mid_angle) * mid_radius)
+                    p2 = (cx + math.cos(angle2) * radius, cy + math.sin(angle2) * radius)
+                    
+                    # Cor ciano/branco
+                    spark_color = random.choice([(100, 200, 255), (200, 255, 255), (255, 255, 255)])
+                    pygame.draw.lines(surface, spark_color, False, [p1, p_mid, p2], 1)
+
         # Rastros de Vento Constante (Omnidirecional)
         for s in self.repulsion_wind_streaks:
             start_x = s["cx"] + math.cos(s["angle"]) * s["dist"]

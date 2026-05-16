@@ -79,7 +79,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         display_name="Magneto",
         description="Atrai estrelas/powerups e possui um laser carregado (Alt + Espaço ou Mouse) devastador.",
         sprite_filename="ship_magnetico.png",
-        unlock_cost=50,
+        unlock_cost=25,
         pickup_radius_mult=2.5,
         speed_mult=1.0,
         agility_mult=1.3,  # Coleta exige alcançar drops rapidamente
@@ -95,7 +95,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         display_name="Estilete",
         description="Atira 60% mais rápido, mas cada tiro causa 35% menos dano.",
         sprite_filename="ship_estilete.png",
-        unlock_cost=30,
+        unlock_cost=40,
         fire_rate_mult=1.60,
         damage_mult=0.65,
         speed_mult=1.2,  # Mais rápida que a padrão
@@ -109,7 +109,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         display_name="Aríete",
         description=("Dano +80% e +1 vida, mas é 30% mais lenta e atira 25% menos."),
         sprite_filename="ship_ariete.png",
-        unlock_cost=60,
+        unlock_cost=55,
         fire_rate_mult=0.75,
         damage_mult=1.80,
         speed_mult=0.70,
@@ -127,7 +127,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
             "Velocidade -15% pelo peso do cofre."
         ),
         sprite_filename="ship_cofre.png",
-        unlock_cost=80,
+        unlock_cost=70,
         speed_mult=0.85,
         agility_mult=0.9,  # Pesada pelo carregamento
         thruster_intensity_mult=0.75,
@@ -143,7 +143,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
             "-1 vida e dano -20%."
         ),
         sprite_filename="ship_fantasma.png",
-        unlock_cost=100,
+        unlock_cost=80,
         damage_mult=0.80,
         speed_mult=1.1,
         agility_mult=1.5,  # Muito ágil para compensar fragilidade
@@ -161,7 +161,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
             "1 mini-nave permanente orbitando. Tiros principais causam 15% menos dano."
         ),
         sprite_filename="ship_engenheiro.png",
-        unlock_cost=120,
+        unlock_cost=90,
         damage_mult=0.85,
         speed_mult=1.0,
         agility_mult=1.05,  # Mini-nave cobre área; jogador pode ser mais conservador
@@ -178,7 +178,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
             "Falha se soltar antes. Fire rate base -30%."
         ),
         sprite_filename="ship_cacador.png",
-        unlock_cost=150,
+        unlock_cost=100,
         fire_rate_mult=0.70,
         speed_mult=1.0,
         agility_mult=1.0,  # Charge shot exige posicionamento deliberado, não reflexo
@@ -197,7 +197,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
             "Reset ao ser atingida. Stats base -10%."
         ),
         sprite_filename="ship_reveberador.png",
-        unlock_cost=200,
+        unlock_cost=100,
         fire_rate_mult=0.90,
         damage_mult=0.90,
         speed_mult=0.90,

@@ -172,7 +172,7 @@ class UpgradesSelectionScene(Scene):
         self.layout.right_area = pygame.Rect(sw - rw, 0, rw, sh)
 
         # --- ARSENAL (Esquerda) ---
-        # Slots Ativos em grid 4×3 (12 slots), com tamanho de célula idêntico aos
+        # Slots Ativos em grid 4×2 (8 slots), com tamanho de célula idêntico aos
         # demais grids (Estoque/Hangar também usam 4 colunas).
         cols_slots = 4
         size_slots = (lw - self.MARGIN * 2 - (cols_slots - 1) * self.GAP) // cols_slots
@@ -1098,25 +1098,57 @@ class UpgradesSelectionScene(Scene):
         if self.hovered_upgrade is None:
             return
         pos, upg = pygame.mouse.get_pos(), self.hovered_upgrade
-        w, h = 260, 100
+        
+        # Largura fixa, altura dinâmica
+        w = 280
+        padding = 12
+        line_height = 20
+        
+        # Quebrar o texto em linhas antes de calcular a altura
+        wrapped_lines = self._wrap_text(upg.desc, self.small_font, w - (padding * 2))
+        
+        # Calcular altura necessária: Top + Nome + Gap + Linhas + Bottom
+        # 10 (top) + 24 (nome) + 10 (gap) + (linhas * height) + 10 (bottom)
+        h = 10 + 24 + 10 + (len(wrapped_lines) * line_height) + 10
+        
         x, y = pos[0] + 20, pos[1] + 20
+        
+        # Ajustar posição para não sair da tela
         if y + h > surface.get_height():
-            y = pos[1] - h - 20
+            y = pos[1] - h - 10
         if x + w > surface.get_width():
-            x = pos[0] - w - 20
-        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+            x = pos[0] - w - 10
+            
+        # Garantir que não saia pelo topo ou esquerda
+        x = max(10, x)
+        y = max(10, y)
+
+        # Criar superfície do tooltip
+        tooltip_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        
+        # Fundo e borda
         pygame.draw.rect(
-            surf, (20, 20, 30, 240), surf.get_rect(), border_radius=self.RADIUS
+            tooltip_surf, (15, 15, 25, 245), tooltip_surf.get_rect(), border_radius=10
         )
         pygame.draw.rect(
-            surf, (255, 255, 255, 220), surf.get_rect(), 2, border_radius=self.RADIUS
+            tooltip_surf, (200, 200, 220, 200), tooltip_surf.get_rect(), 1, border_radius=10
         )
-        surf.blit(self.item_font.render(upg.name, True, colors.YELLOW), (10, 10))
-        dy = 40
-        for line in self._wrap_text(upg.desc, self.small_font, w - 20)[:2]:
-            surf.blit(self.small_font.render(line, True, colors.WHITE), (10, dy))
-            dy += 18
-        surface.blit(surf, (x, y))
+        
+        # Nome do upgrade
+        name_surf = self.item_font.render(upg.name, True, colors.YELLOW)
+        tooltip_surf.blit(name_surf, (padding, 10))
+        
+        # Linha separadora sutil
+        pygame.draw.line(tooltip_surf, (60, 60, 80), (padding, 38), (w - padding, 38), 1)
+        
+        # Descrição (todas as linhas)
+        dy = 48
+        for line in wrapped_lines:
+            line_surf = self.small_font.render(line, True, colors.WHITE)
+            tooltip_surf.blit(line_surf, (padding, dy))
+            dy += line_height
+            
+        surface.blit(tooltip_surf, (x, y))
 
     def _wrap_text(self, text: str, font: pygame.font.Font, max_w: int) -> list[str]:
         words: list[str] = text.split(" ")

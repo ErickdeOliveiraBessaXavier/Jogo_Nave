@@ -8,6 +8,6 @@
   "sfx_volume": 0.5,
   "shot_volume": 0.2,
   "mouse_control": true,
-  "auto_fire": false,
+  "auto_fire": true,
   "show_controls_modal": false
 }
