@@ -85,7 +85,11 @@ class GolemMine:
 
     FUSE_TIME = 5.0
     LAND_SPEED = 900.0
-    RADIUS = 12
+    RADIUS = 12  # Escala visual da cruz central e do arco do fuse.
+    # Hitbox maior que o RADIUS visual: o halo vermelho pulsante se estende
+    # além da cruz, então o tiro do jogador (e o contato com a nave) alcança
+    # essa área. Mantém o desenho no RADIUS original.
+    HIT_RADIUS = 20
     EXPL_SHARDS = 14
 
     _COLOR_BODY = (200, 40, 40)
@@ -107,10 +111,10 @@ class GolemMine:
         self._tick_timer: float = 0.0
 
         self.rect = pygame.Rect(
-            int(self.x - self.RADIUS),
-            int(self.y - self.RADIUS),
-            self.RADIUS * 2,
-            self.RADIUS * 2,
+            int(self.x - self.HIT_RADIUS),
+            int(self.y - self.HIT_RADIUS),
+            self.HIT_RADIUS * 2,
+            self.HIT_RADIUS * 2,
         )
 
         # Pré-alocação de superfícies
@@ -144,7 +148,7 @@ class GolemMine:
         return 50
 
     def collision_circle(self) -> tuple[float, float, float]:
-        return self.x, self.y, float(self.RADIUS)
+        return self.x, self.y, float(self.HIT_RADIUS)
 
     def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
@@ -217,8 +221,8 @@ class GolemMine:
                     )
                 self.dead = True
 
-        self.rect.x = int(self.x - self.RADIUS)
-        self.rect.y = int(self.y - self.RADIUS)
+        self.rect.x = int(self.x - self.HIT_RADIUS)
+        self.rect.y = int(self.y - self.HIT_RADIUS)
         return spawned
 
     def draw(self, surface: pygame.Surface) -> None:
@@ -309,11 +313,15 @@ class AttackDebris:
         self._angle = angle_deg
         self._spin = random.uniform(-220, 220)
 
+        # Hitbox dimensionada pela rocha sólida desenhada (~size de largura),
+        # não pelo halo de glow externo. Half-extent = size//2 para acompanhar
+        # exatamente o quadrado opaco visível.
+        self._hit_half = max(1, self.size // 2)
         self.rect = pygame.Rect(
-            int(self.x - self.size),
-            int(self.y - self.size),
-            self.size * 2,
-            self.size * 2,
+            int(self.x - self._hit_half),
+            int(self.y - self._hit_half),
+            self._hit_half * 2,
+            self._hit_half * 2,
         )
 
         s = self.size // 2
@@ -329,8 +337,8 @@ class AttackDebris:
         self.x += self.vx * dt
         self.y += self.vy * dt
         self._angle += self._spin * dt
-        self.rect.x = int(self.x - self.size)
-        self.rect.y = int(self.y - self.size)
+        self.rect.x = int(self.x - self._hit_half)
+        self.rect.y = int(self.y - self._hit_half)
 
         margin = 40
         if (
@@ -351,7 +359,9 @@ class AttackDebris:
         pygame.draw.rect(surface, core, (cx - s // 2, cy - s // 2, s, s))
 
     def collision_circle(self) -> tuple[float, float, float]:
-        return self.x, self.y, float(self.size)
+        # Raio = metade da largura visível da rocha sólida (size//2), não o
+        # raio do halo de glow que se estende até size*2.
+        return self.x, self.y, float(self._hit_half)
 
     def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
@@ -427,8 +437,16 @@ class OrbitalDebris:
         self._fire_perp_decay = 3.5
         self._fire_gravity = getattr(Config, "GOLEM_DEBRIS_GRAVITY", 30)
 
-        hit = S * self._size
-        self.rect = pygame.Rect(int(self.x) - hit, int(self.y) - hit, hit * 2, hit * 2)
+        # Half-extent baseado na largura visível da rocha (size*S), não no
+        # canvas inflado (size+2)*S. Usado tanto para rect quanto para o raio
+        # de colisão, garantindo que a hitbox case com o sprite.
+        self._hit_half = max(1, (S * self._size) // 2)
+        self.rect = pygame.Rect(
+            int(self.x) - self._hit_half,
+            int(self.y) - self._hit_half,
+            self._hit_half * 2,
+            self._hit_half * 2,
+        )
 
         canvas_size = (self._size + 2) * S * 2
         self._rock_surf = pygame.Surface((canvas_size, canvas_size), pygame.SRCALPHA)
@@ -507,8 +525,8 @@ class OrbitalDebris:
         for t in self.trail:
             t[2] -= self.TRAIL_FADE_SPEED * dt
         self.trail = [t for t in self.trail if t[2] > 0]
-        hit = self._S * self._size
-        self.rect.x, self.rect.y = int(self.x) - hit, int(self.y) - hit
+        self.rect.x = int(self.x) - self._hit_half
+        self.rect.y = int(self.y) - self._hit_half
 
     @property
     def causes_damage(self) -> bool:
@@ -539,7 +557,8 @@ class OrbitalDebris:
         surface.blit(rotated, (int(self.x) - rw // 2, int(self.y) - rh // 2))
 
     def collision_circle(self) -> tuple[float, float, float]:
-        return self.x, self.y, float(self._S * self._size)
+        # Raio = metade da largura da rocha (size*S/2), não size*S inteiro.
+        return self.x, self.y, float(self._hit_half)
 
     def on_hit(self, _damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems.hit_result import NO_HIT
@@ -603,8 +622,15 @@ class EmergeDebris:
         self._screen_w = getattr(Config, "SCREEN_WIDTH", 480)
         self._screen_h = getattr(Config, "SCREEN_HEIGHT", 800)
 
-        hit = S * self.rock_size
-        self.rect = pygame.Rect(int(self.x) - hit, int(self.y) - hit, hit * 2, hit * 2)
+        # Half-extent baseado na largura visível da rocha (size*S), espelhando
+        # o mesmo cálculo de OrbitalDebris para hitbox coerente com o sprite.
+        self._hit_half = max(1, (S * self.rock_size) // 2)
+        self.rect = pygame.Rect(
+            int(self.x) - self._hit_half,
+            int(self.y) - self._hit_half,
+            self._hit_half * 2,
+            self._hit_half * 2,
+        )
 
         canvas_size = (self.rock_size + 2) * S * 2
         self._rock_surf = pygame.Surface((canvas_size, canvas_size), pygame.SRCALPHA)
@@ -636,8 +662,8 @@ class EmergeDebris:
             t[2] -= self.TRAIL_FADE_SPEED * dt
         self.trail = [t for t in self.trail if t[2] > 0]
 
-        hit = self.S * self.rock_size
-        self.rect.x, self.rect.y = int(self.x) - hit, int(self.y) - hit
+        self.rect.x = int(self.x) - self._hit_half
+        self.rect.y = int(self.y) - self._hit_half
 
         if (
             self.y > self._screen_h + 100
@@ -667,7 +693,8 @@ class EmergeDebris:
         surface.blit(rotated, (int(self.x) - rw // 2, int(self.y) - rh // 2))
 
     def collision_circle(self) -> tuple[float, float, float]:
-        return self.x, self.y, float(self.S * self.rock_size)
+        # Raio = metade da largura da rocha (size*S/2), consistente com a rect.
+        return self.x, self.y, float(self._hit_half)
 
     def on_hit(self, _damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems.hit_result import NO_HIT
@@ -765,6 +792,12 @@ class StoneGolemBoss:
 
     SCALE = 10
     MAX_CHARGE_PARTICLES = 100
+
+    # Frações de HP que disparam mudanças de fase.
+    # Half phase: boss afunda e invoca minas/bots auxiliares.
+    # Third phase: segunda submersão + entra em rage (movimento e ataques acelerados).
+    HALF_PHASE_HP_FRACTION: Final = 0.75
+    THIRD_PHASE_HP_FRACTION: Final = 0.35
 
     MUSIC_STATE: Final = MusicState.STONE_GOLEM_BOSS
 
@@ -1190,13 +1223,15 @@ class StoneGolemBoss:
 
     @property
     def _rage_mult(self) -> float:
-        """Multiplicador ativo abaixo de 30% de HP: velocidade de movimento e scan."""
-        return 1.5 if self.health <= self.max_health * 0.3 else 1.0
+        """Multiplicador de velocidade ativo a partir da third phase (rage)."""
+        threshold = self.max_health * self.THIRD_PHASE_HP_FRACTION
+        return 1.5 if self.health <= threshold else 1.0
 
     @property
     def _attack_spd(self) -> float:
         """difficulty_multiplier × 1.25x rage — aplicado nas durações dos estados de ataque."""
-        rage = 1.25 if self.health <= self.max_health * 0.3 else 1.0
+        threshold = self.max_health * self.THIRD_PHASE_HP_FRACTION
+        rage = 1.25 if self.health <= threshold else 1.0
         return self.difficulty_multiplier * rage
 
     @property
@@ -1262,7 +1297,9 @@ class StoneGolemBoss:
 
         self._update_sentry_spawn(dt, entity_manager)
 
-        self.rect.x, self.rect.y = int(self.x), int(self.y)
+        # Rect acompanha o float vertical para casar com a posição desenhada.
+        self.rect.x = int(self.x)
+        self.rect.y = int(self.y + self._current_float_y)
         self._entity_manager = None
         return new_mines, new_shards, self._orbital_debris
 
@@ -1946,8 +1983,8 @@ class StoneGolemBoss:
         if self.dead:
             return
 
-        half_health = self.max_health * 0.5
-        third_health = self.max_health * 0.3
+        half_health = self.max_health * self.HALF_PHASE_HP_FRACTION
+        third_health = self.max_health * self.THIRD_PHASE_HP_FRACTION
         prev_health = self.health
         self.health -= amount
         if self.health <= 0:
@@ -1969,7 +2006,13 @@ class StoneGolemBoss:
             self._third_phase_pending = True
 
     def collision_circle(self) -> tuple[float, float, float]:
-        return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
+        # Centro acompanha o float vertical do boss (mesmo offset usado pelo
+        # draw). Raio usa min(w, h)/2 — círculo inscrito no bounding box, mais
+        # próximo da silhueta em diamante do golem. max(w,h)/2 inflava os
+        # cantos da rect que ficam transparentes no sprite.
+        cx = self.x + self.w / 2
+        cy = self.y + self.h / 2 + self._current_float_y
+        return cx, cy, min(self.w, self.h) / 2
 
     def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
