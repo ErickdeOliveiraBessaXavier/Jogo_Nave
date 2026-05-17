@@ -14,6 +14,10 @@ class DifficultySettingsDict(TypedDict):
     player_damage_multiplier: float
     lives: int
     rewards_multiplier: float
+    # Multiplica a frequência de power-ups. >1 = mais frequente (Casual),
+    # <1 = mais raro (Hardcore/Pesadelo). Aplicado dividindo o intervalo
+    # base, análogo ao spawn_rate_multiplier de inimigos.
+    powerup_spawn_rate_multiplier: float
     special_rules: NotRequired[list[str]]  # Regras especiais opcionais (ex.: "permadeath")
 
 
@@ -39,6 +43,7 @@ class DifficultySettings:
             "player_damage_multiplier": 1.3,  # Jogador mais forte
             "lives": 5,  # Mais vidas
             "rewards_multiplier": 0.8,  # Menos recompensas
+            "powerup_spawn_rate_multiplier": 1.3,  # Power-ups mais frequentes
         },
         DifficultyPreset.NORMAL: {
             "name": "Normal",
@@ -49,6 +54,7 @@ class DifficultySettings:
             "player_damage_multiplier": 1.0,
             "lives": 3,
             "rewards_multiplier": 1.0,
+            "powerup_spawn_rate_multiplier": 1.0,
         },
         DifficultyPreset.HARDCORE: {
             "name": "Hardcore",
@@ -59,6 +65,7 @@ class DifficultySettings:
             "player_damage_multiplier": 0.9,
             "lives": 2,
             "rewards_multiplier": 1.5,
+            "powerup_spawn_rate_multiplier": 0.7,  # ~43% mais raros
         },
         DifficultyPreset.NIGHTMARE: {
             "name": "Pesadelo",
@@ -69,6 +76,7 @@ class DifficultySettings:
             "player_damage_multiplier": 0.8,
             "lives": 1,  # Permadeath!
             "rewards_multiplier": 3.0,  # Alta recompensa, alto risco
+            "powerup_spawn_rate_multiplier": 0.5,  # 2x mais raros
             "special_rules": ["permadeath"],
         },
     }

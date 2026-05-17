@@ -182,6 +182,20 @@ class WorldUnlockStatus:
     checkpoint_set: bool = False
 
 
+@dataclass
+class HighScoreEntry:
+    """Entrada no Hall da Fama (top 10 arcade)."""
+
+    initials: str
+    score: int
+    level_reached: int
+    difficulty: str  # DifficultyPreset.value
+    achieved_at: datetime
+
+
+MAX_HIGH_SCORES = 10
+
+
 class PerformanceAnalyzer:
     """Analisa padrões de performance e sugere ajustes."""
 
@@ -551,6 +565,9 @@ class PlayerProfile:
         self.unlocked_ships: set[str] = {DEFAULT_SHIP_ID}
         self.selected_ship: str = DEFAULT_SHIP_ID
 
+        # Hall da Fama: lista global ordenada desc por score (top 10).
+        self.high_scores: List[HighScoreEntry] = []
+
         # Teclas para ativar aprimoramentos (1-9), limitadas por UPGRADE_SLOT_COUNT
         default_keys: list[int] = [
             pygame.K_1,
@@ -666,16 +683,16 @@ class PlayerProfile:
             logger.info("🌍 Checkpoint definido no Mundo %s!", world_config.world_id)
 
     def reset_to_checkpoint(self) -> int:
-        """Jogador perdeu: retorna nível inicial do mundo checkpoint atual."""
+        """Jogador perdeu: retorna nível inicial do mundo checkpoint atual.
+
+        Não toca em ``current_session`` — mortes e score já foram registrados
+        por ``record_death`` no caller. Mexer aqui causaria contagem dupla de
+        mortes e descartaria o score da run.
+        """
         from .world_config import get_world_for_level_by_id
 
         checkpoint_world = get_world_for_level_by_id(self.current_checkpoint_world)
         if checkpoint_world:
-            # Resetar score da sessão atual
-            if self.current_session:
-                self.current_session.score = 0
-                self.current_session.deaths += 1
-
             logger.info(
                 "💀 Reset para checkpoint: Mundo %s, Nível %s",
                 checkpoint_world.world_id,
@@ -835,6 +852,59 @@ class PlayerProfile:
         """Retorna o ShipProfile correspondente à nave selecionada."""
         return get_ship_profile(self.selected_ship)
 
+    # ------------------------------------------------------------------
+    # SISTEMA DE HIGH SCORES
+    # ------------------------------------------------------------------
+
+    def qualifies_for_high_score(self, score: int) -> bool:
+        """True se ``score`` entra no top 10. Score <= 0 nunca qualifica."""
+        if score <= 0:
+            return False
+        if len(self.high_scores) < MAX_HIGH_SCORES:
+            return True
+        return score > self.high_scores[-1].score
+
+    def submit_high_score(self, entry: HighScoreEntry) -> int:
+        """Insere ``entry`` mantendo ordem desc por score (FIFO em empates) e
+        recorta para os ``MAX_HIGH_SCORES`` melhores.
+
+        Returns:
+            Posição final 0-indexed, ou -1 se foi cortado fora do top.
+        """
+        self.high_scores.append(entry)
+        self.high_scores.sort(key=lambda e: (-e.score, e.achieved_at))
+        del self.high_scores[MAX_HIGH_SCORES:]
+        self._mark_dirty()
+        try:
+            return self.high_scores.index(entry)
+        except ValueError:
+            return -1
+
+    def get_predicted_rank(self, score: int) -> int:
+        """Retorna a posição 1-indexed onde o score ficaria no top 10."""
+        if score <= 0:
+            return -1
+        # Simular inserção (considerando FIFO em empates por data)
+        temp_list = list(self.high_scores)
+        dummy_entry = HighScoreEntry(
+            initials="???",
+            score=score,
+            level_reached=1,
+            difficulty="normal",
+            achieved_at=datetime.now(),
+        )
+        temp_list.append(dummy_entry)
+        temp_list.sort(key=lambda e: (-e.score, e.achieved_at))
+        try:
+            rank = temp_list.index(dummy_entry) + 1
+            return rank if rank <= MAX_HIGH_SCORES else -1
+        except ValueError:
+            return -1
+
+    def get_high_scores(self) -> List[HighScoreEntry]:
+        """Cópia defensiva da lista (já ordenada desc por score)."""
+        return list(self.high_scores)
+
     def start_session(self):
         """Inicia uma nova sessão de jogo."""
         self.current_session = SessionStats(start_time=datetime.now())
@@ -942,18 +1012,35 @@ class PlayerProfile:
         if level_number % 5 == 0:
             self.save()
 
-    def record_death(self, level_number: int, cause: str = "unknown"):
-        """Registra morte em um nível."""
+    def record_death(
+        self, level_number: int, cause: str = "unknown", score: int = 0
+    ):
+        """Registra morte em um nível.
+
+        Se ``score`` > 0, persiste o ganho da fase incompleta nos agregadores
+        (usado no game over para capturar o progresso da fase em que o jogador
+        morreu, já que ``record_clear`` não roda nesse caso). Para perdas de
+        vida sem game over, mantenha ``score=0`` — o ganho do nível será
+        persistido por ``record_clear`` quando a fase for concluída.
+        """
         stats = self.level_stats[level_number]
         stats.deaths += 1
         stats.current_win_streak = 0  # Reset streak
         self.total_deaths += 1
+
+        if score > 0:
+            stats.total_score += score
+            stats.best_score = max(stats.best_score, score)
+            self.total_score += score
+            if self.current_session:
+                self.current_session.score += score
 
         # Histórico recente
         attempt_data: Dict[str, Any] = {
             "timestamp": datetime.now().isoformat(),
             "cleared": False,
             "cause": cause,
+            "score": score,
         }
         stats.recent_attempts.append(attempt_data)
 
@@ -1154,6 +1241,40 @@ class PlayerProfile:
 
                 if get_world_for_level_by_id(self.current_checkpoint_world) is None:
                     self.current_checkpoint_world = 1
+
+                # Hall da Fama (top 10 high scores)
+                self.high_scores = []
+                hs_raw = data.get("high_scores", [])
+                if isinstance(hs_raw, list):
+                    valid_hs: List[HighScoreEntry] = []
+                    valid_difficulties = {p.value for p in DifficultyPreset}
+                    for entry_raw in cast(List[Any], hs_raw):
+                        if not isinstance(entry_raw, dict):
+                            continue
+                        entry_dict = cast(Dict[str, Any], entry_raw)
+                        try:
+                            diff = str(entry_dict.get("difficulty", "normal"))
+                            if diff not in valid_difficulties:
+                                diff = "normal"
+                            valid_hs.append(
+                                HighScoreEntry(
+                                    initials=str(entry_dict["initials"])[:3].upper(),
+                                    score=int(entry_dict["score"]),
+                                    level_reached=int(
+                                        entry_dict.get("level_reached", 1)
+                                    ),
+                                    difficulty=diff,
+                                    achieved_at=datetime.fromisoformat(
+                                        entry_dict["achieved_at"]
+                                    ),
+                                )
+                            )
+                        except (KeyError, ValueError, TypeError):
+                            logger.warning("Pulando entrada corrupta de high_score")
+                            continue
+                    valid_hs.sort(key=lambda e: (-e.score, e.achieved_at))
+                    del valid_hs[MAX_HIGH_SCORES:]
+                    self.high_scores = valid_hs
 
                 # Timestamps
                 if "profile_created" in data and isinstance(
@@ -1486,6 +1607,16 @@ class PlayerProfile:
                 for world_id, status in self.world_unlocks.items()
             },
             "current_checkpoint_world": self.current_checkpoint_world,
+            "high_scores": [
+                {
+                    "initials": e.initials,
+                    "score": e.score,
+                    "level_reached": e.level_reached,
+                    "difficulty": e.difficulty,
+                    "achieved_at": e.achieved_at.isoformat(),
+                }
+                for e in self.high_scores
+            ],
         }
         return data
 
@@ -1582,6 +1713,9 @@ class PlayerProfile:
         # Resetar naves
         self.unlocked_ships = {DEFAULT_SHIP_ID}
         self.selected_ship = DEFAULT_SHIP_ID
+
+        # Resetar Hall da Fama
+        self.high_scores = []
 
         self.profile_created = datetime.now()
         self.last_played = None

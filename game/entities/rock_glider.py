@@ -23,8 +23,6 @@ class RockGlider(Meteor):
 
     ROCK_MAX_HP = 20
     BOT_MAX_HP = 10
-    ROCK_MAX_HP_HARD = 24
-    BOT_MAX_HP_HARD = 16
     ROCK_SCORE_SHARE = 0.58
     # Mesma paleta de terra usada pelos fragmentos de entrada do StoneGolemBoss.
     STONE_FRAGMENT_COLORS = [

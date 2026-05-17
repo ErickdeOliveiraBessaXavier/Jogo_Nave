@@ -1655,7 +1655,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         # boss_type=Boss,
         score_multiplier=1.0,
     ),
-    # Nível 3: Primeiro Boss - Stone Golem (Montanhas)
+    # Nível 3: Primeiro Boss - Mountain Serpent (Montanhas)
     3: LevelConfig(
         level_number=3,
         enemy_spawn_config={
@@ -1664,12 +1664,12 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             StoneSentry: 18.0,
         },
         enemies_to_clear=250,
-        boss_type=StoneGolemBoss,
+        boss_type=MountainSerpentBoss,
         mines_enabled=True,
-        theme_name="Chefe do Golem de Pedra",
+        theme_name="Boss da Serpente de Pedra",
         score_multiplier=1.2,
     ),
-    # Nível 6: Segundo Boss - Mountain Serpent
+    # Nível 6: Segundo Boss - Cloud Archmage
     6: LevelConfig(
         level_number=6,
         enemy_spawn_config={
@@ -1678,12 +1678,12 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             MountainMage: 10.0,
         },
         enemies_to_clear=300,
-        boss_type=MountainSerpentBoss,
+        boss_type=CloudArchmageBoss,
         mines_enabled=True,
-        theme_name="Boss da Serpente de Pedra",
+        theme_name="O Arquimago das Nuvens",
         score_multiplier=1.3,
     ),
-    # Nível 10: Terceiro Boss - Cloud Archmage (Final do Mundo 1)
+    # Nível 10: Terceiro Boss - Stone Golem (Final do Mundo 1)
     10: LevelConfig(
         level_number=10,
         enemy_spawn_config={
@@ -1692,9 +1692,9 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             MountainPropeller: 10.0,
         },
         enemies_to_clear=350,
-        boss_type=CloudArchmageBoss,
+        boss_type=StoneGolemBoss,
         mines_enabled=True,
-        theme_name="O Arquimago das Nuvens",
+        theme_name="Chefe do Golem de Pedra",
         score_multiplier=1.5,
     ),
     # Vazio Sideral - 4 Bosses

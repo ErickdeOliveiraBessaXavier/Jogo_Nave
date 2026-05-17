@@ -3,12 +3,17 @@ from .difficulty import DifficultyPreset
 
 
 def get_powerup_weights(difficulty: DifficultyPreset) -> dict[PowerUpType, int]:
+    """Retorna pesos relativos de power-ups (qual aparece quando um spawn ocorre).
+
+    A frequência de spawn (intervalo entre power-ups) é controlada
+    separadamente em ``PowerUpSpawner`` via ``powerup_spawn_rate_multiplier``
+    do preset. Aqui só controlamos a distribuição entre tipos quando um
+    spawn já foi decidido — escalar todos os pesos pelo mesmo fator não
+    muda a distribuição relativa (``random.choices`` normaliza), então
+    isso é deixado igual entre dificuldades por enquanto.
     """
-    Retorna pesos de power-ups ajustados pela dificuldade.
-    Em dificuldades mais altas, power-ups ficam mais raros (pesos menores).
-    """
-    # Pesos base (de Config.POWERUP_WEIGHTS, multiplicados por 10)
-    base_weights = {
+    del difficulty  # Reservado para futura modulação de distribuição.
+    return {
         PowerUpType.SHIELD: 150,
         PowerUpType.DOUBLE_SHOT: 200,
         PowerUpType.SPEED: 150,
@@ -23,14 +28,3 @@ def get_powerup_weights(difficulty: DifficultyPreset) -> dict[PowerUpType, int]:
         PowerUpType.CHAIN_SHOT: 60,
         PowerUpType.REPULSION_SHIELD: 60,
     }
-
-    # Multiplicadores para raridade por dificuldade
-    rarity_multiplier = {
-        DifficultyPreset.CASUAL: 1.2,  # Mais comuns (20% a mais)
-        DifficultyPreset.NORMAL: 1.0,  # Padrão
-        DifficultyPreset.HARDCORE: 0.7,  # Menos comuns (30% a menos)
-        DifficultyPreset.NIGHTMARE: 0.5,  # Muito raros (50% a menos)
-    }.get(difficulty, 1.0)
-
-    # Aplica multiplicador e converte para int
-    return {k: max(1, int(v * rarity_multiplier)) for k, v in base_weights.items()}

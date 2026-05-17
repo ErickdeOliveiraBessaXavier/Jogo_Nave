@@ -146,6 +146,7 @@ class PlayingScene(Scene):
         self.state: GameState = GameState.PREPARING
         self.preparation_time_left: float = Config.PREPARATION_TIME
         self.level_start_time: Optional[float] = None
+        self.level_start_score: int = 0
         self.level_damage_taken: int = 0
         self.level_powerups_collected: int = 0
         self.level_attempt_recorded: bool = False
@@ -252,6 +253,7 @@ class PlayingScene(Scene):
         self.state: GameState = GameState.PREPARING
         self.preparation_time_left: float = Config.PREPARATION_TIME
         self.level_start_time: Optional[float] = None
+        self.level_start_score: int = 0
         self.level_damage_taken: int = 0
         self.level_powerups_collected: int = 0
         self.level_attempt_recorded: bool = False
@@ -414,6 +416,7 @@ class PlayingScene(Scene):
         self.state = GameState.PREPARING
         self.preparation_time_left = Config.PREPARATION_TIME
         self.level_start_time = None
+        self.level_start_score = 0
         self.level_damage_taken = 0
         self.level_powerups_collected = 0
         self.level_attempt_recorded = False
@@ -489,6 +492,7 @@ class PlayingScene(Scene):
         self.state = GameState.PREPARING
         self.preparation_time_left = Config.PREPARATION_TIME
         self.level_start_time = None
+        self.level_start_score = 0
         self.level_damage_taken = 0
         self.level_powerups_collected = 0
         self.level_attempt_recorded = False
@@ -513,6 +517,7 @@ class PlayingScene(Scene):
         self.ship.is_entering = False
         if self.level_start_time is None:
             self.level_start_time = time.time()
+            self.level_start_score = self.score
         if not self.level_attempt_recorded:
             self.player_profile.record_attempt(self.current_level_index + 1)
             self.level_attempt_recorded = True
@@ -2011,13 +2016,25 @@ class PlayingScene(Scene):
             return
 
         self._change_lives(-1)
-        self.player_profile.record_death(self.current_level_index + 1, "collision")
+        is_game_over = self.lives <= 0
+        # No game over, persistir o ganho da fase incompleta (record_clear não
+        # roda nesse caso). Em perdas de vida com vidas restantes, deixar para
+        # record_clear capturar o total quando a fase for concluída.
+        level_gain_on_death = (
+            self.score - self.level_start_score if is_game_over else 0
+        )
+        self.player_profile.record_death(
+            self.current_level_index + 1,
+            cause="collision",
+            score=level_gain_on_death,
+        )
 
-        if self.lives > 0:
+        if not is_game_over:
             self.ship.invuln = Config.INVULN_TIME * 1000
         else:
-            # Em permadeath (NIGHTMARE), reset_to_checkpoint já devolve ao início
-            # do mundo atual — comportamento correto. Tornar a intenção explícita.
+            # Captura o score final ANTES de qualquer zeragem para a tela de
+            # Game Over exibir o valor real (sem isso, permadeath mostraria 0).
+            final_score = self.score
             if self._permadeath_mode:
                 self.score = 0
             next_level = self.player_profile.reset_to_checkpoint()
@@ -2027,7 +2044,7 @@ class PlayingScene(Scene):
             from .game_over import GameOverScene
 
             self.app.states.switch(
-                GameOverScene(self.app, self.score, self, next_level)
+                GameOverScene(self.app, final_score, self, next_level)
             )
 
     # ------------------------------------------------------------------
@@ -2245,7 +2262,7 @@ class PlayingScene(Scene):
             self.player_profile.record_clear(
                 level_number=self.current_level_index + 1,
                 time_taken=clear_time,
-                score=self.score,
+                score=self.score - self.level_start_score,
                 enemies_killed=self.total_enemies_destroyed,
                 damage_taken=self.level_damage_taken,
                 powerups_collected=self.level_powerups_collected,
@@ -2284,6 +2301,7 @@ class PlayingScene(Scene):
         self.enemy_spawner.set_level(self.current_level_index + 1, is_world_transition=theme_changed, level_config=self.level_config)
         self.enemies_destroyed_in_level = 0
         self.level_start_time = None
+        self.level_start_score = 0
         self.level_damage_taken = 0
         self.level_powerups_collected = 0
         self.level_attempt_recorded = False

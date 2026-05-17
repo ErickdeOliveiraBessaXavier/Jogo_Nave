@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Callable
 
 import pygame
 
@@ -98,8 +98,8 @@ class ControlsModalScene(Scene):
     def _wrap_text(self, text: str, font: pygame.font.Font, max_width: int) -> list[str]:
         """Quebra o texto em múltiplas linhas para caber na largura."""
         words = text.split(' ')
-        lines = []
-        current_line = []
+        lines: list[str] = []
+        current_line: list[str] = []
 
         for word in words:
             test_line = ' '.join(current_line + [word])
@@ -132,8 +132,7 @@ class ControlsModalScene(Scene):
         left_x = self.modal_rect.x + 40
         right_x = self.modal_rect.centerx + 20
         max_col_w = (self.modal_w // 2) - 60
-        line_spacing = 35
-        
+
         # Instruções
         left_col_raw = [
             "• Mouse/WASD: Mover",

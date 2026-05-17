@@ -694,7 +694,8 @@ class EnemySpawner:
             y = random.randint(
                 SIDE_SCROLL_Y_MIN, Config.SCREEN_HEIGHT - SIDE_SCROLL_Y_MIN
             )
-            entity_manager.spawn_mountain_propeller(y=y)
+            prop = entity_manager.spawn_mountain_propeller(y=y)
+            prop.health = max(1, int(prop.health * self.enemy_health_multiplier))
             return True
 
         # Fallback genérico
@@ -774,11 +775,13 @@ class EnemySpawner:
         else:
             glider = entity_manager.rock_glider_pool.get(size=glider_size)
 
-        if self.difficulty_preset in (
-            DifficultyPreset.HARDCORE,
-            DifficultyPreset.NIGHTMARE,
-        ):
-            glider.set_hp(RockGlider.ROCK_MAX_HP_HARD, RockGlider.BOT_MAX_HP_HARD)
+        # Aplica multiplicador de HP do preset de forma uniforme. Mantém a
+        # proporção entre rocha e bot (rocha vale o dobro do bot na contagem
+        # base). O resultado é arredondado e clamped em >=1 para evitar
+        # gliders com 0 HP em multiplicadores muito baixos.
+        rock_hp = max(1, int(RockGlider.ROCK_MAX_HP * self.enemy_health_multiplier))
+        bot_hp = max(1, int(RockGlider.BOT_MAX_HP * self.enemy_health_multiplier))
+        glider.set_hp(rock_hp, bot_hp)
 
         entity_manager.enemies.append(glider)  # type: ignore[arg-type]
         return True
@@ -1079,7 +1082,8 @@ class EnemySpawner:
             random.random() < self.spawn_intensity
             and len(entity_manager.mountain_propellers) < SPAWNER_CAP_MOUNTAIN_PROPELLER
         ):
-            entity_manager.spawn_mountain_propeller()
+            prop = entity_manager.spawn_mountain_propeller()
+            prop.health = max(1, int(prop.health * self.enemy_health_multiplier))
 
     def _update_formation_spawner(
         self,
@@ -1235,7 +1239,12 @@ class EnemySpawner:
 
 class PowerUpSpawner:
     def __init__(self, difficulty: DifficultyPreset = DifficultyPreset.NORMAL) -> None:
+        from ..core.difficulty import DifficultySettings
+
         self.difficulty = difficulty
+        settings = DifficultySettings.get_settings(difficulty)
+        # >1 = mais frequente (intervalo menor). Casual=1.3, Pesadelo=0.5.
+        self._spawn_rate_multiplier: float = settings["powerup_spawn_rate_multiplier"]
         self._reset_timer()
 
     def _select_powerup_by_rarity(self) -> PowerUpType:
@@ -1246,7 +1255,12 @@ class PowerUpSpawner:
 
     def _reset_timer(self) -> None:
         min_t, max_t = Config.POWERUP_SPAWN_INTERVAL
-        self.timer = Timer(random.uniform(min_t, max_t))
+        # Divide pelo multiplicador: rate>1 (Casual) → intervalo menor; rate<1
+        # (Hardcore/Pesadelo) → intervalo maior. Clamp para evitar valores
+        # degenerados caso o preset venha com multiplicador zero/negativo.
+        mult = max(0.1, self._spawn_rate_multiplier)
+        interval = random.uniform(min_t, max_t) / mult
+        self.timer = Timer(interval)
         self.timer.start()
 
     def update(self, dt: float, powerups: List[PowerUp]) -> None:

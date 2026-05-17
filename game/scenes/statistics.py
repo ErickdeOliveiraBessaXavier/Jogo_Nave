@@ -1,12 +1,18 @@
+import math
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Dict, List
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 import pygame
 
 from ..core import colors
 from ..core.assets import get_font
 from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
-from ..core.meta_progression import PerformanceState, PlayerProfile, WorldUnlockStatus
+from ..core.difficulty import DifficultyPreset
+from ..core.meta_progression import (
+    PerformanceState,
+    PlayerProfile,
+    WorldUnlockStatus,
+)
 from ..core.paths import get_profile_path
 from ..core.state import Scene
 from .ui_helpers import draw_bordered_button, render_with_fade
@@ -20,7 +26,24 @@ class StatTab(Enum):
 
     OVERVIEW = "Visão Geral"
     LEVELS = "Níveis"
+    HIGH_SCORES = "Recordes"
     # HISTORY = "Histórico" # Desativado por enquanto para simplificar
+
+
+_DIFFICULTY_DISPLAY_NAMES: Dict[Optional[DifficultyPreset], str] = {
+    None: "Todas",
+    DifficultyPreset.CASUAL: "Casual",
+    DifficultyPreset.NORMAL: "Normal",
+    DifficultyPreset.HARDCORE: "Hardcore",
+    DifficultyPreset.NIGHTMARE: "Pesadelo",
+}
+
+_DIFFICULTY_TAG_COLORS: Dict[str, colors.Color] = {
+    "casual": colors.LIGHT_BLUE,
+    "normal": colors.WHITE,
+    "hardcore": colors.ORANGE,
+    "nightmare": colors.RED,
+}
 
 
 class StatisticsView:
@@ -50,6 +73,11 @@ class StatisticsView:
         self.current_tab = StatTab.OVERVIEW
         self.layout_rects: Dict[str, Any] = {}
         self.scroll_y = 0  # Para rolagem na aba de níveis
+
+        # Filtro da aba Recordes (None = "Todas")
+        self.selected_difficulty_filter: Optional[DifficultyPreset] = None
+        # Rects dos botões de filtro são calculados em _render_high_scores_tab
+        self._difficulty_filter_rects: List[tuple[Optional[DifficultyPreset], pygame.Rect]] = []
 
         # Animação de entrada
         self.entry_progress = 0.0
@@ -157,9 +185,20 @@ class StatisticsView:
                     if rect.collidepoint(pos):
                         self._switch_tab(list(StatTab)[i])
                         return True
+                if self.current_tab == StatTab.HIGH_SCORES:
+                    for diff, rect in self._difficulty_filter_rects:
+                        if rect.collidepoint(pos):
+                            if self.selected_difficulty_filter != diff:
+                                self.selected_difficulty_filter = diff
+                                self.scroll_y = 0
+                            return True
 
         if event.type == pygame.MOUSEWHEEL:
-            if self.current_tab in [StatTab.LEVELS, StatTab.OVERVIEW]:
+            if self.current_tab in [
+                StatTab.LEVELS,
+                StatTab.OVERVIEW,
+                StatTab.HIGH_SCORES,
+            ]:
                 self.scroll_y -= event.y * 20  # Ajusta a velocidade de rolagem
                 return True
 
@@ -298,6 +337,8 @@ class StatisticsView:
             self._render_overview_tab(surface, clip_area, alpha)
         elif self.current_tab == StatTab.LEVELS:
             self._render_levels_tab(surface, clip_area, alpha)
+        elif self.current_tab == StatTab.HIGH_SCORES:
+            self._render_high_scores_tab(surface, clip_area, alpha)
 
         surface.set_clip(None)
 
@@ -307,6 +348,8 @@ class StatisticsView:
         if not self.profile:
             return
         summary = self.profile.get_statistics_summary()
+
+        indent_x = 30
 
         # Dados para exibição
         stats_data = [
@@ -322,28 +365,25 @@ class StatisticsView:
         ]
 
         # Configuração de Layout
-        cols = 2  # Forçado para 2 colunas como solicitado
-        col_width = (area.width - 40) / cols
+        cols = 2 
+        col_width = (area.width - 60) / cols # Ajustado para novo indent
 
         # Calcular altura do Card 1
         rows = (len(stats_data) + cols - 1) // cols
-        card1_height = 60 + rows * 35 + 20  # Header + Rows + Padding
+        card1_height = 60 + rows * 35 + 20 
 
         # Calcular altura do Card 2
         num_recom = len(summary["recommendations"]) if summary["recommendations"] else 1
         card2_height = 60 + num_recom * 28 + 20
 
-        # Altura total do conteúdo
         total_height = card1_height + 20 + card2_height
 
-        # Ajuste de Scroll
         visible_height = area.height
         if total_height > visible_height:
             self.scroll_y = max(0, min(self.scroll_y, total_height - visible_height))
         else:
             self.scroll_y = 0
 
-        # Criar superfície de conteúdo
         content_surface = pygame.Surface(
             (area.width, max(total_height, visible_height)), pygame.SRCALPHA
         )
@@ -356,14 +396,14 @@ class StatisticsView:
 
         header = self.header_font.render("Resumo do Piloto", True, CUSTOM_GOLD)
         header.set_alpha(alpha)
-        content_surface.blit(header, (card_rect.x + 20, card_rect.y + 15))
+        content_surface.blit(header, (card_rect.x + indent_x, card_rect.y + 15))
 
         stats_y = card_rect.y + 60
 
         for i, (label, value) in enumerate(stats_data):
             col = i % cols
             row = i // cols
-            x_pos = card_rect.x + 20 + col * col_width
+            x_pos = card_rect.x + indent_x + col * col_width
             y_pos = stats_y + row * 35
 
             label_surf = self.item_font.render(label, True, colors.GRAY)
@@ -382,23 +422,22 @@ class StatisticsView:
 
         header = self.header_font.render("Recomendações", True, CUSTOM_GOLD)
         header.set_alpha(alpha)
-        content_surface.blit(header, (recom_rect.x + 20, recom_rect.y + 15))
+        content_surface.blit(header, (recom_rect.x + indent_x, recom_rect.y + 15))
 
         recom_y_inner = recom_rect.y + 60
         if summary["recommendations"]:
             for recom in summary["recommendations"]:
                 recom_surf = self.small_font.render(f"• {recom}", True, colors.GRAY)
                 recom_surf.set_alpha(alpha)
-                content_surface.blit(recom_surf, (recom_rect.x + 25, recom_y_inner))
+                content_surface.blit(recom_surf, (recom_rect.x + indent_x + 5, recom_y_inner))
                 recom_y_inner += 28
         else:
             recom_surf = self.small_font.render(
                 "Nenhuma recomendação no momento. Continue jogando!", True, colors.GRAY
             )
             recom_surf.set_alpha(alpha)
-            content_surface.blit(recom_surf, (recom_rect.x + 25, recom_y_inner))
+            content_surface.blit(recom_surf, (recom_rect.x + indent_x + 5, recom_y_inner))
 
-        # Blitar conteúdo com scroll
         content_surface.set_alpha(alpha)
         surface.blit(
             content_surface,
@@ -412,9 +451,10 @@ class StatisticsView:
         if not self.profile:
             return
 
+        indent_x = 30
         header = self.header_font.render("Performance por Nível", True, CUSTOM_GOLD)
         header.set_alpha(alpha)
-        surface.blit(header, (area.x, area.y))
+        surface.blit(header, (area.x + indent_x, area.y))
 
         y = area.y + 50
         if not self.profile.level_stats:
@@ -422,50 +462,40 @@ class StatisticsView:
                 "Nenhum nível jogado ainda.", True, colors.GRAY
             )
             text.set_alpha(alpha)
-            surface.blit(text, (area.x, y))
+            surface.blit(text, (area.x + indent_x, y))
             return
 
         sorted_levels = sorted(self.profile.level_stats.keys())
 
-        # Calcular altura total do conteúdo
         total_height = 0
         for level_num in sorted_levels:
             stats = self.profile.level_stats[level_num]
-            num_lines = 3  # Nível, Tentativas, Sucesso
+            num_lines = 3 
             if stats.best_time:
-                num_lines += 2  # Melhor tempo, Melhor pontuação
-            card_height = (
-                20 + (num_lines * 25) + 10
-            )  # padding top + lines + padding bottom
-            total_height += card_height + 15  # + spacing
+                num_lines += 2 
+            card_height = 20 + (num_lines * 25) + 10
+            total_height += card_height + 15 
 
-        # Ajustar scroll_y
-        visible_height = area.height - 50  # subtrair espaço do header
+        visible_height = area.height - 50 
         if total_height > visible_height:
             self.scroll_y = max(0, min(self.scroll_y, total_height - visible_height))
         else:
             self.scroll_y = 0
 
-        # Criar superfície de conteúdo
         content_surface = pygame.Surface(
             (area.width, max(total_height, visible_height)), pygame.SRCALPHA
         )
 
-        # Renderizar conteúdo na superfície
         content_y = 0
         for level_num in sorted_levels:
             stats = self.profile.level_stats[level_num]
-            # Calculate card height based on content (each line is ~25px)
-            num_lines = 3  # Nível, Tentativas, Sucesso
+            num_lines = 3 
             if stats.best_time:
-                num_lines += 2  # Melhor tempo, Melhor pontuação
-            card_height = (
-                20 + (num_lines * 25) + 10
-            )  # padding top + lines + padding bottom
+                num_lines += 2 
+            card_height = 20 + (num_lines * 25) + 10
             card_rect = pygame.Rect(0, content_y, area.width, card_height)
             self._draw_card_background(content_surface, card_rect, alpha)
 
-            # Cor baseada na performance
             state = stats.get_performance_state()
             state_colors = {
                 PerformanceState.STRUGGLING: colors.RED,
@@ -482,64 +512,58 @@ class StatisticsView:
                 border_radius=8,
             )
 
-            # Cada informação em sua própria linha
             line_y = card_rect.y + 15
             line_spacing = 25
 
-            # Linha 1: Nível
             level_label = self.item_font.render("Nível", True, colors.GRAY)
             level_label.set_alpha(alpha)
             level_value = self.item_font.render(str(level_num), True, CUSTOM_PURPLE)
             level_value.set_alpha(alpha)
-            content_surface.blit(level_label, (card_rect.x + 25, line_y))
+            content_surface.blit(level_label, (card_rect.x + indent_x, line_y))
             content_surface.blit(
-                level_value, (card_rect.x + 25 + level_label.get_width() + 5, line_y)
+                level_value, (card_rect.x + indent_x + level_label.get_width() + 5, line_y)
             )
-            line_y += line_spacing + 10  # Extra margin before line 2
+            line_y += line_spacing + 10 
 
-            # Linha 2: Tentativas
             attempts_label = self.small_font.render("Tentativas:", True, colors.GRAY)
             attempts_label.set_alpha(alpha)
             attempts_value = self.small_font.render(
                 str(stats.attempts), True, CUSTOM_PURPLE
             )
             attempts_value.set_alpha(alpha)
-            content_surface.blit(attempts_label, (card_rect.x + 25, line_y))
+            content_surface.blit(attempts_label, (card_rect.x + indent_x, line_y))
             content_surface.blit(
                 attempts_value,
-                (card_rect.x + 25 + attempts_label.get_width() + 5, line_y),
+                (card_rect.x + indent_x + attempts_label.get_width() + 5, line_y),
             )
             line_y += line_spacing
 
-            # Linha 3: Sucesso
             success_label = self.small_font.render("Sucesso:", True, colors.GRAY)
             success_label.set_alpha(alpha)
             success_value = self.small_font.render(
                 f"{stats.clear_rate:.0%}", True, CUSTOM_PURPLE
             )
             success_value.set_alpha(alpha)
-            content_surface.blit(success_label, (card_rect.x + 25, line_y))
+            content_surface.blit(success_label, (card_rect.x + indent_x, line_y))
             content_surface.blit(
                 success_value,
-                (card_rect.x + 25 + success_label.get_width() + 5, line_y),
+                (card_rect.x + indent_x + success_label.get_width() + 5, line_y),
             )
             line_y += line_spacing
 
             if stats.best_time:
-                # Linha 4: Melhor tempo
                 time_label = self.small_font.render("Melhor tempo:", True, colors.GRAY)
                 time_label.set_alpha(alpha)
                 time_value = self.small_font.render(
                     f"{stats.best_time:.1f}s", True, CUSTOM_PURPLE
                 )
                 time_value.set_alpha(alpha)
-                content_surface.blit(time_label, (card_rect.x + 25, line_y))
+                content_surface.blit(time_label, (card_rect.x + indent_x, line_y))
                 content_surface.blit(
-                    time_value, (card_rect.x + 25 + time_label.get_width() + 5, line_y)
+                    time_value, (card_rect.x + indent_x + time_label.get_width() + 5, line_y)
                 )
                 line_y += line_spacing
 
-                # Linha 5: Melhor pontuação
                 score_label = self.small_font.render(
                     "Melhor pontuação:", True, colors.GRAY
                 )
@@ -548,10 +572,10 @@ class StatisticsView:
                     f"{stats.best_score:,}", True, CUSTOM_PURPLE
                 )
                 score_value.set_alpha(alpha)
-                content_surface.blit(score_label, (card_rect.x + 25, line_y))
+                content_surface.blit(score_label, (card_rect.x + indent_x, line_y))
                 content_surface.blit(
                     score_value,
-                    (card_rect.x + 25 + score_label.get_width() + 5, line_y),
+                    (card_rect.x + indent_x + score_label.get_width() + 5, line_y),
                 )
 
             content_y += card_rect.height + 15
@@ -564,6 +588,239 @@ class StatisticsView:
             content_surface,
             (area.x, area.y + 50),
             area=(0, self.scroll_y, area.width, visible_height),
+        )
+
+    def _render_high_scores_tab(
+        self, surface: pygame.Surface, area: pygame.Rect, alpha: int = 255
+    ):
+        if not self.profile:
+            return
+
+        # Indentação padrão para alinhar com as colunas da tabela
+        indent_x = 30
+        
+        header = self.header_font.render("HALL DA FAMA", True, CUSTOM_GOLD)
+        header.set_alpha(alpha)
+        surface.blit(header, (area.x + indent_x, area.y))
+
+        # Filtros por dificuldade (Todas, Casual, Normal, Hardcore, Pesadelo)
+        filters_y = area.y + 50 # Aumentado de 40 para 50 para mais respiro
+        btn_h = 30
+        btn_padding_x = 14
+        btn_gap = 10
+        cursor_x = area.x + indent_x
+        self._difficulty_filter_rects = []
+        filter_options: List[Optional[DifficultyPreset]] = [
+            None,
+            DifficultyPreset.CASUAL,
+            DifficultyPreset.NORMAL,
+            DifficultyPreset.HARDCORE,
+            DifficultyPreset.NIGHTMARE,
+        ]
+
+        # Cores para os botões de filtro baseadas na dificuldade
+        filter_colors: Dict[Optional[DifficultyPreset], colors.Color] = {
+            None: colors.WHITE,
+            DifficultyPreset.CASUAL: colors.LIGHT_BLUE,
+            DifficultyPreset.NORMAL: colors.WHITE,
+            DifficultyPreset.HARDCORE: colors.ORANGE,
+            DifficultyPreset.NIGHTMARE: colors.RED,
+        }
+
+        for diff in filter_options:
+            label = _DIFFICULTY_DISPLAY_NAMES[diff]
+            text_w = self.small_font.size(label)[0]
+            btn_w = text_w + btn_padding_x * 2
+            rect = pygame.Rect(cursor_x, filters_y, btn_w, btn_h)
+            self._difficulty_filter_rects.append((diff, rect))
+
+            is_active = self.selected_difficulty_filter == diff
+            is_hovered = rect.collidepoint(pygame.mouse.get_pos())
+
+            target_color = filter_colors[diff]
+            if is_active:
+                bg_alpha = int(alpha * 0.3)
+                bg_color = (*target_color, bg_alpha)
+                border_color = CUSTOM_GOLD
+                text_color = CUSTOM_GOLD
+            elif is_hovered:
+                bg_alpha = int(alpha * 0.15)
+                bg_color = (*target_color, bg_alpha)
+                border_color = CUSTOM_PURPLE
+                text_color = colors.WHITE
+            else:
+                bg_color = (0, 0, 0, 0)
+                border_color = (100, 100, 100)
+                text_color = colors.LIGHT_GRAY
+
+            if bg_color[3] > 0:
+                bg_surf = pygame.Surface(rect.size, pygame.SRCALPHA)
+                pygame.draw.rect(bg_surf, bg_color, bg_surf.get_rect(), border_radius=6)
+                surface.blit(bg_surf, rect.topleft)
+
+            border_surf = pygame.Surface(rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(
+                border_surf,
+                (*border_color, alpha),
+                border_surf.get_rect(),
+                2 if is_active else 1,
+                border_radius=6,
+            )
+            surface.blit(border_surf, rect.topleft)
+
+            text_surf = self.small_font.render(label, True, text_color)
+            text_surf.set_alpha(alpha)
+            surface.blit(text_surf, text_surf.get_rect(center=rect.center))
+
+            cursor_x += btn_w + btn_gap
+
+        # Lista filtrada
+        all_entries = self.profile.get_high_scores()
+        if self.selected_difficulty_filter is not None:
+            wanted = self.selected_difficulty_filter.value
+            entries = [e for e in all_entries if e.difficulty == wanted]
+        else:
+            entries = all_entries
+
+        list_top = filters_y + btn_h + 30 # Aumentado gap para a tabela
+        list_visible_height = area.height - (list_top - area.y)
+
+        # Frame estilo Arcade
+        frame_rect = pygame.Rect(area.x, list_top - 5, area.width, list_visible_height + 5)
+        frame_surf = pygame.Surface(frame_rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(frame_surf, (20, 20, 30, alpha), frame_surf.get_rect(), border_radius=10)
+        pygame.draw.rect(frame_surf, (*CUSTOM_PURPLE, alpha // 2), frame_surf.get_rect(), 2, border_radius=10)
+        surface.blit(frame_surf, frame_rect.topleft)
+
+        if not entries:
+            empty = self.item_font.render(
+                "Nenhum recorde ainda. Sobreviva, marque sua glória.",
+                True,
+                colors.GRAY,
+            )
+            empty.set_alpha(alpha)
+            surface.blit(empty, (area.x + indent_x, list_top + 40))
+            return
+
+        # Layout de linha (Refinado para melhor espaçamento)
+        row_h = 52
+        col_rank_w = 80
+        col_initials_w = 150
+        col_score_w = 280
+        col_level_w = 150
+        col_diff_w = 220
+        col_date_w = 150
+        row_padding_x = indent_x
+
+        # Cabeçalho da tabela
+        header_h = 40
+        header_y = list_top + 10
+        header_color = CUSTOM_GOLD
+        col_titles = [
+            ("#", col_rank_w),
+            ("PILOTO", col_initials_w),
+            ("SCORE", col_score_w),
+            ("NÍVEL", col_level_w),
+            ("DIF.", col_diff_w),
+            ("DATA", col_date_w),
+        ]
+        
+        cx = area.x + row_padding_x
+        for title, w in col_titles:
+            txt = self.small_font.render(title, True, header_color)
+            txt.set_alpha(alpha)
+            # Centralizar título verticalmente no header_h
+            txt_y = header_y + (header_h - txt.get_height()) // 2
+            surface.blit(txt, (cx, txt_y))
+            cx += w
+
+        rows_top = header_y + header_h + 5
+        total_height = row_h * len(entries)
+        visible_rows_height = max(0, list_visible_height - (rows_top - list_top) - 10)
+        if total_height > visible_rows_height:
+            self.scroll_y = max(0, min(self.scroll_y, total_height - visible_rows_height))
+        else:
+            self.scroll_y = 0
+
+        content_surface = pygame.Surface(
+            (area.width, max(total_height, visible_rows_height)), pygame.SRCALPHA
+        )
+
+        t = pygame.time.get_ticks() / 1000.0
+
+        for idx, entry in enumerate(entries):
+            row_y = idx * row_h
+            is_first = idx == 0 and self.selected_difficulty_filter is None
+
+            # Animação para o #1 global
+            row_alpha = alpha
+            if is_first:
+                pulse = 0.5 + 0.5 * math.sin(t * 10)
+                row_color = CUSTOM_GOLD
+                # Brilho de fundo para o primeiro lugar
+                glow_alpha = int(40 * pulse * (alpha / 255))
+                pygame.draw.rect(content_surface, (*CUSTOM_GOLD, glow_alpha), (0, row_y, area.width, row_h), border_radius=5)
+            elif idx < 3:
+                row_color = colors.LIGHT_GRAY
+            else:
+                row_color = colors.WHITE
+
+            cx = row_padding_x
+
+            # Rank
+            rank_text = self.item_font.render(f"#{idx + 1}", True, row_color)
+            rank_text.set_alpha(row_alpha)
+            content_surface.blit(rank_text, (cx, row_y + (row_h - rank_text.get_height()) // 2))
+            cx += col_rank_w
+
+            # Iniciais (fonte maior estilo arcade)
+            initials_text = self.header_font.render(entry.initials, True, row_color)
+            initials_text.set_alpha(row_alpha)
+            content_surface.blit(initials_text, (cx, row_y + (row_h - initials_text.get_height()) // 2))
+            cx += col_initials_w
+
+            # Score
+            score_str = f"{entry.score:,}".replace(",", ".")
+            score_text = self.item_font.render(score_str, True, CUSTOM_GOLD if is_first else CUSTOM_PURPLE)
+            score_text.set_alpha(row_alpha)
+            content_surface.blit(score_text, (cx, row_y + (row_h - score_text.get_height()) // 2))
+            cx += col_score_w
+
+            # Nível
+            level_text = self.item_font.render(f"Lv {entry.level_reached:02d}", True, row_color)
+            level_text.set_alpha(row_alpha)
+            content_surface.blit(level_text, (cx, row_y + (row_h - level_text.get_height()) // 2))
+            cx += col_level_w
+
+            # Dificuldade (Badge estilizada)
+            tag_color = _DIFFICULTY_TAG_COLORS.get(entry.difficulty, colors.WHITE)
+            try:
+                diff_preset = DifficultyPreset(entry.difficulty)
+                diff_label = _DIFFICULTY_DISPLAY_NAMES[diff_preset].upper()
+            except ValueError:
+                diff_label = entry.difficulty.upper()
+
+            # Desenhar fundo da badge
+            badge_w = self.small_font.size(diff_label)[0] + 16
+            badge_h = 26
+            badge_rect = pygame.Rect(cx, row_y + (row_h - badge_h) // 2, badge_w, badge_h)
+            pygame.draw.rect(content_surface, (*tag_color, int(row_alpha * 0.2)), badge_rect, border_radius=6)
+            pygame.draw.rect(content_surface, (*tag_color, int(row_alpha * 0.5)), badge_rect, 1, border_radius=6)
+
+            diff_text = self.small_font.render(diff_label, True, tag_color)
+            diff_text.set_alpha(row_alpha)
+            content_surface.blit(diff_text, (cx + 8, row_y + (row_h - diff_text.get_height()) // 2))
+            cx += col_diff_w
+
+            # Data
+            date_text = self.small_font.render(entry.achieved_at.strftime("%d/%m/%y"), True, colors.GRAY)
+            date_text.set_alpha(row_alpha)
+            content_surface.blit(date_text, (cx, row_y + (row_h - date_text.get_height()) // 2))
+
+        surface.blit(
+            content_surface,
+            (area.x, rows_top),
+            area=(0, self.scroll_y, area.width, visible_rows_height),
         )
 
     def _draw_card_background(
