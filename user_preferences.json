@@ -9,5 +9,6 @@
   "shot_volume": 0.2,
   "mouse_control": true,
   "auto_fire": true,
-  "show_controls_modal": false
+  "show_controls_modal": false,
+  "gamepad_enabled": false
 }

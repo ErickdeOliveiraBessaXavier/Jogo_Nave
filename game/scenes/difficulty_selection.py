@@ -58,9 +58,9 @@ class DifficultySelectionView:
         self.hovered_difficulty: DifficultyPreset | None = None
 
         # Animação de entrada
-        self.entry_progress = 0.0
-        self.is_entering = True
-        self.entry_duration = 0.4
+        self.entry_progress: float = 0.0
+        self.is_entering: bool = True
+        self.entry_duration: float = 0.4
 
         self.setup_ui()
 

@@ -2500,24 +2500,20 @@ class PlayingScene(Scene):
                 self._navigate_upgrade_select(1)
             return
 
-        if button == XboxButton.A:
-            # Tiro discreto. Charge shot é separado via LT.
-            if self.shoot_cd == 0.0 and not self.ship.charge_shot_active:
-                self._fire_bullets()
-        elif button == XboxButton.X:
+        # A é o botão único de tiro: o disparo (tap ou hold) sai do
+        # ``hold_shoot`` em poll_held — não dispara aqui para evitar dupla
+        # contagem. Habilidades especiais (dash, charge shot do Caçador,
+        # laser do Magneto) ficam no LT analógico, tratadas em
+        # ``_handle_gamepad_axis`` baseado no perfil da nave.
+        if button == XboxButton.X:
             self.ship.cycle_facing()
         elif button == XboxButton.Y:
             self._activate_stored_powerup(0)  # Cofre Q
         elif button == XboxButton.R3:
             self._activate_stored_powerup(1)  # Cofre E
-        elif button == XboxButton.L3:
-            if self.ship.profile.has_dash:
-                move_vec = self._gamepad_dash_vector()
-                self.ship.try_dash(move_vec)
-        elif button == XboxButton.LB:
-            self._activate_upgrade_slot(0)
-        elif button == XboxButton.RB:
-            self._activate_upgrade_slot(1)
+        # LB/RB fora do modo de seleção não fazem nada — esses botões só
+        # ganham função quando o modo está aberto (navegar entre slots).
+        # L3 fica livre (o dash agora vive no LT junto com o charge shot).
 
     def _handle_gamepad_hat(self, value: tuple[int, int]) -> None:
         """D-pad ↑ alterna o modo de seleção de upgrades.
@@ -2582,7 +2578,17 @@ class PlayingScene(Scene):
             self._activate_upgrade_slot(idx)
 
     def _handle_gamepad_axis(self, axis: int, value: float) -> None:
-        """LT analógico controla charge shot via transição de threshold."""
+        """LT analógico é o botão único de habilidade especial.
+
+        - Naves com ``has_dash`` (Fantasma): aperto do LT executa dash na
+          direção atual do stick esquerdo.
+        - Naves com ``has_charge_shot`` (Caçador, Magneto): segurar o LT
+          carrega o tiro; soltar com a carga cheia dispara o laser/teleguiado,
+          soltar antes cancela.
+
+        Caso ambos os perfis coexistam (não acontece hoje), dash tem
+        prioridade no aperto e o charge segue em paralelo.
+        """
         from ..core.gamepad import GamepadManager, XboxAxis
 
         if axis != XboxAxis.LT:
@@ -2593,18 +2599,25 @@ class PlayingScene(Scene):
             return
         self._lt_pressed = pressed
 
-        if not self.ship.profile.has_charge_shot:
-            return
         if self.ship.is_entering or not self._can_handle_gameplay_actions():
             return
 
-        if pressed and not self.ship.charge_shot_active:
-            self.ship.start_charge()
-        elif not pressed and self.ship.charge_shot_active:
-            if self.ship.charge_shot_progress >= 1.0:
-                self._fire_bullets()
-            else:
-                self.ship.cancel_charge()
+        profile = self.ship.profile
+
+        # Dash dispara no instante do press, sem segurar.
+        if pressed and profile.has_dash:
+            move_vec = self._gamepad_dash_vector()
+            self.ship.try_dash(move_vec)
+
+        # Charge shot precisa de hold/release.
+        if profile.has_charge_shot:
+            if pressed and not self.ship.charge_shot_active:
+                self.ship.start_charge()
+            elif not pressed and self.ship.charge_shot_active:
+                if self.ship.charge_shot_progress >= 1.0:
+                    self._fire_bullets()
+                else:
+                    self.ship.cancel_charge()
 
     def _gamepad_dash_vector(self) -> pygame.math.Vector2:
         """Direção do dash via stick esquerdo (fallback para hold actions)."""

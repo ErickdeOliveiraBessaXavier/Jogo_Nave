@@ -1,3 +1,5 @@
+import logging
+
 import pygame
 
 from .core.assets import load_custom_cursor
@@ -12,6 +14,8 @@ from .core.paths import get_preferences_path, get_profile_path
 from .core.preferences import UserPreferences
 from .core.state import Scene, StateManager
 from .scenes.main_menu import MainMenuScene
+
+logger = logging.getLogger(__name__)
 
 
 # Velocidade do cursor virtual movido pelo stick direito (px/s a magnitude 1.0).
@@ -35,7 +39,11 @@ class GameApp:
         pygame.init()
 
         # Carregar preferências de sistema (vídeo, áudio, controles)
-        self.preferences = UserPreferences(get_preferences_path())
+        # Detecta se é a primeira execução do jogo ANTES de carregar — útil
+        # para decidir auto-ativação de gamepad em quem nunca abriu Settings.
+        prefs_path = get_preferences_path()
+        is_first_run = not prefs_path.exists()
+        self.preferences = UserPreferences(prefs_path)
         base_width, base_height = self.preferences.resolution
 
         # Carregar perfil de progressão
@@ -94,7 +102,24 @@ class GameApp:
         # Suporte a controle Xbox: singleton compartilhado com a Input e cenas.
         self.gamepad: GamepadManager = GamepadManager()
         self.gamepad.init()
+        # Primeira execução com controle plugado: ativa por padrão pra evitar
+        # que o jogador precise abrir Settings antes de jogar. Sessões
+        # posteriores respeitam o toggle (mesmo que ele tenha sido desligado).
+        if is_first_run and self.gamepad.connected and not self.preferences.gamepad_enabled:
+            self.preferences.gamepad_enabled = True
+            self.preferences.save()
+            logger.info("Primeira execução com controle conectado — gamepad ativado por padrão.")
         self.gamepad.set_enabled(self.preferences.gamepad_enabled)
+
+        if self.gamepad.connected:
+            if self.gamepad.is_active:
+                logger.info("Controle pronto para uso.")
+            else:
+                logger.info(
+                    "Controle detectado mas desativado — ligue em Settings → Controle Xbox."
+                )
+        else:
+            logger.info("Nenhum controle detectado no startup.")
 
         # Cursor virtual movido pelo stick direito em cenas não-gameplay.
         self._virtual_cursor_x: float = base_width / 2

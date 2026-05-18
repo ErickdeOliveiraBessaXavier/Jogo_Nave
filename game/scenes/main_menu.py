@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable, List, Optional, TypedDict
 import pygame
 
 from ..core.assets import get_font
-from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
+from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE, GREEN, YELLOW
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset
 from ..core.sound import sound_manager
@@ -987,6 +987,9 @@ class MainMenuScene(Scene):
                 # Restaurar progresso original
                 button.entry_progress = original_progress
 
+            # Badge de status do controle Xbox (apenas no menu principal).
+            self._render_gamepad_status_badge(surface, alpha_mult)
+
         # Transicao para gameplay: fade-out para preto e pequena pausa em preto.
         if self.pending_game_start and self.fade_out and self.transitioning:
             black_alpha = int(255 * self.transition_progress)
@@ -1000,3 +1003,51 @@ class MainMenuScene(Scene):
 
         if self.force_blackout_frame:
             surface.fill(BLACK)
+
+    def _render_gamepad_status_badge(
+        self, surface: pygame.Surface, alpha_mult: float
+    ) -> None:
+        """Desenha badge discreto no canto inferior direito indicando se o
+        controle Xbox foi detectado e está ativo."""
+        gamepad = getattr(self.app, "gamepad", None)
+        if gamepad is None or not gamepad.connected:
+            return
+
+        if gamepad.is_active:
+            label = "Controle Xbox ativo"
+            color = GREEN
+        else:
+            label = "Controle detectado — ative em Settings"
+            color = YELLOW
+
+        font = get_font(14)
+        text_surf = font.render(label, True, color)
+        text_w, text_h = text_surf.get_size()
+
+        pad_x, pad_y = 12, 6
+        bg_w = text_w + pad_x * 2
+        bg_h = text_h + pad_y * 2
+        margin = 16
+        bg_x = Config.SCREEN_WIDTH - bg_w - margin
+        bg_y = Config.SCREEN_HEIGHT - bg_h - margin
+
+        alpha = int(220 * alpha_mult)
+        bg_surf = pygame.Surface((bg_w, bg_h), pygame.SRCALPHA)
+        pygame.draw.rect(
+            bg_surf, (20, 20, 24, alpha), bg_surf.get_rect(), border_radius=8
+        )
+        pygame.draw.rect(
+            bg_surf,
+            (*color, alpha),
+            bg_surf.get_rect(),
+            1,
+            border_radius=8,
+        )
+        # Bolinha indicadora à esquerda do texto.
+        dot_r = 4
+        pygame.draw.circle(
+            bg_surf, (*color, alpha), (pad_x, bg_h // 2), dot_r
+        )
+        text_surf.set_alpha(alpha)
+        bg_surf.blit(text_surf, (pad_x + dot_r + 6, pad_y))
+        surface.blit(bg_surf, (bg_x, bg_y))

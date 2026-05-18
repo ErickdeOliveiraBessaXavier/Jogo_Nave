@@ -65,10 +65,11 @@ class Input:
     def _poll_held_gamepad(self, gp: GamepadManager) -> set[str]:
         """Lê estado contínuo do controle e mapeia para ações de hold.
 
-        Em gameplay o D-pad é reservado para ativar slots de upgrade
-        (tratado em playing.py), então NÃO entra nas ações de movimento.
-        Movimento da nave vem só do stick esquerdo. A magnitude exata é
-        exposta separadamente em ``gamepad_movement_vector``.
+        Em gameplay o D-pad é reservado para o modo de seleção de upgrade
+        (tratado em playing.py), então NÃO entra em ações de movimento.
+        Movimento vem só do stick esquerdo; a magnitude exata é exposta em
+        ``gamepad_movement_vector``. Tiro contínuo vem de segurar o botão A
+        — botão único dedicado, sem trigger duplicado.
         """
         held: set[str] = set()
 
@@ -82,8 +83,7 @@ class Input:
         if ly > 0:
             held.add("hold_down")
 
-        # Tiro contínuo via RT analógico.
-        if gp.get_trigger("right") > GamepadManager.TRIGGER_THRESHOLD:
+        if gp.is_button_pressed(XboxButton.A):
             held.add("hold_shoot")
 
         return held
