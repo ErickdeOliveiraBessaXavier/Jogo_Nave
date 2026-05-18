@@ -27,6 +27,7 @@ class UserPreferences:
         self.mouse_control: bool = False
         self.auto_fire: bool = False
         self.show_controls_modal: bool = True
+        self.gamepad_enabled: bool = False
 
         self.load()
 
@@ -65,6 +66,7 @@ class UserPreferences:
                 self.mouse_control = data.get("mouse_control", self.mouse_control)
                 self.auto_fire = data.get("auto_fire", self.auto_fire)
                 self.show_controls_modal = data.get("show_controls_modal", self.show_controls_modal)
+                self.gamepad_enabled = data.get("gamepad_enabled", self.gamepad_enabled)
 
         except (OSError, json.JSONDecodeError, ValueError) as e:
             logger.error("Erro ao carregar preferências: %s", e)
@@ -82,6 +84,7 @@ class UserPreferences:
                 "mouse_control": self.mouse_control,
                 "auto_fire": self.auto_fire,
                 "show_controls_modal": self.show_controls_modal,
+                "gamepad_enabled": self.gamepad_enabled,
             }
             with open(self.file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
@@ -98,4 +101,5 @@ class UserPreferences:
         self.mouse_control = False
         self.auto_fire = False
         self.show_controls_modal = True
+        self.gamepad_enabled = False
         self.save()

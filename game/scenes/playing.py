@@ -126,6 +126,10 @@ class UpgradeContext:
 
 
 class PlayingScene(Scene):
+    # Flag lida pelo GameApp para suprimir tradução sintética de eventos JOY
+    # em menus — playing.py trata os botões do controle nativamente.
+    is_gameplay_scene: bool = True
+
     def __init__(
         self,
         app: "GameApp",
@@ -149,6 +153,13 @@ class PlayingScene(Scene):
         self.level_start_score: int = 0
         self.level_damage_taken: int = 0
         self.level_powerups_collected: int = 0
+        # Estado anterior dos triggers analógicos do controle (para detectar
+        # transição abaixo/acima do threshold sem disparar a cada AXISMOTION).
+        self._lt_pressed: bool = False
+        # Modo de seleção de upgrade via controle: D-pad ↑ alterna, LB/RB
+        # navegam entre slots ativos, A confirma, B cancela.
+        self._upgrade_select_mode: bool = False
+        self._upgrade_select_index: int = 0
         self.level_attempt_recorded: bool = False
         self.transition_phase: TransitionPhase = TransitionPhase.LEVEL_ENTRY
         self.enemies_destroyed_in_level: int = 0
@@ -252,6 +263,9 @@ class PlayingScene(Scene):
         self.god_mode: bool = False
         self.state: GameState = GameState.PREPARING
         self.preparation_time_left: float = Config.PREPARATION_TIME
+        self._lt_pressed: bool = False
+        self._upgrade_select_mode: bool = False
+        self._upgrade_select_index: int = 0
         self.level_start_time: Optional[float] = None
         self.level_start_score: int = 0
         self.level_damage_taken: int = 0
@@ -936,8 +950,14 @@ class PlayingScene(Scene):
             boss_pausing = cast(SpikeBoss, self.entity_manager.boss).is_pausing_game()
 
         if self._can_handle_gameplay_actions() and not self.ship.is_entering:
-            held = self.app.input.poll_held()
-            self.ship.move(held, dt, is_side_scroll=self.is_side_scroll)
+            held = self.app.input.poll_held(self.app.gamepad)
+            gamepad_vec = self.app.input.gamepad_movement_vector(self.app.gamepad)
+            self.ship.move(
+                held,
+                dt,
+                is_side_scroll=self.is_side_scroll,
+                gamepad_vec=gamepad_vec,
+            )
 
             # Caçador: enquanto a carga está acumulando, suprime auto-fire/hold-shoot.
             # O disparo carregado sai no MOUSEBUTTONUP.
@@ -2441,6 +2461,172 @@ class PlayingScene(Scene):
                     else:
                         self.ship.cancel_charge()
 
+        elif event.type == pygame.JOYBUTTONDOWN:
+            self._handle_gamepad_button(event.button)
+        elif event.type == pygame.JOYHATMOTION:
+            self._handle_gamepad_hat(event.value)
+        elif event.type == pygame.JOYAXISMOTION:
+            self._handle_gamepad_axis(event.axis, event.value)
+
+    # ------------------------------------------------------------------
+    # Mapeamento de botões do controle Xbox para ações de gameplay
+    # ------------------------------------------------------------------
+
+    def _handle_gamepad_button(self, button: int) -> None:
+        from ..core.gamepad import XboxButton
+
+        # Start sempre abre pausa, mesmo se a nave está entrando ou em modo de seleção.
+        if button == XboxButton.START:
+            self._upgrade_select_mode = False
+            from .paused import PausedScene
+
+            self.app.states.push(PausedScene(self.app, previous_scene=self))
+            return
+
+        if self.ship.is_entering or not self._can_handle_gameplay_actions():
+            return
+
+        # Modo de seleção de upgrade: LB/RB navegam, A confirma, B cancela.
+        # Outros botões ficam inativos até sair do modo para evitar inputs
+        # acidentais enquanto o jogador escolhe.
+        if self._upgrade_select_mode:
+            if button == XboxButton.A:
+                self._confirm_upgrade_select()
+            elif button == XboxButton.B:
+                self._upgrade_select_mode = False
+            elif button == XboxButton.LB:
+                self._navigate_upgrade_select(-1)
+            elif button == XboxButton.RB:
+                self._navigate_upgrade_select(1)
+            return
+
+        if button == XboxButton.A:
+            # Tiro discreto. Charge shot é separado via LT.
+            if self.shoot_cd == 0.0 and not self.ship.charge_shot_active:
+                self._fire_bullets()
+        elif button == XboxButton.X:
+            self.ship.cycle_facing()
+        elif button == XboxButton.Y:
+            self._activate_stored_powerup(0)  # Cofre Q
+        elif button == XboxButton.R3:
+            self._activate_stored_powerup(1)  # Cofre E
+        elif button == XboxButton.L3:
+            if self.ship.profile.has_dash:
+                move_vec = self._gamepad_dash_vector()
+                self.ship.try_dash(move_vec)
+        elif button == XboxButton.LB:
+            self._activate_upgrade_slot(0)
+        elif button == XboxButton.RB:
+            self._activate_upgrade_slot(1)
+
+    def _handle_gamepad_hat(self, value: tuple[int, int]) -> None:
+        """D-pad ↑ alterna o modo de seleção de upgrades.
+
+        Outras direções do D-pad ficam reservadas para o próprio modo (não
+        executam ação fora dele — usar LB/RB para navegar dentro do modo).
+        """
+        if self.ship.is_entering or not self._can_handle_gameplay_actions():
+            return
+        _x, y = value
+        if y > 0:
+            self._toggle_upgrade_select_mode()
+
+    # ------------------------------------------------------------------
+    # Modo de seleção de upgrade via controle
+    # ------------------------------------------------------------------
+
+    def _toggle_upgrade_select_mode(self) -> None:
+        """Liga/desliga o modo de seleção. Ao ligar, alinha o cursor para um
+        slot válido (ignora slots vazios)."""
+        if self._upgrade_select_mode:
+            self._upgrade_select_mode = False
+            return
+        if not any(s is not None for s in self.upgrade_slots):
+            return  # Sem upgrades equipados — nada para selecionar.
+        self._upgrade_select_mode = True
+        self._snap_upgrade_select_to_valid()
+
+    def _snap_upgrade_select_to_valid(self) -> None:
+        """Garante que ``_upgrade_select_index`` aponta para um slot ocupado."""
+        n = len(self.upgrade_slots)
+        if n == 0:
+            return
+        if (
+            0 <= self._upgrade_select_index < n
+            and self.upgrade_slots[self._upgrade_select_index] is not None
+        ):
+            return
+        for offset in range(n):
+            idx = (self._upgrade_select_index + offset) % n
+            if self.upgrade_slots[idx] is not None:
+                self._upgrade_select_index = idx
+                return
+
+    def _navigate_upgrade_select(self, delta: int) -> None:
+        """Move o cursor para o próximo slot ocupado na direção ``delta``."""
+        n = len(self.upgrade_slots)
+        if n == 0:
+            return
+        idx = self._upgrade_select_index
+        for _ in range(n):
+            idx = (idx + delta) % n
+            if self.upgrade_slots[idx] is not None:
+                self._upgrade_select_index = idx
+                return
+
+    def _confirm_upgrade_select(self) -> None:
+        """Ativa o slot atualmente destacado e sai do modo."""
+        idx = self._upgrade_select_index
+        self._upgrade_select_mode = False
+        if 0 <= idx < len(self.upgrade_slots) and self.upgrade_slots[idx] is not None:
+            self._activate_upgrade_slot(idx)
+
+    def _handle_gamepad_axis(self, axis: int, value: float) -> None:
+        """LT analógico controla charge shot via transição de threshold."""
+        from ..core.gamepad import GamepadManager, XboxAxis
+
+        if axis != XboxAxis.LT:
+            return
+        normalized = (value + 1.0) * 0.5
+        pressed = normalized > GamepadManager.TRIGGER_THRESHOLD
+        if pressed == self._lt_pressed:
+            return
+        self._lt_pressed = pressed
+
+        if not self.ship.profile.has_charge_shot:
+            return
+        if self.ship.is_entering or not self._can_handle_gameplay_actions():
+            return
+
+        if pressed and not self.ship.charge_shot_active:
+            self.ship.start_charge()
+        elif not pressed and self.ship.charge_shot_active:
+            if self.ship.charge_shot_progress >= 1.0:
+                self._fire_bullets()
+            else:
+                self.ship.cancel_charge()
+
+    def _gamepad_dash_vector(self) -> pygame.math.Vector2:
+        """Direção do dash via stick esquerdo (fallback para hold actions)."""
+        gx, gy = self.app.input.gamepad_movement_vector(self.app.gamepad)
+        if gx != 0.0 or gy != 0.0:
+            vec = pygame.math.Vector2(gx, gy)
+            if vec.length() > 0:
+                vec.normalize_ip()
+            return vec
+        # Fallback: usa o WASD se o usuário estiver com teclado em paralelo.
+        held = self.app.input.poll_held(self.app.gamepad)
+        move_vec = pygame.math.Vector2(0, 0)
+        if "hold_left" in held:
+            move_vec.x -= 1
+        if "hold_right" in held:
+            move_vec.x += 1
+        if "hold_up" in held:
+            move_vec.y -= 1
+        if "hold_down" in held:
+            move_vec.y += 1
+        return move_vec
+
     def _activate_stored_powerup(self, slot_index: int) -> None:
         """Consome o powerup do slot indicado e aplica seu efeito (Cofre)."""
         if not self.ship.has_storage_slots():
@@ -3006,3 +3192,29 @@ class PlayingScene(Scene):
                     3,
                     border_radius=8,
                 )
+
+            # Destaque dourado pulsante quando o slot está selecionado no
+            # modo de seleção via controle (D-pad ↑ → LB/RB → A).
+            if self._upgrade_select_mode and i == self._upgrade_select_index:
+                pulse = 0.6 + 0.4 * math.sin(pygame.time.get_ticks() / 120.0)
+                glow_thickness = 3 + int(pulse * 2)
+                pygame.draw.rect(
+                    surface,
+                    _colors.CUSTOM_GOLD,
+                    pygame.Rect(
+                        slot_x - 2, y - 2, slot_w + 4, slot_h + 4
+                    ),
+                    glow_thickness,
+                    border_radius=10,
+                )
+
+        # Dica de controles quando em modo de seleção via gamepad.
+        if self._upgrade_select_mode:
+            hint = font_small.render(
+                "LB/RB navegar  A confirmar  B cancelar",
+                True,
+                _colors.CUSTOM_GOLD,
+            )
+            hint_x = Config.SCREEN_WIDTH - pad - hint.get_width()
+            hint_y = y + slot_h + 6
+            surface.blit(hint, (hint_x, hint_y))

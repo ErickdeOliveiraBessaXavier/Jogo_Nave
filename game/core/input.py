@@ -1,4 +1,8 @@
+from typing import Optional
+
 import pygame
+
+from .gamepad import GamepadManager, XboxButton
 
 KEYMAP = {
     pygame.K_LEFT: "move_left",
@@ -16,9 +20,16 @@ KEYMAP = {
     pygame.K_ESCAPE: "quit",
 }
 
+# Botões Xbox em ações discretas (KEYDOWN equivalente). A direção do D-pad
+# é tratada em outro caminho (eventos sintéticos no app.py).
+BUTTONMAP_GAMEPLAY = {
+    XboxButton.A: "shoot",
+    XboxButton.START: "pause",
+}
+
 
 class Input:
-    def poll_events(self) -> set[str]:
+    def poll_events(self, gamepad: Optional[GamepadManager] = None) -> set[str]:
         actions: set[str] = set()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -26,9 +37,13 @@ class Input:
             elif event.type == pygame.KEYDOWN:
                 if event.key in KEYMAP:
                     actions.add(KEYMAP[event.key])
+            elif event.type == pygame.JOYBUTTONDOWN and gamepad is not None and gamepad.is_active:
+                action = BUTTONMAP_GAMEPLAY.get(event.button)
+                if action is not None:
+                    actions.add(action)
         return actions
 
-    def poll_held(self) -> set[str]:
+    def poll_held(self, gamepad: Optional[GamepadManager] = None) -> set[str]:
         held: set[str] = set()
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
@@ -41,4 +56,47 @@ class Input:
             held.add("hold_down")
         if keys[pygame.K_SPACE] or keys[pygame.K_RETURN]:
             held.add("hold_shoot")
+
+        if gamepad is not None and gamepad.is_active:
+            held |= self._poll_held_gamepad(gamepad)
+
         return held
+
+    def _poll_held_gamepad(self, gp: GamepadManager) -> set[str]:
+        """Lê estado contínuo do controle e mapeia para ações de hold.
+
+        Em gameplay o D-pad é reservado para ativar slots de upgrade
+        (tratado em playing.py), então NÃO entra nas ações de movimento.
+        Movimento da nave vem só do stick esquerdo. A magnitude exata é
+        exposta separadamente em ``gamepad_movement_vector``.
+        """
+        held: set[str] = set()
+
+        lx, ly = gp.get_stick("left")
+        if lx < 0:
+            held.add("hold_left")
+        if lx > 0:
+            held.add("hold_right")
+        if ly < 0:
+            held.add("hold_up")
+        if ly > 0:
+            held.add("hold_down")
+
+        # Tiro contínuo via RT analógico.
+        if gp.get_trigger("right") > GamepadManager.TRIGGER_THRESHOLD:
+            held.add("hold_shoot")
+
+        return held
+
+    def gamepad_movement_vector(
+        self, gamepad: Optional[GamepadManager]
+    ) -> tuple[float, float]:
+        """Vetor de movimento (x, y) com magnitude do stick esquerdo.
+
+        Cada componente já tem dead zone aplicada (vale 0.0 fora da zona).
+        Retorna (0, 0) se nenhum gamepad ativo. Permite ``ship.move`` aplicar
+        velocidade proporcional à inclinação do stick.
+        """
+        if gamepad is None or not gamepad.is_active:
+            return (0.0, 0.0)
+        return gamepad.get_stick("left")

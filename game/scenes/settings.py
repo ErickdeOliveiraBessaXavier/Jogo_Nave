@@ -59,6 +59,7 @@ class SettingsView:
         self.toggles: Dict[str, bool] = {
             "mouse_control": self.preferences.mouse_control,
             "auto_fire": self.preferences.auto_fire,
+            "gamepad_enabled": self.preferences.gamepad_enabled,
         }
         self.dragging_slider: str | None = None
 
@@ -142,7 +143,7 @@ class SettingsView:
         y_offset = controls_card_rect.y + 60
 
         # Agrupar toggles
-        for key in ["mouse_control", "auto_fire"]:
+        for key in ["mouse_control", "auto_fire", "gamepad_enabled"]:
             self.layout_rects["toggles"][key] = pygame.Rect(
                 controls_card_rect.x + 30, y_offset, toggle_w, toggle_h
             )
@@ -230,6 +231,7 @@ class SettingsView:
 
         self.toggles["mouse_control"] = self.preferences.mouse_control
         self.toggles["auto_fire"] = self.preferences.auto_fire
+        self.toggles["gamepad_enabled"] = self.preferences.gamepad_enabled
 
         saved_res = self.preferences.resolution
         for i, (w, h, _) in enumerate(self.available_resolutions):
@@ -328,6 +330,9 @@ class SettingsView:
                     elif key == "auto_fire":
                         self.preferences.auto_fire = self.toggles[key]
                         self._apply_live_control_settings()
+                    elif key == "gamepad_enabled":
+                        self.preferences.gamepad_enabled = self.toggles[key]
+                        self._apply_live_control_settings()
                     self.preferences.save()
                     return True
 
@@ -372,17 +377,23 @@ class SettingsView:
             sound_manager.set_shot_volume(volume)
 
     def _apply_live_control_settings(self) -> None:
-        """Aplica mouse_control/auto_fire imediatamente no runtime atual."""
+        """Aplica mouse_control/auto_fire/gamepad_enabled imediatamente no runtime."""
         if self._app is None:
             return
 
         # Sincroniza preferências em memória do app.
         self._app.preferences.mouse_control = self.preferences.mouse_control
         self._app.preferences.auto_fire = self.preferences.auto_fire
+        self._app.preferences.gamepad_enabled = self.preferences.gamepad_enabled
 
         # Sincroniza sistema de input global.
         self._app.input.mouse_control = self.preferences.mouse_control
         self._app.input.auto_fire = self.preferences.auto_fire
+
+        # Liga/desliga gamepad em tempo real sem precisar reiniciar.
+        gamepad = getattr(self._app, "gamepad", None)
+        if gamepad is not None:
+            gamepad.set_enabled(self.preferences.gamepad_enabled)
 
         # Se houver cena de gameplay ativa por baixo (abrindo settings via pause),
         # atualiza também a nave existente sem exigir reinício.
@@ -565,7 +576,14 @@ class SettingsView:
         surface.set_clip(clip_rect)
 
         # Toggles
-        labels = {"mouse_control": "Controle por Mouse", "auto_fire": "Tiro Automático"}
+        labels = {
+            "mouse_control": "Controle por Mouse",
+            "auto_fire": "Tiro Automático",
+            "gamepad_enabled": "Controle Xbox",
+        }
+        gamepad = getattr(self._app, "gamepad", None) if self._app is not None else None
+        gamepad_connected = bool(gamepad is not None and gamepad.connected)
+
         for key in self.toggles:
             rect = self.layout_rects["toggles"][key].copy()
             rect.y += offset_y
@@ -582,8 +600,15 @@ class SettingsView:
                 check_surf.fill((*CUSTOM_GOLD, alpha))
                 surface.blit(check_surf, (rect.x + 3, rect.y + 3))
 
-            # Label
-            label_surf = self.item_font.render(labels[key], True, colors.WHITE)
+            # Label (com sufixo de status para o toggle de gamepad)
+            label_text = labels[key]
+            if key == "gamepad_enabled":
+                suffix = " (conectado)" if gamepad_connected else " (desconectado)"
+                label_color = colors.WHITE if gamepad_connected else colors.GRAY
+                label_text += suffix
+            else:
+                label_color = colors.WHITE
+            label_surf = self.item_font.render(label_text, True, label_color)
             label_surf.set_alpha(alpha)
             surface.blit(
                 label_surf,

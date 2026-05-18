@@ -1044,7 +1044,13 @@ class Ship:
             if self.auto_fire_timer >= 0.1:
                 self.auto_fire_timer = 0.0
 
-    def move(self, held_actions: set[str], dt: float, is_side_scroll: bool = False):
+    def move(
+        self,
+        held_actions: set[str],
+        dt: float,
+        is_side_scroll: bool = False,
+        gamepad_vec: tuple[float, float] = (0.0, 0.0),
+    ):
         """
         Move a nave baseado nas ações pressionadas.
 
@@ -1053,6 +1059,9 @@ class Ship:
             dt: Delta time
             is_side_scroll: Se True, usa movimentação horizontal (left-right com up-down)
                            Se False, usa movimentação vertical (top-down)
+            gamepad_vec: Vetor do stick esquerdo do controle (já com dead zone).
+                Quando diferente de (0,0) precede mouse_control e teclado,
+                permitindo velocidade proporcional à inclinação do stick.
         """
         # Fantasma em dash: força velocidade alta na direção travada e ignora input.
         if self.is_dashing:
@@ -1073,7 +1082,18 @@ class Ship:
         current_speed = self.speed * base_speed_multiplier
         move_vec = pygame.math.Vector2(0, 0)
 
-        if self.mouse_control:
+        gp_x, gp_y = gamepad_vec
+        if gp_x != 0.0 or gp_y != 0.0:
+            # Movimento proporcional à inclinação do stick. invert_controls_timer
+            # (Toxina) espelha o vetor inteiro.
+            if self.invert_controls_timer > 0.0:
+                gp_x, gp_y = -gp_x, -gp_y
+            move_vec.x = gp_x
+            move_vec.y = gp_y
+            mag = move_vec.length()
+            if mag > 1.0:
+                move_vec /= mag
+        elif self.mouse_control:
             # Spring-follow: velocidade proporcional à distância ao cursor,
             # escalada por agility_mult do profile. Sem input lag.
             mouse_x, mouse_y = pygame.mouse.get_pos()
