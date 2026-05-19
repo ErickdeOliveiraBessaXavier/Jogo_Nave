@@ -200,53 +200,87 @@ class MountainsBackground(Background):
         self.sun_rect: Optional[pygame.Rect] = None
         self.sun_surface: Optional[pygame.Surface] = None
 
-        # Gradiente do céu (pré-renderizado)
-        self.sky_gradient: Optional[pygame.Surface] = None
+        # Dois gradientes pré-renderizados: warm (pôr do sol) e night (azul-frio).
+        # O blit final do céu mistura os dois via alpha proporcional ao
+        # ``_current_progress`` (0 = warm puro, 1 = night puro).
+        self.sky_warm_gradient: Optional[pygame.Surface] = None
+        self.sky_night_gradient: Optional[pygame.Surface] = None
+
+        # Progressão da paisagem (0=dia/pôr do sol, 1=noite fechada).
+        # ``_target_progress`` é setado externamente quando o nível avança;
+        # ``_current_progress`` interpola linearmente em direção ao alvo. A
+        # velocidade é calibrada para que cada step de nível (≈ 0.11) leve
+        # ~0.4s — bem visível ao avançar, mas com animação suave de fade.
+        self._target_progress: float = 0.0
+        self._current_progress: float = 0.0
+        self._progress_lerp_speed: float = 0.3  # unidades/segundo
+
+        # Quanto o sol desce verticalmente quando vai do meio-dia à noite.
+        self._sun_dive_distance: int = int(self.height * 0.22)
 
         # Criar elementos
-        self._create_sky_gradient()
+        self._create_sky_gradients()
         self._create_layers()
         self._create_stars()
         self._create_sun()
         self._create_clouds()
 
-    def _create_sky_gradient(self) -> None:
-        """Pré-renderiza o gradiente do céu com as cores vibrantes originais (otimizado com draw.line)."""
-        self.sky_gradient = pygame.Surface((self.width, self.height))
+    def _create_sky_gradients(self) -> None:
+        """Pré-renderiza dois gradientes (warm e night) que serão misturados
+        via alpha em tempo de desenho conforme ``_current_progress``.
 
-        # Cores do gradiente (do HTML original)
-        gradient_colors = [
-            (30, 17, 40),  # #1e1128 - topo
-            (58, 37, 82),  # #3a2552 - 40%
-            (140, 75, 110),  # #8c4b6e - 70%
-            (201, 109, 99),  # #c96d63 - 90%
-            (255, 158, 125),  # #ff9e7d - base
+        Custo: dois loops por linha, executados uma vez no construtor.
+        """
+        warm_colors = [
+            (30, 17, 40),    # topo profundo (já era escuro no warm)
+            (58, 37, 82),    # ~40% — roxo
+            (140, 75, 110),  # ~70% — rosa-vinho
+            (201, 109, 99),  # ~90% — laranja avermelhado
+            (255, 158, 125),  # base — peach
         ]
-        gradient_stops = [0.0, 0.4, 0.7, 0.9, 1.0]
+        night_colors = [
+            (5, 8, 18),     # topo — quase preto azulado
+            (10, 15, 35),   # ~40% — azul-marinho profundo
+            (18, 28, 55),   # ~70% — azul noite
+            (28, 42, 72),   # ~90% — azul-petróleo
+            (40, 60, 95),   # base — azul-acinzentado frio
+        ]
+        stops = [0.0, 0.4, 0.7, 0.9, 1.0]
 
-        # Desenhar gradiente otimizado (pré-calcular cores)
+        self.sky_warm_gradient = self._render_sky_gradient(warm_colors, stops)
+        self.sky_night_gradient = self._render_sky_gradient(night_colors, stops)
+
+    def _render_sky_gradient(
+        self,
+        colors: List[Tuple[int, int, int]],
+        stops: List[float],
+    ) -> pygame.Surface:
+        """Renderiza uma surface vertical com gradiente interpolado entre
+        ``colors`` posicionados em ``stops`` (0..1)."""
+        surf = pygame.Surface((self.width, self.height))
         for y in range(self.height):
             t = y / self.height
-
-            # Encontrar entre quais stops estamos
-            for i in range(len(gradient_stops) - 1):
-                if t <= gradient_stops[i + 1]:
-                    # Interpolar entre gradient_colors[i] e gradient_colors[i+1]
-                    local_t = (t - gradient_stops[i]) / (
-                        gradient_stops[i + 1] - gradient_stops[i]
-                    )
+            for i in range(len(stops) - 1):
+                if t <= stops[i + 1]:
+                    local_t = (t - stops[i]) / (stops[i + 1] - stops[i])
                     color = tuple(
                         int(
-                            gradient_colors[i][c]
-                            + (gradient_colors[i + 1][c] - gradient_colors[i][c])
-                            * local_t
+                            colors[i][c]
+                            + (colors[i + 1][c] - colors[i][c]) * local_t
                         )
                         for c in range(3)
                     )
-
-                    # Desenhar linha uma vez (mais otimizado que pixel por pixel)
-                    pygame.draw.line(self.sky_gradient, color, (0, y), (self.width, y))
+                    pygame.draw.line(surf, color, (0, y), (self.width, y))
                     break
+        return surf
+
+    def set_target_progress(self, progress: float) -> None:
+        """Define alvo da transição warm→night (0 = pôr do sol, 1 = noite).
+
+        O ``update`` interpola ``_current_progress`` linearmente em direção
+        ao alvo, evitando saltos visuais entre transições de nível.
+        """
+        self._target_progress = max(0.0, min(1.0, progress))
 
     def _create_layers(self) -> None:
         """Cria camadas de parallax otimizadas."""
@@ -382,15 +416,27 @@ class MountainsBackground(Background):
             )
 
     def _draw_stars(self, surface: pygame.Surface) -> None:
-        """Desenha estrelas com brilho piscante usando variants pré-renderizadas."""
+        """Desenha estrelas com brilho piscante usando variants pré-renderizadas.
+
+        O brilho geral é escalado pelo ``_current_progress`` — estrelas quase
+        invisíveis no pôr do sol (0) e fortes na noite fechada (1).
+        """
         current_time = pygame.time.get_ticks() / 1000.0
         twinkle_speed = self.star_twinkle_speed
+        # Floor de 0.25 garante que estrelas existem mesmo de dia (apenas
+        # discretas); 1.0 é o brilho máximo na noite.
+        brightness_mult = 0.25 + self._current_progress * 0.75
 
         for star in self.stars:
             alpha_factor = (
                 math.sin(current_time * twinkle_speed + star["delay"]) + 1
             ) * 0.5
-            alpha = int((star["base_alpha"] * (0.3 + alpha_factor * 0.7)) * 255)
+            alpha = int(
+                star["base_alpha"]
+                * (0.3 + alpha_factor * 0.7)
+                * brightness_mult
+                * 255
+            )
             level = min(
                 self.STAR_ALPHA_LEVELS - 1,
                 max(0, round(alpha * (self.STAR_ALPHA_LEVELS - 1) / 255)),
@@ -473,22 +519,40 @@ class MountainsBackground(Background):
         for cloud in self.clouds_front:
             cloud.update(dt, speed_mult)
 
+        # Interpolação linear cadenciada do progresso warm→night.
+        diff = self._target_progress - self._current_progress
+        if diff != 0.0:
+            step = self._progress_lerp_speed * dt
+            if abs(diff) <= step:
+                self._current_progress = self._target_progress
+            else:
+                self._current_progress += step if diff > 0 else -step
+
     def draw(self, surface: pygame.Surface) -> None:
         """Desenha todos os elementos do background."""
-        # Desenhar gradiente de céu pré-renderizado
-        if self.sky_gradient:
-            surface.blit(self.sky_gradient, (0, 0))
+        # Sky base (warm puro) sempre cobre a tela.
+        if self.sky_warm_gradient:
+            surface.blit(self.sky_warm_gradient, (0, 0))
+        # Overlay night por cima com alpha = progresso atual. Set_alpha em
+        # surface convertida é barato (sem re-render).
+        if self.sky_night_gradient and self._current_progress > 0.001:
+            self.sky_night_gradient.set_alpha(int(self._current_progress * 255))
+            surface.blit(self.sky_night_gradient, (0, 0))
 
-        # Desenhar estrelas
+        # Desenhar estrelas (brilho escalado em _draw_stars conforme o progresso)
         self._draw_stars(surface)
 
         # Desenhar nuvens de fundo
         for cloud in self.clouds_back:
             cloud.draw(surface)
 
-        # Desenhar sol (pré-renderizado)
+        # Desenhar sol: fade out + desliza para baixo conforme escurece.
         if self.sun_surface and self.sun_rect:
-            surface.blit(self.sun_surface, self.sun_rect)
+            sun_alpha = int((1.0 - self._current_progress) * 255)
+            if sun_alpha > 0:
+                self.sun_surface.set_alpha(sun_alpha)
+                offset_y = int(self._current_progress * self._sun_dive_distance)
+                surface.blit(self.sun_surface, self.sun_rect.move(0, offset_y))
 
         # Desenhar camadas de montanhas (parallax)
         for layer in self.layers:

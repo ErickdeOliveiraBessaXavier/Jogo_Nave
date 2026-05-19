@@ -209,6 +209,12 @@ class BlackHole:
             if getattr(enemy, "dead", False):
                 continue
 
+            # Inimigos fixos no chão (stalagmites, propellers ancorados) ou
+            # outras entidades cujo ``y`` é derivado (property sem setter)
+            # opt-out via ``pullable_by_black_hole = False``.
+            if not getattr(enemy, "pullable_by_black_hole", True):
+                continue
+
             # Verificar se é um boss - bosses são imunes ao buraco negro
             enemy_class_name = enemy.__class__.__name__
             if enemy_class_name in (

@@ -89,6 +89,11 @@ class _StalagmiteFragment:
 
 
 class MountainStalagmite:
+    # Estrutura fixa no chão — ``y`` é derivado de ``ground_y - _current_height``,
+    # uma property sem setter. Sinaliza ao black_hole.process_all_enemies para
+    # ignorar (qualquer ``enemy.y += ...`` causaria AttributeError).
+    pullable_by_black_hole: bool = False
+
     """Pilar de pedra invocado pelo MountainMage, estilo low-poly terroso."""
 
     # Combat

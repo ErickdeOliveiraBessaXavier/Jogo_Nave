@@ -43,6 +43,7 @@ from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgr
 from ..core.upgrades_config import HOMING_DAMAGE_MULTIPLIER, UPGRADE_SLOT_COUNT
 from ..core.world_config import (
     WorldConfig,
+    WorldTheme,
     format_stage_name,
     get_world_for_level,
     is_side_scroll_mode,
@@ -453,11 +454,29 @@ class PlayingScene(Scene):
     def _apply_world_theme(self) -> None:
         """Aplica o tema visual do mundo atual."""
         self.r.set_world_theme(self.current_world.theme)
+        self._apply_mountains_progress()
         logger.info(
             "🌍 Mundo aplicado: %s (%s)",
             self.current_world.name,
             self.current_world.theme.value,
         )
+
+    def _apply_mountains_progress(self) -> None:
+        """Repassa ao renderer o progresso (0..1) da paleta warm→night das
+        Cordilheiras conforme o nível avança dentro do Mundo 1.
+
+        Em outros temas é no-op porque o renderer só aplica quando o
+        background atual é ``MountainsBackground``.
+        """
+        if self.current_world.theme != WorldTheme.MOUNTAINS:
+            return
+        start = self.current_world.start_level
+        end = self.current_world.end_level
+        span = max(1, end - start)
+        current_level = self.current_level_index + 1
+        progress = (current_level - start) / span
+        progress = max(0.0, min(1.0, progress))
+        self.r.set_mountains_progress(progress)
 
     # ------------------------------------------------------------------
     # Máquina de estados de transição
@@ -2320,6 +2339,12 @@ class PlayingScene(Scene):
             self.level_config.score_multiplier
             * self.difficulty_settings["rewards_multiplier"]
         )
+
+        # Avanço dentro do mesmo mundo (sem theme change) atualiza só o
+        # progress visual; troca de tema delega para _apply_world_theme
+        # após a cutscene de transição.
+        if not theme_changed:
+            self._apply_mountains_progress()
 
         self.enemy_spawner.set_level(self.current_level_index + 1, is_world_transition=theme_changed, level_config=self.level_config)
         self.enemies_destroyed_in_level = 0

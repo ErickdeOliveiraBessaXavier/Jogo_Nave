@@ -473,6 +473,12 @@ class Renderer:
         }
         # === FIM DO SISTEMA DE FPS ===
 
+    def set_mountains_progress(self, progress: float) -> None:
+        """Repassa o progresso warm→night ao background atual quando ele é
+        ``MountainsBackground``. Em outros temas, no-op."""
+        if isinstance(self.current_background, MountainsBackground):
+            self.current_background.set_target_progress(progress)
+
     def set_world_theme(self, theme: WorldTheme) -> None:
         """
         Troca o background baseado no tema do mundo.

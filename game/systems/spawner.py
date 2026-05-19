@@ -369,6 +369,8 @@ class EnemySpawner:
             "SquareMinionBoss": "square_minion_boss",
             "ElementalRobot": "elemental_robot",
             "StoneSentry": "stone_sentry",
+            "MountainMage": "mountain_mage",
+            "MountainPropeller": "mountain_propeller",
         }
         return aliases.get(enemy_type.__name__, enemy_type.__name__.lower())
 
@@ -377,7 +379,12 @@ class EnemySpawner:
         base_gap = DifficultyConfig.MIN_SPAWN_GAP_BY_TYPE.get(
             type_key, DifficultyConfig.MIN_GLOBAL_SPAWN_GAP
         )
-        if enemy_type in (ElementalRobot, StoneSentry):
+        if enemy_type in (
+            ElementalRobot,
+            StoneSentry,
+            MountainMage,
+            MountainPropeller,
+        ):
             base_gap = max(base_gap, self.level_config.get_spawn_time(enemy_type))
 
         return base_gap * DifficultyConfig.DIFFICULTY_SPAWN_GAP_MULTIPLIER.get(

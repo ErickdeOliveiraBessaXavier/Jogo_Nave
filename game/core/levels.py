@@ -694,6 +694,15 @@ class DifficultyConfig:
         "elemental_robot": 0.90,
         # StoneSentry deve ter cadência rara (30s entre spawns).
         "stone_sentry": 30.0,
+        # MountainMage tem cap de 1 simultâneo. Sem este gap mínimo, ao morrer
+        # um o spawner reagia em ~0.16s (gap global), causando reentrada quase
+        # instantânea no procedural. 8s mantém presença sem virar onda.
+        "mountain_mage": 8.0,
+        # MountainPropeller tem cap de 3 simultâneos e um spawner dedicado de
+        # ~14s. No caminho ponderado (_select_enemy_to_spawn) sem este gap o
+        # spawn caía no global de 0.16s, sobrecarregando a tela em quem ainda
+        # tem cota dos 3 propellers. 5s respeita o cap sem virar swarm.
+        "mountain_propeller": 5.0,
     }
 
     DIFFICULTY_SCALING: float = 0.15
