@@ -6,6 +6,7 @@ Mostra status de desbloqueio e checkpoint atual.
 """
 
 import math
+import random
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, List, Tuple
 
@@ -21,6 +22,33 @@ from .ui_helpers import draw_bordered_button
 
 if TYPE_CHECKING:
     from ..render.renderer import Renderer
+
+
+class UIParticle:
+    """Simples sistema de partículas para UI."""
+    def __init__(self, x: float, y: float, color: tuple[int, int, int]):
+        self.x = x
+        self.y = y
+        self.color = color
+        angle = random.uniform(0, math.pi * 2)
+        speed = random.uniform(20, 80)
+        self.vx = math.cos(angle) * speed
+        self.vy = math.sin(angle) * speed
+        self.life = 1.0
+        self.size = random.randint(2, 4)
+
+    def update(self, dt: float):
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.life -= dt * 0.8
+
+    def draw(self, surface: pygame.Surface, alpha_mult: float = 1.0):
+        if self.life <= 0:
+            return
+        alpha = int(255 * self.life * alpha_mult)
+        p_surf = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
+        pygame.draw.circle(p_surf, (*self.color, alpha), (self.size, self.size), self.size)
+        surface.blit(p_surf, (self.x - self.size, self.y - self.size))
 
 
 def render_text_wrapped(
@@ -143,7 +171,8 @@ class WorldCard:
             bg_bright = 20 * pulse
             bg_color = tuple(min(255, int(c + bg_bright)) for c in self.bg_color)
             
-        pygame.draw.rect(card_surf, bg_color, card_surf.get_rect(), border_radius=12)
+        # Desenhar fundo translúcido (RGBA)
+        pygame.draw.rect(card_surf, (*bg_color, 200), card_surf.get_rect(), border_radius=12)
 
         # Borda dinâmica
         border_thickness = 3
@@ -280,7 +309,14 @@ class WorldSelectionView:
         )
 
         # Fontes cacheadas fora do caminho de render
+        self.title_font = get_font(36)
         self._inst_font = get_font(16)
+
+        # Título
+        self.title_text = self.title_font.render(
+            "Selecione o Mundo", True, CUSTOM_GOLD
+        )
+        self.title_rect = self.title_text.get_rect(center=(Config.SCREEN_WIDTH // 2, 80))
 
         # Botão Voltar (Canto inferior esquerdo)
         btn_w = 160
@@ -296,6 +332,12 @@ class WorldSelectionView:
         self.right_arrow_rect = pygame.Rect(Config.SCREEN_WIDTH - arrow_box_size - 10, center_y - arrow_box_size // 2, arrow_box_size, arrow_box_size)
         self.left_arrow_hover = False
         self.right_arrow_hover = False
+
+        # Sistema de partículas
+        self.particles: List[UIParticle] = []
+
+        # Tremor ambiental
+        self._focused_shake = (0.0, 0.0)
 
         # Tempo global para animações de bordas
         self.time = 0.0
@@ -498,6 +540,57 @@ class WorldSelectionView:
             except Exception:  # pylint: disable=broad-exception-caught
                 pass
 
+        # Emitir partículas para o card focado
+        if 0 <= self.selected_index < len(self.world_cards):
+            card = self.world_cards[self.selected_index]
+            # Usar a cor da borda do card para as partículas
+            p_color = card.border_color
+            
+            # Tremor ambiental leve no focado
+            # amplitude reduzida para ser "atmosférico"
+            amp_x, amp_y = 3, 2
+            freq = 4.0
+            card_shake_x = math.sin(self.time * freq) * amp_x
+            card_shake_y = math.cos(self.time * freq * 1.1) * amp_y
+            
+            # Armazenar temporariamente no objeto view para o render usar
+            # (Poderia ser um atributo do card, mas vamos injetar no render)
+            self._focused_shake = (card_shake_x, card_shake_y)
+            
+            # Emitir partículas nas bordas do card central (focado)
+            num_p = 2 
+            for _ in range(num_p):
+                # Posição visual central
+                center_x = Config.SCREEN_WIDTH // 2
+                center_y = Config.SCREEN_HEIGHT // 2
+                
+                # Escolher um lado aleatório da borda (baseado no tamanho real do card focado)
+                side = random.randint(0, 3)
+                half_w, half_h = card.base_width // 2, card.base_height // 2
+                
+                if side == 0:  # Top
+                    px = center_x + random.uniform(-half_w, half_w)
+                    py = center_y - half_h
+                elif side == 1:  # Bottom
+                    px = center_x + random.uniform(-half_w, half_w)
+                    py = center_y + half_h
+                elif side == 2:  # Left
+                    px = center_x - half_w
+                    py = center_y + random.uniform(-half_h, half_h)
+                else:  # Right
+                    px = center_x + half_w
+                    py = center_y + random.uniform(-half_h, half_h)
+                    
+                self.particles.append(UIParticle(px, py, p_color))
+        else:
+            self._focused_shake = (0, 0)
+
+        # Atualizar partículas
+        for p in self.particles[:]:
+            p.update(_dt)
+            if p.life <= 0:
+                self.particles.remove(p)
+
     def render(self, surface: pygame.Surface) -> None:
         """Renderiza a view com carrossel dinâmico."""
         # Fundo preto
@@ -505,6 +598,13 @@ class WorldSelectionView:
 
         # 1. Renderizar Background
         self._render_background(surface)
+        
+        # Título
+        surface.blit(self.title_text, self.title_rect)
+        
+        # Renderizar Partículas (atrás dos cards)
+        for p in self.particles:
+            p.draw(surface)
 
         # 2. Renderizar Cards do Carrossel
         center_x = Config.SCREEN_WIDTH // 2
@@ -543,8 +643,15 @@ class WorldSelectionView:
             # Um card é focado se for o mais próximo do visual_scroll_index (arredondado)
             is_focused = i == self.selected_index
             
+            # Aplicar tremor se focado
+            final_center_x = int(x)
+            final_center_y = center_y
+            if is_focused:
+                final_center_x += int(self._focused_shake[0])
+                final_center_y += int(self._focused_shake[1])
+            
             if -400 < x < Config.SCREEN_WIDTH + 400:
-                card.render(surface, (int(x), center_y), scale, alpha, self.time, is_focused)
+                card.render(surface, (final_center_x, final_center_y), scale, alpha, self.time, is_focused)
 
         # 3. Instruções e Botão Voltar
         self._render_ui_elements(surface)

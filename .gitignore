@@ -114,6 +114,7 @@ venv.bak/
 .vscode/
 
 player_profile.json
+user_preferences.json
 
 # Build outputs and executables
 Output/
