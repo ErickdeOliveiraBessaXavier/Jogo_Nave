@@ -20,6 +20,17 @@ class Scene(ABC):
     def handle_event(self, event: pygame.event.Event):
         pass
 
+    def get_focusable_rects(self) -> List[pygame.Rect]:
+        """Lista opcional de áreas clicáveis para snap-focus via controle.
+
+        Cenas que implementarem retornam os rects dos elementos interativos
+        (botões, cards, slots). O app.py usa essa lista para mover o cursor
+        virtual entre elementos quando o jogador aperta o DPad, emulando
+        navegação por Tab. Lista vazia = cena fica no fallback de KEYDOWN
+        sintético (DPad → setas), comportamento atual.
+        """
+        return []
+
     @abstractmethod
     def update(self, dt: float): ...
 

@@ -378,11 +378,26 @@ class CloudArchmageBoss:
     _SHIELD_SPAWN_DUR: Final[float] = 0.55
     _TELEPORT_HALF: Final[float] = 0.6
 
-    def __init__(self, x: float | None = None, y: float | None = None) -> None:
+    def __init__(
+        self,
+        x: float | None = None,
+        y: float | None = None,
+        difficulty_multiplier: float = 1.0,
+    ) -> None:
         sw = Config.SCREEN_WIDTH
         self.w, self.h = self.WIDTH, self.HEIGHT
         self.x: float = x if x is not None else sw / 2 - self.w / 2
         self.y: float = y if y is not None else -self.h - 50.0
+        # Pace inverso à dificuldade: Casual (0.8) → intervalos 25% mais
+        # longos, Pesadelo (1.5) → 33% mais curtos. Sem isso, Casual viraria
+        # uma chuva de estalagmites + fire zones idêntica ao Normal.
+        self.difficulty_multiplier: float = difficulty_multiplier
+        self._attack_pace_mult: float = 1.0 / max(0.5, difficulty_multiplier)
+        # Cap de fire zones ativas escala com dificuldade (Casual: 4, Normal:
+        # 5, Hardcore: 6-7, Pesadelo: 7-8) para evitar campo minado em Casual.
+        self._max_fire_zones: int = max(
+            2, int(round(_MAX_FIRE_ZONES * difficulty_multiplier))
+        )
 
         # Lerp targets — zero-initialised; snapped after sprites are baked
         self._hat_x = self._hat_y = 0.0
@@ -392,8 +407,8 @@ class CloudArchmageBoss:
         self._eye_l_x = self._eye_l_y = 0.0
         self._eye_r_x = self._eye_r_y = 0.0
 
-        self.max_health: int = self.MAX_HEALTH
-        self.health: int = self.MAX_HEALTH
+        self.max_health: int = int(self.MAX_HEALTH * difficulty_multiplier)
+        self.health: int = self.max_health
         self.dead: bool = False
         self.active: bool = False
 
@@ -441,11 +456,15 @@ class CloudArchmageBoss:
         self._hit_count: int = 0
 
         self._player_pos: tuple[float, float] | None = None
-        # Mutable attack intervals — scaled down as HP drops
-        self._stalagmite_interval: float = _PHASE2_STALAGMITE_INTERVAL
-        self._firezone_interval: float = _PHASE3_FIREZONE_INTERVAL
-        self._overload_firezone_interval: float = 1.0
-        self._overload_stalagmite_interval: float = 0.9
+        # Mutable attack intervals — scaled down as HP drops + pace de dificuldade
+        self._stalagmite_interval: float = (
+            _PHASE2_STALAGMITE_INTERVAL * self._attack_pace_mult
+        )
+        self._firezone_interval: float = (
+            _PHASE3_FIREZONE_INTERVAL * self._attack_pace_mult
+        )
+        self._overload_firezone_interval: float = 1.0 * self._attack_pace_mult
+        self._overload_stalagmite_interval: float = 0.9 * self._attack_pace_mult
 
         # Shield state
         self._shield_hp: int = 0
@@ -472,6 +491,12 @@ class CloudArchmageBoss:
         self._vulnerable_timer: float = 0.0
         self._stalagmite_spawn_timer: float = 0.0
         self._fire_zone_spawn_timer: float = 0.0
+        # Respiro entre bursts de fire zones: novo grupo só nasce quando o
+        # campo está limpo (sem zonas ativas nem avisos pendentes) E o
+        # cooldown abaixo zerou. Escala com o pace de dificuldade — Casual
+        # ganha pausa mais longa, Pesadelo encurta. 2.5s base no Normal.
+        self._firezone_burst_cooldown: float = 0.0
+        self._FIREZONE_BURST_REST_BASE: float = 2.5
         self._phase1_rock_glider_timer: float = 0.0
         self._phase1_propeller_timer: float = 0.0
         self._phase3_combo_powers: tuple[OrbType, ...] | None = None
@@ -935,10 +960,6 @@ class CloudArchmageBoss:
             return cx, cy, r
         return cx, cy, max(self.w, self.h) / 2
 
-    @property
-    def is_siphoning(self) -> bool:
-        return self._state == ArchmageState.PHASE2_DEFENSE and self._shield_active
-
     # ------------------------------------------------------------------
     # Orb positioning
     # ------------------------------------------------------------------
@@ -1018,7 +1039,10 @@ class CloudArchmageBoss:
         self._white_dodge_active = False
 
     def _update_attack_intervals(self) -> None:
-        scale = 0.55 + 0.45 * (self.health / self.max_health)
+        # Aceleração natural por HP perdido (1.0 → 0.55) combinada com o pace
+        # de dificuldade (Casual desacelera, Pesadelo acelera). Sem o pace,
+        # todas as dificuldades sentiam a mesma rampa de pressão.
+        scale = (0.55 + 0.45 * (self.health / self.max_health)) * self._attack_pace_mult
         self._stalagmite_interval = _PHASE2_STALAGMITE_INTERVAL * scale
         self._firezone_interval = _PHASE3_FIREZONE_INTERVAL * scale
         self._overload_firezone_interval = 1.0 * scale
@@ -1082,6 +1106,10 @@ class CloudArchmageBoss:
             self._overload_cooldown = _OVERLOAD_COOLDOWN
         self._fire_zone_spawn_timer = 0.0
         self._stalagmite_spawn_timer = 0.0
+        # Entrada na phase 3 começa com respiro — evita burst imediato
+        # logo após a transição. Sem isso, ao sair da phase 2 a primeira
+        # rajada caía no mesmo frame em que o jogador estava se reposicionando.
+        self._firezone_burst_cooldown = self._FIREZONE_BURST_REST_BASE * self._attack_pace_mult
         self._white_dodge_active = False
 
     def _choose_phase3_combo(self) -> tuple[OrbType, ...]:
@@ -1360,7 +1388,7 @@ class CloudArchmageBoss:
 
     def _queue_random_firezone_warning(self, radius: int, duration: float) -> None:
         active_zones = [z for z in self._spawned_fire_zones if not z.should_remove()]
-        if len(active_zones) + len(self._firezone_warnings) >= _MAX_FIRE_ZONES:
+        if len(active_zones) + len(self._firezone_warnings) >= self._max_fire_zones:
             return
 
         margin = max(90.0, float(radius) + 24.0)
@@ -1508,14 +1536,24 @@ class CloudArchmageBoss:
         )
 
         if self._phase3_combo_powers and OrbType.ORANGE in self._phase3_combo_powers:
-            self._fire_zone_spawn_timer += dt
-            while self._fire_zone_spawn_timer >= self._firezone_interval:
-                self._fire_zone_spawn_timer -= self._firezone_interval
+            # Serializa o ataque: só dispara o próximo burst quando o campo
+            # está limpo E o cooldown zerou. Sem isso, o timer continuava
+            # acumulando e enfileirava zonas em rajadas consecutivas.
+            self._firezone_burst_cooldown = max(
+                0.0, self._firezone_burst_cooldown - dt
+            )
+            field_clear = (
+                not self._spawned_fire_zones and not self._firezone_warnings
+            )
+            if field_clear and self._firezone_burst_cooldown <= 0.0:
                 for _ in range(3):
                     self._queue_random_firezone_warning(
                         radius=int(60 * _FIREZONE_RADIUS_SCALE),
                         duration=random.uniform(5.0, 8.0),
                     )
+                self._firezone_burst_cooldown = (
+                    self._FIREZONE_BURST_REST_BASE * self._attack_pace_mult
+                )
 
         if self._phase3_combo_powers and OrbType.PURPLE in self._phase3_combo_powers:
             self._stalagmite_spawn_timer += dt
@@ -1579,16 +1617,26 @@ class CloudArchmageBoss:
             player_pos if player_pos else (self.x + self.w / 2, self.y + self.h / 2)
         )
 
-        self._fire_zone_spawn_timer += dt
         self._stalagmite_spawn_timer += dt
 
-        while self._fire_zone_spawn_timer >= self._overload_firezone_interval:
-            self._fire_zone_spawn_timer -= self._overload_firezone_interval
+        # Mesma serialização do PHASE3_COMBOS: só lança o próximo burst quando
+        # o campo está limpo + cooldown zerado. Mantém o overload intenso
+        # (cooldown menor que o phase normal) sem virar lava sem fim.
+        self._firezone_burst_cooldown = max(
+            0.0, self._firezone_burst_cooldown - dt
+        )
+        field_clear = not self._spawned_fire_zones and not self._firezone_warnings
+        if field_clear and self._firezone_burst_cooldown <= 0.0:
             for _ in range(3):
                 self._queue_random_firezone_warning(
                     radius=int(68 * _FIREZONE_RADIUS_SCALE),
                     duration=random.uniform(5.0, 8.0),
                 )
+            # Overload usa metade do respiro do PHASE3_COMBOS para preservar
+            # a sensação de "ataque enraivecido", mas ainda dá respiro.
+            self._firezone_burst_cooldown = (
+                self._FIREZONE_BURST_REST_BASE * 0.5 * self._attack_pace_mult
+            )
 
         while self._stalagmite_spawn_timer >= self._overload_stalagmite_interval:
             self._stalagmite_spawn_timer -= self._overload_stalagmite_interval

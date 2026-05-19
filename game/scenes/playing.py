@@ -155,6 +155,12 @@ class PlayingScene(Scene):
         # Estado anterior dos triggers analógicos do controle (para detectar
         # transição abaixo/acima do threshold sem disparar a cada AXISMOTION).
         self._lt_pressed: bool = False
+        # Calibração defensiva do LT: só confiamos no axis 2 como gatilho se
+        # ele já reportou valor próximo de -1 (estado solto de trigger real).
+        # Sticks analógicos repousam em ~0 e nunca chegam a -1 sem input —
+        # então qualquer controle que reporte o RS Y em axis 2 (mapeamento
+        # SDL não-padrão) NÃO acionará habilidades especiais por engano.
+        self._lt_calibrated: bool = False
         # Modo de seleção de upgrade via controle: D-pad ↑ alterna, LB/RB
         # navegam entre slots ativos, A confirma, B cancela.
         self._upgrade_select_mode: bool = False
@@ -268,6 +274,7 @@ class PlayingScene(Scene):
         self.state: GameState = GameState.PREPARING
         self.preparation_time_left: float = Config.PREPARATION_TIME
         self._lt_pressed: bool = False
+        self._lt_calibrated: bool = False
         self._upgrade_select_mode: bool = False
         self._upgrade_select_index: int = 0
         self.level_start_time: Optional[float] = None
@@ -570,14 +577,17 @@ class PlayingScene(Scene):
             self._begin_playing_state()
             return
 
-        # …resto do método inalterado (lógica de aplicação de mundo)
         new_world = self.pending_world_transition
         self.current_world = new_world
         self.is_side_scroll = is_side_scroll_mode(new_world.theme)
         self.pending_world_transition = None
         self._apply_world_theme()
-        self._reset_ship_for_level_entry()
-        self._begin_playing_state()
+        # Usa o mesmo fluxo de preparação dos níveis normais — ``_begin_playing_state``
+        # direto zerava ``is_entering`` no mesmo frame e a animação de entrada
+        # nunca tocava. ``_begin_level_preparation`` mantém ``state=PREPARING``
+        # até ``_update_preparing_state`` consumir ``Config.PREPARATION_TIME``,
+        # garantindo que a nave deslize da borda até a posição alvo.
+        self._begin_level_preparation()
 
     # ------------------------------------------------------------------
     # Cutscene de transição de mundo
@@ -1009,22 +1019,6 @@ class PlayingScene(Scene):
                     self.ship.x -= prop.PUSH_FORCE * dt
                     wind_slow_factor = prop.SLOW_SPEED_MULT
 
-        # Sifão do CloudArchmageBoss
-        if self._boss_type_cache == "archmage" and self.entity_manager.boss:
-            from ..entities.cloud_archmage_boss import CloudArchmageBoss
-
-            archmage = cast(CloudArchmageBoss, self.entity_manager.boss)
-            if archmage.is_siphoning:
-                target_x = archmage.x + archmage.w / 2
-                target_y = archmage.y + archmage.h / 2
-                dx = target_x - self.ship.x
-                dy = target_y - self.ship.y
-                dist = math.hypot(dx, dy)
-                if dist > 10:
-                    force = 180.0
-                    self.ship.x += (dx / dist) * force * dt
-                    self.ship.y += (dy / dist) * force * dt
-                    wind_slow_factor = min(wind_slow_factor, 0.6)
 
         self.ship.wind_slow_factor = wind_slow_factor
 
@@ -2166,6 +2160,7 @@ class PlayingScene(Scene):
         if not level_config.boss_type:
             return
 
+        from ..entities.cloud_archmage_boss import CloudArchmageBoss
         from ..entities.giant_meteor_boss import GiantMeteorBoss
         from ..entities.mountain_serpent_boss import MountainSerpentBoss
         from ..entities.stone_golem_boss import StoneGolemBoss
@@ -2192,6 +2187,14 @@ class PlayingScene(Scene):
             boss = self.entity_manager.spawn_giant_meteor_boss()
             boss.health = int(boss.health * self.enemy_health_multiplier)
             boss.max_health = boss.health
+        elif level_config.boss_type == CloudArchmageBoss:
+            # Archmage precisa do pace interno (intervalo de estalagmites/fire
+            # zones + cap de zonas ativas), não só HP escalado — sem isso a
+            # phase 3 fica idêntica em Casual e Pesadelo.
+            boss = CloudArchmageBoss(
+                difficulty_multiplier=self.enemy_health_multiplier,
+            )
+            self.entity_manager.boss = boss
         else:
             boss = level_config.boss_type(Config.SCREEN_WIDTH / 2 - 50, 50)
             boss.health = int(boss.health * self.enemy_health_multiplier)
@@ -2528,20 +2531,22 @@ class PlayingScene(Scene):
                 self._navigate_upgrade_select(1)
             return
 
-        # A é o botão único de tiro: o disparo (tap ou hold) sai do
-        # ``hold_shoot`` em poll_held — não dispara aqui para evitar dupla
-        # contagem. Habilidades especiais (dash, charge shot do Caçador,
-        # laser do Magneto) ficam no LT analógico, tratadas em
+        # O tiro normal saiu dos botões e foi para o RT (gatilho direito):
+        # ``hold_shoot`` em ``_poll_held_gamepad`` é o único caminho, então
+        # ``button == XboxButton.A`` fora do modo de seleção fica livre para
+        # outro propósito (Cofre E). Habilidades especiais (dash, charge shot
+        # do Caçador, laser do Magneto) ficam no LT analógico, tratadas em
         # ``_handle_gamepad_axis`` baseado no perfil da nave.
-        if button == XboxButton.X:
+        if button == XboxButton.A:
+            self._activate_stored_powerup(1)  # Cofre E (era R3 antes)
+        elif button == XboxButton.X:
             self.ship.cycle_facing()
         elif button == XboxButton.Y:
             self._activate_stored_powerup(0)  # Cofre Q
-        elif button == XboxButton.R3:
-            self._activate_stored_powerup(1)  # Cofre E
         # LB/RB fora do modo de seleção não fazem nada — esses botões só
         # ganham função quando o modo está aberto (navegar entre slots).
-        # L3 fica livre (o dash agora vive no LT junto com o charge shot).
+        # L3/R3 ficam livres por requisito do usuário: ``configurações dos
+        # analógicos RS e LS removidas``. O Cofre E migrou de R3 para A.
 
     def _handle_gamepad_hat(self, value: tuple[int, int]) -> None:
         """D-pad ↑ alterna o modo de seleção de upgrades.
@@ -2620,6 +2625,15 @@ class PlayingScene(Scene):
         from ..core.gamepad import GamepadManager, XboxAxis
 
         if axis != XboxAxis.LT:
+            return
+        # Defesa contra mapeamento SDL não-padrão: se o controle reportar o
+        # RS Y em axis 2, value vai descansar perto de 0 (stick) e nunca
+        # chegar perto de -1 (estado solto de trigger real). Só validamos
+        # o LT após ver pelo menos um evento abaixo de -0.5, indicando que
+        # o axis realmente se comporta como gatilho.
+        if value <= -0.5:
+            self._lt_calibrated = True
+        if not self._lt_calibrated:
             return
         normalized = (value + 1.0) * 0.5
         pressed = normalized > GamepadManager.TRIGGER_THRESHOLD

@@ -230,6 +230,29 @@ class DifficultySelectionView:
                 self.on_back()
                 return True  # Evento consumido
 
+        elif event.type == pygame.JOYBUTTONDOWN:
+            # Controle: A confirma no card sob o cursor virtual (movido pelo
+            # RS no app.py). Sem essa traduçao, A só virava K_RETURN sintético
+            # e a view não tratava K_RETURN — daí o ``não consigo selecionar``.
+            # B age como atalho de voltar, independente da posição do cursor.
+            from ..core.gamepad import XboxButton
+
+            if event.button == XboxButton.A:
+                pos = pygame.mouse.get_pos()
+                if self.back_button_rect.collidepoint(pos):
+                    sound_manager.play_sound("button_click")
+                    self.on_back()
+                    return True
+                for preset, button_data in self.difficulty_buttons.items():
+                    if button_data["rect"].collidepoint(pos):
+                        sound_manager.play_sound("button_click")
+                        self.selected_difficulty = preset
+                        self.on_select(preset)
+                        return True
+            elif event.button == XboxButton.B:
+                self.on_back()
+                return True
+
         return False  # Evento não consumido
 
     def update(self, dt: float):
@@ -427,6 +450,12 @@ class DifficultySelectionScene(Scene):
 
     def handle_event(self, event: pygame.event.Event):
         self.view.handle_event(event)
+
+    def get_focusable_rects(self) -> list[pygame.Rect]:
+        """Cards de dificuldade + botão Voltar. App.py usa pra navegar via DPad."""
+        rects = [data["rect"] for data in self.view.difficulty_buttons.values()]
+        rects.append(self.view.back_button_rect)
+        return rects
 
     def start_game(self, preset: DifficultyPreset):
         """Inicia o jogo com a dificuldade selecionada."""

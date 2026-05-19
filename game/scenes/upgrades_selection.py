@@ -292,6 +292,20 @@ class UpgradesSelectionScene(Scene):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self._return_to_menu()
 
+        # Controle: A aciona equipar/retirar automaticamente no item sob o
+        # cursor virtual (movido pelo stick direito em app.py). Sem
+        # drag-and-drop — clicar o upgrade no Estoque manda para o primeiro
+        # slot livre; clicar o slot equipado devolve o item ao Estoque.
+        if event.type == pygame.JOYBUTTONDOWN:
+            from ..core.gamepad import XboxButton
+
+            if event.button == XboxButton.A:
+                self._handle_gamepad_confirm()
+                return
+            if event.button == XboxButton.B:
+                self._return_to_menu()
+                return
+
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             pos = event.pos
             if self.layout.back_button.collidepoint(pos):
@@ -340,6 +354,84 @@ class UpgradesSelectionScene(Scene):
                 else:
                     self.ship_scroll = min(self.max_ship_scroll, self.ship_scroll + 1)
                 self._rebuild_ship_grid()
+
+    def _handle_gamepad_confirm(self) -> None:
+        """Aciona ``A`` do controle sobre o item embaixo do cursor virtual.
+
+        Substitui o drag-and-drop por auto-equip/auto-retirar:
+        - Botão Voltar: retorna ao menu.
+        - Card de nave: equivalente ao click do mouse (selecionar/comprar).
+        - Slot ativo equipado: retira o upgrade (volta ao Estoque).
+        - Slot ativo bloqueado: tenta desbloquear pelo custo em estrelas.
+        - Card do Estoque: equipa no primeiro slot livre que aceite o peso;
+          se já estiver equipado, retira (toggle).
+        """
+        pos = pygame.mouse.get_pos()
+
+        if self.layout.back_button.collidepoint(pos):
+            self._return_to_menu()
+            return
+
+        for i, rect in enumerate(self.layout.ship_grid_cells):
+            if rect.collidepoint(pos):
+                self._handle_ship_click(self.layout.visible_ships[i], rect)
+                return
+
+        for i, rect in enumerate(self.layout.active_slots):
+            if rect.collidepoint(pos):
+                self._gamepad_slot_action(i, rect)
+                return
+
+        for i, rect in enumerate(self.layout.upgrade_grid_cells):
+            if rect.collidepoint(pos):
+                self._gamepad_stock_action(self.layout.visible_upgrades[i], rect)
+                return
+
+    def _gamepad_slot_action(self, idx: int, rect: pygame.Rect) -> None:
+        """Slot ativo: retira o upgrade equipado ou tenta destravar slot."""
+        profile = self.player_profile
+        if idx >= profile.unlocked_slots:
+            if profile.can_unlock_slot(idx):
+                profile.unlock_slot(idx)
+            else:
+                self.shaking_slot, self.shake_start_time = idx, time.time()
+            return
+        if profile.upgrade_loadout[idx] is not None:
+            profile.equip_upgrade(None, idx)
+
+    def _gamepad_stock_action(self, upg: UpgradeMeta, rect: pygame.Rect) -> None:
+        """Estoque: equipa no primeiro slot livre; toggle se já equipado.
+
+        Sem slot livre OU peso excedido: tremor + mensagem para indicar que o
+        upgrade não cabe agora, espelhando o feedback do fluxo de drag.
+        """
+        profile = self.player_profile
+
+        if upg.type not in profile.unlocked_upgrades:
+            self.floating_messages.append(
+                FloatingMessage(rect.centerx, rect.top, "Bloqueado", colors.RED)
+            )
+            return
+
+        # Toggle: clicar item já equipado retira-o.
+        current_slot = profile.get_equipped_slot(upg.type)
+        if current_slot is not None:
+            profile.equip_upgrade(None, current_slot)
+            return
+
+        # Procura primeiro slot livre que aceite o peso atual.
+        for i in range(profile.unlocked_slots):
+            if profile.upgrade_loadout[i] is None and profile.can_equip_upgrade(
+                upg.type, i
+            ):
+                profile.equip_upgrade(upg.type, i)
+                return
+
+        # Não coube — shake no slot 0 + mensagem.
+        self.shaking_slot, self.shake_start_time = 0, time.time()
+        self.floating_messages.append(
+            FloatingMessage(rect.centerx, rect.top, "Sem espaço", colors.RED)
+        )
 
     def _handle_ship_click(self, ship: ShipProfile, rect: pygame.Rect):
         profile = self.player_profile

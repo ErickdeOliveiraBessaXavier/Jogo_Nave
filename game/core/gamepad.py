@@ -166,6 +166,46 @@ class GamepadManager:
             return self.get_axis(XboxAxis.LEFT_X), self.get_axis(XboxAxis.LEFT_Y)
         return self.get_axis(XboxAxis.RIGHT_X), self.get_axis(XboxAxis.RIGHT_Y)
 
+    @staticmethod
+    def _rescale_dead_zone(value: float, dead_zone: float) -> float:
+        """Aplica dead zone com reescala linear pós-zona morta.
+
+        Diferente do ``_apply_dead_zone`` simples (que só zera abaixo do limite),
+        este reescala valores acima da zona morta para [0..1], evitando o ``salto``
+        de 0 → ~0.2 quando a haste sai do centro. Útil para controle de cursor:
+        sem reescala, sticks com drift > dead zone produzem deslocamentos
+        constantes (cursor ``escorrega`` lentamente até a borda da tela).
+        """
+        abs_v = abs(value)
+        if abs_v < dead_zone or dead_zone >= 1.0:
+            return 0.0
+        sign = 1.0 if value > 0 else -1.0
+        return sign * (abs_v - dead_zone) / (1.0 - dead_zone)
+
+    def get_stick_rescaled(
+        self, side: Literal["left", "right"], dead_zone: float
+    ) -> tuple[float, float]:
+        """Lê o stick aplicando dead zone customizada com reescala linear.
+
+        Bypassa o ``DEAD_ZONE`` padrão da classe para permitir thresholds
+        diferentes por consumidor — gameplay quer alta resposta (zona menor),
+        cursor virtual quer baixo drift (zona maior).
+        """
+        joy = self._joystick
+        if not self._enabled or joy is None:
+            return (0.0, 0.0)
+        ax_x = XboxAxis.LEFT_X if side == "left" else XboxAxis.RIGHT_X
+        ax_y = XboxAxis.LEFT_Y if side == "left" else XboxAxis.RIGHT_Y
+        try:
+            raw_x = joy.get_axis(ax_x)
+            raw_y = joy.get_axis(ax_y)
+        except (pygame.error, IndexError):
+            return (0.0, 0.0)
+        return (
+            self._rescale_dead_zone(raw_x, dead_zone),
+            self._rescale_dead_zone(raw_y, dead_zone),
+        )
+
     def get_trigger(self, side: Literal["left", "right"]) -> float:
         """Retorna 0..1 do trigger. Triggers reportam -1 (solto) a +1 (full)
         em pygame 2.x; normalizamos para 0..1 e ignoramos jitter abaixo do

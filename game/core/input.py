@@ -21,9 +21,10 @@ KEYMAP = {
 }
 
 # Botões Xbox em ações discretas (KEYDOWN equivalente). A direção do D-pad
-# é tratada em outro caminho (eventos sintéticos no app.py).
+# é tratada em outro caminho (eventos sintéticos no app.py). O tiro normal
+# saiu daqui — agora é acionado pelo RT (trigger direito) via
+# ``_poll_held_gamepad``.
 BUTTONMAP_GAMEPLAY = {
-    XboxButton.A: "shoot",
     XboxButton.START: "pause",
 }
 
@@ -68,8 +69,9 @@ class Input:
         Em gameplay o D-pad é reservado para o modo de seleção de upgrade
         (tratado em playing.py), então NÃO entra em ações de movimento.
         Movimento vem só do stick esquerdo; a magnitude exata é exposta em
-        ``gamepad_movement_vector``. Tiro contínuo vem de segurar o botão A
-        — botão único dedicado, sem trigger duplicado.
+        ``gamepad_movement_vector``. Tiro contínuo vem do RT (gatilho
+        direito) — apertar segura, soltar para. LT fica reservado para
+        habilidades especiais (dash / charge shot).
         """
         held: set[str] = set()
 
@@ -83,7 +85,7 @@ class Input:
         if ly > 0:
             held.add("hold_down")
 
-        if gp.is_button_pressed(XboxButton.A):
+        if gp.get_trigger("right") > GamepadManager.TRIGGER_THRESHOLD:
             held.add("hold_shoot")
 
         return held
