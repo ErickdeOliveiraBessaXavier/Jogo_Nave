@@ -7,10 +7,12 @@ import pygame
 
 from ..core import colors
 from ..core.assets import get_font
+from ..core.colors import CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.config import config as Config
 from ..core.meta_progression import HighScoreEntry
 from ..core.sound import sound_manager
 from ..core.state import Scene
+from .ui_helpers import draw_bordered_button
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -29,7 +31,7 @@ class InitialsEntryWidget:
     SLOT_GAP = 16
     CURSOR_PERIOD = 0.5
 
-    def __init__(self, center_x: int, top_y: int, score: int, app: "GameApp"):
+    def __init__(self, score: int, app: "GameApp"):
         self.chars: List[str] = []
         self.cursor_visible = True
         self.cursor_timer = 0.0
@@ -37,16 +39,27 @@ class InitialsEntryWidget:
         self.app = app
 
         self.font_slot = get_font(60)
-        self.font_label = get_font(20)
-        self.font_button = get_font(20)
-        self.font_rank = get_font(28)
+        self.font_label = get_font(16)
+        self.font_button = get_font(16)
+        self.font_rank = get_font(18)
 
-        total_w = self.SLOT_W * self.MAX_LEN + self.SLOT_GAP * (self.MAX_LEN - 1)
-        slots_x0 = center_x - total_w // 2
+        # Dimensões do Modal
+        self.modal_w, self.modal_h = 500, 360
+        self.rect = pygame.Rect(
+            (Config.SCREEN_WIDTH - self.modal_w) // 2,
+            (Config.SCREEN_HEIGHT - self.modal_h) // 2,
+            self.modal_w,
+            self.modal_h
+        )
+
+        total_slots_w = self.SLOT_W * self.MAX_LEN + self.SLOT_GAP * (self.MAX_LEN - 1)
+        slots_x0 = self.rect.centerx - total_slots_w // 2
+        slot_y = self.rect.top + 100
+        
         self.slot_rects: List[pygame.Rect] = [
             pygame.Rect(
                 slots_x0 + i * (self.SLOT_W + self.SLOT_GAP),
-                top_y,
+                slot_y,
                 self.SLOT_W,
                 self.SLOT_H,
             )
@@ -58,14 +71,14 @@ class InitialsEntryWidget:
         self.slot_pop_timers = [0.0] * self.MAX_LEN
         self.entry_anim_timer = 0.0
 
-        btn_w, btn_h = 160, 44
+        btn_w, btn_h = 160, 40
         btn_gap = 20
-        btn_y = top_y + self.SLOT_H + 90
+        btn_y = self.rect.bottom - 70
         self.save_button = pygame.Rect(
-            center_x - btn_w - btn_gap // 2, btn_y, btn_w, btn_h
+            self.rect.centerx - btn_w - btn_gap // 2, btn_y, btn_w, btn_h
         )
         self.skip_button = pygame.Rect(
-            center_x + btn_gap // 2, btn_y, btn_w, btn_h
+            self.rect.centerx + btn_gap // 2, btn_y, btn_w, btn_h
         )
 
         self.predicted_rank = self.app.player_profile.get_predicted_rank(self.score)
@@ -118,16 +131,30 @@ class InitialsEntryWidget:
         return "".join(self.chars)
 
     def render(self, surface: pygame.Surface, alpha: int) -> None:
+        # Overlay de fundo escuro para o modal
+        modal_overlay = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA)
+        modal_overlay.fill((0, 0, 0, int(alpha * 0.7)))
+        surface.blit(modal_overlay, (0, 0))
+
+        # Fundo do Modal
+        pygame.draw.rect(surface, (15, 15, 25, alpha), self.rect, border_radius=15)
+        pygame.draw.rect(surface, (*CUSTOM_GOLD, alpha), self.rect, 2, border_radius=15)
+
+        # Título do Modal
+        title_text = self.font_label.render("DIGITE SUAS INICIAIS", True, colors.WHITE)
+        title_text.set_alpha(alpha)
+        surface.blit(title_text, title_text.get_rect(centerx=self.rect.centerx, top=self.rect.top + 25))
+
         # Posição prevista
         if self.predicted_rank > 0:
             rank_text = self.font_rank.render(
-                f"NOVO RECORDE: #{self.predicted_rank} LUGAR!", True, colors.CUSTOM_GOLD
+                f"RECORDE: #{self.predicted_rank} LUGAR!", True, CUSTOM_GOLD
             )
             rank_text.set_alpha(alpha)
-            rank_y = self.slot_rects[0].top - 60
+            rank_y = self.slot_rects[0].top - 35
             surface.blit(
                 rank_text,
-                rank_text.get_rect(center=(self.slot_rects[1].centerx, rank_y)),
+                rank_text.get_rect(center=(self.rect.centerx, rank_y)),
             )
 
         active_idx = min(len(self.chars), self.MAX_LEN - 1)
@@ -159,46 +186,25 @@ class InitialsEntryWidget:
             surface.blit(border_surf, draw_rect.topleft)
 
             if i < len(self.chars):
-                glyph = self.font_slot.render(self.chars[i], True, colors.CUSTOM_GOLD)
+                glyph = self.font_slot.render(self.chars[i], True, CUSTOM_GOLD)
                 glyph.set_alpha(alpha)
                 surface.blit(glyph, glyph.get_rect(center=rect.center))
             elif i == active_idx and self.cursor_visible:
-                caret = self.font_slot.render("_", True, colors.CUSTOM_GOLD)
+                caret = self.font_slot.render("_", True, CUSTOM_GOLD)
                 caret.set_alpha(int(alpha * 0.6))
                 surface.blit(caret, caret.get_rect(center=(rect.centerx, rect.centery + 10)))
 
         label = self.font_label.render(
-            "ENTER: SALVAR    ESC: PULAR    BACKSPACE: APAGAR",
+            "ENTER: SALVAR   ESC: PULAR",
             True,
             (180, 180, 180),
         )
         label.set_alpha(alpha)
-        label_y = self.slot_rects[0].bottom + 30
-        surface.blit(label, label.get_rect(center=(self.slot_rects[1].centerx, label_y)))
+        label_y = self.slot_rects[0].bottom + 25
+        surface.blit(label, label.get_rect(center=(self.rect.centerx, label_y)))
 
-        self._draw_button(surface, self.save_button, "SALVAR", enabled=bool(self.chars), alpha=alpha)
-        self._draw_button(surface, self.skip_button, "PULAR", enabled=True, alpha=alpha)
-
-    def _draw_button(self, surface: pygame.Surface, rect: pygame.Rect, label: str, enabled: bool, alpha: int) -> None:
-        mouse_pos = pygame.mouse.get_pos()
-        is_hovered = enabled and rect.collidepoint(mouse_pos)
-        
-        if not enabled:
-            bg, border, text_color = (30, 30, 30), (70, 70, 70), (100, 100, 100)
-        elif is_hovered:
-            bg, border, text_color = (60, 60, 80), colors.WHITE, colors.WHITE
-        else:
-            bg, border, text_color = (40, 40, 50), (150, 150, 150), (220, 220, 220)
-
-        bg_surf = pygame.Surface(rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(bg_surf, (*bg, alpha), bg_surf.get_rect(), border_radius=10)
-        surface.blit(bg_surf, rect.topleft)
-        
-        pygame.draw.rect(surface, (*border, alpha), rect, 2, border_radius=10)
-
-        text = self.font_button.render(label, True, text_color)
-        text.set_alpha(alpha)
-        surface.blit(text, text.get_rect(center=rect.center))
+        draw_bordered_button(surface, self.save_button, "SALVAR", self.font_button, CUSTOM_GOLD, alpha)
+        draw_bordered_button(surface, self.skip_button, "PULAR", self.font_button, CUSTOM_PURPLE, alpha)
 
 
 class GameOverScene(Scene):
@@ -210,9 +216,10 @@ class GameOverScene(Scene):
         self.r = playing_scene.r
 
         self.game_over_timer = 0.0
-        self.game_over_font_title = get_font(100)
-        self.game_over_font_score = get_font(40)
-        self.game_over_font_prompt = get_font(24)
+        self.game_over_font_title = get_font(80)
+        self.game_over_font_score = get_font(36)
+        self.game_over_font_prompt = get_font(18)
+        self.game_over_font_button = get_font(16)
         
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
@@ -227,11 +234,11 @@ class GameOverScene(Scene):
         self.playing_scene.screen_shake_timer = 0.6
         self.playing_scene.screen_shake_intensity = Config.SCREEN_SHAKE_GAME_OVER
 
-        # Layout centralizado
-        btn_w, btn_h = 320, 50
+        # Layout padronizado
+        btn_w, btn_h = 220, 40
         self.back_to_menu_button = pygame.Rect(
-            (Config.SCREEN_WIDTH - btn_w) // 2, 
-            Config.SCREEN_HEIGHT - 100, 
+            40, 
+            Config.SCREEN_HEIGHT - 60, 
             btn_w, btn_h
         )
 
@@ -240,10 +247,7 @@ class GameOverScene(Scene):
         self.entry_widget: Optional[InitialsEntryWidget] = None
         
         if self.high_score_qualified:
-            widget_top_y = int(Config.SCREEN_HEIGHT / 2 + 120)
             self.entry_widget = InitialsEntryWidget(
-                center_x=int(Config.SCREEN_WIDTH / 2),
-                top_y=widget_top_y,
                 score=self.score,
                 app=self.app,
             )
@@ -278,7 +282,6 @@ class GameOverScene(Scene):
                 if result == "submit":
                     self._submit_high_score(self.entry_widget.get_initials())
                     self.entry_submitted = True
-                    self._goto_statistics()
                 elif result == "skip":
                     self.entry_submitted = True
             return
@@ -308,12 +311,6 @@ class GameOverScene(Scene):
         )
         self.app.player_profile.submit_high_score(entry)
         self.app.player_profile.save()
-
-    def _goto_statistics(self):
-        from .statistics import StatTab, StatisticsScene
-        scene = StatisticsScene(self.app)
-        scene.view.current_tab = StatTab.HIGH_SCORES
-        self.app.states.switch(scene)
 
     def _return_to_menu(self):
         sound_manager.stop_music()
@@ -347,11 +344,13 @@ class GameOverScene(Scene):
         surface.blit(overlay, (0, 0))
 
         text_alpha = int(progress * 255)
+        center_x = Config.SCREEN_WIDTH // 2
+        center_y = Config.SCREEN_HEIGHT // 2
         
         # Título: GAME OVER
         title_surf = self.game_over_font_title.render("GAME OVER", True, colors.WHITE)
         title_surf.set_alpha(text_alpha)
-        title_rect = title_surf.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2 - 120))
+        title_rect = title_surf.get_rect(center=(center_x, center_y - 140))
         surface.blit(title_surf, title_rect)
 
         # Score
@@ -361,27 +360,25 @@ class GameOverScene(Scene):
 
             score_surf = self.game_over_font_score.render(f"PONTUAÇÃO: {self.score:,}".replace(",", "."), True, colors.WHITE)
             score_surf.set_alpha(sub_alpha)
-            score_rect = score_surf.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2 - 20))
+            score_rect = score_surf.get_rect(center=(center_x, center_y - 40))
             surface.blit(score_surf, score_rect)
 
             if self.entry_widget is not None and not self.entry_submitted:
-                prompt_surf = self.game_over_font_prompt.render("DIGITE SUAS INICIAIS", True, colors.WHITE)
-                prompt_surf.set_alpha(int(sub_alpha * 0.7))
-                surface.blit(prompt_surf, prompt_surf.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2 + 30)))
                 self.entry_widget.render(surface, sub_alpha)
             else:
                 restart_surf = self.game_over_font_prompt.render("PRESSIONE 'R' PARA REINICIAR", True, colors.WHITE)
                 restart_surf.set_alpha(sub_alpha)
-                surface.blit(restart_surf, restart_surf.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2 + 60)))
+                surface.blit(restart_surf, restart_surf.get_rect(center=(center_x, center_y + 40)))
 
                 # Botão "Voltar ao Menu"
-                is_hovered = self.back_to_menu_button.collidepoint(pygame.mouse.get_pos())
-                bg_color = (60, 60, 70) if is_hovered else (40, 40, 50)
-                pygame.draw.rect(surface, bg_color, self.back_to_menu_button, border_radius=12)
-                pygame.draw.rect(surface, colors.WHITE if is_hovered else (150, 150, 150), self.back_to_menu_button, 2, border_radius=12)
-                
-                btn_text = get_font(22).render("VOLTAR AO MENU", True, colors.WHITE)
-                surface.blit(btn_text, btn_text.get_rect(center=self.back_to_menu_button.center))
+                draw_bordered_button(
+                    surface,
+                    self.back_to_menu_button,
+                    "VOLTAR AO MENU",
+                    self.game_over_font_button,
+                    CUSTOM_PURPLE,
+                    sub_alpha
+                )
 
     def exit(self):
         pygame.mouse.set_visible(False)

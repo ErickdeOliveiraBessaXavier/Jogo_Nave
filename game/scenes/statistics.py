@@ -64,10 +64,10 @@ class StatisticsView:
         self.dialog: ConfirmationDialog | None = None
 
         # Fonts
-        self.title_font = get_font(40)
-        self.header_font = get_font(24)
-        self.item_font = get_font(20)
-        self.small_font = get_font(16)
+        self.title_font = get_font(36)
+        self.header_font = get_font(18)
+        self.item_font = get_font(16)
+        self.small_font = get_font(13)
 
         # Sistema de abas
         self.current_tab = StatTab.OVERVIEW
@@ -93,29 +93,31 @@ class StatisticsView:
 
         # Dimensões e espaçamentos consistentes com settings.py
         outer_pad = 40
-        top_offset = 100
-
-        # Largura disponível
-        available_width = screen_w - (2 * outer_pad)
-
+        
         # Abas
-        tab_buttons: List[pygame.Rect] = []
         num_tabs = len(StatTab)
-        # Tabs ocupam toda a largura disponível
-        tab_w = (
-            available_width - (num_tabs - 1) * 20
-        ) / num_tabs  # 20px de gap entre abas
         tab_h = 50
+        tab_gap = 20
+        
+        # Área de Conteúdo
+        # Altura total do bloco (abas + gap + conteúdo)
+        total_content_height = screen_h - 220 # Reservar espaço para título e botões
+        
+        # Centralizar o bloco verticalmente
+        block_y = (screen_h - total_content_height) // 2 + 20
+        
+        available_width = screen_w - (2 * outer_pad)
+        tab_w = (available_width - (num_tabs - 1) * tab_gap) / num_tabs
 
+        tab_buttons: List[pygame.Rect] = []
         for i, _ in enumerate(StatTab):
-            rect = pygame.Rect(outer_pad + i * (tab_w + 20), top_offset, tab_w, tab_h)
+            rect = pygame.Rect(outer_pad + i * (tab_w + tab_gap), block_y, tab_w, tab_h)
             tab_buttons.append(rect)
         self.layout_rects["tab_buttons"] = tab_buttons
 
-        # Área de Conteúdo
-        content_y = top_offset + tab_h + 20  # +20 gap
+        content_y = block_y + tab_h + 10 # Reduzido gap para aproximar conteúdo das abas
         self.layout_rects["content_area"] = pygame.Rect(
-            outer_pad, content_y, available_width, screen_h - content_y - outer_pad - 60
+            outer_pad, content_y, available_width, total_content_height - tab_h - 10
         )
 
         # Botões de Ação
@@ -966,9 +968,9 @@ class ConfirmationDialog:
     ):
         self.on_yes = on_yes
         self.on_no = on_no
-        self.header_font = get_font(24)
-        self.item_font = get_font(20)
-        self.small_font = get_font(16)
+        self.header_font = get_font(18)
+        self.item_font = get_font(16)
+        self.small_font = get_font(13)
 
         # Box
         box_w, box_h = 450, 200

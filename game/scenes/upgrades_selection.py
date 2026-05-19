@@ -14,6 +14,7 @@ from ..core.ship_types import ShipProfile, all_ship_profiles, get_ship_profile
 from ..core.state import Scene
 from ..core.upgrades import UpgradeMeta, get_upgrade_icon, list_all_upgrades_meta
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
+from .ui_helpers import draw_bordered_button
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -229,7 +230,11 @@ class UpgradesSelectionScene(Scene):
         )
         self._rebuild_ship_grid()
 
-        self.layout.back_button = pygame.Rect(self.MARGIN, sh - 55, 140, 35)
+        btn_w = 160
+        btn_h = 40
+        self.layout.back_button = pygame.Rect(
+            self.MARGIN, sh - 60, btn_w, btn_h
+        )
 
     def _rebuild_upgrade_grid(self):
         self.layout.upgrade_grid_cells.clear()
@@ -1062,16 +1067,15 @@ class UpgradesSelectionScene(Scene):
             pygame.draw.rect(surface, (100, 100, 100), (x, by, fw, bh))
 
     def _draw_back_button(self, surface: pygame.Surface):
-        r = self.layout.back_button
-        pygame.draw.rect(
+        draw_bordered_button(
             surface,
-            CUSTOM_GOLD if r.collidepoint(pygame.mouse.get_pos()) else CUSTOM_PURPLE,
-            r,
-            2,
-            border_radius=8,
+            self.layout.back_button,
+            "Voltar",
+            self.item_font,
+            CUSTOM_PURPLE,
+            255,
+            0,
         )
-        txt = self.item_font.render("VOLTAR", True, colors.WHITE)
-        surface.blit(txt, txt.get_rect(center=r.center))
 
     def _draw_dragging_upgrade(self, surface: pygame.Surface):
         if self.dragging_upgrade is None:

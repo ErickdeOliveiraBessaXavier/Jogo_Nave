@@ -44,11 +44,11 @@ class SettingsView:
         self.player_profile = PlayerProfile(get_profile_path())
 
         # Fonts
-        self.title_font = get_font(40)
-        self.header_font = get_font(24)
-        self.item_font = get_font(20)
-        self.small_font = get_font(16)
-        self.percent_font = get_font(14)
+        self.title_font = get_font(36)
+        self.header_font = get_font(18)
+        self.item_font = get_font(16)
+        self.small_font = get_font(13)
+        self.percent_font = get_font(13)
 
         # Estado da UI
         self.sliders: Dict[str, float] = {
@@ -112,12 +112,15 @@ class SettingsView:
         available_width = screen_w - (2 * outer_pad)
         card_width = (available_width - card_gap) / 2
         card_height = screen_h - 180
+        
+        # Centralizar cards verticalmente
+        card_y = (screen_h - card_height) // 2 + 20
 
         # Posição inicial X
         start_x = outer_pad
 
         # Card de Áudio (Esquerda)
-        audio_card_rect = pygame.Rect(start_x, 100, card_width, card_height)
+        audio_card_rect = pygame.Rect(start_x, card_y, card_width, card_height)
         self.layout_rects["audio_card"] = audio_card_rect
 
         self.layout_rects["sliders"] = {}
@@ -186,11 +189,11 @@ class SettingsView:
 
             resolution_buttons.append(pygame.Rect(x, y, button_w, button_h))
 
-        # Botão de Voltar (Canto inferior esquerdo, alinhado com card)
+        # Botão de Voltar (Canto inferior esquerdo)
         back_text_width = self.item_font.size("Voltar")[0]
         back_btn_width = back_text_width + 60
         self.layout_rects["back_button"] = pygame.Rect(
-            start_x, screen_h - 60, back_btn_width, 40
+            outer_pad, screen_h - 60, back_btn_width, 40
         )
 
         # Pop-up de confirmação (Centralizado na tela)

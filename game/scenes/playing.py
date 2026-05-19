@@ -3206,18 +3206,25 @@ class PlayingScene(Scene):
                     border_radius=8,
                 )
 
-            # Destaque dourado pulsante quando o slot está selecionado no
-            # modo de seleção via controle (D-pad ↑ → LB/RB → A).
+            # Destaque dourado vibrando quando o slot está selecionado no
+            # modo de seleção via controle (D-pad ↑ → LB/RB → A). Só a
+            # MOLDURA dourada balança — o conteúdo interno (fundo do slot,
+            # ícone do upgrade e label da tecla) já foi blitado acima e fica
+            # estático, então o texto não treme junto.
             if self._upgrade_select_mode and i == self._upgrade_select_index:
-                pulse = 0.6 + 0.4 * math.sin(pygame.time.get_ticks() / 120.0)
-                glow_thickness = 3 + int(pulse * 2)
+                t = pygame.time.get_ticks()
+                shake_x = int(math.sin(t / 35.0) * 2)
+                shake_y = int(math.cos(t / 42.0) * 2)
                 pygame.draw.rect(
                     surface,
                     _colors.CUSTOM_GOLD,
                     pygame.Rect(
-                        slot_x - 2, y - 2, slot_w + 4, slot_h + 4
+                        slot_x - 3 + shake_x,
+                        y - 3 + shake_y,
+                        slot_w + 6,
+                        slot_h + 6,
                     ),
-                    glow_thickness,
+                    3,
                     border_radius=10,
                 )
 
