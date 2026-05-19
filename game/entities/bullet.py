@@ -1,9 +1,117 @@
-from typing import Any, List, Optional
+import math
+from typing import Any, Dict, List, Optional, Tuple
 
 import pygame
 
 from ..core import colors
 from ..core.config import config as Config
+
+# Cache estático de surfaces do Fantasma — evita alocar Surface SRCALPHA por
+# frame por bala. Chave: (w, h) — a bala só tem 2 orientações possíveis.
+_FANTASMA_SURFACE_CACHE: Dict[Tuple[int, int], pygame.Surface] = {}
+
+
+def _get_fantasma_surface(w: int, h: int) -> pygame.Surface:
+    key = (w, h)
+    cached = _FANTASMA_SURFACE_CACHE.get(key)
+    if cached is None:
+        s = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(s, (180, 255, 255, 160), s.get_rect(), border_radius=2)
+        try:
+            s = s.convert_alpha()
+        except pygame.error:
+            pass
+        _FANTASMA_SURFACE_CACHE[key] = s
+        return s
+    return cached
+
+
+# Cache estático de frames pré-rotacionados do tiro teleguiado.
+# 24 frames = 15° por frame; suficiente para 360°/s a 60fps.
+# Cada frame é uma surface pequena (~20x20). Total ~10 KB de memória.
+_HOMING_NUM_FRAMES: int = 24
+_HOMING_FRAMES: List[pygame.Surface] = []
+_HOMING_FRAMES_EXPLOSIVE: List[pygame.Surface] = []
+
+
+def _build_homing_base_surface(with_explosive_ring: bool) -> pygame.Surface:
+    """Constrói a sprite base do '+' (sem rotação). Tamanho 20x20 garante
+    que cabe rotacionado em qualquer ângulo sem cortes."""
+    size = 6
+    surf_size = 20
+    center = surf_size // 2
+    surf = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
+
+    color_bright = colors.GREEN
+    color_dim = (0, 200, 0)
+
+    # Braços do '+'
+    for i in range(-size, size + 1):
+        color = color_bright if abs(i) < 2 else color_dim
+        surf.set_at((center + i, center), color)
+        surf.set_at((center, center + i), color)
+
+    # Centro super brilhante (radius 2 cobre o miolo)
+    pygame.draw.circle(surf, (150, 255, 150), (center, center), 2)
+
+    # Aro do combo homing+explosive
+    if with_explosive_ring:
+        pygame.draw.circle(surf, (255, 80, 0), (center, center), 9, 1)
+
+    return surf
+
+
+def _ensure_homing_frames() -> None:
+    """Renderiza N frames rotacionados sob demanda (idempotente). Chamado
+    no primeiro draw para garantir que o display esteja inicializado."""
+    if _HOMING_FRAMES:
+        return
+    base_plain = _build_homing_base_surface(with_explosive_ring=False)
+    base_expl = _build_homing_base_surface(with_explosive_ring=True)
+    step = 360.0 / _HOMING_NUM_FRAMES
+    for i in range(_HOMING_NUM_FRAMES):
+        angle = i * step
+        for src, dst in ((base_plain, _HOMING_FRAMES), (base_expl, _HOMING_FRAMES_EXPLOSIVE)):
+            frame = pygame.transform.rotate(src, -angle)
+            try:
+                frame = frame.convert_alpha()
+            except pygame.error:
+                pass
+            dst.append(frame)
+
+
+# Cache estático do corpo do tiro explosivo (outer + body sem o core pulsante).
+# Chaves: 'normal' e 'low_blink_on'. O core e os sparks ficam dinâmicos.
+_EXPLOSIVE_BODY_CACHE: Dict[str, pygame.Surface] = {}
+
+
+def _build_explosive_body_surface(low_ammo_blink_on: bool) -> pygame.Surface:
+    radius = 5
+    surf_size = (radius + 1) * 2 + 2
+    center = surf_size // 2
+    surf = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
+    if low_ammo_blink_on:
+        outer_color = (200, 20, 0)
+        body_color = (255, 60, 0)
+    else:
+        outer_color = (180, 50, 0)
+        body_color = (255, 120, 0)
+    pygame.draw.circle(surf, outer_color, (center, center), radius + 1)
+    pygame.draw.circle(surf, body_color, (center, center), radius)
+    try:
+        surf = surf.convert_alpha()
+    except pygame.error:
+        pass
+    return surf
+
+
+def _get_explosive_body(low_ammo_blink_on: bool) -> pygame.Surface:
+    key = "low_blink_on" if low_ammo_blink_on else "normal"
+    cached = _EXPLOSIVE_BODY_CACHE.get(key)
+    if cached is None:
+        cached = _build_explosive_body_surface(low_ammo_blink_on)
+        _EXPLOSIVE_BODY_CACHE[key] = cached
+    return cached
 
 
 class Bullet:
@@ -40,11 +148,19 @@ class Bullet:
         self.direction = direction
         self.ship_id = ship_id
 
+        # Rect persistente — atualizado in-place em vez de alocar por acesso.
+        self._rect = pygame.Rect(int(x), int(y), 1, 1)
+
         self._configure_shape_and_velocity(direction)
+        self._sync_rect()
 
     @property
     def rect(self) -> pygame.Rect:
-        return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+        self._sync_rect()
+        return self._rect
+
+    def _sync_rect(self) -> None:
+        self._rect.update(int(self.x), int(self.y), self.w, self.h)
 
     def reset(
         self,
@@ -78,6 +194,7 @@ class Bullet:
         self.direction = direction
         self.ship_id = ship_id
         self._configure_shape_and_velocity(direction)
+        self._sync_rect()
 
     def update(self, dt: float, enemies: Optional[List[Any]] = None) -> None:
         if self.homing and enemies:
@@ -240,10 +357,8 @@ class Bullet:
             # Cofre: Amarelo claro arredondado
             pygame.draw.rect(surface, (255, 220, 100), rect, border_radius=3)
         elif self.ship_id == "fantasma":
-            # Fantasma: Ciano pálido translúcido
-            s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-            pygame.draw.rect(s, (180, 255, 255, 160), s.get_rect(), border_radius=2)
-            surface.blit(s, rect.topleft)
+            # Fantasma: Ciano pálido translúcido — surface pré-renderizada (cache estático).
+            surface.blit(_get_fantasma_surface(rect.width, rect.height), rect.topleft)
         elif self.ship_id == "engenheiro":
             # Engenheiro: Azul elétrico com núcleo branco
             pygame.draw.circle(surface, (0, 150, 255), center, rect.width // 2)
@@ -272,134 +387,59 @@ class Bullet:
             pygame.draw.rect(surface, color, rect)
 
     def _draw_homing_bullet(self, surface: pygame.Surface):
-        """Desenha o tiro teleguiado como um '+' pixelizado que gira."""
-        import math
-
+        """Desenha o tiro teleguiado como um '+' pixelizado que gira.
+        Usa frames pré-rotacionados — 1 blit em vez de 26 draw.circle."""
+        _ensure_homing_frames()
+        frames = _HOMING_FRAMES_EXPLOSIVE if self.explosive else _HOMING_FRAMES
+        idx = int(self.rotation_angle * _HOMING_NUM_FRAMES / 360.0) % _HOMING_NUM_FRAMES
+        frame = frames[idx]
+        fw, fh = frame.get_size()
         center_x = self.x + self.w / 2
         center_y = self.y + self.h / 2
-
-        # Tamanho do '+'
-        size = 6
-        thickness = 2
-
-        # Cores: brilhante no centro, mais escuro nas bordas
-        color_bright = colors.GREEN
-        color_dim = (0, 200, 0)
-
-        # Converter ângulo para radianos
-        angle_rad = math.radians(self.rotation_angle)
-        cos_a = math.cos(angle_rad)
-        sin_a = math.sin(angle_rad)
-
-        # Definir os 4 braços do '+' (horizontal e vertical)
-        # Horizontal: esquerda e direita
-        # Vertical: cima e baixo
-
-        # Desenhar braço horizontal (rotacionado)
-        for i in range(-size, size + 1):
-            # Posição relativa ao centro
-            local_x = i
-            local_y = 0
-
-            # Rotacionar
-            rotated_x = local_x * cos_a - local_y * sin_a
-            rotated_y = local_x * sin_a + local_y * cos_a
-
-            # Posição absoluta
-            pixel_x = center_x + rotated_x
-            pixel_y = center_y + rotated_y
-
-            # Cor mais brilhante no centro
-            color = color_bright if abs(i) < 2 else color_dim
-            pygame.draw.circle(
-                surface, color, (int(pixel_x), int(pixel_y)), thickness // 2
-            )
-
-        # Desenhar braço vertical (rotacionado)
-        for i in range(-size, size + 1):
-            # Posição relativa ao centro
-            local_x = 0
-            local_y = i
-
-            # Rotacionar
-            rotated_x = local_x * cos_a - local_y * sin_a
-            rotated_y = local_x * sin_a + local_y * cos_a
-
-            # Posição absoluta
-            pixel_x = center_x + rotated_x
-            pixel_y = center_y + rotated_y
-
-            # Cor mais brilhante no centro
-            color = color_bright if abs(i) < 2 else color_dim
-            pygame.draw.circle(
-                surface, color, (int(pixel_x), int(pixel_y)), thickness // 2
-            )
-
-        # Desenhar centro brilhante
-        pygame.draw.circle(
-            surface, (150, 255, 150), (int(center_x), int(center_y)), thickness
-        )
-
-        # Aro vermelho/laranja quando combo homing+explosive — indica que o tiro
-        # vai perseguir e explodir no impacto.
-        if self.explosive:
-            pygame.draw.circle(
-                surface, (255, 80, 0), (int(center_x), int(center_y)), 9, 1
-            )
+        surface.blit(frame, (int(center_x - fw / 2), int(center_y - fh / 2)))
 
     def _draw_explosive_bullet(self, surface: pygame.Surface):
-        """Desenha o tiro explosivo com visual de granada/bomba."""
-        import math
-
+        """Desenha o tiro explosivo com visual de granada/bomba.
+        Outer+body vêm de cache estático; só core e sparks ficam dinâmicos."""
         center_x = self.x + self.w / 2
         center_y = self.y + self.h / 2
-
-        # Corpo principal - círculo laranja/vermelho
+        cx_int = int(center_x)
+        cy_int = int(center_y)
         radius = 5
 
-        # Efeito de pulso/brilho (mais rápido se low_ammo)
-        pulse_speed = 0.02 if self.low_ammo else 0.01
-        pulse = abs(math.sin(pygame.time.get_ticks() * pulse_speed)) * 0.3 + 0.7
+        ticks = pygame.time.get_ticks()  # 1 chamada em vez de 3
 
-        # Se low_ammo, alternar entre laranja e vermelho para efeito de piscar
+        pulse_speed = 0.02 if self.low_ammo else 0.01
+        pulse = abs(math.sin(ticks * pulse_speed)) * 0.3 + 0.7
+
         if self.low_ammo:
-            blink = int(pygame.time.get_ticks() * 0.008) % 2 == 0
-            if blink:
-                # Vermelho piscante
-                outer_color = (200, 20, 0)
-                body_color = (255, 60, 0)
+            blink_on = (int(ticks * 0.008) % 2) == 0
+            if blink_on:
                 core_color = (255, 150, 50)
             else:
-                # Laranja normal
-                outer_color = (180, 50, 0)
-                body_color = (255, 120, 0)
                 core_color = (255, int(200 * pulse) + 55, 0)
+            body_surf = _get_explosive_body(blink_on)
         else:
-            outer_color = (180, 50, 0)
-            body_color = (255, 120, 0)
             core_color = (255, int(200 * pulse) + 55, 0)
+            body_surf = _get_explosive_body(False)
 
-        # Cor externa (vermelho escuro)
-        pygame.draw.circle(
-            surface, outer_color, (int(center_x), int(center_y)), radius + 1
-        )
+        # 1 blit em vez de 2 draw.circle (outer + body).
+        bw, bh = body_surf.get_size()
+        surface.blit(body_surf, (cx_int - bw // 2, cy_int - bh // 2))
 
-        # Corpo (laranja)
-        pygame.draw.circle(surface, body_color, (int(center_x), int(center_y)), radius)
+        # Núcleo pulsante (dinâmico — fica fora do cache).
+        pygame.draw.circle(surface, core_color, (cx_int, cy_int), radius - 2)
 
-        # Núcleo brilhante (amarelo pulsante)
-        pygame.draw.circle(
-            surface, core_color, (int(center_x), int(center_y)), radius - 2
-        )
-
-        # Partículas/faíscas ao redor (efeito visual) - mais se low_ammo
+        # Sparks: posição dinâmica, mantém draw.circle.
         num_sparks = 6 if self.low_ammo else 4
         spark_radius = radius + 3
-        time_offset = pygame.time.get_ticks() * 0.003
-
+        time_offset = ticks * 0.003
+        spark_color = (255, 100, 100) if self.low_ammo else (255, 255, 100)
+        angle_step = 2 * math.pi / num_sparks
+        cos = math.cos
+        sin = math.sin
         for i in range(num_sparks):
-            angle = time_offset + (i * 2 * math.pi / num_sparks)
-            spark_x = center_x + math.cos(angle) * spark_radius
-            spark_y = center_y + math.sin(angle) * spark_radius
-            spark_color = (255, 100, 100) if self.low_ammo else (255, 255, 100)
+            angle = time_offset + i * angle_step
+            spark_x = center_x + cos(angle) * spark_radius
+            spark_y = center_y + sin(angle) * spark_radius
             pygame.draw.circle(surface, spark_color, (int(spark_x), int(spark_y)), 1)

@@ -47,6 +47,7 @@ class RockGlider(Meteor):
         (210, 60, 50),
         (80, 80, 80),
     ]
+    RING_PHASE_OFFSETS: tuple[float, float, float] = (0.0, 1.0 / 3.0, 2.0 / 3.0)
 
     @classmethod
     def _random_fragment_palette_color(cls) -> tuple[int, int, int]:
@@ -108,6 +109,8 @@ class RockGlider(Meteor):
 
         self._rock_hit_rect = pygame.Rect(0, 0, 1, 1)
         self._bot_hit_rect = pygame.Rect(0, 0, 1, 1)
+        self._cached_rect = pygame.Rect(0, 0, 0, 0)
+        self._cached_hitboxes: tuple[pygame.Rect, ...] = ()
         self._rock_center: tuple[float, float] = (
             self.x + self.size,
             self.y + self.size,
@@ -121,6 +124,9 @@ class RockGlider(Meteor):
         self._collision_disabled = False
 
         self._rock_surface = pygame.Surface((1, 1), pygame.SRCALPHA)
+        self._eye_surface_cache: dict[
+            tuple[int, bool], tuple[pygame.Surface, int, int]
+        ] = {}
         self._bot_surface = pygame.Surface((1, 1), pygame.SRCALPHA)
         self._draw_offset_x = 0
         self._draw_offset_y = 0
@@ -260,6 +266,8 @@ class RockGlider(Meteor):
 
         self._rock_hit_rect = pygame.Rect(0, 0, 1, 1)
         self._bot_hit_rect = pygame.Rect(0, 0, 1, 1)
+        self._cached_rect = pygame.Rect(0, 0, 0, 0)
+        self._cached_hitboxes = ()
         self._rock_center: tuple[float, float] = (
             self.x + self.size,
             self.y + self.size,
@@ -473,16 +481,90 @@ class RockGlider(Meteor):
             .union(_local_thruster)
         )
 
+        # Cache estático de olhos: 3 offsets de scan × 2 estados de piscada.
+        self._eye_surface_cache = {}
+        for scan_offset in (-1, 0, 1):
+            for blinking in (False, True):
+                self._eye_surface_cache[(scan_offset, blinking)] = (
+                    self._build_eye_surface(scan_offset, blinking)
+                )
+
+    def _build_eye_surface(
+        self, scan_offset: int, blinking: bool
+    ) -> tuple[pygame.Surface, int, int]:
+        eye_size = self._eye_size
+        eye_h = eye_size if not blinking else max(1, eye_size // 3)
+        eye_y_rel = self._eye_base_y - eye_h // 2
+        left_eye_x_rel = self._eye_base_left_x + scan_offset
+        right_eye_x_rel = self._eye_base_right_x + scan_offset
+        brow_y_rel = eye_y_rel - 2
+
+        min_x = left_eye_x_rel - 1
+        max_x = right_eye_x_rel + eye_size + 2
+        min_y = brow_y_rel
+        max_y = max(eye_y_rel + eye_h, brow_y_rel + 2) + 1
+
+        surface = pygame.Surface((max_x - min_x, max_y - min_y), pygame.SRCALPHA)
+
+        left_rect = (left_eye_x_rel - min_x, eye_y_rel - min_y, eye_size, eye_h)
+        right_rect = (right_eye_x_rel - min_x, eye_y_rel - min_y, eye_size, eye_h)
+        pygame.draw.rect(surface, self.color_eye, left_rect)
+        pygame.draw.rect(surface, self.color_eye, right_rect)
+
+        if eye_h > 1:
+            pupil_w = max(1, eye_size // 2)
+            pupil_h = max(1, eye_h // 2)
+            pygame.draw.rect(
+                surface,
+                colors.BLACK,
+                (
+                    (left_eye_x_rel - min_x) + (eye_size - pupil_w) // 2,
+                    (eye_y_rel - min_y) + (eye_h - pupil_h) // 2,
+                    pupil_w,
+                    pupil_h,
+                ),
+            )
+            pygame.draw.rect(
+                surface,
+                colors.BLACK,
+                (
+                    (right_eye_x_rel - min_x) + (eye_size - pupil_w) // 2,
+                    (eye_y_rel - min_y) + (eye_h - pupil_h) // 2,
+                    pupil_w,
+                    pupil_h,
+                ),
+            )
+
+        pygame.draw.line(
+            surface,
+            colors.BLACK,
+            (left_eye_x_rel - 1 - min_x, brow_y_rel - min_y),
+            (left_eye_x_rel + eye_size + 1 - min_x, brow_y_rel + 1 - min_y),
+            1,
+        )
+        pygame.draw.line(
+            surface,
+            colors.BLACK,
+            (right_eye_x_rel - 1 - min_x, brow_y_rel + 1 - min_y),
+            (right_eye_x_rel + eye_size + 1 - min_x, brow_y_rel - min_y),
+            1,
+        )
+
+        return surface, min_x, min_y
+
     def _update_collision_regions(self) -> None:
         bx = int(self.x)
         by = int(self.y)
-        self._rock_hit_rect = pygame.Rect(
+        self._rock_hit_rect.update(
             bx + self._local_rock_min_x,
             by + self._local_rock_min_y,
             max(1, self._local_rock_max_x - self._local_rock_min_x),
             max(1, self._local_rock_max_y - self._local_rock_min_y),
         )
-        self._bot_hit_rect = self._local_bot_hit_union.move(bx, by)
+        local_bot = self._local_bot_hit_union
+        self._bot_hit_rect.update(
+            local_bot.x + bx, local_bot.y + by, local_bot.width, local_bot.height
+        )
         self._rock_center = (
             float(self._rock_hit_rect.centerx),
             float(self._rock_hit_rect.centery),
@@ -491,38 +573,49 @@ class RockGlider(Meteor):
             float(self._bot_hit_rect.centerx),
             float(self._bot_hit_rect.centery),
         )
+        self._refresh_collision_cache()
 
-    def get_ship_contact_hitboxes(self) -> tuple[pygame.Rect, ...]:
-        """Retorna hitboxes reais de contato para colisao com a nave."""
+    def _refresh_collision_cache(self) -> None:
         if self._fully_destroyed or self._collision_disabled:
-            return ()
+            self._cached_hitboxes = ()
+            self._cached_rect.update(int(self.x), int(self.y), 0, 0)
+            return
 
-        hitboxes: list[pygame.Rect] = []
-        if (
+        rock_alive = (
             not self._rock_destroyed
             and self._rock_hit_rect.width > 0
             and self._rock_hit_rect.height > 0
-        ):
-            hitboxes.append(self._rock_hit_rect)
-        if (
+        )
+        bot_alive = (
             not self._bot_destroyed
             and self._bot_hit_rect.width > 0
             and self._bot_hit_rect.height > 0
-        ):
-            hitboxes.append(self._bot_hit_rect)
-        return tuple(hitboxes)
+        )
+
+        if rock_alive and bot_alive:
+            self._cached_hitboxes = (self._rock_hit_rect, self._bot_hit_rect)
+            union = self._rock_hit_rect.union(self._bot_hit_rect)
+            self._cached_rect.update(union.x, union.y, union.width, union.height)
+        elif rock_alive:
+            self._cached_hitboxes = (self._rock_hit_rect,)
+            r = self._rock_hit_rect
+            self._cached_rect.update(r.x, r.y, r.width, r.height)
+        elif bot_alive:
+            self._cached_hitboxes = (self._bot_hit_rect,)
+            r = self._bot_hit_rect
+            self._cached_rect.update(r.x, r.y, r.width, r.height)
+        else:
+            self._cached_hitboxes = ()
+            self._cached_rect.update(int(self.x), int(self.y), 0, 0)
+
+    def get_ship_contact_hitboxes(self) -> tuple[pygame.Rect, ...]:
+        """Retorna hitboxes reais de contato para colisao com a nave."""
+        return self._cached_hitboxes
 
     @property
     def rect(self) -> pygame.Rect:
         """Rect agregado para broad-phase (grid), baseado nas partes vivas."""
-        hitboxes = self.get_ship_contact_hitboxes()
-        if not hitboxes:
-            return pygame.Rect(int(self.x), int(self.y), 0, 0)
-
-        aggregated_rect = hitboxes[0].copy()
-        for hitbox in hitboxes[1:]:
-            aggregated_rect.union_ip(hitbox)
-        return aggregated_rect
+        return self._cached_rect
 
     def _resolve_hit_part(self, hit_x: float, hit_y: float) -> str | None:
         point = (int(hit_x), int(hit_y))
@@ -564,7 +657,6 @@ class RockGlider(Meteor):
     def take_part_damage(
         self, hit_x: float, hit_y: float, amount: int = 1
     ) -> tuple[int, bool, bool, tuple[float, float], str | None]:
-        self._update_collision_regions()
         target = self._resolve_hit_part(hit_x, hit_y)
         if target is None:
             return 0, False, self._fully_destroyed, (hit_x, hit_y), None
@@ -596,6 +688,8 @@ class RockGlider(Meteor):
             self._collision_disabled = True
             self.w = 0
             self.h = 0
+        if part_destroyed:
+            self._refresh_collision_cache()
         impact_center = self._rock_center if target == "rock" else self._bot_center
         return points, part_destroyed, self._fully_destroyed, impact_center, target
 
@@ -664,77 +758,27 @@ class RockGlider(Meteor):
             screen.blit(self._bot_surface, (bot_x, bot_y))
 
         if not self._bot_destroyed:
-            eye_size = self._eye_size
-            eye_h = (
-                eye_size if self._eye_blink_remaining <= 0.0 else max(1, eye_size // 3)
-            )
-            eye_y = int(self.y) + self._eye_base_y - eye_h // 2
+            blinking = self._eye_blink_remaining > 0.0
+            eye_surf, eye_ox, eye_oy = self._eye_surface_cache[
+                (self._eye_scan_offset, blinking)
+            ]
+            screen.blit(eye_surf, (int(self.x) + eye_ox, int(self.y) + eye_oy))
 
-            left_eye_x = int(self.x) + self._eye_base_left_x + self._eye_scan_offset
-            right_eye_x = int(self.x) + self._eye_base_right_x + self._eye_scan_offset
-
-            pygame.draw.rect(
-                screen, self.color_eye, (left_eye_x, eye_y, eye_size, eye_h)
-            )
-            pygame.draw.rect(
-                screen, self.color_eye, (right_eye_x, eye_y, eye_size, eye_h)
-            )
-
-            if eye_h > 1:
-                pupil_w = max(1, eye_size // 2)
-                pupil_h = max(1, eye_h // 2)
-                pygame.draw.rect(
-                    screen,
-                    colors.BLACK,
-                    (
-                        left_eye_x + (eye_size - pupil_w) // 2,
-                        eye_y + (eye_h - pupil_h) // 2,
-                        pupil_w,
-                        pupil_h,
-                    ),
-                )
-                pygame.draw.rect(
-                    screen,
-                    colors.BLACK,
-                    (
-                        right_eye_x + (eye_size - pupil_w) // 2,
-                        eye_y + (eye_h - pupil_h) // 2,
-                        pupil_w,
-                        pupil_h,
-                    ),
-                )
-
-            brow_y = eye_y - 2
-            pygame.draw.line(
-                screen,
-                colors.BLACK,
-                (left_eye_x - 1, brow_y),
-                (left_eye_x + eye_size + 1, brow_y + 1),
-                1,
-            )
-            pygame.draw.line(
-                screen,
-                colors.BLACK,
-                (right_eye_x - 1, brow_y + 1),
-                (right_eye_x + eye_size + 1, brow_y),
-                1,
-            )
-
-            ring_count = 3
             max_drop = 10
             ring_speed = 2.3
             nozzle_y = int(self.y) + self._nozzle_base_y
+            base_phase = self._time * ring_speed
+            ix = int(self.x)
 
             for cx_ring, side_phase in (
-                (int(self.x) + self._thruster_left_center_x, 0.0),
-                (int(self.x) + self._thruster_right_center_x, 0.5),
+                (ix + self._thruster_left_center_x, 0.0),
+                (ix + self._thruster_right_center_x, 0.5),
             ):
-                for i in range(ring_count):
-                    phase = (
-                        (self._time * ring_speed) + (i / ring_count) + side_phase
-                    ) % 1.0
-                    ring_w = max(2, int(8 * (1.0 - phase)))
-                    ring_h = max(1, int(3 * (1.0 - phase)))
+                for phase_offset in self.RING_PHASE_OFFSETS:
+                    phase = (base_phase + phase_offset + side_phase) % 1.0
+                    inv = 1.0 - phase
+                    ring_w = max(2, int(8 * inv))
+                    ring_h = max(1, int(3 * inv))
                     ring_y = nozzle_y + 2 + int(phase * max_drop)
 
                     if phase < 0.2:
@@ -744,13 +788,12 @@ class RockGlider(Meteor):
                     else:
                         ring_color = self.color_thruster_cool
 
-                    ring_rect = pygame.Rect(
-                        cx_ring - ring_w // 2,
-                        ring_y,
-                        ring_w,
-                        ring_h,
+                    pygame.draw.rect(
+                        screen,
+                        ring_color,
+                        (cx_ring - ring_w // 2, ring_y, ring_w, ring_h),
+                        1,
                     )
-                    pygame.draw.rect(screen, ring_color, ring_rect, 1)
 
     def set_hp(self, rock_hp: int, bot_hp: int) -> None:
         self._rock_hp = rock_hp

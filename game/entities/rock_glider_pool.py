@@ -24,6 +24,7 @@ class RockGliderPool(PoolStatsMixin):
 
         self.pool: List[RockGlider] = []
         self.active: List[RockGlider] = []
+        self.free: List[RockGlider] = []
 
         self.peak_active = 0
         self.total_created = 0
@@ -34,6 +35,7 @@ class RockGliderPool(PoolStatsMixin):
             glider.active = False
             glider.dead = True
             self.pool.append(glider)
+            self.free.append(glider)
             self.total_created += 1
 
     def get(
@@ -44,16 +46,18 @@ class RockGliderPool(PoolStatsMixin):
         vx: float | None = None,
         vy: float | None = None,
     ) -> RockGlider:
-        for glider in self.pool:
-            if not glider.active:
-                glider.reset(size=size, x=x, y=y, vx=vx, vy=vy)
-                self.active.append(glider)
-                self.reused_count += 1
-                self._update_peak()
-                return glider
+        if self.free:
+            glider = self.free.pop()
+            glider.reset(size=size, x=x, y=y, vx=vx, vy=vy)
+            glider.active = True
+            self.active.append(glider)
+            self.reused_count += 1
+            self._update_peak()
+            return glider
 
         if len(self.pool) < self.max_size:
             glider = RockGlider(size=size, x=x, y=y, vx=vx, vy=vy)
+            glider.active = True
             self.pool.append(glider)
             self.active.append(glider)
             self.total_created += 1
@@ -63,6 +67,7 @@ class RockGliderPool(PoolStatsMixin):
         if self.active:
             glider = self.active.pop(0)
             glider.reset(size=size, x=x, y=y, vx=vx, vy=vy)
+            glider.active = True
             self.active.append(glider)
             self._update_peak()
             return glider
@@ -70,24 +75,37 @@ class RockGliderPool(PoolStatsMixin):
         return RockGlider(size=size, x=x, y=y, vx=vx, vy=vy)
 
     def release(self, glider: RockGlider) -> None:
-        if glider in self.active:
-            glider.active = False
-            glider.dead = True
+        try:
             self.active.remove(glider)
+        except ValueError:
+            return
+        glider.active = False
+        glider.dead = True
+        self.free.append(glider)
 
     def update(self, dt: float, is_side_scroll: bool | None = None) -> None:
         if is_side_scroll is not None:
             self.is_side_scroll = is_side_scroll
 
-        for glider in self.active[:]:
+        write = 0
+        active = self.active
+        for glider in active:
             glider.update(dt, self.is_side_scroll)
             if glider.dead:
-                self.release(glider)
+                glider.active = False
+                self.free.append(glider)
+            else:
+                active[write] = glider
+                write += 1
+        del active[write:]
 
     def draw(self, screen: pygame.Surface) -> None:
         for glider in self.active:
             glider.draw(screen)
 
     def clear_active(self) -> None:
-        for glider in self.active[:]:
-            self.release(glider)
+        for glider in self.active:
+            glider.active = False
+            glider.dead = True
+            self.free.append(glider)
+        self.active.clear()

@@ -49,7 +49,7 @@ Animações implementadas (mapeamento HTML → Python):
 import logging
 import math
 import random
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 import pygame
 
@@ -82,6 +82,156 @@ logger = logging.getLogger(__name__)
 
 # Alias de cor RGB — espelha o tipo definido no pixel map
 RGB = Tuple[int, int, int]
+
+# ============================================================================
+# CACHE ESTÁTICO DE SUPERFÍCIES (compartilhado entre instâncias)
+# ============================================================================
+
+# Body cache: pré-renderiza o corpo + braços por paleta. Chave inclui os 4
+# campos dinâmicos do corpo (outline, main, dark, light) e a escala S.
+# Valor: (body_surf, left_arm_surf, right_arm_surf).
+_BOT_BODY_CACHE: Dict[
+    Tuple[RGB, RGB, RGB, RGB, int],
+    Tuple[pygame.Surface, pygame.Surface, pygame.Surface],
+] = {}
+
+# Cells dos braços — constante, evita reconstruir `{0, PIXEL_COLS-1}` por frame.
+_BODY_ARM_COL_LEFT: int = 0
+_BODY_ARM_COL_RIGHT: int = _PIXEL_COLS - 1
+
+
+def _resolve_pixel_color(
+    cell: str, outline: RGB, main: RGB, dark: RGB, light: RGB
+) -> RGB:
+    if cell == "A":
+        return outline
+    if cell == "B" or cell == "D":
+        return main
+    if cell == "F":
+        return light
+    if cell == "G":
+        return dark
+    if cell == "C":
+        return _C["C"]
+    if cell == "E":
+        return _C["E"]
+    if cell == "H":
+        return _C["H"]
+    if cell == "I":
+        return _C["I"]
+    return (255, 0, 255)  # célula desconhecida
+
+
+def _build_bot_body_surfaces(
+    outline: RGB, main: RGB, dark: RGB, light: RGB, S: int
+) -> Tuple[pygame.Surface, pygame.Surface, pygame.Surface]:
+    """Pré-renderiza corpo (sem olhos, sem braços) + dois braços separados."""
+    body_w = _PIXEL_COLS * S
+    body_h = _PIXEL_ROWS * S
+    body_surf = pygame.Surface((body_w, body_h), pygame.SRCALPHA)
+    left_arm = pygame.Surface((S, body_h), pygame.SRCALPHA)
+    right_arm = pygame.Surface((S, body_h), pygame.SRCALPHA)
+
+    eye_left_start = _EYE_LEFT_COL_START
+    eye_left_end = _EYE_LEFT_COL_END
+    eye_right_start = _EYE_RIGHT_COL_START
+    eye_right_end = _EYE_RIGHT_COL_END
+    eye_row_start = _EYE_ROW_START
+    eye_row_end = _EYE_ROW_END
+
+    for row_i, row in enumerate(_PIXEL_MAP):
+        in_eye_row = eye_row_start <= row_i <= eye_row_end
+        py = row_i * S
+        for col_i, cell in enumerate(row):
+            if cell is None:
+                continue
+            # Olhos são desenhados separadamente em _draw_eyes
+            if in_eye_row and (
+                eye_left_start <= col_i <= eye_left_end
+                or eye_right_start <= col_i <= eye_right_end
+            ):
+                continue
+
+            color = _resolve_pixel_color(cell, outline, main, dark, light)
+
+            if col_i == _BODY_ARM_COL_LEFT:
+                pygame.draw.rect(left_arm, color, (0, py, S, S))
+            elif col_i == _BODY_ARM_COL_RIGHT:
+                pygame.draw.rect(right_arm, color, (0, py, S, S))
+            else:
+                pygame.draw.rect(body_surf, color, (col_i * S, py, S, S))
+
+    try:
+        body_surf = body_surf.convert_alpha()
+        left_arm = left_arm.convert_alpha()
+        right_arm = right_arm.convert_alpha()
+    except pygame.error:
+        pass
+
+    return body_surf, left_arm, right_arm
+
+
+def _get_bot_body_surfaces(
+    outline: RGB, main: RGB, dark: RGB, light: RGB, S: int
+) -> Tuple[pygame.Surface, pygame.Surface, pygame.Surface]:
+    key = (outline, main, dark, light, S)
+    cached = _BOT_BODY_CACHE.get(key)
+    if cached is not None:
+        return cached
+    built = _build_bot_body_surfaces(outline, main, dark, light, S)
+    _BOT_BODY_CACHE[key] = built
+    return built
+
+
+# Aura cache: chave (theme_name, base_r, S). Cada surface contém os 13 fills
+# do glow já compostos — em vez de 1 alloc + 13 fills por frame, só 1 blit.
+_AURA_CACHE: Dict[Tuple[str, int, int], pygame.Surface] = {}
+
+
+def _build_aura_surface(theme: str, base_r: int, S: int) -> pygame.Surface:
+    palette = _ATTACK_PALETTES[theme]
+    sz = base_r * 6 + 1
+    surf = pygame.Surface((sz * 2, sz * 2), pygame.SRCALPHA)
+    center = sz
+    half_r = base_r // 2
+
+    def fill_px(dx: int, dy: int, color: RGB, alpha: int = 255) -> None:
+        r, g, b = color
+        surf.fill(
+            (r, g, b, alpha),
+            (center + dx - half_r, center + dy - half_r, base_r, base_r),
+        )
+
+    fill_px(0, 0, palette["core"])
+    for dx, dy in ((0, -base_r), (0, base_r), (-base_r, 0), (base_r, 0)):
+        fill_px(dx, dy, palette["mid"])
+    for dx, dy in (
+        (-base_r, -base_r),
+        (base_r, -base_r),
+        (-base_r, base_r),
+        (base_r, base_r),
+    ):
+        fill_px(dx, dy, palette["outer"], 200)
+    ext2 = base_r * 2
+    for dx, dy in ((0, -ext2), (0, ext2), (-ext2, 0), (ext2, 0)):
+        fill_px(dx, dy, palette["outer"], 160)
+
+    try:
+        surf = surf.convert_alpha()
+    except pygame.error:
+        pass
+    return surf
+
+
+def _get_aura_surface(theme: str, base_r: int, S: int) -> pygame.Surface:
+    key = (theme, base_r, S)
+    cached = _AURA_CACHE.get(key)
+    if cached is not None:
+        return cached
+    built = _build_aura_surface(theme, base_r, S)
+    _AURA_CACHE[key] = built
+    return built
+
 
 # ============================================================================
 # INIMIGO PRINCIPAL
@@ -234,8 +384,25 @@ class ElementalRobot:
         self._thruster_surfs = [
             pygame.Surface((_s * 10 + 2, _s * 4 + 2), pygame.SRCALPHA) for _ in range(5)
         ]
-        self._aura_surf = pygame.Surface((_s * 24, _s * 24), pygame.SRCALPHA)
-        self._pulse_surf = pygame.Surface((_s * 6, _s * 6), pygame.SRCALPHA)
+
+        # Antenna pulse — alpha é constante (64 / 26), dimensões dependem só
+        # de S e da geometria da antena. Pré-renderiza para evitar alocar 2
+        # Surfaces SRCALPHA por frame enquanto a pulse está ativa em IDLE.
+        tip_w = (_ANTENNA_COL_END - _ANTENNA_COL_START + 1) * _s
+        tip_h = (_ANTENNA_ROW_END - _ANTENNA_ROW_START + 1) * _s
+        pw = tip_w + _s * 2
+        ph = tip_h + _s * 2
+        self._antenna_pulse_inner = pygame.Surface((pw, ph), pygame.SRCALPHA)
+        pygame.draw.rect(self._antenna_pulse_inner, (92, 225, 230, 64), (0, 0, pw, ph))
+        pw2 = pw + _s * 2
+        ph2 = ph + _s * 2
+        self._antenna_pulse_outer = pygame.Surface((pw2, ph2), pygame.SRCALPHA)
+        pygame.draw.rect(self._antenna_pulse_outer, (92, 225, 230, 26), (0, 0, pw2, ph2))
+        try:
+            self._antenna_pulse_inner = self._antenna_pulse_inner.convert_alpha()
+            self._antenna_pulse_outer = self._antenna_pulse_outer.convert_alpha()
+        except pygame.error:
+            pass
 
     # =========================================================================
     # PROPRIEDADES CALCULADAS
@@ -417,9 +584,16 @@ class ElementalRobot:
                 )
 
         ax, ay = self._antenna_tip_center()
-        for p in self._charge_particles:
+        # Sweep in-place — atualiza e filtra mortos em uma única passagem,
+        # sem rebuild de lista por frame.
+        particles = self._charge_particles
+        write = 0
+        for p in particles:
             p.update(dt, ax, ay)
-        self._charge_particles = [p for p in self._charge_particles if not p.dead]
+            if not p.dead:
+                particles[write] = p
+                write += 1
+        del particles[write:]
 
     def _fire(self, player_x: float, player_y: float) -> list[EnergyOrb]:
         """
@@ -649,77 +823,31 @@ class ElementalRobot:
         S: int,
     ) -> None:
         """
-        Itera o PIXEL_MAP e pinta cada bloco com a cor adequada.
-
-        Inset-shadow do HTML (body-main::box-shadow):
-          inset 0  12px 0 current-light  → top ~2 linhas de "D" usam _body_light
-          inset 0 -12px 0 current-dark   → bot ~2 linhas de "D" usam _body_dark
-          meio                           → _body_main
-
-        Braço (cols 0 e 17): offset vertical _arm_dy aplicado individualmente.
+        Renderiza corpo + braços a partir de surfaces pré-renderizadas por
+        paleta. Os braços ficam separados pois o offset vertical (_arm_dy)
+        muda em IDLE/CHARGING — desenho fica em 3 blits em vez de iterar o
+        pixel map completo por frame.
         """
-        arm_cols = {0, _PIXEL_COLS - 1}
+        body_surf, left_arm, right_arm = _get_bot_body_surfaces(
+            self._body_outline,
+            self._body_main,
+            self._body_dark,
+            self._body_light,
+            S,
+        )
 
-        for row_i, row in enumerate(_PIXEL_MAP):
-            for col_i, cell in enumerate(row):
-                if cell is None:
-                    continue
-                # Células dos olhos desenhadas em _draw_eyes
-                if _EYE_ROW_START <= row_i <= _EYE_ROW_END and (
-                    _EYE_LEFT_COL_START <= col_i <= _EYE_LEFT_COL_END
-                    or _EYE_RIGHT_COL_START <= col_i <= _EYE_RIGHT_COL_END
-                ):
-                    continue
+        surface.blit(body_surf, (ox, oy))
 
-                # Escolha de cor
-                if cell == "A":
-                    color = self._body_outline
-                elif cell in ("B", "D"):
-                    color = self._body_main
-                elif cell == "C":
-                    color = _C["C"]
-                elif cell == "E":
-                    color = _C["E"]
-                elif cell == "F":
-                    color = self._body_light
-                elif cell == "G":
-                    color = self._body_dark
-                elif cell == "H":
-                    color = _C["H"]
-                elif cell == "I":
-                    color = _C["I"]
-                else:
-                    color = (255, 0, 255)  # magenta = letra desconhecida
-
-                # Offset do braço
-                dy_extra = int(self._arm_dy) if col_i in arm_cols else 0
-
-                pygame.draw.rect(
-                    surface,
-                    color,
-                    (ox + col_i * S, oy + row_i * S + dy_extra, S, S),
-                )
+        arm_dy = int(self._arm_dy)
+        surface.blit(left_arm, (ox, oy + arm_dy))
+        surface.blit(right_arm, (ox + _BODY_ARM_COL_RIGHT * S, oy + arm_dy))
 
         # ── Pulso da antena (antennaPulse em IDLE) ────────────────────────────
         if self._antenna_pulse_alpha > 0 and self.fsm_state == "IDLE":
-            tip_w = (_ANTENNA_COL_END - _ANTENNA_COL_START + 1) * S
-            tip_h = (_ANTENNA_ROW_END - _ANTENNA_ROW_START + 1) * S
             tip_x = ox + _ANTENNA_COL_START * S
             tip_y = oy + _ANTENNA_ROW_START * S
-            # Anel interno (4 px) e externo (8 px) de glow ciano translúcido
-            cyan_inner = (92, 225, 230, min(64, self._antenna_pulse_alpha))
-            cyan_outer = (92, 225, 230, min(26, self._antenna_pulse_alpha // 2))
-            self._pulse_surf.fill((0, 0, 0, 0))
-            pw = tip_w + S * 2
-            ph = tip_h + S * 2
-            ps = pygame.Surface((pw, ph), pygame.SRCALPHA)
-            ps.fill((0, 0, 0, 0))
-            pygame.draw.rect(ps, cyan_inner, (0, 0, pw, ph))
-            surface.blit(ps, (tip_x - S, tip_y - S))
-            ps2 = pygame.Surface((pw + S * 2, ph + S * 2), pygame.SRCALPHA)
-            ps2.fill((0, 0, 0, 0))
-            pygame.draw.rect(ps2, cyan_outer, (0, 0, pw + S * 2, ph + S * 2))
-            surface.blit(ps2, (tip_x - S * 2, tip_y - S * 2))
+            surface.blit(self._antenna_pulse_inner, (tip_x - S, tip_y - S))
+            surface.blit(self._antenna_pulse_outer, (tip_x - S * 2, tip_y - S * 2))
 
     def _draw_eyes(
         self,
@@ -822,7 +950,8 @@ class ElementalRobot:
             # ── Otimização: Reutiliza Surface pré-alocada ──────────────────
             rs = self._thruster_surfs[i]
             rs.fill((0, 0, 0, 0))
-            pygame.draw.rect(rs, (*color, alpha), (0, 0, w, h), S)
+            cr, cg, cb = color
+            pygame.draw.rect(rs, (cr, cg, cb, alpha), (0, 0, w, h), S)
             surface.blit(rs, (cx - w // 2, y - h // 2))
 
     def _draw_aura(
@@ -834,57 +963,17 @@ class ElementalRobot:
     ) -> None:
         """
         Núcleo de energia pixel-art que cresce na ponta da antena.
-
-        Espelha o CSS .aura com box-shadow (12 sombras):
-          ±4px X/Y → cor mid    (4 direções)
-          ±4px diag → cor outer  (4 cantos)
-          ±8px X/Y → cor outer   (4 extremidades axiais)
-
-        Correção: raio externo axial = 2 × base_r (era 1.5 × — incorreto).
+        Composição (13 fills) pré-renderizada por (theme, base_r) — em vez
+        de alocar surface + 13 fills por frame, só 1 blit.
         """
         if not self._aura_visible or self._aura_scale < 0.1:
             return
 
+        base_r = max(1, int(S * self._aura_scale))
+        aura_surf = _get_aura_surface(self._attack_theme, base_r, S)
         ax, ay = self._antenna_tip_center()
-        p = self._palette
-        scale = self._aura_scale
-
-        base_r = max(1, int(S * scale))
-        sz = base_r * 6 + 1
-        self._aura_surf = pygame.Surface((sz * 2, sz * 2), pygame.SRCALPHA)
-        self._aura_surf.fill((0, 0, 0, 0))
-        center = sz
-
-        def blit_px(dx: int, dy: int, color: RGB, alpha: int = 255) -> None:
-            r, g, b = color
-            self._aura_surf.fill(
-                (r, g, b, max(0, min(255, alpha))),
-                (center + dx - base_r // 2, center + dy - base_r // 2, base_r, base_r),
-            )
-
-        # Núcleo central (branco/core)
-        blit_px(0, 0, p["core"])
-
-        # Anel médio: ±4 px (espelha ±4px do box-shadow)
-        for dx, dy in ((0, -base_r), (0, base_r), (-base_r, 0), (base_r, 0)):
-            blit_px(dx, dy, p["mid"])
-
-        # Anel externo diagonal: ±4 px (mesma distância que mid)
-        for dx, dy in (
-            (-base_r, -base_r),
-            (base_r, -base_r),
-            (-base_r, base_r),
-            (base_r, base_r),
-        ):
-            blit_px(dx, dy, p["outer"], 200)
-
-        # Anel externo axial: ±8 px = 2 × base_r (espelha ±8px do box-shadow)
-        ext2 = base_r * 2
-        for dx, dy in ((0, -ext2), (0, ext2), (-ext2, 0), (ext2, 0)):
-            blit_px(dx, dy, p["outer"], 160)
-
-        half = sz
-        surface.blit(self._aura_surf, (int(ax) - half, int(ay) - half))
+        half = base_r * 6 + 1
+        surface.blit(aura_surf, (int(ax) - half, int(ay) - half))
 
     def _draw_particles(self, surface: pygame.Surface) -> None:
         """Desenha todas as partículas de carga ativas."""

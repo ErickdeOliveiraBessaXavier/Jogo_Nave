@@ -20,6 +20,8 @@ class BulletPool:
         """
         self.pool: List[Bullet] = []
         self.active: List[Bullet] = []
+        # Free-list LIFO: lookup O(1) por spawn em vez de scan O(n) no pool.
+        self.free: List[Bullet] = []
 
         # Pré-cria balas inativas
         for _ in range(initial_size):
@@ -27,6 +29,7 @@ class BulletPool:
             bullet.active = False
             bullet.dead = True
             self.pool.append(bullet)
+            self.free.append(bullet)
 
     def get(
         self,
@@ -43,40 +46,25 @@ class BulletPool:
     ) -> Bullet:
         """
         Obtém uma bala do pool, reutilizando uma inativa ou criando nova.
-
-        Args:
-            x, y: Posição inicial da bala
-            damage: Dano da bala
-            piercing: Se a bala é perfurante
-            homing: Se a bala é teleguiada
-            explosive: Se a bala é explosiva
-            low_ammo: Se restam poucas cargas (efeito de piscar)
-            is_side_scroll: Se está em modo side-scroll
-            direction: Direção cardinal do tiro, como (dx, dy)
-            ship_id: ID da nave que atirou para definir o visual
-
-        Returns:
-            Bala ativa e configurada
         """
-        # Procura uma bala inativa no pool
-        for bullet in self.pool:
-            if not bullet.active:
-                bullet.reset(
-                    x=x,
-                    y=y,
-                    damage=damage,
-                    piercing=piercing,
-                    homing=homing,
-                    explosive=explosive,
-                    low_ammo=low_ammo,
-                    is_side_scroll=is_side_scroll,
-                    direction=direction,
-                    ship_id=ship_id,
-                )
-                self.active.append(bullet)
-                return bullet
+        if self.free:
+            bullet = self.free.pop()
+            bullet.reset(
+                x=x,
+                y=y,
+                damage=damage,
+                piercing=piercing,
+                homing=homing,
+                explosive=explosive,
+                low_ammo=low_ammo,
+                is_side_scroll=is_side_scroll,
+                direction=direction,
+                ship_id=ship_id,
+            )
+            self.active.append(bullet)
+            return bullet
 
-        # Se não houver disponível, cria nova
+        # Sem balas livres: cria uma nova e registra no pool.
         bullet = Bullet(
             x=x,
             y=y,
@@ -96,49 +84,57 @@ class BulletPool:
     def release(self, bullet: Bullet):
         """
         Libera uma bala de volta ao pool, marcando como inativa.
-
-        Args:
-            bullet: Bala a ser desativada
+        Chamado por código externo; o sweep do update() não passa por aqui.
         """
         if bullet.laser_sound_channel is not None:
             bullet.laser_sound_channel.stop()
             bullet.laser_sound_channel = None
-        if bullet in self.active:
-            bullet.active = False
-            bullet.dead = True
+        try:
             self.active.remove(bullet)
+        except ValueError:
+            return
+        bullet.active = False
+        bullet.dead = True
+        self.free.append(bullet)
 
     def update(self, dt: float):
         """
         Atualiza todas as balas ativas e libera as que morreram.
-
-        Args:
-            dt: Delta time em segundos
+        Sweep in-place: sem cópia de lista, sem release() por bala morta.
         """
-        for bullet in self.active[:]:  # Copia a lista para iterar com segurança
+        write = 0
+        active = self.active
+        free = self.free
+        for bullet in active:
             bullet.update(dt)
             if bullet.dead:
-                self.release(bullet)
+                if bullet.laser_sound_channel is not None:
+                    bullet.laser_sound_channel.stop()
+                    bullet.laser_sound_channel = None
+                bullet.active = False
+                free.append(bullet)
+            else:
+                active[write] = bullet
+                write += 1
+        del active[write:]
 
     def draw(self, screen: pygame.Surface):
-        """
-        Desenha todas as balas ativas.
-
-        Args:
-            screen: Superfície do pygame onde desenhar
-        """
         for bullet in self.active:
             bullet.draw(screen)
 
     def clear_active(self):
         """Remove todas as balas ativas, devolvendo-as ao pool."""
-        for bullet in self.active[:]:
-            self.release(bullet)
+        for bullet in self.active:
+            if bullet.laser_sound_channel is not None:
+                bullet.laser_sound_channel.stop()
+                bullet.laser_sound_channel = None
+            bullet.active = False
+            bullet.dead = True
+            self.free.append(bullet)
+        self.active.clear()
 
     def get_active_count(self) -> int:
-        """Retorna a quantidade de balas atualmente ativas."""
         return len(self.active)
 
     def get_pool_size(self) -> int:
-        """Retorna o tamanho total do pool (ativas + inativas)."""
         return len(self.pool)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import random
 import time
+from collections import deque
 from typing import TYPE_CHECKING, Any, Optional, TypedDict
 
 import pygame
@@ -39,6 +40,32 @@ ORBITAL_INITIAL_COOLDOWN_MAX = 5.0
 MOUSE_BASE_STIFFNESS: float = 8.5
 MOUSE_DEAD_ZONE: float = 2.0
 
+# Cache estático da surface de brilho do Repulsion Shield — evita alocar
+# Surface SRCALPHA e draw.circle por frame quando o escudo está ativo.
+_REPULSION_GLOW_CACHE: dict[int, pygame.Surface] = {}
+
+
+def _get_repulsion_glow(glow_r: int) -> pygame.Surface:
+    cached = _REPULSION_GLOW_CACHE.get(glow_r)
+    if cached is not None:
+        return cached
+    surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+    pygame.draw.circle(surf, (200, 255, 255, 40), (glow_r, glow_r), glow_r)
+    try:
+        surf = surf.convert_alpha()
+    except pygame.error:
+        pass
+    _REPULSION_GLOW_CACHE[glow_r] = surf
+    return surf
+
+
+# Cores dos sparks do Chain Shot — tuple imutável evita realocação.
+_CHAIN_SPARK_COLORS: tuple[tuple[int, int, int], ...] = (
+    (100, 200, 255),
+    (200, 255, 255),
+    (255, 255, 255),
+)
+
 
 class ParticleDict(TypedDict):
     x: float
@@ -68,6 +95,9 @@ class Ship:
         self.h = 60
         self.x = x
         self.y = y
+        # Rect persistente — atualizado in-place no acesso para evitar alocação
+        # por frame (rect é consultado por colisões, pickup, draw...).
+        self._rect = pygame.Rect(int(x), int(y), self.w, self.h)
         # Multiplicadores do profile aplicados sobre os valores-base.
         self.speed = 250 * self.profile.speed_mult
         self.invuln = 0  # ms
@@ -101,9 +131,11 @@ class Ship:
                 int(original_size[1] * scale_factor),
             )
             self.ship_image = pygame.transform.scale(self.ship_image, new_size)
+            self._ship_image_size: tuple[int, int] = self.ship_image.get_size()
         except pygame.error:
             # Imagem não carregada - nave não será visível
             self.ship_image = None
+            self._ship_image_size = (self.w, self.h)
 
         # Power-ups
         self.double_shot_timer: float = 0.0
@@ -149,6 +181,7 @@ class Ship:
             "west": 270.0,
         }
         self.set_facing(self.facing)
+        self._refresh_sprite_size()
 
         # Shield system (from upgrades)
         self.shield_timer: float = 0.0
@@ -213,7 +246,11 @@ class Ship:
         self.charge_shot_timer: float = 0.0  # tempo acumulado de carga
 
         # Buffer de posições do cursor para reaction_delay (x, y, timestamp).
-        self._mouse_history: list[tuple[float, float, float]] = []
+        # Deque: popleft O(1) para descartar entradas vencidas, evitando
+        # rebuild da lista por frame.
+        self._mouse_history: deque[tuple[float, float, float]] = deque()
+        # Cache do tamanho do sprite renderizado — invalidado em set_rotation.
+        self._cached_sprite_size: tuple[int, int] = (self.w, self.h)
 
         # Reverberador: combo de dano sem tomar hit.
         self.combo_kills: int = 0  # abates consecutivos sem dano
@@ -402,7 +439,8 @@ class Ship:
 
     @property
     def rect(self) -> pygame.Rect:
-        return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+        self._rect.update(int(self.x), int(self.y), self.w, self.h)
+        return self._rect
 
     @property
     def is_invulnerable(self) -> bool:
@@ -540,6 +578,7 @@ class Ship:
             # Rotacionar imagem: pygame.transform.rotate() usa rotação no sentido contrário
             # Então rotacionamos -angle para obter a rotação desejada
             self.ship_image_rotated = pygame.transform.rotate(self.ship_image, -angle)
+            self._refresh_sprite_size()
 
     def set_facing(self, facing: str) -> None:
         """Define a direção cardinal da nave e atualiza sua rotação visual."""
@@ -564,12 +603,17 @@ class Ship:
         return self._cardinal_vectors.get(self.facing, (0.0, -1.0))
 
     def _get_rendered_sprite_size(self) -> tuple[int, int]:
-        """Retorna o tamanho do sprite atualmente desenhado na tela."""
+        """Retorna o tamanho do sprite atualmente desenhado na tela.
+        Valor cacheado; invalidado em set_rotation/_refresh_sprite_size."""
+        return self._cached_sprite_size
+
+    def _refresh_sprite_size(self) -> None:
         if self.ship_image is None:
-            return self.w, self.h
-        if self.rotation_angle != 0.0 and self.ship_image_rotated is not None:
-            return self.ship_image_rotated.get_size()
-        return self.ship_image.get_size()
+            self._cached_sprite_size = (self.w, self.h)
+        elif self.rotation_angle != 0.0 and self.ship_image_rotated is not None:
+            self._cached_sprite_size = self.ship_image_rotated.get_size()
+        else:
+            self._cached_sprite_size = self.ship_image.get_size()
 
     def _get_enemy_center(self, enemy: Any) -> Optional[tuple[float, float]]:
         """Calcula o centro de um inimigo independente do tipo."""
@@ -1111,12 +1155,14 @@ class Ship:
             delay = self.profile.reaction_delay
             if delay > 0.0:
                 now = time.time()
-                self._mouse_history.append((target_x, target_y, now))
-                # Descartar entradas antigas (manter apenas janela relevante).
+                history = self._mouse_history
+                history.append((target_x, target_y, now))
+                # Descartar entradas vencidas — popleft O(1) por entrada.
                 cutoff = now - (delay + 0.1)
-                self._mouse_history = [e for e in self._mouse_history if e[2] >= cutoff]
+                while history and history[0][2] < cutoff:
+                    history.popleft()
                 # Buscar a posição mais próxima de `delay` segundos atrás.
-                for x, y, t in reversed(self._mouse_history):
+                for x, y, t in reversed(history):
                     if now - t >= delay:
                         target_x, target_y = x, y
                         break
@@ -1361,18 +1407,10 @@ class Ship:
             # Efeito pulsante
             pulse = abs((self._draw_time * 4) % 2 - 1)  # Oscila entre 0 e 1
 
-            # Calcular centro baseado no tamanho real do sprite (se existir)
-            if self.ship_image is not None:
-                sprite_w, sprite_h = self.ship_image.get_size()
-                # Centralizar escudo no sprite real
-                center_x = int(self.x + sprite_w / 2)
-                center_y = int(self.y + sprite_h / 2)
-                base_radius = max(sprite_w, sprite_h) / 2 + 8
-            else:
-                # Fallback para dimensões lógicas
-                center_x = int(self.x + self.w / 2)
-                center_y = int(self.y + self.h / 2)
-                base_radius = max(self.w, self.h) / 2 + 8
+            sprite_w, sprite_h = self._ship_image_size
+            center_x = int(self.x + sprite_w / 2)
+            center_y = int(self.y + sprite_h / 2)
+            base_radius = max(sprite_w, sprite_h) / 2 + 8
 
             radius = int(base_radius + pulse * 4)
 
@@ -1385,66 +1423,72 @@ class Ship:
 
         # Repulsion Shield (Vento)
         if self.has_repulsion_shield:
-            if self.ship_image is not None:
-                sprite_w, sprite_h = self.ship_image.get_size()
-                cx = int(self.x + sprite_w / 2)
-                cy = int(self.y + sprite_h / 2)
-            else:
-                cx = int(self.x + self.w / 2)
-                cy = int(self.y + self.h / 2)
+            sprite_w, sprite_h = self._ship_image_size
+            cx = int(self.x + sprite_w / 2)
+            cy = int(self.y + sprite_h / 2)
 
             # Visual suave de brilho no centro durante o sopro
             pulse = abs((self._draw_time * 6) % 2 - 1)
             glow_r = 30 + int(pulse * 10)
-            
-            # Surface para brilho radial
-            glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
-            pygame.draw.circle(glow_surf, (200, 255, 255, 40), (glow_r, glow_r), glow_r)
+
+            # Surface cacheada (módulo) — sem alocação por frame.
+            glow_surf = _get_repulsion_glow(glow_r)
             surface.blit(glow_surf, (cx - glow_r, cy - glow_r))
 
         # Chain Shot (Efeito Estático/Elétrico)
         if self.has_chain_shot:
-            # Pegar centro e dimensões do sprite
-            sprite_w, sprite_h = self._get_rendered_sprite_size()
+            sprite_w, sprite_h = self._cached_sprite_size
             cx, cy = int(self.x + sprite_w / 2), int(self.y + sprite_h / 2)
             radius = max(sprite_w, sprite_h) // 2 + 5
-            
-            # Gerar pequenos arcos elétricos aleatórios
+
             # Apenas em alguns frames para efeito de flickering (estático)
             if random.random() < 0.8:
+                # Locals — atributos/globals viram lookup mais barato em loops quentes.
+                cos = math.cos
+                sin = math.sin
+                uniform = random.uniform
+                choice = random.choice
+                draw_lines = pygame.draw.lines
+                colors_pool = _CHAIN_SPARK_COLORS
+                tau = math.tau
+
                 num_arcs = random.randint(2, 4)
                 for _ in range(num_arcs):
-                    # Ângulo inicial e final do arco
-                    angle1 = random.uniform(0, math.tau)
-                    angle2 = angle1 + random.uniform(0.2, 0.8)
-                    
-                    # Pontos do arco
-                    p1 = (cx + math.cos(angle1) * radius, cy + math.sin(angle1) * radius)
-                    # Ponto intermediário com "jitter" para parecer eletricidade
-                    mid_angle = (angle1 + angle2) / 2
-                    mid_radius = radius + random.uniform(2, 8)
-                    p_mid = (cx + math.cos(mid_angle) * mid_radius, cy + math.sin(mid_angle) * mid_radius)
-                    p2 = (cx + math.cos(angle2) * radius, cy + math.sin(angle2) * radius)
-                    
-                    # Cor ciano/branco
-                    spark_color = random.choice([(100, 200, 255), (200, 255, 255), (255, 255, 255)])
-                    pygame.draw.lines(surface, spark_color, False, [p1, p_mid, p2], 1)
+                    angle1 = uniform(0, tau)
+                    angle2 = angle1 + uniform(0.2, 0.8)
+                    mid_angle = (angle1 + angle2) * 0.5
+                    mid_radius = radius + uniform(2, 8)
+
+                    p1 = (cx + cos(angle1) * radius, cy + sin(angle1) * radius)
+                    p_mid = (cx + cos(mid_angle) * mid_radius, cy + sin(mid_angle) * mid_radius)
+                    p2 = (cx + cos(angle2) * radius, cy + sin(angle2) * radius)
+
+                    draw_lines(surface, choice(colors_pool), False, [p1, p_mid, p2], 1)
 
         # Rastros de Vento Constante (Omnidirecional)
-        for s in self.repulsion_wind_streaks:
-            start_x = s["cx"] + math.cos(s["angle"]) * s["dist"]
-            start_y = s["cy"] + math.sin(s["angle"]) * s["dist"]
-            
-            end_x = s["cx"] + math.cos(s["angle"]) * (s["dist"] + s["len"])
-            end_y = s["cy"] + math.sin(s["angle"]) * (s["dist"] + s["len"])
-            
-            pygame.draw.line(
-                surface,
-                (255, 255, 255, int(s["alpha"])),
-                (start_x, start_y),
-                (end_x, end_y),
-                1
-            )
+        if self.repulsion_wind_streaks:
+            cos = math.cos
+            sin = math.sin
+            draw_line = pygame.draw.line
+            for s in self.repulsion_wind_streaks:
+                angle = s["angle"]
+                dist = s["dist"]
+                length = s["len"]
+                ca = cos(angle)
+                sa = sin(angle)
+                base_x = s["cx"]
+                base_y = s["cy"]
+                start_x = base_x + ca * dist
+                start_y = base_y + sa * dist
+                end_x = base_x + ca * (dist + length)
+                end_y = base_y + sa * (dist + length)
+                draw_line(
+                    surface,
+                    (255, 255, 255, int(s["alpha"])),
+                    (start_x, start_y),
+                    (end_x, end_y),
+                    1,
+                )
 
         # Calcular tremor
         shake_x, shake_y = 0, 0
@@ -1466,11 +1510,8 @@ class Ship:
         if self.orbital_lasers_active:
             current_time = self._draw_time
 
-            # Obter tamanho real do sprite para centralizar corretamente
-            if self.ship_image is not None:
-                sprite_w, sprite_h = self.ship_image.get_size()
-            else:
-                sprite_w, sprite_h = self.w, self.h
+            # Tamanho do sprite — cache não-rotacionado para centralização.
+            sprite_w, sprite_h = self._ship_image_size
 
             # Desenhar cada bola orbital
             for i in range(self.num_orbital_balls):

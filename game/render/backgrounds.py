@@ -19,6 +19,24 @@ import pygame
 logger = logging.getLogger(__name__)
 
 
+def _optimize_surface(surf: pygame.Surface) -> pygame.Surface:
+    """Aplica convert() para alinhar formato com o display (blits ~2-3x mais rápidos).
+    Faz fallback silencioso se o display ainda não estiver pronto."""
+    try:
+        return surf.convert()
+    except pygame.error:
+        return surf
+
+
+def _optimize_alpha_surface(surf: pygame.Surface) -> pygame.Surface:
+    """Aplica convert_alpha() para alinhar formato RGBA com o display.
+    Faz fallback silencioso se o display ainda não estiver pronto."""
+    try:
+        return surf.convert_alpha()
+    except pygame.error:
+        return surf
+
+
 class ColorPalette:
     """Paleta de cores para camadas de montanha."""
 
@@ -31,11 +49,19 @@ class LayerData:
     """Dados de uma camada de parallax."""
 
     def __init__(
-        self, surface: pygame.Surface, speed: float, offset: float = 0.0
+        self,
+        surface: pygame.Surface,
+        speed: float,
+        offset: float = 0.0,
+        y_pos: int = 0,
     ) -> None:
         self.surface: pygame.Surface = surface
         self.speed: float = speed
         self.offset: float = offset
+        # Dimensões cacheadas — evitam get_width/get_height por frame
+        self.width: int = surface.get_width()
+        self.height: int = surface.get_height()
+        self.y_pos: int = y_pos
 
 
 class Background(ABC):
@@ -85,7 +111,9 @@ class Cloud:
         # pois o alpha difere entre camadas (102 vs 179)
         cache_key = (color, is_back_layer)
         if cache_key not in Cloud._surface_cache:
-            Cloud._surface_cache[cache_key] = self._generate_cloud_surface()
+            Cloud._surface_cache[cache_key] = _optimize_alpha_surface(
+                self._generate_cloud_surface()
+            )
 
         self.base_surface = Cloud._surface_cache[cache_key]
 
@@ -131,8 +159,8 @@ class Cloud:
         new_height = int(self.base_surface.get_height() * scale)
 
         # Reutilizar surface transformada
-        self.scaled_surface = pygame.transform.scale(
-            self.base_surface, (new_width, new_height)
+        self.scaled_surface = _optimize_alpha_surface(
+            pygame.transform.scale(self.base_surface, (new_width, new_height))
         )
 
         # Posição inicial
@@ -247,8 +275,14 @@ class MountainsBackground(Background):
         ]
         stops = [0.0, 0.4, 0.7, 0.9, 1.0]
 
-        self.sky_warm_gradient = self._render_sky_gradient(warm_colors, stops)
-        self.sky_night_gradient = self._render_sky_gradient(night_colors, stops)
+        # convert() alinha o formato dos gradientes com o display — blit
+        # full-screen fica significativamente mais barato.
+        self.sky_warm_gradient = _optimize_surface(
+            self._render_sky_gradient(warm_colors, stops)
+        )
+        self.sky_night_gradient = _optimize_surface(
+            self._render_sky_gradient(night_colors, stops)
+        )
 
     def _render_sky_gradient(
         self,
@@ -287,11 +321,13 @@ class MountainsBackground(Background):
         speed_multiplier = 50  # Ajuste de escala
 
         for i in range(6):
-            layer_surface = self._generate_mountain_surface(
-                self.PALETTES[i],
-                self.PEAKS_COUNTS[i],
-                self.ROUGHNESS_VALUES[i],
-                self.HEIGHT_PERCENTAGES[i],
+            layer_surface = _optimize_alpha_surface(
+                self._generate_mountain_surface(
+                    self.PALETTES[i],
+                    self.PEAKS_COUNTS[i],
+                    self.ROUGHNESS_VALUES[i],
+                    self.HEIGHT_PERCENTAGES[i],
+                )
             )
 
             self.layers.append(
@@ -299,6 +335,7 @@ class MountainsBackground(Background):
                     surface=layer_surface,
                     speed=self.LAYER_SPEEDS[i] * speed_multiplier,
                     offset=0.0,
+                    y_pos=self.height - layer_surface.get_height(),
                 )
             )
 
@@ -400,7 +437,7 @@ class MountainsBackground(Background):
                 alpha = int(255 * (level / (self.STAR_ALPHA_LEVELS - 1)))
                 surf = pygame.Surface((size, size), pygame.SRCALPHA)
                 surf.fill((255, 255, 255, alpha))
-                variants.append(surf)
+                variants.append(_optimize_alpha_surface(surf))
             self._star_surf_cache[size] = variants
 
         for _ in range(self.NUM_STARS):
@@ -410,6 +447,8 @@ class MountainsBackground(Background):
                     "x": random.random() * self.width,
                     "y": random.random() * star_area_height,
                     "size": size,
+                    # Bind direto da lista de variants p/ evitar dict lookup por frame.
+                    "variants": self._star_surf_cache[size],
                     "delay": random.random() * 5,
                     "base_alpha": random.uniform(0.3, 1.0),
                 }
@@ -422,27 +461,27 @@ class MountainsBackground(Background):
         invisíveis no pôr do sol (0) e fortes na noite fechada (1).
         """
         current_time = pygame.time.get_ticks() / 1000.0
-        twinkle_speed = self.star_twinkle_speed
+        # Locals — atalho mais rápido que atributo/global em Python hot loops.
+        twinkle_phase = current_time * self.star_twinkle_speed
         # Floor de 0.25 garante que estrelas existem mesmo de dia (apenas
         # discretas); 1.0 é o brilho máximo na noite.
         brightness_mult = 0.25 + self._current_progress * 0.75
+        max_level = self.STAR_ALPHA_LEVELS - 1
+        level_factor = max_level / 255.0
+        sin = math.sin
+        blit = surface.blit
 
         for star in self.stars:
-            alpha_factor = (
-                math.sin(current_time * twinkle_speed + star["delay"]) + 1
-            ) * 0.5
-            alpha = int(
-                star["base_alpha"]
-                * (0.3 + alpha_factor * 0.7)
-                * brightness_mult
-                * 255
+            alpha_factor = (sin(twinkle_phase + star["delay"]) + 1) * 0.5
+            alpha = (
+                star["base_alpha"] * (0.3 + alpha_factor * 0.7) * brightness_mult * 255
             )
-            level = min(
-                self.STAR_ALPHA_LEVELS - 1,
-                max(0, round(alpha * (self.STAR_ALPHA_LEVELS - 1) / 255)),
-            )
-            surf = self._star_surf_cache[star["size"]][level]
-            surface.blit(surf, (int(star["x"]), int(star["y"])))
+            level = int(alpha * level_factor + 0.5)
+            if level <= 0:
+                continue
+            if level > max_level:
+                level = max_level
+            blit(star["variants"][level], (int(star["x"]), int(star["y"])))
 
     def _create_sun(self) -> None:
         """Cria superfície do sol com brilho pré-renderizado."""
@@ -458,7 +497,7 @@ class MountainsBackground(Background):
         )
 
         # Pré-renderizar o sol com todos os efeitos
-        self.sun_surface = self._render_sun(sun_size)
+        self.sun_surface = _optimize_alpha_surface(self._render_sun(sun_size))
 
     def _render_sun(self, size: int) -> pygame.Surface:
         """Renderiza o sol com gradiente radial otimizado."""
@@ -530,14 +569,22 @@ class MountainsBackground(Background):
 
     def draw(self, surface: pygame.Surface) -> None:
         """Desenha todos os elementos do background."""
-        # Sky base (warm puro) sempre cobre a tela.
-        if self.sky_warm_gradient:
-            surface.blit(self.sky_warm_gradient, (0, 0))
-        # Overlay night por cima com alpha = progresso atual. Set_alpha em
-        # surface convertida é barato (sem re-render).
-        if self.sky_night_gradient and self._current_progress > 0.001:
-            self.sky_night_gradient.set_alpha(int(self._current_progress * 255))
-            surface.blit(self.sky_night_gradient, (0, 0))
+        progress = self._current_progress
+        # Skip de blits nos extremos: full-day usa apenas warm, full-night
+        # usa apenas night. Evita um blit fullscreen quando não há mistura.
+        if progress <= 0.001:
+            if self.sky_warm_gradient:
+                surface.blit(self.sky_warm_gradient, (0, 0))
+        elif progress >= 0.999:
+            if self.sky_night_gradient:
+                self.sky_night_gradient.set_alpha(255)
+                surface.blit(self.sky_night_gradient, (0, 0))
+        else:
+            if self.sky_warm_gradient:
+                surface.blit(self.sky_warm_gradient, (0, 0))
+            if self.sky_night_gradient:
+                self.sky_night_gradient.set_alpha(int(progress * 255))
+                surface.blit(self.sky_night_gradient, (0, 0))
 
         # Desenhar estrelas (brilho escalado em _draw_stars conforme o progresso)
         self._draw_stars(surface)
@@ -548,25 +595,20 @@ class MountainsBackground(Background):
 
         # Desenhar sol: fade out + desliza para baixo conforme escurece.
         if self.sun_surface and self.sun_rect:
-            sun_alpha = int((1.0 - self._current_progress) * 255)
+            sun_alpha = int((1.0 - progress) * 255)
             if sun_alpha > 0:
                 self.sun_surface.set_alpha(sun_alpha)
-                offset_y = int(self._current_progress * self._sun_dive_distance)
+                offset_y = int(progress * self._sun_dive_distance)
                 surface.blit(self.sun_surface, self.sun_rect.move(0, offset_y))
 
-        # Desenhar camadas de montanhas (parallax)
+        # Desenhar camadas de montanhas (parallax) — dimensões cacheadas em LayerData.
+        blit = surface.blit
         for layer in self.layers:
-            layer_w = layer.surface.get_width()
-            layer_h = layer.surface.get_height()
-            y_pos = self.height - layer_h
-
-            # Offset sempre dentro de [0, layer_w) para wrap correto
+            layer_w = layer.width
             x_offset = -(int(layer.offset) % layer_w)
-
-            # Sempre desenhar duas cópias — garante continuidade sem gap
-            surface.blit(layer.surface, (x_offset, y_pos))
+            blit(layer.surface, (x_offset, layer.y_pos))
             if x_offset != 0:
-                surface.blit(layer.surface, (x_offset + layer_w, y_pos))
+                blit(layer.surface, (x_offset + layer_w, layer.y_pos))
 
         # Desenhar nuvens da frente
         for cloud in self.clouds_front:

@@ -1143,8 +1143,14 @@ class StoneGolemBoss:
         self._half_phase_bots_spawned = True
 
     def _active_half_phase_bots(self) -> list[ElementalRobot]:
-        self._half_phase_bots = [bot for bot in self._half_phase_bots if not bot.dead]
-        return self._half_phase_bots
+        bots = self._half_phase_bots
+        write = 0
+        for bot in bots:
+            if not bot.dead:
+                bots[write] = bot
+                write += 1
+        del bots[write:]
+        return bots
 
     def _spawn_half_phase_mines(
         self,
@@ -1280,20 +1286,44 @@ class StoneGolemBoss:
 
         self.stomp_shake = self._jitter_y
 
+        # Sweep in-place: update + filter de mortos em uma passagem só,
+        # sem rebuild de lista por frame.
         px, py = self._pupil_pos()
-        for p in self._charge_particles:
+        particles = self._charge_particles
+        write = 0
+        for p in particles:
             p.update(dt, px, py)
-        self._charge_particles = [p for p in self._charge_particles if not p.dead]
+            if not p.dead:
+                particles[write] = p
+                write += 1
+        del particles[write:]
 
-        for d in self._emerge_debris:
+        debris = self._emerge_debris
+        write = 0
+        for d in debris:
             d.update(dt)
-        self._emerge_debris = [d for d in self._emerge_debris if not d.dead]
+            if not d.dead:
+                debris[write] = d
+                write += 1
+        del debris[write:]
 
-        self._mines = [m for m in self._mines if not m.dead]
+        mines = self._mines
+        write = 0
+        for m in mines:
+            if not m.dead:
+                mines[write] = m
+                write += 1
+        del mines[write:]
+
         cx, cy = self._shared_center()
-        for r in self._orbital_debris:
+        orbital = self._orbital_debris
+        write = 0
+        for r in orbital:
             r.update(dt, cx, cy, player_x, player_y)
-        self._orbital_debris = [r for r in self._orbital_debris if not r.dead]
+            if not r.dead:
+                orbital[write] = r
+                write += 1
+        del orbital[write:]
 
         self._update_sentry_spawn(dt, entity_manager)
 
@@ -1487,7 +1517,13 @@ class StoneGolemBoss:
         _shards: List[AttackDebris],
     ) -> None:
         active_bots = self._active_half_phase_bots()
-        self._half_phase_mines = [m for m in self._half_phase_mines if not m.dead]
+        hp_mines = self._half_phase_mines
+        write = 0
+        for m in hp_mines:
+            if not m.dead:
+                hp_mines[write] = m
+                write += 1
+        del hp_mines[write:]
 
         if active_bots:
             # Kick off a new volley of 3 when the previous one is fully gone and no queue pending
