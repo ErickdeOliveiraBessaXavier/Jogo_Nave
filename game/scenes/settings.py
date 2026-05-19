@@ -280,15 +280,25 @@ class SettingsView:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 pos = event.pos
                 if self.layout_rects["popup_yes_button"].collidepoint(pos):
-                    self.show_restart_popup = False
-                    import sys
-
-                    pygame.quit()
-                    sys.exit(0)
+                    self._popup_confirm()
+                    return True
                 if self.layout_rects["popup_no_button"].collidepoint(pos):
                     self.show_restart_popup = False
                 return True
+            if event.type == pygame.JOYBUTTONDOWN:
+                from ..core.gamepad import XboxButton
 
+                if event.button == XboxButton.A:
+                    pos = pygame.mouse.get_pos()
+                    if self.layout_rects["popup_yes_button"].collidepoint(pos):
+                        self._popup_confirm()
+                    else:
+                        # Default A no popup = não (mais seguro contra apertar sem mirar).
+                        self.show_restart_popup = False
+                    return True
+                if event.button in (XboxButton.B, XboxButton.BACK):
+                    self.show_restart_popup = False
+                    return True
             # Consumir os demais eventos para evitar click-through.
             if event.type in (
                 pygame.MOUSEBUTTONUP,
@@ -296,6 +306,24 @@ class SettingsView:
                 pygame.MOUSEWHEEL,
                 pygame.KEYDOWN,
             ):
+                return True
+
+        if event.type == pygame.JOYBUTTONDOWN:
+            from ..core.gamepad import XboxButton
+
+            if event.button == XboxButton.A:
+                pos = pygame.mouse.get_pos()
+                self._activate_at(pos)
+                return True
+            if event.button in (XboxButton.B, XboxButton.BACK):
+                self.preferences.save()
+                self.on_back()
+                return True
+            if event.button in (XboxButton.LB, XboxButton.RB):
+                # LB/RB ajustam o slider sob o cursor — UX similar à de
+                # ajuste de áudio em consoles.
+                direction = -1 if event.button == XboxButton.LB else +1
+                self._adjust_slider_under_cursor(direction)
                 return True
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -366,6 +394,78 @@ class SettingsView:
                 return True
 
         return False
+
+    def _popup_confirm(self) -> None:
+        """Confirma o reinício solicitado pelo popup de mudança de resolução."""
+        import sys
+
+        self.show_restart_popup = False
+        pygame.quit()
+        sys.exit(0)
+
+    def _activate_at(self, pos: tuple[int, int]) -> bool:
+        """Aciona o elemento de UI sob ``pos`` (botão, toggle, slider center).
+
+        Reutiliza a mesma lógica do click do mouse — DPad já moveu o cursor
+        até o elemento via snap-focus, então basta replicar o efeito do click.
+        """
+        from typing import List, cast
+
+        if self.layout_rects["back_button"].collidepoint(pos):
+            self.preferences.save()
+            self.on_back()
+            return True
+
+        resolution_buttons = cast(
+            List[pygame.Rect], self.layout_rects["resolution_buttons"]
+        )
+        for i, button_rect in enumerate(resolution_buttons):
+            if button_rect.collidepoint(pos):
+                self.selected_resolution_index = i
+                w, h, _ = self.available_resolutions[i]
+                self.preferences.resolution = (w, h)
+                self.preferences.save()
+                self.show_restart_popup = True
+                return True
+
+        for key, rect in self.layout_rects["toggles"].items():
+            if rect.inflate(60, 0).collidepoint(pos):
+                # Hitbox inflado horizontalmente cobre rótulo — torna a
+                # mira do controle mais perdoadora ao apontar pro toggle.
+                self.toggles[key] = not self.toggles[key]
+                if key == "mouse_control":
+                    self.preferences.mouse_control = self.toggles[key]
+                    self._apply_live_control_settings()
+                elif key == "auto_fire":
+                    self.preferences.auto_fire = self.toggles[key]
+                    self._apply_live_control_settings()
+                elif key == "gamepad_enabled":
+                    self.preferences.gamepad_enabled = self.toggles[key]
+                    self._apply_live_control_settings()
+                self.preferences.save()
+                return True
+
+        # Slider: A em cima do slider seta o valor pra posição da mira.
+        for key, rect in self.layout_rects["sliders"].items():
+            if rect.collidepoint(pos):
+                new_val = (pos[0] - rect.x) / rect.w
+                self.sliders[key] = max(0.0, min(1.0, new_val))
+                self._update_volume(key)
+                self.preferences.save()
+                return True
+        return False
+
+    def _adjust_slider_under_cursor(self, direction: int) -> None:
+        """LB/RB no settings ajusta volume em passos de 5%."""
+        pos = pygame.mouse.get_pos()
+        for key, rect in self.layout_rects["sliders"].items():
+            if rect.inflate(40, 30).collidepoint(pos):
+                self.sliders[key] = max(
+                    0.0, min(1.0, self.sliders[key] + direction * 0.05)
+                )
+                self._update_volume(key)
+                self.preferences.save()
+                return
 
     def _update_volume(self, key: str):
         volume = self.sliders[key]
@@ -837,6 +937,29 @@ class SettingsScene(Scene):
 
     def handle_event(self, event: pygame.event.Event):
         self.view.handle_event(event)
+
+    def get_focusable_rects(self) -> list[pygame.Rect]:
+        # Quando popup de reinício está aberto, foco fica restrito aos
+        # botões dele — bloqueia DPad de vazar pra controles atrás.
+        if self.view.show_restart_popup:
+            return [
+                self.view.layout_rects["popup_yes_button"],
+                self.view.layout_rects["popup_no_button"],
+            ]
+        rects: list[pygame.Rect] = []
+        from typing import List, cast
+
+        for r in cast(List[pygame.Rect], self.view.layout_rects.get("resolution_buttons", [])):
+            rects.append(r)
+        # Toggles e sliders viram alvos do DPad. Inflo o toggle horizontalmente
+        # pra cobrir o rótulo (mesmo padrão do _activate_at).
+        for r in self.view.layout_rects.get("toggles", {}).values():
+            rects.append(r.inflate(60, 0))
+        for r in self.view.layout_rects.get("sliders", {}).values():
+            rects.append(r)
+        if "back_button" in self.view.layout_rects:
+            rects.append(self.view.layout_rects["back_button"])
+        return rects
 
     def update(self, dt: float):
         self.r.starfield.update(dt)

@@ -63,42 +63,73 @@ class PausedScene(Scene):
         if not self.go_to_menu and not self.go_to_settings:
             sound_manager.resume_music()
 
+    def get_focusable_rects(self) -> list[pygame.Rect]:
+        return [
+            self.continue_button_rect,
+            self.settings_button_rect,
+            self.menu_button_rect,
+        ]
+
+    def _activate_continue(self) -> None:
+        self.app.states.pop()
+
+    def _activate_settings(self) -> None:
+        from .settings import SettingsScene
+
+        self.go_to_settings = True
+        self.app.states.push(
+            SettingsScene(
+                self.app,
+                return_to_game=True,
+                runtime_scene=self.previous_scene,
+            )
+        )
+
+    def _activate_menu(self) -> None:
+        self.go_to_menu = True
+        sound_manager.stop_music()
+        from ..core.sound_config import MusicState
+
+        sound_manager.music_state_manager.transition_to(MusicState.MENU, force=True)
+        from .main_menu import MainMenuScene
+
+        self.app.states.switch(MainMenuScene(self.app))
+
     def update(self, dt: float):
         pass
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_p:
             self.app.states.pop()
+            return
 
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            if self.continue_button_rect.collidepoint(event.pos):
+        if event.type == pygame.JOYBUTTONDOWN:
+            from ..core.gamepad import XboxButton
+
+            if event.button == XboxButton.A:
+                pos = pygame.mouse.get_pos()
+                if self.continue_button_rect.collidepoint(pos):
+                    self._activate_continue()
+                elif self.settings_button_rect.collidepoint(pos):
+                    self._activate_settings()
+                elif self.menu_button_rect.collidepoint(pos):
+                    self._activate_menu()
+                else:
+                    # Sem botão sob a mira: A age como ``Continuar`` por
+                    # ser a ação padrão na pausa.
+                    self._activate_continue()
+                return
+            if event.button in (XboxButton.B, XboxButton.START):
                 self.app.states.pop()
+                return
 
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.continue_button_rect.collidepoint(event.pos):
+                self._activate_continue()
             elif self.settings_button_rect.collidepoint(event.pos):
-                from .settings import SettingsScene
-
-                self.go_to_settings = True
-                self.app.states.push(
-                    SettingsScene(
-                        self.app,
-                        return_to_game=True,
-                        runtime_scene=self.previous_scene,
-                    )
-                )
-
+                self._activate_settings()
             elif self.menu_button_rect.collidepoint(event.pos):
-                self.go_to_menu = True
-                sound_manager.stop_music()
-                from ..core.sound_config import MusicState
-
-                sound_manager.music_state_manager.transition_to(
-                    MusicState.MENU, force=True
-                )
-
-                # Voltar ao menu principal usando switch
-                from .main_menu import MainMenuScene
-
-                self.app.states.switch(MainMenuScene(self.app))
+                self._activate_menu()
 
         elif event.type == pygame.MOUSEMOTION:
             self.continue_button_hovered = self.continue_button_rect.collidepoint(

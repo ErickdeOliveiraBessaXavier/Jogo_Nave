@@ -70,9 +70,7 @@ class ControlsModalScene(Scene):
             # Checkbox (hitbox facilitada)
             click_rect = self.checkbox_rect.inflate(200, 10)
             if click_rect.collidepoint(pos):
-                self.show_again = not self.show_again
-                sound_manager.play_sound("button_hover")
-            
+                self._toggle_checkbox()
             # Botão Entendi
             if self.button_rect.collidepoint(pos):
                 self._finish()
@@ -80,6 +78,34 @@ class ControlsModalScene(Scene):
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_ESCAPE):
                 self._finish()
+
+        if event.type == pygame.JOYBUTTONDOWN:
+            from ..core.gamepad import XboxButton
+
+            # A: ativa o item sob o cursor (checkbox ou botão). Se cursor
+            # estiver fora, fecha o modal (ação padrão). X é atalho dedicado
+            # para alternar o checkbox sem precisar mirar.
+            if event.button == XboxButton.A:
+                pos = pygame.mouse.get_pos()
+                if self.checkbox_rect.inflate(200, 10).collidepoint(pos):
+                    self._toggle_checkbox()
+                else:
+                    self._finish()
+                return
+            if event.button == XboxButton.X:
+                self._toggle_checkbox()
+                return
+            if event.button in (XboxButton.B, XboxButton.BACK, XboxButton.START):
+                self._finish()
+                return
+
+    def _toggle_checkbox(self) -> None:
+        self.show_again = not self.show_again
+        sound_manager.play_sound("button_hover")
+
+    def get_focusable_rects(self):
+        # Inflado igual ao hitbox de mouse pra DPad alternar entre checkbox e botão.
+        return [self.button_rect, self.checkbox_rect.inflate(200, 10)]
 
     def _finish(self):
         sound_manager.play_sound("button_click")

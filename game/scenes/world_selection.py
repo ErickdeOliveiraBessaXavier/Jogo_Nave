@@ -445,6 +445,34 @@ class WorldSelectionView:
             elif event.key == pygame.K_ESCAPE:
                 self.on_back()
 
+        elif event.type == pygame.JOYBUTTONDOWN:
+            from ..core.gamepad import XboxButton
+
+            if event.button == XboxButton.A:
+                pos = pygame.mouse.get_pos()
+                if self.back_button_rect.collidepoint(pos):
+                    sound_manager.play_sound("button_click")
+                    self.on_back()
+                elif self.left_arrow_rect.collidepoint(pos):
+                    self._cycle_world(-1)
+                elif self.right_arrow_rect.collidepoint(pos):
+                    self._cycle_world(+1)
+                else:
+                    # Cursor sobre card ou neutro: confirma o mundo focado.
+                    self._select_current_world()
+                return
+            if event.button == XboxButton.B:
+                self.on_back()
+                return
+            # LB/RB ciclam mundos sem precisar mirar nas setinhas — pedido do
+            # usuário ("permitir troca de mundos diretamente usando LB e RB").
+            if event.button == XboxButton.LB:
+                self._cycle_world(-1)
+                return
+            if event.button == XboxButton.RB:
+                self._cycle_world(+1)
+                return
+
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             # Verificar botão voltar
             if self.back_button_rect.collidepoint(event.pos):
@@ -482,6 +510,29 @@ class WorldSelectionView:
             if card.state != WorldCardState.LOCKED:
                 self.on_world_selected(card.world_config.world_id)
                 sound_manager.play_sound("button_click")
+
+    def _cycle_world(self, direction: int) -> None:
+        """Avança/retrocede no carrossel. Wrap nos extremos (igual ao DPad esq/dir
+        sintetizado), pra rotação natural entre todos os mundos."""
+        if not self.world_cards:
+            return
+        self.selected_index = (self.selected_index + direction) % len(self.world_cards)
+        sound_manager.play_sound("button_hover")
+
+    def get_focusable_rects(self) -> list[pygame.Rect]:
+        """Cards visíveis + setas + botão Voltar. Snap-focus do DPad usa
+        a lista pra calcular o vizinho mais próximo na direção apertada.
+
+        Apertar baixo a partir das setas/card central naturalmente vai cair
+        no botão Voltar (o único rect na parte inferior da tela)."""
+        rects: list[pygame.Rect] = []
+        for card in self.world_cards:
+            if hasattr(card, "rect") and card.rect is not None:
+                rects.append(card.rect)
+        rects.append(self.left_arrow_rect)
+        rects.append(self.right_arrow_rect)
+        rects.append(self.back_button_rect)
+        return rects
 
     def update(self, _dt: float) -> None:
         """Atualiza a lógica da view."""

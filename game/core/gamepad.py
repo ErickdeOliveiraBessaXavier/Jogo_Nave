@@ -38,7 +38,13 @@ class XboxButton:
 
 
 class XboxAxis:
-    """Índices de eixos para Xbox controller em pygame 2.x."""
+    """Índices DEFAULT de eixos para Xbox controller em pygame 2.x (XInput).
+
+    Note: alguns drivers/sistemas reportam o controle com layout PS4
+    (RS em 2/3, LT em 4). ``GamepadManager`` faz detecção em runtime e
+    armazena o layout real em atributos de instância (``axis_lt``, etc.).
+    Use os atributos do manager — estas constantes servem só como default.
+    """
 
     LEFT_X = 0
     LEFT_Y = 1
@@ -69,6 +75,14 @@ class GamepadManager:
         self._enabled: bool = False
         # Estado do D-pad cacheado (último valor lido) para queries síncronas.
         self._hat_state: tuple[int, int] = (0, 0)
+        # Layout de eixos detectado em runtime. Default XInput; ``_detect_axis_layout``
+        # re-mapeia se identificar PS4-like via posição de repouso dos triggers.
+        self.axis_left_x: int = XboxAxis.LEFT_X
+        self.axis_left_y: int = XboxAxis.LEFT_Y
+        self.axis_lt: int = XboxAxis.LT
+        self.axis_right_x: int = XboxAxis.RIGHT_X
+        self.axis_right_y: int = XboxAxis.RIGHT_Y
+        self.axis_rt: int = XboxAxis.RT
 
     # ------------------------------------------------------------------
     # Ciclo de vida
@@ -95,9 +109,58 @@ class GamepadManager:
                     joy.get_numbuttons(),
                     joy.get_numhats(),
                 )
+                self._detect_axis_layout()
             except pygame.error as e:
                 logger.warning("Falha ao abrir controle: %s", e)
                 self._joystick = None
+
+    def _detect_axis_layout(self) -> None:
+        """Identifica se o controle reporta layout XInput ou PS4.
+
+        Em pygame 2.x, triggers descansam em -1 (estado solto) e sticks
+        descansam em ~0. Layout XInput (Xbox 360/One/PS5 via SDL): LT=axis 2,
+        RS=axis 3/4. Layout PS4: RS=axis 2/3, LT=axis 4. Probe checa o valor
+        de repouso do axis 2: se < -0.5, é um trigger → XInput. Senão, é um
+        stick e o LT está no axis 4 → PS4-like.
+
+        Bug capturado: sem detecção, a leitura de RS Y caía no axis 4 do
+        controle PS4 (que na verdade é o LT, em repouso -1) e empurrava
+        o cursor virtual constantemente para cima.
+        """
+        joy = self._joystick
+        if joy is None:
+            return
+        # Pump events força o SDL a flushar os valores iniciais para que
+        # get_axis() reflita o estado de repouso e não 0.0 padrão.
+        pygame.event.pump()
+        try:
+            axis2 = joy.get_axis(2)
+            axis4 = joy.get_axis(4) if joy.get_numaxes() > 4 else 0.0
+        except (pygame.error, IndexError):
+            return
+
+        if axis2 < -0.5:
+            # XInput / PS5 layout: defaults estão corretos, sem mudança.
+            logger.info(
+                "Layout detectado: XInput (LT=axis 2, RS=axis 3/4, RT=axis 5)"
+            )
+        elif axis4 < -0.5:
+            # PS4-like: trigger esquerdo migra para axis 4, RS para 2/3.
+            self.axis_right_x = 2
+            self.axis_right_y = 3
+            self.axis_lt = 4
+            logger.info(
+                "Layout detectado: PS4-like (LT=axis 4, RS=axis 2/3, RT=axis 5)"
+            )
+        else:
+            # Nenhum trigger em repouso reconhecível — fica no default e loga
+            # para diagnóstico. Provavelmente um controle não-padrão.
+            logger.warning(
+                "Não foi possível detectar layout — axis2=%.2f axis4=%.2f. "
+                "Usando default XInput. Se RS/LT estiverem trocados, reporte.",
+                axis2,
+                axis4,
+            )
 
     def handle_event(self, event: pygame.event.Event) -> None:
         """Processa eventos de hot-plug e cacheia estado contínuo (hat)."""
@@ -163,8 +226,8 @@ class GamepadManager:
     def get_stick(self, side: Literal["left", "right"]) -> tuple[float, float]:
         """Retorna (x, y) do stick com dead zone aplicado."""
         if side == "left":
-            return self.get_axis(XboxAxis.LEFT_X), self.get_axis(XboxAxis.LEFT_Y)
-        return self.get_axis(XboxAxis.RIGHT_X), self.get_axis(XboxAxis.RIGHT_Y)
+            return self.get_axis(self.axis_left_x), self.get_axis(self.axis_left_y)
+        return self.get_axis(self.axis_right_x), self.get_axis(self.axis_right_y)
 
     @staticmethod
     def _rescale_dead_zone(value: float, dead_zone: float) -> float:
@@ -194,8 +257,8 @@ class GamepadManager:
         joy = self._joystick
         if not self._enabled or joy is None:
             return (0.0, 0.0)
-        ax_x = XboxAxis.LEFT_X if side == "left" else XboxAxis.RIGHT_X
-        ax_y = XboxAxis.LEFT_Y if side == "left" else XboxAxis.RIGHT_Y
+        ax_x = self.axis_left_x if side == "left" else self.axis_right_x
+        ax_y = self.axis_left_y if side == "left" else self.axis_right_y
         try:
             raw_x = joy.get_axis(ax_x)
             raw_y = joy.get_axis(ax_y)
@@ -213,7 +276,7 @@ class GamepadManager:
         joy = self._joystick
         if not self._enabled or joy is None:
             return 0.0
-        axis = XboxAxis.LT if side == "left" else XboxAxis.RT
+        axis = self.axis_lt if side == "left" else self.axis_rt
         try:
             raw = joy.get_axis(axis)
         except (pygame.error, IndexError):

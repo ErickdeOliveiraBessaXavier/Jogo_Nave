@@ -232,9 +232,8 @@ class DifficultySelectionView:
 
         elif event.type == pygame.JOYBUTTONDOWN:
             # Controle: A confirma no card sob o cursor virtual (movido pelo
-            # RS no app.py). Sem essa traduçao, A só virava K_RETURN sintético
-            # e a view não tratava K_RETURN — daí o ``não consigo selecionar``.
-            # B age como atalho de voltar, independente da posição do cursor.
+            # RS no app.py). LB/RB ciclam entre dificuldades sem precisar
+            # apontar com a mira — UX típica de menu de fighting/arcade.
             from ..core.gamepad import XboxButton
 
             if event.button == XboxButton.A:
@@ -252,8 +251,44 @@ class DifficultySelectionView:
             elif event.button == XboxButton.B:
                 self.on_back()
                 return True
+            elif event.button == XboxButton.LB:
+                self._cycle_difficulty(-1)
+                return True
+            elif event.button == XboxButton.RB:
+                self._cycle_difficulty(+1)
+                return True
 
         return False  # Evento não consumido
+
+    def _cycle_difficulty(self, direction: int) -> None:
+        """Move o cursor para o card de dificuldade vizinho na direção dada.
+
+        Quando a mira está fora dos cards (e.g. apertou LB/RB na primeira vez),
+        ancora no primeiro card. ``direction`` +1 vai pra direita, -1 esquerda.
+        Sem wrap entre extremos pra dar feedback claro do limite.
+        """
+        presets = list(self.difficulty_buttons.keys())
+        if not presets:
+            return
+        pos = pygame.mouse.get_pos()
+        current_idx = -1
+        for i, preset in enumerate(presets):
+            if self.difficulty_buttons[preset]["rect"].collidepoint(pos):
+                current_idx = i
+                break
+        if current_idx == -1:
+            target_idx = 0 if direction > 0 else len(presets) - 1
+        else:
+            target_idx = max(0, min(len(presets) - 1, current_idx + direction))
+        if target_idx == current_idx:
+            return
+        target_rect = self.difficulty_buttons[presets[target_idx]]["rect"]
+        try:
+            pygame.mouse.set_pos(target_rect.center)
+        except pygame.error:
+            pass
+        self.hovered_difficulty = presets[target_idx]
+        sound_manager.play_sound("button_hover")
 
     def update(self, dt: float):
         """Atualiza a lógica da view."""

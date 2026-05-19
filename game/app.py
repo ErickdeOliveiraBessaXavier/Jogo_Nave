@@ -136,6 +136,11 @@ class GameApp:
         self._virtual_cursor_x: float = base_width / 2
         self._virtual_cursor_y: float = base_height / 2
 
+        # Auto-hide do cursor: DPad/LB/RB/teclado escondem; mouse/stick mostram.
+        # Sem isso, focus navigation por DPad coexistia com cursor visível e
+        # criava o conflito ``mira aponta em A, focus está em B``.
+        self._cursor_navigation_mode: str = "cursor"  # ``cursor`` ou ``focus``
+
         from .render.renderer import Renderer
 
         self.renderer = Renderer()
@@ -153,6 +158,68 @@ class GameApp:
         """True se a cena trata eventos JOY nativamente (gameplay). Cenas de
         gameplay devem definir o atributo de classe ``is_gameplay_scene``."""
         return bool(getattr(scene, "is_gameplay_scene", False))
+
+    def _set_cursor_mode(self, mode: str) -> None:
+        """Alterna entre ``cursor`` (mouse/stick) e ``focus`` (DPad/teclado).
+
+        Em modo focus o ponteiro do mouse fica oculto — evita o conflito
+        visual ``a mira aponta em A mas o focus está em B``. Cenas de
+        gameplay são imunes (mantêm a própria política via set_visible).
+        """
+        if mode == self._cursor_navigation_mode:
+            return
+        self._cursor_navigation_mode = mode
+        current = self.states.current()
+        if current is not None and self._scene_is_gameplay(current):
+            return
+        try:
+            pygame.mouse.set_visible(mode == "cursor")
+        except pygame.error:
+            pass
+
+    def _track_input_mode(self, event: pygame.event.Event) -> None:
+        """Inspeciona cada evento pra decidir se o usuário está em modo
+        cursor (mira livre) ou focus (navegação discreta).
+
+        Discreto → focus → esconde cursor: DPad, LB/RB, KEYDOWN de setas/Tab.
+        Contínuo → cursor → mostra cursor: MOUSEMOTION com movimento real.
+        Stick analógico também ativa cursor (ele move o ponteiro).
+        """
+        if event.type == pygame.JOYHATMOTION:
+            x, y = event.value
+            if x or y:
+                self._set_cursor_mode("focus")
+        elif event.type == pygame.JOYBUTTONDOWN:
+            from .core.gamepad import XboxButton
+
+            if event.button in (XboxButton.LB, XboxButton.RB):
+                self._set_cursor_mode("focus")
+        elif event.type == pygame.KEYDOWN:
+            nav_keys = (
+                pygame.K_UP,
+                pygame.K_DOWN,
+                pygame.K_LEFT,
+                pygame.K_RIGHT,
+                pygame.K_TAB,
+            )
+            if event.key in nav_keys:
+                self._set_cursor_mode("focus")
+        elif event.type == pygame.MOUSEMOTION:
+            # Ignora MOUSEMOTION sintético do próprio snap-focus — ele tem
+            # ``rel`` calculado, mas o sintético do snap também. Diferenciar
+            # via mode atual: se acabamos de entrar em focus, o sintético
+            # que sai do _snap_focus_to_direction não deveria reverter.
+            # Aqui um movimento ``real`` do mouse tem buttons preenchidos
+            # ou pelo menos rel > 0 não-sintético — heurística: ignoramos
+            # se ``rel`` for exatamente o esperado pelo snap. Como não dá
+            # pra distinguir 100%, simples: qualquer MOUSEMOTION reabilita
+            # cursor. Snap só dispara em DPad, então o flick para focus
+            # acontece ANTES do MOUSEMOTION sintético — o set_pos posterior
+            # gera um motion que reverte. Para evitar isso, marcamos uma
+            # flag no snap (vide _snap_focus_to_direction).
+            if not getattr(self, "_suppress_next_motion_mode_switch", False):
+                self._set_cursor_mode("cursor")
+            self._suppress_next_motion_mode_switch = False
 
     def _synthesize_menu_events(
         self, event: pygame.event.Event, scene: Scene
@@ -289,7 +356,9 @@ class GameApp:
         # seguinte (ela lê pygame.mouse.get_pos, então fica coerente).
         self._virtual_cursor_x = float(new_x)
         self._virtual_cursor_y = float(new_y)
-        # Dispara MOUSEMOTION sintético pra cena atualizar hover imediato.
+        # Marca a flag pro próximo MOUSEMOTION (gerado pelo set_pos acima OU
+        # pelo sintético abaixo) não reverter o modo de focus para cursor.
+        self._suppress_next_motion_mode_switch = True
         motion = pygame.event.Event(
             pygame.MOUSEMOTION,
             {
@@ -302,21 +371,26 @@ class GameApp:
         return True
 
     def _update_virtual_cursor(self, dt: float, scene: Scene) -> None:
-        """Move o cursor virtual pelo stick direito e dispara MOUSEMOTION
+        """Move o cursor virtual pelos sticks analógicos e dispara MOUSEMOTION
         sintéticos para que cenas só-mouse (settings, paused, etc) reajam
         ao hover. Só ativo fora de gameplay.
 
-        O stick esquerdo é IGNORADO aqui de propósito — cursor só responde ao
-        stick direito (RS) conforme requisito do usuário. Em gameplay esta
-        função retorna cedo; o LS continua livre para mover a nave.
+        RS e LS funcionam simultaneamente — pega o stick com maior magnitude.
+        Em gameplay esta função retorna cedo; o LS continua livre para
+        mover a nave (PlayingScene lê LS direto via input.gamepad_movement_vector).
         """
         if not self.gamepad.is_active or self._scene_is_gameplay(scene):
             return
 
-        # Usa dead zone customizada com reescala linear: sem isso, drift
-        # mecânico do stick (>0.18 padrão) empurraria o cursor lentamente
-        # para uma borda mesmo com o usuário sem tocar no controle.
+        # Dead zone customizada com reescala linear: sem isso, drift mecânico
+        # do stick (>0.18 padrão) empurraria o cursor lentamente para uma
+        # borda mesmo com o usuário sem tocar no controle.
         rx, ry = self.gamepad.get_stick_rescaled("right", _VIRTUAL_CURSOR_DEAD_ZONE)
+        lx, ly = self.gamepad.get_stick_rescaled("left", _VIRTUAL_CURSOR_DEAD_ZONE)
+        # Pega o stick com magnitude maior — evita somas que causariam
+        # cancelamento se o jogador segurar ambos em direções opostas.
+        if (lx * lx + ly * ly) > (rx * rx + ry * ry):
+            rx, ry = lx, ly
 
         # Sincroniza o cursor virtual com a posição real do mouse a cada
         # frame. Sem isso, ao entrar numa cena nova (e.g. pausa após
@@ -329,6 +403,10 @@ class GameApp:
 
         if rx == 0.0 and ry == 0.0:
             return
+
+        # Stick ativo → modo cursor (controle livre da mira). Sem isso, depois
+        # de navegar via DPad o stick ficaria movendo um cursor invisível.
+        self._set_cursor_mode("cursor")
 
         # dt cap evita saltos grandes após frames lentos (carregamento de
         # cena, GC longo) — sem isso o cursor pulava direto pra borda
@@ -380,6 +458,9 @@ class GameApp:
                 for event in pygame.event.get():
                     # Hot-plug e cache de hat antes de qualquer dispatch.
                     self.gamepad.handle_event(event)
+                    # Atualiza modo cursor/focus ANTES do dispatch — assim a
+                    # cena já recebe o estado correto se quiser consultar.
+                    self._track_input_mode(event)
 
                     if event.type == pygame.QUIT:
                         self.running = False

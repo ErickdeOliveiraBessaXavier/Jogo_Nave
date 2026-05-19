@@ -136,6 +136,48 @@ class StatisticsView:
             self.current_tab = new_tab
             self.scroll_y = 0  # Reset scroll on tab switch
 
+    def _cycle_tab(self, direction: int) -> None:
+        """Avança/retrocede entre abas (LB/RB ou DPad ESQ/DIR estilo console)."""
+        tabs = list(StatTab)
+        idx = tabs.index(self.current_tab)
+        new_idx = (idx + direction) % len(tabs)
+        self._switch_tab(tabs[new_idx])
+
+    def _activate_at(self, pos: tuple[int, int]) -> bool:
+        """Replica o click do mouse no elemento sob ``pos`` — DPad já moveu
+        o cursor via snap-focus, então basta executar a mesma ação."""
+        if self.layout_rects["back_button"].collidepoint(pos):
+            self.on_back()
+            return True
+        if self.layout_rects["reset_button"].collidepoint(pos):
+            self.show_confirmation()
+            return True
+        for i, rect in enumerate(self.layout_rects["tab_buttons"]):
+            if rect.collidepoint(pos):
+                self._switch_tab(list(StatTab)[i])
+                return True
+        if self.current_tab == StatTab.HIGH_SCORES:
+            for diff, rect in self._difficulty_filter_rects:
+                if rect.collidepoint(pos):
+                    if self.selected_difficulty_filter != diff:
+                        self.selected_difficulty_filter = diff
+                        self.scroll_y = 0
+                    return True
+        return False
+
+    def get_focusable_rects(self) -> list[pygame.Rect]:
+        """Abas + filtros (se aba atual for HIGH_SCORES) + botões inferiores."""
+        rects: list[pygame.Rect] = []
+        rects.extend(self.layout_rects.get("tab_buttons", []))
+        if self.current_tab == StatTab.HIGH_SCORES:
+            for _, rect in self._difficulty_filter_rects:
+                rects.append(rect)
+        if "back_button" in self.layout_rects:
+            rects.append(self.layout_rects["back_button"])
+        if "reset_button" in self.layout_rects:
+            rects.append(self.layout_rects["reset_button"])
+        return rects
+
     def reset(self):
         """Reseta o estado da view para reiniciar animação."""
         self.entry_progress = 0.0
@@ -173,6 +215,24 @@ class StatisticsView:
         if self.dialog:
             self.dialog.handle_event(event)
             return True
+
+        if event.type == pygame.JOYBUTTONDOWN:
+            from ..core.gamepad import XboxButton
+
+            if event.button == XboxButton.A:
+                pos = pygame.mouse.get_pos()
+                self._activate_at(pos)
+                return True
+            if event.button in (XboxButton.B, XboxButton.BACK):
+                self.on_back()
+                return True
+            # LB/RB ciclam abas — pedido do usuário para navegação rápida.
+            if event.button == XboxButton.LB:
+                self._cycle_tab(-1)
+                return True
+            if event.button == XboxButton.RB:
+                self._cycle_tab(+1)
+                return True
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             pos = event.pos
@@ -945,6 +1005,12 @@ class StatisticsScene(Scene):
     def handle_event(self, event: pygame.event.Event):
         self.view.handle_event(event)
 
+    def get_focusable_rects(self) -> list[pygame.Rect]:
+        # Diálogo de reset rouba o foco quando aberto.
+        if self.view.dialog is not None:
+            return self.view.dialog.get_focusable_rects()
+        return self.view.get_focusable_rects()
+
     def render(self, surface: pygame.Surface):
         render_with_fade(
             surface,
@@ -1034,6 +1100,22 @@ class ConfirmationDialog:
                 self.on_yes()
             elif self.no_rect.collidepoint(event.pos):
                 self.on_no()
+        elif event.type == pygame.JOYBUTTONDOWN:
+            from ..core.gamepad import XboxButton
+
+            if event.button == XboxButton.A:
+                pos = pygame.mouse.get_pos()
+                if self.yes_rect.collidepoint(pos):
+                    self.on_yes()
+                else:
+                    # Default A no modal de confirmação = NÃO (mais seguro).
+                    self.on_no()
+            elif event.button in (XboxButton.B, XboxButton.BACK):
+                self.on_no()
+
+    def get_focusable_rects(self) -> list[pygame.Rect]:
+        """Apenas os 2 botões — DPad esq/dir alterna entre Sim/Não."""
+        return [self.yes_rect, self.no_rect]
 
     def update(self):
         pass  # Hover é tratado no render

@@ -634,6 +634,21 @@ class MainMenuScene(Scene):
         # Resetar o auto-play ao entrar no menu
         self.auto_play.reset()
 
+    def get_focusable_rects(self) -> list[pygame.Rect]:
+        """Rects dos botões do menu principal — DPad snap usa essa lista
+        para mover o cursor virtual entre botões em vez de só atualizar
+        focused_button_index. Mantém cursor visual e focus lógico em sincronia."""
+        if self.current_view == MenuView.DIFFICULTY_SELECTION:
+            rects = [
+                data["rect"]
+                for data in self.difficulty_view.difficulty_buttons.values()
+            ]
+            rects.append(self.difficulty_view.back_button_rect)
+            return rects
+        if self.current_view == MenuView.WORLD_SELECTION:
+            return self.world_selection_view.get_focusable_rects()
+        return [button.rect for button in self.buttons]
+
         # Resetar animação de entrada
         self.entry_timer = 0.0
         self.title_entry_progress = 0.0
@@ -706,7 +721,7 @@ class MainMenuScene(Scene):
                         sound_manager.play_sound("button_click")
                         break
         elif event.type == pygame.MOUSEMOTION:
-            for button in self.buttons:
+            for i, button in enumerate(self.buttons):
                 prev_state = button.state
                 button.update_hover(event.pos)
                 if (
@@ -715,6 +730,13 @@ class MainMenuScene(Scene):
                 ):
                     # Reproduzir som de hover (reinicia se já estiver tocando)
                     sound_manager.play_sound("button_hover")
+                # Sincroniza o focus interno com o que a mira está apontando.
+                # Sem isso, A do controle (que vira K_RETURN sintético) ativava
+                # o botão focado por teclado, ignorando onde o cursor estava.
+                if button.state == ButtonState.HOVERED:
+                    self.focused_button_index = i
+                    for j, b in enumerate(self.buttons):
+                        b.focused = j == i
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_DOWN:
                 self.focused_button_index = (self.focused_button_index + 1) % len(

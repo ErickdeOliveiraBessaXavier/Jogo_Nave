@@ -2526,9 +2526,12 @@ class PlayingScene(Scene):
             elif button == XboxButton.B:
                 self._upgrade_select_mode = False
             elif button == XboxButton.LB:
-                self._navigate_upgrade_select(-1)
+                # HUD desenha os slots da direita pra esquerda (slot 0 = mais à
+                # direita, slot N = mais à esquerda), então LB precisa ANDAR pra
+                # frente no índice pra ir visualmente pra esquerda.
+                self._navigate_upgrade_select(+1)
             elif button == XboxButton.RB:
-                self._navigate_upgrade_select(1)
+                self._navigate_upgrade_select(-1)
             return
 
         # O tiro normal saiu dos botões e foi para o RT (gatilho direito):
@@ -2622,15 +2625,15 @@ class PlayingScene(Scene):
         Caso ambos os perfis coexistam (não acontece hoje), dash tem
         prioridade no aperto e o charge segue em paralelo.
         """
-        from ..core.gamepad import GamepadManager, XboxAxis
+        from ..core.gamepad import GamepadManager
 
-        if axis != XboxAxis.LT:
+        # Layout é detectado em runtime no GamepadManager — pode não ser axis 2
+        # em controles PS4-like. Usar o índice do manager garante que dash/charge
+        # sai do gatilho físico correto.
+        if axis != self.app.gamepad.axis_lt:
             return
-        # Defesa contra mapeamento SDL não-padrão: se o controle reportar o
-        # RS Y em axis 2, value vai descansar perto de 0 (stick) e nunca
-        # chegar perto de -1 (estado solto de trigger real). Só validamos
-        # o LT após ver pelo menos um evento abaixo de -0.5, indicando que
-        # o axis realmente se comporta como gatilho.
+        # Defesa adicional contra falsa detecção: só confiamos como gatilho
+        # depois de ver pelo menos um evento abaixo de -0.5 (estado solto).
         if value <= -0.5:
             self._lt_calibrated = True
         if not self._lt_calibrated:
