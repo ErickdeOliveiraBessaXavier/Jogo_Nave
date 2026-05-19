@@ -43,7 +43,6 @@ from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgr
 from ..core.upgrades_config import HOMING_DAMAGE_MULTIPLIER, UPGRADE_SLOT_COUNT
 from ..core.world_config import (
     WorldConfig,
-    WorldTheme,
     format_stage_name,
     get_world_for_level,
     is_side_scroll_mode,
@@ -469,21 +468,10 @@ class PlayingScene(Scene):
         )
 
     def _apply_mountains_progress(self) -> None:
-        """Repassa ao renderer o progresso (0..1) da paleta warm→night das
-        Cordilheiras conforme o nível avança dentro do Mundo 1.
-
-        Em outros temas é no-op porque o renderer só aplica quando o
-        background atual é ``MountainsBackground``.
-        """
-        if self.current_world.theme != WorldTheme.MOUNTAINS:
-            return
-        start = self.current_world.start_level
-        end = self.current_world.end_level
-        span = max(1, end - start)
-        current_level = self.current_level_index + 1
-        progress = (current_level - start) / span
-        progress = max(0.0, min(1.0, progress))
-        self.r.set_mountains_progress(progress)
+        """No-op: o progresso warm→night é agora contínuo e automático no
+        background das cordilheiras. Mantido por compatibilidade com o fluxo
+        de theme changes, mas não faz mais nada."""
+        pass
 
     # ------------------------------------------------------------------
     # Máquina de estados de transição
@@ -2569,7 +2557,7 @@ class PlayingScene(Scene):
 
     def _toggle_upgrade_select_mode(self) -> None:
         """Liga/desliga o modo de seleção. Ao ligar, alinha o cursor para um
-        slot válido (ignora slots vazios)."""
+        slot válido, priorizando upgrades fora de cooldown."""
         if self._upgrade_select_mode:
             self._upgrade_select_mode = False
             return
@@ -2578,33 +2566,45 @@ class PlayingScene(Scene):
         self._upgrade_select_mode = True
         self._snap_upgrade_select_to_valid()
 
+    def _upgrade_slot_is_ready(self, upg: ActiveUpgrade | None) -> bool:
+        if upg is None:
+            return False
+        return upg.cooldown_left <= 0.0
+
+    def _get_upgrade_select_order(self) -> list[int]:
+        """Retorna índices de slots com upgrades prontos primeiro."""
+        ready_slots = [
+            i
+            for i, upg in enumerate(self.upgrade_slots)
+            if self._upgrade_slot_is_ready(upg)
+        ]
+        cooling_slots = [
+            i
+            for i, upg in enumerate(self.upgrade_slots)
+            if upg is not None and not self._upgrade_slot_is_ready(upg)
+        ]
+        return ready_slots + cooling_slots
+
     def _snap_upgrade_select_to_valid(self) -> None:
-        """Garante que ``_upgrade_select_index`` aponta para um slot ocupado."""
-        n = len(self.upgrade_slots)
-        if n == 0:
+        """Garante que ``_upgrade_select_index`` priorize um upgrade pronto."""
+        ordered_slots = self._get_upgrade_select_order()
+        if not ordered_slots:
             return
-        if (
-            0 <= self._upgrade_select_index < n
-            and self.upgrade_slots[self._upgrade_select_index] is not None
-        ):
-            return
-        for offset in range(n):
-            idx = (self._upgrade_select_index + offset) % n
-            if self.upgrade_slots[idx] is not None:
-                self._upgrade_select_index = idx
-                return
+        self._upgrade_select_index = ordered_slots[0]
 
     def _navigate_upgrade_select(self, delta: int) -> None:
-        """Move o cursor para o próximo slot ocupado na direção ``delta``."""
-        n = len(self.upgrade_slots)
-        if n == 0:
+        """Move o cursor entre upgrades ocupados, priorizando os prontos."""
+        ordered_slots = self._get_upgrade_select_order()
+        if not ordered_slots:
             return
-        idx = self._upgrade_select_index
-        for _ in range(n):
-            idx = (idx + delta) % n
-            if self.upgrade_slots[idx] is not None:
-                self._upgrade_select_index = idx
-                return
+        try:
+            current_pos = ordered_slots.index(self._upgrade_select_index)
+        except ValueError:
+            self._upgrade_select_index = ordered_slots[0]
+            return
+
+        next_pos = (current_pos + delta) % len(ordered_slots)
+        self._upgrade_select_index = ordered_slots[next_pos]
 
     def _confirm_upgrade_select(self) -> None:
         """Ativa o slot atualmente destacado e sai do modo."""

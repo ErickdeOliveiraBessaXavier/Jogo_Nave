@@ -234,14 +234,15 @@ class MountainsBackground(Background):
         self.sky_warm_gradient: Optional[pygame.Surface] = None
         self.sky_night_gradient: Optional[pygame.Surface] = None
 
-        # Progressão da paisagem (0=dia/pôr do sol, 1=noite fechada).
-        # ``_target_progress`` é setado externamente quando o nível avança;
-        # ``_current_progress`` interpola linearmente em direção ao alvo. A
-        # velocidade é calibrada para que cada step de nível (≈ 0.11) leve
-        # ~0.4s — bem visível ao avançar, mas com animação suave de fade.
-        self._target_progress: float = 0.0
+        # Ciclo contínuo dia/noite: anoitecer → noite → amanhecer → dia → repete.
+        # _phase: 'sunset' (0→1), 'night' (permanece 1), 'sunrise' (1→0), 'day' (permanece 0)
+        self._phase: str = "day"
+        self._phase_elapsed_time: float = 0.0
+        self._sunset_duration: float = 600.0  # segundos para anoitecer completo (10 min)
+        self._night_duration: float = 180.0  # noite (3 min intervalo)
+        self._sunrise_duration: float = 600.0  # segundos para amanhecer completo (10 min)
+        self._day_duration: float = 180.0  # dia (3 min intervalo)
         self._current_progress: float = 0.0
-        self._progress_lerp_speed: float = 0.3  # unidades/segundo
 
         # Quanto o sol desce verticalmente quando vai do meio-dia à noite.
         self._sun_dive_distance: int = int(self.height * 0.22)
@@ -252,6 +253,12 @@ class MountainsBackground(Background):
         self._create_stars()
         self._create_sun()
         self._create_clouds()
+
+    @staticmethod
+    def _ease_progress(progress: float) -> float:
+        """Aplica smoothstep em 0..1 para suavizar a transição visual."""
+        progress = max(0.0, min(1.0, progress))
+        return progress * progress * (3.0 - 2.0 * progress)
 
     def _create_sky_gradients(self) -> None:
         """Pré-renderiza dois gradientes (warm e night) que serão misturados
@@ -308,13 +315,20 @@ class MountainsBackground(Background):
                     break
         return surf
 
-    def set_target_progress(self, progress: float) -> None:
-        """Define alvo da transição warm→night (0 = pôr do sol, 1 = noite).
-
-        O ``update`` interpola ``_current_progress`` linearmente em direção
-        ao alvo, evitando saltos visuais entre transições de nível.
+    def set_theme_duration(self, sunset_duration: float, night_duration: float = 300.0,
+                           sunrise_duration: float = 600.0, day_duration: float = 300.0) -> None:
+        """Define as durações de cada fase do ciclo dia/noite.
+        
+        Args:
+            sunset_duration: Tempo para ir de 0 (dia) a 1 (noite) em segundos.
+            night_duration: Tempo de permanência em noite (1.0) em segundos.
+            sunrise_duration: Tempo para ir de 1 (noite) a 0 (dia) em segundos.
+            day_duration: Tempo de permanência em dia (0.0) em segundos.
         """
-        self._target_progress = max(0.0, min(1.0, progress))
+        self._sunset_duration = max(1.0, sunset_duration)
+        self._night_duration = max(0.0, night_duration)
+        self._sunrise_duration = max(1.0, sunrise_duration)
+        self._day_duration = max(0.0, day_duration)
 
     def _create_layers(self) -> None:
         """Cria camadas de parallax otimizadas."""
@@ -558,18 +572,47 @@ class MountainsBackground(Background):
         for cloud in self.clouds_front:
             cloud.update(dt, speed_mult)
 
-        # Interpolação linear cadenciada do progresso warm→night.
-        diff = self._target_progress - self._current_progress
-        if diff != 0.0:
-            step = self._progress_lerp_speed * dt
-            if abs(diff) <= step:
-                self._current_progress = self._target_progress
+        # Ciclo contínuo dia/noite com fases distintas.
+        self._phase_elapsed_time += dt * speed_mult
+        
+        if self._phase == "day":
+            if self._phase_elapsed_time >= self._day_duration:
+                self._phase = "sunset"
+                self._phase_elapsed_time = 0.0
             else:
-                self._current_progress += step if diff > 0 else -step
+                self._current_progress = 0.0
+        
+        elif self._phase == "sunset":
+            if self._phase_elapsed_time >= self._sunset_duration:
+                self._phase = "night"
+                self._phase_elapsed_time = 0.0
+                self._current_progress = 1.0
+            else:
+                # Interpola de 0 a 1 durante o anoitecer
+                t = self._phase_elapsed_time / self._sunset_duration
+                self._current_progress = t
+        
+        elif self._phase == "night":
+            if self._phase_elapsed_time >= self._night_duration:
+                self._phase = "sunrise"
+                self._phase_elapsed_time = 0.0
+            else:
+                self._current_progress = 1.0
+        
+        elif self._phase == "sunrise":
+            if self._phase_elapsed_time >= self._sunrise_duration:
+                self._phase = "day"
+                self._phase_elapsed_time = 0.0
+                self._current_progress = 0.0
+            else:
+                # Interpola de 1 a 0 durante o amanhecer
+                t = self._phase_elapsed_time / self._sunrise_duration
+                self._current_progress = 1.0 - t
 
     def draw(self, surface: pygame.Surface) -> None:
         """Desenha todos os elementos do background."""
         progress = self._current_progress
+        display_progress = self._ease_progress(progress)
         # Skip de blits nos extremos: full-day usa apenas warm, full-night
         # usa apenas night. Evita um blit fullscreen quando não há mistura.
         if progress <= 0.001:
@@ -595,10 +638,10 @@ class MountainsBackground(Background):
 
         # Desenhar sol: fade out + desliza para baixo conforme escurece.
         if self.sun_surface and self.sun_rect:
-            sun_alpha = int((1.0 - progress) * 255)
+            sun_alpha = int((1.0 - display_progress) * 255)
             if sun_alpha > 0:
                 self.sun_surface.set_alpha(sun_alpha)
-                offset_y = int(progress * self._sun_dive_distance)
+                offset_y = int(display_progress * self._sun_dive_distance)
                 surface.blit(self.sun_surface, self.sun_rect.move(0, offset_y))
 
         # Desenhar camadas de montanhas (parallax) — dimensões cacheadas em LayerData.
@@ -623,6 +666,11 @@ class MountainsBackground(Background):
             cloud.reset(is_first_time=True)
         for cloud in self.clouds_front:
             cloud.reset(is_first_time=True)
+        
+        # Reseta o ciclo dia/noite
+        self._phase = "day"
+        self._phase_elapsed_time = 0.0
+        self._current_progress = 0.0
 
 
 class CityBackground(Background):

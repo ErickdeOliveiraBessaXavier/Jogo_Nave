@@ -474,10 +474,12 @@ class Renderer:
         # === FIM DO SISTEMA DE FPS ===
 
     def set_mountains_progress(self, progress: float) -> None:
-        """Repassa o progresso warm→night ao background atual quando ele é
-        ``MountainsBackground``. Em outros temas, no-op."""
-        if isinstance(self.current_background, MountainsBackground):
-            self.current_background.set_target_progress(progress)
+        """DEPRECATED: Progressão das cordilheiras é agora automática e contínua.
+        
+        O ciclo dia/noite ocorre independentemente em MountainsBackground.
+        Este método é mantido por compatibilidade, mas não faz nada.
+        """
+        pass
 
     def set_world_theme(self, theme: WorldTheme) -> None:
         """
