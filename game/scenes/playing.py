@@ -36,8 +36,6 @@ from ..core.config import SlimeBossState
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
 from ..core.levels import LevelConfig, LevelManager, get_level_config
-from ..core.meta_progression import PlayerProfile
-from ..core.paths import get_profile_path
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
@@ -233,8 +231,13 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
 
     def _init_player_profile(self) -> None:
-        self.player_profile = PlayerProfile(get_profile_path())
-        self.player_profile.start_session()
+        # Reusa a instância oficial do app — criar uma nova aqui causaria
+        # duas instâncias divergentes: record_attempt/record_death iriam para
+        # esta cópia, mas save() chamado por outras cenas (game over, settings)
+        # iria pela do app, sobrescrevendo o JSON sem os updates de gameplay.
+        self.player_profile = self.app.player_profile
+        if self.player_profile.current_session is None:
+            self.player_profile.start_session()
 
     def _init_ship(self) -> None:
         if self.is_side_scroll:

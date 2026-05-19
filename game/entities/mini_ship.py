@@ -1,8 +1,10 @@
 import math
+from pathlib import Path
+from typing import Optional
 
 import pygame
 
-from ..core.colors import LIGHT_BLUE
+from ..core.assets import get_image
 from ..core.config import config as Config
 from ..core.sound import sound_manager
 from .alien import Alien
@@ -14,7 +16,30 @@ from .ship import Ship
 from .stone_sentry import StoneSentry
 
 
+_SPRITE_PATH = (
+    Path(__file__).resolve().parent.parent / "assets" / "icons" / "mini_ship.png"
+)
+
+
 class MiniShip:
+    # Sprites pré-escalados e pré-rotacionados (cache de classe para não
+    # recriar a cada instância). ``_sprite_top_down`` é o sprite original
+    # apontando para cima; ``_sprite_side_scroll`` é rotacionado 90° para
+    # apontar à direita nas fases de scroll horizontal.
+    _sprite_top_down: Optional[pygame.Surface] = None
+    _sprite_side_scroll: Optional[pygame.Surface] = None
+
+    @classmethod
+    def _ensure_sprites(cls, size: int) -> None:
+        if cls._sprite_top_down is not None:
+            return
+        raw = get_image(_SPRITE_PATH)
+        scaled = pygame.transform.smoothscale(raw, (size, size))
+        cls._sprite_top_down = scaled
+        # Rotação negativa em pygame = sentido horário; -90 leva o topo
+        # do sprite para o lado direito.
+        cls._sprite_side_scroll = pygame.transform.rotate(scaled, -90)
+
     def __init__(
         self,
         player_ship: Ship,
@@ -30,6 +55,7 @@ class MiniShip:
         self.permanent = permanent
         self.w = 20
         self.h = 20
+        self._ensure_sprites(self.w)
         self.x = self.player.x
         self.y = self.player.y
         self.shoot_cooldown = 0.75
@@ -135,17 +161,12 @@ class MiniShip:
         if should_blink and int(pygame.time.get_ticks() / 150) % 2 == 0:
             return
 
-        if self.is_side_scroll:
-            # Nave apontando para a direita.
-            points: list[tuple[float, float]] = [
-                (self.x + self.w, self.y + self.h / 2),
-                (self.x, self.y),
-                (self.x, self.y + self.h),
-            ]
-        else:
-            points = [
-                (self.x + self.w / 2, self.y),
-                (self.x, self.y + self.h),
-                (self.x + self.w, self.y + self.h),
-            ]
-        pygame.draw.polygon(surface, LIGHT_BLUE, points)
+        sprite = (
+            self._sprite_side_scroll if self.is_side_scroll else self._sprite_top_down
+        )
+        if sprite is None:
+            return  # fallback defensivo se o asset não carregou.
+        # Centraliza o sprite na bounding box (importante no caso side-scroll,
+        # onde a rotação pode mudar o tamanho da surface).
+        rect = sprite.get_rect(center=(int(self.x + self.w / 2), int(self.y + self.h / 2)))
+        surface.blit(sprite, rect)

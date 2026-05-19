@@ -139,12 +139,12 @@ class DifficultySelectionView:
                 f"Vidas: {settings['lives']}", True, WHITE
             )
 
-            # Parâmetros de tremor baseados na dificuldade
+            # Parâmetros de tremor unificados pelo estilo do Pesadelo (sutil mas energético)
             # (amplitude_x, amplitude_y, frequência, fase)
             shake_params = {
-                DifficultyPreset.CASUAL: (0.1, 0.1, 0.5, i * 1.5),
-                DifficultyPreset.NORMAL: (0.3, 0.3, 1.0, i * 2.0),
-                DifficultyPreset.HARDCORE: (0.8, 0.7, 2.0, i * 2.5),
+                DifficultyPreset.CASUAL: (1.5, 1.2, 3.0, i * 1.5),
+                DifficultyPreset.NORMAL: (1.5, 1.2, 3.0, i * 2.0),
+                DifficultyPreset.HARDCORE: (1.5, 1.2, 3.0, i * 2.5),
                 DifficultyPreset.NIGHTMARE: (1.5, 1.2, 3.0, i * 3.0),
             }
 

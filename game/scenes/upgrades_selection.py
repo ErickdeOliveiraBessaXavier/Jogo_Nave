@@ -8,8 +8,6 @@ import pygame
 from ..core import colors
 from ..core.assets import BASE_DIR, get_font, get_image
 from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
-from ..core.meta_progression import PlayerProfile
-from ..core.paths import get_profile_path
 from ..core.ship_types import ShipProfile, all_ship_profiles, get_ship_profile
 from ..core.state import Scene
 from ..core.upgrades import UpgradeMeta, get_upgrade_icon, list_all_upgrades_meta
@@ -113,7 +111,10 @@ class UpgradesSelectionScene(Scene):
         )
         self.star_icon_small = pygame.transform.scale(self.star_icon, (18, 18))
 
-        self.player_profile = PlayerProfile(get_profile_path())
+        # Reusa a instância oficial do app. Criar uma nova aqui causaria
+        # divergência: as mudanças (loadout/nave) seriam salvas no JSON mas
+        # ficariam invisíveis para PlayingScene, que consome ``app.player_profile``.
+        self.player_profile = self.app.player_profile
         self._ensure_slots()
 
         # Todos os upgrades em ordem alfabética
