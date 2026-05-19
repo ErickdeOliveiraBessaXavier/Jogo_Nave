@@ -142,10 +142,10 @@ class DifficultySelectionView:
             # Parâmetros de tremor baseados na dificuldade
             # (amplitude_x, amplitude_y, frequência, fase)
             shake_params = {
-                DifficultyPreset.CASUAL: (2, 2, 2.0, i * 1.5),
-                DifficultyPreset.NORMAL: (4, 3, 4.0, i * 2.0),
-                DifficultyPreset.HARDCORE: (7, 6, 8.0, i * 2.5),
-                DifficultyPreset.NIGHTMARE: (8, 7, 12.0, i * 3.0),
+                DifficultyPreset.CASUAL: (0.1, 0.1, 0.5, i * 1.5),
+                DifficultyPreset.NORMAL: (0.3, 0.3, 1.0, i * 2.0),
+                DifficultyPreset.HARDCORE: (0.8, 0.7, 2.0, i * 2.5),
+                DifficultyPreset.NIGHTMARE: (1.5, 1.2, 3.0, i * 3.0),
             }
 
             self.difficulty_buttons[preset] = {
@@ -261,7 +261,7 @@ class DifficultySelectionView:
                 # Tremor único apenas se selecionado (hover)
                 amp_x, amp_y, freq, phase = button_data["shake_params"]
                 # Aumentar tremor se hovered (que é o único caso aqui agora)
-                mult = 1.0 + button_data["hover_progress"] * 0.5
+                mult = 1.0 + button_data["hover_progress"] * 0.1
                 button_data["shake_offset"][0] = math.sin(self.time * freq + phase) * amp_x * mult
                 button_data["shake_offset"][1] = math.cos(self.time * freq * 1.1 + phase * 0.7) * amp_y * mult
                 
