@@ -364,9 +364,9 @@ MAX_ENEMY_VARIETY_BY_DIFFICULTY: dict[DifficultyPreset, int] = {
 # Os valores aqui SUBSTITUEM MAX_ENEMY_VARIETY_BY_DIFFICULTY nas fases early/mid;
 # late usa o valor do dict acima para manter compatibilidade com o cap original.
 MAX_ENEMY_VARIETY_BY_STAGE: dict[DifficultyPreset, dict[str, int]] = {
-    DifficultyPreset.CASUAL:    {"early": 1, "mid": 2, "late": 3},
-    DifficultyPreset.NORMAL:    {"early": 1, "mid": 2, "late": 3},
-    DifficultyPreset.HARDCORE:  {"early": 2, "mid": 3, "late": 4},
+    DifficultyPreset.CASUAL: {"early": 1, "mid": 2, "late": 3},
+    DifficultyPreset.NORMAL: {"early": 1, "mid": 2, "late": 3},
+    DifficultyPreset.HARDCORE: {"early": 2, "mid": 3, "late": 4},
     DifficultyPreset.NIGHTMARE: {"early": 2, "mid": 3, "late": 4},
 }
 
@@ -583,7 +583,9 @@ def _apply_enemy_variety_cap(
     stage_band = _get_stage_band(world, config.level_number)
     variety_by_stage = MAX_ENEMY_VARIETY_BY_STAGE.get(difficulty_preset)
     if variety_by_stage is not None:
-        cap = variety_by_stage.get(stage_band, MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3))
+        cap = variety_by_stage.get(
+            stage_band, MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3)
+        )
     else:
         cap = MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3)
     spawn_config = config.enemy_spawn_config
@@ -1661,8 +1663,8 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         },
         enemies_to_clear=75,
         theme_name="Tutorial",
-        #boss_type=StoneGolemBoss,
-        #boss_type=MountainSerpentBoss,
+        # boss_type=StoneGolemBoss,
+        # boss_type=MountainSerpentBoss,
         score_multiplier=1.0,
     ),
     # Nível 3: Primeiro Boss - Mountain Serpent (Montanhas)

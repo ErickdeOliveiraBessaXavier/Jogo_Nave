@@ -296,6 +296,8 @@ class StarField:
         self._pool_index = 0
         self._initialize_surface_pool()
 
+        self._points_buffer: list[tuple[float, float]] = [(0.0, 0.0)] * 20
+
         for _ in range(n):
             self.stars.append(self._create_and_initialize_star())
 
@@ -396,23 +398,19 @@ class StarField:
                 # Limpar surface
                 star_surf.fill((0, 0, 0, 0))
 
-                # Calcular pontos do polígono
-                points: list[tuple[float, float]] = []
-                t = 0.0
-                step = self.TWO_PI / 20  # Reduzido para 20 pontos
+                # Calcular pontos do polígono (reutiliza buffer pré-alocado)
+                step = self.TWO_PI / 20
                 a = animated_size
-                center_offset = (
-                    self.MAX_STAR_SIZE // 2
-                )  # Centro da surface (24//2 = 12)
+                center_offset = self.MAX_STAR_SIZE // 2
 
-                while t < self.TWO_PI:
-                    x = a * (math.cos(t) ** 3)
-                    y = a * (math.sin(t) ** 3)
-                    points.append((center_offset + x, center_offset + y))
-                    t += step
+                for i in range(20):
+                    t = i * step
+                    self._points_buffer[i] = (
+                        center_offset + a * math.cos(t) ** 3,
+                        center_offset + a * math.sin(t) ** 3,
+                    )
 
-                # Desenhar polígono na surface do pool
-                pygame.draw.polygon(star_surf, c, points)
+                pygame.draw.polygon(star_surf, c, self._points_buffer)
 
                 # Blitar na surface principal
                 surface.blit(

@@ -71,9 +71,7 @@ class MusicStateManager:
             MusicState.STONE_GOLEM_BOSS,
         ]
 
-        is_music_paused = bool(
-            getattr(self.music_manager.sound_manager, "music_paused", False)
-        )
+        is_music_paused = self.music_manager.sound_manager.music_paused
         is_game_music_active = self.current_state in game_music_types or (
             is_music_paused and self.previous_state in game_music_types
         )

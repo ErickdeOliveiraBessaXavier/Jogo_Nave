@@ -708,11 +708,6 @@ class CityBackground(Background):
         super().__init__(width, height)
         self.buildings: List[Dict[str, Any]] = []
         self.blink_timer: float = 0.0
-
-        # Pré-calcular padrão de piscar para evitar cálculos repetidos
-        self.blink_pattern_cache: Dict[tuple[int, int], bool] = {}
-        self._cache_clear_timer: float = 0.0
-
         self._create_buildings()
 
     def _create_buildings(self) -> None:
@@ -751,12 +746,6 @@ class CityBackground(Background):
     def update(self, dt: float, speed_mult: float = 1.0) -> None:
         """Atualiza timer de piscar."""
         self.blink_timer += dt * self.BLINK_SPEED * speed_mult
-
-        # Limpar cache periodicamente com timer fixo (5 segundos)
-        self._cache_clear_timer += dt
-        if self._cache_clear_timer > 5.0:
-            self.blink_pattern_cache.clear()
-            self._cache_clear_timer = 0.0
 
     def draw(self, surface: pygame.Surface) -> None:
         """Desenha cidade com janelas piscantes."""
@@ -816,17 +805,8 @@ class CityBackground(Background):
 
         for wy in range(y_start, y_end, spacing + window_h):
             for wx in range(x_start, x_end, spacing):
-                # Otimizar cálculo de piscar usando cache (tupla evita colisão)
-                window_key = (wx, wy)
-
-                if window_key not in self.blink_pattern_cache:
-                    blink_offset = (wx + wy) % 100
-                    self.blink_pattern_cache[window_key] = (
-                        blink_time + blink_offset
-                    ) % 200 < 150
-
                 color = (
-                    lit_color if self.blink_pattern_cache[window_key] else dark_color
+                    lit_color if (blink_time + (wx + wy) % 100) % 200 < 150 else dark_color
                 )
                 pygame.draw.rect(surface, color, (wx, wy, window_w, window_h))
 
@@ -834,7 +814,6 @@ class CityBackground(Background):
         """Reseta cidade para estado inicial."""
         self.buildings.clear()
         self.blink_timer = 0.0
-        self.blink_pattern_cache.clear()
         self._create_buildings()
 
 

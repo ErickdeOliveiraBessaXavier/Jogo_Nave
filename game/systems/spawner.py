@@ -552,6 +552,8 @@ class EnemySpawner:
     def _record_pressure_sample(
         self, entity_manager: "EntityManager", counts: dict[str, int] | None = None
     ) -> None:
+        if not self.weighted_telemetry_enabled:
+            return
         if counts is None:
             counts = self._count_enemies_by_type(entity_manager)
         total = counts["total"]
@@ -927,10 +929,12 @@ class EnemySpawner:
         if not self.weighted_spawn_timer.done():
             return
 
-        self.weighted_spawn_attempts += 1
+        if self.weighted_telemetry_enabled:
+            self.weighted_spawn_attempts += 1
 
         if random.random() >= self.spawn_intensity:
-            self.weighted_spawn_blocked += 1
+            if self.weighted_telemetry_enabled:
+                self.weighted_spawn_blocked += 1
             self.weighted_spawn_timer.start()
             return
 
@@ -938,12 +942,14 @@ class EnemySpawner:
         if enemy_type is None or not self._should_spawn_enemy(
             enemy_type, entity_manager, counts=counts
         ):
-            self.weighted_spawn_blocked += 1
+            if self.weighted_telemetry_enabled:
+                self.weighted_spawn_blocked += 1
             self.weighted_spawn_timer.start()
             return
 
         if not self._can_spawn_now(enemy_type):
-            self.weighted_spawn_blocked += 1
+            if self.weighted_telemetry_enabled:
+                self.weighted_spawn_blocked += 1
             self.weighted_spawn_timer.start()
             return
 
@@ -955,11 +961,12 @@ class EnemySpawner:
             is_side_scroll=is_side_scroll,
         )
         if did_spawn:
-            self.weighted_spawn_success += 1
+            if self.weighted_telemetry_enabled:
+                self.weighted_spawn_success += 1
             self._record_weighted_spawn(enemy_type)
             self.recent_enemy_types.append(enemy_type)
             self._register_spawn(enemy_type)
-        else:
+        elif self.weighted_telemetry_enabled:
             self.weighted_spawn_blocked += 1
 
         self.weighted_spawn_timer.start()

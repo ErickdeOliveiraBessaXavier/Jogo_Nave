@@ -77,7 +77,9 @@ class StatisticsView:
         # Filtro da aba Recordes (None = "Todas")
         self.selected_difficulty_filter: Optional[DifficultyPreset] = None
         # Rects dos botões de filtro são calculados em _render_high_scores_tab
-        self._difficulty_filter_rects: List[tuple[Optional[DifficultyPreset], pygame.Rect]] = []
+        self._difficulty_filter_rects: List[
+            tuple[Optional[DifficultyPreset], pygame.Rect]
+        ] = []
 
         # Animação de entrada
         self.entry_progress = 0.0
@@ -93,19 +95,19 @@ class StatisticsView:
 
         # Dimensões e espaçamentos consistentes com settings.py
         outer_pad = 40
-        
+
         # Abas
         num_tabs = len(StatTab)
         tab_h = 50
         tab_gap = 20
-        
+
         # Área de Conteúdo
         # Altura total do bloco (abas + gap + conteúdo)
-        total_content_height = screen_h - 220 # Reservar espaço para título e botões
-        
+        total_content_height = screen_h - 220  # Reservar espaço para título e botões
+
         # Centralizar o bloco verticalmente
         block_y = (screen_h - total_content_height) // 2 + 20
-        
+
         available_width = screen_w - (2 * outer_pad)
         tab_w = (available_width - (num_tabs - 1) * tab_gap) / num_tabs
 
@@ -115,7 +117,9 @@ class StatisticsView:
             tab_buttons.append(rect)
         self.layout_rects["tab_buttons"] = tab_buttons
 
-        content_y = block_y + tab_h + 10 # Reduzido gap para aproximar conteúdo das abas
+        content_y = (
+            block_y + tab_h + 10
+        )  # Reduzido gap para aproximar conteúdo das abas
         self.layout_rects["content_area"] = pygame.Rect(
             outer_pad, content_y, available_width, total_content_height - tab_h - 10
         )
@@ -427,12 +431,12 @@ class StatisticsView:
         ]
 
         # Configuração de Layout
-        cols = 2 
-        col_width = (area.width - 60) / cols # Ajustado para novo indent
+        cols = 2
+        col_width = (area.width - 60) / cols  # Ajustado para novo indent
 
         # Calcular altura do Card 1
         rows = (len(stats_data) + cols - 1) // cols
-        card1_height = 60 + rows * 35 + 20 
+        card1_height = 60 + rows * 35 + 20
 
         # Calcular altura do Card 2
         num_recom = len(summary["recommendations"]) if summary["recommendations"] else 1
@@ -491,14 +495,18 @@ class StatisticsView:
             for recom in summary["recommendations"]:
                 recom_surf = self.small_font.render(f"• {recom}", True, colors.GRAY)
                 recom_surf.set_alpha(alpha)
-                content_surface.blit(recom_surf, (recom_rect.x + indent_x + 5, recom_y_inner))
+                content_surface.blit(
+                    recom_surf, (recom_rect.x + indent_x + 5, recom_y_inner)
+                )
                 recom_y_inner += 28
         else:
             recom_surf = self.small_font.render(
                 "Nenhuma recomendação no momento. Continue jogando!", True, colors.GRAY
             )
             recom_surf.set_alpha(alpha)
-            content_surface.blit(recom_surf, (recom_rect.x + indent_x + 5, recom_y_inner))
+            content_surface.blit(
+                recom_surf, (recom_rect.x + indent_x + 5, recom_y_inner)
+            )
 
         content_surface.set_alpha(alpha)
         surface.blit(
@@ -532,13 +540,13 @@ class StatisticsView:
         total_height = 0
         for level_num in sorted_levels:
             stats = self.profile.level_stats[level_num]
-            num_lines = 3 
+            num_lines = 3
             if stats.best_time:
-                num_lines += 2 
+                num_lines += 2
             card_height = 20 + (num_lines * 25) + 10
-            total_height += card_height + 15 
+            total_height += card_height + 15
 
-        visible_height = area.height - 50 
+        visible_height = area.height - 50
         if total_height > visible_height:
             self.scroll_y = max(0, min(self.scroll_y, total_height - visible_height))
         else:
@@ -551,9 +559,9 @@ class StatisticsView:
         content_y = 0
         for level_num in sorted_levels:
             stats = self.profile.level_stats[level_num]
-            num_lines = 3 
+            num_lines = 3
             if stats.best_time:
-                num_lines += 2 
+                num_lines += 2
             card_height = 20 + (num_lines * 25) + 10
             card_rect = pygame.Rect(0, content_y, area.width, card_height)
             self._draw_card_background(content_surface, card_rect, alpha)
@@ -583,9 +591,10 @@ class StatisticsView:
             level_value.set_alpha(alpha)
             content_surface.blit(level_label, (card_rect.x + indent_x, line_y))
             content_surface.blit(
-                level_value, (card_rect.x + indent_x + level_label.get_width() + 5, line_y)
+                level_value,
+                (card_rect.x + indent_x + level_label.get_width() + 5, line_y),
             )
-            line_y += line_spacing + 10 
+            line_y += line_spacing + 10
 
             attempts_label = self.small_font.render("Tentativas:", True, colors.GRAY)
             attempts_label.set_alpha(alpha)
@@ -622,7 +631,8 @@ class StatisticsView:
                 time_value.set_alpha(alpha)
                 content_surface.blit(time_label, (card_rect.x + indent_x, line_y))
                 content_surface.blit(
-                    time_value, (card_rect.x + indent_x + time_label.get_width() + 5, line_y)
+                    time_value,
+                    (card_rect.x + indent_x + time_label.get_width() + 5, line_y),
                 )
                 line_y += line_spacing
 
@@ -660,13 +670,13 @@ class StatisticsView:
 
         # Indentação padrão para alinhar com as colunas da tabela
         indent_x = 30
-        
+
         header = self.header_font.render("HALL DA FAMA", True, CUSTOM_GOLD)
         header.set_alpha(alpha)
         surface.blit(header, (area.x + indent_x, area.y))
 
         # Filtros por dificuldade (Todas, Casual, Normal, Hardcore, Pesadelo)
-        filters_y = area.y + 50 # Aumentado de 40 para 50 para mais respiro
+        filters_y = area.y + 50  # Aumentado de 40 para 50 para mais respiro
         btn_h = 30
         btn_padding_x = 14
         btn_gap = 10
@@ -744,14 +754,24 @@ class StatisticsView:
         else:
             entries = all_entries
 
-        list_top = filters_y + btn_h + 30 # Aumentado gap para a tabela
+        list_top = filters_y + btn_h + 30  # Aumentado gap para a tabela
         list_visible_height = area.height - (list_top - area.y)
 
         # Frame estilo Arcade
-        frame_rect = pygame.Rect(area.x, list_top - 5, area.width, list_visible_height + 5)
+        frame_rect = pygame.Rect(
+            area.x, list_top - 5, area.width, list_visible_height + 5
+        )
         frame_surf = pygame.Surface(frame_rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(frame_surf, (20, 20, 30, alpha), frame_surf.get_rect(), border_radius=10)
-        pygame.draw.rect(frame_surf, (*CUSTOM_PURPLE, alpha // 2), frame_surf.get_rect(), 2, border_radius=10)
+        pygame.draw.rect(
+            frame_surf, (20, 20, 30, alpha), frame_surf.get_rect(), border_radius=10
+        )
+        pygame.draw.rect(
+            frame_surf,
+            (*CUSTOM_PURPLE, alpha // 2),
+            frame_surf.get_rect(),
+            2,
+            border_radius=10,
+        )
         surface.blit(frame_surf, frame_rect.topleft)
 
         if not entries:
@@ -786,7 +806,7 @@ class StatisticsView:
             ("DIF.", col_diff_w),
             ("DATA", col_date_w),
         ]
-        
+
         cx = area.x + row_padding_x
         for title, w in col_titles:
             txt = self.small_font.render(title, True, header_color)
@@ -800,7 +820,9 @@ class StatisticsView:
         total_height = row_h * len(entries)
         visible_rows_height = max(0, list_visible_height - (rows_top - list_top) - 10)
         if total_height > visible_rows_height:
-            self.scroll_y = max(0, min(self.scroll_y, total_height - visible_rows_height))
+            self.scroll_y = max(
+                0, min(self.scroll_y, total_height - visible_rows_height)
+            )
         else:
             self.scroll_y = 0
 
@@ -821,7 +843,12 @@ class StatisticsView:
                 row_color = CUSTOM_GOLD
                 # Brilho de fundo para o primeiro lugar
                 glow_alpha = int(40 * pulse * (alpha / 255))
-                pygame.draw.rect(content_surface, (*CUSTOM_GOLD, glow_alpha), (0, row_y, area.width, row_h), border_radius=5)
+                pygame.draw.rect(
+                    content_surface,
+                    (*CUSTOM_GOLD, glow_alpha),
+                    (0, row_y, area.width, row_h),
+                    border_radius=5,
+                )
             elif idx < 3:
                 row_color = colors.LIGHT_GRAY
             else:
@@ -832,26 +859,38 @@ class StatisticsView:
             # Rank
             rank_text = self.item_font.render(f"#{idx + 1}", True, row_color)
             rank_text.set_alpha(row_alpha)
-            content_surface.blit(rank_text, (cx, row_y + (row_h - rank_text.get_height()) // 2))
+            content_surface.blit(
+                rank_text, (cx, row_y + (row_h - rank_text.get_height()) // 2)
+            )
             cx += col_rank_w
 
             # Iniciais (fonte maior estilo arcade)
             initials_text = self.header_font.render(entry.initials, True, row_color)
             initials_text.set_alpha(row_alpha)
-            content_surface.blit(initials_text, (cx, row_y + (row_h - initials_text.get_height()) // 2))
+            content_surface.blit(
+                initials_text, (cx, row_y + (row_h - initials_text.get_height()) // 2)
+            )
             cx += col_initials_w
 
             # Score
             score_str = f"{entry.score:,}".replace(",", ".")
-            score_text = self.item_font.render(score_str, True, CUSTOM_GOLD if is_first else CUSTOM_PURPLE)
+            score_text = self.item_font.render(
+                score_str, True, CUSTOM_GOLD if is_first else CUSTOM_PURPLE
+            )
             score_text.set_alpha(row_alpha)
-            content_surface.blit(score_text, (cx, row_y + (row_h - score_text.get_height()) // 2))
+            content_surface.blit(
+                score_text, (cx, row_y + (row_h - score_text.get_height()) // 2)
+            )
             cx += col_score_w
 
             # Nível
-            level_text = self.item_font.render(f"Lv {entry.level_reached:02d}", True, row_color)
+            level_text = self.item_font.render(
+                f"Lv {entry.level_reached:02d}", True, row_color
+            )
             level_text.set_alpha(row_alpha)
-            content_surface.blit(level_text, (cx, row_y + (row_h - level_text.get_height()) // 2))
+            content_surface.blit(
+                level_text, (cx, row_y + (row_h - level_text.get_height()) // 2)
+            )
             cx += col_level_w
 
             # Dificuldade (Badge estilizada)
@@ -865,19 +904,38 @@ class StatisticsView:
             # Desenhar fundo da badge
             badge_w = self.small_font.size(diff_label)[0] + 16
             badge_h = 26
-            badge_rect = pygame.Rect(cx, row_y + (row_h - badge_h) // 2, badge_w, badge_h)
-            pygame.draw.rect(content_surface, (*tag_color, int(row_alpha * 0.2)), badge_rect, border_radius=6)
-            pygame.draw.rect(content_surface, (*tag_color, int(row_alpha * 0.5)), badge_rect, 1, border_radius=6)
+            badge_rect = pygame.Rect(
+                cx, row_y + (row_h - badge_h) // 2, badge_w, badge_h
+            )
+            pygame.draw.rect(
+                content_surface,
+                (*tag_color, int(row_alpha * 0.2)),
+                badge_rect,
+                border_radius=6,
+            )
+            pygame.draw.rect(
+                content_surface,
+                (*tag_color, int(row_alpha * 0.5)),
+                badge_rect,
+                1,
+                border_radius=6,
+            )
 
             diff_text = self.small_font.render(diff_label, True, tag_color)
             diff_text.set_alpha(row_alpha)
-            content_surface.blit(diff_text, (cx + 8, row_y + (row_h - diff_text.get_height()) // 2))
+            content_surface.blit(
+                diff_text, (cx + 8, row_y + (row_h - diff_text.get_height()) // 2)
+            )
             cx += col_diff_w
 
             # Data
-            date_text = self.small_font.render(entry.achieved_at.strftime("%d/%m/%y"), True, colors.GRAY)
+            date_text = self.small_font.render(
+                entry.achieved_at.strftime("%d/%m/%y"), True, colors.GRAY
+            )
             date_text.set_alpha(row_alpha)
-            content_surface.blit(date_text, (cx, row_y + (row_h - date_text.get_height()) // 2))
+            content_surface.blit(
+                date_text, (cx, row_y + (row_h - date_text.get_height()) // 2)
+            )
 
         surface.blit(
             content_surface,

@@ -2437,7 +2437,8 @@ class PlayingScene(Scene):
                         # Só ativa charge com Space + Alt pressionados juntos.
                         self.ship.start_charge()
 
-            self._process_cheat_input(event)
+            if __debug__:
+                self._process_cheat_input(event)
 
             if self._can_handle_gameplay_actions() and not self.ship.is_entering:
                 self._handle_upgrade_key(event)

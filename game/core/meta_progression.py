@@ -1116,419 +1116,302 @@ class PlayerProfile:
             "sessions_played": len(self.session_history),
         }
 
-    def load(self):
-        """Carrega perfil do disco."""
+    def _parse_profile_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parseia JSON em valores de campo. Levanta exceção em estrutura inválida.
+
+        Nunca modifica self — garante atomicidade: load() só aplica o resultado
+        se este método retornar com sucesso completo.
+        """
+        if "level_stats" not in data:
+            raise ValueError("Invalid profile structure")
+
+        from .world_config import get_world_for_level_by_id
+
+        parsed: Dict[str, Any] = {}
+
+        # Dados básicos
+        parsed["total_playtime"] = data.get("total_playtime", 0.0)
+        parsed["highest_level_reached"] = data.get("highest_level_reached", 1)
+        parsed["total_deaths"] = data.get("total_deaths", 0)
+        parsed["total_score"] = data.get("total_score", 0)
+
+        # Configurações de vídeo
+        resolution_raw = data.get("resolution")
+        if isinstance(resolution_raw, list):
+            resolution_list = cast(List[Any], resolution_raw)
+            parsed["resolution"] = (
+                (int(resolution_list[0]), int(resolution_list[1]))
+                if len(resolution_list) == 2
+                else (1280, 720)
+            )
+        else:
+            parsed["resolution"] = (1280, 720)
+
+        # Configurações de controle
+        parsed["mouse_control"] = data.get("mouse_control", False)
+        parsed["auto_fire"] = data.get("auto_fire", False)
+
+        # Star collection system
+        parsed["stars_collected"] = data.get("stars_collected", 0)
+        parsed["stars_spent"] = data.get("stars_spent", 0)
+        parsed["unlocked_slots"] = data.get("unlocked_slots", INITIAL_UNLOCKED_SLOTS)
+
+        # Naves
+        unlocked_ships_raw = data.get("unlocked_ships")
+        if isinstance(unlocked_ships_raw, list):
+            unlocked_ships: set[str] = {
+                sid
+                for sid in cast(List[Any], unlocked_ships_raw)
+                if isinstance(sid, str) and is_valid_ship_id(sid)
+            }
+            unlocked_ships.add(DEFAULT_SHIP_ID)
+        else:
+            unlocked_ships = {DEFAULT_SHIP_ID}
+        parsed["unlocked_ships"] = unlocked_ships
+
+        selected = data.get("selected_ship", DEFAULT_SHIP_ID)
+        parsed["selected_ship"] = (
+            selected
+            if isinstance(selected, str) and selected in unlocked_ships
+            else DEFAULT_SHIP_ID
+        )
+
+        # Sistema de mundos e savepoints
+        world_unlocks: Dict[int, WorldUnlockStatus] = {}
+        world_unlocks_raw = data.get("world_unlocks", {})
+        if isinstance(world_unlocks_raw, dict):
+            for wid_key, wdata in cast(Dict[Any, Any], world_unlocks_raw).items():
+                if not (isinstance(wid_key, str) and isinstance(wdata, dict)):
+                    continue
+                try:
+                    wid = int(wid_key)
+                    world_unlocks[wid] = WorldUnlockStatus(
+                        world_id=wid,
+                        is_unlocked=wdata.get("is_unlocked", False),
+                        first_accessed_at=(
+                            datetime.fromisoformat(wdata["first_accessed_at"])
+                            if wdata.get("first_accessed_at")
+                            else None
+                        ),
+                        last_best_score_at_checkpoint=wdata.get(
+                            "last_best_score_at_checkpoint", 0
+                        ),
+                        checkpoint_set=wdata.get("checkpoint_set", False),
+                    )
+                except (ValueError, TypeError, KeyError):
+                    logger.warning("Skipping corrupt world data for world %s", wid_key)
+        if 1 not in world_unlocks:
+            world_unlocks[1] = WorldUnlockStatus(
+                world_id=1,
+                is_unlocked=True,
+                first_accessed_at=datetime.now(),
+                checkpoint_set=True,
+            )
+        parsed["world_unlocks"] = world_unlocks
+
+        checkpoint_raw = data.get("current_checkpoint_world", 1)
+        checkpoint = (
+            int(checkpoint_raw)
+            if isinstance(checkpoint_raw, (int, float, str))
+            and str(checkpoint_raw).isdigit()
+            else 1
+        )
+        if checkpoint not in world_unlocks or get_world_for_level_by_id(checkpoint) is None:
+            checkpoint = 1
+        parsed["current_checkpoint_world"] = checkpoint
+
+        # Hall da Fama
+        high_scores: List[HighScoreEntry] = []
+        valid_difficulties = {p.value for p in DifficultyPreset}
+        for entry_raw in cast(List[Any], data.get("high_scores", [])):
+            if not isinstance(entry_raw, dict):
+                continue
+            entry = cast(Dict[str, Any], entry_raw)
+            try:
+                diff = str(entry.get("difficulty", "normal"))
+                if diff not in valid_difficulties:
+                    diff = "normal"
+                high_scores.append(
+                    HighScoreEntry(
+                        initials=str(entry["initials"])[:3].upper(),
+                        score=int(entry["score"]),
+                        level_reached=int(entry.get("level_reached", 1)),
+                        difficulty=diff,
+                        achieved_at=datetime.fromisoformat(entry["achieved_at"]),
+                    )
+                )
+            except (KeyError, ValueError, TypeError):
+                logger.warning("Pulando entrada corrupta de high_score")
+        high_scores.sort(key=lambda e: (-e.score, e.achieved_at))
+        del high_scores[MAX_HIGH_SCORES:]
+        parsed["high_scores"] = high_scores
+
+        # Timestamps
+        if "profile_created" in data and isinstance(data["profile_created"], str):
+            parsed["profile_created"] = datetime.fromisoformat(data["profile_created"])
+        if data.get("last_played") and isinstance(data["last_played"], str):
+            parsed["last_played"] = datetime.fromisoformat(data["last_played"])
+
+        # Level stats
+        level_stats: Dict[int, LevelPerformance] = {}
+        for level_num_str, stats_data in data.get("level_stats", {}).items():
+            try:
+                level_num = int(level_num_str)
+                stats = LevelPerformance(level_number=level_num)
+                stats.attempts = int(stats_data.get("attempts", 0))
+                stats.clears = int(stats_data.get("clears", 0))
+                stats.deaths = int(stats_data.get("deaths", 0))
+                stats.total_time = float(stats_data.get("total_time", 0.0))
+                stats.best_time = (
+                    float(stats_data["best_time"])
+                    if isinstance(stats_data.get("best_time"), (int, float))
+                    else None
+                )
+                stats.worst_time = float(stats_data.get("worst_time", 0.0))
+                stats.total_score = int(stats_data.get("total_score", 0))
+                stats.best_score = int(stats_data.get("best_score", 0))
+                stats.total_enemies_killed = int(stats_data.get("total_enemies_killed", 0))
+                stats.total_damage_taken = int(stats_data.get("total_damage_taken", 0))
+                stats.total_powerups_collected = int(
+                    stats_data.get("total_powerups_collected", 0)
+                )
+                stats.recent_attempts = deque(
+                    cast(List[Dict[str, Any]], stats_data.get("recent_attempts", [])),
+                    maxlen=PerformanceAnalyzer.RECENT_ATTEMPTS_WINDOW,
+                )
+                stats.current_win_streak = int(stats_data.get("current_win_streak", 0))
+                stats.best_win_streak = int(stats_data.get("best_win_streak", 0))
+                if "first_played" in stats_data and isinstance(stats_data["first_played"], str):
+                    stats.first_played = datetime.fromisoformat(stats_data["first_played"])
+                if "last_played" in stats_data and isinstance(stats_data["last_played"], str):
+                    stats.last_played = datetime.fromisoformat(stats_data["last_played"])
+                level_stats[level_num] = stats
+            except (ValueError, TypeError, KeyError):
+                logger.warning("Skipping corrupt level data for level %s", level_num_str)
+        parsed["level_stats"] = level_stats
+
+        # Ajustes adaptativos
+        parsed["level_adjustments"] = {
+            int(k): v
+            for k, v in data.get("level_adjustments", {}).items()
+            if isinstance(v, (int, float))
+        }
+
+        # Histórico de sessões
+        session_history: List[SessionStats] = []
+        for session_data in data.get("session_history", []):
+            if session_data.get("start_time") is None:
+                continue
+            try:
+                start_time_str = session_data.get("start_time")
+                if not isinstance(start_time_str, str):
+                    logger.warning("Skipping corrupt session data due to invalid start_time type.")
+                    continue
+                session = SessionStats(start_time=datetime.fromisoformat(start_time_str))
+                end_time_str = session_data.get("end_time")
+                if isinstance(end_time_str, str):
+                    session.end_time = datetime.fromisoformat(end_time_str)
+                session.levels_attempted = [
+                    int(lvl)
+                    for lvl in session_data.get("levels_attempted", [])
+                    if isinstance(lvl, (int, float))
+                ]
+                deaths_raw = session_data.get("deaths", 0)
+                session.deaths = int(deaths_raw) if isinstance(deaths_raw, (int, float)) else 0
+                score_raw = session_data.get("score", 0)
+                session.score = int(score_raw) if isinstance(score_raw, (int, float)) else 0
+                pc_raw = session_data.get("powerups_collected", 0)
+                session.powerups_collected = int(pc_raw) if isinstance(pc_raw, (int, float)) else 0
+                session_history.append(session)
+            except (ValueError, TypeError, KeyError) as ve:
+                logger.warning("Skipping corrupt session data: %s", ve)
+        parsed["session_history"] = session_history
+
+        # Aprimoramentos: unlocked + loadout
+        _kb_defaults: List[int] = [
+            pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
+            pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9, pygame.K_0,
+            pygame.K_MINUS, pygame.K_EQUALS,
+        ]
+        try:
+            unlocked_raw = data.get("unlocked_upgrades")
+            if isinstance(unlocked_raw, list):
+                up_parsed: set[UpgradeType] = set()
+                for name in cast(List[Any], unlocked_raw):
+                    try:
+                        up_parsed.add(UpgradeType[name])
+                    except KeyError:
+                        logger.warning("Skipping unknown upgrade: %s", name)
+                parsed["unlocked_upgrades"] = (
+                    up_parsed.union(set(DEFAULT_UNLOCKED)) if up_parsed else set(DEFAULT_UNLOCKED)
+                )
+            else:
+                parsed["unlocked_upgrades"] = set(DEFAULT_UNLOCKED)
+
+            loadout_raw = data.get("upgrade_loadout")
+            if isinstance(loadout_raw, list):
+                slots: List[Optional[UpgradeType]] = []
+                for item in cast(List[Any], loadout_raw)[:UPGRADE_SLOT_COUNT]:
+                    if item is None:
+                        slots.append(None)
+                        continue
+                    try:
+                        slots.append(UpgradeType[item])
+                    except KeyError:
+                        slots.append(None)
+                        logger.warning("Skipping unknown upgrade: %s", item)
+                while len(slots) < UPGRADE_SLOT_COUNT:
+                    slots.append(None)
+                parsed["upgrade_loadout"] = slots
+            else:
+                parsed["upgrade_loadout"] = [None] * UPGRADE_SLOT_COUNT
+        except (KeyError, ValueError, TypeError):
+            parsed["unlocked_upgrades"] = set(DEFAULT_UNLOCKED)
+            parsed["upgrade_loadout"] = [None] * UPGRADE_SLOT_COUNT
+
+        # Keybindings
+        try:
+            keybindings_raw = data.get("upgrade_keybindings")
+            if isinstance(keybindings_raw, list):
+                keys: List[int] = []
+                for key in cast(List[Any], keybindings_raw)[:UPGRADE_SLOT_COUNT]:
+                    if isinstance(key, int) and 0 <= key <= 1000000:
+                        keys.append(key)
+                    else:
+                        keys.append(_kb_defaults[len(keys)])
+                while len(keys) < UPGRADE_SLOT_COUNT:
+                    keys.append(_kb_defaults[len(keys)])
+                parsed["upgrade_keybindings"] = keys
+            else:
+                parsed["upgrade_keybindings"] = _kb_defaults[:UPGRADE_SLOT_COUNT]
+        except (KeyError, ValueError, TypeError, IndexError):
+            parsed["upgrade_keybindings"] = _kb_defaults[:UPGRADE_SLOT_COUNT]
+
+        return parsed
+
+    def load(self) -> None:
+        """Carrega perfil do disco. Transacional: self só é modificado em caso de sucesso total."""
         if not self.profile_path.exists():
-            # Garantir estado inicial consistente em perfil novo.
-            self.world_unlocks = {}
             self._ensure_safe_world_defaults()
             return
 
         try:
             with open(self.profile_path, "r", encoding="utf-8") as f:
                 data: Dict[str, Any] = json.load(f)
-
-                # Validate basic structure
-                if "level_stats" not in data:
-                    raise ValueError("Invalid profile structure")
-
-                # Dados básicos
-                self.total_playtime = data.get("total_playtime", 0.0)
-                self.highest_level_reached = data.get("highest_level_reached", 1)
-                self.total_deaths = data.get("total_deaths", 0)
-                self.total_score = data.get("total_score", 0)
-
-                # Configurações de vídeo
-                resolution_raw = data.get("resolution")
-                if isinstance(resolution_raw, list):
-                    resolution_list = cast(List[Any], resolution_raw)
-                    if len(resolution_list) == 2:
-                        self.resolution = (
-                            int(resolution_list[0]),
-                            int(resolution_list[1]),
-                        )
-                    else:
-                        self.resolution = (1280, 720)  # Default
-                else:
-                    self.resolution = (1280, 720)  # Default
-
-                # Configurações de controle
-                self.mouse_control = data.get("mouse_control", False)
-                self.auto_fire = data.get("auto_fire", False)
-
-                # Star collection system
-                self.stars_collected = data.get("stars_collected", 0)
-                self.stars_spent = data.get("stars_spent", 0)
-                self.unlocked_slots = data.get("unlocked_slots", INITIAL_UNLOCKED_SLOTS)
-
-                # Naves (com fallback defensivo para ids inválidos)
-                unlocked_ships_raw = data.get("unlocked_ships")
-                if isinstance(unlocked_ships_raw, list):
-                    unlocked_ships_list = cast(List[Any], unlocked_ships_raw)
-                    self.unlocked_ships = {
-                        sid
-                        for sid in unlocked_ships_list
-                        if isinstance(sid, str) and is_valid_ship_id(sid)
-                    }
-                    self.unlocked_ships.add(DEFAULT_SHIP_ID)
-                else:
-                    self.unlocked_ships = {DEFAULT_SHIP_ID}
-
-                selected = data.get("selected_ship", DEFAULT_SHIP_ID)
-                if isinstance(selected, str) and selected in self.unlocked_ships:
-                    self.selected_ship = selected
-                else:
-                    self.selected_ship = DEFAULT_SHIP_ID
-
-                # Sistema de mundos e savepoints
-                world_unlocks_raw_untyped = data.get("world_unlocks", {})
-                world_unlocks_raw: Dict[str, Dict[str, Any]] = {}
-                if isinstance(world_unlocks_raw_untyped, dict):
-                    world_unlocks_dict = cast(
-                        Dict[Any, Any],
-                        world_unlocks_raw_untyped,
-                    )
-                    for world_id_key, world_data_value in world_unlocks_dict.items():
-                        if isinstance(world_id_key, str) and isinstance(
-                            world_data_value, dict
-                        ):
-                            world_unlocks_raw[world_id_key] = world_data_value
-                for world_id_str, world_data_raw in world_unlocks_raw.items():
-                    world_data: Dict[str, Any] = world_data_raw
-                    try:
-                        world_id = int(world_id_str)
-                        status = WorldUnlockStatus(
-                            world_id=world_id,
-                            is_unlocked=world_data.get("is_unlocked", False),
-                            first_accessed_at=(
-                                datetime.fromisoformat(world_data["first_accessed_at"])
-                                if world_data.get("first_accessed_at")
-                                else None
-                            ),
-                            last_best_score_at_checkpoint=world_data.get(
-                                "last_best_score_at_checkpoint", 0
-                            ),
-                            checkpoint_set=world_data.get("checkpoint_set", False),
-                        )
-                        self.world_unlocks[world_id] = status
-                    except (ValueError, TypeError, KeyError):
-                        logger.warning(
-                            "Skipping corrupt world data for world %s", world_id_str
-                        )
-                        continue
-
-                # Inicializar mundo 1 se não existir (mundo padrão sempre desbloqueado)
-                if 1 not in self.world_unlocks:
-                    self.world_unlocks[1] = WorldUnlockStatus(
-                        world_id=1,
-                        is_unlocked=True,
-                        first_accessed_at=datetime.now(),
-                        checkpoint_set=True,
-                    )
-
-                checkpoint_raw = data.get("current_checkpoint_world", 1)
-                self.current_checkpoint_world = (
-                    int(checkpoint_raw)
-                    if isinstance(checkpoint_raw, (int, float, str))
-                    and str(checkpoint_raw).isdigit()
-                    else 1
-                )
-                if self.current_checkpoint_world not in self.world_unlocks:
-                    self.current_checkpoint_world = 1
-
-                # Se o checkpoint carregado estiver inválido/corrompido, forçar Mundo 1.
-                from .world_config import get_world_for_level_by_id
-
-                if get_world_for_level_by_id(self.current_checkpoint_world) is None:
-                    self.current_checkpoint_world = 1
-
-                # Hall da Fama (top 10 high scores)
-                self.high_scores = []
-                hs_raw = data.get("high_scores", [])
-                if isinstance(hs_raw, list):
-                    valid_hs: List[HighScoreEntry] = []
-                    valid_difficulties = {p.value for p in DifficultyPreset}
-                    for entry_raw in cast(List[Any], hs_raw):
-                        if not isinstance(entry_raw, dict):
-                            continue
-                        entry_dict = cast(Dict[str, Any], entry_raw)
-                        try:
-                            diff = str(entry_dict.get("difficulty", "normal"))
-                            if diff not in valid_difficulties:
-                                diff = "normal"
-                            valid_hs.append(
-                                HighScoreEntry(
-                                    initials=str(entry_dict["initials"])[:3].upper(),
-                                    score=int(entry_dict["score"]),
-                                    level_reached=int(
-                                        entry_dict.get("level_reached", 1)
-                                    ),
-                                    difficulty=diff,
-                                    achieved_at=datetime.fromisoformat(
-                                        entry_dict["achieved_at"]
-                                    ),
-                                )
-                            )
-                        except (KeyError, ValueError, TypeError):
-                            logger.warning("Pulando entrada corrupta de high_score")
-                            continue
-                    valid_hs.sort(key=lambda e: (-e.score, e.achieved_at))
-                    del valid_hs[MAX_HIGH_SCORES:]
-                    self.high_scores = valid_hs
-
-                # Timestamps
-                if "profile_created" in data and isinstance(
-                    data["profile_created"], str
-                ):
-                    self.profile_created = datetime.fromisoformat(
-                        data["profile_created"]
-                    )
-                if data.get("last_played") and isinstance(data["last_played"], str):
-                    self.last_played = datetime.fromisoformat(data["last_played"])
-
-                # Level stats
-                level_stats_raw: Dict[str, Dict[str, Any]] = data.get("level_stats", {})
-                for level_num_str, stats_data_raw in level_stats_raw.items():
-                    stats_data: Dict[str, Any] = stats_data_raw
-                    try:
-                        level_num = int(level_num_str)
-                        stats = LevelPerformance(level_number=level_num)
-
-                        # Restore fields explicitly for type safety
-                        stats.attempts = int(stats_data.get("attempts", 0))
-                        stats.clears = int(stats_data.get("clears", 0))
-                        stats.deaths = int(stats_data.get("deaths", 0))
-                        stats.total_time = float(stats_data.get("total_time", 0.0))
-                        stats.best_time = (
-                            float(stats_data["best_time"])
-                            if isinstance(stats_data.get("best_time"), (int, float))
-                            else None
-                        )
-                        stats.worst_time = float(stats_data.get("worst_time", 0.0))
-                        stats.total_score = int(stats_data.get("total_score", 0))
-                        stats.best_score = int(stats_data.get("best_score", 0))
-                        stats.total_enemies_killed = int(
-                            stats_data.get("total_enemies_killed", 0)
-                        )
-                        stats.total_damage_taken = int(
-                            stats_data.get("total_damage_taken", 0)
-                        )
-                        stats.total_powerups_collected = int(
-                            stats_data.get("total_powerups_collected", 0)
-                        )
-                        # Cast the loaded list to the expected element type so the
-                        # type-checker can infer the deque element type correctly.
-                        stats.recent_attempts = deque(
-                            cast(
-                                List[Dict[str, Any]],
-                                stats_data.get("recent_attempts", []),
-                            ),
-                            maxlen=PerformanceAnalyzer.RECENT_ATTEMPTS_WINDOW,
-                        )
-                        stats.current_win_streak = int(
-                            stats_data.get("current_win_streak", 0)
-                        )
-                        stats.best_win_streak = int(
-                            stats_data.get("best_win_streak", 0)
-                        )
-
-                        if "first_played" in stats_data and isinstance(
-                            stats_data["first_played"], str
-                        ):
-                            stats.first_played = datetime.fromisoformat(
-                                stats_data["first_played"]
-                            )
-                        if "last_played" in stats_data and isinstance(
-                            stats_data["last_played"], str
-                        ):
-                            stats.last_played = datetime.fromisoformat(
-                                stats_data["last_played"]
-                            )
-
-                        self.level_stats[level_num] = stats
-                    except (ValueError, TypeError, KeyError):
-                        logger.warning(
-                            "Skipping corrupt level data for level %s", level_num_str
-                        )
-                        continue
-
-                # Ajustes
-                level_adjustments_raw = data.get("level_adjustments", {})
-                self.level_adjustments = {
-                    int(k): v
-                    for k, v in level_adjustments_raw.items()
-                    if isinstance(v, (int, float))
-                }
-
-                # Sessões
-                session_history_raw: List[Dict[str, Any]] = data.get(
-                    "session_history", []
-                )
-                for session_data_raw in session_history_raw:
-                    if session_data_raw.get("start_time") is None:
-                        continue
-                    session_data: Dict[str, Any] = session_data_raw
-                    try:
-                        # Ensure start_time is a string before passing to fromisoformat
-                        start_time_str = session_data.get("start_time")
-                        if not isinstance(start_time_str, str):
-                            logger.warning(
-                                "Skipping corrupt session data due to invalid start_time type."
-                            )
-                            continue
-
-                        session = SessionStats(
-                            start_time=datetime.fromisoformat(start_time_str)
-                        )
-
-                        end_time_str = session_data.get("end_time")
-                        if isinstance(end_time_str, str):
-                            session.end_time = datetime.fromisoformat(end_time_str)
-
-                        # Explicitly check types for other fields
-                        levels_attempted_raw = session_data.get("levels_attempted", [])
-                        session.levels_attempted = [
-                            int(lvl)
-                            for lvl in levels_attempted_raw
-                            if isinstance(lvl, (int, float))
-                        ]
-
-                        deaths_raw = session_data.get("deaths", 0)
-                        session.deaths = (
-                            int(deaths_raw)
-                            if isinstance(deaths_raw, (int, float))
-                            else 0
-                        )
-
-                        score_raw = session_data.get("score", 0)
-                        session.score = (
-                            int(score_raw) if isinstance(score_raw, (int, float)) else 0
-                        )
-
-                        powerups_collected_raw = session_data.get(
-                            "powerups_collected", 0
-                        )
-                        session.powerups_collected = (
-                            int(powerups_collected_raw)
-                            if isinstance(powerups_collected_raw, (int, float))
-                            else 0
-                        )
-
-                        self.session_history.append(session)
-                    except (ValueError, TypeError, KeyError) as ve:
-                        logger.warning("Skipping corrupt session data: %s", ve)
-                        continue
-
-                # Aprimoramentos: unlocked + loadout (migração segura)
-                try:
-                    unlocked_raw = data.get("unlocked_upgrades")
-                    if isinstance(unlocked_raw, list):
-                        parsed: set[UpgradeType] = set()
-                        for name in cast(List[Any], unlocked_raw):
-                            try:
-                                parsed.add(UpgradeType[name])
-                            except KeyError:
-                                logger.warning("Skipping unknown upgrade: %s", name)
-                                continue
-                        # Fazer merge com DEFAULT_UNLOCKED para adicionar novos upgrades
-                        # Isso garante que upgrades novos sejam automaticamente desbloqueados
-                        self.unlocked_upgrades = (
-                            parsed.union(set(DEFAULT_UNLOCKED))
-                            if parsed
-                            else set(DEFAULT_UNLOCKED)
-                        )
-                    else:
-                        self.unlocked_upgrades = set(DEFAULT_UNLOCKED)
-
-                    loadout_raw = data.get("upgrade_loadout")
-                    if isinstance(loadout_raw, list):
-                        slots: List[Optional[UpgradeType]] = []
-                        for item in cast(List[Any], loadout_raw)[:UPGRADE_SLOT_COUNT]:
-                            if item is None:
-                                slots.append(None)
-                                continue
-                            try:
-                                slots.append(UpgradeType[item])
-                            except KeyError:
-                                slots.append(None)
-                                logger.warning("Skipping unknown upgrade: %s", item)
-                        # Completar tamanho de slots
-                        while len(slots) < UPGRADE_SLOT_COUNT:
-                            slots.append(None)
-                        self.upgrade_loadout = slots
-                    else:
-                        self.upgrade_loadout = [None] * UPGRADE_SLOT_COUNT
-                except (KeyError, ValueError, TypeError):
-                    # Em caso de erro, usar defaults
-                    self.unlocked_upgrades = set(DEFAULT_UNLOCKED)
-                    self.upgrade_loadout = [None] * UPGRADE_SLOT_COUNT
-
-                # Keybindings (migração segura) — deve rodar independente do bloco de upgrades
-                try:
-                    keybindings_raw = data.get("upgrade_keybindings")
-                    _kb_defaults: List[int] = [
-                        pygame.K_1,
-                        pygame.K_2,
-                        pygame.K_3,
-                        pygame.K_4,
-                        pygame.K_5,
-                        pygame.K_6,
-                        pygame.K_7,
-                        pygame.K_8,
-                        pygame.K_9,
-                        pygame.K_0,
-                        pygame.K_MINUS,
-                        pygame.K_EQUALS,
-                    ]
-                    if isinstance(keybindings_raw, list):
-                        keys: List[int] = []
-                        for key in cast(List[Any], keybindings_raw)[
-                            :UPGRADE_SLOT_COUNT
-                        ]:
-                            if isinstance(key, int) and 0 <= key <= 1000000:
-                                keys.append(key)
-                            else:
-                                keys.append(_kb_defaults[len(keys)])
-                        while len(keys) < UPGRADE_SLOT_COUNT:
-                            keys.append(_kb_defaults[len(keys)])
-                        self.upgrade_keybindings = keys
-                    else:
-                        self.upgrade_keybindings = _kb_defaults[:UPGRADE_SLOT_COUNT]
-                except (KeyError, ValueError, TypeError, IndexError):
-                    defaults: List[int] = [
-                        pygame.K_1,
-                        pygame.K_2,
-                        pygame.K_3,
-                        pygame.K_4,
-                        pygame.K_5,
-                        pygame.K_6,
-                        pygame.K_7,
-                        pygame.K_8,
-                        pygame.K_9,
-                        pygame.K_0,
-                        pygame.K_MINUS,
-                        pygame.K_EQUALS,
-                    ]
-                    self.upgrade_keybindings = defaults[:UPGRADE_SLOT_COUNT]
-
-                # Limit session history after loading
-                if len(self.session_history) > self.MAX_SESSION_HISTORY:
-                    self.session_history = self.session_history[
-                        -self.MAX_SESSION_HISTORY :
-                    ]
-
+            parsed = self._parse_profile_data(data)
         except (OSError, ValueError, KeyError, TypeError) as e:
             logger.error("Erro ao carregar perfil: %s", e)
-            # Fazer backup
             if self.profile_path.exists():
                 backup_path = self.profile_path.with_suffix(".backup.json")
                 import shutil
-
                 shutil.copy2(self.profile_path, backup_path)
                 logger.info("Backup salvo em: %s", backup_path)
-            # Carregar defaults ao invés de resetar
             self._ensure_safe_world_defaults()
-            return  # Mantém valores inicializados no __init__
+            return
+
+        self.__dict__.update(parsed)
+        if len(self.session_history) > self.MAX_SESSION_HISTORY:
+            self.session_history = self.session_history[-self.MAX_SESSION_HISTORY:]
 
     def _prepare_save_data(self) -> Dict[str, Any]:
         """Prepara dados do perfil para serialização (sincronous, side-effect free)."""

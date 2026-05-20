@@ -36,7 +36,7 @@ class UpgradeCategory(Enum):
     OFFENSIVE = auto()
 
 
-class UpgradeContext(Protocol):
+class UpgradeContextProtocol(Protocol):
     """Contexto necessário para upgrades operarem.
 
     Fornecido pela cena durante a gameplay. Não exigimos uma classe específica
@@ -91,7 +91,7 @@ class ActiveUpgrade:
         self.active: bool = False
 
     # ----- Lifecycle -----------------------------------------------------
-    def can_activate(self, ctx: UpgradeContext) -> bool:
+    def can_activate(self, ctx: UpgradeContextProtocol) -> bool:
         if self.active and not self.allows_refresh():
             return False
         if self.cooldown_left > 0.0:
@@ -103,7 +103,7 @@ class ActiveUpgrade:
         # A decisão fina será aplicada pelo chamador ou por get_effective_cooldown.
         return self.additional_can_activate(ctx)
 
-    def activate(self, ctx: UpgradeContext) -> bool:
+    def activate(self, ctx: UpgradeContextProtocol) -> bool:
         if not self.can_activate(ctx):
             self.on_denied(ctx)
             return False
@@ -123,7 +123,7 @@ class ActiveUpgrade:
         self.on_after_activate(ctx)
         return True
 
-    def update(self, dt: float, ctx: Optional[UpgradeContext] = None) -> None:
+    def update(self, dt: float, ctx: Optional[UpgradeContextProtocol] = None) -> None:
         if self.cooldown_left > 0.0:
             old_cooldown = self.cooldown_left
             self.cooldown_left = max(0.0, self.cooldown_left - dt)
@@ -144,40 +144,40 @@ class ActiveUpgrade:
                 self.on_expire(ctx)
 
     @staticmethod
-    def _ctx_ship(ctx: Optional[UpgradeContext]) -> Any:
+    def _ctx_ship(ctx: Optional[UpgradeContextProtocol]) -> Any:
         if ctx is None:
             return None
         return getattr(ctx, "ship", None)
 
     @staticmethod
-    def _ctx_entity_manager(ctx: Optional[UpgradeContext]) -> Any:
+    def _ctx_entity_manager(ctx: Optional[UpgradeContextProtocol]) -> Any:
         if ctx is None:
             return None
         return getattr(ctx, "entity_manager", None)
 
     @staticmethod
-    def _ctx_scene(ctx: Optional[UpgradeContext]) -> Any:
+    def _ctx_scene(ctx: Optional[UpgradeContextProtocol]) -> Any:
         if ctx is None:
             return None
         return getattr(ctx, "scene", None)
 
     @staticmethod
-    def _ctx_attr(ctx: Optional[UpgradeContext], name: str, default: Any = None) -> Any:
+    def _ctx_attr(ctx: Optional[UpgradeContextProtocol], name: str, default: Any = None) -> Any:
         if ctx is None:
             return default
         return getattr(ctx, name, default)
 
     # ----- Hooks for subclasses -----------------------------------------
-    def additional_can_activate(self, _ctx: UpgradeContext) -> bool:
+    def additional_can_activate(self, _ctx: UpgradeContextProtocol) -> bool:
         return True
 
     def allows_refresh(self) -> bool:
         return False
 
-    def on_activate_effect(self, ctx: UpgradeContext) -> None:
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         raise NotImplementedError
 
-    def on_after_activate(self, ctx: UpgradeContext) -> None:
+    def on_after_activate(self, ctx: UpgradeContextProtocol) -> None:
         # SFX/VFX padrão podem ser disparados aqui se desejado
         try:
             sound_manager = self._ctx_attr(ctx, "sound_manager")
@@ -186,7 +186,7 @@ class ActiveUpgrade:
         except (AttributeError, TypeError):
             pass
 
-    def on_denied(self, ctx: UpgradeContext) -> None:
+    def on_denied(self, ctx: UpgradeContextProtocol) -> None:
         try:
             sound_manager = self._ctx_attr(ctx, "sound_manager")
             if sound_manager is not None:
@@ -194,12 +194,12 @@ class ActiveUpgrade:
         except (AttributeError, TypeError):
             pass
 
-    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         # Reverter efeitos temporários, se necessário
         pass
 
     # ----- Effective values with difficulty rules -----------------------
-    def get_effective_cooldown(self, ctx: Optional[UpgradeContext]) -> float:
+    def get_effective_cooldown(self, ctx: Optional[UpgradeContextProtocol]) -> float:
         cd = self.meta.base_cooldown
         try:
             # Modo GOD: cooldown de apenas 1 segundo
@@ -215,7 +215,7 @@ class ActiveUpgrade:
             pass
         return cd
 
-    def get_effective_duration(self, _ctx: Optional[UpgradeContext]) -> float:
+    def get_effective_duration(self, _ctx: Optional[UpgradeContextProtocol]) -> float:
         return self.meta.base_duration
 
     # ----- UI helpers ----------------------------------------------------
@@ -244,7 +244,7 @@ class ShieldBurstUpgrade(ActiveUpgrade):
         # Não permite refresh - escudo não pode ser reativado enquanto ativo
         return False
 
-    def can_activate(self, ctx: UpgradeContext) -> bool:
+    def can_activate(self, ctx: UpgradeContextProtocol) -> bool:
         # Não pode ativar se já está monitorando um escudo ativo
         if self._monitoring_shield:
             return False
@@ -252,7 +252,7 @@ class ShieldBurstUpgrade(ActiveUpgrade):
             return False
         return self.additional_can_activate(ctx)
 
-    def activate(self, ctx: UpgradeContext) -> bool:
+    def activate(self, ctx: UpgradeContextProtocol) -> bool:
         if not self.can_activate(ctx):
             self.on_denied(ctx)
             return False
@@ -265,7 +265,7 @@ class ShieldBurstUpgrade(ActiveUpgrade):
         self.on_after_activate(ctx)
         return True
 
-    def on_activate_effect(self, ctx: UpgradeContext) -> None:
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         # Ativa escudo que absorve 1 hit de dano (sem limite de tempo)
         ship = self._ctx_ship(ctx)
         if ship is None:
@@ -281,7 +281,7 @@ class ShieldBurstUpgrade(ActiveUpgrade):
             except (AttributeError, TypeError):
                 pass
 
-    def update(self, dt: float, ctx: Optional[UpgradeContext] = None) -> None:
+    def update(self, dt: float, ctx: Optional[UpgradeContextProtocol] = None) -> None:
         # Atualizar cooldown normalmente
         if self.cooldown_left > 0.0:
             self.cooldown_left = max(0.0, self.cooldown_left - dt)
@@ -298,7 +298,7 @@ class ShieldBurstUpgrade(ActiveUpgrade):
                     self.active = False
                     self.cooldown_left = self.get_effective_cooldown(ctx)
 
-    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         # Não usado - escudo expira quando consumido, não por timer
         self._monitoring_shield = False
         self.active = False
@@ -309,7 +309,7 @@ class HealUpgrade(ActiveUpgrade):
         super().__init__(meta)
         self.usage_count: int = 0
 
-    def additional_can_activate(self, ctx: UpgradeContext) -> bool:
+    def additional_can_activate(self, ctx: UpgradeContextProtocol) -> bool:
         if self.usage_count >= 2:
             return False
         ship = self._ctx_ship(ctx)
@@ -321,7 +321,7 @@ class HealUpgrade(ActiveUpgrade):
             return False
         return current_lives < max_lives
 
-    def on_activate_effect(self, ctx: UpgradeContext) -> None:
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         self.usage_count += 1
         ship = self._ctx_ship(ctx)
         if ship is None:
@@ -343,7 +343,7 @@ class EMPUpgrade(ActiveUpgrade):
     def allows_refresh(self) -> bool:
         return True
 
-    def on_activate_effect(self, ctx: UpgradeContext) -> None:
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         em = self._ctx_entity_manager(ctx)
         if em is None:
             return
@@ -380,7 +380,7 @@ class EMPUpgrade(ActiveUpgrade):
         except (AttributeError, TypeError):
             pass
 
-    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         if not ctx:
             return
         em = self._ctx_entity_manager(ctx)
@@ -400,7 +400,7 @@ class HomingShotUpgrade(ActiveUpgrade):
     def allows_refresh(self) -> bool:
         return True
 
-    def on_activate_effect(self, ctx: UpgradeContext) -> None:
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         ship = self._ctx_ship(ctx)
         if ship is None:
             return
@@ -437,7 +437,7 @@ class HomingShotUpgrade(ActiveUpgrade):
             except (AttributeError, TypeError):
                 pass
 
-    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         if not ctx:
             return
         ship = self._ctx_ship(ctx)
@@ -462,7 +462,7 @@ class LaserShotUpgrade(ActiveUpgrade):
     def allows_refresh(self) -> bool:
         return False  # Baseado em cargas, não permite refresh
 
-    def on_activate_effect(self, ctx: UpgradeContext) -> None:
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         """Ativa o sistema de bolas elétricas orbitais (3 bolas, 3 cargas cada)."""
         ship = self._ctx_ship(ctx)
 
@@ -484,7 +484,7 @@ class LaserShotUpgrade(ActiveUpgrade):
             except (AttributeError, TypeError):
                 pass
 
-    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         # Não precisa fazer nada - o sistema se desativa automaticamente quando as cargas acabam
         pass
 
@@ -507,7 +507,7 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
     def allows_refresh(self) -> bool:
         return False  # Baseado em cargas, não permite refresh
 
-    def can_activate(self, ctx: UpgradeContext) -> bool:
+    def can_activate(self, ctx: UpgradeContextProtocol) -> bool:
         # Não pode ativar se já está ativo (aguardando cargas acabarem)
         if self._waiting_for_charges_depleted:
             return False
@@ -516,7 +516,7 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
             return False
         return self.additional_can_activate(ctx)
 
-    def activate(self, ctx: UpgradeContext) -> bool:
+    def activate(self, ctx: UpgradeContextProtocol) -> bool:
         if not self.can_activate(ctx):
             self.on_denied(ctx)
             return False
@@ -529,7 +529,7 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
         self.on_after_activate(ctx)
         return True
 
-    def on_activate_effect(self, ctx: UpgradeContext) -> None:
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         """Ativa o sistema de tiros explosivos na nave."""
         ship = self._ctx_ship(ctx)
 
@@ -552,7 +552,7 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
             except (AttributeError, TypeError):
                 pass
 
-    def update(self, dt: float, ctx: Optional[UpgradeContext] = None) -> None:
+    def update(self, dt: float, ctx: Optional[UpgradeContextProtocol] = None) -> None:
         # Atualizar cooldown normalmente
         if self.cooldown_left > 0.0:
             self.cooldown_left = max(0.0, self.cooldown_left - dt)
@@ -570,7 +570,7 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
                     self.active = False
                     self.cooldown_left = self.get_effective_cooldown(ctx)
 
-    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         # Chamado quando sistema expira manualmente (não usado aqui)
         self._waiting_for_charges_depleted = False
         self.active = False
@@ -596,14 +596,14 @@ class AirStrikeUpgrade(ActiveUpgrade):
     def allows_refresh(self) -> bool:
         return False  # Ultimate não permite refresh
 
-    def can_activate(self, ctx: UpgradeContext) -> bool:
+    def can_activate(self, ctx: UpgradeContextProtocol) -> bool:
         if self._is_spawning:
             return False
         if self.cooldown_left > 0.0:
             return False
         return self.additional_can_activate(ctx)
 
-    def activate(self, ctx: UpgradeContext) -> bool:
+    def activate(self, ctx: UpgradeContextProtocol) -> bool:
         if not self.can_activate(ctx):
             self.on_denied(ctx)
             return False
@@ -617,7 +617,7 @@ class AirStrikeUpgrade(ActiveUpgrade):
         self.on_after_activate(ctx)
         return True
 
-    def on_activate_effect(self, ctx: UpgradeContext) -> None:
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         """Inicia o bombardeio aéreo."""
         import pygame
 
@@ -648,7 +648,7 @@ class AirStrikeUpgrade(ActiveUpgrade):
         if hasattr(entity_manager, "spawn_air_strike"):
             entity_manager.spawn_air_strike(target_x, target_y)
 
-    def update(self, dt: float, ctx: Optional[UpgradeContext] = None) -> None:
+    def update(self, dt: float, ctx: Optional[UpgradeContextProtocol] = None) -> None:
         # Atualizar cooldown normalmente
         if self.cooldown_left > 0.0:
             self.cooldown_left = max(0.0, self.cooldown_left - dt)
@@ -677,7 +677,7 @@ class AirStrikeUpgrade(ActiveUpgrade):
                 self.active = False
                 self.cooldown_left = self.get_effective_cooldown(ctx)
 
-    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         self._is_spawning = False
         self._bombs_remaining = 0
         self.active = False
@@ -697,7 +697,7 @@ class BlackHoleUpgrade(ActiveUpgrade):
     def allows_refresh(self) -> bool:
         return False  # Ultimate não permite refresh
 
-    def on_activate_effect(self, ctx: UpgradeContext) -> None:
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         """Ativa o buraco negro."""
         entity_manager = self._ctx_entity_manager(ctx)
         ship = self._ctx_ship(ctx)
@@ -715,7 +715,7 @@ class BlackHoleUpgrade(ActiveUpgrade):
         if hasattr(entity_manager, "spawn_black_hole"):
             entity_manager.spawn_black_hole(ship_center_x, ship_center_y, duration)
 
-    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         self.active = False
 
 
@@ -733,7 +733,7 @@ class CannonTowerUpgrade(ActiveUpgrade):
     def allows_refresh(self) -> bool:
         return False  # Ultimate não permite refresh
 
-    def on_activate_effect(self, ctx: UpgradeContext) -> None:
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         """Spawna duas torres de canhão fixas."""
         entity_manager = self._ctx_entity_manager(ctx)
         if entity_manager is None:
@@ -756,7 +756,7 @@ class CannonTowerUpgrade(ActiveUpgrade):
             entity_manager.spawn_cannon_tower(left_tower_x, tower_y)
             entity_manager.spawn_cannon_tower(right_tower_x, tower_y)
 
-    def on_expire(self, ctx: Optional[UpgradeContext]) -> None:
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         self.active = False
 
 

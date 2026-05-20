@@ -18,7 +18,9 @@ class DifficultySettingsDict(TypedDict):
     # <1 = mais raro (Hardcore/Pesadelo). Aplicado dividindo o intervalo
     # base, análogo ao spawn_rate_multiplier de inimigos.
     powerup_spawn_rate_multiplier: float
-    special_rules: NotRequired[list[str]]  # Regras especiais opcionais (ex.: "permadeath")
+    special_rules: NotRequired[
+        list[str]
+    ]  # Regras especiais opcionais (ex.: "permadeath")
 
 
 class DifficultyPreset(Enum):

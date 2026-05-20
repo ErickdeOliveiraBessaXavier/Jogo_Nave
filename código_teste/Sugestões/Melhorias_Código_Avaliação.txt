@@ -1,0 +1,222 @@
+# Revisão Técnica Crítica — Space Shooter
+
+Problemas pendentes após revisão inicial. Itens já corrigidos foram removidos.
+
+---
+
+## 🔴 CRÍTICO — Risco imediato de bugs ou degradação severa
+
+### 1. `playing.py` — God Object com 1.500+ linhas e responsabilidades demais
+
+`PlayingScene` acumula: lógica de colisões, progressão de nível, boss fights, upgrades, input de teclado E controle, cutscenes, HUD, transições de mundo, cheat codes e meta-progression. Isso viola SRP de forma grave.
+
+```python
+# Sintoma: métodos como _handle_collisions() com 8 seções distintas,
+# _start_boss_fight() com lógica de spawn inline, _fire_bullets() com
+# ramificação de perfil de nave misturada com física de projétil
+```
+
+**Impacto real:** qualquer mudança em colisões pode quebrar progressão; testar uma única feature exige instanciar toda a cena; bugs são difíceis de isolar.
+
+**Refatoração necessária:**
+```python
+class BossFightController:
+    def start(self, boss_type, health_mult): ...
+    def update(self, dt): ...
+    def end(self): ...
+
+class LevelProgressionController:
+    def check_progression(self): ...
+    def advance(self): ...
+
+class ShootingSystem:
+    def fire(self, ship, entity_manager): ...
+```
+
+---
+
+### 2. `entity_manager.py` — Listas paralelas sem abstração, update/draw misturado
+
+O manager mantém 40+ listas paralelas (`bullets`, `homing_bullets`, `emp_waves`, `explosive_effects`...) sem nenhuma abstração comum. O método `update()` tem 200+ linhas com branches para cada tipo específico de entidade.
+
+```python
+# Problema: isinstance() em hot path a cada frame
+if isinstance(en, Alien):
+    s = en.update(sdt)
+elif isinstance(en, EyeEnemy):
+    s = en.update(sdt, player_x, player_y)
+elif isinstance(en, GuidedMeteor):
+    en.update(sdt, self.is_side_scroll, player_x, player_y)
+# ... mais 10 branches
+```
+
+**Isso é O(n·k) no pior caso onde k = número de tipos.** Viola o Princípio Aberto/Fechado — adicionar um inimigo exige modificar `entity_manager.py`.
+
+**Solução:**
+```python
+class Entity(Protocol):
+    dead: bool
+    def update(self, dt: float, ctx: UpdateContext) -> None: ...
+    def draw(self, surface: Surface) -> None: ...
+
+# Entidades recebem ctx com player_pos, is_side_scroll, etc.
+for entity in self._active_entities:
+    entity.update(dt, self._update_ctx)
+```
+
+---
+
+---
+
+### 4. `collisions.py` — Acoplamento forte com tipos concretos, não extensível
+
+`Collisions` importa diretamente 25+ tipos de entidade e tem métodos como `bullets_vs_slime_drips`, `ship_vs_spike_boss`. Adicionar um novo inimigo com colisão especial exige modificar essa classe.
+
+```python
+# Problema: método específico para cada combinação
+def bullets_vs_slime_drips(self, bullets, slime_drips, entity_manager): ...
+def cannons_mines_vs_enemies(self, cannon_mines, enemies, entity_manager): ...
+def ship_vs_spike_boss(self, ship, boss, entity_manager): ...
+```
+
+**Solução baseada em protocolos já parcialmente definidos no projeto:**
+```python
+# collision_protocols.py já tem Damageable — use isso consistentemente
+class Collisions:
+    def projectiles_vs_damageable(
+        self,
+        projectiles: list[Projectile],
+        targets: list[Damageable],
+        grid: SpatialGrid,
+    ) -> CollisionResult: ...
+    # Um método genérico substitui 15 métodos específicos
+```
+
+---
+
+## 🟠 ALTO — Problemas que vão causar dor crescente
+
+### 5. `levels.py` — Geração procedural com 900 linhas e múltiplas responsabilidades
+
+`ProceduralLevelGenerator._generate_level_impl()` faz seleção de tema, cálculo de spawn, escolha de formações e configuração de features — tudo inline. As constantes `ENEMY_THEME_WEIGHT_PROFILES` e `ENEMY_STAGE_WEIGHT_PROFILES` têm ~150 linhas de dicts nested que são difíceis de auditar.
+
+```python
+# Problema: lógica de spawn por tema duplicada em dois lugares
+if world.theme in (WorldTheme.STARFIELD, WorldTheme.CITY, ...):
+    # bloco de 60 linhas
+if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.15:
+    # bloco separado
+```
+
+**Pipeline de transformações não é explícito.** A sequência `_filter → _apply_weights → _apply_stage_weights → _apply_variety_cap` deve ser uma pipeline clara, não funções soltas chamadas em `_apply_theme_enemy_rules`.
+
+---
+
+### 6. `spawner.py` — Dois sistemas de spawn (legado + ponderado) ativos simultaneamente
+
+```python
+self.use_weighted_spawn: bool = DifficultyConfig.WEIGHTED_SPAWN_ENABLED
+
+if self.use_weighted_spawn:
+    self._update_weighted_enemy_spawn(...)
+else:
+    self._update_legacy_enemy_spawn(...)
+```
+
+Manter dois sistemas completos em paralelo é debt técnico. O sistema legado provavelmente nunca é testado no estado atual. Se o weighted está estável, remova o legado. Se não está, corrija — não mantenha os dois.
+
+---
+
+## 🟡 MÉDIO — Dívida técnica acumulada
+
+### 9. `config.py` — `Config` como dataclass frozen com 300+ campos é um anti-pattern
+
+Um único dataclass com campos de boss, slime, spike, formações, power-ups e UI não é configuração — é um namespace global disfarçado. Grupos não relacionados compartilham o mesmo espaço de nomes.
+
+```python
+# Problemas:
+# 1. SlimeBoss stages como campo de Config viola SRP
+SLIME_BOSS_STAGES: dict[SlimeBossState, StageConfig] = field(...)
+# 2. ConfigProxy com __getattr__ para SCREEN_WIDTH/HEIGHT é workaround para imutabilidade
+# 3. _runtime_screen como dict global mutável contradiz o frozen=True
+```
+
+**Melhor abordagem:**
+```python
+@dataclass(frozen=True)
+class DisplayConfig: ...
+
+@dataclass(frozen=True)
+class GameplayConfig: ...
+
+@dataclass(frozen=True)
+class GameConfig:
+    display: DisplayConfig
+    gameplay: GameplayConfig
+    bosses: BossConfigs
+```
+
+---
+
+## 🔵 ARQUITETURAL — Decisões que limitam o crescimento do projeto
+
+### 10. Ausência de Event Bus real para comunicação entre sistemas
+
+O projeto tem `events.py` com `EventBus`, mas não é usado pelos sistemas principais. `PlayingScene` chama diretamente `sound_manager.play_X()`, `player_profile.record_X()`, e `entity_manager.spawn_X()` — tudo acoplamento direto.
+
+```python
+# Estado atual:
+sound_manager.play_explosion_boss()
+self.player_profile.record_clear(...)
+self.entity_manager.spawn_explosion(...)
+
+# Com EventBus:
+self.event_bus.emit("enemy_killed", enemy=enemy, position=pos, points=pts)
+# SoundSystem, ScoreSystem, EffectsSystem reagem independentemente
+```
+
+---
+
+### 11. `SpatialGrid` correto mas subutilizado em colisões
+
+`SpatialGrid` existe e funciona, mas vários métodos de colisão em `collisions.py` ainda iteram listas completas:
+
+```python
+def serpent_bullets_vs_ship(self, ship, serpent_bullets):
+    for bullet in serpent_bullets[:]:  # sem spatial grid
+        if ship.rect.colliderect(bullet.rect):
+```
+
+Com muitos projéteis em tela, isso é O(n) onde poderia ser O(1) médio.
+
+---
+
+### 12. `PlayerProfile` mistura persistência, lógica de negócio e UI helpers
+
+```python
+class PlayerProfile:
+    def load(self): ...
+    def save(self): ...
+    def get_adjusted_config(self, base_config): ...  # chama PerformanceAnalyzer
+    def unlock_next_world(self): ...
+    def get_statistics_summary(self): ...  # formata dados para exibição
+    def get_skill_level(self) -> str: ...  # retorna string localizada
+```
+
+`ProfileVisualizer` com métodos `render_*` dentro de `meta_progression.py` é o pior exemplo — lógica de rendering dentro de um módulo de domínio.
+
+---
+
+## Resumo por prioridade
+
+| # | Problema | Gravidade | Esforço |
+|---|----------|-----------|---------|
+| 1 | `PlayingScene` God Object | 🔴 Crítico | Alto |
+| 2 | `EntityManager` com isinstance em hot path | 🔴 Crítico | Alto |
+| 3 | `Collisions` acoplado a tipos concretos | 🔴 Crítico | Alto |
+| 4 | `levels.py` — pipeline implícita, 900 linhas | 🟠 Alto | Médio |
+| 5 | Dois sistemas de spawn em paralelo | 🟠 Alto | Médio |
+| 6 | `config.py` — namespace global disfarçado | 🟡 Médio | Alto |
+| 7 | EventBus existente mas não usado | 🔵 Arquitetural | Alto |
+| 8 | `SpatialGrid` subutilizado em colisões | 🔵 Arquitetural | Médio |
+| 9 | `PlayerProfile` mistura persistência + UI | 🔵 Arquitetural | Alto |
