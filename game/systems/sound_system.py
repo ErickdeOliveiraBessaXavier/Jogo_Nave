@@ -40,11 +40,10 @@ class SoundSystem:
 
     def _on_player_shot(self, event: events.PlayerShot) -> None:
         """Toca o som de tiro do jogador."""
-        # Lógica mais complexa pode ser adicionada aqui, ex: som diferente por arma
         if event.projectile_type == "cacador_laser":
-            sound_manager.play_boss_laser_fire()
-        else:
-            sound_manager.play_shot()
+            # Canal gerenciado diretamente em playing.py (precisa de return_channel).
+            return
+        sound_manager.play_shot()
 
     def _on_enemy_destroyed(self, event: events.EnemyDestroyed) -> None:
         """Toca um som de explosão para inimigos."""

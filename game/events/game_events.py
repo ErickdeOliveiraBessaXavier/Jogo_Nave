@@ -80,14 +80,6 @@ class LevelCleared(Event):
 
 
 @dataclass
-class ScoreGained(Event):
-    """O jogador ganhou pontos (ex: coletar estrela, bônus)."""
-
-    points: int
-    position: Optional[tuple[float, float]] = None
-
-
-@dataclass
 class PlaySound(Event):
     """Solicita a reprodução de um efeito sonoro."""
 
@@ -130,8 +122,3 @@ class SpawnFloatingScore(Event):
     color: Optional[tuple[int, int, int]] = None
 
 
-@dataclass
-class GameStateChange(Event):
-    """Informa uma mudança no estado principal do jogo (preparando, jogando, etc)."""
-
-    new_state: Any  # Ex: GameState.PLAYING

@@ -8,7 +8,6 @@ from ..core.spatial_grid import SpatialGrid
 from ..core.upgrades_config import EXPLOSIVE_BULLET_DAMAGE
 from ..core.upgrades_config import EXPLOSIVE_BULLET_RADIUS as _EXPLOSIVE_BULLET_RADIUS
 from ..entities.air_strike_bomb import AirStrikeBomb
-from ..entities.alien_bullet import AlienBullet
 from ..entities.boss_laser import BossLaser
 from ..entities.boss_square import BossSquare
 from ..entities.bot_elemental_attacks import EnergyOrb
@@ -24,7 +23,6 @@ from ..entities.homing_bullet import HomingBullet
 from ..entities.ice_poison_zone import IcePoisonZone
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
-from ..entities.mountain_serpent_boss import SerpentRockBullet
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
 from ..entities.ship import Ship
@@ -957,26 +955,36 @@ class Collisions:
             )
         return score_gain
 
-    def mini_ship_bullets_vs_enemies(
+    def projectiles_vs_enemies(
         self,
-        mini_ship_bullets: list[MiniShipBullet],
+        projectiles: list[Projectile],
         enemy_grid: SpatialGrid[Any],
         entity_manager: "EntityManager",
+        ship: Any = None,
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Projéteis do jogador (Bullet e MiniShipBullet) vs. inimigos normais.
+
+        `ship` é necessário apenas para acionar Chain Shot.
+        Explosive e chain shot são ativados via duck typing — MiniShipBullet não os
+        possui, então os caminhos especiais são automaticamente ignorados.
+        """
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
 
-        if not mini_ship_bullets:
+        if not projectiles:
             return 0, 0, []
 
+        chain_active = ship is not None and getattr(ship, "has_chain_shot", False)
+        max_jumps = config_instance.CHAIN_SHOT_MAX_JUMPS if chain_active else 0
+
         projectile_targets = self._batch_query_for_projectiles(
-            mini_ship_bullets,
+            projectiles,
             enemy_grid,
             padding=CollisionConstants.SPATIAL_QUERY_PADDING,
         )
 
-        for b in mini_ship_bullets[:]:
+        for b in projectiles[:]:
             potential_enemies = projectile_targets.get(id(b), [])
             if not potential_enemies:
                 continue
@@ -986,17 +994,37 @@ class Collisions:
                     continue
                 if self._projectile_collides_with_enemy(b.rect, enemy):
                     result = self._apply_hit(
-                        enemy,
-                        getattr(b, "damage", 1),
-                        b.x,
-                        b.y,
-                        entity_manager,
+                        enemy, getattr(b, "damage", 1), b.x, b.y, entity_manager
                     )
                     score_gain += result.points
                     if result.killed:
                         destroyed_count += 1
                         if result.points > 0:
                             score_events.append((b.x, b.y, result.points))
+
+                    if chain_active and max_jumps > 0:
+                        already_hit: set[int] = set()
+                        eg, ed, ee = self._trigger_chain_shot(
+                            hit_x=b.x,
+                            hit_y=b.y,
+                            source_enemy=enemy,
+                            bullet_damage=getattr(b, "damage", 1),
+                            jumps_left=max_jumps,
+                            already_hit=already_hit,
+                            enemy_grid=enemy_grid,
+                            entity_manager=entity_manager,
+                        )
+                        score_gain += eg
+                        destroyed_count += ed
+                        score_events.extend(ee)
+
+                    if getattr(b, "explosive", False) and not b.dead:
+                        eg, ed, ee = self._handle_explosive_bullet(
+                            cast(Bullet, b), enemy_grid, entity_manager
+                        )
+                        score_gain += eg
+                        destroyed_count += ed
+                        score_events.extend(ee)
 
                     if self._process_projectile_hit(
                         b, b.x, b.y, entity_manager, create_explosion=False
@@ -1225,84 +1253,16 @@ class Collisions:
 
         return score_gain, destroyed_count, score_events
 
-    def bullets_vs_enemies(
+    def projectiles_vs_boss(
         self,
-        bullets: list[Bullet],
-        enemy_grid: "SpatialGrid[Any]",
-        entity_manager: "EntityManager",
-        ship: Any = None,
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
-        score_gain = 0
-        destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
-
-        if not bullets:
-            return 0, 0, []
-
-        chain_active = ship is not None and getattr(ship, "has_chain_shot", False)
-        max_jumps = config_instance.CHAIN_SHOT_MAX_JUMPS if chain_active else 0
-
-        projectile_targets = self._batch_query_for_projectiles(
-            bullets, enemy_grid, padding=CollisionConstants.SPATIAL_QUERY_PADDING
-        )
-
-        for b in bullets[:]:
-            potential_enemies = projectile_targets.get(id(b), [])
-            if not potential_enemies:
-                continue
-
-            for enemy in potential_enemies:
-                if enemy.dead:
-                    continue
-                if self._projectile_collides_with_enemy(b.rect, enemy):
-                    result = self._apply_hit(
-                        enemy, getattr(b, "damage", 1), b.x, b.y, entity_manager
-                    )
-                    score_gain += result.points
-                    if result.killed:
-                        destroyed_count += 1
-                        if result.points > 0:
-                            score_events.append((b.x, b.y, result.points))
-
-                    if chain_active and max_jumps > 0:
-                        already_hit: set[int] = set()
-                        eg, ed, ee = self._trigger_chain_shot(
-                            hit_x=b.x,
-                            hit_y=b.y,
-                            source_enemy=enemy,
-                            bullet_damage=getattr(b, "damage", 1),
-                            jumps_left=max_jumps,
-                            already_hit=already_hit,
-                            enemy_grid=enemy_grid,
-                            entity_manager=entity_manager,
-                        )
-                        score_gain += eg
-                        destroyed_count += ed
-                        score_events.extend(ee)
-
-                    if b.explosive and not b.dead:
-                        eg, ed, ee = self._handle_explosive_bullet(
-                            b, enemy_grid, entity_manager
-                        )
-                        score_gain += eg
-                        destroyed_count += ed
-                        score_events.extend(ee)
-
-                    if self._process_projectile_hit(
-                        b, b.x, b.y, entity_manager, create_explosion=False
-                    ):
-                        break
-        return score_gain, destroyed_count, score_events
-
-    def bullets_vs_boss(
-        self,
-        bullets: list[Bullet],
+        projectiles: Sequence[Any],
         boss: Any,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
+        """Projéteis do jogador (Bullet, MiniShipBullet) vs. boss — dano com multiplicador."""
         return self._project_into_boss(
-            bullets, boss, floating_scores, entity_manager, is_piercing_allowed=True
+            projectiles, boss, floating_scores, entity_manager, is_piercing_allowed=True
         )
 
     def ship_vs_boss(
@@ -1363,62 +1323,22 @@ class Collisions:
             return True
         return False
 
-    def serpent_bullets_vs_ship(
+    def enemy_projectiles_vs_ship(
         self,
         ship: Ship,
-        serpent_bullets: list[SerpentRockBullet],
-        grid: "SpatialGrid[Any] | None" = None,
+        projectiles: list[Any],
     ) -> bool:
-        """Verifica colisão entre as bolas de rocha da serpente e a nave."""
-        if ship.invuln > 0:
-            return False
-        ship_rect = ship.rect
-        if grid is not None:
-            pad = CollisionConstants.SPATIAL_QUERY_PADDING
-            for bullet in grid.query(
-                ship_rect.x - pad,
-                ship_rect.y - pad,
-                ship_rect.width + pad * 2,
-                ship_rect.height + pad * 2,
-            ):
-                if isinstance(bullet, SerpentRockBullet) and ship_rect.colliderect(
-                    bullet.rect
-                ):
-                    bullet.dead = True
-                    return True
-            return False
-        for bullet in serpent_bullets[:]:
-            if ship_rect.colliderect(bullet.rect):
-                bullet.dead = True
-                return True
-        return False
+        """Projéteis de inimigos (qualquer tipo) vs. nave do jogador.
 
-    def alien_bullets_vs_ship(
-        self,
-        ship: Ship,
-        alien_bullets: list[AlienBullet],
-        grid: "SpatialGrid[Any] | None" = None,
-    ) -> bool:
+        Itera a lista de tipo específico diretamente — listas de projéteis de
+        inimigos são pequenas, a overhead de grid não se justifica.
+        """
         if ship.invuln > 0:
             return False
         ship_rect = ship.rect
-        if grid is not None:
-            pad = CollisionConstants.SPATIAL_QUERY_PADDING
-            for bullet in grid.query(
-                ship_rect.x - pad,
-                ship_rect.y - pad,
-                ship_rect.width + pad * 2,
-                ship_rect.height + pad * 2,
-            ):
-                if isinstance(bullet, AlienBullet) and ship_rect.colliderect(
-                    bullet.rect
-                ):
-                    bullet.dead = True
-                    return True
-            return False
-        for bullet in alien_bullets[:]:
-            if ship_rect.colliderect(bullet.rect):
-                bullet.dead = True
+        for p in projectiles:
+            if not getattr(p, "dead", False) and ship_rect.colliderect(p.rect):
+                p.dead = True
                 return True
         return False
 
@@ -1484,38 +1404,25 @@ class Collisions:
                 return True
         return False
 
-    def mini_ship_bullets_vs_boss(
+    def projectiles_vs_spikes(
         self,
-        mini_ship_bullets: list[MiniShipBullet],
-        boss: Damageable,
-        floating_scores: list[FloatingScore],
-        entity_manager: "EntityManager",
-    ) -> int:
-        """Colisão de balas das mini ships com Boss normal."""
-        return self._project_into_boss(
-            mini_ship_bullets,
-            boss,
-            floating_scores,
-            entity_manager,
-            is_piercing_allowed=True,
-        )
-
-    def mini_ship_bullets_vs_spikes(
-        self,
-        mini_ship_bullets: list[MiniShipBullet],
+        projectiles: list[Projectile],
         spike_grid: SpatialGrid[Spike],
         entity_manager: "EntityManager",
     ) -> int:
-        """Colisão de balas das mini ships com Spikes."""
+        """Projéteis do jogador (Bullet, MiniShipBullet) vs. Spikes voando.
+
+        Só colide com spikes em estado "flying". Retorna score ganho.
+        """
         score_gain = 0
 
-        for b in mini_ship_bullets[:]:
+        for b in projectiles[:]:
             b_rect = b.rect
-            query_x = b_rect.x - CollisionConstants.SPATIAL_QUERY_PADDING
-            query_y = b_rect.y - CollisionConstants.SPATIAL_QUERY_PADDING
-            query_w = b_rect.width + CollisionConstants.SPATIAL_QUERY_PADDING * 2
-            query_h = b_rect.height + CollisionConstants.SPATIAL_QUERY_PADDING * 2
-            potential_spikes = spike_grid.query(query_x, query_y, query_w, query_h)
+            pad = CollisionConstants.SPATIAL_QUERY_PADDING
+            potential_spikes = spike_grid.query(
+                b_rect.x - pad, b_rect.y - pad,
+                b_rect.width + pad * 2, b_rect.height + pad * 2,
+            )
             for spike in potential_spikes:
                 if spike.state == "flying" and b_rect.colliderect(spike.rect):
                     self._process_projectile_hit(
@@ -1580,38 +1487,6 @@ class Collisions:
                 )
                 return True
         return False
-
-    def bullets_vs_spikes(
-        self,
-        bullets: list[Bullet],
-        spike_grid: SpatialGrid[Spike],
-        entity_manager: "EntityManager",
-    ) -> int:
-        """Verifica colisão entre balas e espinhos. Retorna pontos ganhos."""
-        score_gain = 0
-
-        for b in bullets[:]:
-            b_rect = b.rect
-            query_x = b_rect.x - CollisionConstants.SPATIAL_QUERY_PADDING
-            query_y = b_rect.y - CollisionConstants.SPATIAL_QUERY_PADDING
-            query_w = b_rect.width + CollisionConstants.SPATIAL_QUERY_PADDING * 2
-            query_h = b_rect.height + CollisionConstants.SPATIAL_QUERY_PADDING * 2
-            potential_spikes = spike_grid.query(query_x, query_y, query_w, query_h)
-            for spike in potential_spikes:
-                if b_rect.colliderect(spike.rect):
-                    self._process_projectile_hit(
-                        b,
-                        spike.center_x,
-                        spike.center_y,
-                        entity_manager,
-                        create_explosion=True,
-                        explosion_size=CollisionConstants.SPIKE_EXPLOSION_SIZE,
-                    )
-                    spike.dead = True
-                    sound_manager.play_explosion_asteroid()
-                    score_gain += spike.get_points_value()
-                    break
-        return score_gain
 
     def ship_vs_spike_boss(
         self, ship: Ship, boss: Any, entity_manager: "EntityManager"

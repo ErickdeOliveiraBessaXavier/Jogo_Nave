@@ -1289,7 +1289,7 @@ class PlayingScene(Scene):
                 self.warning_timer = Config.BOSS_WARNING_DURATION
                 self.screen_shake_timer = Config.BOSS_WARNING_DURATION
                 if not self.warning_sound_played:
-                    sound_manager.play_warning()
+                    self.app.event_bus.emit(events.PlaySound(sound_name="warning"))
                     self.warning_sound_played = True
 
         elif self.warning_stage == 2:
@@ -1462,23 +1462,15 @@ class PlayingScene(Scene):
         """Projéteis da nave vs. inimigos normais. Retorna (score, kills, events, ship_hit)."""
         enemies_view = cast(Sequence["Enemy"], self.entity_manager.enemies)
 
-        gain, destroyed, score_events = self.collisions.bullets_vs_enemies(
-            self.entity_manager.bullets,
+        all_player_projectiles = (
+            self.entity_manager.bullets + self.entity_manager.mini_ship_bullets
+        )
+        gain, destroyed, score_events = self.collisions.projectiles_vs_enemies(
+            all_player_projectiles,
             enemy_grid,
             self.entity_manager,
             ship=self.ship,
         )
-
-        vector_gain, vector_destroyed, vector_events = (
-            self.collisions.mini_ship_bullets_vs_enemies(
-                self.entity_manager.mini_ship_bullets,
-                enemy_grid,
-                self.entity_manager,
-            )
-        )
-        gain += vector_gain
-        destroyed += vector_destroyed
-        score_events.extend(vector_events)
 
         laser_gain, laser_destroyed, laser_events = (
             self.collisions.player_lasers_vs_enemies(
@@ -1688,14 +1680,11 @@ class PlayingScene(Scene):
         if not (boss and self._boss_type_cache):
             return gain
 
-        score_gain = self.collisions.bullets_vs_boss(
-            self.entity_manager.bullets,
-            boss,  # type: ignore[arg-type]
-            self.entity_manager.floating_scores,
-            self.entity_manager,
+        all_player_projectiles = (
+            self.entity_manager.bullets + self.entity_manager.mini_ship_bullets
         )
-        score_gain += self.collisions.mini_ship_bullets_vs_boss(
-            self.entity_manager.mini_ship_bullets,
+        score_gain = self.collisions.projectiles_vs_boss(
+            all_player_projectiles,
             boss,  # type: ignore[arg-type]
             self.entity_manager.floating_scores,
             self.entity_manager,
@@ -1762,13 +1751,9 @@ class PlayingScene(Scene):
         """Verifica todas as colisões que causam dano à nave."""
         em = self.entity_manager
 
-        if self.collisions.alien_bullets_vs_ship(
-            self.ship, em.alien_bullets, em.enemy_projectile_grid
-        ):
+        if self.collisions.enemy_projectiles_vs_ship(self.ship, em.alien_bullets):
             self._handle_ship_hit()
-        if self.collisions.serpent_bullets_vs_ship(
-            self.ship, em.serpent_bullets, em.enemy_projectile_grid
-        ):
+        if self.collisions.enemy_projectiles_vs_ship(self.ship, em.serpent_bullets):
             self._handle_ship_hit()
         if self.collisions.eye_laser_vs_ship(self.ship, em.eye_lasers):
             self._handle_ship_hit()
@@ -1891,8 +1876,11 @@ class PlayingScene(Scene):
                 self.ship.register_kill()
 
         if self.entity_manager.spikes:
-            spike_gain = self.collisions.mini_ship_bullets_vs_spikes(
-                self.entity_manager.mini_ship_bullets,
+            all_player_projectiles = (
+                self.entity_manager.bullets + self.entity_manager.mini_ship_bullets
+            )
+            spike_gain = self.collisions.projectiles_vs_spikes(
+                all_player_projectiles,
                 self.entity_manager.spike_spatial_grid,
                 self.entity_manager,
             )
@@ -1922,15 +1910,6 @@ class PlayingScene(Scene):
                 self.entity_manager.slime_drips,
                 self.entity_manager,
             )
-
-        spike_score = self.collisions.bullets_vs_spikes(
-            self.entity_manager.bullets,
-            self.entity_manager.spike_spatial_grid,
-            self.entity_manager,
-        )
-        if self.score_multiplier_active:
-            spike_score = int(spike_score * self.score_multiplier_value)
-        self.score += spike_score
 
         self._check_ship_damage()
         self._process_powerups_and_stars()
@@ -2400,13 +2379,21 @@ class PlayingScene(Scene):
     def _advance_to_next_level(self, with_delay: bool = True) -> None:
         if self.level_start_time is not None:
             clear_time = time.time() - self.level_start_time
+            level_score = self.score - self.level_start_score
             self.player_profile.record_clear(
                 level_number=self.current_level_index + 1,
                 time_taken=clear_time,
-                score=self.score - self.level_start_score,
+                score=level_score,
                 enemies_killed=self.total_enemies_destroyed,
                 damage_taken=self.level_damage_taken,
                 powerups_collected=self.level_powerups_collected,
+            )
+            self.app.event_bus.emit(
+                events.LevelCleared(
+                    level_number=self.current_level_index + 1,
+                    score=level_score,
+                    time_taken=clear_time,
+                )
             )
 
         if with_delay:
@@ -2805,7 +2792,7 @@ class PlayingScene(Scene):
         kind = self.ship.consume_stored_powerup(slot_index)
         if kind is None:
             return
-        sound_manager.play_powerup()
+        self.app.event_bus.emit(events.PlaySound(sound_name="powerup"))
         self._apply_powerup(kind)
 
     def _handle_upgrade_key(self, event: pygame.event.Event) -> None:
