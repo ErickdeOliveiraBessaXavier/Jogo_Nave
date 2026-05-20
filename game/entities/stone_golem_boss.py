@@ -818,6 +818,9 @@ class StoneGolemBoss:
         }
     )
 
+    # Cache de máscara pixel-perfeita para colisão baseada em pixel map
+    _collision_mask: Optional[pygame.mask.Mask] = None
+
     def __init__(
         self,
         _x: float,
@@ -2040,6 +2043,55 @@ class StoneGolemBoss:
             and self.health <= third_health
         ):
             self._third_phase_pending = True
+
+    @classmethod
+    def _build_collision_mask(cls) -> pygame.mask.Mask:
+        """
+        Constrói máscara pixel-perfeita a partir do PIXEL_MAP.
+        Cada pixel do mapa que não é None resulta em um pixel sólido na máscara.
+        A máscara é escalada e cacheada para reutilização.
+        """
+        if cls._collision_mask is not None:
+            return cls._collision_mask
+
+        S = cls.SCALE
+        mask_w = _PIXEL_COLS * S
+        mask_h = _PIXEL_ROWS * S
+
+        # Cria máscara vazia (todos os pixels transparentes por padrão)
+        mask = pygame.mask.Mask((mask_w, mask_h), fill=False)
+
+        # Para cada célula do pixel map com valor (não None),
+        # marca toda a área escalada como sólida
+        for row_idx, row in enumerate(_PIXEL_MAP):
+            for col_idx, cell in enumerate(row):
+                if cell is not None:  # Célula com cor (sólida)
+                    x = col_idx * S
+                    y = row_idx * S
+                    for px in range(S):
+                        for py in range(S):
+                            if x + px < mask_w and y + py < mask_h:
+                                mask.set_at((x + px, y + py), True)
+
+        cls._collision_mask = mask
+        return mask
+
+    def get_collision_mask_data(
+        self,
+    ) -> tuple[pygame.mask.Mask, tuple[int, int]] | None:
+        """
+        Retorna dados para colisão pixel-perfeita.
+        
+        Usado pelo sistema de colisão: primeiro tenta máscara (pixel-perfect),
+        depois fallback para collision_circle().
+        
+        Posição base do boss (x, y), mas com ajuste do float vertical.
+        """
+        mask = self._build_collision_mask()
+        # Offset leva em conta o float vertical (oscilação)
+        offset_x = int(self.x)
+        offset_y = int(self.y + self._current_float_y)
+        return mask, (offset_x, offset_y)
 
     def collision_circle(self) -> tuple[float, float, float]:
         # Centro acompanha o float vertical do boss (mesmo offset usado pelo
