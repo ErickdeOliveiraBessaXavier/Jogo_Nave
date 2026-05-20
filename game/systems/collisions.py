@@ -243,10 +243,28 @@ class Collisions:
         """
         Verifica colisão pixel-perfect entre entidade e alvo com máscara.
         Fallback para rect collision se máscara não disponível.
+
+        Prioridade de detecção:
+        1. get_collision_mask_data() — máscara pixel-perfect com offset correto
+           (inclui float vertical, jitter, etc). Respeita pixels None do mapa.
+        2. Atributo .mask + .rect — padrão pygame.sprite.
+        3. Fallback AABB puro via .rect.
         """
-        # Se não possui mask explícita, usa fallback de rect
-        mask = getattr(target_with_mask, "mask", None)  # type: ignore[attr-defined]
-        if mask is None:
+        # Tentativa 1: get_collision_mask_data() — caminho correto para bosses
+        # com pixel map (ex.: StoneGolemBoss). O offset já inclui float e jitter.
+        mask_data = self._get_enemy_collision_mask_data(target_with_mask)
+        if mask_data is not None:
+            target_mask, (tx, ty) = mask_data
+            target_mask_rect = pygame.Rect(tx, ty, *target_mask.get_size())
+            if not entity_rect.colliderect(target_mask_rect):
+                return False
+            if entity_mask is None:
+                entity_mask = self._get_rect_mask(entity_rect.width, entity_rect.height)
+            return entity_mask.overlap(target_mask, (tx - entity_rect.x, ty - entity_rect.y)) is not None
+
+        # Tentativa 2: atributo .mask (padrão pygame.sprite)
+        sprite_mask = getattr(target_with_mask, "mask", None)  # type: ignore[attr-defined]
+        if sprite_mask is not None:
             target_rect: pygame.Rect | None = getattr(target_with_mask, "rect", None)
             if target_rect is None:
                 target_rect = pygame.Rect(
@@ -255,27 +273,23 @@ class Collisions:
                     target_with_mask.w,
                     target_with_mask.h,
                 )
-            return entity_rect.colliderect(target_rect)
+            if not entity_rect.colliderect(target_rect):
+                return False
+            if entity_mask is None:
+                entity_mask = self._get_rect_mask(entity_rect.width, entity_rect.height)
+            offset = (target_rect.x - entity_rect.x, target_rect.y - entity_rect.y)
+            return cast("pygame.mask.Mask", sprite_mask).overlap(entity_mask, offset) is not None  # type: ignore[attr-defined]
 
-        target_rect = pygame.Rect(
-            target_with_mask.x,
-            target_with_mask.y,
-            target_with_mask.w,
-            target_with_mask.h,
-        )
-        if not entity_rect.colliderect(target_rect):
-            return False
-
-        # Mask overlap check
-        if entity_mask is None:
-            entity_mask = self._get_rect_mask(entity_rect.width, entity_rect.height)
-
-        offset = (
-            int(entity_x - target_with_mask.x),
-            int(entity_y - target_with_mask.y),
-        )
-        # mask is type: ignore for Pylance, since we checked above
-        return cast("pygame.mask.Mask", mask).overlap(entity_mask, offset) is not None  # type: ignore[attr-defined]
+        # Tentativa 3: fallback AABB puro
+        fallback_rect: pygame.Rect | None = getattr(target_with_mask, "rect", None)
+        if fallback_rect is None:
+            fallback_rect = pygame.Rect(
+                target_with_mask.x,
+                target_with_mask.y,
+                target_with_mask.w,
+                target_with_mask.h,
+            )
+        return entity_rect.colliderect(fallback_rect)
 
     def _batch_query_for_projectiles(
         self,

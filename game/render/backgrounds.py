@@ -86,6 +86,15 @@ class Background(ABC):
         """Reseta para estado inicial."""
         raise NotImplementedError
 
+    def set_day_night_paused(self, paused: bool) -> None:
+        """Optional hook to pause/resume day/night cycle.
+
+        Background implementations that don't implement a day/night cycle
+        can ignore this. Provides a stable API for callers that want to
+        request pausing regardless of the concrete background type.
+        """
+        return None
+
 
 class Cloud:
     """Representa uma nuvem individual com otimizações."""
@@ -243,6 +252,7 @@ class MountainsBackground(Background):
         self._sunrise_duration: float = 600.0  # segundos para amanhecer completo (10 min)
         self._day_duration: float = 180.0  # dia (3 min intervalo)
         self._current_progress: float = 0.0
+        self._pause_day_night_cycle: bool = False  # Pausar ciclo enquanto boss ativo
 
         # Quanto o sol desce verticalmente quando vai do meio-dia à noite.
         self._sun_dive_distance: int = int(self.height * 0.22)
@@ -329,6 +339,16 @@ class MountainsBackground(Background):
         self._night_duration = max(0.0, night_duration)
         self._sunrise_duration = max(1.0, sunrise_duration)
         self._day_duration = max(0.0, day_duration)
+
+    def set_day_night_paused(self, paused: bool) -> None:
+        """Pausa ou retoma o ciclo dia/noite.
+        
+        Útil para manter a iluminação constante durante combates de boss.
+        
+        Args:
+            paused: True para pausar, False para retomar.
+        """
+        self._pause_day_night_cycle = paused
 
     def _create_layers(self) -> None:
         """Cria camadas de parallax otimizadas."""
@@ -573,7 +593,9 @@ class MountainsBackground(Background):
             cloud.update(dt, speed_mult)
 
         # Ciclo contínuo dia/noite com fases distintas.
-        self._phase_elapsed_time += dt * speed_mult
+        # Se o ciclo estiver pausado (boss ativo), não avança o tempo.
+        if not self._pause_day_night_cycle:
+            self._phase_elapsed_time += dt * speed_mult
         
         if self._phase == "day":
             if self._phase_elapsed_time >= self._day_duration:

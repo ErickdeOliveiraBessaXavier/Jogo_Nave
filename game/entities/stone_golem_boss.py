@@ -1330,9 +1330,11 @@ class StoneGolemBoss:
 
         self._update_sentry_spawn(dt, entity_manager)
 
-        # Rect acompanha o float vertical para casar com a posição desenhada.
-        self.rect.x = int(self.x)
-        self.rect.y = int(self.y + self._current_float_y)
+        # Rect acompanha float vertical e jitter para casar com a posição desenhada.
+        # get_collision_mask_data usa self.rect como fonte única de verdade,
+        # por isso jitter também deve entrar aqui.
+        self.rect.x = int(self.x + self._jitter_x)
+        self.rect.y = int(self.y + self._current_float_y + self._jitter_y)
         self._entity_manager = None
         return new_mines, new_shards, self._orbital_debris
 
@@ -2088,10 +2090,10 @@ class StoneGolemBoss:
         Posição base do boss (x, y), mas com ajuste do float vertical.
         """
         mask = self._build_collision_mask()
-        # Offset leva em conta o float vertical (oscilação)
-        offset_x = int(self.x)
-        offset_y = int(self.y + self._current_float_y)
-        return mask, (offset_x, offset_y)
+        # Usa self.rect como fonte única de verdade: já inclui float vertical
+        # e jitter, garantindo alinhamento perfeito com o AABB pré-filtro do
+        # sistema de colisão e com a posição visual desenhada.
+        return mask, (self.rect.x, self.rect.y)
 
     def collision_circle(self) -> tuple[float, float, float]:
         # Centro acompanha o float vertical do boss (mesmo offset usado pelo

@@ -2190,6 +2190,13 @@ class PlayingScene(Scene):
             self.entity_manager.boss = boss
 
         self._cache_boss_type()
+        
+        # Pausa o ciclo dia/noite enquanto o boss está ativo (se o background existir)
+        renderer_bg = None
+        if getattr(self, "r", None) is not None:
+            renderer_bg = getattr(self.r, "current_background", None)
+        if renderer_bg is not None:
+            renderer_bg.set_day_night_paused(True)
 
         _boss_music_map = {
             "spike": MusicState.SPIKE_BOSS,
@@ -2273,6 +2280,13 @@ class PlayingScene(Scene):
         self.entity_manager.boss = None
         self.boss_fight_active = False
         self._boss_type_cache = None
+        
+        # Retoma o ciclo dia/noite após a morte do boss (se o background existir)
+        renderer_bg = None
+        if getattr(self, "r", None) is not None:
+            renderer_bg = getattr(self.r, "current_background", None)
+        if renderer_bg is not None:
+            renderer_bg.set_day_night_paused(False)
 
         boss_score = Config.BOSS_DEFEAT_SCORE
         if self.score_multiplier_active:
