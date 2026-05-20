@@ -1,24 +1,18 @@
-# Revisão Técnica Crítica — Space Shooter
+# Revisão Técnica Crítica - Space Shooter
 
-Problemas pendentes após revisão inicial. Itens já corrigidos foram removidos.
+Resumo executivo dos pontos ainda relevantes após a implementação do Event Bus.
 
 ---
 
-## 🔴 CRÍTICO — Risco imediato de bugs ou degradação severa
+## Crítico
 
-### 1. `playing.py` — God Object com 1.500+ linhas e responsabilidades demais
+### 1. `playing.py` continua concentrando responsabilidades demais
 
-`PlayingScene` acumula: lógica de colisões, progressão de nível, boss fights, upgrades, input de teclado E controle, cutscenes, HUD, transições de mundo, cheat codes e meta-progression. Isso viola SRP de forma grave.
+`PlayingScene` ainda reúne colisões, progressão de nível, boss fights, upgrades, input, cutscenes, HUD, transições de mundo, cheat codes e meta-progression. O risco não é teórico: qualquer mudança em uma área continua com chance de afetar várias outras.
 
-```python
-# Sintoma: métodos como _handle_collisions() com 8 seções distintas,
-# _start_boss_fight() com lógica de spawn inline, _fire_bullets() com
-# ramificação de perfil de nave misturada com física de projétil
-```
+**Impacto:** a cena segue difícil de testar, de manter e de evoluir. O próximo passo natural é extrair controladores de domínio.
 
-**Impacto real:** qualquer mudança em colisões pode quebrar progressão; testar uma única feature exige instanciar toda a cena; bugs são difíceis de isolar.
-
-**Refatoração necessária:**
+**Direção recomendada:**
 ```python
 class BossFightController:
     def start(self, boss_type, health_mult): ...
@@ -33,22 +27,13 @@ class ShootingSystem:
     def fire(self, ship, entity_manager): ...
 ```
 
----
+### 2. `collisions.py` ainda está fortemente acoplado a tipos concretos
 
-### 2. `collisions.py` — Acoplamento forte com tipos concretos, não extensível
+A classe `Collisions` continua conhecendo muitos tipos específicos de entidade e combinações pontuais de comportamento. Isso limita a extensibilidade e aumenta o custo de introduzir novos inimigos ou regras especiais.
 
-`Collisions` importa diretamente 25+ tipos de entidade e tem métodos como `bullets_vs_slime_drips`, `ship_vs_spike_boss`. Adicionar um novo inimigo com colisão especial exige modificar essa classe.
+**Direção recomendada:** consolidar o fluxo em torno de protocolos como `Damageable` e reduzir métodos específicos por tipo.
 
 ```python
-# Problema: método específico para cada combinação
-def bullets_vs_slime_drips(self, bullets, slime_drips, entity_manager): ...
-def cannons_mines_vs_enemies(self, cannon_mines, enemies, entity_manager): ...
-def ship_vs_spike_boss(self, ship, boss, entity_manager): ...
-```
-
-**Solução baseada em protocolos já parcialmente definidos no projeto:**
-```python
-# collision_protocols.py já tem Damageable — use isso consistentemente
 class Collisions:
     def projectiles_vs_damageable(
         self,
@@ -56,26 +41,18 @@ class Collisions:
         targets: list[Damageable],
         grid: SpatialGrid,
     ) -> CollisionResult: ...
-    # Um método genérico substitui 15 métodos específicos
 ```
 
 ---
 
-## 🟡 MÉDIO — Dívida técnica acumulada
+## Médio
 
-### 3. `config.py` — `Config` como dataclass frozen com 300+ campos é um anti-pattern
+### 3. `config.py` ainda funciona como namespace global disfarçado
 
-Um único dataclass com campos de boss, slime, spike, formações, power-ups e UI não é configuração — é um namespace global disfarçado. Grupos não relacionados compartilham o mesmo espaço de nomes.
+O arquivo concentra configurações de boss, formações, power-ups e UI em um único bloco. Funciona, mas não é uma modelagem saudável para crescimento do projeto.
 
-```python
-# Problemas:
-# 1. SlimeBoss stages como campo de Config viola SRP
-SLIME_BOSS_STAGES: dict[SlimeBossState, StageConfig] = field(...)
-# 2. ConfigProxy com __getattr__ para SCREEN_WIDTH/HEIGHT é workaround para imutabilidade
-# 3. _runtime_screen como dict global mutável contradiz o frozen=True
-```
+**Direção recomendada:** separar por domínio.
 
-**Melhor abordagem:**
 ```python
 @dataclass(frozen=True)
 class DisplayConfig: ...
@@ -92,26 +69,28 @@ class GameConfig:
 
 ---
 
-## � CONCLUÍDO — Arquitetura refatorada
+## Concluído
 
-### 4. ~~Ausência de Event Bus real para comunicação entre sistemas~~ ✅ IMPLEMENTADO
+### 4. O Event Bus foi implementado e integrado
 
-**Resolução completa:**
-- `game/events/game_events.py`: Eventos tipados com dataclasses para segurança de tipo
-- `game/core/events.py`: EventBus redesenhado para trabalhar com eventos tipados
-- `game/systems/sound_system.py`: Sistema de áudio desacoplado (escuta eventos)
-- `game/systems/effects_system.py`: Sistema de efeitos desacoplado (escuta eventos)
-- `game/app.py`: EventBus centralizado e compartilhado
-- `game/scenes/playing.py`: Refatorada para emitir eventos em vez de chamar diretamente
+O item de comunicação entre sistemas foi resolvido com eventos tipados e consumidores dedicados.
 
-**Eventos implementados:**
-- `PlayerShot` — para disparos da nave
-- `EnemyDestroyed` — para inimigos mortos
-- `BossDefeated` — para derrota do boss
-- `PowerupCollected` — para power-ups
-- `PlayerDamaged` — para danos na nave
-- `SpawnFloatingScore` — para pontos flutuantes
-- `GameOver` — para fim de jogo
+**Componentes envolvidos:**
+- `game/events/game_events.py`: eventos tipados com dataclasses
+- `game/core/events.py`: EventBus com `on`, `off`, `emit` e `clear`
+- `game/systems/sound_system.py`: áudio reativo a eventos
+- `game/systems/effects_system.py`: efeitos visuais reativos a eventos
+- `game/app.py`: EventBus centralizado na aplicação
+- `game/scenes/playing.py`: emissão de eventos no fluxo de gameplay
+
+**Eventos principais:**
+- `PlayerShot`
+- `EnemyDestroyed`
+- `BossDefeated`
+- `PowerupCollected`
+- `PlayerDamaged`
+- `SpawnFloatingScore`
+- `GameOver`
 
 **Antes:**
 ```python
@@ -126,17 +105,16 @@ self.app.event_bus.emit(events.BossDefeated(
     boss_type=self._boss_type_cache,
     position=boss_center
 ))
-# SoundSystem, EffectsSystem reagem automaticamente
 ```
 
 ---
 
-## Resumo de status
+## Status resumido
 
 | # | Problema | Gravidade | Status |
 |---|----------|-----------|--------|
-| 1 | `PlayingScene` God Object | 🔴 Crítico | ⏳ Pendente |
-| 2 | `Collisions` acoplado a tipos concretos | 🔴 Crítico | ⏳ Pendente |
-| 3 | `config.py` — namespace global disfarçado | 🟡 Médio | ⏳ Pendente |
-| 4 | EventBus não usado | 🔵 Arquitetural | ✅ RESOLVIDO |
+| 1 | `PlayingScene` God Object | Crítico | Pendente |
+| 2 | `Collisions` acoplado a tipos concretos | Crítico | Pendente |
+| 3 | `config.py` como namespace global | Médio | Pendente |
+| 4 | Event Bus não usado | Arquitetural | Resolvido |
 

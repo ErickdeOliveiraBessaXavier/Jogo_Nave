@@ -45,12 +45,7 @@ class EffectsSystem:
 
     def _on_spawn_floating_score(self, event: events.SpawnFloatingScore) -> None:
         """Cria um texto de score flutuante."""
-        score_obj = FloatingScore(
-            x=event.x,
-            y=event.y,
-            value=event.score,
-            color=event.color,
-        )
+        score_obj = FloatingScore(x=event.x, y=event.y, value=event.score)
         self._entity_manager.floating_scores.append(score_obj)
 
     def cleanup(self) -> None:

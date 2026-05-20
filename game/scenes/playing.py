@@ -811,7 +811,9 @@ class PlayingScene(Scene):
     def enter(self) -> None:
         pygame.mouse.set_visible(False)
         if self.first_entry:
-            sound_manager.music_state_manager.transition_to(MusicState.GAME)
+            self.app.event_bus.emit(
+                events.MusicStateChange(state=MusicState.GAME, fade_ms=0)
+            )
             self.first_entry = False
         if self.transition_phase == TransitionPhase.WORLD_PANEL:
             self._apply_pending_world_transition()
@@ -1273,7 +1275,12 @@ class PlayingScene(Scene):
                 not self.music_fade_started
                 and self.warning_stage_timer >= Config.BOSS_MUSIC_FADE_OUT_START
             ):
-                sound_manager.fade_out_music(Config.BOSS_MUSIC_FADE_OUT_DURATION)
+                self.app.event_bus.emit(
+                    events.MusicStateChange(
+                        state=MusicState.SILENCE,
+                        fade_ms=int(Config.BOSS_MUSIC_FADE_OUT_DURATION * 1000),
+                    )
+                )
                 self.music_fade_started = True
 
             if self.warning_stage_timer >= Config.BOSS_PRE_WARNING_DELAY:
@@ -2283,7 +2290,9 @@ class PlayingScene(Scene):
         boss_music_state = getattr(type(boss), "MUSIC_STATE", None)
         if boss_music_state is None:
             boss_music_state = _boss_music_map.get(boss_type, MusicState.BOSS)
-        sound_manager.music_state_manager.transition_to(boss_music_state)
+        self.app.event_bus.emit(
+            events.MusicStateChange(state=boss_music_state, fade_ms=0)
+        )
         self.boss_music_started = True
 
     def _explode_entities(self, entities: list[Any], size: int = 15) -> None:
@@ -2375,7 +2384,9 @@ class PlayingScene(Scene):
 
         self.music_fade_started = False
         self.boss_music_started = False
-        sound_manager.music_state_manager.transition_to(MusicState.GAME)
+        self.app.event_bus.emit(
+            events.MusicStateChange(state=MusicState.GAME, fade_ms=0)
+        )
 
         current_level_number = self.current_level_index + 1
         if current_level_number == self.current_world.boss_level:

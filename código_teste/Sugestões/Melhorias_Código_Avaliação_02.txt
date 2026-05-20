@@ -1,206 +1,69 @@
 # Code Review: Event Bus Implementation
 
-## Avaliação Geral
-
-A implementação mostra intenção correta, mas a execução tem problemas sérios que precisam ser corrigidos antes de considerar isso "resolvido". Vou ser direto.
+Resumo executivo do estado do Event Bus após as correções aplicadas.
 
 ---
 
-## 🔴 Problemas Críticos
+## Corrigido
 
-### 1. Duplicação de Efeitos — O Bug Mais Sério
+### 1. Duplicação de explosões
 
-Em `effects_system.py`, o handler `_on_enemy_destroyed` cria uma explosão para cada inimigo destruído. Mas em `collisions.py`, o método `_apply_hit` já cria explosões via `entity_manager.spawn_explosion(...)`:
+O handler legado de `EnemyDestroyed` foi removido de `EffectsSystem`, e o fluxo passou a emitir `EnemyDestroyed` apenas no ponto correto da colisão.
 
-```python
-# collisions.py — já cria explosão
-def _apply_hit(self, ...):
-    if result.explosion_size > 0:
-        entity_manager.spawn_explosion(hit_x, hit_y, ...)  # Explosão #1
+### 2. Métodos inexistentes no `SoundSystem`
 
-# effects_system.py — cria OUTRA explosão via evento
-def _on_enemy_destroyed(self, event: events.EnemyDestroyed) -> None:
-    self._entity_manager.spawn_explosion(...)  # Explosão #2 (duplicada!)
-```
+O sistema de áudio agora usa apenas APIs reais do `SoundManager`.
 
-O evento `EnemyDestroyed` não está sendo emitido em nenhum lugar do código atual — então a duplicação ainda não se manifesta. Mas assim que for conectado corretamente, cada morte de inimigo gerará duas explosões. Isso revela que o EventBus foi implementado **sem remover o comportamento original**, criando uma arquitetura inconsistente.
+### 3. Falta de `off()` no `EventBus`
 
-**Regra fundamental violada**: ao mover responsabilidade para um handler de evento, o comportamento original deve ser removido do local anterior. Isso não foi feito.
+`EventBus.off()` foi implementado e os sistemas passaram a limpar seus inscritos com `cleanup()`.
 
----
+### 4. `EnemyDestroyed` sem emissão
 
-### 2. `SoundSystem` Duplica Lógica Sem Substituir
+O evento agora é emitido em `collisions._apply_hit()` quando o alvo é realmente destruído.
 
-```python
-# sound_system.py
-def _on_player_shot(self, event: events.PlayerShot) -> None:
-    if event.projectile_type == "cacador_laser":
-        sound_manager.play_boss_laser_fire()
-    else:
-        sound_manager.play_shot()
-```
+### 5. `BossDefeated` duplicando explosões
 
-Em `playing.py`, o som de tiro ainda é emitido diretamente pelo `SoundSystem` **e também** pelo código legado que permanece intacto. O evento `PlayerShot` é emitido, mas `sound_manager.play_shot()` dentro de `playing.py` não foi removido. Você tem dois caminhos paralelos ativos para o mesmo efeito.
+`EffectsSystem` deixou de reagir com explosão adicional para boss derrotado.
+
+### 6. `MusicStateChange` e `ScreenShake`
+
+O handler de música agora mapeia para métodos reais do `SoundManager`. `ScreenShake` segue sem som dedicado.
 
 ---
 
-### 3. `EffectsSystem` Recria `FloatingScore` Incorretamente
+## Atenção
 
-```python
-# effects_system.py
-def _on_spawn_floating_score(self, event: events.SpawnFloatingScore) -> None:
-    score_obj = FloatingScore(x=event.x, y=event.y, value=event.score, color=event.color)
-    self._entity_manager.floating_scores.append(score_obj)
-```
+### 7. `SpawnFloatingScore` ainda usa cor fixa
 
-Em `playing.py`, o método `_handle_collisions` emite `SpawnFloatingScore` com o score **já multiplicado** (`self._apply_score_multiplier(pts)`). Mas também há código legado que adiciona `FloatingScore` diretamente em `player_lasers_vs_enemies` e `cacador_lasers_vs_enemies` em `collisions.py`. Floating scores podem aparecer duplicados dependendo do caminho de código executado.
+O evento continua com cor padrão branca. Isso é aceitável funcionalmente, mas ainda é uma decisão visual acoplada ao evento.
 
----
+### 8. Arquitetura ainda híbrida
 
-### 4. `SpawnFloatingScore` com `color` Tem Tipo Errado
+O EventBus já cobre áudio e efeitos principais, mas `PlayingScene` ainda mantém algumas chamadas diretas de música e transição.
 
-```python
-@dataclass
-class SpawnFloatingScore(Event):
-    color: tuple[int, int, int] = (255, 255, 255)
-```
+### 9. Eventos sem consumo amplo
 
-`FloatingScore.__init__` em produção provavelmente aceita cor como parâmetro, mas o evento sempre envia branco. O `color` não vem do `HitResult`, então informações de cor de explosão específica (SlimeBoss verde, etc.) são silenciosamente descartadas.
+`LevelCleared`, `ScoreGained` e `GameStateChange` continuam definidos com pouco ou nenhum consumo.
 
 ---
 
-## 🟠 Problemas Graves de Arquitetura
+## Status
 
-### 5. EventBus Não Tem `off()` — Memory Leak Garantido
-
-```python
-class EventBus:
-    def on(self, event_type, fn): ...
-    def emit(self, event): ...
-    def clear(self): ...  # Nuclear — remove TUDO
-```
-
-Não existe `off(event_type, handler)`. Se uma cena se registra no EventBus e depois é destruída, os handlers ficam referenciando objetos mortos. O método `clear()` é uma solução nuclear que exige reregistro de todos os sistemas — impraticável numa arquitetura real com hot-reload de cenas.
-
-A solução adequada:
-
-```python
-def off(self, event_type: Type[T], fn: Callable[[T], None]) -> None:
-    handlers = self._subscribers.get(event_type, [])
-    try:
-        handlers.remove(fn)
-    except ValueError:
-        pass
-```
-
-E os sistemas devem ter `cleanup()` funcional:
-
-```python
-class SoundSystem:
-    def cleanup(self) -> None:
-        self._bus.off(events.PlayerShot, self._on_player_shot)
-        self._bus.off(events.EnemyDestroyed, self._on_enemy_destroyed)
-        # ...
-```
-
-O `cleanup()` atual em `sound_system.py` tem um comentário dizendo que não funciona. Isso é technical debt admitido na entrega.
-
----
-
-### 6. `SoundSystem._on_enemy_destroyed` Chama o Som Errado
-
-```python
-def _on_enemy_destroyed(self, event: events.EnemyDestroyed) -> None:
-    sound_manager.play_explosion()  # Este método não existe em SoundManager
-```
-
-`SoundManager` não tem `play_explosion()` — tem `play_explosion_asteroid()`, `play_explosion_alien()`, `play_explosion_boss()`. O método genérico não existe. Isso provavelmente lança `AttributeError` silenciado pelo decorator `@require_audio`.
-
----
-
-### 7. `EnemyDestroyed` Nunca é Emitido
-
-Procurando em todo o codebase, `events.EnemyDestroyed` é definido mas não é emitido em lugar nenhum. O `SoundSystem` se registra para ouvir esse evento, mas ele nunca chega. Isso significa que `_on_enemy_destroyed` e `_on_boss_defeated` no `SoundSystem` são código morto.
-
-O fluxo correto exigiria emissão em `collisions.py` dentro de `_apply_hit` quando `result.killed == True`, mas isso não foi implementado.
-
----
-
-### 8. `BossDefeated` Cria Explosão Duplicada
-
-```python
-# effects_system.py
-def _on_boss_defeated(self, event: events.BossDefeated) -> None:
-    self._entity_manager.spawn_explosion(x=..., y=..., size=50)
-
-# playing.py — _end_boss_fight() já cria explosões extensas:
-self.entity_manager.spawn_explosion(boss_center[0], boss_center[1], size=60)
-for i in range(num_exp):
-    self.entity_manager.spawn_explosion(ex, ey, size=40)
-# ... E emite o evento DEPOIS
-self.app.event_bus.emit(events.BossDefeated(...))
-```
-
-O evento é emitido após todas as explosões já terem sido criadas. O handler cria mais uma explosão adicional no centro. Com boss de tamanho 50, isso é visualmente perceptível e incorreto.
-
----
-
-### 9. `MusicStateChange` e `ScreenShake` Sem Implementação Real
-
-```python
-def _on_music_state_change(self, event: events.MusicStateChange) -> None:
-    sound_manager.set_music_state(event.state, event.fade_ms)  # método não existe
-
-def _on_screen_shake(self, event: events.ScreenShake) -> None:
-    sound_manager.play("rumble", volume=0.7)  # método não existe
-```
-
-`SoundManager` não tem `set_music_state()` nem `play()`. Esses handlers vão falhar silenciosamente em runtime.
-
----
-
-## 🟡 Problemas de Design
-
-### 10. Eventos Assimétricos — Metade do Sistema Ainda é Imperativo
-
-A implementação é parcial por design. Alguns sons usam eventos, outros não. Não há consistência. Isso é pior do que não ter EventBus, porque agora existem dois sistemas paralelos com comportamento undefined quando ambos disparam.
-
-Se o EventBus não substitui completamente o acoplamento direto, ele apenas adiciona complexidade sem benefício.
-
----
-
-### 11. `SpawnFloatingScore` Viola Single Responsibility
-
-O evento carrega responsabilidade de renderização (cor do texto). Eventos devem transportar dados de domínio, não decisões visuais. A cor deveria ser determinada pelo sistema de renderização com base no tipo de evento ou contexto, não ser hardcoded no ponto de emissão.
-
----
-
-### 12. `game_events.py` Tem Eventos Sem Uso Imediato
-
-`LevelCleared`, `ScoreGained`, `GameStateChange` são definidos mas não emitidos nem consumidos. Isso não é problema em si, mas combinado com `EnemyDestroyed` que também não é emitido, sugere que a lista de eventos foi expandida especulativamente sem completar a implementação dos casos de uso reais.
-
----
-
-## Resumo do Estado Real da Implementação
-
-| Afirmação no PR | Realidade |
+| Área | Status |
 |---|---|
-| ✅ Desacoplamento completo | ❌ Dois sistemas paralelos ativos |
-| ✅ SoundSystem sem dependência de PlayingScene | ⚠️ Verdade, mas com métodos inexistentes |
-| ✅ EffectsSystem desacoplado | ❌ Cria efeitos duplicados |
-| ✅ Type Safety | ⚠️ Tipos corretos, mas emissões ausentes |
-| ✅ Item #4 RESOLVIDO | ❌ Implementação incompleta e com bugs |
+| Emissão de eventos principais | OK |
+| Cleanup de handlers | OK |
+| Duplicação de explosões | Resolvida |
+| Métodos inexistentes no áudio | Resolvido |
+| Itens de design restantes | Pendentes |
 
 ---
 
-## O Que Precisa Ser Feito Para Resolver Corretamente
+## Próximos passos
 
-1. **Implementar `off()` no EventBus** antes de qualquer uso em produção
-2. **Remover o comportamento original** ao mover responsabilidade para handlers — escolha um caminho ou o outro, nunca os dois
-3. **Emitir `EnemyDestroyed`** em `collisions._apply_hit` quando `result.killed` for `True`, passando o `enemy_type` correto
-4. **Corrigir métodos inexistentes** em `SoundSystem` (`play_explosion`, `set_music_state`, `play`)
-5. **Remover explosão duplicada** do `_on_boss_defeated` ou remover as explosões de `_end_boss_fight` e centralizar no handler
-6. **Implementar `cleanup()`** em `SoundSystem` e `EffectsSystem` usando `off()`
-7. **Auditar todos os pontos de emissão** para garantir que o comportamento original foi removido
+1. Remover a cor fixa de `SpawnFloatingScore` se quiser manter os eventos mais puros.
+2. Migrar os pontos restantes de música/transição, se a meta for EventBus completo.
+3. Consolidar ou remover eventos ainda não consumidos, se não houver uso próximo.
 
-A arquitetura do EventBus é correta como direção. A execução precisa de uma segunda iteração completa.
+O fluxo principal agora está estável; o restante é refinamento de arquitetura.

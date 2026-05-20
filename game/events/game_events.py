@@ -127,7 +127,6 @@ class SpawnFloatingScore(Event):
     x: float
     y: float
     score: int
-    color: tuple[int, int, int] = (255, 255, 255)
 
 
 @dataclass
