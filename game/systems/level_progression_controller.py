@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import time
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 from ..core.levels import LevelConfig, get_level_config
 from ..core.meta_progression_service import MetaProgressionService
@@ -30,10 +30,10 @@ logger = logging.getLogger(__name__)
 class ProgressionStatus(Enum):
     """Estado da progressão após avaliação em check_progression()."""
 
-    NONE = auto()            # Threshold ainda não atingido
+    NONE = auto()  # Threshold ainda não atingido
     CLEANUP_NEEDED = auto()  # Threshold atingido, hostis restantes em tela
-    BOSS_READY = auto()      # Threshold atingido, tela limpa, boss disponível
-    LEVEL_CLEARED = auto()   # Threshold atingido, tela limpa, sem boss
+    BOSS_READY = auto()  # Threshold atingido, tela limpa, boss disponível
+    LEVEL_CLEARED = auto()  # Threshold atingido, tela limpa, sem boss
 
 
 class LevelProgressionController:
@@ -62,7 +62,7 @@ class LevelProgressionController:
         enemy_spawner: EnemySpawner,
         player_profile: Any,
         difficulty_preset: DifficultyPreset,
-        difficulty_settings: dict[str, Any],
+        difficulty_settings: Mapping[str, Any],
     ) -> None:
         self._em = entity_manager
         self._bus = event_bus
