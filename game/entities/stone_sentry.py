@@ -11,6 +11,7 @@ from ..core.sound import sound_manager
 from ..entities.alien_bullet import AlienBullet
 
 if TYPE_CHECKING:
+    from ..systems.entity_context import EnemyUpdateContext
     from ..systems.hit_result import HitResult
 
 
@@ -699,6 +700,13 @@ class StoneSentry:
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+
+    def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
+        emitted = self.update(
+            ctx.sdt, (ctx.player_x, ctx.player_y), ctx.other_enemies
+        )
+        if emitted:
+            ctx.new_alien_bullets.extend(emitted)
 
     def update(
         self,

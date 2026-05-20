@@ -35,38 +35,7 @@ class ShootingSystem:
 
 ---
 
-### 2. `entity_manager.py` — Listas paralelas sem abstração, update/draw misturado
-
-O manager mantém 40+ listas paralelas (`bullets`, `homing_bullets`, `emp_waves`, `explosive_effects`...) sem nenhuma abstração comum. O método `update()` tem 200+ linhas com branches para cada tipo específico de entidade.
-
-```python
-# Problema: isinstance() em hot path a cada frame
-if isinstance(en, Alien):
-    s = en.update(sdt)
-elif isinstance(en, EyeEnemy):
-    s = en.update(sdt, player_x, player_y)
-elif isinstance(en, GuidedMeteor):
-    en.update(sdt, self.is_side_scroll, player_x, player_y)
-# ... mais 10 branches
-```
-
-**Isso é O(n·k) no pior caso onde k = número de tipos.** Viola o Princípio Aberto/Fechado — adicionar um inimigo exige modificar `entity_manager.py`.
-
-**Solução:**
-```python
-class Entity(Protocol):
-    dead: bool
-    def update(self, dt: float, ctx: UpdateContext) -> None: ...
-    def draw(self, surface: Surface) -> None: ...
-
-# Entidades recebem ctx com player_pos, is_side_scroll, etc.
-for entity in self._active_entities:
-    entity.update(dt, self._update_ctx)
-```
-
----
-
-### 3. `collisions.py` — Acoplamento forte com tipos concretos, não extensível
+### 2. `collisions.py` — Acoplamento forte com tipos concretos, não extensível
 
 `Collisions` importa diretamente 25+ tipos de entidade e tem métodos como `bullets_vs_slime_drips`, `ship_vs_spike_boss`. Adicionar um novo inimigo com colisão especial exige modificar essa classe.
 
@@ -94,7 +63,7 @@ class Collisions:
 
 ## 🟡 MÉDIO — Dívida técnica acumulada
 
-### 4. `config.py` — `Config` como dataclass frozen com 300+ campos é um anti-pattern
+### 3. `config.py` — `Config` como dataclass frozen com 300+ campos é um anti-pattern
 
 Um único dataclass com campos de boss, slime, spike, formações, power-ups e UI não é configuração — é um namespace global disfarçado. Grupos não relacionados compartilham o mesmo espaço de nomes.
 
@@ -125,7 +94,7 @@ class GameConfig:
 
 ## 🔵 ARQUITETURAL — Decisões que limitam o crescimento do projeto
 
-### 5. Ausência de Event Bus real para comunicação entre sistemas
+### 4. Ausência de Event Bus real para comunicação entre sistemas
 
 O projeto tem `events.py` com `EventBus`, mas não é usado pelos sistemas principais. `PlayingScene` chama diretamente `sound_manager.play_X()`, `player_profile.record_X()`, e `entity_manager.spawn_X()` — tudo acoplamento direto.
 
@@ -147,7 +116,6 @@ self.event_bus.emit("enemy_killed", enemy=enemy, position=pos, points=pts)
 | # | Problema | Gravidade | Esforço |
 |---|----------|-----------|---------|
 | 1 | `PlayingScene` God Object | 🔴 Crítico | Alto |
-| 2 | `EntityManager` com isinstance em hot path | 🔴 Crítico | Alto |
-| 3 | `Collisions` acoplado a tipos concretos | 🔴 Crítico | Alto |
-| 4 | `config.py` — namespace global disfarçado | 🟡 Médio | Alto |
-| 5 | EventBus existente mas não usado | 🔵 Arquitetural | Alto |
+| 2 | `Collisions` acoplado a tipos concretos | 🔴 Crítico | Alto |
+| 3 | `config.py` — namespace global disfarçado | 🟡 Médio | Alto |
+| 4 | EventBus existente mas não usado | 🔵 Arquitetural | Alto |

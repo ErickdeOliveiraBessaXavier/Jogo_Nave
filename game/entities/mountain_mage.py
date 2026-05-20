@@ -12,6 +12,7 @@ from ..core import colors
 from ..core.config import config as Config
 
 if TYPE_CHECKING:
+    from ..systems.entity_context import EnemyUpdateContext
     from ..systems.hit_result import HitResult
 
 # ---------------------------------------------------------------------------
@@ -1416,6 +1417,11 @@ class MountainMage:
 
     def should_remove(self) -> bool:
         return self.dead
+
+    def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
+        emitted = self.update(ctx.sdt, (ctx.player_x, ctx.player_y))
+        if emitted:
+            ctx.new_enemies.extend(emitted)
 
     def update(
         self, dt: float, player_pos: tuple[float, float] | None = None

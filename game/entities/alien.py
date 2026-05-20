@@ -10,6 +10,7 @@ from ..core.sprite_loader import sprite_loader
 from .alien_bullet import AlienBullet
 
 if TYPE_CHECKING:
+    from ..systems.entity_context import EnemyUpdateContext
     from ..systems.hit_result import HitResult
 
 
@@ -90,6 +91,11 @@ class Alien:
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+
+    def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
+        emitted = self.update(ctx.sdt)
+        if emitted:
+            ctx.new_alien_bullets.extend(emitted)
 
     def update(self, dt: float) -> list[AlienBullet] | None:
         # Se controlado por formação, não move automaticamente

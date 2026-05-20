@@ -9,6 +9,7 @@ from ..core.config import config as Config
 from .eye_laser import EyeLaser
 
 if TYPE_CHECKING:
+    from ..systems.entity_context import EnemyUpdateContext
     from ..systems.hit_result import HitResult
 
 
@@ -57,6 +58,11 @@ class EyeEnemy:
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+
+    def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
+        emitted = self.update(ctx.sdt, ctx.player_x, ctx.player_y)
+        if emitted:
+            ctx.new_eye_lasers.extend(emitted)
 
     def update(
         self, dt: float, player_x: float, player_y: float

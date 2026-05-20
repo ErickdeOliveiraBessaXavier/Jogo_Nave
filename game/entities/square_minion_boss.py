@@ -9,6 +9,7 @@ import pygame
 from .draw_utils import draw_square_trail_particle, rotated_square_corners
 
 if TYPE_CHECKING:
+    from ..systems.entity_context import EnemyUpdateContext
     from ..systems.hit_result import HitResult
 
 
@@ -100,6 +101,9 @@ class SquareMinionBoss:
 
         # Animação da borda pixelada
         self.border_anim_offset: float = random.uniform(0, 100)
+
+    def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
+        self.update(ctx.sdt, ctx.screen_width, ctx.screen_height)
 
     def update(
         self, dt: float, screen_width: int = 1600, screen_height: int = 900

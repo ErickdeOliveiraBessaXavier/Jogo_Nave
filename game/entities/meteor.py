@@ -10,6 +10,7 @@ from ..core import colors
 from ..core.config import config as Config
 
 if TYPE_CHECKING:
+    from ..systems.entity_context import EnemyUpdateContext
     from ..systems.entity_manager import EntityManager
     from ..systems.hit_result import HitResult
 
@@ -169,6 +170,9 @@ class Meteor:
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+
+    def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
+        self.update(ctx.sdt, ctx.is_side_scroll)
 
     def update(self, dt: float, is_side_scroll: bool = False):
         """Update meteor position and rotation."""

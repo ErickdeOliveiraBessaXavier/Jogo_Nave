@@ -70,6 +70,7 @@ from ..entities.stone_golem_boss import (
 )
 from ..entities.stone_sentry import StoneSentry
 from .collision_protocols import Removable
+from .entity_context import EnemyUpdateContext
 from .hit_result import MeteorSpec
 
 if TYPE_CHECKING:
@@ -665,39 +666,34 @@ class EntityManager:
                     if q not in self.boss_squares:
                         self.boss_squares.append(q)
 
-        # Atualizar Inimigos Comuns
+        # Atualizar Inimigos Comuns via dispatch polimórfico.
+        # Cada inimigo implementa update_in_context(ctx) e empurra emissões
+        # (bullets/lasers/orbs/novos inimigos) nos buffers do ctx — elimina
+        # a cadeia de isinstance e respeita o Princípio Aberto/Fechado.
+        ctx = EnemyUpdateContext(
+            dt=dt,
+            sdt=0.0,
+            player_x=player_x,
+            player_y=player_y,
+            is_side_scroll=self.is_side_scroll,
+            screen_width=screen_width,
+            screen_height=screen_height,
+            other_enemies=self.enemies,
+        )
         for en in self.enemies:
             update_ice_linger(en, dt)
             mul = emp_mul_for(en) * ice_mul_for(en)
-            sdt = enemy_dt * mul
-            if isinstance(en, Alien):
-                s = en.update(sdt)
-                if s:
-                    new_alien_bullets.extend(s)
-            elif isinstance(en, EyeEnemy):
-                s = en.update(sdt, player_x, player_y)
-                if s:
-                    new_eye_lasers.extend(s)
-            elif isinstance(en, GuidedMeteor):
-                en.update(sdt, self.is_side_scroll, player_x, player_y)
-            elif isinstance(en, SquareMinionBoss):
-                en.update(sdt, screen_width, screen_height)
-            elif isinstance(en, ElementalRobot):
-                no = en.update(dt, sdt, player_x, player_y)
-                if no:
-                    self.energy_orbs.extend(no)
-            elif isinstance(en, StoneSentry):
-                s = en.update(sdt, (player_x, player_y), self.enemies)
-                if s:
-                    new_alien_bullets.extend(s)
-            elif isinstance(en, MountainMage):
-                nst = en.update(sdt, (player_x, player_y))
-                if nst:
-                    self.enemies.extend(nst)
-            elif isinstance(en, Meteor):
-                en.update(sdt, self.is_side_scroll)
+            ctx.sdt = enemy_dt * mul
+            update_in_ctx = getattr(en, "update_in_context", None)
+            if update_in_ctx is not None:
+                update_in_ctx(ctx)
             else:
-                en.update(sdt)
+                en.update(ctx.sdt)
+
+        new_alien_bullets.extend(ctx.new_alien_bullets)
+        new_eye_lasers.extend(ctx.new_eye_lasers)
+        self.energy_orbs.extend(ctx.new_energy_orbs)
+        self.enemies.extend(ctx.new_enemies)
 
         for prop in self.mountain_propellers:
             prop.update(dt)

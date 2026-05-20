@@ -1,11 +1,14 @@
 import math
-from typing import Tuple
+from typing import TYPE_CHECKING, Tuple
 
 import pygame
 
 from ..core import colors
 from ..core.config import config as Config
 from .meteor import Meteor
+
+if TYPE_CHECKING:
+    from ..systems.entity_context import EnemyUpdateContext
 
 
 class GuidedMeteor(Meteor):
@@ -51,6 +54,9 @@ class GuidedMeteor(Meteor):
 
         # Cor especial para meteoros guiados - Verde para destaque
         self.base_color: Tuple[int, int, int] = colors.GREEN
+
+    def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
+        self.update(ctx.sdt, ctx.is_side_scroll, ctx.player_x, ctx.player_y)
 
     def update(
         self,

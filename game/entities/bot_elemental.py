@@ -74,6 +74,7 @@ from ..entities.bot_elemental_pixel_map import THRUSTER_NEUTRAL as _THRUSTER_NEU
 from ..entities.bot_elemental_pixel_map import C as _C
 
 if TYPE_CHECKING:
+    from ..systems.entity_context import EnemyUpdateContext
     from ..systems.hit_result import HitResult
 
 from .bot_elemental_attacks import ChargeParticle, EnergyOrb, clamp, ease_out_cubic
@@ -655,6 +656,11 @@ class ElementalRobot:
     # =========================================================================
     # UPDATE
     # =========================================================================
+
+    def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
+        emitted = self.update(ctx.dt, ctx.sdt, ctx.player_x, ctx.player_y)
+        if emitted:
+            ctx.new_energy_orbs.extend(emitted)
 
     def update(
         self,
