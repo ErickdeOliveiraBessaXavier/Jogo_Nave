@@ -12,10 +12,11 @@ from __future__ import annotations
 import logging
 import time
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional
 
 from ..core.levels import LevelConfig, get_level_config
 from ..core.meta_progression_service import MetaProgressionService
+from ..core.world_config import WorldConfig, get_world_for_level
 from ..events import game_events as events
 
 if TYPE_CHECKING:
@@ -48,9 +49,8 @@ class LevelProgressionController:
     - Avanço para próximo nível (índice + spawner)
 
     Comunicação com PlayingScene:
-    - check_progression() retorna ProgressionStatus; a cena decide a ação.
+    - check_level_progression() avalia o estado e dispara callbacks.
     - notify_*() recebem deltas de gameplay (kills, dano, powerups).
-    - advance_to_next_level() incrementa índice e devolve o novo LevelConfig.
     - Atributos públicos (level_start_score, current_level_number, etc.) são
       lidos pela cena conforme necessário.
     """
@@ -63,6 +63,10 @@ class LevelProgressionController:
         player_profile: Any,
         difficulty_preset: DifficultyPreset,
         difficulty_settings: Mapping[str, Any],
+        on_level_cleared: Callable[[bool], None],
+        on_boss_threshold_reached: Callable[[], None],
+        on_cleanup_needed: Callable[[], None],
+        on_advance_level: Callable[[bool, WorldConfig], None],
     ) -> None:
         self._em = entity_manager
         self._bus = event_bus
@@ -71,9 +75,16 @@ class LevelProgressionController:
         self._difficulty_preset = difficulty_preset
         self._difficulty_settings = difficulty_settings
 
+        # Callbacks
+        self._on_level_cleared = on_level_cleared
+        self._on_boss_threshold_reached = on_boss_threshold_reached
+        self._on_cleanup_needed = on_cleanup_needed
+        self._on_advance_level = on_advance_level
+
         # Configuração da fase atual
         self.current_level_index: int = 0
         self.level_config: Optional[LevelConfig] = None
+        self.current_world: Optional[WorldConfig] = None
         self.enemies_to_clear: int = 0
         self.has_boss: bool = False
         self.base_score_multiplier: float = 1.0
@@ -95,10 +106,13 @@ class LevelProgressionController:
     # Setup
     # ------------------------------------------------------------------
 
-    def setup(self, level_index: int, level_config: LevelConfig) -> None:
+    def setup(
+        self, level_index: int, level_config: LevelConfig, current_world: WorldConfig
+    ) -> None:
         """Inicializa o controlador para o nível inicial."""
         self.current_level_index = level_index
         self.level_config = level_config
+        self.current_world = current_world
         self._cache_thresholds()
         self._recompute_score_multiplier()
         self.reset_level_stats()
@@ -158,7 +172,7 @@ class LevelProgressionController:
             self._player_profile.record_attempt(self.current_level_number)
             self.level_attempt_recorded = True
 
-    def count_active_hostiles(self) -> int:
+    def _count_active_stage_hostiles(self) -> int:
         """Hostis vivos relevantes para conclusão da fase."""
         em = self._em
         active_enemies = sum(1 for e in em.enemies if not getattr(e, "dead", False))
@@ -184,27 +198,57 @@ class LevelProgressionController:
             + active_orbital_debris
         )
 
-    def check_progression(self) -> ProgressionStatus:
-        """Avalia progresso e retorna o que a cena deve fazer.
-
-        Quando o threshold é atingido, pausa o spawner antes de retornar.
-        """
+    def check_level_progression(
+        self, current_score: int, enemy_cleanup_active: bool
+    ) -> None:
+        """Avalia progresso da fase e dispara callbacks apropriados."""
         if self.enemies_destroyed_in_level < self.enemies_to_clear:
-            return ProgressionStatus.NONE
+            return
 
         self._enemy_spawner.stop()
+        active_hostiles = self._count_active_stage_hostiles()
 
-        if self.count_active_hostiles() > 0:
-            return ProgressionStatus.CLEANUP_NEEDED
-        if self.has_boss:
-            return ProgressionStatus.BOSS_READY
-        return ProgressionStatus.LEVEL_CLEARED
+        if active_hostiles > 0:
+            if not enemy_cleanup_active:
+                self._on_cleanup_needed()
+        else:
+            if self.has_boss:
+                self._on_boss_threshold_reached()
+            else:
+                self._advance_to_next_level(with_delay=False, current_score=current_score)
 
-    def record_clear(self, current_score: int, total_enemies_destroyed: int) -> None:
-        """Registra clear no perfil e emite LevelCleared.
+    def advance_after_boss(self, current_score: int) -> None:
+        """Inicia fluxo de transição após vitória contra o boss."""
+        self._advance_to_next_level(with_delay=True, current_score=current_score)
 
-        No-op se o timer da fase nunca iniciou (ex.: avanço sem PLAYING).
-        """
+    def _advance_to_next_level(self, with_delay: bool, current_score: int) -> None:
+        """Finaliza fase atual e sinaliza para a cena."""
+        self.record_clear(current_score)
+        self._on_level_cleared(with_delay)
+
+    def start_next_level(self, current_world: WorldConfig) -> None:
+        """Incrementa nível, carrega config e sinaliza início."""
+        self.current_level_index += 1
+        self.level_config = self.get_adjusted_level_config(self.current_level_number)
+        
+        new_world = get_world_for_level(self.current_level_number)
+        theme_changed = new_world.theme != current_world.theme
+        self.current_world = new_world
+
+        self._cache_thresholds()
+        self._recompute_score_multiplier()
+        self.reset_level_stats()
+
+        self._enemy_spawner.set_level(
+            self.current_level_number,
+            is_world_transition=theme_changed,
+            level_config=self.level_config,
+        )
+
+        self._on_advance_level(theme_changed, new_world)
+
+    def record_clear(self, current_score: int) -> None:
+        """Registra clear no perfil e emite LevelCleared."""
         if self.level_start_time is None:
             return
         clear_time = time.time() - self.level_start_time
@@ -213,7 +257,7 @@ class LevelProgressionController:
             level_number=self.current_level_number,
             time_taken=clear_time,
             score=level_score,
-            enemies_killed=total_enemies_destroyed,
+            enemies_killed=self.enemies_destroyed_in_level,
             damage_taken=self.level_damage_taken,
             powerups_collected=self.level_powerups_collected,
         )
@@ -224,20 +268,3 @@ class LevelProgressionController:
                 time_taken=clear_time,
             )
         )
-
-    def advance_to_next_level(self, is_world_transition: bool) -> LevelConfig:
-        """Incrementa índice, carrega config, zera estatísticas, atualiza spawner.
-
-        Retorna o novo LevelConfig para a cena sincronizar seus atributos.
-        """
-        self.current_level_index += 1
-        self.level_config = self.get_adjusted_level_config(self.current_level_number)
-        self._cache_thresholds()
-        self._recompute_score_multiplier()
-        self.reset_level_stats()
-        self._enemy_spawner.set_level(
-            self.current_level_number,
-            is_world_transition=is_world_transition,
-            level_config=self.level_config,
-        )
-        return self.level_config

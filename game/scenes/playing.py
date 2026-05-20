@@ -58,7 +58,6 @@ from ..systems.effects_system import EffectsSystem
 from ..systems.entity_manager import EntityManager
 from ..systems.level_progression_controller import (
     LevelProgressionController,
-    ProgressionStatus,
 )
 from ..systems.shooting_system import ShootingSystem
 from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
@@ -191,7 +190,6 @@ class PlayingScene(Scene):
         self.start_fade_active: bool = False
         self.start_fade_alpha: float = 255.0
         self.start_fade_elapsed: float = 0.0
-        self.level_config: LevelConfig | None = None
         self.lives: int = 0
         self.player_damage_multiplier: float = 1.0
         self.enemy_health_multiplier: float = 1.0
@@ -213,6 +211,36 @@ class PlayingScene(Scene):
         # `entity_manager` existe (criado em `_init_systems`).
         self._build_permanent_mini_ships()
         self._init_upgrades_from_profile()
+
+    @property
+    def enemies_destroyed_in_level(self) -> int:
+        if hasattr(self, "level_controller") and self.level_controller:
+            return self.level_controller.enemies_destroyed_in_level
+        return 0
+
+    @property
+    def enemies_to_clear(self) -> int:
+        if hasattr(self, "level_controller") and self.level_controller:
+            return self.level_controller.enemies_to_clear
+        return 0
+
+    @property
+    def has_boss(self) -> bool:
+        if hasattr(self, "level_controller") and self.level_controller:
+            return self.level_controller.has_boss
+        return False
+
+    @property
+    def level_config(self) -> Optional[LevelConfig]:
+        if hasattr(self, "level_controller") and self.level_controller:
+            return self.level_controller.level_config
+        return None
+
+    @level_config.setter
+    def level_config(self, value: Optional[LevelConfig]) -> None:
+        # Mantém compatibilidade com atribuições diretas legadas
+        if hasattr(self, "level_controller") and self.level_controller:
+            self.level_controller.level_config = value
 
     # ------------------------------------------------------------------
     # Inicialização segmentada
@@ -350,7 +378,7 @@ class PlayingScene(Scene):
         """Instancia sistemas de jogo (EntityManager, spawners, colisões)."""
         initial_level_number = self.current_level_index + 1
         base_config = get_level_config(initial_level_number, self.difficulty_preset)
-        self.level_config = MetaProgressionService.get_adjusted_config(
+        level_config = MetaProgressionService.get_adjusted_config(
             self.player_profile, base_config
         )
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
@@ -381,7 +409,7 @@ class PlayingScene(Scene):
         # diferentes do primeiro (ex.: começar em STARFIELD via world select).
         if not is_initial_level:
             self.enemy_spawner.set_level(
-                initial_level_number, level_config=self.level_config
+                initial_level_number, level_config=level_config
             )
         self.powerup_spawner = PowerUpSpawner(self.difficulty_preset)
         self.collisions = Collisions(self.app.event_bus)
@@ -394,10 +422,15 @@ class PlayingScene(Scene):
             player_profile=self.player_profile,
             difficulty_preset=self.difficulty_preset,
             difficulty_settings=self.difficulty_settings,
+            on_level_cleared=self._on_level_cleared,
+            on_boss_threshold_reached=self._on_boss_threshold_reached,
+            on_cleanup_needed=self._on_cleanup_needed,
+            on_advance_level=self._on_advance_level,
         )
         self.level_controller.setup(
             level_index=self.current_level_index,
-            level_config=self.level_config,
+            level_config=level_config,
+            current_world=self.current_world,
         )
 
         self.shooting = ShootingSystem(
@@ -491,6 +524,50 @@ class PlayingScene(Scene):
         self.preparation_time_left = Config.PREPARATION_TIME
         self.level_controller.reset_level_stats()
         self._reset_ship_for_level_entry()
+
+    def _on_level_cleared(self, with_delay: bool) -> None:
+        """Sinal do LevelProgressionController: fase concluída."""
+        if with_delay:
+            if self.transition_phase == TransitionPhase.PLAYING:
+                self._set_transition_phase(TransitionPhase.POST_VICTORY_DELAY)
+        else:
+            self._start_next_level()
+
+    def _on_boss_threshold_reached(self) -> None:
+        """Sinal do LevelProgressionController: threshold atingido, boss pendente."""
+        self.boss_controller.enemy_cleanup_active = False
+        self.boss_controller.pre_boss_transition = True
+
+    def _on_cleanup_needed(self) -> None:
+        """Sinal do LevelProgressionController: hostis ainda ativos, iniciar blink."""
+        self.boss_controller.begin_cleanup()
+
+    def _on_advance_level(self, theme_changed: bool, new_world: WorldConfig) -> None:
+        """Sinal do LevelProgressionController: novo nível iniciado."""
+        # Sincroniza o current_level_index da cena com o do controlador
+        self.current_level_index = self.level_controller.current_level_index
+
+        if theme_changed:
+            self.pending_world_transition = new_world
+        else:
+            self.current_world = new_world
+            self.pending_world_transition = None
+            self._apply_mountains_progress()
+
+        self._base_score_multiplier = self.level_controller.base_score_multiplier
+
+        self.boss_controller.reset()
+        self.entity_manager.clear_for_level_transition()
+
+        if self.ship.mini_ships_timer > 0.0:
+            self._build_mini_ships()
+        else:
+            self._build_permanent_mini_ships()
+
+        if theme_changed:
+            self._start_world_transition_cutscene(new_world)
+        else:
+            self._begin_playing_state()
 
     def _reset_ship_for_level_entry(self) -> None:
         """Reposiciona a nave para a posição de entrada do nível atual."""
@@ -1508,7 +1585,6 @@ class PlayingScene(Scene):
 
         if ship_hit_proj or ship_hit_form:
             self._handle_ship_hit()
-            self.level_controller.notify_damage_taken()
 
         batched_events = self._batch_floating_scores(
             score_events, proximity_threshold=self.floating_score_batch_threshold
@@ -1757,6 +1833,7 @@ class PlayingScene(Scene):
             return
 
         self._change_lives(-1)
+        self.level_controller.notify_damage_taken()
         is_game_over = self.lives <= 0
         # No game over, persistir o ganho da fase incompleta (record_clear não
         # roda nesse caso). Em perdas de vida com vidas restantes, deixar para
@@ -1800,16 +1877,10 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
 
     def _check_level_progression(self) -> None:
-        status = self.level_controller.check_progression()
-        if status is ProgressionStatus.NONE:
-            return
-        if status is ProgressionStatus.CLEANUP_NEEDED:
-            if not self.boss_controller.enemy_cleanup_active:
-                self.boss_controller.begin_cleanup()
-        elif status is ProgressionStatus.BOSS_READY:
-            self.boss_controller.pre_boss_transition = True
-        elif status is ProgressionStatus.LEVEL_CLEARED:
-            self._advance_to_next_level(with_delay=False)
+        self.level_controller.check_level_progression(
+            current_score=self.score,
+            enemy_cleanup_active=self.boss_controller.enemy_cleanup_active,
+        )
 
     def _start_boss_fight(self) -> None:
         level_config = self.level_config
@@ -1826,15 +1897,7 @@ class PlayingScene(Scene):
         if self.level_controller.current_level_number == self.current_world.boss_level:
             self.player_profile.unlock_next_world(self.current_world.world_id)
 
-        self._advance_to_next_level()
-
-    def _advance_to_next_level(self, with_delay: bool = True) -> None:
-        self.level_controller.record_clear(self.score, self.total_enemies_destroyed)
-        if with_delay:
-            if self.transition_phase == TransitionPhase.PLAYING:
-                self._set_transition_phase(TransitionPhase.POST_VICTORY_DELAY)
-        else:
-            self._start_next_level()
+        self.level_controller.advance_after_boss(self.score)
 
     def _start_next_level(self) -> None:
         # Checkpoint usa o número 1-based do nível recém-concluído.
@@ -1843,39 +1906,7 @@ class PlayingScene(Scene):
         )
         self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
 
-        next_level_number = self.level_controller.current_level_number + 1
-        new_world = get_world_for_level(next_level_number)
-        theme_changed = new_world.theme != self.current_world.theme
-
-        self.level_config = self.level_controller.advance_to_next_level(
-            is_world_transition=theme_changed
-        )
-        self.current_level_index = self.level_controller.current_level_index
-
-        if theme_changed:
-            self.pending_world_transition = new_world
-        else:
-            self.current_world = new_world
-            self.pending_world_transition = None
-            # Avanço dentro do mesmo mundo: atualiza só o progress visual.
-            # Theme change delega para _apply_world_theme após a cutscene.
-            self._apply_mountains_progress()
-
-        self.boss_controller.reset()
-        self.entity_manager.clear_for_level_transition()
-
-        # Restaura mini-naves após a limpeza:
-        #  - Powerup `mini_ships` ainda ativo → recria o par temporário (left+right).
-        #  - Senão → restaura as permanentes do Engenheiro (se a nave tiver).
-        if self.ship.mini_ships_timer > 0.0:
-            self._build_mini_ships()
-        else:
-            self._build_permanent_mini_ships()
-
-        if theme_changed:
-            self._start_world_transition_cutscene(new_world)
-        else:
-            self._begin_playing_state()
+        self.level_controller.start_next_level(self.current_world)
 
     # ------------------------------------------------------------------
     # Eventos de entrada
