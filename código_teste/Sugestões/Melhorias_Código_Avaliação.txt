@@ -92,30 +92,51 @@ class GameConfig:
 
 ---
 
-## 🔵 ARQUITETURAL — Decisões que limitam o crescimento do projeto
+## � CONCLUÍDO — Arquitetura refatorada
 
-### 4. Ausência de Event Bus real para comunicação entre sistemas
+### 4. ~~Ausência de Event Bus real para comunicação entre sistemas~~ ✅ IMPLEMENTADO
 
-O projeto tem `events.py` com `EventBus`, mas não é usado pelos sistemas principais. `PlayingScene` chama diretamente `sound_manager.play_X()`, `player_profile.record_X()`, e `entity_manager.spawn_X()` — tudo acoplamento direto.
+**Resolução completa:**
+- `game/events/game_events.py`: Eventos tipados com dataclasses para segurança de tipo
+- `game/core/events.py`: EventBus redesenhado para trabalhar com eventos tipados
+- `game/systems/sound_system.py`: Sistema de áudio desacoplado (escuta eventos)
+- `game/systems/effects_system.py`: Sistema de efeitos desacoplado (escuta eventos)
+- `game/app.py`: EventBus centralizado e compartilhado
+- `game/scenes/playing.py`: Refatorada para emitir eventos em vez de chamar diretamente
 
+**Eventos implementados:**
+- `PlayerShot` — para disparos da nave
+- `EnemyDestroyed` — para inimigos mortos
+- `BossDefeated` — para derrota do boss
+- `PowerupCollected` — para power-ups
+- `PlayerDamaged` — para danos na nave
+- `SpawnFloatingScore` — para pontos flutuantes
+- `GameOver` — para fim de jogo
+
+**Antes:**
 ```python
-# Estado atual:
 sound_manager.play_explosion_boss()
 self.player_profile.record_clear(...)
 self.entity_manager.spawn_explosion(...)
+```
 
-# Com EventBus:
-self.event_bus.emit("enemy_killed", enemy=enemy, position=pos, points=pts)
-# SoundSystem, ScoreSystem, EffectsSystem reagem independentemente
+**Depois:**
+```python
+self.app.event_bus.emit(events.BossDefeated(
+    boss_type=self._boss_type_cache,
+    position=boss_center
+))
+# SoundSystem, EffectsSystem reagem automaticamente
 ```
 
 ---
 
-## Resumo por prioridade
+## Resumo de status
 
-| # | Problema | Gravidade | Esforço |
-|---|----------|-----------|---------|
-| 1 | `PlayingScene` God Object | 🔴 Crítico | Alto |
-| 2 | `Collisions` acoplado a tipos concretos | 🔴 Crítico | Alto |
-| 3 | `config.py` — namespace global disfarçado | 🟡 Médio | Alto |
-| 4 | EventBus existente mas não usado | 🔵 Arquitetural | Alto |
+| # | Problema | Gravidade | Status |
+|---|----------|-----------|--------|
+| 1 | `PlayingScene` God Object | 🔴 Crítico | ⏳ Pendente |
+| 2 | `Collisions` acoplado a tipos concretos | 🔴 Crítico | ⏳ Pendente |
+| 3 | `config.py` — namespace global disfarçado | 🟡 Médio | ⏳ Pendente |
+| 4 | EventBus não usado | 🔵 Arquitetural | ✅ RESOLVIDO |
+

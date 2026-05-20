@@ -6,6 +6,7 @@ from .core.assets import load_custom_cursor
 from .core.config import config as Config
 from .core.config import set_screen_resolution
 from .core.difficulty import DifficultyPreset
+from .core.events import EventBus
 from .core.gamepad import GamepadManager, XboxButton
 from .core.input import Input
 from .core.levels import FIXED_LEVELS, LevelManager
@@ -14,6 +15,7 @@ from .core.paths import get_preferences_path, get_profile_path
 from .core.preferences import UserPreferences
 from .core.state import Scene, StateManager
 from .scenes.main_menu import MainMenuScene
+from .systems.sound_system import SoundSystem
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,9 @@ class GameApp:
         # Melhor qualidade/latência para o mixer antes do pygame.init()
         pygame.mixer.pre_init(44100, -16, 2, 1024)
         pygame.init()
+
+        # EventBus central para comunicação desacoplada
+        self.event_bus = EventBus()
 
         # Carregar preferências de sistema (vídeo, áudio, controles)
         # Detecta se é a primeira execução do jogo ANTES de carregar — útil
@@ -110,16 +115,26 @@ class GameApp:
         self.level_manager = LevelManager(FIXED_LEVELS)
         self.input: Input = Input()
 
+        # Instanciar sistemas que ouvem o EventBus
+        self.sound_system = SoundSystem(self.event_bus)
+        # O EffectsSystem será criado na PlayingScene, pois depende do EntityManager.
+
         # Suporte a controle Xbox: singleton compartilhado com a Input e cenas.
         self.gamepad: GamepadManager = GamepadManager()
         self.gamepad.init()
         # Primeira execução com controle plugado: ativa por padrão pra evitar
         # que o jogador precise abrir Settings antes de jogar. Sessões
         # posteriores respeitam o toggle (mesmo que ele tenha sido desligado).
-        if is_first_run and self.gamepad.connected and not self.preferences.gamepad_enabled:
+        if (
+            is_first_run
+            and self.gamepad.connected
+            and not self.preferences.gamepad_enabled
+        ):
             self.preferences.gamepad_enabled = True
             self.preferences.save()
-            logger.info("Primeira execução com controle conectado — gamepad ativado por padrão.")
+            logger.info(
+                "Primeira execução com controle conectado — gamepad ativado por padrão."
+            )
         self.gamepad.set_enabled(self.preferences.gamepad_enabled)
 
         if self.gamepad.connected:
@@ -221,9 +236,7 @@ class GameApp:
                 self._set_cursor_mode("cursor")
             self._suppress_next_motion_mode_switch = False
 
-    def _synthesize_menu_events(
-        self, event: pygame.event.Event, scene: Scene
-    ) -> None:
+    def _synthesize_menu_events(self, event: pygame.event.Event, scene: Scene) -> None:
         """Despacha eventos sintéticos KEYDOWN equivalentes ao apertar botões
         Xbox em menus (Camada A do plano de gamepad).
 
@@ -283,9 +296,7 @@ class GameApp:
                     )
                 )
 
-    def _snap_focus_to_direction(
-        self, scene: Scene, dx: int, dy: int
-    ) -> bool:
+    def _snap_focus_to_direction(self, scene: Scene, dx: int, dy: int) -> bool:
         """Move o cursor para o rect focusable mais próximo na direção (dx, dy).
 
         Convenção de eixos: dx +1 = direita, dy +1 = baixo (pygame screen).

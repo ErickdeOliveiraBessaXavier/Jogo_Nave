@@ -48,11 +48,12 @@ from ..core.world_config import (
     get_world_for_level,
     is_side_scroll_mode,
 )
-from ..entities.floating_score import FloatingScore
 from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
 from ..entities.spike_boss_laser import SpikeBossLaser
+from ..events import game_events as events
 from ..systems.collisions import Collisions
+from ..systems.effects_system import EffectsSystem
 from ..systems.entity_manager import EntityManager
 from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
 
@@ -398,6 +399,9 @@ class PlayingScene(Scene):
         self.entity_manager = EntityManager(is_side_scroll=self.is_side_scroll)
         self._apply_world_theme()
         self._cache_level_thresholds()
+
+        # Instanciar EffectsSystem que escuta eventos do jogo
+        self.effects_system = EffectsSystem(self.app.event_bus, self.entity_manager)
 
         is_initial_level = self.current_level_index == 0
         self.enemy_spawner = EnemySpawner(
@@ -1128,6 +1132,15 @@ class PlayingScene(Scene):
                 self._cacador_laser_channel = sound_manager.play_boss_laser_fire(
                     return_channel=True
                 )
+                # Emit event for charged shot
+                self.app.event_bus.emit(
+                    events.PlayerShot(
+                        ship_type="magneto",
+                        projectile_type="cacador_laser",
+                        position=(self.ship.x, self.ship.y),
+                        charge_level=charge_factor,
+                    )
+                )
                 for x, y, direction, *_ in bullet_specs:
                     dx, dy = direction
                     mag = math.hypot(dx, dy)
@@ -1151,6 +1164,15 @@ class PlayingScene(Scene):
                 if self.entity_manager.homing_bullets:
                     self.shoot_cd = self._get_shoot_cooldown()
                     return
+                # Emit event for charged homing shot
+                self.app.event_bus.emit(
+                    events.PlayerShot(
+                        ship_type="cacador",
+                        projectile_type="homing_bullets",
+                        position=(self.ship.x, self.ship.y),
+                        charge_level=charge_factor,
+                    )
+                )
                 count = 5
                 spread = math.radians(90)
                 divisor = max(1, count - 1)
@@ -1195,7 +1217,14 @@ class PlayingScene(Scene):
                 return
 
         # Tocar som de tiro (uma vez por salva de tiros)
-        sound_manager.play_shot()
+        self.app.event_bus.emit(
+            events.PlayerShot(
+                ship_type=self.ship.profile.id,
+                projectile_type="bullet",
+                position=(self.ship.x, self.ship.y),
+                charge_level=1.0,
+            )
+        )
 
         for (
             x,
@@ -1374,12 +1403,12 @@ class PlayingScene(Scene):
 
         # Agregar pontos dentro de cada célula
         batched: list[tuple[float, float, int]] = []
-        for events in buckets.values():
-            if not events:
+        for event_list in buckets.values():
+            if not event_list:
                 continue
-            avg_x = sum(e[0] for e in events) / len(events)
-            avg_y = sum(e[1] for e in events) / len(events)
-            total_pts = sum(e[2] for e in events)
+            avg_x = sum(e[0] for e in event_list) / len(event_list)
+            avg_y = sum(e[1] for e in event_list) / len(event_list)
+            total_pts = sum(e[2] for e in event_list)
             batched.append((avg_x, avg_y, total_pts))
 
         return batched
@@ -1832,8 +1861,11 @@ class PlayingScene(Scene):
             score_events, proximity_threshold=self.floating_score_batch_threshold
         )
         for x, y, pts in batched_events:
-            self.entity_manager.floating_scores.append(
-                FloatingScore(x, y, self._apply_score_multiplier(pts))
+            # Emit event to display floating score
+            self.app.event_bus.emit(
+                events.SpawnFloatingScore(
+                    x=x, y=y, score=self._apply_score_multiplier(pts)
+                )
             )
 
         self.score += self._apply_score_multiplier(gain)
@@ -2016,7 +2048,12 @@ class PlayingScene(Scene):
         )
         if collected_stars > 0:
             self.player_profile.add_stars(collected_stars)
-            sound_manager.play_powerup()
+            # Emit powerup event for stars
+            self.app.event_bus.emit(
+                events.PowerupCollected(
+                    powerup_type="star", position=(self.ship.x, self.ship.y)
+                )
+            )
 
         collected_powerups = self.collisions.ship_vs_powerups(
             self.ship, self.entity_manager.powerups
@@ -2025,7 +2062,12 @@ class PlayingScene(Scene):
             collected_powerups = []
 
         for kind in collected_powerups:
-            sound_manager.play_powerup()
+            # Emit PowerupCollected event
+            self.app.event_bus.emit(
+                events.PowerupCollected(
+                    powerup_type=kind, position=(self.ship.x, self.ship.y)
+                )
+            )
             # Cofre: guarda no slot livre em vez de aplicar imediato. Se todos
             # estão ocupados, cai no comportamento padrão (consumo imediato)
             # para não desperdiçar o powerup coletado.
@@ -2044,7 +2086,14 @@ class PlayingScene(Scene):
         if self._game_over_triggered or self.god_mode or self.ship.invuln > 0:
             return
 
-        sound_manager.play_boss_damage()
+        # Emit PlayerDamaged event
+        self.app.event_bus.emit(
+            events.PlayerDamaged(
+                damage=1,
+                remaining_lives=self.lives,
+                is_game_over=False,  # Will update if game over
+            )
+        )
 
         # Reverberador: qualquer hit que efetivamente conta reseta o combo.
         self.ship.reset_combo()
@@ -2053,7 +2102,8 @@ class PlayingScene(Scene):
             self.ship.shield_hp -= 1
             if self.ship.shield_hp <= 0:
                 self.ship.shield_timer = 0.0
-            sound_manager.play_powerup()
+            # Emit powerup event for shield absorption
+            self.app.event_bus.emit(events.PlaySound(sound_name="powerup", volume=1.0))
             return
 
         self._change_lives(-1)
@@ -2079,6 +2129,13 @@ class PlayingScene(Scene):
             next_level = self.player_profile.reset_to_checkpoint()
             logger.info("Game Over! Reinício preparado para nível %d", next_level)
             self._game_over_triggered = True
+
+            # Emit GameOver event
+            self.app.event_bus.emit(
+                events.GameOver(
+                    final_score=final_score, level_reached=self.current_level_index + 1
+                )
+            )
 
             from .game_over import GameOverScene
 
@@ -2248,7 +2305,13 @@ class PlayingScene(Scene):
             boss_center = (boss.x + boss.w / 2, boss.y + boss.h / 2)
         self.screen_shake_timer = Config.SCREEN_SHAKE_BOSS_DEATH_DURATION
         self.screen_shake_intensity = Config.SCREEN_SHAKE_BOSS_DEATH
-        sound_manager.play_explosion_boss()
+
+        # Emit BossDefeated event
+        self.app.event_bus.emit(
+            events.BossDefeated(
+                boss_type=self._boss_type_cache or "normal", position=boss_center
+            )
+        )
 
         # Explosões em anel
         num_exp = Config.BOSS_EXPLOSION_COUNT
