@@ -168,9 +168,6 @@ class BossFightController:
                 boss_center[1] + radius * math.sin(angle),
                 size=Config.BOSS_EXPLOSION_SMALL_SIZE,
             )
-        self._em.spawn_explosion(
-            boss_center[0], boss_center[1], size=Config.BOSS_EXPLOSION_LARGE_SIZE
-        )
 
         # Limpar spikes
         for spike in self._em.spikes:
@@ -274,9 +271,10 @@ class BossFightController:
 
         if 0.0 < time_remaining <= 5.0:
             blink_t = max(0.0, min(1.0, time_remaining / 5.0))
-            self.enemy_blink_interval = _BLINK_FAST_INTERVAL + (
-                _BLINK_SLOW_INTERVAL - _BLINK_FAST_INTERVAL
-            ) * blink_t
+            self.enemy_blink_interval = (
+                _BLINK_FAST_INTERVAL
+                + (_BLINK_SLOW_INTERVAL - _BLINK_FAST_INTERVAL) * blink_t
+            )
             self.enemy_blink_timer += dt
             if self.enemy_blink_timer >= self.enemy_blink_interval:
                 self.enemy_blink_timer = 0.0
