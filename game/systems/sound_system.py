@@ -8,9 +8,10 @@ Isso desacopla a lógica de áudio das cenas de gameplay.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..core.sound import sound_manager
+from ..core.sound_config import MusicState
 from ..events import game_events as events
 
 if TYPE_CHECKING:
@@ -47,8 +48,7 @@ class SoundSystem:
 
     def _on_enemy_destroyed(self, event: events.EnemyDestroyed) -> None:
         """Toca um som de explosão para inimigos."""
-        # Poderia ter sons diferentes para inimigos grandes/pequenos
-        sound_manager.play_explosion()
+        self._play_enemy_explosion_sound(event.enemy_type)
 
     def _on_boss_defeated(self, event: events.BossDefeated) -> None:
         """Toca o som de explosão massiva do boss."""
@@ -65,25 +65,76 @@ class SoundSystem:
 
     def _on_play_sound(self, event: events.PlaySound) -> None:
         """Handler genérico para tocar qualquer som pelo nome."""
-        # Este é um evento mais genérico que permite a qualquer sistema
-        # solicitar a reprodução de um som sem conhecer o sound_manager.
-        sound_manager.play(event.sound_name, volume=event.volume)
+        self._play_named_sound(event.sound_name)
 
     def _on_music_state_change(self, event: events.MusicStateChange) -> None:
         """Controla a música de fundo."""
-        sound_manager.set_music_state(event.state, event.fade_ms)
+        if event.state == MusicState.GAME:
+            sound_manager.play_background_music()
+        elif event.state == MusicState.BOSS:
+            sound_manager.play_boss_music()
+        elif event.state == MusicState.SPIKE_BOSS:
+            sound_manager.play_spike_boss_music()
+        elif event.state == MusicState.SLIME_BOSS:
+            sound_manager.play_slime_boss_music()
+        elif event.state == MusicState.GIANT_METEOR_BOSS:
+            sound_manager.play_giant_meteor_boss_music()
+        elif event.state == MusicState.MOUNTAIN_SERPENT_BOSS:
+            sound_manager.play_mountain_serpent_boss_music()
+        elif event.state == MusicState.CLOUD_ARCHMAGE_BOSS:
+            sound_manager.play_cloud_archmage_boss_music()
+        elif event.state == MusicState.STONE_GOLEM_BOSS:
+            sound_manager.play_stone_golem_boss_music()
+        elif event.state == MusicState.MENU:
+            sound_manager.play_menu_music()
+        elif event.state == MusicState.SILENCE:
+            if event.fade_ms > 0:
+                sound_manager.fade_out_music(event.fade_ms / 1000.0)
+            else:
+                sound_manager.stop_music(force=True)
 
     def _on_screen_shake(self, event: events.ScreenShake) -> None:
         """Toca som de impacto para o tremor de tela."""
-        # Exemplo: som de "rumble" ou impacto pesado
-        sound_manager.play("rumble", volume=0.7)
+        # Tremor de tela não tem efeito sonoro dedicado no SoundManager atual.
+        pass
+
+    def _play_enemy_explosion_sound(self, enemy_type: str) -> None:
+        normalized = enemy_type.lower()
+        if "boss" in normalized:
+            sound_manager.play_explosion_boss()
+        elif any(
+            token in normalized
+            for token in ("alien", "slime", "spike", "serpent", "golem")
+        ):
+            sound_manager.play_explosion_alien()
+        else:
+            sound_manager.play_explosion_asteroid()
+
+    def _play_named_sound(self, sound_name: str) -> None:
+        sound_map: dict[str, Any] = {
+            "shot": sound_manager.play_shot,
+            "powerup": sound_manager.play_powerup,
+            "warning": sound_manager.play_warning,
+            "boss_laser_fire": sound_manager.play_boss_laser_fire,
+            "boss_damage": sound_manager.play_boss_damage,
+            "explosion_boss": sound_manager.play_explosion_boss,
+            "explosion_alien": sound_manager.play_explosion_alien,
+            "explosion_asteroid": sound_manager.play_explosion_asteroid,
+        }
+        handler = sound_map.get(sound_name)
+        if handler is not None:
+            handler()
 
     def cleanup(self) -> None:
         """
         Remove os handlers do EventBus para evitar memory leaks quando
         o sistema for destruído.
         """
-        # A implementação do EventBus.off(event, handler) seria necessária
-        # para uma limpeza seletiva. Por enquanto, o bus pode ser recriado
-        # a cada nova cena.
-        pass
+        self._bus.off(events.PlayerShot, self._on_player_shot)
+        self._bus.off(events.EnemyDestroyed, self._on_enemy_destroyed)
+        self._bus.off(events.BossDefeated, self._on_boss_defeated)
+        self._bus.off(events.PowerupCollected, self._on_powerup_collected)
+        self._bus.off(events.PlayerDamaged, self._on_player_damaged)
+        self._bus.off(events.PlaySound, self._on_play_sound)
+        self._bus.off(events.MusicStateChange, self._on_music_state_change)
+        self._bus.off(events.ScreenShake, self._on_screen_shake)

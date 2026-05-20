@@ -492,6 +492,7 @@ class GameApp:
 
                 pygame.display.flip()
         finally:
+            self.sound_system.cleanup()
             sound_manager.shutdown()
             pygame.quit()
 

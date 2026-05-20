@@ -14,6 +14,7 @@ from ..entities.boss_square import BossSquare
 from ..entities.bot_elemental_attacks import EnergyOrb
 from ..entities.bullet import Bullet
 from ..entities.cannon_mine import CannonMine, MineState
+from ..entities.chain_lightning import ChainLightning
 from ..entities.explosion import ExplosionType
 from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.eye_laser import EyeLaser
@@ -25,7 +26,6 @@ from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.mountain_serpent_boss import SerpentRockBullet
 from ..entities.player_laser import PlayerLaser
-from ..entities.chain_lightning import ChainLightning
 from ..entities.powerup import PowerUp
 from ..entities.ship import Ship
 from ..entities.slime_drip import SlimeDrip
@@ -36,6 +36,7 @@ from .collision_protocols import Damageable, Enemy
 from .hit_result import NO_HIT, HitResult
 
 if TYPE_CHECKING:
+    from ..core.events import EventBus
     from .entity_manager import EntityManager
 
 
@@ -58,6 +59,8 @@ class CollisionConstants:
 
 
 class Collisions:
+    def __init__(self, event_bus: "EventBus | None" = None) -> None:
+        self._event_bus = event_bus
 
     @staticmethod
     def _get_points_value(enemy: Any) -> int:
@@ -128,11 +131,15 @@ class Collisions:
 
     @staticmethod
     def _circles_collide(
-        c1_x: float, c1_y: float, c1_r: float,
-        c2_x: float, c2_y: float, c2_r: float,
+        c1_x: float,
+        c1_y: float,
+        c1_r: float,
+        c2_x: float,
+        c2_y: float,
+        c2_r: float,
     ) -> bool:
         """Verifica colisão entre dois círculos (distância < r1 + r2).
-        
+
         Otimizado: compara distância ao quadrado para evitar sqrt.
         """
         dx = c2_x - c1_x
@@ -143,7 +150,7 @@ class Collisions:
     @classmethod
     def _rect_collides_with_enemy(cls, rect: pygame.Rect, enemy: Any) -> bool:
         """Colisão híbrida: AABB (rápido) → Círculo (preciso) quando disponível.
-        
+
         Para objetos redondos (SerpentBlock, etc), usa collision_circle() como
         validação secundária após AABB pass. Evita falsos positivos nas diagonais.
         """
@@ -173,17 +180,19 @@ class Collisions:
                 if rect.colliderect(hitbox):
                     # Validação secundária: se o inimigo oferece collision_circle(),
                     # valida com círculo para ser mais preciso (evita falsos positivos)
-                    if hasattr(enemy, 'collision_circle') and callable(enemy.collision_circle):
+                    if hasattr(enemy, "collision_circle") and callable(
+                        enemy.collision_circle
+                    ):
                         proj_cx, proj_cy = float(rect.centerx), float(rect.centery)
                         proj_r = float(max(rect.width, rect.height) / 2.0)
                         try:
                             circle_data: tuple[float, float, float] = cast(
-                                tuple[float, float, float],
-                                enemy.collision_circle()
+                                tuple[float, float, float], enemy.collision_circle()
                             )
                             enemy_cx, enemy_cy, enemy_r = circle_data
-                            return cls._circles_collide(proj_cx, proj_cy, proj_r,
-                                                         enemy_cx, enemy_cy, enemy_r)
+                            return cls._circles_collide(
+                                proj_cx, proj_cy, proj_r, enemy_cx, enemy_cy, enemy_r
+                            )
                         except (TypeError, ValueError):
                             # Fallback caso collision_circle() não retorne formato esperado
                             return True
@@ -260,7 +269,12 @@ class Collisions:
                 return False
             if entity_mask is None:
                 entity_mask = self._get_rect_mask(entity_rect.width, entity_rect.height)
-            return entity_mask.overlap(target_mask, (tx - entity_rect.x, ty - entity_rect.y)) is not None
+            return (
+                entity_mask.overlap(
+                    target_mask, (tx - entity_rect.x, ty - entity_rect.y)
+                )
+                is not None
+            )
 
         # Tentativa 2: atributo .mask (padrão pygame.sprite)
         sprite_mask = getattr(target_with_mask, "mask", None)  # type: ignore[attr-defined]
@@ -278,7 +292,10 @@ class Collisions:
             if entity_mask is None:
                 entity_mask = self._get_rect_mask(entity_rect.width, entity_rect.height)
             offset = (target_rect.x - entity_rect.x, target_rect.y - entity_rect.y)
-            return cast("pygame.mask.Mask", sprite_mask).overlap(entity_mask, offset) is not None  # type: ignore[attr-defined]
+            return (
+                cast("pygame.mask.Mask", sprite_mask).overlap(entity_mask, offset)
+                is not None
+            )  # type: ignore[attr-defined]
 
         # Tentativa 3: fallback AABB puro
         fallback_rect: pygame.Rect | None = getattr(target_with_mask, "rect", None)
@@ -353,6 +370,21 @@ class Collisions:
 
         if result.killed and result.points > 0 and floating_scores is not None:
             floating_scores.append(FloatingScore(hit_x, hit_y, result.points))
+
+        if (
+            result.killed
+            and self._event_bus is not None
+            and "boss" not in type(target).__name__.lower()
+        ):
+            from ..events import game_events as events
+
+            self._event_bus.emit(
+                events.EnemyDestroyed(
+                    enemy_type=type(target).__name__,
+                    position=(hit_x, hit_y),
+                    points=result.points,
+                )
+            )
 
         if result.triggers_special_death:
             entity_manager.trigger_death_sequence(target)
@@ -1165,7 +1197,9 @@ class Collisions:
                 )
             )
 
-            result = self._apply_hit(best, current_damage, best_cx, best_cy, entity_manager)
+            result = self._apply_hit(
+                best, current_damage, best_cx, best_cy, entity_manager
+            )
             score_gain += result.points
             if result.killed:
                 destroyed_count += 1
@@ -1329,10 +1363,14 @@ class Collisions:
         if grid is not None:
             pad = CollisionConstants.SPATIAL_QUERY_PADDING
             for bullet in grid.query(
-                ship_rect.x - pad, ship_rect.y - pad,
-                ship_rect.width + pad * 2, ship_rect.height + pad * 2,
+                ship_rect.x - pad,
+                ship_rect.y - pad,
+                ship_rect.width + pad * 2,
+                ship_rect.height + pad * 2,
             ):
-                if isinstance(bullet, SerpentRockBullet) and ship_rect.colliderect(bullet.rect):
+                if isinstance(bullet, SerpentRockBullet) and ship_rect.colliderect(
+                    bullet.rect
+                ):
                     bullet.dead = True
                     return True
             return False
@@ -1354,10 +1392,14 @@ class Collisions:
         if grid is not None:
             pad = CollisionConstants.SPATIAL_QUERY_PADDING
             for bullet in grid.query(
-                ship_rect.x - pad, ship_rect.y - pad,
-                ship_rect.width + pad * 2, ship_rect.height + pad * 2,
+                ship_rect.x - pad,
+                ship_rect.y - pad,
+                ship_rect.width + pad * 2,
+                ship_rect.height + pad * 2,
             ):
-                if isinstance(bullet, AlienBullet) and ship_rect.colliderect(bullet.rect):
+                if isinstance(bullet, AlienBullet) and ship_rect.colliderect(
+                    bullet.rect
+                ):
                     bullet.dead = True
                     return True
             return False
@@ -1383,10 +1425,16 @@ class Collisions:
         if grid is not None:
             pad = CollisionConstants.SPATIAL_QUERY_PADDING
             for orb in grid.query(
-                ship_rect.x - pad, ship_rect.y - pad,
-                ship_rect.width + pad * 2, ship_rect.height + pad * 2,
+                ship_rect.x - pad,
+                ship_rect.y - pad,
+                ship_rect.width + pad * 2,
+                ship_rect.height + pad * 2,
             ):
-                if isinstance(orb, EnergyOrb) and not orb.dead and ship_rect.colliderect(orb.rect):
+                if (
+                    isinstance(orb, EnergyOrb)
+                    and not orb.dead
+                    and ship_rect.colliderect(orb.rect)
+                ):
                     orb.dead = True
                     return orb
             return None
@@ -1758,7 +1806,6 @@ class Collisions:
                         destroyed_count += 1
                         if result.points > 0:
                             score_events.append((cx, cy, result.points))
-                            floating_scores.append(FloatingScore(cx, cy, result.points))
         return score_gain, destroyed_count, score_events
 
     def player_lasers_vs_boss(
@@ -1912,7 +1959,6 @@ class Collisions:
                         destroyed_count += 1
                         if result.points > 0:
                             score_events.append((cx, cy, result.points))
-                            floating_scores.append(FloatingScore(cx, cy, result.points))
         return score_gain, destroyed_count, score_events
 
     def cacador_lasers_vs_boss(

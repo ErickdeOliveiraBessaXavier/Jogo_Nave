@@ -419,7 +419,7 @@ class PlayingScene(Scene):
                 self.current_level_index + 1, level_config=self.level_config
             )
         self.powerup_spawner = PowerUpSpawner(self.difficulty_preset)
-        self.collisions = Collisions()
+        self.collisions = Collisions(self.app.event_bus)
         self.star_spawner = StarSpawner()
 
         self._base_score_multiplier: float = (
@@ -818,6 +818,8 @@ class PlayingScene(Scene):
 
     def exit(self) -> None:
         pygame.mouse.set_visible(True)
+        if hasattr(self, "effects_system"):
+            self.effects_system.cleanup()
 
     # ------------------------------------------------------------------
     # Update principal

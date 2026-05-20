@@ -35,6 +35,26 @@ class EventBus:
         """
         self._subscribers[event_type].append(fn)
 
+    def off(self, event_type: Type[T], fn: Callable[[T], None]) -> None:
+        """
+        Remove uma função inscrita para um tipo de evento específico.
+
+        Args:
+            event_type: A classe do evento registrada.
+            fn: A função que deve deixar de receber eventos desse tipo.
+        """
+        handlers = self._subscribers.get(event_type)
+        if not handlers:
+            return
+
+        try:
+            handlers.remove(fn)
+        except ValueError:
+            return
+
+        if not handlers:
+            self._subscribers.pop(event_type, None)
+
     def emit(self, event: Event) -> None:
         """
         Emite um evento, notificando todos os seus inscritos.
@@ -43,7 +63,7 @@ class EventBus:
             event: Uma instância de uma classe de evento (ex: PlayerShot(...)).
         """
         # Notifica os inscritos para o tipo de evento específico
-        for fn in self._subscribers[type(event)]:
+        for fn in list(self._subscribers.get(type(event), [])):
             try:
                 fn(event)
             except Exception as e:
