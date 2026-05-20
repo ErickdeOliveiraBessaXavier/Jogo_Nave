@@ -23,14 +23,12 @@ from __future__ import annotations
 import logging
 import math
 import random
-import time
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Optional, Sequence, TypedDict, cast
 
 import pygame
 
-from ..core import colors
 from ..core.assets import get_font
 from ..core.config import SlimeBossState
 from ..core.config import config as Config
@@ -40,11 +38,10 @@ from ..core.meta_progression_service import MetaProgressionService
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
-from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
+from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 from ..core.world_config import (
     WorldConfig,
-    format_stage_name,
     get_world_for_level,
     is_side_scroll_mode,
 )
@@ -52,6 +49,7 @@ from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..events import game_events as events
+from ..render.game_renderer import GameRenderer
 from ..systems.boss_fight_controller import BossFightController
 from ..systems.collisions import Collisions
 from ..systems.effects_system import EffectsSystem
@@ -341,6 +339,8 @@ class PlayingScene(Scene):
 
         # Instanciar EffectsSystem que escuta eventos do jogo
         self.effects_system = EffectsSystem(self.app.event_bus, self.entity_manager)
+
+        self.game_renderer = GameRenderer(self.r)
 
         is_initial_level = self.current_level_index == 0
         self.enemy_spawner = EnemySpawner(
@@ -2217,216 +2217,11 @@ class PlayingScene(Scene):
                     return
 
     # ------------------------------------------------------------------
-    # Debug / hitboxes
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _get_enemy_contact_hitboxes(enemy: Any) -> tuple[pygame.Rect, ...]:
-        """Retorna hitboxes de contato para debug visual, com fallback para rect."""
-        getter = getattr(enemy, "get_ship_contact_hitboxes", None)
-        if callable(getter):
-            raw_hitboxes = cast(Any, getter)()
-            hitboxes = tuple(
-                r
-                for r in raw_hitboxes
-                if isinstance(r, pygame.Rect) and r.width > 0 and r.height > 0
-            )
-            if hitboxes:
-                return hitboxes
-
-        enemy_rect = getattr(enemy, "rect", pygame.Rect(0, 0, 0, 0))
-        if (
-            isinstance(enemy_rect, pygame.Rect)
-            and enemy_rect.width > 0
-            and enemy_rect.height > 0
-        ):
-            return (enemy_rect,)
-        return ()
-
-    def _draw_enemy_hitboxes(self, surface: pygame.Surface) -> None:
-        """Overlay de hitboxes (amarelo = bounding rect; laranja = mask pixel-perfect)."""
-        enemies_in_view = self.entity_manager.enemy_spatial_grid.query(
-            0, 0, Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-        )
-        seen: set[int] = set()
-        for enemy in enemies_in_view:
-            eid = id(enemy)
-            if eid in seen or getattr(enemy, "dead", False):
-                continue
-            seen.add(eid)
-
-            mask_getter = getattr(enemy, "get_collision_mask_data", None)
-            has_mask = False
-            if callable(mask_getter):
-                raw = cast(
-                    "tuple[pygame.mask.Mask, tuple[int, int]] | None",
-                    mask_getter(),
-                )
-                if raw is not None:
-                    mask, offset = raw
-                    mask_w, mask_h = mask.get_size()
-                    if mask_w > 0 and mask_h > 0:
-                        outline_surf = pygame.Surface((mask_w, mask_h), pygame.SRCALPHA)
-                        for px, py in mask.outline():
-                            pygame.draw.circle(
-                                outline_surf, (255, 120, 0, 220), (px, py), 1
-                            )
-                        surface.blit(outline_surf, offset)
-                        has_mask = True
-
-            # Se não tem máscara pixel-perfeita, desenha rects de contato normais
-            if not has_mask:
-                for idx, rect in enumerate(self._get_enemy_contact_hitboxes(enemy)):
-                    color = (255, 200, 40) if idx == 0 else (40, 220, 255)
-                    pygame.draw.rect(surface, color, rect, 2)
-
-    # ------------------------------------------------------------------
     # Render
     # ------------------------------------------------------------------
 
-    def _compute_shake_offset(self) -> tuple[int, int]:
-        """Retorna o deslocamento de screen-shake para o frame atual."""
-        if self.screen_shake_timer <= 0:
-            return (0, 0)
-        intensity = self.screen_shake_intensity
-        return (
-            random.randint(-intensity, intensity),
-            random.randint(-intensity, intensity),
-        )
-
     def render(self, surface: pygame.Surface) -> None:
-        dt = self.last_dt
-        speed_multiplier = 1.0
-        boss_active = False
-
-        if self.state == GameState.PREPARING:
-            progress = min(
-                1.0,
-                max(
-                    0.0,
-                    (Config.PREPARATION_TIME - self.preparation_time_left)
-                    / Config.PREPARATION_TIME,
-                ),
-            )
-            speed_multiplier = 1.0 + (Config.WARP_SPEED_MULTIPLIER - 1.0) * (
-                1.0 - progress**2
-            )
-        else:
-            boss_active = bool(
-                self.boss_controller.active
-                and self.entity_manager.boss
-                and not self.entity_manager.boss.dead
-            )
-            if boss_active:
-                speed_multiplier = Config.BOSS_WARP_SPEED_MULTIPLIER
-
-        self.r.background(
-            self.game_surface,
-            dt=dt,
-            speed_multiplier=speed_multiplier,
-            draw_celestials=not boss_active,
-        )
-
-        current_fps = self.r.current_fps if self.r.current_fps > 0 else 60.0
-        intro_active = bool(
-            self.entity_manager.boss
-            and getattr(self.entity_manager.boss, "is_intro_active", False)
-        )
-        self.entity_manager.draw(
-            self.game_surface,
-            self.ship.rect.centerx,
-            self.ship.rect.centery,
-            self.boss_controller.enemy_visible,
-            fps=current_fps,
-            draw_boss=not intro_active,
-        )
-
-        if self.show_enemy_hitboxes:
-            self._draw_enemy_hitboxes(self.game_surface)
-
-        for p in self.world_transition_thruster_particles:
-            px = self.ship.x + p["offset_x"]
-            py = self.ship.y + p["offset_y"]
-            pygame.draw.circle(
-                self.game_surface,
-                p["color"],
-                (int(px), int(py)),
-                max(1, int(p["size"])),
-            )
-
-        self.ship.draw(self.game_surface)
-
-        if intro_active:
-            boss = self.entity_manager.boss
-            if boss:
-                from ..entities.cloud_archmage_boss import CloudArchmageBoss
-
-                archmage = cast(CloudArchmageBoss, boss)
-                overlay_alpha = archmage.get_intro_dim_alpha()
-                if overlay_alpha > 0:
-                    overlay = pygame.Surface(
-                        (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
-                    )
-                    overlay.fill((0, 0, 0, overlay_alpha))
-                    self.game_surface.blit(overlay, (0, 0))
-                archmage.draw(self.game_surface)
-
-        self.r.update_fps(dt)
-
-        level_config = self.level_config
-        assert level_config is not None
-        stage_name = format_stage_name(level_config.level_number)
-        self.r.hud(
-            self.game_surface,
-            self.score,
-            self.lives,
-            self.total_enemies_destroyed,
-            self.ship,
-            stage_name,
-            self.difficulty_preset,
-            score_multiplier_active=self.score_multiplier_active,
-            score_multiplier_timer=self.score_multiplier_timer,
-            mini_ships_active=self.ship.mini_ships_timer > 0,
-            mini_ships_timer=self.ship.mini_ships_timer,
-            explosive_shots_active=self.ship.explosive_shots_active,
-            explosive_shots_remaining=self.ship.explosive_shots_remaining,
-        )
-
-        self._render_upgrades_hud(self.game_surface)
-        self._render_storage_slots_hud(self.game_surface)
-        self._render_combo_hud(self.game_surface)
-
-        if self.show_fps:
-            fps_stats = self.r.get_fps_stats()
-            fps_text = (
-                f"FPS: {fps_stats['fps']:.1f} | "
-                f"Avg: {fps_stats['avg_frame_time']:.1f}ms | "
-                f"Max: {fps_stats['max_frame_time']:.1f}ms"
-            )
-            fps_surface = self.r.font_small.render(fps_text, True, colors.YELLOW)
-            self.game_surface.blit(fps_surface, (10, Config.SCREEN_HEIGHT - 30))
-
-        if self.show_enemy_hitboxes:
-            hitbox_text = self.r.font_small.render(
-                "F7 Hitbox Debug: ON", True, (255, 200, 40)
-            )
-            self.game_surface.blit(hitbox_text, (10, Config.SCREEN_HEIGHT - 50))
-
-        surface.blit(self.game_surface, self._compute_shake_offset())
-
-        if self.boss_controller.warning_timer > 0 and int(self.boss_controller.warning_timer * 5) % 2 == 1:
-            warning_text = self.warning_font.render("WARNING!", True, colors.RED)
-            text_rect = warning_text.get_rect(
-                center=(Config.SCREEN_WIDTH / 2, Config.SCREEN_HEIGHT / 2)
-            )
-            surface.blit(warning_text, text_rect)
-
-        if self.state == GameState.PREPARING:
-            self.r.preparation(surface, self.preparation_time_left)
-
-        if self.start_fade_active:
-            self.start_fade_overlay.fill((0, 0, 0, int(self.start_fade_alpha)))
-            surface.blit(self.start_fade_overlay, (0, 0))
+        self.game_renderer.render(self, surface)
 
     # ===================== Upgrades (helpers) =====================
 
@@ -2499,282 +2294,3 @@ class PlayingScene(Scene):
                 self.app.heal_usage_count = upg.usage_count
         except (AttributeError, TypeError):
             pass
-
-    def _render_combo_hud(self, surface: pygame.Surface) -> None:
-        """Indicador do combo do Reverberador (canto inferior esquerdo).
-
-        Mostra contagem de abates consecutivos sem dano e bônus de dano resultante.
-        Só aparece para naves com `combo_damage_per_kill > 0`.
-        """
-        if self.ship.profile.combo_damage_per_kill <= 0:
-            return
-
-        from ..core import colors as _colors
-
-        kills = self.ship.combo_kills
-        bonus = self.ship.combo_damage_bonus
-        cap = self.ship.profile.combo_damage_cap
-
-        font_label = get_font(14)
-        font_value = get_font(22)
-
-        # Cores: cinza se sem combo, dourado em escala conforme se aproxima do cap.
-        if kills == 0:
-            color = (160, 160, 160)
-        elif 0 < cap <= bonus:
-            # Cap atingido: pulso amarelo brilhante.
-            pulse = int(40 + 40 * abs(math.sin(time.time() * 6)))
-            color = (255, 220 - pulse // 4, 60)
-        else:
-            fade = min(1.0, bonus / cap) if cap > 0 else min(1.0, bonus)
-            color = (
-                int(180 + 75 * fade),
-                int(180 + 40 * fade),
-                int(140 - 80 * fade),
-            )
-
-        x = 16
-        y = Config.SCREEN_HEIGHT - 70
-
-        label = font_label.render("COMBO", True, _colors.WHITE)
-        surface.blit(label, (x, y))
-
-        bonus_pct = int(round(bonus * 100))
-        text = font_value.render(f"x{kills}  +{bonus_pct}%", True, color)
-        surface.blit(text, (x, y + 16))
-
-    def _render_storage_slots_hud(self, surface: pygame.Surface) -> None:
-        """Desenha as caixas dos slots de powerup do Cofre (estilo Mario World).
-
-        Cada slot mostra o ícone colorido do powerup armazenado, espelhando a
-        aparência do PowerUp coletável (círculo colorido + símbolo).
-        """
-        if not self.ship.has_storage_slots():
-            return
-
-        from ..core import colors as _colors
-        from ..core.colors import (
-            POWERUP_COOLDOWN_HASTE,
-            POWERUP_DAMAGE_BOOST,
-            POWERUP_DOUBLE_SHOT,
-            POWERUP_LIFE,
-            POWERUP_MINI_SHIPS,
-            POWERUP_PIERCING_SHOT,
-            POWERUP_RAINBOW,
-            POWERUP_SCORE,
-            POWERUP_SHIELD,
-            POWERUP_SPEED,
-            POWERUP_TIME_STOP,
-        )
-
-        font_label = get_font(20)
-        font_hint = get_font(12)
-        font_icon = get_font(18)
-
-        slot_size = 56
-        gap = 12
-        slots = self.ship.stored_powerups
-        total_w = len(slots) * slot_size + (len(slots) - 1) * gap
-
-        start_x = (Config.SCREEN_WIDTH - total_w) // 2
-        y = 8
-
-        # Cor e símbolo de cada powerup — alinhados com PowerUp.draw.
-        powerup_colors: dict[str, tuple[int, int, int]] = {
-            "life": POWERUP_LIFE,
-            "shield": POWERUP_SHIELD,
-            "double_shot": POWERUP_DOUBLE_SHOT,
-            "speed": POWERUP_SPEED,
-            "score": POWERUP_SCORE,
-            "piercing_shot": POWERUP_PIERCING_SHOT,
-            "mini_ships": POWERUP_MINI_SHIPS,
-            "rainbow": POWERUP_RAINBOW,
-            "cooldown_haste": POWERUP_COOLDOWN_HASTE,
-            "time_stop": POWERUP_TIME_STOP,
-            "damage_boost": POWERUP_DAMAGE_BOOST,
-            "chain_shot": (80, 220, 255),
-            "repulsion_shield": (100, 255, 80),
-        }
-        powerup_symbols: dict[str, str] = {
-            "life": "+",
-            "shield": "S",
-            "double_shot": "2X",
-            "speed": "V",
-            "score": "$",
-            "piercing_shot": "P",
-            "mini_ships": "M",
-            "rainbow": "*",
-            "cooldown_haste": "CD",
-            "time_stop": "T",
-            "damage_boost": "DMG",
-            "chain_shot": "⚡",
-            "repulsion_shield": "🛡",
-        }
-        hint_keys = ("Q", "E")
-
-        for i, kind in enumerate(slots):
-            x = start_x + i * (slot_size + gap)
-            slot_surface = pygame.Surface((slot_size, slot_size), pygame.SRCALPHA)
-
-            # Fundo escuro semi-transparente
-            pygame.draw.rect(
-                slot_surface,
-                (20, 20, 30, 200),
-                (0, 0, slot_size, slot_size),
-                border_radius=8,
-            )
-            # Borda amarela (cheia) ou cinza (vazia)
-            border_color = (
-                (*_colors.YELLOW, 230) if kind is not None else (*_colors.GRAY, 160)
-            )
-            pygame.draw.rect(
-                slot_surface,
-                border_color,
-                (0, 0, slot_size, slot_size),
-                2,
-                border_radius=8,
-            )
-
-            # Letra de tecla no canto superior esquerdo
-            key_label = hint_keys[i] if i < len(hint_keys) else str(i + 1)
-            slot_surface.blit(font_hint.render(key_label, True, _colors.WHITE), (5, 3))
-
-            if kind is not None:
-                # Círculo colorido com a cor do powerup (mesma usada no drop).
-                color = powerup_colors.get(kind, (200, 200, 200))
-                center = (slot_size // 2, slot_size // 2 + 4)
-                pygame.draw.circle(slot_surface, color, center, 16)
-                pygame.draw.circle(slot_surface, _colors.WHITE, center, 16, 2)
-                # Símbolo central
-                symbol = powerup_symbols.get(kind, kind[:2].upper())
-                content = font_icon.render(symbol, True, _colors.BLACK)
-                slot_surface.blit(content, content.get_rect(center=center))
-            else:
-                # Slot vazio: traço discreto
-                dash = font_label.render("—", True, (90, 90, 90))
-                slot_surface.blit(
-                    dash, dash.get_rect(center=(slot_size // 2, slot_size // 2))
-                )
-
-            surface.blit(slot_surface, (x, y))
-
-    def _render_upgrades_hud(self, surface: pygame.Surface) -> None:
-        from ..core import colors as _colors
-
-        active_slots = [
-            (i, upg) for i, upg in enumerate(self.upgrade_slots) if upg is not None
-        ]
-        if not active_slots:
-            return
-
-        font = get_font(20)
-        font_small = get_font(12)
-        pad = 8
-        slot_w = slot_h = _HUD_UPGRADE_SLOT_SIZE
-        x = Config.SCREEN_WIDTH - pad - slot_w
-        y = 44
-
-        for display_index, (i, upg) in enumerate(active_slots):
-            slot_surface = pygame.Surface((slot_w, slot_h), pygame.SRCALPHA)
-
-            pygame.draw.rect(
-                slot_surface, (30, 30, 30, 180), (0, 0, slot_w, slot_h), border_radius=8
-            )
-            pygame.draw.rect(
-                slot_surface,
-                (*_colors.WHITE, 200),
-                (0, 0, slot_w, slot_h),
-                2,
-                border_radius=8,
-            )
-
-            try:
-                keycode = self.player_profile.upgrade_keybindings[i]
-                key_label = pygame.key.name(keycode).upper()
-            except (AttributeError, IndexError, TypeError):
-                key_label = str(i + 1)
-            slot_surface.blit(font_small.render(key_label, True, _colors.WHITE), (4, 2))
-
-            ui = upg.get_ui_state()  # type: ignore[attr-defined]
-            name_str = str(ui.get("name", ""))
-            icon_id = str(ui.get("icon_id", "")) if ui.get("icon_id") else None
-            icon = get_upgrade_icon(name_str, icon_id)
-            icon_txt = font.render(icon, True, _colors.CYAN)
-            slot_surface.blit(
-                icon_txt, icon_txt.get_rect(center=(slot_w // 2, slot_h // 2))
-            )
-
-            cd_left = (
-                float(ui["cooldown_left"])
-                if ui.get("cooldown_left") is not None
-                else 0.0
-            )
-            cd_base = float(ui["cooldown"]) if ui.get("cooldown") is not None else 1.0
-            if cd_left > 0.0:
-                pct = max(0.0, min(1.0, cd_left / cd_base))
-                bar_h = 4
-                pygame.draw.rect(
-                    slot_surface,
-                    (120, 120, 120, 150),
-                    (2, slot_h - bar_h - 2, slot_w - 4, bar_h),
-                    border_radius=2,
-                )
-                bar_w = int((slot_w - 4) * pct)
-                pygame.draw.rect(
-                    slot_surface,
-                    (80, 180, 255, 200),
-                    (2, slot_h - bar_h - 2, bar_w, bar_h),
-                    border_radius=2,
-                )
-
-            charges = ui.get("charges_left")
-            if charges is not None:
-                c_txt = font_small.render(f"{charges}", True, _colors.WHITE)
-                c_rect = c_txt.get_rect()
-                c_rect.bottomright = (slot_w - 3, slot_h - 3)
-                slot_surface.blit(c_txt, c_rect)
-
-            slot_x = x - display_index * (slot_w + _HUD_UPGRADE_SLOT_GAP)
-            surface.blit(slot_surface, (slot_x, y))
-
-            if ui["active"]:
-                pygame.draw.rect(
-                    surface,
-                    _colors.GREEN,
-                    pygame.Rect(slot_x, y, slot_w, slot_h),
-                    3,
-                    border_radius=8,
-                )
-
-            # Destaque dourado vibrando quando o slot está selecionado no
-            # modo de seleção via controle (D-pad ↑ → LB/RB → A). Só a
-            # MOLDURA dourada balança — o conteúdo interno (fundo do slot,
-            # ícone do upgrade e label da tecla) já foi blitado acima e fica
-            # estático, então o texto não treme junto.
-            if self._upgrade_select_mode and i == self._upgrade_select_index:
-                t = pygame.time.get_ticks()
-                shake_x = int(math.sin(t / 35.0) * 2)
-                shake_y = int(math.cos(t / 42.0) * 2)
-                pygame.draw.rect(
-                    surface,
-                    _colors.CUSTOM_GOLD,
-                    pygame.Rect(
-                        slot_x - 3 + shake_x,
-                        y - 3 + shake_y,
-                        slot_w + 6,
-                        slot_h + 6,
-                    ),
-                    3,
-                    border_radius=10,
-                )
-
-        # Dica de controles quando em modo de seleção via gamepad.
-        if self._upgrade_select_mode:
-            hint = font_small.render(
-                "LB/RB navegar  A confirmar  B cancelar",
-                True,
-                _colors.CUSTOM_GOLD,
-            )
-            hint_x = Config.SCREEN_WIDTH - pad - hint.get_width()
-            hint_y = y + slot_h + 6
-            surface.blit(hint, (hint_x, hint_y))
