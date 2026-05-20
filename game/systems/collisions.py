@@ -368,8 +368,21 @@ class Collisions:
         if result.fragments:
             entity_manager.absorb_fragments(result.fragments)
 
-        if result.killed and result.points > 0 and floating_scores is not None:
-            floating_scores.append(FloatingScore(hit_x, hit_y, result.points))
+        if result.killed and result.points > 0:
+            if floating_scores is not None:
+                if self._event_bus is not None:
+                    from ..events import game_events as events
+
+                    self._event_bus.emit(
+                        events.SpawnFloatingScore(
+                            x=hit_x,
+                            y=hit_y,
+                            score=result.points,
+                            color=(255, 255, 0),  # Amarelo para combate
+                        )
+                    )
+                else:
+                    floating_scores.append(FloatingScore(hit_x, hit_y, result.points))
 
         if (
             result.killed

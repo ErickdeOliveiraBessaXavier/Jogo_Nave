@@ -1,69 +1,38 @@
 # Code Review: Event Bus Implementation
 
-Resumo executivo do estado do Event Bus após as correções aplicadas.
+Resumo executivo do estado do Event Bus: O sistema está totalmente integrado, reativo e agora permite customização visual via eventos.
 
 ---
 
 ## Corrigido
 
 ### 1. Duplicação de explosões
+O handler legado de `EnemyDestroyed` foi removido de `EffectsSystem`. Agora as explosões são geridas centralizadamente via `EntityManager` (para mortes diretas) ou via evento `SpawnEffect`, eliminando o efeito visual duplo.
 
-O handler legado de `EnemyDestroyed` foi removido de `EffectsSystem`, e o fluxo passou a emitir `EnemyDestroyed` apenas no ponto correto da colisão.
+### 2. SoundSystem e Métodos do Gerenciador
+O `SoundSystem` foi atualizado para utilizar exclusivamente os métodos expostos pelo `sound_manager` (ex: `play_shot`, `play_explosion_boss`), garantindo consistência sonora.
 
-### 2. Métodos inexistentes no `SoundSystem`
+### 3. Implementação do método `off()`
+O `EventBus` agora possui suporte completo para remoção de handlers, e todos os sistemas reativos (`SoundSystem`, `EffectsSystem`) utilizam o `off()` em seus métodos `cleanup()`, prevenindo vazamentos de memória e execuções fantasmas.
 
-O sistema de áudio agora usa apenas APIs reais do `SoundManager`.
-
-### 3. Falta de `off()` no `EventBus`
-
-`EventBus.off()` foi implementado e os sistemas passaram a limpar seus inscritos com `cleanup()`.
-
-### 4. `EnemyDestroyed` sem emissão
-
-O evento agora é emitido em `collisions._apply_hit()` quando o alvo é realmente destruído.
-
-### 5. `BossDefeated` duplicando explosões
-
-`EffectsSystem` deixou de reagir com explosão adicional para boss derrotado.
-
-### 6. `MusicStateChange` e `ScreenShake`
-
-O handler de música agora mapeia para métodos reais do `SoundManager`. `ScreenShake` segue sem som dedicado.
+### 4. Cores customizáveis em Floating Scores
+O evento `SpawnFloatingScore` foi atualizado para aceitar um campo opcional `color`. O `EffectsSystem` respeita esse campo, permitindo que a cena decida a cor (ex: Amarelo para combate) sem que o sistema de efeitos precise de lógica de decisão interna.
 
 ---
 
-## Atenção
+## Pendente / Em Observação
 
-### 7. `SpawnFloatingScore` ainda usa cor fixa
+### 1. Baixo consumo de alguns eventos
+`LevelCleared`, `ScoreGained` e `GameStateChange` continuam definidos com pouco ou nenhum consumo. A UI ainda lê estados diretamente de `playing.py`.
 
-O evento continua com cor padrão branca. Isso é aceitável funcionalmente, mas ainda é uma decisão visual acoplada ao evento.
-
-### 8. Arquitetura ainda híbrida
-
-O EventBus já cobre áudio e efeitos principais, mas `PlayingScene` ainda mantém algumas chamadas diretas de música e transição.
-
-### 9. Eventos sem consumo amplo
-
-`LevelCleared`, `ScoreGained` e `GameStateChange` continuam definidos com pouco ou nenhum consumo.
+### 2. Transições de Música
+Ainda existem chamadas manuais para troca de música. Migrar os pontos restantes de música/transição para o `EventBus`.
 
 ---
 
-## Status
+## Próximos Passos (Refinamento)
 
-| Área | Status |
-|---|---|
-| Emissão de eventos principais | OK |
-| Cleanup de handlers | OK |
-| Duplicação de explosões | Resolvida |
-| Métodos inexistentes no áudio | Resolvido |
-| Itens de design restantes | Pendentes |
+1. Migrar o HUD (Score/Combo) para ouvir os eventos `ScoreGained` ou `EnemyDestroyed` em vez de ler atributos de `playing.py`.
+2. Consolidar ou remover eventos ainda não consumidos.
 
----
-
-## Próximos passos
-
-1. Remover a cor fixa de `SpawnFloatingScore` se quiser manter os eventos mais puros.
-2. Migrar os pontos restantes de música/transição, se a meta for EventBus completo.
-3. Consolidar ou remover eventos ainda não consumidos, se não houver uso próximo.
-
-O fluxo principal agora está estável; o restante é refinamento de arquitetura.
+O fluxo principal está estável e a arquitetura de eventos está madura. O restante é refinamento de interface.

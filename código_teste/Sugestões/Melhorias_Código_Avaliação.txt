@@ -116,5 +116,5 @@ self.app.event_bus.emit(events.BossDefeated(
 | 1 | `PlayingScene` God Object | Crítico | Pendente |
 | 2 | `Collisions` acoplado a tipos concretos | Crítico | Pendente |
 | 3 | `config.py` como namespace global | Médio | Pendente |
-| 4 | Event Bus não usado | Arquitetural | Resolvido |
+| 4 | Event Bus não usado | Arquitetural | Concluído |
 

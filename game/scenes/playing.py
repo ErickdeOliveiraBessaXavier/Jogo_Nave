@@ -1873,7 +1873,10 @@ class PlayingScene(Scene):
             # Emit event to display floating score
             self.app.event_bus.emit(
                 events.SpawnFloatingScore(
-                    x=x, y=y, score=self._apply_score_multiplier(pts)
+                    x=x,
+                    y=y,
+                    score=self._apply_score_multiplier(pts),
+                    color=(255, 255, 0),  # Amarelo para pontos de combate
                 )
             )
 
