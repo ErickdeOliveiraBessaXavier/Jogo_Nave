@@ -1659,9 +1659,10 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # Meteor: 1.0,
             # EyeEnemy: 2.0,
         },
-        enemies_to_clear=75,
+        enemies_to_clear=1,
         theme_name="Tutorial",
         #boss_type=StoneGolemBoss,
+        boss_type=MountainSerpentBoss,
         score_multiplier=1.0,
     ),
     # Nível 3: Primeiro Boss - Mountain Serpent (Montanhas)

@@ -2748,7 +2748,7 @@ class PlayingScene(Scene):
         return ()
 
     def _draw_enemy_hitboxes(self, surface: pygame.Surface) -> None:
-        """Overlay de hitboxes (amarelo = bounding rect; vermelho = máscara pixel-perfect)."""
+        """Overlay de hitboxes (amarelo = bounding rect; azul = circular; vermelho = mask pixel-perfect)."""
         enemies_in_view = self.entity_manager.enemy_spatial_grid.query(
             0, 0, Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
         )
@@ -2777,6 +2777,21 @@ class PlayingScene(Scene):
                             )
                         surface.blit(outline_surf, offset)
                         has_mask = True
+
+            # Se tem collision_circle(), desenha como círculo (azul claro)
+            if not has_mask:
+                collision_circle_method = getattr(enemy, "collision_circle", None)
+                if callable(collision_circle_method):
+                    try:
+                        circle_data: tuple[float, float, float] = cast(
+                            tuple[float, float, float],
+                            collision_circle_method()
+                        )
+                        cx, cy, radius = circle_data
+                        pygame.draw.circle(surface, (40, 200, 255), (int(cx), int(cy)), int(radius), 2)
+                        has_mask = True  # Não desenha rects se já desenhou círculo
+                    except (TypeError, ValueError):
+                        pass
 
             if not has_mask and not callable(
                 getattr(enemy, "get_collision_mask_data", None)

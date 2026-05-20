@@ -630,8 +630,6 @@ class SerpentBlock:
         else:
             self._draw_fallback_circle(surface, cx, cy, r)
 
-        self._draw_health_bar(surface, cx, cy, r)
-
     def _draw_sprite(self, surface: pygame.Surface, cx: int, cy: int) -> None:
         if self._sprite_frame is None:
             return
@@ -933,6 +931,8 @@ class MountainSerpentBoss:
     # Cache de frames (compartilhado entre instancias)
     _animation_frames: Optional[List[pygame.Surface]] = None
     _white_animation_frames: Optional[List[pygame.Surface]] = None
+    _vulnerable_animation_frames: Optional[List[pygame.Surface]] = None
+    _white_vulnerable_animation_frames: Optional[List[pygame.Surface]] = None
     _spit_sprite: Optional[pygame.Surface] = None
     _white_spit_sprite: Optional[pygame.Surface] = None
     _pain_sprite: Optional[pygame.Surface] = None
@@ -1023,6 +1023,16 @@ class MountainSerpentBoss:
         self._head_half_w = self._head_sprite.get_width() // 2
         self._head_half_h = self._head_sprite.get_height() // 2
 
+        # Sequência de animação para frames vulneráveis (se disponíveis)
+        if self._vulnerable_animation_frames:
+            self._vulnerable_frame_sequence = self._build_ping_pong_sequence(
+                len(self._vulnerable_animation_frames), repeat_each=self.HEAD_FRAME_REPEAT
+            )
+        else:
+            self._vulnerable_frame_sequence: List[int] = []
+        self._vulnerable_seq_pos: int = 0
+        self._vulnerable_timer: float = 0.0
+
         # Rect da cabeca atualizado in-place (sem realocar por frame)
         self._head_rect = pygame.Rect(
             int(self.head_x - self._head_half_w),
@@ -1056,7 +1066,7 @@ class MountainSerpentBoss:
         if sprites_dir.exists():
             # Carrega frames de animação idle (exclui os novos sprites especiais)
             for path in sorted(sprites_dir.glob("*.png")):
-                if "Cuspindo" in path.name or "Dano" in path.name:
+                if "Cuspindo" in path.name or "Dano" in path.name or "Vulnerável" in path.name:
                     continue
                 image = get_image(path)
                 if image.get_size() != target_size:
@@ -1078,6 +1088,22 @@ class MountainSerpentBoss:
                     get_image(pain_path), target_size
                 )
                 cls._white_pain_sprite = _make_white_sprite(cls._pain_sprite)
+
+            # Carrega frames de vulnerabilidade (4 sprites ordenados)
+            vulnerable_frames: List[pygame.Surface] = []
+            white_vulnerable_frames: List[pygame.Surface] = []
+            for i in range(1, 5):  # 01, 02, 03, 04
+                vuln_path = sprites_dir / f"Animação_Cobra_Sprite_Vulnerável_{i:02d}.png"
+                if vuln_path.exists():
+                    image = pygame.transform.scale(
+                        get_image(vuln_path), target_size
+                    )
+                    vulnerable_frames.append(image)
+                    white_vulnerable_frames.append(_make_white_sprite(image))
+            
+            if vulnerable_frames:
+                cls._vulnerable_animation_frames = vulnerable_frames
+                cls._white_vulnerable_animation_frames = white_vulnerable_frames
 
         cls._animation_frames = frames
         cls._white_animation_frames = white_frames
@@ -1134,6 +1160,28 @@ class MountainSerpentBoss:
         return base
 
     def _update_head_animation(self, dt: float) -> None:
+        # Se vulnerável e tem frames vulneráveis, usa a sequência vulnerável
+        if self.is_vulnerable and self._vulnerable_animation_frames:
+            if len(self._vulnerable_animation_frames) <= 1:
+                self._head_sprite = self._vulnerable_animation_frames[0]
+                return
+
+            self._vulnerable_timer += dt
+            current_idx = self._vulnerable_frame_sequence[self._vulnerable_seq_pos]
+
+            dur = self._get_animation_frame_duration(current_idx)
+            while self._vulnerable_timer >= dur:
+                self._vulnerable_timer -= dur
+                self._vulnerable_seq_pos = (self._vulnerable_seq_pos + 1) % len(
+                    self._vulnerable_frame_sequence
+                )
+                current_idx = self._vulnerable_frame_sequence[self._vulnerable_seq_pos]
+                dur = self._get_animation_frame_duration(current_idx)
+
+            self._set_head_frame_vulnerable(current_idx)
+            return
+
+        # Animação normal (não vulnerável)
         if len(self._head_frames) <= 1:
             self._head_sprite = self._head_frames[0]
             return
@@ -1166,6 +1214,17 @@ class MountainSerpentBoss:
         self._head_half_h = self._head_sprite.get_height() // 2
         self._head_rect.width = self._head_sprite.get_width()
         self._head_rect.height = self._head_sprite.get_height()
+
+    def _set_head_frame_vulnerable(self, frame_idx: int) -> None:
+        """Atualiza o sprite atual (versão vulnerável) e recalcula dimensoes em cache."""
+        if self._vulnerable_animation_frames and frame_idx < len(
+            self._vulnerable_animation_frames
+        ):
+            self._head_sprite = self._vulnerable_animation_frames[frame_idx]
+            self._head_half_w = self._head_sprite.get_width() // 2
+            self._head_half_h = self._head_sprite.get_height() // 2
+            self._head_rect.width = self._head_sprite.get_width()
+            self._head_rect.height = self._head_sprite.get_height()
 
     # ------------------------------------------------------------------
     # Fabrica de blocos
@@ -1848,11 +1907,17 @@ class MountainSerpentBoss:
         draw_x = int(self.head_x + shake_x) - self._head_half_w
         draw_y = int(self.head_y + shake_y) - self._head_half_h
 
-        # Seleciona o sprite baseado no estado (Prioridade: Dor > Cuspida > Normal)
+        # Seleciona o sprite baseado no estado (Prioridade: Vulnerável > Dor > Cuspida > Normal)
         current_sprite = self._head_sprite
         white_sprite = None
 
-        if self._head_pain_timer > 0.0 and self._pain_sprite:
+        if self.is_vulnerable and self._vulnerable_animation_frames:
+            # Usa o sprite vulnerável atual (já atualizado em _update_head_animation)
+            current_sprite = self._head_sprite
+            white_frames = self._white_vulnerable_animation_frames
+            if white_frames is not None and self._vulnerable_seq_pos < len(white_frames):
+                white_sprite = white_frames[self._vulnerable_seq_pos]
+        elif self._head_pain_timer > 0.0 and self._pain_sprite:
             current_sprite = self._pain_sprite
             white_sprite = self._white_pain_sprite
         elif self._spit_anim_timer > 0.0 and self._spit_sprite:
@@ -1870,7 +1935,8 @@ class MountainSerpentBoss:
         else:
             surface.blit(current_sprite, (draw_x, draw_y))
 
-        self._draw_health_bar(surface)
+        if self.is_vulnerable:
+            self._draw_health_bar(surface)
 
     def _draw_health_bar(self, surface: pygame.Surface) -> None:
         bar_w = 140

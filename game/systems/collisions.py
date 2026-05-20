@@ -126,8 +126,28 @@ class Collisions:
             _RECT_MASK_CACHE[key] = mask
         return mask
 
+    @staticmethod
+    def _circles_collide(
+        c1_x: float, c1_y: float, c1_r: float,
+        c2_x: float, c2_y: float, c2_r: float,
+    ) -> bool:
+        """Verifica colisão entre dois círculos (distância < r1 + r2).
+        
+        Otimizado: compara distância ao quadrado para evitar sqrt.
+        """
+        dx = c2_x - c1_x
+        dy = c2_y - c1_y
+        sum_radii = c1_r + c2_r
+        return (dx * dx + dy * dy) < (sum_radii * sum_radii)
+
     @classmethod
     def _rect_collides_with_enemy(cls, rect: pygame.Rect, enemy: Any) -> bool:
+        """Colisão híbrida: AABB (rápido) → Círculo (preciso) quando disponível.
+        
+        Para objetos redondos (SerpentBlock, etc), usa collision_circle() como
+        validação secundária após AABB pass. Evita falsos positivos nas diagonais.
+        """
+        # Tentativa 1: Colisão por máscara (mask-based, pixel-perfect)
         mask_data = cls._get_enemy_collision_mask_data(enemy)
         if mask_data is not None:
             enemy_mask, (enemy_x, enemy_y) = mask_data
@@ -146,9 +166,31 @@ class Collisions:
             )
             return overlap is not None
 
-        return any(
-            rect.colliderect(hitbox) for hitbox in cls._get_ship_contact_hitboxes(enemy)
-        )
+        # Tentativa 2: Colisão por hitbox retangular
+        hitboxes = cls._get_ship_contact_hitboxes(enemy)
+        if hitboxes:
+            for hitbox in hitboxes:
+                if rect.colliderect(hitbox):
+                    # Validação secundária: se o inimigo oferece collision_circle(),
+                    # valida com círculo para ser mais preciso (evita falsos positivos)
+                    if hasattr(enemy, 'collision_circle') and callable(enemy.collision_circle):
+                        proj_cx, proj_cy = float(rect.centerx), float(rect.centery)
+                        proj_r = float(max(rect.width, rect.height) / 2.0)
+                        try:
+                            circle_data: tuple[float, float, float] = cast(
+                                tuple[float, float, float],
+                                enemy.collision_circle()
+                            )
+                            enemy_cx, enemy_cy, enemy_r = circle_data
+                            return cls._circles_collide(proj_cx, proj_cy, proj_r,
+                                                         enemy_cx, enemy_cy, enemy_r)
+                        except (TypeError, ValueError):
+                            # Fallback caso collision_circle() não retorne formato esperado
+                            return True
+                    return True
+            return False
+
+        return False
 
     @classmethod
     def _ship_collides_with_enemy(cls, ship_rect: pygame.Rect, enemy: Any) -> bool:

@@ -25,7 +25,7 @@ def fix_png_profile(png_path: Path):
 
 def main():
     """Processa todas as imagens PNG no diretório de assets."""
-    base_dir = Path(__file__).parent / "game" / "assets"
+    base_dir = Path(__file__).parent.parent / "game" / "assets"
 
     if not base_dir.exists():
         print(f"Diretório não encontrado: {base_dir}")
