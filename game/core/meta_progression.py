@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Deque, Dict, List, Optional, Tuple, cast
+from typing import Any, Deque, Dict, List, Optional, cast
 
 import pygame
 
@@ -927,6 +927,11 @@ class PlayerProfile:
         self._stats_dirty = True  # OPT #4: Invalidate cache when data changes
         self._cached_global_stats = None
 
+    def record_level_adjustment(self, level_number: int, multiplier: float) -> None:
+        """Persiste novo multiplicador de ajuste de dificuldade para um nível."""
+        self.level_adjustments[level_number] = multiplier
+        self._mark_dirty()
+
     def get_global_stats(self) -> Dict[str, Any]:
         """OPT #4: Get cached global stats, recalculate only if dirty."""
         if self._cached_global_stats is None or self._stats_dirty:
@@ -1049,72 +1054,6 @@ class PlayerProfile:
             self.current_session.deaths += 1
 
         self._mark_dirty()
-
-    def get_adjusted_config(self, base_config: LevelConfig) -> LevelConfig:
-        """
-        Obtém configuração ajustada para um nível.
-
-        Sistema completo de meta-progression em ação.
-        """
-        level_num = base_config.level_number
-
-        # Primeira tentativa - sem ajuste
-        if level_num not in self.level_stats:
-            return base_config
-
-        # Analisar performance
-        stats = self.level_stats[level_num]
-        analysis = PerformanceAnalyzer.analyze_level_performance(stats)
-
-        # Obter ajuste anterior (se houver)
-        previous_adjustment = self.level_adjustments.get(level_num, 1.0)
-
-        # Aplicar novo ajuste
-        adjusted_config, new_adjustment = DifficultyAdjuster.apply_adjustment(
-            base_config, analysis, previous_adjustment
-        )
-
-        # Salvar novo ajuste
-        if new_adjustment != previous_adjustment:
-            self.level_adjustments[level_num] = new_adjustment
-            self._mark_dirty()
-
-            # Log para debug
-            direction = "mais fácil" if new_adjustment < 1.0 else "mais difícil"
-            logging.info(
-                "[Meta-Progression] Level %s ajustado %.0f%% %s",
-                level_num,
-                abs(new_adjustment - 1.0) * 100,
-                direction,
-            )
-            logging.info("  Motivo: %s", analysis["reason"])
-
-        return adjusted_config
-
-    def get_skill_level(self) -> str:
-        """Retorna skill level atual."""
-        if not self.level_stats:
-            return "Novato"
-
-        analysis = self.get_global_stats()  # OPT #4: Use cached version
-        return analysis["skill_level"]
-
-    def get_statistics_summary(self) -> Dict[str, Any]:
-        """Retorna resumo completo de estatísticas."""
-        analysis = self.get_global_stats()  # OPT #4: Use cached version
-
-        return {
-            "skill_level": analysis["skill_level"],
-            "highest_level": self.highest_level_reached,
-            "total_playtime_hours": self.total_playtime / 3600,
-            "total_deaths": self.total_deaths,
-            "total_score": self.total_score,
-            "avg_clear_rate": analysis["avg_clear_rate"],
-            "overall_trend": analysis["overall_trend"],
-            "levels_played": len(self.level_stats),
-            "recommendations": analysis["recommendations"],
-            "sessions_played": len(self.session_history),
-        }
 
     def _parse_profile_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parseia JSON em valores de campo. Levanta exceção em estrutura inválida.
@@ -1609,152 +1548,3 @@ class PlayerProfile:
         self.save()
 
         logger.info("Perfil do jogador resetado com sucesso!")
-
-
-class ProfileVisualizer:
-    """Cria visualizações das estatísticas do jogador."""
-
-    @staticmethod
-    def render_skill_badge(
-        surface: pygame.Surface,
-        skill_level: str,
-        x: int,
-        y: int,
-        font: pygame.font.Font,
-    ):
-        """Renderiza badge de skill level."""
-        from ..core import colors
-
-        badge_colors = {
-            "Novato": (100, 100, 100),
-            "Aprendiz": (139, 69, 19),
-            "Intermediário": (192, 192, 192),
-            "Avançado": (255, 215, 0),
-            "Veterano": (75, 0, 130),
-            "Mestre": (255, 0, 255),
-        }
-        color = badge_colors.get(skill_level, colors.WHITE)
-
-        pygame.draw.circle(surface, color, (x + 40, y + 40), 40, 3)
-
-        text = font.render(skill_level, True, color)
-        text_rect = text.get_rect(center=(x + 150, y + 40))
-        surface.blit(text, text_rect)
-
-    @staticmethod
-    def render_performance_graph(
-        surface: pygame.Surface,
-        profile: PlayerProfile,
-        x: int,
-        y: int,
-        width: int,
-        height: int,
-        font: pygame.font.Font,
-    ):
-        """Renderiza gráfico de performance ao longo dos níveis."""
-        from ..core import colors
-
-        if not profile.level_stats:
-            return
-
-        levels = sorted(profile.level_stats.keys())
-        max_level = max(levels) if levels else 1
-
-        pygame.draw.line(
-            surface, colors.GRAY, (x, y + height), (x + width, y + height), 2
-        )
-        pygame.draw.line(surface, colors.GRAY, (x, y), (x, y + height), 2)
-
-        if len(levels) > 1:
-            points: List[Tuple[float, float]] = []
-            for level_num in levels:
-                stats = profile.level_stats[level_num]
-                px = x + (level_num / max_level) * width
-                py = y + height - (stats.clear_rate * height)
-                points.append((px, py))
-                color = ProfileVisualizer._get_performance_color(stats.clear_rate)
-                pygame.draw.circle(surface, color, (int(px), int(py)), 5)
-
-            if len(points) > 1:
-                pygame.draw.lines(surface, colors.BLUE, False, points, 2)
-
-        for i in range(0, max_level + 1, max(1, max_level // 10)):
-            label_x = x + (i / max_level) * width
-            label = font.render(str(i), True, colors.WHITE)
-            surface.blit(label, (label_x - 5, y + height + 5))
-
-        for i in range(0, 101, 25):
-            label_y = y + height - (i / 100 * height)
-            label = font.render(f"{i}%", True, colors.WHITE)
-            surface.blit(label, (x - 40, label_y - 10))
-
-    @staticmethod
-    def render_level_preview(
-        surface: pygame.Surface,
-        profile: PlayerProfile,
-        level_number: int,
-        x: int,
-        y: int,
-    ):
-        """Renderiza preview de um nível com estatísticas."""
-        from ..core import colors
-        from ..core.assets import get_font
-
-        if level_number not in profile.level_stats:
-            # Nível novo
-            font = get_font(18)
-            text = font.render("Nível Novo!", True, colors.GREEN)
-            surface.blit(text, (x, y))
-            return
-
-        stats = profile.level_stats[level_number]
-        analysis = PerformanceAnalyzer.analyze_level_performance(stats)
-
-        # Background
-        bg_rect = pygame.Rect(x, y, 300, 120)
-        pygame.draw.rect(surface, (40, 40, 40), bg_rect)
-        pygame.draw.rect(surface, colors.WHITE, bg_rect, 2)
-
-        font = get_font(16)
-        y_offset = y + 10
-
-        # Estado
-        state_colors = {
-            PerformanceState.STRUGGLING: colors.RED,
-            PerformanceState.LEARNING: colors.YELLOW,
-            PerformanceState.COMFORTABLE: colors.GREEN,
-            PerformanceState.DOMINATING: colors.BLUE,
-            PerformanceState.INCONSISTENT: colors.ORANGE,
-        }
-        state_text = analysis["state"].value.capitalize()
-        state_color = state_colors.get(analysis["state"], colors.WHITE)
-        text = font.render(f"Status: {state_text}", True, state_color)
-        surface.blit(text, (x + 10, y_offset))
-        y_offset += 25
-
-        # Estatísticas
-        lines = [
-            f"Tentativas: {stats.attempts}",
-            f"Taxa de Sucesso: {stats.clear_rate:.0%}",
-            (
-                f"Melhor Tempo: {stats.best_time:.1f}s"
-                if stats.best_time is not None
-                else "Melhor Tempo: --"
-            ),
-        ]
-
-        for line in lines:
-            text = font.render(line, True, colors.WHITE)
-            surface.blit(text, (x + 10, y_offset))
-            y_offset += 22
-
-    @staticmethod
-    def _get_performance_color(clear_rate: float) -> Tuple[int, int, int]:
-        """Retorna cor baseada na taxa de sucesso."""
-        if clear_rate < 0.3:
-            return (255, 0, 0)  # Vermelho - struggling
-        if clear_rate < 0.5:
-            return (255, 165, 0)  # Laranja - learning
-        if clear_rate < 0.8:
-            return (0, 255, 0)  # Verde - comfortable
-        return (0, 191, 255)  # Azul - dominating

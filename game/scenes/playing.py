@@ -36,6 +36,7 @@ from ..core.config import SlimeBossState
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
 from ..core.levels import LevelConfig, LevelManager, get_level_config
+from ..core.meta_progression_service import MetaProgressionService
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
@@ -457,7 +458,9 @@ class PlayingScene(Scene):
     def _get_adjusted_level_config(self, level_number: int) -> LevelConfig:
         """Obtém configuração de nível ajustada pelo meta-progression."""
         base_config = get_level_config(level_number, self.difficulty_preset)
-        return self.player_profile.get_adjusted_config(base_config)
+        return MetaProgressionService.get_adjusted_config(
+            self.player_profile, base_config
+        )
 
     def _apply_world_theme(self) -> None:
         """Aplica o tema visual do mundo atual."""

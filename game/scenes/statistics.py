@@ -13,6 +13,7 @@ from ..core.meta_progression import (
     PlayerProfile,
     WorldUnlockStatus,
 )
+from ..core.meta_progression_service import ProfileStatsFormatter
 from ..core.paths import get_profile_path
 from ..core.state import Scene
 from .ui_helpers import draw_bordered_button, render_with_fade
@@ -413,7 +414,7 @@ class StatisticsView:
     ):
         if not self.profile:
             return
-        summary = self.profile.get_statistics_summary()
+        summary = ProfileStatsFormatter.statistics_summary(self.profile)
 
         indent_x = 30
 

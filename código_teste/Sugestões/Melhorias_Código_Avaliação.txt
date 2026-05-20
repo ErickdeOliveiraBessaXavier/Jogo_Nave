@@ -140,20 +140,6 @@ self.event_bus.emit("enemy_killed", enemy=enemy, position=pos, points=pts)
 # SoundSystem, ScoreSystem, EffectsSystem reagem independentemente
 ```
 
-### 6. `PlayerProfile` mistura persistência, lógica de negócio e UI helpers
-
-```python
-class PlayerProfile:
-    def load(self): ...
-    def save(self): ...
-    def get_adjusted_config(self, base_config): ...  # chama PerformanceAnalyzer
-    def unlock_next_world(self): ...
-    def get_statistics_summary(self): ...  # formata dados para exibição
-    def get_skill_level(self) -> str: ...  # retorna string localizada
-```
-
-`ProfileVisualizer` com métodos `render_*` dentro de `meta_progression.py` é o pior exemplo — lógica de rendering dentro de um módulo de domínio.
-
 ---
 
 ## Resumo por prioridade
@@ -165,4 +151,3 @@ class PlayerProfile:
 | 3 | `Collisions` acoplado a tipos concretos | 🔴 Crítico | Alto |
 | 4 | `config.py` — namespace global disfarçado | 🟡 Médio | Alto |
 | 5 | EventBus existente mas não usado | 🔵 Arquitetural | Alto |
-| 6 | `PlayerProfile` mistura persistência + UI | 🔵 Arquitetural | Alto |
