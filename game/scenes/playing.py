@@ -166,25 +166,8 @@ class PlayingScene(Scene):
         self._init_upgrades_from_profile()
 
     @property
-    def enemies_destroyed_in_level(self) -> int:
-        return self.level_controller.enemies_destroyed_in_level
-
-    @property
-    def enemies_to_clear(self) -> int:
-        return self.level_controller.enemies_to_clear
-
-    @property
-    def has_boss(self) -> bool:
-        return self.level_controller.has_boss
-
-    @property
     def level_config(self) -> Optional[LevelConfig]:
         return self.level_controller.level_config
-
-    @level_config.setter
-    def level_config(self, value: Optional[LevelConfig]) -> None:
-        # Mantém compatibilidade com atribuições diretas legadas
-        self.level_controller.level_config = value
 
     # ------------------------------------------------------------------
     # Inicialização segmentada
@@ -495,8 +478,6 @@ class PlayingScene(Scene):
             self.current_world = new_world
             self.pending_world_transition = None
             self._apply_mountains_progress()
-
-        self._base_score_multiplier = self.level_controller.base_score_multiplier
 
         self.boss_controller.reset()
         self.entity_manager.clear_for_level_transition()
