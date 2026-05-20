@@ -66,9 +66,7 @@ for entity in self._active_entities:
 
 ---
 
----
-
-### 4. `collisions.py` — Acoplamento forte com tipos concretos, não extensível
+### 3. `collisions.py` — Acoplamento forte com tipos concretos, não extensível
 
 `Collisions` importa diretamente 25+ tipos de entidade e tem métodos como `bullets_vs_slime_drips`, `ship_vs_spike_boss`. Adicionar um novo inimigo com colisão especial exige modificar essa classe.
 
@@ -109,21 +107,6 @@ if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.15:
 ```
 
 **Pipeline de transformações não é explícito.** A sequência `_filter → _apply_weights → _apply_stage_weights → _apply_variety_cap` deve ser uma pipeline clara, não funções soltas chamadas em `_apply_theme_enemy_rules`.
-
----
-
-### 6. `spawner.py` — Dois sistemas de spawn (legado + ponderado) ativos simultaneamente
-
-```python
-self.use_weighted_spawn: bool = DifficultyConfig.WEIGHTED_SPAWN_ENABLED
-
-if self.use_weighted_spawn:
-    self._update_weighted_enemy_spawn(...)
-else:
-    self._update_legacy_enemy_spawn(...)
-```
-
-Manter dois sistemas completos em paralelo é debt técnico. O sistema legado provavelmente nunca é testado no estado atual. Se o weighted está estável, remova o legado. Se não está, corrija — não mantenha os dois.
 
 ---
 
@@ -175,23 +158,7 @@ self.event_bus.emit("enemy_killed", enemy=enemy, position=pos, points=pts)
 # SoundSystem, ScoreSystem, EffectsSystem reagem independentemente
 ```
 
----
-
-### 11. `SpatialGrid` correto mas subutilizado em colisões
-
-`SpatialGrid` existe e funciona, mas vários métodos de colisão em `collisions.py` ainda iteram listas completas:
-
-```python
-def serpent_bullets_vs_ship(self, ship, serpent_bullets):
-    for bullet in serpent_bullets[:]:  # sem spatial grid
-        if ship.rect.colliderect(bullet.rect):
-```
-
-Com muitos projéteis em tela, isso é O(n) onde poderia ser O(1) médio.
-
----
-
-### 12. `PlayerProfile` mistura persistência, lógica de negócio e UI helpers
+### 7. `PlayerProfile` mistura persistência, lógica de negócio e UI helpers
 
 ```python
 class PlayerProfile:
@@ -215,8 +182,6 @@ class PlayerProfile:
 | 2 | `EntityManager` com isinstance em hot path | 🔴 Crítico | Alto |
 | 3 | `Collisions` acoplado a tipos concretos | 🔴 Crítico | Alto |
 | 4 | `levels.py` — pipeline implícita, 900 linhas | 🟠 Alto | Médio |
-| 5 | Dois sistemas de spawn em paralelo | 🟠 Alto | Médio |
-| 6 | `config.py` — namespace global disfarçado | 🟡 Médio | Alto |
-| 7 | EventBus existente mas não usado | 🔵 Arquitetural | Alto |
-| 8 | `SpatialGrid` subutilizado em colisões | 🔵 Arquitetural | Médio |
-| 9 | `PlayerProfile` mistura persistência + UI | 🔵 Arquitetural | Alto |
+| 5 | `config.py` — namespace global disfarçado | 🟡 Médio | Alto |
+| 6 | EventBus existente mas não usado | 🔵 Arquitetural | Alto |
+| 7 | `PlayerProfile` mistura persistência + UI | 🔵 Arquitetural | Alto |

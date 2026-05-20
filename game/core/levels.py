@@ -665,7 +665,6 @@ class DifficultyConfig:
     BASE_ALIEN_SPAWN_TIME: float = 2.5
     BASE_EYE_SPAWN_TIME: float = 6.0
     MIN_SPAWN_TIME: float = 0.3  # Aumentado de 0.15 para 0.3 (mais jogável)
-    WEIGHTED_SPAWN_ENABLED: bool = True  # Feature flag do novo spawn ponderado
     WEIGHTED_SPAWN_TICK: float = 0.15  # Janela entre tentativas de spawn ponderado
     WEIGHTED_RECENT_MEMORY: int = 3  # Quantos spawns recentes entram no anti-repetição
     WEIGHTED_REPEAT_PENALTY: float = 0.45  # Penalidade por repetição recente

@@ -10,7 +10,6 @@ from typing import (
     List,
     Protocol,
     Tuple,
-    Type,
     TypedDict,
     Union,
     cast,
@@ -130,9 +129,11 @@ STAR_Y_OFFSET_MAX: float = 100.0
 # EnemySpawner — warm-up e rampa de intensidade para transição de mundo.
 # Troca de mundo = silêncio extra + rampa mais lenta para não jogar o jogador
 # direto no máximo de pressão logo na primeira fase do novo mundo.
-WORLD_TRANSITION_WARMUP_EXTRA: float = 4.0   # segundos extras de silêncio pós-boss
-WORLD_TRANSITION_RAMP_DURATION: float = 25.0  # segundos para atingir spawn_intensity=1.0
-NORMAL_RAMP_DURATION: float = 15.0            # rampa padrão (troca de fase normal)
+WORLD_TRANSITION_WARMUP_EXTRA: float = 4.0  # segundos extras de silêncio pós-boss
+WORLD_TRANSITION_RAMP_DURATION: float = (
+    25.0  # segundos para atingir spawn_intensity=1.0
+)
+NORMAL_RAMP_DURATION: float = 15.0  # rampa padrão (troca de fase normal)
 
 
 # ---------------------------------------------------------------------------
@@ -245,8 +246,7 @@ class EnemySpawner:
             "full_cycle": float(Config.FORMATION_CIRCLE_RADIUS + 40),
         }
 
-        # Pipeline ponderado com fallback para o modo legado
-        self.use_weighted_spawn: bool = DifficultyConfig.WEIGHTED_SPAWN_ENABLED
+        # Pipeline ponderado
         self.recent_enemy_types: deque[type] = deque(
             maxlen=DifficultyConfig.WEIGHTED_RECENT_MEMORY
         )
@@ -328,14 +328,7 @@ class EnemySpawner:
             )
 
     def _reset_spawn_pipeline(self) -> None:
-        """Recria timers para o modo ativo de spawn."""
-        self.enemy_timers: Dict[Type[object], Timer] = {}
-        for enemy_type in self.level_config.enemy_types:
-            spawn_time = self.level_config.get_spawn_time(enemy_type)
-            timer = Timer(spawn_time)
-            timer.start()
-            self.enemy_timers[enemy_type] = timer
-
+        """Recria timers para o spawn ponderado."""
         self.weighted_spawn_timer = Timer(DifficultyConfig.WEIGHTED_SPAWN_TICK)
         self.weighted_spawn_timer.start()
         self.recent_enemy_types.clear()
@@ -882,39 +875,7 @@ class EnemySpawner:
         return True
 
     # ------------------------------------------------------------------
-    # Update — legado e ponderado
     # ------------------------------------------------------------------
-
-    def _update_legacy_enemy_spawn(
-        self,
-        dt: float,
-        entity_manager: "EntityManager",
-        player_x: float | None,
-        player_y: float | None,
-        is_side_scroll: bool,
-        counts: dict[str, int] | None = None,
-    ) -> None:
-        for enemy_type, timer in self.enemy_timers.items():
-            timer.update(dt)
-            if not timer.done():
-                continue
-            timer.start()
-
-            if random.random() >= self.spawn_intensity:
-                continue
-            if not self._should_spawn_enemy(enemy_type, entity_manager, counts=counts):
-                continue
-            if not self._can_spawn_now(enemy_type):
-                continue
-
-            self._spawn_enemy_of_type(
-                enemy_type,
-                entity_manager,
-                player_x=player_x,
-                player_y=player_y,
-                is_side_scroll=is_side_scroll,
-            )
-            self._register_spawn(enemy_type)
 
     def _update_weighted_enemy_spawn(
         self,
@@ -1008,27 +969,17 @@ class EnemySpawner:
             self.spawn_intensity = min(1.0, 0.1 + (ramp_elapsed / ramp_duration) * 0.9)
             self.warm_up_timer -= dt  # Continua decrementando para a rampa funcionar
 
-        # Spawn principal (ponderado ou legado)
-        if self.use_weighted_spawn:
-            self._record_pressure_sample(entity_manager, counts=counts)
-            self._update_weighted_enemy_spawn(
-                dt,
-                entity_manager,
-                player_x,
-                player_y,
-                is_side_scroll,
-                counts=counts,
-            )
-            self._flush_weighted_telemetry(dt)
-        else:
-            self._update_legacy_enemy_spawn(
-                dt,
-                entity_manager,
-                player_x,
-                player_y,
-                is_side_scroll,
-                counts=counts,
-            )
+        # Spawn ponderado
+        self._record_pressure_sample(entity_manager, counts=counts)
+        self._update_weighted_enemy_spawn(
+            dt,
+            entity_manager,
+            player_x,
+            player_y,
+            is_side_scroll,
+            counts=counts,
+        )
+        self._flush_weighted_telemetry(dt)
 
         self._update_mine_spawner(dt, entity_manager, counts=counts)
         self._update_propeller_spawner(dt, entity_manager, counts=counts)
@@ -1233,7 +1184,9 @@ class EnemySpawner:
         self.level_config = (
             level_config
             if level_config is not None
-            else self.level_manager.get_level(self.current_level_number, self.difficulty_preset)
+            else self.level_manager.get_level(
+                self.current_level_number, self.difficulty_preset
+            )
         )
         self.stopped = False
         self._is_world_transition = is_world_transition

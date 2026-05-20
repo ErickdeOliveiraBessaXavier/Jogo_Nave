@@ -410,7 +410,9 @@ class PlayingScene(Scene):
         # config do nível 1 por default, o que quebra inicializações em mundos
         # diferentes do primeiro (ex.: começar em STARFIELD via world select).
         if not is_initial_level:
-            self.enemy_spawner.set_level(self.current_level_index + 1, level_config=self.level_config)
+            self.enemy_spawner.set_level(
+                self.current_level_index + 1, level_config=self.level_config
+            )
         self.powerup_spawner = PowerUpSpawner(self.difficulty_preset)
         self.collisions = Collisions()
         self.star_spawner = StarSpawner()
@@ -1007,7 +1009,6 @@ class PlayingScene(Scene):
                     self.ship.x -= prop.PUSH_FORCE * dt
                     wind_slow_factor = prop.SLOW_SPEED_MULT
 
-
         self.ship.wind_slow_factor = wind_slow_factor
 
     def _update_spawners(self, dt: float) -> None:
@@ -1153,7 +1154,8 @@ class PlayingScene(Scene):
 
                 # Coletar inimigos válidos para distribuição de alvos.
                 live_enemies = [
-                    e for e in self.entity_manager.enemies
+                    e
+                    for e in self.entity_manager.enemies
                     if not getattr(e, "dead", False)
                 ]
                 if self.entity_manager.boss and not getattr(
@@ -1174,7 +1176,11 @@ class PlayingScene(Scene):
                         # Distribuição round-robin: projétil i persegue inimigo i % n.
                         # Se não há inimigos, locked_target=None e o projétil busca
                         # o mais próximo dinamicamente (comportamento padrão).
-                        target = live_enemies[i % len(live_enemies)] if live_enemies else None
+                        target = (
+                            live_enemies[i % len(live_enemies)]
+                            if live_enemies
+                            else None
+                        )
                         self.entity_manager.spawn_homing_bullet(
                             x,
                             y,
@@ -1322,7 +1328,9 @@ class PlayingScene(Scene):
                 self.player_profile.add_stars(9999)
                 self.player_profile.unlock_all_worlds()
                 self.player_profile.save()  # Força save imediato
-                logger.info("⭐ CHEAT ATIVADO - +9999 Estrelas e todos os mundos desbloqueados!")
+                logger.info(
+                    "⭐ CHEAT ATIVADO - +9999 Estrelas e todos os mundos desbloqueados!"
+                )
                 if hasattr(sound_manager, "play_powerup"):
                     sound_manager.play_powerup()  # type: ignore
             else:
@@ -1713,14 +1721,20 @@ class PlayingScene(Scene):
         """Verifica todas as colisões que causam dano à nave."""
         em = self.entity_manager
 
-        if self.collisions.alien_bullets_vs_ship(self.ship, em.alien_bullets):
+        if self.collisions.alien_bullets_vs_ship(
+            self.ship, em.alien_bullets, em.enemy_projectile_grid
+        ):
             self._handle_ship_hit()
-        if self.collisions.serpent_bullets_vs_ship(self.ship, em.serpent_bullets):
+        if self.collisions.serpent_bullets_vs_ship(
+            self.ship, em.serpent_bullets, em.enemy_projectile_grid
+        ):
             self._handle_ship_hit()
         if self.collisions.eye_laser_vs_ship(self.ship, em.eye_lasers):
             self._handle_ship_hit()
 
-        orb_hit = self.collisions.energy_orbs_vs_ship(self.ship, em.energy_orbs)
+        orb_hit = self.collisions.energy_orbs_vs_ship(
+            self.ship, em.energy_orbs, em.enemy_projectile_grid
+        )
         if orb_hit:
             self._handle_ship_hit()
             if self.ship.invuln > 0:
@@ -2044,9 +2058,7 @@ class PlayingScene(Scene):
         # No game over, persistir o ganho da fase incompleta (record_clear não
         # roda nesse caso). Em perdas de vida com vidas restantes, deixar para
         # record_clear capturar o total quando a fase for concluída.
-        level_gain_on_death = (
-            self.score - self.level_start_score if is_game_over else 0
-        )
+        level_gain_on_death = self.score - self.level_start_score if is_game_over else 0
         self.player_profile.record_death(
             self.current_level_index + 1,
             cause="collision",
@@ -2190,7 +2202,7 @@ class PlayingScene(Scene):
             self.entity_manager.boss = boss
 
         self._cache_boss_type()
-        
+
         # Pausa o ciclo dia/noite enquanto o boss está ativo (se o background existir)
         renderer_bg = None
         if getattr(self, "r", None) is not None:
@@ -2280,7 +2292,7 @@ class PlayingScene(Scene):
         self.entity_manager.boss = None
         self.boss_fight_active = False
         self._boss_type_cache = None
-        
+
         # Retoma o ciclo dia/noite após a morte do boss (se o background existir)
         renderer_bg = None
         if getattr(self, "r", None) is not None:
@@ -2351,7 +2363,11 @@ class PlayingScene(Scene):
         if not theme_changed:
             self._apply_mountains_progress()
 
-        self.enemy_spawner.set_level(self.current_level_index + 1, is_world_transition=theme_changed, level_config=self.level_config)
+        self.enemy_spawner.set_level(
+            self.current_level_index + 1,
+            is_world_transition=theme_changed,
+            level_config=self.level_config,
+        )
         self.enemies_destroyed_in_level = 0
         self.level_start_time = None
         self.level_start_score = 0

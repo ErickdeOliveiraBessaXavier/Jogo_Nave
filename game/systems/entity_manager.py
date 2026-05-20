@@ -18,6 +18,7 @@ from ..entities.bullet import Bullet
 from ..entities.bullet_pool import BulletPool
 from ..entities.cannon_mine import CannonMine
 from ..entities.cannon_tower import CannonTower
+from ..entities.chain_lightning import ChainLightning
 from ..entities.cloud_archmage_boss import CloudArchmageBoss
 from ..entities.emp_wave import EMPWave
 from ..entities.explosion import Explosion, ExplosionType
@@ -50,7 +51,6 @@ from ..entities.mountain_serpent_boss import (
     SerpentRockBullet,
 )
 from ..entities.player_laser import PlayerLaser
-from ..entities.chain_lightning import ChainLightning
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
 from ..entities.rock_glider_pool import RockGliderPool
@@ -164,6 +164,7 @@ class EntityManager:
             ]
         ] = SpatialGrid()
         self.spike_spatial_grid: SpatialGrid[Spike] = SpatialGrid()
+        self.enemy_projectile_grid: SpatialGrid[Any] = SpatialGrid()
 
         # Estado interno
         self._grid_needs_rebuild = True
@@ -434,6 +435,17 @@ class EntityManager:
         self.spike_spatial_grid.clear()
         for s in self.spikes:
             self.spike_spatial_grid.insert_from_rect(s)
+
+        self.enemy_projectile_grid.clear()
+        for b in self.alien_bullets:
+            if not b.dead:
+                self.enemy_projectile_grid.insert_from_rect(b)
+        for b in self.serpent_bullets:
+            if not b.dead:
+                self.enemy_projectile_grid.insert_from_rect(b)
+        for o in self.energy_orbs:
+            if not o.dead:
+                self.enemy_projectile_grid.insert_from_rect(o)
 
         self._grid_needs_rebuild = False
 
@@ -964,10 +976,10 @@ class EntityManager:
             sw, sh = surface.get_size()
             overlay = ChainLightning.get_shared_overlay(sw, sh)
             overlay.fill((0, 0, 0, 0))
-            
+
             for cl in self.chain_lightnings:
                 cl.draw_to_surface(overlay)
-                
+
             surface.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
 
     def spawn_elemental_robot(
@@ -1247,6 +1259,7 @@ class EntityManager:
         self.explosion_pool.clear_active()
         self.enemy_spatial_grid.clear()
         self.spike_spatial_grid.clear()
+        self.enemy_projectile_grid.clear()
         self._grid_needs_rebuild = True
 
     def clear_for_level_transition(self) -> None:
@@ -1287,6 +1300,7 @@ class EntityManager:
 
         self.enemy_spatial_grid.clear()
         self.spike_spatial_grid.clear()
+        self.enemy_projectile_grid.clear()
         self._grid_needs_rebuild = True
 
     def get_stats(self) -> dict[str, Any]:

@@ -1317,30 +1317,61 @@ class Collisions:
         return False
 
     def serpent_bullets_vs_ship(
-        self, ship: Ship, serpent_bullets: list[SerpentRockBullet]
+        self,
+        ship: Ship,
+        serpent_bullets: list[SerpentRockBullet],
+        grid: "SpatialGrid[Any] | None" = None,
     ) -> bool:
         """Verifica colisão entre as bolas de rocha da serpente e a nave."""
         if ship.invuln > 0:
             return False
+        ship_rect = ship.rect
+        if grid is not None:
+            pad = CollisionConstants.SPATIAL_QUERY_PADDING
+            for bullet in grid.query(
+                ship_rect.x - pad, ship_rect.y - pad,
+                ship_rect.width + pad * 2, ship_rect.height + pad * 2,
+            ):
+                if isinstance(bullet, SerpentRockBullet) and ship_rect.colliderect(bullet.rect):
+                    bullet.dead = True
+                    return True
+            return False
         for bullet in serpent_bullets[:]:
-            if ship.rect.colliderect(bullet.rect):
+            if ship_rect.colliderect(bullet.rect):
                 bullet.dead = True
                 return True
         return False
 
     def alien_bullets_vs_ship(
-        self, ship: Ship, alien_bullets: list[AlienBullet]
+        self,
+        ship: Ship,
+        alien_bullets: list[AlienBullet],
+        grid: "SpatialGrid[Any] | None" = None,
     ) -> bool:
         if ship.invuln > 0:
             return False
+        ship_rect = ship.rect
+        if grid is not None:
+            pad = CollisionConstants.SPATIAL_QUERY_PADDING
+            for bullet in grid.query(
+                ship_rect.x - pad, ship_rect.y - pad,
+                ship_rect.width + pad * 2, ship_rect.height + pad * 2,
+            ):
+                if isinstance(bullet, AlienBullet) and ship_rect.colliderect(bullet.rect):
+                    bullet.dead = True
+                    return True
+            return False
         for bullet in alien_bullets[:]:
-            if ship.rect.colliderect(bullet.rect):
+            if ship_rect.colliderect(bullet.rect):
                 bullet.dead = True
                 return True
         return False
 
     def energy_orbs_vs_ship(
-        self, ship: Ship, energy_orbs: list[EnergyOrb]
+        self,
+        ship: Ship,
+        energy_orbs: list[EnergyOrb],
+        grid: "SpatialGrid[Any] | None" = None,
     ) -> EnergyOrb | None:
         """Verifica colisão entre EnergyOrbs (ElementalRobot) e a nave.
 
@@ -1348,9 +1379,19 @@ class Collisions:
         """
         if ship.invuln > 0:
             return None
-
+        ship_rect = ship.rect
+        if grid is not None:
+            pad = CollisionConstants.SPATIAL_QUERY_PADDING
+            for orb in grid.query(
+                ship_rect.x - pad, ship_rect.y - pad,
+                ship_rect.width + pad * 2, ship_rect.height + pad * 2,
+            ):
+                if isinstance(orb, EnergyOrb) and not orb.dead and ship_rect.colliderect(orb.rect):
+                    orb.dead = True
+                    return orb
+            return None
         for orb in energy_orbs[:]:
-            if not orb.dead and ship.rect.colliderect(orb.rect):
+            if not orb.dead and ship_rect.colliderect(orb.rect):
                 orb.dead = True
                 return orb
         return None
