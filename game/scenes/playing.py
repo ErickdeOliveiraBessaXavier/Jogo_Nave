@@ -58,6 +58,7 @@ from ..systems.effects_system import EffectsSystem
 from ..systems.entity_manager import EntityManager
 from ..systems.level_progression_controller import (
     LevelProgressionController,
+    ProgressionStatus,
 )
 from ..systems.shooting_system import ShootingSystem
 from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
@@ -148,53 +149,6 @@ class PlayingScene(Scene):
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
         self.last_dt: float = 1.0 / Config.FPS
         self.r = app.renderer
-        self.first_entry: bool = True
-        self.cheat_buffer: str = ""
-        self.god_mode: bool = False
-        self.state: GameState = GameState.PREPARING
-        self.preparation_time_left: float = Config.PREPARATION_TIME
-        # Estado anterior dos triggers analógicos do controle (para detectar
-        # transição abaixo/acima do threshold sem disparar a cada AXISMOTION).
-        self._lt_pressed: bool = False
-        # Calibração defensiva do LT: só confiamos no axis 2 como gatilho se
-        # ele já reportou valor próximo de -1 (estado solto de trigger real).
-        # Sticks analógicos repousam em ~0 e nunca chegam a -1 sem input —
-        # então qualquer controle que reporte o RS Y em axis 2 (mapeamento
-        # SDL não-padrão) NÃO acionará habilidades especiais por engano.
-        self._lt_calibrated: bool = False
-        # Modo de seleção de upgrade via controle: D-pad ↑ alterna, LB/RB
-        # navegam entre slots ativos, A confirma, B cancela.
-        self._upgrade_select_mode: bool = False
-        self._upgrade_select_index: int = 0
-        self.transition_phase: TransitionPhase = TransitionPhase.LEVEL_ENTRY
-        self.screen_shake_timer: float = 0.0
-        self.screen_shake_intensity: int = Config.SCREEN_SHAKE_NORMAL
-        self.time_stop_timer: float = 0.0
-        self.freeze_active: bool = False
-        self.show_fps: bool = False
-        self.show_enemy_hitboxes: bool = False
-        self._game_over_triggered: bool = False
-        self.score_multiplier_timer: float = 0.0
-        self.score_multiplier_active: bool = False
-        self.level_transition_timer: float = 0.0
-        self.level_transition_pending_timer: float = 0.0
-        self.pending_world_transition: Optional[WorldConfig] = None
-        self.world_transition_cutscene_timer: float = 0.0
-        self.world_transition_cutscene_launch_speed: float = 0.0
-        self.world_transition_cutscene_origin: tuple[float, float] = (0.0, 0.0)
-        self.world_transition_cutscene_recoil_offset: float = 0.0
-        self.world_transition_cutscene_launch_distance: float = 0.0
-        self.world_transition_cutscene_target_world: Optional[WorldConfig] = None
-        self.world_transition_cutscene_debug_mode: bool = False
-        self.world_transition_thruster_particles: list[ThrusterParticle] = []
-        self.start_fade_active: bool = False
-        self.start_fade_alpha: float = 255.0
-        self.start_fade_elapsed: float = 0.0
-        self.lives: int = 0
-        self.player_damage_multiplier: float = 1.0
-        self.enemy_health_multiplier: float = 1.0
-        self.score: int = 0
-        self.total_enemies_destroyed: int = 0
 
         # Índice 0-based; starting_level é 1-based
         self.current_level_index: int = starting_level - 1
@@ -207,6 +161,7 @@ class PlayingScene(Scene):
         self._init_transition_state()
         self._init_fade()
         self._init_systems()
+
         # Engenheiro: mini-naves permanentes só podem ser spawnadas depois que
         # `entity_manager` existe (criado em `_init_systems`).
         self._build_permanent_mini_ships()
@@ -214,33 +169,24 @@ class PlayingScene(Scene):
 
     @property
     def enemies_destroyed_in_level(self) -> int:
-        if hasattr(self, "level_controller") and self.level_controller:
-            return self.level_controller.enemies_destroyed_in_level
-        return 0
+        return self.level_controller.enemies_destroyed_in_level
 
     @property
     def enemies_to_clear(self) -> int:
-        if hasattr(self, "level_controller") and self.level_controller:
-            return self.level_controller.enemies_to_clear
-        return 0
+        return self.level_controller.enemies_to_clear
 
     @property
     def has_boss(self) -> bool:
-        if hasattr(self, "level_controller") and self.level_controller:
-            return self.level_controller.has_boss
-        return False
+        return self.level_controller.has_boss
 
     @property
     def level_config(self) -> Optional[LevelConfig]:
-        if hasattr(self, "level_controller") and self.level_controller:
-            return self.level_controller.level_config
-        return None
+        return self.level_controller.level_config
 
     @level_config.setter
     def level_config(self, value: Optional[LevelConfig]) -> None:
         # Mantém compatibilidade com atribuições diretas legadas
-        if hasattr(self, "level_controller") and self.level_controller:
-            self.level_controller.level_config = value
+        self.level_controller.level_config = value
 
     # ------------------------------------------------------------------
     # Inicialização segmentada
@@ -422,10 +368,6 @@ class PlayingScene(Scene):
             player_profile=self.player_profile,
             difficulty_preset=self.difficulty_preset,
             difficulty_settings=self.difficulty_settings,
-            on_level_cleared=self._on_level_cleared,
-            on_boss_threshold_reached=self._on_boss_threshold_reached,
-            on_cleanup_needed=self._on_cleanup_needed,
-            on_advance_level=self._on_advance_level,
         )
         self.level_controller.setup(
             level_index=self.current_level_index,
@@ -1877,10 +1819,16 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
 
     def _check_level_progression(self) -> None:
-        self.level_controller.check_level_progression(
+        status = self.level_controller.check_level_progression(
             current_score=self.score,
             enemy_cleanup_active=self.boss_controller.enemy_cleanup_active,
         )
+        if status == ProgressionStatus.CLEANUP_NEEDED:
+            self._on_cleanup_needed()
+        elif status == ProgressionStatus.BOSS_READY:
+            self._on_boss_threshold_reached()
+        elif status == ProgressionStatus.LEVEL_CLEARED:
+            self._on_level_cleared(with_delay=False)
 
     def _start_boss_fight(self) -> None:
         level_config = self.level_config
@@ -1897,7 +1845,9 @@ class PlayingScene(Scene):
         if self.level_controller.current_level_number == self.current_world.boss_level:
             self.player_profile.unlock_next_world(self.current_world.world_id)
 
-        self.level_controller.advance_after_boss(self.score)
+        status = self.level_controller.advance_after_boss(self.score)
+        if status == ProgressionStatus.LEVEL_CLEARED:
+            self._on_level_cleared(with_delay=True)
 
     def _start_next_level(self) -> None:
         # Checkpoint usa o número 1-based do nível recém-concluído.
@@ -1906,7 +1856,10 @@ class PlayingScene(Scene):
         )
         self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
 
-        self.level_controller.start_next_level(self.current_world)
+        theme_changed, new_world = self.level_controller.start_next_level(
+            self.current_world
+        )
+        self._on_advance_level(theme_changed, new_world)
 
     # ------------------------------------------------------------------
     # Eventos de entrada

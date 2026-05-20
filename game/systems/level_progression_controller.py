@@ -49,7 +49,7 @@ class LevelProgressionController:
     - Avanço para próximo nível (índice + spawner)
 
     Comunicação com PlayingScene:
-    - check_level_progression() avalia o estado e dispara callbacks.
+    - check_level_progression() avalia o estado e retorna ProgressionStatus.
     - notify_*() recebem deltas de gameplay (kills, dano, powerups).
     - Atributos públicos (level_start_score, current_level_number, etc.) são
       lidos pela cena conforme necessário.
@@ -63,10 +63,6 @@ class LevelProgressionController:
         player_profile: Any,
         difficulty_preset: DifficultyPreset,
         difficulty_settings: Mapping[str, Any],
-        on_level_cleared: Callable[[bool], None],
-        on_boss_threshold_reached: Callable[[], None],
-        on_cleanup_needed: Callable[[], None],
-        on_advance_level: Callable[[bool, WorldConfig], None],
     ) -> None:
         self._em = entity_manager
         self._bus = event_bus
@@ -74,12 +70,6 @@ class LevelProgressionController:
         self._player_profile = player_profile
         self._difficulty_preset = difficulty_preset
         self._difficulty_settings = difficulty_settings
-
-        # Callbacks
-        self._on_level_cleared = on_level_cleared
-        self._on_boss_threshold_reached = on_boss_threshold_reached
-        self._on_cleanup_needed = on_cleanup_needed
-        self._on_advance_level = on_advance_level
 
         # Configuração da fase atual
         self.current_level_index: int = 0
@@ -200,37 +190,35 @@ class LevelProgressionController:
 
     def check_level_progression(
         self, current_score: int, enemy_cleanup_active: bool
-    ) -> None:
-        """Avalia progresso da fase e dispara callbacks apropriados."""
+    ) -> ProgressionStatus:
+        """Avalia progresso da fase e retorna o status atual."""
         if self.enemies_destroyed_in_level < self.enemies_to_clear:
-            return
+            return ProgressionStatus.NONE
 
         self._enemy_spawner.stop()
         active_hostiles = self._count_active_stage_hostiles()
 
         if active_hostiles > 0:
             if not enemy_cleanup_active:
-                self._on_cleanup_needed()
+                return ProgressionStatus.CLEANUP_NEEDED
+            return ProgressionStatus.NONE
         else:
             if self.has_boss:
-                self._on_boss_threshold_reached()
+                return ProgressionStatus.BOSS_READY
             else:
-                self._advance_to_next_level(with_delay=False, current_score=current_score)
+                self.record_clear(current_score)
+                return ProgressionStatus.LEVEL_CLEARED
 
-    def advance_after_boss(self, current_score: int) -> None:
+    def advance_after_boss(self, current_score: int) -> ProgressionStatus:
         """Inicia fluxo de transição após vitória contra o boss."""
-        self._advance_to_next_level(with_delay=True, current_score=current_score)
-
-    def _advance_to_next_level(self, with_delay: bool, current_score: int) -> None:
-        """Finaliza fase atual e sinaliza para a cena."""
         self.record_clear(current_score)
-        self._on_level_cleared(with_delay)
+        return ProgressionStatus.LEVEL_CLEARED
 
-    def start_next_level(self, current_world: WorldConfig) -> None:
+    def start_next_level(self, current_world: WorldConfig) -> tuple[bool, WorldConfig]:
         """Incrementa nível, carrega config e sinaliza início."""
         self.current_level_index += 1
         self.level_config = self.get_adjusted_level_config(self.current_level_number)
-        
+
         new_world = get_world_for_level(self.current_level_number)
         theme_changed = new_world.theme != current_world.theme
         self.current_world = new_world
@@ -245,7 +233,7 @@ class LevelProgressionController:
             level_config=self.level_config,
         )
 
-        self._on_advance_level(theme_changed, new_world)
+        return theme_changed, new_world
 
     def record_clear(self, current_score: int) -> None:
         """Registra clear no perfil e emite LevelCleared."""
