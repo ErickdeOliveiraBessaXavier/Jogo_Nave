@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import random
 from typing import Any
 
 import pygame
-import random
 
 
 def update_magnetic_attraction(

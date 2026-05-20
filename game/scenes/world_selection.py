@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 class UIParticle:
     """Simples sistema de partículas para UI."""
+
     def __init__(self, x: float, y: float, color: tuple[int, int, int]):
         self.x = x
         self.y = y
@@ -47,7 +48,9 @@ class UIParticle:
             return
         alpha = int(255 * self.life * alpha_mult)
         p_surf = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
-        pygame.draw.circle(p_surf, (*self.color, alpha), (self.size, self.size), self.size)
+        pygame.draw.circle(
+            p_surf, (*self.color, alpha), (self.size, self.size), self.size
+        )
         surface.blit(p_surf, (self.x - self.size, self.y - self.size))
 
 
@@ -141,11 +144,17 @@ class WorldCard:
             self.title_color = (100, 100, 100)
 
     def render(
-        self, surface: pygame.Surface, center_pos: Tuple[int, int], scale: float, alpha: int, time: float, is_focused: bool
+        self,
+        surface: pygame.Surface,
+        center_pos: Tuple[int, int],
+        scale: float,
+        alpha: int,
+        time: float,
+        is_focused: bool,
     ) -> None:
         """
         Renderiza o card com escala e alpha dinâmicos.
-        
+
         Args:
             surface: Superfície de destino
             center_pos: Posição central do card
@@ -162,7 +171,7 @@ class WorldCard:
 
         # Criar superfície temporária para o card para facilitar escala e alpha
         card_surf = pygame.Surface((self.base_width, self.base_height), pygame.SRCALPHA)
-        
+
         # Fundo
         bg_color = self.bg_color
         if self.state != WorldCardState.LOCKED and is_focused:
@@ -170,14 +179,16 @@ class WorldCard:
             pulse = (math.sin(time * 3) + 1) * 0.5
             bg_bright = 20 * pulse
             bg_color = tuple(min(255, int(c + bg_bright)) for c in self.bg_color)
-            
+
         # Desenhar fundo translúcido (RGBA)
-        pygame.draw.rect(card_surf, (*bg_color, 200), card_surf.get_rect(), border_radius=12)
+        pygame.draw.rect(
+            card_surf, (*bg_color, 200), card_surf.get_rect(), border_radius=12
+        )
 
         # Borda dinâmica
         border_thickness = 3
         current_border_color = self.border_color
-        
+
         if self.state == WorldCardState.CHECKPOINT:
             if is_focused:
                 # Brilho dourado pulsante apenas se focado
@@ -195,7 +206,11 @@ class WorldCard:
                 )
 
         pygame.draw.rect(
-            card_surf, current_border_color, card_surf.get_rect(), border_thickness, border_radius=12
+            card_surf,
+            current_border_color,
+            card_surf.get_rect(),
+            border_thickness,
+            border_radius=12,
         )
 
         # Conteúdo do Card (Texto)
@@ -214,7 +229,9 @@ class WorldCard:
         )
 
         # Descrição
-        desc_color = (120, 120, 120) if self.state == WorldCardState.LOCKED else (200, 200, 200)
+        desc_color = (
+            (120, 120, 120) if self.state == WorldCardState.LOCKED else (200, 200, 200)
+        )
         render_text_wrapped(
             text=self.world_config.description,
             font=self.desc_font,
@@ -229,25 +246,55 @@ class WorldCard:
         if self.state == WorldCardState.LOCKED:
             # Desenhar ícone de cadeado asset
             try:
-                lock_img = get_image(BASE_DIR / "assets" / "images" / "icons" / "icon_bloqueado.png")
+                lock_img = get_image(
+                    BASE_DIR / "assets" / "images" / "icons" / "icon_bloqueado.png"
+                )
                 # Redimensionar se necessário, ex: 40x40
                 lock_img = pygame.transform.scale(lock_img, (40, 40))
-                lock_rect = lock_img.get_rect(center=(self.base_width // 2, self.base_height - 50))
+                lock_rect = lock_img.get_rect(
+                    center=(self.base_width // 2, self.base_height - 50)
+                )
                 card_surf.blit(lock_img, lock_rect)
             except (OSError, pygame.error, ValueError):
                 # Fallback para o ícone desenhado se falhar
                 lock_x, lock_y = self.base_width // 2, self.base_height - 50
-                pygame.draw.rect(card_surf, (80, 80, 80), (lock_x - 12, lock_y, 24, 20), border_radius=3)
-                pygame.draw.arc(card_surf, (80, 80, 80), (lock_x - 10, lock_y - 12, 20, 20), math.pi, 0, 3)
+                pygame.draw.rect(
+                    card_surf,
+                    (80, 80, 80),
+                    (lock_x - 12, lock_y, 24, 20),
+                    border_radius=3,
+                )
+                pygame.draw.arc(
+                    card_surf,
+                    (80, 80, 80),
+                    (lock_x - 10, lock_y - 12, 20, 20),
+                    math.pi,
+                    0,
+                    3,
+                )
         elif self.state == WorldCardState.CHECKPOINT:
             line1 = self.checkpoint_font.render("CHECKPOINT ATUAL", True, CUSTOM_GOLD)
-            line2 = self.checkpoint_font.render(f"BEST: {self.best_score:,}", True, CUSTOM_GOLD)
-            
-            card_surf.blit(line2, line2.get_rect(centerx=self.base_width // 2, bottom=self.base_height - 15))
-            card_surf.blit(line1, line1.get_rect(centerx=self.base_width // 2, bottom=self.base_height - 35))
+            line2 = self.checkpoint_font.render(
+                f"BEST: {self.best_score:,}", True, CUSTOM_GOLD
+            )
+
+            card_surf.blit(
+                line2,
+                line2.get_rect(
+                    centerx=self.base_width // 2, bottom=self.base_height - 15
+                ),
+            )
+            card_surf.blit(
+                line1,
+                line1.get_rect(
+                    centerx=self.base_width // 2, bottom=self.base_height - 35
+                ),
+            )
         else:
             status_text = self.score_font.render("DESBLOQUEADO", True, CUSTOM_PURPLE)
-            status_rect = status_text.get_rect(centerx=self.base_width // 2, bottom=self.base_height - 20)
+            status_rect = status_text.get_rect(
+                centerx=self.base_width // 2, bottom=self.base_height - 20
+            )
             card_surf.blit(status_text, status_rect)
 
         # Aplicar escala e blitar na superfície principal
@@ -278,11 +325,11 @@ class WorldSelectionView:
         # Cards de mundo
         self.world_cards: List[WorldCard] = []
         self.selected_index = 0
-        
+
         # Animação do Carrossel
         self.visual_scroll_index = 0.0  # Para interpolação suave
         self.scroll_speed = 10.0
-        
+
         # Layout
         self.card_spacing = 400  # Espaçamento entre centros no carrossel
 
@@ -313,23 +360,28 @@ class WorldSelectionView:
         self._inst_font = get_font(16)
 
         # Título
-        self.title_text = self.title_font.render(
-            "Selecione o Mundo", True, CUSTOM_GOLD
+        self.title_text = self.title_font.render("Selecione o Mundo", True, CUSTOM_GOLD)
+        self.title_rect = self.title_text.get_rect(
+            center=(Config.SCREEN_WIDTH // 2, 80)
         )
-        self.title_rect = self.title_text.get_rect(center=(Config.SCREEN_WIDTH // 2, 80))
 
         # Botão Voltar (Canto inferior esquerdo)
         btn_w = 160
         btn_h = 40
-        self.back_button_rect = pygame.Rect(
-            40, Config.SCREEN_HEIGHT - 60, btn_w, btn_h
-        )
+        self.back_button_rect = pygame.Rect(40, Config.SCREEN_HEIGHT - 60, btn_w, btn_h)
 
         # Hitboxes das Setas
         arrow_box_size = 100
         center_y = Config.SCREEN_HEIGHT // 2
-        self.left_arrow_rect = pygame.Rect(10, center_y - arrow_box_size // 2, arrow_box_size, arrow_box_size)
-        self.right_arrow_rect = pygame.Rect(Config.SCREEN_WIDTH - arrow_box_size - 10, center_y - arrow_box_size // 2, arrow_box_size, arrow_box_size)
+        self.left_arrow_rect = pygame.Rect(
+            10, center_y - arrow_box_size // 2, arrow_box_size, arrow_box_size
+        )
+        self.right_arrow_rect = pygame.Rect(
+            Config.SCREEN_WIDTH - arrow_box_size - 10,
+            center_y - arrow_box_size // 2,
+            arrow_box_size,
+            arrow_box_size,
+        )
         self.left_arrow_hover = False
         self.right_arrow_hover = False
 
@@ -379,7 +431,7 @@ class WorldSelectionView:
     def reset(self) -> None:
         """Reinicia a view com dados atualizados."""
         self.world_cards.clear()
-        
+
         # Encontrar checkpoint atual para iniciar nele
         worlds = get_all_worlds()
         checkpoint_idx = 0
@@ -485,7 +537,7 @@ class WorldSelectionView:
                 self.selected_index = (self.selected_index - 1) % len(self.world_cards)
                 sound_manager.play_sound("button_hover")
                 return
-            
+
             if self.right_arrow_rect.collidepoint(event.pos):
                 self.selected_index = (self.selected_index + 1) % len(self.world_cards)
                 sound_manager.play_sound("button_hover")
@@ -537,23 +589,23 @@ class WorldSelectionView:
     def update(self, _dt: float) -> None:
         """Atualiza a lógica da view."""
         self.time += _dt
-        
+
         # Detectar hover nas setas
         mouse_pos = pygame.mouse.get_pos()
         self.left_arrow_hover = self.left_arrow_rect.collidepoint(mouse_pos)
         self.right_arrow_hover = self.right_arrow_rect.collidepoint(mouse_pos)
-        
+
         # Interpolação suave do carrossel com lógica de loop (caminho mais curto)
         num_cards = len(self.world_cards)
         diff = self.selected_index - self.visual_scroll_index
-        
+
         # Ajustar para o caminho mais curto no loop
         if abs(diff) > num_cards / 2:
             if diff > 0:
                 diff -= num_cards
             else:
                 diff += num_cards
-                
+
         if abs(diff) > 0.01:
             self.visual_scroll_index += diff * _dt * self.scroll_speed
             # Normalizar visual_scroll_index para manter dentro do range [0, num_cards)
@@ -596,29 +648,29 @@ class WorldSelectionView:
             card = self.world_cards[self.selected_index]
             # Usar a cor da borda do card para as partículas
             p_color = card.border_color
-            
+
             # Tremor ambiental leve no focado
             # amplitude reduzida para ser "atmosférico"
             amp_x, amp_y = 3, 2
             freq = 4.0
             card_shake_x = math.sin(self.time * freq) * amp_x
             card_shake_y = math.cos(self.time * freq * 1.1) * amp_y
-            
+
             # Armazenar temporariamente no objeto view para o render usar
             # (Poderia ser um atributo do card, mas vamos injetar no render)
             self._focused_shake = (card_shake_x, card_shake_y)
-            
+
             # Emitir partículas nas bordas do card central (focado)
-            num_p = 2 
+            num_p = 2
             for _ in range(num_p):
                 # Posição visual central
                 center_x = Config.SCREEN_WIDTH // 2
                 center_y = Config.SCREEN_HEIGHT // 2
-                
+
                 # Escolher um lado aleatório da borda (baseado no tamanho real do card focado)
                 side = random.randint(0, 3)
                 half_w, half_h = card.base_width // 2, card.base_height // 2
-                
+
                 if side == 0:  # Top
                     px = center_x + random.uniform(-half_w, half_w)
                     py = center_y - half_h
@@ -631,7 +683,7 @@ class WorldSelectionView:
                 else:  # Right
                     px = center_x + half_w
                     py = center_y + random.uniform(-half_h, half_h)
-                    
+
                 self.particles.append(UIParticle(px, py, p_color))
         else:
             self._focused_shake = (0, 0)
@@ -649,10 +701,10 @@ class WorldSelectionView:
 
         # 1. Renderizar Background
         self._render_background(surface)
-        
+
         # Título
         surface.blit(self.title_text, self.title_rect)
-        
+
         # Renderizar Partículas (atrás dos cards)
         for p in self.particles:
             p.draw(surface)
@@ -664,45 +716,52 @@ class WorldSelectionView:
         # Renderizar cards em ordem de profundidade
         num_cards = len(self.world_cards)
         indices = list(range(num_cards))
-        
+
         # Helper para calcular distância modular correta para ordenação de profundidade
         def modular_dist(idx: int) -> float:
             d = abs(idx - self.visual_scroll_index)
             return min(d, num_cards - d)
-            
+
         indices.sort(key=modular_dist, reverse=True)
 
         for i in indices:
             card = self.world_cards[i]
-            
+
             # rel_idx modular para posicionamento correto no loop
             rel_idx = i - self.visual_scroll_index
             if rel_idx > num_cards / 2:
                 rel_idx -= num_cards
             elif rel_idx < -num_cards / 2:
                 rel_idx += num_cards
-                
+
             dist = abs(rel_idx)
-            
+
             # Curva de escala e alpha
             scale = max(0.6, 1.0 - (dist * 0.25))
             alpha = int(max(100, 255 - (dist * 150)))
-            
+
             # Posição X com perspectiva
             x = center_x + (rel_idx * self.card_spacing * (0.8 + scale * 0.2))
-            
+
             # Um card é focado se for o mais próximo do visual_scroll_index (arredondado)
             is_focused = i == self.selected_index
-            
+
             # Aplicar tremor se focado
             final_center_x = int(x)
             final_center_y = center_y
             if is_focused:
                 final_center_x += int(self._focused_shake[0])
                 final_center_y += int(self._focused_shake[1])
-            
+
             if -400 < x < Config.SCREEN_WIDTH + 400:
-                card.render(surface, (final_center_x, final_center_y), scale, alpha, self.time, is_focused)
+                card.render(
+                    surface,
+                    (final_center_x, final_center_y),
+                    scale,
+                    alpha,
+                    self.time,
+                    is_focused,
+                )
 
         # 3. Instruções e Botão Voltar
         self._render_ui_elements(surface)
@@ -714,16 +773,22 @@ class WorldSelectionView:
                 try:
                     self._bg_scratch_a.fill((0, 0, 0, 0))
                     self.previous_background.draw(self._bg_scratch_a)
-                    self._bg_scratch_a.set_alpha(int(76 * (1.0 - self.transition_progress)))
+                    self._bg_scratch_a.set_alpha(
+                        int(76 * (1.0 - self.transition_progress))
+                    )
                     surface.blit(self._bg_scratch_a, (0, 0))
-                except Exception: pass
+                except Exception:
+                    pass
             else:
                 try:
                     self._bg_scratch_a.fill((0, 0, 0, 0))
                     self.renderer.starfield.draw(self._bg_scratch_a)
-                    self._bg_scratch_a.set_alpha(int(76 * (1.0 - self.transition_progress)))
+                    self._bg_scratch_a.set_alpha(
+                        int(76 * (1.0 - self.transition_progress))
+                    )
                     surface.blit(self._bg_scratch_a, (0, 0))
-                except Exception: pass
+                except Exception:
+                    pass
 
             if self.current_background is not None:
                 try:
@@ -731,14 +796,16 @@ class WorldSelectionView:
                     self.current_background.draw(self._bg_scratch_b)
                     self._bg_scratch_b.set_alpha(int(76 * self.transition_progress))
                     surface.blit(self._bg_scratch_b, (0, 0))
-                except Exception: pass
+                except Exception:
+                    pass
             else:
                 try:
                     self._bg_scratch_b.fill((0, 0, 0, 0))
                     self.renderer.starfield.draw(self._bg_scratch_b)
                     self._bg_scratch_b.set_alpha(int(76 * self.transition_progress))
                     surface.blit(self._bg_scratch_b, (0, 0))
-                except Exception: pass
+                except Exception:
+                    pass
         else:
             if self.current_background is not None:
                 try:
@@ -766,45 +833,60 @@ class WorldSelectionView:
 
         # Desenhar Setas Chevron Pixel Art (Indicação Visual)
         center_y = Config.SCREEN_HEIGHT // 2
-        
+
         # Pulsação suave
         pulse = (math.sin(self.time * 4) + 1) * 0.5
         arrow_alpha = int(120 + 135 * pulse)
-        
+
         # Helper para desenhar chevron pixelado
-        def draw_pixel_chevron(surf: pygame.Surface, x_tip: int, direction: int, color: Tuple[int, int, int], alpha: int, scale: float = 1.0):
+        def draw_pixel_chevron(
+            surf: pygame.Surface,
+            x_tip: int,
+            direction: int,
+            color: Tuple[int, int, int],
+            alpha: int,
+            scale: float = 1.0,
+        ):
             # direction: -1 para apontar para a esquerda (<), 1 para apontar para a direita (>)
             length = int(30 * scale)
             pixel_size = int(5 * scale)
-            
+
             # Criar superfície temporária para o chevron
-            chevron_surf = pygame.Surface((length + pixel_size, length * 2), pygame.SRCALPHA)
-            
+            chevron_surf = pygame.Surface(
+                (length + pixel_size, length * 2), pygame.SRCALPHA
+            )
+
             for i in range(0, length, pixel_size):
                 # px: Se aponta para a direita (>), o x aumenta conforme i se aproxima do centro vertical (length)
                 # Se aponta para a esquerda (<), o x diminui conforme i se aproxima do centro
                 px = i if direction == -1 else length - i
-                
+
                 # Parte superior da chevron
                 py_sup = length - i
-                pygame.draw.rect(chevron_surf, (*color, alpha), (px, py_sup, pixel_size, pixel_size))
-                
+                pygame.draw.rect(
+                    chevron_surf, (*color, alpha), (px, py_sup, pixel_size, pixel_size)
+                )
+
                 # Parte inferior da chevron
                 py_inf = length + i
-                pygame.draw.rect(chevron_surf, (*color, alpha), (px, py_inf, pixel_size, pixel_size))
-            
+                pygame.draw.rect(
+                    chevron_surf, (*color, alpha), (px, py_inf, pixel_size, pixel_size)
+                )
+
             # Blitar centralizado verticalmente
             dest_rect = chevron_surf.get_rect(centery=center_y)
             if direction == -1:
                 dest_rect.left = x_tip
             else:
                 dest_rect.right = x_tip
-                
+
             surf.blit(chevron_surf, dest_rect.topleft)
 
         # Desenhar Setas com escala dinâmica se houver hover
         left_scale = 1.4 if self.left_arrow_hover else 1.0
         right_scale = 1.4 if self.right_arrow_hover else 1.0
-        
+
         draw_pixel_chevron(surface, 60, -1, CUSTOM_GOLD, arrow_alpha, left_scale)
-        draw_pixel_chevron(surface, Config.SCREEN_WIDTH - 60, 1, CUSTOM_GOLD, arrow_alpha, right_scale)
+        draw_pixel_chevron(
+            surface, Config.SCREEN_WIDTH - 60, 1, CUSTOM_GOLD, arrow_alpha, right_scale
+        )

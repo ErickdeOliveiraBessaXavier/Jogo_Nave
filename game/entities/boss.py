@@ -4,14 +4,6 @@ import random
 from collections import deque
 from typing import Any, List, Literal
 
-# Sound events emitted by Boss.update() — executed by EntityManager
-BossSoundEvent = Literal[
-    "play_charging",
-    "stop_charging",
-    "play_fire",
-    "stop_fire",
-]
-
 import pygame
 
 from ..core import colors
@@ -24,6 +16,14 @@ from .boss_particles import BossParticleSystem
 from .boss_square import BossSquare
 from .boss_state import BossState
 from .draw_utils import rotated_square_corners
+
+# Sound events emitted by Boss.update() — executed by EntityManager
+BossSoundEvent = Literal[
+    "play_charging",
+    "stop_charging",
+    "play_fire",
+    "stop_fire",
+]
 
 
 class Boss(BossHitMixin):
@@ -131,9 +131,9 @@ class Boss(BossHitMixin):
         self.squares_animation_timer = 0.0
 
         # Sistema de lançamento sequencial de quadrados
-        self.square_launch_queue: List[BossSquare] = (
-            []
-        )  # Fila de quadrados prontos para lançar
+        self.square_launch_queue: List[
+            BossSquare
+        ] = []  # Fila de quadrados prontos para lançar
         self.square_launch_timer = 0.0  # Timer para lançamento sequencial
         self.square_launch_delay = 0.15  # 150ms entre cada lançamento
 
@@ -352,7 +352,9 @@ class Boss(BossHitMixin):
             if self.frenzy_mode
             else Config.BOSS_LASER_LIFETIME
         )
-        return self._create_laser_pattern(face_x, face_y, laser_lifetime, self.frenzy_mode)
+        return self._create_laser_pattern(
+            face_x, face_y, laser_lifetime, self.frenzy_mode
+        )
 
     def _create_laser_pattern(
         self,
@@ -580,7 +582,7 @@ class Boss(BossHitMixin):
 
         for laser in self.fired_lasers:
             laser.update(dt)
-        self.fired_lasers = [l for l in self.fired_lasers if not l.dead]
+        self.fired_lasers = [laser for laser in self.fired_lasers if not laser.dead]
         if not self.fired_lasers:
             self._sound_events.append("stop_fire")
 
@@ -768,7 +770,10 @@ class Boss(BossHitMixin):
             self.frenzy_mode
             and self.frenzy_shake_timer <= 0
             and self.state
-            in (BossState.ACTIVE, BossState.AIMING)  # Só quando não está atacando com laser
+            in (
+                BossState.ACTIVE,
+                BossState.AIMING,
+            )  # Só quando não está atacando com laser
             and not self.pending_laser_data
             and player_y is not None
         ):  # E não tem laser pendente
@@ -820,7 +825,12 @@ class Boss(BossHitMixin):
             self._update_firing_state(dt)
 
         # Atualizar animação da linha de mira (acelera gradualmente com o progresso)
-        if self.state in (BossState.AIMING, BossState.CHARGING, BossState.CONVERGING, BossState.PREPARING_TO_FIRE):
+        if self.state in (
+            BossState.AIMING,
+            BossState.CHARGING,
+            BossState.CONVERGING,
+            BossState.PREPARING_TO_FIRE,
+        ):
             # Interpolar velocidade baseado no charge_progress
             current_speed = (
                 self.aim_anim_base_speed
@@ -1163,7 +1173,11 @@ class Boss(BossHitMixin):
             self._draw_aiming_line(surface)
 
         # Charging circle - círculo que cresce durante o carregamento
-        if self.state in (BossState.CHARGING, BossState.CONVERGING, BossState.PREPARING_TO_FIRE):
+        if self.state in (
+            BossState.CHARGING,
+            BossState.CONVERGING,
+            BossState.PREPARING_TO_FIRE,
+        ):
             # O círculo aparece na face principal do boss
             face_x, face_y = self._get_face_position()
             circle_x = face_x + offset_x
@@ -1192,7 +1206,11 @@ class Boss(BossHitMixin):
                     )
 
         # Charging particles
-        if self.state in (BossState.CHARGING, BossState.CONVERGING, BossState.PREPARING_TO_FIRE):
+        if self.state in (
+            BossState.CHARGING,
+            BossState.CONVERGING,
+            BossState.PREPARING_TO_FIRE,
+        ):
             self._draw_particles(surface, offset_x, offset_y)
 
         # Efeito visual de "prestes a disparar" durante o delay

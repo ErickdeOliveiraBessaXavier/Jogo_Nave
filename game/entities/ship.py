@@ -148,7 +148,7 @@ class Ship:
         # Repulsion Shield power-up (Vento Constante)
         self.repulsion_shield_timer: float = 0.0
         self.repulsion_wind_streaks: list[dict[str, Any]] = []
-        
+
         self.is_entering = False
         self.entry_particles: list[ParticleDict] = []
         self.thruster_particles: list[ParticleDict] = []
@@ -996,62 +996,88 @@ class Ship:
             if p["lifetime"] - dt > 0 and p["size"] - dt * 12.0 > 0
         ]
 
-    def _update_repulsion_shield(self, dt: float, entity_manager: Optional["EntityManager"]) -> None:
+    def _update_repulsion_shield(
+        self, dt: float, entity_manager: Optional["EntityManager"]
+    ) -> None:
         if entity_manager is None:
             return
 
         # 1. Gerenciar o spawn de rastros de vento (streaks) enquanto o power-up estiver ativo
         if self.repulsion_shield_timer > 0.0:
             # Gerar novos rastros continuamente para dar aspecto de vento constante
-            spawn_rate = 60 # Muitos rastros por segundo
-            for _ in range(int(spawn_rate * dt) + (1 if random.random() < (spawn_rate * dt) % 1 else 0)):
+            spawn_rate = 60  # Muitos rastros por segundo
+            for _ in range(
+                int(spawn_rate * dt)
+                + (1 if random.random() < (spawn_rate * dt) % 1 else 0)
+            ):
                 sprite_w, sprite_h = self._get_rendered_sprite_size()
                 angle = random.uniform(0, math.tau)
-                self.repulsion_wind_streaks.append({
-                    "angle": angle,
-                    "dist": random.uniform(5.0, 30.0), # Começa bem perto da nave
-                    "speed": random.uniform(900, 1500),
-                    "len": random.uniform(40, 90),
-                    "alpha": random.randint(120, 200),
-                    "cx": self.x + sprite_w / 2,
-                    "cy": self.y + sprite_h / 2
-                })
+                self.repulsion_wind_streaks.append(
+                    {
+                        "angle": angle,
+                        "dist": random.uniform(5.0, 30.0),  # Começa bem perto da nave
+                        "speed": random.uniform(900, 1500),
+                        "len": random.uniform(40, 90),
+                        "alpha": random.randint(120, 200),
+                        "cx": self.x + sprite_w / 2,
+                        "cy": self.y + sprite_h / 2,
+                    }
+                )
 
             # 2. Aplicar força de "sopro" CONSTANTE em todos os inimigos no raio
             radius = Config.REPULSION_SHIELD_RADIUS * 1.5
             cx = self.x + self.w / 2
             cy = self.y + self.h / 2
-            
+
             enemies = entity_manager.enemy_spatial_grid.query(
                 cx - radius, cy - radius, radius * 2, radius * 2
             )
 
             for enemy in enemies:
-                if getattr(enemy, "dead", False): continue
+                if getattr(enemy, "dead", False):
+                    continue
                 class_name = enemy.__class__.__name__
-                if (hasattr(enemy, "boss") or "Boss" in class_name or "Mountain" in class_name):
+                if (
+                    hasattr(enemy, "boss")
+                    or "Boss" in class_name
+                    or "Mountain" in class_name
+                ):
                     continue
 
                 center = self._get_enemy_center(enemy)
-                ex = center[0] if center is not None else float(getattr(enemy, "x", 0.0))
-                ey = center[1] if center is not None else float(getattr(enemy, "y", 0.0))
+                ex = (
+                    center[0] if center is not None else float(getattr(enemy, "x", 0.0))
+                )
+                ey = (
+                    center[1] if center is not None else float(getattr(enemy, "y", 0.0))
+                )
 
-                dx = ex - cx; dy = ey - cy
+                dx = ex - cx
+                dy = ey - cy
                 dist_sq = dx * dx + dy * dy
-                
+
                 if 0 < dist_sq < radius**2:
                     dist = math.sqrt(dist_sq)
                     # Força constante: quanto mais perto, mais forte
                     blow_force = Config.REPULSION_FORCE * 2.8 * (1.0 - (dist / radius))
                     try:
-                        setattr(enemy, "x", getattr(enemy, "x") + (dx / dist) * blow_force * dt)
-                        setattr(enemy, "y", getattr(enemy, "y") + (dy / dist) * blow_force * dt)
-                    except (AttributeError, TypeError): continue
+                        setattr(
+                            enemy,
+                            "x",
+                            getattr(enemy, "x") + (dx / dist) * blow_force * dt,
+                        )
+                        setattr(
+                            enemy,
+                            "y",
+                            getattr(enemy, "y") + (dy / dist) * blow_force * dt,
+                        )
+                    except (AttributeError, TypeError):
+                        continue
 
         # 3. Atualizar rastros visuais (streaks) - decaem independente do timer do power-up
         for s in self.repulsion_wind_streaks[:]:
             s["dist"] += s["speed"] * dt
-            s["alpha"] -= 400 * dt 
+            s["alpha"] -= 400 * dt
             if s["alpha"] <= 0 or s["dist"] > Config.REPULSION_SHIELD_RADIUS * 2.5:
                 self.repulsion_wind_streaks.remove(s)
 
@@ -1460,7 +1486,10 @@ class Ship:
                     mid_radius = radius + uniform(2, 8)
 
                     p1 = (cx + cos(angle1) * radius, cy + sin(angle1) * radius)
-                    p_mid = (cx + cos(mid_angle) * mid_radius, cy + sin(mid_angle) * mid_radius)
+                    p_mid = (
+                        cx + cos(mid_angle) * mid_radius,
+                        cy + sin(mid_angle) * mid_radius,
+                    )
                     p2 = (cx + cos(angle2) * radius, cy + sin(angle2) * radius)
 
                     draw_lines(surface, choice(colors_pool), False, [p1, p_mid, p2], 1)

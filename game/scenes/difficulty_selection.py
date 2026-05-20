@@ -3,6 +3,7 @@ import random
 from typing import TYPE_CHECKING, Any, Callable, Dict, List
 
 import pygame
+
 from ..core.assets import get_font
 from ..core.colors import (
     CUSTOM_DARK_BG,
@@ -11,10 +12,9 @@ from ..core.colors import (
     GREEN,
     ORANGE,
     RED,
-    YELLOW,
     WHITE,
+    YELLOW,
 )
-
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
 from ..core.sound import sound_manager
@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 class UIParticle:
     """Simples sistema de partículas para UI."""
+
     def __init__(self, x: float, y: float, color: tuple[int, int, int]):
         self.x = x
         self.y = y
@@ -48,7 +49,9 @@ class UIParticle:
             return
         alpha = int(255 * self.life * alpha_mult)
         p_surf = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
-        pygame.draw.circle(p_surf, (*self.color, alpha), (self.size, self.size), self.size)
+        pygame.draw.circle(
+            p_surf, (*self.color, alpha), (self.size, self.size), self.size
+        )
         surface.blit(p_surf, (self.x - self.size, self.y - self.size))
 
 
@@ -91,10 +94,10 @@ class DifficultySelectionView:
         self.entry_progress: float = 0.0
         self.is_entering: bool = True
         self.entry_duration: float = 0.4
-        
+
         # Sistema de partículas
         self.particles: List[UIParticle] = []
-        
+
         # Tempo global para tremores
         self.time = 0.0
 
@@ -131,8 +134,12 @@ class DifficultySelectionView:
             button_rect = pygame.Rect(card_x, card_y, card_size, card_size)
 
             # Descrição com quebra de linha
-            desc_lines = self._wrap_text(settings["description"], self.desc_font, card_size - 30)
-            desc_surfaces = [self.desc_font.render(line, True, WHITE) for line in desc_lines]
+            desc_lines = self._wrap_text(
+                settings["description"], self.desc_font, card_size - 30
+            )
+            desc_surfaces = [
+                self.desc_font.render(line, True, WHITE) for line in desc_lines
+            ]
 
             # Informações extras
             lives_text = self.desc_font.render(
@@ -156,33 +163,33 @@ class DifficultySelectionView:
                 "color": self.difficulty_colors[preset],
                 "hover_progress": 0.0,
                 "shake_params": shake_params[preset],
-                "shake_offset": [0, 0]
+                "shake_offset": [0, 0],
             }
 
         # Botão Voltar (Canto inferior esquerdo)
         btn_w = 160
         btn_h = 40
-        self.back_button_rect = pygame.Rect(
-            40, Config.SCREEN_HEIGHT - 60, btn_w, btn_h
-        )
+        self.back_button_rect = pygame.Rect(40, Config.SCREEN_HEIGHT - 60, btn_w, btn_h)
 
-    def _wrap_text(self, text: str, font: pygame.font.Font, max_width: int) -> list[str]:
+    def _wrap_text(
+        self, text: str, font: pygame.font.Font, max_width: int
+    ) -> list[str]:
         """Quebra texto em múltiplas linhas."""
-        words = text.split(' ')
+        words = text.split(" ")
         lines: list[str] = []
         current_line: list[str] = []
-        
+
         for word in words:
-            test_line = ' '.join(current_line + [word])
+            test_line = " ".join(current_line + [word])
             if font.size(test_line)[0] <= max_width:
                 current_line.append(word)
             else:
-                lines.append(' '.join(current_line))
+                lines.append(" ".join(current_line))
                 current_line = [word]
-        
+
         if current_line:
-            lines.append(' '.join(current_line))
-            
+            lines.append(" ".join(current_line))
+
         return lines
 
     def reset(self):
@@ -293,7 +300,7 @@ class DifficultySelectionView:
     def update(self, dt: float):
         """Atualiza a lógica da view."""
         self.time += dt
-        
+
         # Animação de entrada
         if self.is_entering and self.entry_progress < 1.0:
             self.entry_progress = min(
@@ -306,23 +313,31 @@ class DifficultySelectionView:
         speed = 10.0  # Velocidade da animação
         for preset, button_data in self.difficulty_buttons.items():
             is_hovered = preset == self.hovered_difficulty
-            
+
             # Interpolação de hover
             target = 1.0 if is_hovered else 0.0
             if button_data["hover_progress"] != target:
                 if button_data["hover_progress"] < target:
-                    button_data["hover_progress"] = min(target, button_data["hover_progress"] + dt * speed)
+                    button_data["hover_progress"] = min(
+                        target, button_data["hover_progress"] + dt * speed
+                    )
                 else:
-                    button_data["hover_progress"] = max(target, button_data["hover_progress"] - dt * speed)
-            
+                    button_data["hover_progress"] = max(
+                        target, button_data["hover_progress"] - dt * speed
+                    )
+
             if is_hovered:
                 # Tremor único apenas se selecionado (hover)
                 amp_x, amp_y, freq, phase = button_data["shake_params"]
                 # Aumentar tremor se hovered (que é o único caso aqui agora)
                 mult = 1.0 + button_data["hover_progress"] * 0.1
-                button_data["shake_offset"][0] = math.sin(self.time * freq + phase) * amp_x * mult
-                button_data["shake_offset"][1] = math.cos(self.time * freq * 1.1 + phase * 0.7) * amp_y * mult
-                
+                button_data["shake_offset"][0] = (
+                    math.sin(self.time * freq + phase) * amp_x * mult
+                )
+                button_data["shake_offset"][1] = (
+                    math.cos(self.time * freq * 1.1 + phase * 0.7) * amp_y * mult
+                )
+
                 # Emitir partículas nas bordas
                 num_p = 2
                 for _ in range(num_p):
@@ -331,7 +346,7 @@ class DifficultySelectionView:
                     vis_offset_y = int(30 * (1.0 - self.entry_progress))
                     slide_off = int(15 * button_data["hover_progress"])
                     rect = button_data["rect"]
-                    
+
                     # Escolher um lado aleatório da borda
                     side = random.randint(0, 3)
                     if side == 0:  # Top
@@ -342,11 +357,17 @@ class DifficultySelectionView:
                         py = rect.bottom + vis_offset_y - slide_off
                     elif side == 2:  # Left
                         px = rect.left
-                        py = random.uniform(rect.top + vis_offset_y - slide_off, rect.bottom + vis_offset_y - slide_off)
+                        py = random.uniform(
+                            rect.top + vis_offset_y - slide_off,
+                            rect.bottom + vis_offset_y - slide_off,
+                        )
                     else:  # Right
                         px = rect.right
-                        py = random.uniform(rect.top + vis_offset_y - slide_off, rect.bottom + vis_offset_y - slide_off)
-                        
+                        py = random.uniform(
+                            rect.top + vis_offset_y - slide_off,
+                            rect.bottom + vis_offset_y - slide_off,
+                        )
+
                     self.particles.append(UIParticle(px, py, button_data["color"]))
             else:
                 # Resetar tremor se não estiver selecionado
@@ -369,7 +390,7 @@ class DifficultySelectionView:
         title_surface.set_alpha(alpha)
         title_pos = (self.title_rect.x, self.title_rect.y + offset_y)
         surface.blit(title_surface, title_pos)
-        
+
         # Renderizar Partículas
         for p in self.particles:
             p.draw(surface, alpha / 255.0)
@@ -378,10 +399,10 @@ class DifficultySelectionView:
         for button_data in self.difficulty_buttons.values():
             hover_p = button_data["hover_progress"]
             shake_off = button_data["shake_offset"]
-            
+
             # Slide Up base
             slide_offset = int(15 * hover_p)
-            
+
             rect = button_data["rect"].copy()
             rect.x += int(shake_off[0])
             rect.y += offset_y - slide_offset + int(shake_off[1])
@@ -391,16 +412,23 @@ class DifficultySelectionView:
             if hover_p > 0:
                 glow_size = int(12 * hover_p)
                 glow_rect = rect.inflate(glow_size * 2, glow_size * 2)
-                glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
-                
+                glow_surface = pygame.Surface(
+                    (glow_rect.width, glow_rect.height), pygame.SRCALPHA
+                )
+
                 glow_alpha = int(120 * hover_p * (alpha / 255))
                 for i in range(glow_size, 0, -2):
                     step_alpha = int(glow_alpha * (1 - i / (glow_size + 1)))
                     pygame.draw.rect(
-                        glow_surface, 
-                        (*color, step_alpha), 
-                        (glow_size - i, glow_size - i, rect.width + i * 2, rect.height + i * 2), 
-                        border_radius=15
+                        glow_surface,
+                        (*color, step_alpha),
+                        (
+                            glow_size - i,
+                            glow_size - i,
+                            rect.width + i * 2,
+                            rect.height + i * 2,
+                        ),
+                        border_radius=15,
                     )
                 surface.blit(glow_surface, glow_rect.topleft)
 
@@ -409,9 +437,12 @@ class DifficultySelectionView:
 
             # Cor de fundo (Preto translúcido para destacar o conteúdo sobre o background)
             pygame.draw.rect(
-                temp_surface, (20, 20, 30, int(alpha * 0.8)), temp_surface.get_rect(), border_radius=12
+                temp_surface,
+                (20, 20, 30, int(alpha * 0.8)),
+                temp_surface.get_rect(),
+                border_radius=12,
             )
-            
+
             # Borda do quadrado (Agora com a cor da dificuldade)
             border_width = 3 + int(2 * hover_p)
             pygame.draw.rect(

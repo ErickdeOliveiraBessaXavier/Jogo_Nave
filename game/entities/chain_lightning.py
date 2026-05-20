@@ -48,7 +48,7 @@ class ChainLightning:
         if distance_sq < 1:
             self.lightning_points = [
                 (int(self.start_pos[0]), int(self.start_pos[1])),
-                (int(self.end_pos[0]), int(self.end_pos[1]))
+                (int(self.end_pos[0]), int(self.end_pos[1])),
             ]
             return
 
@@ -60,7 +60,9 @@ class ChainLightning:
         perp_x = -dy / distance
         perp_y = dx / distance
 
-        points: List[Tuple[int, int]] = [(int(self.start_pos[0]), int(self.start_pos[1]))]
+        points: List[Tuple[int, int]] = [
+            (int(self.start_pos[0]), int(self.start_pos[1]))
+        ]
         for i in range(1, num_segments):
             t = i * inv_segments
             offset = random.uniform(-LIGHTNING_MAX_OFFSET, LIGHTNING_MAX_OFFSET)
@@ -98,6 +100,12 @@ class ChainLightning:
         core_color = (255, 255, 255, alpha)
 
         # Desenhar os segmentos direto na surface (overlay compartilhado)
-        pygame.draw.lines(surface, glow_color, False, self.lightning_points, 5) # brilho
-        pygame.draw.lines(surface, mid_color, False, self.lightning_points, 2)  # cor principal
-        pygame.draw.lines(surface, core_color, False, self.lightning_points, 1) # núcleo
+        pygame.draw.lines(
+            surface, glow_color, False, self.lightning_points, 5
+        )  # brilho
+        pygame.draw.lines(
+            surface, mid_color, False, self.lightning_points, 2
+        )  # cor principal
+        pygame.draw.lines(
+            surface, core_color, False, self.lightning_points, 1
+        )  # núcleo

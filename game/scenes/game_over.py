@@ -99,9 +99,11 @@ class InitialsEntryWidget:
             + title_h
             + (gap_title_rank + rank_h if rank_h else 0)
             + gap_rank_cols
-            + arrow_h + arrow_to_col  # ▲ acima das colunas
+            + arrow_h
+            + arrow_to_col  # ▲ acima das colunas
             + col_h
-            + arrow_to_col + arrow_h  # ▼ abaixo das colunas
+            + arrow_to_col
+            + arrow_h  # ▼ abaixo das colunas
             + gap_cols_label
             + label_total_h
             + gap_label_btn
@@ -111,9 +113,7 @@ class InitialsEntryWidget:
 
         # Largura: cobre as 3 colunas + paddings laterais. Mantém mínimo
         # confortável para a legenda em 2 linhas.
-        total_cols_w = (
-            self.COL_W * self.MAX_LEN + self.COL_GAP * (self.MAX_LEN - 1)
-        )
+        total_cols_w = self.COL_W * self.MAX_LEN + self.COL_GAP * (self.MAX_LEN - 1)
         side_pad = 32
         self.modal_w = max(540, total_cols_w + side_pad * 2)
         self.modal_h = total_h
@@ -286,13 +286,9 @@ class InitialsEntryWidget:
         surface.blit(modal_overlay, (0, 0))
 
         pygame.draw.rect(surface, (15, 15, 25, alpha), self.rect, border_radius=15)
-        pygame.draw.rect(
-            surface, (*CUSTOM_GOLD, alpha), self.rect, 2, border_radius=15
-        )
+        pygame.draw.rect(surface, (*CUSTOM_GOLD, alpha), self.rect, 2, border_radius=15)
 
-        title_text = self.font_label.render(
-            "DIGITE SUAS INICIAIS", True, colors.WHITE
-        )
+        title_text = self.font_label.render("DIGITE SUAS INICIAIS", True, colors.WHITE)
         title_text.set_alpha(alpha)
         surface.blit(
             title_text,
@@ -344,9 +340,7 @@ class InitialsEntryWidget:
         scroll = self._scroll_offset[idx]
 
         # Clip vertical para não vazar pra fora da coluna durante o scroll.
-        clip_rect = pygame.Rect(
-            rect.x - 4, rect.y, rect.width + 8, rect.height
-        )
+        clip_rect = pygame.Rect(rect.x - 4, rect.y, rect.width + 8, rect.height)
         previous_clip = surface.get_clip()
         surface.set_clip(clip_rect)
         try:
@@ -425,7 +419,13 @@ class InitialsEntryWidget:
 
 
 class GameOverScene(Scene):
-    def __init__(self, app: "GameApp", score: int, playing_scene: "PlayingScene", restart_level: int = 1):
+    def __init__(
+        self,
+        app: "GameApp",
+        score: int,
+        playing_scene: "PlayingScene",
+        restart_level: int = 1,
+    ):
         super().__init__(app)
         self.score = score
         self.playing_scene = playing_scene
@@ -437,7 +437,7 @@ class GameOverScene(Scene):
         self.game_over_font_score = get_font(36)
         self.game_over_font_prompt = get_font(18)
         self.game_over_font_button = get_font(16)
-        
+
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
         # Game over effects
@@ -454,15 +454,15 @@ class GameOverScene(Scene):
         # Layout padronizado
         btn_w, btn_h = 220, 40
         self.back_to_menu_button = pygame.Rect(
-            40, 
-            Config.SCREEN_HEIGHT - 60, 
-            btn_w, btn_h
+            40, Config.SCREEN_HEIGHT - 60, btn_w, btn_h
         )
 
-        self.high_score_qualified = self.app.player_profile.qualifies_for_high_score(self.score)
+        self.high_score_qualified = self.app.player_profile.qualifies_for_high_score(
+            self.score
+        )
         self.entry_submitted = not self.high_score_qualified
         self.entry_widget: Optional[InitialsEntryWidget] = None
-        
+
         if self.high_score_qualified:
             self.entry_widget = InitialsEntryWidget(
                 score=self.score,
@@ -484,7 +484,10 @@ class GameOverScene(Scene):
             self.playing_scene.ship.rect.centery,
         )
 
-        if self.high_score_qualified and self.game_over_timer > Config.GAME_OVER_RESTART_DELAY:
+        if (
+            self.high_score_qualified
+            and self.game_over_timer > Config.GAME_OVER_RESTART_DELAY
+        ):
             if not self.ranking_sound_played:
                 sound_manager.play_powerup()
                 self.ranking_sound_played = True
@@ -534,6 +537,7 @@ class GameOverScene(Scene):
 
     def _restart_level(self) -> None:
         from .playing import PlayingScene
+
         self.app.states.switch(
             PlayingScene(
                 self.app,
@@ -558,8 +562,10 @@ class GameOverScene(Scene):
     def _return_to_menu(self):
         sound_manager.stop_music()
         from ..core.sound_config import MusicState
+
         sound_manager.music_state_manager.transition_to(MusicState.MENU, force=True)
         from .main_menu import MainMenuScene
+
         self.app.states.switch(MainMenuScene(self.app))
 
     def render(self, surface: pygame.Surface):
@@ -571,25 +577,33 @@ class GameOverScene(Scene):
             self.playing_scene.ship.rect.centery,
             enemy_visible=True,
         )
-        
+
         shake_offset = (0, 0)
         if self.playing_scene.screen_shake_timer > 0:
             shake_offset = (
-                random.randint(-self.playing_scene.screen_shake_intensity, self.playing_scene.screen_shake_intensity),
-                random.randint(-self.playing_scene.screen_shake_intensity, self.playing_scene.screen_shake_intensity),
+                random.randint(
+                    -self.playing_scene.screen_shake_intensity,
+                    self.playing_scene.screen_shake_intensity,
+                ),
+                random.randint(
+                    -self.playing_scene.screen_shake_intensity,
+                    self.playing_scene.screen_shake_intensity,
+                ),
             )
         surface.blit(self.game_surface, shake_offset)
 
         # Overlay escurecido
         progress = min(1.0, self.game_over_timer / Config.GAME_OVER_FADE_DURATION)
-        overlay = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay = pygame.Surface(
+            (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+        )
         overlay.fill((0, 0, 0, int(progress * 200)))
         surface.blit(overlay, (0, 0))
 
         text_alpha = int(progress * 255)
         center_x = Config.SCREEN_WIDTH // 2
         center_y = Config.SCREEN_HEIGHT // 2
-        
+
         # Título: GAME OVER
         title_surf = self.game_over_font_title.render("GAME OVER", True, colors.WHITE)
         title_surf.set_alpha(text_alpha)
@@ -598,10 +612,14 @@ class GameOverScene(Scene):
 
         # Score
         if self.game_over_timer > Config.GAME_OVER_RESTART_DELAY:
-            sub_progress = min(1.0, (self.game_over_timer - Config.GAME_OVER_RESTART_DELAY) / 0.8)
+            sub_progress = min(
+                1.0, (self.game_over_timer - Config.GAME_OVER_RESTART_DELAY) / 0.8
+            )
             sub_alpha = int(sub_progress * 255)
 
-            score_surf = self.game_over_font_score.render(f"PONTUAÇÃO: {self.score:,}".replace(",", "."), True, colors.WHITE)
+            score_surf = self.game_over_font_score.render(
+                f"PONTUAÇÃO: {self.score:,}".replace(",", "."), True, colors.WHITE
+            )
             score_surf.set_alpha(sub_alpha)
             score_rect = score_surf.get_rect(center=(center_x, center_y - 40))
             surface.blit(score_surf, score_rect)
@@ -609,9 +627,14 @@ class GameOverScene(Scene):
             if self.entry_widget is not None and not self.entry_submitted:
                 self.entry_widget.render(surface, sub_alpha)
             else:
-                restart_surf = self.game_over_font_prompt.render("PRESSIONE 'R' PARA REINICIAR", True, colors.WHITE)
+                restart_surf = self.game_over_font_prompt.render(
+                    "PRESSIONE 'R' PARA REINICIAR", True, colors.WHITE
+                )
                 restart_surf.set_alpha(sub_alpha)
-                surface.blit(restart_surf, restart_surf.get_rect(center=(center_x, center_y + 40)))
+                surface.blit(
+                    restart_surf,
+                    restart_surf.get_rect(center=(center_x, center_y + 40)),
+                )
 
                 # Botão "Voltar ao Menu"
                 draw_bordered_button(
@@ -620,7 +643,7 @@ class GameOverScene(Scene):
                     "VOLTAR AO MENU",
                     self.game_over_font_button,
                     CUSTOM_PURPLE,
-                    sub_alpha
+                    sub_alpha,
                 )
 
     def exit(self):

@@ -122,7 +122,9 @@ class HomingBullet:
 
         # Homing logic: preferir locked_target se ainda vivo, senão buscar o mais próximo.
         if enemies:
-            if self.locked_target is not None and getattr(self.locked_target, "dead", False):
+            if self.locked_target is not None and getattr(
+                self.locked_target, "dead", False
+            ):
                 self.locked_target = None  # alvo morreu — libera para busca livre
             target = (
                 self.locked_target

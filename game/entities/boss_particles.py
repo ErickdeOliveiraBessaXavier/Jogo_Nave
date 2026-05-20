@@ -54,7 +54,8 @@ class BossParticleSystem:
 
         # Remove particles that are too close or too small
         self.charging_particles = [
-            p for p in self.charging_particles
+            p
+            for p in self.charging_particles
             if (pygame.Vector2(face_x, face_y) - p["pos"]).length() >= 5
             and p["size"] >= 1
         ]
@@ -120,7 +121,8 @@ class BossParticleSystem:
 
         # Remove expired particles
         self.circle_disappear_particles = [
-            p for p in self.circle_disappear_particles
+            p
+            for p in self.circle_disappear_particles
             if p["lifetime"] < p["max_lifetime"]
         ]
 
@@ -143,10 +145,16 @@ class BossParticleSystem:
             progress = particle["lifetime"] / particle["max_lifetime"]
             alpha_factor = 1 - progress
             r, g, b = particle["color"]
-            faded_color = (int(r * alpha_factor), int(g * alpha_factor), int(b * alpha_factor))
+            faded_color = (
+                int(r * alpha_factor),
+                int(g * alpha_factor),
+                int(b * alpha_factor),
+            )
             pos_x = int(particle["pos"].x + offset_x)
             pos_y = int(particle["pos"].y + offset_y)
-            pygame.draw.circle(surface, faded_color, (pos_x, pos_y), max(1, int(particle["size"])))
+            pygame.draw.circle(
+                surface, faded_color, (pos_x, pos_y), max(1, int(particle["size"]))
+            )
 
     def clear_all(self) -> None:
         """Clear all particles."""
