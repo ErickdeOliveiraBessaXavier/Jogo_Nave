@@ -3,7 +3,7 @@ import math
 import random
 import zlib
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, Callable, Type
 
 from ..entities.alien import Alien
 from ..entities.boss import Boss
@@ -51,6 +51,16 @@ EnemySpawnConfig = dict[
 ]
 
 ACTIVE_ENEMY_TUNING_PROFILE = "moderate"
+
+# Temas em que Alien/Eye/SquareMinionBoss são configurados via bandas de
+# stage_progress (early/mid/late). Outros temas usam o cálculo baseado em
+# theme.enemy_weight + _get_progressive_enemy_weight.
+_STAGE_BANDED_THEMES: tuple[WorldTheme, ...] = (
+    WorldTheme.STARFIELD,
+    WorldTheme.CITY,
+    WorldTheme.VOLCANIC,
+    WorldTheme.PROCEDURAL,
+)
 
 
 # Registro central de elegibilidade por tema.
@@ -440,7 +450,9 @@ def _filter_enemy_spawn_for_theme(
 
 
 def _apply_theme_enemy_eligibility(
-    config: "LevelConfig", world: "WorldConfig"
+    config: "LevelConfig",
+    world: "WorldConfig",
+    _difficulty_preset: DifficultyPreset,
 ) -> "LevelConfig":
     """Aplica elegibilidade de inimigos por tema em qualquer LevelConfig."""
     adjusted_spawn_config = _filter_enemy_spawn_for_theme(
@@ -451,22 +463,13 @@ def _apply_theme_enemy_eligibility(
     if adjusted_spawn_config == config.enemy_spawn_config:
         return config
 
-    return LevelConfig(
-        level_number=config.level_number,
-        enemy_spawn_config=adjusted_spawn_config,
-        enemies_to_clear=config.enemies_to_clear,
-        boss_type=config.boss_type,
-        mines_enabled=config.mines_enabled,
-        formations_enabled=config.formations_enabled,
-        formation_types=config.formation_types,
-        theme_name=config.theme_name,
-        score_multiplier=config.score_multiplier,
-        storm_kind=config.storm_kind,
-    )
+    return replace(config, enemy_spawn_config=adjusted_spawn_config)
 
 
 def _apply_theme_enemy_weights(
-    config: "LevelConfig", world: "WorldConfig"
+    config: "LevelConfig",
+    world: "WorldConfig",
+    _difficulty_preset: DifficultyPreset,
 ) -> "LevelConfig":
     """Aplica multiplicadores de frequência por tema no spawn_config."""
     theme_weights = ENEMY_THEME_WEIGHT_MULTIPLIERS.get(world.theme)
@@ -492,18 +495,7 @@ def _apply_theme_enemy_weights(
     if not changed:
         return config
 
-    return LevelConfig(
-        level_number=config.level_number,
-        enemy_spawn_config=adjusted_spawn_config,
-        enemies_to_clear=config.enemies_to_clear,
-        boss_type=config.boss_type,
-        mines_enabled=config.mines_enabled,
-        formations_enabled=config.formations_enabled,
-        formation_types=config.formation_types,
-        theme_name=config.theme_name,
-        score_multiplier=config.score_multiplier,
-        storm_kind=config.storm_kind,
-    )
+    return replace(config, enemy_spawn_config=adjusted_spawn_config)
 
 
 def _get_stage_band(world: "WorldConfig", level_number: int) -> str:
@@ -520,7 +512,9 @@ def _get_stage_band(world: "WorldConfig", level_number: int) -> str:
 
 
 def _apply_stage_progression_enemy_weights(
-    config: "LevelConfig", world: "WorldConfig"
+    config: "LevelConfig",
+    world: "WorldConfig",
+    _difficulty_preset: DifficultyPreset,
 ) -> "LevelConfig":
     """Aplica pesos extras por faixa de estágio dentro do mundo."""
     theme_stage_weights = ENEMY_STAGE_WEIGHT_MULTIPLIERS.get(world.theme)
@@ -551,18 +545,7 @@ def _apply_stage_progression_enemy_weights(
     if not changed:
         return config
 
-    return LevelConfig(
-        level_number=config.level_number,
-        enemy_spawn_config=adjusted_spawn_config,
-        enemies_to_clear=config.enemies_to_clear,
-        boss_type=config.boss_type,
-        mines_enabled=config.mines_enabled,
-        formations_enabled=config.formations_enabled,
-        formation_types=config.formation_types,
-        theme_name=config.theme_name,
-        score_multiplier=config.score_multiplier,
-        storm_kind=config.storm_kind,
-    )
+    return replace(config, enemy_spawn_config=adjusted_spawn_config)
 
 
 def _apply_enemy_variety_cap(
@@ -614,18 +597,22 @@ def _apply_enemy_variety_cap(
 
     adjusted_spawn_config = {t: spawn_config[t] for t in chosen}
 
-    return LevelConfig(
-        level_number=config.level_number,
-        enemy_spawn_config=adjusted_spawn_config,
-        enemies_to_clear=config.enemies_to_clear,
-        boss_type=config.boss_type,
-        mines_enabled=config.mines_enabled,
-        formations_enabled=config.formations_enabled,
-        formation_types=config.formation_types,
-        theme_name=config.theme_name,
-        score_multiplier=config.score_multiplier,
-        storm_kind=config.storm_kind,
-    )
+    return replace(config, enemy_spawn_config=adjusted_spawn_config)
+
+
+# Pipeline declarativo de transformações aplicadas a um `LevelConfig` em ordem.
+# Cada step recebe (config, world, difficulty_preset) e retorna um novo LevelConfig.
+# Para reordenar, desabilitar ou inserir uma etapa, edite esta tupla.
+_ThemeRuleStep = Callable[
+    ["LevelConfig", "WorldConfig", DifficultyPreset], "LevelConfig"
+]
+
+_THEME_RULES_PIPELINE: tuple[tuple[str, _ThemeRuleStep], ...] = (
+    ("eligibility", _apply_theme_enemy_eligibility),
+    ("theme_weights", _apply_theme_enemy_weights),
+    ("stage_progression", _apply_stage_progression_enemy_weights),
+    ("variety_cap", _apply_enemy_variety_cap),
+)
 
 
 def _apply_theme_enemy_rules(
@@ -633,11 +620,9 @@ def _apply_theme_enemy_rules(
     world: "WorldConfig",
     difficulty_preset: DifficultyPreset,
 ) -> "LevelConfig":
-    """Pipeline único: elegibilidade + pesos por tema + pesos por estágio + cap de variedade."""
-    config = _apply_theme_enemy_eligibility(config, world)
-    config = _apply_theme_enemy_weights(config, world)
-    config = _apply_stage_progression_enemy_weights(config, world)
-    config = _apply_enemy_variety_cap(config, world, difficulty_preset)
+    """Executa o pipeline declarativo `_THEME_RULES_PIPELINE` em ordem."""
+    for _name, step in _THEME_RULES_PIPELINE:
+        config = step(config, world, difficulty_preset)
     return config
 
 
@@ -1312,6 +1297,95 @@ class ProceduralLevelGenerator:
         """Garante que o tempo de spawn não seja menor que o mínimo."""
         return max(DifficultyConfig.MIN_SPAWN_TIME, time)
 
+    def _configure_mountains_spawn(
+        self,
+        enemy_spawn_config: EnemySpawnConfig,
+        stage_progress: float,
+        difficulty: float,
+        spawn_multiplier: float,
+    ) -> None:
+        """Configura spawn de MountainMage/Propeller/StoneSentry/ElementalRobot.
+
+        Cada inimigo tem um gate de stage_progress; tempos base variam por
+        banda (early/mid/late) para os inimigos com escalonamento explícito.
+        """
+        if stage_progress >= 0.15:
+            if stage_progress < 0.40:
+                mage_base_time = 22.0
+            elif stage_progress < 0.70:
+                mage_base_time = 14.0
+            else:
+                mage_base_time = 10.0
+            enemy_spawn_config[MountainMage] = self._clamp_spawn_time(
+                (mage_base_time / difficulty) / spawn_multiplier
+            )
+
+        if stage_progress >= 0.35:
+            enemy_spawn_config[MountainPropeller] = self._clamp_spawn_time(
+                (20.0 / difficulty) / spawn_multiplier
+            )
+
+        if stage_progress >= 0.40:
+            sentry_weight = _get_progressive_enemy_weight(
+                "stone_sentry", 1.0, stage_progress
+            )
+            enemy_spawn_config[StoneSentry] = self._clamp_spawn_time(
+                (10.0 / difficulty / spawn_multiplier) * (2.0 / sentry_weight)
+            )
+
+        if stage_progress >= 0.53:
+            robot_weight = _get_progressive_enemy_weight(
+                "elemental_robot", 1.0, stage_progress
+            )
+            enemy_spawn_config[ElementalRobot] = self._clamp_spawn_time(
+                (15.0 / difficulty / spawn_multiplier) * (2.0 / robot_weight)
+            )
+
+    def _configure_stage_banded_spawn(
+        self,
+        enemy_spawn_config: EnemySpawnConfig,
+        stage_progress: float,
+        difficulty: float,
+        spawn_multiplier: float,
+    ) -> None:
+        """Configura Alien/EyeEnemy/SquareMinionBoss por bandas de stage_progress.
+
+        Espelha a lógica de bandas explícitas usada em MOUNTAINS para os temas
+        que herdam o pool do Espaço Sideral (STARFIELD/CITY/VOLCANIC/PROCEDURAL):
+        cada inimigo tem gate de entrada e tempos base que variam entre
+        early/mid/late do mundo.
+        """
+        if stage_progress < 0.40:
+            alien_base = 3.0
+        elif stage_progress < 0.70:
+            alien_base = 2.2
+        else:
+            alien_base = 1.6
+        enemy_spawn_config[Alien] = self._clamp_spawn_time(
+            (alien_base / difficulty) / spawn_multiplier
+        )
+
+        if stage_progress >= 0.25:
+            if stage_progress < 0.55:
+                eye_base = 8.0
+            elif stage_progress < 0.80:
+                eye_base = 5.5
+            else:
+                eye_base = 3.8
+            enemy_spawn_config[EyeEnemy] = self._clamp_spawn_time(
+                (eye_base / difficulty) / spawn_multiplier
+            )
+        else:
+            enemy_spawn_config.pop(EyeEnemy, None)
+
+        if stage_progress >= 0.45:
+            square_base = 14.0 if stage_progress < 0.75 else 9.0
+            enemy_spawn_config[SquareMinionBoss] = self._clamp_spawn_time(
+                (square_base / difficulty) / spawn_multiplier
+            )
+        else:
+            enemy_spawn_config.pop(SquareMinionBoss, None)
+
     def _calculate_score_multiplier(self, level_number: int) -> float:
         """Calcula o multiplicador de pontuação baseado no nível."""
         if level_number in self._score_cache:
@@ -1390,13 +1464,7 @@ class ProceduralLevelGenerator:
             # esses valores são sobrescritos por bandas de stage_progress abaixo.
             # Computar apenas para os demais temas (MOUNTAINS e variantes) — onde
             # serão filtrados depois pela elegibilidade por tema, caso não permitidos.
-            _stage_banded_themes = (
-                WorldTheme.STARFIELD,
-                WorldTheme.CITY,
-                WorldTheme.VOLCANIC,
-                WorldTheme.PROCEDURAL,
-            )
-            if world.theme not in _stage_banded_themes:
+            if world.theme not in _STAGE_BANDED_THEMES:
                 # Aliens (nível 2+)
                 if level_number >= 2:
                     alien_weight = (
@@ -1445,100 +1513,15 @@ class ProceduralLevelGenerator:
                             base_square_time * (2.0 / square_weight)
                         )
 
-            if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.15:
-                if stage_progress < 0.40:
-                    mage_base_time = 22.0  # raro no early
-                elif stage_progress < 0.70:
-                    mage_base_time = 14.0  # moderado no mid
-                else:
-                    mage_base_time = 10.0  # frequente no late
-                mage_spawn_time = (mage_base_time / difficulty) / spawn_multiplier
-                enemy_spawn_config[MountainMage] = self._clamp_spawn_time(
-                    mage_spawn_time
+            if world.theme == WorldTheme.MOUNTAINS:
+                self._configure_mountains_spawn(
+                    enemy_spawn_config, stage_progress, difficulty, spawn_multiplier
                 )
 
-            # Mountain Propeller
-            if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.35:
-                propeller_base_time = 20.0
-                propeller_spawn_time = (
-                    propeller_base_time / difficulty
-                ) / spawn_multiplier
-                enemy_spawn_config[MountainPropeller] = self._clamp_spawn_time(
-                    propeller_spawn_time
+            if world.theme in _STAGE_BANDED_THEMES:
+                self._configure_stage_banded_spawn(
+                    enemy_spawn_config, stage_progress, difficulty, spawn_multiplier
                 )
-
-            # StoneSentry — entra a partir de 40% do mundo (gate suavizado por 0.42)
-            if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.40:
-                sentry_weight = _get_progressive_enemy_weight(
-                    "stone_sentry", 1.0, stage_progress
-                )
-                sentry_spawn_time = (10.0 / difficulty / spawn_multiplier) * (
-                    2.0 / sentry_weight
-                )
-                enemy_spawn_config[StoneSentry] = self._clamp_spawn_time(
-                    sentry_spawn_time
-                )
-
-            # ElementalRobot — mini-boss, entra a partir de 53% (gate suavizado por 0.55)
-            if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.53:
-                robot_weight = _get_progressive_enemy_weight(
-                    "elemental_robot", 1.0, stage_progress
-                )
-                robot_spawn_time = (15.0 / difficulty / spawn_multiplier) * (
-                    2.0 / robot_weight
-                )
-                enemy_spawn_config[ElementalRobot] = self._clamp_spawn_time(
-                    robot_spawn_time
-                )
-
-            # ----------------------------------------------------------------
-            # PROGRESSÃO POR ESTÁGIO — temas que herdam o pool do Espaço Sideral
-            # (STARFIELD/CITY/VOLCANIC/PROCEDURAL). Espelha a lógica de bandas
-            # explícitas usada em MOUNTAINS: cada inimigo tem gate de entrada
-            # e tempos base que variam entre early/mid/late do mundo.
-            # ----------------------------------------------------------------
-            if world.theme in (
-                WorldTheme.STARFIELD,
-                WorldTheme.CITY,
-                WorldTheme.VOLCANIC,
-                WorldTheme.PROCEDURAL,
-            ):
-                # Alien — presente do início, escala para o late-stage
-                if stage_progress < 0.40:
-                    alien_base = 3.0  # padrão
-                elif stage_progress < 0.70:
-                    alien_base = 2.2  # moderado
-                else:
-                    alien_base = 1.6  # frequente
-                enemy_spawn_config[Alien] = self._clamp_spawn_time(
-                    (alien_base / difficulty) / spawn_multiplier
-                )
-
-                # EyeEnemy — entra após 25% do mundo, intensifica no fim
-                if stage_progress >= 0.25:
-                    if stage_progress < 0.55:
-                        eye_base = 8.0  # raro
-                    elif stage_progress < 0.80:
-                        eye_base = 5.5  # moderado
-                    else:
-                        eye_base = 3.8  # frequente
-                    enemy_spawn_config[EyeEnemy] = self._clamp_spawn_time(
-                        (eye_base / difficulty) / spawn_multiplier
-                    )
-                else:
-                    enemy_spawn_config.pop(EyeEnemy, None)
-
-                # SquareMinionBoss — mini-boss tardio (entra após 45% do mundo)
-                if stage_progress >= 0.45:
-                    if stage_progress < 0.75:
-                        square_base = 14.0  # raro
-                    else:
-                        square_base = 9.0  # mais frequente
-                    enemy_spawn_config[SquareMinionBoss] = self._clamp_spawn_time(
-                        (square_base / difficulty) / spawn_multiplier
-                    )
-                else:
-                    enemy_spawn_config.pop(SquareMinionBoss, None)
 
         # 2. Calcular quantidade de inimigos
         curve = DifficultyConfig.ENEMY_COUNT_CURVE

@@ -92,27 +92,9 @@ class Collisions:
 
 ---
 
-## 🟠 ALTO — Problemas que vão causar dor crescente
-
-### 5. `levels.py` — Geração procedural com 900 linhas e múltiplas responsabilidades
-
-`ProceduralLevelGenerator._generate_level_impl()` faz seleção de tema, cálculo de spawn, escolha de formações e configuração de features — tudo inline. As constantes `ENEMY_THEME_WEIGHT_PROFILES` e `ENEMY_STAGE_WEIGHT_PROFILES` têm ~150 linhas de dicts nested que são difíceis de auditar.
-
-```python
-# Problema: lógica de spawn por tema duplicada em dois lugares
-if world.theme in (WorldTheme.STARFIELD, WorldTheme.CITY, ...):
-    # bloco de 60 linhas
-if world.theme == WorldTheme.MOUNTAINS and stage_progress >= 0.15:
-    # bloco separado
-```
-
-**Pipeline de transformações não é explícito.** A sequência `_filter → _apply_weights → _apply_stage_weights → _apply_variety_cap` deve ser uma pipeline clara, não funções soltas chamadas em `_apply_theme_enemy_rules`.
-
----
-
 ## 🟡 MÉDIO — Dívida técnica acumulada
 
-### 9. `config.py` — `Config` como dataclass frozen com 300+ campos é um anti-pattern
+### 4. `config.py` — `Config` como dataclass frozen com 300+ campos é um anti-pattern
 
 Um único dataclass com campos de boss, slime, spike, formações, power-ups e UI não é configuração — é um namespace global disfarçado. Grupos não relacionados compartilham o mesmo espaço de nomes.
 
@@ -143,7 +125,7 @@ class GameConfig:
 
 ## 🔵 ARQUITETURAL — Decisões que limitam o crescimento do projeto
 
-### 10. Ausência de Event Bus real para comunicação entre sistemas
+### 5. Ausência de Event Bus real para comunicação entre sistemas
 
 O projeto tem `events.py` com `EventBus`, mas não é usado pelos sistemas principais. `PlayingScene` chama diretamente `sound_manager.play_X()`, `player_profile.record_X()`, e `entity_manager.spawn_X()` — tudo acoplamento direto.
 
@@ -158,7 +140,7 @@ self.event_bus.emit("enemy_killed", enemy=enemy, position=pos, points=pts)
 # SoundSystem, ScoreSystem, EffectsSystem reagem independentemente
 ```
 
-### 7. `PlayerProfile` mistura persistência, lógica de negócio e UI helpers
+### 6. `PlayerProfile` mistura persistência, lógica de negócio e UI helpers
 
 ```python
 class PlayerProfile:
@@ -181,7 +163,6 @@ class PlayerProfile:
 | 1 | `PlayingScene` God Object | 🔴 Crítico | Alto |
 | 2 | `EntityManager` com isinstance em hot path | 🔴 Crítico | Alto |
 | 3 | `Collisions` acoplado a tipos concretos | 🔴 Crítico | Alto |
-| 4 | `levels.py` — pipeline implícita, 900 linhas | 🟠 Alto | Médio |
-| 5 | `config.py` — namespace global disfarçado | 🟡 Médio | Alto |
-| 6 | EventBus existente mas não usado | 🔵 Arquitetural | Alto |
-| 7 | `PlayerProfile` mistura persistência + UI | 🔵 Arquitetural | Alto |
+| 4 | `config.py` — namespace global disfarçado | 🟡 Médio | Alto |
+| 5 | EventBus existente mas não usado | 🔵 Arquitetural | Alto |
+| 6 | `PlayerProfile` mistura persistência + UI | 🔵 Arquitetural | Alto |
