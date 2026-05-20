@@ -7,10 +7,10 @@ Melhorias aplicadas (boas práticas Python / Pygame):
   3. UpgradeContext substituído por dataclass tipada (elimina `type(..., (), ...)(...)`).
   4. _build_mini_ships() elimina duplicação em _process_powerups_and_stars.
   5. _apply_powerup() com dict-dispatch substitui cadeia de elif crescente.
-  6. _count_active_stage_hostiles() simplificado com sum() + generator coeso.
-  7. Laços de explosão de boss extraídos em _explode_entities().
+  6. Progressão de nível extraída em LevelProgressionController.
+  7. Boss fight extraído em BossFightController (systems/boss_fight_controller.py).
   8. _compute_shake_offset() encapsula lógica de screen-shake.
-  9. _get_shoot_cooldown() centraliza o cálculo do cooldown de tiro.
+  9. Sistema de tiro extraído em ShootingSystem (systems/shooting_system.py).
  10. Docstrings e type hints revisados; comentários inline redundantes removidos.
  11. Importações locais reagrupadas no topo quando possível; ciclos restantes mantidos.
  12. f-strings usadas de forma consistente no logging.
@@ -41,7 +41,7 @@ from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
 from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade, get_upgrade_icon
-from ..core.upgrades_config import HOMING_DAMAGE_MULTIPLIER, UPGRADE_SLOT_COUNT
+from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 from ..core.world_config import (
     WorldConfig,
     format_stage_name,
@@ -52,9 +52,15 @@ from ..entities.mini_ship import MiniShip
 from ..entities.ship import Ship
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..events import game_events as events
+from ..systems.boss_fight_controller import BossFightController
 from ..systems.collisions import Collisions
 from ..systems.effects_system import EffectsSystem
 from ..systems.entity_manager import EntityManager
+from ..systems.level_progression_controller import (
+    LevelProgressionController,
+    ProgressionStatus,
+)
+from ..systems.shooting_system import ShootingSystem
 from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
 
 logger = logging.getLogger(__name__)
@@ -144,15 +150,10 @@ class PlayingScene(Scene):
         self.last_dt: float = 1.0 / Config.FPS
         self.r = app.renderer
         self.first_entry: bool = True
-        self.shoot_cd: float = 0.0
         self.cheat_buffer: str = ""
         self.god_mode: bool = False
         self.state: GameState = GameState.PREPARING
         self.preparation_time_left: float = Config.PREPARATION_TIME
-        self.level_start_time: Optional[float] = None
-        self.level_start_score: int = 0
-        self.level_damage_taken: int = 0
-        self.level_powerups_collected: int = 0
         # Estado anterior dos triggers analógicos do controle (para detectar
         # transição abaixo/acima do threshold sem disparar a cada AXISMOTION).
         self._lt_pressed: bool = False
@@ -166,34 +167,16 @@ class PlayingScene(Scene):
         # navegam entre slots ativos, A confirma, B cancela.
         self._upgrade_select_mode: bool = False
         self._upgrade_select_index: int = 0
-        self.level_attempt_recorded: bool = False
         self.transition_phase: TransitionPhase = TransitionPhase.LEVEL_ENTRY
-        self.enemies_destroyed_in_level: int = 0
-        self.boss_fight_active: bool = False
-        self.pre_boss_transition: bool = False
-        self.pre_boss_timer: float = 0.0
-        self.warning_sound_played: bool = False
-        self.warning_stage: int = 0
-        self.warning_stage_timer: float = 0.0
-        self.music_fade_started: bool = False
-        self.boss_music_started: bool = False
         self.screen_shake_timer: float = 0.0
         self.screen_shake_intensity: int = Config.SCREEN_SHAKE_NORMAL
-        self.warning_timer: float = 0.0
         self.time_stop_timer: float = 0.0
         self.freeze_active: bool = False
-        self._cacador_laser_channel: Any | None = None
-        self.enemy_cleanup_active: bool = False
-        self.enemy_cleanup_timer: float = 0.0
-        self.enemy_blink_timer: float = 0.0
-        self.enemy_blink_interval: float = 0.2
-        self.enemy_visible: bool = True
         self.show_fps: bool = False
         self.show_enemy_hitboxes: bool = False
         self._game_over_triggered: bool = False
         self.score_multiplier_timer: float = 0.0
         self.score_multiplier_active: bool = False
-        self._boss_type_cache: Optional[str] = None
         self.level_transition_timer: float = 0.0
         self.level_transition_pending_timer: float = 0.0
         self.pending_world_transition: Optional[WorldConfig] = None
@@ -209,14 +192,11 @@ class PlayingScene(Scene):
         self.start_fade_alpha: float = 255.0
         self.start_fade_elapsed: float = 0.0
         self.level_config: LevelConfig | None = None
-        self._base_score_multiplier: float = 1.0
         self.lives: int = 0
         self.player_damage_multiplier: float = 1.0
         self.enemy_health_multiplier: float = 1.0
         self.score: int = 0
         self.total_enemies_destroyed: int = 0
-        self.enemies_to_clear: int = 0
-        self.has_boss: bool = False
 
         # Índice 0-based; starting_level é 1-based
         self.current_level_index: int = starting_level - 1
@@ -269,7 +249,6 @@ class PlayingScene(Scene):
 
     def _init_game_state(self) -> None:
         """Inicializa o estado de jogo e aplica configurações de dificuldade."""
-        self.shoot_cd: float = 0.0
         self.cheat_buffer: str = ""
         self.god_mode: bool = False
         self.state: GameState = GameState.PREPARING
@@ -278,42 +257,15 @@ class PlayingScene(Scene):
         self._lt_calibrated: bool = False
         self._upgrade_select_mode: bool = False
         self._upgrade_select_index: int = 0
-        self.level_start_time: Optional[float] = None
-        self.level_start_score: int = 0
-        self.level_damage_taken: int = 0
-        self.level_powerups_collected: int = 0
-        self.level_attempt_recorded: bool = False
         self.transition_phase: TransitionPhase = TransitionPhase.LEVEL_ENTRY
         self._apply_difficulty_settings()
 
-        self.enemies_destroyed_in_level: int = 0
-        self.boss_fight_active: bool = False
-        self.pre_boss_transition: bool = False
-        self.pre_boss_timer: float = 0.0
-        self.warning_sound_played: bool = False
-
-        # Sistema de warning em 3 estágios: 0=idle, 1=pre-delay, 2=active, 3=post-delay
-        self.warning_stage: int = 0
-        self.warning_stage_timer: float = 0.0
-
-        self.music_fade_started: bool = False
-        self.boss_music_started: bool = False
-
         self.screen_shake_timer: float = 0.0
         self.screen_shake_intensity: int = Config.SCREEN_SHAKE_NORMAL
-        self.warning_timer: float = 0.0
         self.warning_font = get_font(Config.WARNING_FONT_SIZE)
 
         self.time_stop_timer: float = 0.0
         self.freeze_active: bool = False
-        self._cacador_laser_channel: Any | None = None
-
-        self.enemy_cleanup_active: bool = False
-        self.enemy_cleanup_timer: float = 0.0
-        self.enemy_cleanup_duration: float = 20.0
-        self.enemy_blink_timer: float = 0.0
-        self.enemy_blink_interval: float = 0.2
-        self.enemy_visible: bool = True
 
         self.show_fps: bool = False
         self.show_enemy_hitboxes: bool = False
@@ -326,8 +278,6 @@ class PlayingScene(Scene):
 
         self.floating_score_batch_threshold: float = 60.0
 
-        # Cache de otimização
-        self._boss_type_cache: Optional[str] = None
         self._special_rules: list[str] = self.difficulty_settings.get(
             "special_rules", []
         )
@@ -389,16 +339,31 @@ class PlayingScene(Scene):
             (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
         )
 
+    def _request_screen_shake(self, duration: float, intensity: int) -> None:
+        self.screen_shake_timer = duration
+        self.screen_shake_intensity = intensity
+
+    def _get_background(self) -> Any | None:
+        return getattr(self.r, "current_background", None)
+
     def _init_systems(self) -> None:
         """Instancia sistemas de jogo (EntityManager, spawners, colisões)."""
-        self.level_config = self._get_adjusted_level_config(
-            self.current_level_index + 1
+        initial_level_number = self.current_level_index + 1
+        base_config = get_level_config(initial_level_number, self.difficulty_preset)
+        self.level_config = MetaProgressionService.get_adjusted_config(
+            self.player_profile, base_config
         )
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
         self.entity_manager = EntityManager(is_side_scroll=self.is_side_scroll)
         self._apply_world_theme()
-        self._cache_level_thresholds()
+
+        self.boss_controller = BossFightController(
+            entity_manager=self.entity_manager,
+            event_bus=self.app.event_bus,
+            screen_shake_request=self._request_screen_shake,
+            background_getter=self._get_background,
+        )
 
         # Instanciar EffectsSystem que escuta eventos do jogo
         self.effects_system = EffectsSystem(self.app.event_bus, self.entity_manager)
@@ -416,15 +381,28 @@ class PlayingScene(Scene):
         # diferentes do primeiro (ex.: começar em STARFIELD via world select).
         if not is_initial_level:
             self.enemy_spawner.set_level(
-                self.current_level_index + 1, level_config=self.level_config
+                initial_level_number, level_config=self.level_config
             )
         self.powerup_spawner = PowerUpSpawner(self.difficulty_preset)
         self.collisions = Collisions(self.app.event_bus)
         self.star_spawner = StarSpawner()
 
-        self._base_score_multiplier: float = (
-            self.level_config.score_multiplier
-            * self.difficulty_settings["rewards_multiplier"]
+        self.level_controller = LevelProgressionController(
+            entity_manager=self.entity_manager,
+            event_bus=self.app.event_bus,
+            enemy_spawner=self.enemy_spawner,
+            player_profile=self.player_profile,
+            difficulty_preset=self.difficulty_preset,
+            difficulty_settings=self.difficulty_settings,
+        )
+        self.level_controller.setup(
+            level_index=self.current_level_index,
+            level_config=self.level_config,
+        )
+
+        self.shooting = ShootingSystem(
+            entity_manager=self.entity_manager,
+            event_bus=self.app.event_bus,
         )
 
     # ------------------------------------------------------------------
@@ -441,30 +419,10 @@ class PlayingScene(Scene):
         self.score: int = 0
         self._sync_lives(self.lives)
         self.total_enemies_destroyed: int = 0
-        self.shoot_cd = 0.0
         self.cheat_buffer = ""
         self.god_mode = False
         self.state = GameState.PREPARING
         self.preparation_time_left = Config.PREPARATION_TIME
-        self.level_start_time = None
-        self.level_start_score = 0
-        self.level_damage_taken = 0
-        self.level_powerups_collected = 0
-        self.level_attempt_recorded = False
-
-    def _cache_level_thresholds(self) -> None:
-        """Pré-calcula valores usados em verificações frequentes."""
-        level_config = self.level_config
-        assert level_config is not None
-        self.enemies_to_clear = level_config.enemies_to_clear
-        self.has_boss = bool(level_config.boss_type)
-
-    def _get_adjusted_level_config(self, level_number: int) -> LevelConfig:
-        """Obtém configuração de nível ajustada pelo meta-progression."""
-        base_config = get_level_config(level_number, self.difficulty_preset)
-        return MetaProgressionService.get_adjusted_config(
-            self.player_profile, base_config
-        )
 
     def _apply_world_theme(self) -> None:
         """Aplica o tema visual do mundo atual."""
@@ -531,11 +489,7 @@ class PlayingScene(Scene):
         self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
         self.state = GameState.PREPARING
         self.preparation_time_left = Config.PREPARATION_TIME
-        self.level_start_time = None
-        self.level_start_score = 0
-        self.level_damage_taken = 0
-        self.level_powerups_collected = 0
-        self.level_attempt_recorded = False
+        self.level_controller.reset_level_stats()
         self._reset_ship_for_level_entry()
 
     def _reset_ship_for_level_entry(self) -> None:
@@ -555,12 +509,8 @@ class PlayingScene(Scene):
         self._set_transition_phase(TransitionPhase.PLAYING)
         self.state = GameState.PLAYING
         self.ship.is_entering = False
-        if self.level_start_time is None:
-            self.level_start_time = time.time()
-            self.level_start_score = self.score
-        if not self.level_attempt_recorded:
-            self.player_profile.record_attempt(self.current_level_index + 1)
-            self.level_attempt_recorded = True
+        self.level_controller.start_level_timer(self.score)
+        self.level_controller.record_attempt_if_needed()
 
     def _apply_pending_world_transition(self) -> None:
         """Aplica o mundo pendente após o painel de transição finalizar."""
@@ -862,17 +812,6 @@ class PlayingScene(Scene):
             attraction_mult=self.ship.profile.pickup_radius_mult,
         )
 
-        if self._cacador_laser_channel is not None:
-            has_alive_cacador_laser = any(
-                getattr(laser, "state", "") == "alive"
-                for laser in self.entity_manager.cacador_lasers
-            )
-            if not has_alive_cacador_laser:
-                self._cacador_laser_channel.stop()
-                self._cacador_laser_channel = None
-
-        # Sincronizar volume do laser carregado se estiver ativo (opcional, mantendo compatibilidade)
-
         if self.transition_phase in (
             TransitionPhase.PLAYING,
             TransitionPhase.LEVEL_ENTRY,
@@ -933,8 +872,7 @@ class PlayingScene(Scene):
     def _update_timers(self, dt: float) -> None:
         self.time_stop_timer = max(0.0, self.time_stop_timer - dt)
         self.freeze_active = self.time_stop_timer > 0.0
-        self.shoot_cd = max(0.0, self.shoot_cd - dt)
-        self.warning_timer = max(0.0, self.warning_timer - dt)
+        self.shooting.update(dt)
 
         if self.score_multiplier_active:
             self.score_multiplier_timer -= dt
@@ -977,7 +915,7 @@ class PlayingScene(Scene):
                 self._build_permanent_mini_ships()
 
         boss_pausing = False
-        if self._boss_type_cache == "spike" and self.entity_manager.boss:
+        if self.boss_controller.boss_type == "spike" and self.entity_manager.boss:
             from ..entities.spike_boss import SpikeBoss
 
             boss_pausing = cast(SpikeBoss, self.entity_manager.boss).is_pausing_game()
@@ -999,12 +937,12 @@ class PlayingScene(Scene):
             )
             if (
                 ("hold_shoot" in held or self.ship.should_auto_fire())
-                and self.shoot_cd == 0.0
+                and self.shooting.is_ready
                 and not boss_pausing
                 and self.ship.speed_modifier_timer <= 0.0
                 and not charging
             ):
-                self._fire_bullets()
+                self.shooting.fire(self.ship, self.player_damage_multiplier)
 
     def _apply_environmental_effects(self, dt: float) -> None:
         """Aplica efeitos ambientais (como vento) à nave do jogador."""
@@ -1024,8 +962,8 @@ class PlayingScene(Scene):
 
     def _update_spawners(self, dt: float) -> None:
         if (
-            not self.boss_fight_active
-            and not self.pre_boss_transition
+            not self.boss_controller.active
+            and not self.boss_controller.pre_boss_transition
             and not self.level_transition_active
             and not self.level_transition_pending
         ):
@@ -1044,297 +982,18 @@ class PlayingScene(Scene):
             self.star_spawner.update(self.entity_manager.stars)
 
     def _update_level_logic(self, dt: float) -> None:
-        if self.boss_fight_active:
+        if self.boss_controller.active:
             if self.entity_manager.boss and self.entity_manager.boss.dead:
                 self._end_boss_fight()
-        elif self.pre_boss_transition:
-            if not self.entity_manager.enemies and self.warning_stage == 0:
-                self.warning_stage = 1
-                self.warning_stage_timer = 0.0
-                self.warning_sound_played = False
-            self._update_warning_system(dt)
+        elif self.boss_controller.pre_boss_transition:
+            has_active = bool(self.entity_manager.enemies)
+            if self.boss_controller.update_warning(dt, has_active):
+                self._start_boss_fight()
         elif self.transition_phase == TransitionPhase.PLAYING:
             if self._game_over_triggered:
                 return
-            self._update_enemy_cleanup(dt)
+            self.boss_controller.update_cleanup(dt)
             self._check_level_progression()
-
-    def _update_enemy_cleanup(self, dt: float) -> None:
-        if not self.enemy_cleanup_active:
-            return
-
-        self.enemy_cleanup_timer += dt
-        time_remaining = max(
-            0.0, self.enemy_cleanup_duration - self.enemy_cleanup_timer
-        )
-
-        if 0.0 < time_remaining <= 5.0:
-            blink_t = max(0.0, min(1.0, time_remaining / 5.0))
-            self.enemy_blink_interval = 0.05 + (0.4 - 0.05) * blink_t
-            self.enemy_blink_timer += dt
-            if self.enemy_blink_timer >= self.enemy_blink_interval:
-                self.enemy_blink_timer = 0.0
-                self.enemy_visible = not self.enemy_visible
-        elif time_remaining <= 0.0:
-            self.enemy_visible = True
-            self._force_kill_stage_hostiles()
-            self.enemy_cleanup_active = False
-
-    def _force_kill_stage_hostiles(self) -> None:
-        em = self.entity_manager
-        for e in em.enemies:
-            if not getattr(e, "dead", False):
-                e.dead = True
-        for f in em.formations:
-            if not getattr(f, "dead", False):
-                for e in f.get_enemies():
-                    if not getattr(e, "dead", False):
-                        e.dead = True
-        for m in em.boulders:
-            if not m.dead:
-                m.dead = True
-        for s in em.attack_debris:
-            if not s.dead:
-                s.dead = True
-        for r in em.orbital_debris:
-            if not r.dead and getattr(r, "causes_damage", False):
-                r.dead = True
-
-    # ------------------------------------------------------------------
-    # Tiro
-    # ------------------------------------------------------------------
-
-    def _get_shoot_cooldown(self) -> float:
-        """Calcula e retorna o cooldown de tiro baseado na attack speed da nave."""
-        return 1.0 / (self.ship.attack_speed_multiplier * Config.FIRE_RATE)
-
-    def _fire_bullets(self) -> None:
-        """Dispara as balas da nave e reinicia o cooldown.
-
-        Para o Caçador, o tiro carregado vira um laser especial separado.
-        """
-        bullet_specs = self.ship.bullet_spawn()
-        # Caçador: se há carga ativa, consome o fator e ativa o tiro carregado.
-        charge_factor = self.ship.consume_charge()
-        # `ship.damage_multiplier` já compõe o profile da nave com o damage_boost
-        # ativo (powerup multiplicativo sobre o stat da nave).
-        adjusted_damage = int(
-            Config.BULLET_BASE_DAMAGE
-            * self.player_damage_multiplier
-            * self.ship.damage_multiplier
-            * charge_factor
-        )
-
-        # Charge shot: behavior depends on ship type. Magneto => laser, Caçador => 5 homing bullets.
-        is_charge_shot = self.ship.profile.has_charge_shot and charge_factor > 1.0
-        if is_charge_shot:
-            ship_id = getattr(self.ship.profile, "id", "")
-            # Magneto keeps the continuous boss-laser behaviour
-            if ship_id == "magneto":
-                if self._cacador_laser_channel is not None:
-                    self._cacador_laser_channel.stop()
-                self._cacador_laser_channel = sound_manager.play_boss_laser_fire(
-                    return_channel=True
-                )
-                # Emit event for charged shot
-                self.app.event_bus.emit(
-                    events.PlayerShot(
-                        ship_type="magneto",
-                        projectile_type="cacador_laser",
-                        position=(self.ship.x, self.ship.y),
-                        charge_level=charge_factor,
-                    )
-                )
-                for x, y, direction, *_ in bullet_specs:
-                    dx, dy = direction
-                    mag = math.hypot(dx, dy)
-                    if mag == 0.0:
-                        continue
-                    unit_dir = (dx / mag, dy / mag)
-                    self.entity_manager.spawn_cacador_laser(
-                        x,
-                        y,
-                        direction=unit_dir,
-                        damage=adjusted_damage,
-                    )
-                self.shoot_cd = self._get_shoot_cooldown()
-                return
-
-            # Caçador: dispara múltiplos tiros teleguiados com alvos independentes.
-            # Cada projétil recebe um alvo exclusivo (round-robin sobre os inimigos
-            # vivos em tela), evitando que todos persigam o mesmo inimigo.
-            # Não dispara se já há projéteis teleguiados vivos — evita acúmulo.
-            if ship_id == "cacador":
-                if self.entity_manager.homing_bullets:
-                    self.shoot_cd = self._get_shoot_cooldown()
-                    return
-                # Emit event for charged homing shot
-                self.app.event_bus.emit(
-                    events.PlayerShot(
-                        ship_type="cacador",
-                        projectile_type="homing_bullets",
-                        position=(self.ship.x, self.ship.y),
-                        charge_level=charge_factor,
-                    )
-                )
-                count = 5
-                spread = math.radians(90)
-                divisor = max(1, count - 1)
-
-                # Coletar inimigos válidos para distribuição de alvos.
-                live_enemies = [
-                    e
-                    for e in self.entity_manager.enemies
-                    if not getattr(e, "dead", False)
-                ]
-                if self.entity_manager.boss and not getattr(
-                    self.entity_manager.boss, "dead", False
-                ):
-                    live_enemies.append(self.entity_manager.boss)
-
-                for x, y, direction, *_ in bullet_specs:
-                    dx, dy = direction
-                    mag = math.hypot(dx, dy)
-                    if mag == 0.0:
-                        continue
-                    base_angle = math.atan2(dy, dx)
-                    for i in range(count):
-                        t = i / divisor
-                        angle = base_angle - spread / 2 + t * spread
-                        dir_vec = (math.cos(angle), math.sin(angle))
-                        # Distribuição round-robin: projétil i persegue inimigo i % n.
-                        # Se não há inimigos, locked_target=None e o projétil busca
-                        # o mais próximo dinamicamente (comportamento padrão).
-                        target = (
-                            live_enemies[i % len(live_enemies)]
-                            if live_enemies
-                            else None
-                        )
-                        self.entity_manager.spawn_homing_bullet(
-                            x,
-                            y,
-                            damage=adjusted_damage,
-                            direction=dir_vec,
-                            locked_target=target,
-                        )
-                self.shoot_cd = self._get_shoot_cooldown()
-                return
-
-        # Tocar som de tiro (uma vez por salva de tiros)
-        self.app.event_bus.emit(
-            events.PlayerShot(
-                ship_type=self.ship.profile.id,
-                projectile_type="bullet",
-                position=(self.ship.x, self.ship.y),
-                charge_level=1.0,
-            )
-        )
-
-        for (
-            x,
-            y,
-            direction,
-            is_piercing,
-            is_homing,
-            is_explosive,
-            is_low_ammo,
-        ) in bullet_specs:
-            # Tiros teleguiados levam multiplicador de dano direto.
-            # Quando combinados com explosivo, o impacto direto fica mais forte
-            # (a explosão em área usa EXPLOSIVE_BULLET_DAMAGE no collision system).
-            bullet_damage = (
-                int(adjusted_damage * HOMING_DAMAGE_MULTIPLIER)
-                if is_homing
-                else adjusted_damage
-            )
-            self.entity_manager.spawn_bullet(
-                x,
-                y,
-                damage=bullet_damage,
-                piercing=is_piercing,
-                homing=is_homing,
-                explosive=is_explosive,
-                low_ammo=is_low_ammo,
-                direction=direction,
-                ship_id=self.ship.profile.id,
-            )
-            if is_explosive:
-                self.ship.consume_explosive_shot()
-        self.shoot_cd = self._get_shoot_cooldown()
-
-    # ------------------------------------------------------------------
-    # Sistema de warning
-    # ------------------------------------------------------------------
-
-    def _update_warning_system(self, dt: float) -> None:
-        """Atualiza o sistema de warning em 3 estágios."""
-        self.warning_stage_timer += dt
-
-        if self.warning_stage == 1:
-            if (
-                not self.music_fade_started
-                and self.warning_stage_timer >= Config.BOSS_MUSIC_FADE_OUT_START
-            ):
-                self.app.event_bus.emit(
-                    events.MusicStateChange(
-                        state=MusicState.SILENCE,
-                        fade_ms=int(Config.BOSS_MUSIC_FADE_OUT_DURATION * 1000),
-                    )
-                )
-                self.music_fade_started = True
-
-            if self.warning_stage_timer >= Config.BOSS_PRE_WARNING_DELAY:
-                self.warning_stage = 2
-                self.warning_stage_timer = 0.0
-                self.warning_timer = Config.BOSS_WARNING_DURATION
-                self.screen_shake_timer = Config.BOSS_WARNING_DURATION
-                if not self.warning_sound_played:
-                    self.app.event_bus.emit(events.PlaySound(sound_name="warning"))
-                    self.warning_sound_played = True
-
-        elif self.warning_stage == 2:
-            if self.warning_stage_timer >= Config.BOSS_WARNING_DURATION:
-                self.warning_stage = 3
-                self.warning_stage_timer = 0.0
-                self.warning_timer = 0.0
-                self.screen_shake_timer = 0.0
-                sound_manager.stop_warning()
-
-        elif self.warning_stage == 3:
-            if self.warning_stage_timer >= Config.BOSS_POST_WARNING_DELAY:
-                self._start_boss_fight()
-
-    # ------------------------------------------------------------------
-    # Cache de boss
-    # ------------------------------------------------------------------
-
-    def _cache_boss_type(self) -> None:
-        """Cacheia o tipo do boss assim que ele é spawnado."""
-        boss = self.entity_manager.boss
-        if not boss:
-            self._boss_type_cache = None
-            return
-
-        from ..entities.cloud_archmage_boss import CloudArchmageBoss
-        from ..entities.giant_meteor_boss import GiantMeteorBoss
-        from ..entities.mountain_serpent_boss import MountainSerpentBoss
-        from ..entities.slime_boss import SlimeBoss
-        from ..entities.spike_boss import SpikeBoss
-        from ..entities.stone_golem_boss import StoneGolemBoss
-
-        type_map: dict[type, str] = {
-            SpikeBoss: "spike",
-            SlimeBoss: "slime",
-            GiantMeteorBoss: "giant_meteor",
-            StoneGolemBoss: "stone_golem",
-            MountainSerpentBoss: "mountain_serpent",
-            CloudArchmageBoss: "archmage",
-        }
-        for cls, name in type_map.items():
-            if isinstance(boss, cls):
-                self._boss_type_cache = name
-                return
-        self._boss_type_cache = "normal"
 
     def _all_animations_finished(self) -> bool:
         """Verifica se todas as explosões finalizaram (para transição de nível)."""
@@ -1677,7 +1336,7 @@ class PlayingScene(Scene):
         score_gain = 0
         boss = self.entity_manager.boss
 
-        if not (boss and self._boss_type_cache):
+        if not (boss and self.boss_controller.boss_type):
             return gain
 
         all_player_projectiles = (
@@ -1732,7 +1391,7 @@ class PlayingScene(Scene):
                 self.entity_manager,
             )
 
-        if self._boss_type_cache == "slime":
+        if self.boss_controller.boss_type == "slime":
             from ..entities.slime_boss import SlimeBoss
 
             slime_boss = cast(SlimeBoss, boss)
@@ -1741,7 +1400,7 @@ class PlayingScene(Scene):
             )
             if drip_damage > 0:
                 self._handle_ship_hit()
-                self.level_damage_taken += drip_damage
+                self.level_controller.notify_damage_taken(drip_damage)
 
         score_gain = self._apply_score_multiplier(score_gain)
 
@@ -1787,10 +1446,10 @@ class PlayingScene(Scene):
         if self.collisions.ship_vs_boss_squares(self.ship, em.boss_squares):
             self._handle_ship_hit()
 
-        if self._boss_type_cache == "stone_golem" and em.boss:
+        if self.boss_controller.boss_type == "stone_golem" and em.boss:
             self._check_stone_golem_sweep(em)
 
-        if self._boss_type_cache == "mountain_serpent" and em.boss:
+        if self.boss_controller.boss_type == "mountain_serpent" and em.boss:
             if self.collisions.ship_vs_boss(self.ship, em.boss, self.entity_manager):
                 self._handle_ship_hit()
 
@@ -1820,7 +1479,7 @@ class PlayingScene(Scene):
 
     def _apply_score_multiplier(self, pts: int) -> int:
         """Aplica multiplicador de score base + eventual bônus ativo."""
-        multiplier = self._base_score_multiplier
+        multiplier = self.level_controller.base_score_multiplier
         if self.score_multiplier_active:
             multiplier *= self.score_multiplier_value
         return int(pts * multiplier)
@@ -1849,7 +1508,7 @@ class PlayingScene(Scene):
 
         if ship_hit_proj or ship_hit_form:
             self._handle_ship_hit()
-            self.level_damage_taken += 1
+            self.level_controller.notify_damage_taken()
 
         batched_events = self._batch_floating_scores(
             score_events, proximity_threshold=self.floating_score_batch_threshold
@@ -1867,7 +1526,7 @@ class PlayingScene(Scene):
 
         self.score += self._apply_score_multiplier(gain)
         self.total_enemies_destroyed += destroyed
-        self.enemies_destroyed_in_level += destroyed
+        self.level_controller.notify_enemies_destroyed(destroyed)
 
         if destroyed > 0:
             self.star_spawner.add_kills(destroyed, self.entity_manager.stars)
@@ -1904,7 +1563,7 @@ class PlayingScene(Scene):
             self.entity_manager,
         )
 
-        if self._boss_type_cache == "slime":
+        if self.boss_controller.boss_type == "slime":
             self.collisions.bullets_vs_slime_drips(
                 self.entity_manager.bullets,
                 self.entity_manager.slime_drips,
@@ -2066,7 +1725,7 @@ class PlayingScene(Scene):
                 self.ship.has_storage_slots() and self.ship.try_store_powerup(kind)
             ):
                 self._apply_powerup(kind)
-            self.level_powerups_collected += 1
+            self.level_controller.notify_powerup_collected()
 
     # ------------------------------------------------------------------
     # Dano à nave / game over
@@ -2102,7 +1761,9 @@ class PlayingScene(Scene):
         # No game over, persistir o ganho da fase incompleta (record_clear não
         # roda nesse caso). Em perdas de vida com vidas restantes, deixar para
         # record_clear capturar o total quando a fase for concluída.
-        level_gain_on_death = self.score - self.level_start_score if is_game_over else 0
+        level_gain_on_death = (
+            self.score - self.level_controller.level_start_score if is_game_over else 0
+        )
         self.player_profile.record_death(
             self.current_level_index + 1,
             cause="collision",
@@ -2138,264 +1799,37 @@ class PlayingScene(Scene):
     # Progressão de nível
     # ------------------------------------------------------------------
 
-    def _count_active_stage_hostiles(self) -> int:
-        """Conta hostis ativos relevantes para concluir a fase."""
-        em = self.entity_manager
-
-        active_enemies = sum(1 for e in em.enemies if not getattr(e, "dead", False))
-        active_formation_enemies = sum(
-            1
-            for f in em.formations
-            if not getattr(f, "dead", False)
-            for e in f.get_enemies()
-            if not getattr(e, "dead", False)
-        )
-        active_boulders = sum(1 for m in em.boulders if not m.dead)
-        active_attack_debris = sum(1 for s in em.attack_debris if not s.dead)
-        active_orbital_debris = sum(
-            1
-            for r in em.orbital_debris
-            if not r.dead and getattr(r, "causes_damage", False)
-        )
-
-        return (
-            active_enemies
-            + active_formation_enemies
-            + active_boulders
-            + active_attack_debris
-            + active_orbital_debris
-        )
-
     def _check_level_progression(self) -> None:
-        if self.enemies_destroyed_in_level < self.enemies_to_clear:
+        status = self.level_controller.check_progression()
+        if status is ProgressionStatus.NONE:
             return
-
-        self.enemy_spawner.stop()
-        active_hostiles = self._count_active_stage_hostiles()
-
-        if active_hostiles > 0:
-            if not self.enemy_cleanup_active:
-                self.enemy_cleanup_active = True
-                self.enemy_cleanup_timer = 0.0
-                logger.info(
-                    "🧹 Aguardando limpeza final: %d hostis ainda ativos.",
-                    active_hostiles,
-                )
-        else:
-            self.enemy_cleanup_active = False
-            if self.has_boss:
-                self.pre_boss_transition = True
-            else:
-                self._advance_to_next_level(with_delay=False)
+        if status is ProgressionStatus.CLEANUP_NEEDED:
+            if not self.boss_controller.enemy_cleanup_active:
+                self.boss_controller.begin_cleanup()
+        elif status is ProgressionStatus.BOSS_READY:
+            self.boss_controller.pre_boss_transition = True
+        elif status is ProgressionStatus.LEVEL_CLEARED:
+            self._advance_to_next_level(with_delay=False)
 
     def _start_boss_fight(self) -> None:
         level_config = self.level_config
         assert level_config is not None
-
-        self.pre_boss_transition = False
-        self.pre_boss_timer = 0.0
-        self.warning_sound_played = False
-        self.warning_stage = 0
-        self.warning_stage_timer = 0.0
-        self.warning_timer = 0.0
-        self.music_fade_started = False
-        self.boss_music_started = False
-        self.boss_fight_active = True
-        self.screen_shake_timer = Config.BOSS_ENTRY_SHAKE_DURATION
-        self.enemy_visible = True
-        self.enemy_blink_timer = 0.0
-
-        sound_manager.stop_warning()
-        sound_manager.stop_all_sfx()
-
-        if not level_config.boss_type:
-            return
-
-        from ..entities.cloud_archmage_boss import CloudArchmageBoss
-        from ..entities.giant_meteor_boss import GiantMeteorBoss
-        from ..entities.mountain_serpent_boss import MountainSerpentBoss
-        from ..entities.stone_golem_boss import StoneGolemBoss
-
-        if level_config.boss_type == StoneGolemBoss:
-            boss = StoneGolemBoss(
-                Config.SCREEN_WIDTH / 2 - 50,
-                50,
-                difficulty_multiplier=self.enemy_health_multiplier,
-            )
-            self.entity_manager.boss = boss
-        elif level_config.boss_type == MountainSerpentBoss:
-            # spawn_mountain_serpent_boss cria a cabeça E os blocos laterais
-            # Não passa x/y para usar os valores padrão centrados da classe
-            scaled_health = int(
-                MountainSerpentBoss.DEFAULT_HEALTH * self.enemy_health_multiplier
-            )
-            boss = self.entity_manager.spawn_mountain_serpent_boss(
-                health=scaled_health,
-                block_health_multiplier=self.enemy_health_multiplier,
-            )
-        elif level_config.boss_type == GiantMeteorBoss:
-            # spawn_giant_meteor_boss seta is_side_scroll corretamente
-            boss = self.entity_manager.spawn_giant_meteor_boss()
-            boss.health = int(boss.health * self.enemy_health_multiplier)
-            boss.max_health = boss.health
-        elif level_config.boss_type == CloudArchmageBoss:
-            # Archmage precisa do pace interno (intervalo de estalagmites/fire
-            # zones + cap de zonas ativas), não só HP escalado — sem isso a
-            # phase 3 fica idêntica em Casual e Pesadelo.
-            boss = CloudArchmageBoss(
-                difficulty_multiplier=self.enemy_health_multiplier,
-            )
-            self.entity_manager.boss = boss
-        else:
-            boss = level_config.boss_type(Config.SCREEN_WIDTH / 2 - 50, 50)
-            boss.health = int(boss.health * self.enemy_health_multiplier)
-            boss.max_health = boss.health
-            self.entity_manager.boss = boss
-
-        self._cache_boss_type()
-
-        # Pausa o ciclo dia/noite enquanto o boss está ativo (se o background existir)
-        renderer_bg = None
-        if getattr(self, "r", None) is not None:
-            renderer_bg = getattr(self.r, "current_background", None)
-        if renderer_bg is not None:
-            renderer_bg.set_day_night_paused(True)
-
-        _boss_music_map = {
-            "spike": MusicState.SPIKE_BOSS,
-            "slime": MusicState.SLIME_BOSS,
-            "giant_meteor": MusicState.GIANT_METEOR_BOSS,
-            "mountain_serpent": MusicState.MOUNTAIN_SERPENT_BOSS,
-            "archmage": MusicState.CLOUD_ARCHMAGE_BOSS,
-        }
-        boss_type = self._boss_type_cache or "normal"
-        boss_music_state = getattr(type(boss), "MUSIC_STATE", None)
-        if boss_music_state is None:
-            boss_music_state = _boss_music_map.get(boss_type, MusicState.BOSS)
-        self.app.event_bus.emit(
-            events.MusicStateChange(state=boss_music_state, fade_ms=0)
-        )
-        self.boss_music_started = True
-
-    def _explode_entities(self, entities: list[Any], size: int = 15) -> None:
-        """Cria explosões para uma lista de entidades e as remove."""
-        for entity in entities:
-            cx = float(getattr(entity, "x", 0.0)) + getattr(entity, "w", 0) / 2
-            cy = float(getattr(entity, "y", 0.0)) + getattr(entity, "h", 0) / 2
-            self.entity_manager.spawn_explosion(cx, cy, size=size)
+        self.boss_controller.start(level_config, self.enemy_health_multiplier)
 
     def _end_boss_fight(self) -> None:
-        from ..entities.giant_meteor_boss import GiantMeteorBoss
-        from ..entities.mountain_serpent_boss import MountainSerpentBoss
-
-        boss = self.entity_manager.boss
-        if not boss:
-            return
-
-        if isinstance(boss, MountainSerpentBoss):
-            boss_center = (boss.head_x, boss.head_y)
-        else:
-            boss_center = (boss.x + boss.w / 2, boss.y + boss.h / 2)
-        self.screen_shake_timer = Config.SCREEN_SHAKE_BOSS_DEATH_DURATION
-        self.screen_shake_intensity = Config.SCREEN_SHAKE_BOSS_DEATH
-
-        # Emit BossDefeated event
-        self.app.event_bus.emit(
-            events.BossDefeated(
-                boss_type=self._boss_type_cache or "normal", position=boss_center
-            )
+        boss_score = self.boss_controller.end(
+            score_multiplier_active=self.score_multiplier_active,
+            score_multiplier_value=self.score_multiplier_value,
         )
-
-        # Explosões em anel
-        num_exp = Config.BOSS_EXPLOSION_COUNT
-        radius = Config.BOSS_EXPLOSION_RADIUS
-        for i in range(num_exp):
-            angle = math.radians((360 / num_exp) * i)
-            ex = boss_center[0] + radius * math.cos(angle)
-            ey = boss_center[1] + radius * math.sin(angle)
-            self.entity_manager.spawn_explosion(
-                ex, ey, size=Config.BOSS_EXPLOSION_SMALL_SIZE
-            )
-
-        self.entity_manager.spawn_explosion(
-            boss_center[0], boss_center[1], size=Config.BOSS_EXPLOSION_LARGE_SIZE
-        )
-
-        # Limpar spikes com explosões
-        for spike in self.entity_manager.spikes:
-            if spike.state != "respawning":
-                self.entity_manager.spawn_explosion(
-                    spike.center_x, spike.center_y, size=15
-                )
-        self.entity_manager.spikes.clear()
-
-        # Para GiantMeteorBoss: destruir meteoros ativos
-        if isinstance(boss, GiantMeteorBoss):
-            for meteor in self.entity_manager.meteor_pool.active:
-                self.entity_manager.spawn_explosion(
-                    meteor.x + meteor.w / 2,
-                    meteor.y + meteor.h / 2,
-                    size=max(12, int(meteor.w // 2)),
-                )
-            self.entity_manager.meteor_pool.clear_active()
-
-        # Limpar inimigos e formações restantes
-        self._explode_entities(list(self.entity_manager.enemies))
-        self.entity_manager.enemies.clear()
-
-        for formation in self.entity_manager.formations:
-            self._explode_entities(list(formation.enemies))
-            formation.dead = True
-        self.entity_manager.formations.clear()
-
-        self.entity_manager.boss = None
-        self.boss_fight_active = False
-        self._boss_type_cache = None
-
-        # Retoma o ciclo dia/noite após a morte do boss (se o background existir)
-        renderer_bg = None
-        if getattr(self, "r", None) is not None:
-            renderer_bg = getattr(self.r, "current_background", None)
-        if renderer_bg is not None:
-            renderer_bg.set_day_night_paused(False)
-
-        boss_score = Config.BOSS_DEFEAT_SCORE
-        if self.score_multiplier_active:
-            boss_score = int(boss_score * self.score_multiplier_value)
         self.score += boss_score
 
-        self.music_fade_started = False
-        self.boss_music_started = False
-        self.app.event_bus.emit(
-            events.MusicStateChange(state=MusicState.GAME, fade_ms=0)
-        )
-
-        current_level_number = self.current_level_index + 1
-        if current_level_number == self.current_world.boss_level:
+        if self.level_controller.current_level_number == self.current_world.boss_level:
             self.player_profile.unlock_next_world(self.current_world.world_id)
 
         self._advance_to_next_level()
 
     def _advance_to_next_level(self, with_delay: bool = True) -> None:
-        if self.level_start_time is not None:
-            clear_time = time.time() - self.level_start_time
-            level_score = self.score - self.level_start_score
-            self.player_profile.record_clear(
-                level_number=self.current_level_index + 1,
-                time_taken=clear_time,
-                score=level_score,
-                enemies_killed=self.total_enemies_destroyed,
-                damage_taken=self.level_damage_taken,
-                powerups_collected=self.level_powerups_collected,
-            )
-            self.app.event_bus.emit(
-                events.LevelCleared(
-                    level_number=self.current_level_index + 1,
-                    score=level_score,
-                    time_taken=clear_time,
-                )
-            )
-
+        self.level_controller.record_clear(self.score, self.total_enemies_destroyed)
         if with_delay:
             if self.transition_phase == TransitionPhase.PLAYING:
                 self._set_transition_phase(TransitionPhase.POST_VICTORY_DELAY)
@@ -2403,53 +1837,31 @@ class PlayingScene(Scene):
             self._start_next_level()
 
     def _start_next_level(self) -> None:
-        self.player_profile.set_checkpoint_on_level_start(self.current_level_index + 1)
-        self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
-        self.current_level_index += 1
-
-        self.level_config = self._get_adjusted_level_config(
-            self.current_level_index + 1
+        # Checkpoint usa o número 1-based do nível recém-concluído.
+        self.player_profile.set_checkpoint_on_level_start(
+            self.level_controller.current_level_number
         )
+        self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
 
-        new_world = get_world_for_level(self.current_level_index + 1)
+        next_level_number = self.level_controller.current_level_number + 1
+        new_world = get_world_for_level(next_level_number)
         theme_changed = new_world.theme != self.current_world.theme
+
+        self.level_config = self.level_controller.advance_to_next_level(
+            is_world_transition=theme_changed
+        )
+        self.current_level_index = self.level_controller.current_level_index
 
         if theme_changed:
             self.pending_world_transition = new_world
         else:
             self.current_world = new_world
             self.pending_world_transition = None
-
-        self._cache_level_thresholds()
-        self._base_score_multiplier = (
-            self.level_config.score_multiplier
-            * self.difficulty_settings["rewards_multiplier"]
-        )
-
-        # Avanço dentro do mesmo mundo (sem theme change) atualiza só o
-        # progress visual; troca de tema delega para _apply_world_theme
-        # após a cutscene de transição.
-        if not theme_changed:
+            # Avanço dentro do mesmo mundo: atualiza só o progress visual.
+            # Theme change delega para _apply_world_theme após a cutscene.
             self._apply_mountains_progress()
 
-        self.enemy_spawner.set_level(
-            self.current_level_index + 1,
-            is_world_transition=theme_changed,
-            level_config=self.level_config,
-        )
-        self.enemies_destroyed_in_level = 0
-        self.level_start_time = None
-        self.level_start_score = 0
-        self.level_damage_taken = 0
-        self.level_powerups_collected = 0
-        self.level_attempt_recorded = False
-
-        # Reset do sistema de limpeza
-        self.enemy_cleanup_active = False
-        self.enemy_cleanup_timer = 0.0
-        self.enemy_blink_timer = 0.0
-        self.enemy_visible = True
-
+        self.boss_controller.reset()
         self.entity_manager.clear_for_level_transition()
 
         # Restaura mini-naves após a limpeza:
@@ -2538,8 +1950,8 @@ class PlayingScene(Scene):
                     ):
                         # Botão esquerdo + Alt: inicia charge (espelho do Space+Alt).
                         self.ship.start_charge()
-                    elif not self.ship.auto_fire and self.shoot_cd == 0.0:
-                        self._fire_bullets()
+                    elif not self.ship.auto_fire and self.shooting.is_ready:
+                        self.shooting.fire(self.ship, self.player_damage_multiplier)
             elif event.button == 2:
                 if not self.ship.is_entering and self._can_handle_gameplay_actions():
                     self.ship.cycle_facing()
@@ -2563,7 +1975,7 @@ class PlayingScene(Scene):
                 and self._can_handle_gameplay_actions()
             ):
                 if self.ship.charge_shot_progress >= 1.0:
-                    self._fire_bullets()
+                    self.shooting.fire(self.ship, self.player_damage_multiplier)
                 else:
                     self.ship.cancel_charge()
 
@@ -2576,7 +1988,7 @@ class PlayingScene(Scene):
                     and self._can_handle_gameplay_actions()
                 ):
                     if self.ship.charge_shot_progress >= 1.0:
-                        self._fire_bullets()
+                        self.shooting.fire(self.ship, self.player_damage_multiplier)
                     else:
                         self.ship.cancel_charge()
 
@@ -2760,7 +2172,7 @@ class PlayingScene(Scene):
                 self.ship.start_charge()
             elif not pressed and self.ship.charge_shot_active:
                 if self.ship.charge_shot_progress >= 1.0:
-                    self._fire_bullets()
+                    self.shooting.fire(self.ship, self.player_damage_multiplier)
                 else:
                     self.ship.cancel_charge()
 
@@ -2917,7 +2329,7 @@ class PlayingScene(Scene):
             )
         else:
             boss_active = bool(
-                self.boss_fight_active
+                self.boss_controller.active
                 and self.entity_manager.boss
                 and not self.entity_manager.boss.dead
             )
@@ -2940,7 +2352,7 @@ class PlayingScene(Scene):
             self.game_surface,
             self.ship.rect.centerx,
             self.ship.rect.centery,
-            self.enemy_visible,
+            self.boss_controller.enemy_visible,
             fps=current_fps,
             draw_boss=not intro_active,
         )
@@ -3018,7 +2430,7 @@ class PlayingScene(Scene):
 
         surface.blit(self.game_surface, self._compute_shake_offset())
 
-        if self.warning_timer > 0 and int(self.warning_timer * 5) % 2 == 1:
+        if self.boss_controller.warning_timer > 0 and int(self.boss_controller.warning_timer * 5) % 2 == 1:
             warning_text = self.warning_font.render("WARNING!", True, colors.RED)
             text_rect = warning_text.get_rect(
                 center=(Config.SCREEN_WIDTH / 2, Config.SCREEN_HEIGHT / 2)

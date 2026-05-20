@@ -6,26 +6,16 @@ Itens pendentes após implementação do Event Bus e seus refinamentos.
 
 ## Crítico
 
-### 1. `playing.py` continua concentrando responsabilidades demais
+### 1. `playing.py` — extração de controladores de domínio (concluída)
 
-`PlayingScene` ainda reúne colisões, progressão de nível, boss fights, upgrades, input, cutscenes, HUD, transições de mundo, cheat codes e meta-progression. O risco não é teórico: qualquer mudança em uma área continua com chance de afetar várias outras.
+`PlayingScene` reunia colisões, progressão de nível, boss fights, upgrades, input, cutscenes, HUD, transições de mundo, cheat codes e meta-progression.
 
-**Impacto:** a cena segue difícil de testar, de manter e de evoluir. O próximo passo natural é extrair controladores de domínio.
+**Extrações realizadas:**
+- `BossFightController` (`game/systems/boss_fight_controller.py`) — ciclo de vida do boss, warning system, cleanup de hostis.
+- `LevelProgressionController` (`game/systems/level_progression_controller.py`) — thresholds, contagem de hostis, estatísticas da fase, avanço entre níveis, emissão de `LevelCleared`. API por retorno de enum (`ProgressionStatus`), sem callbacks circulares.
+- `ShootingSystem` (`game/systems/shooting_system.py`) — cooldown, disparo regular, charge shots do Magneto/Caçador e canal de áudio do laser carregado.
 
-**Direção recomendada:**
-```python
-class BossFightController:
-    def start(self, boss_type, health_mult): ...
-    def update(self, dt): ...
-    def end(self): ...
-
-class LevelProgressionController:
-    def check_progression(self): ...
-    def advance(self): ...
-
-class ShootingSystem:
-    def fire(self, ship, entity_manager): ...
-```
+`PlayingScene` ficou reduzida de ~3150 para ~2800 linhas e os domínios principais agora respondem por sua própria coerência.
 
 ---
 
@@ -57,6 +47,8 @@ class GameConfig:
 
 | # | Problema | Gravidade | Status |
 |---|----------|-----------|--------|
-| 1 | `PlayingScene` God Object | Crítico | Pendente |
+| 1 | `PlayingScene` God Object — `ShootingSystem` restante | Crítico | Parcial |
 | 2 | `config.py` como namespace global | Médio | Pendente |
 | — | `Collisions` acoplado a tipos concretos | Crítico | Concluído |
+| — | `BossFightController` extraído | Crítico | Concluído |
+| — | `LevelProgressionController` extraído | Crítico | Concluído |
