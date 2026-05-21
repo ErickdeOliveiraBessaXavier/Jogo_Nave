@@ -39,9 +39,12 @@ class ShootingSystem:
 
     Comunicação com PlayingScene:
     - fire(ship, player_damage_multiplier) → dispara o tiro apropriado
-    - is_ready property → True quando cooldown zerou
+    - is_ready(ship) → True quando o cooldown daquela nave zerou
     - update(dt) → decrementa cooldown e libera canal de áudio
-    - reset() → zera cooldown entre fases
+    - reset() → zera cooldowns entre fases
+
+    Cooldown é per-ship (dict keyed por id(ship)). Em multiplayer cada nave
+    tem seu próprio timer de disparo, então P1 e P2 atiram independentemente.
     """
 
     def __init__(
@@ -51,20 +54,28 @@ class ShootingSystem:
     ) -> None:
         self._em = entity_manager
         self._bus = event_bus
-        self.shoot_cd: float = 0.0
+        # Cooldown por nave: chave = id(ship), valor = segundos restantes.
+        # Naves não-mapeadas têm cooldown 0 implícito (atira imediatamente).
+        self._cooldowns: dict[int, float] = {}
         self._charged_laser_channel: Any | None = None
 
-    @property
-    def is_ready(self) -> bool:
-        return self.shoot_cd == 0.0
+    def is_ready(self, ship: Ship) -> bool:
+        return self._cooldowns.get(id(ship), 0.0) <= 0.0
 
     def reset(self) -> None:
-        """Zera cooldown entre fases. O canal de áudio é liberado em update()."""
-        self.shoot_cd = 0.0
+        """Zera todos os cooldowns entre fases. O canal de áudio é liberado em update()."""
+        self._cooldowns.clear()
 
     def update(self, dt: float) -> None:
-        """Decrementa cooldown e libera o canal do laser quando não há lasers vivos."""
-        self.shoot_cd = max(0.0, self.shoot_cd - dt)
+        """Decrementa cooldowns de todas as naves e libera o canal do laser quando não há lasers vivos."""
+        if self._cooldowns:
+            # Evita lista intermediária quando há poucos slots; mutação direta.
+            for ship_id in list(self._cooldowns.keys()):
+                new_cd = self._cooldowns[ship_id] - dt
+                if new_cd <= 0.0:
+                    del self._cooldowns[ship_id]
+                else:
+                    self._cooldowns[ship_id] = new_cd
         if self._charged_laser_channel is not None:
             has_alive = any(
                 getattr(laser, "state", "") == "alive"
@@ -95,13 +106,13 @@ class ShootingSystem:
                 self._fire_magneto_charge(
                     ship, bullet_specs, adjusted_damage, charge_factor
                 )
-                self.shoot_cd = self._cooldown_for(ship)
+                self._cooldowns[id(ship)] = self._cooldown_for(ship)
                 return
             if ship_id == "cacador":
                 self._fire_cacador_charge(
                     ship, bullet_specs, adjusted_damage, charge_factor
                 )
-                self.shoot_cd = self._cooldown_for(ship)
+                self._cooldowns[id(ship)] = self._cooldown_for(ship)
                 return
 
         self._bus.emit(
@@ -143,7 +154,7 @@ class ShootingSystem:
             )
             if is_explosive:
                 ship.consume_explosive_shot()
-        self.shoot_cd = self._cooldown_for(ship)
+        self._cooldowns[id(ship)] = self._cooldown_for(ship)
 
     # ------------------------------------------------------------------
     # Helpers privados

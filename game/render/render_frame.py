@@ -73,3 +73,7 @@ class RenderFrame:
     ship: "Ship"
     entity_manager: "EntityManager"
     boss_controller: "BossFightController"
+
+    # Multiplayer: naves adicionais (P2 em diante) renderizadas após `ship`.
+    # Vazio em single-player. Renderer apenas draw()-a; não inspeciona estado.
+    extra_ships: tuple["Ship", ...] = ()

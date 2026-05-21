@@ -108,8 +108,10 @@ class GameRenderer:
                 max(1, int(p["size"])),
             )
 
-        # 4. Nave do jogador
+        # 4. Nave do jogador (P1 + naves adicionais em multiplayer local)
         frame.ship.draw(self.game_surface)
+        for extra_ship in frame.extra_ships:
+            extra_ship.draw(self.game_surface)
 
         # 5. Efeito de entrada de boss (CloudArchmage)
         if intro_active:

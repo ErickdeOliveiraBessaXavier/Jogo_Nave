@@ -197,9 +197,10 @@ class PlayingScene(Scene):
         ship_obj.apply_world_mode(self.is_side_scroll)
 
         # Roster mantém slots de jogador. Lives são populados depois em
-        # _apply_difficulty_settings; aqui só ancoramos o slot P1.
+        # _apply_difficulty_settings; aqui só ancoramos o slot P1 com gamepad
+        # slot 0 (teclado é incluído automaticamente no slot 0 pelo Input).
         self.roster: PlayerRoster = PlayerRoster.with_primary(
-            PlayerSlot(ship=ship_obj, lives=0, gamepad_id=None)
+            PlayerSlot(ship=ship_obj, lives=0, gamepad_slot=0)
         )
 
         self.first_entry: bool = True
@@ -903,7 +904,14 @@ class PlayingScene(Scene):
             self._start_next_level()
 
     def _update_ship(self, dt: float) -> None:
-        self.ship.update(dt, self.entity_manager, is_side_scroll=self.is_side_scroll)
+        # Atualiza apenas naves vivas — slots mortos não precisam de física,
+        # invuln, ou timer de powerups (são removidos de tela até revive).
+        for slot in self.roster.alive_slots():
+            slot.ship.update(
+                dt, self.entity_manager, is_side_scroll=self.is_side_scroll
+            )
+        # Powerup mini_ships ainda é P1-only (mini-naves do EntityManager são
+        # construídas com self.ship). Refatoração per-player fica para Fase 4.
         if self.ship.mini_ships_timer == 0.0 and self.entity_manager.mini_ships:
             # Powerup expirou: se há mini-naves temporárias, troca-as pelas
             # permanentes do Engenheiro (se a nave atual tiver alguma).
@@ -921,29 +929,36 @@ class PlayingScene(Scene):
 
             boss_pausing = cast(SpikeBoss, self.entity_manager.boss).is_pausing_game()
 
-        if self._can_handle_gameplay_actions() and not self.ship.is_entering:
-            held = self.app.input.poll_held(self.app.gamepad)
-            gamepad_vec = self.app.input.gamepad_movement_vector(self.app.gamepad)
-            self.ship.move(
-                held,
-                dt,
-                is_side_scroll=self.is_side_scroll,
-                gamepad_vec=gamepad_vec,
-            )
+        if self._can_handle_gameplay_actions():
+            for slot in self.roster.alive_slots():
+                ship = slot.ship
+                if ship.is_entering:
+                    continue
+                slot_idx = slot.gamepad_slot if slot.gamepad_slot is not None else 0
+                held = self.app.input.poll_held_for(self.app.gamepad, slot=slot_idx)
+                gamepad_vec = self.app.input.gamepad_movement_vector_for(
+                    self.app.gamepad, slot=slot_idx
+                )
+                ship.move(
+                    held,
+                    dt,
+                    is_side_scroll=self.is_side_scroll,
+                    gamepad_vec=gamepad_vec,
+                )
 
-            # Caçador: enquanto a carga está acumulando, suprime auto-fire/hold-shoot.
-            # O disparo carregado sai no MOUSEBUTTONUP.
-            charging = (
-                self.ship.profile.has_charge_shot and self.ship.charge_shot_active
-            )
-            if (
-                ("hold_shoot" in held or self.ship.should_auto_fire())
-                and self.shooting.is_ready
-                and not boss_pausing
-                and self.ship.speed_modifier_timer <= 0.0
-                and not charging
-            ):
-                self.shooting.fire(self.ship, self.player_damage_multiplier)
+                # Caçador: enquanto a carga está acumulando, suprime auto-fire/hold-shoot.
+                # O disparo carregado sai no MOUSEBUTTONUP.
+                charging = (
+                    ship.profile.has_charge_shot and ship.charge_shot_active
+                )
+                if (
+                    ("hold_shoot" in held or ship.should_auto_fire())
+                    and self.shooting.is_ready(ship)
+                    and not boss_pausing
+                    and ship.speed_modifier_timer <= 0.0
+                    and not charging
+                ):
+                    self.shooting.fire(ship, self.player_damage_multiplier)
 
     def _apply_environmental_effects(self, dt: float) -> None:
         """Aplica efeitos ambientais (como vento) à nave do jogador."""
@@ -1386,81 +1401,86 @@ class PlayingScene(Scene):
         if self.boss_controller.boss_type == "slime":
             from ..entities.slime_boss import SlimeBoss
 
+            # Slime drip ainda é checado contra primary apenas; checagem
+            # per-slot fica para Fase 3+ (mesma justificativa de
+            # mine/fire/ice zones). Com 1 slot é equivalente ao original.
             slime_boss = cast(SlimeBoss, boss)
             drip_damage = slime_boss.check_drip_damage(
                 self.ship.rect, self.entity_manager
             )
             if drip_damage > 0:
-                self._handle_ship_hit()
+                self._handle_ship_hit(self.roster.primary())
                 self.level_controller.notify_damage_taken(drip_damage)
 
         score_gain = self._apply_score_multiplier(score_gain)
 
         return gain + score_gain
 
-    def _check_ship_damage(self) -> None:
-        """Verifica todas as colisões que causam dano à nave."""
+    def _check_ship_damage(self, slot: PlayerSlot) -> None:
+        """Verifica todas as colisões que causam dano à nave do slot."""
         em = self.entity_manager
+        ship = slot.ship
 
         if self.collisions.enemy_projectiles_vs_ship(
-            self.ship, em.alien_bullets, em.enemy_projectile_grid
+            ship, em.alien_bullets, em.enemy_projectile_grid
         ):
-            self._handle_ship_hit()
+            self._handle_ship_hit(slot)
         if self.collisions.enemy_projectiles_vs_ship(
-            self.ship, em.serpent_bullets, em.enemy_projectile_grid
+            ship, em.serpent_bullets, em.enemy_projectile_grid
         ):
-            self._handle_ship_hit()
-        if self.collisions.eye_laser_vs_ship(self.ship, em.eye_lasers):
-            self._handle_ship_hit()
+            self._handle_ship_hit(slot)
+        if self.collisions.eye_laser_vs_ship(ship, em.eye_lasers):
+            self._handle_ship_hit(slot)
 
         orb_hit = self.collisions.energy_orbs_vs_ship(
-            self.ship, em.energy_orbs, em.enemy_projectile_grid
+            ship, em.energy_orbs, em.enemy_projectile_grid
         )
         if orb_hit:
-            self._handle_ship_hit()
-            if self.ship.invuln > 0:
-                orb_hit.apply_effect(self.ship)
+            self._handle_ship_hit(slot)
+            if ship.invuln > 0:
+                orb_hit.apply_effect(ship)
 
         from ..entities.boss_laser import BossLaser
 
         boss_lasers = [
             laser for laser in em.boss_lasers if isinstance(laser, BossLaser)
         ]
-        if self.collisions.laser_vs_ship(self.ship, boss_lasers):
-            self._handle_ship_hit()
+        if self.collisions.laser_vs_ship(ship, boss_lasers):
+            self._handle_ship_hit(slot)
 
         spike_lasers: list[SpikeBossLaser] = [
             laser for laser in em.boss_lasers if isinstance(laser, SpikeBossLaser)
         ]
         if spike_lasers and self.collisions.spike_boss_laser_vs_ship(
-            self.ship, spike_lasers
+            ship, spike_lasers
         ):
-            self._handle_ship_hit()
+            self._handle_ship_hit(slot)
 
-        if self.collisions.ship_vs_spikes(self.ship, em.spikes, em):
-            self._handle_ship_hit()
-        if self.collisions.ship_vs_boss_squares(self.ship, em.boss_squares):
-            self._handle_ship_hit()
+        if self.collisions.ship_vs_spikes(ship, em.spikes, em):
+            self._handle_ship_hit(slot)
+        if self.collisions.ship_vs_boss_squares(ship, em.boss_squares):
+            self._handle_ship_hit(slot)
 
         if self.boss_controller.boss_type == "stone_golem" and em.boss:
-            self._check_stone_golem_sweep(em)
+            self._check_stone_golem_sweep(em, slot)
 
         if self.boss_controller.boss_type == "mountain_serpent" and em.boss:
-            if self.collisions.ship_vs_boss(self.ship, em.boss, self.entity_manager):
-                self._handle_ship_hit()
+            if self.collisions.ship_vs_boss(ship, em.boss, self.entity_manager):
+                self._handle_ship_hit(slot)
 
-    def _check_stone_golem_sweep(self, em: EntityManager) -> None:
-        """Verifica dano do feixe sweep do StoneGolemBoss."""
+    def _check_stone_golem_sweep(self, em: EntityManager, slot: PlayerSlot) -> None:
+        """Verifica dano do feixe sweep do StoneGolemBoss contra o slot."""
         from ..entities.stone_golem_boss import StoneGolemBoss
 
         golem = cast(StoneGolemBoss, em.boss)
         beam = golem.get_sweep_beam()
-        if not beam or self.ship.invuln > 0:
+        ship = slot.ship
+        if not beam or ship.invuln > 0:
             return
 
         px, py, ex, ey = beam
-        sx = float(self.ship.rect.centerx)
-        sy = float(self.ship.rect.centery)
+        sx = float(ship.rect.centerx)
+        sy = float(ship.rect.centery)
         dx, dy = ex - px, ey - py
         len_sq = dx * dx + dy * dy
         if len_sq <= 0:
@@ -1470,8 +1490,8 @@ class PlayingScene(Scene):
         closest_x = px + t * dx
         closest_y = py + t * dy
         dist = math.hypot(sx - closest_x, sy - closest_y)
-        if dist < golem.SCALE * 2 + self.ship.rect.width * 0.4:
-            self._handle_ship_hit()
+        if dist < golem.SCALE * 2 + ship.rect.width * 0.4:
+            self._handle_ship_hit(slot)
 
     def _apply_score_multiplier(self, pts: int) -> int:
         """Aplica multiplicador de score base + eventual bônus ativo."""
@@ -1502,8 +1522,12 @@ class PlayingScene(Scene):
             gain, destroyed, score_events
         )
 
+        # ship_hit_proj/ship_hit_form vêm de mine/fire/ice zones que ainda usam
+        # `self.ship` (primário) — em multiplayer P2 não recebe esses hits.
+        # Refatoração completa dessas zonas por-slot fica para Fase 3+, junto
+        # com a dedupe de dano global por inimigo. Hoje (1 slot) é equivalente.
         if ship_hit_proj or ship_hit_form:
-            self._handle_ship_hit()
+            self._handle_ship_hit(self.roster.primary())
 
         batched_events = self._batch_floating_scores(
             score_events, proximity_threshold=self.floating_score_batch_threshold
@@ -1525,9 +1549,12 @@ class PlayingScene(Scene):
 
         if destroyed > 0:
             self.star_spawner.add_kills(destroyed, self.entity_manager.stars)
-            # Reverberador: cada inimigo abatido conta para o combo.
-            for _ in range(destroyed):
-                self.ship.register_kill()
+            # Reverberador: combo é per-ship; cada inimigo abatido conta para
+            # todos os jogadores vivos (em multiplayer, ambos participam do
+            # combate). Refinar atribuição por dano em fase futura se preciso.
+            for slot in self.roster.alive_slots():
+                for _ in range(destroyed):
+                    slot.ship.register_kill()
 
         if self.entity_manager.spikes:
             all_player_projectiles = (
@@ -1542,12 +1569,12 @@ class PlayingScene(Scene):
                 spike_gain = int(spike_gain * self.score_multiplier_value)
             self.score += spike_gain
 
-        # Nave vs. inimigos (físico)
-        ship_vs_grid_hit = self.collisions.ship_vs_enemies(
-            self.ship, enemy_grid, self.entity_manager
-        )
-        if ship_vs_grid_hit:
-            self._handle_ship_hit()
+        # Nave vs. inimigos (físico) — per-slot
+        for slot in self.roster.alive_slots():
+            if self.collisions.ship_vs_enemies(
+                slot.ship, enemy_grid, self.entity_manager
+            ):
+                self._handle_ship_hit(slot)
 
         self.score += self._check_boss_collisions(0)
 
@@ -1565,7 +1592,9 @@ class PlayingScene(Scene):
                 self.entity_manager,
             )
 
-        self._check_ship_damage()
+        # Damage per-slot: cada nave recebe os ataques que efetivamente acertam.
+        for slot in self.roster.alive_slots():
+            self._check_ship_damage(slot)
         self._process_powerups_and_stars()
 
     # ------------------------------------------------------------------
@@ -1612,34 +1641,48 @@ class PlayingScene(Scene):
     # Dano à nave / game over
     # ------------------------------------------------------------------
 
-    def _handle_ship_hit(self) -> None:
-        """Processa um acerto na nave: god mode, escudo, vidas, game over."""
-        if self._game_over_triggered or self.god_mode or self.ship.invuln > 0:
+    def _handle_ship_hit(self, slot: Optional[PlayerSlot] = None) -> None:
+        """Processa um acerto na nave do slot: god mode, escudo, vidas, game over.
+
+        Slot opcional para retrocompat — call sites antigos podem chamar sem
+        argumento e cai no slot primário (P1).
+        """
+        if slot is None:
+            slot = self.roster.primary()
+        ship = slot.ship
+        if self._game_over_triggered or self.god_mode or ship.invuln > 0:
             return
 
         # Emit PlayerDamaged event
         self.app.event_bus.emit(
             events.PlayerDamaged(
                 damage=1,
-                remaining_lives=self.lives,
+                remaining_lives=slot.lives,
                 is_game_over=False,  # Will update if game over
             )
         )
 
         # Reverberador: qualquer hit que efetivamente conta reseta o combo.
-        self.ship.reset_combo()
+        ship.reset_combo()
 
-        if self.ship.has_shield:
-            self.ship.shield_hp -= 1
-            if self.ship.shield_hp <= 0:
-                self.ship.shield_timer = 0.0
+        if ship.has_shield:
+            ship.shield_hp -= 1
+            if ship.shield_hp <= 0:
+                ship.shield_timer = 0.0
             # Emit powerup event for shield absorption
             self.app.event_bus.emit(events.PlaySound(sound_name="powerup", volume=1.0))
             return
 
-        self._change_lives(-1)
+        self._change_lives_for(slot, -1)
         self.level_controller.notify_damage_taken()
-        is_game_over = self.lives <= 0
+        if slot.lives <= 0:
+            # Marca o slot como morto — filtragem em alive_slots() impede que
+            # o slot continue tomando dano, atirando, ou sendo renderizado.
+            # Fase 6 substituirá esta lógica pelo sistema de beacon/revive.
+            slot.is_dead = True
+        # Game over quando ninguém tem vidas. Em single-player, com 1 slot,
+        # equivale ao comportamento original (vida zero = game over imediato).
+        is_game_over = all(s.lives <= 0 for s in self.roster.all_slots())
         # No game over, persistir o ganho da fase incompleta (record_clear não
         # roda nesse caso). Em perdas de vida com vidas restantes, deixar para
         # record_clear capturar o total quando a fase for concluída.
@@ -1653,7 +1696,7 @@ class PlayingScene(Scene):
         )
 
         if not is_game_over:
-            self.ship.invuln = Config.INVULN_TIME * 1000
+            ship.invuln = Config.INVULN_TIME * 1000
         else:
             # Captura o score final ANTES de qualquer zeragem para a tela de
             # Game Over exibir o valor real (sem isso, permadeath mostraria 0).
@@ -1729,7 +1772,79 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        # Intercepta Start no gamepad de slot 1 quando P2 ainda não juntou:
+        # abre o modal de seleção de nave de P2. Demais eventos seguem para
+        # o handler padrão (que opera somente sobre P1).
+        if event.type == pygame.JOYBUTTONDOWN and self._is_p2_join_trigger(event):
+            self._open_p2_select_modal()
+            return
         self.input_handler.handle(event)
+
+    def _is_p2_join_trigger(self, event: pygame.event.Event) -> bool:
+        """True se o evento é START no segundo controle, e P2 ainda não juntou."""
+        from ..core.gamepad import XboxButton
+
+        if event.button != XboxButton.START:
+            return False
+        if self.roster.count() >= 2:
+            return False
+        gp = self.app.gamepad
+        if not gp.secondary_connected:
+            return False
+        return gp.slot_of_instance_id(event.instance_id) == 1
+
+    def _open_p2_select_modal(self) -> None:
+        """Empurra o modal de seleção de nave de P2 sobre a partida."""
+        from .p2_ship_select import P2ShipSelectScene
+
+        modal = P2ShipSelectScene(
+            self.app, playing_scene=self, on_confirm=self._spawn_p2
+        )
+        self.app.states.push(modal)
+
+    def _spawn_p2(self, profile: Any) -> None:
+        """Cria a nave de P2 e adiciona ao roster.
+
+        ``profile`` é um ``ShipProfile`` validado (veio do modal). P2 nasce
+        em posição ligeiramente deslocada de P1 e não recebe upgrades
+        permanentes — apenas powerups coletados em tempo de partida.
+        """
+        primary_ship = self.roster.primary().ship
+        # Spawn lateral relativo a P1. Em side-scroll, mesma X com Y deslocado;
+        # em top-down, X deslocado pra direita.
+        if self.is_side_scroll:
+            spawn_x = primary_ship.x
+            spawn_y = primary_ship.y + 80.0
+        else:
+            spawn_x = primary_ship.x + 80.0
+            spawn_y = primary_ship.y
+
+        p2_ship = Ship(
+            spawn_x,
+            spawn_y,
+            mouse_control=False,  # P2 obrigatoriamente gamepad
+            auto_fire=False,
+            profile=profile,
+        )
+        # P2 não roda animação de entrada (que é gerida pela cena ao começar
+        # nível). Spawn é instantâneo, com invuln para evitar morte imediata
+        # se a área estiver cheia de inimigos.
+        p2_ship.is_entering = False
+        p2_ship.invuln = float(Config.INVULN_TIME * 1000)
+        p2_ship.apply_world_mode(self.is_side_scroll)
+
+        lives = int(self.difficulty_settings.get("lives", 3))
+        p2_slot = PlayerSlot(
+            ship=p2_ship,
+            lives=lives,
+            gamepad_slot=1,
+            apply_permanent_upgrades=False,
+        )
+        p2_ship.lives = lives
+        self.roster.add(p2_slot)
+        logger.info(
+            "P2 entrou na partida com a nave '%s' (vidas=%d).", profile.id, lives
+        )
 
     # ------------------------------------------------------------------
     # Modo de seleção de upgrade via controle
@@ -1847,6 +1962,11 @@ class PlayingScene(Scene):
             ship=self.ship,
             entity_manager=self.entity_manager,
             boss_controller=self.boss_controller,
+            extra_ships=tuple(
+                slot.ship
+                for slot in self.roster.all_slots()[1:]
+                if not slot.is_dead
+            ),
         )
 
     # ===================== Upgrades (helpers) =====================
@@ -1889,15 +2009,24 @@ class PlayingScene(Scene):
                 upg.update(dt, ctx)
 
     def _sync_lives(self, lives: int) -> None:
-        # Por enquanto P1 e a cena compartilham o mesmo valor. Quando P2 entrar
-        # (Fase 3+), o sync passa a ser per-slot via _sync_lives_for(slot).
-        self.lives = max(0, lives)
-        primary = self.roster.primary()
-        primary.lives = self.lives
-        primary.ship.lives = self.lives
+        """Backward compat: sincroniza vidas do P1 e mirror para HUD."""
+        self._sync_lives_for(self.roster.primary(), lives)
+
+    def _sync_lives_for(self, slot: PlayerSlot, lives: int) -> None:
+        """Vidas per-slot. Se for o slot primário, espelha em ``self.lives``
+        (campo legado lido pelo HUD e por GameOver — quem migrar a leitura para
+        ``self.roster`` em fase futura remove esse mirror)."""
+        new_lives = max(0, lives)
+        slot.lives = new_lives
+        slot.ship.lives = new_lives
+        if slot is self.roster.primary():
+            self.lives = new_lives
 
     def _change_lives(self, delta: int) -> None:
-        self._sync_lives(self.lives + delta)
+        self._change_lives_for(self.roster.primary(), delta)
+
+    def _change_lives_for(self, slot: PlayerSlot, delta: int) -> None:
+        self._sync_lives_for(slot, slot.lives + delta)
 
     def _apply_cooldown_reduction(self, reduction: float) -> None:
         """Reduz instantaneamente o cooldown de todos os upgrades ativos."""

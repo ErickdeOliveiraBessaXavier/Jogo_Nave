@@ -107,19 +107,33 @@ Arquivos: `game/core/gamepad.py`, `game/core/input.py`.
 
 ### Fase 2 — Refatorar `self.ship` → `self.roster` 🔥
 
-**Esforço:** 2–3 dias · **Risco:** Alto · **Status:** ⏳ Em andamento (Passo 2.1 ✅)
+**Esforço:** 2–3 dias · **Risco:** Alto · **Status:** ✅ Concluída
 
-**Passo 2.1** ✅ Concluído. `_init_ship()` cria `Ship` localmente e popula
+**Passo 2.1** ✅ `_init_ship()` cria `Ship` localmente e popula
 `self.roster = PlayerRoster.with_primary(PlayerSlot(...))`. `self.ship` virou
-property → `self.roster.primary().ship`. `_sync_lives` agora também atualiza
-`primary.lives`. Imports passam, todos os ~100 call sites de `self.ship.*`
-continuam funcionando via property.
+property → `self.roster.primary().ship`. `gamepad_slot=0` por padrão para P1.
 
-**Passos 2.2-2.4 pendentes** — convertem `_check_ship_damage` (~15 chamadas
-de `X_vs_ship(self.ship, ...)`), `ship_vs_enemies`, `_check_boss_collisions`,
-`_handle_ship_hit` (precisa receber slot) e cooldown de tiro do
-`ShootingSystem` (hoje global, precisa ser per-ship). Com 1 slot, o
-comportamento deve ser **idêntico** — loop de 1 = single path.
+**Passo 2.3** ✅ Conversão das funções de colisão per-player:
+- `_check_ship_damage(slot)` — usa `slot.ship` em todas as 11+ chamadas de `X_vs_ship`
+- `_check_stone_golem_sweep(em, slot)` — feixe sweep contra slot específico
+- `_handle_ship_hit(slot=None)` — opera em `slot.ship` para invuln/shield/combo; decrementa via `_change_lives_for(slot, -1)`; game over checa `slot.lives <= 0` (em Fase 6 vira lógica de beacon)
+- Orquestrador `_handle_collisions`: loop `for slot in self.roster.alive_slots()` para `ship_vs_enemies`, `_check_ship_damage`, e `register_kill` do reverberador
+- `_sync_lives_for(slot, lives)` e `_change_lives_for(slot, delta)` — primário mirror em `self.lives` para HUD legado
+
+Pendências documentadas para Fase 3+: `mine_explosions`, `fire_zones`,
+`ice_poison_zones` e `slime_drip_damage` hoje checam só contra P1 (`self.roster.primary()`).
+Refatorar essas pra per-slot exige dedupe de score (cada chamada compartilha
+o cômputo de dano a inimigos). Não bloqueia Phase 3.
+
+**Passo 2.4** ✅ `ShootingSystem` per-ship:
+- `shoot_cd: float` → `_cooldowns: dict[int, float]` keyed por `id(ship)`
+- `is_ready` → `is_ready(ship)` (parametrizado)
+- `update(dt)` decrementa todos os cooldowns; `reset()` limpa
+- Loop sobre `self.roster.alive_slots()` em `playing.py:_apply_gameplay_actions` para input/move/fire per-slot (`poll_held_for(slot)`, `gamepad_movement_vector_for(slot)`)
+- Call site em `gameplay_input_handler.py` atualizado para `is_ready(ship)`
+
+**Critério de aceite (1 slot = idêntico ao single-player):** smoke tests
+de import + boot passam. Validação manual de gameplay fica para o usuário.
 
 Esta é a fase mais cara. Estratégia incremental, **commits pequenos**, manter
 single-player 100% funcional a cada commit.
@@ -153,7 +167,40 @@ Regressão zero é o critério.
 
 ### Fase 3 — Fluxo de entrada do P2
 
-**Esforço:** 1 dia · **Risco:** Médio · **Status:** Pendente
+**Esforço:** 1 dia · **Risco:** Médio · **Status:** ✅ Concluída
+
+**Arquivos novos:** `game/scenes/p2_ship_select.py` — modal de seleção.
+
+**Fluxo implementado:**
+- `PlayingScene.handle_event` intercepta JOYBUTTONDOWN com `event.button == START`
+- Verifica via `gamepad.slot_of_instance_id(event.instance_id) == 1` se é o
+  segundo controle, `roster.count() < 2` e `gamepad.secondary_connected`
+- Se todos True: abre `P2ShipSelectScene` empurrado no states stack
+- Modal mostra carrossel filtrado por `player_profile.unlocked_ships`
+- Navegação: D-pad ⬅/➡, LS X, A confirma, B cancela
+- `_spawn_p2(profile)`: cria `Ship` ao lado de P1, sem entry animation, com
+  invuln inicial; adiciona `PlayerSlot(gamepad_slot=1, apply_permanent_upgrades=False)`
+  ao roster
+- Vidas iniciais = mesma quantidade da dificuldade (decisão travada)
+
+**Render multiplayer:**
+- `RenderFrame` ganhou `extra_ships: tuple[Ship, ...]` (default vazio)
+- `GameRenderer` desenha P1 e depois itera `extra_ships`
+- `_build_render_frame` filtra slots mortos do extra_ships
+
+**Lógica de game-over ajustada (preparação parcial pra Fase 6):**
+- `_handle_ship_hit(slot)`: quando `slot.lives <= 0`, marca `slot.is_dead = True`
+  (em vez de game-over imediato)
+- Game-over real só dispara quando `all(s.lives <= 0 for s in roster.all_slots())`
+- Single-player: 1 slot, comportamento idêntico
+
+**Limitações reconhecidas, a tratar em fases seguintes:**
+- P2 não pode disparar ações especiais via botões (dash, charge, cycle, cofre) —
+  gameplay_input_handler ainda é P1-only. Movement + shoot funcionam por
+  `poll_held_for(slot)` da Fase 2
+- Powerups ainda vão pra P1 (Fase 4 vai rotear por colisão)
+- HUD não mostra P2 (Fase 7)
+- Sem beacon de revive (Fase 6) — P2 morto fica permanentemente fora até fim de partida ou level transition
 
 **Trigger:** durante `PlayingScene.update()`, se `roster.count() < 2` **e**
 `gamepad.secondary_connected` for True **e** algum controle não-P1 pressionar
@@ -335,8 +382,8 @@ game over **imediato** (sem alguém vivo, beacon não tem como avançar).
 |---|---|---|---|
 | 0 — Tipos base (`PlayerSlot`/`PlayerRoster`) | 0,5 dia | Baixo | ✅ Concluída |
 | 1 — Input multi-controle | 1–2 dias | Médio | ✅ Concluída |
-| 2 — Refatorar `self.ship` → `roster` | 2–3 dias | Alto | ⏳ Passo 2.1 ✅ |
-| 3 — Fluxo de entrada P2 (modal) | 1 dia | Médio | Pendente |
+| 2 — Refatorar `self.ship` → `roster` | 2–3 dias | Alto | ✅ Concluída |
+| 3 — Fluxo de entrada P2 (modal) | 1 dia | Médio | ✅ Concluída |
 | 4 — Power-ups e mini-naves per-player | 0,5 dia | Baixo | Pendente |
 | 5 — Boss HP +40% | 2–4 h | Baixo | Pendente |
 | 6 — Sistema de reviver (beacon) | 1–1,5 dia | Médio | Pendente |

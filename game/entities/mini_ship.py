@@ -8,13 +8,13 @@ from ..core.assets import get_image
 from ..core.config import config as Config
 from ..core.sound import sound_manager
 from .alien import Alien
+from .boss import Boss
 from .explosive_mine import ExplosiveMine
 from .eye_enemy import EyeEnemy
 from .meteor import Meteor
 from .mini_ship_bullet import MiniShipBullet
 from .ship import Ship
 from .stone_sentry import StoneSentry
-
 
 _SPRITE_PATH = (
     Path(__file__).resolve().parent.parent / "assets" / "icons" / "mini_ship.png"
@@ -108,9 +108,34 @@ class MiniShip:
     ) -> Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry | None:
         from ..systems.targeting import find_nearest_in_list
 
-        return find_nearest_in_list(
+        nearest = find_nearest_in_list(
             self.x, self.y, enemies, max_range_sq=_MAX_TARGETING_RANGE_SQ
         )
+        if nearest is not None:
+            return nearest
+
+        # Fallback: explicitly consider Boss instances (some bosses may
+        # implement `can_take_damage` semantics that exclude them from the
+        # generic helper). Allow mini-ships to target visible bosses.
+        best = None
+        best_sq = _MAX_TARGETING_RANGE_SQ
+        for e in enemies:
+            if isinstance(e, Boss) and not getattr(e, "dead", False):
+                if hasattr(e, "w") and hasattr(e, "h"):
+                    cx = float(e.x + e.w / 2)
+                    cy = float(e.y + e.h / 2)
+                elif hasattr(e, "radius"):
+                    cx = float(e.x)
+                    cy = float(e.y)
+                else:
+                    continue
+                dx = cx - self.x
+                dy = cy - self.y
+                dist_sq = dx * dx + dy * dy
+                if dist_sq < best_sq:
+                    best_sq = dist_sq
+                    best = e
+        return best
 
     def shoot(
         self,
@@ -161,5 +186,7 @@ class MiniShip:
             return  # fallback defensivo se o asset não carregou.
         # Centraliza o sprite na bounding box (importante no caso side-scroll,
         # onde a rotação pode mudar o tamanho da surface).
-        rect = sprite.get_rect(center=(int(self.x + self.w / 2), int(self.y + self.h / 2)))
+        rect = sprite.get_rect(
+            center=(int(self.x + self.w / 2), int(self.y + self.h / 2))
+        )
         surface.blit(sprite, rect)

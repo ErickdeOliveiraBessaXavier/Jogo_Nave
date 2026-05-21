@@ -11,7 +11,6 @@ import random
 from typing import TYPE_CHECKING, Any, Final, List, Optional, Tuple
 
 import pygame
-from .boss_hit_mixin import BossHitMixin
 
 from ..core.config import config as Config
 from ..core.sound_config import MusicState
@@ -25,6 +24,7 @@ from ..entities.stone_golem_pixel_map import PIXEL_COLS as _PIXEL_COLS
 from ..entities.stone_golem_pixel_map import PIXEL_MAP as _PIXEL_MAP
 from ..entities.stone_golem_pixel_map import PIXEL_ROWS as _PIXEL_ROWS
 from ..entities.stone_golem_pixel_map import C as _C
+from .boss_hit_mixin import BossHitMixin
 
 if TYPE_CHECKING:
     from ..systems.hit_result import HitResult
@@ -158,6 +158,21 @@ class GolemMine:
         self.dead = True
         return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
 
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        # Reuse existing take_damage logic and translate to HitResult for
+        # the damage router in CollisionPhysics.
+        self.take_damage(damage)
+        if self.dead:
+            return HitResult(
+                killed=True,
+                points=self.get_points_value(),
+                explosion_size=max(16, int(self.RADIUS * 1.5)),
+                sound=hit_sounds.EXPLOSION_ASTEROID,
+            )
+        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 
     def update(self, dt: float) -> list["AttackDebris"]:
         self._pulse_t += dt
@@ -312,6 +327,8 @@ class AttackDebris:
         s = self.size // 2
         self._glow_surf = pygame.Surface((s * 4, s * 4), pygame.SRCALPHA)
         self._glow_surf.fill((*self.color, 60))
+        # Vida para que ataques do jogador possam destruí-lo
+        self.health = int(self.MAX_HEALTH)
 
     @property
     def causes_damage(self) -> bool:
@@ -355,6 +372,20 @@ class AttackDebris:
         self.dead = True
         return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
 
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.health -= int(damage)
+        if self.health <= 0:
+            self.dead = True
+            return HitResult(
+                killed=True,
+                points=0,
+                explosion_size=max(8, int(self.size)),
+                sound=hit_sounds.EXPLOSION_ASTEROID,
+            )
+        return HitResult(explosion_size=6, sound=hit_sounds.BOSS_DAMAGE)
 
 
 class OrbitalDebris:
@@ -364,6 +395,11 @@ class OrbitalDebris:
 
     TRAIL_SPAWN_CHANCE = 0.4
     TRAIL_FADE_SPEED = 800.0
+
+    # Static attribute annotations to help static analysis (Pylance)
+    _S: int
+    _size: int
+    health: int
 
     def __init__(
         self,
@@ -427,6 +463,8 @@ class OrbitalDebris:
             pygame.draw.rect(self._rock_surf, self.color, (ox + S, oy - S, S, S))
             pygame.draw.rect(self._rock_surf, self.color, (ox - S, oy + S, S, S))
         self._dust_surf = pygame.Surface((S * 2, S * 2), pygame.SRCALPHA)
+        # Vida simples para permitir que o jogador quebre os detritos
+        self.health = max(1, int(self._size * 10))
 
     def _orbit_target(self) -> Tuple[float, float]:
         bobbing_y = math.sin(self.orbit_angle * 2 + self.bob_offset) * 15
@@ -535,6 +573,20 @@ class OrbitalDebris:
         self.dead = True
         return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
 
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.health -= int(damage)
+        if self.health <= 0:
+            self.dead = True
+            return HitResult(
+                killed=True,
+                points=0,
+                explosion_size=max(10, int(self._size * 4)),
+                sound=hit_sounds.EXPLOSION_ASTEROID,
+            )
+        return HitResult(explosion_size=6, sound=hit_sounds.BOSS_DAMAGE)
 
 
 class EmergeDebris:
@@ -553,6 +605,11 @@ class EmergeDebris:
         (139, 115, 85),  # Barro/Argila
         (160, 82, 45),  # Sienna
     ]
+
+    # Static attribute annotations to help static analysis (Pylance)
+    S: int
+    rock_size: int
+    health: int
 
     def __init__(
         self,
@@ -604,6 +661,8 @@ class EmergeDebris:
             pygame.draw.rect(self._rock_surf, self.color, (ox + S, oy - S, S, S))
             pygame.draw.rect(self._rock_surf, self.color, (ox - S, oy + S, S, S))
         self._dust_surf = pygame.Surface((S * 2, S * 2), pygame.SRCALPHA)
+        # Vida para permitir destruição por tiros
+        self.health = max(1, int(self.rock_size * 12))
 
     @property
     def causes_damage(self) -> bool:
@@ -664,6 +723,20 @@ class EmergeDebris:
         self.dead = True
         return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
 
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        self.health -= int(damage)
+        if self.health <= 0:
+            self.dead = True
+            return HitResult(
+                killed=True,
+                points=0,
+                explosion_size=max(10, int(self.rock_size * 4)),
+                sound=hit_sounds.EXPLOSION_ASTEROID,
+            )
+        return HitResult(explosion_size=6, sound=hit_sounds.BOSS_DAMAGE)
 
 
 # ============================================================================
@@ -2038,10 +2111,10 @@ class StoneGolemBoss(BossHitMixin):
     ) -> tuple[pygame.mask.Mask, tuple[int, int]] | None:
         """
         Retorna dados para colisão pixel-perfeita.
-        
+
         Usado pelo sistema de colisão: primeiro tenta máscara (pixel-perfect),
         depois fallback para collision_circle().
-        
+
         Posição base do boss (x, y), mas com ajuste do float vertical.
         """
         mask = self._build_collision_mask()
@@ -2062,7 +2135,6 @@ class StoneGolemBoss(BossHitMixin):
         cx = self.x + self.w / 2
         cy = self.y + self.h / 2 + self._current_float_y
         return cx, cy, min(self.w, self.h) / 2
-
 
     def draw(self, surface: pygame.Surface) -> None:
         if self.dead:

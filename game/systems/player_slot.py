@@ -32,8 +32,13 @@ class PlayerSlot:
 
     ship: "Ship"
     lives: int
-    gamepad_id: Optional[int] = None
-    """`instance_id` do pygame joystick atribuído a este slot. None = teclado."""
+    gamepad_slot: Optional[int] = None
+    """Índice no GamepadManager (0=P1, 1=P2). None = teclado puro (só P1).
+
+    P1 com gamepad usa ``gamepad_slot=0`` e P1 com teclado também usa 0
+    (em slot 0, `poll_held_for` agrega teclado E gamepad). P2 obrigatoriamente
+    tem ``gamepad_slot=1`` — multiplayer exige segundo controle físico.
+    """
 
     is_dead: bool = False
     """True quando lives chegou a 0 — ship está oculta esperando revive."""

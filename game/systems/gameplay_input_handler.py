@@ -121,7 +121,7 @@ class GameplayInputHandler:
                 ):
                     # Botão esquerdo + Alt: inicia charge (espelho do Space+Alt).
                     scene.ship.start_charge()
-                elif not scene.ship.auto_fire and scene.shooting.is_ready:
+                elif not scene.ship.auto_fire and scene.shooting.is_ready(scene.ship):
                     scene.shooting.fire(scene.ship, scene.player_damage_multiplier)
         elif event.button == 2:
             if not scene.ship.is_entering and scene._can_handle_gameplay_actions():
