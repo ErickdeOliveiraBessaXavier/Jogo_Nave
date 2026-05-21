@@ -178,31 +178,34 @@ class Formation:
         else:
             self._update_pattern_positions(dt)
 
-        # Atualizar cada inimigo e coletar balas
+        # Atualizar cada inimigo e coletar balas (swap-and-pop para mortos).
         all_bullets: List[Any] = []
-        for enemy in self.enemies[:]:
-            if hasattr(enemy, "dead") and enemy.dead:
-                self.enemies.remove(enemy)
+        i = 0
+        while i < len(self.enemies):
+            enemy = self.enemies[i]
+            if getattr(enemy, "dead", False):
+                self.enemies[i] = self.enemies[-1]
+                self.enemies.pop()
                 continue
 
-            # Chamar update do inimigo para cuidar de animações e timers internos
             if hasattr(enemy, "update"):
                 enemy.update(dt)
 
-            # A formação controla o disparo, não o inimigo individualmente
-            # MAS só permitir tiro se a formação estiver completamente formada
+            # A formação controla o disparo, não o inimigo individualmente —
+            # mas só com a formação completa e fora de transição.
             if (
                 hasattr(enemy, "shoot_timer")
                 and self.formation_complete
                 and not self.is_transitioning
+                and enemy.shoot_timer <= 0
             ):
-                if enemy.shoot_timer <= 0:
-                    from .alien_bullet import AlienBullet
+                from .alien_bullet import AlienBullet
 
-                    enemy.shoot_timer = random.uniform(2.0, 4.0)
-                    all_bullets.append(
-                        AlienBullet(enemy.x + enemy.w / 2, enemy.y + enemy.h)
-                    )
+                enemy.shoot_timer = random.uniform(2.0, 4.0)
+                all_bullets.append(
+                    AlienBullet(enemy.x + enemy.w / 2, enemy.y + enemy.h)
+                )
+            i += 1
 
         # Formação morre se todos os inimigos morrerem
         if len(self.enemies) == 0:

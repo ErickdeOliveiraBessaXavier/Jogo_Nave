@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import time
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 from ..core.levels import LevelConfig, get_level_config
 from ..core.meta_progression_service import MetaProgressionService

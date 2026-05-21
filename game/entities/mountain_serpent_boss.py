@@ -847,6 +847,8 @@ class MountainSerpentBoss:
       * Renderizar a cabeca animada e a barra de HP.
     """
 
+    is_boss: bool = True
+
     # ------------------------------------------------------------------
     # Constantes de gameplay
     # ------------------------------------------------------------------

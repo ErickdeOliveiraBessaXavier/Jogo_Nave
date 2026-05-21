@@ -42,6 +42,7 @@ from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 from ..core.world_config import (
     WorldConfig,
+    format_stage_name,
     get_world_for_level,
     is_side_scroll_mode,
 )
@@ -50,6 +51,7 @@ from ..entities.ship import Ship
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..events import game_events as events
 from ..render.game_renderer import GameRenderer
+from ..render.render_frame import RenderFrame
 from ..systems.boss_fight_controller import BossFightController
 from ..systems.collisions import Collisions
 from ..systems.effects_system import EffectsSystem
@@ -2202,7 +2204,43 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
 
     def render(self, surface: pygame.Surface) -> None:
-        self.game_renderer.render(self, surface)
+        self.game_renderer.render(self._build_render_frame(), surface)
+
+    def _build_render_frame(self) -> RenderFrame:
+        """Monta o snapshot do estado que o GameRenderer consome neste frame."""
+        level_config = self.level_config
+        assert level_config is not None
+        stage_name = format_stage_name(level_config.level_number)
+
+        keybindings = getattr(self.player_profile, "upgrade_keybindings", []) or []
+
+        return RenderFrame(
+            dt=self.last_dt,
+            state=self.state,
+            preparation_time_left=self.preparation_time_left,
+            score=self.score,
+            lives=self.lives,
+            total_enemies_destroyed=self.total_enemies_destroyed,
+            difficulty_preset=self.difficulty_preset,
+            stage_name=stage_name,
+            score_multiplier_active=self.score_multiplier_active,
+            score_multiplier_timer=self.score_multiplier_timer,
+            shake_timer=self.screen_shake_timer,
+            shake_intensity=self.screen_shake_intensity,
+            start_fade_active=self.start_fade_active,
+            start_fade_alpha=self.start_fade_alpha,
+            start_fade_overlay=self.start_fade_overlay,
+            show_fps=self.show_fps,
+            show_enemy_hitboxes=self.show_enemy_hitboxes,
+            upgrade_select_mode=self._upgrade_select_mode,
+            upgrade_select_index=self._upgrade_select_index,
+            upgrade_slots=self.upgrade_slots,
+            upgrade_keybindings=list(keybindings),
+            world_transition_thruster_particles=self.world_transition_thruster_particles,
+            ship=self.ship,
+            entity_manager=self.entity_manager,
+            boss_controller=self.boss_controller,
+        )
 
     # ===================== Upgrades (helpers) =====================
 

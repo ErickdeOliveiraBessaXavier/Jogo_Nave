@@ -16,6 +16,10 @@ from dataclasses import dataclass, field
 from typing import Any, List
 
 
+def _empty_any_list() -> List[Any]:
+    return []
+
+
 @dataclass
 class EnemyUpdateContext:
     """Estado compartilhado passado a `update_in_context()` de cada inimigo.
@@ -35,7 +39,7 @@ class EnemyUpdateContext:
 
     # Buffers de emissão preenchidos pelos inimigos durante o update.
     # O EntityManager consome-os após o loop para evitar mutação concorrente.
-    new_alien_bullets: List[Any] = field(default_factory=list)
-    new_eye_lasers: List[Any] = field(default_factory=list)
-    new_energy_orbs: List[Any] = field(default_factory=list)
-    new_enemies: List[Any] = field(default_factory=list)
+    new_alien_bullets: List[Any] = field(default_factory=_empty_any_list)
+    new_eye_lasers: List[Any] = field(default_factory=_empty_any_list)
+    new_energy_orbs: List[Any] = field(default_factory=_empty_any_list)
+    new_enemies: List[Any] = field(default_factory=_empty_any_list)

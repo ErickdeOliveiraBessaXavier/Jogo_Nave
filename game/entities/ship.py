@@ -616,63 +616,16 @@ class Ship:
             self._cached_sprite_size = self.ship_image.get_size()
 
     def _get_enemy_center(self, enemy: Any) -> Optional[tuple[float, float]]:
-        """Calcula o centro de um inimigo independente do tipo."""
-        if hasattr(enemy, "w") and hasattr(enemy, "h"):
-            return float(enemy.x + enemy.w / 2), float(enemy.y + enemy.h / 2)
-        elif hasattr(enemy, "radius"):
-            return float(enemy.x), float(enemy.y)
-        return None
+        from ..systems.targeting import enemy_center
+
+        return enemy_center(enemy)
 
     def _find_nearest_enemy(
         self, from_x: float, from_y: float, entity_manager: "EntityManager"
     ) -> Optional[Any]:
-        """Encontra o inimigo mais próximo de uma posição.
+        from ..systems.targeting import find_nearest_enemy
 
-        Usa distância ao quadrado internamente para evitar sqrt por inimigo.
-        """
-        nearest_enemy: Optional[Any] = None
-        nearest_dist_sq = float("inf")
-
-        # Buscar em todos os inimigos normais
-        for enemy in entity_manager.enemies:
-            if getattr(enemy, "dead", False):
-                continue
-            center = self._get_enemy_center(enemy)
-            if center is None:
-                continue
-            dx = center[0] - from_x
-            dy = center[1] - from_y
-            dist_sq = dx * dx + dy * dy
-            if dist_sq < nearest_dist_sq:
-                nearest_dist_sq = dist_sq
-                nearest_enemy = enemy
-
-        # Buscar em formações
-        for formation in entity_manager.formations:
-            for enemy in formation.get_enemies():
-                if getattr(enemy, "dead", False):
-                    continue
-                center = self._get_enemy_center(enemy)
-                if center is None:
-                    continue
-                dx = center[0] - from_x
-                dy = center[1] - from_y
-                dist_sq = dx * dx + dy * dy
-                if dist_sq < nearest_dist_sq:
-                    nearest_dist_sq = dist_sq
-                    nearest_enemy = enemy
-
-        # Verificar boss
-        if entity_manager.boss is not None:
-            boss = entity_manager.boss
-            if not getattr(boss, "dead", False):
-                dx = boss.x + boss.w / 2 - from_x
-                dy = boss.y + boss.h / 2 - from_y
-                dist_sq = dx * dx + dy * dy
-                if dist_sq < nearest_dist_sq:
-                    nearest_enemy = boss
-
-        return nearest_enemy
+        return find_nearest_enemy(from_x, from_y, entity_manager)
 
     def _update_timers(self, dt: float) -> None:
         """Atualiza todos os timers de power-ups e debuffs."""

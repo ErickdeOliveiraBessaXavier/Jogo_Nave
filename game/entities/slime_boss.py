@@ -22,6 +22,7 @@ class SlimeBoss:
     Visuals use `game/assets/images/sprite_boss_03_slime.png` (scaled to boss size).
     """
 
+    is_boss: bool = True
     _animation_frames: list[pygame.Surface] | None = None
 
     @classmethod

@@ -362,6 +362,7 @@ class ResonanceWave:
 
 
 class CloudArchmageBoss:
+    is_boss: bool = True
     MUSIC_STATE: Final = MusicState.CLOUD_ARCHMAGE_BOSS
     MAX_HEALTH: Final[int] = 1200
     WIDTH: Final[int] = 80

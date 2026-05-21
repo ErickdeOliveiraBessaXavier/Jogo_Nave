@@ -579,7 +579,7 @@ class WorldSelectionView:
         no botão Voltar (o único rect na parte inferior da tela)."""
         rects: list[pygame.Rect] = []
         for card in self.world_cards:
-            if hasattr(card, "rect") and card.rect is not None:
+            if hasattr(card, "rect"):
                 rects.append(card.rect)
         rects.append(self.left_arrow_rect)
         rects.append(self.right_arrow_rect)

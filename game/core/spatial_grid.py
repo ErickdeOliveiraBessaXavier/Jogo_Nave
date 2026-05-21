@@ -1,4 +1,4 @@
-from typing import Any, Generic, Protocol, TypeVar, cast
+from typing import Any, Generic, Iterator, Protocol, TypeVar, cast
 
 
 class HasRect(Protocol):
@@ -39,16 +39,16 @@ class SpatialGrid(Generic[T]):
 
     def _get_cells_for_rect(
         self, x: float, y: float, w: float, h: float
-    ) -> set[tuple[int, int]]:
-        """Get all cell coordinates that a rectangle occupies."""
-        left = int(x // self.cell_size)
-        right = int((x + w) // self.cell_size)
-        top = int(y // self.cell_size)
-        bottom = int((y + h) // self.cell_size)
-
-        return {
-            (cx, cy) for cx in range(left, right + 1) for cy in range(top, bottom + 1)
-        }
+    ) -> Iterator[tuple[int, int]]:
+        """Yield cell coordinates a rectangle occupies. Pairs are unique by construction."""
+        cell_size = self.cell_size
+        left = int(x // cell_size)
+        right = int((x + w) // cell_size)
+        top = int(y // cell_size)
+        bottom = int((y + h) // cell_size)
+        for cx in range(left, right + 1):
+            for cy in range(top, bottom + 1):
+                yield (cx, cy)
 
     def insert(self, obj: T, x: float, y: float, w: float = 0, h: float = 0):
         """Insert an object into the grid based on its bounding box."""

@@ -790,6 +790,7 @@ class StoneGolemBoss:
     Implementação otimizada com FSM modularizada.
     """
 
+    is_boss: bool = True
     SCALE = 10
     MAX_CHARGE_PARTICLES = 100
 

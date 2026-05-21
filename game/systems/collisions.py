@@ -30,6 +30,7 @@ from ..entities.slime_drip import SlimeDrip
 from ..entities.spike import Spike
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.star import Star
+from ..events import game_events as events
 from .collision_protocols import Damageable, Enemy
 from .hit_result import NO_HIT, HitResult
 
@@ -369,8 +370,6 @@ class Collisions:
         if result.killed and result.points > 0:
             if floating_scores is not None:
                 if self._event_bus is not None:
-                    from ..events import game_events as events
-
                     self._event_bus.emit(
                         events.SpawnFloatingScore(
                             x=hit_x,
@@ -385,10 +384,8 @@ class Collisions:
         if (
             result.killed
             and self._event_bus is not None
-            and "boss" not in type(target).__name__.lower()
+            and not getattr(target, "is_boss", False)
         ):
-            from ..events import game_events as events
-
             self._event_bus.emit(
                 events.EnemyDestroyed(
                     enemy_type=type(target).__name__,

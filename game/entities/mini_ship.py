@@ -21,6 +21,9 @@ _SPRITE_PATH = (
 )
 
 
+_MAX_TARGETING_RANGE_SQ = 400 * 400
+
+
 class MiniShip:
     # Sprites pré-escalados e pré-rotacionados (cache de classe para não
     # recriar a cada instância). ``_sprite_top_down`` é o sprite original
@@ -103,21 +106,11 @@ class MiniShip:
     def _find_nearest_enemy(
         self, enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry]
     ) -> Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry | None:
-        nearest_enemy = None
-        min_dist_sq = float("inf")
+        from ..systems.targeting import find_nearest_in_list
 
-        for enemy in enemies:
-            if isinstance(enemy, ExplosiveMine):
-                enemy_cx, enemy_cy = enemy.x, enemy.y
-            else:
-                enemy_cx, enemy_cy = enemy.x + enemy.w / 2, enemy.y + enemy.h / 2
-
-            dist_sq = (self.x - enemy_cx) ** 2 + (self.y - enemy_cy) ** 2
-            if dist_sq < min_dist_sq:
-                min_dist_sq = dist_sq
-                nearest_enemy = enemy
-
-        return nearest_enemy
+        return find_nearest_in_list(
+            self.x, self.y, enemies, max_range_sq=_MAX_TARGETING_RANGE_SQ
+        )
 
     def shoot(
         self,

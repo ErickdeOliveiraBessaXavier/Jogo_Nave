@@ -31,7 +31,6 @@ from ..entities.fire_zone import FireZone
 from ..entities.floating_score import FloatingScore
 from ..entities.formation import Formation
 from ..entities.giant_meteor_boss import GiantMeteorBoss
-from ..entities.guided_meteor import GuidedMeteor
 from ..entities.homing_bullet import HomingBullet
 from ..entities.ice_poison_zone import IcePoisonZone
 from ..entities.meteor import Meteor
@@ -750,16 +749,40 @@ class EntityManager:
     def update_for_game_over_slow_motion(
         self, dt: float, player_x: float, player_y: float
     ) -> None:
-        # Atualizar todas as listas de perigos e projéteis
-        groups: list[list[Any]] = [
-            self.enemies,
+        # Inimigos: dispatch polimórfico via update_in_context. sdt == dt
+        # (sem EMP/ice em slow-motion). Cada inimigo traduz o ctx em sua
+        # assinatura específica — sem cascata de isinstance aqui.
+        sw, sh = self._screen_size
+        ctx = EnemyUpdateContext(
+            dt=dt,
+            sdt=dt,
+            player_x=player_x,
+            player_y=player_y,
+            is_side_scroll=self.is_side_scroll,
+            screen_width=sw,
+            screen_height=sh,
+            other_enemies=self.enemies,
+        )
+        for en in self.enemies:
+            update_in_ctx = getattr(en, "update_in_context", None)
+            if update_in_ctx is not None:
+                update_in_ctx(ctx)
+            else:
+                en.update(dt)
+
+        # MiniShip exige listas explícitas de alvos/balas — em slow-motion
+        # passamos vazias para evitar disparos durante a death sequence.
+        for ms in self.mini_ships:
+            ms.update(dt, [], [])
+
+        # Demais grupos têm assinatura uniforme update(dt).
+        uniform_groups: list[list[Any]] = [
             self.bullets,
             self.alien_bullets,
             self.serpent_bullets,
             self.boss_lasers,
             self.powerups,
             self.floating_scores,
-            self.mini_ships,
             self.spikes,
             self.boss_squares,
             self.eye_lasers,
@@ -770,21 +793,9 @@ class EntityManager:
             self.boulders,
             self.attack_debris,
         ]
-        for g in groups:
+        for g in uniform_groups:
             for e in g:
-                if isinstance(e, (EyeEnemy, GuidedMeteor, ElementalRobot)):
-                    if isinstance(e, GuidedMeteor):
-                        e.update(dt, self.is_side_scroll, player_x, player_y)
-                    elif isinstance(e, ElementalRobot):
-                        e.update(dt, dt, player_x, player_y)
-                    else:
-                        e.update(dt, player_x, player_y)
-                elif isinstance(e, MiniShip):
-                    e.update(dt, [], [])
-                elif isinstance(e, Meteor):
-                    e.update(dt, self.is_side_scroll)
-                else:
-                    e.update(dt)
+                e.update(dt)
 
         for f in self.formations:
             f.update(dt)

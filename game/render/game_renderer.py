@@ -2,6 +2,9 @@
 
 Desacopla a lógica de renderização e HUD da cena de gameplay, tratando
 o desenho de entidades, efeitos visuais, shake de tela e overlays.
+
+Consome um `RenderFrame` (DTO) construído pela cena por frame. Não acessa
+nada de `PlayingScene` diretamente — contrato explícito via `render_frame.py`.
 """
 
 from __future__ import annotations
@@ -17,12 +20,11 @@ from ..core import colors
 from ..core.assets import get_font
 from ..core.config import config as Config
 from ..core.upgrades import get_upgrade_icon
-from ..core.world_config import format_stage_name
 
 if TYPE_CHECKING:
-    from ..scenes.playing import PlayingScene
     from ..entities.ship import Ship
     from ..systems.entity_manager import EntityManager
+    from .render_frame import RenderFrame
 
 
 class GameRenderer:
@@ -40,20 +42,20 @@ class GameRenderer:
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
         self.warning_font = get_font(Config.WARNING_FONT_SIZE)
 
-    def render(self, scene: PlayingScene, surface: pygame.Surface) -> None:
+    def render(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """Método principal de renderização chamado a cada frame."""
-        dt = scene.last_dt
+        from ..scenes.playing import GameState
+
+        dt = frame.dt
         speed_multiplier = 1.0
         boss_active = False
 
-        from ..scenes.playing import GameState
-
-        if scene.state == GameState.PREPARING:
+        if frame.state == GameState.PREPARING:
             progress = min(
                 1.0,
                 max(
                     0.0,
-                    (Config.PREPARATION_TIME - scene.preparation_time_left)
+                    (Config.PREPARATION_TIME - frame.preparation_time_left)
                     / Config.PREPARATION_TIME,
                 ),
             )
@@ -62,9 +64,9 @@ class GameRenderer:
             )
         else:
             boss_active = bool(
-                scene.boss_controller.active
-                and scene.entity_manager.boss
-                and not scene.entity_manager.boss.dead
+                frame.boss_controller.active
+                and frame.entity_manager.boss
+                and not frame.entity_manager.boss.dead
             )
             if boss_active:
                 speed_multiplier = Config.BOSS_WARP_SPEED_MULTIPLIER
@@ -80,25 +82,25 @@ class GameRenderer:
         # 2. Entidades
         current_fps = self.r.current_fps if self.r.current_fps > 0 else 60.0
         intro_active = bool(
-            scene.entity_manager.boss
-            and getattr(scene.entity_manager.boss, "is_intro_active", False)
+            frame.entity_manager.boss
+            and getattr(frame.entity_manager.boss, "is_intro_active", False)
         )
-        scene.entity_manager.draw(
+        frame.entity_manager.draw(
             self.game_surface,
-            scene.ship.rect.centerx,
-            scene.ship.rect.centery,
-            scene.boss_controller.enemy_visible,
+            frame.ship.rect.centerx,
+            frame.ship.rect.centery,
+            frame.boss_controller.enemy_visible,
             fps=current_fps,
             draw_boss=not intro_active,
         )
 
-        if scene.show_enemy_hitboxes:
-            self._draw_enemy_hitboxes(scene.entity_manager, self.game_surface)
+        if frame.show_enemy_hitboxes:
+            self._draw_enemy_hitboxes(frame.entity_manager, self.game_surface)
 
         # 3. Partículas de transição de mundo
-        for p in scene.world_transition_thruster_particles:
-            px = scene.ship.x + p["offset_x"]
-            py = scene.ship.y + p["offset_y"]
+        for p in frame.world_transition_thruster_particles:
+            px = frame.ship.x + p["offset_x"]
+            py = frame.ship.y + p["offset_y"]
             pygame.draw.circle(
                 self.game_surface,
                 p["color"],
@@ -107,11 +109,11 @@ class GameRenderer:
             )
 
         # 4. Nave do jogador
-        scene.ship.draw(self.game_surface)
+        frame.ship.draw(self.game_surface)
 
         # 5. Efeito de entrada de boss (CloudArchmage)
         if intro_active:
-            boss = scene.entity_manager.boss
+            boss = frame.entity_manager.boss
             if boss:
                 from ..entities.cloud_archmage_boss import CloudArchmageBoss
 
@@ -128,32 +130,29 @@ class GameRenderer:
         self.r.update_fps(dt)
 
         # 6. HUD Principal
-        level_config = scene.level_config
-        assert level_config is not None
-        stage_name = format_stage_name(level_config.level_number)
         self.r.hud(
             self.game_surface,
-            scene.score,
-            scene.lives,
-            scene.total_enemies_destroyed,
-            scene.ship,
-            stage_name,
-            scene.difficulty_preset,
-            score_multiplier_active=scene.score_multiplier_active,
-            score_multiplier_timer=scene.score_multiplier_timer,
-            mini_ships_active=scene.ship.mini_ships_timer > 0,
-            mini_ships_timer=scene.ship.mini_ships_timer,
-            explosive_shots_active=scene.ship.explosive_shots_active,
-            explosive_shots_remaining=scene.ship.explosive_shots_remaining,
+            frame.score,
+            frame.lives,
+            frame.total_enemies_destroyed,
+            frame.ship,
+            frame.stage_name,
+            frame.difficulty_preset,
+            score_multiplier_active=frame.score_multiplier_active,
+            score_multiplier_timer=frame.score_multiplier_timer,
+            mini_ships_active=frame.ship.mini_ships_timer > 0,
+            mini_ships_timer=frame.ship.mini_ships_timer,
+            explosive_shots_active=frame.ship.explosive_shots_active,
+            explosive_shots_remaining=frame.ship.explosive_shots_remaining,
         )
 
         # 7. Overlays específicos (Upgrades, Cofre, Combo)
-        self._render_upgrades_hud(scene, self.game_surface)
-        self._render_storage_slots_hud(scene.ship, self.game_surface)
-        self._render_combo_hud(scene.ship, self.game_surface)
+        self._render_upgrades_hud(frame, self.game_surface)
+        self._render_storage_slots_hud(frame.ship, self.game_surface)
+        self._render_combo_hud(frame.ship, self.game_surface)
 
         # 8. Debug info
-        if scene.show_fps:
+        if frame.show_fps:
             fps_stats = self.r.get_fps_stats()
             fps_text = (
                 f"FPS: {fps_stats['fps']:.1f} | "
@@ -163,17 +162,18 @@ class GameRenderer:
             fps_surface = self.r.font_small.render(fps_text, True, colors.YELLOW)
             self.game_surface.blit(fps_surface, (10, Config.SCREEN_HEIGHT - 30))
 
-        if scene.show_enemy_hitboxes:
+        if frame.show_enemy_hitboxes:
             hitbox_text = self.r.font_small.render(
                 "F7 Hitbox Debug: ON", True, (255, 200, 40)
             )
             self.game_surface.blit(hitbox_text, (10, Config.SCREEN_HEIGHT - 50))
 
         # 9. Blit final com Screen Shake
-        surface.blit(self.game_surface, self._compute_shake_offset(scene))
+        surface.blit(self.game_surface, self._compute_shake_offset(frame))
 
         # 10. Warning de Boss
-        if scene.boss_controller.warning_timer > 0 and int(scene.boss_controller.warning_timer * 5) % 2 == 1:
+        warning_timer = frame.boss_controller.warning_timer
+        if warning_timer > 0 and int(warning_timer * 5) % 2 == 1:
             warning_text = self.warning_font.render("WARNING!", True, colors.RED)
             text_rect = warning_text.get_rect(
                 center=(Config.SCREEN_WIDTH / 2, Config.SCREEN_HEIGHT / 2)
@@ -181,19 +181,19 @@ class GameRenderer:
             surface.blit(warning_text, text_rect)
 
         # 11. Overlay de preparação
-        if scene.state == GameState.PREPARING:
-            self.r.preparation(surface, scene.preparation_time_left)
+        if frame.state == GameState.PREPARING:
+            self.r.preparation(surface, frame.preparation_time_left)
 
         # 12. Fade-in inicial
-        if scene.start_fade_active:
-            scene.start_fade_overlay.fill((0, 0, 0, int(scene.start_fade_alpha)))
-            surface.blit(scene.start_fade_overlay, (0, 0))
+        if frame.start_fade_active:
+            frame.start_fade_overlay.fill((0, 0, 0, int(frame.start_fade_alpha)))
+            surface.blit(frame.start_fade_overlay, (0, 0))
 
-    def _compute_shake_offset(self, scene: PlayingScene) -> tuple[int, int]:
+    def _compute_shake_offset(self, frame: RenderFrame) -> tuple[int, int]:
         """Calcula o deslocamento aleatório para o efeito de screen shake."""
-        if scene.screen_shake_timer <= 0:
+        if frame.shake_timer <= 0:
             return (0, 0)
-        intensity = scene.screen_shake_intensity
+        intensity = frame.shake_intensity
         return (
             random.randint(-intensity, intensity),
             random.randint(-intensity, intensity),
@@ -337,7 +337,7 @@ class GameRenderer:
             x = start_x + i * (slot_size + gap)
             slot_surface = pygame.Surface((slot_size, slot_size), pygame.SRCALPHA)
             pygame.draw.rect(slot_surface, (20, 20, 30, 200), (0, 0, slot_size, slot_size), border_radius=8)
-            
+
             border_color = (*colors.YELLOW, 230) if kind is not None else (*colors.GRAY, 160)
             pygame.draw.rect(slot_surface, border_color, (0, 0, slot_size, slot_size), 2, border_radius=8)
 
@@ -358,9 +358,9 @@ class GameRenderer:
 
             surface.blit(slot_surface, (x, y))
 
-    def _render_upgrades_hud(self, scene: PlayingScene, surface: pygame.Surface) -> None:
+    def _render_upgrades_hud(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """Exibe os slots de upgrades ativos e seus cooldowns."""
-        active_slots = [(i, upg) for i, upg in enumerate(scene.upgrade_slots) if upg is not None]
+        active_slots = [(i, upg) for i, upg in enumerate(frame.upgrade_slots) if upg is not None]
         if not active_slots:
             return
 
@@ -374,9 +374,9 @@ class GameRenderer:
             pygame.draw.rect(slot_surface, (*colors.WHITE, 200), (0, 0, slot_w, slot_h), 2, border_radius=8)
 
             try:
-                keycode = scene.player_profile.upgrade_keybindings[i]
+                keycode = frame.upgrade_keybindings[i]
                 key_label = pygame.key.name(keycode).upper()
-            except (AttributeError, IndexError, TypeError):
+            except (IndexError, TypeError):
                 key_label = str(i + 1)
             slot_surface.blit(font_small.render(key_label, True, colors.WHITE), (4, 2))
 
@@ -404,12 +404,12 @@ class GameRenderer:
             if ui["active"]:
                 pygame.draw.rect(surface, colors.GREEN, pygame.Rect(slot_x, y, slot_w, slot_h), 3, border_radius=8)
 
-            if getattr(scene, "_upgrade_select_mode", False) and i == getattr(scene, "_upgrade_select_index", -1):
+            if frame.upgrade_select_mode and i == frame.upgrade_select_index:
                 t_ticks = pygame.time.get_ticks()
                 shake_x = int(math.sin(t_ticks / 35.0) * 2)
                 shake_y = int(math.cos(t_ticks / 42.0) * 2)
                 pygame.draw.rect(surface, colors.CUSTOM_GOLD, pygame.Rect(slot_x - 3 + shake_x, y - 3 + shake_y, slot_w + 6, slot_h + 6), 3, border_radius=10)
 
-        if getattr(scene, "_upgrade_select_mode", False):
+        if frame.upgrade_select_mode:
             hint = font_small.render("LB/RB navegar  A confirmar  B cancelar", True, colors.CUSTOM_GOLD)
             surface.blit(hint, (Config.SCREEN_WIDTH - pad - hint.get_width(), y + slot_h + 6))

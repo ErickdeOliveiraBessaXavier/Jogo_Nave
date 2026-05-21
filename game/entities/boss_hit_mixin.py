@@ -6,6 +6,7 @@ if TYPE_CHECKING:
 
 class BossHitMixin:
     dead: bool
+    is_boss: bool = True
 
     def take_damage(self, _amount: int) -> None: ...
 
