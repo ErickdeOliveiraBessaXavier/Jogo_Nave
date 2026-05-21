@@ -495,13 +495,49 @@ class EntityManager:
         attraction_mult: float = 1.0,
     ) -> None:
         enemy_dt = 0.0 if freeze_enemies else dt
-        new_alien_bullets: list[AlienBullet] = []
-        new_eye_lasers: list[EyeLaser] = []
-
-        # Atualiza cache de tamanho de tela (seguro chamar uma vez por frame).
         self._screen_size = (screen_width, screen_height)
+        self._rebuild_enemy_caches()
 
-        # Cache de inimigos
+        self._update_visual_effects(dt)
+
+        new_alien_bullets: list[AlienBullet] = self._update_formations(dt, enemy_dt)
+        self._update_player_projectiles(dt)
+        self._update_enemy_projectiles(enemy_dt)
+        self._update_misc_effects(dt)
+
+        self._update_collectibles(
+            dt, (player_x, player_y), attraction_mult, screen_width, screen_height
+        )
+        self._update_floating_scores_and_mini_ships(dt)
+
+        self._update_spikes(dt, enemy_dt, player_x, player_y)
+        self._update_boss(enemy_dt, player_x, player_y)
+
+        ctx_emissions = self._update_enemies(
+            dt, enemy_dt, player_x, player_y, screen_width, screen_height
+        )
+        new_alien_bullets.extend(ctx_emissions.new_alien_bullets)
+        new_eye_lasers: list[EyeLaser] = list(ctx_emissions.new_eye_lasers)
+        self.energy_orbs.extend(ctx_emissions.new_energy_orbs)
+        self.enemies.extend(ctx_emissions.new_enemies)
+
+        self._update_mountain_propellers(dt)
+        self._update_energy_orbs(dt)
+        self._check_alien_collisions()
+        self.alien_bullets.extend(new_alien_bullets)
+        self.eye_lasers.extend(new_eye_lasers)
+
+        self._update_environment(dt, enemy_dt)
+
+        self.cleanup()
+        self.rebuild_all_grids()
+
+    # ------------------------------------------------------------------
+    # Sub-passos de update() — extraídos para isolar fronteiras de domínio.
+    # ------------------------------------------------------------------
+
+    def _rebuild_enemy_caches(self) -> None:
+        """Atualiza caches de inimigos consumidos por bullets homing / mini-ships."""
         self._cached_formation_enemies = []
         self._cached_all_enemies = list(self.enemies)
         for f in self.formations:
@@ -511,7 +547,13 @@ class EntityManager:
         if self.boss:
             self._cached_all_enemies.append(self.boss)
 
-        # Atualizar efeitos visuais
+    def _emp_state(self) -> tuple[bool, float]:
+        slow_active = getattr(self, "emp_active", False)
+        slow_factor = getattr(self, "emp_slow_factor", 1.0) if slow_active else 1.0
+        return slow_active, slow_factor
+
+    def _update_visual_effects(self, dt: float) -> None:
+        """Efeitos visuais com auto-cleanup: EMP, explosivos, zonas elementais, chain."""
         for w in self.emp_waves[:]:
             w.update(dt)
             if w.dead:
@@ -533,31 +575,21 @@ class EntityManager:
             if cl.dead:
                 self.chain_lightnings.remove(cl)
 
-        # Helper para lentidão (EMP)
-        slow_active = getattr(self, "emp_active", False)
-        slow_factor = getattr(self, "emp_slow_factor", 1.0) if slow_active else 1.0
-
-        def emp_mul_for(entity: Any) -> float:
-            return self._emp_multiplier(entity, slow_active, slow_factor, dt)
-
-        def update_linger(entity: Any, dt: float) -> None:
-            self._update_emp_linger(entity, dt)
-
-        def ice_mul_for(entity: Any) -> float:
-            return self._ice_multiplier(entity)
-
-        def update_ice_linger(entity: Any, dt: float) -> None:
-            self._update_ice_linger(entity, dt)
-
-        # Atualizar formações e naves aliadas
+    def _update_formations(self, dt: float, enemy_dt: float) -> list[AlienBullet]:
+        """Tick das formações com EMP/ice; retorna alien_bullets emitidas."""
+        new_alien_bullets: list[AlienBullet] = []
+        slow_active, slow_factor = self._emp_state()
         for f in self.formations[:]:
-            update_linger(f, dt)
-            update_ice_linger(f, dt)
-            mul = emp_mul_for(f) * ice_mul_for(f)
+            self._update_emp_linger(f, dt)
+            self._update_ice_linger(f, dt)
+            mul = self._emp_multiplier(f, slow_active, slow_factor, dt) * self._ice_multiplier(f)
             shot = f.update(enemy_dt * mul)
             if shot:
                 new_alien_bullets.extend(shot)
+        return new_alien_bullets
 
+    def _update_player_projectiles(self, dt: float) -> None:
+        """Projéteis do jogador: bullets (com homing), homing dedicado, mini-ships, lasers."""
         for b in self.bullets:
             b.update(dt, self._cached_all_enemies if b.homing else None)
 
@@ -574,7 +606,8 @@ class EntityManager:
         for b in self.cacador_lasers:
             b.update(dt)
 
-        # Atualizar projéteis inimigos
+    def _update_enemy_projectiles(self, enemy_dt: float) -> None:
+        """Projéteis inimigos: alien/serpent/boss/eye (todos respeitam freeze)."""
         for b in self.alien_bullets:
             b.update(enemy_dt)
         for b in self.serpent_bullets:
@@ -584,12 +617,21 @@ class EntityManager:
         for b in self.eye_lasers:
             b.update(enemy_dt)
 
+    def _update_misc_effects(self, dt: float) -> None:
+        """Pool de explosões e mine_explosions."""
         self.explosion_pool.update(dt)
         for me in self.mine_explosions:
             me.update(dt)
 
-        # Coletáveis com suporte a atração (Magneto)
-        player_pos = (player_x, player_y)
+    def _update_collectibles(
+        self,
+        dt: float,
+        player_pos: tuple[float, float],
+        attraction_mult: float,
+        screen_width: int,
+        screen_height: int,
+    ) -> None:
+        """Powerups e estrelas — suportam atração do Magneto."""
         for p in self.powerups:
             p.update(dt, attraction_pos=player_pos, attraction_mult=attraction_mult)
         for s in self.stars:
@@ -601,74 +643,86 @@ class EntityManager:
                 attraction_mult=attraction_mult,
             )
 
+    def _update_floating_scores_and_mini_ships(self, dt: float) -> None:
         for fs in self.floating_scores:
             fs.update(dt)
         for ms in self.mini_ships:
             ms.update(dt, self._cached_all_enemies, self.mini_ship_bullets)
 
-        # Atualizar Spikes
+    def _update_spikes(
+        self, dt: float, enemy_dt: float, player_x: float, player_y: float
+    ) -> None:
         ac = sum(1 for s in self.spikes if s.state in ("trembling", "flying"))
+        slow_active, slow_factor = self._emp_state()
         for s in self.spikes:
-            update_linger(s, dt)
-            update_ice_linger(s, dt)
-            mul = emp_mul_for(s) * ice_mul_for(s)
+            self._update_emp_linger(s, dt)
+            self._update_ice_linger(s, dt)
+            mul = self._emp_multiplier(s, slow_active, slow_factor, dt) * self._ice_multiplier(s)
             s.update(enemy_dt * mul, player_x, player_y, ac)
 
-        # Atualizar Boss
-        if self.boss:
-            if isinstance(self.boss, SpikeBoss):
-                ss, bls = self.boss.update(enemy_dt, player_x, player_y, self.spikes)
-                if ss:
-                    self.spikes.extend(ss)
-                if bls:
-                    self.boss_lasers.extend(bls)
-            elif isinstance(self.boss, SlimeBoss):
-                self.boss.update(enemy_dt, player_x, player_y, self)
-            elif isinstance(self.boss, GiantMeteorBoss):
-                self.boss.update(enemy_dt, self)
-            elif isinstance(self.boss, StoneGolemBoss):
-                nb, ns, orks = self.boss.update(enemy_dt, player_x, player_y, self)
-                if nb:
-                    self.boulders.extend(nb)
-                if ns:
-                    self.attack_debris.extend(ns)
-                self.orbital_debris = orks
-            elif isinstance(self.boss, MountainSerpentBoss):
-                bb, fragments = self.boss.update(enemy_dt, player_x, player_y)
-                if bb:
-                    self.serpent_bullets.extend(bb)
-                for f in fragments:
-                    if isinstance(f, SerpentRockBullet):
-                        self.serpent_bullets.append(f)
+    def _update_boss(self, enemy_dt: float, player_x: float, player_y: float) -> None:
+        """Dispatch específico por boss (assinaturas de update divergem)."""
+        if not self.boss:
+            return
+        if isinstance(self.boss, SpikeBoss):
+            ss, bls = self.boss.update(enemy_dt, player_x, player_y, self.spikes)
+            if ss:
+                self.spikes.extend(ss)
+            if bls:
+                self.boss_lasers.extend(bls)
+        elif isinstance(self.boss, SlimeBoss):
+            self.boss.update(enemy_dt, player_x, player_y, self)
+        elif isinstance(self.boss, GiantMeteorBoss):
+            self.boss.update(enemy_dt, self)
+        elif isinstance(self.boss, StoneGolemBoss):
+            nb, ns, orks = self.boss.update(enemy_dt, player_x, player_y, self)
+            if nb:
+                self.boulders.extend(nb)
+            if ns:
+                self.attack_debris.extend(ns)
+            self.orbital_debris = orks
+        elif isinstance(self.boss, MountainSerpentBoss):
+            bb, fragments = self.boss.update(enemy_dt, player_x, player_y)
+            if bb:
+                self.serpent_bullets.extend(bb)
+            for f in fragments:
+                if isinstance(f, SerpentRockBullet):
+                    self.serpent_bullets.append(f)
+                else:
+                    self.enemies.append(f)
+        elif isinstance(self.boss, CloudArchmageBoss):
+            spawned = self.boss.update(enemy_dt, (player_x, player_y))
+            if spawned:
+                for s in spawned:
+                    if isinstance(s, RockGlider):
+                        self.rock_glider_pool.pool.append(s)
+                        self.rock_glider_pool.active.append(s)
+                        self.enemies.append(s)  # type: ignore[arg-type]
+                    elif isinstance(s, MountainPropeller):
+                        self.mountain_propellers.append(s)
                     else:
-                        self.enemies.append(f)
-            elif isinstance(self.boss, CloudArchmageBoss):
-                spawned = self.boss.update(enemy_dt, (player_x, player_y))
-                if spawned:
-                    for s in spawned:
-                        if isinstance(s, RockGlider):
-                            self.rock_glider_pool.pool.append(s)
-                            self.rock_glider_pool.active.append(s)
-                            self.enemies.append(s)  # type: ignore[arg-type]
-                        elif isinstance(s, MountainPropeller):
-                            self.mountain_propellers.append(s)
-                        else:
-                            self.enemies.append(s)
-            else:
-                ls, sqs, sound_events = self.boss.update(enemy_dt, player_x, player_y)
-                if ls:
-                    self.boss_lasers.extend(ls)
-                if sqs:
-                    self.boss_squares.extend(sqs)
-                self._dispatch_boss_sound_events(sound_events)
-                for q in self.boss.floating_squares:
-                    if q not in self.boss_squares:
-                        self.boss_squares.append(q)
+                        self.enemies.append(s)
+        else:
+            ls, sqs, sound_events = self.boss.update(enemy_dt, player_x, player_y)
+            if ls:
+                self.boss_lasers.extend(ls)
+            if sqs:
+                self.boss_squares.extend(sqs)
+            self._dispatch_boss_sound_events(sound_events)
+            for q in self.boss.floating_squares:
+                if q not in self.boss_squares:
+                    self.boss_squares.append(q)
 
-        # Atualizar Inimigos Comuns via dispatch polimórfico.
-        # Cada inimigo implementa update_in_context(ctx) e empurra emissões
-        # (bullets/lasers/orbs/novos inimigos) nos buffers do ctx — elimina
-        # a cadeia de isinstance e respeita o Princípio Aberto/Fechado.
+    def _update_enemies(
+        self,
+        dt: float,
+        enemy_dt: float,
+        player_x: float,
+        player_y: float,
+        screen_width: int,
+        screen_height: int,
+    ) -> EnemyUpdateContext:
+        """Loop polimórfico via update_in_context — retorna ctx com emissões."""
         ctx = EnemyUpdateContext(
             dt=dt,
             sdt=0.0,
@@ -679,33 +733,29 @@ class EntityManager:
             screen_height=screen_height,
             other_enemies=self.enemies,
         )
+        slow_active, slow_factor = self._emp_state()
         for en in self.enemies:
-            update_ice_linger(en, dt)
-            mul = emp_mul_for(en) * ice_mul_for(en)
+            self._update_ice_linger(en, dt)
+            mul = self._emp_multiplier(en, slow_active, slow_factor, dt) * self._ice_multiplier(en)
             ctx.sdt = enemy_dt * mul
             update_in_ctx = getattr(en, "update_in_context", None)
             if update_in_ctx is not None:
                 update_in_ctx(ctx)
             else:
                 en.update(ctx.sdt)
+        return ctx
 
-        new_alien_bullets.extend(ctx.new_alien_bullets)
-        new_eye_lasers.extend(ctx.new_eye_lasers)
-        self.energy_orbs.extend(ctx.new_energy_orbs)
-        self.enemies.extend(ctx.new_enemies)
-
+    def _update_mountain_propellers(self, dt: float) -> None:
         for prop in self.mountain_propellers:
             prop.update(dt)
         self.mountain_propellers = [p for p in self.mountain_propellers if not p.dead]
 
-        # Atualizar projéteis adicionais e colisões
+    def _update_energy_orbs(self, dt: float) -> None:
         for o in self.energy_orbs:
             o.update(dt)
-        self._check_alien_collisions()
-        self.alien_bullets.extend(new_alien_bullets)
-        self.eye_lasers.extend(new_eye_lasers)
 
-        # Atualizar elementos dinâmicos da tela
+    def _update_environment(self, dt: float, enemy_dt: float) -> None:
+        """Elementos dinâmicos: boss_squares, boulders/debris, bombs, towers, mines, black holes."""
         sw, sh = self._screen_size
 
         for q in self.boss_squares[:]:
@@ -742,9 +792,6 @@ class EntityManager:
             b.process_all_enemies(
                 self._cached_all_enemies, enemy_dt, self.spawn_explosion
             )
-
-        self.cleanup()
-        self.rebuild_all_grids()
 
     def update_for_game_over_slow_motion(
         self, dt: float, player_x: float, player_y: float

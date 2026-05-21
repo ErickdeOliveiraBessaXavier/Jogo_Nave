@@ -5,29 +5,29 @@ import zlib
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Callable, Type
 
-from ..entities.alien import Alien
-from ..entities.boss import Boss
-from ..entities.bot_elemental import ElementalRobot
-from ..entities.cloud_archmage_boss import CloudArchmageBoss
-from ..entities.explosive_mine import ExplosiveMine
-from ..entities.eye_enemy import EyeEnemy
-from ..entities.giant_meteor_boss import GiantMeteorBoss
-from ..entities.meteor import Meteor
-from ..entities.mountain_geode import MountainGeode
-from ..entities.mountain_mage import MountainMage
-from ..entities.mountain_propeller import MountainPropeller
-from ..entities.mountain_serpent_boss import MountainSerpentBoss
-from ..entities.rock_glider import RockGlider
-from ..entities.slime_boss import SlimeBoss
-from ..entities.spike_boss import SpikeBoss
-from ..entities.square_minion_boss import SquareMinionBoss
-from ..entities.stone_golem_boss import StoneGolemBoss
-from ..entities.stone_sentry import StoneSentry
-from .difficulty import DifficultyPreset, DifficultySettings
-from .world_config import WorldTheme, get_world_for_level
+from ...entities.alien import Alien
+from ...entities.boss import Boss
+from ...entities.bot_elemental import ElementalRobot
+from ...entities.cloud_archmage_boss import CloudArchmageBoss
+from ...entities.explosive_mine import ExplosiveMine
+from ...entities.eye_enemy import EyeEnemy
+from ...entities.giant_meteor_boss import GiantMeteorBoss
+from ...entities.meteor import Meteor
+from ...entities.mountain_geode import MountainGeode
+from ...entities.mountain_mage import MountainMage
+from ...entities.mountain_propeller import MountainPropeller
+from ...entities.mountain_serpent_boss import MountainSerpentBoss
+from ...entities.rock_glider import RockGlider
+from ...entities.slime_boss import SlimeBoss
+from ...entities.spike_boss import SpikeBoss
+from ...entities.square_minion_boss import SquareMinionBoss
+from ...entities.stone_golem_boss import StoneGolemBoss
+from ...entities.stone_sentry import StoneSentry
+from ..difficulty import DifficultyPreset, DifficultySettings
+from ..world_config import WorldTheme, get_world_for_level
 
 if TYPE_CHECKING:
-    from .world_config import WorldConfig
+    from ..world_config import WorldConfig
 
 
 logger = logging.getLogger(__name__)

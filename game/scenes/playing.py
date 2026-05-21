@@ -55,7 +55,9 @@ from ..render.render_frame import RenderFrame
 from ..systems.boss_fight_controller import BossFightController
 from ..systems.cheat_input import CheatBuffer
 from ..systems.collisions import Collisions
+from ..systems.gameplay_input_handler import GameplayInputHandler
 from ..systems.powerup_system import PowerupSystem
+from ..systems.transition_controller import TransitionController, TransitionPhase
 from ..systems.effects_system import EffectsSystem
 from ..systems.entity_manager import EntityManager
 from ..systems.level_progression_controller import (
@@ -85,15 +87,6 @@ _HUD_UPGRADE_SLOT_GAP = 6
 # ---------------------------------------------------------------------------
 # Tipos auxiliares
 # ---------------------------------------------------------------------------
-
-
-class TransitionPhase(Enum):
-    PLAYING = auto()
-    POST_VICTORY_DELAY = auto()
-    LEVEL_TRANSITION_WAIT = auto()
-    CUTSCENE_EXIT = auto()
-    WORLD_PANEL = auto()
-    LEVEL_ENTRY = auto()
 
 
 class GameState(Enum):
@@ -208,14 +201,17 @@ class PlayingScene(Scene):
         """Inicializa o estado de jogo e aplica configurações de dificuldade."""
         self.cheat: CheatBuffer = CheatBuffer()
         self.powerup_system: PowerupSystem = PowerupSystem(self)
+        self.input_handler: GameplayInputHandler = GameplayInputHandler(self)
+        self.transitions: TransitionController = TransitionController(
+            post_victory_delay=Config.LEVEL_TRANSITION_PENDING_DELAY,
+            level_transition_delay=Config.LEVEL_TRANSITION_DELAY,
+            animation_timeout=Config.LEVEL_TRANSITION_ANIMATION_TIMEOUT,
+        )
         self.god_mode: bool = False
         self.state: GameState = GameState.PREPARING
         self.preparation_time_left: float = Config.PREPARATION_TIME
-        self._lt_pressed: bool = False
-        self._lt_calibrated: bool = False
         self._upgrade_select_mode: bool = False
         self._upgrade_select_index: int = 0
-        self.transition_phase: TransitionPhase = TransitionPhase.LEVEL_ENTRY
         self._apply_difficulty_settings()
 
         self.screen_shake_timer: float = 0.0
@@ -258,16 +254,11 @@ class PlayingScene(Scene):
         }
 
     def _init_transition_state(self) -> None:
-        """Inicializa timers e flags de transição de nível/mundo."""
-        self.level_transition_timer: float = 0.0
-        self.level_transition_delay: float = Config.LEVEL_TRANSITION_DELAY
-        self.level_transition_pending_timer: float = 0.0
-        self.level_transition_pending_delay: float = (
-            Config.LEVEL_TRANSITION_PENDING_DELAY
-        )
-        self.level_transition_animation_timeout: float = (
-            Config.LEVEL_TRANSITION_ANIMATION_TIMEOUT
-        )
+        """Inicializa timers e flags de transição de nível/mundo.
+
+        FSM e timers de fase vivem em `self.transitions` (TransitionController).
+        Aqui ficam apenas os dados de cutscene (visual/animação).
+        """
         self.pending_world_transition: Optional[WorldConfig] = None
 
         self.world_transition_cutscene_timer: float = 0.0
@@ -408,32 +399,30 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
 
     def _set_transition_phase(self, phase: TransitionPhase) -> None:
-        """Atualiza a fase de transição e sincroniza os flags legados."""
-        self.transition_phase = phase
+        self.transitions.set_phase(phase)
 
-        if phase != TransitionPhase.POST_VICTORY_DELAY:
-            self.level_transition_pending_timer = 0.0
-        if phase != TransitionPhase.LEVEL_TRANSITION_WAIT:
-            self.level_transition_timer = 0.0
+    @property
+    def transition_phase(self) -> TransitionPhase:
+        return self.transitions.phase
 
     @property
     def level_transition_pending(self) -> bool:
-        return self.transition_phase == TransitionPhase.POST_VICTORY_DELAY
+        return self.transitions.is_post_victory_delay
 
     @property
     def level_transition_active(self) -> bool:
-        return self.transition_phase == TransitionPhase.LEVEL_TRANSITION_WAIT
+        return self.transitions.is_level_transition_wait
 
     @property
     def world_transition_cutscene_active(self) -> bool:
-        return self.transition_phase == TransitionPhase.CUTSCENE_EXIT
+        return self.transitions.is_cutscene_exit
 
     @world_transition_cutscene_active.setter
     def world_transition_cutscene_active(self, value: bool) -> None:
         if value:
-            self.transition_phase = TransitionPhase.CUTSCENE_EXIT
-        elif self.transition_phase == TransitionPhase.CUTSCENE_EXIT:
-            self.transition_phase = (
+            self.transitions.phase = TransitionPhase.CUTSCENE_EXIT
+        elif self.transitions.is_cutscene_exit:
+            self.transitions.phase = (
                 TransitionPhase.WORLD_PANEL
                 if self.pending_world_transition is not None
                 else TransitionPhase.LEVEL_ENTRY
@@ -441,11 +430,11 @@ class PlayingScene(Scene):
 
     @property
     def awaiting_world_transition_panel(self) -> bool:
-        return self.transition_phase == TransitionPhase.WORLD_PANEL
+        return self.transitions.is_world_panel
 
     def _can_handle_gameplay_actions(self) -> bool:
         """Retorna True quando o jogador pode agir normalmente."""
-        return self.transition_phase == TransitionPhase.PLAYING
+        return self.transitions.can_handle_gameplay_actions
 
     def _begin_level_preparation(self) -> None:
         """Coloca a cena em modo de preparação para o próximo nível."""
@@ -793,13 +782,7 @@ class PlayingScene(Scene):
             self._update_world_transition_cutscene(dt)
             return
 
-        if self.transition_phase == TransitionPhase.POST_VICTORY_DELAY:
-            self.level_transition_pending_timer += dt
-            if (
-                self.level_transition_pending_timer
-                >= self.level_transition_pending_delay
-            ):
-                self._set_transition_phase(TransitionPhase.LEVEL_TRANSITION_WAIT)
+        self.transitions.update_post_victory(dt)
 
         self._update_preparing_state(dt)
         self._update_timers(dt)
@@ -896,15 +879,10 @@ class PlayingScene(Scene):
         else:
             self.screen_shake_timer = max(0.0, self.screen_shake_timer - dt)
 
-        if self.transition_phase == TransitionPhase.LEVEL_TRANSITION_WAIT:
-            self.level_transition_timer += dt
-            if self.level_transition_timer >= self.level_transition_delay:
-                timed_out = self.level_transition_timer >= (
-                    self.level_transition_delay
-                    + self.level_transition_animation_timeout
-                )
-                if self._all_animations_finished() or timed_out:
-                    self._start_next_level()
+        if self.transitions.update_level_transition_wait(
+            dt, self._all_animations_finished()
+        ):
+            self._start_next_level()
 
     def _update_ship(self, dt: float) -> None:
         self.ship.update(dt, self.entity_manager, is_side_scroll=self.is_side_scroll)
@@ -1733,186 +1711,7 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_p:
-                from .paused import PausedScene
-
-                self.app.states.push(PausedScene(self.app, previous_scene=self))
-            elif event.key == pygame.K_F3:
-                self.show_fps = not self.show_fps
-                logger.info(
-                    "Debug FPS: %s", "ATIVADO" if self.show_fps else "DESATIVADO"
-                )
-            elif event.key == pygame.K_F7:
-                self.show_enemy_hitboxes = not self.show_enemy_hitboxes
-                logger.info(
-                    "Debug Hitbox: %s",
-                    "ATIVADO" if self.show_enemy_hitboxes else "DESATIVADO",
-                )
-            elif event.key == pygame.K_F8:
-                self._trigger_world_transition_debug_preview()
-            elif event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
-                if not self.ship.is_entering and self._can_handle_gameplay_actions():
-                    self.ship.cycle_facing()
-            elif event.key in (pygame.K_q, pygame.K_e):
-                # Cofre: Q usa slot 0, E usa slot 1.
-                if not self.ship.is_entering and self._can_handle_gameplay_actions():
-                    slot = 0 if event.key == pygame.K_q else 1
-                    self._activate_stored_powerup(slot)
-            elif event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT):
-                # Fantasma: dash com i-frames.
-                if (
-                    not self.ship.is_entering
-                    and self._can_handle_gameplay_actions()
-                    and self.ship.profile.has_dash
-                ):
-                    held = self.app.input.poll_held()
-                    move_vec = pygame.math.Vector2(0, 0)
-                    if "hold_left" in held:
-                        move_vec.x -= 1
-                    if "hold_right" in held:
-                        move_vec.x += 1
-                    if "hold_up" in held:
-                        move_vec.y -= 1
-                    if "hold_down" in held:
-                        move_vec.y += 1
-                    self.ship.try_dash(move_vec)
-            elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
-                if not self.ship.is_entering and self._can_handle_gameplay_actions():
-                    if self.ship.profile.has_charge_shot and (
-                        event.mod & pygame.KMOD_ALT
-                    ):
-                        # Só ativa charge com Space + Alt pressionados juntos.
-                        self.ship.start_charge()
-
-            if __debug__:
-                self._process_cheat_input(event)
-
-            if self._can_handle_gameplay_actions() and not self.ship.is_entering:
-                self._handle_upgrade_key(event)
-
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:
-                if not self.ship.is_entering and self._can_handle_gameplay_actions():
-                    if (
-                        self.ship.profile.has_charge_shot
-                        and not self.ship.charge_shot_active
-                        and pygame.key.get_mods() & pygame.KMOD_ALT
-                    ):
-                        # Botão esquerdo + Alt: inicia charge (espelho do Space+Alt).
-                        self.ship.start_charge()
-                    elif not self.ship.auto_fire and self.shooting.is_ready:
-                        self.shooting.fire(self.ship, self.player_damage_multiplier)
-            elif event.button == 2:
-                if not self.ship.is_entering and self._can_handle_gameplay_actions():
-                    self.ship.cycle_facing()
-            elif event.button == 3:
-                # Botão direito: inicia charge no Caçador/Magneto.
-                if (
-                    not self.ship.is_entering
-                    and self._can_handle_gameplay_actions()
-                    and self.ship.profile.has_charge_shot
-                    and not self.ship.charge_shot_active
-                ):
-                    self.ship.start_charge()
-
-        elif event.type == pygame.MOUSEBUTTONUP:
-            # Caçador/Magneto: soltar botão esquerdo ou direito dispara o charge.
-            if (
-                event.button in (1, 3)
-                and self.ship.profile.has_charge_shot
-                and self.ship.charge_shot_active
-                and not self.ship.is_entering
-                and self._can_handle_gameplay_actions()
-            ):
-                if self.ship.charge_shot_progress >= 1.0:
-                    self.shooting.fire(self.ship, self.player_damage_multiplier)
-                else:
-                    self.ship.cancel_charge()
-
-        elif event.type == pygame.KEYUP:
-            if event.key in (pygame.K_SPACE, pygame.K_RETURN):
-                if (
-                    self.ship.profile.has_charge_shot
-                    and self.ship.charge_shot_active
-                    and not self.ship.is_entering
-                    and self._can_handle_gameplay_actions()
-                ):
-                    if self.ship.charge_shot_progress >= 1.0:
-                        self.shooting.fire(self.ship, self.player_damage_multiplier)
-                    else:
-                        self.ship.cancel_charge()
-
-        elif event.type == pygame.JOYBUTTONDOWN:
-            self._handle_gamepad_button(event.button)
-        elif event.type == pygame.JOYHATMOTION:
-            self._handle_gamepad_hat(event.value)
-        elif event.type == pygame.JOYAXISMOTION:
-            self._handle_gamepad_axis(event.axis, event.value)
-
-    # ------------------------------------------------------------------
-    # Mapeamento de botões do controle Xbox para ações de gameplay
-    # ------------------------------------------------------------------
-
-    def _handle_gamepad_button(self, button: int) -> None:
-        from ..core.gamepad import XboxButton
-
-        # Start sempre abre pausa, mesmo se a nave está entrando ou em modo de seleção.
-        if button == XboxButton.START:
-            self._upgrade_select_mode = False
-            from .paused import PausedScene
-
-            self.app.states.push(PausedScene(self.app, previous_scene=self))
-            return
-
-        if self.ship.is_entering or not self._can_handle_gameplay_actions():
-            return
-
-        # Modo de seleção de upgrade: LB/RB navegam, A confirma, B cancela.
-        # Outros botões ficam inativos até sair do modo para evitar inputs
-        # acidentais enquanto o jogador escolhe.
-        if self._upgrade_select_mode:
-            if button == XboxButton.A:
-                self._confirm_upgrade_select()
-            elif button == XboxButton.B:
-                self._upgrade_select_mode = False
-            elif button == XboxButton.LB:
-                # HUD desenha os slots da direita pra esquerda (slot 0 = mais à
-                # direita, slot N = mais à esquerda), então LB precisa ANDAR pra
-                # frente no índice pra ir visualmente pra esquerda.
-                self._navigate_upgrade_select(+1)
-            elif button == XboxButton.RB:
-                self._navigate_upgrade_select(-1)
-            return
-
-        # O tiro normal saiu dos botões e foi para o RT (gatilho direito):
-        # ``hold_shoot`` em ``_poll_held_gamepad`` é o único caminho, então
-        # ``button == XboxButton.A`` fora do modo de seleção fica livre para
-        # outro propósito (Cofre E). Habilidades especiais (dash, charge shot
-        # do Caçador, laser do Magneto) ficam no LT analógico, tratadas em
-        # ``_handle_gamepad_axis`` baseado no perfil da nave.
-        if button == XboxButton.A:
-            self._activate_stored_powerup(1)  # Cofre E (era R3 antes)
-        elif button == XboxButton.X:
-            self.ship.cycle_facing()
-        elif button == XboxButton.Y:
-            self._activate_stored_powerup(0)  # Cofre Q
-        # LB/RB fora do modo de seleção não fazem nada — esses botões só
-        # ganham função quando o modo está aberto (navegar entre slots).
-        # L3/R3 ficam livres por requisito do usuário: ``configurações dos
-        # analógicos RS e LS removidas``. O Cofre E migrou de R3 para A.
-
-    def _handle_gamepad_hat(self, value: tuple[int, int]) -> None:
-        """D-pad ↑ alterna o modo de seleção de upgrades.
-
-        Outras direções do D-pad ficam reservadas para o próprio modo (não
-        executam ação fora dele — usar LB/RB para navegar dentro do modo).
-        """
-        if self.ship.is_entering or not self._can_handle_gameplay_actions():
-            return
-        _x, y = value
-        if y > 0:
-            self._toggle_upgrade_select_mode()
+        self.input_handler.handle(event)
 
     # ------------------------------------------------------------------
     # Modo de seleção de upgrade via controle
@@ -1976,77 +1775,7 @@ class PlayingScene(Scene):
         if 0 <= idx < len(self.upgrade_slots) and self.upgrade_slots[idx] is not None:
             self._activate_upgrade_slot(idx)
 
-    def _handle_gamepad_axis(self, axis: int, value: float) -> None:
-        """LT analógico é o botão único de habilidade especial.
 
-        - Naves com ``has_dash`` (Fantasma): aperto do LT executa dash na
-          direção atual do stick esquerdo.
-        - Naves com ``has_charge_shot`` (Caçador, Magneto): segurar o LT
-          carrega o tiro; soltar com a carga cheia dispara o laser/teleguiado,
-          soltar antes cancela.
-
-        Caso ambos os perfis coexistam (não acontece hoje), dash tem
-        prioridade no aperto e o charge segue em paralelo.
-        """
-        from ..core.gamepad import GamepadManager
-
-        # Layout é detectado em runtime no GamepadManager — pode não ser axis 2
-        # em controles PS4-like. Usar o índice do manager garante que dash/charge
-        # sai do gatilho físico correto.
-        if axis != self.app.gamepad.axis_lt:
-            return
-        # Defesa adicional contra falsa detecção: só confiamos como gatilho
-        # depois de ver pelo menos um evento abaixo de -0.5 (estado solto).
-        if value <= -0.5:
-            self._lt_calibrated = True
-        if not self._lt_calibrated:
-            return
-        normalized = (value + 1.0) * 0.5
-        pressed = normalized > GamepadManager.TRIGGER_THRESHOLD
-        if pressed == self._lt_pressed:
-            return
-        self._lt_pressed = pressed
-
-        if self.ship.is_entering or not self._can_handle_gameplay_actions():
-            return
-
-        profile = self.ship.profile
-
-        # Dash dispara no instante do press, sem segurar.
-        if pressed and profile.has_dash:
-            move_vec = self._gamepad_dash_vector()
-            self.ship.try_dash(move_vec)
-
-        # Charge shot precisa de hold/release.
-        if profile.has_charge_shot:
-            if pressed and not self.ship.charge_shot_active:
-                self.ship.start_charge()
-            elif not pressed and self.ship.charge_shot_active:
-                if self.ship.charge_shot_progress >= 1.0:
-                    self.shooting.fire(self.ship, self.player_damage_multiplier)
-                else:
-                    self.ship.cancel_charge()
-
-    def _gamepad_dash_vector(self) -> pygame.math.Vector2:
-        """Direção do dash via stick esquerdo (fallback para hold actions)."""
-        gx, gy = self.app.input.gamepad_movement_vector(self.app.gamepad)
-        if gx != 0.0 or gy != 0.0:
-            vec = pygame.math.Vector2(gx, gy)
-            if vec.length() > 0:
-                vec.normalize_ip()
-            return vec
-        # Fallback: usa o WASD se o usuário estiver com teclado em paralelo.
-        held = self.app.input.poll_held(self.app.gamepad)
-        move_vec = pygame.math.Vector2(0, 0)
-        if "hold_left" in held:
-            move_vec.x -= 1
-        if "hold_right" in held:
-            move_vec.x += 1
-        if "hold_up" in held:
-            move_vec.y -= 1
-        if "hold_down" in held:
-            move_vec.y += 1
-        return move_vec
 
     def _activate_stored_powerup(self, slot_index: int) -> None:
         """Consome o powerup do slot indicado e aplica seu efeito (Cofre)."""
@@ -2058,30 +1787,6 @@ class PlayingScene(Scene):
         self.app.event_bus.emit(events.PlaySound(sound_name="powerup"))
         self._apply_powerup(kind)
 
-    def _handle_upgrade_key(self, event: pygame.event.Event) -> None:
-        """Ativa o slot de upgrade correspondente à tecla pressionada."""
-        try:
-            keybinds = self.player_profile.upgrade_keybindings
-            for i, keycode in enumerate(keybinds[:UPGRADE_SLOT_COUNT]):
-                if event.key == keycode:
-                    self._activate_upgrade_slot(i)
-                    return
-        except (AttributeError, TypeError):
-            default_keys = [
-                pygame.K_1,
-                pygame.K_2,
-                pygame.K_3,
-                pygame.K_4,
-                pygame.K_5,
-                pygame.K_6,
-                pygame.K_7,
-                pygame.K_8,
-                pygame.K_9,
-            ]
-            for i, keycode in enumerate(default_keys[:UPGRADE_SLOT_COUNT]):
-                if event.key == keycode:
-                    self._activate_upgrade_slot(i)
-                    return
 
     # ------------------------------------------------------------------
     # Render

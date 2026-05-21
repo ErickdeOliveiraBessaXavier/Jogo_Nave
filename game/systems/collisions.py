@@ -30,9 +30,13 @@ from ..entities.slime_drip import SlimeDrip
 from ..entities.spike import Spike
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.star import Star
-from ..events import game_events as events
+from .collision_physics import (
+    CollisionPhysics,
+    get_enemy_collision_mask_data,
+    get_rect_mask,
+)
 from .collision_protocols import Damageable, Enemy
-from .hit_result import NO_HIT, HitResult
+from .hit_result import HitResult
 
 if TYPE_CHECKING:
     from ..core.events import EventBus
@@ -40,8 +44,6 @@ if TYPE_CHECKING:
 
 
 Projectile: TypeAlias = Bullet | MiniShipBullet
-
-_RECT_MASK_CACHE: dict[tuple[int, int], pygame.mask.Mask] = {}
 
 
 # Constantes de colisão
@@ -60,6 +62,10 @@ class CollisionConstants:
 class Collisions:
     def __init__(self, event_bus: "EventBus | None" = None) -> None:
         self._event_bus = event_bus
+        # Helpers de física extraídos. Os métodos `_apply_*` / `_check_*` /
+        # `_batch_*` abaixo viraram thin wrappers para preservar os ~28 call
+        # sites internos sem mudanças.
+        self.physics = CollisionPhysics(event_bus)
 
     @staticmethod
     def _get_points_value(enemy: Any) -> int:
@@ -93,40 +99,17 @@ class Collisions:
             return ()
         return (enemy_rect,)
 
+    # Wrappers thin para as primitivas migradas a `collision_physics.py`.
+    # Mantidos como staticmethods para preservar chamadas `cls._get_*(...)`.
     @staticmethod
     def _get_enemy_collision_mask_data(
         enemy: Any,
     ) -> tuple[pygame.mask.Mask, tuple[int, int]] | None:
-        getter = getattr(enemy, "get_collision_mask_data", None)
-        if callable(getter):
-            raw_data = cast(
-                tuple[pygame.mask.Mask, tuple[int, int]] | None,
-                getter(),
-            )
-            if raw_data is not None:
-                mask, offset = raw_data
-                if mask.get_size()[0] > 0 and mask.get_size()[1] > 0:
-                    return mask, offset
-
-        # Fallback: suporte a padrão do pygame com atributos .mask e .rect
-        if hasattr(enemy, "mask"):
-            mask = getattr(enemy, "mask")
-            if mask is not None:
-                if hasattr(enemy, "rect"):
-                    rect = getattr(enemy, "rect")
-                    if rect is not None:
-                        return cast(pygame.mask.Mask, mask), (rect.x, rect.y)
-
-        return None
+        return get_enemy_collision_mask_data(enemy)
 
     @staticmethod
     def _get_rect_mask(width: int, height: int) -> pygame.mask.Mask:
-        key = (width, height)
-        mask = _RECT_MASK_CACHE.get(key)
-        if mask is None:
-            mask = pygame.mask.Mask((width, height), fill=True)
-            _RECT_MASK_CACHE[key] = mask
-        return mask
+        return get_rect_mask(width, height)
 
     @staticmethod
     def _circles_collide(
@@ -248,64 +231,9 @@ class Collisions:
         entity_x: float,
         entity_y: float,
     ) -> bool:
-        """
-        Verifica colisão pixel-perfect entre entidade e alvo com máscara.
-        Fallback para rect collision se máscara não disponível.
-
-        Prioridade de detecção:
-        1. get_collision_mask_data() — máscara pixel-perfect com offset correto
-           (inclui float vertical, jitter, etc). Respeita pixels None do mapa.
-        2. Atributo .mask + .rect — padrão pygame.sprite.
-        3. Fallback AABB puro via .rect.
-        """
-        # Tentativa 1: get_collision_mask_data() — caminho correto para bosses
-        # com pixel map (ex.: StoneGolemBoss). O offset já inclui float e jitter.
-        mask_data = self._get_enemy_collision_mask_data(target_with_mask)
-        if mask_data is not None:
-            target_mask, (tx, ty) = mask_data
-            target_mask_rect = pygame.Rect(tx, ty, *target_mask.get_size())
-            if not entity_rect.colliderect(target_mask_rect):
-                return False
-            if entity_mask is None:
-                entity_mask = self._get_rect_mask(entity_rect.width, entity_rect.height)
-            return (
-                entity_mask.overlap(
-                    target_mask, (tx - entity_rect.x, ty - entity_rect.y)
-                )
-                is not None
-            )
-
-        # Tentativa 2: atributo .mask (padrão pygame.sprite)
-        sprite_mask = getattr(target_with_mask, "mask", None)  # type: ignore[attr-defined]
-        if sprite_mask is not None:
-            target_rect: pygame.Rect | None = getattr(target_with_mask, "rect", None)
-            if target_rect is None:
-                target_rect = pygame.Rect(
-                    target_with_mask.x,
-                    target_with_mask.y,
-                    target_with_mask.w,
-                    target_with_mask.h,
-                )
-            if not entity_rect.colliderect(target_rect):
-                return False
-            if entity_mask is None:
-                entity_mask = self._get_rect_mask(entity_rect.width, entity_rect.height)
-            offset = (target_rect.x - entity_rect.x, target_rect.y - entity_rect.y)
-            return (
-                cast("pygame.mask.Mask", sprite_mask).overlap(entity_mask, offset)
-                is not None
-            )  # type: ignore[attr-defined]
-
-        # Tentativa 3: fallback AABB puro
-        fallback_rect: pygame.Rect | None = getattr(target_with_mask, "rect", None)
-        if fallback_rect is None:
-            fallback_rect = pygame.Rect(
-                target_with_mask.x,
-                target_with_mask.y,
-                target_with_mask.w,
-                target_with_mask.h,
-            )
-        return entity_rect.colliderect(fallback_rect)
+        return self.physics.check_mask_collision(
+            entity_rect, entity_mask, target_with_mask, entity_x, entity_y
+        )
 
     def _batch_query_for_projectiles(
         self,
@@ -313,29 +241,7 @@ class Collisions:
         grid: SpatialGrid[Any],
         padding: int = CollisionConstants.SPATIAL_QUERY_PADDING,
     ) -> dict[int, list[Enemy]]:
-        """
-        Faz uma query por projétil em vez de uma área única abrangente.
-        Isso evita que um conjunto disperso de balas crie uma área de consulta gigantesca.
-
-        Retorna dicionário mapeando projectile_id -> potential_targets.
-        """
-        if not projectiles:
-            return {}
-
-        result: dict[int, list[Enemy]] = {}
-        for p in projectiles:
-            r = p.rect
-            potential_enemies = grid.query(
-                r.x - padding,
-                r.y - padding,
-                r.width + padding * 2,
-                r.height + padding * 2,
-            )
-            result[id(p)] = [
-                target for target in potential_enemies if r.colliderect(target.rect)
-            ]
-
-        return result
+        return self.physics.batch_query_for_projectiles(projectiles, grid, padding)
 
     def _apply_hit(
         self,
@@ -346,58 +252,9 @@ class Collisions:
         entity_manager: "EntityManager",
         floating_scores: list[FloatingScore] | None = None,
     ) -> HitResult:
-        """Roteador único: chama target.on_hit e materializa o HitResult.
-
-        Substitui _destroy_enemy. A entidade decide o que acontece; este
-        método apenas executa explosão, som, fragmentos e death-sequence.
-        """
-        result: HitResult = target.on_hit(damage, hit_x, hit_y)
-
-        if result.explosion_size > 0:
-            entity_manager.spawn_explosion(
-                hit_x,
-                hit_y,
-                size=result.explosion_size,
-                explosion_type=result.explosion_type,
-            )
-
-        if result.sound is not None:
-            result.sound()
-
-        if result.fragments:
-            entity_manager.absorb_fragments(result.fragments)
-
-        if result.killed and result.points > 0:
-            if floating_scores is not None:
-                if self._event_bus is not None:
-                    self._event_bus.emit(
-                        events.SpawnFloatingScore(
-                            x=hit_x,
-                            y=hit_y,
-                            score=result.points,
-                            color=(255, 255, 0),  # Amarelo para combate
-                        )
-                    )
-                else:
-                    floating_scores.append(FloatingScore(hit_x, hit_y, result.points))
-
-        if (
-            result.killed
-            and self._event_bus is not None
-            and not getattr(target, "is_boss", False)
-        ):
-            self._event_bus.emit(
-                events.EnemyDestroyed(
-                    enemy_type=type(target).__name__,
-                    position=(hit_x, hit_y),
-                    points=result.points,
-                )
-            )
-
-        if result.triggers_special_death:
-            entity_manager.trigger_death_sequence(target)
-
-        return result
+        return self.physics.apply_hit(
+            target, damage, hit_x, hit_y, entity_manager, floating_scores
+        )
 
     def _apply_ship_contact(
         self,
@@ -406,20 +263,9 @@ class Collisions:
         contact_y: float,
         entity_manager: "EntityManager",
     ) -> HitResult:
-        """Roteador para morte por contato com a nave."""
-        contact = getattr(target, "on_ship_contact", None)
-        if not callable(contact):
-            return NO_HIT
-        result: HitResult = cast(Callable[[float, float], HitResult], contact)(
-            contact_x, contact_y
+        return self.physics.apply_ship_contact(
+            target, contact_x, contact_y, entity_manager
         )
-        if result.explosion_size > 0:
-            entity_manager.spawn_explosion(
-                contact_x, contact_y, size=result.explosion_size
-            )
-        if result.sound is not None:
-            result.sound()
-        return result
 
     def _apply_area_damage(
         self,
@@ -431,51 +277,15 @@ class Collisions:
         entity_manager: "EntityManager",
         damage: int = 1,
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
-        """Helper para aplicar dano em área a inimigos.
-
-        Usado por: explosive effects, air strike bombs, explosive bullets.
-        Retorna (score_gain, destroyed_count, score_events).
-        """
-        score_gain = 0
-        destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
-
-        for enemy in enemies:
-            if enemy.dead:
-                continue
-
-            enemy_id = id(enemy)
-            if enemy_id in hit_tracking_set:
-                continue
-
-            # Calcular distância usando o protocol CollisionGeometry
-            cx, cy, radius = enemy.collision_circle()
-            dist_sq = (cx - source_x) ** 2 + (cy - source_y) ** 2
-
-            # Verificar colisão
-            if dist_sq < (damage_radius + radius) ** 2:
-                hit_tracking_set.add(enemy_id)
-
-                # Aplicar o dano real da explosão (inimigos comuns recebem 'damage')
-                hit_damage = (
-                    enemy.health
-                    if getattr(enemy, "is_explosive_mine", False)
-                    else damage
-                )
-                result = self._apply_hit(
-                    enemy,
-                    hit_damage,
-                    cx,
-                    cy,
-                    entity_manager,
-                )
-                score_gain += result.points
-                if result.killed:
-                    destroyed_count += 1
-                    if result.points > 0:
-                        score_events.append((cx, cy, result.points))
-
-        return score_gain, destroyed_count, score_events
+        return self.physics.apply_area_damage(
+            source_x,
+            source_y,
+            damage_radius,
+            hit_tracking_set,
+            enemies,
+            entity_manager,
+            damage,
+        )
 
     def _aoe_into_boss(
         self,
@@ -780,7 +590,7 @@ class Collisions:
                 continue
 
             # Usar helper consolidado
-            gain, destroyed, events = self._apply_area_damage(
+            gain, destroyed, hit_events = self._apply_area_damage(
                 effect.x,
                 effect.y,
                 damage_radius,
@@ -791,7 +601,7 @@ class Collisions:
             )
             score_gain += gain
             destroyed_count += destroyed
-            score_events.extend(events)
+            score_events.extend(hit_events)
 
         return score_gain, destroyed_count, score_events
 
@@ -841,7 +651,7 @@ class Collisions:
                 continue
 
             # Usar helper consolidado
-            gain, destroyed, events = self._apply_area_damage(
+            gain, destroyed, hit_events = self._apply_area_damage(
                 bomb.x,
                 bomb.target_y,
                 damage_radius,
@@ -852,7 +662,7 @@ class Collisions:
             )
             score_gain += gain
             destroyed_count += destroyed
-            score_events.extend(events)
+            score_events.extend(hit_events)
 
         return score_gain, destroyed_count, score_events
 
@@ -872,7 +682,7 @@ class Collisions:
             damage_info = mine.damage_info
             if damage_info.radius > 0:
                 # Aplicar dano em área contínuo
-                gain, destroyed, events = self._apply_area_damage(
+                gain, destroyed, hit_events = self._apply_area_damage(
                     damage_info.x,
                     damage_info.y,
                     damage_info.radius,
@@ -883,7 +693,7 @@ class Collisions:
                 )
                 score_gain += gain
                 destroyed_count += destroyed
-                score_events.extend(events)
+                score_events.extend(hit_events)
 
             # Verificar colisão para ativação de minas armadas
             if not mine.dead and mine.state == MineState.ARMED:

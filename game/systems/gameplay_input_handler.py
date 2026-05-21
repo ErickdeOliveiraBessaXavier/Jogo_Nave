@@ -1,0 +1,317 @@
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING
+
+import pygame
+
+if TYPE_CHECKING:
+    from ..scenes.playing import PlayingScene
+
+
+logger = logging.getLogger(__name__)
+
+
+class GameplayInputHandler:
+    """Despacha eventos pygame (teclado, mouse, gamepad) para ações de gameplay.
+
+    A cena (`PlayingScene`) continua dona dos slots de upgrade, do modo de
+    seleção e dos toggles de debug — este handler apenas roteia o evento para
+    o método certo da cena ou do `Ship`.
+    """
+
+    def __init__(self, scene: "PlayingScene") -> None:
+        self.scene = scene
+        # Estado do gatilho LT do controle (calibrado na primeira leitura
+        # abaixo de -0.5 — proteção contra falsa detecção).
+        self._lt_pressed: bool = False
+        self._lt_calibrated: bool = False
+
+    # ------------------------------------------------------------------
+    # Dispatch principal
+    # ------------------------------------------------------------------
+
+    def handle(self, event: pygame.event.Event) -> None:
+        if event.type == pygame.KEYDOWN:
+            self._handle_keydown(event)
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            self._handle_mousebuttondown(event)
+        elif event.type == pygame.MOUSEBUTTONUP:
+            self._handle_mousebuttonup(event)
+        elif event.type == pygame.KEYUP:
+            self._handle_keyup(event)
+        elif event.type == pygame.JOYBUTTONDOWN:
+            self._handle_gamepad_button(event.button)
+        elif event.type == pygame.JOYHATMOTION:
+            self._handle_gamepad_hat(event.value)
+        elif event.type == pygame.JOYAXISMOTION:
+            self._handle_gamepad_axis(event.axis, event.value)
+
+    # ------------------------------------------------------------------
+    # Teclado / Mouse
+    # ------------------------------------------------------------------
+
+    def _handle_keydown(self, event: pygame.event.Event) -> None:
+        scene = self.scene
+        if event.key == pygame.K_p:
+            from ..scenes.paused import PausedScene
+
+            scene.app.states.push(PausedScene(scene.app, previous_scene=scene))
+        elif event.key == pygame.K_F3:
+            scene.show_fps = not scene.show_fps
+            logger.info(
+                "Debug FPS: %s", "ATIVADO" if scene.show_fps else "DESATIVADO"
+            )
+        elif event.key == pygame.K_F7:
+            scene.show_enemy_hitboxes = not scene.show_enemy_hitboxes
+            logger.info(
+                "Debug Hitbox: %s",
+                "ATIVADO" if scene.show_enemy_hitboxes else "DESATIVADO",
+            )
+        elif event.key == pygame.K_F8:
+            scene._trigger_world_transition_debug_preview()
+        elif event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
+            if not scene.ship.is_entering and scene._can_handle_gameplay_actions():
+                scene.ship.cycle_facing()
+        elif event.key in (pygame.K_q, pygame.K_e):
+            # Cofre: Q usa slot 0, E usa slot 1.
+            if not scene.ship.is_entering and scene._can_handle_gameplay_actions():
+                slot = 0 if event.key == pygame.K_q else 1
+                scene._activate_stored_powerup(slot)
+        elif event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT):
+            # Fantasma: dash com i-frames.
+            if (
+                not scene.ship.is_entering
+                and scene._can_handle_gameplay_actions()
+                and scene.ship.profile.has_dash
+            ):
+                held = scene.app.input.poll_held()
+                move_vec = pygame.math.Vector2(0, 0)
+                if "hold_left" in held:
+                    move_vec.x -= 1
+                if "hold_right" in held:
+                    move_vec.x += 1
+                if "hold_up" in held:
+                    move_vec.y -= 1
+                if "hold_down" in held:
+                    move_vec.y += 1
+                scene.ship.try_dash(move_vec)
+        elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
+            if not scene.ship.is_entering and scene._can_handle_gameplay_actions():
+                if scene.ship.profile.has_charge_shot and (
+                    event.mod & pygame.KMOD_ALT
+                ):
+                    # Só ativa charge com Space + Alt pressionados juntos.
+                    scene.ship.start_charge()
+
+        if __debug__:
+            scene._process_cheat_input(event)
+
+        if scene._can_handle_gameplay_actions() and not scene.ship.is_entering:
+            self._handle_upgrade_key(event)
+
+    def _handle_mousebuttondown(self, event: pygame.event.Event) -> None:
+        scene = self.scene
+        if event.button == 1:
+            if not scene.ship.is_entering and scene._can_handle_gameplay_actions():
+                if (
+                    scene.ship.profile.has_charge_shot
+                    and not scene.ship.charge_shot_active
+                    and pygame.key.get_mods() & pygame.KMOD_ALT
+                ):
+                    # Botão esquerdo + Alt: inicia charge (espelho do Space+Alt).
+                    scene.ship.start_charge()
+                elif not scene.ship.auto_fire and scene.shooting.is_ready:
+                    scene.shooting.fire(scene.ship, scene.player_damage_multiplier)
+        elif event.button == 2:
+            if not scene.ship.is_entering and scene._can_handle_gameplay_actions():
+                scene.ship.cycle_facing()
+        elif event.button == 3:
+            # Botão direito: inicia charge no Caçador/Magneto.
+            if (
+                not scene.ship.is_entering
+                and scene._can_handle_gameplay_actions()
+                and scene.ship.profile.has_charge_shot
+                and not scene.ship.charge_shot_active
+            ):
+                scene.ship.start_charge()
+
+    def _handle_mousebuttonup(self, event: pygame.event.Event) -> None:
+        scene = self.scene
+        # Caçador/Magneto: soltar botão esquerdo ou direito dispara o charge.
+        if (
+            event.button in (1, 3)
+            and scene.ship.profile.has_charge_shot
+            and scene.ship.charge_shot_active
+            and not scene.ship.is_entering
+            and scene._can_handle_gameplay_actions()
+        ):
+            if scene.ship.charge_shot_progress >= 1.0:
+                scene.shooting.fire(scene.ship, scene.player_damage_multiplier)
+            else:
+                scene.ship.cancel_charge()
+
+    def _handle_keyup(self, event: pygame.event.Event) -> None:
+        scene = self.scene
+        if event.key in (pygame.K_SPACE, pygame.K_RETURN):
+            if (
+                scene.ship.profile.has_charge_shot
+                and scene.ship.charge_shot_active
+                and not scene.ship.is_entering
+                and scene._can_handle_gameplay_actions()
+            ):
+                if scene.ship.charge_shot_progress >= 1.0:
+                    scene.shooting.fire(scene.ship, scene.player_damage_multiplier)
+                else:
+                    scene.ship.cancel_charge()
+
+    # ------------------------------------------------------------------
+    # Gamepad
+    # ------------------------------------------------------------------
+
+    def _handle_gamepad_button(self, button: int) -> None:
+        from ..core.gamepad import XboxButton
+
+        scene = self.scene
+        # Start sempre abre pausa, mesmo se a nave está entrando ou em modo de seleção.
+        if button == XboxButton.START:
+            scene._upgrade_select_mode = False
+            from ..scenes.paused import PausedScene
+
+            scene.app.states.push(PausedScene(scene.app, previous_scene=scene))
+            return
+
+        if scene.ship.is_entering or not scene._can_handle_gameplay_actions():
+            return
+
+        # Modo de seleção de upgrade: LB/RB navegam, A confirma, B cancela.
+        if scene._upgrade_select_mode:
+            if button == XboxButton.A:
+                scene._confirm_upgrade_select()
+            elif button == XboxButton.B:
+                scene._upgrade_select_mode = False
+            elif button == XboxButton.LB:
+                # HUD desenha os slots da direita pra esquerda — LB anda no
+                # índice positivo pra ir visualmente pra esquerda.
+                scene._navigate_upgrade_select(+1)
+            elif button == XboxButton.RB:
+                scene._navigate_upgrade_select(-1)
+            return
+
+        # Tiro normal sai do RT (gatilho direito), via ``hold_shoot`` em
+        # ``_poll_held_gamepad``. A/X/Y aqui ficam livres para Cofre e cycle.
+        if button == XboxButton.A:
+            scene._activate_stored_powerup(1)  # Cofre E
+        elif button == XboxButton.X:
+            scene.ship.cycle_facing()
+        elif button == XboxButton.Y:
+            scene._activate_stored_powerup(0)  # Cofre Q
+
+    def _handle_gamepad_hat(self, value: tuple[int, int]) -> None:
+        """D-pad ↑ alterna o modo de seleção de upgrades."""
+        scene = self.scene
+        if scene.ship.is_entering or not scene._can_handle_gameplay_actions():
+            return
+        _x, y = value
+        if y > 0:
+            scene._toggle_upgrade_select_mode()
+
+    def _handle_gamepad_axis(self, axis: int, value: float) -> None:
+        """LT analógico é o botão único de habilidade especial.
+
+        - Naves com ``has_dash`` (Fantasma): aperto do LT executa dash na
+          direção atual do stick esquerdo.
+        - Naves com ``has_charge_shot`` (Caçador, Magneto): segurar o LT
+          carrega o tiro; soltar com a carga cheia dispara o laser/teleguiado,
+          soltar antes cancela.
+        """
+        from ..core.gamepad import GamepadManager
+
+        scene = self.scene
+        if axis != scene.app.gamepad.axis_lt:
+            return
+        # Defesa contra falsa detecção: só confia no gatilho após ver pelo
+        # menos um evento abaixo de -0.5 (estado solto).
+        if value <= -0.5:
+            self._lt_calibrated = True
+        if not self._lt_calibrated:
+            return
+        normalized = (value + 1.0) * 0.5
+        pressed = normalized > GamepadManager.TRIGGER_THRESHOLD
+        if pressed == self._lt_pressed:
+            return
+        self._lt_pressed = pressed
+
+        if scene.ship.is_entering or not scene._can_handle_gameplay_actions():
+            return
+
+        profile = scene.ship.profile
+
+        # Dash dispara no instante do press, sem segurar.
+        if pressed and profile.has_dash:
+            move_vec = self._gamepad_dash_vector()
+            scene.ship.try_dash(move_vec)
+
+        # Charge shot precisa de hold/release.
+        if profile.has_charge_shot:
+            if pressed and not scene.ship.charge_shot_active:
+                scene.ship.start_charge()
+            elif not pressed and scene.ship.charge_shot_active:
+                if scene.ship.charge_shot_progress >= 1.0:
+                    scene.shooting.fire(scene.ship, scene.player_damage_multiplier)
+                else:
+                    scene.ship.cancel_charge()
+
+    def _gamepad_dash_vector(self) -> pygame.math.Vector2:
+        """Direção do dash via stick esquerdo (fallback para hold actions)."""
+        scene = self.scene
+        gx, gy = scene.app.input.gamepad_movement_vector(scene.app.gamepad)
+        if gx != 0.0 or gy != 0.0:
+            vec = pygame.math.Vector2(gx, gy)
+            if vec.length() > 0:
+                vec.normalize_ip()
+            return vec
+        # Fallback: WASD se o usuário estiver com teclado em paralelo.
+        held = scene.app.input.poll_held(scene.app.gamepad)
+        move_vec = pygame.math.Vector2(0, 0)
+        if "hold_left" in held:
+            move_vec.x -= 1
+        if "hold_right" in held:
+            move_vec.x += 1
+        if "hold_up" in held:
+            move_vec.y -= 1
+        if "hold_down" in held:
+            move_vec.y += 1
+        return move_vec
+
+    # ------------------------------------------------------------------
+    # Teclas de upgrade
+    # ------------------------------------------------------------------
+
+    def _handle_upgrade_key(self, event: pygame.event.Event) -> None:
+        """Ativa o slot de upgrade correspondente à tecla pressionada."""
+        from ..core.upgrades_config import UPGRADE_SLOT_COUNT
+
+        scene = self.scene
+        try:
+            keybinds = scene.player_profile.upgrade_keybindings
+            for i, keycode in enumerate(keybinds[:UPGRADE_SLOT_COUNT]):
+                if event.key == keycode:
+                    scene._activate_upgrade_slot(i)
+                    return
+        except (AttributeError, TypeError):
+            default_keys = [
+                pygame.K_1,
+                pygame.K_2,
+                pygame.K_3,
+                pygame.K_4,
+                pygame.K_5,
+                pygame.K_6,
+                pygame.K_7,
+                pygame.K_8,
+                pygame.K_9,
+            ]
+            for i, keycode in enumerate(default_keys[:UPGRADE_SLOT_COUNT]):
+                if event.key == keycode:
+                    scene._activate_upgrade_slot(i)
+                    return
