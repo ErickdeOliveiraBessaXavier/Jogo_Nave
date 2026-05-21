@@ -254,6 +254,7 @@ class BossFightController:
                 self.warning_stage = 3
                 self.warning_stage_timer = 0.0
                 self.warning_timer = 0.0
+                sound_manager.stop_warning()
 
         elif self.warning_stage == 3:
             if self.warning_stage_timer >= Config.BOSS_POST_WARNING_DELAY:

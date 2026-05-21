@@ -1,21 +1,22 @@
-# Plano de Revisão — Space Shooter (Ciclo Atual)
+# Plano de Revisão — Space Shooter
 
-Itens levantados após análise do código de produção (`game/`). Cada item foi
-classificado pela gravidade definida no CLAUDE.md e acompanha causa, impacto
-técnico e direção concreta de melhoria.
+Próximo ciclo de revisão técnica. Item levantado, avaliado, classificado e fechado
+quando concluído. O arquivo deve refletir o estado atual — atualize gravidade/status
+conforme o trabalho avança.
 
 ---
 
 ## Escopo
 
-Avaliação focada em `game/systems/`, `game/entities/`, `game/render/` e
-`game/scenes/playing.py`. Infraestrutura de build/scripts fora do escopo.
+Avaliação focada em código de produção (`game/`) e infraestrutura de build/scripts.
+Itens fora do escopo: assets binários, documentos em `código_teste/`, ferramentas
+de profiling não usadas em runtime.
 
 ---
 
 ## Critérios de gravidade
 
-- **Crítico** — viola princípio do CLAUDE.md (coupling, side-effects em render,
+- **Crítico** — viola um princípio do CLAUDE.md (coupling, side-effects em render,
   global state), causa bug observável, ou bloqueia evolução de outra área.
 - **Médio** — não bloqueia, mas degrada legibilidade/testabilidade ou fere
   composição/extensão.
@@ -27,369 +28,221 @@ Avaliação focada em `game/systems/`, `game/entities/`, `game/render/` e
 
 ### Crítico
 
-#### 1. `GameRenderer` acessa atributos internos de `PlayingScene` diretamente
+#### 1. `Ship` acumula renderização, movimento, powerups e targeting na mesma classe
 
-**Sintoma:** `game_renderer.py` lê `scene.last_dt`, `scene.state`,
-`scene.screen_shake_timer`, `scene.screen_shake_intensity`,
-`scene.boss_controller.warning_timer`, `scene.start_fade_active`,
-`scene.start_fade_alpha`, `scene.preparation_time_left`, `scene.show_fps`,
-`scene.show_enemy_hitboxes`, `scene.score`, `scene.lives`,
-`scene.total_enemies_destroyed`, `scene.score_multiplier_active` e outros —
-praticamente qualquer variável de estado que a cena possui.
+**Sintoma:** `ship.py` (~1750 LOC) contém em um único arquivo:
+- `draw()` com ~300+ linhas renderizando escudo, orbital lasers, chain shot,
+  repulsion shield, partículas e dash trail
+- `move()` com lógica de mouse-spring, gamepad, teclado, inversão de controles
+  e dash simultaneamente
+- `_update_timers()` gerenciando >15 timers de powerup independentes
+- `bullet_spawn()` com posições hardcoded por facing direction (~100 LOC)
+- `activate_orbital_lasers()`, `activate_chain_shot()`, etc. — API de powerups
+  crescendo sem contrato formal
 
-**Causa:** O renderer foi extraído da cena para separar responsabilidades, mas
-continua acoplado ao contrato interno de `PlayingScene` em vez de a uma
-interface de dados explícita. Qualquer renomeação de atributo na cena quebra o
-renderer silenciosamente.
+**Causa:** `Ship` nasceu como entidade simples e absorveu responsabilidades à
+medida que novas mecânicas foram adicionadas, sem fronteira arquitetural explícita.
 
-**Direção:** Definir um dataclass `RenderFrame` (ou similar) que a cena monta
-a cada frame e passa ao renderer. O renderer passa a depender desse DTO, não
-da cena.
+**Impacto:** Qualquer nova nave ou powerup exige editar `ship.py`. Bugs em
+renderização e movimento compartilham o mesmo espaço de risco.
 
-```python
-# Antes (renderer.py)
-dt = scene.last_dt
-if scene.screen_shake_timer <= 0:
-    ...
+**Direção — decomposição por composição:**
 
-# Depois
-@dataclass
-class RenderFrame:
-    dt: float
-    shake_timer: float
-    shake_intensity: int
-    state: GameState
-    score: int
-    lives: int
-    ...
-
-# playing.py monta e passa
-frame = self._build_render_frame()
-self.game_renderer.render(frame, surface)
+```
+entities/
+  ship.py           ← fachada pública, mantém API externa intacta
+  ship_renderer.py  ← draw() e todos os efeitos visuais
+  ship_powerups.py  ← activate_*, timers de powerup, _update_timers()
+  ship_movement.py  ← move(), _keep_in_bounds(), dash logic
 ```
 
-**Impacto:** `game_renderer.py`, `playing.py`. Isola o contrato de renderização
-e torna `PlayingScene` refatorável sem risco de regressão silenciosa no render.
+Extração na ordem: `draw()` primeiro (maior isolamento de risco), depois
+powerups, depois `move()`.
 
-**Status:** Concluído. Novo módulo `game/render/render_frame.py` com dataclass
-frozen de 25 campos (scalars + refs a sistemas estáveis: ship, entity_manager,
-boss_controller). `GameRenderer.render(frame, surface)` substitui
-`render(scene, surface)`; helpers internos (`_compute_shake_offset`,
-`_render_upgrades_hud`) também consomem o DTO. `PlayingScene._build_render_frame()`
-monta o snapshot por frame. Cobertura verificada: 25/25 campos declarados são
-lidos; zero refs residuais a `scene.*` no renderer.
+**Arquivos afetados:** `entities/ship.py`, possivelmente `entities/mini_ship.py`
+para alinhar a API quando aplicável.
+
+**Status:** Pendente
 
 ---
 
-#### 2. `_apply_hit` em `Collisions` faz import lazy dentro de hot path
+#### 2. `PlayingScene` concentra input de gameplay, powerups, cheats e transições (~2300 LOC)
 
-**Sintoma:** Em `collisions.py`, `_apply_hit` e `_apply_ship_contact`
-executam `from ..events import game_events as events` dentro do corpo do
-método, chamado centenas de vezes por frame (uma vez por projétil × inimigo).
+**Sintoma:** Após as extrações anteriores, `playing.py` ainda contém:
+- `handle_event()` com tratamento direto de KEYDOWN, MOUSEBUTTONDOWN,
+  MOUSEBUTTONUP, JOYAXISMOTION, JOYBUTTONDOWN — input de gameplay acoplado à cena
+- `_apply_powerup()` com dict-dispatch de 13 powerups inline na cena
+- `_process_cheat_input()` duplicado — também existe em `main_menu.py:669-684`
+  com `_CHEAT_CODE = "271195"` redefinido como variável local
+- FSM de `TransitionPhase` (6 estados) com timers dispersos em 4 métodos de update
 
-**Causa:** Import foi inserido para resolver referência circular, mas não foi
-movido para o nível de módulo ou resolvido pela raiz (re-arquitetura de imports).
+**Causa:** A cena serve de hub de coordenação mesmo após as extrações anteriores.
+Lógica que deveria estar em controladores especializados foi mantida inline para
+simplicidade de acesso a `self.ship`, `self.entity_manager` e `self.score`.
 
-**Direção:** Mover o import para o nível de módulo com `TYPE_CHECKING` guard
-onde necessário, ou centralizar os tipos de evento num módulo sem dependências
-de runtime pesadas.
+**Impacto:** Novos powerups, transições ou input acumulam em `playing.py` sem
+alternativa estrutural. Bloqueia evolução independente de cada domínio.
 
-```python
-# Antes (dentro de _apply_hit, chamado todo frame)
-from ..events import game_events as events
-self._event_bus.emit(events.EnemyDestroyed(...))
+**Direção — extrações prioritárias:**
 
-# Depois (topo de collisions.py)
-from ..events import game_events as events   # import único, em módulo
+```
+systems/
+  powerup_system.py        ← _apply_powerup() + _process_powerups_and_stars()
+  input_handler.py         ← handle_event() de gameplay
+  transition_controller.py ← TransitionPhase FSM + timers associados
+  cheat_input.py           ← _CHEAT_CODE + buffer compartilhado entre cenas
 ```
 
-**Impacto:** `systems/collisions.py`. Elimina overhead de resolução de módulo
-no hot path de colisão sem alterar comportamento.
+Cheat code: centralizar `_CHEAT_CODE` e a lógica de buffer; `playing.py` e
+`main_menu.py` consomem o mesmo módulo.
 
-**Status:** Concluído
+**Arquivos afetados:** `scenes/playing.py`, `scenes/main_menu.py`, novos
+arquivos em `systems/`.
 
----
-
-#### 3. `enemy_projectiles_vs_ship` ignora a spatial grid já existente
-
-**Sintoma:** O método em `collisions.py` itera a lista inteira de projéteis
-de inimigos com loop linear, com comentário justificando que "listas são
-pequenas". A `entity_manager` já constrói `enemy_projectile_grid` a cada
-frame inserindo `alien_bullets`, `serpent_bullets` e `energy_orbs`.
-
-**Causa:** O método não recebe a grid como parâmetro e o chamador
-(`playing.py`) não a passa.
-
-**Direção:** Aceitar a grid como parâmetro opcional (mantém compatibilidade)
-e usá-la quando disponível, o que o método `energy_orbs_vs_ship` já faz
-corretamente — padronizar.
-
-```python
-# Antes
-def enemy_projectiles_vs_ship(self, ship, projectiles):
-    for p in projectiles:  # O(n) sempre
-        ...
-
-# Depois
-def enemy_projectiles_vs_ship(self, ship, projectiles, grid=None):
-    if grid is not None:
-        candidates = grid.query(ship_rect.x - pad, ...)
-    else:
-        candidates = projectiles
-    for p in candidates:
-        ...
-```
-
-**Impacto:** `systems/collisions.py`, `scenes/playing.py` (passar a grid na
-chamada). Reduz colisões redundantes em fases com muitos projéteis de inimigos.
-
-**Status:** Concluído. Assinatura agora espelha `energy_orbs_vs_ship`: grid
-opcional, default mantém o comportamento antigo. Como o `enemy_projectile_grid`
-mistura `alien_bullets`, `serpent_bullets` e `energy_orbs`, a filtragem por
-pertencimento à lista usa id-set (`{id(p) for p in projectiles}`). Call sites
-em `playing.py` passam `em.enemy_projectile_grid`. Aplicado como consistência
-de API — ganho de perf depende do tamanho da lista (irrelevante em fases
-leves, melhora quando há muitos projéteis longe da nave).
+**Status:** Pendente
 
 ---
 
 ### Médio
 
-#### 4. `MiniShip._find_nearest_enemy` faz O(n) scan sem limit de range
+#### 3. `levels.py` mistura dados estáticos, geração procedural e pipeline (~2200 LOC)
 
-**Sintoma:** `mini_ship.py` itera todos os inimigos passados para encontrar o
-mais próximo, sem raio de busca. Em fases com muitos inimigos e dois MiniShips
-ativos, isso são dois scans completos por cooldown de tiro (≈0.75 s).
+**Sintoma:** O arquivo contém simultaneamente:
+- `FIXED_LEVELS` — configuração handcrafted (dados puros)
+- `ProceduralLevelGenerator` — geração procedural com seed e caches
+- `get_level_config()` — pipeline de transformação com 5 etapas
+- `LevelAnalyzer`, `LevelManager` — utilitários
+- `DifficultyCurves`, `DifficultyConfig` — configuração de balanceamento
 
-**Causa:** A lista de inimigos é passada inteira pelo chamador sem filtro
-prévio. Não há uso da spatial grid já disponível no `EntityManager`.
+**Causa:** Crescimento incremental sem separação por domínio.
 
-**Direção:** Adicionar raio de busca máximo (ex.: 400 px) e fazer early-exit.
-Se o `EntityManager` for acessível no contexto, substituir pelo grid query.
+**Direção — separação em pacote:**
 
-```python
-MAX_TARGETING_RANGE_SQ = 400 ** 2
-
-def _find_nearest_enemy(self, enemies):
-    nearest = None
-    min_d = MAX_TARGETING_RANGE_SQ   # só alvos dentro do range
-    for e in enemies:
-        ...
-        if dist_sq < min_d:
-            min_d = dist_sq
-            nearest = e
-    return nearest
+```
+core/
+  levels/
+    __init__.py     ← re-exporta get_level_config, LevelManager (API pública inalterada)
+    fixed_levels.py ← FIXED_LEVELS dict (dados puros, zero lógica)
+    procedural.py   ← ProceduralLevelGenerator, DifficultyCurves, DifficultyConfig
+    pipeline.py     ← get_level_config(), grace logic, _apply_theme_enemy_rules()
+    analysis.py     ← LevelAnalyzer, LevelManager
 ```
 
-**Impacto:** `entities/mini_ship.py`. Sem mudança de interface pública.
+**Arquivos afetados:** `core/levels.py` → pacote `core/levels/`. API pública
+inalterada — callers importam de `core.levels` como antes.
 
-**Status:** Concluído (junto com #6 — MiniShip delega para `find_nearest_in_list`
-com `max_range_sq=400²`)
+**Status:** Pendente
 
 ---
 
-#### 5. `Formation.update` remove inimigos de `self.enemies` durante iteração com `self.enemies[:]`
+#### 4. `collisions.py` — helpers de física acoplados ao dispatcher
 
-**Sintoma:** Em `formation.py`, `update()` itera `self.enemies[:]` e chama
-`self.enemies.remove(enemy)` para inimigos mortos. Isso cria uma cópia a cada
-frame por formação ativa e realiza busca linear O(n) no remove.
+**Sintoma:** `_check_mask_collision` (L243), `_batch_query_for_projectiles`
+(L310), `_apply_hit` (L340), `_apply_ship_contact` (L402) e `_apply_area_damage`
+(L424) ficam no mesmo arquivo que os ~25 métodos `X_vs_Y`. Os helpers de física
+têm baixa dependência de `EntityManager` e seriam testáveis isoladamente.
 
-**Causa:** Padrão copy-then-remove, amplamente usado no codebase em outros
-pontos que já foram migrados para `_filter_dead_inplace` no `EntityManager`.
+**Nota:** Registry/dispatch declarativo foi avaliado e descartado — o modelo
+`X_vs_Y` tem coesão razoável e registry introduziria indireção sem ganho
+concreto agora.
 
-**Direção:** Substituir pelo padrão swap-and-pop já existente no projeto, ou
-acumular índices mortos e remover ao fim do loop.
+**Direção:** Extrair helpers para `systems/collision_physics.py`. `Collisions`
+permanece como dispatcher, importando os helpers.
 
-```python
-# Antes
-for enemy in self.enemies[:]:
-    if enemy.dead:
-        self.enemies.remove(enemy)  # O(n) por remoção
-        continue
-    ...
+**Arquivos afetados:** `systems/collisions.py` → `systems/collision_physics.py`.
+Sem alteração de API pública.
 
-# Depois
-i = 0
-while i < len(self.enemies):
-    enemy = self.enemies[i]
-    if enemy.dead:
-        self.enemies[i] = self.enemies[-1]
-        self.enemies.pop()
-    else:
-        enemy.update(dt)
-        ...
-        i += 1
-```
-
-**Impacto:** `entities/formation.py`. Risco baixo — mudança local.
-
-**Status:** Concluído
+**Status:** Pendente
 
 ---
 
-#### 6. `Ship._find_nearest_enemy` duplica lógica já existente em `MiniShip._find_nearest_enemy`
+#### 5. `entity_manager.update()` longo (~260 LOC inline)
 
-**Sintoma:** `ship.py` e `mini_ship.py` contêm implementações separadas de
-"achar o inimigo mais próximo de uma posição", com pequenas variações de
-interface mas lógica idêntica (dist_sq, skip dead, verificar boss).
+**Sintoma:** `update()` (L487–L748) itera múltiplos grupos inline com lógicas
+próprias: dispatch polimórfico de inimigos, atualização de projéteis, cleanup
+de boss squares com filter inline, atualização de mountain propellers, black
+holes, etc. Difícil identificar fronteiras de responsabilidade.
 
-**Causa:** A funcionalidade foi adicionada independentemente nos dois arquivos
-sem extração para utilitário compartilhado.
+**Causa:** Crescimento orgânico do método principal. Cada novo tipo de entidade
+adicionou seu bloco inline.
 
-**Direção:** Extrair para `systems/targeting.py` (ou similar) uma função pura:
-
-```python
-def find_nearest_enemy(
-    from_x: float,
-    from_y: float,
-    entity_manager: EntityManager,
-    max_range_sq: float = float("inf"),
-) -> Any | None: ...
-```
-
-`Ship` e `MiniShip` delegam para essa função. `MiniShip` passa
-`MAX_TARGETING_RANGE_SQ` como `max_range_sq`.
-
-**Impacto:** `entities/ship.py`, `entities/mini_ship.py`. Novo arquivo
-`systems/targeting.py`. Sem mudança de comportamento.
-
-**Status:** Concluído
-
----
-
-#### 7. `Collisions._apply_hit` emite `EnemyDestroyed` com heurística de nome frágil
-
-**Sintoma:** O evento `EnemyDestroyed` é suprimido para bosses com:
-```python
-if "boss" not in type(target).__name__.lower()
-```
-Isso é uma heurística baseada em convenção de nomenclatura. Uma classe
-`ExplosiveMine` que internamente seja um "mini-boss" mas não tenha "boss" no
-nome emite o evento indevidamente. Uma classe de boss fora da convenção
-(ex.: `Leviathan`) suprime o evento incorretamente.
-
-**Causa:** Sem interface formal que declare se um inimigo é um boss ou não.
-
-**Direção:** Adicionar atributo de classe ou propriedade ao protocolo `Enemy`:
+**Direção:** Extrair `_update_enemies()`, `_update_projectiles()`,
+`_update_effects()`, `_update_collectibles()` como métodos privados dentro do
+mesmo arquivo. Sem novos arquivos necessários.
 
 ```python
-class Enemy(Protocol):
-    is_boss: bool   # ou property
-    ...
+def update(self, dt, player_x, player_y, ...):
+    self._update_enemies(enemy_dt, player_x, player_y)
+    self._update_projectiles(dt)
+    self._update_effects(dt)
+    self._update_collectibles(dt, attraction_mult)
+    self.cleanup()
+    self.rebuild_all_grids()
 ```
 
-E substituir a heurística:
-```python
-if result.killed and not getattr(target, "is_boss", False):
-    self._event_bus.emit(events.EnemyDestroyed(...))
-```
+**Arquivos afetados:** `systems/entity_manager.py` apenas.
 
-**Impacto:** `systems/collisions.py`, `systems/collision_protocols.py`. Todas
-as classes de boss devem declarar `is_boss = True`.
-
-**Status:** Concluído. `BossHitMixin.is_boss = True` cobre `Boss` e `SpikeBoss`
-por herança; classes standalone (`SlimeBoss`, `GiantMeteorBoss`,
-`CloudArchmageBoss`, `MountainSerpentBoss`, `StoneGolemBoss`) ganharam
-declaração explícita. `SquareMinionBoss` **não** recebeu `is_boss=True` — apesar
-do nome, é inimigo comum spawnável (a heurística antiga o classificava
-incorretamente; comportamento agora é o correto: emite `EnemyDestroyed`).
-
----
-
-#### 8. `update_for_game_over_slow_motion` em `EntityManager` usa `isinstance` em cascata como dispatcher
-
-**Sintoma:** O método itera uma lista combinada de todas as entidades e decide
-qual overload de `update()` chamar com `isinstance(e, EyeEnemy)`,
-`isinstance(e, GuidedMeteor)`, `isinstance(e, ElementalRobot)`, etc.
-
-**Causa:** Método alternativo de slow-motion adicionado como patch sem
-aproveitar o protocolo de update já definido nas entidades.
-
-**Direção:** Cada entidade deve ter um método `update_slow(dt)` ou o
-`update()` regular deve aceitar o dt reduzido uniformemente. O dispatcher
-some e o método fica:
-
-```python
-def update_for_game_over_slow_motion(self, dt, player_x, player_y):
-    slow_dt = dt * SLOW_FACTOR
-    for g in self._all_entity_groups():
-        for e in g:
-            e.update(slow_dt)   # cada entidade controla seu próprio ritmo
-```
-
-**Impacto:** `systems/entity_manager.py`. Risco médio — requer que as
-entidades com assinatura diferente de `update` sejam adaptadas.
-
-**Status:** Concluído. Reutilizado o pattern `update_in_context(ctx)` já
-existente para o regular `update()`. Slow-motion constrói um `EnemyUpdateContext`
-com `sdt == dt` (sem EMP/ice) e os inimigos heterogêneos viram o dispatch via
-método polimórfico. `MiniShip` mantém chamada explícita (precisa de listas
-vazias de alvos/balas durante death sequence). Demais grupos têm assinatura
-`update(dt)` uniforme.
+**Status:** Pendente
 
 ---
 
 ### Baixo
 
-#### 9. `SpatialGrid._get_cells_for_rect` aloca `set` a cada chamada
+#### 6. Bloco de bosses — constantes inline e concentração de responsabilidades
 
-**Sintoma:** Toda inserção e query cria um `set` de coordenadas de célula via
-comprehension. Em fases densas, isso é chamado centenas de vezes por frame.
+**Sintoma:** `cloud_archmage_boss.py` tem paletas de cores e constantes de
+sprite embutidas na classe. `stone_golem_boss.py` e `mountain_serpent_boss.py`
+concentram FSM, física e renderização no mesmo arquivo.
 
-**Causa:** Implementação direta sem caching.
+**Direção:** Avaliar em bloco dedicado após conclusão dos itens 1–5.
+`cloud_archmage` primeiro (constantes inline são cirúrgicas). Depois avaliar
+se `BossRenderer` por boss é viável ou se o `BossParticleSystem` compartilhado
+é suficiente.
 
-**Direção:** Retornar um generator ou acumular em lista local ao invés de set.
-Alternativamente, aceitar duplicatas no resultado e deduplica na query (onde
-`seen` já existe).
-
-```python
-# Simples: trocar set por itertools.product
-def _get_cells_for_rect(self, x, y, w, h):
-    left = int(x // self.cell_size)
-    right = int((x + w) // self.cell_size)
-    top = int(y // self.cell_size)
-    bottom = int((y + h) // self.cell_size)
-    for cx in range(left, right + 1):
-        for cy in range(top, bottom + 1):
-            yield (cx, cy)
-```
-
-As chamadas em `insert` e `query` iteram diretamente sem materializar o set.
-
-**Impacto:** `core/spatial_grid.py`. Mudança segura e localizada.
-
-**Status:** Concluído
+**Status:** Pendente — bloco dedicado após itens 1–5.
 
 ---
 
-#### 10. `AutoPlay` em `main_menu.py` usa `Config.` com import legado
+## Ordem de execução recomendada
 
-**Reavaliação:** A premissa do item está incorreta. `main_menu.py:11` já
-importa `from ..core.config import config as Config`, que é o
-`ConfigurationManager` introduzido no ciclo anterior. Os acessos
-`Config.MIN_METEOR_SIZE`, `Config.MAX_METEOR_SIZE`, `Config.SCREEN_WIDTH`
-funcionam via `ConfigurationManager.__getattr__` percorrendo os domínios — é
-o comportamento desenhado, não um vestígio de import legado.
+```
+1. ship.py — extração de ShipRenderer (draw)         [Crítico]
+2. ship.py — extração de ShipPowerups                [Crítico]
+3. ship.py — extração de ShipMovement                [Crítico]
+4. playing.py — cheat_input.py + remover duplicação  [Crítico, rápido]
+5. playing.py — PowerupSystem                        [Crítico]
+6. playing.py — InputHandler de gameplay             [Crítico]
+7. levels.py — separação em pacote core/levels/      [Médio]
+8. entity_manager.update() — reorganização interna   [Médio]
+9. collisions.py — collision_physics.py              [Médio]
+10. Bloco bosses                                     [Baixo]
+```
 
-Se o objetivo for forçar acesso por domínio (`Config.meteors.MIN_METEOR_SIZE`,
-`Config.display.SCREEN_WIDTH`), isso é uma decisão arquitetural global que
-exigiria migrar todos os call sites do projeto, não apenas `main_menu.py`. Fica
-como item para um eventual ciclo futuro de "limpeza do flat namespace".
-
-**Status:** Descartado (premissa incorreta)
+Itens 7, 8, 9 podem ser feitos em paralelo por não terem dependência entre si.
+Item 10 fica para depois.
 
 ---
 
 ## Decisões deliberadamente adiadas
 
-- **`RenderFrame` DTO completo** — o item 1 pode ser implementado
-  incrementalmente: começar pelos atributos mais acessados (shake, fade, state)
-  e expandir. Não bloquear o item esperando cobertura 100%.
+- **Registry/dispatch declarativo em `collisions.py`** — modelo `X_vs_Y`
+  tem coesão razoável. Reavaliar quando houver necessidade concreta de registrar
+  novos tipos de colisão em runtime.
 
-- **Refatoração de `update_for_game_over_slow_motion`** — o item 8 requer que
-  entidades com assinatura de `update` incompatível (ex.: `GuidedMeteor`,
-  `ElementalRobot`) recebam adaptadores. Pode ser feito separado do restante
-  do ciclo sem bloquear.
+- **`LevelManager` como serviço com injeção de dependência** — a classe hoje
+  é wrapper fino de `get_level_config()`. Ganho real só após extração de
+  `playing.py` (item 2).
+
+- **Herança de bosses / `BossBase`** — defer até o bloco de bosses ter
+  visibilidade completa dos padrões compartilhados entre os bosses existentes.
+
+- **Acesso por domínio em `Config` (`Config.meteors.MIN_METEOR_SIZE`)** —
+  `__getattr__` flat é o contrato atual e funciona. Reavaliar só se houver
+  conflito de nome entre domínios.
+
+- **`enemy_projectiles_vs_ship` retornar à API mais simples** — após o ciclo
+  anterior, o método aceita `grid` opcional. O ganho efetivo depende do tamanho
+  da lista; medir com profiling em fase densa antes de decidir reverter.
 
 ---
 
@@ -397,34 +250,47 @@ como item para um eventual ciclo futuro de "limpeza do flat namespace".
 
 | # | Item | Gravidade | Status |
 |---|------|-----------|--------|
-| 1 | `GameRenderer` acessa estado interno de `PlayingScene` diretamente | Crítico | Concluído |
-| 2 | Import lazy de `game_events` dentro do hot path de colisão | Crítico | Concluído |
-| 3 | `enemy_projectiles_vs_ship` não usa `enemy_projectile_grid` | Crítico | Concluído |
-| 4 | `MiniShip._find_nearest_enemy` O(n) sem range limit | Médio | Concluído |
-| 5 | `Formation.update` copy-remove pattern ainda não migrado | Médio | Concluído |
-| 6 | Lógica de targeting duplicada em `Ship` e `MiniShip` | Médio | Concluído |
-| 7 | Supressão de `EnemyDestroyed` por heurística de nome frágil | Médio | Concluído |
-| 8 | `update_for_game_over_slow_motion` usa `isinstance` como dispatcher | Médio | Concluído |
-| 9 | `SpatialGrid._get_cells_for_rect` aloca `set` por chamada | Baixo | Concluído |
-| 10 | `AutoPlay` usa import legado de `Config` | Baixo | Descartado |
+| 1 | `Ship` acumula render, movimento, powerups e targeting | Crítico | Pendente |
+| 2 | `PlayingScene` concentra input, powerups, cheats e transições | Crítico | Pendente |
+| 3 | `levels.py` mistura dados, procedural e pipeline | Médio | Pendente |
+| 4 | `collisions.py` — extrair helpers de física | Médio | Pendente |
+| 5 | `entity_manager.update()` longo (~260 LOC) | Médio | Pendente |
+| 6 | Bloco de bosses — constantes inline e responsabilidades | Baixo | Pendente |
 
 ---
 
 ## Histórico de ciclos anteriores
 
-Os relatórios `Melhorias_Código_Avaliação.txt`, `_02.txt` e `_03.txt` foram
-arquivados após conclusão das ações deles. Resumo do que ficou:
+Relatórios `Melhorias_Código_Avaliação.txt`, `_02.txt` e `_03.txt` foram
+arquivados após conclusão. Ciclos recentes encerraram com:
 
-- **PlayingScene god object** — extraídos `BossFightController`,
-  `LevelProgressionController`, `ShootingSystem`. Cena reduzida e domínios
-  isolados por sua coerência interna.
+**Ciclo imediatamente anterior:**
+- **`GameRenderer` desacoplado de `PlayingScene`** — `RenderFrame` DTO implementado
+  (`game/render/render_frame.py`); `playing.py` monta `_build_render_frame()` por
+  frame e passa ao renderer. Renderer não acessa mais `scene.*`.
+- **`enemy_projectiles_vs_ship` aceita grid opcional** — assinatura alinhada
+  com `energy_orbs_vs_ship`; filtra candidatos via id-set.
+- **Import lazy de `game_events` em `collisions.py`** — movido para o topo
+  do módulo; sem ciclo real.
+- **`MiniShip._find_nearest_enemy` com range cap** — delega para
+  `systems/targeting.py` (`find_nearest_in_list`) com `_MAX_TARGETING_RANGE_SQ`.
+- **`Formation.update` migrado para swap-and-pop** — O(1) por remoção.
+- **`systems/targeting.py` extraído** — `find_nearest_enemy()`,
+  `find_nearest_in_list()`, `enemy_center()`; `Ship` e `MiniShip` delegam.
+- **`is_boss` attribute** — substituiu heurística `"boss" in type.__name__`;
+  `BossHitMixin.is_boss = True` cobre subclasses por herança; bosses
+  standalone marcados explicitamente.
+- **Slow-motion dispatcher polimórfico** — `update_for_game_over_slow_motion`
+  reutiliza `update_in_context(ctx)` em vez da cascata `isinstance`.
+- **`SpatialGrid._get_cells_for_rect` → generator** — eliminada alocação de
+  `set` por chamada (deduplicação já existe em `query` via `seen`).
+
+**Ciclos anteriores a esse:**
 - **`config.py` namespace global** — substituído por dataclasses `frozen=True`
-  por domínio (`DisplayConfig`, `GameplayConfig`, `MeteorConfig`, `AlienConfig`,
-  `PowerUpConfig`, `BossConfig` + variantes, `FormationConfig`,
-  `VisualEffectConfig`, `ScoringConfig`, `ParticleConfig`), agregadas em
-  `ConfigurationManager`.
+  por domínio, agregadas em `ConfigurationManager`.
 - **Event Bus** — refinamentos (off/cleanup, eventos sem uso removidos,
-  `LevelCleared` emitido, deduplicação de explosões, double-play do laser
-  Magneto).
-- **Resíduos da migração `LevelProgressionController`** — `_base_score_multiplier`
-  alias e propriedades de compat removidos; setter `level_config` removido.
+  `LevelCleared` emitido, deduplicação de explosões, double-play do laser Magneto).
+- **`PlayingScene` god object** — extraídos `BossFightController`,
+  `LevelProgressionController`, `ShootingSystem`.
+- **Resíduos da migração `LevelProgressionController`** — aliases e
+  propriedades de compat removidos.

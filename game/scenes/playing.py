@@ -312,7 +312,9 @@ class PlayingScene(Scene):
         )
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
-        self.entity_manager = EntityManager(is_side_scroll=self.is_side_scroll)
+        self.entity_manager = EntityManager(
+            sound_manager=sound_manager, is_side_scroll=self.is_side_scroll
+        )
         self._apply_world_theme()
 
         self.boss_controller = BossFightController(
