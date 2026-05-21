@@ -2096,6 +2096,10 @@ class StoneGolemBoss:
         # sistema de colisão e com a posição visual desenhada.
         return mask, (self.rect.x, self.rect.y)
 
+    def can_take_damage(self) -> bool:
+        """O boss não recebe dano durante a introdução ou se estiver morto."""
+        return self.fsm_state != "ENTERING" and not self.dead
+
     def collision_circle(self) -> tuple[float, float, float]:
         # Centro acompanha o float vertical do boss (mesmo offset usado pelo
         # draw). Raio usa min(w, h)/2 — círculo inscrito no bounding box, mais

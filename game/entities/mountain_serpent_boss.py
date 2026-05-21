@@ -1700,6 +1700,13 @@ class MountainSerpentBoss:
     def should_remove(self) -> bool:
         return self.dead
 
+    def can_take_damage(self) -> bool:
+        """Só recebe dano se não estiver entrando e se estiver vulnerável."""
+        # Se head_y < _final_head_y, ainda está entrando
+        if self.head_y < self._final_head_y:
+            return False
+        return self.is_vulnerable and not self.dead
+
     @property
     def rect(self) -> pygame.Rect:
         """Rect preciso da cabeca - atualizado in-place em ``update()``."""

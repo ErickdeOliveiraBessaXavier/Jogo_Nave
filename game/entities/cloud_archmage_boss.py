@@ -932,6 +932,12 @@ class CloudArchmageBoss:
         self._miss_x = hit_x if hit_x is not None else center_x
         self._miss_y = (hit_y if hit_y is not None else center_y) - 56.0
 
+    def can_take_damage(self) -> bool:
+        """O boss não recebe dano durante a introdução, teleporte ou se estiver morto."""
+        if self._state in (ArchmageState.INTRO, ArchmageState.TELEPORT) or self.dead:
+            return False
+        return True
+
     @property
     def rect(self) -> pygame.Rect:
         """Empty during teleport fade-out; expands to cover shield when active."""

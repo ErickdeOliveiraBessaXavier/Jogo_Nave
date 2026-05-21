@@ -1290,6 +1290,8 @@ class Boss(BossHitMixin):
         return self.get_rect()
 
     def collision_circle(self) -> tuple[float, float, float]:
+        if not self.can_take_damage():
+            return 0.0, 0.0, 0.0
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 
     def take_damage(self, amount: int) -> None:

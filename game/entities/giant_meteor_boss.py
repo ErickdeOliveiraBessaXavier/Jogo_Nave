@@ -150,6 +150,10 @@ class GiantMeteorBoss:
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
+    def can_take_damage(self) -> bool:
+        """O boss não recebe dano se estiver entrando ou morto."""
+        return self.state != "entering" and not self.dead
+
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 

@@ -17,6 +17,10 @@ if TYPE_CHECKING:
 
 def enemy_center(enemy: Any) -> Optional[tuple[float, float]]:
     """Centro geométrico tolerante a inimigos com (w,h) ou (radius)."""
+    can_damage_fn = getattr(enemy, "can_take_damage", None)
+    if callable(can_damage_fn) and not can_damage_fn():
+        return None
+
     if hasattr(enemy, "w") and hasattr(enemy, "h"):
         return float(enemy.x + enemy.w / 2), float(enemy.y + enemy.h / 2)
     if hasattr(enemy, "radius"):
@@ -39,8 +43,19 @@ def find_nearest_enemy(
     nearest: Optional[Any] = None
     best_sq = max_range_sq
 
+    # Função auxiliar para verificar se um inimigo é um alvo válido
+    def is_targetable(e: Any) -> bool:
+        if getattr(e, "dead", False):
+            return False
+        # Se a entidade possui can_take_damage, respeita o retorno dela
+        # (usado por bosses durante entrada/animações)
+        can_damage_fn = getattr(e, "can_take_damage", None)
+        if callable(can_damage_fn):
+            return bool(can_damage_fn())
+        return True
+
     for enemy in entity_manager.enemies:
-        if getattr(enemy, "dead", False):
+        if not is_targetable(enemy):
             continue
         center = enemy_center(enemy)
         if center is None:
@@ -54,7 +69,7 @@ def find_nearest_enemy(
 
     for formation in entity_manager.formations:
         for enemy in formation.get_enemies():
-            if getattr(enemy, "dead", False):
+            if not is_targetable(enemy):
                 continue
             center = enemy_center(enemy)
             if center is None:
@@ -67,12 +82,15 @@ def find_nearest_enemy(
                 nearest = enemy
 
     boss = entity_manager.boss
-    if boss is not None and not getattr(boss, "dead", False):
-        dx = boss.x + boss.w / 2 - from_x
-        dy = boss.y + boss.h / 2 - from_y
-        dist_sq = dx * dx + dy * dy
-        if dist_sq < best_sq:
-            nearest = boss
+    if boss is not None and is_targetable(boss):
+        # Usar enemy_center para o boss também, garantindo consistência
+        center = enemy_center(boss)
+        if center is not None:
+            dx = center[0] - from_x
+            dy = center[1] - from_y
+            dist_sq = dx * dx + dy * dy
+            if dist_sq < best_sq:
+                nearest = boss
 
     return nearest
 
@@ -88,8 +106,17 @@ def find_nearest_in_list(
     nearest: Optional[Any] = None
     best_sq = max_range_sq
 
+    # Função auxiliar para verificar se um inimigo é um alvo válido
+    def is_targetable(e: Any) -> bool:
+        if getattr(e, "dead", False):
+            return False
+        can_damage_fn = getattr(e, "can_take_damage", None)
+        if callable(can_damage_fn):
+            return bool(can_damage_fn())
+        return True
+
     for enemy in enemies:
-        if getattr(enemy, "dead", False):
+        if not is_targetable(enemy):
             continue
         center = enemy_center(enemy)
         if center is None:
