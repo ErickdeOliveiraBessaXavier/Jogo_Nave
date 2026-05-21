@@ -1254,8 +1254,10 @@ class Collisions:
             b_rect = b.rect
             pad = CollisionConstants.SPATIAL_QUERY_PADDING
             potential_spikes = spike_grid.query(
-                b_rect.x - pad, b_rect.y - pad,
-                b_rect.width + pad * 2, b_rect.height + pad * 2,
+                b_rect.x - pad,
+                b_rect.y - pad,
+                b_rect.width + pad * 2,
+                b_rect.height + pad * 2,
             )
             for spike in potential_spikes:
                 if spike.state == "flying" and b_rect.colliderect(spike.rect):
