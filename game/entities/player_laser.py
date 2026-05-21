@@ -9,12 +9,12 @@ from typing import (
     Optional,
     Set,
     Tuple,
-    TypedDict,
 )
 
 import pygame
 
 from ..core import colors, upgrades_config
+from .particle_types import DeathParticle
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
@@ -38,7 +38,6 @@ TWO_PI: Final[float] = 2 * math.pi
 PARTICLE_SIZE_DECAY: Final[float] = 5.0
 MIN_POSITION_CHANGE: Final[float] = 1.0
 
-from .particle_types import DeathParticle
 
 class PlayerLaser:
     """Laser disparado pelo jogador que atravessa múltiplos inimigos."""
@@ -229,15 +228,10 @@ class PlayerLaser:
             # Otimização: atualizar e filtrar partículas em um único loop
             alive_particles: List[DeathParticle] = []
             for p in self.death_particles:
-                old_pos = p["pos"]
-                vel = p["vel"]
-                new_lifespan = p["lifespan"] - dt
-                new_size = p["size"] - PARTICLE_SIZE_DECAY * dt
-
-                if new_lifespan > 0 and new_size > 0:
-                    p["pos"] = (old_pos[0] + vel[0] * dt, old_pos[1] + vel[1] * dt)
-                    p["lifespan"] = new_lifespan
-                    p["size"] = new_size
+                p["pos"] += p["vel"] * dt
+                p["lifespan"] -= dt
+                p["size"] -= PARTICLE_SIZE_DECAY * dt
+                if p["lifespan"] > 0 and p["size"] > 0:
                     alive_particles.append(p)
 
             self.death_particles = alive_particles
@@ -290,8 +284,8 @@ class PlayerLaser:
                 pos_y = self.y + norm_y * dist
 
                 particle: DeathParticle = {
-                    "pos": (pos_x, pos_y),
-                    "vel": (
+                    "pos": pygame.Vector2(pos_x, pos_y),
+                    "vel": pygame.Vector2(
                         random.uniform(*PARTICLE_VELOCITY_RANGE),
                         random.uniform(*PARTICLE_VELOCITY_RANGE),
                     ),
@@ -393,6 +387,6 @@ class PlayerLaser:
                     pygame.draw.circle(
                         surface,
                         p["color"],
-                        (int(pos[0]), int(pos[1])),
+                        (int(pos.x), int(pos.y)),
                         size,
                     )
