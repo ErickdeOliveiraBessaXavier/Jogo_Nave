@@ -92,3 +92,147 @@ Blocos `score_gain += result.points / if result.killed / destroyed_count += 1` r
 7. `FadeTransitionMixin` — médio risco
 8. `LevelConfig` ajuste consolidado — alto risco, testar progressão completa
 9. Importações cíclicas — alto risco, testar inicialização completa do jogo
+
+---
+
+## Status atual da execução
+
+| Item | Plano | Status |
+|---|---|---|
+| **2a** TypedDicts duplicados | `particle_types.py` | ✅ Concluído |
+| **2b** `SquareProjectileBase` | `square_base.py` | ✅ Concluído (BossSquare + SquareMinionBoss herdam) |
+| **2c** `ZoneParticle` | `zone_base.py` | ✅ Concluído (`_FireParticle`, `_PlusParticle` herdam) |
+| **2d** `wrap_text` central | `ui_helpers.py` | ✅ Concluído (9 call sites unificados) |
+| **2e** `FadeTransitionMixin` | `ui_helpers.py` | ✅ Concluído (`SettingsScene`, `StatisticsScene` herdam) |
+| **2f** `EnemyHitMixin` | `enemy_hit_mixin.py` | ✅ Parcial — `StoneSentry`, `MountainMage` migrados. Bosses ficam com `BossHitMixin` (decisão coerente). |
+| **2g** `LevelConfig` adjuster | consolidar entre `_legacy.py` e `meta_progression.py` | ⚠️ **Parcial** — ambos passaram a usar `dataclasses.replace`, eliminando duplicação ESTRUTURAL. Mas as duas funções (`_apply_difficulty_to_fixed_level` e `DifficultyAdjuster._apply_to_config`) continuam separadas com regras de negócio levemente diferentes. |
+| **2h** `DEFAULT_KEYBINDINGS` | mover para `upgrades_config.py` | ⚠️ **Regressão** — `DEFAULT_KEYBINDINGS` foi adicionado a `upgrades_config.py`, mas o arquivo agora faz `from .upgrades import UpgradeType` no topo, criando o ciclo `upgrades ↔ upgrades_config`. O plano original sugeria criar `upgrades_types.py` separado — ainda não feito. |
+| **2i** `RAINBOW_COLORS` | exportar de `colors.py` | ✅ Concluído (consumido em `main_menu.py` lazy e `powerup.py` top-level) |
+| **2j** `_accumulate_hit_result` | helper em `CollisionPhysics` | ❌ **Não feito** — padrão `score_gain += result.points / if killed / destroyed_count += 1` continua duplicado entre `collision_physics.py:292` e `collisions.py:526`. Helper estático não foi extraído. |
+| **P1** Imports cíclicos | converter top-level para lazy/TYPE_CHECKING | ✅ **6 dos 8 ciclos resolvidos.** `main_menu.py` agora importa `playing/settings/statistics/upgrades_selection/difficulty_selection/world_selection` lazy (dentro de métodos ou `__init__`). Os 3 lambdas de menu viraram métodos `_open_statistics/_open_upgrades/_open_settings`. Imports mantidos em bloco `TYPE_CHECKING` com `# noqa: F401` para satisfazer Pylint sem disparar Ruff F401 (ver nota no fim das pendências). Restam 2 ciclos R0401 (`upgrades ↔ upgrades_config` e `render → playing`). |
+
+---
+
+## Pendências para próximo ciclo
+
+### Ordem recomendada de execução
+
+| Ordem | Item | Esforço | Risco | Impacto |
+|---|---|---|---|---|
+| 1 | **`upgrades_types.py`** (#1 abaixo) | ~10 min | Baixo | Mata 1 ciclo R0401 (regressão do 2h) |
+| 2 | **`ship_movement._ParticleDict` → central** (#4) | ~2 min | Mínimo | Mata 1 duplicação R0801 |
+| 3 | **`player_laser.py:3` remover `TypedDict`** (#5) | ~1 min | Zero | -1 W0611 |
+| 4 | **Mover `GameState` + `ThrusterParticle`** (#2) | ~20 min | Médio | Mata 1 ciclo R0401 |
+| 5 | **`_accumulate_hit_result` helper** (#3) | ~30 min | Médio | Mata 1 duplicação R0801 (17 call sites) |
+
+**Atalho prático:** os itens 1+2+3 são totalmente independentes, baixo risco, ~15 min no total. Podem ir num único commit. Os itens 4 e 5 são mais cirúrgicos — recomendo commits separados.
+
+**Estado pós-conclusão de todos:** 0 ciclos R0401 (queda total 8 → 0), 3 duplicações R0801 a menos. Score pylint estimado: **~9.85/10**.
+
+---
+
+### Detalhamento de cada pendência
+
+### 1. Ciclo `upgrades ↔ upgrades_config` (item 2h)
+
+**Estado atual:** `upgrades_config.py:7` tem `from .upgrades import UpgradeType` (top-level); `upgrades.py:347,406` importa `upgrades_config` (lazy). Pylint detecta R0401.
+
+**Solução proposta:** Criar `game/core/upgrades_types.py` zero-dependência contendo:
+- `UpgradeType` (Enum)
+- `DEFAULT_KEYBINDINGS`
+- `UPGRADE_SLOT_COUNT`
+- `SLOT_UNLOCK_COSTS`
+
+Tanto `upgrades.py` quanto `upgrades_config.py` passam a importar de `upgrades_types.py`. Os imports cross-mútuos somem.
+
+**Risco:** Baixo. Mecânico.
+
+### 2. Ciclo `render.game_renderer → scenes.playing` (Prioridade 1 residual)
+
+**Estado atual:** `game_renderer.py:48` faz `from ..scenes.playing import GameState` lazy dentro de `render()`, e `render_frame.py:25` faz o mesmo import dentro de `if TYPE_CHECKING:`. Pylint detecta estruturalmente.
+
+**Solução proposta:**
+- Mover `GameState` para `core/state.py` (já existe).
+- Mover `ThrusterParticle` (TypedDict) para `render/render_frame.py` (faz mais sentido lá).
+- Ajustar `playing.py`, `render_frame.py`, `game_renderer.py` para importarem dos novos locais.
+
+**Risco:** Médio. `GameState` é usado em muitos lugares — grep antes de mover.
+
+### 3. `_accumulate_hit_result` helper (item 2j)
+
+**Estado atual:** Padrão duplicado em ~17 locais.
+
+**Solução proposta:** Adicionar em `CollisionPhysics`:
+```python
+@staticmethod
+def accumulate_hit_result(
+    result: HitResult,
+    score_events: list[tuple[float, float, int]],
+    hit_x: float,
+    hit_y: float,
+) -> tuple[int, int]:
+    """Retorna (score_delta, destroyed_delta) e popula score_events."""
+    if result.killed:
+        if result.points > 0:
+            score_events.append((hit_x, hit_y, result.points))
+        return result.points, 1
+    return result.points, 0
+```
+
+E ajustar call sites para `s, d = self.physics.accumulate_hit_result(...); score_gain += s; destroyed_count += d`.
+
+**Risco:** Médio — 17 call sites em `collisions.py` + 1 em `collision_physics.py`. Validar score em fase densa.
+
+### 4. Duplicação `ship_movement._ParticleDict` ↔ `playing.ThrusterParticle`
+
+Pylint detecta R0801 entre `ship_movement.py:27-34` e `playing.py:101-108`. Ambos têm os mesmos 7 campos. **Causa:** quando `ship_movement.py` foi extraído, criei `_ParticleDict` local em vez de reusar `ParticleDict` de `particle_types.py`.
+
+**Fix:** trocar `_ParticleDict` por `ParticleDict` em `ship_movement.py`. Considerar mover `ThrusterParticle` para `particle_types.py` também.
+
+**Risco:** Baixo.
+
+### 5. `player_laser.py:3` — `TypedDict` unused (W0611)
+
+Não estava na lista original do usuário, mas pylint detectou. Remover do import.
+
+### 6. Demais ciclos entre cenas (residuais — pylint não reporta mais)
+
+Os 6 ciclos `main_menu ↔ settings/statistics/playing/...` que estavam ativos foram quebrados. Caso novos imports top-level cross-scene sejam adicionados, manter padrão: imports dentro de método ou `if TYPE_CHECKING:`.
+
+---
+
+### ⚠️ Nota importante: conflito Ruff F401 × Pylint R0401
+
+Durante o ciclo, descobrimos que **Pylint só considera o ciclo `main_menu ↔ X`
+resolvido se houver `from .X import Y` no bloco `if TYPE_CHECKING:`**, mesmo
+que o import lazy dentro do método já satisfaça o runtime.
+
+Mas Ruff F401 reclama desses mesmos imports em `TYPE_CHECKING` se eles não
+forem usados como type annotation (e a maioria não é — são só
+instanciações).
+
+**Solução adotada em `main_menu.py:24-37`:** manter os 6 imports em
+`TYPE_CHECKING` **com `# noqa: F401`** em cada um. Comentário no topo
+explica o porquê.
+
+```python
+if TYPE_CHECKING:
+    from ..app import GameApp
+    from ..scenes.difficulty_selection import DifficultySelectionView  # noqa: F401
+    from ..scenes.playing import PlayingScene  # noqa: F401
+    # ... (outros 4 com noqa)
+```
+
+Aplicar o mesmo padrão se aparecerem ciclos similares no futuro.
+
+---
+
+## Score Pylint
+
+| Estado | Score | R0401 ciclos | R0801 duplicações |
+|---|---|---|---|
+| Antes do plano | 9.60/10 | — | — |
+| Após implementação parcial (pré-revisão) | 9.61/10 | 8 | ~6 |
+| **Após revisão atual** (correção dos bugs do usuário + 6 ciclos eliminados) | **9.61/10** | **2** | ~6 |
+
+Score geral não subiu porque R0801 (duplicações) compensaram as melhorias estruturais. A grande vitória do ciclo atual foi **R0401: 8 → 2 ciclos**.

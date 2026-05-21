@@ -16,16 +16,24 @@ from ..core.state import Scene
 from ..core.world_config import get_world_for_level_by_id
 from ..entities.explosion_pool import ExplosionPool
 from ..entities.meteor import Meteor
-from ..scenes.difficulty_selection import DifficultySelectionView
-from ..scenes.playing import PlayingScene
-from ..scenes.settings import SettingsScene
-from ..scenes.statistics import StatisticsScene
-from ..scenes.upgrades_selection import UpgradesSelectionScene
 from ..systems.cheat_input import CheatBuffer
-from ..scenes.world_selection import WorldSelectionView
 
+# Imports cross-scene são lazy (dentro dos métodos) para evitar ciclos em
+# runtime — este módulo é raiz da navegação e seria referenciado de volta
+# por quase todas as cenas (paused→settings→main_menu, game_over→main_menu,
+# etc). Os 6 nomes abaixo só são instanciados, nunca usados como type
+# annotation — mas precisam aparecer no bloco TYPE_CHECKING para pylint
+# parar de reportar R0401 (a análise estrutural do pylint considera o
+# símbolo "presente" via TYPE_CHECKING e ignora o ciclo). `# noqa: F401`
+# silencia ruff sobre o aparente "unused import".
 if TYPE_CHECKING:
     from ..app import GameApp
+    from ..scenes.difficulty_selection import DifficultySelectionView  # noqa: F401
+    from ..scenes.playing import PlayingScene  # noqa: F401
+    from ..scenes.settings import SettingsScene  # noqa: F401
+    from ..scenes.statistics import StatisticsScene  # noqa: F401
+    from ..scenes.upgrades_selection import UpgradesSelectionScene  # noqa: F401
+    from ..scenes.world_selection import WorldSelectionView  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -366,6 +374,11 @@ class MainMenuScene(Scene):
         self.game_start_black_hold_duration = 0.18
         self.force_blackout_frame = False
 
+        # Imports locais: views de seleção referenciam de volta MainMenuScene
+        # via callbacks; manter o import top-level cria ciclo R0401.
+        from ..scenes.difficulty_selection import DifficultySelectionView
+        from ..scenes.world_selection import WorldSelectionView
+
         # View de seleção de dificuldade
         self.difficulty_view = DifficultySelectionView(
             on_select=self._on_difficulty_selected,
@@ -485,6 +498,8 @@ class MainMenuScene(Scene):
             self.app.player_profile.current_session.score = 0
 
         def _push_playing_scene():
+            from ..scenes.playing import PlayingScene
+
             self.app.states.push(
                 PlayingScene(
                     self.app,
@@ -527,6 +542,23 @@ class MainMenuScene(Scene):
         self.fade_out = True
         self.transitioning = True
         self.transition_progress = 0.0
+
+    # Botões do menu: imports locais quebram o ciclo R0401 entre main_menu
+    # e statistics/upgrades/settings (que importam main_menu de volta).
+    def _open_statistics(self) -> None:
+        from ..scenes.statistics import StatisticsScene
+
+        self.app.states.push(StatisticsScene(self.app))
+
+    def _open_upgrades(self) -> None:
+        from ..scenes.upgrades_selection import UpgradesSelectionScene
+
+        self.app.states.push(UpgradesSelectionScene(self.app))
+
+    def _open_settings(self) -> None:
+        from ..scenes.settings import SettingsScene
+
+        self.app.states.push(SettingsScene(self.app))
 
     def _create_title_chars(self):
         """Creates character data for title animation."""
@@ -571,19 +603,19 @@ class MainMenuScene(Scene):
                 MenuStrings.STATISTICS,
                 CUSTOM_GOLD,
                 CUSTOM_PURPLE,
-                lambda: self.app.states.push(StatisticsScene(self.app)),
+                self._open_statistics,
             ),
             (
                 MenuStrings.UPGRADES,
                 CUSTOM_GOLD,
                 CUSTOM_PURPLE,
-                lambda: self.app.states.push(UpgradesSelectionScene(self.app)),
+                self._open_upgrades,
             ),
             (
                 MenuStrings.SETTINGS,
                 CUSTOM_GOLD,
                 CUSTOM_PURPLE,
-                lambda: self.app.states.push(SettingsScene(self.app)),
+                self._open_settings,
             ),
             (
                 MenuStrings.EXIT,

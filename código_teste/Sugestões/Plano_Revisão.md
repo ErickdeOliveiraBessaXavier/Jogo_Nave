@@ -406,6 +406,23 @@ refinamento mexe apenas em arquivos internos.
    após avaliar os 3 bosses acima (continua adiado por falta de
    visibilidade — ver "Decisões deliberadamente adiadas").
 
+### C. Pendências do ciclo Pylint
+
+Trabalho paralelo seguindo `código_teste/Sugestões/Revisão_Pylint.md`.
+Detalhes completos lá. Resumo do que falta:
+
+| Pendência | Esforço | Risco | Resolve |
+|---|---|---|---|
+| Criar `core/upgrades_types.py` (move `UpgradeType` para módulo zero-dep) | ~10 min | Baixo | Ciclo R0401 `upgrades ↔ upgrades_config` (regressão do item 2h do plano pylint) |
+| `ship_movement._ParticleDict` → `ParticleDict` central | ~2 min | Mínimo | Duplicação R0801 que eu introduzi ao extrair `ship_movement.py` |
+| `player_laser.py:3` remover `TypedDict` unused | ~1 min | Zero | W0611 órfão |
+| Mover `GameState` → `core/state.py` + `ThrusterParticle` → `render_frame.py` | ~20 min | Médio | Ciclo R0401 `render.game_renderer → scenes.playing` |
+| Extrair `_accumulate_hit_result` em `CollisionPhysics` | ~30 min | Médio | Duplicação R0801 entre `collision_physics.py:292` e `collisions.py:526` (17 call sites) |
+
+**Estado atual do Pylint:** 9.61/10 (R0401: 2 ciclos restantes, R0801: ~6
+duplicações). Estimativa pós-conclusão de todas as pendências acima:
+~9.85/10, 0 ciclos R0401.
+
 ---
 
 ## Histórico de ciclos anteriores
@@ -448,6 +465,27 @@ arquivados após conclusão. Ciclos recentes encerraram com:
     fallback defensivo `if hasattr(boss, "rect") else cast(...)` foi
     removido em `player_lasers_vs_boss` e `cacador_lasers_vs_boss` — o
     protocolo `Damageable` exige `rect` e agora todos os bosses cumprem.
+- **Ciclo Pylint paralelo (parcial)** — usuário fez vários commits seguindo
+  `Revisão_Pylint.md` e pediu revisão. Detalhe completo lá. Bullets:
+  - ✅ `particle_types.py`, `square_base.py`, `enemy_hit_mixin.py` criados;
+    `ZoneParticle` base em `zone_base.py`; `wrap_text` central em
+    `ui_helpers.py`; `FadeTransitionMixin`; `RAINBOW_COLORS` exportado.
+  - ✅ Bugs reportados pelo usuário corrigidos: `DEFAULT_KEYBINDINGS` import
+    faltando em `meta_progression.py`, `EnemyUpdateContext`/`HitResult`
+    fora de `TYPE_CHECKING` em `eye_enemy.py`, args invertidos em
+    `wrap_text` em `difficulty_selection.py:107`, ~10 imports unused
+    removidos, `from .particle_types import ParticleDict` em `ship.py`
+    movido para o topo (E402).
+  - ✅ Ciclos R0401 entre cenas: **8 → 2**. `main_menu.py` agora importa
+    `playing/settings/statistics/upgrades_selection/difficulty_selection/
+    world_selection` lazy (dentro de métodos ou `__init__`). Os 3 lambdas
+    de menu viraram métodos `_open_*`. Imports mantidos em `TYPE_CHECKING`
+    com `# noqa: F401` (conflito Ruff×Pylint documentado em
+    `Revisão_Pylint.md`).
+  - ⏳ Restam 2 ciclos R0401 + 4 pendências (`upgrades_types.py`,
+    `_accumulate_hit_result`, `ship_movement._ParticleDict` central,
+    `player_laser.py:3` cleanup, `GameState` move). Ver seção C de
+    Pendências.
 
 **Ciclo imediatamente anterior:**
 - **`GameRenderer` desacoplado de `PlayingScene`** — `RenderFrame` DTO implementado
