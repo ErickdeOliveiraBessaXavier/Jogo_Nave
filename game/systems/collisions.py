@@ -1672,10 +1672,16 @@ class Collisions:
 
             # Usa spatial grid para narrow candidates quando disponível
             if enemy_grid is not None:
-                lx = int(laser.x)
-                ly = int(laser.y - laser.w / 2)
-                lw = int(laser.w)
-                lh = int(laser.w)
+                # Calcular bounding box do laser (linha entre x,y e target_x,target_y)
+                min_x = min(laser.x, laser.target_x) - laser.w
+                max_x = max(laser.x, laser.target_x) + laser.w
+                min_y = min(laser.y, laser.target_y) - laser.w
+                max_y = max(laser.y, laser.target_y) + laser.w
+
+                lx = int(min_x)
+                ly = int(min_y)
+                lw = int(max_x - min_x)
+                lh = int(max_y - min_y)
                 candidates: Sequence[Enemy] = enemy_grid.query(lx, ly, lw, lh)
             else:
                 candidates = enemies
@@ -1739,7 +1745,15 @@ class Collisions:
                 continue
 
             line = laser.get_collision_line()
-            boss_rect: pygame.Rect = boss.rect
+            # Garantir acesso seguro ao rect do boss
+            boss_rect: pygame.Rect = (
+                boss.rect
+                if hasattr(boss, "rect")
+                else cast(
+                    pygame.Rect,
+                    getattr(boss, "get_rect", lambda: pygame.Rect(0, 0, 0, 0))(),
+                )
+            )
 
             collision_detected = False
 
@@ -1889,7 +1903,15 @@ class Collisions:
                 continue
 
             line = laser.get_collision_line()
-            boss_rect: pygame.Rect = boss.rect
+            # Garantir acesso seguro ao rect do boss
+            boss_rect: pygame.Rect = (
+                boss.rect
+                if hasattr(boss, "rect")
+                else cast(
+                    pygame.Rect,
+                    getattr(boss, "get_rect", lambda: pygame.Rect(0, 0, 0, 0))(),
+                )
+            )
             collision_detected = False
 
             if mask_data is not None:

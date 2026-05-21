@@ -1284,6 +1284,11 @@ class Boss(BossHitMixin):
             return pygame.Rect(-1000, -1000, 0, 0)
         return pygame.Rect(self.x, self.y, self.w, self.h)
 
+    @property
+    def rect(self) -> pygame.Rect:
+        """Pygame-compatible rect property."""
+        return self.get_rect()
+
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 
