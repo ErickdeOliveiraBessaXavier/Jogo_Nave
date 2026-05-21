@@ -1291,7 +1291,9 @@ class Boss(BossHitMixin):
 
     def collision_circle(self) -> tuple[float, float, float]:
         if not self.can_take_damage():
-            return 0.0, 0.0, 0.0
+            # Off-screen sentinel: chamadores calculam distância e ficam fora
+            # de qualquer raio plausível. Coerente com get_rect() vazio.
+            return -1000.0, -1000.0, 0.0
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 
     def take_damage(self, amount: int) -> None:

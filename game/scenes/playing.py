@@ -53,7 +53,9 @@ from ..events import game_events as events
 from ..render.game_renderer import GameRenderer
 from ..render.render_frame import RenderFrame
 from ..systems.boss_fight_controller import BossFightController
+from ..systems.cheat_input import CheatBuffer
 from ..systems.collisions import Collisions
+from ..systems.powerup_system import PowerupSystem
 from ..systems.effects_system import EffectsSystem
 from ..systems.entity_manager import EntityManager
 from ..systems.level_progression_controller import (
@@ -73,8 +75,6 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Constantes de módulo (eliminam "magic numbers" espalhados pela classe)
 # ---------------------------------------------------------------------------
-_CHEAT_CODE = "271195"
-_CHEAT_BUFFER_MAX = len(_CHEAT_CODE)
 _SCORE_MULTIPLIER_DURATION = 15.0
 _SIDE_SCROLL_SHIP_ENTRY_X = 100
 _TOP_DOWN_SHIP_TARGET_Y_OFFSET = 80
@@ -206,7 +206,8 @@ class PlayingScene(Scene):
 
     def _init_game_state(self) -> None:
         """Inicializa o estado de jogo e aplica configurações de dificuldade."""
-        self.cheat_buffer: str = ""
+        self.cheat: CheatBuffer = CheatBuffer()
+        self.powerup_system: PowerupSystem = PowerupSystem(self)
         self.god_mode: bool = False
         self.state: GameState = GameState.PREPARING
         self.preparation_time_left: float = Config.PREPARATION_TIME
@@ -381,7 +382,7 @@ class PlayingScene(Scene):
         self.score: int = 0
         self._sync_lives(self.lives)
         self.total_enemies_destroyed: int = 0
-        self.cheat_buffer = ""
+        self.cheat.reset()
         self.god_mode = False
         self.state = GameState.PREPARING
         self.preparation_time_left = Config.PREPARATION_TIME
@@ -1013,32 +1014,23 @@ class PlayingScene(Scene):
 
     def _process_cheat_input(self, event: pygame.event.Event) -> None:
         """Detecta o cheat code '271195' para ativar/desativar god mode, adicionar 9999 estrelas e desbloquear todos os mundos."""
-        if not pygame.K_0 <= event.key <= pygame.K_9:
-            # Se apertar uma tecla que não é número, reseta o buffer
-            self.cheat_buffer = ""
+        if not self.cheat.feed(event):
             return
 
-        self.cheat_buffer += chr(event.key)
-        logger.debug("Cheat buffer: '%s'", self.cheat_buffer)
-        if len(self.cheat_buffer) > _CHEAT_BUFFER_MAX:
-            self.cheat_buffer = self.cheat_buffer[-_CHEAT_BUFFER_MAX:]
-
-        if self.cheat_buffer == _CHEAT_CODE:
-            self.god_mode = not self.god_mode
-            self.cheat_buffer = ""
-            if self.god_mode:
-                logger.info("GOD MODE ATIVADO - Invulnerabilidade ligada!")
-                self._apply_god_mode_cooldowns()
-                self.player_profile.add_stars(9999)
-                self.player_profile.unlock_all_worlds()
-                self.player_profile.save()  # Força save imediato
-                logger.info(
-                    "⭐ CHEAT ATIVADO - +9999 Estrelas e todos os mundos desbloqueados!"
-                )
-                if hasattr(sound_manager, "play_powerup"):
-                    sound_manager.play_powerup()  # type: ignore
-            else:
-                logger.info("GOD MODE DESATIVADO - Invulnerabilidade desligada!")
+        self.god_mode = not self.god_mode
+        if self.god_mode:
+            logger.info("GOD MODE ATIVADO - Invulnerabilidade ligada!")
+            self._apply_god_mode_cooldowns()
+            self.player_profile.add_stars(9999)
+            self.player_profile.unlock_all_worlds()
+            self.player_profile.save()  # Força save imediato
+            logger.info(
+                "⭐ CHEAT ATIVADO - +9999 Estrelas e todos os mundos desbloqueados!"
+            )
+            if hasattr(sound_manager, "play_powerup"):
+                sound_manager.play_powerup()  # type: ignore
+        else:
+            logger.info("GOD MODE DESATIVADO - Invulnerabilidade desligada!")
 
     # ------------------------------------------------------------------
     # Batching de floating scores
@@ -1615,124 +1607,10 @@ class PlayingScene(Scene):
             )
 
     def _apply_powerup(self, kind: str) -> None:
-        """Aplica o efeito de um power-up coletado via dict-dispatch."""
-        pv = self._powerup_values
-
-        def _apply_shield() -> None:
-            self.ship.invuln = max(self.ship.invuln, pv["shield_duration"])
-
-        def _apply_double_shot() -> None:
-            self.ship.double_shot_timer = max(
-                self.ship.double_shot_timer, pv["double_shot_duration"]
-            )
-
-        def _apply_speed() -> None:
-            self.ship.speed_boost_timer = max(
-                self.ship.speed_boost_timer, pv["speed_boost_duration"]
-            )
-
-        def _apply_score_bonus() -> None:
-            self.score_multiplier_timer = _SCORE_MULTIPLIER_DURATION
-            self.score_multiplier_active = True
-
-        def _apply_piercing() -> None:
-            self.ship.piercing_shot_timer = max(
-                self.ship.piercing_shot_timer, pv["piercing_shot_duration"]
-            )
-
-        def _apply_mini_ships() -> None:
-            self.ship.mini_ships_timer = max(
-                self.ship.mini_ships_timer, pv["mini_ships_duration"]
-            )
-            self._build_mini_ships()
-
-        def _apply_cooldown_haste() -> None:
-            self._apply_cooldown_reduction(pv["cooldown_haste_reduction"])
-
-        def _apply_time_stop() -> None:
-            self.time_stop_timer = max(self.time_stop_timer, pv["time_stop_duration"])
-            self.freeze_active = True
-
-        def _apply_damage_boost() -> None:
-            self.ship.damage_boost_timer = max(
-                self.ship.damage_boost_timer, pv["damage_boost_duration"]
-            )
-
-        def _apply_chain_shot() -> None:
-            self.ship.activate_chain_shot()
-
-        def _apply_repulsion_shield() -> None:
-            self.ship.activate_repulsion_shield()
-
-        def _apply_life() -> None:
-            self._change_lives(1)
-
-        def _apply_rainbow() -> None:
-            _apply_life()
-            _apply_shield()
-            _apply_double_shot()
-            _apply_speed()
-            _apply_mini_ships()
-            rainbow_score = int(pv["rainbow_score"])
-            if self.score_multiplier_active:
-                rainbow_score = int(rainbow_score * self.score_multiplier_value)
-            self.score += rainbow_score
-
-        dispatch: dict[str, Any] = {
-            "life": _apply_life,
-            "shield": _apply_shield,
-            "double_shot": _apply_double_shot,
-            "speed": _apply_speed,
-            "score": _apply_score_bonus,
-            "piercing_shot": _apply_piercing,
-            "mini_ships": _apply_mini_ships,
-            "cooldown_haste": _apply_cooldown_haste,
-            "time_stop": _apply_time_stop,
-            "rainbow": _apply_rainbow,
-            "damage_boost": _apply_damage_boost,
-            "chain_shot": _apply_chain_shot,
-            "repulsion_shield": _apply_repulsion_shield,
-        }
-
-        handler = dispatch.get(kind)
-        if handler:
-            handler()
+        self.powerup_system.apply(kind)
 
     def _process_powerups_and_stars(self) -> None:
-        """Processa coleta de power-ups e estrelas."""
-        collected_stars = self.collisions.ship_vs_stars(
-            self.ship, self.entity_manager.stars
-        )
-        if collected_stars > 0:
-            self.player_profile.add_stars(collected_stars)
-            # Emit powerup event for stars
-            self.app.event_bus.emit(
-                events.PowerupCollected(
-                    powerup_type="star", position=(self.ship.x, self.ship.y)
-                )
-            )
-
-        collected_powerups = self.collisions.ship_vs_powerups(
-            self.ship, self.entity_manager.powerups
-        )
-        if self._no_powerups_mode:
-            collected_powerups = []
-
-        for kind in collected_powerups:
-            # Emit PowerupCollected event
-            self.app.event_bus.emit(
-                events.PowerupCollected(
-                    powerup_type=kind, position=(self.ship.x, self.ship.y)
-                )
-            )
-            # Cofre: guarda no slot livre em vez de aplicar imediato. Se todos
-            # estão ocupados, cai no comportamento padrão (consumo imediato)
-            # para não desperdiçar o powerup coletado.
-            if not (
-                self.ship.has_storage_slots() and self.ship.try_store_powerup(kind)
-            ):
-                self._apply_powerup(kind)
-            self.level_controller.notify_powerup_collected()
+        self.powerup_system.process_collection()
 
     # ------------------------------------------------------------------
     # Dano à nave / game over

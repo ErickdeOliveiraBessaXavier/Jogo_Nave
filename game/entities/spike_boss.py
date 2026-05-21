@@ -544,6 +544,11 @@ class SpikeBoss(BossHitMixin):
             return pygame.Rect(-1000, -1000, 0, 0)
         return pygame.Rect(self.x, self.y, self.w, self.h)
 
+    @property
+    def rect(self) -> pygame.Rect:
+        """Pygame-compatible rect property (alias para get_rect)."""
+        return self.get_rect()
+
     def get_proximity_attack_data(self) -> tuple[bool, float, float, float] | None:
         """
         Retorna dados do ataque de proximidade para detecção de colisão.

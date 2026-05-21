@@ -62,7 +62,10 @@ powerups, depois `move()`.
 **Arquivos afetados:** `entities/ship.py`, possivelmente `entities/mini_ship.py`
 para alinhar a API quando aplicável.
 
-**Status:** Pendente
+**Status:** Concluído — `ship.py` reduzido de 1699 → 835 LOC. Extraídos
+`ship_renderer.py` (370), `ship_powerups.py` (324) e `ship_movement.py` (230).
+`Ship` permanece fachada pública: `draw()`, `move()`, `try_dash()`,
+`activate_*`, `consume_*`, `try_store_powerup` delegam para os componentes.
 
 ---
 
@@ -99,7 +102,16 @@ Cheat code: centralizar `_CHEAT_CODE` e a lógica de buffer; `playing.py` e
 **Arquivos afetados:** `scenes/playing.py`, `scenes/main_menu.py`, novos
 arquivos em `systems/`.
 
-**Status:** Pendente
+**Status:** Em andamento.
+- ✅ `cheat_input.py` extraído: `CheatBuffer` em `systems/cheat_input.py`;
+  `playing.py` e `main_menu.py` consomem o mesmo módulo (sem mais duplicação
+  do code "271195").
+- ✅ `powerup_system.py` extraído: `PowerupSystem` em `systems/powerup_system.py`
+  com dispatch de classe (`_dispatch`) e métodos `apply(kind)` /
+  `process_collection()`. `PlayingScene._apply_powerup` e
+  `_process_powerups_and_stars` viraram delegators thin. `playing.py` reduzido
+  de 2321 → 2199 LOC.
+- ⏳ Restante: `input_handler.py`, `transition_controller.py`.
 
 ---
 
@@ -250,7 +262,7 @@ Item 10 fica para depois.
 
 | # | Item | Gravidade | Status |
 |---|------|-----------|--------|
-| 1 | `Ship` acumula render, movimento, powerups e targeting | Crítico | Pendente |
+| 1 | `Ship` acumula render, movimento, powerups e targeting | Crítico | Concluído |
 | 2 | `PlayingScene` concentra input, powerups, cheats e transições | Crítico | Pendente |
 | 3 | `levels.py` mistura dados, procedural e pipeline | Médio | Pendente |
 | 4 | `collisions.py` — extrair helpers de física | Médio | Pendente |

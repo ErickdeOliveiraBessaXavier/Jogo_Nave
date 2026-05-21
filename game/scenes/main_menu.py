@@ -21,6 +21,7 @@ from ..scenes.playing import PlayingScene
 from ..scenes.settings import SettingsScene
 from ..scenes.statistics import StatisticsScene
 from ..scenes.upgrades_selection import UpgradesSelectionScene
+from ..systems.cheat_input import CheatBuffer
 from ..scenes.world_selection import WorldSelectionView
 
 if TYPE_CHECKING:
@@ -346,7 +347,7 @@ class MainMenuScene(Scene):
         self.focused_button_index = 0
 
         # Cheat code buffer
-        self.cheat_buffer: str = ""
+        self.cheat: CheatBuffer = CheatBuffer()
 
         # Auto-play visual
         self.auto_play = AutoPlay()
@@ -667,26 +668,14 @@ class MainMenuScene(Scene):
 
     def _process_cheat_input(self, event: pygame.event.Event) -> None:
         """Detecta o cheat code '271195' para adicionar 9999 estrelas e desbloquear todos os mundos."""
-        _CHEAT_CODE = "271195"
-        _CHEAT_BUFFER_MAX = len(_CHEAT_CODE)
-
-        if not pygame.K_0 <= event.key <= pygame.K_9:
-            # Se apertar uma tecla que não é número, reseta o buffer
-            self.cheat_buffer = ""
+        if not self.cheat.feed(event):
             return
 
-        self.cheat_buffer += chr(event.key)
-        logger.debug(f"Cheat buffer: '{self.cheat_buffer}'")
-        if len(self.cheat_buffer) > _CHEAT_BUFFER_MAX:
-            self.cheat_buffer = self.cheat_buffer[-_CHEAT_BUFFER_MAX:]
-
-        if self.cheat_buffer == _CHEAT_CODE:
-            self.cheat_buffer = ""
-            self.app.player_profile.add_stars(9999)
-            self.app.player_profile.unlock_all_worlds()
-            self.app.player_profile.save()
-            logger.info("⭐ CHEAT ATIVADO - +9999 Estrelas e todos os mundos desbloqueados!")
-            sound_manager.play_sound("button_click")
+        self.app.player_profile.add_stars(9999)
+        self.app.player_profile.unlock_all_worlds()
+        self.app.player_profile.save()
+        logger.info("⭐ CHEAT ATIVADO - +9999 Estrelas e todos os mundos desbloqueados!")
+        sound_manager.play_sound("button_click")
 
     def handle_event(self, event: pygame.event.Event):
         """Handles user input events."""

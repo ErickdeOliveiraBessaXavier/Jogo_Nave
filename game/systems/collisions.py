@@ -1136,6 +1136,11 @@ class Collisions:
         """Colisão de tiros teleguiados consumíveis com boss."""
         if not homing_bullets or not boss or boss.dead:
             return 0
+        # Boss invulnerável (INTRO/TELEPORT/ENTERING): pular para não
+        # desperdiçar cargas — o dano seria descartado por can_take_damage.
+        can_damage_fn = getattr(boss, "can_take_damage", None)
+        if callable(can_damage_fn) and not can_damage_fn():
+            return 0
 
         score_gain = 0
         for b in homing_bullets[:]:
@@ -1736,6 +1741,12 @@ class Collisions:
             return 0
         if not boss or boss.dead:
             return 0
+        # Boss em INTRO/TELEPORT/ENTERING: pular para não registrar boss em
+        # laser.hit_enemies prematuramente — caso contrário o laser nunca
+        # acertaria de novo quando o boss ficasse vulnerável.
+        can_damage_fn = getattr(boss, "can_take_damage", None)
+        if callable(can_damage_fn) and not can_damage_fn():
+            return 0
         score_gain: int = 0
 
         mask_data = self._get_enemy_collision_mask_data(boss)
@@ -1745,15 +1756,7 @@ class Collisions:
                 continue
 
             line = laser.get_collision_line()
-            # Garantir acesso seguro ao rect do boss
-            boss_rect: pygame.Rect = (
-                boss.rect
-                if hasattr(boss, "rect")
-                else cast(
-                    pygame.Rect,
-                    getattr(boss, "get_rect", lambda: pygame.Rect(0, 0, 0, 0))(),
-                )
-            )
+            boss_rect: pygame.Rect = boss.rect
 
             collision_detected = False
 
@@ -1841,10 +1844,18 @@ class Collisions:
             line = laser.get_collision_line()
 
             if enemy_grid is not None:
-                lx = int(min(laser.x, laser.target_x))
-                ly = int(min(laser.y, laser.target_y) - laser.w / 2)
-                lw = int(abs(laser.target_x - laser.x))
-                lh = int(abs(laser.target_y - laser.y) + laser.w)
+                # Bounding box do segmento do laser com padding lateral. Para
+                # lasers verticais (target_x ≈ laser.x), abs(target_x - x) é 0
+                # e candidatos a meio caminho ficariam fora do query — usar
+                # min/max com `+ laser.w` evita esse caso.
+                min_x = min(laser.x, laser.target_x) - laser.w
+                max_x = max(laser.x, laser.target_x) + laser.w
+                min_y = min(laser.y, laser.target_y) - laser.w
+                max_y = max(laser.y, laser.target_y) + laser.w
+                lx = int(min_x)
+                ly = int(min_y)
+                lw = int(max_x - min_x)
+                lh = int(max_y - min_y)
                 candidates: Sequence[Enemy] = enemy_grid.query(lx, ly, lw, lh)
             else:
                 candidates = enemies
@@ -1894,6 +1905,10 @@ class Collisions:
             return 0
         if not boss or boss.dead:
             return 0
+        # Boss em INTRO/TELEPORT/ENTERING: pular (ver `player_lasers_vs_boss`).
+        can_damage_fn = getattr(boss, "can_take_damage", None)
+        if callable(can_damage_fn) and not can_damage_fn():
+            return 0
 
         score_gain: int = 0
         mask_data = self._get_enemy_collision_mask_data(boss)
@@ -1903,15 +1918,7 @@ class Collisions:
                 continue
 
             line = laser.get_collision_line()
-            # Garantir acesso seguro ao rect do boss
-            boss_rect: pygame.Rect = (
-                boss.rect
-                if hasattr(boss, "rect")
-                else cast(
-                    pygame.Rect,
-                    getattr(boss, "get_rect", lambda: pygame.Rect(0, 0, 0, 0))(),
-                )
-            )
+            boss_rect: pygame.Rect = boss.rect
             collision_detected = False
 
             if mask_data is not None:
