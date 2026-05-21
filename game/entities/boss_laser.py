@@ -1,19 +1,10 @@
 import random
-from typing import List, Set, Tuple, TypedDict
+from typing import List, Set
 
 import pygame
 
 from ..core.config import config as Config
-
-
-class DeathParticle(TypedDict):
-    """Type definition for laser death particles."""
-
-    pos: pygame.Vector2
-    vel: pygame.Vector2
-    size: float
-    color: Tuple[int, int, int]
-    lifespan: float
+from .particle_types import DeathParticle
 
 
 class BossLaser:

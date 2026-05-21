@@ -11,6 +11,7 @@ import random
 from typing import TYPE_CHECKING, Any, Final, List, Optional, Tuple
 
 import pygame
+from .boss_hit_mixin import BossHitMixin
 
 from ..core.config import config as Config
 from ..core.sound_config import MusicState
@@ -150,20 +151,6 @@ class GolemMine:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x, self.y, float(self.HIT_RADIUS)
 
-    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
-        from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult
-
-        self.take_damage(damage)
-        if self.dead:
-            return HitResult(
-                killed=True,
-                points=self.get_points_value(),
-                explosion_size=20,
-                sound=hit_sounds.EXPLOSION_ASTEROID,
-            )
-        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
-
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
@@ -171,8 +158,6 @@ class GolemMine:
         self.dead = True
         return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
 
-    def should_remove(self) -> bool:
-        return self.dead
 
     def update(self, dt: float) -> list["AttackDebris"]:
         self._pulse_t += dt
@@ -363,21 +348,6 @@ class AttackDebris:
         # raio do halo de glow que se estende até size*2.
         return self.x, self.y, float(self._hit_half)
 
-    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
-        from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult
-
-        self.health = max(0, self.health - damage)
-        if self.health <= 0:
-            self.dead = True
-            return HitResult(
-                killed=True,
-                points=20,
-                explosion_size=18,
-                sound=hit_sounds.EXPLOSION_ASTEROID,
-            )
-        return HitResult(explosion_size=8, sound=hit_sounds.BOSS_DAMAGE)
-
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
@@ -385,8 +355,6 @@ class AttackDebris:
         self.dead = True
         return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
 
-    def should_remove(self) -> bool:
-        return self.dead
 
 
 class OrbitalDebris:
@@ -560,11 +528,6 @@ class OrbitalDebris:
         # Raio = metade da largura da rocha (size*S/2), não size*S inteiro.
         return self.x, self.y, float(self._hit_half)
 
-    def on_hit(self, _damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
-        from ..systems.hit_result import NO_HIT
-
-        return NO_HIT  # imune a tiros
-
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
@@ -572,8 +535,6 @@ class OrbitalDebris:
         self.dead = True
         return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
 
-    def should_remove(self) -> bool:
-        return self.dead
 
 
 class EmergeDebris:
@@ -696,11 +657,6 @@ class EmergeDebris:
         # Raio = metade da largura da rocha (size*S/2), consistente com a rect.
         return self.x, self.y, float(self._hit_half)
 
-    def on_hit(self, _damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
-        from ..systems.hit_result import NO_HIT
-
-        return NO_HIT  # imune a tiros
-
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
@@ -708,8 +664,6 @@ class EmergeDebris:
         self.dead = True
         return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ASTEROID)
 
-    def should_remove(self) -> bool:
-        return self.dead
 
 
 # ============================================================================
@@ -784,7 +738,7 @@ class _ChargeParticle:
         surface.blit(self._surf, (int(self.px) - self.size, int(self.py) - self.size))
 
 
-class StoneGolemBoss:
+class StoneGolemBoss(BossHitMixin):
     """
     Boss do Mundo 1 — Cordilheira Celestial.
     Implementação otimizada com FSM modularizada.
@@ -2109,22 +2063,6 @@ class StoneGolemBoss:
         cy = self.y + self.h / 2 + self._current_float_y
         return cx, cy, min(self.w, self.h) / 2
 
-    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
-        from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult
-
-        self.take_damage(damage)
-        if self.dead:
-            return HitResult(
-                killed=True,
-                points=Config.BOSS_DEFEAT_SCORE,
-                explosion_size=100,
-                sound=hit_sounds.EXPLOSION_BOSS,
-            )
-        return HitResult(explosion_size=15, sound=hit_sounds.BOSS_DAMAGE)
-
-    def should_remove(self) -> bool:
-        return self.dead
 
     def draw(self, surface: pygame.Surface) -> None:
         if self.dead:

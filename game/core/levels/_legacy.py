@@ -2055,17 +2055,11 @@ def _apply_difficulty_to_fixed_level(
         adjusted_enemies * DIFFICULTY_ENEMY_COUNT_MULTIPLIER.get(preset, 1.0)
     )
 
-    return LevelConfig(
-        level_number=config.level_number,
+    import dataclasses
+    return dataclasses.replace(
+        config,
         enemy_spawn_config=adjusted_spawn_config,
         enemies_to_clear=adjusted_enemies,
-        boss_type=config.boss_type,
-        mines_enabled=config.mines_enabled,
-        formations_enabled=config.formations_enabled,
-        formation_types=config.formation_types,
-        theme_name=config.theme_name,
-        score_multiplier=config.score_multiplier,
-        storm_kind=config.storm_kind,
     )
 
 

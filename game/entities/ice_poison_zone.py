@@ -1,34 +1,12 @@
 import math
 import random
-from dataclasses import dataclass
 
 import pygame
 
-from .zone_base import ZoneBase
+from .zone_base import ZoneBase, ZoneParticle
 
 
-@dataclass
-class _PlusParticle:
-    x: float
-    y: float
-    age: float = 0.0
-    lifetime: float = 0.0
-    base_size: float = 0.0
-    rotation: float = 0.0
-    rot_speed: float = 0.0
-
-    def update(self, dt: float) -> None:
-        self.age += dt
-        self.rotation += self.rot_speed * dt
-
-    @property
-    def alive(self) -> bool:
-        return self.age < self.lifetime
-
-    @property
-    def progress(self) -> float:
-        return self.age / self.lifetime
-
+class _PlusParticle(ZoneParticle):
     @property
     def current_size(self) -> float:
         return self.base_size * min(1.0, self.progress * 2.5)

@@ -1,11 +1,10 @@
 import math
 import random
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, Sequence
 
 import pygame
 
-from .zone_base import ZoneBase
+from .zone_base import ZoneBase, ZoneParticle
 
 if TYPE_CHECKING:
     from ..systems.hit_result import HitResult
@@ -18,28 +17,7 @@ class Positionable(Protocol):
     y: float
 
 
-@dataclass
-class _FireParticle:
-    x: float
-    y: float
-    age: float = 0.0
-    lifetime: float = 0.0
-    base_size: float = 0.0
-    rotation: float = 0.0
-    rot_speed: float = 0.0
-
-    def update(self, dt: float) -> None:
-        self.age += dt
-        self.rotation += self.rot_speed * dt
-
-    @property
-    def alive(self) -> bool:
-        return self.age < self.lifetime
-
-    @property
-    def progress(self) -> float:
-        return self.age / self.lifetime
-
+class _FireParticle(ZoneParticle):
     @property
     def current_size(self) -> float:
         # Cresce rápido e encolhe no final

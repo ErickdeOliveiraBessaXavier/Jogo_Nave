@@ -3,6 +3,7 @@ import random
 from typing import TYPE_CHECKING, Final, List, Literal, Optional, TypeAlias, TypedDict
 
 import pygame
+from .boss_hit_mixin import BossHitMixin
 
 from ..core import colors
 from ..core.assets import BASE_DIR, get_image
@@ -382,9 +383,6 @@ class SerpentBlock:
             if not self.is_fragment:
                 self.boss.on_block_killed(self.side, self)
 
-    def collision_circle(self) -> tuple[float, float, float]:
-        r = self.rect
-        return r.centerx, r.centery, max(r.width, r.height) / 2
 
     def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
@@ -407,9 +405,6 @@ class SerpentBlock:
         self.take_damage(self.health)  # mata via take_damage para notificar boss
         return HitResult(killed=False, sound=hit_sounds.EXPLOSION_ASTEROID)
 
-    def should_remove(self) -> bool:
-        # Boss controla o ciclo de vida — nunca remover via cleanup genérico.
-        return False
 
     # ------------------------------------------------------------------
     # Revive / Re-entrada
@@ -836,7 +831,7 @@ class SerpentRockBullet:
 # ---------------------------------------------------------------------------
 
 
-class MountainSerpentBoss:
+class MountainSerpentBoss(BossHitMixin):
     """Cabeca da Serpente de Pedra (boss das Cordilheiras).
 
     Responsabilidades:
@@ -1676,9 +1671,6 @@ class MountainSerpentBoss:
     def get_points_value(self) -> int:
         return 850
 
-    def collision_circle(self) -> tuple[float, float, float]:
-        r = self.rect
-        return r.centerx, r.centery, max(r.width, r.height) / 2
 
     def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..core.config import config as cfg
@@ -1697,8 +1689,6 @@ class MountainSerpentBoss:
             )
         return HitResult(explosion_size=15, sound=hit_sounds.BOSS_DAMAGE)
 
-    def should_remove(self) -> bool:
-        return self.dead
 
     def can_take_damage(self) -> bool:
         """Só recebe dano se não estiver entrando e se estiver vulnerável."""

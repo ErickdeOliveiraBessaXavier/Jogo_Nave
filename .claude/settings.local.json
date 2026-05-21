@@ -5,7 +5,8 @@
       "Bash(grep -nA 30 \"_spawn_damage_meteor\\\\|_spawn_death_fragment\" game/entities/giant_meteor_boss.py)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\eobx\\\\OneDrive\\\\Documentos\\\\Jogos_Python\\\\Nave\" -Recurse -File)",
       "Bash(Select-Object FullName)",
-      "Bash(Get-Content *)"
+      "Bash(Get-Content *)",
+      "Bash(PYTHONUTF8=1 python *)"
     ]
   }
 }

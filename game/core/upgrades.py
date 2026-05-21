@@ -10,12 +10,7 @@ try:
 except ImportError:  # pragma: no cover - defensive fallback for isolated tests
     Config = None  # type: ignore
 
-try:
-    from .upgrades_config import EMP_BASE_DURATION
-
-    _emp_base_duration = EMP_BASE_DURATION
-except ImportError:
-    _emp_base_duration = 10.0  # fallback
+_emp_base_duration = 10.0
 
 
 class UpgradeType(Enum):

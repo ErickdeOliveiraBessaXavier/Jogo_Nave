@@ -12,7 +12,7 @@ from ..core.ship_types import ShipProfile, all_ship_profiles, get_ship_profile
 from ..core.state import Scene
 from ..core.upgrades import UpgradeMeta, get_upgrade_icon, list_all_upgrades_meta
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
-from .ui_helpers import draw_bordered_button
+from .ui_helpers import wrap_text, draw_bordered_button
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -708,7 +708,7 @@ class UpgradesSelectionScene(Scene):
             y_pos: int,
             max_lines: int = 3,
         ) -> int:
-            for line in self._wrap_text(text, font, max_w)[:max_lines]:
+            for line in wrap_text(font, text, max_w)[:max_lines]:
                 line_surf = font.render(line, True, color)
                 # Clip garante que nada vaze mesmo se a palavra individual exceder.
                 surface.blit(
@@ -1212,7 +1212,7 @@ class UpgradesSelectionScene(Scene):
         line_height = 20
 
         # Quebrar o texto em linhas antes de calcular a altura
-        wrapped_lines = self._wrap_text(upg.desc, self.small_font, w - (padding * 2))
+        wrapped_lines = wrap_text(self.small_font, upg.desc, w - (padding * 2))
 
         # Calcular altura necessária: Top + Nome + Gap + Linhas + Bottom
         # 10 (top) + 24 (nome) + 10 (gap) + (linhas * height) + 10 (bottom)
@@ -1263,21 +1263,6 @@ class UpgradesSelectionScene(Scene):
 
         surface.blit(tooltip_surf, (x, y))
 
-    def _wrap_text(self, text: str, font: pygame.font.Font, max_w: int) -> list[str]:
-        words: list[str] = text.split(" ")
-        lines: list[str] = []
-        cur = ""
-        for w in words:
-            test = cur + w + " "
-            if font.size(test)[0] < max_w:
-                cur = test
-            else:
-                if cur:
-                    lines.append(cur.strip())
-                cur = w + " "
-        if cur:
-            lines.append(cur.strip())
-        return lines
 
     def _return_to_menu(self):
         self.fade_out, self.transitioning, self.transition_progress = True, True, 0.0

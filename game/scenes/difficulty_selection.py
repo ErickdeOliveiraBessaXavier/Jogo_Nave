@@ -19,7 +19,7 @@ from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
 from ..core.sound import sound_manager
 from ..core.state import Scene
-from .ui_helpers import UIParticle, draw_bordered_button
+from .ui_helpers import wrap_text, UIParticle, draw_bordered_button
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -104,8 +104,8 @@ class DifficultySelectionView:
             button_rect = pygame.Rect(card_x, card_y, card_size, card_size)
 
             # Descrição com quebra de linha
-            desc_lines = self._wrap_text(
-                settings["description"], self.desc_font, card_size - 30
+            desc_lines = wrap_text(
+                self.desc_font, settings["description"], card_size - 30
             )
             desc_surfaces = [
                 self.desc_font.render(line, True, WHITE) for line in desc_lines
@@ -141,26 +141,6 @@ class DifficultySelectionView:
         btn_h = 40
         self.back_button_rect = pygame.Rect(40, Config.SCREEN_HEIGHT - 60, btn_w, btn_h)
 
-    def _wrap_text(
-        self, text: str, font: pygame.font.Font, max_width: int
-    ) -> list[str]:
-        """Quebra texto em múltiplas linhas."""
-        words = text.split(" ")
-        lines: list[str] = []
-        current_line: list[str] = []
-
-        for word in words:
-            test_line = " ".join(current_line + [word])
-            if font.size(test_line)[0] <= max_width:
-                current_line.append(word)
-            else:
-                lines.append(" ".join(current_line))
-                current_line = [word]
-
-        if current_line:
-            lines.append(" ".join(current_line))
-
-        return lines
 
     def reset(self):
         """Reseta o estado da view para reiniciar animação."""

@@ -8,6 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Sequence
 
 import pygame
+from .ui_helpers import wrap_text
 
 from ..core import colors
 from ..core.assets import get_font
@@ -192,26 +193,6 @@ class WorldTransitionScene(Scene):
         overlay.set_alpha(alpha)
         surface.blit(overlay, (0, 0))
 
-    def _wrap_text(
-        self, font: pygame.font.Font, text: str, max_width: int
-    ) -> list[str]:
-        words = text.split()
-        if not words:
-            return [text]
-
-        lines: list[str] = []
-        current_line = words[0]
-
-        for word in words[1:]:
-            candidate = f"{current_line} {word}"
-            if font.size(candidate)[0] <= max_width:
-                current_line = candidate
-            else:
-                lines.append(current_line)
-                current_line = word
-
-        lines.append(current_line)
-        return lines
 
     def _normalize_rgb(self, raw_color: Sequence[Any]) -> tuple[int, int, int]:
         """Normaliza cores para RGB válido aceito pelo pygame."""
@@ -236,7 +217,7 @@ class WorldTransitionScene(Scene):
         max_lines: int | None = None,
         line_spacing: int = 4,
     ) -> int:
-        lines = self._wrap_text(font, text, max_width)
+        lines = wrap_text(font, text, max_width)
         if max_lines is not None:
             lines = lines[:max_lines]
 

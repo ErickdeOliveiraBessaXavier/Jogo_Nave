@@ -96,3 +96,44 @@ def render_with_fade(
         surface.blit(temp, (0, 0))
     else:
         view.render(surface)
+
+def wrap_text(font: pygame.font.Font, text: str, max_width: int) -> list[str]:
+    """Quebra texto em múltiplas linhas para caber na largura máxima."""
+    words = text.split()
+    if not words:
+        return [""]
+
+    lines: list[str] = []
+    current_line = words[0]
+
+    for word in words[1:]:
+        candidate = f"{current_line} {word}"
+        width = font.size(candidate)[0]
+        if width <= max_width:
+            current_line = candidate
+        else:
+            lines.append(current_line)
+            current_line = word
+            
+    lines.append(current_line)
+    return lines
+
+class FadeTransitionMixin:
+    """Mixin para propriedades e métodos de transição fade."""
+    
+    transitioning: bool
+    transition_progress: float
+    transition_duration: float
+    fade_out: bool
+
+    def _init_transition(self, duration: float = 0.3) -> None:
+        self.transitioning = False
+        self.transition_progress = 0.0
+        self.transition_duration = duration
+        self.fade_out = False
+
+    def _on_back(self) -> None:
+        """Inicia a transição de fade out."""
+        self.fade_out = True
+        self.transitioning = True
+        self.transition_progress = 0.0

@@ -290,7 +290,7 @@ class GameplayInputHandler:
 
     def _handle_upgrade_key(self, event: pygame.event.Event) -> None:
         """Ativa o slot de upgrade correspondente à tecla pressionada."""
-        from ..core.upgrades_config import UPGRADE_SLOT_COUNT
+        from ..core.upgrades_config import UPGRADE_SLOT_COUNT, DEFAULT_KEYBINDINGS
 
         scene = self.scene
         try:
@@ -300,18 +300,7 @@ class GameplayInputHandler:
                     scene._activate_upgrade_slot(i)
                     return
         except (AttributeError, TypeError):
-            default_keys = [
-                pygame.K_1,
-                pygame.K_2,
-                pygame.K_3,
-                pygame.K_4,
-                pygame.K_5,
-                pygame.K_6,
-                pygame.K_7,
-                pygame.K_8,
-                pygame.K_9,
-            ]
-            for i, keycode in enumerate(default_keys[:UPGRADE_SLOT_COUNT]):
+            for i, keycode in enumerate(DEFAULT_KEYBINDINGS[:UPGRADE_SLOT_COUNT]):
                 if event.key == keycode:
                     scene._activate_upgrade_slot(i)
                     return

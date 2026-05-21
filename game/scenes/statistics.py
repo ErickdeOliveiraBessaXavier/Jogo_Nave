@@ -16,7 +16,7 @@ from ..core.meta_progression import (
 from ..core.meta_progression_service import ProfileStatsFormatter
 from ..core.paths import get_profile_path
 from ..core.state import Scene
-from .ui_helpers import draw_bordered_button, render_with_fade
+from .ui_helpers import FadeTransitionMixin, wrap_text, draw_bordered_button, render_with_fade
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -1015,27 +1015,14 @@ class StatisticsView:
         self.close_confirmation()
 
 
-class StatisticsScene(Scene):
+class StatisticsScene(Scene, FadeTransitionMixin):
     """Cena de estatísticas do jogador (mantida para compatibilidade)."""
 
     def __init__(self, game_app: "GameApp"):
         super().__init__(game_app)
         self.r = game_app.renderer  # Usar renderer compartilhado
         self.view = StatisticsView(on_back=self._on_back, renderer=self.r, app=game_app)
-
-        # Sistema de transição
-        self.transitioning = False
-        self.transition_progress = 0.0
-        self.transition_duration = 0.3
-        self.fade_out = False
-
-    def _on_back(self):
-        """Callback quando o usuário quer voltar."""
-        # Iniciar transição de saída
-        self.fade_out = True
-        self.transitioning = True
-        self.transition_progress = 0.0
-
+        self._init_transition(duration=0.3)
     def enter(self):
         super().enter()
         self.view.reset()
@@ -1116,8 +1103,7 @@ class ConfirmationDialog:
         self.text_max_width = self.box_rect.width - 50
         message_text = " ".join(question_lines)
         self.message_font = self.item_font
-        self.message_lines = self._wrap_text(
-            self.message_font, message_text, self.text_max_width
+        self.message_lines = wrap_text(self.message_font, message_text, self.text_max_width
         )
 
         line_gap = 8
@@ -1131,8 +1117,7 @@ class ConfirmationDialog:
 
         if text_block_height > available_height:
             self.message_font = self.small_font
-            self.message_lines = self._wrap_text(
-                self.message_font, message_text, self.text_max_width
+            self.message_lines = wrap_text(self.message_font, message_text, self.text_max_width
             )
             line_height = self.message_font.get_linesize()
             text_block_height = (len(self.message_lines) * line_height) + (
@@ -1194,27 +1179,6 @@ class ConfirmationDialog:
         self._draw_button(surface, self.yes_rect, "Sim", colors.GREEN)
         self._draw_button(surface, self.no_rect, "Não", colors.RED)
 
-    def _wrap_text(
-        self, font: pygame.font.Font, text: str, max_width: int
-    ) -> list[str]:
-        """Quebra texto em linhas para caber dentro do dialog."""
-        words = text.split()
-        if not words:
-            return [""]
-
-        lines: list[str] = []
-        current = words[0]
-
-        for word in words[1:]:
-            candidate = f"{current} {word}"
-            if font.size(candidate)[0] <= max_width:
-                current = candidate
-            else:
-                lines.append(current)
-                current = word
-
-        lines.append(current)
-        return lines
 
     def _draw_button(
         self, surface: pygame.Surface, rect: pygame.Rect, text: str, color: colors.Color

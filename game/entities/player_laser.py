@@ -38,14 +38,7 @@ TWO_PI: Final[float] = 2 * math.pi
 PARTICLE_SIZE_DECAY: Final[float] = 5.0
 MIN_POSITION_CHANGE: Final[float] = 1.0
 
-
-class DeathParticle(TypedDict):
-    pos: Tuple[float, float]
-    vel: Tuple[float, float]
-    size: float
-    color: Tuple[int, int, int]
-    lifespan: float
-
+from .particle_types import DeathParticle
 
 class PlayerLaser:
     """Laser disparado pelo jogador que atravessa múltiplos inimigos."""

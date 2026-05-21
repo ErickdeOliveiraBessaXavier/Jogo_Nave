@@ -16,6 +16,7 @@ from .levels import DifficultyConfig, LevelConfig
 from .ship_types import DEFAULT_SHIP_ID, ShipProfile, get_ship_profile, is_valid_ship_id
 from .upgrades import UpgradeType
 from .upgrades_config import (
+    DEFAULT_KEYBINDINGS,
     DEFAULT_UNLOCKED,
     INITIAL_UNLOCKED_SLOTS,
     UPGRADE_SLOT_COUNT,
@@ -494,17 +495,11 @@ class DifficultyAdjuster:
         adjusted_enemies = int(config.enemies_to_clear * multiplier)
         adjusted_enemies = max(20, adjusted_enemies)  # Mínimo de 20 inimigos
 
-        # Criar nova config
-        return LevelConfig(
-            level_number=config.level_number,
+        import dataclasses
+        return dataclasses.replace(
+            config,
             enemy_spawn_config=adjusted_spawn_config,
             enemies_to_clear=adjusted_enemies,
-            boss_type=config.boss_type,
-            mines_enabled=config.mines_enabled,
-            formations_enabled=config.formations_enabled,
-            formation_types=config.formation_types,
-            theme_name=config.theme_name,
-            score_multiplier=config.score_multiplier,
         )
 
 
@@ -1267,11 +1262,6 @@ class PlayerProfile:
         parsed["session_history"] = session_history
 
         # Aprimoramentos: unlocked + loadout
-        _kb_defaults: List[int] = [
-            pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
-            pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9, pygame.K_0,
-            pygame.K_MINUS, pygame.K_EQUALS,
-        ]
         try:
             unlocked_raw = data.get("unlocked_upgrades")
             if isinstance(unlocked_raw, list):
@@ -1317,14 +1307,14 @@ class PlayerProfile:
                     if isinstance(key, int) and 0 <= key <= 1000000:
                         keys.append(key)
                     else:
-                        keys.append(_kb_defaults[len(keys)])
+                        keys.append(DEFAULT_KEYBINDINGS[len(keys)])
                 while len(keys) < UPGRADE_SLOT_COUNT:
-                    keys.append(_kb_defaults[len(keys)])
+                    keys.append(DEFAULT_KEYBINDINGS[len(keys)])
                 parsed["upgrade_keybindings"] = keys
             else:
-                parsed["upgrade_keybindings"] = _kb_defaults[:UPGRADE_SLOT_COUNT]
+                parsed["upgrade_keybindings"] = DEFAULT_KEYBINDINGS[:UPGRADE_SLOT_COUNT]
         except (KeyError, ValueError, TypeError, IndexError):
-            parsed["upgrade_keybindings"] = _kb_defaults[:UPGRADE_SLOT_COUNT]
+            parsed["upgrade_keybindings"] = DEFAULT_KEYBINDINGS[:UPGRADE_SLOT_COUNT]
 
         return parsed
 
@@ -1512,20 +1502,7 @@ class PlayerProfile:
         self.auto_fire = False
         self.unlocked_upgrades = set(DEFAULT_UNLOCKED)
         self.upgrade_loadout = [None] * UPGRADE_SLOT_COUNT
-        self.upgrade_keybindings = [
-            pygame.K_1,
-            pygame.K_2,
-            pygame.K_3,
-            pygame.K_4,
-            pygame.K_5,
-            pygame.K_6,
-            pygame.K_7,
-            pygame.K_8,
-            pygame.K_9,
-            pygame.K_0,
-            pygame.K_MINUS,
-            pygame.K_EQUALS,
-        ][:UPGRADE_SLOT_COUNT]
+        self.upgrade_keybindings = DEFAULT_KEYBINDINGS[:UPGRADE_SLOT_COUNT]
 
         # Resetar sistema de estrelas
         self.stars_collected = 0

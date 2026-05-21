@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, List, Tuple
 
 import pygame
+from .enemy_hit_mixin import EnemyHitMixin
 
 from ..core import colors
 from ..core.config import config as Config
@@ -135,7 +136,7 @@ class StoneShardBullet(AlienBullet):
         )
 
 
-class StoneSentry:
+class StoneSentry(EnemyHitMixin):
     """
     Inimigo Sentinela de Pedra - Tema de Montanha.
     Flutua até uma posição, persegue o jogador lentamente e dispara um pedregulho central.
@@ -1067,23 +1068,6 @@ class StoneSentry:
         if self.health <= 0:
             self.dead = True
 
-    def collision_circle(self) -> tuple[float, float, float]:
-        r = self.rect
-        return r.centerx, r.centery, max(r.width, r.height) / 2
-
-    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
-        from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult
-
-        self.take_damage(damage)
-        if self.dead:
-            return HitResult(
-                killed=True,
-                points=self.get_points_value(),
-                explosion_size=45,
-                sound=hit_sounds.EXPLOSION_ALIEN,
-            )
-        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds

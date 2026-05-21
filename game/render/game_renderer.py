@@ -44,8 +44,8 @@ class GameRenderer:
 
     def render(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """Método principal de renderização chamado a cada frame."""
-        from ..scenes.playing import GameState
 
+        from ..scenes.playing import GameState
         dt = frame.dt
         speed_multiplier = 1.0
         boss_active = False

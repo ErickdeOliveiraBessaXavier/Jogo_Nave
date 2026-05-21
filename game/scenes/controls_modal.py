@@ -8,7 +8,7 @@ from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE, WHITE
 from ..core.config import config as Config
 from ..core.sound import sound_manager
 from ..core.state import Scene
-from .ui_helpers import draw_bordered_button
+from .ui_helpers import wrap_text, draw_bordered_button
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -121,24 +121,6 @@ class ControlsModalScene(Scene):
         if self.timer <= 0:
             self._finish()
 
-    def _wrap_text(self, text: str, font: pygame.font.Font, max_width: int) -> list[str]:
-        """Quebra o texto em múltiplas linhas para caber na largura."""
-        words = text.split(' ')
-        lines: list[str] = []
-        current_line: list[str] = []
-
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            if font.size(test_line)[0] <= max_width:
-                current_line.append(word)
-            else:
-                lines.append(' '.join(current_line))
-                current_line = [word]
-        
-        if current_line:
-            lines.append(' '.join(current_line))
-        
-        return lines
 
     def render(self, surface: pygame.Surface):
         # Overlay escuro no fundo da tela toda
@@ -174,7 +156,7 @@ class ControlsModalScene(Scene):
         def draw_column(items: list[str], start_x: int, start_y: int):
             curr_y = start_y
             for item in items:
-                wrapped_lines = self._wrap_text(item, self.item_font, max_col_w)
+                wrapped_lines = wrap_text(self.item_font, item, max_col_w)
                 for line in wrapped_lines:
                     text_surf = self.item_font.render(line, True, WHITE)
                     surface.blit(text_surf, (start_x, curr_y))

@@ -1,18 +1,11 @@
 import random
-from typing import List, Tuple, TypedDict
+from typing import List
 
 import pygame
 
 from ..core import colors
 from .laser_utils import compute_laser_width
-
-
-class DeathParticle(TypedDict):
-    pos: pygame.Vector2
-    vel: pygame.Vector2
-    size: float
-    color: Tuple[int, int, int]
-    lifespan: float
+from .particle_types import DeathParticle
 
 
 class SpikeBossLaser:

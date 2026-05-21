@@ -1,23 +1,17 @@
 import math
 import random
-from typing import TYPE_CHECKING, List, Tuple, TypedDict
+from typing import TYPE_CHECKING, List, Tuple
 
 import pygame
 
 from ..core import colors
 from ..core.config import config as Config
 from .eye_laser import EyeLaser
+from .particle_types import ChargingParticle
 
 if TYPE_CHECKING:
     from ..systems.entity_context import EnemyUpdateContext
     from ..systems.hit_result import HitResult
-
-
-class ChargingParticle(TypedDict):
-    pos: pygame.Vector2
-    speed: float
-    color: Tuple[int, int, int]
-    size: float
 
 
 class EyeEnemy:

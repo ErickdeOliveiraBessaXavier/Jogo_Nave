@@ -1,20 +1,12 @@
 import random
-from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, TypedDict
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 import pygame
 
+from .particle_types import ParticleDict
+
 if TYPE_CHECKING:
     from .cannon_mine import CannonMine
-
-
-class ParticleDict(TypedDict):
-    x: float
-    y: float
-    vx: float
-    vy: float
-    lifetime: float
-    size: float
-    color: Tuple[int, int, int]
 
 
 class CannonTower:

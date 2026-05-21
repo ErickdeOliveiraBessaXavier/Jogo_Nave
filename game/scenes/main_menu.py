@@ -911,29 +911,20 @@ class MainMenuScene(Scene):
 
             # Render title com efeito rainbow se easter egg ativado
             if self.auto_play.is_rainbow_mode():
-                # Cores do arco-íris (HSV para RGB)
-                rainbow_colors = [
-                    (255, 0, 0),  # Vermelho
-                    (255, 127, 0),  # Laranja
-                    (255, 255, 0),  # Amarelo
-                    (0, 255, 0),  # Verde
-                    (0, 0, 255),  # Azul
-                    (75, 0, 130),  # Índigo
-                    (148, 0, 211),  # Violeta
-                ]
+                from ..core.colors import RAINBOW_COLORS
 
                 time_ms = pygame.time.get_ticks()
 
                 for i, char_data in enumerate(self.title_chars):
                     # Deslocar cores baseado no tempo (cria efeito de "rainbow wave") - MAIS LENTO
-                    color_offset = (time_ms / 200) % len(rainbow_colors)
+                    color_offset = (time_ms / 200) % len(RAINBOW_COLORS)
                     base_color_index = int(color_offset)
-                    next_color_index = (base_color_index + 1) % len(rainbow_colors)
+                    next_color_index = (base_color_index + 1) % len(RAINBOW_COLORS)
 
                     # Interpolação suave entre cores
                     blend_factor = color_offset - base_color_index
-                    base_color = rainbow_colors[base_color_index]
-                    next_color = rainbow_colors[next_color_index]
+                    base_color = RAINBOW_COLORS[base_color_index]
+                    next_color = RAINBOW_COLORS[next_color_index]
 
                     # Interpolar RGB entre as duas cores
                     interpolated_color = (

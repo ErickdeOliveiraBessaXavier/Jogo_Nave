@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import random
 from collections import deque
-from typing import TYPE_CHECKING, Any, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, Optional
 
 import pygame
 
 from ..core.config import config as Config
 from ..core.ship_types import ShipProfile, get_ship_profile
 from ..core.sound import sound_manager
+from .particle_types import ParticleDict
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -24,16 +25,6 @@ PARTICLE_THRUSTER_VELOCITY_X = Config.PARTICLE_THRUSTER_VELOCITY_X
 PARTICLE_THRUSTER_VELOCITY_Y = Config.PARTICLE_THRUSTER_VELOCITY_Y
 PARTICLE_THRUSTER_LIFETIME = Config.PARTICLE_THRUSTER_LIFETIME
 PARTICLE_THRUSTER_SIZE = Config.PARTICLE_THRUSTER_SIZE
-
-
-class ParticleDict(TypedDict):
-    x: float
-    y: float
-    vx: float
-    vy: float
-    lifetime: float
-    size: float
-    color: tuple[int, int, int]
 
 
 class Ship:

@@ -7,6 +7,7 @@ from enum import Enum, auto
 from typing import TYPE_CHECKING, Final
 
 import pygame
+from .enemy_hit_mixin import EnemyHitMixin
 
 from ..core import colors
 from ..core.config import config as Config
@@ -228,26 +229,6 @@ class MountainStalagmite:
             self.health = 0
             self._begin_shattering()
 
-    def collision_circle(self) -> tuple[float, float, float]:
-        r = self.rect
-        return r.centerx, r.centery, max(r.width, r.height) / 2
-
-    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
-        from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult
-
-        prev_health = self.health
-        self.take_damage(damage)
-        # Hit fatal: HP > 0 cruza para 0 (estalagmite começa a estilhaçar).
-        just_died = prev_health > 0 and self.health <= 0
-        if just_died:
-            return HitResult(
-                killed=True,
-                points=self.get_points_value(),
-                explosion_size=38,
-                sound=hit_sounds.EXPLOSION_ASTEROID,
-            )
-        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
@@ -901,25 +882,6 @@ class MountainStalactite:
             self.health = 0
             self._begin_shattering()
 
-    def collision_circle(self) -> tuple[float, float, float]:
-        r = self.rect
-        return r.centerx, r.centery, max(r.width, r.height) / 2
-
-    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
-        from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult
-
-        prev_health = self.health
-        self.take_damage(damage)
-        just_died = prev_health > 0 and self.health <= 0
-        if just_died:
-            return HitResult(
-                killed=True,
-                points=self.get_points_value(),
-                explosion_size=38,
-                sound=hit_sounds.EXPLOSION_ASTEROID,
-            )
-        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
@@ -1286,7 +1248,7 @@ class MountainStalactite:
 # ---------------------------------------------------------------------------
 
 
-class MountainMage:
+class MountainMage(EnemyHitMixin):
     """Robo/mago exclusivo das montanhas que invoca estalagmites no alvo."""
 
     MAX_HEALTH: Final[int] = 24
@@ -1387,23 +1349,6 @@ class MountainMage:
             self.health = 0
             self.dead = True
 
-    def collision_circle(self) -> tuple[float, float, float]:
-        r = self.rect
-        return r.centerx, r.centery, max(r.width, r.height) / 2
-
-    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
-        from ..systems import hit_sounds
-        from ..systems.hit_result import HitResult
-
-        self.take_damage(damage)
-        if self.dead:
-            return HitResult(
-                killed=True,
-                points=self.get_points_value(),
-                explosion_size=35,
-                sound=hit_sounds.EXPLOSION_ALIEN,
-            )
-        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds

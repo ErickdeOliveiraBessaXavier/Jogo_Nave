@@ -10,7 +10,7 @@ from ..core.paths import get_preferences_path, get_profile_path
 from ..core.preferences import UserPreferences
 from ..core.sound import sound_manager
 from ..core.state import Scene
-from .ui_helpers import draw_bordered_button, render_with_fade
+from .ui_helpers import FadeTransitionMixin, wrap_text, draw_bordered_button, render_with_fade
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -838,7 +838,7 @@ class SettingsView:
             "Deseja fazer isso agora?"
         )
         text_max_width = popup_rect.width - 60
-        message_lines = self._wrap_text(self.item_font, message_text, text_max_width)
+        message_lines = wrap_text(self.item_font, message_text, text_max_width)
 
         line_height = self.item_font.get_linesize()
         line_gap = 4
@@ -853,7 +853,7 @@ class SettingsView:
             # Fallback para garantir que nunca estoure verticalmente.
             msg_font = self.small_font
             line_height = msg_font.get_linesize()
-            message_lines = self._wrap_text(msg_font, message_text, text_max_width)
+            message_lines = wrap_text(msg_font, message_text, text_max_width)
             block_height = (len(message_lines) * line_height) + (
                 max(0, len(message_lines) - 1) * line_gap
             )
@@ -875,30 +875,9 @@ class SettingsView:
             surface, self.layout_rects["popup_no_button"], "Não", CUSTOM_PURPLE, 255, 0
         )
 
-    def _wrap_text(
-        self, font: pygame.font.Font, text: str, max_width: int
-    ) -> list[str]:
-        """Quebra texto em múltiplas linhas para caber na largura máxima."""
-        words = text.split()
-        if not words:
-            return [""]
-
-        lines: list[str] = []
-        current_line = words[0]
-
-        for word in words[1:]:
-            candidate = f"{current_line} {word}"
-            if font.size(candidate)[0] <= max_width:
-                current_line = candidate
-            else:
-                lines.append(current_line)
-                current_line = word
-
-        lines.append(current_line)
-        return lines
 
 
-class SettingsScene(Scene):
+class SettingsScene(Scene, FadeTransitionMixin):
     """Cena de configurações."""
 
     def __init__(
@@ -916,17 +895,7 @@ class SettingsScene(Scene):
             app=app,
             runtime_scene=runtime_scene,
         )
-
-        self.transitioning = False
-        self.transition_progress = 0.0
-        self.transition_duration = 0.3
-        self.fade_out = False
-
-    def _on_back(self):
-        self.fade_out = True
-        self.transitioning = True
-        self.transition_progress = 0.0
-
+        self._init_transition(duration=0.3)
     def enter(self):
         pygame.mouse.set_visible(True)
         self.view.reset()
