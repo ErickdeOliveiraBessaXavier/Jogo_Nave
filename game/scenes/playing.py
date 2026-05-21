@@ -47,11 +47,12 @@ from ..core.world_config import (
     is_side_scroll_mode,
 )
 from ..entities.mini_ship import MiniShip
+from ..entities.revival_beacon import RevivalBeacon
 from ..entities.ship import Ship
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..events import game_events as events
 from ..render.game_renderer import GameRenderer
-from ..render.render_frame import RenderFrame
+from ..render.render_frame import P2HudInfo, RenderFrame
 from ..systems.boss_fight_controller import BossFightController
 from ..systems.cheat_input import CheatBuffer
 from ..systems.collisions import Collisions
@@ -806,6 +807,7 @@ class PlayingScene(Scene):
         self._update_preparing_state(dt)
         self._update_timers(dt)
         self._update_ship(dt)
+        self._update_revival_beacons(dt)
         self._apply_environmental_effects(dt)
         self._update_spawners(dt)
 
@@ -910,18 +912,26 @@ class PlayingScene(Scene):
             slot.ship.update(
                 dt, self.entity_manager, is_side_scroll=self.is_side_scroll
             )
-        # Powerup mini_ships ainda é P1-only (mini-naves do EntityManager são
-        # construídas com self.ship). Refatoração per-player fica para Fase 4.
-        if self.ship.mini_ships_timer == 0.0 and self.entity_manager.mini_ships:
-            # Powerup expirou: se há mini-naves temporárias, troca-as pelas
-            # permanentes do Engenheiro (se a nave atual tiver alguma).
-            has_temps = any(
-                not getattr(m, "permanent", False)
-                for m in self.entity_manager.mini_ships
-            )
+
+        # Powerup `mini_ships` expirou para algum slot: troca as temporárias
+        # daquela nave pelas permanentes (se o profile tiver), preservando as
+        # mini-naves de outros slots.
+        for slot in self.roster.all_slots():
+            if slot.ship.mini_ships_timer != 0.0:
+                continue
+            ship_minis = [
+                m for m in self.entity_manager.mini_ships if m.player is slot.ship
+            ]
+            if not ship_minis:
+                continue
+            has_temps = any(not getattr(m, "permanent", False) for m in ship_minis)
             if has_temps:
-                self.entity_manager.mini_ships.clear()
-                self._build_permanent_mini_ships()
+                self.entity_manager.mini_ships = [
+                    m
+                    for m in self.entity_manager.mini_ships
+                    if m.player is not slot.ship
+                ]
+                self._build_permanent_mini_ships(slot)
 
         boss_pausing = False
         if self.boss_controller.boss_type == "spike" and self.entity_manager.boss:
@@ -1601,22 +1611,31 @@ class PlayingScene(Scene):
     # Power-ups
     # ------------------------------------------------------------------
 
-    def _build_mini_ships(self) -> None:
-        """Cria o par temporário do powerup `mini_ships` (left + right).
+    def _build_mini_ships(self, slot: Optional[PlayerSlot] = None) -> None:
+        """Cria o par temporário do powerup `mini_ships` (left + right) para o slot.
 
-        Remove qualquer mini-nave existente — inclusive as permanentes do
-        Engenheiro — para evitar sobreposição visual. As permanentes voltam
-        automaticamente quando o timer do powerup expira.
+        Remove apenas as mini-naves vinculadas à nave deste slot (inclusive as
+        permanentes — para evitar sobreposição visual). Mini-naves de outros
+        slots permanecem intactas. As permanentes deste slot voltam quando o
+        timer expira (`_update_ship`).
         """
-        self.entity_manager.mini_ships.clear()
+        if slot is None:
+            slot = self.roster.primary()
+        parent = slot.ship
+        self.entity_manager.mini_ships = [
+            m for m in self.entity_manager.mini_ships if m.player is not parent
+        ]
         for side in ("left", "right"):
             self.entity_manager.mini_ships.append(
-                MiniShip(self.ship, side, is_side_scroll=self.is_side_scroll)
+                MiniShip(parent, side, is_side_scroll=self.is_side_scroll)
             )
 
-    def _build_permanent_mini_ships(self) -> None:
-        """Spawn das mini-naves permanentes conforme `profile.permanent_mini_ships`."""
-        count = self.ship.profile.permanent_mini_ships
+    def _build_permanent_mini_ships(self, slot: Optional[PlayerSlot] = None) -> None:
+        """Spawn das mini-naves permanentes do slot conforme `profile.permanent_mini_ships`."""
+        if slot is None:
+            slot = self.roster.primary()
+        parent = slot.ship
+        count = parent.profile.permanent_mini_ships
         if count <= 0:
             return
         # Alterna lados começando pela esquerda; com 1 = só esquerda, 2 = ambas.
@@ -1624,15 +1643,17 @@ class PlayingScene(Scene):
         for i in range(min(count, len(sides))):
             self.entity_manager.mini_ships.append(
                 MiniShip(
-                    self.ship,
+                    parent,
                     sides[i],
                     is_side_scroll=self.is_side_scroll,
                     permanent=True,
                 )
             )
 
-    def _apply_powerup(self, kind: str) -> None:
-        self.powerup_system.apply(kind)
+    def _apply_powerup(self, kind: str, slot: Optional[PlayerSlot] = None) -> None:
+        if slot is None:
+            slot = self.roster.primary()
+        self.powerup_system.apply(kind, slot)
 
     def _process_powerups_and_stars(self) -> None:
         self.powerup_system.process_collection()
@@ -1651,6 +1672,11 @@ class PlayingScene(Scene):
             slot = self.roster.primary()
         ship = slot.ship
         if self._game_over_triggered or self.god_mode or ship.invuln > 0:
+            return
+        # Slots mortos (esperando revive) não tomam dano — caso algum call
+        # site não-filtrado chame _handle_ship_hit pra um slot já morto
+        # (ex.: mine explosion, slime drip que ainda usam o primário direto).
+        if slot.is_dead:
             return
 
         # Emit PlayerDamaged event
@@ -1678,10 +1704,19 @@ class PlayingScene(Scene):
         if slot.lives <= 0:
             # Marca o slot como morto — filtragem em alive_slots() impede que
             # o slot continue tomando dano, atirando, ou sendo renderizado.
-            # Fase 6 substituirá esta lógica pelo sistema de beacon/revive.
             slot.is_dead = True
+            # Mini-naves do slot somem junto com a nave (sem orbitar fantasma).
+            # As permanentes voltam no revive via `_build_permanent_mini_ships`.
+            self.entity_manager.mini_ships = [
+                m
+                for m in self.entity_manager.mini_ships
+                if m.player is not slot.ship
+            ]
+            self._spawn_revival_beacon(slot)
         # Game over quando ninguém tem vidas. Em single-player, com 1 slot,
         # equivale ao comportamento original (vida zero = game over imediato).
+        # Em coop, se restar pelo menos um vivo, o beacon do morto pode ser
+        # ativado — o slot reviverá no próximo update sem disparar game over.
         is_game_over = all(s.lives <= 0 for s in self.roster.all_slots())
         # No game over, persistir o ganho da fase incompleta (record_clear não
         # roda nesse caso). Em perdas de vida com vidas restantes, deixar para
@@ -1736,10 +1771,25 @@ class PlayingScene(Scene):
         elif status == ProgressionStatus.LEVEL_CLEARED:
             self._on_level_cleared(with_delay=False)
 
+    # Bônus de HP do boss por jogador adicional no roster (regra do plano de
+    # coop: P2 ativo adiciona 40% de vida pra compensar DPS dobrado). Aplicado
+    # no momento do spawn — bosses já em campo não reescalam se P2 entrar
+    # durante a luta.
+    _COOP_BOSS_HP_PER_EXTRA_PLAYER: float = 0.40
+
     def _start_boss_fight(self) -> None:
         level_config = self.level_config
         assert level_config is not None
-        self.boss_controller.start(level_config, self.enemy_health_multiplier)
+        player_count = len(self.roster.all_slots())
+        coop_hp_scale = 1.0 + self._COOP_BOSS_HP_PER_EXTRA_PLAYER * (player_count - 1)
+        effective_multiplier = self.enemy_health_multiplier * coop_hp_scale
+        if player_count > 1:
+            logger.info(
+                "Boss spawnando com escala coop ×%.2f (%d jogadores).",
+                coop_hp_scale,
+                player_count,
+            )
+        self.boss_controller.start(level_config, effective_multiplier)
 
     def _end_boss_fight(self) -> None:
         boss_score = self.boss_controller.end(
@@ -1778,7 +1828,54 @@ class PlayingScene(Scene):
         if event.type == pygame.JOYBUTTONDOWN and self._is_p2_join_trigger(event):
             self._open_p2_select_modal()
             return
+        # Saída voluntária do P2: Back/Select no controle de P2 remove ele
+        # do roster. Score compartilhado fica preservado.
+        if event.type == pygame.JOYBUTTONDOWN and self._is_p2_leave_trigger(event):
+            self._remove_p2_slot(reason="voluntary")
+            return
+        # Desconexão do controle do P2: remove P2 do roster pra evitar nave
+        # parada na tela sem input. P2 pode rejoinar reconectando o controle.
+        if event.type == pygame.JOYDEVICEREMOVED and self._is_p2_disconnect(event):
+            self._remove_p2_slot(reason="disconnect")
+            return
         self.input_handler.handle(event)
+
+    def _is_p2_leave_trigger(self, event: pygame.event.Event) -> bool:
+        """True se BACK foi pressionado no gamepad atribuído ao P2."""
+        from ..core.gamepad import XboxButton
+
+        if event.button != XboxButton.BACK:
+            return False
+        if self.roster.count() < 2:
+            return False
+        return self.app.gamepad.slot_of_instance_id(event.instance_id) == 1
+
+    def _is_p2_disconnect(self, event: pygame.event.Event) -> bool:
+        """True se o gamepad desconectado era o atribuído ao P2."""
+        if self.roster.count() < 2:
+            return False
+        p2_slot = self.roster.all_slots()[1]
+        if p2_slot.gamepad_slot != 1:
+            return False
+        # GamepadManager já processou o JOYDEVICEREMOVED neste momento
+        # (handle_event() do app.py despacha pra cá depois de chamar
+        # gamepad.handle_event). Então slot 1 já está vazio se era o P2.
+        return not self.app.gamepad.is_slot_connected(1)
+
+    def _remove_p2_slot(self, *, reason: str) -> None:
+        """Remove o slot do P2 do roster. Beacon e mini-naves são descartados."""
+        all_slots = self.roster.all_slots()
+        if len(all_slots) < 2:
+            return
+        p2 = all_slots[1]
+        p2.revival_beacon = None
+        # Mini-naves do P2 (permanentes do Engenheiro ou temporárias do powerup)
+        # somem junto — sem a nave delas, ficariam orbitando entidade fantasma.
+        self.entity_manager.mini_ships = [
+            m for m in self.entity_manager.mini_ships if m.player is not p2.ship
+        ]
+        self.roster.remove(p2)
+        logger.info("P2 saiu da partida (motivo=%s).", reason)
 
     def _is_p2_join_trigger(self, event: pygame.event.Event) -> bool:
         """True se o evento é START no segundo controle, e P2 ainda não juntou."""
@@ -1842,6 +1939,9 @@ class PlayingScene(Scene):
         )
         p2_ship.lives = lives
         self.roster.add(p2_slot)
+        # Engenheiro spawna com mini-naves permanentes orbitando — P2 deve
+        # receber as suas próprias se escolher essa nave.
+        self._build_permanent_mini_ships(p2_slot)
         logger.info(
             "P2 entrou na partida com a nave '%s' (vidas=%d).", profile.id, lives
         )
@@ -1911,14 +2011,38 @@ class PlayingScene(Scene):
 
 
     def _activate_stored_powerup(self, slot_index: int) -> None:
-        """Consome o powerup do slot indicado e aplica seu efeito (Cofre)."""
-        if not self.ship.has_storage_slots():
+        """Compat: ativa Cofre do slot primário (P1). Mantido para
+        callers de teclado (Q/E) e outros pontos legados.
+        """
+        self._activate_stored_powerup_for(self.roster.primary(), slot_index)
+
+    def _activate_stored_powerup_for(
+        self, slot: PlayerSlot, slot_index: int
+    ) -> None:
+        """Consome o powerup armazenado do Cofre do `slot` e aplica em si próprio."""
+        ship = slot.ship
+        if not ship.has_storage_slots():
             return
-        kind = self.ship.consume_stored_powerup(slot_index)
+        kind = ship.consume_stored_powerup(slot_index)
         if kind is None:
             return
         self.app.event_bus.emit(events.PlaySound(sound_name="powerup"))
-        self._apply_powerup(kind)
+        self._apply_powerup(kind, slot)
+
+    def _slot_inside_any_beacon(self, slot: PlayerSlot) -> bool:
+        """True se o slot vivo está dentro do raio de algum beacon ativo.
+
+        Usado pelo input handler pra suprimir a ativação do Cofre slot 0
+        (botão Y) quando o jogador está tentando reviver alguém — o Y é
+        compartilhado entre as duas ações e o revive (held) tem precedência.
+        """
+        ship = slot.ship
+        px, py = float(ship.rect.centerx), float(ship.rect.centery)
+        for dead in self.roster.dead_slots():
+            beacon = dead.revival_beacon
+            if beacon is not None and beacon.contains_point(px, py):
+                return True
+        return False
 
 
     # ------------------------------------------------------------------
@@ -1967,6 +2091,29 @@ class PlayingScene(Scene):
                 for slot in self.roster.all_slots()[1:]
                 if not slot.is_dead
             ),
+            revival_beacons=tuple(
+                slot.revival_beacon
+                for slot in self.roster.dead_slots()
+                if slot.revival_beacon is not None
+            ),
+            primary_alive=not self.roster.primary().is_dead,
+            p2_hud=self._build_p2_hud_info(),
+        )
+
+    def _build_p2_hud_info(self) -> Optional[P2HudInfo]:
+        """Monta o snapshot do P2 para o HUD secundário (None em single-player)."""
+        all_slots = self.roster.all_slots()
+        if len(all_slots) < 2:
+            return None
+        p2 = all_slots[1]
+        beacon_progress = (
+            p2.revival_beacon.progress_ratio if p2.revival_beacon is not None else 0.0
+        )
+        return P2HudInfo(
+            lives=p2.lives,
+            is_dead=p2.is_dead,
+            ship=p2.ship,
+            beacon_progress=beacon_progress,
         )
 
     # ===================== Upgrades (helpers) =====================
@@ -2027,6 +2174,104 @@ class PlayingScene(Scene):
 
     def _change_lives_for(self, slot: PlayerSlot, delta: int) -> None:
         self._sync_lives_for(slot, slot.lives + delta)
+
+    # ------------------------------------------------------------------
+    # Beacon de revive (multiplayer)
+    # ------------------------------------------------------------------
+
+    def _spawn_revival_beacon(self, slot: PlayerSlot) -> None:
+        """Cria o beacon na posição da nave do slot que acabou de morrer.
+
+        No-op em single-player (1 slot só, sem outro vivo pra ativar — o
+        próximo frame dispara game over de qualquer forma). Em coop, registra
+        o beacon no próprio slot para que `_update_revival_beacons` o processe.
+        """
+        if self.roster.count() < 2:
+            return
+        ship = slot.ship
+        slot.revival_beacon = RevivalBeacon(
+            x=float(ship.rect.centerx),
+            y=float(ship.rect.centery),
+            for_slot=slot,
+        )
+        logger.info(
+            "Beacon de revive spawnou em (%.0f, %.0f) para slot morto.",
+            slot.revival_beacon.x,
+            slot.revival_beacon.y,
+        )
+
+    def _update_revival_beacons(self, dt: float) -> None:
+        """Processa todos os beacons ativos: detecta hold, acumula timer, revive."""
+        dead_with_beacon = [
+            s for s in self.roster.dead_slots() if s.revival_beacon is not None
+        ]
+        if not dead_with_beacon:
+            return
+
+        alive = self.roster.alive_slots()
+        for dead_slot in dead_with_beacon:
+            beacon = dead_slot.revival_beacon
+            assert beacon is not None
+            beacon.update_visual(dt)
+
+            qualifying_helper = self._find_revive_helper(beacon, alive)
+            if qualifying_helper is not None:
+                beacon.tick_hold(dt)
+                if beacon.is_complete:
+                    self._revive_slot(dead_slot)
+            else:
+                beacon.reset_progress()
+
+    def _find_revive_helper(
+        self, beacon: RevivalBeacon, alive_slots: list[PlayerSlot]
+    ) -> Optional[PlayerSlot]:
+        """Retorna o primeiro slot vivo dentro do raio segurando Y, ou None."""
+        for helper in alive_slots:
+            ship = helper.ship
+            if not beacon.contains_point(
+                float(ship.rect.centerx), float(ship.rect.centery)
+            ):
+                continue
+            if self._is_revive_button_held(helper):
+                return helper
+        return None
+
+    def _is_revive_button_held(self, slot: PlayerSlot) -> bool:
+        """Checa se o slot está segurando o botão de revive (Y / tecla Y)."""
+        from ..core.gamepad import XboxButton
+
+        gp = self.app.gamepad
+        slot_idx = slot.gamepad_slot if slot.gamepad_slot is not None else 0
+        if gp.is_button_pressed(XboxButton.Y, slot=slot_idx):
+            return True
+        # Fallback teclado só para P1 (slot 0 inclui teclado por convenção).
+        if slot_idx == 0:
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_y]:
+                return True
+        return False
+
+    def _revive_slot(self, slot: PlayerSlot) -> None:
+        """Ressuscita o slot na posição do beacon com vida e invuln inicial."""
+        beacon = slot.revival_beacon
+        if beacon is None:
+            return
+        ship = slot.ship
+        # Reposiciona a nave no beacon para o player "renascer" no local.
+        ship.x = beacon.x - ship.w / 2.0
+        ship.y = beacon.y - ship.h / 2.0
+        ship.invuln = RevivalBeacon.POST_REVIVE_INVULN_MS
+        slot.is_dead = False
+        slot.revival_beacon = None
+        self._sync_lives_for(slot, RevivalBeacon.LIVES_ON_REVIVE)
+        # Restaura mini-naves permanentes (Engenheiro): foram removidas na morte.
+        self._build_permanent_mini_ships(slot)
+        logger.info(
+            "Slot revivido em (%.0f, %.0f) com %d vida.",
+            beacon.x,
+            beacon.y,
+            RevivalBeacon.LIVES_ON_REVIVE,
+        )
 
     def _apply_cooldown_reduction(self, reduction: float) -> None:
         """Reduz instantaneamente o cooldown de todos os upgrades ativos."""

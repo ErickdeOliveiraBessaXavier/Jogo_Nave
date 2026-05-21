@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 import random
 import time
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import pygame
 
@@ -109,9 +109,14 @@ class GameRenderer:
             )
 
         # 4. Nave do jogador (P1 + naves adicionais em multiplayer local)
-        frame.ship.draw(self.game_surface)
+        if frame.primary_alive:
+            frame.ship.draw(self.game_surface)
         for extra_ship in frame.extra_ships:
             extra_ship.draw(self.game_surface)
+        # 4b. Beacons de revive de slots mortos (renderer trata como overlay
+        # acima das naves para garantir leitura visual do raio).
+        for beacon in frame.revival_beacons:
+            beacon.draw(self.game_surface)
 
         # 5. Efeito de entrada de boss (CloudArchmage)
         if intro_active:
@@ -150,8 +155,14 @@ class GameRenderer:
 
         # 7. Overlays específicos (Upgrades, Cofre, Combo)
         self._render_upgrades_hud(frame, self.game_surface)
-        self._render_storage_slots_hud(frame.ship, self.game_surface)
+        # Cofre: passa também a nave do P2 — quando ambos têm Cofre, mostra
+        # 4 caixas centralizadas (2 do P1, 2 do P2).
+        p2_ship = frame.p2_hud.ship if frame.p2_hud is not None else None
+        self._render_storage_slots_hud(frame.ship, self.game_surface, p2_ship)
         self._render_combo_hud(frame.ship, self.game_surface)
+        # 7b. HUD do Jogador 2 (multiplayer coop)
+        if frame.p2_hud is not None:
+            self._render_p2_hud(frame.p2_hud, self.game_surface)
 
         # 8. Debug info
         if frame.show_fps:
@@ -260,6 +271,69 @@ class GameRenderer:
                     color = (255, 200, 40) if idx == 0 else (40, 220, 255)
                     pygame.draw.rect(surface, color, rect, 2)
 
+    def _render_p2_hud(self, p2_hud: Any, surface: pygame.Surface) -> None:
+        """HUD secundário do Jogador 2 (multiplayer coop).
+
+        Posicionado no canto superior direito, abaixo das vidas do P1 (que
+        ocupam a linha 10..36). Quando P2 está morto, mostra a barra de
+        progresso do beacon de revive no lugar das vidas.
+        """
+        font_label = get_font(14)
+        font_value = get_font(20)
+        right_margin = 10
+        y = 44  # logo abaixo da linha das vidas do P1
+
+        label = font_label.render("JOGADOR 2", True, colors.CYAN)
+        surface.blit(
+            label,
+            (Config.SCREEN_WIDTH - label.get_width() - right_margin, y),
+        )
+        y += 18
+
+        if p2_hud.is_dead:
+            pct = int(round(p2_hud.beacon_progress * 100))
+            # Cor pulsa entre cinza e ciano conforme o progresso aumenta.
+            color = (
+                int(150 + 105 * p2_hud.beacon_progress),
+                int(200 + 50 * p2_hud.beacon_progress),
+                255,
+            )
+            status = font_value.render(f"REVIVE {pct}%", True, color)
+            surface.blit(
+                status,
+                (Config.SCREEN_WIDTH - status.get_width() - right_margin, y),
+            )
+            return
+
+        lives_surf = font_value.render(
+            f"Vidas: {p2_hud.lives}", True, colors.WHITE
+        )
+        surface.blit(
+            lives_surf,
+            (Config.SCREEN_WIDTH - lives_surf.get_width() - right_margin, y),
+        )
+        y += 26
+
+        # Powerup timers ativos do P2.
+        ship = p2_hud.ship
+        font_small = get_font(13)
+
+        def right_line(txt: str, color: tuple[int, int, int]) -> None:
+            nonlocal y
+            t = font_small.render(txt, True, color)
+            surface.blit(t, (Config.SCREEN_WIDTH - t.get_width() - right_margin, y))
+            y += 16
+
+        invuln_s = ship.get_invulnerable_time()
+        ds_s = ship.get_double_shot_time()
+        sp_s = ship.get_speed_boost_time()
+        if invuln_s > 0:
+            right_line(f"[S] Escudo: {invuln_s:.1f}s", colors.BLUE)
+        if ds_s > 0:
+            right_line(f"[2X] Tiro Duplo: {ds_s:.1f}s", colors.GREEN)
+        if sp_s > 0:
+            right_line(f"[V] Velocidade: {sp_s:.1f}s", colors.YELLOW)
+
     def _render_combo_hud(self, ship: Ship, surface: pygame.Surface) -> None:
         """Indicador do combo do Reverberador."""
         if ship.profile.combo_damage_per_kill <= 0:
@@ -293,11 +367,18 @@ class GameRenderer:
         text = font_value.render(f"x{kills}  +{bonus_pct}%", True, color)
         surface.blit(text, (x, y + 16))
 
-    def _render_storage_slots_hud(self, ship: Ship, surface: pygame.Surface) -> None:
-        """Exibe os slots de powerup armazenados (Cofre)."""
-        if not ship.has_storage_slots():
-            return
+    def _render_storage_slots_hud(
+        self,
+        ship: Ship,
+        surface: pygame.Surface,
+        p2_ship: Optional[Ship] = None,
+    ) -> None:
+        """Exibe os slots de powerup armazenados (Cofre).
 
+        Em coop, se P1 e P2 estiverem ambos com Cofre, mostra 4 caixas
+        centralizadas — 2 do P1 e 2 do P2, com pequena separação visual.
+        Se só um dos jogadores tem Cofre, mantém o layout single-player.
+        """
         from ..core.colors import (
             POWERUP_COOLDOWN_HASTE,
             POWERUP_DAMAGE_BOOST,
@@ -312,10 +393,28 @@ class GameRenderer:
             POWERUP_TIME_STOP,
         )
 
+        # Define grupos a renderizar (ship, label, hint_keys). Cada grupo é
+        # um Cofre completo (todos os slots dele).
+        groups: list[tuple[Ship, str, tuple[str, ...]]] = []
+        if ship.has_storage_slots():
+            groups.append((ship, "P1", ("Q", "E")))
+        if p2_ship is not None and p2_ship.has_storage_slots():
+            groups.append((p2_ship, "P2", ("Y", "A")))
+        if not groups:
+            return
+
         font_label, font_hint, font_icon = get_font(20), get_font(12), get_font(18)
-        slot_size, gap = 56, 12
-        slots = ship.stored_powerups
-        total_w = len(slots) * slot_size + (len(slots) - 1) * gap
+        font_group = get_font(11)
+        slot_size, gap, group_gap = 56, 12, 28
+
+        # Largura total: soma das larguras de cada grupo + group_gap entre eles.
+        total_w = 0
+        for i, (g_ship, _, _) in enumerate(groups):
+            n = len(g_ship.stored_powerups)
+            total_w += n * slot_size + (n - 1) * gap
+            if i < len(groups) - 1:
+                total_w += group_gap
+
         start_x, y = (Config.SCREEN_WIDTH - total_w) // 2, 8
 
         powerup_colors = {
@@ -333,32 +432,67 @@ class GameRenderer:
             "cooldown_haste": "CD", "time_stop": "T", "damage_boost": "DMG",
             "chain_shot": "⚡", "repulsion_shield": "🛡",
         }
-        hint_keys = ("Q", "E")
 
-        for i, kind in enumerate(slots):
-            x = start_x + i * (slot_size + gap)
-            slot_surface = pygame.Surface((slot_size, slot_size), pygame.SRCALPHA)
-            pygame.draw.rect(slot_surface, (20, 20, 30, 200), (0, 0, slot_size, slot_size), border_radius=8)
+        cur_x = start_x
+        for group_idx, (g_ship, group_label, hint_keys) in enumerate(groups):
+            slots = g_ship.stored_powerups
+            group_w = len(slots) * slot_size + (len(slots) - 1) * gap
 
-            border_color = (*colors.YELLOW, 230) if kind is not None else (*colors.GRAY, 160)
-            pygame.draw.rect(slot_surface, border_color, (0, 0, slot_size, slot_size), 2, border_radius=8)
+            # Label "P1"/"P2" centralizado acima do grupo (apenas em coop).
+            if len(groups) > 1:
+                label_surf = font_group.render(group_label, True, colors.CYAN)
+                surface.blit(
+                    label_surf,
+                    (cur_x + (group_w - label_surf.get_width()) // 2, y - 14),
+                )
 
-            key_label = hint_keys[i] if i < len(hint_keys) else str(i + 1)
-            slot_surface.blit(font_hint.render(key_label, True, colors.WHITE), (5, 3))
+            for i, kind in enumerate(slots):
+                x = cur_x + i * (slot_size + gap)
+                slot_surface = pygame.Surface(
+                    (slot_size, slot_size), pygame.SRCALPHA
+                )
+                pygame.draw.rect(
+                    slot_surface,
+                    (20, 20, 30, 200),
+                    (0, 0, slot_size, slot_size),
+                    border_radius=8,
+                )
 
-            if kind is not None:
-                color = powerup_colors.get(kind, (200, 200, 200))
-                center = (slot_size // 2, slot_size // 2 + 4)
-                pygame.draw.circle(slot_surface, color, center, 16)
-                pygame.draw.circle(slot_surface, colors.WHITE, center, 16, 2)
-                symbol = powerup_symbols.get(kind, kind[:2].upper())
-                content = font_icon.render(symbol, True, colors.BLACK)
-                slot_surface.blit(content, content.get_rect(center=center))
-            else:
-                dash = font_label.render("—", True, (90, 90, 90))
-                slot_surface.blit(dash, dash.get_rect(center=(slot_size // 2, slot_size // 2)))
+                border_color = (
+                    (*colors.YELLOW, 230)
+                    if kind is not None
+                    else (*colors.GRAY, 160)
+                )
+                pygame.draw.rect(
+                    slot_surface,
+                    border_color,
+                    (0, 0, slot_size, slot_size),
+                    2,
+                    border_radius=8,
+                )
 
-            surface.blit(slot_surface, (x, y))
+                key_label = hint_keys[i] if i < len(hint_keys) else str(i + 1)
+                slot_surface.blit(
+                    font_hint.render(key_label, True, colors.WHITE), (5, 3)
+                )
+
+                if kind is not None:
+                    color = powerup_colors.get(kind, (200, 200, 200))
+                    center = (slot_size // 2, slot_size // 2 + 4)
+                    pygame.draw.circle(slot_surface, color, center, 16)
+                    pygame.draw.circle(slot_surface, colors.WHITE, center, 16, 2)
+                    symbol = powerup_symbols.get(kind, kind[:2].upper())
+                    content = font_icon.render(symbol, True, colors.BLACK)
+                    slot_surface.blit(content, content.get_rect(center=center))
+                else:
+                    dash = font_label.render("—", True, (90, 90, 90))
+                    slot_surface.blit(
+                        dash, dash.get_rect(center=(slot_size // 2, slot_size // 2))
+                    )
+
+                surface.blit(slot_surface, (x, y))
+
+            cur_x += group_w + group_gap
 
     def _render_upgrades_hud(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """Exibe os slots de upgrades ativos e seus cooldowns."""

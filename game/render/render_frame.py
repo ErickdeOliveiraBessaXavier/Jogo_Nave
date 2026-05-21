@@ -14,17 +14,34 @@ slots) também passam por ref e são tratadas como read-only pelo renderer.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import pygame
 
 if TYPE_CHECKING:
     from ..core.difficulty import DifficultyPreset
     from ..core.upgrades import ActiveUpgrade
+    from ..entities.revival_beacon import RevivalBeacon
     from ..entities.ship import Ship
     from ..scenes.playing import GameState, ThrusterParticle
     from ..systems.boss_fight_controller import BossFightController
     from ..systems.entity_manager import EntityManager
+
+
+@dataclass(frozen=True)
+class P2HudInfo:
+    """Snapshot dos dados do Jogador 2 para o HUD secundário.
+
+    Existe apenas quando há um segundo slot no roster (coop ativo). Quando
+    `is_dead=True`, `beacon_progress` está em 0.0-1.0 mostrando o quanto da
+    barra de revive já foi acumulada — usado pelo HUD para mostrar
+    "REVIVENDO XX%" no lugar das vidas.
+    """
+
+    lives: int
+    is_dead: bool
+    ship: "Ship"
+    beacon_progress: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -77,3 +94,13 @@ class RenderFrame:
     # Multiplayer: naves adicionais (P2 em diante) renderizadas após `ship`.
     # Vazio em single-player. Renderer apenas draw()-a; não inspeciona estado.
     extra_ships: tuple["Ship", ...] = ()
+
+    # Multiplayer: beacons de revive de slots mortos. Renderer só os desenha.
+    revival_beacons: tuple["RevivalBeacon", ...] = ()
+
+    # Multiplayer: False quando o slot primário está morto esperando revive.
+    # Renderer pula `frame.ship.draw()` mas mantém o resto do HUD/stats.
+    primary_alive: bool = True
+
+    # Multiplayer: dados do P2 para o HUD secundário. None em single-player.
+    p2_hud: Optional[P2HudInfo] = None

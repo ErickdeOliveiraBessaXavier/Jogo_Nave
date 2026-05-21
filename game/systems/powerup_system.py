@@ -6,6 +6,7 @@ from ..events import game_events as events
 
 if TYPE_CHECKING:
     from ..scenes.playing import PlayingScene
+    from ..systems.player_slot import PlayerSlot
 
 
 class PowerupSystem:
@@ -14,6 +15,11 @@ class PowerupSystem:
     O estado (timers de score multiplier, time stop, etc.) continua na
     `PlayingScene` — esta classe centraliza apenas o dispatch e a lógica de
     cada efeito em um lugar só.
+
+    Em multiplayer local, cada powerup é coletado individualmente pelo slot
+    que toca nele. Efeitos vinculados à nave (`shield`, `double_shot`, ...)
+    afetam apenas o coletor. Efeitos globais (`score_bonus`, `time_stop`)
+    valem para a partida toda, independentemente de quem coletou.
     """
 
     def __init__(self, scene: "PlayingScene") -> None:
@@ -23,89 +29,102 @@ class PowerupSystem:
     # Aplicação de cada powerup
     # ------------------------------------------------------------------
 
-    def apply(self, kind: str) -> None:
-        """Aplica o efeito de um power-up coletado via dict-dispatch."""
+    def apply(self, kind: str, slot: "PlayerSlot") -> None:
+        """Aplica o efeito de um power-up para o slot coletor."""
         handler = self._dispatch.get(kind)
         if handler is not None:
-            handler(self)
+            handler(self, slot)
 
-    def _apply_shield(self) -> None:
+    def _apply_shield(self, slot: "PlayerSlot") -> None:
         scene = self.scene
-        scene.ship.invuln = max(scene.ship.invuln, scene._powerup_values["shield_duration"])
+        ship = slot.ship
+        ship.invuln = max(ship.invuln, scene._powerup_values["shield_duration"])
 
-    def _apply_double_shot(self) -> None:
+    def _apply_double_shot(self, slot: "PlayerSlot") -> None:
         scene = self.scene
-        scene.ship.double_shot_timer = max(
-            scene.ship.double_shot_timer,
+        ship = slot.ship
+        ship.double_shot_timer = max(
+            ship.double_shot_timer,
             scene._powerup_values["double_shot_duration"],
         )
 
-    def _apply_speed(self) -> None:
+    def _apply_speed(self, slot: "PlayerSlot") -> None:
         scene = self.scene
-        scene.ship.speed_boost_timer = max(
-            scene.ship.speed_boost_timer,
+        ship = slot.ship
+        ship.speed_boost_timer = max(
+            ship.speed_boost_timer,
             scene._powerup_values["speed_boost_duration"],
         )
 
-    def _apply_score_bonus(self) -> None:
-        # Importação local — evita ciclo com playing.py em módulo top-level.
+    def _apply_score_bonus(self, slot: "PlayerSlot") -> None:
+        # Efeito global: independente de quem coletou. Score é compartilhado.
         from ..scenes.playing import _SCORE_MULTIPLIER_DURATION
 
         scene = self.scene
         scene.score_multiplier_timer = _SCORE_MULTIPLIER_DURATION
         scene.score_multiplier_active = True
 
-    def _apply_piercing(self) -> None:
+    def _apply_piercing(self, slot: "PlayerSlot") -> None:
         scene = self.scene
-        scene.ship.piercing_shot_timer = max(
-            scene.ship.piercing_shot_timer,
+        ship = slot.ship
+        ship.piercing_shot_timer = max(
+            ship.piercing_shot_timer,
             scene._powerup_values["piercing_shot_duration"],
         )
 
-    def _apply_mini_ships(self) -> None:
+    def _apply_mini_ships(self, slot: "PlayerSlot") -> None:
+        # Mini-naves do powerup orbitam a nave do coletor. EntityManager mantém
+        # uma única lista global, mas cada MiniShip carrega `self.player`, então
+        # `_build_mini_ships(slot)` substitui apenas as deste slot.
         scene = self.scene
-        scene.ship.mini_ships_timer = max(
-            scene.ship.mini_ships_timer,
+        ship = slot.ship
+        ship.mini_ships_timer = max(
+            ship.mini_ships_timer,
             scene._powerup_values["mini_ships_duration"],
         )
-        scene._build_mini_ships()
+        scene._build_mini_ships(slot)
 
-    def _apply_cooldown_haste(self) -> None:
+    def _apply_cooldown_haste(self, slot: "PlayerSlot") -> None:
+        # Upgrades permanentes pertencem ao P1; cooldown haste só afeta os
+        # slots dele. P2 coletar mantém o efeito sem impacto adicional.
         scene = self.scene
         scene._apply_cooldown_reduction(
             scene._powerup_values["cooldown_haste_reduction"]
         )
 
-    def _apply_time_stop(self) -> None:
+    def _apply_time_stop(self, slot: "PlayerSlot") -> None:
+        # Efeito global: congela inimigos para todos.
         scene = self.scene
         scene.time_stop_timer = max(
             scene.time_stop_timer, scene._powerup_values["time_stop_duration"]
         )
         scene.freeze_active = True
 
-    def _apply_damage_boost(self) -> None:
+    def _apply_damage_boost(self, slot: "PlayerSlot") -> None:
         scene = self.scene
-        scene.ship.damage_boost_timer = max(
-            scene.ship.damage_boost_timer,
+        ship = slot.ship
+        ship.damage_boost_timer = max(
+            ship.damage_boost_timer,
             scene._powerup_values["damage_boost_duration"],
         )
 
-    def _apply_chain_shot(self) -> None:
-        self.scene.ship.activate_chain_shot()
+    def _apply_chain_shot(self, slot: "PlayerSlot") -> None:
+        slot.ship.activate_chain_shot()
 
-    def _apply_repulsion_shield(self) -> None:
-        self.scene.ship.activate_repulsion_shield()
+    def _apply_repulsion_shield(self, slot: "PlayerSlot") -> None:
+        slot.ship.activate_repulsion_shield()
 
-    def _apply_life(self) -> None:
-        self.scene._change_lives(1)
+    def _apply_life(self, slot: "PlayerSlot") -> None:
+        # Vida vai para o slot coletor (P2 ganha vida quando P2 coleta).
+        self.scene._change_lives_for(slot, 1)
 
-    def _apply_rainbow(self) -> None:
+    def _apply_rainbow(self, slot: "PlayerSlot") -> None:
         scene = self.scene
-        self._apply_life()
-        self._apply_shield()
-        self._apply_double_shot()
-        self._apply_speed()
-        self._apply_mini_ships()
+        self._apply_life(slot)
+        self._apply_shield(slot)
+        self._apply_double_shot(slot)
+        self._apply_speed(slot)
+        self._apply_mini_ships(slot)
         rainbow_score = int(scene._powerup_values["rainbow_score"])
         if scene.score_multiplier_active:
             rainbow_score = int(rainbow_score * scene.score_multiplier_value)
@@ -134,35 +153,46 @@ class PowerupSystem:
     # ------------------------------------------------------------------
 
     def process_collection(self) -> None:
-        """Processa coleta de power-ups e estrelas (chamado por frame)."""
+        """Processa coleta de power-ups e estrelas para todos os slots vivos.
+
+        Cada slot consulta a colisão individualmente; o primeiro a tocar
+        no powerup fica com o efeito (o `Collisions.ship_vs_powerups` remove
+        o powerup da lista, então o segundo slot já não vê o que o primeiro
+        coletou no mesmo frame).
+        """
         scene = self.scene
-        collected_stars = scene.collisions.ship_vs_stars(
-            scene.ship, scene.entity_manager.stars
-        )
-        if collected_stars > 0:
-            scene.player_profile.add_stars(collected_stars)
-            scene.app.event_bus.emit(
-                events.PowerupCollected(
-                    powerup_type="star", position=(scene.ship.x, scene.ship.y)
-                )
+        for slot in scene.roster.alive_slots():
+            ship = slot.ship
+            collected_stars = scene.collisions.ship_vs_stars(
+                ship, scene.entity_manager.stars
             )
-
-        collected_powerups = scene.collisions.ship_vs_powerups(
-            scene.ship, scene.entity_manager.powerups
-        )
-        if scene._no_powerups_mode:
-            collected_powerups = []
-
-        for kind in collected_powerups:
-            scene.app.event_bus.emit(
-                events.PowerupCollected(
-                    powerup_type=kind, position=(scene.ship.x, scene.ship.y)
+            if collected_stars > 0:
+                # Estrelas só contam para o perfil de P1 (progressão permanente
+                # vinculada à conta). P2 colhe normalmente — efeito de coleta
+                # ainda emite evento, mas estrelas vão pro mesmo perfil.
+                scene.player_profile.add_stars(collected_stars)
+                scene.app.event_bus.emit(
+                    events.PowerupCollected(
+                        powerup_type="star", position=(ship.x, ship.y)
+                    )
                 )
+
+            collected_powerups = scene.collisions.ship_vs_powerups(
+                ship, scene.entity_manager.powerups
             )
-            # Cofre: guarda no slot livre se houver; senão, aplica imediato
-            # para não desperdiçar o powerup coletado.
-            if not (
-                scene.ship.has_storage_slots() and scene.ship.try_store_powerup(kind)
-            ):
-                self.apply(kind)
-            scene.level_controller.notify_powerup_collected()
+            if scene._no_powerups_mode:
+                collected_powerups = []
+
+            for kind in collected_powerups:
+                scene.app.event_bus.emit(
+                    events.PowerupCollected(
+                        powerup_type=kind, position=(ship.x, ship.y)
+                    )
+                )
+                # Cofre: guarda no slot livre se houver; senão, aplica imediato
+                # para não desperdiçar o powerup coletado.
+                if not (
+                    ship.has_storage_slots() and ship.try_store_powerup(kind)
+                ):
+                    self.apply(kind, slot)
+                scene.level_controller.notify_powerup_collected()

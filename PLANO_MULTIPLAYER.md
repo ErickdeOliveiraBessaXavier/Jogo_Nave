@@ -228,7 +228,34 @@ A confirma, P2 spawna ao lado de P1 e se movimenta.
 
 ### Fase 4 — Power-ups e mini-naves per-player
 
-**Esforço:** 0,5 dia · **Risco:** Baixo · **Status:** Pendente
+**Esforço:** 0,5 dia · **Risco:** Baixo · **Status:** ✅ Concluída
+
+**`PowerupSystem` refatorado para receber slot:**
+- `apply(kind, slot)` — assinatura agora exige o slot coletor
+- `process_collection()` itera `roster.alive_slots()`; primeiro slot a tocar
+  no powerup fica com o efeito (`ship_vs_powerups` muta a lista in-place)
+- `_apply_life(slot)` → `_change_lives_for(slot, +1)`
+- `_apply_shield/double_shot/speed/piercing/damage_boost/chain_shot/repulsion_shield` →
+  operam em `slot.ship` (efeito per-coletor)
+- `_apply_score_bonus`/`_apply_time_stop` continuam globais (efeito coletivo)
+- `_apply_rainbow` thread o slot em todos os subefeitos
+
+**Mini-naves per-slot (follow-up integrado depois):**
+- `_build_mini_ships(slot=None)` e `_build_permanent_mini_ships(slot=None)`
+  aceitam slot. Filtragem por `MiniShip.player is slot.ship` substitui apenas
+  as mini-naves do slot, preservando as de outros
+- `_update_ship`: novo loop por slot detecta expiração de `mini_ships_timer`
+  e troca temporárias pelas permanentes só desse slot (bloco legado removido)
+- `_apply_mini_ships(slot)`: agora opera na nave do coletor
+- `_spawn_p2`: chama `_build_permanent_mini_ships(p2_slot)` se profile do P2
+  for Engenheiro
+- Death/revive: ao morrer, mini-naves do slot são removidas (não orbitam ship
+  fantasma); revive restaura as permanentes via `_build_permanent_mini_ships`
+- `_remove_p2_slot`: limpa mini-naves do P2 saída voluntária/desconexão
+
+**`_apply_powerup(kind, slot=None)`** atualizado em PlayingScene com default
+no primário — preserva o caminho do Cofre (`_activate_stored_powerup`) sem
+mudança de comportamento.
 
 - Coleta de `Powerup`: loop sobre roster, primeiro player a tocar fica com o
   efeito (`apply_to(slot.ship)`)
@@ -244,7 +271,15 @@ mudança.
 
 ### Fase 5 — Boss HP scaling
 
-**Esforço:** 2–4 horas · **Risco:** Baixo · **Status:** Pendente
+**Esforço:** 2–4 horas · **Risco:** Baixo · **Status:** ✅ Concluída
+
+`PlayingScene._start_boss_fight` calcula `coop_hp_scale = 1.0 + 0.40 * (player_count - 1)`
+no momento do spawn e multiplica `self.enemy_health_multiplier` por ele
+antes de passar para `BossFightController.start`. Bosses já em campo não
+reescalam — escala vale só pro próximo spawn (decisão travada).
+
+Constante `_COOP_BOSS_HP_PER_EXTRA_PLAYER = 0.40` na classe para fácil
+ajuste futuro.
 
 `BossController.spawn_boss(...)` (ou equivalente) consulta
 `len(roster.alive())` no momento do spawn:
@@ -264,7 +299,31 @@ single-player mantém HP original.
 
 ### Fase 6 — Sistema de reviver (beacon)
 
-**Esforço:** 1–1,5 dia · **Risco:** Médio · **Status:** Pendente
+**Esforço:** 1–1,5 dia · **Risco:** Médio · **Status:** ✅ Concluída
+
+**Nova entidade:** `game/entities/revival_beacon.py`:
+- `RevivalBeacon(x, y, for_slot)` com `HOLD_TIME_REQUIRED=5.0s`, `RADIUS=70px`
+- `tick_hold(dt)`, `reset_progress()`, `update_visual(dt)`, `is_complete`, `contains_point(px,py)`
+- `draw(surface)`: círculo translúcido com anel de progresso (preenche em sentido horário) + cruz central + pulso visual
+
+**Integração em `PlayingScene`:**
+- `_handle_ship_hit`: quando `slot.lives <= 0`, chama `_spawn_revival_beacon(slot)` (no-op em single-player com 1 slot)
+- `_spawn_revival_beacon(slot)`: cria beacon em `(ship.rect.centerx, ship.rect.centery)` e atribui em `slot.revival_beacon`
+- `_update_revival_beacons(dt)`: para cada slot morto com beacon, busca um vivo dentro do raio segurando Y; se sim, `tick_hold(dt)`; senão, `reset_progress()`; se `is_complete`, chama `_revive_slot`
+- `_find_revive_helper(beacon, alive)`: primeiro vivo dentro do raio com Y segurado
+- `_is_revive_button_held(slot)`: gamepad Y do slot + fallback teclado Y para P1
+- `_revive_slot(slot)`: reposiciona ship no centro do beacon, `invuln = 2000ms`, `is_dead = False`, vidas = 1, limpa beacon
+
+**Render multiplayer:**
+- `RenderFrame`: adicionados `revival_beacons: tuple[RevivalBeacon, ...]` e `primary_alive: bool`
+- `GameRenderer`: pula `frame.ship.draw()` quando `primary_alive=False`; renderiza beacons como overlay
+- Slots mortos sem beacon (single-player, ou após game over consolidado) ficam invisíveis automaticamente
+
+**Bidirecional:** P1 revive P2 ou P2 revive P1 — qualquer vivo segurando Y dentro do raio do beacon do morto avança o timer.
+
+**Game over:** mantém `all(s.lives <= 0 for s in roster.all_slots())`. Se ambos morrem antes de qualquer revive, game over fecha o ciclo (impossível ativar beacon sem ninguém vivo).
+
+**Defensivo:** `_handle_ship_hit` checa `slot.is_dead` no topo e ignora — protege mine/slime/fire zones ainda P1-only de re-spawnar beacon num slot já morto.
 
 **Novo arquivo: `game/entities/revival_beacon.py`**
 
@@ -316,7 +375,19 @@ com 1 vida. Se P1 sai do raio antes dos 5s, progresso zera.
 
 ### Fase 7 — HUD dual
 
-**Esforço:** 0,5 dia · **Risco:** Baixo · **Status:** Pendente
+**Esforço:** 0,5 dia · **Risco:** Baixo · **Status:** ✅ Concluída
+
+**Novo dataclass `P2HudInfo`** em `render_frame.py`: `lives`, `is_dead`,
+`ship`, `beacon_progress`. `RenderFrame.p2_hud: Optional[P2HudInfo]`.
+
+**`PlayingScene._build_p2_hud_info()`** monta o snapshot. None em
+single-player (1 slot só).
+
+**`GameRenderer._render_p2_hud(p2_hud, surface)`**:
+- Canto superior direito, abaixo das vidas do P1
+- Label "JOGADOR 2" em ciano
+- Se vivo: "Vidas: N" e timers de Escudo/Tiro Duplo/Velocidade alinhados à direita
+- Se morto: "REVIVE XX%" com cor que pulsa de cinza para ciano conforme `beacon_progress`
 
 `game/render/hud.py` (ou onde estiver o HUD):
 - Coluna P1 (atual) + coluna P2 ao lado, com ícone da nave
@@ -330,7 +401,24 @@ com 1 vida. Se P1 sai do raio antes dos 5s, progresso zera.
 
 ### Fase 8 — Game over e fim de partida
 
-**Esforço:** 0,5 dia · **Risco:** Baixo · **Status:** Pendente
+**Esforço:** 0,5 dia · **Risco:** Baixo · **Status:** ✅ Concluída (junto com 3+6)
+
+A lógica de game over consolidou-se em `_handle_ship_hit`:
+
+```python
+is_game_over = all(s.lives <= 0 for s in self.roster.all_slots())
+```
+
+**Por que esta condição é suficiente:**
+- Single-player (1 slot): equivale ao comportamento original (lives<=0 = game over)
+- Coop: se algum slot ainda tem `lives > 0`, ele está vivo (ou poderia ser revivido). Game over só fecha quando todos zeraram
+- Beacon sem helper vivo é inerte: se todos zeraram, ninguém ativa o beacon, então game over é o desfecho correto
+- A regra `if slot.is_dead: return` no topo de `_handle_ship_hit` evita re-spawn de beacons em slots já marcados como mortos
+
+**Ordem dos efeitos garantida:** dentro de `_handle_ship_hit`, o
+`_spawn_revival_beacon(slot)` acontece **antes** do check `is_game_over` —
+beacons nascem na morte mesmo no frame do game over, mas se ninguém vivo, a
+GameOverScene assume o controle e o beacon nunca é renderizado/ativado.
 
 ```python
 def _check_game_over(self) -> bool:
@@ -353,7 +441,33 @@ game over **imediato** (sem alguém vivo, beacon não tem como avançar).
 
 ### Fase 9 — Edge cases e polimento
 
-**Esforço:** 0,5–1 dia · **Risco:** Médio · **Status:** Pendente
+**Esforço:** 0,5–1 dia · **Risco:** Médio · **Status:** ✅ Concluída (core)
+
+**Tratamentos implementados em `PlayingScene.handle_event`:**
+
+- **`_is_p2_leave_trigger(event)`**: BACK no controle do slot 1 remove P2
+  voluntariamente. Score compartilhado preserva (P1 fica com o total).
+- **`_is_p2_disconnect(event)`**: JOYDEVICEREMOVED do gamepad do slot 1
+  remove P2 automaticamente — evita nave parada na tela sem input.
+- **`_remove_p2_slot(reason)`**: descarta beacon ativo se houver e tira o slot
+  do roster. Loga o motivo.
+
+**Pause já compatível** com qualquer controle: `_handle_gamepad_button(button)`
+em `gameplay_input_handler.py` ignora `instance_id`, então START de P1 ou P2
+abre o pause. `PausedScene.handle_event` igualmente aceita qualquer controle
+para fechar.
+
+**Boss HP scaling correto na transição P2 sair durante boss:**
+- `_start_boss_fight()` lê `roster.all_slots()` no spawn — se P2 sair durante
+  boss fight, boss já está em campo e não reescala (decisão travada)
+- Próximo boss usa o count atual
+
+**Não-bloqueantes (limitações conhecidas, podem virar polish futuro):**
+- Modal de P2 não detecta JOYDEVICEREMOVED — se controle cair durante
+  seleção, ESC do teclado cancela
+- Mine/fire/ice/slime zones ainda checam apenas P1 — P2 atravessa sem dano
+  nessas armadilhas específicas
+- Câmera/shake centrados em P1 sempre (sem split-screen — coop é colocalizado)
 
 | Caso | Tratamento |
 |---|---|
@@ -384,14 +498,43 @@ game over **imediato** (sem alguém vivo, beacon não tem como avançar).
 | 1 — Input multi-controle | 1–2 dias | Médio | ✅ Concluída |
 | 2 — Refatorar `self.ship` → `roster` | 2–3 dias | Alto | ✅ Concluída |
 | 3 — Fluxo de entrada P2 (modal) | 1 dia | Médio | ✅ Concluída |
-| 4 — Power-ups e mini-naves per-player | 0,5 dia | Baixo | Pendente |
-| 5 — Boss HP +40% | 2–4 h | Baixo | Pendente |
-| 6 — Sistema de reviver (beacon) | 1–1,5 dia | Médio | Pendente |
-| 7 — HUD dual | 0,5 dia | Baixo | Pendente |
-| 8 — Game over rework | 0,5 dia | Baixo | Pendente |
-| 9 — Edge cases | 0,5–1 dia | Médio | Pendente |
+| 4 — Power-ups e mini-naves per-player | 0,5 dia | Baixo | ✅ Concluída |
+| 5 — Boss HP +40% | 2–4 h | Baixo | ✅ Concluída |
+| 6 — Sistema de reviver (beacon) | 1–1,5 dia | Médio | ✅ Concluída |
+| 7 — HUD dual | 0,5 dia | Baixo | ✅ Concluída |
+| 8 — Game over rework | 0,5 dia | Baixo | ✅ Concluída |
+| 9 — Edge cases | 0,5–1 dia | Médio | ✅ Concluída (core) |
 
 **Total estimado:** ~8–10 dias de trabalho concentrado.
+
+---
+
+## Pós-Fase 9 — Polish entregue
+
+### Per-slot button routing no gameplay_input_handler
+
+`handle(event)` agora propaga `event.instance_id` para os subhandlers de
+JOYBUTTON/JOYHAT/JOYAXIS. Novo `_slot_for_instance_id(instance_id)` resolve
+qual `PlayerSlot` emitiu o evento.
+
+**Resultado:**
+- A/X/Y do controle do P2 → ativam Cofre/cycle_facing **da nave do P2**
+- LT do controle do P2 → dash/charge_shot **da nave do P2** (Fantasma/Caçador/Magneto agora funcionais pra P2)
+- LB/RB e D-pad ↑ continuam exclusivos do P1 (upgrade select é do perfil dele)
+- START de qualquer controle pausa (mantido)
+- Estado de calibração e "pressionado" do LT virou dict per slot do gamepad — controles com layouts diferentes calibram independentemente
+
+**Conflito Y vs revive resolvido:** `_slot_inside_any_beacon(slot)` checa se
+o jogador está no raio de algum beacon de morto ativo; se sim, o botão Y
+**não** ativa Cofre slot 0 (deixa a precedência para o revive contínuo).
+
+### HUD do Cofre — 4 caixas em coop
+
+`_render_storage_slots_hud(p1_ship, surface, p2_ship=None)`:
+- Single-player ou só P1 com Cofre: 2 caixas centralizadas (comportamento original)
+- Apenas P2 com Cofre: 2 caixas centralizadas com labels Y/A
+- Ambos com Cofre: 4 caixas centralizadas com pequena separação visual e labels "P1"/"P2" acima dos grupos
+- Hints de tecla: P1 mostra Q/E (teclado), P2 mostra Y/A (gamepad)
 
 ---
 

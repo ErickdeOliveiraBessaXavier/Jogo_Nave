@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import pygame
 
 if TYPE_CHECKING:
     from ..scenes.playing import PlayingScene
+    from ..systems.player_slot import PlayerSlot
 
 
 logger = logging.getLogger(__name__)
@@ -18,14 +19,21 @@ class GameplayInputHandler:
     A cena (`PlayingScene`) continua dona dos slots de upgrade, do modo de
     seleção e dos toggles de debug — este handler apenas roteia o evento para
     o método certo da cena ou do `Ship`.
+
+    Em multiplayer, eventos de gamepad são roteados pelo `instance_id` do
+    pygame: `_slot_for_instance_id` traduz para o `PlayerSlot` correto, e
+    cada ação (cycle_facing, dash, charge, Cofre) opera em `slot.ship`. LT
+    e botões P1-only (upgrade select / D-pad) permanecem ligados ao slot
+    primário.
     """
 
     def __init__(self, scene: "PlayingScene") -> None:
         self.scene = scene
-        # Estado do gatilho LT do controle (calibrado na primeira leitura
-        # abaixo de -0.5 — proteção contra falsa detecção).
-        self._lt_pressed: bool = False
-        self._lt_calibrated: bool = False
+        # Estado do gatilho LT por slot do gamepad (calibrado na primeira
+        # leitura abaixo de -0.5 — proteção contra falsa detecção). Cada
+        # controle calibra independentemente.
+        self._lt_pressed: dict[int, bool] = {}
+        self._lt_calibrated: dict[int, bool] = {}
 
     # ------------------------------------------------------------------
     # Dispatch principal
@@ -41,11 +49,11 @@ class GameplayInputHandler:
         elif event.type == pygame.KEYUP:
             self._handle_keyup(event)
         elif event.type == pygame.JOYBUTTONDOWN:
-            self._handle_gamepad_button(event.button)
+            self._handle_gamepad_button(event.button, event.instance_id)
         elif event.type == pygame.JOYHATMOTION:
-            self._handle_gamepad_hat(event.value)
+            self._handle_gamepad_hat(event.value, event.instance_id)
         elif event.type == pygame.JOYAXISMOTION:
-            self._handle_gamepad_axis(event.axis, event.value)
+            self._handle_gamepad_axis(event.axis, event.value, event.instance_id)
 
     # ------------------------------------------------------------------
     # Teclado / Mouse
@@ -169,11 +177,27 @@ class GameplayInputHandler:
     # Gamepad
     # ------------------------------------------------------------------
 
-    def _handle_gamepad_button(self, button: int) -> None:
+    def _slot_for_instance_id(self, instance_id: int) -> Optional["PlayerSlot"]:
+        """Resolve o slot do roster a partir do `instance_id` do evento.
+
+        Retorna None se o gamepad emissor não está mapeado a nenhum slot
+        (orphan event, controle desconectado entre evento e processamento, etc.).
+        """
+        scene = self.scene
+        gp_slot_idx = scene.app.gamepad.slot_of_instance_id(instance_id)
+        if gp_slot_idx is None:
+            return None
+        for slot in scene.roster.all_slots():
+            if slot.gamepad_slot == gp_slot_idx:
+                return slot
+        return None
+
+    def _handle_gamepad_button(self, button: int, instance_id: int) -> None:
         from ..core.gamepad import XboxButton
 
         scene = self.scene
-        # Start sempre abre pausa, mesmo se a nave está entrando ou em modo de seleção.
+        # Start sempre abre pausa — qualquer controle, mesmo durante entry
+        # ou modo de seleção. Não precisa resolver slot (pausa é global).
         if button == XboxButton.START:
             scene._upgrade_select_mode = False
             from ..scenes.paused import PausedScene
@@ -181,42 +205,55 @@ class GameplayInputHandler:
             scene.app.states.push(PausedScene(scene.app, previous_scene=scene))
             return
 
-        if scene.ship.is_entering or not scene._can_handle_gameplay_actions():
+        slot = self._slot_for_instance_id(instance_id)
+        if slot is None or slot.is_dead:
             return
 
-        # Modo de seleção de upgrade: LB/RB navegam, A confirma, B cancela.
-        if scene._upgrade_select_mode:
+        ship = slot.ship
+        if ship.is_entering or not scene._can_handle_gameplay_actions():
+            return
+
+        is_primary = slot is scene.roster.primary()
+
+        # Modo de seleção de upgrade é exclusivo do P1 (upgrades pertencem
+        # ao perfil dele). P2 nesses botões: no-op.
+        if scene._upgrade_select_mode and is_primary:
             if button == XboxButton.A:
                 scene._confirm_upgrade_select()
             elif button == XboxButton.B:
                 scene._upgrade_select_mode = False
             elif button == XboxButton.LB:
-                # HUD desenha os slots da direita pra esquerda — LB anda no
-                # índice positivo pra ir visualmente pra esquerda.
                 scene._navigate_upgrade_select(+1)
             elif button == XboxButton.RB:
                 scene._navigate_upgrade_select(-1)
             return
 
-        # Tiro normal sai do RT (gatilho direito), via ``hold_shoot`` em
-        # ``_poll_held_gamepad``. A/X/Y aqui ficam livres para Cofre e cycle.
+        # Tiro normal sai do RT via ``hold_shoot``. A/X/Y ficam livres para
+        # Cofre e cycle. Y também é o botão de revive (held); para evitar
+        # consumo indevido do Cofre slot 0 quando o jogador está tentando
+        # reviver, suprimimos o activate se ele está dentro de algum beacon.
         if button == XboxButton.A:
-            scene._activate_stored_powerup(1)  # Cofre E
+            scene._activate_stored_powerup_for(slot, 1)  # Cofre E
         elif button == XboxButton.X:
-            scene.ship.cycle_facing()
+            ship.cycle_facing()
         elif button == XboxButton.Y:
-            scene._activate_stored_powerup(0)  # Cofre Q
+            if not scene._slot_inside_any_beacon(slot):
+                scene._activate_stored_powerup_for(slot, 0)  # Cofre Q
 
-    def _handle_gamepad_hat(self, value: tuple[int, int]) -> None:
-        """D-pad ↑ alterna o modo de seleção de upgrades."""
-        scene = self.scene
-        if scene.ship.is_entering or not scene._can_handle_gameplay_actions():
+    def _handle_gamepad_hat(self, value: tuple[int, int], instance_id: int) -> None:
+        """D-pad ↑ alterna o modo de seleção de upgrades — somente P1."""
+        slot = self._slot_for_instance_id(instance_id)
+        if slot is None or slot is not self.scene.roster.primary():
+            return
+        if slot.ship.is_entering or not self.scene._can_handle_gameplay_actions():
             return
         _x, y = value
         if y > 0:
-            scene._toggle_upgrade_select_mode()
+            self.scene._toggle_upgrade_select_mode()
 
-    def _handle_gamepad_axis(self, axis: int, value: float) -> None:
+    def _handle_gamepad_axis(
+        self, axis: int, value: float, instance_id: int
+    ) -> None:
         """LT analógico é o botão único de habilidade especial.
 
         - Naves com ``has_dash`` (Fantasma): aperto do LT executa dash na
@@ -224,48 +261,68 @@ class GameplayInputHandler:
         - Naves com ``has_charge_shot`` (Caçador, Magneto): segurar o LT
           carrega o tiro; soltar com a carga cheia dispara o laser/teleguiado,
           soltar antes cancela.
+
+        Roteado por `instance_id` para o slot correto (P1 ou P2). Calibração
+        e estado de "pressionado" são mantidos por slot — gamepads PS4-likes
+        e XInput podem ter layouts/repouso diferentes.
         """
         from ..core.gamepad import GamepadManager
 
         scene = self.scene
-        if axis != scene.app.gamepad.axis_lt:
+        gp = scene.app.gamepad
+        gp_slot_idx = gp.slot_of_instance_id(instance_id)
+        if gp_slot_idx is None:
             return
-        # Defesa contra falsa detecção: só confia no gatilho após ver pelo
-        # menos um evento abaixo de -0.5 (estado solto).
+        # Cada gamepad pode reportar `axis_lt` diferente (XInput vs PS4-like).
+        # Como o layout é detectado no spawn em propriedades da instância,
+        # consultamos o axis_lt geral (que é da slot 0). Para multiplayer
+        # robusto seria ideal expor axis_lt per-slot — por ora, ambos os
+        # gamepads costumam usar o mesmo layout em hardware comum.
+        if axis != gp.axis_lt:
+            return
+
+        # Defesa contra falsa detecção, por slot.
         if value <= -0.5:
-            self._lt_calibrated = True
-        if not self._lt_calibrated:
+            self._lt_calibrated[gp_slot_idx] = True
+        if not self._lt_calibrated.get(gp_slot_idx, False):
             return
         normalized = (value + 1.0) * 0.5
         pressed = normalized > GamepadManager.TRIGGER_THRESHOLD
-        if pressed == self._lt_pressed:
+        prev_pressed = self._lt_pressed.get(gp_slot_idx, False)
+        if pressed == prev_pressed:
             return
-        self._lt_pressed = pressed
+        self._lt_pressed[gp_slot_idx] = pressed
 
-        if scene.ship.is_entering or not scene._can_handle_gameplay_actions():
+        slot = self._slot_for_instance_id(instance_id)
+        if slot is None or slot.is_dead:
+            return
+        ship = slot.ship
+        if ship.is_entering or not scene._can_handle_gameplay_actions():
             return
 
-        profile = scene.ship.profile
+        profile = ship.profile
 
         # Dash dispara no instante do press, sem segurar.
         if pressed and profile.has_dash:
-            move_vec = self._gamepad_dash_vector()
-            scene.ship.try_dash(move_vec)
+            move_vec = self._gamepad_dash_vector(gp_slot_idx)
+            ship.try_dash(move_vec)
 
         # Charge shot precisa de hold/release.
         if profile.has_charge_shot:
-            if pressed and not scene.ship.charge_shot_active:
-                scene.ship.start_charge()
-            elif not pressed and scene.ship.charge_shot_active:
-                if scene.ship.charge_shot_progress >= 1.0:
-                    scene.shooting.fire(scene.ship, scene.player_damage_multiplier)
+            if pressed and not ship.charge_shot_active:
+                ship.start_charge()
+            elif not pressed and ship.charge_shot_active:
+                if ship.charge_shot_progress >= 1.0:
+                    scene.shooting.fire(ship, scene.player_damage_multiplier)
                 else:
-                    scene.ship.cancel_charge()
+                    ship.cancel_charge()
 
-    def _gamepad_dash_vector(self) -> pygame.math.Vector2:
-        """Direção do dash via stick esquerdo (fallback para hold actions)."""
+    def _gamepad_dash_vector(self, gp_slot_idx: int = 0) -> pygame.math.Vector2:
+        """Direção do dash via stick esquerdo do slot (fallback hold actions)."""
         scene = self.scene
-        gx, gy = scene.app.input.gamepad_movement_vector(scene.app.gamepad)
+        gx, gy = scene.app.input.gamepad_movement_vector_for(
+            scene.app.gamepad, slot=gp_slot_idx
+        )
         if gx != 0.0 or gy != 0.0:
             vec = pygame.math.Vector2(gx, gy)
             if vec.length() > 0:
