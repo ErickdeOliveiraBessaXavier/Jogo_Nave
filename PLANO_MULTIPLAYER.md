@@ -18,6 +18,7 @@ chegando perto da posição da morte e segurando Y por 5 segundos.
 
 | Item | Decisão |
 |---|---|
+| **Pré-requisito de coop** | **Multiplayer só ativa com 2 gamepads conectados.** Teclado não é dividido entre jogadores (inviável). P1 pode usar teclado ou gamepad; P2 **obrigatoriamente** gamepad |
 | Vidas P2 | Mesma quantidade configurada pela dificuldade (igual P1) |
 | Power-ups | Quem coleta fica com o efeito — **não compartilhado** |
 | Score | **Compartilhado** (continua em `self.score` único) |
@@ -37,7 +38,9 @@ chegando perto da posição da morte e segurando Y por 5 segundos.
 
 ### Fase 0 — Tipos base (`PlayerSlot`, `PlayerRoster`)
 
-**Esforço:** 0,5 dia · **Risco:** Baixo · **Status:** Pendente
+**Esforço:** 0,5 dia · **Risco:** Baixo · **Status:** ✅ Concluída
+
+Arquivo: `game/systems/player_slot.py`. Importável sem erros, sem uso ainda.
 
 Criar `game/systems/player_slot.py`:
 
@@ -68,7 +71,19 @@ class PlayerRoster:
 
 ### Fase 1 — Input multi-controle
 
-**Esforço:** 1–2 dias · **Risco:** Médio · **Status:** Pendente
+**Esforço:** 1–2 dias · **Risco:** Médio · **Status:** ✅ Concluída
+
+Arquivos: `game/core/gamepad.py`, `game/core/input.py`.
+
+- `GamepadManager` refatorado para multi-slot (até 2 controles)
+- API legada preservada 100% (propriedades `_joystick`, `axis_lt`, `is_active`, `connected` continuam funcionando, todas resolvendo para slot 0)
+- Novo: `is_slot_connected(slot)`, `is_slot_active(slot)`, `slot_instance_id(slot)`, `slot_of_instance_id(iid)`, `secondary_connected`
+- Read methods (`get_axis`, `get_stick`, `get_trigger`, `is_button_pressed`, `get_dpad`, `rumble`) aceitam `slot` opcional (default 0)
+- `JOYDEVICEADDED/REMOVED` agora preenche/libera qualquer slot vazio
+- `_detect_axis_layout` agora é por-slot (cada gamepad pode ter layout diferente)
+- `Input.poll_held_for(slot)` adicionado — slot 0 inclui teclado, demais slots só gamepad
+- `Input.gamepad_movement_vector_for(slot)` adicionado
+- Smoke test de boot e API compat passa.
 
 Arquivos: `game/core/gamepad.py`, `game/core/input.py`.
 
@@ -128,8 +143,10 @@ Regressão zero é o critério.
 
 **Esforço:** 1 dia · **Risco:** Médio · **Status:** Pendente
 
-**Trigger:** durante `PlayingScene.update()`, se `roster.count() < 2` e algum
-controle não-P1 pressionar Start, abrir modal.
+**Trigger:** durante `PlayingScene.update()`, se `roster.count() < 2` **e**
+`gamepad.secondary_connected` for True **e** algum controle não-P1 pressionar
+Start, abrir modal. Sem segundo gamepad conectado, qualquer tentativa
+(teclado ou outro botão) é ignorada — coop exige 2 controles.
 
 **Modal `game/ui/p2_ship_select_modal.py`:**
 - Overlay sobre a partida — jogo **pausa**
@@ -304,8 +321,8 @@ game over **imediato** (sem alguém vivo, beacon não tem como avançar).
 
 | Fase | Esforço | Risco | Status |
 |---|---|---|---|
-| 0 — Tipos base (`PlayerSlot`/`PlayerRoster`) | 0,5 dia | Baixo | Pendente |
-| 1 — Input multi-controle | 1–2 dias | Médio | Pendente |
+| 0 — Tipos base (`PlayerSlot`/`PlayerRoster`) | 0,5 dia | Baixo | ✅ Concluída |
+| 1 — Input multi-controle | 1–2 dias | Médio | ✅ Concluída |
 | 2 — Refatorar `self.ship` → `roster` | 2–3 dias | Alto | Pendente |
 | 3 — Fluxo de entrada P2 (modal) | 1 dia | Médio | Pendente |
 | 4 — Power-ups e mini-naves per-player | 0,5 dia | Baixo | Pendente |
