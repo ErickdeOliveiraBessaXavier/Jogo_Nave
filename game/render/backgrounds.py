@@ -86,7 +86,7 @@ class Background(ABC):
         """Reseta para estado inicial."""
         raise NotImplementedError
 
-    def set_day_night_paused(self, paused: bool) -> None:
+    def set_day_night_paused(self, _paused: bool) -> None:
         """Optional hook to pause/resume day/night cycle.
 
         Background implementations that don't implement a day/night cycle
@@ -247,9 +247,13 @@ class MountainsBackground(Background):
         # _phase: 'sunset' (0→1), 'night' (permanece 1), 'sunrise' (1→0), 'day' (permanece 0)
         self._phase: str = "day"
         self._phase_elapsed_time: float = 0.0
-        self._sunset_duration: float = 600.0  # segundos para anoitecer completo (10 min)
+        self._sunset_duration: float = (
+            600.0  # segundos para anoitecer completo (10 min)
+        )
         self._night_duration: float = 180.0  # noite (3 min intervalo)
-        self._sunrise_duration: float = 600.0  # segundos para amanhecer completo (10 min)
+        self._sunrise_duration: float = (
+            600.0  # segundos para amanhecer completo (10 min)
+        )
         self._day_duration: float = 180.0  # dia (3 min intervalo)
         self._current_progress: float = 0.0
         self._pause_day_night_cycle: bool = False  # Pausar ciclo enquanto boss ativo
@@ -277,18 +281,18 @@ class MountainsBackground(Background):
         Custo: dois loops por linha, executados uma vez no construtor.
         """
         warm_colors = [
-            (30, 17, 40),    # topo profundo (já era escuro no warm)
-            (58, 37, 82),    # ~40% — roxo
+            (30, 17, 40),  # topo profundo (já era escuro no warm)
+            (58, 37, 82),  # ~40% — roxo
             (140, 75, 110),  # ~70% — rosa-vinho
             (201, 109, 99),  # ~90% — laranja avermelhado
             (255, 158, 125),  # base — peach
         ]
         night_colors = [
-            (5, 8, 18),     # topo — quase preto azulado
-            (10, 15, 35),   # ~40% — azul-marinho profundo
-            (18, 28, 55),   # ~70% — azul noite
-            (28, 42, 72),   # ~90% — azul-petróleo
-            (40, 60, 95),   # base — azul-acinzentado frio
+            (5, 8, 18),  # topo — quase preto azulado
+            (10, 15, 35),  # ~40% — azul-marinho profundo
+            (18, 28, 55),  # ~70% — azul noite
+            (28, 42, 72),  # ~90% — azul-petróleo
+            (40, 60, 95),  # base — azul-acinzentado frio
         ]
         stops = [0.0, 0.4, 0.7, 0.9, 1.0]
 
@@ -315,20 +319,22 @@ class MountainsBackground(Background):
                 if t <= stops[i + 1]:
                     local_t = (t - stops[i]) / (stops[i + 1] - stops[i])
                     color = tuple(
-                        int(
-                            colors[i][c]
-                            + (colors[i + 1][c] - colors[i][c]) * local_t
-                        )
+                        int(colors[i][c] + (colors[i + 1][c] - colors[i][c]) * local_t)
                         for c in range(3)
                     )
                     pygame.draw.line(surf, color, (0, y), (self.width, y))
                     break
         return surf
 
-    def set_theme_duration(self, sunset_duration: float, night_duration: float = 300.0,
-                           sunrise_duration: float = 600.0, day_duration: float = 300.0) -> None:
+    def set_theme_duration(
+        self,
+        sunset_duration: float,
+        night_duration: float = 300.0,
+        sunrise_duration: float = 600.0,
+        day_duration: float = 300.0,
+    ) -> None:
         """Define as durações de cada fase do ciclo dia/noite.
-        
+
         Args:
             sunset_duration: Tempo para ir de 0 (dia) a 1 (noite) em segundos.
             night_duration: Tempo de permanência em noite (1.0) em segundos.
@@ -340,15 +346,15 @@ class MountainsBackground(Background):
         self._sunrise_duration = max(1.0, sunrise_duration)
         self._day_duration = max(0.0, day_duration)
 
-    def set_day_night_paused(self, paused: bool) -> None:
+    def set_day_night_paused(self, _paused: bool) -> None:
         """Pausa ou retoma o ciclo dia/noite.
-        
+
         Útil para manter a iluminação constante durante combates de boss.
-        
+
         Args:
             paused: True para pausar, False para retomar.
         """
-        self._pause_day_night_cycle = paused
+        self._pause_day_night_cycle = _paused
 
     def _create_layers(self) -> None:
         """Cria camadas de parallax otimizadas."""
@@ -596,14 +602,14 @@ class MountainsBackground(Background):
         # Se o ciclo estiver pausado (boss ativo), não avança o tempo.
         if not self._pause_day_night_cycle:
             self._phase_elapsed_time += dt * speed_mult
-        
+
         if self._phase == "day":
             if self._phase_elapsed_time >= self._day_duration:
                 self._phase = "sunset"
                 self._phase_elapsed_time = 0.0
             else:
                 self._current_progress = 0.0
-        
+
         elif self._phase == "sunset":
             if self._phase_elapsed_time >= self._sunset_duration:
                 self._phase = "night"
@@ -613,14 +619,14 @@ class MountainsBackground(Background):
                 # Interpola de 0 a 1 durante o anoitecer
                 t = self._phase_elapsed_time / self._sunset_duration
                 self._current_progress = t
-        
+
         elif self._phase == "night":
             if self._phase_elapsed_time >= self._night_duration:
                 self._phase = "sunrise"
                 self._phase_elapsed_time = 0.0
             else:
                 self._current_progress = 1.0
-        
+
         elif self._phase == "sunrise":
             if self._phase_elapsed_time >= self._sunrise_duration:
                 self._phase = "day"
@@ -688,7 +694,7 @@ class MountainsBackground(Background):
             cloud.reset(is_first_time=True)
         for cloud in self.clouds_front:
             cloud.reset(is_first_time=True)
-        
+
         # Reseta o ciclo dia/noite
         self._phase = "day"
         self._phase_elapsed_time = 0.0
@@ -806,7 +812,9 @@ class CityBackground(Background):
         for wy in range(y_start, y_end, spacing + window_h):
             for wx in range(x_start, x_end, spacing):
                 color = (
-                    lit_color if (blink_time + (wx + wy) % 100) % 200 < 150 else dark_color
+                    lit_color
+                    if (blink_time + (wx + wy) % 100) % 200 < 150
+                    else dark_color
                 )
                 pygame.draw.rect(surface, color, (wx, wy, window_w, window_h))
 

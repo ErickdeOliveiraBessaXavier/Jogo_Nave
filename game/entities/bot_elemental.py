@@ -189,7 +189,7 @@ def _get_bot_body_surfaces(
 _AURA_CACHE: Dict[Tuple[str, int, int], pygame.Surface] = {}
 
 
-def _build_aura_surface(theme: str, base_r: int, S: int) -> pygame.Surface:
+def _build_aura_surface(theme: str, base_r: int, _S: int) -> pygame.Surface:
     palette = _ATTACK_PALETTES[theme]
     sz = base_r * 6 + 1
     surf = pygame.Surface((sz * 2, sz * 2), pygame.SRCALPHA)
@@ -398,7 +398,9 @@ class ElementalRobot:
         pw2 = pw + _s * 2
         ph2 = ph + _s * 2
         self._antenna_pulse_outer = pygame.Surface((pw2, ph2), pygame.SRCALPHA)
-        pygame.draw.rect(self._antenna_pulse_outer, (92, 225, 230, 26), (0, 0, pw2, ph2))
+        pygame.draw.rect(
+            self._antenna_pulse_outer, (92, 225, 230, 26), (0, 0, pw2, ph2)
+        )
         try:
             self._antenna_pulse_inner = self._antenna_pulse_inner.convert_alpha()
             self._antenna_pulse_outer = self._antenna_pulse_outer.convert_alpha()

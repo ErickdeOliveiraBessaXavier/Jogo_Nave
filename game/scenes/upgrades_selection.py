@@ -233,9 +233,7 @@ class UpgradesSelectionScene(Scene):
 
         btn_w = 160
         btn_h = 40
-        self.layout.back_button = pygame.Rect(
-            self.MARGIN, sh - 60, btn_w, btn_h
-        )
+        self.layout.back_button = pygame.Rect(self.MARGIN, sh - 60, btn_w, btn_h)
 
     def _rebuild_upgrade_grid(self):
         self.layout.upgrade_grid_cells.clear()
@@ -387,7 +385,7 @@ class UpgradesSelectionScene(Scene):
                 self._gamepad_stock_action(self.layout.visible_upgrades[i], rect)
                 return
 
-    def _gamepad_slot_action(self, idx: int, rect: pygame.Rect) -> None:
+    def _gamepad_slot_action(self, idx: int, _rect: pygame.Rect) -> None:
         """Slot ativo: retira o upgrade equipado ou tenta destravar slot."""
         profile = self.player_profile
         if idx >= profile.unlocked_slots:
@@ -399,7 +397,7 @@ class UpgradesSelectionScene(Scene):
         if profile.upgrade_loadout[idx] is not None:
             profile.equip_upgrade(None, idx)
 
-    def _gamepad_stock_action(self, upg: UpgradeMeta, rect: pygame.Rect) -> None:
+    def _gamepad_stock_action(self, upg: UpgradeMeta, _rect: pygame.Rect) -> None:
         """Estoque: equipa no primeiro slot livre; toggle se já equipado.
 
         Sem slot livre OU peso excedido: tremor + mensagem para indicar que o
@@ -409,7 +407,7 @@ class UpgradesSelectionScene(Scene):
 
         if upg.type not in profile.unlocked_upgrades:
             self.floating_messages.append(
-                FloatingMessage(rect.centerx, rect.top, "Bloqueado", colors.RED)
+                FloatingMessage(_rect.centerx, _rect.top, "Bloqueado", colors.RED)
             )
             return
 
@@ -430,7 +428,7 @@ class UpgradesSelectionScene(Scene):
         # Não coube — shake no slot 0 + mensagem.
         self.shaking_slot, self.shake_start_time = 0, time.time()
         self.floating_messages.append(
-            FloatingMessage(rect.centerx, rect.top, "Sem espaço", colors.RED)
+            FloatingMessage(_rect.centerx, _rect.top, "Sem espaço", colors.RED)
         )
 
     def _handle_ship_click(self, ship: ShipProfile, rect: pygame.Rect):
@@ -596,7 +594,9 @@ class UpgradesSelectionScene(Scene):
                 else self.transition_progress
             )
             if self.transitioning
-            else self.entry_progress if self.is_entering else 1.0
+            else self.entry_progress
+            if self.is_entering
+            else 1.0
         )
         alpha = int(255 * alpha_mult)
         title = self.title_font.render("Central de Loadout", True, CUSTOM_GOLD)
@@ -872,7 +872,9 @@ class UpgradesSelectionScene(Scene):
             color = (
                 colors.YELLOW
                 if (self.hovered_slot_idx == i or is_valid_target)
-                else (80, 80, 80) if lock else colors.GRAY
+                else (80, 80, 80)
+                if lock
+                else colors.GRAY
             )
             pygame.draw.rect(
                 surface, color, dr, 2 if eq else 1, border_radius=self.RADIUS
@@ -923,13 +925,19 @@ class UpgradesSelectionScene(Scene):
             bg = (
                 (60, 60, 60)
                 if self.hovered_upgrade == upg
-                else (40, 40, 40) if unl else (25, 25, 25)
+                else (40, 40, 40)
+                if unl
+                else (25, 25, 25)
             )
             pygame.draw.rect(surface, bg, rect, border_radius=self.RADIUS)
             border = (
                 colors.YELLOW
                 if eq
-                else colors.RED if not unl else (130, 90, 50) if no_fit else colors.GRAY
+                else colors.RED
+                if not unl
+                else (130, 90, 50)
+                if no_fit
+                else colors.GRAY
             )
             pygame.draw.rect(surface, border, rect, 2, border_radius=self.RADIUS)
 
@@ -1023,7 +1031,9 @@ class UpgradesSelectionScene(Scene):
             bg = (
                 (40, 60, 40)
                 if sel
-                else (60, 60, 70) if self.hovered_ship == s else (30, 30, 35)
+                else (60, 60, 70)
+                if self.hovered_ship == s
+                else (30, 30, 35)
             )
             pygame.draw.rect(surface, bg, dr, border_radius=self.RADIUS)
             pygame.draw.rect(
@@ -1195,56 +1205,62 @@ class UpgradesSelectionScene(Scene):
         if self.hovered_upgrade is None:
             return
         pos, upg = pygame.mouse.get_pos(), self.hovered_upgrade
-        
+
         # Largura fixa, altura dinâmica
         w = 280
         padding = 12
         line_height = 20
-        
+
         # Quebrar o texto em linhas antes de calcular a altura
         wrapped_lines = self._wrap_text(upg.desc, self.small_font, w - (padding * 2))
-        
+
         # Calcular altura necessária: Top + Nome + Gap + Linhas + Bottom
         # 10 (top) + 24 (nome) + 10 (gap) + (linhas * height) + 10 (bottom)
         h = 10 + 24 + 10 + (len(wrapped_lines) * line_height) + 10
-        
+
         x, y = pos[0] + 20, pos[1] + 20
-        
+
         # Ajustar posição para não sair da tela
         if y + h > surface.get_height():
             y = pos[1] - h - 10
         if x + w > surface.get_width():
             x = pos[0] - w - 10
-            
+
         # Garantir que não saia pelo topo ou esquerda
         x = max(10, x)
         y = max(10, y)
 
         # Criar superfície do tooltip
         tooltip_surf = pygame.Surface((w, h), pygame.SRCALPHA)
-        
+
         # Fundo e borda
         pygame.draw.rect(
             tooltip_surf, (15, 15, 25, 245), tooltip_surf.get_rect(), border_radius=10
         )
         pygame.draw.rect(
-            tooltip_surf, (200, 200, 220, 200), tooltip_surf.get_rect(), 1, border_radius=10
+            tooltip_surf,
+            (200, 200, 220, 200),
+            tooltip_surf.get_rect(),
+            1,
+            border_radius=10,
         )
-        
+
         # Nome do upgrade
         name_surf = self.item_font.render(upg.name, True, colors.YELLOW)
         tooltip_surf.blit(name_surf, (padding, 10))
-        
+
         # Linha separadora sutil
-        pygame.draw.line(tooltip_surf, (60, 60, 80), (padding, 38), (w - padding, 38), 1)
-        
+        pygame.draw.line(
+            tooltip_surf, (60, 60, 80), (padding, 38), (w - padding, 38), 1
+        )
+
         # Descrição (todas as linhas)
         dy = 48
         for line in wrapped_lines:
             line_surf = self.small_font.render(line, True, colors.WHITE)
             tooltip_surf.blit(line_surf, (padding, dy))
             dy += line_height
-            
+
         surface.blit(tooltip_surf, (x, y))
 
     def _wrap_text(self, text: str, font: pygame.font.Font, max_w: int) -> list[str]:

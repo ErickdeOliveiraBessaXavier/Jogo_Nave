@@ -83,8 +83,8 @@ class CollisionPhysics:
         entity_rect: pygame.Rect,
         entity_mask: pygame.mask.Mask | None,
         target_with_mask: Any,
-        entity_x: float,
-        entity_y: float,
+        _entity_x: float,
+        _entity_y: float,
     ) -> bool:
         """Colisão pixel-perfect entre `entity_rect` e `target_with_mask`.
 

@@ -19,40 +19,10 @@ from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
 from ..core.sound import sound_manager
 from ..core.state import Scene
-from .ui_helpers import draw_bordered_button
+from .ui_helpers import UIParticle, draw_bordered_button
 
 if TYPE_CHECKING:
     from ..app import GameApp
-
-
-class UIParticle:
-    """Simples sistema de partículas para UI."""
-
-    def __init__(self, x: float, y: float, color: tuple[int, int, int]):
-        self.x = x
-        self.y = y
-        self.color = color
-        angle = random.uniform(0, math.pi * 2)
-        speed = random.uniform(20, 80)
-        self.vx = math.cos(angle) * speed
-        self.vy = math.sin(angle) * speed
-        self.life = 1.0
-        self.size = random.randint(2, 4)
-
-    def update(self, dt: float):
-        self.x += self.vx * dt
-        self.y += self.vy * dt
-        self.life -= dt * 0.8
-
-    def draw(self, surface: pygame.Surface, alpha_mult: float = 1.0):
-        if self.life <= 0:
-            return
-        alpha = int(255 * self.life * alpha_mult)
-        p_surf = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
-        pygame.draw.circle(
-            p_surf, (*self.color, alpha), (self.size, self.size), self.size
-        )
-        surface.blit(p_surf, (self.x - self.size, self.y - self.size))
 
 
 class DifficultySelectionView:

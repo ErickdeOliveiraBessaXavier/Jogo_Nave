@@ -1472,7 +1472,7 @@ class Collisions:
         self,
         player_lasers: list[PlayerLaser],
         enemies: Sequence[Enemy],
-        floating_scores: list[FloatingScore],
+        _floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
         enemy_grid: "SpatialGrid[Any] | None" = None,
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
@@ -1640,7 +1640,7 @@ class Collisions:
         self,
         lasers: list[BossLaser],
         enemies: Sequence[Enemy],
-        floating_scores: list[FloatingScore],
+        _floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
         enemy_grid: "SpatialGrid[Any] | None" = None,
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
@@ -1709,7 +1709,7 @@ class Collisions:
         self,
         lasers: list[BossLaser],
         boss: Damageable,
-        floating_scores: list[FloatingScore],
+        _floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
         """Colisão dos lasers especiais do Caçador (BossLaser) com o boss."""
@@ -1788,7 +1788,7 @@ class Collisions:
             cx_hit: float = float(boss.rect.centerx)
             cy_hit: float = float(boss.rect.centery)
             result = self._apply_hit(
-                boss, damage, cx_hit, cy_hit, entity_manager, floating_scores
+                boss, damage, cx_hit, cy_hit, entity_manager, _floating_scores
             )
             score_gain += result.points
 

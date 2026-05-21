@@ -49,11 +49,11 @@ class SoundSystem:
         """Toca um som de explosão para inimigos."""
         self._play_enemy_explosion_sound(event.enemy_type)
 
-    def _on_boss_defeated(self, event: events.BossDefeated) -> None:
+    def _on_boss_defeated(self, _event: events.BossDefeated) -> None:
         """Toca o som de explosão massiva do boss."""
         sound_manager.play_explosion_boss()
 
-    def _on_powerup_collected(self, event: events.PowerupCollected) -> None:
+    def _on_powerup_collected(self, _event: events.PowerupCollected) -> None:
         """Toca o som de coleta de power-up."""
         sound_manager.play_powerup()
 
@@ -92,10 +92,10 @@ class SoundSystem:
             else:
                 sound_manager.stop_music(force=True)
 
-    def _on_screen_shake(self, event: events.ScreenShake) -> None:
+    def _on_screen_shake(self, _event: events.ScreenShake) -> None:
         """Toca som de impacto para o tremor de tela."""
         # Tremor de tela não tem efeito sonoro dedicado no SoundManager atual.
-        pass
+        return None
 
     def _play_enemy_explosion_sound(self, enemy_type: str) -> None:
         normalized = enemy_type.lower()
