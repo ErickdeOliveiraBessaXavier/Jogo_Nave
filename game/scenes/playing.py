@@ -1412,9 +1412,13 @@ class PlayingScene(Scene):
         """Verifica todas as colisões que causam dano à nave."""
         em = self.entity_manager
 
-        if self.collisions.enemy_projectiles_vs_ship(self.ship, em.alien_bullets):
+        if self.collisions.enemy_projectiles_vs_ship(
+            self.ship, em.alien_bullets, em.enemy_projectile_grid
+        ):
             self._handle_ship_hit()
-        if self.collisions.enemy_projectiles_vs_ship(self.ship, em.serpent_bullets):
+        if self.collisions.enemy_projectiles_vs_ship(
+            self.ship, em.serpent_bullets, em.enemy_projectile_grid
+        ):
             self._handle_ship_hit()
         if self.collisions.eye_laser_vs_ship(self.ship, em.eye_lasers):
             self._handle_ship_hit()

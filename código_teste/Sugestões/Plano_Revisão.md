@@ -143,7 +143,13 @@ def enemy_projectiles_vs_ship(self, ship, projectiles, grid=None):
 **Impacto:** `systems/collisions.py`, `scenes/playing.py` (passar a grid na
 chamada). Reduz colisões redundantes em fases com muitos projéteis de inimigos.
 
-**Status:** Pendente
+**Status:** Concluído. Assinatura agora espelha `energy_orbs_vs_ship`: grid
+opcional, default mantém o comportamento antigo. Como o `enemy_projectile_grid`
+mistura `alien_bullets`, `serpent_bullets` e `energy_orbs`, a filtragem por
+pertencimento à lista usa id-set (`{id(p) for p in projectiles}`). Call sites
+em `playing.py` passam `em.enemy_projectile_grid`. Aplicado como consistência
+de API — ganho de perf depende do tamanho da lista (irrelevante em fases
+leves, melhora quando há muitos projéteis longe da nave).
 
 ---
 
@@ -393,7 +399,7 @@ como item para um eventual ciclo futuro de "limpeza do flat namespace".
 |---|------|-----------|--------|
 | 1 | `GameRenderer` acessa estado interno de `PlayingScene` diretamente | Crítico | Concluído |
 | 2 | Import lazy de `game_events` dentro do hot path de colisão | Crítico | Concluído |
-| 3 | `enemy_projectiles_vs_ship` não usa `enemy_projectile_grid` | Crítico | Pendente (medir antes) |
+| 3 | `enemy_projectiles_vs_ship` não usa `enemy_projectile_grid` | Crítico | Concluído |
 | 4 | `MiniShip._find_nearest_enemy` O(n) sem range limit | Médio | Concluído |
 | 5 | `Formation.update` copy-remove pattern ainda não migrado | Médio | Concluído |
 | 6 | Lógica de targeting duplicada em `Ship` e `MiniShip` | Médio | Concluído |

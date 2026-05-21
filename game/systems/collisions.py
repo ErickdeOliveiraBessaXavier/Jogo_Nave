@@ -1324,15 +1324,37 @@ class Collisions:
         self,
         ship: Ship,
         projectiles: list[Any],
+        grid: "SpatialGrid[Any] | None" = None,
     ) -> bool:
         """Projéteis de inimigos (qualquer tipo) vs. nave do jogador.
 
-        Itera a lista de tipo específico diretamente — listas de projéteis de
-        inimigos são pequenas, a overhead de grid não se justifica.
+        Quando `grid` é passada, filtra candidatos por proximidade espacial e
+        verifica pertencimento à `projectiles` via id-set (a grid mistura
+        tipos diferentes de projétil de inimigo). Sem grid, itera a lista
+        diretamente — assinatura espelha `energy_orbs_vs_ship`.
         """
         if ship.invuln > 0:
             return False
         ship_rect = ship.rect
+
+        if grid is not None and projectiles:
+            pad = CollisionConstants.SPATIAL_QUERY_PADDING
+            projectile_ids = {id(p) for p in projectiles}
+            for p in grid.query(
+                ship_rect.x - pad,
+                ship_rect.y - pad,
+                ship_rect.width + pad * 2,
+                ship_rect.height + pad * 2,
+            ):
+                if (
+                    id(p) in projectile_ids
+                    and not getattr(p, "dead", False)
+                    and ship_rect.colliderect(p.rect)
+                ):
+                    p.dead = True
+                    return True
+            return False
+
         for p in projectiles:
             if not getattr(p, "dead", False) and ship_rect.colliderect(p.rect):
                 p.dead = True
