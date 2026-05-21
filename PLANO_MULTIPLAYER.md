@@ -107,7 +107,19 @@ Arquivos: `game/core/gamepad.py`, `game/core/input.py`.
 
 ### Fase 2 — Refatorar `self.ship` → `self.roster` 🔥
 
-**Esforço:** 2–3 dias · **Risco:** Alto · **Status:** Pendente
+**Esforço:** 2–3 dias · **Risco:** Alto · **Status:** ⏳ Em andamento (Passo 2.1 ✅)
+
+**Passo 2.1** ✅ Concluído. `_init_ship()` cria `Ship` localmente e popula
+`self.roster = PlayerRoster.with_primary(PlayerSlot(...))`. `self.ship` virou
+property → `self.roster.primary().ship`. `_sync_lives` agora também atualiza
+`primary.lives`. Imports passam, todos os ~100 call sites de `self.ship.*`
+continuam funcionando via property.
+
+**Passos 2.2-2.4 pendentes** — convertem `_check_ship_damage` (~15 chamadas
+de `X_vs_ship(self.ship, ...)`), `ship_vs_enemies`, `_check_boss_collisions`,
+`_handle_ship_hit` (precisa receber slot) e cooldown de tiro do
+`ShootingSystem` (hoje global, precisa ser per-ship). Com 1 slot, o
+comportamento deve ser **idêntico** — loop de 1 = single path.
 
 Esta é a fase mais cara. Estratégia incremental, **commits pequenos**, manter
 single-player 100% funcional a cada commit.
@@ -323,7 +335,7 @@ game over **imediato** (sem alguém vivo, beacon não tem como avançar).
 |---|---|---|---|
 | 0 — Tipos base (`PlayerSlot`/`PlayerRoster`) | 0,5 dia | Baixo | ✅ Concluída |
 | 1 — Input multi-controle | 1–2 dias | Médio | ✅ Concluída |
-| 2 — Refatorar `self.ship` → `roster` | 2–3 dias | Alto | Pendente |
+| 2 — Refatorar `self.ship` → `roster` | 2–3 dias | Alto | ⏳ Passo 2.1 ✅ |
 | 3 — Fluxo de entrada P2 (modal) | 1 dia | Médio | Pendente |
 | 4 — Power-ups e mini-naves per-player | 0,5 dia | Baixo | Pendente |
 | 5 — Boss HP +40% | 2–4 h | Baixo | Pendente |

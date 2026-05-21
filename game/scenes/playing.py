@@ -64,6 +64,7 @@ from ..systems.level_progression_controller import (
     LevelProgressionController,
     ProgressionStatus,
 )
+from ..systems.player_slot import PlayerRoster, PlayerSlot
 from ..systems.shooting_system import ShootingSystem
 from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
 
@@ -185,17 +186,34 @@ class PlayingScene(Scene):
             ship_x = Config.SCREEN_WIDTH / 2.0 - 20
             ship_y = float(Config.SCREEN_HEIGHT + 100)
 
-        self.ship = Ship(
+        ship_obj = Ship(
             ship_x,
             ship_y,
             mouse_control=self.app.preferences.mouse_control,
             auto_fire=self.app.preferences.auto_fire,
             profile=self.player_profile.get_selected_ship_profile(),
         )
-        self.ship.is_entering = True
-        self.ship.apply_world_mode(self.is_side_scroll)
+        ship_obj.is_entering = True
+        ship_obj.apply_world_mode(self.is_side_scroll)
+
+        # Roster mantém slots de jogador. Lives são populados depois em
+        # _apply_difficulty_settings; aqui só ancoramos o slot P1.
+        self.roster: PlayerRoster = PlayerRoster.with_primary(
+            PlayerSlot(ship=ship_obj, lives=0, gamepad_id=None)
+        )
 
         self.first_entry: bool = True
+
+    @property
+    def ship(self) -> Ship:
+        """Backward compat: nave do P1 (slot primário).
+
+        Mantida como property para que call sites legados (`self.ship.x`,
+        `self.ship.lives`, etc.) continuem funcionando enquanto a refatoração
+        multiplayer é incremental. Para iterar sobre todos os jogadores ativos,
+        usar `self.roster.alive_slots()`.
+        """
+        return self.roster.primary().ship
 
     def _init_game_state(self) -> None:
         """Inicializa o estado de jogo e aplica configurações de dificuldade."""
@@ -1871,8 +1889,12 @@ class PlayingScene(Scene):
                 upg.update(dt, ctx)
 
     def _sync_lives(self, lives: int) -> None:
+        # Por enquanto P1 e a cena compartilham o mesmo valor. Quando P2 entrar
+        # (Fase 3+), o sync passa a ser per-slot via _sync_lives_for(slot).
         self.lives = max(0, lives)
-        self.ship.lives = self.lives
+        primary = self.roster.primary()
+        primary.lives = self.lives
+        primary.ship.lives = self.lives
 
     def _change_lives(self, delta: int) -> None:
         self._sync_lives(self.lives + delta)
