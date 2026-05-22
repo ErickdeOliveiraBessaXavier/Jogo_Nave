@@ -71,7 +71,10 @@ def _ensure_homing_frames() -> None:
     step = 360.0 / _HOMING_NUM_FRAMES
     for i in range(_HOMING_NUM_FRAMES):
         angle = i * step
-        for src, dst in ((base_plain, _HOMING_FRAMES), (base_expl, _HOMING_FRAMES_EXPLOSIVE)):
+        for src, dst in (
+            (base_plain, _HOMING_FRAMES),
+            (base_expl, _HOMING_FRAMES_EXPLOSIVE),
+        ):
             frame = pygame.transform.rotate(src, -angle)
             try:
                 frame = frame.convert_alpha()

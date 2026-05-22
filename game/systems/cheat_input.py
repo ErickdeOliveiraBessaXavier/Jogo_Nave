@@ -31,7 +31,7 @@ class CheatBuffer:
 
         self.buffer += chr(event.key)
         if len(self.buffer) > self._max_len:
-            self.buffer = self.buffer[-self._max_len:]
+            self.buffer = self.buffer[-self._max_len :]
 
         if self.buffer == self.code:
             self.buffer = ""

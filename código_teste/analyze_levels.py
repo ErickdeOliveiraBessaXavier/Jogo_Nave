@@ -50,7 +50,7 @@ def analyze_difficulty_preset(preset: DifficultyPreset, levels_to_check: range):
             f"👾{stats['enemies_to_clear']:>3} │ "
             f"📈{spawn_rate:>5.1f}/s │ "
             f"🎯~{max_enemies:>2} │ "
-            f"🕐{duration/60:>5.1f}m │ "
+            f"🕐{duration / 60:>5.1f}m │ "
             f"{features:^8}"
         )
 
@@ -102,7 +102,7 @@ def main():
                 f"👾 {config.enemies_to_clear:3d} │ "
                 f"📈 {spawn_rate:.1f}/s │ "
                 f"🎯 ~{max_enemies:2d} tela │ "
-                f"🕐 {duration/60:.1f}min"
+                f"🕐 {duration / 60:.1f}min"
             )
 
             if warnings:

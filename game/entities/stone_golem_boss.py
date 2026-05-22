@@ -1489,7 +1489,7 @@ class StoneGolemBoss(BossHitMixin):
                 self._retreat_waiting = False
                 self._retreat_wait_timer = 0.0
                 self._emerge_debris_timer = 0.0
-                self._dive_phase = "none" # Reset para a próxima descida
+                self._dive_phase = "none"  # Reset para a próxima descida
         else:
             # LÓGICA DE MERGULHO COM ANTECIPAÇÃO
             if self._dive_phase == "none":
@@ -1507,12 +1507,13 @@ class StoneGolemBoss(BossHitMixin):
                 # Tremor de tela sutil durante a antecipação da PRIMEIRA descida
                 if self._retreat_step == 0 and self._bus and random.random() < 0.15:
                     from ..events import game_events as events
+
                     self._bus.emit(events.ScreenShake(intensity=2, duration=0.1))
 
                 if self._dive_timer >= 1.0:
                     self._dive_phase = "recoil"
                     self._dive_timer = 0.0
-            
+
             elif self._dive_phase == "recoil":
                 # 2. Recuo: Move para cima de forma tensa (1.0s)
                 recoil_dist = 70.0
@@ -1526,20 +1527,20 @@ class StoneGolemBoss(BossHitMixin):
                 if self._dive_timer >= recoil_dur:
                     self._dive_phase = "pause"
                     self._dive_timer = 0.0
-            
+
             elif self._dive_phase == "pause":
                 # 3. Pausa Dramática: Congelamento total (0.5s)
                 self._jitter_x, self._jitter_y = 0.0, 0.0
                 if self._dive_timer >= 0.5:
                     self._dive_phase = "action"
                     self._dive_timer = 0.0
-            
+
             elif self._dive_phase == "action":
                 # 4. Mergulho Violento: Velocidade muito maior (Contrast)
                 dive_speed = retreat_speed * 4.5
                 self.y += dive_speed * dt
                 self._jitter_x = random.uniform(-2, 2)
-                
+
                 # Verifica se atingiu o alvo (parada ou fim da tela)
                 target_y = 0.0
                 if self._retreat_step < 2:
@@ -1552,7 +1553,7 @@ class StoneGolemBoss(BossHitMixin):
                     self.y = target_y
                     self._dive_phase = "impact"
                     self._dive_timer = 0.0
-                    
+
                     # IMPACTO PESADO
                     from ..events import game_events as events
                     from ..systems import hit_sounds as _hs
@@ -1560,8 +1561,10 @@ class StoneGolemBoss(BossHitMixin):
                     # Screen Shake: Muito mais forte na primeira descida (step 0)
                     if self._bus:
                         shake_intensity = 22 if self._retreat_step == 0 else 14
-                        self._bus.emit(events.ScreenShake(intensity=shake_intensity, duration=0.5))
-                    
+                        self._bus.emit(
+                            events.ScreenShake(intensity=shake_intensity, duration=0.5)
+                        )
+
                     # Burst de detritos (SÓ NO IMPACTO)
                     burst_count = _BURST_COUNTS[min(2, self._retreat_step)]
                     self._spawn_debris_cluster(
@@ -1571,10 +1574,10 @@ class StoneGolemBoss(BossHitMixin):
                         spawn_from_bottom=True,
                         force=True,
                     )
-                    
+
                     # Som e transição
                     _hs.GOLEM_ERUPTION()
-                    
+
                     if self._retreat_step < 2:
                         self._retreat_waiting = True
                     else:

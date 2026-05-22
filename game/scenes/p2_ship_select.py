@@ -50,7 +50,7 @@ class P2ShipSelectScene(Scene):
         super().__init__(app)
         self.playing_scene = playing_scene
         self.on_confirm = on_confirm
-        
+
         # Fontes escalonadas
         self.title_font = get_font(42)
         self.name_font = get_font(32)
@@ -73,7 +73,7 @@ class P2ShipSelectScene(Scene):
         self._p2_instance_id: int | None = self.app.gamepad.slot_instance_id(
             P2_GAMEPAD_SLOT
         )
-        
+
         # Configurações de layout
         self.card_w = 600
         self.card_h = 450
@@ -81,7 +81,7 @@ class P2ShipSelectScene(Scene):
             (Config.SCREEN_WIDTH - self.card_w) // 2,
             (Config.SCREEN_HEIGHT - self.card_h) // 2 + 20,
             self.card_w,
-            self.card_h
+            self.card_h,
         )
 
     def enter(self) -> None:
@@ -158,20 +158,26 @@ class P2ShipSelectScene(Scene):
             surface.fill((0, 0, 0))
 
         # Overlay escuro
-        overlay = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay = pygame.Surface(
+            (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
+        )
         overlay.fill((0, 0, 0, 210))
         surface.blit(overlay, (0, 0))
 
         # Título
         title_surf = self.title_font.render("JOGADOR 2 — NAVE", True, CUSTOM_GOLD)
-        surface.blit(title_surf, ((Config.SCREEN_WIDTH - title_surf.get_width()) // 2, 60))
+        surface.blit(
+            title_surf, ((Config.SCREEN_WIDTH - title_surf.get_width()) // 2, 60)
+        )
 
         # Card Central
         pygame.draw.rect(surface, CUSTOM_DARK_BG, self.card_rect, border_radius=15)
-        pygame.draw.rect(surface, CUSTOM_PURPLE, self.card_rect, width=3, border_radius=15)
+        pygame.draw.rect(
+            surface, CUSTOM_PURPLE, self.card_rect, width=3, border_radius=15
+        )
 
         profile = self.profiles[self.index]
-        
+
         # 1. Sprite da Nave (Escalado)
         icon_path = BASE_DIR / "assets" / "icons" / profile.sprite_filename
         icon_surf = get_image(icon_path)
@@ -182,15 +188,18 @@ class P2ShipSelectScene(Scene):
                 ship_preview,
                 (
                     self.card_rect.centerx - ship_preview.get_width() // 2,
-                    self.card_rect.top + 40
-                )
+                    self.card_rect.top + 40,
+                ),
             )
 
         # 2. Nome da Nave
         name_surf = self.name_font.render(profile.display_name.upper(), True, WHITE)
         surface.blit(
             name_surf,
-            (self.card_rect.centerx - name_surf.get_width() // 2, self.card_rect.top + 160)
+            (
+                self.card_rect.centerx - name_surf.get_width() // 2,
+                self.card_rect.top + 160,
+            ),
         )
 
         # 3. Tags
@@ -198,11 +207,13 @@ class P2ShipSelectScene(Scene):
             tag_y = self.card_rect.top + 210
             total_tags_w = sum(self.tag_font.size(t)[0] + 20 for t in profile.tags) - 10
             start_x = self.card_rect.centerx - total_tags_w // 2
-            
+
             curr_x = start_x
             for tag in profile.tags:
                 tag_surf = self.tag_font.render(tag, True, CUSTOM_GOLD)
-                tag_bg = pygame.Rect(curr_x, tag_y, tag_surf.get_width() + 16, tag_surf.get_height() + 8)
+                tag_bg = pygame.Rect(
+                    curr_x, tag_y, tag_surf.get_width() + 16, tag_surf.get_height() + 8
+                )
                 pygame.draw.rect(surface, (40, 40, 60), tag_bg, border_radius=5)
                 surface.blit(tag_surf, (tag_bg.x + 8, tag_bg.y + 4))
                 curr_x += tag_bg.width + 10
@@ -213,28 +224,38 @@ class P2ShipSelectScene(Scene):
             surface,
             desc_text,
             y_start=self.card_rect.top + 260,
-            max_width=self.card_w - 60
+            max_width=self.card_w - 60,
         )
 
         # Setas de navegação
-        arrow_color = CUSTOM_GOLD if (pygame.time.get_ticks() // 500) % 2 == 0 else WHITE
+        arrow_color = (
+            CUSTOM_GOLD if (pygame.time.get_ticks() // 500) % 2 == 0 else WHITE
+        )
         # Esquerda
-        self._draw_arrow(surface, (self.card_rect.left - 40, self.card_rect.centery), -1, arrow_color)
+        self._draw_arrow(
+            surface, (self.card_rect.left - 40, self.card_rect.centery), -1, arrow_color
+        )
         # Direita
-        self._draw_arrow(surface, (self.card_rect.right + 40, self.card_rect.centery), 1, arrow_color)
+        self._draw_arrow(
+            surface, (self.card_rect.right + 40, self.card_rect.centery), 1, arrow_color
+        )
 
         # Contador
-        counter = self.hint_font.render(f"{self.index + 1} / {len(self.profiles)}", True, GRAY)
-        surface.blit(counter, (self.card_rect.centerx - counter.get_width() // 2, self.card_rect.bottom + 15))
+        counter = self.hint_font.render(
+            f"{self.index + 1} / {len(self.profiles)}", True, GRAY
+        )
+        surface.blit(
+            counter,
+            (
+                self.card_rect.centerx - counter.get_width() // 2,
+                self.card_rect.bottom + 15,
+            ),
+        )
 
         # Dicas de controles
         hint_y = Config.SCREEN_HEIGHT - 60
-        hints = [
-            ("L/R", "Navegar"),
-            ("A", "Confirmar"),
-            ("B", "Cancelar")
-        ]
-        
+        hints = [("L/R", "Navegar"), ("A", "Confirmar"), ("B", "Cancelar")]
+
         hint_x_start = Config.SCREEN_WIDTH // 2 - 200
         for btn, action in hints:
             b_surf = self.hint_font.render(btn, True, CUSTOM_GOLD)
@@ -243,14 +264,16 @@ class P2ShipSelectScene(Scene):
             surface.blit(a_surf, (hint_x_start + b_surf.get_width() + 10, hint_y))
             hint_x_start += 160
 
-    def _draw_arrow(self, surface: pygame.Surface, pos: tuple[int, int], direction: int, color: tuple[int, int, int]) -> None:
+    def _draw_arrow(
+        self,
+        surface: pygame.Surface,
+        pos: tuple[int, int],
+        direction: int,
+        color: tuple[int, int, int],
+    ) -> None:
         x, y = pos
         size = 20
-        points = [
-            (x, y - size),
-            (x + direction * size, y),
-            (x, y + size)
-        ]
+        points = [(x, y - size), (x + direction * size, y), (x, y + size)]
         pygame.draw.polygon(surface, color, points)
 
     def _draw_wrapped_centered(
@@ -263,7 +286,7 @@ class P2ShipSelectScene(Scene):
         words = text.split()
         lines: List[str] = []
         current: List[str] = []
-        
+
         for word in words:
             tentative = " ".join(current + [word])
             if self.desc_font.size(tentative)[0] <= max_width:

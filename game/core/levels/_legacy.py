@@ -652,7 +652,7 @@ class DifficultyConfig:
     MIN_SPAWN_TIME: float = 0.5  # Aumentado para evitar frenesi excessivo
     WEIGHTED_SPAWN_TICK: float = 0.25  # Janela entre tentativas de spawn aumentada
     WEIGHTED_RECENT_MEMORY: int = 3
-  # Quantos spawns recentes entram no anti-repetição
+    # Quantos spawns recentes entram no anti-repetição
     WEIGHTED_REPEAT_PENALTY: float = 0.45  # Penalidade por repetição recente
     WEIGHTED_SPAWN_TELEMETRY: bool = False  # Logs periódicos para calibração
     WEIGHTED_TELEMETRY_INTERVAL: float = 15.0  # Segundos entre relatórios
@@ -1920,6 +1920,7 @@ def get_level_config(
     level_number: int,
     difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
     force_meteor_storm: bool = False,
+    player_count: int = 1,
 ) -> LevelConfig:
     """
     Retorna a configuração de um nível com dificuldade aplicada.
@@ -1933,10 +1934,15 @@ def get_level_config(
         level_number: Número do nível desejado (1+)
         difficulty_preset: Preset de dificuldade a aplicar
         force_meteor_storm: Forçar tema meteor storm mantendo regras de elegibilidade por mundo
+        player_count: Número de jogadores para escalar dificuldade (ondas e cadência)
 
     Returns:
         LevelConfig do nível com dificuldade aplicada
     """
+    # Escalonamento cooperativo base para níveis não-boss
+    coop_enemies_multiplier = 1.0 + 0.35 * (player_count - 1)
+    coop_spawn_multiplier = 1.0 + 0.20 * (player_count - 1)
+
     # NOVO: Obter mundo do nível
     world = get_world_for_level(level_number)
 
@@ -1975,20 +1981,21 @@ def get_level_config(
             fixed_grace = 0.80
         elif fixed_stage == 3:
             fixed_grace = 0.90
-        if fixed_grace < 1.0:
-            adjusted_spawn = {
-                et: spawn_time / fixed_grace
-                for et, spawn_time in config.enemy_spawn_config.items()
-            }
-            adjusted_to_clear = max(
-                DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
-                int(config.enemies_to_clear * fixed_grace),
-            )
-            config = replace(
-                config,
-                enemy_spawn_config=adjusted_spawn,
-                enemies_to_clear=adjusted_to_clear,
-            )
+
+        # Escalonamento Coop
+        adjusted_spawn = {
+            et: (spawn_time / fixed_grace) / coop_spawn_multiplier
+            for et, spawn_time in config.enemy_spawn_config.items()
+        }
+        adjusted_to_clear = max(
+            DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
+            int(config.enemies_to_clear * fixed_grace * coop_enemies_multiplier),
+        )
+        config = replace(
+            config,
+            enemy_spawn_config=adjusted_spawn,
+            enemies_to_clear=adjusted_to_clear,
+        )
         return config
 
     # Obter ou criar gerador para este preset
@@ -2020,21 +2027,21 @@ def get_level_config(
             random.Random(generator.seed * 10_000 + level_number),
         )
         config = _apply_world_theme_to_config(config, world)
-        # Aplicar grace de entrada
-        if world_entry_grace < 1.0:
-            adjusted_spawn = {
-                et: spawn_time / world_entry_grace
-                for et, spawn_time in config.enemy_spawn_config.items()
-            }
-            adjusted_to_clear = max(
-                DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
-                int(config.enemies_to_clear * world_entry_grace),
-            )
-            config = replace(
-                config,
-                enemy_spawn_config=adjusted_spawn,
-                enemies_to_clear=adjusted_to_clear,
-            )
+
+        # Aplicar grace de entrada e Coop
+        adjusted_spawn = {
+            et: (spawn_time / world_entry_grace) / coop_spawn_multiplier
+            for et, spawn_time in config.enemy_spawn_config.items()
+        }
+        adjusted_to_clear = max(
+            DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
+            int(config.enemies_to_clear * world_entry_grace * coop_enemies_multiplier),
+        )
+        config = replace(
+            config,
+            enemy_spawn_config=adjusted_spawn,
+            enemies_to_clear=adjusted_to_clear,
+        )
         config = _apply_theme_enemy_rules(config, world, difficulty_preset)
         return config
 
@@ -2042,23 +2049,20 @@ def get_level_config(
     config = generator.generate_level(level_number)
     config = _apply_world_theme_to_config(config, world)
 
-    # Aplicar grace de entrada: spawn_time maior (= menos inimigos por segundo)
-    # e enemies_to_clear reduzido (= fase mais curta), evitando sessões longas e
-    # opressoras nas primeiras fases de cada mundo.
-    if world_entry_grace < 1.0:
-        adjusted_spawn = {
-            et: spawn_time / world_entry_grace
-            for et, spawn_time in config.enemy_spawn_config.items()
-        }
-        adjusted_to_clear = max(
-            DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
-            int(config.enemies_to_clear * world_entry_grace),
-        )
-        config = replace(
-            config,
-            enemy_spawn_config=adjusted_spawn,
-            enemies_to_clear=adjusted_to_clear,
-        )
+    # Aplicar grace de entrada e Coop
+    adjusted_spawn = {
+        et: (spawn_time / world_entry_grace) / coop_spawn_multiplier
+        for et, spawn_time in config.enemy_spawn_config.items()
+    }
+    adjusted_to_clear = max(
+        DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
+        int(config.enemies_to_clear * world_entry_grace * coop_enemies_multiplier),
+    )
+    config = replace(
+        config,
+        enemy_spawn_config=adjusted_spawn,
+        enemies_to_clear=adjusted_to_clear,
+    )
 
     config = _apply_theme_enemy_rules(config, world, difficulty_preset)
     return config
@@ -2107,9 +2111,12 @@ class LevelManager:
         self,
         level_number: int,
         difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
+        player_count: int = 1,
     ) -> LevelConfig:
         """Retorna a configuração de um nível com dificuldade aplicada."""
-        return get_level_config(level_number, difficulty_preset)
+        return get_level_config(
+            level_number, difficulty_preset, player_count=player_count
+        )
 
 
 # ============================================================================
@@ -2220,4 +2227,3 @@ class LevelAnalyzer:
             if warnings:
                 for warning in warnings:
                     logger.info("    └─ ⚠️  %s", warning)
-

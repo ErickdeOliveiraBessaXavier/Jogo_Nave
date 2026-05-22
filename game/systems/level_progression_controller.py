@@ -63,6 +63,7 @@ class LevelProgressionController:
         player_profile: Any,
         difficulty_preset: DifficultyPreset,
         difficulty_settings: Mapping[str, Any],
+        player_count: int = 1,
     ) -> None:
         self._em = entity_manager
         self._bus = event_bus
@@ -70,6 +71,7 @@ class LevelProgressionController:
         self._player_profile = player_profile
         self._difficulty_preset = difficulty_preset
         self._difficulty_settings = difficulty_settings
+        self._player_count = player_count
 
         # Configuração da fase atual
         self.current_level_index: int = 0
@@ -109,7 +111,11 @@ class LevelProgressionController:
 
     def get_adjusted_level_config(self, level_number: int) -> LevelConfig:
         """Carrega LevelConfig ajustado pelo meta-progression."""
-        base = get_level_config(level_number, self._difficulty_preset)
+        base = get_level_config(
+            level_number,
+            self._difficulty_preset,
+            player_count=self._player_count,
+        )
         return MetaProgressionService.get_adjusted_config(self._player_profile, base)
 
     def _cache_thresholds(self) -> None:

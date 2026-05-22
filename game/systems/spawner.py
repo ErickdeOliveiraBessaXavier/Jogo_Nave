@@ -202,11 +202,13 @@ class EnemySpawner:
         is_initial_level: bool = False,
         difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
         enemy_health_multiplier: float = 1.0,
+        aggressiveness_multiplier: float = 1.0,
     ) -> None:
         self.level_manager = level_manager
         self.meteor_pool = meteor_pool
         self.difficulty_preset = difficulty_preset
         self.enemy_health_multiplier = enemy_health_multiplier
+        self.aggressiveness_multiplier = aggressiveness_multiplier
         self.current_level_number: int = 1
         self.level_config: Any = self.level_manager.get_level(
             self.current_level_number, self.difficulty_preset
@@ -269,7 +271,21 @@ class EnemySpawner:
 
         self._reset_spawn_pipeline()
 
+        # ------------------------------------------------------------------
+        # DIRETOR DE ONDAS (PACING FSM)
+        # ------------------------------------------------------------------
+        # Estados: BUILDUP (crescimento), PEAK (horda), REST (respiro)
+        self.director_state: str = "BUILDUP"
+        self.director_timer: float = 0.0
+        self.director_intensity_mult: float = 1.0  # Multiplicador na cadência global
+
+        # Duração base dos ciclos (com variação randômica)
+        self._dir_buildup_dur = random.uniform(8.0, 12.0)
+        self._dir_peak_dur = random.uniform(12.0, 18.0)
+        self._dir_rest_dur = random.uniform(4.0, 7.0)
+
         self.guided_meteor_timer = Timer(3.0)
+
         self.guided_meteor_timer.start()
 
         self.mine_spawn_timer = Timer(10.0)
@@ -948,31 +964,62 @@ class EnemySpawner:
             return
 
         self.spawn_clock += dt
-        # Conta inimigos uma única vez por frame e propaga para os consumidores.
         counts = self._count_enemies_by_type(entity_manager)
         self._refresh_death_clocks(counts)
 
-        # Warm-up: mantém intensidade em 0 sem early return (timers precisam atualizar)
+        # Warm-up estrito
         if self.warm_up_timer > 0:
             self.warm_up_timer -= dt
             self.spawn_intensity = 0.0
         else:
-            # Rampa de intensidade orgânica: de 0.1 a 1.0 após o warmup.
-            # Troca de mundo usa rampa mais lenta para não sobrecarregar o jogador
-            # logo nas primeiras fases do novo mundo.
-            ramp_duration = (
-                WORLD_TRANSITION_RAMP_DURATION
-                if self._is_world_transition
-                else NORMAL_RAMP_DURATION
-            )
-            ramp_elapsed = abs(self.warm_up_timer)
-            self.spawn_intensity = min(1.0, 0.1 + (ramp_elapsed / ramp_duration) * 0.9)
-            self.warm_up_timer -= dt  # Continua decrementando para a rampa funcionar
+            # --------------------------------------------------------------
+            # DIRETOR DE ONDAS (PACING FSM)
+            # Controla `self.spawn_intensity` e `self.director_intensity_mult`
+            # para gerar o ciclo orgânico: BUILDUP -> PEAK -> REST -> BUILDUP
+            # --------------------------------------------------------------
+            self.director_timer += dt
 
-        # Spawn ponderado
+            if self.director_state == "BUILDUP":
+                # Cresce de 0.2 até 1.0 gradualmente
+                progress = min(1.0, self.director_timer / self._dir_buildup_dur)
+                self.spawn_intensity = 0.2 + (0.8 * progress)
+                self.director_intensity_mult = 1.0
+
+                if self.director_timer >= self._dir_buildup_dur:
+                    self.director_state = "PEAK"
+                    self.director_timer = 0.0
+                    self._dir_peak_dur = random.uniform(
+                        12.0, 18.0
+                    )  # Sorteia próximo Peak
+
+            elif self.director_state == "PEAK":
+                # Intensidade máxima + cadência 10% mais agressiva
+                self.spawn_intensity = 1.0
+                self.director_intensity_mult = 1.10
+
+                if self.director_timer >= self._dir_peak_dur:
+                    self.director_state = "REST"
+                    self.director_timer = 0.0
+                    self._dir_rest_dur = random.uniform(
+                        4.0, 7.0
+                    )  # Sorteia próximo Rest
+
+            elif self.director_state == "REST":
+                # Quebra o spawn quase a zero para o jogador respirar
+                self.spawn_intensity = 0.1
+                self.director_intensity_mult = 0.50
+
+                if self.director_timer >= self._dir_rest_dur:
+                    self.director_state = "BUILDUP"
+                    self.director_timer = 0.0
+                    self._dir_buildup_dur = random.uniform(
+                        8.0, 12.0
+                    )  # Sorteia próximo Buildup
+
+        # Spawn ponderado com multiplicador do diretor aplicado
         self._record_pressure_sample(entity_manager, counts=counts)
         self._update_weighted_enemy_spawn(
-            dt,
+            dt * self.director_intensity_mult,  # Acelera ou retarda os timers
             entity_manager,
             player_x,
             player_y,

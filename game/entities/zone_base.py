@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 from dataclasses import dataclass
 
+
 @dataclass
 class ZoneParticle:
     x: float

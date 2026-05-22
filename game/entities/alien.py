@@ -46,19 +46,29 @@ class Alien:
         cls._animation_frames = frames
         return frames
 
-    def __init__(self):
+    def __init__(self, aggressiveness_multiplier: float = 1.0):
         self.w, self.h = Config.ALIEN_WIDTH, Config.ALIEN_HEIGHT
         self.x = random.randint(0, Config.SCREEN_WIDTH - self.w)
         self.y = -self.h
-        self.speed_x = random.choice(Config.ALIEN_SPEED_X_OPTIONS)
-        self.speed_y = Config.ALIEN_SPEED_Y
+
+        # Agressividade: Aumenta a velocidade
+        self.speed_x = (
+            random.choice(Config.ALIEN_SPEED_X_OPTIONS) * aggressiveness_multiplier
+        )
+        self.speed_y = Config.ALIEN_SPEED_Y * aggressiveness_multiplier
+
         self.dead = False
         self.health = Config.ALIEN_HEALTH
 
+        # Agressividade também se propaga para as balas atiradas por este Alien
+        self.aggressiveness_multiplier = aggressiveness_multiplier
+
         # Timers de tiro
-        self.shoot_timer: float = random.uniform(
+        # Agressividade: Reduz o intervalo entre os tiros (atira mais rápido)
+        base_interval = random.uniform(
             Config.ALIEN_SHOOT_INTERVAL_MIN, Config.ALIEN_SHOOT_INTERVAL_MAX
         )
+        self.shoot_timer: float = base_interval / aggressiveness_multiplier
 
         # Atributos para controle por formação
         self.formation_controlled = False
@@ -187,20 +197,24 @@ class Alien:
                         pass
                 else:
                     # Acabou a sequência, aplicar cooldown de 0.5s antes de voltar a se mover
-                    self.post_shoot_cooldown = 0.5
+                    # Agressividade: reduz o tempo de cooldown após atirar
+                    self.post_shoot_cooldown = 0.5 / self.aggressiveness_multiplier
                     self.is_burst_mode = False
-                    # Resetar timer normal
-                    self.shoot_timer = random.uniform(
+                    # Resetar timer normal considerando agressividade
+                    base_interval = random.uniform(
                         Config.ALIEN_SHOOT_INTERVAL_MIN, Config.ALIEN_SHOOT_INTERVAL_MAX
                     )
+                    self.shoot_timer = base_interval / self.aggressiveness_multiplier
 
         # Criar bala se deve disparar
         bullets = None
         if self.should_shoot:
             self.should_shoot = False
             sound_manager.play_shot()
-            # Não aplicar cooldown aqui - será aplicado quando terminar a sequência
-            bullets = [AlienBullet(self.x + self.w / 2, self.y + self.h)]
+            # Agressividade: A bala criada também herda o multiplicador de velocidade
+            bullet = AlienBullet(self.x + self.w / 2, self.y + self.h)
+            bullet.speed_y *= self.aggressiveness_multiplier
+            bullets = [bullet]
 
         # Atualizar animação
         self.animation_timer += dt

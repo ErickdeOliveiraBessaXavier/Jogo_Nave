@@ -16,7 +16,12 @@ from ..core.meta_progression import (
 from ..core.meta_progression_service import ProfileStatsFormatter
 from ..core.paths import get_profile_path
 from ..core.state import Scene
-from .ui_helpers import FadeTransitionMixin, wrap_text, draw_bordered_button, render_with_fade
+from .ui_helpers import (
+    FadeTransitionMixin,
+    wrap_text,
+    draw_bordered_button,
+    render_with_fade,
+)
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -1023,6 +1028,7 @@ class StatisticsScene(Scene, FadeTransitionMixin):
         self.r = game_app.renderer  # Usar renderer compartilhado
         self.view = StatisticsView(on_back=self._on_back, renderer=self.r, app=game_app)
         self._init_transition(duration=0.3)
+
     def enter(self):
         super().enter()
         self.view.reset()
@@ -1103,7 +1109,8 @@ class ConfirmationDialog:
         self.text_max_width = self.box_rect.width - 50
         message_text = " ".join(question_lines)
         self.message_font = self.item_font
-        self.message_lines = wrap_text(self.message_font, message_text, self.text_max_width
+        self.message_lines = wrap_text(
+            self.message_font, message_text, self.text_max_width
         )
 
         line_gap = 8
@@ -1117,7 +1124,8 @@ class ConfirmationDialog:
 
         if text_block_height > available_height:
             self.message_font = self.small_font
-            self.message_lines = wrap_text(self.message_font, message_text, self.text_max_width
+            self.message_lines = wrap_text(
+                self.message_font, message_text, self.text_max_width
             )
             line_height = self.message_font.get_linesize()
             text_block_height = (len(self.message_lines) * line_height) + (
@@ -1178,7 +1186,6 @@ class ConfirmationDialog:
         # Botões
         self._draw_button(surface, self.yes_rect, "Sim", colors.GREEN)
         self._draw_button(surface, self.no_rect, "Não", colors.RED)
-
 
     def _draw_button(
         self, surface: pygame.Surface, rect: pygame.Rect, text: str, color: colors.Color

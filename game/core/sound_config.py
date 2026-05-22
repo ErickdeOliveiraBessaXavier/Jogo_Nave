@@ -101,7 +101,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "music/Cloud_Peak_Circuit.mp3",
             "music/Cloud_Pass_Relay.mp3",
             "music/Cloud_Peak_Circuit_Intenso.mp3",
-            "music/Twelve_Alarms_Musica_Cordilheira.mp3"
+            "music/Twelve_Alarms_Musica_Cordilheira.mp3",
         ],
         "boss": "music/boss.mp3",
         "menu": "music/menu-music.mp3",

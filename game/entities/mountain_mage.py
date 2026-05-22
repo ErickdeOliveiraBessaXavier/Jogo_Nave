@@ -229,7 +229,6 @@ class MountainStalagmite:
             self.health = 0
             self._begin_shattering()
 
-
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
@@ -882,7 +881,6 @@ class MountainStalactite:
             self.health = 0
             self._begin_shattering()
 
-
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
@@ -1348,7 +1346,6 @@ class MountainMage(EnemyHitMixin):
         if self.health <= 0:
             self.health = 0
             self.dead = True
-
 
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds

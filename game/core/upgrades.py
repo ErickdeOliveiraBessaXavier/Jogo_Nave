@@ -157,7 +157,9 @@ class ActiveUpgrade:
         return getattr(ctx, "scene", None)
 
     @staticmethod
-    def _ctx_attr(ctx: Optional[UpgradeContextProtocol], name: str, default: Any = None) -> Any:
+    def _ctx_attr(
+        ctx: Optional[UpgradeContextProtocol], name: str, default: Any = None
+    ) -> Any:
         if ctx is None:
             return default
         return getattr(ctx, name, default)

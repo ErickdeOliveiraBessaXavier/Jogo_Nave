@@ -21,7 +21,9 @@ class ControlsModalScene(Scene):
         super().__init__(app)
         self.on_finish = on_finish
         self.timer = 10.0
-        self.show_again = True  # Estado do checkbox (invertido para salvar em show_controls_modal)
+        self.show_again = (
+            True  # Estado do checkbox (invertido para salvar em show_controls_modal)
+        )
 
         self.title_font = get_font(32)
         self.item_font = get_font(18)
@@ -31,7 +33,7 @@ class ControlsModalScene(Scene):
 
     def _calculate_layout(self):
         screen_w, screen_h = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-        
+
         # Modal mais largo para garantir que as colunas não se sobreponham
         self.modal_w = 760
         self.modal_h = 420
@@ -39,7 +41,7 @@ class ControlsModalScene(Scene):
             (screen_w - self.modal_w) // 2,
             (screen_h - self.modal_h) // 2,
             self.modal_w,
-            self.modal_h
+            self.modal_h,
         )
 
         # Botão "Entendi" - Centralizado horizontalmente na parte inferior
@@ -49,7 +51,7 @@ class ControlsModalScene(Scene):
             self.modal_rect.centerx - btn_w // 2,
             self.modal_rect.bottom - 120,
             btn_w,
-            btn_h
+            btn_h,
         )
 
         # Checkbox "Não mostrar mais" - Abaixo do botão
@@ -58,7 +60,7 @@ class ControlsModalScene(Scene):
             self.modal_rect.centerx - 110,
             self.button_rect.bottom + 15,
             cb_size,
-            cb_size
+            cb_size,
         )
 
     def enter(self):
@@ -112,7 +114,7 @@ class ControlsModalScene(Scene):
         # Salvar preferência
         self.app.preferences.show_controls_modal = self.show_again
         self.app.preferences.save()
-        
+
         self.app.states.pop()  # Remove a si mesma do stack
         self.on_finish()
 
@@ -121,10 +123,11 @@ class ControlsModalScene(Scene):
         if self.timer <= 0:
             self._finish()
 
-
     def render(self, surface: pygame.Surface):
         # Overlay escuro no fundo da tela toda
-        overlay = pygame.Surface((surface.get_width(), surface.get_height()), pygame.SRCALPHA)
+        overlay = pygame.Surface(
+            (surface.get_width(), surface.get_height()), pygame.SRCALPHA
+        )
         overlay.fill((0, 0, 0, 180))
         surface.blit(overlay, (0, 0))
 
@@ -134,7 +137,13 @@ class ControlsModalScene(Scene):
 
         # Título
         title_surf = self.title_font.render("Instruções de Voo", True, CUSTOM_GOLD)
-        surface.blit(title_surf, (self.modal_rect.centerx - title_surf.get_width() // 2, self.modal_rect.y + 25))
+        surface.blit(
+            title_surf,
+            (
+                self.modal_rect.centerx - title_surf.get_width() // 2,
+                self.modal_rect.y + 25,
+            ),
+        )
 
         # Configuração das colunas
         left_x = self.modal_rect.x + 40
@@ -176,8 +185,8 @@ class ControlsModalScene(Scene):
                 for line in wrapped_lines:
                     text_surf = self.item_font.render(line, True, WHITE)
                     surface.blit(text_surf, (start_x, curr_y))
-                    curr_y += 25 # Espaço entre linhas da mesma instrução
-                curr_y += 15 # Espaço extra entre instruções diferentes
+                    curr_y += 25  # Espaço entre linhas da mesma instrução
+                curr_y += 15  # Espaço extra entre instruções diferentes
 
         y_start = self.modal_rect.y + 90
         draw_column(left_col_raw, left_x, y_start)
@@ -186,15 +195,17 @@ class ControlsModalScene(Scene):
         # Timer
         timer_text = f"Iniciando em: {max(0, int(self.timer + 0.9))}s"
         timer_surf = self.small_font.render(timer_text, True, colors.GRAY)
-        surface.blit(timer_surf, (self.modal_rect.centerx - timer_surf.get_width() // 2, self.modal_rect.bottom - 25))
+        surface.blit(
+            timer_surf,
+            (
+                self.modal_rect.centerx - timer_surf.get_width() // 2,
+                self.modal_rect.bottom - 25,
+            ),
+        )
 
         # Botão Entendi
         draw_bordered_button(
-            surface,
-            self.button_rect,
-            "Entendi",
-            self.item_font,
-            CUSTOM_PURPLE
+            surface, self.button_rect, "Entendi", self.item_font, CUSTOM_PURPLE
         )
 
         # Checkbox "Não mostrar mais" abaixo do botão
@@ -202,8 +213,14 @@ class ControlsModalScene(Scene):
         if not self.show_again:
             inner_rect = self.checkbox_rect.inflate(-6, -6)
             pygame.draw.rect(surface, CUSTOM_GOLD, inner_rect, border_radius=1)
-        
+
         # Fonte menor para o checkbox
         tiny_font = get_font(12)
         label_surf = tiny_font.render("Não mostrar novamente", True, colors.GRAY)
-        surface.blit(label_surf, (self.checkbox_rect.right + 8, self.checkbox_rect.centery - label_surf.get_height() // 2))
+        surface.blit(
+            label_surf,
+            (
+                self.checkbox_rect.right + 8,
+                self.checkbox_rect.centery - label_surf.get_height() // 2,
+            ),
+        )

@@ -7,7 +7,7 @@ scores flutuantes e tremores de tela, ouvindo eventos do jogo.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..entities.floating_score import FloatingScore
 from ..events import game_events as events

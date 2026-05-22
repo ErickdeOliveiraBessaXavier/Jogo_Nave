@@ -738,9 +738,7 @@ class UpgradesSelectionScene(Scene):
         # frases que mencionam ações (charge shot, Cofre, dash) trocam de
         # legenda conforme o input ativo via `format_ship_description`.
         desc_text = format_ship_description(ship, self.app.gamepad.is_active)
-        y = _draw_wrapped(
-            desc_text, self.small_font, colors.WHITE, y, max_lines=4
-        )
+        y = _draw_wrapped(desc_text, self.small_font, colors.WHITE, y, max_lines=4)
         y += 6
 
         # Linha divisória sutil.
@@ -1282,7 +1280,6 @@ class UpgradesSelectionScene(Scene):
             dy += line_height
 
         surface.blit(tooltip_surf, (x, y))
-
 
     def _return_to_menu(self):
         self.fade_out, self.transitioning, self.transition_progress = True, True, 0.0

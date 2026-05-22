@@ -193,7 +193,6 @@ class WorldTransitionScene(Scene):
         overlay.set_alpha(alpha)
         surface.blit(overlay, (0, 0))
 
-
     def _normalize_rgb(self, raw_color: Sequence[Any]) -> tuple[int, int, int]:
         """Normaliza cores para RGB válido aceito pelo pygame."""
         if len(raw_color) < 3:

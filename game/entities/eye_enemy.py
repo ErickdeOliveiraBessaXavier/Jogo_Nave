@@ -15,23 +15,30 @@ if TYPE_CHECKING:
 
 
 class EyeEnemy:
-    def __init__(self, x: float, y: float):
+    def __init__(self, x: float, y: float, aggressiveness_multiplier: float = 1.0):
         self.w: int = 40
         self.h: int = 40
         self.x: float = x
         self.y: float = -self.h  # Start off-screen
         self.target_y: float = y
         self.health: int = 20
-        self.speed_x: float = 75
+
+        # Agressividade: Aumenta a velocidade de movimento
+        self.speed_x: float = 75 * aggressiveness_multiplier
         self.dead: bool = False
 
         self.state: str = (
             "entering"  # entering, moving, aiming, charging, firing, waiting
         )
-        self.timer: float = random.uniform(2.0, 4.0)  # Time until next action
 
-        self.aim_duration: float = 1.5
-        self.charge_duration: float = 1.5
+        # Agressividade: Reduz o tempo de movimentação antes de mirar
+        base_timer = random.uniform(2.0, 4.0)
+        self.timer: float = base_timer / aggressiveness_multiplier
+        self.aggressiveness_multiplier = aggressiveness_multiplier
+
+        # Agressividade: Reduz o tempo de mira e carregamento do laser
+        self.aim_duration: float = 1.5 / aggressiveness_multiplier
+        self.charge_duration: float = 1.5 / aggressiveness_multiplier
         self.active_laser: EyeLaser | None = None
         self.locked_player_pos: tuple[float, float] | None = None
 

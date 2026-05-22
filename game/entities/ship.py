@@ -631,12 +631,14 @@ class Ship:
             self.entering_timer += dt
             progress = min(1.0, self.entering_timer / self.entering_duration)
             eased = 1.0 - (1.0 - progress) ** 3  # ease-out cúbico
-            self.x = self.entry_start_pos[0] + (
-                self.entry_target_pos[0] - self.entry_start_pos[0]
-            ) * eased
-            self.y = self.entry_start_pos[1] + (
-                self.entry_target_pos[1] - self.entry_start_pos[1]
-            ) * eased
+            self.x = (
+                self.entry_start_pos[0]
+                + (self.entry_target_pos[0] - self.entry_start_pos[0]) * eased
+            )
+            self.y = (
+                self.entry_start_pos[1]
+                + (self.entry_target_pos[1] - self.entry_start_pos[1]) * eased
+            )
             if progress >= 1.0:
                 self.is_entering = False
 

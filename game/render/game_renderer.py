@@ -222,7 +222,7 @@ class GameRenderer:
                 stage_name=frame.stage_name,
                 difficulty=frame.difficulty_preset,
             )
-        
+
         # 11b. Pop-up de início de nível (sub-fases)
         if frame.level_popup_timer > 0:
             self.r.level_popup(

@@ -937,7 +937,9 @@ class SpikeBoss(BossHitMixin):
         health_color = (
             colors.GREEN
             if health_ratio > 0.5
-            else colors.YELLOW if health_ratio > 0.25 else colors.RED
+            else colors.YELLOW
+            if health_ratio > 0.25
+            else colors.RED
         )
         pygame.draw.rect(
             surface, health_color, (bar_x, bar_y, health_width, bar_height)

@@ -1116,7 +1116,9 @@ class CloudArchmageBoss:
         # Entrada na phase 3 começa com respiro — evita burst imediato
         # logo após a transição. Sem isso, ao sair da phase 2 a primeira
         # rajada caía no mesmo frame em que o jogador estava se reposicionando.
-        self._firezone_burst_cooldown = self._FIREZONE_BURST_REST_BASE * self._attack_pace_mult
+        self._firezone_burst_cooldown = (
+            self._FIREZONE_BURST_REST_BASE * self._attack_pace_mult
+        )
         self._white_dodge_active = False
 
     def _choose_phase3_combo(self) -> tuple[OrbType, ...]:
@@ -1546,12 +1548,8 @@ class CloudArchmageBoss:
             # Serializa o ataque: só dispara o próximo burst quando o campo
             # está limpo E o cooldown zerou. Sem isso, o timer continuava
             # acumulando e enfileirava zonas em rajadas consecutivas.
-            self._firezone_burst_cooldown = max(
-                0.0, self._firezone_burst_cooldown - dt
-            )
-            field_clear = (
-                not self._spawned_fire_zones and not self._firezone_warnings
-            )
+            self._firezone_burst_cooldown = max(0.0, self._firezone_burst_cooldown - dt)
+            field_clear = not self._spawned_fire_zones and not self._firezone_warnings
             if field_clear and self._firezone_burst_cooldown <= 0.0:
                 for _ in range(3):
                     self._queue_random_firezone_warning(
@@ -1629,9 +1627,7 @@ class CloudArchmageBoss:
         # Mesma serialização do PHASE3_COMBOS: só lança o próximo burst quando
         # o campo está limpo + cooldown zerado. Mantém o overload intenso
         # (cooldown menor que o phase normal) sem virar lava sem fim.
-        self._firezone_burst_cooldown = max(
-            0.0, self._firezone_burst_cooldown - dt
-        )
+        self._firezone_burst_cooldown = max(0.0, self._firezone_burst_cooldown - dt)
         field_clear = not self._spawned_fire_zones and not self._firezone_warnings
         if field_clear and self._firezone_burst_cooldown <= 0.0:
             for _ in range(3):

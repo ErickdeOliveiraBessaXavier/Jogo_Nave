@@ -18,6 +18,9 @@ class DifficultySettingsDict(TypedDict):
     # <1 = mais raro (Hardcore/Pesadelo). Aplicado dividindo o intervalo
     # base, análogo ao spawn_rate_multiplier de inimigos.
     powerup_spawn_rate_multiplier: float
+    # Multiplica a velocidade de movimento e tiro dos inimigos.
+    # >1 = mais rápido/letal (Hardcore/Pesadelo), <1 = mais lento (Casual).
+    aggressiveness_multiplier: float
     special_rules: NotRequired[
         list[str]
     ]  # Regras especiais opcionais (ex.: "permadeath")
@@ -46,6 +49,7 @@ class DifficultySettings:
             "lives": 5,  # Mais vidas
             "rewards_multiplier": 0.8,  # Menos recompensas
             "powerup_spawn_rate_multiplier": 1.3,  # Power-ups mais frequentes
+            "aggressiveness_multiplier": 0.85,  # Inimigos e projéteis mais lentos
         },
         DifficultyPreset.NORMAL: {
             "name": "Normal",
@@ -57,6 +61,7 @@ class DifficultySettings:
             "lives": 3,
             "rewards_multiplier": 1.0,
             "powerup_spawn_rate_multiplier": 1.0,
+            "aggressiveness_multiplier": 1.0,
         },
         DifficultyPreset.HARDCORE: {
             "name": "Hardcore",
@@ -68,6 +73,7 @@ class DifficultySettings:
             "lives": 2,
             "rewards_multiplier": 1.5,
             "powerup_spawn_rate_multiplier": 0.7,  # ~43% mais raros
+            "aggressiveness_multiplier": 1.20,  # 20% mais rápido/letal
         },
         DifficultyPreset.NIGHTMARE: {
             "name": "Pesadelo",
@@ -79,6 +85,7 @@ class DifficultySettings:
             "lives": 1,  # Permadeath!
             "rewards_multiplier": 3.0,  # Alta recompensa, alto risco
             "powerup_spawn_rate_multiplier": 0.5,  # 2x mais raros
+            "aggressiveness_multiplier": 1.45,  # 45% mais rápido/letal
             "special_rules": ["permadeath"],
         },
     }

@@ -10,7 +10,12 @@ from ..core.paths import get_preferences_path, get_profile_path
 from ..core.preferences import UserPreferences
 from ..core.sound import sound_manager
 from ..core.state import Scene
-from .ui_helpers import FadeTransitionMixin, wrap_text, draw_bordered_button, render_with_fade
+from .ui_helpers import (
+    FadeTransitionMixin,
+    wrap_text,
+    draw_bordered_button,
+    render_with_fade,
+)
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -114,7 +119,7 @@ class SettingsView:
         available_width = screen_w - (2 * outer_pad)
         card_width = (available_width - card_gap) / 2
         card_height = screen_h - 180
-        
+
         # Centralizar cards verticalmente
         card_y = (screen_h - card_height) // 2 + 20
 
@@ -191,7 +196,11 @@ class SettingsView:
             row = i // cols
             col = i % cols
 
-            x = controls_card_rect.x + card_inner_pad_x + col * (button_w + button_gap_x)
+            x = (
+                controls_card_rect.x
+                + card_inner_pad_x
+                + col * (button_w + button_gap_x)
+            )
             y = grid_start_y + row * (button_h + button_gap_y)
 
             resolution_buttons.append(pygame.Rect(x, y, button_w, button_h))
@@ -704,7 +713,10 @@ class SettingsView:
             ]
 
         slider_bottom = max(
-            (slider_rect.bottom for slider_rect in self.layout_rects["sliders"].values()),
+            (
+                slider_rect.bottom
+                for slider_rect in self.layout_rects["sliders"].values()
+            ),
             default=card_rect.y + 80,
         )
         instruction_start_y = slider_bottom + 18 + offset_y
@@ -908,7 +920,6 @@ class SettingsView:
         )
 
 
-
 class SettingsScene(Scene, FadeTransitionMixin):
     """Cena de configurações."""
 
@@ -928,6 +939,7 @@ class SettingsScene(Scene, FadeTransitionMixin):
             runtime_scene=runtime_scene,
         )
         self._init_transition(duration=0.3)
+
     def enter(self):
         pygame.mouse.set_visible(True)
         self.view.reset()
@@ -950,7 +962,9 @@ class SettingsScene(Scene, FadeTransitionMixin):
         rects: list[pygame.Rect] = []
         from typing import List, cast
 
-        for r in cast(List[pygame.Rect], self.view.layout_rects.get("resolution_buttons", [])):
+        for r in cast(
+            List[pygame.Rect], self.view.layout_rects.get("resolution_buttons", [])
+        ):
             rects.append(r)
         # Toggles e sliders viram alvos do DPad. Inflo o toggle horizontalmente
         # pra cobrir o rótulo (mesmo padrão do _activate_at).

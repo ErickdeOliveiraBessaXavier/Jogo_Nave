@@ -383,7 +383,6 @@ class SerpentBlock:
             if not self.is_fragment:
                 self.boss.on_block_killed(self.side, self)
 
-
     def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
@@ -404,7 +403,6 @@ class SerpentBlock:
 
         self.take_damage(self.health)  # mata via take_damage para notificar boss
         return HitResult(killed=False, sound=hit_sounds.EXPLOSION_ASTEROID)
-
 
     # ------------------------------------------------------------------
     # Revive / Re-entrada
@@ -667,7 +665,9 @@ class SerpentBlock:
         bar_color = (
             self._COLOR_HP_HIGH
             if ratio > 0.5
-            else self._COLOR_HP_MID if ratio > 0.25 else self._COLOR_HP_LOW
+            else self._COLOR_HP_MID
+            if ratio > 0.25
+            else self._COLOR_HP_LOW
         )
         pygame.draw.rect(surface, colors.DARK_GRAY, (bar_x, bar_y, bar_w, bar_h))
         pygame.draw.rect(surface, bar_color, (bar_x, bar_y, life_w, bar_h))
@@ -1023,7 +1023,8 @@ class MountainSerpentBoss(BossHitMixin):
         # Sequência de animação para frames vulneráveis (se disponíveis)
         if self._vulnerable_animation_frames:
             self._vulnerable_frame_sequence = self._build_ping_pong_sequence(
-                len(self._vulnerable_animation_frames), repeat_each=self.HEAD_FRAME_REPEAT
+                len(self._vulnerable_animation_frames),
+                repeat_each=self.HEAD_FRAME_REPEAT,
             )
         else:
             self._vulnerable_frame_sequence: List[int] = []
@@ -1063,7 +1064,11 @@ class MountainSerpentBoss(BossHitMixin):
         if sprites_dir.exists():
             # Carrega frames de animação idle (exclui os novos sprites especiais)
             for path in sorted(sprites_dir.glob("*.png")):
-                if "Cuspindo" in path.name or "Dano" in path.name or "Vulnerável" in path.name:
+                if (
+                    "Cuspindo" in path.name
+                    or "Dano" in path.name
+                    or "Vulnerável" in path.name
+                ):
                     continue
                 image = get_image(path)
                 if image.get_size() != target_size:
@@ -1090,14 +1095,14 @@ class MountainSerpentBoss(BossHitMixin):
             vulnerable_frames: List[pygame.Surface] = []
             white_vulnerable_frames: List[pygame.Surface] = []
             for i in range(1, 5):  # 01, 02, 03, 04
-                vuln_path = sprites_dir / f"Animação_Cobra_Sprite_Vulnerável_{i:02d}.png"
+                vuln_path = (
+                    sprites_dir / f"Animação_Cobra_Sprite_Vulnerável_{i:02d}.png"
+                )
                 if vuln_path.exists():
-                    image = pygame.transform.scale(
-                        get_image(vuln_path), target_size
-                    )
+                    image = pygame.transform.scale(get_image(vuln_path), target_size)
                     vulnerable_frames.append(image)
                     white_vulnerable_frames.append(_make_white_sprite(image))
-            
+
             if vulnerable_frames:
                 cls._vulnerable_animation_frames = vulnerable_frames
                 cls._white_vulnerable_animation_frames = white_vulnerable_frames
@@ -1671,7 +1676,6 @@ class MountainSerpentBoss(BossHitMixin):
     def get_points_value(self) -> int:
         return 850
 
-
     def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..core.config import config as cfg
         from ..systems import hit_sounds
@@ -1688,7 +1692,6 @@ class MountainSerpentBoss(BossHitMixin):
                 sound=hit_sounds.EXPLOSION_BOSS,
             )
         return HitResult(explosion_size=15, sound=hit_sounds.BOSS_DAMAGE)
-
 
     def can_take_damage(self) -> bool:
         """Só recebe dano se não estiver entrando e se estiver vulnerável."""
@@ -1914,7 +1917,9 @@ class MountainSerpentBoss(BossHitMixin):
             # Usa o sprite vulnerável atual (já atualizado em _update_head_animation)
             current_sprite = self._head_sprite
             white_frames = self._white_vulnerable_animation_frames
-            if white_frames is not None and self._vulnerable_seq_pos < len(white_frames):
+            if white_frames is not None and self._vulnerable_seq_pos < len(
+                white_frames
+            ):
                 white_sprite = white_frames[self._vulnerable_seq_pos]
         elif self._head_pain_timer > 0.0 and self._pain_sprite:
             current_sprite = self._pain_sprite

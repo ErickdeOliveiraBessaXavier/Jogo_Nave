@@ -95,13 +95,12 @@ class TransitionController:
         if not self.is_post_victory_delay:
             return
         self.level_transition_pending_timer += dt
-        if (
-            self.level_transition_pending_timer
-            >= self.level_transition_pending_delay
-        ):
+        if self.level_transition_pending_timer >= self.level_transition_pending_delay:
             self.set_phase(TransitionPhase.LEVEL_TRANSITION_WAIT)
 
-    def update_level_transition_wait(self, dt: float, animations_finished: bool) -> bool:
+    def update_level_transition_wait(
+        self, dt: float, animations_finished: bool
+    ) -> bool:
         """Avança o timer de LEVEL_TRANSITION_WAIT.
 
         Returns:

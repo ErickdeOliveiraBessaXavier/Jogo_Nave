@@ -496,6 +496,7 @@ class DifficultyAdjuster:
         adjusted_enemies = max(20, adjusted_enemies)  # Mínimo de 20 inimigos
 
         import dataclasses
+
         return dataclasses.replace(
             config,
             enemy_spawn_config=adjusted_spawn_config,
@@ -1012,9 +1013,7 @@ class PlayerProfile:
         if level_number % 5 == 0:
             self.save()
 
-    def record_death(
-        self, level_number: int, cause: str = "unknown", score: int = 0
-    ):
+    def record_death(self, level_number: int, cause: str = "unknown", score: int = 0):
         """Registra morte em um nível.
 
         Se ``score`` > 0, persiste o ganho da fase incompleta nos agregadores
@@ -1150,7 +1149,10 @@ class PlayerProfile:
             and str(checkpoint_raw).isdigit()
             else 1
         )
-        if checkpoint not in world_unlocks or get_world_for_level_by_id(checkpoint) is None:
+        if (
+            checkpoint not in world_unlocks
+            or get_world_for_level_by_id(checkpoint) is None
+        ):
             checkpoint = 1
         parsed["current_checkpoint_world"] = checkpoint
 
@@ -1204,7 +1206,9 @@ class PlayerProfile:
                 stats.worst_time = float(stats_data.get("worst_time", 0.0))
                 stats.total_score = int(stats_data.get("total_score", 0))
                 stats.best_score = int(stats_data.get("best_score", 0))
-                stats.total_enemies_killed = int(stats_data.get("total_enemies_killed", 0))
+                stats.total_enemies_killed = int(
+                    stats_data.get("total_enemies_killed", 0)
+                )
                 stats.total_damage_taken = int(stats_data.get("total_damage_taken", 0))
                 stats.total_powerups_collected = int(
                     stats_data.get("total_powerups_collected", 0)
@@ -1215,13 +1219,23 @@ class PlayerProfile:
                 )
                 stats.current_win_streak = int(stats_data.get("current_win_streak", 0))
                 stats.best_win_streak = int(stats_data.get("best_win_streak", 0))
-                if "first_played" in stats_data and isinstance(stats_data["first_played"], str):
-                    stats.first_played = datetime.fromisoformat(stats_data["first_played"])
-                if "last_played" in stats_data and isinstance(stats_data["last_played"], str):
-                    stats.last_played = datetime.fromisoformat(stats_data["last_played"])
+                if "first_played" in stats_data and isinstance(
+                    stats_data["first_played"], str
+                ):
+                    stats.first_played = datetime.fromisoformat(
+                        stats_data["first_played"]
+                    )
+                if "last_played" in stats_data and isinstance(
+                    stats_data["last_played"], str
+                ):
+                    stats.last_played = datetime.fromisoformat(
+                        stats_data["last_played"]
+                    )
                 level_stats[level_num] = stats
             except (ValueError, TypeError, KeyError):
-                logger.warning("Skipping corrupt level data for level %s", level_num_str)
+                logger.warning(
+                    "Skipping corrupt level data for level %s", level_num_str
+                )
         parsed["level_stats"] = level_stats
 
         # Ajustes adaptativos
@@ -1239,9 +1253,13 @@ class PlayerProfile:
             try:
                 start_time_str = session_data.get("start_time")
                 if not isinstance(start_time_str, str):
-                    logger.warning("Skipping corrupt session data due to invalid start_time type.")
+                    logger.warning(
+                        "Skipping corrupt session data due to invalid start_time type."
+                    )
                     continue
-                session = SessionStats(start_time=datetime.fromisoformat(start_time_str))
+                session = SessionStats(
+                    start_time=datetime.fromisoformat(start_time_str)
+                )
                 end_time_str = session_data.get("end_time")
                 if isinstance(end_time_str, str):
                     session.end_time = datetime.fromisoformat(end_time_str)
@@ -1251,11 +1269,17 @@ class PlayerProfile:
                     if isinstance(lvl, (int, float))
                 ]
                 deaths_raw = session_data.get("deaths", 0)
-                session.deaths = int(deaths_raw) if isinstance(deaths_raw, (int, float)) else 0
+                session.deaths = (
+                    int(deaths_raw) if isinstance(deaths_raw, (int, float)) else 0
+                )
                 score_raw = session_data.get("score", 0)
-                session.score = int(score_raw) if isinstance(score_raw, (int, float)) else 0
+                session.score = (
+                    int(score_raw) if isinstance(score_raw, (int, float)) else 0
+                )
                 pc_raw = session_data.get("powerups_collected", 0)
-                session.powerups_collected = int(pc_raw) if isinstance(pc_raw, (int, float)) else 0
+                session.powerups_collected = (
+                    int(pc_raw) if isinstance(pc_raw, (int, float)) else 0
+                )
                 session_history.append(session)
             except (ValueError, TypeError, KeyError) as ve:
                 logger.warning("Skipping corrupt session data: %s", ve)
@@ -1272,7 +1296,9 @@ class PlayerProfile:
                     except KeyError:
                         logger.warning("Skipping unknown upgrade: %s", name)
                 parsed["unlocked_upgrades"] = (
-                    up_parsed.union(set(DEFAULT_UNLOCKED)) if up_parsed else set(DEFAULT_UNLOCKED)
+                    up_parsed.union(set(DEFAULT_UNLOCKED))
+                    if up_parsed
+                    else set(DEFAULT_UNLOCKED)
                 )
             else:
                 parsed["unlocked_upgrades"] = set(DEFAULT_UNLOCKED)
@@ -1333,6 +1359,7 @@ class PlayerProfile:
             if self.profile_path.exists():
                 backup_path = self.profile_path.with_suffix(".backup.json")
                 import shutil
+
                 shutil.copy2(self.profile_path, backup_path)
                 logger.info("Backup salvo em: %s", backup_path)
             self._ensure_safe_world_defaults()
@@ -1340,7 +1367,7 @@ class PlayerProfile:
 
         self.__dict__.update(parsed)
         if len(self.session_history) > self.MAX_SESSION_HISTORY:
-            self.session_history = self.session_history[-self.MAX_SESSION_HISTORY:]
+            self.session_history = self.session_history[-self.MAX_SESSION_HISTORY :]
 
     def _prepare_save_data(self) -> Dict[str, Any]:
         """Prepara dados do perfil para serialização (sincronous, side-effect free)."""

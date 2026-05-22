@@ -79,9 +79,7 @@ class Spike:
         # Rotação rápida quando voando (única para cada spike)
         self.flying_rotation_speed = random.uniform(
             Config.SPIKE_ROTATION_SPEED_MIN, Config.SPIKE_ROTATION_SPEED_MAX
-        ) * random.choice(
-            [-1, 1]
-        )  # Aleatoriamente horário ou anti-horário
+        ) * random.choice([-1, 1])  # Aleatoriamente horário ou anti-horário
 
         # Cache de posições do centro
         self._cached_center_x = self.center_x

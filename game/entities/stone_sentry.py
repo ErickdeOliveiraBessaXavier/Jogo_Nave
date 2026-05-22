@@ -703,9 +703,7 @@ class StoneSentry(EnemyHitMixin):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
     def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
-        emitted = self.update(
-            ctx.sdt, (ctx.player_x, ctx.player_y), ctx.other_enemies
-        )
+        emitted = self.update(ctx.sdt, (ctx.player_x, ctx.player_y), ctx.other_enemies)
         if emitted:
             ctx.new_alien_bullets.extend(emitted)
 
@@ -1067,7 +1065,6 @@ class StoneSentry(EnemyHitMixin):
         self.hit_timer = 0.1
         if self.health <= 0:
             self.dead = True
-
 
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds

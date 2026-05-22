@@ -191,8 +191,6 @@ class PowerupSystem:
                 )
                 # Cofre: guarda no slot livre se houver; senão, aplica imediato
                 # para não desperdiçar o powerup coletado.
-                if not (
-                    ship.has_storage_slots() and ship.try_store_powerup(kind)
-                ):
+                if not (ship.has_storage_slots() and ship.try_store_powerup(kind)):
                     self.apply(kind, slot)
                 scene.level_controller.notify_powerup_collected()

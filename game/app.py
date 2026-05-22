@@ -176,7 +176,9 @@ class GameApp:
 
     def _any_gamepad_active(self) -> bool:
         """True quando pelo menos um controle ativo está disponível."""
-        return any(self.gamepad.is_slot_active(slot) for slot in range(MAX_GAMEPAD_SLOTS))
+        return any(
+            self.gamepad.is_slot_active(slot) for slot in range(MAX_GAMEPAD_SLOTS)
+        )
 
     def _set_cursor_mode(self, mode: str) -> None:
         """Alterna entre ``cursor`` (mouse/stick) e ``focus`` (DPad/teclado).

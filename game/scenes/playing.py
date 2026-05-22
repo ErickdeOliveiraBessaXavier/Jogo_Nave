@@ -330,8 +330,13 @@ class PlayingScene(Scene):
 
     def _init_systems(self) -> None:
         """Instancia sistemas de jogo (EntityManager, spawners, colisões)."""
+        player_count = len(self.roster.all_slots())
         initial_level_number = self.current_level_index + 1
-        base_config = get_level_config(initial_level_number, self.difficulty_preset)
+        base_config = get_level_config(
+            initial_level_number,
+            self.difficulty_preset,
+            player_count=player_count,
+        )
         level_config = MetaProgressionService.get_adjusted_config(
             self.player_profile, base_config
         )
@@ -363,6 +368,7 @@ class PlayingScene(Scene):
             is_initial_level,
             self.difficulty_preset,
             self.enemy_health_multiplier,
+            self.difficulty_settings.get("aggressiveness_multiplier", 1.0),
         )
         # Sincroniza o spawner com o starting_level — sem isto o spawner usa o
         # config do nível 1 por default, o que quebra inicializações em mundos
@@ -382,6 +388,7 @@ class PlayingScene(Scene):
             player_profile=self.player_profile,
             difficulty_preset=self.difficulty_preset,
             difficulty_settings=self.difficulty_settings,
+            player_count=player_count,
         )
         self.level_controller.setup(
             level_index=self.current_level_index,
@@ -507,7 +514,7 @@ class PlayingScene(Scene):
             self.current_world = new_world
             self.pending_world_transition = None
             self._apply_mountains_progress()
-            
+
             # Trigger pop-up de sub-fase (ex: 1-1 -> 1-2)
             level_config = self.level_config
             if level_config:

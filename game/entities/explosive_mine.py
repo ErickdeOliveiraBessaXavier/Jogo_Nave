@@ -114,9 +114,9 @@ class ExplosiveMine:
         explosion_temp = self.__class__._explosion_sprite
 
         assert normal_temp is not None, "Normal sprite for explosive mine not loaded"
-        assert (
-            explosion_temp is not None
-        ), "Explosion sprite for explosive mine not loaded"
+        assert explosion_temp is not None, (
+            "Explosion sprite for explosive mine not loaded"
+        )
 
         self.normal_sprite = normal_temp
         self.explosion_sprite = explosion_temp

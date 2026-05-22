@@ -121,9 +121,9 @@ class SlimeBoss:
         # Mask cache for pixel-perfect collision optimization (limited to recent frames)
         self._mask_cache: dict[int, pygame.mask.Mask] = {}
         self._scaled_frame_cache: dict[int, pygame.Surface] = {}
-        self._outline_cache: dict[tuple[int, int], list[tuple[int, int]]] = (
-            {}
-        )  # Cache for hit flash outlines — keyed by (frame_idx, lod_level)
+        self._outline_cache: dict[
+            tuple[int, int], list[tuple[int, int]]
+        ] = {}  # Cache for hit flash outlines — keyed by (frame_idx, lod_level)
         self._last_mask_size = (int(self.w), int(self.h))
         self._mask_cache_max_size = (
             6  # Keep masks for last 6 frames to balance memory/performance

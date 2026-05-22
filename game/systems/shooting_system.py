@@ -243,11 +243,7 @@ class ShootingSystem:
                 t = i / divisor
                 angle = base_angle - spread / 2 + t * spread
                 dir_vec = (math.cos(angle), math.sin(angle))
-                target = (
-                    live_enemies[i % len(live_enemies)]
-                    if live_enemies
-                    else None
-                )
+                target = live_enemies[i % len(live_enemies)] if live_enemies else None
                 self._em.spawn_homing_bullet(
                     x,
                     y,

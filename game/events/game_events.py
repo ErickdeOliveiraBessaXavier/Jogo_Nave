@@ -120,5 +120,3 @@ class SpawnFloatingScore(Event):
     y: float
     score: int
     color: Optional[tuple[int, int, int]] = None
-
-

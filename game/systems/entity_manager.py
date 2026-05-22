@@ -582,7 +582,9 @@ class EntityManager:
         for f in self.formations[:]:
             self._update_emp_linger(f, dt)
             self._update_ice_linger(f, dt)
-            mul = self._emp_multiplier(f, slow_active, slow_factor, dt) * self._ice_multiplier(f)
+            mul = self._emp_multiplier(
+                f, slow_active, slow_factor, dt
+            ) * self._ice_multiplier(f)
             shot = f.update(enemy_dt * mul)
             if shot:
                 new_alien_bullets.extend(shot)
@@ -657,7 +659,9 @@ class EntityManager:
         for s in self.spikes:
             self._update_emp_linger(s, dt)
             self._update_ice_linger(s, dt)
-            mul = self._emp_multiplier(s, slow_active, slow_factor, dt) * self._ice_multiplier(s)
+            mul = self._emp_multiplier(
+                s, slow_active, slow_factor, dt
+            ) * self._ice_multiplier(s)
             s.update(enemy_dt * mul, player_x, player_y, ac)
 
     def _update_boss(self, enemy_dt: float, player_x: float, player_y: float) -> None:
@@ -736,7 +740,9 @@ class EntityManager:
         slow_active, slow_factor = self._emp_state()
         for en in self.enemies:
             self._update_ice_linger(en, dt)
-            mul = self._emp_multiplier(en, slow_active, slow_factor, dt) * self._ice_multiplier(en)
+            mul = self._emp_multiplier(
+                en, slow_active, slow_factor, dt
+            ) * self._ice_multiplier(en)
             ctx.sdt = enemy_dt * mul
             update_in_ctx = getattr(en, "update_in_context", None)
             if update_in_ctx is not None:

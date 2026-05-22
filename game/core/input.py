@@ -38,7 +38,11 @@ class Input:
             elif event.type == pygame.KEYDOWN:
                 if event.key in KEYMAP:
                     actions.add(KEYMAP[event.key])
-            elif event.type == pygame.JOYBUTTONDOWN and gamepad is not None and gamepad.is_active:
+            elif (
+                event.type == pygame.JOYBUTTONDOWN
+                and gamepad is not None
+                and gamepad.is_active
+            ):
                 action = BUTTONMAP_GAMEPLAY.get(event.button)
                 if action is not None:
                     actions.add(action)

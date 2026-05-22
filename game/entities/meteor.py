@@ -56,6 +56,7 @@ class Meteor:
         y: float | None = None,
         vx: float | None = None,
         vy: float | None = None,
+        aggressiveness_multiplier: float = 1.0,
     ):
         # Initialize attributes with type hints
         self.size: int
@@ -72,6 +73,7 @@ class Meteor:
         self.dead: bool
         self.active: bool
         self.health: int
+        self.aggressiveness_multiplier: float = aggressiveness_multiplier
 
         # Configure all attributes
         self.size = (
@@ -106,19 +108,21 @@ class Meteor:
         )
 
         if vy is None:
-            self.vy = base_vy
+            self.vy = base_vy * self.aggressiveness_multiplier
         else:
-            self.vy = vy
+            self.vy = vy * self.aggressiveness_multiplier
 
         if vx is None:
             if random.random() < Config.DIAGONAL_CHANCE:
-                self.vx = random.uniform(-120.0, 120.0) * (
-                    self.vy / max(Config.FAST_METEOR_SPEED, 1e-6)
+                self.vx = (
+                    random.uniform(-120.0, 120.0)
+                    * (self.vy / max(Config.FAST_METEOR_SPEED, 1e-6))
+                    * self.aggressiveness_multiplier
                 )
             else:
                 self.vx = 0.0
         else:
-            self.vx = vx
+            self.vx = vx * self.aggressiveness_multiplier
 
     def _configure_rotation(self) -> None:
         """Configure meteor rotation."""
@@ -152,8 +156,10 @@ class Meteor:
         y: float | None = None,
         vx: float | None = None,
         vy: float | None = None,
+        aggressiveness_multiplier: float = 1.0,
     ):
         """Reconfigura o meteoro para reutilização no pool."""
+        self.aggressiveness_multiplier = aggressiveness_multiplier
         self.size = (
             size
             if size is not None

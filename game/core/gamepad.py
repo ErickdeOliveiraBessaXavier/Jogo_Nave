@@ -436,9 +436,7 @@ class GamepadManager:
             self._rescale_dead_zone(raw_y, dead_zone),
         )
 
-    def get_trigger(
-        self, side: Literal["left", "right"], slot: int = 0
-    ) -> float:
+    def get_trigger(self, side: Literal["left", "right"], slot: int = 0) -> float:
         """Retorna 0..1 do trigger. Triggers reportam -1 (solto) a +1 (full)
         em pygame 2.x; normalizamos para 0..1 e ignoramos jitter abaixo do
         dead zone."""

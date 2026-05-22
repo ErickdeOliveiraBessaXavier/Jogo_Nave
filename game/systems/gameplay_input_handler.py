@@ -67,9 +67,7 @@ class GameplayInputHandler:
             scene.app.states.push(PausedScene(scene.app, previous_scene=scene))
         elif event.key == pygame.K_F3:
             scene.show_fps = not scene.show_fps
-            logger.info(
-                "Debug FPS: %s", "ATIVADO" if scene.show_fps else "DESATIVADO"
-            )
+            logger.info("Debug FPS: %s", "ATIVADO" if scene.show_fps else "DESATIVADO")
         elif event.key == pygame.K_F7:
             scene.show_enemy_hitboxes = not scene.show_enemy_hitboxes
             logger.info(
@@ -106,9 +104,7 @@ class GameplayInputHandler:
                 scene.ship.try_dash(move_vec)
         elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
             if not scene.ship.is_entering and scene._can_handle_gameplay_actions():
-                if scene.ship.profile.has_charge_shot and (
-                    event.mod & pygame.KMOD_ALT
-                ):
+                if scene.ship.profile.has_charge_shot and (event.mod & pygame.KMOD_ALT):
                     # Só ativa charge com Space + Alt pressionados juntos.
                     scene.ship.start_charge()
 
@@ -251,9 +247,7 @@ class GameplayInputHandler:
         if y > 0:
             self.scene._toggle_upgrade_select_mode()
 
-    def _handle_gamepad_axis(
-        self, axis: int, value: float, instance_id: int
-    ) -> None:
+    def _handle_gamepad_axis(self, axis: int, value: float, instance_id: int) -> None:
         """LT analógico é o botão único de habilidade especial.
 
         - Naves com ``has_dash`` (Fantasma): aperto do LT executa dash na

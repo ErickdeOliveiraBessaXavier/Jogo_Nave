@@ -72,14 +72,14 @@ class UserPreferences:
                 # Controles
                 self.mouse_control = data.get("mouse_control", self.mouse_control)
                 self.auto_fire = data.get("auto_fire", self.auto_fire)
-                self.show_controls_modal = data.get("show_controls_modal", self.show_controls_modal)
+                self.show_controls_modal = data.get(
+                    "show_controls_modal", self.show_controls_modal
+                )
                 self.gamepad_enabled = data.get("gamepad_enabled", self.gamepad_enabled)
                 self.p1_prefers_keyboard = data.get(
                     "p1_prefers_keyboard", self.p1_prefers_keyboard
                 )
-                self.p2_coop_enabled = data.get(
-                    "p2_coop_enabled", self.p2_coop_enabled
-                )
+                self.p2_coop_enabled = data.get("p2_coop_enabled", self.p2_coop_enabled)
 
         except (OSError, json.JSONDecodeError, ValueError) as e:
             logger.error("Erro ao carregar preferências: %s", e)
