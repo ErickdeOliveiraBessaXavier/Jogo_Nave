@@ -452,7 +452,7 @@ class GameOverScene(Scene):
         self.playing_scene.screen_shake_intensity = Config.SCREEN_SHAKE_GAME_OVER
 
         # Layout padronizado
-        btn_w, btn_h = 220, 40
+        btn_w, btn_h = 280, 40
         self.back_to_menu_button = pygame.Rect(
             40, Config.SCREEN_HEIGHT - 60, btn_w, btn_h
         )

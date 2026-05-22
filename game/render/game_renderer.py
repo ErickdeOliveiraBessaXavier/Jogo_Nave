@@ -12,20 +12,26 @@ from __future__ import annotations
 import math
 import random
 import time
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional, TypedDict, cast
 
 import pygame
 
 from ..core import colors
 from ..core.assets import get_font
 from ..core.config import config as Config
-from ..core.difficulty import DifficultyPreset, DifficultySettings
+from ..core.difficulty import DifficultyPreset
 from ..core.upgrades import get_upgrade_icon
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
     from ..systems.entity_manager import EntityManager
     from .render_frame import RenderFrame
+
+
+class PowerupUiData(TypedDict):
+    color: tuple[int, int, int]
+    symbol: str
+    label: str
 
 
 class GameRenderer:
@@ -39,7 +45,7 @@ class GameRenderer:
     """
 
     # Cores e Símbolos de Power-ups para o HUD
-    POWERUP_UI_DATA = {
+    POWERUP_UI_DATA: dict[str, PowerupUiData] = {
         "shield": {"color": colors.BLUE, "symbol": "S", "label": "ESCUDO"},
         "double_shot": {"color": colors.GREEN, "symbol": "2X", "label": "TIRO DUPLO"},
         "speed": {"color": colors.YELLOW, "symbol": "V", "label": "VELOCIDADE"},
@@ -67,6 +73,7 @@ class GameRenderer:
         self.hud_font_medium = get_font(18)
         self.hud_font_large = get_font(24)
         self.hud_font_score = get_font(32)
+        self.hud_font_score_small = get_font(26)
 
     def render(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """Método principal de renderização chamado a cada frame."""
@@ -242,8 +249,23 @@ class GameRenderer:
         self._render_combo_hud(frame.ship, surface)
 
     def _render_score_kills_box(self, frame: RenderFrame, surface: pygame.Surface) -> None:
-        """Renderiza o score e kills em uma caixa no canto superior esquerdo."""
-        box_w, box_h = 240, 75
+        """Renderiza o score e kills em uma caixa adaptativa no canto superior esquerdo."""
+        score_text: str = f"{frame.score:06d}"
+        kills_text = f"KILLS: {frame.total_enemies_destroyed}"
+        
+        # Calcular largura necessária
+        score_w = self.hud_font_score.size(score_text)[0]
+        if score_w > 300:
+            score_text = f"{frame.score:.2e}".replace("e+0", "e+").replace("e-0", "e-")
+            score_w = self.hud_font_score.size(score_text)[0]
+            if score_w > 300:
+                score_w = self.hud_font_score_small.size(score_text)[0]
+        kills_w = self.hud_font_tiny.size(kills_text)[0]
+        content_w = max(score_w, kills_w)
+        
+        box_padding = 20
+        box_w = content_w + (box_padding * 2)
+        box_h = 85
         rect = pygame.Rect(15, 0, box_w, box_h)
         
         # Fundo da Caixa
@@ -253,19 +275,41 @@ class GameRenderer:
         surface.blit(overlay, rect.topleft)
         
         # Score
-        score_surf = self.hud_font_score.render(f"{frame.score:06}", True, colors.WHITE)
-        surface.blit(score_surf, (rect.centerx - score_surf.get_width() // 2, 8))
+        score_font = self.hud_font_score if self.hud_font_score.size(score_text)[0] <= 300 else self.hud_font_score_small
+        score_surf = score_font.render(score_text, True, colors.WHITE)
+        surface.blit(score_surf, (rect.centerx - score_surf.get_width() // 2, rect.top + 15))
         
         # Kills
-        kills_text = f"KILLS: {frame.total_enemies_destroyed}"
         kills_surf = self.hud_font_tiny.render(kills_text, True, colors.GRAY)
-        surface.blit(kills_surf, (rect.centerx - kills_surf.get_width() // 2, 48))
+        surface.blit(kills_surf, (rect.centerx - kills_surf.get_width() // 2, rect.top + 60))
 
     def _render_players_status_box(self, frame: RenderFrame, surface: pygame.Surface) -> None:
-        """Renderiza as vidas e powerups em uma caixa no canto superior direito."""
-        is_coop = frame.p2_hud is not None
-        box_w = 400 if is_coop else 200
-        box_h = 75
+        """Renderiza vidas e powerups em uma caixa adaptativa no canto superior direito."""
+        p2_hud = frame.p2_hud
+        is_coop = p2_hud is not None
+        
+        # 1. Calcular larguras dos blocos de conteúdo
+        # Bloco P1
+        p1_lives_txt = str(frame.lives)
+        p1_lives_w = self.hud_font_large.size(p1_lives_txt)[0]
+        p1_block_w = 32 + 8 + p1_lives_w # Icon (32) + Gap (8) + Text
+        
+        # Bloco P2 ou Convite
+        if is_coop:
+            assert p2_hud is not None
+            p2_lives_txt = f"{int(p2_hud.beacon_progress * 100)}%" if p2_hud.is_dead else str(p2_hud.lives)
+            p2_lives_w = (self.hud_font_small if p2_hud.is_dead else self.hud_font_large).size(p2_lives_txt)[0]
+            p2_block_w = 32 + 8 + p2_lives_w
+        else:
+            invite_w1 = self.hud_font_tiny.size("P2")[0]
+            invite_w2 = self.hud_font_small.size("PRESS START")[0]
+            p2_block_w = max(invite_w1, invite_w2)
+
+        # 2. Definir dimensões da caixa com base no conteúdo
+        internal_gap = 40 # Espaço entre P1 e P2 (space-between feeling)
+        side_padding = 20
+        box_w = p1_block_w + internal_gap + p2_block_w + (side_padding * 2)
+        box_h = 85
         rect = pygame.Rect(Config.SCREEN_WIDTH - box_w - 15, 0, box_w, box_h)
         
         # Fundo da Caixa
@@ -274,17 +318,23 @@ class GameRenderer:
                          border_bottom_left_radius=15, border_bottom_right_radius=15)
         surface.blit(overlay, rect.topleft)
         
+        # 3. Renderizar P1 (Alinhado à esquerda da caixa + padding)
+        p1_rect = pygame.Rect(rect.left + side_padding, rect.top, p1_block_w, box_h)
+        self._render_player_in_box(surface, frame.ship, frame.lives, p1_rect, is_p2=False)
+        
+        # 4. Renderizar P2 ou Convite (Alinhado à direita da caixa - padding)
+        p2_rect = pygame.Rect(rect.right - side_padding - p2_block_w, rect.top, p2_block_w, box_h)
+        
         if not is_coop:
-            # Single Player: P1 centralizado na caixa
-            self._render_player_in_box(surface, frame.ship, frame.lives, rect, is_p2=False)
+            # Convite P2 (Piscando)
+            if (pygame.time.get_ticks() // 600) % 2 == 0:
+                p2_label = self.hud_font_tiny.render("P2", True, colors.CYAN)
+                invite_surf = self.hud_font_small.render("PRESS START", True, colors.WHITE)
+                surface.blit(p2_label, (p2_rect.centerx - p2_label.get_width() // 2, p2_rect.top + 20))
+                surface.blit(invite_surf, (p2_rect.centerx - invite_surf.get_width() // 2, p2_rect.top + 40))
         else:
-            # Co-op: P1 na esquerda da caixa, P2 na direita
-            p1_rect = pygame.Rect(rect.left, rect.top, box_w // 2, box_h)
-            p2_rect = pygame.Rect(rect.left + box_w // 2, rect.top, box_w // 2, box_h)
-            
-            self._render_player_in_box(surface, frame.ship, frame.lives, p1_rect, is_p2=False)
-            self._render_player_in_box(surface, frame.p2_hud.ship, frame.p2_hud.lives, p2_rect, 
-                                      is_p2=True, p2_info=frame.p2_hud)
+            assert p2_hud is not None
+            self._render_player_in_box(surface, p2_hud.ship, p2_hud.lives, p2_rect, is_p2=True, p2_info=p2_hud)
 
     def _render_player_in_box(
         self, 
@@ -295,28 +345,31 @@ class GameRenderer:
         is_p2: bool,
         p2_info: Any = None
     ) -> None:
-        """Helper para renderizar info de um jogador dentro de uma área delimitada."""
+        """Helper para renderizar info de um jogador dentro de sua área alocada."""
         # 1. Ícone da Nave + Vidas
         if ship and ship.ship_image:
             icon = pygame.transform.scale(ship.ship_image, (32, 32))
-            icon_x = rect.left + 20
-            surface.blit(icon, (icon_x, rect.top + 10))
             
             # Vidas ou Status Morto
             if is_p2 and p2_info and p2_info.is_dead:
                 pct = int(p2_info.beacon_progress * 100)
                 txt = self.hud_font_small.render(f"{pct}%", True, colors.CYAN)
-                surface.blit(txt, (icon_x + 36, rect.top + 18))
+                txt_y_offset = 20
             else:
                 txt = self.hud_font_large.render(str(lives), True, colors.WHITE)
-                surface.blit(txt, (icon_x + 40, rect.top + 12))
+                txt_y_offset = 14
+
+            # O rect passado já define a largura exata do bloco (Ícone + Gap + Texto)
+            # Então apenas desenhamos a partir da esquerda do rect.
+            surface.blit(icon, (rect.left, rect.top + 12))
+            surface.blit(txt, (rect.left + 40, rect.top + txt_y_offset))
 
         # 2. Powerups Ativos (Mini ícones na parte de baixo do rect)
         self._render_active_powerups_in_box(surface, ship, rect, is_p2)
 
     def _render_active_powerups_in_box(self, surface: pygame.Surface, ship: Ship, rect: pygame.Rect, is_p2: bool) -> None:
         """Desenha powerups ativos na linha inferior da caixa do jogador."""
-        active = []
+        active: list[tuple[str, float]] = []
         time_checks = [
             (ship.get_invulnerable_time(), "shield", 8.0),
             (ship.get_double_shot_time(), "double_shot", 10.0),
@@ -339,14 +392,15 @@ class GameRenderer:
             
         icon_size = 20
         gap = 4
-        y = rect.top + 48
+        y = rect.top + 55
         
         # Centralizar ícones na área do jogador
         total_w = len(active) * (icon_size + gap) - gap
         curr_x = rect.centerx - total_w // 2
         
+        default_data: PowerupUiData = {"color": colors.WHITE, "symbol": "?", "label": "?"}
         for key, ratio in active:
-            data = self.POWERUP_UI_DATA.get(key, {"color": colors.WHITE, "symbol": "?"})
+            data = self.POWERUP_UI_DATA.get(key, default_data)
             
             icon_rect = pygame.Rect(curr_x, y, icon_size, icon_size)
             pygame.draw.rect(surface, (20, 20, 30, 180), icon_rect, border_radius=4)
@@ -522,7 +576,7 @@ class GameRenderer:
         start_x, y = (Config.SCREEN_WIDTH - total_w) // 2, 65
 
         cur_x = start_x
-        for group_idx, (g_ship, group_label, hint_keys) in enumerate(groups):
+        for g_ship, group_label, hint_keys in groups:
             slots = g_ship.stored_powerups
             group_w = len(slots) * slot_size + (len(slots) - 1) * gap
 
@@ -565,7 +619,14 @@ class GameRenderer:
                 )
 
                 if kind is not None:
-                    data = self.POWERUP_UI_DATA.get(kind, {"color": (200,200,200), "symbol": kind[:2].upper()})
+                    data = self.POWERUP_UI_DATA.get(
+                        kind,
+                        {
+                            "color": (200, 200, 200),
+                            "symbol": kind[:2].upper(),
+                            "label": kind,
+                        },
+                    )
                     color = data["color"]
                     center = (slot_size // 2, slot_size // 2 + 4)
                     pygame.draw.circle(slot_surface, color, center, 16)
@@ -585,7 +646,9 @@ class GameRenderer:
 
     def _render_upgrades_hud(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """Exibe os slots de upgrades ativos centralizados na parte inferior."""
-        active_slots = [(i, upg) for i, upg in enumerate(frame.upgrade_slots) if upg is not None]
+        active_slots: list[tuple[int, Any]] = [
+            (i, upg) for i, upg in enumerate(frame.upgrade_slots) if upg is not None
+        ]
         if not active_slots:
             return
 
