@@ -22,15 +22,30 @@ class EffectsSystem:
     Cria e gerencia efeitos visuais com base em eventos de jogo.
     """
 
-    def __init__(self, event_bus: EventBus, entity_manager: EntityManager):
+    def __init__(
+        self, event_bus: EventBus, entity_manager: EntityManager, scene: Any = None
+    ):
         self._bus = event_bus
         self._entity_manager = entity_manager
+        self._scene = scene
         self._register_handlers()
 
     def _register_handlers(self) -> None:
         """Inscreve os handlers no EventBus."""
         self._bus.on(events.SpawnEffect, self._on_spawn_effect)
         self._bus.on(events.SpawnFloatingScore, self._on_spawn_floating_score)
+        self._bus.on(events.ScreenShake, self._on_screen_shake)
+
+    def _on_screen_shake(self, event: events.ScreenShake) -> None:
+        """Handler para tremor de tela — repassa os dados para a cena."""
+        if self._scene is not None:
+            # Chama o método de request da PlayingScene
+            if hasattr(self._scene, "_request_screen_shake"):
+                self._scene._request_screen_shake(event.duration, event.intensity)
+            else:
+                # Fallback direto caso o método mude
+                self._scene.screen_shake_timer = event.duration
+                self._scene.screen_shake_intensity = event.intensity
 
     def _on_spawn_effect(self, event: events.SpawnEffect) -> None:
         """Handler genérico para criar efeitos visuais."""

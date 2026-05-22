@@ -27,6 +27,7 @@ from ..entities.stone_golem_pixel_map import C as _C
 from .boss_hit_mixin import BossHitMixin
 
 if TYPE_CHECKING:
+    from ..core.events import EventBus
     from ..systems.hit_result import HitResult
 
 logger = logging.getLogger(__name__)
@@ -855,6 +856,7 @@ class StoneGolemBoss(BossHitMixin):
         y: float,
         health: Optional[int] = None,
         difficulty_multiplier: float = 1.0,
+        event_bus: Optional["EventBus"] = None,
     ):
         # Declarações explícitas para satisfazer W0201 (pylint).
         # Valores reais são atribuídos pelos helpers _init_*.
@@ -917,6 +919,10 @@ class StoneGolemBoss(BossHitMixin):
         self._sentry_spawn_timer: float = 0.0
         self._active_sentry: Any | None = None
         self._entity_manager: Any | None = None
+        self._bus = event_bus
+        self._dive_phase: str = "none"
+        self._dive_timer: float = 0.0
+        self._dive_start_y: float = 0.0
         self._time: float = 0.0
         self.rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
         self.emp_linger_timer: float = 0.0
@@ -1136,6 +1142,8 @@ class StoneGolemBoss(BossHitMixin):
             self._retreat_waiting = False
             self._retreat_wait_timer = 0.0
             self._emerge_debris_timer = 0.0
+            self._dive_phase = "none"
+            self._dive_timer = 0.0
         elif new_state == "HALF_SUMMON":
             self._half_phase_summon_timer = 0.0
         elif new_state == "HALF_VOLLEY":
@@ -1303,16 +1311,22 @@ class StoneGolemBoss(BossHitMixin):
             else 0
         )
 
+        # Executa a FSM primeiro para definir os jitter e novos estados
         self._run_fsm(dt, player_x, player_y, new_mines, new_shards)
 
+        # Gerenciamento de tremores (jitter)
         S = self.SCALE
         if self.fsm_state in ("EARTH_SHAKE", "EARTH_PULL", "SWEEP_FIRE"):
+            # Estados nativos de tremor do boss
             self._jitter_x, self._jitter_y = (
                 random.uniform(-0.5, 0.5) * S,
                 random.uniform(-0.5, 0.5) * S,
             )
-        elif self.fsm_state != "ENTERING":
-            # Reseta jitter para outros estados, exceto ENTERING que define o seu próprio
+        elif self.fsm_state in ("ENTERING", "HALF_RETREAT"):
+            # Deixa o jitter ser controlado pelos métodos de estado (antecipação)
+            pass
+        else:
+            # Reseta jitter para estados estáticos
             self._jitter_x, self._jitter_y = 0.0, 0.0
 
         self.stomp_shake = self._jitter_y
@@ -1444,11 +1458,9 @@ class StoneGolemBoss(BossHitMixin):
         _mines: List["GolemMine"],
         _shards: List[AttackDebris],
     ) -> None:
-        # Profundidades de parada intermediárias (quanto o fundo do boss ultrapassa screen_h)
-        # Step 0: afunda até h*0.38 abaixo da tela | Step 1: afunda até h*0.74 abaixo | Step 2: desaparece
+        # Profundidades de parada intermediárias
         _SINK_OFFSETS = (self.h * 0.38, self.h * 0.74)
         _BASE = getattr(Config, "GOLEM_SUBMERGE_DEBRIS_COUNT", 8)
-        # Use exactly the configured base count for each submerge burst
         _BURST_COUNTS = (_BASE, _BASE, _BASE)
         _WAIT = 3.0
         retreat_speed = getattr(Config, "GOLEM_ENTRY_SPEED", 160) * 1.8
@@ -1459,7 +1471,7 @@ class StoneGolemBoss(BossHitMixin):
             self._jitter_x = random.uniform(-intensity, intensity)
             self._jitter_y = random.uniform(-intensity * 0.45, intensity * 0.45)
 
-            # Detritos contínuos durante a pausa — cadência aumenta por step
+            # Detritos contínuos durante a pausa
             self._emerge_debris_timer += dt
             interval = max(0.12, 0.22 - self._retreat_step * 0.05)
             if self._emerge_debris_timer >= interval:
@@ -1477,49 +1489,99 @@ class StoneGolemBoss(BossHitMixin):
                 self._retreat_waiting = False
                 self._retreat_wait_timer = 0.0
                 self._emerge_debris_timer = 0.0
+                self._dive_phase = "none" # Reset para a próxima descida
         else:
-            # Descida ativa
-            self.y += retreat_speed * dt
-            self._jitter_x = random.uniform(-6, 6)
-            self._jitter_y = random.uniform(-3, 3)
+            # LÓGICA DE MERGULHO COM ANTECIPAÇÃO
+            if self._dive_phase == "none":
+                self._dive_phase = "tension"
+                self._dive_timer = 0.0
+                self._dive_start_y = self.y
 
-            if self._retreat_step < 2:
-                # Parada intermediária: afunda até _SINK_OFFSETS[step] abaixo da screen
-                target_bottom = self._screen_h + _SINK_OFFSETS[self._retreat_step]
-                if (self.y + self.h) >= target_bottom:
-                    self.y = float(target_bottom - self.h)
-                    self._retreat_waiting = True
-                    self._retreat_wait_timer = 0.0
-                    self._emerge_debris_timer = 0.0
-                    # Burst de detritos quando toca o piso — força spawn independente do cap
+            self._dive_timer += dt
+
+            if self._dive_phase == "tension":
+                # 1. Tensão: Tremor forte parado (1.0s)
+                self._jitter_x = random.uniform(-12, 12)
+                self._jitter_y = random.uniform(-8, 8)
+
+                # Tremor de tela sutil durante a antecipação da PRIMEIRA descida
+                if self._retreat_step == 0 and self._bus and random.random() < 0.15:
+                    from ..events import game_events as events
+                    self._bus.emit(events.ScreenShake(intensity=2, duration=0.1))
+
+                if self._dive_timer >= 1.0:
+                    self._dive_phase = "recoil"
+                    self._dive_timer = 0.0
+            
+            elif self._dive_phase == "recoil":
+                # 2. Recuo: Move para cima de forma tensa (1.0s)
+                recoil_dist = 70.0
+                recoil_dur = 1.0
+                recoil_speed = recoil_dist / recoil_dur
+                self.y -= recoil_speed * dt
+                # Tremor aumenta conforme chega no ponto máximo do recuo
+                intensity = 4.0 + (self._dive_timer / recoil_dur) * 6.0
+                self._jitter_x = random.uniform(-intensity, intensity)
+                self._jitter_y = random.uniform(-intensity * 0.7, intensity * 0.7)
+                if self._dive_timer >= recoil_dur:
+                    self._dive_phase = "pause"
+                    self._dive_timer = 0.0
+            
+            elif self._dive_phase == "pause":
+                # 3. Pausa Dramática: Congelamento total (0.5s)
+                self._jitter_x, self._jitter_y = 0.0, 0.0
+                if self._dive_timer >= 0.5:
+                    self._dive_phase = "action"
+                    self._dive_timer = 0.0
+            
+            elif self._dive_phase == "action":
+                # 4. Mergulho Violento: Velocidade muito maior (Contrast)
+                dive_speed = retreat_speed * 4.5
+                self.y += dive_speed * dt
+                self._jitter_x = random.uniform(-2, 2)
+                
+                # Verifica se atingiu o alvo (parada ou fim da tela)
+                target_y = 0.0
+                if self._retreat_step < 2:
+                    target_bottom = self._screen_h + _SINK_OFFSETS[self._retreat_step]
+                    target_y = float(target_bottom - self.h)
+                else:
+                    target_y = float(self._screen_h + self.h + 80)
+
+                if self.y >= target_y:
+                    self.y = target_y
+                    self._dive_phase = "impact"
+                    self._dive_timer = 0.0
+                    
+                    # IMPACTO PESADO
+                    from ..events import game_events as events
+                    from ..systems import hit_sounds as _hs
+
+                    # Screen Shake: Muito mais forte na primeira descida (step 0)
+                    if self._bus:
+                        shake_intensity = 22 if self._retreat_step == 0 else 14
+                        self._bus.emit(events.ScreenShake(intensity=shake_intensity, duration=0.5))
+                    
+                    # Burst de detritos (SÓ NO IMPACTO)
+                    burst_count = _BURST_COUNTS[min(2, self._retreat_step)]
                     self._spawn_debris_cluster(
-                        _BURST_COUNTS[self._retreat_step],
+                        burst_count * 2,
                         _px,
                         _py,
                         spawn_from_bottom=True,
                         force=True,
                     )
-                    from ..systems import hit_sounds as _hs
-
+                    
+                    # Som e transição
                     _hs.GOLEM_ERUPTION()
-            else:
-                # Terceira descida — submersão completa
-                if self.y >= self._screen_h + self.h + 60:
-                    # Burst final quando desaparece totalmente — força spawn independente do cap
-                    self._spawn_debris_cluster(
-                        _BURST_COUNTS[2],
-                        _px,
-                        _py,
-                        spawn_from_bottom=True,
-                        force=True,
-                    )
-                    from ..systems import hit_sounds as _hs
-
-                    _hs.GOLEM_ERUPTION()
-                    self.y = float(self._screen_h + self.h + 60)
-                    self._jitter_x = 0.0
-                    self._jitter_y = 0.0
-                    self._change_fsm("HALF_SUMMON")
+                    
+                    if self._retreat_step < 2:
+                        self._retreat_waiting = True
+                    else:
+                        # Submersão completa
+                        self._jitter_x = 0.0
+                        self._jitter_y = 0.0
+                        self._change_fsm("HALF_SUMMON")
 
     def _fsm_half_summon(
         self,

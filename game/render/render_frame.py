@@ -104,3 +104,8 @@ class RenderFrame:
 
     # Multiplayer: dados do P2 para o HUD secundário. None em single-player.
     p2_hud: Optional[P2HudInfo] = None
+
+    # Pop-up de início de nível (sub-fases)
+    level_popup_text: str = ""
+    level_popup_timer: float = 0.0
+    level_popup_duration: float = 2.5

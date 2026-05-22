@@ -19,7 +19,7 @@ from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
 from ..core.sound import sound_manager
 from ..core.state import Scene
-from .ui_helpers import wrap_text, UIParticle, draw_bordered_button
+from .ui_helpers import UIParticle, draw_bordered_button, wrap_text
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -140,7 +140,6 @@ class DifficultySelectionView:
         btn_w = 160
         btn_h = 40
         self.back_button_rect = pygame.Rect(40, Config.SCREEN_HEIGHT - 60, btn_w, btn_h)
-
 
     def reset(self):
         """Reseta o estado da view para reiniciar animação."""
@@ -487,6 +486,7 @@ class DifficultySelectionScene(Scene):
                     self.app,
                     self.app.level_manager,
                     difficulty_preset=preset,
+                    start_fade_duration=0.8,
                 )
             )
 
@@ -503,6 +503,7 @@ class DifficultySelectionScene(Scene):
                     self.app,
                     self.app.level_manager,
                     difficulty_preset=preset,
+                    start_fade_duration=0.8,
                 )
             )
 

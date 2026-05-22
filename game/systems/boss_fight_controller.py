@@ -330,6 +330,7 @@ class BossFightController:
                 Config.SCREEN_WIDTH / 2 - 50,
                 50,
                 difficulty_multiplier=enemy_health_multiplier,
+                event_bus=self._bus,
             )
             self._em.boss = boss
         elif boss_type == MountainSerpentBoss:

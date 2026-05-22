@@ -492,6 +492,7 @@ class MainMenuScene(Scene):
                     self.app.level_manager,
                     difficulty_preset=preset,
                     starting_level=starting_level,
+                    start_fade_duration=0.8,
                 )
             )
 
@@ -692,7 +693,9 @@ class MainMenuScene(Scene):
         self.app.player_profile.add_stars(9999)
         self.app.player_profile.unlock_all_worlds()
         self.app.player_profile.save()
-        logger.info("⭐ CHEAT ATIVADO - +9999 Estrelas e todos os mundos desbloqueados!")
+        logger.info(
+            "⭐ CHEAT ATIVADO - +9999 Estrelas e todos os mundos desbloqueados!"
+        )
         sound_manager.play_sound("button_click")
 
     def handle_event(self, event: pygame.event.Event):
@@ -1065,9 +1068,7 @@ class MainMenuScene(Scene):
         )
         # Bolinha indicadora à esquerda do texto.
         dot_r = 4
-        pygame.draw.circle(
-            bg_surf, (*color, alpha), (pad_x, bg_h // 2), dot_r
-        )
+        pygame.draw.circle(bg_surf, (*color, alpha), (pad_x, bg_h // 2), dot_r)
         text_surf.set_alpha(alpha)
         bg_surf.blit(text_surf, (pad_x + dot_r + 6, pad_y))
         surface.blit(bg_surf, (bg_x, bg_y))

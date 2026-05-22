@@ -137,11 +137,13 @@ class PlayingScene(Scene):
         level_manager: LevelManager,
         difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
         starting_level: int = 1,
+        start_fade_duration: float = 0.45,
     ) -> None:
         super().__init__(app)
         self.level_manager = level_manager
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
+        self._start_fade_duration = start_fade_duration
         self.last_dt: float = 1.0 / Config.FPS
         self.r = app.renderer
 
@@ -258,6 +260,11 @@ class PlayingScene(Scene):
 
         self.floating_score_batch_threshold: float = 60.0
 
+        # Pop-up de início de nível (sub-fases)
+        self.level_popup_text: str = ""
+        self.level_popup_timer: float = 0.0
+        self.level_popup_duration: float = 2.5
+
         self._special_rules: list[str] = self.difficulty_settings.get(
             "special_rules", []
         )
@@ -309,7 +316,7 @@ class PlayingScene(Scene):
         self.start_fade_active: bool = True
         self.start_fade_alpha: float = 255.0
         self.start_fade_elapsed: float = 0.0
-        self.start_fade_duration: float = 0.45
+        self.start_fade_duration: float = self._start_fade_duration
         self.start_fade_overlay = pygame.Surface(
             (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
         )
@@ -343,7 +350,9 @@ class PlayingScene(Scene):
         )
 
         # Instanciar EffectsSystem que escuta eventos do jogo
-        self.effects_system = EffectsSystem(self.app.event_bus, self.entity_manager)
+        self.effects_system = EffectsSystem(
+            self.app.event_bus, self.entity_manager, scene=self
+        )
 
         self.game_renderer = GameRenderer(self.r)
 
@@ -498,6 +507,12 @@ class PlayingScene(Scene):
             self.current_world = new_world
             self.pending_world_transition = None
             self._apply_mountains_progress()
+            
+            # Trigger pop-up de sub-fase (ex: 1-1 -> 1-2)
+            level_config = self.level_config
+            if level_config:
+                self.level_popup_text = format_stage_name(level_config.level_number)
+                self.level_popup_timer = self.level_popup_duration
 
         self.boss_controller.reset()
         self.entity_manager.clear_for_level_transition()
@@ -780,6 +795,7 @@ class PlayingScene(Scene):
 
     def enter(self) -> None:
         pygame.mouse.set_visible(False)
+        self._init_fade()
         if self.first_entry:
             self.app.event_bus.emit(
                 events.MusicStateChange(state=MusicState.GAME, fade_ms=0)
@@ -853,13 +869,11 @@ class PlayingScene(Scene):
             self.start_fade_active = False
 
     def _update_preparing_state(self, dt: float) -> None:
-        """Gerencia o estado de preparação e o tempo até o início da partida."""
+        """Gerencia o estado de preparação e o início da partida."""
         if self.state != GameState.PREPARING:
             return
 
-        self.preparation_time_left -= dt
-
-        # Quando o tempo de preparação acaba, inicia o gameplay ativo
+        # O início do gameplay ocorre quando o timer atinge 0
         if self.preparation_time_left <= 0:
             self._begin_playing_state()
 
@@ -867,6 +881,14 @@ class PlayingScene(Scene):
         self.time_stop_timer = max(0.0, self.time_stop_timer - dt)
         self.freeze_active = self.time_stop_timer > 0.0
         self.shooting.update(dt)
+
+        # Timer de preparação (continua negativo para animação de saída)
+        if self.preparation_time_left > -1.5:
+            self.preparation_time_left -= dt
+
+        # Pop-up de início de nível
+        if self.level_popup_timer > 0:
+            self.level_popup_timer = max(0.0, self.level_popup_timer - dt)
 
         if self.score_multiplier_active:
             self.score_multiplier_timer -= dt
@@ -2085,6 +2107,9 @@ class PlayingScene(Scene):
             ),
             primary_alive=not self.roster.primary().is_dead,
             p2_hud=self._build_p2_hud_info(),
+            level_popup_text=self.level_popup_text,
+            level_popup_timer=self.level_popup_timer,
+            level_popup_duration=self.level_popup_duration,
         )
 
     def _build_p2_hud_info(self) -> Optional[P2HudInfo]:

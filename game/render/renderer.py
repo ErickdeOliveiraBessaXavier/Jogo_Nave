@@ -693,30 +693,69 @@ class Renderer:
         stage_name: str = "",
         difficulty: Optional["DifficultyPreset"] = None,
     ):
-        # Usar fonte do warning (60pt)
+        # Design aprimorado com animações e hierarquia
+        t = pygame.time.get_ticks() / 1000.0
+        
+        # Parâmetros de animação de saída
+        exit_anim_active = remaining <= 0
+        exit_progress = min(1.0, abs(remaining) / 1.0) if exit_anim_active else 0.0
+        global_alpha = int(255 * (1.0 - exit_progress))
+        exit_scale = 1.0 + exit_progress * 1.5 # Expande conforme some
+
+        # 1. Painel de fundo sutil com gradiente otimizado
+        panel_h = 240
+        panel_y = Config.SCREEN_HEIGHT // 2 - panel_h // 2
+        
+        grad_w = 200
+        grad_surf = pygame.Surface((grad_w, 1), pygame.SRCALPHA)
+        for x in range(grad_w):
+            dist_center = abs(x - grad_w // 2)
+            alpha = max(0, int(140 * (1.0 - exit_progress)) - int(dist_center * (140 / (grad_w // 2))))
+            if alpha > 0:
+                grad_surf.set_at((x, 0), (0, 0, 0, alpha))
+        
+        overlay = pygame.transform.smoothscale(grad_surf, (Config.SCREEN_WIDTH, panel_h))
+        surface.blit(overlay, (0, panel_y))
+
+        # Fontes
         warning_font = get_font(Config.WARNING_FONT_SIZE)
         info_font = get_font(24)
         diff_font = get_font(18)
 
-        # 1. Nome do Estágio (Acima do contador)
+        # 2. Nome do Estágio (Acima do contador)
         if stage_name:
+            st_alpha = int((180 + int(75 * math.sin(t * 3))) * (1.0 - exit_progress))
             st_surf = info_font.render(stage_name, True, colors.CUSTOM_GOLD)
+            st_surf.set_alpha(st_alpha)
             surface.blit(
                 st_surf,
                 (
                     Config.SCREEN_WIDTH // 2 - st_surf.get_width() // 2,
-                    Config.SCREEN_HEIGHT // 2 - 120,
+                    Config.SCREEN_HEIGHT // 2 - 95 - int(exit_progress * 40),
                 ),
             )
 
-        # 2. Contador Central
-        ct = warning_font.render(f"{int(remaining) + 1}", True, colors.RED)
-        crect = ct.get_rect(
+        # 3. Contador Central (Número Grande ou "COMBATE!")
+        if not exit_anim_active:
+            count_val = int(remaining) + 1
+            fraction = remaining - int(remaining)
+            pulse = 1.0 + 0.2 * (1.0 - fraction)
+            ct_base = warning_font.render(f"{count_val}", True, colors.RED)
+        else:
+            pulse = exit_scale
+            ct_base = warning_font.render("COMBATE!", True, colors.YELLOW)
+            ct_base.set_alpha(global_alpha)
+        
+        ct_surf = pygame.transform.smoothscale(
+            ct_base, 
+            (int(ct_base.get_width() * pulse), int(ct_base.get_height() * pulse))
+        )
+        crect = ct_surf.get_rect(
             center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2)
         )
-        surface.blit(ct, crect)
+        surface.blit(ct_surf, crect)
 
-        # 3. Dificuldade (Abaixo do contador)
+        # 4. Dificuldade (Abaixo do contador)
         if difficulty is not None:
             from ..core.difficulty import DifficultyPreset, DifficultySettings
 
@@ -731,13 +770,60 @@ class Renderer:
             d_surf = diff_font.render(
                 f"DIFICULDADE: {d_set['name'].upper()}", True, d_color
             )
-            surface.blit(
-                d_surf,
-                (
-                    Config.SCREEN_WIDTH // 2 - d_surf.get_width() // 2,
-                    Config.SCREEN_HEIGHT // 2 + 80,
-                ),
-            )
+            d_surf.set_alpha(global_alpha)
+            
+            dx = Config.SCREEN_WIDTH // 2 - d_surf.get_width() // 2
+            dy = Config.SCREEN_HEIGHT // 2 + 70 + int(exit_progress * 40)
+            
+            # Linhas decorativas laterais
+            line_w = 60
+            l_alpha = global_alpha
+            pygame.draw.line(surface, (*d_color, l_alpha), (dx - line_w - 10, dy + 12), (dx - 10, dy + 12), 2)
+            pygame.draw.line(surface, (*d_color, l_alpha), (dx + d_surf.get_width() + 10, dy + 12), (dx + d_surf.get_width() + line_w + 10, dy + 12), 2)
+            
+            surface.blit(d_surf, (dx, dy))
+
+    def level_popup(self, surface: pygame.Surface, text: str, timer: float, duration: float):
+        """Renderiza um pop-up de transição de nível que desliza do topo."""
+        if timer <= 0:
+            return
+
+        # Animação de slide
+        # 0.5s entrada, dur-1.0s espera, 0.5s saída
+        slide_duration = 0.5
+        if timer > duration - slide_duration:
+            # Entrada
+            progress = (duration - timer) / slide_duration
+            y_offset = -60 + 80 * (1.0 - (1.0 - progress)**3) # Ease out cubic
+        elif timer < slide_duration:
+            # Saída
+            progress = timer / slide_duration
+            y_offset = -60 + 80 * progress
+        else:
+            # Espera
+            y_offset = 20
+
+        # Design do Pop-up
+        font = get_font(22)
+        txt_surf = font.render(text, True, colors.WHITE)
+        
+        box_w = txt_surf.get_width() + 60
+        box_h = 45
+        box_x = Config.SCREEN_WIDTH // 2 - box_w // 2
+        box_y = y_offset
+        
+        # Fundo do painel
+        panel = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+        pygame.draw.rect(panel, (0, 0, 0, 180), (0, 0, box_w, box_h), border_radius=10)
+        pygame.draw.rect(panel, colors.CUSTOM_GOLD, (0, 0, box_w, box_h), 2, border_radius=10)
+        
+        # Brilho sutil nas bordas
+        glow = pygame.Surface((box_w + 10, box_h + 10), pygame.SRCALPHA)
+        pygame.draw.rect(glow, (218, 165, 32, 50), (5, 5, box_w, box_h), border_radius=12)
+        
+        surface.blit(glow, (box_x - 5, box_y - 5))
+        surface.blit(panel, (box_x, box_y))
+        surface.blit(txt_surf, (box_x + 30, box_y + (box_h - txt_surf.get_height()) // 2))
 
     def update_fps(self, dt: float):
         """Atualiza o contador de FPS e calcula métricas de performance."""

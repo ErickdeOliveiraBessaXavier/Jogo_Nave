@@ -647,11 +647,12 @@ class DifficultyConfig:
     """Constantes para balanceamento de dificuldade."""
 
     BASE_METEOR_SPAWN_TIME: float = 1.2
-    BASE_ALIEN_SPAWN_TIME: float = 2.5
+    BASE_ALIEN_SPAWN_TIME: float = 4.5
     BASE_EYE_SPAWN_TIME: float = 6.0
-    MIN_SPAWN_TIME: float = 0.3  # Aumentado de 0.15 para 0.3 (mais jogável)
-    WEIGHTED_SPAWN_TICK: float = 0.15  # Janela entre tentativas de spawn ponderado
-    WEIGHTED_RECENT_MEMORY: int = 3  # Quantos spawns recentes entram no anti-repetição
+    MIN_SPAWN_TIME: float = 0.5  # Aumentado para evitar frenesi excessivo
+    WEIGHTED_SPAWN_TICK: float = 0.25  # Janela entre tentativas de spawn aumentada
+    WEIGHTED_RECENT_MEMORY: int = 3
+  # Quantos spawns recentes entram no anti-repetição
     WEIGHTED_REPEAT_PENALTY: float = 0.45  # Penalidade por repetição recente
     WEIGHTED_SPAWN_TELEMETRY: bool = False  # Logs periódicos para calibração
     WEIGHTED_TELEMETRY_INTERVAL: float = 15.0  # Segundos entre relatórios
@@ -2219,3 +2220,4 @@ class LevelAnalyzer:
             if warnings:
                 for warning in warnings:
                     logger.info("    └─ ⚠️  %s", warning)
+
