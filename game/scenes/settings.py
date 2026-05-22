@@ -780,17 +780,34 @@ class SettingsView:
 
             surface.blit(tooltip_surf, (tooltip_x, tooltip_y))
 
-        # Instruções de controles
-        instructions = [
-            "CONTROLES:",
-            "• Mouse ou WASD/Setas: Mover",
-            "• Espaço: Atirar | Ctrl: Girar",
-            "• Shift: Dash | Teclado Num: Poderes",
-            "• P: Pausar | ESC: Sair",
-            "",
-            "NOTA: Mudar resolução",
-            "requer reiniciar.",
-        ]
+        # Instruções de controles (trocam conforme o input ativo).
+        gamepad_active = (
+            self._app.gamepad.is_active
+            if (self._app is not None and hasattr(self._app, "gamepad"))
+            else False
+        )
+        if gamepad_active:
+            instructions = [
+                "CONTROLES:",
+                "• LS: Mover",
+                "• RT: Atirar | X: Girar",
+                "• LT: Dash/Charge | D-pad+LB/RB: Poderes",
+                "• START: Pausar | BACK: Sair",
+                "",
+                "NOTA: Mudar resolução",
+                "requer reiniciar.",
+            ]
+        else:
+            instructions = [
+                "CONTROLES:",
+                "• Mouse ou WASD/Setas: Mover",
+                "• Espaço: Atirar | Ctrl: Girar",
+                "• Shift: Dash | Teclado Num: Poderes",
+                "• P: Pausar | ESC: Sair",
+                "",
+                "NOTA: Mudar resolução",
+                "requer reiniciar.",
+            ]
 
         resolution_buttons = cast(
             List[pygame.Rect], self.layout_rects["resolution_buttons"]

@@ -8,7 +8,12 @@ import pygame
 from ..core import colors
 from ..core.assets import BASE_DIR, get_font, get_image
 from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
-from ..core.ship_types import ShipProfile, all_ship_profiles, get_ship_profile
+from ..core.ship_types import (
+    ShipProfile,
+    all_ship_profiles,
+    format_ship_description,
+    get_ship_profile,
+)
 from ..core.state import Scene
 from ..core.upgrades import UpgradeMeta, get_upgrade_icon, list_all_upgrades_meta
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
@@ -729,9 +734,12 @@ class UpgradesSelectionScene(Scene):
 
         # Descrição: cap alto o suficiente para caber as descrições mais longas
         # (Reverberador, Caçador) sem truncar. Clip da coluna garante que nada
-        # vaze lateralmente; o eixo vertical empurra o conteúdo seguinte.
+        # vaze lateralmente; o eixo vertical empurra o conteúdo seguinte. As
+        # frases que mencionam ações (charge shot, Cofre, dash) trocam de
+        # legenda conforme o input ativo via `format_ship_description`.
+        desc_text = format_ship_description(ship, self.app.gamepad.is_active)
         y = _draw_wrapped(
-            ship.description, self.small_font, colors.WHITE, y, max_lines=4
+            desc_text, self.small_font, colors.WHITE, y, max_lines=4
         )
         y += 6
 
@@ -782,23 +790,35 @@ class UpgradesSelectionScene(Scene):
         sign = "+" if pct >= 0 else ""
         return f"{sign}{pct:.0f}%"
 
-    @staticmethod
-    def _ship_ability_descriptions(ship: ShipProfile) -> list[str]:
+    def _input_label(self, keyboard: str, gamepad: str) -> str:
+        """Retorna a legenda apropriada ao modo de input ativo.
+
+        Usa `app.gamepad.is_active` (preferência ligada + controle conectado)
+        como discriminador. Quando o player desliga o gamepad em Settings ou
+        desconecta o controle, as legendas voltam pro teclado automaticamente.
+        """
+        return gamepad if self.app.gamepad.is_active else keyboard
+
+    def _ship_ability_descriptions(self, ship: ShipProfile) -> list[str]:
         """Retorna instruções curtas das mecânicas especiais da nave.
 
         Mantém cada linha sob ~40 chars para caber em coluna estreita sem
-        depender de quebra automática.
+        depender de quebra automática. As teclas/botões alternam conforme o
+        modo de input ativo (teclado x controle) — ver `_input_label`.
         """
         lines: list[str] = []
         if ship.has_dash:
-            lines.append(f"SHIFT: dash i-frames ({ship.dash_cooldown:.0f}s cd)")
+            dash_key = self._input_label("SHIFT", "LT")
+            lines.append(f"{dash_key}: dash i-frames ({ship.dash_cooldown:.0f}s cd)")
         if ship.has_charge_shot:
+            charge_key = self._input_label("ALT+Espaço", "LT")
             lines.append(
-                f"Segure tiro: até {ship.charge_shot_damage_mult:.0f}× dano "
+                f"{charge_key}: até {ship.charge_shot_damage_mult:.0f}× dano "
                 f"({ship.charge_shot_max_time:.1f}s)"
             )
         if ship.powerup_slots > 0:
-            lines.append(f"Q/E: usa {ship.powerup_slots} slots de powerup")
+            powerup_keys = self._input_label("Q/E", "Y/A")
+            lines.append(f"{powerup_keys}: usa {ship.powerup_slots} slots de powerup")
         if ship.permanent_mini_ships > 0:
             n = ship.permanent_mini_ships
             lines.append(

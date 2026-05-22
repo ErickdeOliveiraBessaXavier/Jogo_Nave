@@ -152,18 +152,35 @@ class GamepadManager:
         """Abre joysticks disponíveis preenchendo slots livres em ordem."""
         count = pygame.joystick.get_count()
         for raw_idx in range(count):
-            # Se este device já está mapeado em algum slot, skip.
-            try:
-                probe = pygame.joystick.Joystick(raw_idx)
-            except pygame.error:
-                continue
-            iid = probe.get_instance_id()
-            if any(s and s.instance_id == iid for s in self._slots):
-                continue
+            self.add_device(raw_idx, prefer_slot_1=False)
+
+    def add_device(
+        self, device_index: int, prefer_slot_1: bool = False
+    ) -> Optional[int]:
+        """Reivindica um joystick em um slot livre. Retorna o slot ocupado.
+
+        ``prefer_slot_1=True`` reserva o gamepad pro slot 1 (candidato a P2),
+        deixando o slot 0 vago — útil quando o caller (app.py) decide que P1
+        está jogando teclado e o novo controle deve ser do P2. Se o slot 1
+        já estiver ocupado ou inexistente, cai no comportamento padrão de
+        preencher o primeiro slot vazio.
+        """
+        try:
+            probe = pygame.joystick.Joystick(device_index)
+        except pygame.error:
+            return None
+        iid = probe.get_instance_id()
+        if any(s and s.instance_id == iid for s in self._slots):
+            return None  # já mapeado
+        target_slot: Optional[int] = None
+        if prefer_slot_1 and MAX_GAMEPAD_SLOTS > 1 and self._slots[1] is None:
+            target_slot = 1
+        if target_slot is None:
             target_slot = self._first_empty_slot()
-            if target_slot is None:
-                break
-            self._claim_slot(target_slot, probe)
+        if target_slot is None:
+            return None
+        self._claim_slot(target_slot, probe)
+        return target_slot
 
     def _first_empty_slot(self) -> Optional[int]:
         for i, s in enumerate(self._slots):

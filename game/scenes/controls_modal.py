@@ -141,17 +141,33 @@ class ControlsModalScene(Scene):
         right_x = self.modal_rect.centerx + 20
         max_col_w = (self.modal_w // 2) - 60
 
-        # Instruções
-        left_col_raw = [
-            "• Mouse/WASD: Mover",
-            "• Espaço: Atirar",
-            "• P: Pausar | ESC: Sair",
-        ]
-        right_col_raw = [
-            "• Ctrl: Girar Nave",
-            "• Shift: Dash",
-            "• Teclado Num: Poderes",
-        ]
+        # Instruções: trocam entre teclado e controle conforme o input ativo
+        # (preferência ligada + gamepad conectado).
+        gamepad_active = (
+            self.app.gamepad.is_active if hasattr(self.app, "gamepad") else False
+        )
+        if gamepad_active:
+            left_col_raw = [
+                "• LS: Mover",
+                "• RT: Atirar",
+                "• START: Pausar | BACK: Sair",
+            ]
+            right_col_raw = [
+                "• X: Girar Nave",
+                "• LT: Dash / Charge",
+                "• D-pad ↑ + LB/RB/A: Poderes",
+            ]
+        else:
+            left_col_raw = [
+                "• Mouse/WASD: Mover",
+                "• Espaço: Atirar",
+                "• P: Pausar | ESC: Sair",
+            ]
+            right_col_raw = [
+                "• Ctrl: Girar Nave",
+                "• Shift: Dash",
+                "• Teclado Num: Poderes",
+            ]
 
         def draw_column(items: list[str], start_x: int, start_y: int):
             curr_y = start_y

@@ -77,7 +77,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
     ShipProfile(
         id="magneto",
         display_name="Magneto",
-        description="Atrai estrelas/powerups e possui um laser carregado (Alt + Espaço ou Mouse) devastador.",
+        description="Atrai estrelas/powerups e possui um laser carregado ({charge}) devastador.",
         sprite_filename="ship_magnetico.png",
         unlock_cost=25,
         pickup_radius_mult=2.5,
@@ -123,7 +123,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         id="cofre",
         display_name="Cofre",
         description=(
-            "Powerups coletados vão para 2 slots; ative com Q e E na hora certa. "
+            "Powerups coletados vão para 2 slots; ative com {cofre} na hora certa. "
             "Velocidade -15% pelo peso do cofre."
         ),
         sprite_filename="ship_cofre.png",
@@ -139,7 +139,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         id="fantasma",
         display_name="Fantasma",
         description=(
-            "Dash com invulnerabilidade (cooldown 4s). Atravessa minas. "
+            "{dash}: dash com invulnerabilidade (cd 4s). Atravessa minas. "
             "-1 vida e dano -20%."
         ),
         sprite_filename="ship_fantasma.png",
@@ -174,7 +174,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         id="cacador",
         display_name="Caçador",
         description=(
-            "Charge shot: segure Alt + Espaço (ou Mouse) até 0.8s para 3× dano. "
+            "Charge shot: segure {charge} até 0.8s para 3× dano. "
             "Falha se soltar antes. Fire rate base -30%."
         ),
         sprite_filename="ship_cacador.png",
@@ -217,6 +217,35 @@ _SHIPS_BY_ID: dict[str, ShipProfile] = {ship.id: ship for ship in SHIP_REGISTRY}
 def get_ship_profile(ship_id: str) -> ShipProfile:
     """Retorna o ShipProfile pelo id. Cai no padrão se o id for desconhecido."""
     return _SHIPS_BY_ID.get(ship_id, _SHIPS_BY_ID[DEFAULT_SHIP_ID])
+
+
+# Placeholders permitidos nas descrições. Mantidos como dict literal — ao
+# adicionar uma nova habilidade input-específica em alguma nave, basta criar
+# uma chave aqui e usar `{nova_chave}` no `description` correspondente.
+_INPUT_TOKENS_KEYBOARD: dict[str, str] = {
+    "charge": "Alt + Espaço ou Mouse",
+    "cofre": "Q e E",
+    "dash": "Shift",
+}
+
+_INPUT_TOKENS_GAMEPAD: dict[str, str] = {
+    "charge": "LT",
+    "cofre": "Y e A",
+    "dash": "LT",
+}
+
+
+def format_ship_description(ship: ShipProfile, gamepad_active: bool = False) -> str:
+    """Substitui placeholders `{charge}/{cofre}/{dash}` pela tecla ou botão
+    do input ativo. Strings sem placeholders passam intactas.
+    """
+    tokens = _INPUT_TOKENS_GAMEPAD if gamepad_active else _INPUT_TOKENS_KEYBOARD
+    try:
+        return ship.description.format(**tokens)
+    except (KeyError, IndexError):
+        # Defensivo: se algum dia introduzirem um placeholder desconhecido
+        # sem registrar, devolve a string crua em vez de explodir.
+        return ship.description
 
 
 def all_ship_profiles() -> tuple[ShipProfile, ...]:
