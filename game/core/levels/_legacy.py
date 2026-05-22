@@ -1355,36 +1355,39 @@ class ProceduralLevelGenerator:
         cada inimigo tem gate de entrada e tempos base que variam entre
         early/mid/late do mundo.
         """
-        if stage_progress < 0.40:
-            alien_base = 3.0
-        elif stage_progress < 0.70:
-            alien_base = 2.2
+        if stage_progress < 0.22:
+            enemy_spawn_config.pop(Alien, None)
         else:
-            alien_base = 1.6
-        enemy_spawn_config[Alien] = self._clamp_spawn_time(
-            (alien_base / difficulty) / spawn_multiplier
-        )
-
-        if stage_progress >= 0.25:
-            if stage_progress < 0.55:
-                eye_base = 8.0
-            elif stage_progress < 0.80:
-                eye_base = 5.5
+            if stage_progress < 0.45:
+                alien_base = 5.0
+            elif stage_progress < 0.70:
+                alien_base = 3.2
             else:
-                eye_base = 3.8
+                alien_base = 2.0
+            enemy_spawn_config[Alien] = self._clamp_spawn_time(
+                (alien_base / difficulty) / spawn_multiplier
+            )
+
+        if stage_progress < 0.45:
+            enemy_spawn_config.pop(EyeEnemy, None)
+        else:
+            if stage_progress < 0.70:
+                eye_base = 9.0
+            elif stage_progress < 0.85:
+                eye_base = 6.0
+            else:
+                eye_base = 4.0
             enemy_spawn_config[EyeEnemy] = self._clamp_spawn_time(
                 (eye_base / difficulty) / spawn_multiplier
             )
-        else:
-            enemy_spawn_config.pop(EyeEnemy, None)
 
-        if stage_progress >= 0.45:
-            square_base = 14.0 if stage_progress < 0.75 else 9.0
+        if stage_progress < 0.70:
+            enemy_spawn_config.pop(SquareMinionBoss, None)
+        else:
+            square_base = 15.0 if stage_progress < 0.85 else 10.0
             enemy_spawn_config[SquareMinionBoss] = self._clamp_spawn_time(
                 (square_base / difficulty) / spawn_multiplier
             )
-        else:
-            enemy_spawn_config.pop(SquareMinionBoss, None)
 
     def _calculate_score_multiplier(self, level_number: int) -> float:
         """Calcula o multiplicador de pontuação baseado no nível."""
@@ -1579,6 +1582,13 @@ class ProceduralLevelGenerator:
                 level_number >= DifficultyConfig.FORMATIONS_UNLOCK_LEVEL
                 and "formations" in THEME_FEATURES.get(world.theme, set())
             )
+            if world.theme in _STAGE_BANDED_THEMES:
+                # Espaço Sideral, Cidade e Vulcânico entram mais devagar em formações.
+                if stage_progress < 0.45:
+                    formations_enabled = False
+                elif stage_progress < 0.70:
+                    formations_enabled = formations_enabled and rng.random() < 0.5
+
             if theme and theme.special_feature == "formations_heavy":
                 formations_enabled = True
 
@@ -1595,6 +1605,8 @@ class ProceduralLevelGenerator:
 
             if theme and theme.special_feature == "formations_heavy":
                 formation_types = all_formations
+            elif world.theme in _STAGE_BANDED_THEMES and stage_progress < 0.70:
+                formation_types = ["spiral_circle", "spiral_v"]
             elif level_number >= 6:
                 formation_types = all_formations
             else:
@@ -1691,19 +1703,35 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         theme_name="Chefe do Golem de Pedra",
         score_multiplier=1.5,
     ),
-    # Vazio Sideral - 4 Bosses
+    # Vazio Sideral — Curva de entrada controlada (paralelo ao tutorial 1-1):
+    # 11 introduz só meteoros sem formations/mines; 13/14/15 escalam de forma
+    # gradual até a fase 15, com Alien e formations leves chegando perto do
+    # boss SpikeBoss (16). Bosses 12/16/20/25 são fixos abaixo.
+    #
+    # Nível 11 (2-1): Apresentação do mundo — só meteoros em ritmo controlado.
+    11: LevelConfig(
+        level_number=11,
+        enemy_spawn_config={
+            Meteor: 1.8,
+        },
+        enemies_to_clear=80,
+        boss_type=None,
+        mines_enabled=False,
+        formations_enabled=False,
+        theme_name="Aprendendo o Vazio",
+        score_multiplier=1.0,
+    ),
     # Nível 12: Boss clássico
     12: LevelConfig(
         level_number=12,
         enemy_spawn_config={
-            Meteor: 0.8,
-            Alien: 3.0,
+            Meteor: 1.1,
+            Alien: 4.5,
         },
-        enemies_to_clear=350,
+        enemies_to_clear=280,
         boss_type=Boss,
-        mines_enabled=True,
+        mines_enabled=False,
         formations_enabled=False,
-        # formation_types=["spiral_circle", "spiral_v"],
         theme_name="Chefe Clássico do Espaço",
         score_multiplier=1.3,
     ),
@@ -1711,15 +1739,15 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     16: LevelConfig(
         level_number=16,
         enemy_spawn_config={
-            Meteor: 0.7,
-            Alien: 2.0,
-            EyeEnemy: 4.0,
+            Meteor: 0.9,
+            Alien: 2.8,
+            EyeEnemy: 5.5,
         },
-        enemies_to_clear=380,
+        enemies_to_clear=340,
         boss_type=SpikeBoss,
-        mines_enabled=True,
+        mines_enabled=False,
         formations_enabled=True,
-        formation_types=["spiral_circle", "spiral_v", "spiral_square"],
+        formation_types=["spiral_circle", "spiral_v"],
         theme_name="Criatura Alienígena com Espinhos",
         score_multiplier=1.4,
     ),
@@ -1727,11 +1755,12 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     20: LevelConfig(
         level_number=20,
         enemy_spawn_config={
-            Meteor: 0.5,
+            Meteor: 0.7,
+            Alien: 4.0,
         },
-        enemies_to_clear=300,
+        enemies_to_clear=320,
         boss_type=GiantMeteorBoss,
-        mines_enabled=True,
+        mines_enabled=False,
         formations_enabled=False,
         theme_name="Meteorito Gigante",
         score_multiplier=1.5,
@@ -1740,19 +1769,18 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     25: LevelConfig(
         level_number=25,
         enemy_spawn_config={
-            Meteor: 0.6,
-            Alien: 2.5,
+            Meteor: 0.8,
+            Alien: 3.2,
+            EyeEnemy: 6.0,
         },
-        enemies_to_clear=420,
+        enemies_to_clear=380,
         boss_type=SlimeBoss,
-        mines_enabled=True,
+        mines_enabled=False,
         formations_enabled=True,
         formation_types=[
             "spiral_circle",
             "spiral_v",
             "spiral_square",
-            "full_cycle",
-            "spiral_line",
         ],
         theme_name="Criatura Gelatinosa Alienígena",
         score_multiplier=1.6,
@@ -2056,6 +2084,7 @@ def _apply_difficulty_to_fixed_level(
     )
 
     import dataclasses
+
     return dataclasses.replace(
         config,
         enemy_spawn_config=adjusted_spawn_config,

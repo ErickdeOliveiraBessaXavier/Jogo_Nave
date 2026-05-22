@@ -102,9 +102,10 @@ def _get_worlds() -> dict[int, WorldConfig]:
             boss_level=25,
             boss_type=None,  # Bosses determinados por FIXED_LEVELS
             theme_modifiers={
-                "meteor_weight": 1.0,
-                "alien_weight": 1.15,  # Reduzido de 1.5 para suavizar entrada no mundo
-                "formation_chance": 0.8,  # Reduzido de 1.1
+                "meteor_weight": 0.9,
+                "alien_weight": 0.75,  # Menos aliens durante a curva inteira
+                "spawn_rate_multiplier": 0.78,  # Entrada e meio de mundo mais legíveis
+                "formation_chance": 0.45,  # Formações menos frequentes no mundo 2
             },
         ),
         3: WorldConfig(

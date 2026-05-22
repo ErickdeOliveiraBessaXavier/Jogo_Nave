@@ -29,7 +29,7 @@ from ..core.levels import (
 )
 from ..core.powerup_weights import get_powerup_weights
 from ..core.time import Timer
-from ..core.world_config import get_world_for_level
+from ..core.world_config import WorldTheme, get_world_for_level
 from ..entities.alien import Alien
 from ..entities.bot_elemental import ElementalRobot
 from ..entities.explosive_mine import ExplosiveMine
@@ -1072,7 +1072,12 @@ class EnemySpawner:
         self.formation_spawn_timer = Timer(random.uniform(min_t, max_t))
         self.formation_spawn_timer.start()
 
-        if random.random() >= self.spawn_intensity:
+        formation_chance = world.theme_modifiers.get("formation_chance", 1.0)
+        if world.theme == WorldTheme.STARFIELD:
+            formation_chance = max(0.0, min(1.0, formation_chance))
+
+        effective_chance = self.spawn_intensity * formation_chance
+        if random.random() >= effective_chance:
             return
 
         # Aplicar limite máximo de formações ativas
