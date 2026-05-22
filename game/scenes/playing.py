@@ -183,9 +183,13 @@ class PlayingScene(Scene):
         if self.is_side_scroll:
             ship_x = -50.0
             ship_y = (Config.SCREEN_HEIGHT - 35) / 2.0
+            target_x = float(_SIDE_SCROLL_SHIP_ENTRY_X)
+            target_y = ship_y
         else:
             ship_x = Config.SCREEN_WIDTH / 2.0 - 20
             ship_y = float(Config.SCREEN_HEIGHT + 100)
+            target_x = ship_x
+            target_y = float(Config.SCREEN_HEIGHT - _TOP_DOWN_SHIP_TARGET_Y_OFFSET)
 
         ship_obj = Ship(
             ship_x,
@@ -194,12 +198,16 @@ class PlayingScene(Scene):
             auto_fire=self.app.preferences.auto_fire,
             profile=self.player_profile.get_selected_ship_profile(),
         )
-        ship_obj.is_entering = True
+        
+        # Ativa animação de entrada sincronizada com o contador de preparação
+        ship_obj.start_entering_animation(
+            (ship_x, ship_y), 
+            (target_x, target_y), 
+            Config.PREPARATION_TIME
+        )
         ship_obj.apply_world_mode(self.is_side_scroll)
 
-        # Roster mantém slots de jogador. Lives são populados depois em
-        # _apply_difficulty_settings; aqui só ancoramos o slot P1 com gamepad
-        # slot 0 (teclado é incluído automaticamente no slot 0 pelo Input).
+        # Roster mantém slots de jogador.
         self.roster: PlayerRoster = PlayerRoster.with_primary(
             PlayerSlot(ship=ship_obj, lives=0, gamepad_slot=0)
         )
@@ -847,36 +855,15 @@ class PlayingScene(Scene):
             self.start_fade_active = False
 
     def _update_preparing_state(self, dt: float) -> None:
+        """Gerencia o estado de preparação e o tempo até o início da partida."""
         if self.state != GameState.PREPARING:
             return
 
         self.preparation_time_left -= dt
 
-        if self.is_side_scroll:
-            initial_x = -50.0
-            target_x = float(_SIDE_SCROLL_SHIP_ENTRY_X)
-            target_y = (Config.SCREEN_HEIGHT - 35) / 2.0
-
-            if self.preparation_time_left > 0:
-                elapsed = Config.PREPARATION_TIME - self.preparation_time_left
-                progress = min(1.0, elapsed / Config.PREPARATION_TIME)
-                self.ship.x = initial_x + (target_x - initial_x) * progress
-                self.ship.y = target_y
-            else:
-                self.ship.x = target_x
-                self.ship.y = target_y
-                self._begin_playing_state()
-        else:
-            initial_y = float(Config.SCREEN_HEIGHT + 100)
-            target_y = float(Config.SCREEN_HEIGHT - _TOP_DOWN_SHIP_TARGET_Y_OFFSET)
-
-            if self.preparation_time_left > 0:
-                elapsed = Config.PREPARATION_TIME - self.preparation_time_left
-                progress = min(1.0, elapsed / Config.PREPARATION_TIME)
-                self.ship.y = initial_y + (target_y - initial_y) * progress
-            else:
-                self.ship.y = target_y
-                self._begin_playing_state()
+        # Quando o tempo de preparação acaba, inicia o gameplay ativo
+        if self.preparation_time_left <= 0:
+            self._begin_playing_state()
 
     def _update_timers(self, dt: float) -> None:
         self.time_stop_timer = max(0.0, self.time_stop_timer - dt)
@@ -1900,33 +1887,35 @@ class PlayingScene(Scene):
         self.app.states.push(modal)
 
     def _spawn_p2(self, profile: Any) -> None:
-        """Cria a nave de P2 e adiciona ao roster.
-
-        ``profile`` é um ``ShipProfile`` validado (veio do modal). P2 nasce
-        em posição ligeiramente deslocada de P1 e não recebe upgrades
-        permanentes — apenas powerups coletados em tempo de partida.
-        """
+        """Cria a nave de P2 e adiciona ao roster com animação de entrada."""
         primary_ship = self.roster.primary().ship
-        # Spawn lateral relativo a P1. Em side-scroll, mesma X com Y deslocado;
-        # em top-down, X deslocado pra direita.
+        
+        # Define alvos de spawn baseados em P1
         if self.is_side_scroll:
-            spawn_x = primary_ship.x
-            spawn_y = primary_ship.y + 80.0
+            target_x = primary_ship.x
+            target_y = primary_ship.y + 80.0
+            start_x = -100.0
+            start_y = target_y
         else:
-            spawn_x = primary_ship.x + 80.0
-            spawn_y = primary_ship.y
+            target_x = primary_ship.x + 80.0
+            target_y = primary_ship.y
+            start_x = target_x
+            start_y = float(Config.SCREEN_HEIGHT + 100)
 
         p2_ship = Ship(
-            spawn_x,
-            spawn_y,
-            mouse_control=False,  # P2 obrigatoriamente gamepad
+            start_x,
+            start_y,
+            mouse_control=False,
             auto_fire=False,
             profile=profile,
         )
-        # P2 não roda animação de entrada (que é gerida pela cena ao começar
-        # nível). Spawn é instantâneo, com invuln para evitar morte imediata
-        # se a área estiver cheia de inimigos.
-        p2_ship.is_entering = False
+        
+        # Ativa animação de entrada similar ao P1
+        p2_ship.start_entering_animation(
+            (start_x, start_y), 
+            (target_x, target_y), 
+            1.5 # Duração da animação
+        )
         p2_ship.invuln = float(Config.INVULN_TIME * 1000)
         p2_ship.apply_world_mode(self.is_side_scroll)
 
@@ -1939,11 +1928,11 @@ class PlayingScene(Scene):
         )
         p2_ship.lives = lives
         self.roster.add(p2_slot)
-        # Engenheiro spawna com mini-naves permanentes orbitando — P2 deve
-        # receber as suas próprias se escolher essa nave.
         self._build_permanent_mini_ships(p2_slot)
+        
         logger.info(
-            "P2 entrou na partida com a nave '%s' (vidas=%d).", profile.id, lives
+            "P2 entrou na partida com a nave '%s' (vidas=%d) e animação de entrada.", 
+            profile.id, lives
         )
 
     # ------------------------------------------------------------------
@@ -2213,6 +2202,13 @@ class PlayingScene(Scene):
             beacon = dead_slot.revival_beacon
             assert beacon is not None
             beacon.update_visual(dt)
+
+            # Proximidade visual: mostra a dica se qualquer player vivo estiver no raio
+            near_any = any(
+                beacon.contains_point(float(s.ship.rect.centerx), float(s.ship.rect.centery))
+                for s in alive
+            )
+            beacon.set_hint_visible(near_any)
 
             qualifying_helper = self._find_revive_helper(beacon, alive)
             if qualifying_helper is not None:

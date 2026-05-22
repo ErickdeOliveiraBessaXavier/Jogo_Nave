@@ -100,6 +100,10 @@ class Ship:
         self.repulsion_wind_streaks: list[dict[str, Any]] = []
 
         self.is_entering = False
+        self.entering_timer = 0.0
+        self.entering_duration = 0.0
+        self.entry_start_pos = (0.0, 0.0)
+        self.entry_target_pos = (0.0, 0.0)
         self.entry_particles: list[ParticleDict] = []
         self.thruster_particles: list[ParticleDict] = []
 
@@ -601,6 +605,20 @@ class Ship:
             if p["lifetime"] - dt > 0 and p["size"] - dt > 0
         ]
 
+    def start_entering_animation(
+        self,
+        start_pos: tuple[float, float],
+        target_pos: tuple[float, float],
+        duration: float,
+    ) -> None:
+        """Inicia a animação de entrada da nave."""
+        self.is_entering = True
+        self.entering_timer = 0.0
+        self.entering_duration = duration
+        self.entry_start_pos = start_pos
+        self.entry_target_pos = target_pos
+        self.x, self.y = start_pos
+
     def update(
         self,
         dt: float,
@@ -608,6 +626,20 @@ class Ship:
         is_side_scroll: bool = False,
     ):
         self._draw_time += dt
+
+        if self.is_entering:
+            self.entering_timer += dt
+            progress = min(1.0, self.entering_timer / self.entering_duration)
+            eased = 1.0 - (1.0 - progress) ** 3  # ease-out cúbico
+            self.x = self.entry_start_pos[0] + (
+                self.entry_target_pos[0] - self.entry_start_pos[0]
+            ) * eased
+            self.y = self.entry_start_pos[1] + (
+                self.entry_target_pos[1] - self.entry_start_pos[1]
+            ) * eased
+            if progress >= 1.0:
+                self.is_entering = False
+
         self._powerups.update_timers(dt)
         self._powerups.update_repulsion_shield(dt, entity_manager)
         self._movement.update_dash(dt)

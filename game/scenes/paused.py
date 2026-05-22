@@ -119,7 +119,7 @@ class PausedScene(Scene):
                     # ser a ação padrão na pausa.
                     self._activate_continue()
                 return
-            if event.button in (XboxButton.B, XboxButton.START):
+            if event.button == XboxButton.B:
                 self.app.states.pop()
                 return
 

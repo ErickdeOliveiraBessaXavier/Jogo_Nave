@@ -686,16 +686,43 @@ class Renderer:
             )
             surface.blit(s, rect)
 
-    def preparation(self, surface: pygame.Surface, remaining: float):
+    def preparation(
+        self, 
+        surface: pygame.Surface, 
+        remaining: float, 
+        stage_name: str = "", 
+        difficulty: Optional["DifficultyPreset"] = None
+    ):
         # Usar fonte do warning (60pt)
         warning_font = get_font(Config.WARNING_FONT_SIZE)
+        info_font = get_font(24)
+        diff_font = get_font(18)
 
-        # contador
+        # 1. Nome do Estágio (Acima do contador)
+        if stage_name:
+            st_surf = info_font.render(stage_name, True, colors.CUSTOM_GOLD)
+            surface.blit(st_surf, (Config.SCREEN_WIDTH // 2 - st_surf.get_width() // 2, Config.SCREEN_HEIGHT // 2 - 120))
+
+        # 2. Contador Central
         ct = warning_font.render(f"{int(remaining) + 1}", True, colors.RED)
         crect = ct.get_rect(
             center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2)
         )
         surface.blit(ct, crect)
+        
+        # 3. Dificuldade (Abaixo do contador)
+        if difficulty is not None:
+            from ..core.difficulty import DifficultySettings, DifficultyPreset
+            d_set = DifficultySettings.get_settings(difficulty)
+            d_color = {
+                DifficultyPreset.CASUAL: colors.GREEN,
+                DifficultyPreset.NORMAL: colors.YELLOW,
+                DifficultyPreset.HARDCORE: colors.ORANGE,
+                DifficultyPreset.NIGHTMARE: colors.RED,
+            }.get(difficulty, colors.WHITE)
+            
+            d_surf = diff_font.render(f"DIFICULDADE: {d_set['name'].upper()}", True, d_color)
+            surface.blit(d_surf, (Config.SCREEN_WIDTH // 2 - d_surf.get_width() // 2, Config.SCREEN_HEIGHT // 2 + 80))
 
     def update_fps(self, dt: float):
         """Atualiza o contador de FPS e calcula métricas de performance."""

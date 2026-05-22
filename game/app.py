@@ -121,7 +121,7 @@ class GameApp:
 
         # Suporte a controle Xbox: singleton compartilhado com a Input e cenas.
         self.gamepad: GamepadManager = GamepadManager()
-        self.gamepad.init()
+        self.gamepad.init(prefer_slot_1=self.preferences.p1_prefers_keyboard)
         # Primeira execução com controle plugado: ativa por padrão pra evitar
         # que o jogador precise abrir Settings antes de jogar. Sessões
         # posteriores respeitam o toggle (mesmo que ele tenha sido desligado).

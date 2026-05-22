@@ -57,6 +57,7 @@ class SettingsView:
             "shot": self.preferences.shot_volume,
         }
         self.toggles: Dict[str, bool] = {
+            "p1_prefers_keyboard": self.preferences.p1_prefers_keyboard,
             "mouse_control": self.preferences.mouse_control,
             "auto_fire": self.preferences.auto_fire,
             "gamepad_enabled": self.preferences.gamepad_enabled,
@@ -107,6 +108,7 @@ class SettingsView:
         # Dimensões e espaçamentos
         outer_pad = 40
         card_gap = 40
+        card_inner_pad_x = 30
 
         # Calcular largura dinâmica para ocupar a tela toda
         available_width = screen_w - (2 * outer_pad)
@@ -130,13 +132,13 @@ class SettingsView:
 
         for key in ["music", "sfx", "shot"]:
             self.layout_rects["sliders"][key] = pygame.Rect(
-                audio_card_rect.x + 30, y_offset, slider_w, slider_h
+                audio_card_rect.x + card_inner_pad_x, y_offset, slider_w, slider_h
             )
             y_offset += 100
 
         # Card de Controles (Direita)
         controls_card_rect = pygame.Rect(
-            start_x + card_width + card_gap, 100, card_width, card_height
+            start_x + card_width + card_gap, card_y, card_width, card_height
         )
         self.layout_rects["controls_card"] = controls_card_rect
 
@@ -146,18 +148,23 @@ class SettingsView:
         y_offset = controls_card_rect.y + 60
 
         # Agrupar toggles
-        for key in ["mouse_control", "auto_fire", "gamepad_enabled"]:
+        for key in [
+            "p1_prefers_keyboard",
+            "mouse_control",
+            "auto_fire",
+            "gamepad_enabled",
+        ]:
             self.layout_rects["toggles"][key] = pygame.Rect(
-                controls_card_rect.x + 30, y_offset, toggle_w, toggle_h
+                controls_card_rect.x + card_inner_pad_x, y_offset, toggle_w, toggle_h
             )
             y_offset += 50
 
         # Seletor de resolução
         y_offset += 20
         self.layout_rects["resolution_label"] = pygame.Rect(
-            controls_card_rect.x + 30,
+            controls_card_rect.x + card_inner_pad_x,
             y_offset,
-            controls_card_rect.width - 60,
+            controls_card_rect.width - (2 * card_inner_pad_x),
             30,
         )
 
@@ -168,7 +175,7 @@ class SettingsView:
         cols = 3
         button_gap_x = 10
         button_gap_y = 10
-        available_width_for_buttons = controls_card_rect.width - 60
+        available_width_for_buttons = controls_card_rect.width - (2 * card_inner_pad_x)
         button_w = (available_width_for_buttons - (cols - 1) * button_gap_x) / cols
         button_h = 35
 
@@ -184,7 +191,7 @@ class SettingsView:
             row = i // cols
             col = i % cols
 
-            x = controls_card_rect.x + 30 + col * (button_w + button_gap_x)
+            x = controls_card_rect.x + card_inner_pad_x + col * (button_w + button_gap_x)
             y = grid_start_y + row * (button_h + button_gap_y)
 
             resolution_buttons.append(pygame.Rect(x, y, button_w, button_h))
@@ -235,6 +242,7 @@ class SettingsView:
         self.toggles["mouse_control"] = self.preferences.mouse_control
         self.toggles["auto_fire"] = self.preferences.auto_fire
         self.toggles["gamepad_enabled"] = self.preferences.gamepad_enabled
+        self.toggles["p1_prefers_keyboard"] = self.preferences.p1_prefers_keyboard
 
         saved_res = self.preferences.resolution
         for i, (w, h, _) in enumerate(self.available_resolutions):
@@ -355,6 +363,9 @@ class SettingsView:
                 if rect.collidepoint(pos):
                     self.toggles[key] = not self.toggles[key]
                     # Salvar nas preferências
+                    if key == "p1_prefers_keyboard":
+                        self.preferences.p1_prefers_keyboard = self.toggles[key]
+                        self._apply_live_control_settings()
                     if key == "mouse_control":
                         self.preferences.mouse_control = self.toggles[key]
                         self._apply_live_control_settings()
@@ -488,6 +499,7 @@ class SettingsView:
         self._app.preferences.mouse_control = self.preferences.mouse_control
         self._app.preferences.auto_fire = self.preferences.auto_fire
         self._app.preferences.gamepad_enabled = self.preferences.gamepad_enabled
+        self._app.preferences.p1_prefers_keyboard = self.preferences.p1_prefers_keyboard
 
         # Sincroniza sistema de input global.
         self._app.input.mouse_control = self.preferences.mouse_control
@@ -497,6 +509,9 @@ class SettingsView:
         gamepad = getattr(self._app, "gamepad", None)
         if gamepad is not None:
             gamepad.set_enabled(self.preferences.gamepad_enabled)
+            gamepad.set_primary_keyboard_preference(
+                self.preferences.p1_prefers_keyboard
+            )
 
         # Se houver cena de gameplay ativa por baixo (abrindo settings via pause),
         # atualiza também a nave existente sem exigir reinício.
@@ -659,6 +674,55 @@ class SettingsView:
                 percent_surf, (percent_x, rect.centery - percent_surf.get_height() / 2)
             )
 
+        # Instruções de controles na coluna da esquerda.
+        gamepad_active = (
+            self._app.gamepad.is_active
+            if (self._app is not None and hasattr(self._app, "gamepad"))
+            else False
+        )
+        if gamepad_active:
+            instructions = [
+                "CONTROLES:",
+                "• LS: Mover",
+                "• RT: Atirar | X: Girar",
+                "• LT: Dash/Charge | D-pad+LB/RB: Poderes",
+                "• START: Pausar | BACK: Sair",
+                "",
+                "DICA: Ative 'P1 no teclado / P2 no controle'",
+                "para deixar o controle livre para o segundo jogador.",
+            ]
+        else:
+            instructions = [
+                "CONTROLES:",
+                "• Mouse ou WASD/Setas: Mover",
+                "• Espaço: Atirar | Ctrl: Girar",
+                "• Shift: Dash | Teclado Num: Poderes",
+                "• P: Pausar | ESC: Sair",
+                "",
+                "DICA: Ative 'P1 no teclado / P2 no controle'",
+                "para usar o controle no segundo jogador.",
+            ]
+
+        slider_bottom = max(
+            (slider_rect.bottom for slider_rect in self.layout_rects["sliders"].values()),
+            default=card_rect.y + 80,
+        )
+        instruction_start_y = slider_bottom + 18 + offset_y
+        instruction_x = card_rect.x + 30
+        instruction_max_width = card_rect.width - 60
+        instruction_font = self.small_font
+        for line in instructions:
+            if line == "":
+                instruction_start_y += 8
+                continue
+            color = CUSTOM_GOLD if ":" in line or "DICA" in line else colors.WHITE
+            wrapped_lines = wrap_text(instruction_font, line, instruction_max_width)
+            for wrapped_line in wrapped_lines:
+                text_surf = instruction_font.render(wrapped_line, True, color)
+                text_surf.set_alpha(alpha)
+                surface.blit(text_surf, (instruction_x, instruction_start_y))
+                instruction_start_y += 18
+
         surface.set_clip(None)
 
     def _draw_controls_card(
@@ -680,6 +744,7 @@ class SettingsView:
 
         # Toggles
         labels = {
+            "p1_prefers_keyboard": "P1 no teclado / P2 no controle",
             "mouse_control": "Controle por Mouse",
             "auto_fire": "Tiro Automático",
             "gamepad_enabled": "Controle Xbox",
@@ -779,56 +844,6 @@ class SettingsView:
             surface.blit(bg_surf, bg_rect)
 
             surface.blit(tooltip_surf, (tooltip_x, tooltip_y))
-
-        # Instruções de controles (trocam conforme o input ativo).
-        gamepad_active = (
-            self._app.gamepad.is_active
-            if (self._app is not None and hasattr(self._app, "gamepad"))
-            else False
-        )
-        if gamepad_active:
-            instructions = [
-                "CONTROLES:",
-                "• LS: Mover",
-                "• RT: Atirar | X: Girar",
-                "• LT: Dash/Charge | D-pad+LB/RB: Poderes",
-                "• START: Pausar | BACK: Sair",
-                "",
-                "NOTA: Mudar resolução",
-                "requer reiniciar.",
-            ]
-        else:
-            instructions = [
-                "CONTROLES:",
-                "• Mouse ou WASD/Setas: Mover",
-                "• Espaço: Atirar | Ctrl: Girar",
-                "• Shift: Dash | Teclado Num: Poderes",
-                "• P: Pausar | ESC: Sair",
-                "",
-                "NOTA: Mudar resolução",
-                "requer reiniciar.",
-            ]
-
-        resolution_buttons = cast(
-            List[pygame.Rect], self.layout_rects["resolution_buttons"]
-        )
-        if resolution_buttons:
-            max_button_y = max(r.y + r.height for r in resolution_buttons)
-        else:
-            max_button_y = card_rect.y + 250
-
-        y_offset = max_button_y + 30 + offset_y
-
-        for line in instructions:
-            if line == "":
-                y_offset += 8
-                continue
-            color = CUSTOM_GOLD if ":" in line or "NOTA" in line else colors.WHITE
-            text_surf = self.small_font.render(line, True, color)
-            text_surf.set_alpha(alpha)
-            text_x = card_rect.centerx - text_surf.get_width() // 2
-            surface.blit(text_surf, (text_x, y_offset))
-            y_offset += 22
 
         surface.set_clip(None)
 

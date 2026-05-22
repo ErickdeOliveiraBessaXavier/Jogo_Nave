@@ -21,7 +21,7 @@ Convenções para pygame 2.x com Xbox controller (referência: doc oficial em
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, List, Literal, Optional
 
 import pygame
@@ -97,6 +97,7 @@ class GamepadManager:
         # nele. Segundo controle vai pro slot 1 (candidato a P2).
         self._slots: List[Optional[_GamepadSlotState]] = [None] * MAX_GAMEPAD_SLOTS
         self._enabled: bool = False
+        self._prefer_slot_1_for_new_devices: bool = False
 
     # ------------------------------------------------------------------
     # Backward compat: ``_joystick`` antigo aponta pra slot 0
@@ -142,20 +143,43 @@ class GamepadManager:
     # Ciclo de vida
     # ------------------------------------------------------------------
 
-    def init(self) -> None:
+    def init(self, prefer_slot_1: bool = False) -> None:
         """Inicializa o módulo pygame.joystick e abre os disponíveis."""
+        self._prefer_slot_1_for_new_devices = bool(prefer_slot_1)
         if not pygame.joystick.get_init():
             pygame.joystick.init()
+        self._scan()
+
+    def set_primary_keyboard_preference(self, enabled: bool) -> None:
+        """Define se controles novos devem priorizar o slot 1 (P2)."""
+        enabled = bool(enabled)
+        if self._prefer_slot_1_for_new_devices == enabled:
+            return
+        self._prefer_slot_1_for_new_devices = enabled
+        self._rescan_devices()
+
+    def _reset_slots(self) -> None:
+        for state in self._slots:
+            if state is None:
+                continue
+            try:
+                state.joystick.quit()
+            except pygame.error:
+                pass
+        self._slots = [None] * MAX_GAMEPAD_SLOTS
+
+    def _rescan_devices(self) -> None:
+        self._reset_slots()
         self._scan()
 
     def _scan(self) -> None:
         """Abre joysticks disponíveis preenchendo slots livres em ordem."""
         count = pygame.joystick.get_count()
         for raw_idx in range(count):
-            self.add_device(raw_idx, prefer_slot_1=False)
+            self.add_device(raw_idx, prefer_slot_1=self._prefer_slot_1_for_new_devices)
 
     def add_device(
-        self, device_index: int, prefer_slot_1: bool = False
+        self, device_index: int, prefer_slot_1: Optional[bool] = None
     ) -> Optional[int]:
         """Reivindica um joystick em um slot livre. Retorna o slot ocupado.
 

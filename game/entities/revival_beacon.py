@@ -17,7 +17,8 @@ from typing import TYPE_CHECKING, Final
 
 import pygame
 
-from ..core.colors import WHITE
+from ..core.assets import get_font
+from ..core.colors import WHITE, CUSTOM_GOLD, CYAN
 
 if TYPE_CHECKING:
     from ..systems.player_slot import PlayerSlot
@@ -46,6 +47,9 @@ class RevivalBeacon:
         self.dead: bool = False
         # Animação visual continua mesmo sem ninguém no raio (pulse).
         self._pulse_timer: float = 0.0
+        self._show_hint: bool = False
+        self._hint_font = get_font(12)
+        self._button_font = get_font(16)
 
     # ------------------------------------------------------------------
     # Update
@@ -55,14 +59,22 @@ class RevivalBeacon:
         """Acumula progresso. Chamado pela cena quando alguém está no raio
         segurando o botão de revive."""
         self.hold_progress += dt
+        self._show_hint = True
 
     def reset_progress(self) -> None:
         """Zera o progresso. Chamado pela cena quando ninguém qualifica."""
         self.hold_progress = 0.0
+        # A cena deve atualizar _show_hint externamente ou resetar aqui se 
+        # ninguém estiver sequer perto. Por simplificação, a PlayingScene 
+        # passará a gerir a proximidade visual.
 
     def update_visual(self, dt: float) -> None:
         """Avança o pulso visual independente do progresso de revive."""
         self._pulse_timer = (self._pulse_timer + dt) % 1.0
+
+    def set_hint_visible(self, visible: bool) -> None:
+        """Define se a dica de botão deve ser exibida."""
+        self._show_hint = visible
 
     @property
     def progress_ratio(self) -> float:
@@ -141,3 +153,21 @@ class RevivalBeacon:
         pygame.draw.line(
             surface, base_color, (cx, cy - cross_r), (cx, cy + cross_r), 3
         )
+
+        # Dica Visual (Instrução de botão)
+        if self._show_hint:
+            # Badge do Botão [Y]
+            btn_surf = self._button_font.render("Y", True, (20, 20, 20))
+            btn_bg = pygame.Rect(cx - 15, cy - radius - 45, 30, 30)
+            pygame.draw.rect(surface, CUSTOM_GOLD, btn_bg, border_radius=15)
+            surface.blit(btn_surf, btn_surf.get_rect(center=btn_bg.center))
+
+            # Texto "SEGURE PARA REVIVER"
+            txt_surf = self._hint_font.render("SEGURE PARA REVIVER", True, WHITE)
+            surface.blit(txt_surf, (cx - txt_surf.get_width() // 2, cy - radius - 65))
+            
+            # Progresso em texto se estiver segurando
+            if ratio > 0:
+                pct_surf = self._hint_font.render(f"{int(ratio * 100)}%", True, CYAN)
+                surface.blit(pct_surf, (cx - pct_surf.get_width() // 2, cy - radius - 15))
+
