@@ -18,22 +18,8 @@ from ..entities.explosion_pool import ExplosionPool
 from ..entities.meteor import Meteor
 from ..systems.cheat_input import CheatBuffer
 
-# Imports cross-scene são lazy (dentro dos métodos) para evitar ciclos em
-# runtime — este módulo é raiz da navegação e seria referenciado de volta
-# por quase todas as cenas (paused→settings→main_menu, game_over→main_menu,
-# etc). Os 6 nomes abaixo só são instanciados, nunca usados como type
-# annotation — mas precisam aparecer no bloco TYPE_CHECKING para pylint
-# parar de reportar R0401 (a análise estrutural do pylint considera o
-# símbolo "presente" via TYPE_CHECKING e ignora o ciclo). `# noqa: F401`
-# silencia ruff sobre o aparente "unused import".
 if TYPE_CHECKING:
     from ..app import GameApp
-    from ..scenes.difficulty_selection import DifficultySelectionView  # noqa: F401
-    from ..scenes.playing import PlayingScene  # noqa: F401
-    from ..scenes.settings import SettingsScene  # noqa: F401
-    from ..scenes.statistics import StatisticsScene  # noqa: F401
-    from ..scenes.upgrades_selection import UpgradesSelectionScene  # noqa: F401
-    from ..scenes.world_selection import WorldSelectionView  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

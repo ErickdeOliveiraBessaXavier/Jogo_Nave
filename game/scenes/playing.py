@@ -2169,12 +2169,7 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
 
     def _spawn_revival_beacon(self, slot: PlayerSlot) -> None:
-        """Cria o beacon na posição da nave do slot que acabou de morrer.
-
-        No-op em single-player (1 slot só, sem outro vivo pra ativar — o
-        próximo frame dispara game over de qualquer forma). Em coop, registra
-        o beacon no próprio slot para que `_update_revival_beacons` o processe.
-        """
+        """Cria o beacon na posição da nave do slot que acabou de morrer."""
         if self.roster.count() < 2:
             return
         ship = slot.ship
@@ -2182,6 +2177,7 @@ class PlayingScene(Scene):
             x=float(ship.rect.centerx),
             y=float(ship.rect.centery),
             for_slot=slot,
+            ship_image=ship.ship_image
         )
         logger.info(
             "Beacon de revive spawnou em (%.0f, %.0f) para slot morto.",

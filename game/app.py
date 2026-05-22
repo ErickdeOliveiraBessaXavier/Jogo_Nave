@@ -7,7 +7,7 @@ from .core.config import config as Config
 from .core.config import set_screen_resolution
 from .core.difficulty import DifficultyPreset
 from .core.events import EventBus
-from .core.gamepad import GamepadManager, XboxButton
+from .core.gamepad import MAX_GAMEPAD_SLOTS, GamepadManager, XboxButton
 from .core.input import Input
 from .core.levels import FIXED_LEVELS, LevelManager
 from .core.meta_progression import PlayerProfile
@@ -174,6 +174,10 @@ class GameApp:
         gameplay devem definir o atributo de classe ``is_gameplay_scene``."""
         return bool(getattr(scene, "is_gameplay_scene", False))
 
+    def _any_gamepad_active(self) -> bool:
+        """True quando pelo menos um controle ativo está disponível."""
+        return any(self.gamepad.is_slot_active(slot) for slot in range(MAX_GAMEPAD_SLOTS))
+
     def _set_cursor_mode(self, mode: str) -> None:
         """Alterna entre ``cursor`` (mouse/stick) e ``focus`` (DPad/teclado).
 
@@ -243,7 +247,7 @@ class GameApp:
         Em gameplay esta tradução é pulada — a PlayingScene processa os
         eventos JOY diretamente para preservar semântica (botão A = tiro etc).
         """
-        if not self.gamepad.is_active or self._scene_is_gameplay(scene):
+        if not self._any_gamepad_active() or self._scene_is_gameplay(scene):
             return
 
         if event.type == pygame.JOYBUTTONDOWN:
@@ -386,22 +390,30 @@ class GameApp:
         sintéticos para que cenas só-mouse (settings, paused, etc) reajam
         ao hover. Só ativo fora de gameplay.
 
-        RS e LS funcionam simultaneamente — pega o stick com maior magnitude.
+        RS e LS de qualquer slot ativo funcionam simultaneamente — pega o
+        stick com maior magnitude.
         Em gameplay esta função retorna cedo; o LS continua livre para
         mover a nave (PlayingScene lê LS direto via input.gamepad_movement_vector).
         """
-        if not self.gamepad.is_active or self._scene_is_gameplay(scene):
+        if not self._any_gamepad_active() or self._scene_is_gameplay(scene):
             return
 
         # Dead zone customizada com reescala linear: sem isso, drift mecânico
         # do stick (>0.18 padrão) empurraria o cursor lentamente para uma
         # borda mesmo com o usuário sem tocar no controle.
-        rx, ry = self.gamepad.get_stick_rescaled("right", _VIRTUAL_CURSOR_DEAD_ZONE)
-        lx, ly = self.gamepad.get_stick_rescaled("left", _VIRTUAL_CURSOR_DEAD_ZONE)
-        # Pega o stick com magnitude maior — evita somas que causariam
-        # cancelamento se o jogador segurar ambos em direções opostas.
-        if (lx * lx + ly * ly) > (rx * rx + ry * ry):
-            rx, ry = lx, ly
+        rx, ry = 0.0, 0.0
+        best_mag_sq = 0.0
+        for slot in range(MAX_GAMEPAD_SLOTS):
+            if not self.gamepad.is_slot_active(slot):
+                continue
+            for side in ("right", "left"):
+                sx, sy = self.gamepad.get_stick_rescaled(
+                    side, _VIRTUAL_CURSOR_DEAD_ZONE, slot=slot
+                )
+                mag_sq = (sx * sx) + (sy * sy)
+                if mag_sq > best_mag_sq:
+                    best_mag_sq = mag_sq
+                    rx, ry = sx, sy
 
         # Sincroniza o cursor virtual com a posição real do mouse a cada
         # frame. Sem isso, ao entrar numa cena nova (e.g. pausa após
