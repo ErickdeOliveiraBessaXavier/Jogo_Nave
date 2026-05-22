@@ -37,7 +37,6 @@ SLOT_UNLOCK_COSTS = [
     35,  # Slot 7 - custa 35 estrelas
     50,  # Slot 8 - custa 50 estrelas
 ]
-
 # Quais upgrades vêm desbloqueados por padrão (MVP)
 DEFAULT_UNLOCKED: List[UpgradeType] = [
     UpgradeType.SHIELD_BURST,
@@ -54,6 +53,9 @@ DEFAULT_UNLOCKED: List[UpgradeType] = [
     UpgradeType.CHAIN_LIGHTNING,
     UpgradeType.ORBITAL_SHIELD,
     UpgradeType.PLASMA_BEAM,
+    UpgradeType.WINGMAN,
+    UpgradeType.BERSERK,
+    UpgradeType.COOP_LINK,
 ]
 
 # Parâmetros de balanceamento do EMP (tempo e intensidade)

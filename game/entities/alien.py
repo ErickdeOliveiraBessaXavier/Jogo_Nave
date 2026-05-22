@@ -213,7 +213,7 @@ class Alien:
             sound_manager.play_shot()
             # Agressividade: A bala criada também herda o multiplicador de velocidade
             bullet = AlienBullet(self.x + self.w / 2, self.y + self.h)
-            bullet.speed_y *= self.aggressiveness_multiplier
+            bullet.vy *= self.aggressiveness_multiplier
             bullets = [bullet]
 
         # Atualizar animação

@@ -27,6 +27,7 @@ class GameplayInputHandler:
     primário.
     """
 
+    # Inicializa o handler de inputs.
     def __init__(self, scene: "PlayingScene") -> None:
         self.scene = scene
         # Estado do gatilho LT por slot do gamepad (calibrado na primeira

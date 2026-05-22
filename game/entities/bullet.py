@@ -384,6 +384,10 @@ class Bullet:
             for i in range(1, 3):
                 ring_rect = rect.inflate(i * 4, i * 4)
                 pygame.draw.rect(surface, (255, 100, 255, 100), ring_rect, 1)
+        elif self.ship_id == "berserk":
+            # Berserk: Rosa dos Ventos - Roxo brilhante (similar ao Stone Golem)
+            pygame.draw.ellipse(surface, (150, 0, 255), rect)
+            pygame.draw.ellipse(surface, (255, 100, 255), rect.inflate(-4, -4))
         else:
             # Padrão / Outros
             color = colors.PURPLE if self.piercing else colors.YELLOW

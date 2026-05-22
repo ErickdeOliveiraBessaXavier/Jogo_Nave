@@ -24,11 +24,14 @@ class UpgradeType(Enum):
     BLACK_HOLE = auto()  # Ultimate: Buraco Negro
     CANNON_TOWER = auto()  # Ultimate: Torres de Canhão
     # Novas Variantes
-    BLINK_DASH = auto() # Teleporte curto/Dash evasivo
-    GRAVITY_BOMB = auto() # Granada que cria mini-vórtice de atração
-    CHAIN_LIGHTNING = auto() # Tiro que salta entre inimigos
-    ORBITAL_SHIELD = auto() # Escudos orbitais físicos que bloqueiam tiros
-    PLASMA_BEAM = auto() # Feixe contínuo frontal destruidor
+    BLINK_DASH = auto()  # Teleporte curto/Dash evasivo
+    GRAVITY_BOMB = auto()  # Granada que cria mini-vórtice de atração
+    CHAIN_LIGHTNING = auto()  # Tiro que salta entre inimigos
+    ORBITAL_SHIELD = auto()  # Escudos orbitais físicos que bloqueiam tiros
+    PLASMA_BEAM = auto()  # Feixe contínuo frontal destruidor
+    WINGMAN = auto()  # Naves de escolta autônomas
+    BERSERK = auto()  # Ataque omnidirecional insano
+    COOP_LINK = auto()  # Feixe de dano cooperativo
 
 
 class UpgradeCategory(Enum):
@@ -59,6 +62,7 @@ class UpgradeContextProtocol(Protocol):
     difficulty_settings: Dict[str, Any]
     sound_manager: Any
     god_mode: bool
+    scene: Any
     # Campos opcionais; usamos getattr com fallback
 
 
@@ -950,6 +954,120 @@ class PlasmaBeamUpgrade(ActiveUpgrade):
                 pass
 
 
+class WingmanUpgrade(ActiveUpgrade):
+    """Naves de escolta autônomas que perseguem inimigos."""
+
+    def allows_refresh(self) -> bool:
+        return False
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        em = self._ctx_entity_manager(ctx)
+        if not ship or not em:
+            return
+        duration = self.get_effective_duration(ctx)
+        if hasattr(em, "spawn_wingman"):
+            try:
+                em.spawn_wingman(ship, duration)
+            except (AttributeError, TypeError):
+                pass
+        else:
+            # Fallback
+            try:
+                setattr(ship, "wingman_active", True)
+                setattr(ship, "wingman_timer", duration)
+            except (AttributeError, TypeError):
+                pass
+
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
+        if not ctx:
+            return
+        ship = self._ctx_ship(ctx)
+        if ship:
+            try:
+                setattr(ship, "wingman_active", False)
+                setattr(ship, "wingman_timer", 0.0)
+            except (AttributeError, TypeError):
+                pass
+
+
+class BerserkUpgrade(ActiveUpgrade):
+    """Ataque omnidirecional (Rosa dos Ventos)."""
+
+    def allows_refresh(self) -> bool:
+        return False
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        if not ship:
+            return
+        duration = self.get_effective_duration(ctx)
+        if hasattr(ship, "activate_berserk"):
+            try:
+                ship.activate_berserk(duration)
+            except (AttributeError, TypeError):
+                pass
+        else:
+            try:
+                setattr(ship, "berserk_active", True)
+                setattr(ship, "berserk_timer", duration)
+            except (AttributeError, TypeError):
+                pass
+
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
+        if not ctx:
+            return
+        ship = self._ctx_ship(ctx)
+        if ship:
+            try:
+                setattr(ship, "berserk_active", False)
+                setattr(ship, "berserk_timer", 0.0)
+            except (AttributeError, TypeError):
+                pass
+
+
+class CoopLinkUpgrade(ActiveUpgrade):
+    """Feixe de energia entre dois jogadores."""
+
+    def allows_refresh(self) -> bool:
+        return False
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        em = self._ctx_entity_manager(ctx)
+        scene = self._ctx_scene(ctx)
+        if not ship or not em or not scene:
+            return
+        duration = self.get_effective_duration(ctx)
+
+        # Encontra os jogadores ativos para vincular
+        try:
+            ships = [slot.ship for slot in scene.roster.alive_slots()]
+            if len(ships) < 2:
+                # Se for single player, não há com quem vincular
+                return
+
+            ship1 = ships[0]
+            ship2 = ships[1]
+
+            if hasattr(em, "spawn_coop_link"):
+                em.spawn_coop_link(ship1, ship2, duration)
+        except (AttributeError, TypeError):
+            # Fallback (opcional)
+            pass
+
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
+        if not ctx:
+            return
+        ship = self._ctx_ship(ctx)
+        if ship:
+            try:
+                setattr(ship, "coop_link_active", False)
+                setattr(ship, "coop_link_timer", 0.0)
+            except (AttributeError, TypeError):
+                pass
+
+
 # ===================== Registro e Fábrica ================================
 
 UPGRADES_REGISTRY: Dict[UpgradeType, Callable[[], ActiveUpgrade]] = {}
@@ -1108,6 +1226,39 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_charges=None,
         slot_weight=3,
     ),
+    UpgradeType.WINGMAN: UpgradeMeta(
+        type=UpgradeType.WINGMAN,
+        name="WING",
+        desc="Naves de escolta autônomas que buscam e atacam inimigos.",
+        icon_id="wingman",
+        category=UpgradeCategory.OFFENSIVE,
+        base_cooldown=90.0,
+        base_duration=30.0,
+        base_charges=None,
+        slot_weight=3,
+    ),
+    UpgradeType.BERSERK: UpgradeMeta(
+        type=UpgradeType.BERSERK,
+        name="BERS",
+        desc="Dispara projéteis continuamentes em todas as direções (Rosa dos Ventos).",
+        icon_id="berserk",
+        category=UpgradeCategory.OFFENSIVE,
+        base_cooldown=120.0,
+        base_duration=8.0,
+        base_charges=None,
+        slot_weight=3,
+    ),
+    UpgradeType.COOP_LINK: UpgradeMeta(
+        type=UpgradeType.COOP_LINK,
+        name="LINK",
+        desc="Feixe de energia entre jogadores que causa dano a quem cruzar.",
+        icon_id="coop_link",
+        category=UpgradeCategory.UTILITY,
+        base_cooldown=60.0,
+        base_duration=5.0,
+        base_charges=None,
+        slot_weight=2,
+    ),
 }
 
 
@@ -1167,6 +1318,18 @@ def _factory_plasma_beam() -> ActiveUpgrade:
     return PlasmaBeamUpgrade(UPGRADES_META[UpgradeType.PLASMA_BEAM])
 
 
+def _factory_wingman() -> ActiveUpgrade:
+    return WingmanUpgrade(UPGRADES_META[UpgradeType.WINGMAN])
+
+
+def _factory_berserk() -> ActiveUpgrade:
+    return BerserkUpgrade(UPGRADES_META[UpgradeType.BERSERK])
+
+
+def _factory_coop_link() -> ActiveUpgrade:
+    return CoopLinkUpgrade(UPGRADES_META[UpgradeType.COOP_LINK])
+
+
 UPGRADES_REGISTRY.update(
     {
         UpgradeType.SHIELD_BURST: _factory_shield,
@@ -1183,6 +1346,9 @@ UPGRADES_REGISTRY.update(
         UpgradeType.CHAIN_LIGHTNING: _factory_chain_lightning,
         UpgradeType.ORBITAL_SHIELD: _factory_orbital_shield,
         UpgradeType.PLASMA_BEAM: _factory_plasma_beam,
+        UpgradeType.WINGMAN: _factory_wingman,
+        UpgradeType.BERSERK: _factory_berserk,
+        UpgradeType.COOP_LINK: _factory_coop_link,
     }
 )
 
@@ -1217,6 +1383,9 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
             "chain_lightning": "L",
             "orbital_shield": "R",
             "plasma_beam": "P",
+            "wingman": "W",
+            "berserk": "Z",
+            "coop_link": "C",
         }
         icon = icon_id_map.get(icon_id)
         if icon:
@@ -1250,6 +1419,9 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
         "LIGH": "L",
         "ORB": "R",
         "BEAM": "P",
+        "WING": "W",
+        "BERS": "Z",
+        "LINK": "C",
     }
 
     icon = icon_name_map.get(upgrade_name)

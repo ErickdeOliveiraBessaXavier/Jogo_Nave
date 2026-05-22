@@ -68,6 +68,8 @@ from ..entities.stone_golem_boss import (
     StoneGolemBoss,
 )
 from ..entities.stone_sentry import StoneSentry
+from ..entities.wingman import Wingman
+from ..entities.coop_link import CoopLink
 from .collision_protocols import Removable
 from .entity_context import EnemyUpdateContext
 from .hit_result import MeteorSpec
@@ -123,6 +125,8 @@ class EntityManager:
         ] = None
 
         self.mini_ships: list[MiniShip] = []
+        self.wingmen: list[Wingman] = []
+        self.coop_links: list[CoopLink] = []
         self.formations: list[Formation] = []
         self.mountain_propellers: list[MountainPropeller] = []
         self.spikes: list[Spike] = []
@@ -607,6 +611,21 @@ class EntityManager:
             b.update(dt)
         for b in self.cacador_lasers:
             b.update(dt)
+        for w in self.wingmen:
+            w.update(dt, self._cached_all_enemies, self.mini_ship_bullets)
+        for link in self.coop_links:
+            link.update(dt)
+            # Colisão do feixe com inimigos
+            p1, p2 = link.get_collision_line()
+            damage = link.damage * dt
+            for e in self.enemies:
+                if getattr(e, "dead", False):
+                    continue
+                if e.rect.clipline(p1, p2):
+                    if hasattr(e, "take_damage"):
+                        e.take_damage(damage)
+                    elif hasattr(e, "lives"):
+                        e.lives -= damage
 
     def _update_enemy_projectiles(self, enemy_dt: float) -> None:
         """Projéteis inimigos: alien/serpent/boss/eye (todos respeitam freeze)."""
@@ -991,6 +1010,8 @@ class EntityManager:
             # Laser em linha pode ter rect com altura/largura zero;
             # não usar culling por rect para não sumir no draw.
             laser.draw(surface)
+        for link in self.coop_links:
+            link.draw(surface)
         for b in self.black_holes:
             b.draw(surface)
         for w in self.emp_waves:
@@ -1097,6 +1118,16 @@ class EntityManager:
         boss.is_side_scroll = self.is_side_scroll
         self.boss = boss
         return boss
+
+    def spawn_wingman(self, player: Any, duration: float) -> Wingman:
+        wingman = Wingman(player, duration)
+        self.wingmen.append(wingman)
+        return wingman
+
+    def spawn_coop_link(self, ship1: Any, ship2: Any, duration: float) -> CoopLink:
+        link = CoopLink(ship1, ship2, duration)
+        self.coop_links.append(link)
+        return link
 
     def spawn_meteor(
         self,
@@ -1245,6 +1276,8 @@ class EntityManager:
         self._filter_dead_inplace(self.slime_drips)
         self._filter_dead_inplace(self.eye_lasers)
         self._filter_dead_inplace(self.mini_ship_bullets)
+        self._filter_dead_inplace(self.wingmen)
+        self._filter_dead_inplace(self.coop_links)
         self._filter_dead_inplace(self.chain_lightnings)
 
         # Processar remoção de inimigos via protocolos should_remove/on_remove

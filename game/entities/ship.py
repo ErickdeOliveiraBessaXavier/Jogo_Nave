@@ -198,6 +198,7 @@ class Ship:
         # Caçador: charge shot.
         self.charge_shot_active: bool = False
         self.charge_shot_timer: float = 0.0  # tempo acumulado de carga
+        self.berserk_timer: float = 0.0  # tempo restante do modo Berserk
 
         # Buffer de posições do cursor para reaction_delay (x, y, timestamp).
         # Deque: popleft O(1) para descartar entradas vencidas, evitando
@@ -409,6 +410,9 @@ class Ship:
 
     def activate_explosive_shots(self, charges: int) -> None:
         self._powerups.activate_explosive_shots(charges)
+
+    def activate_berserk(self, duration: float) -> None:
+        self.berserk_timer = duration
 
     def activate_chain_shot(self, duration: float | None = None) -> None:
         self._powerups.activate_chain_shot(duration)
@@ -643,6 +647,7 @@ class Ship:
                 self.is_entering = False
 
         self._powerups.update_timers(dt)
+        self.berserk_timer = max(0.0, self.berserk_timer - dt)
         self._powerups.update_repulsion_shield(dt, entity_manager)
         self._movement.update_dash(dt)
 

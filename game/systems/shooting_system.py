@@ -58,6 +58,7 @@ class ShootingSystem:
         # Naves não-mapeadas têm cooldown 0 implícito (atira imediatamente).
         self._cooldowns: dict[int, float] = {}
         self._charged_laser_channel: Any | None = None
+        self._berserk_fire_timer: float = 0.0
 
     def is_ready(self, ship: Ship) -> bool:
         return self._cooldowns.get(id(ship), 0.0) <= 0.0
@@ -84,6 +85,40 @@ class ShootingSystem:
             if not has_alive:
                 self._charged_laser_channel.stop()
                 self._charged_laser_channel = None
+
+    def fire_berserk(self, ship: Ship, player_damage_multiplier: float, dt: float) -> None:
+        """Dispara projéteis em todas as direções durante o modo Berserk."""
+        self._berserk_fire_timer -= dt
+        if self._berserk_fire_timer <= 0:
+            self._berserk_fire_timer = 0.12  # Frequência rápida
+
+            cx = ship.x + ship.w / 2
+            cy = ship.y + ship.h / 2
+            
+            # Bônus de dano Berserk (1.5x)
+            adjusted_damage = int(
+                Config.BULLET_BASE_DAMAGE 
+                * player_damage_multiplier 
+                * ship.damage_multiplier 
+                * 1.5
+            )
+
+            # Dispara em 8 direções (Rosa dos ventos)
+            for i in range(8):
+                angle_deg = i * 45.0
+                angle_rad = math.radians(angle_deg)
+                dir_vec = (math.cos(angle_rad), math.sin(angle_rad))
+                
+                # Usando BulletPool via EntityManager.spawn_bullet
+                self._em.spawn_bullet(
+                    cx, cy,
+                    damage=adjusted_damage,
+                    direction=dir_vec,
+                    ship_id="berserk"
+                )
+            
+            # Efeito sonoro
+            sound_manager.play_shot()
 
     def fire(self, ship: Ship, player_damage_multiplier: float) -> None:
         """Dispara o tiro apropriado e reinicia o cooldown.

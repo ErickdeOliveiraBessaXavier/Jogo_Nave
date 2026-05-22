@@ -970,6 +970,10 @@ class PlayingScene(Scene):
                     gamepad_vec=gamepad_vec,
                 )
 
+                # Berserk: disparo em todas as direções (Rosa dos ventos)
+                if getattr(ship, "berserk_timer", 0.0) > 0.0:
+                    self.shooting.fire_berserk(ship, self.player_damage_multiplier, dt)
+
                 # Caçador: enquanto a carga está acumulando, suprime auto-fire/hold-shoot.
                 # O disparo carregado sai no MOUSEBUTTONUP.
                 charging = ship.profile.has_charge_shot and ship.charge_shot_active
