@@ -23,6 +23,12 @@ class UpgradeType(Enum):
     AIR_STRIKE = auto()  # Ultimate: Bombardeio Aéreo
     BLACK_HOLE = auto()  # Ultimate: Buraco Negro
     CANNON_TOWER = auto()  # Ultimate: Torres de Canhão
+    # Novas Variantes
+    BLINK_DASH = auto() # Teleporte curto/Dash evasivo
+    GRAVITY_BOMB = auto() # Granada que cria mini-vórtice de atração
+    CHAIN_LIGHTNING = auto() # Tiro que salta entre inimigos
+    ORBITAL_SHIELD = auto() # Escudos orbitais físicos que bloqueiam tiros
+    PLASMA_BEAM = auto() # Feixe contínuo frontal destruidor
 
 
 class UpgradeCategory(Enum):
@@ -757,6 +763,193 @@ class CannonTowerUpgrade(ActiveUpgrade):
         self.active = False
 
 
+class BlinkDashUpgrade(ActiveUpgrade):
+    """Teleporte curto/Dash evasivo.
+    Dá um boost de velocidade e invulnerabilidade por um tempo muito curto.
+    """
+
+    def allows_refresh(self) -> bool:
+        return False
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        if ship is None:
+            return
+        duration = self.get_effective_duration(ctx)
+        if hasattr(ship, "activate_dash"):
+            try:
+                ship.activate_dash(duration)
+            except (AttributeError, TypeError):
+                pass
+        else:
+            try:
+                setattr(ship, "dash_active", True)
+                setattr(ship, "dash_timer", duration)
+                if not hasattr(ship, "original_speed"):
+                    setattr(ship, "original_speed", getattr(ship, "speed", 5))
+                ship.speed = getattr(ship, "original_speed", 5) * 2.5
+                if hasattr(ship, "activate_invulnerability"):
+                    ship.activate_invulnerability(duration)
+            except (AttributeError, TypeError):
+                pass
+
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
+        if not ctx:
+            return
+        ship = self._ctx_ship(ctx)
+        if ship:
+            try:
+                setattr(ship, "dash_active", False)
+                setattr(ship, "dash_timer", 0.0)
+                if hasattr(ship, "original_speed"):
+                    ship.speed = getattr(ship, "original_speed", 5)
+            except (AttributeError, TypeError):
+                pass
+
+
+class GravityBombUpgrade(ActiveUpgrade):
+    """Granada de Singularidade que cria um mini-vórtice de atração."""
+
+    def allows_refresh(self) -> bool:
+        return False
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        em = self._ctx_entity_manager(ctx)
+        if not ship or not em:
+            return
+        duration = self.get_effective_duration(ctx)
+        if hasattr(em, "spawn_gravity_bomb"):
+            try:
+                em.spawn_gravity_bomb(ship.x + ship.w / 2, ship.y, duration)
+            except (AttributeError, TypeError):
+                pass
+        else:
+            try:
+                setattr(em, "gravity_bomb_active", True)
+                setattr(em, "gravity_bomb_pos", (ship.x + ship.w / 2, ship.y - 100))
+                setattr(em, "gravity_bomb_timer", duration)
+            except (AttributeError, TypeError):
+                pass
+
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
+        if not ctx:
+            return
+        em = self._ctx_entity_manager(ctx)
+        if em:
+            try:
+                setattr(em, "gravity_bomb_active", False)
+                setattr(em, "gravity_bomb_timer", 0.0)
+            except (AttributeError, TypeError):
+                pass
+
+
+class ChainLightningUpgrade(ActiveUpgrade):
+    """Tiros elétricos que saltam entre inimigos."""
+
+    def allows_refresh(self) -> bool:
+        return True
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        if not ship:
+            return
+        duration = self.get_effective_duration(ctx)
+        if hasattr(ship, "activate_chain_lightning"):
+            try:
+                ship.activate_chain_lightning(duration)
+            except (AttributeError, TypeError):
+                pass
+        else:
+            try:
+                setattr(ship, "chain_lightning_active", True)
+                setattr(ship, "chain_lightning_timer", duration)
+            except (AttributeError, TypeError):
+                pass
+
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
+        if not ctx:
+            return
+        ship = self._ctx_ship(ctx)
+        if ship:
+            try:
+                setattr(ship, "chain_lightning_active", False)
+                setattr(ship, "chain_lightning_timer", 0.0)
+            except (AttributeError, TypeError):
+                pass
+
+
+class OrbitalShieldUpgrade(ActiveUpgrade):
+    """Escudos orbitais físicos que orbitam a nave e causam dano/bloqueiam tiros."""
+
+    def allows_refresh(self) -> bool:
+        return False
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        em = self._ctx_entity_manager(ctx)
+        if not ship or not em:
+            return
+        duration = self.get_effective_duration(ctx)
+        if hasattr(em, "spawn_orbital_shield"):
+            try:
+                em.spawn_orbital_shield(ship, duration)
+            except (AttributeError, TypeError):
+                pass
+        else:
+            try:
+                setattr(ship, "orbital_shield_active", True)
+                setattr(ship, "orbital_shield_timer", duration)
+            except (AttributeError, TypeError):
+                pass
+
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
+        if not ctx:
+            return
+        ship = self._ctx_ship(ctx)
+        if ship:
+            try:
+                setattr(ship, "orbital_shield_active", False)
+                setattr(ship, "orbital_shield_timer", 0.0)
+            except (AttributeError, TypeError):
+                pass
+
+
+class PlasmaBeamUpgrade(ActiveUpgrade):
+    """Dispara um feixe contínuo de plasma para frente."""
+
+    def allows_refresh(self) -> bool:
+        return False
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        if not ship:
+            return
+        duration = self.get_effective_duration(ctx)
+        if hasattr(ship, "activate_plasma_beam"):
+            try:
+                ship.activate_plasma_beam(duration)
+            except (AttributeError, TypeError):
+                pass
+        else:
+            try:
+                setattr(ship, "plasma_beam_active", True)
+                setattr(ship, "plasma_beam_timer", duration)
+            except (AttributeError, TypeError):
+                pass
+
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
+        if not ctx:
+            return
+        ship = self._ctx_ship(ctx)
+        if ship:
+            try:
+                setattr(ship, "plasma_beam_active", False)
+                setattr(ship, "plasma_beam_timer", 0.0)
+            except (AttributeError, TypeError):
+                pass
+
+
 # ===================== Registro e Fábrica ================================
 
 UPGRADES_REGISTRY: Dict[UpgradeType, Callable[[], ActiveUpgrade]] = {}
@@ -860,6 +1053,61 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         base_charges=None,
         slot_weight=3,  # Ultimate de controle de área
     ),
+    UpgradeType.BLINK_DASH: UpgradeMeta(
+        type=UpgradeType.BLINK_DASH,
+        name="DASH",
+        desc="Dash evasivo super rápido com frames de invulnerabilidade.",
+        icon_id="blink_dash",
+        category=UpgradeCategory.DEFENSIVE,
+        base_cooldown=15.0,
+        base_duration=0.4,
+        base_charges=None,
+        slot_weight=1,
+    ),
+    UpgradeType.GRAVITY_BOMB: UpgradeMeta(
+        type=UpgradeType.GRAVITY_BOMB,
+        name="GRAV",
+        desc="Granada que cria um vórtice puxando inimigos e meteoros.",
+        icon_id="gravity_bomb",
+        category=UpgradeCategory.UTILITY,
+        base_cooldown=60.0,
+        base_duration=2.5,
+        base_charges=None,
+        slot_weight=2,
+    ),
+    UpgradeType.CHAIN_LIGHTNING: UpgradeMeta(
+        type=UpgradeType.CHAIN_LIGHTNING,
+        name="LIGH",
+        desc="Seus tiros disparam raios que saltam entre múltiplos inimigos.",
+        icon_id="chain_lightning",
+        category=UpgradeCategory.OFFENSIVE,
+        base_cooldown=60.0,
+        base_duration=10.0,
+        base_charges=None,
+        slot_weight=2,
+    ),
+    UpgradeType.ORBITAL_SHIELD: UpgradeMeta(
+        type=UpgradeType.ORBITAL_SHIELD,
+        name="ORB",
+        desc="Escudos de pedra orbitam a nave, bloqueando tiros e causando dano.",
+        icon_id="orbital_shield",
+        category=UpgradeCategory.DEFENSIVE,
+        base_cooldown=70.0,
+        base_duration=12.0,
+        base_charges=None,
+        slot_weight=2,
+    ),
+    UpgradeType.PLASMA_BEAM: UpgradeMeta(
+        type=UpgradeType.PLASMA_BEAM,
+        name="BEAM",
+        desc="Dispara um poderoso raio de plasma contínuo em linha reta.",
+        icon_id="plasma_beam",
+        category=UpgradeCategory.OFFENSIVE,
+        base_cooldown=110.0,
+        base_duration=5.0,
+        base_charges=None,
+        slot_weight=3,
+    ),
 }
 
 
@@ -899,6 +1147,26 @@ def _factory_cannon_tower() -> ActiveUpgrade:
     return CannonTowerUpgrade(UPGRADES_META[UpgradeType.CANNON_TOWER])
 
 
+def _factory_blink_dash() -> ActiveUpgrade:
+    return BlinkDashUpgrade(UPGRADES_META[UpgradeType.BLINK_DASH])
+
+
+def _factory_gravity_bomb() -> ActiveUpgrade:
+    return GravityBombUpgrade(UPGRADES_META[UpgradeType.GRAVITY_BOMB])
+
+
+def _factory_chain_lightning() -> ActiveUpgrade:
+    return ChainLightningUpgrade(UPGRADES_META[UpgradeType.CHAIN_LIGHTNING])
+
+
+def _factory_orbital_shield() -> ActiveUpgrade:
+    return OrbitalShieldUpgrade(UPGRADES_META[UpgradeType.ORBITAL_SHIELD])
+
+
+def _factory_plasma_beam() -> ActiveUpgrade:
+    return PlasmaBeamUpgrade(UPGRADES_META[UpgradeType.PLASMA_BEAM])
+
+
 UPGRADES_REGISTRY.update(
     {
         UpgradeType.SHIELD_BURST: _factory_shield,
@@ -910,6 +1178,11 @@ UPGRADES_REGISTRY.update(
         UpgradeType.AIR_STRIKE: _factory_air_strike,
         UpgradeType.BLACK_HOLE: _factory_black_hole,
         UpgradeType.CANNON_TOWER: _factory_cannon_tower,
+        UpgradeType.BLINK_DASH: _factory_blink_dash,
+        UpgradeType.GRAVITY_BOMB: _factory_gravity_bomb,
+        UpgradeType.CHAIN_LIGHTNING: _factory_chain_lightning,
+        UpgradeType.ORBITAL_SHIELD: _factory_orbital_shield,
+        UpgradeType.PLASMA_BEAM: _factory_plasma_beam,
     }
 )
 
@@ -939,6 +1212,11 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
             "explosive_shot": "X",
             "air_strike": "A",
             "black_hole": "B",
+            "blink_dash": "D",
+            "gravity_bomb": "G",
+            "chain_lightning": "L",
+            "orbital_shield": "R",
+            "plasma_beam": "P",
         }
         icon = icon_id_map.get(icon_id)
         if icon:
@@ -967,6 +1245,11 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
         "HOLE": "B",
         "Cannon Tower": "C",
         "CANNON": "C",
+        "DASH": "D",
+        "GRAV": "G",
+        "LIGH": "L",
+        "ORB": "R",
+        "BEAM": "P",
     }
 
     icon = icon_name_map.get(upgrade_name)

@@ -49,6 +49,11 @@ DEFAULT_UNLOCKED: List[UpgradeType] = [
     UpgradeType.AIR_STRIKE,
     UpgradeType.BLACK_HOLE,
     UpgradeType.CANNON_TOWER,
+    UpgradeType.BLINK_DASH,
+    UpgradeType.GRAVITY_BOMB,
+    UpgradeType.CHAIN_LIGHTNING,
+    UpgradeType.ORBITAL_SHIELD,
+    UpgradeType.PLASMA_BEAM,
 ]
 
 # Parâmetros de balanceamento do EMP (tempo e intensidade)
