@@ -57,6 +57,8 @@ from ..entities.slime_boss import SlimeBoss
 from ..entities.slime_drip import SlimeDrip
 from ..entities.spike import Spike
 from ..entities.spike_boss import SpikeBoss
+from ..entities.orbital_shield import OrbitalShield
+from ..entities.plasma_beam import PlasmaBeam
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
@@ -106,6 +108,8 @@ class EntityManager:
         self.fire_zones: list[FireZone] = []
         self.mini_ship_bullets: list[MiniShipBullet] = []
         self.chain_lightnings: list[ChainLightning] = []
+        self.orbital_shields: list[OrbitalShield] = []
+        self.plasma_beams: list[PlasmaBeam] = []
 
         # Listas de entidades e coletáveis
         self.enemies: list[Any] = []
@@ -626,6 +630,23 @@ class EntityManager:
                         e.take_damage(damage)
                     elif hasattr(e, "lives"):
                         e.lives -= damage
+        for s in self.orbital_shields:
+            s.update(dt)
+            # Dano por contato
+            damage = s.damage * dt
+            sr = s.rect
+            for e in self.enemies:
+                if not getattr(e, "dead", False) and sr.colliderect(e.rect):
+                    if hasattr(e, "take_damage"): e.take_damage(damage)
+                    elif hasattr(e, "lives"): e.lives -= damage
+        for beam in self.plasma_beams:
+            beam.update(dt)
+            p1, p2 = beam.get_line()
+            damage = beam.damage * dt
+            for e in self.enemies:
+                if not getattr(e, "dead", False) and e.rect.clipline(p1, p2):
+                    if hasattr(e, "take_damage"): e.take_damage(damage)
+                    elif hasattr(e, "lives"): e.lives -= damage
 
     def _update_enemy_projectiles(self, enemy_dt: float) -> None:
         """Projéteis inimigos: alien/serpent/boss/eye (todos respeitam freeze)."""
@@ -1129,6 +1150,16 @@ class EntityManager:
         self.coop_links.append(link)
         return link
 
+    def spawn_orbital_shield(self, ship: Any, duration: float) -> OrbitalShield:
+        shield = OrbitalShield(ship, duration)
+        self.orbital_shields.append(shield)
+        return shield
+
+    def spawn_plasma_beam(self, ship: Any, duration: float) -> PlasmaBeam:
+        beam = PlasmaBeam(ship, duration)
+        self.plasma_beams.append(beam)
+        return beam
+
     def spawn_meteor(
         self,
         size: int | None = None,
@@ -1278,6 +1309,8 @@ class EntityManager:
         self._filter_dead_inplace(self.mini_ship_bullets)
         self._filter_dead_inplace(self.wingmen)
         self._filter_dead_inplace(self.coop_links)
+        self._filter_dead_inplace(self.orbital_shields)
+        self._filter_dead_inplace(self.plasma_beams)
         self._filter_dead_inplace(self.chain_lightnings)
 
         # Processar remoção de inimigos via protocolos should_remove/on_remove

@@ -72,6 +72,14 @@ class ShipPowerups:
         ship.explosive_shots_active = True
         ship.explosive_shots_remaining = charges
 
+    def activate_dash(self, duration: float) -> None:
+        ship = self.ship
+        ship.dash_timer = max(ship.dash_timer, duration)
+        # Bônus de velocidade durante o Blink Dash
+        if not hasattr(ship, "original_speed"):
+            ship.original_speed = ship.speed
+        ship.speed = ship.original_speed * 2.5
+
     def activate_chain_shot(self, duration: float | None = None) -> None:
         ship = self.ship
         d = duration if duration is not None else Config.CHAIN_SHOT_DURATION
@@ -138,6 +146,12 @@ class ShipPowerups:
             ship.homing_shots_timer = max(0.0, ship.homing_shots_timer - dt)
             if ship.homing_shots_timer <= 0.0:
                 ship.homing_shots_active = False
+                ship.speed = ship.original_speed
+
+        # Reset de velocidade do Blink Dash
+        if hasattr(ship, "dash_timer") and ship.dash_timer > 0.0:
+            # Note: dash_timer é decrementado em ShipMovement.update_dash(dt)
+            if ship.dash_timer <= dt: # Vai acabar agora ou já acabou
                 ship.speed = ship.original_speed
 
         # Debuffs elementais

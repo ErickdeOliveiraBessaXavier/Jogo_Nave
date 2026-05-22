@@ -787,13 +787,10 @@ class BlinkDashUpgrade(ActiveUpgrade):
                 pass
         else:
             try:
-                setattr(ship, "dash_active", True)
                 setattr(ship, "dash_timer", duration)
                 if not hasattr(ship, "original_speed"):
-                    setattr(ship, "original_speed", getattr(ship, "speed", 5))
-                ship.speed = getattr(ship, "original_speed", 5) * 2.5
-                if hasattr(ship, "activate_invulnerability"):
-                    ship.activate_invulnerability(duration)
+                    setattr(ship, "original_speed", getattr(ship, "speed", 300))
+                ship.speed = getattr(ship, "original_speed", 300) * 2.5
             except (AttributeError, TypeError):
                 pass
 
@@ -803,10 +800,9 @@ class BlinkDashUpgrade(ActiveUpgrade):
         ship = self._ctx_ship(ctx)
         if ship:
             try:
-                setattr(ship, "dash_active", False)
                 setattr(ship, "dash_timer", 0.0)
                 if hasattr(ship, "original_speed"):
-                    ship.speed = getattr(ship, "original_speed", 5)
+                    ship.speed = getattr(ship, "original_speed", 300)
             except (AttributeError, TypeError):
                 pass
 
@@ -823,9 +819,11 @@ class GravityBombUpgrade(ActiveUpgrade):
         if not ship or not em:
             return
         duration = self.get_effective_duration(ctx)
-        if hasattr(em, "spawn_gravity_bomb"):
+        # Reutiliza o sistema de Black Hole para a Gravity Bomb
+        if hasattr(em, "spawn_black_hole"):
             try:
-                em.spawn_gravity_bomb(ship.x + ship.w / 2, ship.y, duration)
+                # Spawna um pouco à frente da nave
+                em.spawn_black_hole(ship.x + ship.w / 2, ship.y - 100, duration)
             except (AttributeError, TypeError):
                 pass
         else:
@@ -859,15 +857,15 @@ class ChainLightningUpgrade(ActiveUpgrade):
         if not ship:
             return
         duration = self.get_effective_duration(ctx)
-        if hasattr(ship, "activate_chain_lightning"):
+        # Usa o sistema nativo de Chain Shot
+        if hasattr(ship, "activate_chain_shot"):
             try:
-                ship.activate_chain_lightning(duration)
+                ship.activate_chain_shot(duration)
             except (AttributeError, TypeError):
                 pass
         else:
             try:
-                setattr(ship, "chain_lightning_active", True)
-                setattr(ship, "chain_lightning_timer", duration)
+                setattr(ship, "chain_shot_timer", duration)
             except (AttributeError, TypeError):
                 pass
 
@@ -877,8 +875,7 @@ class ChainLightningUpgrade(ActiveUpgrade):
         ship = self._ctx_ship(ctx)
         if ship:
             try:
-                setattr(ship, "chain_lightning_active", False)
-                setattr(ship, "chain_lightning_timer", 0.0)
+                setattr(ship, "chain_shot_timer", 0.0)
             except (AttributeError, TypeError):
                 pass
 
@@ -907,17 +904,6 @@ class OrbitalShieldUpgrade(ActiveUpgrade):
             except (AttributeError, TypeError):
                 pass
 
-    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
-        if not ctx:
-            return
-        ship = self._ctx_ship(ctx)
-        if ship:
-            try:
-                setattr(ship, "orbital_shield_active", False)
-                setattr(ship, "orbital_shield_timer", 0.0)
-            except (AttributeError, TypeError):
-                pass
-
 
 class PlasmaBeamUpgrade(ActiveUpgrade):
     """Dispara um feixe contínuo de plasma para frente."""
@@ -927,29 +913,19 @@ class PlasmaBeamUpgrade(ActiveUpgrade):
 
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         ship = self._ctx_ship(ctx)
-        if not ship:
+        em = self._ctx_entity_manager(ctx)
+        if not ship or not em:
             return
         duration = self.get_effective_duration(ctx)
-        if hasattr(ship, "activate_plasma_beam"):
+        if hasattr(em, "spawn_plasma_beam"):
             try:
-                ship.activate_plasma_beam(duration)
+                em.spawn_plasma_beam(ship, duration)
             except (AttributeError, TypeError):
                 pass
         else:
             try:
                 setattr(ship, "plasma_beam_active", True)
                 setattr(ship, "plasma_beam_timer", duration)
-            except (AttributeError, TypeError):
-                pass
-
-    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
-        if not ctx:
-            return
-        ship = self._ctx_ship(ctx)
-        if ship:
-            try:
-                setattr(ship, "plasma_beam_active", False)
-                setattr(ship, "plasma_beam_timer", 0.0)
             except (AttributeError, TypeError):
                 pass
 

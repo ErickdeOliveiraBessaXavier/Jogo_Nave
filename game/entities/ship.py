@@ -411,6 +411,9 @@ class Ship:
     def activate_explosive_shots(self, charges: int) -> None:
         self._powerups.activate_explosive_shots(charges)
 
+    def activate_dash(self, duration: float) -> None:
+        self._powerups.activate_dash(duration)
+
     def activate_berserk(self, duration: float) -> None:
         self.berserk_timer = duration
 
