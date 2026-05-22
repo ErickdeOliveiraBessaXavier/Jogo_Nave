@@ -13,12 +13,13 @@ e não se beneficiam dos pools/spatial grids dedicados a inimigos/projéteis.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Final
+import random
+from typing import TYPE_CHECKING, Final, Optional
 
 import pygame
 
 from ..core.assets import get_font
-from ..core.colors import WHITE, CUSTOM_GOLD, CYAN
+from ..core.colors import CUSTOM_GOLD, CYAN, WHITE
 
 if TYPE_CHECKING:
     from ..systems.player_slot import PlayerSlot
@@ -39,7 +40,13 @@ class RevivalBeacon:
     LIVES_ON_REVIVE: Final[int] = 1
     """Vidas com que o slot volta após o revive."""
 
-    def __init__(self, x: float, y: float, for_slot: "PlayerSlot", ship_image: Optional[pygame.Surface] = None) -> None:
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        for_slot: "PlayerSlot",
+        ship_image: Optional[pygame.Surface] = None,
+    ) -> None:
         self.x: float = x
         self.y: float = y
         self.for_slot = for_slot
@@ -51,7 +58,7 @@ class RevivalBeacon:
         self._show_hint: bool = False
         self._hint_font = get_font(12)
         self._button_font = get_font(16)
-        
+
         # Timer para efeitos de glitch
         self._glitch_timer: float = 0.0
         self._scan_line_y: float = 0.0
@@ -74,7 +81,7 @@ class RevivalBeacon:
         """Avança o pulso visual independente do progresso de revive."""
         self._pulse_timer = (self._pulse_timer + dt) % 1.0
         self._glitch_timer += dt
-        
+
         # Move a linha de scan
         self._scan_line_y = (self._scan_line_y + dt * 1.5) % 1.0
 
@@ -123,8 +130,12 @@ class RevivalBeacon:
         overlay = pygame.Surface((radius * 2 + 8, radius * 2 + 8), pygame.SRCALPHA)
         # Se estiver sendo revivido, o círculo brilha mais
         alpha = 40 + int(ratio * 60)
-        pygame.draw.circle(overlay, (*aura_color, alpha), (radius + 4, radius + 4), radius)
-        pygame.draw.circle(overlay, (*aura_color, 120), (radius + 4, radius + 4), radius, width=2)
+        pygame.draw.circle(
+            overlay, (*aura_color, alpha), (radius + 4, radius + 4), radius
+        )
+        pygame.draw.circle(
+            overlay, (*aura_color, 120), (radius + 4, radius + 4), radius, width=2
+        )
         surface.blit(overlay, (cx - radius - 4, cy - radius - 4))
 
         # 3. Anel de Progresso (Arco)
@@ -139,50 +150,61 @@ class RevivalBeacon:
         if self._show_hint:
             self._draw_ui_hints(surface, cx, cy, radius, ratio)
 
-    def _draw_hologram(self, surface: pygame.Surface, cx: int, cy: int, ratio: float) -> None:
+    def _draw_hologram(
+        self, surface: pygame.Surface, cx: int, cy: int, ratio: float
+    ) -> None:
         """Renderiza a nave com efeitos de holograma, glitch e scan."""
         img = self.ship_image
-        if not img: return
-        
+        if not img:
+            return
+
         sw, sh = img.get_size()
         pos_x = cx - sw // 2
         pos_y = cy - sh // 2
-        
+
         # Efeito de Glitch (Deslocamento horizontal aleatório)
         offset_x = 0
-        if random.random() < 0.1: # 10% de chance de glitch por frame
+        if random.random() < 0.1:  # 10% de chance de glitch por frame
             offset_x = random.randint(-4, 4)
-            
+
         # Opacidade aumenta com o progresso (mínimo 60, máximo 255)
         alpha = int(60 + (195 * ratio))
-        
+
         # Criar superfície temporária para o holograma
         holo_surf = img.copy()
         holo_surf.set_alpha(alpha)
-        
+
         # Aplicar tom ciano/azul ao holograma
         tint = pygame.Surface((sw, sh), pygame.SRCALPHA)
         # Cor do tint suaviza de Ciano para Branco conforme o download completa
         tint_color = (
-            int(0 + (255 * ratio)), 
-            int(255), 
-            int(255)
+            int(0 + (255 * ratio)),
+            int(255),
+            int(255),
         )
         tint.fill((*tint_color, 100))
         holo_surf.blit(tint, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-        
+
         surface.blit(holo_surf, (pos_x + offset_x, pos_y))
-        
+
         # Linha de Scan
         scan_y = pos_y + int(sh * self._scan_line_y)
         scan_w = int(sw * 1.2)
-        pygame.draw.line(surface, CYAN, (cx - scan_w//2, scan_y), (cx + scan_w//2, scan_y), 1)
+        pygame.draw.line(
+            surface,
+            CYAN,
+            (cx - scan_w // 2, scan_y),
+            (cx + scan_w // 2, scan_y),
+            1,
+        )
         # Brilho da linha de scan
         scan_glow = pygame.Surface((scan_w, 3), pygame.SRCALPHA)
         scan_glow.fill((*CYAN, 80))
-        surface.blit(scan_glow, (cx - scan_w//2, scan_y - 1))
+        surface.blit(scan_glow, (cx - scan_w // 2, scan_y - 1))
 
-    def _draw_ui_hints(self, surface: pygame.Surface, cx: int, cy: int, radius: int, ratio: float) -> None:
+    def _draw_ui_hints(
+        self, surface: pygame.Surface, cx: int, cy: int, radius: int, ratio: float
+    ) -> None:
         """Renderiza as dicas de botões e progresso."""
         # Badge do Botão [Y]
         btn_surf = self._button_font.render("Y", True, (20, 20, 20))
@@ -193,9 +215,10 @@ class RevivalBeacon:
         # Texto "SEGURE PARA REVIVER"
         txt_surf = self._hint_font.render("SEGURE PARA REVIVER", True, WHITE)
         surface.blit(txt_surf, (cx - txt_surf.get_width() // 2, cy - radius - 65))
-        
+
         # Progresso em texto se estiver segurando
         if ratio > 0:
-            pct_surf = self._hint_font.render(f"DOWNLOADING {int(ratio * 100)}%", True, CYAN)
+            pct_surf = self._hint_font.render(
+                f"DOWNLOADING {int(ratio * 100)}%", True, CYAN
+            )
             surface.blit(pct_surf, (cx - pct_surf.get_width() // 2, cy - radius - 15))
-

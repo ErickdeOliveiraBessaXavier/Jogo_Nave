@@ -56,18 +56,18 @@ from ..render.render_frame import P2HudInfo, RenderFrame
 from ..systems.boss_fight_controller import BossFightController
 from ..systems.cheat_input import CheatBuffer
 from ..systems.collisions import Collisions
-from ..systems.gameplay_input_handler import GameplayInputHandler
-from ..systems.powerup_system import PowerupSystem
-from ..systems.transition_controller import TransitionController, TransitionPhase
 from ..systems.effects_system import EffectsSystem
 from ..systems.entity_manager import EntityManager
+from ..systems.gameplay_input_handler import GameplayInputHandler
 from ..systems.level_progression_controller import (
     LevelProgressionController,
     ProgressionStatus,
 )
 from ..systems.player_slot import PlayerRoster, PlayerSlot
+from ..systems.powerup_system import PowerupSystem
 from ..systems.shooting_system import ShootingSystem
 from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
+from ..systems.transition_controller import TransitionController, TransitionPhase
 
 logger = logging.getLogger(__name__)
 
@@ -198,12 +198,10 @@ class PlayingScene(Scene):
             auto_fire=self.app.preferences.auto_fire,
             profile=self.player_profile.get_selected_ship_profile(),
         )
-        
+
         # Ativa animação de entrada sincronizada com o contador de preparação
         ship_obj.start_entering_animation(
-            (ship_x, ship_y), 
-            (target_x, target_y), 
-            Config.PREPARATION_TIME
+            (ship_x, ship_y), (target_x, target_y), Config.PREPARATION_TIME
         )
         ship_obj.apply_world_mode(self.is_side_scroll)
 
@@ -945,9 +943,7 @@ class PlayingScene(Scene):
 
                 # Caçador: enquanto a carga está acumulando, suprime auto-fire/hold-shoot.
                 # O disparo carregado sai no MOUSEBUTTONUP.
-                charging = (
-                    ship.profile.has_charge_shot and ship.charge_shot_active
-                )
+                charging = ship.profile.has_charge_shot and ship.charge_shot_active
                 if (
                     ("hold_shoot" in held or ship.should_auto_fire())
                     and self.shooting.is_ready(ship)
@@ -1695,9 +1691,7 @@ class PlayingScene(Scene):
             # Mini-naves do slot somem junto com a nave (sem orbitar fantasma).
             # As permanentes voltam no revive via `_build_permanent_mini_ships`.
             self.entity_manager.mini_ships = [
-                m
-                for m in self.entity_manager.mini_ships
-                if m.player is not slot.ship
+                m for m in self.entity_manager.mini_ships if m.player is not slot.ship
             ]
             self._spawn_revival_beacon(slot)
         # Game over quando ninguém tem vidas. Em single-player, com 1 slot,
@@ -1889,7 +1883,7 @@ class PlayingScene(Scene):
     def _spawn_p2(self, profile: Any) -> None:
         """Cria a nave de P2 e adiciona ao roster com animação de entrada."""
         primary_ship = self.roster.primary().ship
-        
+
         # Define alvos de spawn baseados em P1
         if self.is_side_scroll:
             target_x = primary_ship.x
@@ -1909,12 +1903,12 @@ class PlayingScene(Scene):
             auto_fire=False,
             profile=profile,
         )
-        
+
         # Ativa animação de entrada similar ao P1
         p2_ship.start_entering_animation(
-            (start_x, start_y), 
-            (target_x, target_y), 
-            1.5 # Duração da animação
+            (start_x, start_y),
+            (target_x, target_y),
+            1.5,  # Duração da animação
         )
         p2_ship.invuln = float(Config.INVULN_TIME * 1000)
         p2_ship.apply_world_mode(self.is_side_scroll)
@@ -1929,10 +1923,11 @@ class PlayingScene(Scene):
         p2_ship.lives = lives
         self.roster.add(p2_slot)
         self._build_permanent_mini_ships(p2_slot)
-        
+
         logger.info(
-            "P2 entrou na partida com a nave '%s' (vidas=%d) e animação de entrada.", 
-            profile.id, lives
+            "P2 entrou na partida com a nave '%s' (vidas=%d) e animação de entrada.",
+            profile.id,
+            lives,
         )
 
     # ------------------------------------------------------------------
@@ -1997,17 +1992,13 @@ class PlayingScene(Scene):
         if 0 <= idx < len(self.upgrade_slots) and self.upgrade_slots[idx] is not None:
             self._activate_upgrade_slot(idx)
 
-
-
     def _activate_stored_powerup(self, slot_index: int) -> None:
         """Compat: ativa Cofre do slot primário (P1). Mantido para
         callers de teclado (Q/E) e outros pontos legados.
         """
         self._activate_stored_powerup_for(self.roster.primary(), slot_index)
 
-    def _activate_stored_powerup_for(
-        self, slot: PlayerSlot, slot_index: int
-    ) -> None:
+    def _activate_stored_powerup_for(self, slot: PlayerSlot, slot_index: int) -> None:
         """Consome o powerup armazenado do Cofre do `slot` e aplica em si próprio."""
         ship = slot.ship
         if not ship.has_storage_slots():
@@ -2032,7 +2023,6 @@ class PlayingScene(Scene):
             if beacon is not None and beacon.contains_point(px, py):
                 return True
         return False
-
 
     # ------------------------------------------------------------------
     # Render
@@ -2076,9 +2066,7 @@ class PlayingScene(Scene):
             entity_manager=self.entity_manager,
             boss_controller=self.boss_controller,
             extra_ships=tuple(
-                slot.ship
-                for slot in self.roster.all_slots()[1:]
-                if not slot.is_dead
+                slot.ship for slot in self.roster.all_slots()[1:] if not slot.is_dead
             ),
             revival_beacons=tuple(
                 slot.revival_beacon
@@ -2177,7 +2165,7 @@ class PlayingScene(Scene):
             x=float(ship.rect.centerx),
             y=float(ship.rect.centery),
             for_slot=slot,
-            ship_image=ship.ship_image
+            ship_image=ship.ship_image,
         )
         logger.info(
             "Beacon de revive spawnou em (%.0f, %.0f) para slot morto.",
@@ -2201,7 +2189,9 @@ class PlayingScene(Scene):
 
             # Proximidade visual: mostra a dica se qualquer player vivo estiver no raio
             near_any = any(
-                beacon.contains_point(float(s.ship.rect.centerx), float(s.ship.rect.centery))
+                beacon.contains_point(
+                    float(s.ship.rect.centerx), float(s.ship.rect.centery)
+                )
                 for s in alive
             )
             beacon.set_hint_visible(near_any)

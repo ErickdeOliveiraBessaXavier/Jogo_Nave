@@ -473,7 +473,7 @@ class Renderer:
 
     def set_mountains_progress(self, progress: float) -> None:
         """DEPRECATED: Progressão das cordilheiras é agora automática e contínua.
-        
+
         O ciclo dia/noite ocorre independentemente em MountainsBackground.
         Este método é mantido por compatibilidade, mas não faz nada.
         """
@@ -687,11 +687,11 @@ class Renderer:
             surface.blit(s, rect)
 
     def preparation(
-        self, 
-        surface: pygame.Surface, 
-        remaining: float, 
-        stage_name: str = "", 
-        difficulty: Optional["DifficultyPreset"] = None
+        self,
+        surface: pygame.Surface,
+        remaining: float,
+        stage_name: str = "",
+        difficulty: Optional["DifficultyPreset"] = None,
     ):
         # Usar fonte do warning (60pt)
         warning_font = get_font(Config.WARNING_FONT_SIZE)
@@ -701,7 +701,13 @@ class Renderer:
         # 1. Nome do Estágio (Acima do contador)
         if stage_name:
             st_surf = info_font.render(stage_name, True, colors.CUSTOM_GOLD)
-            surface.blit(st_surf, (Config.SCREEN_WIDTH // 2 - st_surf.get_width() // 2, Config.SCREEN_HEIGHT // 2 - 120))
+            surface.blit(
+                st_surf,
+                (
+                    Config.SCREEN_WIDTH // 2 - st_surf.get_width() // 2,
+                    Config.SCREEN_HEIGHT // 2 - 120,
+                ),
+            )
 
         # 2. Contador Central
         ct = warning_font.render(f"{int(remaining) + 1}", True, colors.RED)
@@ -709,10 +715,11 @@ class Renderer:
             center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2)
         )
         surface.blit(ct, crect)
-        
+
         # 3. Dificuldade (Abaixo do contador)
         if difficulty is not None:
-            from ..core.difficulty import DifficultySettings, DifficultyPreset
+            from ..core.difficulty import DifficultyPreset, DifficultySettings
+
             d_set = DifficultySettings.get_settings(difficulty)
             d_color = {
                 DifficultyPreset.CASUAL: colors.GREEN,
@@ -720,9 +727,17 @@ class Renderer:
                 DifficultyPreset.HARDCORE: colors.ORANGE,
                 DifficultyPreset.NIGHTMARE: colors.RED,
             }.get(difficulty, colors.WHITE)
-            
-            d_surf = diff_font.render(f"DIFICULDADE: {d_set['name'].upper()}", True, d_color)
-            surface.blit(d_surf, (Config.SCREEN_WIDTH // 2 - d_surf.get_width() // 2, Config.SCREEN_HEIGHT // 2 + 80))
+
+            d_surf = diff_font.render(
+                f"DIFICULDADE: {d_set['name'].upper()}", True, d_color
+            )
+            surface.blit(
+                d_surf,
+                (
+                    Config.SCREEN_WIDTH // 2 - d_surf.get_width() // 2,
+                    Config.SCREEN_HEIGHT // 2 + 80,
+                ),
+            )
 
     def update_fps(self, dt: float):
         """Atualiza o contador de FPS e calcula métricas de performance."""
