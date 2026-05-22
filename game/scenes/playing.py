@@ -1117,9 +1117,13 @@ class PlayingScene(Scene):
 
     def _check_projectile_vs_enemies(
         self, enemy_grid: "SpatialGrid[Any]"
-    ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
-        """Projéteis da nave vs. inimigos normais. Retorna (score, kills, events, ship_hit)."""
+    ) -> tuple[int, int, list[tuple[float, float, int]], set[int]]:
+        """Projéteis da nave vs. inimigos normais. Retorna (score, kills, events, ship_hits).
+
+        `ship_hits` é um set de `id(ship)` para naves atingidas por mine/fire zones.
+        """
         enemies_view = cast(Sequence["Enemy"], self.entity_manager.enemies)
+        alive_ships = [slot.ship for slot in self.roster.alive_slots()]
 
         all_player_projectiles = (
             self.entity_manager.bullets + self.entity_manager.mini_ship_bullets
@@ -1168,11 +1172,11 @@ class PlayingScene(Scene):
         destroyed += homing_destroyed
         score_events.extend(homing_events)
 
-        mine_gain, mine_destroyed, mine_events, ship_hit = (
+        mine_gain, mine_destroyed, mine_events, ship_hits = (
             self.collisions.check_mine_explosions(
                 enemies_view,
                 self.entity_manager.mine_explosions,
-                self.ship,
+                alive_ships,
                 self.entity_manager,
             )
         )
@@ -1184,7 +1188,7 @@ class PlayingScene(Scene):
             iz_gain, iz_dest, iz_events = self.collisions.ice_poison_zones_vs_entities(
                 self.entity_manager.ice_poison_zones,
                 enemies_view,
-                self.ship,
+                alive_ships,
                 self.entity_manager,
             )
             gain += iz_gain
@@ -1192,26 +1196,31 @@ class PlayingScene(Scene):
             score_events.extend(iz_events)
 
         if self.entity_manager.fire_zones:
-            fz_gain, fz_dest, fz_events, fz_ship_hit = (
+            fz_gain, fz_dest, fz_events, fz_ship_hits = (
                 self.collisions.fire_zones_vs_entities(
                     self.entity_manager.fire_zones,
                     enemies_view,
-                    self.ship,
+                    alive_ships,
                     self.entity_manager,
                 )
             )
             gain += fz_gain
             destroyed += fz_dest
             score_events.extend(fz_events)
-            ship_hit = ship_hit or fz_ship_hit
+            ship_hits |= fz_ship_hits
 
-        return gain, destroyed, score_events, ship_hit
+        return gain, destroyed, score_events, ship_hits
 
     def _check_formation_collisions(
         self, gain: int, destroyed: int, score_events: list[tuple[float, float, int]]
-    ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
-        """Colisões de área vs. formações e inimigos avulsos."""
-        ship_hit = False
+    ) -> tuple[int, int, list[tuple[float, float, int]], set[int]]:
+        """Colisões de área vs. formações e inimigos avulsos.
+
+        Retorna ship_hits como set de `id(ship)` para naves atingidas por
+        mine/fire zones (varredura de formações e inimigos avulsos).
+        """
+        ship_hits: set[int] = set()
+        alive_ships = [slot.ship for slot in self.roster.alive_slots()]
 
         formation_enemy_ids = {
             id(enemy)
@@ -1227,25 +1236,25 @@ class PlayingScene(Scene):
         for formation in self.entity_manager.formations:
             fe = formation.get_enemies()
 
-            f_gain, f_dest, f_events, f_ship_hit = (
+            f_gain, f_dest, f_events, f_ship_hits = (
                 self.collisions.check_mine_explosions(
                     fe,
                     self.entity_manager.mine_explosions,
-                    self.ship,
+                    alive_ships,
                     self.entity_manager,
                 )
             )
             gain += f_gain
             destroyed += f_dest
             score_events.extend(f_events)
-            ship_hit = ship_hit or f_ship_hit
+            ship_hits |= f_ship_hits
 
             if self.entity_manager.ice_poison_zones:
                 iz_gain, iz_dest, iz_events = (
                     self.collisions.ice_poison_zones_vs_entities(
                         self.entity_manager.ice_poison_zones,
                         fe,
-                        self.ship,
+                        alive_ships,
                         self.entity_manager,
                     )
                 )
@@ -1254,18 +1263,18 @@ class PlayingScene(Scene):
                 score_events.extend(iz_events)
 
             if self.entity_manager.fire_zones:
-                fz_gain, fz_dest, fz_events, fz_ship_hit = (
+                fz_gain, fz_dest, fz_events, fz_ship_hits = (
                     self.collisions.fire_zones_vs_entities(
                         self.entity_manager.fire_zones,
                         fe,
-                        self.ship,
+                        alive_ships,
                         self.entity_manager,
                     )
                 )
                 gain += fz_gain
                 destroyed += fz_dest
                 score_events.extend(fz_events)
-                ship_hit = ship_hit or fz_ship_hit
+                ship_hits |= fz_ship_hits
 
             if self.entity_manager.cannon_mines:
                 cg, cd, ce = self.collisions.cannon_mines_vs_enemies(
@@ -1316,20 +1325,20 @@ class PlayingScene(Scene):
             score_events.extend(me)
 
         if self.entity_manager.fire_zones:
-            fz_gain, fz_dest, fz_events, fz_ship_hit = (
+            fz_gain, fz_dest, fz_events, fz_ship_hits = (
                 self.collisions.fire_zones_vs_entities(
                     self.entity_manager.fire_zones,
                     enemies_view,
-                    self.ship,
+                    alive_ships,
                     self.entity_manager,
                 )
             )
             gain += fz_gain
             destroyed += fz_dest
             score_events.extend(fz_events)
-            ship_hit = ship_hit or fz_ship_hit
+            ship_hits |= fz_ship_hits
 
-        return gain, destroyed, score_events, ship_hit
+        return gain, destroyed, score_events, ship_hits
 
     def _check_boss_collisions(self, gain: int) -> int:
         """Todas as colisões envolvendo o boss. Retorna score_gain total."""
@@ -1394,16 +1403,16 @@ class PlayingScene(Scene):
         if self.boss_controller.boss_type == "slime":
             from ..entities.slime_boss import SlimeBoss
 
-            # Slime drip ainda é checado contra primary apenas; checagem
-            # per-slot fica para Fase 3+ (mesma justificativa de
-            # mine/fire/ice zones). Com 1 slot é equivalente ao original.
+            # Slime drip per-slot: cada gota só pode atingir um ship (consumida
+            # ao colidir). Iterar slots vivos resolve sem double-damage.
             slime_boss = cast(SlimeBoss, boss)
-            drip_damage = slime_boss.check_drip_damage(
-                self.ship.rect, self.entity_manager
-            )
-            if drip_damage > 0:
-                self._handle_ship_hit(self.roster.primary())
-                self.level_controller.notify_damage_taken(drip_damage)
+            for slot in self.roster.alive_slots():
+                drip_damage = slime_boss.check_drip_damage(
+                    slot.ship.rect, self.entity_manager
+                )
+                if drip_damage > 0:
+                    self._handle_ship_hit(slot)
+                    self.level_controller.notify_damage_taken(drip_damage)
 
         score_gain = self._apply_score_multiplier(score_gain)
 
@@ -1508,19 +1517,20 @@ class PlayingScene(Scene):
         """
         enemy_grid = self.entity_manager.enemy_spatial_grid
 
-        gain, destroyed, score_events, ship_hit_proj = (
+        gain, destroyed, score_events, ship_hits_proj = (
             self._check_projectile_vs_enemies(enemy_grid)
         )
-        gain, destroyed, score_events, ship_hit_form = self._check_formation_collisions(
-            gain, destroyed, score_events
+        gain, destroyed, score_events, ship_hits_form = (
+            self._check_formation_collisions(gain, destroyed, score_events)
         )
 
-        # ship_hit_proj/ship_hit_form vêm de mine/fire/ice zones que ainda usam
-        # `self.ship` (primário) — em multiplayer P2 não recebe esses hits.
-        # Refatoração completa dessas zonas por-slot fica para Fase 3+, junto
-        # com a dedupe de dano global por inimigo. Hoje (1 slot) é equivalente.
-        if ship_hit_proj or ship_hit_form:
-            self._handle_ship_hit(self.roster.primary())
+        # Mine/fire zones devolvem set de `id(ship)` atingidos. Rotear o hit
+        # ao slot dono — ambos os players tomam dano em armadilhas.
+        zone_ship_hits = ship_hits_proj | ship_hits_form
+        if zone_ship_hits:
+            for slot in self.roster.alive_slots():
+                if id(slot.ship) in zone_ship_hits:
+                    self._handle_ship_hit(slot)
 
         batched_events = self._batch_floating_scores(
             score_events, proximity_threshold=self.floating_score_batch_threshold

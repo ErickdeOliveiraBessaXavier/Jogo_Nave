@@ -351,9 +351,9 @@ class Collisions:
         self,
         enemies: Sequence[Enemy],
         mine_explosions: list[MineExplosion],
-        ship: Ship,
+        ships: Sequence[Ship],
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
+    ) -> tuple[int, int, list[tuple[float, float, int]], set[int]]:
         """
         Processa explosões de minas.
 
@@ -363,14 +363,16 @@ class Collisions:
 
         IMPORTANTE: Verificamos is_exploding + pre_explosion_timer <= 0 porque
         a mina só fica dead=True quando o timer acaba internamente.
+
+        Retorna set de `id(ship)` para cada nave atingida pela explosão.
         """
         if not enemies:
-            return 0, 0, [], False
+            return 0, 0, [], set()
 
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
-        ship_hit = False
+        ship_hits: set[int] = set()
 
         # 1) Criar explosões para minas cujo timer de explosão acabou
         for enemy in enemies:
@@ -385,11 +387,12 @@ class Collisions:
 
                     mine_explosions.append(MineExplosion(cx, cy, size=explosion_radius))
 
-                    # Checar nave e limpar formações
-                    if self.handle_mine_explosion(
-                        cx, cy, explosion_radius, ship, entity_manager
-                    ):
-                        ship_hit = True
+                    # Checar todas as naves vivas e limpar formações
+                    ship_hits.update(
+                        self.handle_mine_explosion(
+                            cx, cy, explosion_radius, ships, entity_manager
+                        )
+                    )
 
                     sound_manager.play_explosion_boss()
 
@@ -447,13 +450,13 @@ class Collisions:
                         if result.points > 0:
                             score_events.append((enemy_cx, enemy_cy, result.points))
 
-        return score_gain, destroyed_count, score_events, ship_hit
+        return score_gain, destroyed_count, score_events, ship_hits
 
     def ice_poison_zones_vs_entities(
         self,
         zones: list[IcePoisonZone],
         enemies: Sequence[Any],
-        ship: Ship,
+        ships: Sequence[Ship],
         entity_manager: "EntityManager",
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         score_gain = 0
@@ -464,8 +467,9 @@ class Collisions:
             if zone.dead:
                 continue
 
-            if zone.in_zone(ship.x, ship.y):
-                ship.speed_modifier_timer = max(ship.speed_modifier_timer, 0.15)
+            for ship in ships:
+                if zone.in_zone(ship.x, ship.y):
+                    ship.speed_modifier_timer = max(ship.speed_modifier_timer, 0.15)
 
             for enemy in enemies:
                 if enemy.dead:
@@ -492,26 +496,28 @@ class Collisions:
         self,
         zones: list[FireZone],
         enemies: Sequence[Any],
-        ship: Ship,
+        ships: Sequence[Ship],
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]], bool]:
+    ) -> tuple[int, int, list[tuple[float, float, int]], set[int]]:
         score_gain = 0
         destroyed_count = 0
         score_events: list[tuple[float, float, int]] = []
-        ship_hit = False
+        ship_hits: set[int] = set()
 
         for zone in zones:
             if zone.dead:
                 continue
 
-            if ship.invuln <= 0:
+            for ship in ships:
+                if ship.invuln > 0:
+                    continue
                 ship_cx = ship.x + ship.w / 2
                 ship_cy = ship.y + ship.h / 2
                 if zone.in_zone(ship_cx, ship_cy):
                     ship_eid = id(ship)
                     if zone.can_damage(ship_eid):
                         zone.register_hit(ship_eid)
-                        ship_hit = True
+                        ship_hits.add(ship_eid)
 
             for enemy in enemies:
                 if enemy.dead:
@@ -530,29 +536,30 @@ class Collisions:
                         if result.points > 0:
                             score_events.append((cx, cy, result.points))
 
-        return score_gain, destroyed_count, score_events, ship_hit
+        return score_gain, destroyed_count, score_events, ship_hits
 
     def handle_mine_explosion(
         self,
         explosion_x: float,
         explosion_y: float,
         explosion_radius: int,
-        ship: Ship,
+        ships: Sequence[Ship],
         entity_manager: "EntityManager",
-    ) -> bool:
+    ) -> set[int]:
         """
-        Checa colisão da explosão de mina com a nave e limpa formações.
+        Checa colisão da explosão de mina com cada nave e limpa formações.
 
-        Retorna True se a nave foi atingida.
+        Retorna set de `id(ship)` para cada nave atingida pela explosão.
         """
-        ship_hit = False
+        ship_hits: set[int] = set()
 
         # Remover inimigos mortos das formações (para marcar formação como dead)
         for formation in entity_manager.formations:
             formation.enemies = [e for e in formation.enemies if not e.dead]
 
-        # Check player collision
-        if ship.invuln <= 0:
+        for ship in ships:
+            if ship.invuln > 0:
+                continue
             ship_cx = ship.x + ship.w / 2
             ship_cy = ship.y + ship.h / 2
             ship_r = ship.w / 2
@@ -564,8 +571,8 @@ class Collisions:
                     ship.y + ship.h / 2,
                     size=CollisionConstants.AREA_EXPLOSION_SIZE,
                 )
-                ship_hit = True
-        return ship_hit
+                ship_hits.add(id(ship))
+        return ship_hits
 
     def explosive_effects_vs_enemies(
         self,

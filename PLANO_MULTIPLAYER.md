@@ -120,10 +120,12 @@ property → `self.roster.primary().ship`. `gamepad_slot=0` por padrão para P1.
 - Orquestrador `_handle_collisions`: loop `for slot in self.roster.alive_slots()` para `ship_vs_enemies`, `_check_ship_damage`, e `register_kill` do reverberador
 - `_sync_lives_for(slot, lives)` e `_change_lives_for(slot, delta)` — primário mirror em `self.lives` para HUD legado
 
-Pendências documentadas para Fase 3+: `mine_explosions`, `fire_zones`,
-`ice_poison_zones` e `slime_drip_damage` hoje checam só contra P1 (`self.roster.primary()`).
-Refatorar essas pra per-slot exige dedupe de score (cada chamada compartilha
-o cômputo de dano a inimigos). Não bloqueia Phase 3.
+~~Pendências documentadas para Fase 3+: `mine_explosions`, `fire_zones`,
+`ice_poison_zones` e `slime_drip_damage` hoje checam só contra P1.~~
+✅ Resolvido (2026-05-22): métodos parametrizados com `ships: Sequence[Ship]`
+e retorno `set[int]` (id(ship)) para naves atingidas. Dedupe de inimigos é
+preservado: zone tickrate gates por `id(enemy)`, drips são consumidos ao
+colidir e mines só explodem uma vez antes de ficarem `dead`.
 
 **Passo 2.4** ✅ `ShootingSystem` per-ship:
 - `shoot_cd: float` → `_cooldowns: dict[int, float]` keyed por `id(ship)`
@@ -463,10 +465,15 @@ para fechar.
 - Próximo boss usa o count atual
 
 **Não-bloqueantes (limitações conhecidas, podem virar polish futuro):**
-- Modal de P2 não detecta JOYDEVICEREMOVED — se controle cair durante
-  seleção, ESC do teclado cancela
-- Mine/fire/ice/slime zones ainda checam apenas P1 — P2 atravessa sem dano
-  nessas armadilhas específicas
+- ~~Modal de P2 não detecta JOYDEVICEREMOVED~~ ✅ Resolvido (2026-05-22):
+  desconexão do gamepad do P2 durante o modal cancela a seleção como se
+  fosse B (snapshot do `instance_id` no construtor)
+- ~~Mine/fire/ice/slime zones ainda checam apenas P1~~ ✅ Resolvido (2026-05-22):
+  `check_mine_explosions`, `fire_zones_vs_entities`, `ice_poison_zones_vs_entities`
+  e `handle_mine_explosion` agora aceitam `ships: Sequence[Ship]` e retornam
+  `set[int]` (id(ship)) para naves atingidas. Orquestrador em
+  `PlayingScene._handle_collisions` roteia hits per-slot. Slime drip itera
+  `roster.alive_slots()` (drip é consumido na colisão — sem double-damage)
 - Câmera/shake centrados em P1 sempre (sem split-screen — coop é colocalizado)
 
 | Caso | Tratamento |

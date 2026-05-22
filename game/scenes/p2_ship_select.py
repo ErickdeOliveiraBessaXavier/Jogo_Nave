@@ -68,6 +68,11 @@ class P2ShipSelectScene(Scene):
         self.index: int = 0
         self._ls_prev_x_pressed: int = 0
         self._closed: bool = False
+        # Snapshot do instance_id do gamepad do P2 — usado pra detectar
+        # desconexão durante a seleção (cancela como se fosse B).
+        self._p2_instance_id: int | None = self.app.gamepad.slot_instance_id(
+            P2_GAMEPAD_SLOT
+        )
         
         # Configurações de layout
         self.card_w = 600
@@ -92,6 +97,15 @@ class P2ShipSelectScene(Scene):
             self._handle_button(event)
         elif event.type == pygame.JOYHATMOTION:
             self._handle_hat(event)
+        elif event.type == pygame.JOYDEVICEREMOVED:
+            if (
+                self._p2_instance_id is not None
+                and event.instance_id == self._p2_instance_id
+            ):
+                logger.info(
+                    "Gamepad de P2 desconectou durante seleção — cancelando modal"
+                )
+                self._cancel()
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self._cancel()
