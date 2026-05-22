@@ -746,6 +746,9 @@ class MountainStalagmite:
 
 
 class MountainStalactite:
+    # Estrutura fixa no teto — análogo a MountainStalagmite
+    pullable_by_black_hole: bool = False
+
     """Estalactite que cai do teto — espelho invertido de MountainStalagmite."""
 
     MAX_HEALTH: Final[int] = 20

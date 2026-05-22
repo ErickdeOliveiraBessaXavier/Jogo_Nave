@@ -75,6 +75,12 @@ class ShipPowerups:
     def activate_dash(self, duration: float) -> None:
         ship = self.ship
         ship.dash_timer = max(ship.dash_timer, duration)
+        
+        # Corrigir direção do dash para seguir a orientação da nave
+        import pygame
+        vx, vy = ship.get_facing_vector()
+        ship.dash_dir = pygame.math.Vector2(vx, vy)
+        
         # Bônus de velocidade durante o Blink Dash
         if not hasattr(ship, "original_speed"):
             ship.original_speed = ship.speed

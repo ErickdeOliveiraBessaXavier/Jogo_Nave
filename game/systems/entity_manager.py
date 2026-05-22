@@ -319,9 +319,11 @@ class EntityManager:
             AirStrikeBomb(target_x, target_y, on_explode=on_explode, on_fall=on_fall)
         )
 
-    def spawn_black_hole(self, x: float, y: float, duration: float) -> None:
+    def spawn_black_hole(
+        self, x: float, y: float, duration: float, is_vortex: bool = False
+    ) -> None:
         self.black_holes.append(
-            BlackHole(x, y, duration, is_side_scroll=self.is_side_scroll)
+            BlackHole(x, y, duration, self.is_side_scroll, is_vortex)
         )
 
     def spawn_cannon_tower(self, x: float, y: float) -> None:
@@ -548,6 +550,10 @@ class EntityManager:
         """Atualiza caches de inimigos consumidos por bullets homing / mini-ships."""
         self._cached_formation_enemies = []
         self._cached_all_enemies = list(self.enemies)
+        
+        # Incluir Rock Gliders ativos do pool
+        self._cached_all_enemies.extend(self.rock_glider_pool.active)
+        
         for f in self.formations:
             fe = f.get_enemies()
             self._cached_formation_enemies.extend(fe)
@@ -632,21 +638,68 @@ class EntityManager:
                         e.lives -= damage
         for s in self.orbital_shields:
             s.update(dt)
-            # Dano por contato
             damage = s.damage * dt
             sr = s.rect
-            for e in self.enemies:
-                if not getattr(e, "dead", False) and sr.colliderect(e.rect):
-                    if hasattr(e, "take_damage"): e.take_damage(damage)
-                    elif hasattr(e, "lives"): e.lives -= damage
+            for e in self._cached_all_enemies:
+                if getattr(e, "dead", False):
+                    continue
+                
+                # Tentar hitboxes específicos para precisão (ex: RockGlider)
+                hitboxes_fn = getattr(e, "get_ship_contact_hitboxes", None)
+                if hitboxes_fn:
+                    for hb in hitboxes_fn():
+                        if sr.colliderect(hb):
+                            self._apply_projectile_damage(e, damage, hb.centerx, hb.centery)
+                            break
+                elif sr.colliderect(e.rect):
+                    self._apply_projectile_damage(e, damage, e.rect.centerx, e.rect.centery)
+
         for beam in self.plasma_beams:
             beam.update(dt)
             p1, p2 = beam.get_line()
             damage = beam.damage * dt
-            for e in self.enemies:
-                if not getattr(e, "dead", False) and e.rect.clipline(p1, p2):
-                    if hasattr(e, "take_damage"): e.take_damage(damage)
-                    elif hasattr(e, "lives"): e.lives -= damage
+            for e in self._cached_all_enemies:
+                if getattr(e, "dead", False):
+                    continue
+                    
+                # Tentar hitboxes específicos para precisão (ex: RockGlider)
+                hitboxes_fn = getattr(e, "get_ship_contact_hitboxes", None)
+                if hitboxes_fn:
+                    for hb in hitboxes_fn():
+                        if hb.clipline(p1, p2):
+                            self._apply_projectile_damage(e, damage, hb.centerx, hb.centery, trigger_death=True)
+                            break
+                else:
+                    rect = getattr(e, "rect", None)
+                    if rect and rect.clipline(p1, p2):
+                        self._apply_projectile_damage(e, damage, rect.centerx, rect.centery, trigger_death=True)
+
+    def _apply_projectile_damage(self, enemy: Any, damage: float, hit_x: float, hit_y: float, trigger_death: bool = False) -> None:
+        """Helper robusto para aplicar dano de upgrades (Beam/Shield/Vortex)."""
+        killed = False
+        if hasattr(enemy, "on_hit"):
+            # Para entidades como RockGlider, Meteor, Bosses
+            enemy.on_hit(int(damage) if damage >= 1 else 1, hit_x, hit_y)
+            if getattr(enemy, "dead", False): killed = True
+        elif hasattr(enemy, "take_damage"):
+            enemy.take_damage(damage)
+            if getattr(enemy, "dead", False): killed = True
+        elif hasattr(enemy, "lives"):
+            current = getattr(enemy, "lives")
+            new_lives = current - damage
+            setattr(enemy, "lives", new_lives)
+            if new_lives <= 0:
+                enemy.dead = True
+                killed = True
+        elif hasattr(enemy, "health"):
+            enemy.health -= damage
+            if enemy.health <= 0:
+                enemy.dead = True
+                killed = True
+        
+        # Garantir efeitos de morte se solicitado e a entidade morreu agora
+        if trigger_death and killed:
+            self.spawn_explosion(hit_x, hit_y, size=30)
 
     def _update_enemy_projectiles(self, enemy_dt: float) -> None:
         """Projéteis inimigos: alien/serpent/boss/eye (todos respeitam freeze)."""
@@ -1033,6 +1086,10 @@ class EntityManager:
             laser.draw(surface)
         for link in self.coop_links:
             link.draw(surface)
+        for s in self.orbital_shields:
+            s.draw(surface)
+        for beam in self.plasma_beams:
+            beam.draw(surface)
         for b in self.black_holes:
             b.draw(surface)
         for w in self.emp_waves:
@@ -1310,6 +1367,12 @@ class EntityManager:
         self._filter_dead_inplace(self.wingmen)
         self._filter_dead_inplace(self.coop_links)
         self._filter_dead_inplace(self.orbital_shields)
+        
+        # PlasmaBeam: disparar explosão final antes de remover
+        for beam in self.plasma_beams:
+            if beam.dead and hasattr(beam, "trigger_final_explosion"):
+                beam.trigger_final_explosion(self)
+                
         self._filter_dead_inplace(self.plasma_beams)
         self._filter_dead_inplace(self.chain_lightnings)
 
@@ -1334,6 +1397,7 @@ class EntityManager:
         self._filter_dead_inplace(self.floating_scores, lambda f: f.is_dead())
         self._filter_dead_inplace(self.formations)
         self._filter_dead_inplace(self.spikes)
+        self._filter_dead_inplace(self.black_holes)
         self._filter_dead_inplace(self.air_strike_bombs)
         self._filter_dead_inplace(self.cannon_towers)
         self._filter_dead_inplace(self.cannon_mines)

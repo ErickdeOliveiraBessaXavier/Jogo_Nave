@@ -57,8 +57,9 @@ class ShootingSystem:
         # Cooldown por nave: chave = id(ship), valor = segundos restantes.
         # Naves não-mapeadas têm cooldown 0 implícito (atira imediatamente).
         self._cooldowns: dict[int, float] = {}
+        self._cooldowns_berserk: dict[int, float] = {}
         self._charged_laser_channel: Any | None = None
-        self._berserk_fire_timer: float = 0.0
+        self._berserk_rotation: float = 0.0
 
     def is_ready(self, ship: Ship) -> bool:
         return self._cooldowns.get(id(ship), 0.0) <= 0.0
@@ -66,6 +67,7 @@ class ShootingSystem:
     def reset(self) -> None:
         """Zera todos os cooldowns entre fases. O canal de áudio é liberado em update()."""
         self._cooldowns.clear()
+        self._cooldowns_berserk.clear()
 
     def update(self, dt: float) -> None:
         """Decrementa cooldowns de todas as naves e libera o canal do laser quando não há lasers vivos."""
@@ -77,6 +79,15 @@ class ShootingSystem:
                     del self._cooldowns[ship_id]
                 else:
                     self._cooldowns[ship_id] = new_cd
+        
+        if self._cooldowns_berserk:
+            for ship_id in list(self._cooldowns_berserk.keys()):
+                new_cd = self._cooldowns_berserk[ship_id] - dt
+                if new_cd <= 0.0:
+                    del self._cooldowns_berserk[ship_id]
+                else:
+                    self._cooldowns_berserk[ship_id] = new_cd
+
         if self._charged_laser_channel is not None:
             has_alive = any(
                 getattr(laser, "state", "") == "alive"
@@ -87,38 +98,50 @@ class ShootingSystem:
                 self._charged_laser_channel = None
 
     def fire_berserk(self, ship: Ship, player_damage_multiplier: float, dt: float) -> None:
-        """Dispara projéteis em todas as direções durante o modo Berserk."""
-        self._berserk_fire_timer -= dt
-        if self._berserk_fire_timer <= 0:
-            self._berserk_fire_timer = 0.12  # Frequência rápida
+        """Dispara projéteis em leque rotativo (Estrela Espiral) durante o modo Berserk."""
+        ship_id = id(ship)
+        
+        # Decrementar o timer de cooldown do berserk se ele existir (fallback caso update não tenha rodado)
+        if ship_id in self._cooldowns_berserk:
+            # Note: O update() já decrementa, mas em PlayingScene o fire_berserk é chamado antes do update do ShootingSystem
+            # em alguns frames. Garantimos que ele respeite o intervalo.
+            if self._cooldowns_berserk[ship_id] > 0:
+                return
 
-            cx = ship.x + ship.w / 2
-            cy = ship.y + ship.h / 2
+        # Rotação global constante (Estilo Stone Golem)
+        self._berserk_rotation += dt * 360  # Uma volta completa por segundo
+
+        # Intervalo entre rajadas (0.1s para manter a intensidade sem poluir demais)
+        self._cooldowns_berserk[ship_id] = 0.1
+
+        cx = ship.x + ship.w / 2
+        cy = ship.y + ship.h / 2
+        
+        # Bônus de dano Berserk (1.5x)
+        adjusted_damage = int(
+            Config.BULLET_BASE_DAMAGE 
+            * player_damage_multiplier 
+            * ship.damage_multiplier 
+            * 1.5
+        )
+
+        # Dispara em 4 direções rotativas (Cruz Espiral)
+        # Reduzido de 8 para 4 conforme solicitado ("tiros demais")
+        for i in range(4):
+            angle_deg = (i * 90.0) + self._berserk_rotation
+            angle_rad = math.radians(angle_deg)
+            dir_vec = (math.cos(angle_rad), math.sin(angle_rad))
             
-            # Bônus de dano Berserk (1.5x)
-            adjusted_damage = int(
-                Config.BULLET_BASE_DAMAGE 
-                * player_damage_multiplier 
-                * ship.damage_multiplier 
-                * 1.5
+            # Usando BulletPool via EntityManager.spawn_bullet
+            self._em.spawn_bullet(
+                cx, cy,
+                damage=adjusted_damage,
+                direction=dir_vec,
+                ship_id="berserk"
             )
-
-            # Dispara em 8 direções (Rosa dos ventos)
-            for i in range(8):
-                angle_deg = i * 45.0
-                angle_rad = math.radians(angle_deg)
-                dir_vec = (math.cos(angle_rad), math.sin(angle_rad))
-                
-                # Usando BulletPool via EntityManager.spawn_bullet
-                self._em.spawn_bullet(
-                    cx, cy,
-                    damage=adjusted_damage,
-                    direction=dir_vec,
-                    ship_id="berserk"
-                )
-            
-            # Efeito sonoro
-            sound_manager.play_shot()
+        
+        # Efeito sonoro
+        sound_manager.play_shot()
 
     def fire(self, ship: Ship, player_damage_multiplier: float) -> None:
         """Dispara o tiro apropriado e reinicia o cooldown.

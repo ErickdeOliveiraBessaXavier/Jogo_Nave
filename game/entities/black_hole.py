@@ -25,275 +25,285 @@ class Particle(TypedDict):
 class BlackHole:
     """Buraco negro com movimento orientado pelo modo da fase."""
 
+    SPAWN_DURATION = 1.0 # Segundos para crescer
+    DEATH_DURATION = 0.5 # Segundos para implodir
+
     def __init__(
         self,
         x: float,
         y: float,
         duration: float,
         is_side_scroll: bool = False,
+        is_vortex: bool = False,
     ):
         self.x = x
         self.y = y
-        self.duration = duration  # Não usado, mas mantido para compatibilidade
+        self.duration = duration
         self.is_side_scroll = is_side_scroll
+        self.is_vortex = is_vortex
         self.lifetime = 0.0
         self.dead = False
+        
+        # Estados: "spawning", "active", "dying"
+        self.state = "spawning"
+        self.state_timer = 0.0
+        self.scale = 0.0 # 0.0 a 1.0 para animações
 
         # Tocar som do buraco negro
         sound_manager.play_black_hole()
 
-        # Movimento orientado pelo tema/mode:
-        # - top-down: sobe (eixo Y)
-        # - side-scroll: avança para a direita (eixo X)
-        self.speed_y = config.BLACK_HOLE_SPEED_Y
-        self.speed_x = abs(config.BLACK_HOLE_SPEED_Y)
+        # Movimento
+        if self.is_vortex:
+            self.speed_y = 0.0
+            self.speed_x = 0.0
+        else:
+            self.speed_y = config.BLACK_HOLE_SPEED_Y
+            self.speed_x = abs(config.BLACK_HOLE_SPEED_Y)
 
-        # Raios do buraco negro (começam pequenos)
-        self.core_radius = (
-            config.BLACK_HOLE_INITIAL_CORE_RADIUS
-        )  # Núcleo central (começa pequeno)
-        self.event_horizon = (
-            self.core_radius * 2
-        )  # Raio de destruição (proporcional ao núcleo)
-        self.pull_radius = config.BLACK_HOLE_INITIAL_PULL_RADIUS  # Raio de atração
+        # Raios base
+        base_core_radius = config.BLACK_HOLE_INITIAL_CORE_RADIUS
+        if self.is_vortex:
+            base_core_radius *= 0.5
 
-        # Raios finais (crescimento)
+        self.core_radius = base_core_radius
+        self.event_horizon = self.core_radius * 2
+        
+        initial_pull = config.BLACK_HOLE_INITIAL_PULL_RADIUS
+        if self.is_vortex:
+            initial_pull *= 0.6
+
+        self.pull_radius = initial_pull
+
+        # Raios finais
         self.max_core_radius = config.BLACK_HOLE_MAX_CORE_RADIUS
-        self.max_event_horizon = config.BLACK_HOLE_MAX_CORE_RADIUS * 2
-        self.max_pull_radius = config.BLACK_HOLE_MAX_PULL_RADIUS
+        if self.is_vortex:
+            self.max_core_radius *= 0.4
+            self.max_pull_radius = config.BLACK_HOLE_INITIAL_PULL_RADIUS * 0.8
+        else:
+            self.max_pull_radius = config.BLACK_HOLE_MAX_PULL_RADIUS
 
-        # Taxa de crescimento (por segundo)
-        self.growth_rate = (
-            config.BLACK_HOLE_GROWTH_RATE
-        )  # Cresce 15 pixels de raio por segundo
+        # Dano (Vortex agora dá dano constante tipo "veneno" no núcleo)
+        # Se for Black Hole Ultimate (não vortex), mata instantaneamente no centro.
+        # Se for Vortex, dá 1 de dano a cada 3 segundos (0.33 HP/s), mas de forma persistente.
+        self.damage_per_second = 0.334 # Resulta em ~1HP a cada 3s
+        self.hit_effect_timer = 0.0 # Timer visual para o veneno
 
-        # Partículas do disco de acreção
+        self.growth_rate = config.BLACK_HOLE_GROWTH_RATE
         self.particles: list[Particle] = []
         self._create_particles()
-
-        # Animação
         self.animation_timer = 0.0
 
     def _create_particles(self):
-        """Cria partículas para o disco de acreção."""
-        for _ in range(config.BLACK_HOLE_PARTICLE_COUNT):  # Usar configuração otimizada
+        count = config.BLACK_HOLE_PARTICLE_COUNT
+        if self.is_vortex:
+            count = int(count * 0.4)
+
+        for _ in range(count):
             angle = random.uniform(0, math.pi * 2)
-            distance = random.uniform(self.pull_radius * 0.5, self.pull_radius * 1.0)
+            dist_min = 0.3 if self.is_vortex else 0.4
+            dist_max = 0.7 if self.is_vortex else 1.0
+            distance = random.uniform(self.pull_radius * dist_min, self.pull_radius * dist_max)
+            
+            if self.is_vortex:
+                color = (random.randint(0, 100), random.randint(150, 255), random.randint(200, 255))
+            else:
+                color = random.choice(BLACK_HOLE_PARTICLE_COLORS)
+
             particle: Particle = {
                 "x": self.x + math.cos(angle) * distance,
                 "y": self.y + math.sin(angle) * distance,
-                "size": random.randint(2, 4),
+                "size": random.randint(1, 5) if self.is_vortex else random.randint(2, 4),
                 "angle": angle,
                 "orbit_radius": distance,
-                "base_speed": random.uniform(0.2, 0.5),
+                "base_speed": random.uniform(0.1, 0.3) if self.is_vortex else random.uniform(0.2, 0.5),
                 "opacity": random.uniform(0.3, 1.0),
-                "color": random.choice(
-                    BLACK_HOLE_PARTICLE_COLORS
-                ),  # Usar constante de cores
+                "color": color,
             }
             self.particles.append(particle)
 
     def update(self, dt: float):
-        """Atualiza o buraco negro.
-
-        Args:
-            dt: Delta time
-        """
         self.lifetime += dt
         self.animation_timer += dt
+        self.state_timer += dt
+        
+        # Timer visual do efeito de hit do veneno
+        if self.is_vortex and self.state == "active":
+            self.hit_effect_timer += dt
 
-        # Movimento orientado por modo
-        if self.is_side_scroll:
-            self.x += self.speed_x * dt
-        else:
-            self.y += self.speed_y * dt
-
-        # Crescer gradualmente até atingir tamanho máximo
-        if self.core_radius < self.max_core_radius:
-            self.core_radius = min(
-                self.max_core_radius, self.core_radius + self.growth_rate * dt
-            )
-            self.event_horizon = self.core_radius * 2
-            self.pull_radius = min(
-                self.max_pull_radius, self.pull_radius + self.growth_rate * 5 * dt
-            )
-
-        # Encerramento quando sair da área útil conforme orientação.
-        if self.is_side_scroll:
-            if self.x > config.SCREEN_WIDTH + self.pull_radius:
+        # Máquina de estados de animação
+        if self.state == "spawning":
+            self.scale = min(1.0, self.state_timer / self.SPAWN_DURATION)
+            if self.state_timer >= self.SPAWN_DURATION:
+                self.state = "active"
+        elif self.state == "active":
+            self.scale = 1.0
+            # Expira por tempo
+            if self.is_vortex and self.lifetime >= self.duration:
+                self.state = "dying"
+                self.state_timer = 0.0
+        elif self.state == "dying":
+            self.scale = max(0.0, 1.0 - (self.state_timer / self.DEATH_DURATION))
+            if self.state_timer >= self.DEATH_DURATION:
                 self.dead = True
                 return
-        elif self.y < -self.pull_radius:
-            self.dead = True
-            return
 
-        # Atualizar todas as partículas do disco
+        # Movimento (apenas se não for vortex e estiver ativo)
+        if not self.is_vortex and self.state != "dying":
+            if self.is_side_scroll:
+                self.x += self.speed_x * dt
+            else:
+                self.y += self.speed_y * dt
+
+        # Crescimento gradual dos atributos base
+        if self.core_radius < self.max_core_radius:
+            self.core_radius = min(self.max_core_radius, self.core_radius + self.growth_rate * dt)
+            self.event_horizon = self.core_radius * 2
+            
+        if self.pull_radius < self.max_pull_radius:
+            self.pull_radius = min(self.max_pull_radius, self.pull_radius + self.growth_rate * 5 * dt)
+
+        # Culling por saída da tela
+        if not self.is_vortex and self.state == "active":
+            if self.is_side_scroll:
+                if self.x > config.SCREEN_WIDTH + self.pull_radius: self.state = "dying"; self.state_timer = 0.0
+            elif self.y < -self.pull_radius:
+                self.state = "dying"; self.state_timer = 0.0
+
+        # Atualizar partículas
         for particle in self.particles:
             dx = self.x - particle["x"]
             dy = self.y - particle["y"]
-            distance_squared = (
-                dx * dx + dy * dy
-            )  # Usar distância ao quadrado (evita sqrt)
-            distance = math.sqrt(
-                distance_squared
-            )  # Manter para cálculos que precisam do valor real
+            distance_squared = dx * dx + dy * dy
+            distance = math.sqrt(distance_squared)
 
-            # Aceleração em direção ao centro
-            distance_factor = max(0.3, distance / (self.pull_radius * 0.5))
+            dist_ref = self.pull_radius * 0.4 if self.is_vortex else self.pull_radius * 0.5
+            distance_factor = max(0.2, distance / dist_ref)
             acceleration_factor = 1 / distance_factor
 
-            # Velocidade angular
             angular_speed = (1 / max(1, distance)) * 20 * acceleration_factor
             particle["angle"] += angular_speed * particle["base_speed"]
+            particle["orbit_radius"] -= particle["base_speed"] * 0.1 * acceleration_factor
 
-            # Espiral em direção ao centro
-            spiral_speed = particle["base_speed"] * 0.1 * acceleration_factor
-            particle["orbit_radius"] -= spiral_speed
+            # Escala afeta a posição das partículas (elas convergem na morte)
+            draw_radius = particle["orbit_radius"] * self.scale
+            particle["x"] = self.x + math.cos(particle["angle"]) * draw_radius
+            particle["y"] = self.y + math.sin(particle["angle"]) * draw_radius
 
-            # Nova posição orbital
-            particle["x"] = (
-                self.x + math.cos(particle["angle"]) * particle["orbit_radius"]
-            )
-            particle["y"] = (
-                self.y + math.sin(particle["angle"]) * particle["orbit_radius"]
-            )
-
-            # Fade próximo ao buraco negro (usar comparação ao quadrado para evitar sqrt)
-            fade_distance_squared = (self.pull_radius * 0.3) ** 2
-            if distance_squared < fade_distance_squared:
-                fade_distance = self.pull_radius * 0.3
-                particle["opacity"] = max(0.2, distance / fade_distance)
-
-            # Resetar se ficar muito próximo
-            if particle["orbit_radius"] < self.core_radius + 20:
+            # Resetar partículas próximas ao centro
+            if particle["orbit_radius"] < self.core_radius + (10 if self.is_vortex else 20):
                 angle = random.uniform(0, math.pi * 2)
-                distance = random.uniform(
-                    self.pull_radius * 0.5, self.pull_radius * 1.0
-                )
-                particle["x"] = self.x + math.cos(angle) * distance
-                particle["y"] = self.y + math.sin(angle) * distance
+                distance = random.uniform(self.pull_radius * 0.3, self.pull_radius * 1.0)
                 particle["orbit_radius"] = distance
                 particle["angle"] = angle
-                particle["opacity"] = random.uniform(0.3, 1.0)
-
-    def is_enemy_in_range(self, enemy: Any) -> bool:
-        """Verifica rapidamente se um inimigo está dentro do raio de atração.
-
-        Returns:
-            True se o inimigo está dentro do pull_radius
-        """
-        enemy_x = getattr(enemy, "x", 0) + getattr(enemy, "w", 0) / 2
-        enemy_y = getattr(enemy, "y", 0) + getattr(enemy, "h", 0) / 2
-
-        dx = self.x - enemy_x
-        dy = self.y - enemy_y
-        distance_squared = dx * dx + dy * dy
-
-        # Usar distância ao quadrado para evitar sqrt
-        return distance_squared < (self.pull_radius * self.pull_radius)
 
     def process_all_enemies(
         self, enemies: list[Any], dt: float, spawn_explosion_callback: Any = None
     ) -> None:
-        """Processa todos os inimigos de uma vez, aplicando gravidade e destruindo quando necessário.
+        if self.state == "dying":
+            return
 
-        Args:
-            enemies: Lista de todos os inimigos
-            dt: Delta time
-            spawn_explosion_callback: Callback para spawnar explosões quando inimigos são destruídos
-        """
-        pull_radius_squared = self.pull_radius * self.pull_radius
-        event_horizon_squared = self.event_horizon * self.event_horizon
+        pull_radius_sq = (self.pull_radius * self.scale) ** 2
+        core_radius_sq = (self.core_radius * self.scale) ** 2
+        
+        # O "veneno" visual ocorre em intervalos curtos para não sobrecarregar
+        show_hit_visual = False
+        if self.is_vortex and self.hit_effect_timer >= 0.15: # 6x por segundo
+            show_hit_visual = True
+            self.hit_effect_timer = 0.0
 
         for enemy in enemies:
             if getattr(enemy, "dead", False):
                 continue
-
-            # Inimigos fixos no chão (stalagmites, propellers ancorados) ou
-            # outras entidades cujo ``y`` é derivado (property sem setter)
+                
             # opt-out via ``pullable_by_black_hole = False``.
             if not getattr(enemy, "pullable_by_black_hole", True):
                 continue
 
-            # Verificar se é um boss - bosses são imunes ao buraco negro
-            enemy_class_name = enemy.__class__.__name__
-            if enemy_class_name in (
-                "Boss",
-                "SlimeBoss",
-                "SpikeBoss",
-                "GiantMeteorBoss",
-            ):
+            # Imunidade de Bosses principais
+            if enemy.__class__.__name__ in ("Boss", "SlimeBoss", "SpikeBoss", "GiantMeteorBoss"):
                 continue
 
-            # Calcular distância ao buraco negro
             enemy_x = getattr(enemy, "x", 0) + getattr(enemy, "w", 0) / 2
             enemy_y = getattr(enemy, "y", 0) + getattr(enemy, "h", 0) / 2
+            dx, dy = self.x - enemy_x, self.y - enemy_y
+            dist_sq = dx * dx + dy * dy
 
-            dx = self.x - enemy_x
-            dy = self.y - enemy_y
-            distance_squared = dx * dx + dy * dy
-
-            # Verificar se está fora do raio de atração (usando distância ao quadrado)
-            if distance_squared >= pull_radius_squared:
+            if dist_sq >= pull_radius_sq:
                 continue
 
-            # Verificar se deve destruir (usando distância ao quadrado)
-            if distance_squared < event_horizon_squared:
+            # Logica de Centro (Núcleo)
+            if dist_sq < core_radius_sq:
+                if not self.is_vortex:
+                    # Black Hole Ultimate mata tudo instantaneamente
+                    enemy.dead = True
+                    if spawn_explosion_callback: spawn_explosion_callback(enemy_x, enemy_y, size=30)
+                else:
+                    # Vortex dá dano de veneno constante
+                    dmg = self.damage_per_second * dt
+                    # Só ativa o efeito visual (on_hit/flash) periodicamente, mas o dano é todo frame
+                    self._apply_vortex_damage(enemy, dmg, spawn_explosion_callback, trigger_visual=show_hit_visual)
+                continue
+
+            # Atração Gravitacional (aplica a todos dentro do pull_radius)
+            dist = math.sqrt(dist_sq)
+            pull_strength = (1.0 - (dist / (self.pull_radius * self.scale))) ** 2
+            base_speed = config.BLACK_HOLE_PULL_SPEED * (1.5 if self.is_vortex else 1.0)
+            pull_speed = base_speed * pull_strength * self.scale
+
+            if dist > 0:
+                enemy.x += (dx / dist) * pull_speed * dt
+                enemy.y += (dy / dist) * pull_speed * dt
+
+    def _apply_vortex_damage(self, enemy: Any, damage: float, spawn_explosion_callback: Any = None, trigger_visual: bool = False) -> None:
+        """Helper para aplicar dano de veneno e garantir efeitos visuais."""
+        killed = False
+        hit_x = enemy.x + getattr(enemy, "w", 0)/2
+        hit_y = enemy.y + getattr(enemy, "h", 0)/2
+
+        # Aplicar o dano (mesmo que seja decimal, o sistema de health suporta)
+        if hasattr(enemy, "health"):
+            enemy.health -= damage
+            if enemy.health <= 0:
                 enemy.dead = True
-                if spawn_explosion_callback:
-                    spawn_explosion_callback(enemy_x, enemy_y, size=30)
-                continue
+                killed = True
+        elif hasattr(enemy, "lives"):
+            current = getattr(enemy, "lives")
+            new_lives = current - damage
+            setattr(enemy, "lives", new_lives)
+            if new_lives <= 0:
+                enemy.dead = True
+                killed = True
 
-            # Aplicar força gravitacional
-            distance = math.sqrt(distance_squared)  # Só calcular sqrt quando necessário
+        # Ativar efeitos visuais se o timer permitiu
+        if trigger_visual and not killed:
+            if hasattr(enemy, "on_hit"):
+                # Passa 0 de dano para on_hit apenas para disparar o visual/flash/partículas
+                enemy.on_hit(0, hit_x, hit_y)
+            elif hasattr(enemy, "_hit_flash"):
+                setattr(enemy, "_hit_flash", 0.1)
 
-            # Força aumenta exponencialmente perto do centro
-            pull_strength = 1.0 - (distance / self.pull_radius)
-            pull_strength = pull_strength**2  # Exponencial
-
-            # Velocidade de atração (pixels/segundo)
-            pull_speed = config.BLACK_HOLE_PULL_SPEED * pull_strength
-
-            # Normalizar vetor de direção e aplicar movimento
-            if distance > 0:
-                dx /= distance
-                dy /= distance
-                enemy.x += dx * pull_speed * dt
-                enemy.y += dy * pull_speed * dt
+        # Se morreu, explosão final
+        if killed and spawn_explosion_callback:
+            spawn_explosion_callback(hit_x, hit_y, size=25)
 
     def draw(self, surface: pygame.Surface):
-        """Desenha o buraco negro.
-
-        Args:
-            surface: Superfície para desenhar
-        """
-        # Desenhar todas as partículas do disco de acreção
-        # OPT: Usar pygame.draw.circle direto ao invés de criar Surface (muito mais rápido)
+        if self.scale <= 0: return
+        
+        # Partículas
         for particle in self.particles:
-            color_with_alpha = particle["color"] + (int(particle["opacity"] * 255),)
+            color_with_alpha = particle["color"] + (int(particle["opacity"] * 255 * self.scale),)
             pygame.draw.circle(
-                surface,
-                color_with_alpha,
-                (int(particle["x"]), int(particle["y"])),
-                particle["size"],
+                surface, color_with_alpha, (int(particle["x"]), int(particle["y"])), 
+                max(1, int(particle["size"] * self.scale))
             )
 
-        # Desenhar núcleo do buraco negro (preto absoluto)
-        pygame.draw.circle(
-            surface, (0, 0, 0), (int(self.x), int(self.y)), int(self.core_radius)
-        )
-
-        # Borda sutil do horizonte de eventos
-        pygame.draw.circle(
-            surface, (50, 50, 50), (int(self.x), int(self.y)), int(self.core_radius), 1
-        )
+        # Núcleo
+        core_r = int(self.core_radius * self.scale)
+        if core_r > 0:
+            pygame.draw.circle(surface, (0, 0, 0), (int(self.x), int(self.y)), core_r)
+            pygame.draw.circle(surface, (50, 50, 50), (int(self.x), int(self.y)), core_r, 1)
 
     @property
     def rect(self) -> pygame.Rect:
-        """Retorna um retângulo para verificações básicas."""
-        return pygame.Rect(
-            int(self.x - self.pull_radius),
-            int(self.y - self.pull_radius),
-            self.pull_radius * 2,
-            self.pull_radius * 2,
-        )
+        r = self.pull_radius * self.scale
+        return pygame.Rect(int(self.x - r), int(self.y - r), int(r * 2), int(r * 2))
