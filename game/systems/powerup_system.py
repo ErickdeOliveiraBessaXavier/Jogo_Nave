@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..core.config import config as Config
 from ..events import game_events as events
 
 if TYPE_CHECKING:
     from ..scenes.playing import PlayingScene
     from ..systems.player_slot import PlayerSlot
+
+
+SCORE_MULTIPLIER_DURATION = 15.0
 
 
 class PowerupSystem:
@@ -24,6 +28,20 @@ class PowerupSystem:
 
     def __init__(self, scene: "PlayingScene") -> None:
         self.scene = scene
+        # Lookup pré-calculado para evitar acesso repetido ao Config (imutável).
+        self._powerup_values: dict[str, float] = {
+            "shield_duration": Config.SHIELD_DURATION * 1000,
+            "double_shot_duration": Config.DOUBLE_SHOT_DURATION,
+            "speed_boost_duration": Config.SPEED_BOOST_DURATION,
+            "piercing_shot_duration": Config.PIERCING_SHOT_DURATION,
+            "mini_ships_duration": Config.MINI_SHIPS_DURATION,
+            "rainbow_duration": Config.RAINBOW_DURATION,
+            "rainbow_duration_invuln": Config.RAINBOW_DURATION * 1000,
+            "rainbow_score": Config.POWERUP_SCORE_BONUS * 2,
+            "cooldown_haste_reduction": Config.COOLDOWN_HASTE_REDUCTION,
+            "time_stop_duration": Config.TIME_STOP_DURATION,
+            "damage_boost_duration": Config.DAMAGE_BOOST_DURATION,
+        }
 
     # ------------------------------------------------------------------
     # Aplicação de cada powerup
@@ -36,76 +54,69 @@ class PowerupSystem:
             handler(self, slot)
 
     def _apply_shield(self, slot: "PlayerSlot") -> None:
-        scene = self.scene
         ship = slot.ship
-        ship.invuln = max(ship.invuln, scene._powerup_values["shield_duration"])
+        ship.invuln = max(ship.invuln, self._powerup_values["shield_duration"])
 
     def _apply_double_shot(self, slot: "PlayerSlot") -> None:
-        scene = self.scene
         ship = slot.ship
         ship.double_shot_timer = max(
             ship.double_shot_timer,
-            scene._powerup_values["double_shot_duration"],
+            self._powerup_values["double_shot_duration"],
         )
 
     def _apply_speed(self, slot: "PlayerSlot") -> None:
-        scene = self.scene
         ship = slot.ship
         ship.speed_boost_timer = max(
             ship.speed_boost_timer,
-            scene._powerup_values["speed_boost_duration"],
+            self._powerup_values["speed_boost_duration"],
         )
 
     def _apply_score_bonus(self, slot: "PlayerSlot") -> None:
         # Efeito global: independente de quem coletou. Score é compartilhado.
-        from ..scenes.playing import _SCORE_MULTIPLIER_DURATION
-
         scene = self.scene
-        scene.score_multiplier_timer = _SCORE_MULTIPLIER_DURATION
+        scene.score_multiplier_timer = SCORE_MULTIPLIER_DURATION
         scene.score_multiplier_active = True
 
     def _apply_piercing(self, slot: "PlayerSlot") -> None:
-        scene = self.scene
         ship = slot.ship
         ship.piercing_shot_timer = max(
             ship.piercing_shot_timer,
-            scene._powerup_values["piercing_shot_duration"],
+            self._powerup_values["piercing_shot_duration"],
         )
 
     def _apply_mini_ships(self, slot: "PlayerSlot") -> None:
         # Mini-naves do powerup orbitam a nave do coletor. EntityManager mantém
         # uma única lista global, mas cada MiniShip carrega `self.player`, então
-        # `_build_mini_ships(slot)` substitui apenas as deste slot.
+        # `build_mini_ships(slot)` substitui apenas as deste slot.
         scene = self.scene
         ship = slot.ship
         ship.mini_ships_timer = max(
             ship.mini_ships_timer,
-            scene._powerup_values["mini_ships_duration"],
+            self._powerup_values["mini_ships_duration"],
         )
-        scene._build_mini_ships(slot)
+        scene.build_mini_ships(slot)
 
     def _apply_cooldown_haste(self, slot: "PlayerSlot") -> None:
         # Upgrades permanentes pertencem ao P1; cooldown haste só afeta os
         # slots dele. P2 coletar mantém o efeito sem impacto adicional.
         scene = self.scene
-        scene._apply_cooldown_reduction(
-            scene._powerup_values["cooldown_haste_reduction"]
+        scene.apply_cooldown_reduction(
+            self._powerup_values["cooldown_haste_reduction"]
         )
 
     def _apply_time_stop(self, slot: "PlayerSlot") -> None:
         # Efeito global: congela inimigos para todos.
         scene = self.scene
         scene.time_stop_timer = max(
-            scene.time_stop_timer, scene._powerup_values["time_stop_duration"]
+            scene.time_stop_timer, self._powerup_values["time_stop_duration"]
         )
         scene.freeze_active = True
 
     def _apply_damage_boost(self, slot: "PlayerSlot") -> None:
-        scene = self.scene
         ship = slot.ship
         ship.damage_boost_timer = max(
             ship.damage_boost_timer,
-            scene._powerup_values["damage_boost_duration"],
+            self._powerup_values["damage_boost_duration"],
         )
 
     def _apply_chain_shot(self, slot: "PlayerSlot") -> None:
@@ -116,7 +127,7 @@ class PowerupSystem:
 
     def _apply_life(self, slot: "PlayerSlot") -> None:
         # Vida vai para o slot coletor (P2 ganha vida quando P2 coleta).
-        self.scene._change_lives_for(slot, 1)
+        self.scene.change_lives_for(slot, 1)
 
     def _apply_rainbow(self, slot: "PlayerSlot") -> None:
         scene = self.scene
@@ -125,7 +136,7 @@ class PowerupSystem:
         self._apply_double_shot(slot)
         self._apply_speed(slot)
         self._apply_mini_ships(slot)
-        rainbow_score = int(scene._powerup_values["rainbow_score"])
+        rainbow_score = int(self._powerup_values["rainbow_score"])
         if scene.score_multiplier_active:
             rainbow_score = int(rainbow_score * scene.score_multiplier_value)
         scene.score += rainbow_score
@@ -180,7 +191,7 @@ class PowerupSystem:
             collected_powerups = scene.collisions.ship_vs_powerups(
                 ship, scene.entity_manager.powerups
             )
-            if scene._no_powerups_mode:
+            if scene.no_powerups_mode:
                 collected_powerups = []
 
             for kind in collected_powerups:

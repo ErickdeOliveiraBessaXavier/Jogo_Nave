@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import random
 import time
+from collections import deque
 from typing import TYPE_CHECKING, TypedDict
 
 import pygame
@@ -41,6 +42,10 @@ class ShipMovement:
 
     def __init__(self, ship: "Ship") -> None:
         self.ship = ship
+        # Buffer de posições do cursor para reaction_delay (x, y, timestamp).
+        # Deque: popleft O(1) para descartar entradas vencidas, evitando
+        # rebuild da lista por frame.
+        self._mouse_history: deque[tuple[float, float, float]] = deque()
 
     def try_dash(self, current_move_vec: pygame.math.Vector2) -> bool:
         """Ativa o dash do Fantasma se o cooldown permitir."""
@@ -54,7 +59,7 @@ class ShipMovement:
             direction = current_move_vec.normalize()
         else:
             # Sem input: dasha na direção em que a nave está apontando.
-            vx, vy = ship._cardinal_vectors.get(ship.facing, (0.0, -1.0))
+            vx, vy = ship.cardinal_vectors.get(ship.facing, (0.0, -1.0))
             direction = pygame.math.Vector2(vx, vy)
 
         ship.dash_dir = direction
@@ -168,7 +173,7 @@ class ShipMovement:
             delay = ship.profile.reaction_delay
             if delay > 0.0:
                 now = time.time()
-                history = ship._mouse_history
+                history = self._mouse_history
                 history.append((target_x, target_y, now))
                 # Descartar entradas vencidas — popleft O(1) por entrada.
                 cutoff = now - (delay + 0.1)

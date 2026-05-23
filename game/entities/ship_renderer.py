@@ -71,9 +71,9 @@ class ShipRenderer:
         # Desenhar escudo (se ativo)
         if ship.has_shield:
             # Efeito pulsante
-            pulse = abs((ship._draw_time * 4) % 2 - 1)
+            pulse = abs((ship.draw_time * 4) % 2 - 1)
 
-            sprite_w, sprite_h = ship._ship_image_size
+            sprite_w, sprite_h = ship.ship_image_size
             center_x = int(ship.x + sprite_w / 2)
             center_y = int(ship.y + sprite_h / 2)
             base_radius = max(sprite_w, sprite_h) / 2 + 8
@@ -88,11 +88,11 @@ class ShipRenderer:
 
         # Repulsion Shield (Vento)
         if ship.has_repulsion_shield:
-            sprite_w, sprite_h = ship._ship_image_size
+            sprite_w, sprite_h = ship.ship_image_size
             cx = int(ship.x + sprite_w / 2)
             cy = int(ship.y + sprite_h / 2)
 
-            pulse = abs((ship._draw_time * 6) % 2 - 1)
+            pulse = abs((ship.draw_time * 6) % 2 - 1)
             glow_r = 30 + int(pulse * 10)
 
             # Surface cacheada (módulo) — sem alocação por frame.
@@ -101,7 +101,7 @@ class ShipRenderer:
 
         # Chain Shot (Efeito Estático/Elétrico)
         if ship.has_chain_shot:
-            sprite_w, sprite_h = ship._cached_sprite_size
+            sprite_w, sprite_h = ship.cached_sprite_size
             cx, cy = int(ship.x + sprite_w / 2), int(ship.y + sprite_h / 2)
             radius = max(sprite_w, sprite_h) // 2 + 5
 
@@ -203,14 +203,14 @@ class ShipRenderer:
             pygame.draw.circle(surface, color, (px, py), 2)
 
         if progress >= 1.0:
-            pulse = int(2 + 2 * abs(math.sin(ship._draw_time * 8)))
+            pulse = int(2 + 2 * abs(math.sin(ship.draw_time * 8)))
             pygame.draw.circle(surface, (255, 255, 255), (cx, cy), radius + 2, pulse)
 
     def _draw_orbital_lasers(self, surface: pygame.Surface) -> None:
         ship = self.ship
-        current_time = ship._draw_time
+        current_time = ship.draw_time
 
-        sprite_w, sprite_h = ship._ship_image_size
+        sprite_w, sprite_h = ship.ship_image_size
 
         for i in range(ship.num_orbital_balls):
             charges = ship.orbital_laser_charges[i]

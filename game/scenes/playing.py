@@ -5,7 +5,7 @@ Melhorias aplicadas (boas práticas Python / Pygame):
   1. Constantes de módulo extraídas do __init__ para evitar "magic numbers".
   2. __init__ dividido em métodos _init_* coesos (Single Responsibility).
   3. UpgradeContext substituído por dataclass tipada (elimina `type(..., (), ...)(...)`).
-  4. _build_mini_ships() elimina duplicação em _process_powerups_and_stars.
+  4. build_mini_ships() elimina duplicação em _process_powerups_and_stars.
   5. _apply_powerup() com dict-dispatch substitui cadeia de elif crescente.
   6. Progressão de nível extraída em LevelProgressionController.
   7. Boss fight extraído em BossFightController (systems/boss_fight_controller.py).
@@ -79,7 +79,6 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Constantes de módulo (eliminam "magic numbers" espalhados pela classe)
 # ---------------------------------------------------------------------------
-_SCORE_MULTIPLIER_DURATION = 15.0
 _SIDE_SCROLL_SHIP_ENTRY_X = 100
 _TOP_DOWN_SHIP_TARGET_Y_OFFSET = 80
 _HUD_UPGRADE_SLOT_SIZE = 50
@@ -238,7 +237,7 @@ class PlayingScene(Scene):
         self.god_mode: bool = False
         self.state: GameState = GameState.PREPARING
         self.preparation_time_left: float = Config.PREPARATION_TIME
-        self._upgrade_select_mode: bool = False
+        self.upgrade_select_mode: bool = False
         self._upgrade_select_index: int = 0
         self._apply_difficulty_settings()
 
@@ -268,23 +267,8 @@ class PlayingScene(Scene):
         self._special_rules: list[str] = self.difficulty_settings.get(
             "special_rules", []
         )
-        self._no_powerups_mode: bool = "no_powerups" in self._special_rules
+        self.no_powerups_mode: bool = "no_powerups" in self._special_rules
         self._permadeath_mode: bool = "permadeath" in self._special_rules
-
-        # Pré-calcula valores de power-up para evitar lookups repetidos
-        self._powerup_values: dict[str, float] = {
-            "shield_duration": Config.SHIELD_DURATION * 1000,
-            "double_shot_duration": Config.DOUBLE_SHOT_DURATION,
-            "speed_boost_duration": Config.SPEED_BOOST_DURATION,
-            "piercing_shot_duration": Config.PIERCING_SHOT_DURATION,
-            "mini_ships_duration": Config.MINI_SHIPS_DURATION,
-            "rainbow_duration": Config.RAINBOW_DURATION,
-            "rainbow_duration_invuln": Config.RAINBOW_DURATION * 1000,
-            "rainbow_score": Config.POWERUP_SCORE_BONUS * 2,
-            "cooldown_haste_reduction": Config.COOLDOWN_HASTE_REDUCTION,
-            "time_stop_duration": Config.TIME_STOP_DURATION,
-            "damage_boost_duration": Config.DAMAGE_BOOST_DURATION,
-        }
 
     def _init_transition_state(self) -> None:
         """Inicializa timers e flags de transição de nível/mundo.
@@ -474,7 +458,7 @@ class PlayingScene(Scene):
     def awaiting_world_transition_panel(self) -> bool:
         return self.transitions.is_world_panel
 
-    def _can_handle_gameplay_actions(self) -> bool:
+    def can_handle_gameplay_actions(self) -> bool:
         """Retorna True quando o jogador pode agir normalmente."""
         return self.transitions.can_handle_gameplay_actions
 
@@ -525,7 +509,7 @@ class PlayingScene(Scene):
         self.entity_manager.clear_for_level_transition()
 
         if self.ship.mini_ships_timer > 0.0:
-            self._build_mini_ships()
+            self.build_mini_ships()
         else:
             self._build_permanent_mini_ships()
 
@@ -777,7 +761,7 @@ class PlayingScene(Scene):
         ):
             self._finish_world_transition_cutscene()
 
-    def _trigger_world_transition_debug_preview(self) -> None:
+    def trigger_world_transition_debug_preview(self) -> None:
         """Abre a transição de mundo manualmente, sem mexer na progressão."""
         if self.world_transition_cutscene_active:
             logger.info("[DEBUG] Cutscene já está ativa")
@@ -953,7 +937,7 @@ class PlayingScene(Scene):
 
             boss_pausing = cast(SpikeBoss, self.entity_manager.boss).is_pausing_game()
 
-        if self._can_handle_gameplay_actions():
+        if self.can_handle_gameplay_actions():
             for slot in self.roster.alive_slots():
                 ship = slot.ship
                 if ship.is_entering:
@@ -988,7 +972,7 @@ class PlayingScene(Scene):
 
     def _apply_environmental_effects(self, dt: float) -> None:
         """Aplica efeitos ambientais (como vento) à nave do jogador."""
-        if not self._can_handle_gameplay_actions() or self.ship.is_entering:
+        if not self.can_handle_gameplay_actions() or self.ship.is_entering:
             return
 
         # Vento do MountainPropeller
@@ -1018,7 +1002,7 @@ class PlayingScene(Scene):
                     is_side_scroll=self.is_side_scroll,
                 )
 
-            if not self._no_powerups_mode:
+            if not self.no_powerups_mode:
                 self.powerup_spawner.update(dt, self.entity_manager.powerups)
 
             self.star_spawner.update(self.entity_manager.stars)
@@ -1049,7 +1033,7 @@ class PlayingScene(Scene):
     # Cheat code
     # ------------------------------------------------------------------
 
-    def _process_cheat_input(self, event: pygame.event.Event) -> None:
+    def process_cheat_input(self, event: pygame.event.Event) -> None:
         """Detecta o cheat code '271195' para ativar/desativar god mode, adicionar 9999 estrelas e desbloquear todos os mundos."""
         if not self.cheat.feed(event):
             return
@@ -1677,7 +1661,7 @@ class PlayingScene(Scene):
     # Power-ups
     # ------------------------------------------------------------------
 
-    def _build_mini_ships(self, slot: Optional[PlayerSlot] = None) -> None:
+    def build_mini_ships(self, slot: Optional[PlayerSlot] = None) -> None:
         """Cria o par temporário do powerup `mini_ships` (left + right) para o slot.
 
         Remove apenas as mini-naves vinculadas à nave deste slot (inclusive as
@@ -1765,7 +1749,7 @@ class PlayingScene(Scene):
             self.app.event_bus.emit(events.PlaySound(sound_name="powerup", volume=1.0))
             return
 
-        self._change_lives_for(slot, -1)
+        self.change_lives_for(slot, -1)
         self.level_controller.notify_damage_taken()
         if slot.lives <= 0:
             # Marca o slot como morto — filtragem em alive_slots() impede que
@@ -2017,15 +2001,15 @@ class PlayingScene(Scene):
     # Modo de seleção de upgrade via controle
     # ------------------------------------------------------------------
 
-    def _toggle_upgrade_select_mode(self) -> None:
+    def toggle_upgrade_select_mode(self) -> None:
         """Liga/desliga o modo de seleção. Ao ligar, alinha o cursor para um
         slot válido, priorizando upgrades fora de cooldown."""
-        if self._upgrade_select_mode:
-            self._upgrade_select_mode = False
+        if self.upgrade_select_mode:
+            self.upgrade_select_mode = False
             return
         if not any(s is not None for s in self.upgrade_slots):
             return  # Sem upgrades equipados — nada para selecionar.
-        self._upgrade_select_mode = True
+        self.upgrade_select_mode = True
         self._snap_upgrade_select_to_valid()
 
     def _upgrade_slot_is_ready(self, upg: ActiveUpgrade | None) -> bool:
@@ -2054,7 +2038,7 @@ class PlayingScene(Scene):
             return
         self._upgrade_select_index = ordered_slots[0]
 
-    def _navigate_upgrade_select(self, delta: int) -> None:
+    def navigate_upgrade_select(self, delta: int) -> None:
         """Move o cursor entre upgrades ocupados, priorizando os prontos."""
         ordered_slots = self._get_upgrade_select_order()
         if not ordered_slots:
@@ -2068,20 +2052,20 @@ class PlayingScene(Scene):
         next_pos = (current_pos + delta) % len(ordered_slots)
         self._upgrade_select_index = ordered_slots[next_pos]
 
-    def _confirm_upgrade_select(self) -> None:
+    def confirm_upgrade_select(self) -> None:
         """Ativa o slot atualmente destacado e sai do modo."""
         idx = self._upgrade_select_index
-        self._upgrade_select_mode = False
+        self.upgrade_select_mode = False
         if 0 <= idx < len(self.upgrade_slots) and self.upgrade_slots[idx] is not None:
-            self._activate_upgrade_slot(idx)
+            self.activate_upgrade_slot(idx)
 
-    def _activate_stored_powerup(self, slot_index: int) -> None:
+    def activate_stored_powerup(self, slot_index: int) -> None:
         """Compat: ativa Cofre do slot primário (P1). Mantido para
         callers de teclado (Q/E) e outros pontos legados.
         """
-        self._activate_stored_powerup_for(self.roster.primary(), slot_index)
+        self.activate_stored_powerup_for(self.roster.primary(), slot_index)
 
-    def _activate_stored_powerup_for(self, slot: PlayerSlot, slot_index: int) -> None:
+    def activate_stored_powerup_for(self, slot: PlayerSlot, slot_index: int) -> None:
         """Consome o powerup armazenado do Cofre do `slot` e aplica em si próprio."""
         ship = slot.ship
         if not ship.has_storage_slots():
@@ -2092,7 +2076,7 @@ class PlayingScene(Scene):
         self.app.event_bus.emit(events.PlaySound(sound_name="powerup"))
         self._apply_powerup(kind, slot)
 
-    def _slot_inside_any_beacon(self, slot: PlayerSlot) -> bool:
+    def slot_inside_any_beacon(self, slot: PlayerSlot) -> bool:
         """True se o slot vivo está dentro do raio de algum beacon ativo.
 
         Usado pelo input handler pra suprimir a ativação do Cofre slot 0
@@ -2140,7 +2124,7 @@ class PlayingScene(Scene):
             start_fade_overlay=self.start_fade_overlay,
             show_fps=self.show_fps,
             show_enemy_hitboxes=self.show_enemy_hitboxes,
-            upgrade_select_mode=self._upgrade_select_mode,
+            upgrade_select_mode=self.upgrade_select_mode,
             upgrade_select_index=self._upgrade_select_index,
             upgrade_slots=self.upgrade_slots,
             upgrade_keybindings=list(keybindings),
@@ -2233,9 +2217,9 @@ class PlayingScene(Scene):
             self.lives = new_lives
 
     def _change_lives(self, delta: int) -> None:
-        self._change_lives_for(self.roster.primary(), delta)
+        self.change_lives_for(self.roster.primary(), delta)
 
-    def _change_lives_for(self, slot: PlayerSlot, delta: int) -> None:
+    def change_lives_for(self, slot: PlayerSlot, delta: int) -> None:
         self._sync_lives_for(slot, slot.lives + delta)
 
     # ------------------------------------------------------------------
@@ -2341,7 +2325,7 @@ class PlayingScene(Scene):
             RevivalBeacon.LIVES_ON_REVIVE,
         )
 
-    def _apply_cooldown_reduction(self, reduction: float) -> None:
+    def apply_cooldown_reduction(self, reduction: float) -> None:
         """Reduz instantaneamente o cooldown de todos os upgrades ativos."""
         for upg in self.upgrade_slots:
             if upg is not None and upg.cooldown_left > 0:
@@ -2353,7 +2337,7 @@ class PlayingScene(Scene):
             if upg is not None and upg.cooldown_left > 0:
                 upg.cooldown_left = min(upg.cooldown_left, 1.0)
 
-    def _activate_upgrade_slot(self, idx: int) -> None:
+    def activate_upgrade_slot(self, idx: int) -> None:
         if not 0 <= idx < len(self.upgrade_slots):
             return
         upg = self.upgrade_slots[idx]

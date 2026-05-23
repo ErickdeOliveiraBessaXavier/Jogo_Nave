@@ -5,6 +5,7 @@ import random
 from typing import TYPE_CHECKING, Optional
 
 from ..core.config import config as Config
+from ..systems.targeting import enemy_center, find_nearest_enemy
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -216,10 +217,10 @@ class ShipPowerups:
                 ball_x = ship.x + sprite_w / 2 + math.cos(angle) * ship.orbital_radius
                 ball_y = ship.y + sprite_h / 2 + math.sin(angle) * ship.orbital_radius
 
-                nearest_enemy = ship._find_nearest_enemy(ball_x, ball_y, entity_manager)
+                nearest_enemy = find_nearest_enemy(ball_x, ball_y, entity_manager)
 
                 if nearest_enemy is not None:
-                    target = ship._get_enemy_center(nearest_enemy)
+                    target = enemy_center(nearest_enemy)
                     if (
                         target is not None
                         and -50 < target[0] < Config.SCREEN_WIDTH + 50
@@ -273,7 +274,7 @@ class ShipPowerups:
                 int(spawn_rate * dt)
                 + (1 if random.random() < (spawn_rate * dt) % 1 else 0)
             ):
-                sprite_w, sprite_h = ship._get_rendered_sprite_size()
+                sprite_w, sprite_h = ship.get_rendered_sprite_size()
                 angle = random.uniform(0, math.tau)
                 ship.repulsion_wind_streaks.append(
                     {
@@ -307,7 +308,7 @@ class ShipPowerups:
                 ):
                     continue
 
-                center = ship._get_enemy_center(enemy)
+                center = enemy_center(enemy)
                 ex = (
                     center[0] if center is not None else float(getattr(enemy, "x", 0.0))
                 )

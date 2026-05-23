@@ -170,6 +170,7 @@ class RockGlider(Meteor):
         y: float | None = None,
         vx: float | None = None,
         vy: float | None = None,
+        aggressiveness_multiplier: float = 1.0,
     ):
         glider_size = (
             size
@@ -179,7 +180,14 @@ class RockGlider(Meteor):
                 Config.ROCK_GLIDER_BASE_MAX_SIZE,
             )
         )
-        super().reset(size=glider_size, x=x, y=y, vx=vx, vy=vy)
+        super().reset(
+            size=glider_size,
+            x=x,
+            y=y,
+            vx=vx,
+            vy=vy,
+            aggressiveness_multiplier=aggressiveness_multiplier,
+        )
 
         # Pedras maiores ficam mais lentas; pedras menores, mais rapidas.
         min_size = 15

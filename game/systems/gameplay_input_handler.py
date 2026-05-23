@@ -76,20 +76,20 @@ class GameplayInputHandler:
                 "ATIVADO" if scene.show_enemy_hitboxes else "DESATIVADO",
             )
         elif event.key == pygame.K_F8:
-            scene._trigger_world_transition_debug_preview()
+            scene.trigger_world_transition_debug_preview()
         elif event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
-            if not scene.ship.is_entering and scene._can_handle_gameplay_actions():
+            if not scene.ship.is_entering and scene.can_handle_gameplay_actions():
                 scene.ship.cycle_facing()
         elif event.key in (pygame.K_q, pygame.K_e):
             # Cofre: Q usa slot 0, E usa slot 1.
-            if not scene.ship.is_entering and scene._can_handle_gameplay_actions():
+            if not scene.ship.is_entering and scene.can_handle_gameplay_actions():
                 slot = 0 if event.key == pygame.K_q else 1
-                scene._activate_stored_powerup(slot)
+                scene.activate_stored_powerup(slot)
         elif event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT):
             # Fantasma: dash com i-frames.
             if (
                 not scene.ship.is_entering
-                and scene._can_handle_gameplay_actions()
+                and scene.can_handle_gameplay_actions()
                 and scene.ship.profile.has_dash
             ):
                 held = scene.app.input.poll_held()
@@ -104,21 +104,21 @@ class GameplayInputHandler:
                     move_vec.y += 1
                 scene.ship.try_dash(move_vec)
         elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
-            if not scene.ship.is_entering and scene._can_handle_gameplay_actions():
+            if not scene.ship.is_entering and scene.can_handle_gameplay_actions():
                 if scene.ship.profile.has_charge_shot and (event.mod & pygame.KMOD_ALT):
                     # Só ativa charge com Space + Alt pressionados juntos.
                     scene.ship.start_charge()
 
         if __debug__:
-            scene._process_cheat_input(event)
+            scene.process_cheat_input(event)
 
-        if scene._can_handle_gameplay_actions() and not scene.ship.is_entering:
+        if scene.can_handle_gameplay_actions() and not scene.ship.is_entering:
             self._handle_upgrade_key(event)
 
     def _handle_mousebuttondown(self, event: pygame.event.Event) -> None:
         scene = self.scene
         if event.button == 1:
-            if not scene.ship.is_entering and scene._can_handle_gameplay_actions():
+            if not scene.ship.is_entering and scene.can_handle_gameplay_actions():
                 if (
                     scene.ship.profile.has_charge_shot
                     and not scene.ship.charge_shot_active
@@ -129,13 +129,13 @@ class GameplayInputHandler:
                 elif not scene.ship.auto_fire and scene.shooting.is_ready(scene.ship):
                     scene.shooting.fire(scene.ship, scene.player_damage_multiplier)
         elif event.button == 2:
-            if not scene.ship.is_entering and scene._can_handle_gameplay_actions():
+            if not scene.ship.is_entering and scene.can_handle_gameplay_actions():
                 scene.ship.cycle_facing()
         elif event.button == 3:
             # Botão direito: inicia charge no Caçador/Magneto.
             if (
                 not scene.ship.is_entering
-                and scene._can_handle_gameplay_actions()
+                and scene.can_handle_gameplay_actions()
                 and scene.ship.profile.has_charge_shot
                 and not scene.ship.charge_shot_active
             ):
@@ -149,7 +149,7 @@ class GameplayInputHandler:
             and scene.ship.profile.has_charge_shot
             and scene.ship.charge_shot_active
             and not scene.ship.is_entering
-            and scene._can_handle_gameplay_actions()
+            and scene.can_handle_gameplay_actions()
         ):
             if scene.ship.charge_shot_progress >= 1.0:
                 scene.shooting.fire(scene.ship, scene.player_damage_multiplier)
@@ -163,7 +163,7 @@ class GameplayInputHandler:
                 scene.ship.profile.has_charge_shot
                 and scene.ship.charge_shot_active
                 and not scene.ship.is_entering
-                and scene._can_handle_gameplay_actions()
+                and scene.can_handle_gameplay_actions()
             ):
                 if scene.ship.charge_shot_progress >= 1.0:
                     scene.shooting.fire(scene.ship, scene.player_damage_multiplier)
@@ -196,7 +196,7 @@ class GameplayInputHandler:
         # Start sempre abre pausa — qualquer controle, mesmo durante entry
         # ou modo de seleção. Não precisa resolver slot (pausa é global).
         if button == XboxButton.START:
-            scene._upgrade_select_mode = False
+            scene.upgrade_select_mode = False
             from ..scenes.paused import PausedScene
 
             scene.app.states.push(PausedScene(scene.app, previous_scene=scene))
@@ -207,22 +207,22 @@ class GameplayInputHandler:
             return
 
         ship = slot.ship
-        if ship.is_entering or not scene._can_handle_gameplay_actions():
+        if ship.is_entering or not scene.can_handle_gameplay_actions():
             return
 
         is_primary = slot is scene.roster.primary()
 
         # Modo de seleção de upgrade é exclusivo do P1 (upgrades pertencem
         # ao perfil dele). P2 nesses botões: no-op.
-        if scene._upgrade_select_mode and is_primary:
+        if scene.upgrade_select_mode and is_primary:
             if button == XboxButton.A:
-                scene._confirm_upgrade_select()
+                scene.confirm_upgrade_select()
             elif button == XboxButton.B:
-                scene._upgrade_select_mode = False
+                scene.upgrade_select_mode = False
             elif button == XboxButton.LB:
-                scene._navigate_upgrade_select(+1)
+                scene.navigate_upgrade_select(+1)
             elif button == XboxButton.RB:
-                scene._navigate_upgrade_select(-1)
+                scene.navigate_upgrade_select(-1)
             return
 
         # Tiro normal sai do RT via ``hold_shoot``. A/X/Y ficam livres para
@@ -230,23 +230,23 @@ class GameplayInputHandler:
         # consumo indevido do Cofre slot 0 quando o jogador está tentando
         # reviver, suprimimos o activate se ele está dentro de algum beacon.
         if button == XboxButton.A:
-            scene._activate_stored_powerup_for(slot, 1)  # Cofre E
+            scene.activate_stored_powerup_for(slot, 1)  # Cofre E
         elif button == XboxButton.X:
             ship.cycle_facing()
         elif button == XboxButton.Y:
-            if not scene._slot_inside_any_beacon(slot):
-                scene._activate_stored_powerup_for(slot, 0)  # Cofre Q
+            if not scene.slot_inside_any_beacon(slot):
+                scene.activate_stored_powerup_for(slot, 0)  # Cofre Q
 
     def _handle_gamepad_hat(self, value: tuple[int, int], instance_id: int) -> None:
         """D-pad ↑ alterna o modo de seleção de upgrades — somente P1."""
         slot = self._slot_for_instance_id(instance_id)
         if slot is None or slot is not self.scene.roster.primary():
             return
-        if slot.ship.is_entering or not self.scene._can_handle_gameplay_actions():
+        if slot.ship.is_entering or not self.scene.can_handle_gameplay_actions():
             return
         _x, y = value
         if y > 0:
-            self.scene._toggle_upgrade_select_mode()
+            self.scene.toggle_upgrade_select_mode()
 
     def _handle_gamepad_axis(self, axis: int, value: float, instance_id: int) -> None:
         """LT analógico é o botão único de habilidade especial.
@@ -292,7 +292,7 @@ class GameplayInputHandler:
         if slot is None or slot.is_dead:
             return
         ship = slot.ship
-        if ship.is_entering or not scene._can_handle_gameplay_actions():
+        if ship.is_entering or not scene.can_handle_gameplay_actions():
             return
 
         profile = ship.profile
@@ -349,10 +349,10 @@ class GameplayInputHandler:
             keybinds = scene.player_profile.upgrade_keybindings
             for i, keycode in enumerate(keybinds[:UPGRADE_SLOT_COUNT]):
                 if event.key == keycode:
-                    scene._activate_upgrade_slot(i)
+                    scene.activate_upgrade_slot(i)
                     return
         except (AttributeError, TypeError):
             for i, keycode in enumerate(DEFAULT_KEYBINDINGS[:UPGRADE_SLOT_COUNT]):
                 if event.key == keycode:
-                    scene._activate_upgrade_slot(i)
+                    scene.activate_upgrade_slot(i)
                     return

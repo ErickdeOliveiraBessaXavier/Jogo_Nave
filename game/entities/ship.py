@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import random
-from collections import deque
 from typing import TYPE_CHECKING, Any, Optional
 
 import pygame
@@ -81,11 +80,11 @@ class Ship:
                 int(original_size[1] * scale_factor),
             )
             self.ship_image = pygame.transform.scale(self.ship_image, new_size)
-            self._ship_image_size: tuple[int, int] = self.ship_image.get_size()
+            self.ship_image_size: tuple[int, int] = self.ship_image.get_size()
         except pygame.error:
             # Imagem não carregada - nave não será visível
             self.ship_image = None
-            self._ship_image_size = (self.w, self.h)
+            self.ship_image_size = (self.w, self.h)
 
         # Power-ups
         self.double_shot_timer: float = 0.0
@@ -122,7 +121,7 @@ class Ship:
             "south",
             "west",
         )
-        self._cardinal_vectors: dict[str, tuple[float, float]] = {
+        self.cardinal_vectors: dict[str, tuple[float, float]] = {
             "north": (0.0, -1.0),
             "east": (1.0, 0.0),
             "south": (0.0, 1.0),
@@ -200,19 +199,15 @@ class Ship:
         self.charge_shot_timer: float = 0.0  # tempo acumulado de carga
         self.berserk_timer: float = 0.0  # tempo restante do modo Berserk
 
-        # Buffer de posições do cursor para reaction_delay (x, y, timestamp).
-        # Deque: popleft O(1) para descartar entradas vencidas, evitando
-        # rebuild da lista por frame.
-        self._mouse_history: deque[tuple[float, float, float]] = deque()
         # Cache do tamanho do sprite renderizado — invalidado em set_rotation.
-        self._cached_sprite_size: tuple[int, int] = (self.w, self.h)
+        self.cached_sprite_size: tuple[int, int] = (self.w, self.h)
 
         # Reverberador: combo de dano sem tomar hit.
         self.combo_kills: int = 0  # abates consecutivos sem dano
 
         # Acumulador de tempo para animações no draw() — substitui time.time()
         # e garante compatibilidade com pausa/slow-motion.
-        self._draw_time: float = 0.0
+        self.draw_time: float = 0.0
 
         # Componentes extraídos: Ship vira fachada e delega.
         from .ship_movement import ShipMovement
@@ -482,32 +477,20 @@ class Ship:
         self.set_facing(default_facing)
 
     def get_facing_vector(self) -> tuple[float, float]:
-        return self._cardinal_vectors.get(self.facing, (0.0, -1.0))
+        return self.cardinal_vectors.get(self.facing, (0.0, -1.0))
 
-    def _get_rendered_sprite_size(self) -> tuple[int, int]:
+    def get_rendered_sprite_size(self) -> tuple[int, int]:
         """Retorna o tamanho do sprite atualmente desenhado na tela.
         Valor cacheado; invalidado em set_rotation/_refresh_sprite_size."""
-        return self._cached_sprite_size
+        return self.cached_sprite_size
 
     def _refresh_sprite_size(self) -> None:
         if self.ship_image is None:
-            self._cached_sprite_size = (self.w, self.h)
+            self.cached_sprite_size = (self.w, self.h)
         elif self.rotation_angle != 0.0 and self.ship_image_rotated is not None:
-            self._cached_sprite_size = self.ship_image_rotated.get_size()
+            self.cached_sprite_size = self.ship_image_rotated.get_size()
         else:
-            self._cached_sprite_size = self.ship_image.get_size()
-
-    def _get_enemy_center(self, enemy: Any) -> Optional[tuple[float, float]]:
-        from ..systems.targeting import enemy_center
-
-        return enemy_center(enemy)
-
-    def _find_nearest_enemy(
-        self, from_x: float, from_y: float, entity_manager: "EntityManager"
-    ) -> Optional[Any]:
-        from ..systems.targeting import find_nearest_enemy
-
-        return find_nearest_enemy(from_x, from_y, entity_manager)
+            self.cached_sprite_size = self.ship_image.get_size()
 
     def _update_particles(self, dt: float, is_side_scroll: bool = False) -> None:
         """Atualiza o sistema de partículas."""
@@ -632,7 +615,7 @@ class Ship:
         entity_manager: Optional["EntityManager"] = None,
         is_side_scroll: bool = False,
     ):
-        self._draw_time += dt
+        self.draw_time += dt
 
         if self.is_entering:
             self.entering_timer += dt
@@ -701,7 +684,7 @@ class Ship:
         facing_vector = self.get_facing_vector()
 
         # Obter tamanho visual atual do sprite (leva em conta rotação 90°/270°).
-        sprite_w, sprite_h = self._get_rendered_sprite_size()
+        sprite_w, sprite_h = self.get_rendered_sprite_size()
 
         if self.facing == "north":
             if self.double_shot_timer > 0:
