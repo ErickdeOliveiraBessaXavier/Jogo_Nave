@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Callable, List, Optional
 
 import pygame
 
-from .particle_types import ParticleDict
+from .particle_types import ParticleDict, step_particle
 
 if TYPE_CHECKING:
     from .cannon_mine import CannonMine
@@ -255,17 +255,9 @@ class CannonTower:
                 )
                 self.thruster_particles.append(particle)
 
-        # Atualizar partículas existentes
+        # Atualizar partículas existentes (encolhem em dt*2)
         self.thruster_particles = [
-            ParticleDict(
-                x=p["x"] + p["vx"] * dt,
-                y=p["y"] + p["vy"] * dt,
-                vx=p["vx"],
-                vy=p["vy"],
-                lifetime=p["lifetime"] - dt,
-                size=max(0, p["size"] - dt * 2),
-                color=p["color"],
-            )
+            step_particle(p, dt, size_shrink_rate=2.0)
             for p in self.thruster_particles
             if p["lifetime"] - dt > 0 and p["size"] - dt > 0
         ]

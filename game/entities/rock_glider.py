@@ -9,6 +9,7 @@ import pygame
 from ..core import colors
 from ..core.config import config as Config
 from .meteor import Meteor
+from .stone_palette import STONE_FRAGMENT_PALETTE
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -24,15 +25,8 @@ class RockGlider(Meteor):
     ROCK_MAX_HP = 20
     BOT_MAX_HP = 10
     ROCK_SCORE_SHARE = 0.58
-    # Mesma paleta de terra usada pelos fragmentos de entrada do StoneGolemBoss.
-    STONE_FRAGMENT_COLORS = [
-        (101, 67, 33),
-        (84, 56, 26),
-        (65, 65, 65),
-        (45, 45, 45),
-        (139, 115, 85),
-        (160, 82, 45),
-    ]
+    # Paleta compartilhada com fragmentos do StoneGolemBoss.
+    STONE_FRAGMENT_COLORS = STONE_FRAGMENT_PALETTE
     # Paletas para o sistema externo de explosão (Explosion/ExplosionType).
     EXPLOSION_TYPE_ROCK: list[tuple[int, int, int]] = [
         (205, 190, 160),

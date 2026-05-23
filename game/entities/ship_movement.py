@@ -4,11 +4,12 @@ import math
 import random
 import time
 from collections import deque
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING
 
 import pygame
 
 from ..core.config import config as Config
+from .particle_types import ParticleDict, step_particle
 
 if TYPE_CHECKING:
     from .ship import Ship
@@ -21,16 +22,6 @@ if TYPE_CHECKING:
 #   Aumente se a nave "vibrar" parada (range seguro: 1.0–4.0).
 MOUSE_BASE_STIFFNESS: float = 8.5
 MOUSE_DEAD_ZONE: float = 2.0
-
-
-class _ParticleDict(TypedDict):
-    x: float
-    y: float
-    vx: float
-    vy: float
-    lifetime: float
-    size: float
-    color: tuple[int, int, int]
 
 
 class ShipMovement:
@@ -88,7 +79,7 @@ class ShipMovement:
             back_y = -ship.dash_dir.y * random.uniform(60, 160)
             for _ in range(3):
                 ship.dash_trail_particles.append(
-                    _ParticleDict(
+                    ParticleDict(
                         x=cx + random.uniform(-4, 4),
                         y=cy + random.uniform(-4, 4),
                         vx=back_x + random.uniform(-30, 30),
@@ -102,16 +93,9 @@ class ShipMovement:
         if not ship.dash_trail_particles:
             return
 
+        # Rastro do dash: encolhe rápido (dt*12) e tem drag (damping 0.92).
         ship.dash_trail_particles = [
-            _ParticleDict(
-                x=p["x"] + p["vx"] * dt,
-                y=p["y"] + p["vy"] * dt,
-                vx=p["vx"] * 0.92,
-                vy=p["vy"] * 0.92,
-                lifetime=p["lifetime"] - dt,
-                size=max(0.0, p["size"] - dt * 12.0),
-                color=p["color"],
-            )
+            step_particle(p, dt, size_shrink_rate=12.0, velocity_damping=0.92)
             for p in ship.dash_trail_particles
             if p["lifetime"] - dt > 0 and p["size"] - dt * 12.0 > 0
         ]

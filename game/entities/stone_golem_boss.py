@@ -25,6 +25,7 @@ from ..entities.stone_golem_pixel_map import PIXEL_MAP as _PIXEL_MAP
 from ..entities.stone_golem_pixel_map import PIXEL_ROWS as _PIXEL_ROWS
 from ..entities.stone_golem_pixel_map import C as _C
 from .boss_hit_mixin import BossHitMixin
+from .stone_palette import STONE_FRAGMENT_PALETTE
 
 if TYPE_CHECKING:
     from ..core.events import EventBus
@@ -597,15 +598,8 @@ class EmergeDebris:
     """
 
     TRAIL_FADE_SPEED = 600.0
-    # Paleta expandida: tons de terra, pedras escuras e poeira
-    EARTH_COLORS = [
-        (101, 67, 33),  # Marrom escuro (terra)
-        (84, 56, 26),  # Marrom profundo
-        (65, 65, 65),  # Cinza pedra
-        (45, 45, 45),  # Pedra escura
-        (139, 115, 85),  # Barro/Argila
-        (160, 82, 45),  # Sienna
-    ]
+    # Paleta compartilhada com RockGlider — ver stone_palette.py.
+    EARTH_COLORS = STONE_FRAGMENT_PALETTE
 
     # Static attribute annotations to help static analysis (Pylance)
     S: int

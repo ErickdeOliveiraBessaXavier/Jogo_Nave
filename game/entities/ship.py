@@ -8,7 +8,7 @@ import pygame
 from ..core.config import config as Config
 from ..core.ship_types import ShipProfile, get_ship_profile
 from ..core.sound import sound_manager
-from .particle_types import ParticleDict
+from .particle_types import ParticleDict, step_particle
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -520,17 +520,9 @@ class Ship:
                 )
                 self.entry_particles.append(particle)
 
-        # Atualizar partículas de entrada (usar list comprehension eficiente)
+        # Atualizar partículas de entrada (sem encolher; só decai por lifetime)
         self.entry_particles = [
-            ParticleDict(
-                x=p["x"] + p["vx"] * dt,
-                y=p["y"] + p["vy"] * dt,
-                vx=p["vx"],
-                vy=p["vy"],
-                lifetime=p["lifetime"] - dt,
-                size=p["size"],
-                color=p["color"],
-            )
+            step_particle(p, dt)
             for p in self.entry_particles
             if p["lifetime"] - dt > 0
         ]
@@ -580,17 +572,9 @@ class Ship:
 
             self.thruster_particles.append(particle)
 
-        # Atualizar partículas de thruster
+        # Atualizar partículas de thruster (encolhem em dt*1)
         self.thruster_particles = [
-            ParticleDict(
-                x=p["x"] + p["vx"] * dt,
-                y=p["y"] + p["vy"] * dt,
-                vx=p["vx"],
-                vy=p["vy"],
-                lifetime=p["lifetime"] - dt,
-                size=max(0, p["size"] - dt),
-                color=p["color"],
-            )
+            step_particle(p, dt, size_shrink_rate=1.0)
             for p in self.thruster_particles
             if p["lifetime"] - dt > 0 and p["size"] - dt > 0
         ]
