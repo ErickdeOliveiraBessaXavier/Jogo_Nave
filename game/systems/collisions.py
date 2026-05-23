@@ -943,6 +943,142 @@ class Collisions:
 
         return score_gain, destroyed_count, score_events
 
+    def _apply_continuous_beam_hits(
+        self,
+        p1: tuple[float, float],
+        p2: tuple[float, float],
+        damage: int,
+        enemy_grid: SpatialGrid[Any],
+        entity_manager: "EntityManager",
+        extra_padding: int = 0,
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Aplica dano de um feixe (linha p1→p2) aos inimigos na grid."""
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        pad = CollisionConstants.SPATIAL_QUERY_PADDING + extra_padding
+        min_x = min(p1[0], p2[0]) - pad
+        min_y = min(p1[1], p2[1]) - pad
+        w = abs(p2[0] - p1[0]) + pad * 2
+        h = abs(p2[1] - p1[1]) + pad * 2
+        candidates = enemy_grid.query(int(min_x), int(min_y), int(w), int(h))
+
+        for enemy in candidates:
+            if enemy.dead:
+                continue
+            for hitbox in self._get_ship_contact_hitboxes(enemy):
+                if hitbox.clipline(p1, p2):
+                    hx, hy = hitbox.centerx, hitbox.centery
+                    result = self._apply_hit(enemy, damage, hx, hy, entity_manager)
+                    score_gain += result.points
+                    if result.killed:
+                        destroyed_count += 1
+                        if result.points > 0:
+                            score_events.append((hx, hy, result.points))
+                    break
+
+        return score_gain, destroyed_count, score_events
+
+    def orbital_shields_vs_enemies(
+        self,
+        orbital_shields: list[Any],
+        enemy_grid: SpatialGrid[Any],
+        dt: float,
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Dano contínuo dos escudos orbitais a inimigos em contato."""
+        if not orbital_shields or dt <= 0.0:
+            return 0, 0, []
+
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        for shield in orbital_shields:
+            if getattr(shield, "dead", False):
+                continue
+            sr: pygame.Rect = shield.rect
+            damage = max(1, int(shield.damage * dt))
+            pad = CollisionConstants.SPATIAL_QUERY_PADDING
+
+            candidates = enemy_grid.query(
+                sr.x - pad, sr.y - pad, sr.width + pad * 2, sr.height + pad * 2
+            )
+            for enemy in candidates:
+                if enemy.dead:
+                    continue
+                if not self._rect_collides_with_enemy(sr, enemy):
+                    continue
+                hx, hy = sr.centerx, sr.centery
+                result = self._apply_hit(enemy, damage, hx, hy, entity_manager)
+                score_gain += result.points
+                if result.killed:
+                    destroyed_count += 1
+                    if result.points > 0:
+                        score_events.append((hx, hy, result.points))
+
+        return score_gain, destroyed_count, score_events
+
+    def plasma_beams_vs_enemies(
+        self,
+        plasma_beams: list[Any],
+        enemy_grid: SpatialGrid[Any],
+        dt: float,
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Dano contínuo do feixe de plasma a inimigos na linha."""
+        if not plasma_beams or dt <= 0.0:
+            return 0, 0, []
+
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        for beam in plasma_beams:
+            if getattr(beam, "dead", False):
+                continue
+            p1, p2 = beam.get_line()
+            damage = max(1, int(beam.damage * dt))
+            extra_pad = int(getattr(beam, "current_width", 0))
+            g, d, ev = self._apply_continuous_beam_hits(
+                p1, p2, damage, enemy_grid, entity_manager, extra_padding=extra_pad
+            )
+            score_gain += g
+            destroyed_count += d
+            score_events.extend(ev)
+
+        return score_gain, destroyed_count, score_events
+
+    def coop_links_vs_enemies(
+        self,
+        coop_links: list[Any],
+        enemy_grid: SpatialGrid[Any],
+        dt: float,
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Dano contínuo do CoopLink (linha entre dois jogadores) a inimigos."""
+        if not coop_links or dt <= 0.0:
+            return 0, 0, []
+
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        for link in coop_links:
+            if getattr(link, "dead", False):
+                continue
+            p1, p2 = link.get_collision_line()
+            damage = max(1, int(link.damage * dt))
+            g, d, ev = self._apply_continuous_beam_hits(
+                p1, p2, damage, enemy_grid, entity_manager
+            )
+            score_gain += g
+            destroyed_count += d
+            score_events.extend(ev)
+
+        return score_gain, destroyed_count, score_events
+
     def homing_bullets_vs_boss(
         self,
         homing_bullets: list[HomingBullet],

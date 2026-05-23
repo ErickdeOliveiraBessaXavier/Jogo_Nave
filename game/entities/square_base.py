@@ -22,21 +22,21 @@ class SquareProjectileBase:
     """Classe base para projéteis e inimigos quadrados com rastro e borda animada."""
 
     def __init__(self, x: float, y: float, size: float):
-        self.x = x
-        self.y = y
-        self.base_size = size
-        self.size = size
-        self.dead = False
+        self.x: float = x
+        self.y: float = y
+        self.base_size: float = size
+        self.size: float = size
+        self.dead: bool = False
 
         # Animação
-        self.rotation = 0.0
+        self.rotation: float = 0.0
         self.border_anim_offset: float = random.uniform(0, 100)
 
         # Trail particles
         self.trail_particles: List[TrailParticle] = []
-        self.trail_spawn_timer = 0.0
-        self.trail_spawn_interval = 0.025
-        self.max_trail_particles = 18
+        self.trail_spawn_timer: float = 0.0
+        self.trail_spawn_interval: float = 0.025
+        self.max_trail_particles: int = 18
 
     def _update_trail(self, dt: float, is_flying: bool) -> None:
         """Atualiza a geração e decaimento das partículas de trail."""

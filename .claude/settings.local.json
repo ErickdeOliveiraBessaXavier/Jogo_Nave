@@ -6,7 +6,12 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\eobx\\\\OneDrive\\\\Documentos\\\\Jogos_Python\\\\Nave\" -Recurse -File)",
       "Bash(Select-Object FullName)",
       "Bash(Get-Content *)",
-      "Bash(PYTHONUTF8=1 python *)"
+      "Bash(PYTHONUTF8=1 python *)",
+      "PowerShell(python -c \"from game.core import upgrades; u = upgrades.upgrade_factory\\(upgrades.UpgradeType.COOP_LINK\\); print\\('CoopLink OK:', type\\(u\\).__name__\\); u = upgrades.upgrade_factory\\(upgrades.UpgradeType.BLINK_DASH\\); print\\('BlinkDash OK:', type\\(u\\).__name__\\); u = upgrades.upgrade_factory\\(upgrades.UpgradeType.GRAVITY_BOMB\\); print\\('GravityBomb OK:', type\\(u\\).__name__\\); u = upgrades.upgrade_factory\\(upgrades.UpgradeType.WINGMAN\\); print\\('Wingman OK:', type\\(u\\).__name__\\)\")",
+      "PowerShell(python -c \"import ast; [ast.parse\\(open\\(p, encoding='utf-8'\\).read\\(\\)\\) for p in [r'game\\\\core\\\\upgrades.py', r'game\\\\systems\\\\collisions.py', r'game\\\\systems\\\\entity_manager.py', r'game\\\\scenes\\\\playing.py', r'game\\\\entities\\\\plasma_beam.py']]; print\\('AST OK'\\)\")",
+      "PowerShell(python -c \"from game.systems.collisions import Collisions; c = Collisions\\(\\); print\\('Methods OK:', all\\(hasattr\\(c, m\\) for m in ['orbital_shields_vs_enemies','plasma_beams_vs_enemies','coop_links_vs_enemies','_apply_continuous_beam_hits']\\)\\)\")",
+      "PowerShell(python -c \"from game.systems.entity_manager import EntityManager; print\\('No _apply_projectile_damage:', not hasattr\\(EntityManager, '_apply_projectile_damage'\\)\\)\")",
+      "PowerShell(python -c \"from game.core import upgrades; print\\('OK'\\)\")"
     ]
   }
 }

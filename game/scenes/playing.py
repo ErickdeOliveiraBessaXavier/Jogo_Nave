@@ -1205,6 +1205,46 @@ class PlayingScene(Scene):
         destroyed += homing_destroyed
         score_events.extend(homing_events)
 
+        upgrade_dt = self.last_dt
+        if self.entity_manager.orbital_shields:
+            os_gain, os_destroyed, os_events = (
+                self.collisions.orbital_shields_vs_enemies(
+                    self.entity_manager.orbital_shields,
+                    enemy_grid,
+                    upgrade_dt,
+                    self.entity_manager,
+                )
+            )
+            gain += os_gain
+            destroyed += os_destroyed
+            score_events.extend(os_events)
+
+        if self.entity_manager.plasma_beams:
+            pb_gain, pb_destroyed, pb_events = (
+                self.collisions.plasma_beams_vs_enemies(
+                    self.entity_manager.plasma_beams,
+                    enemy_grid,
+                    upgrade_dt,
+                    self.entity_manager,
+                )
+            )
+            gain += pb_gain
+            destroyed += pb_destroyed
+            score_events.extend(pb_events)
+
+        if self.entity_manager.coop_links:
+            cl_gain, cl_destroyed, cl_events = (
+                self.collisions.coop_links_vs_enemies(
+                    self.entity_manager.coop_links,
+                    enemy_grid,
+                    upgrade_dt,
+                    self.entity_manager,
+                )
+            )
+            gain += cl_gain
+            destroyed += cl_destroyed
+            score_events.extend(cl_events)
+
         mine_gain, mine_destroyed, mine_events, ship_hits = (
             self.collisions.check_mine_explosions(
                 enemies_view,

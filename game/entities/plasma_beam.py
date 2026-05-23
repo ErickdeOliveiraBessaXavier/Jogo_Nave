@@ -96,19 +96,16 @@ class PlasmaBeam:
             size = random.randint(2, 5)
             pygame.draw.circle(surface, (200, 255, 255), (int(p2[0] + offset_x), int(p2[1] + offset_y)), size)
 
+    FINAL_EXPLOSION_RADIUS = 180
+    FINAL_EXPLOSION_DAMAGE = 400
+
     def trigger_final_explosion(self, entity_manager: Any):
         """Chamado pelo EntityManager quando o feixe expira."""
-        p1, p2 = self.get_line()
-        # Explosão massiva na ponta da lança
-        if hasattr(entity_manager, "spawn_explosion"):
-            entity_manager.spawn_explosion(p2[0], p2[1], size=180) # Aumentado
-            # Dano em área na explosão final
-            for e in entity_manager._cached_all_enemies:
-                if not getattr(e, "dead", False):
-                    dx = e.x + getattr(e, "w", 0)/2 - p2[0]
-                    dy = e.y + getattr(e, "h", 0)/2 - p2[1]
-                    if (dx*dx + dy*dy) < 180*180:
-                        if hasattr(e, "take_damage"): e.take_damage(400)
-                        elif hasattr(e, "lives"): 
-                             current = getattr(e, "lives")
-                             setattr(e, "lives", current - 400)
+        _, p2 = self.get_line()
+        entity_manager.spawn_explosion(p2[0], p2[1], size=self.FINAL_EXPLOSION_RADIUS)
+        entity_manager.spawn_explosive_effect(
+            p2[0],
+            p2[1],
+            radius=self.FINAL_EXPLOSION_RADIUS,
+            damage=self.FINAL_EXPLOSION_DAMAGE,
+        )

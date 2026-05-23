@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, Dict, Optional, Protocol
 
-import pygame
+from .config import config as Config
 
 
 class UpgradeCategory(Enum):
@@ -272,74 +273,67 @@ class EMPUpgrade(ActiveUpgrade):
 class BlinkDashUpgrade(ActiveUpgrade):
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         ship = self._ctx_ship(ctx)
-        if not ship: return
-        duration = self.get_effective_duration(ctx)
-        if hasattr(ship, "activate_dash"):
-            ship.activate_dash(duration)
-        else:
-            setattr(ship, "dash_timer", duration)
-            if not hasattr(ship, "original_speed"):
-                setattr(ship, "original_speed", getattr(ship, "speed", 300))
-            ship.speed = getattr(ship, "original_speed", 300) * 2.5
-            if hasattr(ship, "get_facing_vector"):
-                vx, vy = ship.get_facing_vector()
-                setattr(ship, "dash_dir", pygame.math.Vector2(vx, vy))
-
-    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
-        ship = self._ctx_ship(ctx)
         if ship:
-            setattr(ship, "dash_timer", 0.0)
-            if hasattr(ship, "original_speed"):
-                ship.speed = getattr(ship, "original_speed", 300)
+            ship.activate_dash(self.get_effective_duration(ctx))
 
 
 class GravityBombUpgrade(ActiveUpgrade):
+    VORTEX_COUNT = 5
+    VORTEX_SPAWN_INTERVAL = 3.0
+    VORTEX_DURATION = 15.0
+    VORTEX_MIN_DISTANCE = 350.0
+    VORTEX_PLACEMENT_ATTEMPTS = 20
+
     def __init__(self, meta: UpgradeMeta) -> None:
         super().__init__(meta)
         self._vortexes_to_spawn = 0
         self._spawn_timer = 0.0
-        self._spawn_interval = 3.0
         self._spawned_positions: list[tuple[float, float]] = []
 
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
-        self._vortexes_to_spawn = 5
-        self._spawn_timer = self._spawn_interval
+        self._vortexes_to_spawn = self.VORTEX_COUNT
+        self._spawn_timer = self.VORTEX_SPAWN_INTERVAL
         self._spawned_positions.clear()
 
     def update(self, dt: float, ctx: Optional[UpgradeContextProtocol] = None) -> None:
         super().update(dt, ctx)
         if self.active and self._vortexes_to_spawn > 0 and ctx:
             self._spawn_timer += dt
-            if self._spawn_timer >= self._spawn_interval:
+            if self._spawn_timer >= self.VORTEX_SPAWN_INTERVAL:
                 self._spawn_timer = 0.0
                 self._spawn_vortex(ctx)
                 self._vortexes_to_spawn -= 1
 
     def _spawn_vortex(self, ctx: UpgradeContextProtocol) -> None:
         em = self._ctx_entity_manager(ctx)
-        if not em: return
-        import random, math
-        screen = pygame.display.get_surface()
-        sw, sh = screen.get_size() if screen else (1600, 900)
+        if not em or not hasattr(em, "spawn_black_hole"):
+            return
+        sw, sh = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+        min_dist_sq = self.VORTEX_MIN_DISTANCE ** 2
         best_pos = None
-        for _ in range(20):
-            rx, ry = random.uniform(sw*0.1, sw*0.9), random.uniform(sh*0.1, sh*0.9)
-            if all(math.hypot(rx-px, ry-py) >= 350 for px, py in self._spawned_positions):
-                best_pos = (rx, ry); break
-        if not best_pos: best_pos = (random.uniform(sw*0.1, sw*0.9), random.uniform(sh*0.1, sh*0.9))
+        for _ in range(self.VORTEX_PLACEMENT_ATTEMPTS):
+            rx = random.uniform(sw * 0.1, sw * 0.9)
+            ry = random.uniform(sh * 0.1, sh * 0.9)
+            if all(
+                (rx - px) ** 2 + (ry - py) ** 2 >= min_dist_sq
+                for px, py in self._spawned_positions
+            ):
+                best_pos = (rx, ry)
+                break
+        if best_pos is None:
+            best_pos = (
+                random.uniform(sw * 0.1, sw * 0.9),
+                random.uniform(sh * 0.1, sh * 0.9),
+            )
         self._spawned_positions.append(best_pos)
-        if hasattr(em, "spawn_black_hole"):
-            em.spawn_black_hole(best_pos[0], best_pos[1], 15.0, is_vortex=True)
+        em.spawn_black_hole(best_pos[0], best_pos[1], self.VORTEX_DURATION, is_vortex=True)
 
 
 class ChainLightningUpgrade(ActiveUpgrade):
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         ship = self._ctx_ship(ctx)
-        if ship: setattr(ship, "chain_shot_timer", self.get_effective_duration(ctx))
-
-    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
-        ship = self._ctx_ship(ctx)
-        if ship: setattr(ship, "chain_shot_timer", 0.0)
+        if ship:
+            ship.activate_chain_shot(self.get_effective_duration(ctx))
 
 
 class OrbitalShieldUpgrade(ActiveUpgrade):
@@ -351,45 +345,44 @@ class OrbitalShieldUpgrade(ActiveUpgrade):
 
 
 class PlasmaBeamUpgrade(ActiveUpgrade):
+    SPEED_PENALTY = 0.05
+
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         ship = self._ctx_ship(ctx)
         em = self._ctx_entity_manager(ctx)
-        if not ship or not em: return
-        if hasattr(em, "spawn_plasma_beam"):
-            em.spawn_plasma_beam(ship, self.get_effective_duration(ctx))
-        if not hasattr(ship, "original_speed"):
-            setattr(ship, "original_speed", getattr(ship, "speed", 300.0))
-        setattr(ship, "speed", getattr(ship, "original_speed", 300.0) * 0.05)
+        if not ship or not em or not hasattr(em, "spawn_plasma_beam"):
+            return
+        em.spawn_plasma_beam(ship, self.get_effective_duration(ctx))
+        ship.speed = ship.original_speed * self.SPEED_PENALTY
 
     def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         ship = self._ctx_ship(ctx)
-        if ship and hasattr(ship, "original_speed"):
-            setattr(ship, "speed", getattr(ship, "original_speed", 300.0))
+        if ship:
+            ship.speed = ship.original_speed
 
 
 class WingmanUpgrade(ActiveUpgrade):
     """Naves de escolta autônomas que perseguem inimigos."""
 
+    DRONE_COUNT = 3
+    DRONE_SPAWN_INTERVAL = 5.0
+
     def __init__(self, meta: UpgradeMeta) -> None:
         super().__init__(meta)
         self._wingmen_to_spawn = 0
         self._spawn_timer = 0.0
-        self._spawn_interval = 5.0
-
-    def allows_refresh(self) -> bool:
-        return False
 
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
-        # Inicia a sequência de nascimento de 3 drones
-        self._wingmen_to_spawn = 3
-        self._spawn_timer = self._spawn_interval # Primeiro nasce na hora
+        self._wingmen_to_spawn = self.DRONE_COUNT
+        # Primeiro drone nasce imediatamente.
+        self._spawn_timer = self.DRONE_SPAWN_INTERVAL
 
     def update(self, dt: float, ctx: Optional[UpgradeContextProtocol] = None) -> None:
         super().update(dt, ctx)
-        
+
         if self._wingmen_to_spawn > 0 and ctx is not None:
             self._spawn_timer += dt
-            if self._spawn_timer >= self._spawn_interval:
+            if self._spawn_timer >= self.DRONE_SPAWN_INTERVAL:
                 self._spawn_timer = 0.0
                 self._spawn_wingman_drone(ctx)
                 self._wingmen_to_spawn -= 1
@@ -397,29 +390,16 @@ class WingmanUpgrade(ActiveUpgrade):
     def _spawn_wingman_drone(self, ctx: UpgradeContextProtocol) -> None:
         ship = self._ctx_ship(ctx)
         em = self._ctx_entity_manager(ctx)
-        if not ship or not em:
+        if not ship or not em or not hasattr(em, "spawn_wingman"):
             return
-        
-        # O drone dura o tempo total do upgrade restante + margem de nascimento
-        duration = 30.0 # Valor base fixo para o drone individual
-        if hasattr(em, "spawn_wingman"):
-            try:
-                em.spawn_wingman(ship, duration)
-            except (AttributeError, TypeError):
-                pass
-
-    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
-        pass
+        em.spawn_wingman(ship, self.meta.base_duration)
 
 
 class BerserkUpgrade(ActiveUpgrade):
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         ship = self._ctx_ship(ctx)
-        if ship: setattr(ship, "berserk_timer", self.get_effective_duration(ctx))
-
-    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
-        ship = self._ctx_ship(ctx)
-        if ship: setattr(ship, "berserk_timer", 0.0)
+        if ship:
+            ship.activate_berserk(self.get_effective_duration(ctx))
 
 
 class BlackHoleUpgrade(ActiveUpgrade):
@@ -449,31 +429,22 @@ class CannonTowerUpgrade(ActiveUpgrade):
 class CoopLinkUpgrade(ActiveUpgrade):
     """Feixe de alta voltagem que conecta dois jogadores."""
 
+    @staticmethod
+    def _alive_ships(scene: Any) -> list[Any]:
+        roster = getattr(scene, "roster", None) if scene is not None else None
+        if roster is None:
+            return []
+        return [slot.ship for slot in roster.alive_slots()]
+
     def additional_can_activate(self, ctx: UpgradeContextProtocol) -> bool:
-        scene = self._ctx_scene(ctx)
-        if not scene:
-            return False
-        # Só permite ativar se houver 2 ou mais naves na cena (modo coop)
-        ships = getattr(scene, "ships", [])
-        return len(ships) >= 2
+        return len(self._alive_ships(self._ctx_scene(ctx))) >= 2
 
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         em = self._ctx_entity_manager(ctx)
-        scene = self._ctx_scene(ctx)
-        if not em or not scene:
+        ships = self._alive_ships(self._ctx_scene(ctx))
+        if not em or len(ships) < 2 or not hasattr(em, "spawn_coop_link"):
             return
-            
-        # Tentar obter as duas naves (ship1 e ship2) da cena de jogo
-        ships = getattr(scene, "ships", [])
-        if len(ships) < 2:
-            return
-            
-        duration = self.get_effective_duration(ctx)
-        if hasattr(em, "spawn_coop_link"):
-            try:
-                em.spawn_coop_link(ships[0], ships[1], duration)
-            except (AttributeError, TypeError):
-                pass
+        em.spawn_coop_link(ships[0], ships[1], self.get_effective_duration(ctx))
 
 
 def upgrade_factory(upgrade_type: UpgradeType) -> ActiveUpgrade:
