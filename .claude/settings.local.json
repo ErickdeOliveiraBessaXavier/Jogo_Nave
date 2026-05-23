@@ -20,7 +20,8 @@
       "PowerShell(python -c \"from game.systems.powerup_system import PowerupSystem, SCORE_MULTIPLIER_DURATION; from game.scenes import playing; print\\('All imports OK, SCORE_MULT_DURATION =', SCORE_MULTIPLIER_DURATION\\)\")",
       "PowerShell(python -c \"from game.scenes.playing import PlayingScene; from game.systems.gameplay_input_handler import GameplayInputHandler; print\\('Imports OK'\\); print\\('Renamed:', all\\(hasattr\\(PlayingScene, n\\) for n in ['can_handle_gameplay_actions','activate_stored_powerup','activate_stored_powerup_for','process_cheat_input','confirm_upgrade_select','navigate_upgrade_select','slot_inside_any_beacon','toggle_upgrade_select_mode','activate_upgrade_slot','trigger_world_transition_debug_preview']\\)\\)\")",
       "PowerShell(python -c \"from game.scenes.playing import PlayingScene; [print\\(n, ':', hasattr\\(PlayingScene, n\\)\\) for n in ['can_handle_gameplay_actions','activate_stored_powerup','activate_stored_powerup_for','process_cheat_input','confirm_upgrade_select','navigate_upgrade_select','slot_inside_any_beacon','toggle_upgrade_select_mode','activate_upgrade_slot','trigger_world_transition_debug_preview']]\")",
-      "PowerShell(python -c \"from game.scenes.playing import PlayingScene; print\\('toggle_upgrade_select_mode:', hasattr\\(PlayingScene, 'toggle_upgrade_select_mode'\\)\\)\")"
+      "PowerShell(python -c \"from game.scenes.playing import PlayingScene; print\\('toggle_upgrade_select_mode:', hasattr\\(PlayingScene, 'toggle_upgrade_select_mode'\\)\\)\")",
+      "PowerShell(python -c \"from game.systems.player_slot import PlayerRoster; r = PlayerRoster\\(\\); print\\('OK, slots:', r._slots\\)\")"
     ]
   }
 }

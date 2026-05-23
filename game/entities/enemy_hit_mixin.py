@@ -12,11 +12,14 @@ class EnemyHitMixin:
     """
 
     dead: bool
-    rect: pygame.Rect
 
     # Defaults
     _explosion_size_killed: int = 35
     _explosion_size_hit: int = 10
+
+    @property
+    def rect(self) -> pygame.Rect:
+        raise NotImplementedError
 
     def take_damage(self, amount: int) -> None:
         raise NotImplementedError

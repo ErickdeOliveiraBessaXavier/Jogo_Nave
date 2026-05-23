@@ -54,7 +54,7 @@ class PlayerSlot:
 class PlayerRoster:
     """Lista ordenada de slots ativos. Slot 0 é sempre P1 (primário)."""
 
-    _slots: List[PlayerSlot] = field(default_factory=list)
+    _slots: List[PlayerSlot] = field(default_factory=list[PlayerSlot])
 
     @classmethod
     def with_primary(cls, primary: PlayerSlot) -> "PlayerRoster":

@@ -426,7 +426,7 @@ class OrbitalDebris:
         self.target_ry = target_ry
         self.orbit_angle = orbit_angle_start
         self.orbit_speed = 0.03 + random.random() * 0.04
-        self._S = S
+        self._scale = S
         self._size = rock_size
         self.color = color
         self.bob_offset = random.uniform(0, math.pi * 2)
@@ -550,7 +550,7 @@ class OrbitalDebris:
         for t in self.trail:
             alpha = int(max(0, min(255, t[2])))
             if alpha > 0:
-                s = self._S
+                s = self._scale
                 self._dust_surf.fill((0, 0, 0, 0))
                 pygame.draw.rect(
                     self._dust_surf,
@@ -626,7 +626,7 @@ class EmergeDebris:
         self.x, self.y = float(x), float(y)
         self.vx, self.vy = vx, vy
         self.dead = False
-        self.S = S
+        self.scale = S
         self.rock_size = rock_size
         self.color = color if color else random.choice(self.EARTH_COLORS)
         self.spin = random.uniform(0, 360)
@@ -699,7 +699,7 @@ class EmergeDebris:
         dust_base = (140, 130, 120)
         for t in self.trail:
             alpha = int(_clamp(t[2], 0, 255))
-            s = self.S
+            s = self.scale
             self._dust_surf.fill((0, 0, 0, 0))
             # Usa cor de poeira com o alpha do rastro
             pygame.draw.rect(

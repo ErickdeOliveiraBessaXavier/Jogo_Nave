@@ -23,6 +23,204 @@ Avaliação focada em `game/systems/`, `game/entities/`, `game/render/` e
 
 ---
 
+## Diretrizes Pylance / Type Safety
+
+Regras consultadas ao receber um warning do Pylance. Cada uma tem **trigger**
+(quando aparece), **árvore de decisão** (ordem de preferência) e exemplo
+**❌ antes / ✅ depois**. Antes de "só renomear" o warning, percorra a árvore.
+
+---
+
+### 1. `reportPrivateUsage` em facades com componentes extraídos
+
+**Quando acontece:** Um componente irmão (`ShipPowerups`, `PowerupSystem`,
+`GameplayInputHandler`, etc.) acessa `_attr` ou `_method` de outro objeto
+(`Ship`, `PlayingScene`, etc.).
+
+**Como decidir** (nesta ordem):
+
+1. **Remover** se for wrapper morto (delegator de 1 linha).
+2. **Mover** ownership se o atributo logicamente pertence ao componente:
+   - Lookup tables Config-derivadas → para o componente.
+   - Estado do domínio do componente (ex.: `mouse_history` em movimento) →
+     para o `__init__` do componente.
+3. **Renomear** (drop do `_`) somente quando o atributo é API legítima
+   facade↔componente. O `_` original era engano — não é privado de
+   verdade, é "package-private".
+
+**Anti-padrão:** suprimir o warning via config do pyright sem analisar
+ownership — esconde o sinal útil que aponta fronteira borrada.
+
+```python
+# ❌ Antes (wrapper morto na Ship)
+class Ship:
+    def _find_nearest_enemy(self, x, y, em):
+        from ..systems.targeting import find_nearest_enemy
+        return find_nearest_enemy(x, y, em)
+
+# Componente:
+nearest = ship._find_nearest_enemy(ball_x, ball_y, em)  # ⚠ private access
+
+# ✅ Depois (remoção)
+# Ship sem o wrapper. Componente importa direto:
+from ..systems.targeting import find_nearest_enemy
+nearest = find_nearest_enemy(ball_x, ball_y, em)
+```
+
+---
+
+### 2. `reportConstantRedefinition` em atributos de instância
+
+**Quando acontece:** `self.X = ...` ou `self._X = ...` com nome 100% maiúsculo.
+Pylance trata uppercase como constante por convenção PEP 8.
+
+**Como decidir:** sempre renomear para nome semântico em snake_case
+(`self.scale`, `self._scale`), nunca uma letra avulsa. Letras avulsas
+geralmente vêm de gambiarra local que vazou para atributo.
+
+```python
+# ❌ Antes
+self.S = S          # ⚠ "S" parece constante de classe
+self._S = S         # mesma coisa
+
+# ✅ Depois
+self.scale = S      # nome semântico, lowercase
+self._scale = S
+```
+
+---
+
+### 3. `reportIncompatibleMethodOverride` / `reportIncompatibleVariableOverride`
+
+**Quando acontece:**
+- Subclasse omite parâmetro da assinatura da base (LSP).
+- Subclasse troca `attr: T` por `@property def attr() -> T`.
+
+**Como decidir:**
+- **Método**: aceitar todos os parâmetros da base, mesmo que só os repasse
+  com default (`super().reset(..., aggressiveness_multiplier=mult)`).
+- **Atributo vs property**: se as subclasses precisam ser property
+  (computado), declarar como `@property` abstrata no Mixin/base e levantar
+  `NotImplementedError`. Nunca declarar como atributo simples se vai ser
+  property nas filhas.
+
+```python
+# ❌ Antes (mixin com atributo, subclasse com property)
+class EnemyHitMixin:
+    rect: pygame.Rect
+
+class StoneSentry(EnemyHitMixin):
+    @property
+    def rect(self) -> pygame.Rect:  # ⚠ incompatible override
+        return pygame.Rect(...)
+
+# ✅ Depois
+class EnemyHitMixin:
+    @property
+    def rect(self) -> pygame.Rect:
+        raise NotImplementedError
+```
+
+---
+
+### 4. `reportUnknownVariableType` em `field(default_factory=list)`
+
+**Quando acontece:** Dataclass field com `default_factory=list` (sem
+parâmetro de tipo). Pylance vê `list[Unknown]` e perde a info do tipo
+declarado.
+
+**Como decidir:** use `default_factory=list[T]` (PEP 585, Python 3.9+).
+O generics subscritável funciona como callable em runtime.
+
+```python
+# ❌ Antes
+_slots: List[PlayerSlot] = field(default_factory=list)  # ⚠ Unknown
+
+# ✅ Depois
+_slots: List[PlayerSlot] = field(default_factory=list[PlayerSlot])
+```
+
+---
+
+### 5. `reportUnusedImport`
+
+**Quando acontece:** Import órfão após remoção do código que o usava.
+
+**Como decidir:** após qualquer remoção/refactor que tire o uso de um
+símbolo, varrer os imports do arquivo. Se virou warning, deletar — NÃO
+deixar "por garantia". Se outro arquivo precisa do símbolo, ele que importe.
+
+```python
+# ❌ Antes (pygame era usado no fallback que foi removido)
+import pygame                 # ⚠ não acessado
+from .config import config as Config
+
+class BlinkDashUpgrade(...):
+    def on_activate_effect(self, ctx):
+        ship.activate_dash(...)  # não usa pygame
+
+# ✅ Depois
+from .config import config as Config
+```
+
+---
+
+### 6. Anti-padrão: `setattr`/`getattr`/`hasattr` defensivos mortos
+
+**Quando acontece:** Código usa `setattr(obj, "attr", x)` ou
+`hasattr(obj, "attr")` quando o atributo é garantido pela classe.
+Geralmente herdado de código exploratório / defensive copy-paste.
+
+**Como decidir:**
+- `setattr(ship, "speed", x)` → `ship.speed = x` (acesso direto).
+- `getattr(ship, "speed", default)` → `ship.speed` se sempre existe;
+  manter apenas em fronteira (input externo, plugin opcional).
+- `if hasattr(ship, "metodo"):` → remover o `if` se `metodo` é parte do
+  contrato público da classe. Manter apenas para duck typing real.
+- Bloco `try/except (AttributeError, TypeError): pass` ao redor de chamada
+  conhecida → silencia bugs. Remover ou tratar especificamente.
+
+```python
+# ❌ Antes
+if hasattr(ship, "activate_dash"):
+    ship.activate_dash(duration)
+else:
+    setattr(ship, "dash_timer", duration)
+    if not hasattr(ship, "original_speed"):
+        setattr(ship, "original_speed", getattr(ship, "speed", 300))
+
+# ✅ Depois (Ship sempre tem activate_dash e original_speed)
+ship.activate_dash(duration)
+```
+
+---
+
+### 7. Armadilha de `replace_all` com nomes que se sobrepõem
+
+**Quando acontece:** Rename em batch com `replace_all` quando o nome
+curto é substring do longo. Ex.: `_upgrade_select_mode` vive dentro de
+`_toggle_upgrade_select_mode`.
+
+**Como decidir:**
+
+1. **Listar todos** os nomes a renomear e identificar substring overlaps.
+2. **Renomear os longos primeiro** — mas atenção: depois de renomear
+   `_toggle_upgrade_select_mode` → `toggle_upgrade_select_mode`, o curto
+   `_upgrade_select_mode` ainda casa como substring de
+   `toggle_upgrade_select_mode` e vai gerar `toggleupgrade_select_mode` (!).
+3. **Validar com `hasattr(Cls, 'novo_nome')`** depois do batch. Se False,
+   buscar `novonome` (sem underscore intermediário) no arquivo.
+
+```python
+# Ordem correta + validação
+# 1. _toggle_upgrade_select_mode → toggle_upgrade_select_mode
+# 2. _activate_stored_powerup_for → activate_stored_powerup_for
+# 3. _upgrade_select_mode → upgrade_select_mode  ⚠ pode quebrar #1!
+# 4. python -c "assert hasattr(Cls, 'toggle_upgrade_select_mode')"
+```
+
+---
+
 ## Backlog
 
 ### Crítico
