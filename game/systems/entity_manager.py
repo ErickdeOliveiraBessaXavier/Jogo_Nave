@@ -628,14 +628,21 @@ class EntityManager:
             # Colisão do feixe com inimigos
             p1, p2 = link.get_collision_line()
             damage = link.damage * dt
-            for e in self.enemies:
+            for e in self._cached_all_enemies:
                 if getattr(e, "dead", False):
                     continue
-                if e.rect.clipline(p1, p2):
-                    if hasattr(e, "take_damage"):
-                        e.take_damage(damage)
-                    elif hasattr(e, "lives"):
-                        e.lives -= damage
+                
+                # Tentar hitboxes específicos para precisão (ex: RockGlider)
+                hitboxes_fn = getattr(e, "get_ship_contact_hitboxes", None)
+                if hitboxes_fn:
+                    for hb in hitboxes_fn():
+                        if hb.clipline(p1, p2):
+                            self._apply_projectile_damage(e, damage, hb.centerx, hb.centery, trigger_death=True)
+                            break
+                else:
+                    rect = getattr(e, "rect", None)
+                    if rect and rect.clipline(p1, p2):
+                        self._apply_projectile_damage(e, damage, rect.centerx, rect.centery, trigger_death=True)
         for s in self.orbital_shields:
             s.update(dt)
             damage = s.damage * dt
@@ -649,10 +656,11 @@ class EntityManager:
                 if hitboxes_fn:
                     for hb in hitboxes_fn():
                         if sr.colliderect(hb):
-                            self._apply_projectile_damage(e, damage, hb.centerx, hb.centery)
+                            # OrbitalShield também deve triggar explosão ao matar
+                            self._apply_projectile_damage(e, damage, hb.centerx, hb.centery, trigger_death=True)
                             break
                 elif sr.colliderect(e.rect):
-                    self._apply_projectile_damage(e, damage, e.rect.centerx, e.rect.centery)
+                    self._apply_projectile_damage(e, damage, e.rect.centerx, e.rect.centery, trigger_death=True)
 
         for beam in self.plasma_beams:
             beam.update(dt)
@@ -677,29 +685,54 @@ class EntityManager:
     def _apply_projectile_damage(self, enemy: Any, damage: float, hit_x: float, hit_y: float, trigger_death: bool = False) -> None:
         """Helper robusto para aplicar dano de upgrades (Beam/Shield/Vortex)."""
         killed = False
+        res = None
+        
+        # 1. Tentar aplicar via on_hit (essencial para feedback visual e inimigos com partes)
         if hasattr(enemy, "on_hit"):
-            # Para entidades como RockGlider, Meteor, Bosses
-            enemy.on_hit(int(damage) if damage >= 1 else 1, hit_x, hit_y)
-            if getattr(enemy, "dead", False): killed = True
-        elif hasattr(enemy, "take_damage"):
-            enemy.take_damage(damage)
-            if getattr(enemy, "dead", False): killed = True
-        elif hasattr(enemy, "lives"):
-            current = getattr(enemy, "lives")
-            new_lives = current - damage
-            setattr(enemy, "lives", new_lives)
-            if new_lives <= 0:
-                enemy.dead = True
+            # Capturar o HitResult. Ele nos dirá se houve morte de parte ou da entidade.
+            res = enemy.on_hit(int(damage) if damage >= 1 else 1, hit_x, hit_y)
+            # No caso de HitResult, consideramos 'killed' se o resultado disser que foi morto/destruído
+            if res and getattr(res, "killed", False):
                 killed = True
-        elif hasattr(enemy, "health"):
-            enemy.health -= damage
-            if enemy.health <= 0:
-                enemy.dead = True
+            # Se a entidade inteira morreu (ex: Aliens simples via on_hit)
+            if getattr(enemy, "dead", False):
                 killed = True
         
-        # Garantir efeitos de morte se solicitado e a entidade morreu agora
+        # 2. Fallbacks de dano (caso on_hit não exista ou não tenha matado a entidade inteira)
+        if not killed:
+            if hasattr(enemy, "take_damage"):
+                enemy.take_damage(damage)
+                if getattr(enemy, "dead", False): killed = True
+            elif hasattr(enemy, "lives"):
+                current = getattr(enemy, "lives")
+                new_lives = current - damage
+                setattr(enemy, "lives", new_lives)
+                if new_lives <= 0:
+                    enemy.dead = True
+                    killed = True
+            elif hasattr(enemy, "health"):
+                enemy.health -= damage
+                if enemy.health <= 0:
+                    enemy.dead = True
+                    killed = True
+        
+        # 3. Disparar efeitos visuais de destruição
+        # Se trigger_death for True, garantimos uma explosão se houve 'killed' (morte de parte ou total)
         if trigger_death and killed:
-            self.spawn_explosion(hit_x, hit_y, size=30)
+            # Usar dados do HitResult se disponíveis, senão usar padrões
+            expl_size = getattr(res, "explosion_size", 30) if res else 30
+            expl_type = getattr(res, "explosion_type", None) if res else None
+            
+            # Spawnar a explosão autêntica
+            self.spawn_explosion(hit_x, hit_y, size=expl_size, explosion_type=expl_type)
+            
+            # Processar fragmentos (ex: meteoros se dividindo)
+            if res and hasattr(res, "fragments") and res.fragments:
+                self.absorb_fragments(res.fragments)
+        
+        # Se não matou mas foi um hit, podemos disparar um flash visual manual se necessário
+        elif not killed and not res and hasattr(enemy, "_hit_flash"):
+            setattr(enemy, "_hit_flash", 0.1)
 
     def _update_enemy_projectiles(self, enemy_dt: float) -> None:
         """Projéteis inimigos: alien/serpent/boss/eye (todos respeitam freeze)."""
@@ -1090,6 +1123,8 @@ class EntityManager:
             s.draw(surface)
         for beam in self.plasma_beams:
             beam.draw(surface)
+        for w in self.wingmen:
+            w.draw(surface)
         for b in self.black_holes:
             b.draw(surface)
         for w in self.emp_waves:
@@ -1207,10 +1242,13 @@ class EntityManager:
         self.coop_links.append(link)
         return link
 
-    def spawn_orbital_shield(self, ship: Any, duration: float) -> OrbitalShield:
-        shield = OrbitalShield(ship, duration)
-        self.orbital_shields.append(shield)
-        return shield
+    def spawn_orbital_shield(self, ship: Any, duration: float) -> list[OrbitalShield]:
+        shields: list[OrbitalShield] = []
+        for i in range(3): # Agora são três escudos
+            s: OrbitalShield = OrbitalShield(ship, duration, index=i, total=3)
+            self.orbital_shields.append(s)
+            shields.append(s)
+        return shields
 
     def spawn_plasma_beam(self, ship: Any, duration: float) -> PlasmaBeam:
         beam = PlasmaBeam(ship, duration)

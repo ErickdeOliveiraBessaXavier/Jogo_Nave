@@ -83,10 +83,12 @@ class BlackHole:
             self.max_pull_radius = config.BLACK_HOLE_MAX_PULL_RADIUS
 
         # Dano (Vortex agora dá dano constante tipo "veneno" no núcleo)
-        # Se for Black Hole Ultimate (não vortex), mata instantaneamente no centro.
-        # Se for Vortex, dá 1 de dano a cada 3 segundos (0.33 HP/s), mas de forma persistente.
-        self.damage_per_second = 0.334 # Resulta em ~1HP a cada 3s
-        self.hit_effect_timer = 0.0 # Timer visual para o veneno
+        # Inspirado em IcePoisonZone: dano em ticks discretos com feedback visual.
+        self.damage_tick_timer = 0.0
+        self.damage_interval = 0.25 # 4 ticks por segundo
+        # Queremos ~1HP a cada 3s. Total de 12 ticks em 3s.
+        # 1.0 / 12 = ~0.083 HP por tick.
+        self.damage_per_tick = 0.0834 
 
         self.growth_rate = config.BLACK_HOLE_GROWTH_RATE
         self.particles: list[Particle] = []
@@ -126,9 +128,9 @@ class BlackHole:
         self.animation_timer += dt
         self.state_timer += dt
         
-        # Timer visual do efeito de hit do veneno
+        # Timer de tick de dano (veneno)
         if self.is_vortex and self.state == "active":
-            self.hit_effect_timer += dt
+            self.damage_tick_timer += dt
 
         # Máquina de estados de animação
         if self.state == "spawning":
@@ -205,11 +207,11 @@ class BlackHole:
         pull_radius_sq = (self.pull_radius * self.scale) ** 2
         core_radius_sq = (self.core_radius * self.scale) ** 2
         
-        # O "veneno" visual ocorre em intervalos curtos para não sobrecarregar
-        show_hit_visual = False
-        if self.is_vortex and self.hit_effect_timer >= 0.15: # 6x por segundo
-            show_hit_visual = True
-            self.hit_effect_timer = 0.0
+        # Lógica de Tick de Veneno (Sincronizado com IcePoisonZone)
+        trigger_damage_tick = False
+        if self.is_vortex and self.damage_tick_timer >= self.damage_interval:
+            trigger_damage_tick = True
+            self.damage_tick_timer = 0.0
 
         for enemy in enemies:
             if getattr(enemy, "dead", False):
@@ -237,11 +239,9 @@ class BlackHole:
                     # Black Hole Ultimate mata tudo instantaneamente
                     enemy.dead = True
                     if spawn_explosion_callback: spawn_explosion_callback(enemy_x, enemy_y, size=30)
-                else:
-                    # Vortex dá dano de veneno constante
-                    dmg = self.damage_per_second * dt
-                    # Só ativa o efeito visual (on_hit/flash) periodicamente, mas o dano é todo frame
-                    self._apply_vortex_damage(enemy, dmg, spawn_explosion_callback, trigger_visual=show_hit_visual)
+                elif trigger_damage_tick:
+                    # Vortex aplica dano em ticks discretos com feedback visual completo
+                    self._apply_vortex_damage(enemy, self.damage_per_tick, spawn_explosion_callback)
                 continue
 
             # Atração Gravitacional (aplica a todos dentro do pull_radius)
@@ -254,37 +254,44 @@ class BlackHole:
                 enemy.x += (dx / dist) * pull_speed * dt
                 enemy.y += (dy / dist) * pull_speed * dt
 
-    def _apply_vortex_damage(self, enemy: Any, damage: float, spawn_explosion_callback: Any = None, trigger_visual: bool = False) -> None:
-        """Helper para aplicar dano de veneno e garantir efeitos visuais."""
+    def _apply_vortex_damage(self, enemy: Any, damage: float, spawn_explosion_callback: Any = None) -> None:
+        """Aplica dano e dispara feedback visual (on_hit) sincronizado com o tick."""
         killed = False
+        res = None
         hit_x = enemy.x + getattr(enemy, "w", 0)/2
         hit_y = enemy.y + getattr(enemy, "h", 0)/2
 
-        # Aplicar o dano (mesmo que seja decimal, o sistema de health suporta)
-        if hasattr(enemy, "health"):
-            enemy.health -= damage
-            if enemy.health <= 0:
-                enemy.dead = True
-                killed = True
-        elif hasattr(enemy, "lives"):
-            current = getattr(enemy, "lives")
-            new_lives = current - damage
-            setattr(enemy, "lives", new_lives)
-            if new_lives <= 0:
-                enemy.dead = True
+        # 1. Tentar aplicar via on_hit (melhor para efeitos visuais e partes)
+        if hasattr(enemy, "on_hit"):
+            # Passamos o dano real. Se for tick visual puro, damage será 0 (não ocorre aqui, ocorre no loop caller)
+            res = enemy.on_hit(int(damage) if damage >= 1 else 0, hit_x, hit_y)
+            if getattr(enemy, "dead", False):
                 killed = True
 
-        # Ativar efeitos visuais se o timer permitiu
-        if trigger_visual and not killed:
-            if hasattr(enemy, "on_hit"):
-                # Passa 0 de dano para on_hit apenas para disparar o visual/flash/partículas
-                enemy.on_hit(0, hit_x, hit_y)
-            elif hasattr(enemy, "_hit_flash"):
-                setattr(enemy, "_hit_flash", 0.1)
+        # 2. Fallbacks de dano (caso on_hit não exista ou não tenha matado)
+        if not killed:
+            if hasattr(enemy, "health"):
+                enemy.health -= damage
+                if enemy.health <= 0:
+                    enemy.dead = True
+                    killed = True
+            elif hasattr(enemy, "lives"):
+                current = getattr(enemy, "lives")
+                new_lives = current - damage
+                setattr(enemy, "lives", new_lives)
+                if new_lives <= 0:
+                    enemy.dead = True
+                    killed = True
+            
+            # Se o fallback não tiver on_hit mas disparou flash manual
+            if not killed and not hasattr(enemy, "on_hit") and hasattr(enemy, "_hit_flash"):
+                setattr(enemy, "_hit_flash", 0.15)
 
-        # Se morreu, explosão final
+        # 3. Se morreu, disparar explosão autêntica baseada no inimigo
         if killed and spawn_explosion_callback:
-            spawn_explosion_callback(hit_x, hit_y, size=25)
+            expl_size = getattr(res, "explosion_size", 25) if res else 25
+            expl_type = getattr(res, "explosion_type", None) if res else None
+            spawn_explosion_callback(hit_x, hit_y, size=expl_size, explosion_type=expl_type)
 
     def draw(self, surface: pygame.Surface):
         if self.scale <= 0: return

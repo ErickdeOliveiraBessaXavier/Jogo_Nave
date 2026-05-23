@@ -174,6 +174,19 @@ class ActiveUpgrade:
     def get_effective_duration(self, _ctx: Optional[UpgradeContextProtocol]) -> float:
         return self.meta.base_duration
 
+    def get_ui_state(self) -> Dict[str, Any]:
+        """Retorna o estado do upgrade para renderização na HUD."""
+        return {
+            "name": self.meta.name,
+            "icon_id": self.meta.icon_id,
+            "cooldown_left": max(0.0, self.cooldown_left),
+            "cooldown": self.meta.base_cooldown,
+            "active": self.active,
+            "duration_left": max(0.0, self.duration_left),
+            "charges_left": self.charges_left,
+            "desc": self.meta.desc,
+        }
+
 
 class ShieldBurstUpgrade(ActiveUpgrade):
     def __init__(self, meta: UpgradeMeta) -> None:
@@ -355,11 +368,48 @@ class PlasmaBeamUpgrade(ActiveUpgrade):
 
 
 class WingmanUpgrade(ActiveUpgrade):
+    """Naves de escolta autônomas que perseguem inimigos."""
+
+    def __init__(self, meta: UpgradeMeta) -> None:
+        super().__init__(meta)
+        self._wingmen_to_spawn = 0
+        self._spawn_timer = 0.0
+        self._spawn_interval = 5.0
+
+    def allows_refresh(self) -> bool:
+        return False
+
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        # Inicia a sequência de nascimento de 3 drones
+        self._wingmen_to_spawn = 3
+        self._spawn_timer = self._spawn_interval # Primeiro nasce na hora
+
+    def update(self, dt: float, ctx: Optional[UpgradeContextProtocol] = None) -> None:
+        super().update(dt, ctx)
+        
+        if self._wingmen_to_spawn > 0 and ctx is not None:
+            self._spawn_timer += dt
+            if self._spawn_timer >= self._spawn_interval:
+                self._spawn_timer = 0.0
+                self._spawn_wingman_drone(ctx)
+                self._wingmen_to_spawn -= 1
+
+    def _spawn_wingman_drone(self, ctx: UpgradeContextProtocol) -> None:
         ship = self._ctx_ship(ctx)
         em = self._ctx_entity_manager(ctx)
-        if ship and em and hasattr(em, "spawn_wingman"):
-            em.spawn_wingman(ship, self.get_effective_duration(ctx))
+        if not ship or not em:
+            return
+        
+        # O drone dura o tempo total do upgrade restante + margem de nascimento
+        duration = 30.0 # Valor base fixo para o drone individual
+        if hasattr(em, "spawn_wingman"):
+            try:
+                em.spawn_wingman(ship, duration)
+            except (AttributeError, TypeError):
+                pass
+
+    def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
+        pass
 
 
 class BerserkUpgrade(ActiveUpgrade):
@@ -397,8 +447,33 @@ class CannonTowerUpgrade(ActiveUpgrade):
 
 
 class CoopLinkUpgrade(ActiveUpgrade):
+    """Feixe de alta voltagem que conecta dois jogadores."""
+
+    def additional_can_activate(self, ctx: UpgradeContextProtocol) -> bool:
+        scene = self._ctx_scene(ctx)
+        if not scene:
+            return False
+        # Só permite ativar se houver 2 ou mais naves na cena (modo coop)
+        ships = getattr(scene, "ships", [])
+        return len(ships) >= 2
+
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
-        pass
+        em = self._ctx_entity_manager(ctx)
+        scene = self._ctx_scene(ctx)
+        if not em or not scene:
+            return
+            
+        # Tentar obter as duas naves (ship1 e ship2) da cena de jogo
+        ships = getattr(scene, "ships", [])
+        if len(ships) < 2:
+            return
+            
+        duration = self.get_effective_duration(ctx)
+        if hasattr(em, "spawn_coop_link"):
+            try:
+                em.spawn_coop_link(ships[0], ships[1], duration)
+            except (AttributeError, TypeError):
+                pass
 
 
 def upgrade_factory(upgrade_type: UpgradeType) -> ActiveUpgrade:
@@ -416,10 +491,16 @@ def upgrade_factory(upgrade_type: UpgradeType) -> ActiveUpgrade:
         UpgradeType.BLACK_HOLE: BlackHoleUpgrade,
         UpgradeType.AIR_STRIKE: AirStrikeUpgrade,
         UpgradeType.CANNON_TOWER: CannonTowerUpgrade,
+        UpgradeType.COOP_LINK: CoopLinkUpgrade,
     }
     cls = factories.get(upgrade_type)
     if cls: return cls(UPGRADES_META[upgrade_type])
     raise ValueError(f"Unknown upgrade type: {upgrade_type}")
+
+
+def create_upgrade(upgrade_type: UpgradeType) -> ActiveUpgrade:
+    """Wrapper para compatibilidade com o código legado."""
+    return upgrade_factory(upgrade_type)
 
 
 UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
@@ -429,19 +510,64 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     UpgradeType.BLINK_DASH: UpgradeMeta(UpgradeType.BLINK_DASH, "DASH", "Dash curto invulnerável.", "blink_dash", UpgradeCategory.DEFENSIVE, 15, 0.4, None, 1),
     UpgradeType.GRAVITY_BOMB: UpgradeMeta(UpgradeType.GRAVITY_BOMB, "GRAV", "5 mini-vórtices corrosivos (15s).", "gravity_bomb", UpgradeCategory.UTILITY, 60, 15, None, 2),
     UpgradeType.CHAIN_LIGHTNING: UpgradeMeta(UpgradeType.CHAIN_LIGHTNING, "LIGH", "Tiros que saltam entre inimigos.", "chain_lightning", UpgradeCategory.OFFENSIVE, 60, 10, None, 2),
-    UpgradeType.ORBITAL_SHIELD: UpgradeMeta(UpgradeType.ORBITAL_SHIELD, "ORB", "Escudos físicos rotativos.", "orbital_shield", UpgradeCategory.DEFENSIVE, 70, 12, None, 2),
+    UpgradeType.ORBITAL_SHIELD: UpgradeMeta(
+        UpgradeType.ORBITAL_SHIELD,
+        "ORB",
+        "3 escudos físicos rotativos.",
+        "orbital_shield",
+        UpgradeCategory.DEFENSIVE,
+        70,
+        12,
+        None,
+        2,
+    ),
     UpgradeType.PLASMA_BEAM: UpgradeMeta(UpgradeType.PLASMA_BEAM, "BEAM", "Lança de Plasma com explosão final.", "plasma_beam", UpgradeCategory.OFFENSIVE, 110, 5, None, 3),
-    UpgradeType.WINGMAN: UpgradeMeta(UpgradeType.WINGMAN, "WING", "Drone de escolta autônomo.", "wingman", UpgradeCategory.OFFENSIVE, 80, 20, None, 2),
+    UpgradeType.WINGMAN: UpgradeMeta(
+        UpgradeType.WINGMAN,
+        "WING",
+        "3 drones de escolta sequenciais (30s).",
+        "wingman",
+        UpgradeCategory.OFFENSIVE,
+        120,
+        30,
+        None,
+        2,
+    ),
     UpgradeType.BERSERK: UpgradeMeta(UpgradeType.BERSERK, "BERS", "Rajadas rotativas (Estrela Espiral).", "berserk", UpgradeCategory.OFFENSIVE, 120, 8, None, 3),
     UpgradeType.BLACK_HOLE: UpgradeMeta(UpgradeType.BLACK_HOLE, "HOLE", "Buraco negro móvel Ultimate.", "black_hole", UpgradeCategory.OFFENSIVE, 120, 8, None, 3),
     UpgradeType.AIR_STRIKE: UpgradeMeta(UpgradeType.AIR_STRIKE, "AIR", "Bombardeio aéreo massivo.", "air_strike", UpgradeCategory.OFFENSIVE, 180, 0, 30, 3),
     UpgradeType.CANNON_TOWER: UpgradeMeta(UpgradeType.CANNON_TOWER, "CANNON", "Torres de minas estáticas.", "cannon_tower", UpgradeCategory.OFFENSIVE, 200, 0, None, 3),
+    UpgradeType.COOP_LINK: UpgradeMeta(
+        UpgradeType.COOP_LINK,
+        "LINK",
+        "Feixe de alta voltagem entre jogadores.",
+        "link",
+        UpgradeCategory.UTILITY,
+        45,
+        15,
+        None,
+        2,
+    ),
 }
 
 def list_all_upgrades_meta() -> list[UpgradeMeta]:
     return list(UPGRADES_META.values())
 
 def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
-    mapping = {"shield_burst":"S", "heal":"H", "emp":"E", "air_strike":"A", "black_hole":"B", "blink_dash":"D", "gravity_bomb":"G", "chain_lightning":"L", "orbital_shield":"R", "plasma_beam":"P", "wingman":"W", "berserk":"Z"}
+    mapping = {
+        "shield_burst": "S",
+        "heal": "H",
+        "emp": "E",
+        "air_strike": "A",
+        "black_hole": "B",
+        "blink_dash": "D",
+        "gravity_bomb": "G",
+        "chain_lightning": "L",
+        "orbital_shield": "R",
+        "plasma_beam": "P",
+        "wingman": "W",
+        "berserk": "Z",
+        "link": "C",
+    }
     if icon_id and icon_id in mapping: return mapping[icon_id]
     return upgrade_name[0].upper() if upgrade_name else "?"

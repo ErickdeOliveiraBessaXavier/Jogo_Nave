@@ -49,6 +49,15 @@ class Wingman:
         self.target = None
         self.state = "FOLLOW"  # "FOLLOW" ou "HUNT"
         
+        # Lógica de rotação
+        self.current_angle = 270.0 # Olhando para cima inicialmente
+        self.target_angle = 270.0
+        
+        # Lógica de Animação de Nascimento
+        self.spawn_timer = 0.0
+        self.spawn_duration = 0.8
+        self.scale = 0.0
+        
         # Offset suave para o modo FOLLOW
         self.follow_offset_x = side_offset
         self.follow_offset_y = 60
@@ -62,6 +71,18 @@ class Wingman:
         if self.timer <= 0:
             self.dead = True
             return
+
+        # Animação de nascimento
+        if self.spawn_timer < self.spawn_duration:
+            self.spawn_timer += dt
+            self.scale = min(1.0, self.spawn_timer / self.spawn_duration)
+            # Não ataca nem persegue enquanto está nascendo
+            self._follow_behavior(dt)
+            self.x += self.vx * dt
+            self.y += self.vy * dt
+            return
+
+        self.scale = 1.0
 
         # Busca alvo se não tiver um ou se o atual morreu
         if not self.target or getattr(self.target, "dead", False):
@@ -80,6 +101,24 @@ class Wingman:
         # Integração de movimento
         self.x += self.vx * dt
         self.y += self.vy * dt
+
+        # Atualizar ângulo visual
+        if self.state == "HUNT" and self.target:
+            tx = getattr(self.target, "x", 0) + getattr(self.target, "w", 0) / 2
+            ty = getattr(self.target, "y", 0) + getattr(self.target, "h", 0) / 2
+            dx = tx - (self.x + self.w / 2)
+            dy = ty - (self.y + self.h / 2)
+            # No pygame, 0 é direita, 90 é baixo. Rotate usa graus (anti-horário)
+            # atan2 retorna radianos (-PI a PI)
+            self.target_angle = math.degrees(-math.atan2(dy, dx))
+        elif math.hypot(self.vx, self.vy) > 10:
+            self.target_angle = math.degrees(-math.atan2(self.vy, self.vx))
+        else:
+            self.target_angle = 90.0 # Olhando para cima padrão
+
+        # Interpolação suave do ângulo (evita snaps bruscos)
+        angle_diff = (self.target_angle - self.current_angle + 180) % 360 - 180
+        self.current_angle += angle_diff * 10 * dt
 
         # Limites da tela
         margin = 20
@@ -122,7 +161,7 @@ class Wingman:
         dist = math.hypot(dx, dy) or 1.0
         
         # Se estiver muito perto, tenta manter distância; se longe, aproxima
-        target_dist = 200.0
+        target_dist = 150.0 # Feedback anterior: agressividade aumentada
         if dist > target_dist:
             desired_vx = (dx / dist) * self.speed
             desired_vy = (dy / dist) * self.speed
@@ -183,12 +222,10 @@ class Wingman:
             if self.timer < 3.0 and int(self.timer * 10) % 2 == 0:
                 return
             
+            # Aplicar rotação ao sprite (ajustando 90 graus pois o original olha para cima)
+            rotated_sprite = pygame.transform.rotate(self._sprite, self.current_angle - 90)
+            
             # Desenha com um brilho ciano suave ao redor
-            rect = self._sprite.get_rect(center=(int(self.x + self.w / 2), int(self.y + self.h / 2)))
+            rect = rotated_sprite.get_rect(center=(int(self.x + self.w / 2), int(self.y + self.h / 2)))
             
-            # Brilho opcional
-            # glow_surf = pygame.Surface((self.w + 8, self.h + 8), pygame.SRCALPHA)
-            # pygame.draw.circle(glow_surf, (0, 255, 255, 60), (self.w // 2 + 4, self.h // 2 + 4), self.w // 2 + 4)
-            # surface.blit(glow_surf, (rect.x - 4, rect.y - 4))
-            
-            surface.blit(self._sprite, rect)
+            surface.blit(rotated_sprite, rect)
