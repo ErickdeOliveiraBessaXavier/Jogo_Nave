@@ -244,10 +244,9 @@ class SlimeBoss:
 
     def _update_active_state(self, dt: float) -> None:
         """Move lateralmente 50px para esquerda e direita a partir da posição central."""
-        # Velocidade de movimento
-        speed = (
-            Config.SLIME_BOSS_MOVE_SPEED
-        )  # pixels/segundo (ajuste conforme necessário)
+        # Velocidade de movimento — aggressiveness escala em dificuldades altas.
+        agg = getattr(self, "aggressiveness_multiplier", 1.0)
+        speed = Config.SLIME_BOSS_MOVE_SPEED * agg
 
         # Mover horizontalmente
         self.x += speed * dt * self.direction

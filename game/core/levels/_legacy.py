@@ -1,8 +1,9 @@
 import logging
 import math
+import copy
 import random
 import zlib
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Type
 
 from ...entities.alien import Alien
@@ -463,7 +464,9 @@ def _apply_theme_enemy_eligibility(
     if adjusted_spawn_config == config.enemy_spawn_config:
         return config
 
-    return replace(config, enemy_spawn_config=adjusted_spawn_config)
+    config_copy = copy.copy(config)
+    config_copy.enemy_spawn_config = adjusted_spawn_config
+    return config_copy
 
 
 def _apply_theme_enemy_weights(
@@ -495,7 +498,9 @@ def _apply_theme_enemy_weights(
     if not changed:
         return config
 
-    return replace(config, enemy_spawn_config=adjusted_spawn_config)
+    config_copy = copy.copy(config)
+    config_copy.enemy_spawn_config = adjusted_spawn_config
+    return config_copy
 
 
 def _get_stage_band(world: "WorldConfig", level_number: int) -> str:
@@ -545,7 +550,9 @@ def _apply_stage_progression_enemy_weights(
     if not changed:
         return config
 
-    return replace(config, enemy_spawn_config=adjusted_spawn_config)
+    config_copy = copy.copy(config)
+    config_copy.enemy_spawn_config = adjusted_spawn_config
+    return config_copy
 
 
 def _apply_enemy_variety_cap(
@@ -597,7 +604,9 @@ def _apply_enemy_variety_cap(
 
     adjusted_spawn_config = {t: spawn_config[t] for t in chosen}
 
-    return replace(config, enemy_spawn_config=adjusted_spawn_config)
+    config_copy = copy.copy(config)
+    config_copy.enemy_spawn_config = adjusted_spawn_config
+    return config_copy
 
 
 # Pipeline declarativo de transformações aplicadas a um `LevelConfig` em ordem.
@@ -970,7 +979,9 @@ def _get_progressive_enemy_weight(
 
 
 def calculate_dynamic_enemy_cap(
-    level_number: int, difficulty_preset: DifficultyPreset
+    level_number: int,
+    difficulty_preset: DifficultyPreset,
+    player_count: int = 1,
 ) -> int:
     """
     Calcula o limite de inimigos simultâneos de forma progressiva por mundo.
@@ -979,6 +990,10 @@ def calculate_dynamic_enemy_cap(
     1. Cap base da dificuldade (CASUAL 15, NORMAL 20, HARDCORE 22, NIGHTMARE 25)
     2. Bonus por mundo: cada novo mundo adiciona 1 inimigo (mundo 1=0, mundo 2=1, etc)
     3. Bonus por progresso dentro do mundo: cresce de 0 a +2 do início ao fim
+    4. Multiplicador coop: +20% por jogador extra. Sem isso, o +35% extra de
+       `enemies_to_clear` em coop fica afunilado pelo cap antigo — sensação
+       de "tela travada esperando spawnar" porque a horda não consegue
+       saturar visualmente apesar de existir mais inimigos pra abater.
 
     Exemplo NORMAL (resets dentro de cada mundo):
     Mundo 1 (níveis 1-10):
@@ -1019,7 +1034,11 @@ def calculate_dynamic_enemy_cap(
     else:
         stage_bonus = 0
 
-    return base_cap + world_bonus + stage_bonus
+    base = base_cap + world_bonus + stage_bonus
+    # Coop scaling: +20% por jogador extra. Aplicado por último para
+    # arredondar acima do total já progredido (não dilui os bônus de mundo).
+    coop_multiplier = 1.0 + 0.20 * max(0, player_count - 1)
+    return int(round(base * coop_multiplier))
 
 
 # ============================================================================
@@ -1027,33 +1046,43 @@ def calculate_dynamic_enemy_cap(
 # ============================================================================
 
 
-@dataclass
 class LevelConfig:
     """Configuração de um nível do jogo."""
 
-    level_number: int
-    enemy_spawn_config: dict[type, float]  # Tipo -> tempo de spawn
-    enemies_to_clear: int  # quantos inimigos para passar de fase
-    boss_type: (
-        Type[
-            Boss
-            | SpikeBoss
-            | SlimeBoss
-            | GiantMeteorBoss
-            | StoneGolemBoss
-            | MountainSerpentBoss
-            | CloudArchmageBoss
-        ]
-        | None
-    ) = None
-    mines_enabled: bool = False
-    formations_enabled: bool = False
-    formation_types: list[str] | None = None
-    theme_name: str | None = None  # Para UI mostrar "Invasão Alienígena!"
-    score_multiplier: float = 1.0  # Multiplicador de pontuação para o nível
-    # "meteor" para tempestade de meteoros, "rock_glider" para tempestade de RockGliders;
-    # None para níveis normais. Use is_storm / is_rock_glider_storm para checagem.
-    storm_kind: str | None = None
+    def __init__(
+        self,
+        level_number: int,
+        enemy_spawn_config: dict[type, float],
+        enemies_to_clear: int,
+        boss_type: (
+            Type[
+                Boss
+                | SpikeBoss
+                | SlimeBoss
+                | GiantMeteorBoss
+                | StoneGolemBoss
+                | MountainSerpentBoss
+                | CloudArchmageBoss
+            ]
+            | None
+        ) = None,
+        mines_enabled: bool = False,
+        formations_enabled: bool = False,
+        formation_types: list[str] | None = None,
+        theme_name: str | None = None,
+        score_multiplier: float = 1.0,
+        storm_kind: str | None = None,
+    ) -> None:
+        self.level_number = level_number
+        self.enemy_spawn_config = enemy_spawn_config
+        self.enemies_to_clear = enemies_to_clear
+        self.boss_type = boss_type
+        self.mines_enabled = mines_enabled
+        self.formations_enabled = formations_enabled
+        self.formation_types = formation_types
+        self.theme_name = theme_name
+        self.score_multiplier = score_multiplier
+        self.storm_kind = storm_kind
 
     @property
     def is_storm(self) -> bool:
@@ -1991,11 +2020,9 @@ def get_level_config(
             DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
             int(config.enemies_to_clear * fixed_grace * coop_enemies_multiplier),
         )
-        config = replace(
-            config,
-            enemy_spawn_config=adjusted_spawn,
-            enemies_to_clear=adjusted_to_clear,
-        )
+        config = copy.copy(config)
+        config.enemy_spawn_config = adjusted_spawn
+        config.enemies_to_clear = adjusted_to_clear
         return config
 
     # Obter ou criar gerador para este preset
@@ -2037,11 +2064,9 @@ def get_level_config(
             DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
             int(config.enemies_to_clear * world_entry_grace * coop_enemies_multiplier),
         )
-        config = replace(
-            config,
-            enemy_spawn_config=adjusted_spawn,
-            enemies_to_clear=adjusted_to_clear,
-        )
+        config = copy.copy(config)
+        config.enemy_spawn_config = adjusted_spawn
+        config.enemies_to_clear = adjusted_to_clear
         config = _apply_theme_enemy_rules(config, world, difficulty_preset)
         return config
 
@@ -2058,11 +2083,9 @@ def get_level_config(
         DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
         int(config.enemies_to_clear * world_entry_grace * coop_enemies_multiplier),
     )
-    config = replace(
-        config,
-        enemy_spawn_config=adjusted_spawn,
-        enemies_to_clear=adjusted_to_clear,
-    )
+    config = copy.copy(config)
+    config.enemy_spawn_config = adjusted_spawn
+    config.enemies_to_clear = adjusted_to_clear
 
     config = _apply_theme_enemy_rules(config, world, difficulty_preset)
     return config
@@ -2088,13 +2111,10 @@ def _apply_difficulty_to_fixed_level(
         adjusted_enemies * DIFFICULTY_ENEMY_COUNT_MULTIPLIER.get(preset, 1.0)
     )
 
-    import dataclasses
-
-    return dataclasses.replace(
-        config,
-        enemy_spawn_config=adjusted_spawn_config,
-        enemies_to_clear=adjusted_enemies,
-    )
+    config_copy = copy.copy(config)
+    config_copy.enemy_spawn_config = adjusted_spawn_config
+    config_copy.enemies_to_clear = adjusted_enemies
+    return config_copy
 
 
 class LevelManager:

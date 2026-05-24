@@ -357,6 +357,7 @@ class PlayingScene(Scene):
             self.difficulty_preset,
             self.enemy_health_multiplier,
             self.difficulty_settings.get("aggressiveness_multiplier", 1.0),
+            player_count=len(self.roster.all_slots()),
         )
         # Sincroniza o spawner com o starting_level — sem isto o spawner usa o
         # config do nível 1 por default, o que quebra inicializações em mundos
@@ -365,7 +366,10 @@ class PlayingScene(Scene):
             self.enemy_spawner.set_level(
                 initial_level_number, level_config=level_config
             )
-        self.powerup_spawner = PowerUpSpawner(self.difficulty_preset)
+        self.powerup_spawner = PowerUpSpawner(
+            self.difficulty_preset,
+            player_count=len(self.roster.all_slots()),
+        )
         self.collisions = Collisions(self.app.event_bus)
         self.star_spawner = StarSpawner()
 
@@ -1934,6 +1938,8 @@ class PlayingScene(Scene):
         self.roster.remove(p2)
         # Volta ao escalonamento solo na próxima fase.
         self.level_controller.set_player_count(self.roster.count())
+        self.enemy_spawner.set_player_count(self.roster.count())
+        self.powerup_spawner.set_player_count(self.roster.count())
         logger.info("P2 saiu da partida (motivo=%s).", reason)
 
     def _is_p2_join_trigger(self, event: pygame.event.Event) -> bool:
@@ -2004,6 +2010,10 @@ class PlayingScene(Scene):
         # Atualiza scaling de coop pra próxima fase (a fase atual mantém o
         # valor antigo — mudar inimigos vivos seria confuso pro jogador).
         self.level_controller.set_player_count(self.roster.count())
+        # Cap de inimigos na tela cresce imediatamente (afeta próximos spawns).
+        self.enemy_spawner.set_player_count(self.roster.count())
+        # Frequência de powerups também aumenta a partir do próximo spawn.
+        self.powerup_spawner.set_player_count(self.roster.count())
 
         logger.info(
             "P2 entrou na partida com a nave '%s' (vidas=%d) e animação de entrada.",

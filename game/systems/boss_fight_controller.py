@@ -325,6 +325,7 @@ class BossFightController:
         from ..entities.stone_golem_boss import StoneGolemBoss
 
         boss_type = level_config.boss_type
+        agg = self._em.aggressiveness_multiplier
         if boss_type == StoneGolemBoss:
             boss = StoneGolemBoss(
                 Config.SCREEN_WIDTH / 2 - 50,
@@ -348,7 +349,7 @@ class BossFightController:
         elif boss_type == CloudArchmageBoss:
             boss = CloudArchmageBoss(
                 difficulty_multiplier=enemy_health_multiplier,
-                aggressiveness_multiplier=self._em.aggressiveness_multiplier,
+                aggressiveness_multiplier=agg,
             )
             self._em.boss = boss
         else:
@@ -357,6 +358,17 @@ class BossFightController:
             boss.health = int(boss.health * enemy_health_multiplier)
             boss.max_health = boss.health
             self._em.boss = boss
+
+        # Aggressiveness para todos os bosses (não só CloudArchmage). Cada boss
+        # decide o que escalar lendo `self.aggressiveness_multiplier` nos seus
+        # ticks. Bosses que ignorarem o atributo permanecem inalterados (sem
+        # regressão). Atribuímos via setattr para não exigir mudança nos
+        # construtores dos 5 bosses já existentes.
+        active_boss = self._em.boss
+        if active_boss is not None and not hasattr(
+            active_boss, "aggressiveness_multiplier"
+        ):
+            setattr(active_boss, "aggressiveness_multiplier", agg)
 
     def _emit_boss_music(self) -> None:
         _boss_music_map = {

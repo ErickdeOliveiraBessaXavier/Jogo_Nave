@@ -1784,7 +1784,10 @@ class MountainSerpentBoss(BossHitMixin):
         self._block_wave_time += dt * self.BLOCK_WAVE_SPEED
         self._update_dead_block_respawns(dt)
 
-        current_speed = self.speed
+        # Aggressiveness escala a velocidade base da cabeça da serpente.
+        # Combina com VULNERABLE_HEAD_SPEED_MOD que continua aplicado depois.
+        agg = getattr(self, "aggressiveness_multiplier", 1.0)
+        current_speed = self.speed * agg
         new_entities: List[object] = []
 
         if self._respawn_timer > 0:

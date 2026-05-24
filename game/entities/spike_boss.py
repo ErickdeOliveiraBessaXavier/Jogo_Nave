@@ -230,13 +230,14 @@ class SpikeBoss(BossHitMixin):
         if self.laser_active_timer > 0:
             self.laser_active_timer -= dt
 
-        # Movimento horizontal
+        # Movimento horizontal — aggressiveness escala velocidade base.
         if (
             not self.proximity_telegraph_active
             and not self.laser_charging
             and self.laser_active_timer <= 0
         ):
-            self.x += self.speed * self.direction * dt
+            agg = getattr(self, "aggressiveness_multiplier", 1.0)
+            self.x += self.speed * agg * self.direction * dt
 
             # Inverter direção nas bordas
             if self.x <= 0:
@@ -472,7 +473,11 @@ class SpikeBoss(BossHitMixin):
         """Ativa o ataque de onda de proximidade."""
         self.proximity_telegraph_active = True
         self.proximity_telegraph_timer = 0.0
-        self.proximity_attack_cooldown = Config.SPIKE_BOSS_PROXIMITY_COOLDOWN
+        # Cooldown divide-se por aggressiveness (mais rápido em Nightmare).
+        agg = getattr(self, "aggressiveness_multiplier", 1.0)
+        self.proximity_attack_cooldown = Config.SPIKE_BOSS_PROXIMITY_COOLDOWN / max(
+            0.5, agg
+        )
         # Som de aviso (se disponível)
         if hasattr(sound_manager, "play_boss_warning"):
             sound_manager.play_boss_warning()  # type: ignore

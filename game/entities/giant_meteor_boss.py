@@ -232,9 +232,10 @@ class GiantMeteorBoss:
                 self.y, self.state = self.target_y, "falling"
         elif self.state == "falling":
             self.y += self.speed * dt
-            self.meteor_spawn_interval = (
-                _SPAWN_INTERVAL_BASE - _SPAWN_INTERVAL_SCALE * (1 - hp_pct)
-            )
+            # Aggressiveness reduz o intervalo entre spawns de meteoros.
+            agg = getattr(self, "aggressiveness_multiplier", 1.0)
+            base_interval = _SPAWN_INTERVAL_BASE - _SPAWN_INTERVAL_SCALE * (1 - hp_pct)
+            self.meteor_spawn_interval = base_interval / max(0.5, agg)
             self.meteor_spawn_timer += dt
             if self.meteor_spawn_timer >= self.meteor_spawn_interval:
                 self.meteor_spawn_timer = 0.0

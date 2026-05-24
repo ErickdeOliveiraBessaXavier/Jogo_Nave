@@ -203,12 +203,17 @@ class EnemySpawner:
         difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
         enemy_health_multiplier: float = 1.0,
         aggressiveness_multiplier: float = 1.0,
+        player_count: int = 1,
     ) -> None:
         self.level_manager = level_manager
         self.meteor_pool = meteor_pool
         self.difficulty_preset = difficulty_preset
         self.enemy_health_multiplier = enemy_health_multiplier
         self.aggressiveness_multiplier = aggressiveness_multiplier
+        # Player count alimenta o cap dinâmico de inimigos em tela (coop ganha
+        # +20% por jogador extra). Atualizado via `set_player_count` quando
+        # P2 entra/sai mid-game.
+        self.player_count = max(1, player_count)
         self.current_level_number: int = 1
         self.level_config: Any = self.level_manager.get_level(
             self.current_level_number, self.difficulty_preset
@@ -442,8 +447,21 @@ class EnemySpawner:
         if self._is_storm_level():
             return SPAWNER_STORM_ENEMY_CAP
         return calculate_dynamic_enemy_cap(
-            self.current_level_number, self.difficulty_preset
+            self.current_level_number,
+            self.difficulty_preset,
+            player_count=self.player_count,
         )
+
+    def set_player_count(self, count: int) -> None:
+        """Atualiza player_count em tempo real (P2 entra/sai mid-game).
+
+        Diferente de `LevelProgressionController.set_player_count`, este
+        afeta o cap dinâmico imediatamente — não espera transição de fase.
+        Justificativa: o cap é consultado a cada spawn tentado, então
+        passar a permitir mais inimigos na tela logo após P2 entrar
+        casa com a expectativa do jogador.
+        """
+        self.player_count = max(1, int(count))
 
     def _count_enemies_by_type(self, entity_manager: "EntityManager") -> dict[str, int]:
         counts: dict[str, int] = {
@@ -1269,14 +1287,34 @@ class EnemySpawner:
 
 
 class PowerUpSpawner:
-    def __init__(self, difficulty: DifficultyPreset = DifficultyPreset.NORMAL) -> None:
+    # +25% por jogador extra. Em coop, 2 jogadores competem pelos mesmos
+    # powerups (quem toca primeiro leva) — sem essa compensação, a sensação
+    # é "powerups raros demais pra dupla". Equivalente à lógica do Item 1
+    # do balanceamento (que aumentou +20% a cadência de inimigos em coop).
+    COOP_RATE_PER_EXTRA_PLAYER: float = 0.25
+
+    def __init__(
+        self,
+        difficulty: DifficultyPreset = DifficultyPreset.NORMAL,
+        player_count: int = 1,
+    ) -> None:
         from ..core.difficulty import DifficultySettings
 
         self.difficulty = difficulty
         settings = DifficultySettings.get_settings(difficulty)
         # >1 = mais frequente (intervalo menor). Casual=1.3, Pesadelo=0.5.
         self._spawn_rate_multiplier: float = settings["powerup_spawn_rate_multiplier"]
+        self.player_count = max(1, player_count)
         self._reset_timer()
+
+    def set_player_count(self, count: int) -> None:
+        """Atualiza coop scaling em runtime (P2 entra/sai mid-game).
+
+        O timer atual mantém o intervalo computado; o novo valor entra
+        em vigor no próximo `_reset_timer()`. Isso evita "saltar" um
+        powerup imediatamente quando P2 entra — só afeta os próximos.
+        """
+        self.player_count = max(1, int(count))
 
     def _select_powerup_by_rarity(self) -> PowerUpType:
         powerup_weights = get_powerup_weights(self.difficulty)
@@ -1290,7 +1328,8 @@ class PowerUpSpawner:
         # (Hardcore/Pesadelo) → intervalo maior. Clamp para evitar valores
         # degenerados caso o preset venha com multiplicador zero/negativo.
         mult = max(0.1, self._spawn_rate_multiplier)
-        interval = random.uniform(min_t, max_t) / mult
+        coop_mult = 1.0 + self.COOP_RATE_PER_EXTRA_PLAYER * max(0, self.player_count - 1)
+        interval = random.uniform(min_t, max_t) / (mult * coop_mult)
         self.timer = Timer(interval)
         self.timer.start()
 

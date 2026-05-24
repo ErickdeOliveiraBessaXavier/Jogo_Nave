@@ -1268,10 +1268,15 @@ class StoneGolemBoss(BossHitMixin):
 
     @property
     def _attack_spd(self) -> float:
-        """difficulty_multiplier × 1.25x rage — aplicado nas durações dos estados de ataque."""
+        """difficulty_multiplier × 1.25x rage × aggressiveness — durações dos ataques.
+
+        Aggressiveness vem do preset de dificuldade (Hardcore 1.20, Nightmare 1.45).
+        Multiplica diretamente a cadência: maior valor = ataques mais rápidos.
+        """
         threshold = self.max_health * self.THIRD_PHASE_HP_FRACTION
         rage = 1.25 if self.health <= threshold else 1.0
-        return self.difficulty_multiplier * rage
+        agg = getattr(self, "aggressiveness_multiplier", 1.0)
+        return self.difficulty_multiplier * rage * agg
 
     @property
     def emerge_debris(self) -> List[EmergeDebris]:
