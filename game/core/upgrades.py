@@ -419,11 +419,27 @@ class AirStrikeUpgrade(ActiveUpgrade):
 
 
 class CannonTowerUpgrade(ActiveUpgrade):
+    """Ultimate: duas torres fixas nas laterais inferiores que disparam minas.
+
+    As torres são estáticas — posição derivada da tela, não do jogador (o que
+    fazia a torre estacionar no meio). Restaura o comportamento original:
+    laterais em 15%/85% da largura, ~120px acima do fundo.
+    """
+
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         ship = self._ctx_ship(ctx)
         em = self._ctx_entity_manager(ctx)
-        if ship and em and hasattr(em, "spawn_cannon_tower"):
-            em.spawn_cannon_tower(ship.x + ship.w/2 - 30, ship.y + ship.h/2)
+        if not (ship and em and hasattr(em, "spawn_cannon_tower")):
+            return
+        # `x` é o canto esquerdo da torre (largura 60, ver CannonTower.w).
+        # Descontamos a largura na direita para que as folgas até as bordas
+        # fiquem simétricas (ambas a 15% da largura da tela).
+        tower_w = 60
+        left_x = Config.SCREEN_WIDTH * 0.15
+        right_x = Config.SCREEN_WIDTH * 0.85 - tower_w
+        tower_y = float(Config.SCREEN_HEIGHT - 120)
+        em.spawn_cannon_tower(left_x, tower_y)
+        em.spawn_cannon_tower(right_x, tower_y)
 
 
 class CoopLinkUpgrade(ActiveUpgrade):

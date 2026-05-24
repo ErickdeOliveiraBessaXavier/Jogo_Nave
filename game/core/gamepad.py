@@ -426,6 +426,11 @@ class GamepadManager:
                 self.get_axis(state.axis_left_x, slot),
                 self.get_axis(state.axis_left_y, slot),
             )
+        # O RS depende do layout (eixos 3/4 no XInput vs 2/3 no PS4-like).
+        # Antes da detecção o default XInput pode cair sobre um gatilho em
+        # repouso (-1) e empurrar o cursor sozinho — neutraliza até confirmar.
+        if not state.layout_detected:
+            return (0.0, 0.0)
         return (
             self.get_axis(state.axis_right_x, slot),
             self.get_axis(state.axis_right_y, slot),
@@ -464,6 +469,10 @@ class GamepadManager:
         state = self._slots[slot]
         if state is None:
             return (0.0, 0.0)
+        # Mesmo motivo de get_stick: não mover o cursor pelo RS enquanto o
+        # layout não foi confirmado (o default pode apontar para um gatilho).
+        if side == "right" and not state.layout_detected:
+            return (0.0, 0.0)
         ax_x = state.axis_left_x if side == "left" else state.axis_right_x
         ax_y = state.axis_left_y if side == "left" else state.axis_right_y
         try:
@@ -484,6 +493,12 @@ class GamepadManager:
             return 0.0
         state = self._slots[slot]
         if state is None:
+            return 0.0
+        # LT troca de eixo entre layouts (2 no XInput, 4 no PS4-like); antes da
+        # detecção o default (eixo 2) pode cair sobre o RS-X em repouso (~0),
+        # gerando meio-gatilho fantasma. Suprime LT até confirmar. RT=eixo 5
+        # nos dois layouts, então não precisa.
+        if side == "left" and not state.layout_detected:
             return 0.0
         axis = state.axis_lt if side == "left" else state.axis_rt
         try:

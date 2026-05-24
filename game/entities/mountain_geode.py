@@ -150,8 +150,11 @@ class MountainGeode(ExplosiveMine):
             self._start_explosion()
         else:
             self.shake_timer = GEODE_SHAKE_DURATION_HIT
+            # `health` pode virar float quando o dano recebido é fracionário
+            # (ex.: feixe contínuo). `shake_intensity` alimenta random.randint,
+            # que exige int — coagimos aqui para preservar o contrato de tipo.
             raw = (self.max_health - self.health) * 2
-            self.shake_intensity = min(raw, GEODE_SHAKE_INTENSITY_MAX)
+            self.shake_intensity = int(min(raw, GEODE_SHAKE_INTENSITY_MAX))
 
     def update(self, dt: float) -> None:
         if self.is_exploding:

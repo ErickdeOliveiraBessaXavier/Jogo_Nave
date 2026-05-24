@@ -132,6 +132,9 @@ class UpgradesSelectionScene(Scene):
         self.ship_scroll = 0
         self.max_upgrade_scroll = 0
         self.max_ship_scroll = 0
+        # Cooldown do auto-scroll de borda (controle): limita a cadência a
+        # ~1 linha a cada 0.12s enquanto o cursor fica colado na borda.
+        self._edge_scroll_cooldown = 0.0
 
         # Drag and Drop para upgrades
         self.dragging_upgrade: Optional[UpgradeMeta] = None
@@ -291,9 +294,72 @@ class UpgradesSelectionScene(Scene):
             self.layout.ship_grid_cells.append(rect)
             self.layout.visible_ships.append(ship)
 
+    def _scroll_at(self, x: int, delta: int) -> None:
+        """Rola Estoque (x à esquerda do centro) ou Hangar (à direita).
+
+        ``delta``: -1 sobe uma linha, +1 desce. Fonte única do clamp e do
+        rebuild — compartilhada pela roda do mouse, pelas setas/D-pad e pelo
+        auto-scroll de borda.
+        """
+        mid_x = self.app.screen.get_width() // 2
+        if x < mid_x:
+            new = max(0, min(self.max_upgrade_scroll, self.upgrade_scroll + delta))
+            if new != self.upgrade_scroll:
+                self.upgrade_scroll = new
+                self._rebuild_upgrade_grid()
+        else:
+            new = max(0, min(self.max_ship_scroll, self.ship_scroll + delta))
+            if new != self.ship_scroll:
+                self.ship_scroll = new
+                self._rebuild_ship_grid()
+
+    def _update_edge_autoscroll(self, dt: float) -> None:
+        """Auto-scroll quando o cursor virtual encosta nas bordas verticais de
+        um painel rolável.
+
+        Restrito ao controle (``gamepad.is_active``): com o mouse, o cursor
+        segue o ponteiro real e não deve rolar a lista só por passar perto da
+        borda. Com o stick, empurrar para baixo/cima cola o cursor na borda e
+        rola continuamente (limitado pelo cooldown).
+        """
+        if not self.app.gamepad.is_active:
+            return
+        self._edge_scroll_cooldown = max(0.0, self._edge_scroll_cooldown - dt)
+        if self._edge_scroll_cooldown > 0.0:
+            return
+
+        mx, my = pygame.mouse.get_pos()
+        edge = 36  # px da borda que dispara o scroll contínuo
+        for area, scroll, max_scroll in (
+            (
+                self.layout.upgrade_scroll_area,
+                self.upgrade_scroll,
+                self.max_upgrade_scroll,
+            ),
+            (self.layout.ship_scroll_area, self.ship_scroll, self.max_ship_scroll),
+        ):
+            if not area.collidepoint(mx, my):
+                continue
+            if my >= area.bottom - edge and scroll < max_scroll:
+                self._scroll_at(mx, 1)
+                self._edge_scroll_cooldown = 0.12
+            elif my <= area.top + edge and scroll > 0:
+                self._scroll_at(mx, -1)
+                self._edge_scroll_cooldown = 0.12
+            return
+
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self._return_to_menu()
+
+        # D-pad (sintetizado como setas em app.py) e setas do teclado rolam o
+        # painel sob o cursor — mesma divisão por x da roda do mouse. Cobre
+        # controle e teclado-sem-mouse, que antes não conseguiam rolar.
+        if event.type == pygame.KEYDOWN and event.key in (pygame.K_UP, pygame.K_DOWN):
+            self._scroll_at(
+                pygame.mouse.get_pos()[0], -1 if event.key == pygame.K_UP else 1
+            )
+            return
 
         # Controle: A aciona equipar/retirar automaticamente no item sob o
         # cursor virtual (movido pelo stick direito em app.py). Sem
@@ -338,25 +404,10 @@ class UpgradesSelectionScene(Scene):
                 self._handle_drop_upgrade(event.pos)
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button in (4, 5):
-            # Divisão simples pelo meio horizontal: mouse à esquerda do centro
-            # rola o Estoque; à direita, rola o Hangar. A coluna central só
-            # mostra preview/descrição (nada scrollável), então a fronteira
-            # exata não importa — eliminando qualquer zona morta.
-            mid_x = self.app.screen.get_width() // 2
-            if event.pos[0] < mid_x:
-                if event.button == 4:
-                    self.upgrade_scroll = max(0, self.upgrade_scroll - 1)
-                else:
-                    self.upgrade_scroll = min(
-                        self.max_upgrade_scroll, self.upgrade_scroll + 1
-                    )
-                self._rebuild_upgrade_grid()
-            else:
-                if event.button == 4:
-                    self.ship_scroll = max(0, self.ship_scroll - 1)
-                else:
-                    self.ship_scroll = min(self.max_ship_scroll, self.ship_scroll + 1)
-                self._rebuild_ship_grid()
+            # Roda do mouse: divisão pelo meio horizontal — esquerda rola o
+            # Estoque, direita o Hangar. A coluna central só mostra preview,
+            # então a fronteira exata não importa (sem zona morta).
+            self._scroll_at(event.pos[0], -1 if event.button == 4 else 1)
 
     def _handle_gamepad_confirm(self) -> None:
         """Aciona ``A`` do controle sobre o item embaixo do cursor virtual.
@@ -546,6 +597,10 @@ class UpgradesSelectionScene(Scene):
             and time.time() - self.shake_start_time > self.shake_duration
         ):
             self.shaking_slot = None
+
+        # Auto-scroll de borda (controle) antes da detecção de hover, para que
+        # o hover já reflita os cards revelados neste frame.
+        self._update_edge_autoscroll(dt)
 
         m_pos = pygame.mouse.get_pos()
         self.hovered_upgrade = self.hovered_ship = self.hovered_slot_idx = None
