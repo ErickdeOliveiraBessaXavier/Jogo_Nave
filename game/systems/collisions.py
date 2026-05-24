@@ -791,11 +791,12 @@ class Collisions:
         projectiles: list[Projectile],
         enemy_grid: SpatialGrid[Any],
         entity_manager: "EntityManager",
-        ship: Any = None,
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Projéteis do jogador (Bullet e MiniShipBullet) vs. inimigos normais.
 
-        `ship` é necessário apenas para acionar Chain Shot.
+        Chain Shot é avaliado por bala via `owner_ship`: em coop, cada nave
+        encadeia conforme o seu próprio `has_chain_shot` (P2 coletar o powerup
+        ativa o efeito nas balas do P2, independente do estado do P1).
         Explosive e chain shot são ativados via duck typing — MiniShipBullet não os
         possui, então os caminhos especiais são automaticamente ignorados.
         """
@@ -805,9 +806,6 @@ class Collisions:
 
         if not projectiles:
             return 0, 0, []
-
-        chain_active = ship is not None and getattr(ship, "has_chain_shot", False)
-        max_jumps = config_instance.CHAIN_SHOT_MAX_JUMPS if chain_active else 0
 
         projectile_targets = self._batch_query_for_projectiles(
             projectiles,
@@ -819,6 +817,11 @@ class Collisions:
             potential_enemies = projectile_targets.get(id(b), [])
             if not potential_enemies:
                 continue
+
+            owner = getattr(b, "owner_ship", None)
+            bullet_chain_active = owner is not None and getattr(
+                owner, "has_chain_shot", False
+            )
 
             for enemy in potential_enemies:
                 if enemy.dead:
@@ -834,18 +837,18 @@ class Collisions:
                         if result.points > 0:
                             score_events.append((b.x, b.y, result.points))
 
-                    if chain_active and max_jumps > 0:
+                    if bullet_chain_active:
                         already_hit: set[int] = set()
                         eg, ed, ee = self._trigger_chain_shot(
                             hit_x=b.x,
                             hit_y=b.y,
                             source_enemy=enemy,
                             bullet_damage=getattr(b, "damage", 1),
-                            jumps_left=max_jumps,
+                            jumps_left=config_instance.CHAIN_SHOT_MAX_JUMPS,
                             already_hit=already_hit,
                             enemy_grid=enemy_grid,
                             entity_manager=entity_manager,
-                            owner_ship=getattr(b, "owner_ship", None),
+                            owner_ship=owner,
                         )
                         score_gain += eg
                         destroyed_count += ed

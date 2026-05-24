@@ -1162,7 +1162,6 @@ class PlayingScene(Scene):
             all_player_projectiles,
             enemy_grid,
             self.entity_manager,
-            ship=self.ship,
         )
 
         laser_gain, laser_destroyed, laser_events = (

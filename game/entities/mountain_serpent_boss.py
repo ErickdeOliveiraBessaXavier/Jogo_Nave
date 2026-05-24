@@ -381,6 +381,21 @@ class SerpentBlock:
         """
         return float(self.cx), float(self.cy), float(self.RADIUS)
 
+    def should_remove(self) -> bool:
+        """Decide se o EntityManager pode remover este bloco de ``enemies``.
+
+        Blocos da corrente principal NUNCA são removidos pelo manager: o boss
+        os controla pelo ciclo de vida inteiro (morte = some de cena, mas
+        ``revive()`` os traz de volta in-place entre janelas de
+        vulnerabilidade). Removê-los aqui quebraria o respawn das laterais —
+        ``revive()`` agiria sobre um bloco que já não está na lista de update/
+        draw/colisão, e os blocos nunca reapareceriam.
+
+        Fragmentos ascendentes (``is_fragment``) são descartáveis: somem ao
+        atingir o topo (``dead = True``) e devem ser limpos normalmente.
+        """
+        return self.dead if self.is_fragment else False
+
     def take_damage(self, amount: int) -> None:
         if self.dead:
             return
