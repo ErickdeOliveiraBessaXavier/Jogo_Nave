@@ -264,6 +264,11 @@ class EMPUpgrade(ActiveUpgrade):
             em.spawn_emp_wave(ship.x + ship.w/2, ship.y + ship.h/2)
         setattr(em, "emp_active", True)
         setattr(em, "emp_timer", duration)
+        # Fator de lentidão: o refactor parou de setá-lo e o _emp_state lia 1.0
+        # → o EMP não desacelerava mais. Import local evita ciclo com
+        # upgrades_config (que importa UpgradeType deste módulo).
+        from .upgrades_config import EMP_SLOW_FACTOR
+        setattr(em, "emp_slow_factor", float(EMP_SLOW_FACTOR))
 
     def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         em = self._ctx_entity_manager(ctx)

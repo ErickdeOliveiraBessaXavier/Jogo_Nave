@@ -5,7 +5,7 @@ import pygame
 
 from ..core.config import config as Config
 from ..core.spatial_grid import SpatialGrid
-from ..core.upgrades_config import EMP_LINGER_DURATION
+from ..core.upgrades_config import EMP_LINGER_DURATION, EMP_SLOW_FACTOR
 from ..entities.air_strike_bomb import AirStrikeBomb
 from ..entities.alien import Alien
 from ..entities.alien_bullet import AlienBullet
@@ -581,7 +581,11 @@ class EntityManager:
 
     def _emp_state(self) -> tuple[bool, float]:
         slow_active = getattr(self, "emp_active", False)
-        slow_factor = getattr(self, "emp_slow_factor", 1.0) if slow_active else 1.0
+        # O fator vale tanto durante o EMP global quanto no linger por inimigo
+        # (que persiste depois da onda passar / do EMP acabar). Por isso NÃO
+        # zera quando inativo — o "quando aplicar" é decidido em
+        # _emp_multiplier (global + linger). Default = constante de config.
+        slow_factor = getattr(self, "emp_slow_factor", EMP_SLOW_FACTOR)
         return slow_active, slow_factor
 
     def _update_visual_effects(self, dt: float) -> None:
