@@ -1046,43 +1046,38 @@ def calculate_dynamic_enemy_cap(
 # ============================================================================
 
 
+@dataclass(eq=False)
 class LevelConfig:
-    """Configuração de um nível do jogo."""
+    """Configuração de um nível do jogo.
 
-    def __init__(
-        self,
-        level_number: int,
-        enemy_spawn_config: dict[type, float],
-        enemies_to_clear: int,
-        boss_type: (
-            Type[
-                Boss
-                | SpikeBoss
-                | SlimeBoss
-                | GiantMeteorBoss
-                | StoneGolemBoss
-                | MountainSerpentBoss
-                | CloudArchmageBoss
-            ]
-            | None
-        ) = None,
-        mines_enabled: bool = False,
-        formations_enabled: bool = False,
-        formation_types: list[str] | None = None,
-        theme_name: str | None = None,
-        score_multiplier: float = 1.0,
-        storm_kind: str | None = None,
-    ) -> None:
-        self.level_number = level_number
-        self.enemy_spawn_config = enemy_spawn_config
-        self.enemies_to_clear = enemies_to_clear
-        self.boss_type = boss_type
-        self.mines_enabled = mines_enabled
-        self.formations_enabled = formations_enabled
-        self.formation_types = formation_types
-        self.theme_name = theme_name
-        self.score_multiplier = score_multiplier
-        self.storm_kind = storm_kind
+    Dataclass para que ``dataclasses.replace`` funcione — usado no ajuste
+    dinâmico de dificuldade (`meta_progression`) e no saneamento de formations
+    (`spawner`). ``eq=False`` preserva igualdade/hash por identidade, como na
+    classe original (a config nunca é usada como chave/set, mas mantém o
+    comportamento e evita o ``__hash__ = None`` que ``eq=True`` traria).
+    """
+
+    level_number: int
+    enemy_spawn_config: dict[type, float]
+    enemies_to_clear: int
+    boss_type: (
+        Type[
+            Boss
+            | SpikeBoss
+            | SlimeBoss
+            | GiantMeteorBoss
+            | StoneGolemBoss
+            | MountainSerpentBoss
+            | CloudArchmageBoss
+        ]
+        | None
+    ) = None
+    mines_enabled: bool = False
+    formations_enabled: bool = False
+    formation_types: list[str] | None = None
+    theme_name: str | None = None
+    score_multiplier: float = 1.0
+    storm_kind: str | None = None
 
     @property
     def is_storm(self) -> bool:
