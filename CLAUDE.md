@@ -269,7 +269,7 @@ self.game_renderer.render(frame, surface)
 **Impacto:** `game_renderer.py`, `playing.py`. Isola o contrato de renderização
 e torna `PlayingScene` refatorável sem risco de regressão silenciosa no render.
 
-**Status:** Pendente
+**Status:** Resolvido (verificado 2026-05-24)
 
 ---
 
@@ -298,7 +298,7 @@ from ..events import game_events as events   # import único, em módulo
 **Impacto:** `systems/collisions.py`. Elimina overhead de resolução de módulo
 no hot path de colisão sem alterar comportamento.
 
-**Status:** Pendente
+**Status:** Resolvido (verificado 2026-05-24)
 
 ---
 
@@ -335,7 +335,7 @@ def enemy_projectiles_vs_ship(self, ship, projectiles, grid=None):
 **Impacto:** `systems/collisions.py`, `scenes/playing.py` (passar a grid na
 chamada). Reduz colisões redundantes em fases com muitos projéteis de inimigos.
 
-**Status:** Pendente
+**Status:** Resolvido (verificado 2026-05-24)
 
 ---
 
@@ -369,7 +369,7 @@ def _find_nearest_enemy(self, enemies):
 
 **Impacto:** `entities/mini_ship.py`. Sem mudança de interface pública.
 
-**Status:** Pendente
+**Status:** Resolvido (verificado 2026-05-24)
 
 ---
 
@@ -408,7 +408,7 @@ while i < len(self.enemies):
 
 **Impacto:** `entities/formation.py`. Risco baixo — mudança local.
 
-**Status:** Pendente
+**Status:** Resolvido (verificado 2026-05-24)
 
 ---
 
@@ -438,7 +438,7 @@ def find_nearest_enemy(
 **Impacto:** `entities/ship.py`, `entities/mini_ship.py`. Novo arquivo
 `systems/targeting.py`. Sem mudança de comportamento.
 
-**Status:** Pendente
+**Status:** Resolvido (verificado 2026-05-24)
 
 ---
 
@@ -472,7 +472,7 @@ if result.killed and not getattr(target, "is_boss", False):
 **Impacto:** `systems/collisions.py`, `systems/collision_protocols.py`. Todas
 as classes de boss devem declarar `is_boss = True`.
 
-**Status:** Pendente
+**Status:** Resolvido (verificado 2026-05-24)
 
 ---
 
@@ -500,7 +500,7 @@ def update_for_game_over_slow_motion(self, dt, player_x, player_y):
 **Impacto:** `systems/entity_manager.py`. Risco médio — requer que as
 entidades com assinatura diferente de `update` sejam adaptadas.
 
-**Status:** Pendente
+**Status:** Resolvido (verificado 2026-05-24)
 
 ---
 
@@ -533,7 +533,7 @@ As chamadas em `insert` e `query` iteram diretamente sem materializar o set.
 
 **Impacto:** `core/spatial_grid.py`. Mudança segura e localizada.
 
-**Status:** Pendente
+**Status:** Resolvido (verificado 2026-05-24)
 
 ---
 
@@ -558,20 +558,18 @@ legado.
 **Impacto:** `scenes/main_menu.py`. Sem impacto em runtime, mas mantém
 consistência com o padrão estabelecido.
 
-**Status:** Pendente
+**Status:** Resolvido (verificado 2026-05-24)
 
 ---
 
 ## Decisões deliberadamente adiadas
 
-- **`RenderFrame` DTO completo** — o item 1 pode ser implementado
-  incrementalmente: começar pelos atributos mais acessados (shake, fade, state)
-  e expandir. Não bloquear o item esperando cobertura 100%.
+- **`RenderFrame` DTO completo** — concluído: `game_renderer.py` consome um
+  `RenderFrame` (ver `render/render_frame.py`) e não acessa `PlayingScene`.
 
-- **Refatoração de `update_for_game_over_slow_motion`** — o item 8 requer que
-  entidades com assinatura de `update` incompatível (ex.: `GuidedMeteor`,
-  `ElementalRobot`) recebam adaptadores. Pode ser feito separado do restante
-  do ciclo sem bloquear.
+- **Refatoração de `update_for_game_over_slow_motion`** — concluído: o dispatch
+  dos inimigos virou polimórfico via `update_in_context(ctx)`, sem cascata de
+  `isinstance`.
 
 ---
 
@@ -579,16 +577,16 @@ consistência com o padrão estabelecido.
 
 | # | Item | Gravidade | Status |
 |---|------|-----------|--------|
-| 1 | `GameRenderer` acessa estado interno de `PlayingScene` diretamente | Crítico | Pendente |
-| 2 | Import lazy de `game_events` dentro do hot path de colisão | Crítico | Pendente |
-| 3 | `enemy_projectiles_vs_ship` não usa `enemy_projectile_grid` | Crítico | Pendente |
-| 4 | `MiniShip._find_nearest_enemy` O(n) sem range limit | Médio | Pendente |
-| 5 | `Formation.update` copy-remove pattern ainda não migrado | Médio | Pendente |
-| 6 | Lógica de targeting duplicada em `Ship` e `MiniShip` | Médio | Pendente |
-| 7 | Supressão de `EnemyDestroyed` por heurística de nome frágil | Médio | Pendente |
-| 8 | `update_for_game_over_slow_motion` usa `isinstance` como dispatcher | Médio | Pendente |
-| 9 | `SpatialGrid._get_cells_for_rect` aloca `set` por chamada | Baixo | Pendente |
-| 10 | `AutoPlay` usa import legado de `Config` | Baixo | Pendente |
+| 1 | `GameRenderer` acessa estado interno de `PlayingScene` diretamente | Crítico | Resolvido |
+| 2 | Import lazy de `game_events` dentro do hot path de colisão | Crítico | Resolvido |
+| 3 | `enemy_projectiles_vs_ship` não usa `enemy_projectile_grid` | Crítico | Resolvido |
+| 4 | `MiniShip._find_nearest_enemy` O(n) sem range limit | Médio | Resolvido |
+| 5 | `Formation.update` copy-remove pattern ainda não migrado | Médio | Resolvido |
+| 6 | Lógica de targeting duplicada em `Ship` e `MiniShip` | Médio | Resolvido |
+| 7 | Supressão de `EnemyDestroyed` por heurística de nome frágil | Médio | Resolvido |
+| 8 | `update_for_game_over_slow_motion` usa `isinstance` como dispatcher | Médio | Resolvido |
+| 9 | `SpatialGrid._get_cells_for_rect` aloca `set` por chamada | Baixo | Resolvido |
+| 10 | `AutoPlay` usa import legado de `Config` | Baixo | Resolvido |
 
 ---
 
@@ -610,3 +608,29 @@ arquivados após conclusão das ações deles. Resumo do que ficou:
   Magneto).
 - **Resíduos da migração `LevelProgressionController`** — `_base_score_multiplier`
   alias e propriedades de compat removidos; setter `level_config` removido.
+
+### Ciclo 2026-05-24
+
+- **Backlog deste plano (itens 1–10) verificado e concluído.** Todos os 10
+  itens já estavam implementados no código (RenderFrame DTO, remoção do import
+  lazy de eventos, grid no `enemy_projectiles_vs_ship`, range no MiniShip,
+  swap-and-pop na Formation, `targeting.find_nearest_enemy` compartilhado,
+  atributo `is_boss`, dispatch via `update_in_context`, generator no
+  `SpatialGrid`, proxy `Config` no AutoPlay). Tabela atualizada para Resolvido.
+- **Correções de bugs (fora do backlog), aplicadas neste ciclo:**
+  - Chain Shot do P2 não ativava (gate de chain por bala via `owner_ship` em
+    `projectiles_vs_enemies`, não mais pela nave do P1).
+  - Blocos laterais da Serpente não voltavam após a vulnerabilidade
+    (`SerpentBlock.should_remove` restaurado: corrente principal nunca é
+    removida; fragmentos sim).
+  - Cannon Towers: voltou a invocar 2 torres nas laterais inferiores (15%/85%),
+    não 1 na posição do jogador.
+  - Estoque/Hangar: scroll por controle (auto-scroll de borda + D-pad/setas).
+  - Crash do Mountain Geode (`random.randint` com float — `shake_intensity`
+    coagido a int).
+  - Drift do cursor no arranque do gamepad (RS/LT neutralizados até
+    `layout_detected`).
+  - `LevelConfig` virou dataclass de verdade (`dataclasses.replace` quebrava no
+    ajuste dinâmico de dificuldade e no saneamento de formations).
+  - EMP voltou a desacelerar (`emp_slow_factor` setado pelo upgrade; `_emp_state`
+    devolve o fator mesmo inativo, restaurando também o linger).

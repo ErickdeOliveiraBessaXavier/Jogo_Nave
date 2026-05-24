@@ -783,6 +783,7 @@ class EntityManager:
         )
         slow_active, slow_factor = self._emp_state()
         for en in self.enemies:
+            self._update_emp_linger(en, dt)
             self._update_ice_linger(en, dt)
             mul = self._emp_multiplier(
                 en, slow_active, slow_factor, dt

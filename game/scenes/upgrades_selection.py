@@ -14,6 +14,7 @@ from ..core.ship_types import (
     format_ship_description,
     get_ship_profile,
 )
+from ..core.sound import sound_manager
 from ..core.state import Scene
 from ..core.upgrades import UpgradeMeta, get_upgrade_icon, list_all_upgrades_meta
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
@@ -39,7 +40,13 @@ class UILayout:
     )
     upgrade_grid_cells: List[pygame.Rect] = field(default_factory=lambda: [])
     visible_upgrades: List[UpgradeMeta] = field(default_factory=lambda: [])
-    upgrade_scroll_area: pygame.Rect = field(
+    upgrade_area: pygame.Rect = field(
+        default_factory=lambda: pygame.Rect(0, 0, 0, 0)
+    )
+    upgrade_left_chevron: pygame.Rect = field(
+        default_factory=lambda: pygame.Rect(0, 0, 0, 0)
+    )
+    upgrade_right_chevron: pygame.Rect = field(
         default_factory=lambda: pygame.Rect(0, 0, 0, 0)
     )
 
@@ -47,7 +54,13 @@ class UILayout:
     stats_area: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
     ship_grid_cells: List[pygame.Rect] = field(default_factory=lambda: [])
     visible_ships: List[ShipProfile] = field(default_factory=lambda: [])
-    ship_scroll_area: pygame.Rect = field(
+    ship_area: pygame.Rect = field(
+        default_factory=lambda: pygame.Rect(0, 0, 0, 0)
+    )
+    ship_left_chevron: pygame.Rect = field(
+        default_factory=lambda: pygame.Rect(0, 0, 0, 0)
+    )
+    ship_right_chevron: pygame.Rect = field(
         default_factory=lambda: pygame.Rect(0, 0, 0, 0)
     )
 
@@ -108,6 +121,16 @@ class UpgradesSelectionScene(Scene):
         self.GAP = 12
         self.RADIUS = 8
 
+        # Estoque/Hangar agora são grids paginados 3×3 navegados por chevrons
+        # laterais (mesmo design da seleção de mundos), em vez de scroll.
+        self.GRID_COLS = 3
+        self.GRID_ROWS = 3
+        self._page_size = self.GRID_COLS * self.GRID_ROWS
+        # Largura reservada para a coluna do chevron de cada lado do grid.
+        self.CHEVRON_W = 30
+        # Acumulador de tempo para a pulsação dos chevrons.
+        self._time = 0.0
+
         self.locked_icon = get_image(
             BASE_DIR / "assets" / "images" / "icons" / "icon_bloqueado.png"
         )
@@ -127,14 +150,11 @@ class UpgradesSelectionScene(Scene):
             list_all_upgrades_meta(), key=lambda u: u.name.lower()
         )
 
-        # Estado do Scroll e UI
-        self.upgrade_scroll = 0
-        self.ship_scroll = 0
-        self.max_upgrade_scroll = 0
-        self.max_ship_scroll = 0
-        # Cooldown do auto-scroll de borda (controle): limita a cadência a
-        # ~1 linha a cada 0.12s enquanto o cursor fica colado na borda.
-        self._edge_scroll_cooldown = 0.0
+        # Página atual de cada grid paginado (0-based) e o índice máximo.
+        self.upgrade_page = 0
+        self.ship_page = 0
+        self.max_upgrade_page = 0
+        self.max_ship_page = 0
 
         # Drag and Drop para upgrades
         self.dragging_upgrade: Optional[UpgradeMeta] = None
@@ -210,12 +230,17 @@ class UpgradesSelectionScene(Scene):
         # 2. Estoque (Starting after slots)
         stock_header_y = self.layout.active_slots[-1].bottom + 35
         self._stock_start_y = stock_header_y + 35
-        self.layout.upgrade_scroll_area = pygame.Rect(
+        stock_full = pygame.Rect(
             self.MARGIN,
             self._stock_start_y,
             lw - self.MARGIN * 2,
             sh - self._stock_start_y - 80,
         )
+        (
+            self.layout.upgrade_area,
+            self.layout.upgrade_left_chevron,
+            self.layout.upgrade_right_chevron,
+        ) = self._split_grid_area(stock_full)
         self._rebuild_upgrade_grid()
 
         # --- NAVE (Centro) ---
@@ -234,130 +259,142 @@ class UpgradesSelectionScene(Scene):
 
         # 2. Ship Collection
         self._ship_start_y = self.layout.stats_area.bottom + 70
-        self.layout.ship_scroll_area = pygame.Rect(
+        ship_full = pygame.Rect(
             rx, self._ship_start_y, rw - self.MARGIN * 2, sh - self._ship_start_y - 80
         )
+        (
+            self.layout.ship_area,
+            self.layout.ship_left_chevron,
+            self.layout.ship_right_chevron,
+        ) = self._split_grid_area(ship_full)
         self._rebuild_ship_grid()
 
         btn_w = 160
         btn_h = 40
         self.layout.back_button = pygame.Rect(self.MARGIN, sh - 60, btn_w, btn_h)
 
-    def _rebuild_upgrade_grid(self):
-        self.layout.upgrade_grid_cells.clear()
-        self.layout.visible_upgrades.clear()
-        cols = 4
-        area = self.layout.upgrade_scroll_area
-        size = (area.width - (cols - 1) * self.GAP) // cols
-        visible_rows = area.height // (size + self.GAP)
+    def _split_grid_area(
+        self, full: pygame.Rect
+    ) -> Tuple[pygame.Rect, pygame.Rect, pygame.Rect]:
+        """Divide um painel em (área do grid, chevron esquerdo, chevron direito).
 
-        total_rows = math.ceil(len(self.all_upgrades) / cols)
-        self.max_upgrade_scroll = max(0, total_rows - visible_rows)
-        start_idx = self.upgrade_scroll * cols
-        visible_items = self.all_upgrades[
-            start_idx : start_idx + (visible_rows + 1) * cols
-        ]
+        Reserva ``CHEVRON_W`` de cada lado para as setas e devolve a área
+        central onde o grid 3×3 é desenhado, mais os hitboxes verticais
+        centralizados das duas setas de paginação.
+        """
+        cw = self.CHEVRON_W
+        grid = pygame.Rect(
+            full.x + cw, full.y, full.width - cw * 2, full.height
+        )
+        ch_h = 64
+        cy = full.centery - ch_h // 2
+        left = pygame.Rect(full.x, cy, cw, ch_h)
+        right = pygame.Rect(full.right - cw, cy, cw, ch_h)
+        return grid, left, right
 
-        for i, upg in enumerate(visible_items):
-            r, c = i // cols, i % cols
-            rect = pygame.Rect(
-                area.x + c * (size + self.GAP),
-                area.y + r * (size + self.GAP),
-                size,
-                size,
+    def _build_paged_grid(
+        self, area: pygame.Rect, items: list, page: int
+    ) -> Tuple[List[pygame.Rect], list, int, int]:
+        """Monta uma página de um grid 3×3 centralizado em ``area``.
+
+        Células são quadradas, dimensionadas pelo menor limite (largura ou
+        altura) para sempre caberem na área. Retorna
+        ``(cells, visible_items, max_page, clamped_page)``.
+        """
+        cols, rows = self.GRID_COLS, self.GRID_ROWS
+        gap = self.GAP
+        max_page = max(0, (len(items) - 1) // self._page_size) if items else 0
+        page = max(0, min(page, max_page))
+
+        cell_w = (area.width - (cols - 1) * gap) / cols
+        cell_h = (area.height - (rows - 1) * gap) / rows
+        size = max(1, int(min(cell_w, cell_h)))
+
+        grid_w = cols * size + (cols - 1) * gap
+        grid_h = rows * size + (rows - 1) * gap
+        start_x = area.x + (area.width - grid_w) // 2
+        start_y = area.y + (area.height - grid_h) // 2
+
+        start_idx = page * self._page_size
+        page_items = items[start_idx : start_idx + self._page_size]
+
+        cells: List[pygame.Rect] = []
+        for i in range(len(page_items)):
+            r, c = divmod(i, cols)
+            cells.append(
+                pygame.Rect(
+                    start_x + c * (size + gap),
+                    start_y + r * (size + gap),
+                    size,
+                    size,
+                )
             )
-            self.layout.upgrade_grid_cells.append(rect)
-            self.layout.visible_upgrades.append(upg)
+        return cells, list(page_items), max_page, page
+
+    def _rebuild_upgrade_grid(self):
+        (
+            cells,
+            visible,
+            self.max_upgrade_page,
+            self.upgrade_page,
+        ) = self._build_paged_grid(
+            self.layout.upgrade_area, self.all_upgrades, self.upgrade_page
+        )
+        self.layout.upgrade_grid_cells = cells
+        self.layout.visible_upgrades = visible
 
     def _rebuild_ship_grid(self):
-        self.layout.ship_grid_cells.clear()
-        self.layout.visible_ships.clear()
         ships = list(all_ship_profiles())
-        cols = 4
-        area = self.layout.ship_scroll_area
-        size = (area.width - (cols - 1) * self.GAP) // cols
-        visible_rows = area.height // (size + self.GAP)
+        (
+            cells,
+            visible,
+            self.max_ship_page,
+            self.ship_page,
+        ) = self._build_paged_grid(self.layout.ship_area, ships, self.ship_page)
+        self.layout.ship_grid_cells = cells
+        self.layout.visible_ships = visible
 
-        total_rows = math.ceil(len(ships) / cols)
-        self.max_ship_scroll = max(0, total_rows - visible_rows)
-        start_idx = self.ship_scroll * cols
-        visible_ships = ships[start_idx : start_idx + (visible_rows + 1) * cols]
+    def _page_upgrades(self, delta: int) -> None:
+        """Avança/retrocede a página do Estoque, com wrap nos extremos."""
+        if self.max_upgrade_page <= 0:
+            return
+        self.upgrade_page = (self.upgrade_page + delta) % (self.max_upgrade_page + 1)
+        self._rebuild_upgrade_grid()
+        sound_manager.play_sound("button_hover")
 
-        for i, ship in enumerate(visible_ships):
-            r, c = i // cols, i % cols
-            rect = pygame.Rect(
-                area.x + c * (size + self.GAP),
-                area.y + r * (size + self.GAP),
-                size,
-                size,
-            )
-            self.layout.ship_grid_cells.append(rect)
-            self.layout.visible_ships.append(ship)
+    def _page_ships(self, delta: int) -> None:
+        """Avança/retrocede a página do Hangar, com wrap nos extremos."""
+        if self.max_ship_page <= 0:
+            return
+        self.ship_page = (self.ship_page + delta) % (self.max_ship_page + 1)
+        self._rebuild_ship_grid()
+        sound_manager.play_sound("button_hover")
 
-    def _scroll_at(self, x: int, delta: int) -> None:
-        """Rola Estoque (x à esquerda do centro) ou Hangar (à direita).
+    def _page_panel_at(self, x: int, delta: int) -> None:
+        """Pagina o painel sob a coordenada ``x`` (esquerda=Estoque, dir=Hangar).
 
-        ``delta``: -1 sobe uma linha, +1 desce. Fonte única do clamp e do
-        rebuild — compartilhada pela roda do mouse, pelas setas/D-pad e pelo
-        auto-scroll de borda.
+        Fonte única usada pela roda do mouse, pelas setas do teclado e pelos
+        botões LB/RB do controle.
         """
         mid_x = self.app.screen.get_width() // 2
         if x < mid_x:
-            new = max(0, min(self.max_upgrade_scroll, self.upgrade_scroll + delta))
-            if new != self.upgrade_scroll:
-                self.upgrade_scroll = new
-                self._rebuild_upgrade_grid()
+            self._page_upgrades(delta)
         else:
-            new = max(0, min(self.max_ship_scroll, self.ship_scroll + delta))
-            if new != self.ship_scroll:
-                self.ship_scroll = new
-                self._rebuild_ship_grid()
-
-    def _update_edge_autoscroll(self, dt: float) -> None:
-        """Auto-scroll quando o cursor virtual encosta nas bordas verticais de
-        um painel rolável.
-
-        Restrito ao controle (``gamepad.is_active``): com o mouse, o cursor
-        segue o ponteiro real e não deve rolar a lista só por passar perto da
-        borda. Com o stick, empurrar para baixo/cima cola o cursor na borda e
-        rola continuamente (limitado pelo cooldown).
-        """
-        if not self.app.gamepad.is_active:
-            return
-        self._edge_scroll_cooldown = max(0.0, self._edge_scroll_cooldown - dt)
-        if self._edge_scroll_cooldown > 0.0:
-            return
-
-        mx, my = pygame.mouse.get_pos()
-        edge = 36  # px da borda que dispara o scroll contínuo
-        for area, scroll, max_scroll in (
-            (
-                self.layout.upgrade_scroll_area,
-                self.upgrade_scroll,
-                self.max_upgrade_scroll,
-            ),
-            (self.layout.ship_scroll_area, self.ship_scroll, self.max_ship_scroll),
-        ):
-            if not area.collidepoint(mx, my):
-                continue
-            if my >= area.bottom - edge and scroll < max_scroll:
-                self._scroll_at(mx, 1)
-                self._edge_scroll_cooldown = 0.12
-            elif my <= area.top + edge and scroll > 0:
-                self._scroll_at(mx, -1)
-                self._edge_scroll_cooldown = 0.12
-            return
+            self._page_ships(delta)
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self._return_to_menu()
 
-        # D-pad (sintetizado como setas em app.py) e setas do teclado rolam o
-        # painel sob o cursor — mesma divisão por x da roda do mouse. Cobre
-        # controle e teclado-sem-mouse, que antes não conseguiam rolar.
-        if event.type == pygame.KEYDOWN and event.key in (pygame.K_UP, pygame.K_DOWN):
-            self._scroll_at(
-                pygame.mouse.get_pos()[0], -1 if event.key == pygame.K_UP else 1
+        # Setas esquerda/direita (teclado, ou D-pad horizontal quando o
+        # snap-focus de app.py não encontra alvo) paginam o painel sob o
+        # cursor — mesma divisão por x da roda do mouse.
+        if event.type == pygame.KEYDOWN and event.key in (
+            pygame.K_LEFT,
+            pygame.K_RIGHT,
+        ):
+            self._page_panel_at(
+                pygame.mouse.get_pos()[0], -1 if event.key == pygame.K_LEFT else 1
             )
             return
 
@@ -365,6 +402,7 @@ class UpgradesSelectionScene(Scene):
         # cursor virtual (movido pelo stick direito em app.py). Sem
         # drag-and-drop — clicar o upgrade no Estoque manda para o primeiro
         # slot livre; clicar o slot equipado devolve o item ao Estoque.
+        # LB/RB paginam o painel sob o cursor (atalho direto às setas).
         if event.type == pygame.JOYBUTTONDOWN:
             from ..core.gamepad import XboxButton
 
@@ -374,11 +412,20 @@ class UpgradesSelectionScene(Scene):
             if event.button == XboxButton.B:
                 self._return_to_menu()
                 return
+            if event.button == XboxButton.LB:
+                self._page_panel_at(pygame.mouse.get_pos()[0], -1)
+                return
+            if event.button == XboxButton.RB:
+                self._page_panel_at(pygame.mouse.get_pos()[0], 1)
+                return
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             pos = event.pos
             if self.layout.back_button.collidepoint(pos):
                 self._return_to_menu()
+
+            if self._handle_chevron_click(pos):
+                return
 
             for i, rect in enumerate(self.layout.ship_grid_cells):
                 if rect.collidepoint(pos):
@@ -404,10 +451,29 @@ class UpgradesSelectionScene(Scene):
                 self._handle_drop_upgrade(event.pos)
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button in (4, 5):
-            # Roda do mouse: divisão pelo meio horizontal — esquerda rola o
+            # Roda do mouse: divisão pelo meio horizontal — esquerda pagina o
             # Estoque, direita o Hangar. A coluna central só mostra preview,
             # então a fronteira exata não importa (sem zona morta).
-            self._scroll_at(event.pos[0], -1 if event.button == 4 else 1)
+            self._page_panel_at(event.pos[0], -1 if event.button == 4 else 1)
+
+    def _handle_chevron_click(self, pos: Tuple[int, int]) -> bool:
+        """Trata clique/A sobre uma das setas de paginação. Retorna True se
+        consumiu o evento."""
+        if self.max_upgrade_page > 0:
+            if self.layout.upgrade_left_chevron.collidepoint(pos):
+                self._page_upgrades(-1)
+                return True
+            if self.layout.upgrade_right_chevron.collidepoint(pos):
+                self._page_upgrades(1)
+                return True
+        if self.max_ship_page > 0:
+            if self.layout.ship_left_chevron.collidepoint(pos):
+                self._page_ships(-1)
+                return True
+            if self.layout.ship_right_chevron.collidepoint(pos):
+                self._page_ships(1)
+                return True
+        return False
 
     def _handle_gamepad_confirm(self) -> None:
         """Aciona ``A`` do controle sobre o item embaixo do cursor virtual.
@@ -424,6 +490,9 @@ class UpgradesSelectionScene(Scene):
 
         if self.layout.back_button.collidepoint(pos):
             self._return_to_menu()
+            return
+
+        if self._handle_chevron_click(pos):
             return
 
         for i, rect in enumerate(self.layout.ship_grid_cells):
@@ -567,6 +636,7 @@ class UpgradesSelectionScene(Scene):
 
     def update(self, dt: float):
         self.r.starfield.update(dt)
+        self._time += dt
         if self.is_entering:
             self.entry_progress = min(
                 1.0, self.entry_progress + dt / self.entry_duration
@@ -597,10 +667,6 @@ class UpgradesSelectionScene(Scene):
             and time.time() - self.shake_start_time > self.shake_duration
         ):
             self.shaking_slot = None
-
-        # Auto-scroll de borda (controle) antes da detecção de hover, para que
-        # o hover já reflita os cards revelados neste frame.
-        self._update_edge_autoscroll(dt)
 
         m_pos = pygame.mouse.get_pos()
         self.hovered_upgrade = self.hovered_ship = self.hovered_slot_idx = None
@@ -952,6 +1018,8 @@ class UpgradesSelectionScene(Scene):
             pygame.draw.rect(
                 surface, color, dr, 2 if eq else 1, border_radius=self.RADIUS
             )
+            if self.hovered_slot_idx == i:
+                self._draw_focus_ring(surface, dr)
             if lock:
                 self._draw_lock_indicator(
                     surface, dr, self.player_profile.get_slot_cost(i)
@@ -977,17 +1045,17 @@ class UpgradesSelectionScene(Scene):
                     self._draw_equipped_badge(surface, dr)
 
         surface.blit(
-            self.header_font.render("Estoque", True, colors.WHITE),
+            self.header_font.render(
+                self._page_header("Estoque", self.upgrade_page, self.max_upgrade_page),
+                True,
+                colors.WHITE,
+            ),
             (self.MARGIN, self._stock_start_y - 35),
         )
-        area = self.layout.upgrade_scroll_area
-        surface.set_clip(area)
         # Pré-calcula peso atual equipado para decidir se cada upgrade ainda cabe.
         current_weight = self.player_profile.get_total_equipped_weight()
         slot_cap = self.player_profile.unlocked_slots
         for i, rect in enumerate(self.layout.upgrade_grid_cells):
-            if rect.bottom < area.y or rect.top > area.bottom:
-                continue
             upg = self.layout.visible_upgrades[i]
             unl = upg.type in self.player_profile.unlocked_upgrades
             eq = self.player_profile.get_equipped_slot(upg.type) is not None
@@ -1035,9 +1103,13 @@ class UpgradesSelectionScene(Scene):
 
             if eq:
                 self._draw_equipped_badge(surface, rect)
-        surface.set_clip(None)
-        self._draw_scrollbar(
-            surface, area, self.upgrade_scroll, self.max_upgrade_scroll
+            if self.hovered_upgrade == upg:
+                self._draw_focus_ring(surface, rect)
+        self._draw_chevrons(
+            surface,
+            self.layout.upgrade_left_chevron,
+            self.layout.upgrade_right_chevron,
+            self.max_upgrade_page,
         )
 
     def _draw_right_column(self, surface: pygame.Surface):
@@ -1077,17 +1149,17 @@ class UpgradesSelectionScene(Scene):
         )
 
         surface.blit(
-            self.header_font.render("Hangar", True, colors.WHITE),
+            self.header_font.render(
+                self._page_header("Hangar", self.ship_page, self.max_ship_page),
+                True,
+                colors.WHITE,
+            ),
             (
                 self.layout.right_area.x + self.MARGIN,
                 self.layout.stats_area.bottom + 30,
             ),
         )
-        area = self.layout.ship_scroll_area
-        surface.set_clip(area)
         for i, rect in enumerate(self.layout.ship_grid_cells):
-            if rect.bottom < area.y or rect.top > area.bottom:
-                continue
             s = self.layout.visible_ships[i]
             unl, sel = (
                 self.player_profile.is_ship_unlocked(s.id),
@@ -1138,8 +1210,14 @@ class UpgradesSelectionScene(Scene):
                     pass
                 if sel:
                     self._draw_equipped_badge(surface, dr)
-        surface.set_clip(None)
-        self._draw_scrollbar(surface, area, self.ship_scroll, self.max_ship_scroll)
+            if self.hovered_ship == s:
+                self._draw_focus_ring(surface, dr)
+        self._draw_chevrons(
+            surface,
+            self.layout.ship_left_chevron,
+            self.layout.ship_right_chevron,
+            self.max_ship_page,
+        )
         bal_y = self.app.screen.get_height() - 55
         surface.blit(
             self.star_icon_small, (self.layout.right_area.x + self.MARGIN, bal_y)
@@ -1151,21 +1229,106 @@ class UpgradesSelectionScene(Scene):
             (self.layout.right_area.x + self.MARGIN + 25, bal_y + 1),
         )
 
-    def _draw_scrollbar(
-        self, surface: pygame.Surface, area: pygame.Rect, current: int, max_s: int
-    ):
-        if max_s <= 0:
+    @staticmethod
+    def _page_header(label: str, page: int, max_page: int) -> str:
+        """Anexa o indicador "n/total" ao título quando há mais de uma página."""
+        if max_page <= 0:
+            return label
+        return f"{label}  {page + 1}/{max_page + 1}"
+
+    def _draw_chevrons(
+        self,
+        surface: pygame.Surface,
+        left: pygame.Rect,
+        right: pygame.Rect,
+        max_page: int,
+    ) -> None:
+        """Desenha as setas chevron de paginação (mesmo estilo pixel-art da
+        seleção de mundos). Só aparecem quando há mais de uma página."""
+        if max_page <= 0:
             return
-        sb_w, sb_x = 4, area.right + 6
-        pygame.draw.rect(
-            surface, (40, 40, 40), (sb_x, area.y, sb_w, area.height), border_radius=2
-        )
-        hh = max(20, area.height // (max_s + 1))
-        pygame.draw.rect(
+        pulse = (math.sin(self._time * 4) + 1) * 0.5
+        alpha = int(120 + 135 * pulse)
+        mouse = pygame.mouse.get_pos()
+        # `<` com o bico à esquerda do box; `>` com o bico à direita.
+        self._draw_pixel_chevron(
             surface,
-            CUSTOM_PURPLE,
-            (sb_x, area.y + (current / max_s) * (area.height - hh), sb_w, hh),
-            border_radius=2,
+            left.x + 4,
+            left.centery,
+            -1,
+            CUSTOM_GOLD,
+            alpha,
+            1.3 if left.collidepoint(mouse) else 1.0,
+        )
+        self._draw_pixel_chevron(
+            surface,
+            right.right - 4,
+            right.centery,
+            1,
+            CUSTOM_GOLD,
+            alpha,
+            1.3 if right.collidepoint(mouse) else 1.0,
+        )
+
+    @staticmethod
+    def _draw_pixel_chevron(
+        surface: pygame.Surface,
+        x_tip: int,
+        center_y: int,
+        direction: int,
+        color: Tuple[int, int, int],
+        alpha: int,
+        scale: float = 1.0,
+    ) -> None:
+        """Chevron pixelado (``<`` ou ``>``) idêntico ao da seleção de mundos.
+
+        ``direction``: -1 aponta para a esquerda, +1 para a direita. ``x_tip``
+        é a coordenada da ponta da seta (lado do bico)."""
+        length = max(6, int(16 * scale))
+        pixel = max(2, int(4 * scale))
+        chevron = pygame.Surface((length + pixel, length * 2 + pixel), pygame.SRCALPHA)
+        for i in range(0, length, pixel):
+            px = i if direction == -1 else length - i
+            pygame.draw.rect(chevron, (*color, alpha), (px, length - i, pixel, pixel))
+            pygame.draw.rect(chevron, (*color, alpha), (px, length + i, pixel, pixel))
+        dest = chevron.get_rect(centery=center_y)
+        if direction == -1:
+            dest.left = x_tip
+        else:
+            dest.right = x_tip
+        surface.blit(chevron, dest.topleft)
+
+    def get_focusable_rects(self) -> list[pygame.Rect]:
+        """Rects navegáveis pelo snap-focus do D-pad (ver ``app.py``).
+
+        Inclui slots ativos desbloqueados, células visíveis de Estoque e
+        Hangar, as setas de paginação ativas e o botão Voltar. O D-pad pula o
+        cursor para o rect mais próximo na direção apertada; ``A`` então age
+        sobre o que estiver sob o cursor (ver ``_handle_gamepad_confirm``)."""
+        rects: list[pygame.Rect] = list(self.layout.active_slots)
+        rects.extend(self.layout.upgrade_grid_cells)
+        rects.extend(self.layout.ship_grid_cells)
+        if self.max_upgrade_page > 0:
+            rects.append(self.layout.upgrade_left_chevron)
+            rects.append(self.layout.upgrade_right_chevron)
+        if self.max_ship_page > 0:
+            rects.append(self.layout.ship_left_chevron)
+            rects.append(self.layout.ship_right_chevron)
+        rects.append(self.layout.back_button)
+        return rects
+
+    def _draw_focus_ring(self, surface: pygame.Surface, rect: pygame.Rect) -> None:
+        """Anel pulsante de seleção ao redor do item em foco.
+
+        Crítico no controle: o ponteiro do mouse fica oculto no modo de
+        navegação por D-pad, então este anel é a única indicação clara de
+        qual card/slot está selecionado. Cor distinta das demais bordas
+        (amarelo=hover/seleção, dourado=equipado) para não confundir."""
+        pulse = (math.sin(self._time * 6) + 1) * 0.5
+        color = (int(80 + 70 * pulse), int(190 + 50 * pulse), 255)
+        ring = rect.inflate(8, 8)
+        pygame.draw.rect(
+            surface, color, ring, 3, border_radius=self.RADIUS + 3
         )
 
     def _draw_lock_indicator(
@@ -1274,22 +1437,63 @@ class UpgradesSelectionScene(Scene):
         surf = self.header_font.render(initial, True, CUSTOM_GOLD)
         surface.blit(surf, surf.get_rect(center=rect.center))
 
+    @staticmethod
+    def _upgrade_stat_lines(upg: UpgradeMeta) -> List[str]:
+        """Linhas curtas de stats do upgrade (recarga/duração/peso/cargas).
+
+        Agrupa dois stats por linha para caber na largura do tooltip com a
+        fonte pixelada. ``:g`` evita "0s" em durações fracionárias (ex.: dash
+        de 0.4s) e mantém inteiros sem casas decimais."""
+        lines = [f"Recarga {upg.base_cooldown:g}s    Peso {upg.slot_weight}"]
+        second: List[str] = []
+        if upg.base_duration > 0:
+            second.append(f"Duração {upg.base_duration:g}s")
+        if upg.base_charges is not None:
+            second.append(f"Cargas {upg.base_charges}")
+        if second:
+            lines.append("    ".join(second))
+        return lines
+
     def _draw_tooltip(self, surface: pygame.Surface):
         if self.hovered_upgrade is None:
             return
         pos, upg = pygame.mouse.get_pos(), self.hovered_upgrade
+        profile = self.player_profile
 
         # Largura fixa, altura dinâmica
         w = 280
         padding = 12
         line_height = 20
+        stat_lh = 16
 
         # Quebrar o texto em linhas antes de calcular a altura
         wrapped_lines = wrap_text(self.small_font, upg.desc, w - (padding * 2))
+        stat_lines = self._upgrade_stat_lines(upg)
 
-        # Calcular altura necessária: Top + Nome + Gap + Linhas + Bottom
-        # 10 (top) + 24 (nome) + 10 (gap) + (linhas * height) + 10 (bottom)
-        h = 10 + 24 + 10 + (len(wrapped_lines) * line_height) + 10
+        # Motivo de bloqueio por peso (mesma regra de `no_fit` do Estoque):
+        # desbloqueado, não equipado, e equipá-lo estouraria a capacidade.
+        equipped = profile.get_equipped_slot(upg.type) is not None
+        no_fit = (
+            (upg.type in profile.unlocked_upgrades)
+            and not equipped
+            and (
+                profile.get_total_equipped_weight() + upg.slot_weight
+                > profile.unlocked_slots
+            )
+        )
+        warn = "Sem peso — libere um slot" if no_fit else None
+
+        # Altura: top + nome + separador + descrição + gap + stats + aviso + base
+        h = (
+            10
+            + 24
+            + 10
+            + (len(wrapped_lines) * line_height)
+            + 8
+            + (len(stat_lines) * stat_lh)
+            + (18 if warn else 0)
+            + 10
+        )
 
         x, y = pos[0] + 20, pos[1] + 20
 
@@ -1333,6 +1537,18 @@ class UpgradesSelectionScene(Scene):
             line_surf = self.small_font.render(line, True, colors.WHITE)
             tooltip_surf.blit(line_surf, (padding, dy))
             dy += line_height
+
+        # Stats em fonte miúda, cor fria para se distinguir da descrição.
+        dy += 4
+        for line in stat_lines:
+            stat_surf = self.tiny_font.render(line, True, (170, 195, 225))
+            tooltip_surf.blit(stat_surf, (padding, dy))
+            dy += stat_lh
+
+        # Aviso de bloqueio por peso, se houver.
+        if warn:
+            warn_surf = self.tiny_font.render(warn, True, (235, 120, 120))
+            tooltip_surf.blit(warn_surf, (padding, dy))
 
         surface.blit(tooltip_surf, (x, y))
 

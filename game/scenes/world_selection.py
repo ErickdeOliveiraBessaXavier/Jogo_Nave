@@ -77,26 +77,31 @@ class WorldCard:
     """Card visual representando um mundo."""
 
     def __init__(
-        self, world_config: WorldConfig, state: WorldCardState, best_score: int = 0
+        self,
+        world_config: WorldConfig,
+        state: WorldCardState,
+        best_score: int = 0,
+        ui_scale: float = 1.0,
     ):
         self.world_config = world_config
         self.state = state
         self.best_score = best_score
         self.hover = False
+        self.ui_scale = ui_scale
 
-        # Dimensões base do card
-        self.base_width = 340
-        self.base_height = 220
+        # Dimensões base do card, escaladas para a resolução (design = 1280×720).
+        self.base_width = int(340 * ui_scale)
+        self.base_height = int(220 * ui_scale)
         self.rect = pygame.Rect(0, 0, self.base_width, self.base_height)
 
         # Cores baseadas no estado
         self._update_colors()
 
-        # Fontes
-        self.title_font = get_font(18)
-        self.desc_font = get_font(13)
-        self.score_font = get_font(16)
-        self.checkpoint_font = get_font(13)
+        # Fontes (escaladas junto com o card para manter a proporção).
+        self.title_font = get_font(max(8, int(18 * ui_scale)))
+        self.desc_font = get_font(max(8, int(13 * ui_scale)))
+        self.score_font = get_font(max(8, int(16 * ui_scale)))
+        self.checkpoint_font = get_font(max(8, int(13 * ui_scale)))
 
     def _update_colors(self) -> None:
         """Atualiza cores baseadas no estado atual."""
@@ -142,6 +147,10 @@ class WorldCard:
         # Criar superfície temporária para o card para facilitar escala e alpha
         card_surf = pygame.Surface((self.base_width, self.base_height), pygame.SRCALPHA)
 
+        # Offsets/raios internos seguem a escala da resolução.
+        s = self.ui_scale
+        radius = max(4, int(12 * s))
+
         # Fundo
         bg_color = self.bg_color
         if self.state != WorldCardState.LOCKED and is_focused:
@@ -152,11 +161,11 @@ class WorldCard:
 
         # Desenhar fundo translúcido (RGBA)
         pygame.draw.rect(
-            card_surf, (*bg_color, 200), card_surf.get_rect(), border_radius=12
+            card_surf, (*bg_color, 200), card_surf.get_rect(), border_radius=radius
         )
 
         # Borda dinâmica
-        border_thickness = 3
+        border_thickness = max(2, int(3 * s))
         current_border_color = self.border_color
 
         if self.state == WorldCardState.CHECKPOINT:
@@ -166,7 +175,7 @@ class WorldCard:
                 current_border_color = tuple(
                     int(c * (0.7 + pulse * 0.3)) for c in CUSTOM_GOLD
                 )
-                border_thickness = 4
+                border_thickness = max(3, int(4 * s))
         elif self.state == WorldCardState.UNLOCKED:
             if is_focused:
                 # Brilho roxo suave apenas se focado
@@ -180,11 +189,11 @@ class WorldCard:
             current_border_color,
             card_surf.get_rect(),
             border_thickness,
-            border_radius=12,
+            border_radius=radius,
         )
 
         # Conteúdo do Card (Texto)
-        padding = 25
+        padding = int(25 * s)
         max_text_width = self.base_width - (padding * 2)
 
         # Título
@@ -194,7 +203,7 @@ class WorldCard:
             color=self.title_color,
             surface=card_surf,
             center_x=self.base_width // 2,
-            start_y=25,
+            start_y=int(25 * s),
             max_width=max_text_width,
         )
 
@@ -208,39 +217,39 @@ class WorldCard:
             color=desc_color,
             surface=card_surf,
             center_x=self.base_width // 2,
-            start_y=title_bottom + 12,
+            start_y=title_bottom + int(12 * s),
             max_width=max_text_width,
         )
 
         # Status/Score ou Cadeado
         if self.state == WorldCardState.LOCKED:
             # Desenhar ícone de cadeado asset
+            lock_s = int(40 * s)
             try:
                 lock_img = get_image(
                     BASE_DIR / "assets" / "images" / "icons" / "icon_bloqueado.png"
                 )
-                # Redimensionar se necessário, ex: 40x40
-                lock_img = pygame.transform.scale(lock_img, (40, 40))
+                lock_img = pygame.transform.scale(lock_img, (lock_s, lock_s))
                 lock_rect = lock_img.get_rect(
-                    center=(self.base_width // 2, self.base_height - 50)
+                    center=(self.base_width // 2, self.base_height - int(50 * s))
                 )
                 card_surf.blit(lock_img, lock_rect)
             except (OSError, pygame.error, ValueError):
                 # Fallback para o ícone desenhado se falhar
-                lock_x, lock_y = self.base_width // 2, self.base_height - 50
+                lock_x, lock_y = self.base_width // 2, self.base_height - int(50 * s)
                 pygame.draw.rect(
                     card_surf,
                     (80, 80, 80),
-                    (lock_x - 12, lock_y, 24, 20),
-                    border_radius=3,
+                    (lock_x - int(12 * s), lock_y, int(24 * s), int(20 * s)),
+                    border_radius=max(2, int(3 * s)),
                 )
                 pygame.draw.arc(
                     card_surf,
                     (80, 80, 80),
-                    (lock_x - 10, lock_y - 12, 20, 20),
+                    (lock_x - int(10 * s), lock_y - int(12 * s), int(20 * s), int(20 * s)),
                     math.pi,
                     0,
-                    3,
+                    max(2, int(3 * s)),
                 )
         elif self.state == WorldCardState.CHECKPOINT:
             line1 = self.checkpoint_font.render("CHECKPOINT ATUAL", True, CUSTOM_GOLD)
@@ -251,19 +260,19 @@ class WorldCard:
             card_surf.blit(
                 line2,
                 line2.get_rect(
-                    centerx=self.base_width // 2, bottom=self.base_height - 15
+                    centerx=self.base_width // 2, bottom=self.base_height - int(15 * s)
                 ),
             )
             card_surf.blit(
                 line1,
                 line1.get_rect(
-                    centerx=self.base_width // 2, bottom=self.base_height - 35
+                    centerx=self.base_width // 2, bottom=self.base_height - int(35 * s)
                 ),
             )
         else:
             status_text = self.score_font.render("DESBLOQUEADO", True, CUSTOM_PURPLE)
             status_rect = status_text.get_rect(
-                centerx=self.base_width // 2, bottom=self.base_height - 20
+                centerx=self.base_width // 2, bottom=self.base_height - int(20 * s)
             )
             card_surf.blit(status_text, status_rect)
 
@@ -300,8 +309,14 @@ class WorldSelectionView:
         self.visual_scroll_index = 0.0  # Para interpolação suave
         self.scroll_speed = 10.0
 
-        # Layout
-        self.card_spacing = 400  # Espaçamento entre centros no carrossel
+        # Escala de UI relativa ao design base (1280×720). Todas as resoluções
+        # ofertadas são 16:9, então um único fator (largura) cobre os dois
+        # eixos. Sem ele, cards/setas/fontes ficavam com tamanho fixo e
+        # desproporcionais fora de 720p (carrossel "estranho").
+        self.ui_scale = Config.SCREEN_WIDTH / 1280.0
+
+        # Layout — espaçamento entre centros no carrossel, escalado.
+        self.card_spacing = int(400 * self.ui_scale)
 
         # Navegação por teclado
         self.last_key_time = 0
@@ -325,29 +340,35 @@ class WorldSelectionView:
             (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
         )
 
-        # Fontes cacheadas fora do caminho de render
-        self.title_font = get_font(36)
-        self._inst_font = get_font(16)
+        # Fontes cacheadas fora do caminho de render (escaladas).
+        self.title_font = get_font(max(12, int(36 * self.ui_scale)))
+        self._inst_font = get_font(max(8, int(16 * self.ui_scale)))
 
         # Título
         self.title_text = self.title_font.render("Selecione o Mundo", True, CUSTOM_GOLD)
         self.title_rect = self.title_text.get_rect(
-            center=(Config.SCREEN_WIDTH // 2, 80)
+            center=(Config.SCREEN_WIDTH // 2, int(80 * self.ui_scale))
         )
 
         # Botão Voltar (Canto inferior esquerdo)
-        btn_w = 160
-        btn_h = 40
-        self.back_button_rect = pygame.Rect(40, Config.SCREEN_HEIGHT - 60, btn_w, btn_h)
+        btn_w = int(160 * self.ui_scale)
+        btn_h = int(40 * self.ui_scale)
+        self.back_button_rect = pygame.Rect(
+            int(40 * self.ui_scale),
+            Config.SCREEN_HEIGHT - int(60 * self.ui_scale),
+            btn_w,
+            btn_h,
+        )
 
         # Hitboxes das Setas
-        arrow_box_size = 100
+        arrow_box_size = int(100 * self.ui_scale)
+        arrow_margin = int(10 * self.ui_scale)
         center_y = Config.SCREEN_HEIGHT // 2
         self.left_arrow_rect = pygame.Rect(
-            10, center_y - arrow_box_size // 2, arrow_box_size, arrow_box_size
+            arrow_margin, center_y - arrow_box_size // 2, arrow_box_size, arrow_box_size
         )
         self.right_arrow_rect = pygame.Rect(
-            Config.SCREEN_WIDTH - arrow_box_size - 10,
+            Config.SCREEN_WIDTH - arrow_box_size - arrow_margin,
             center_y - arrow_box_size // 2,
             arrow_box_size,
             arrow_box_size,
@@ -426,7 +447,7 @@ class WorldSelectionView:
                 state = WorldCardState.LOCKED
                 best_score = 0
 
-            card = WorldCard(world_config, state, best_score)
+            card = WorldCard(world_config, state, best_score, ui_scale=self.ui_scale)
             self.world_cards.append(card)
 
         self.selected_index = checkpoint_idx
@@ -852,11 +873,18 @@ class WorldSelectionView:
 
             surf.blit(chevron_surf, dest_rect.topleft)
 
-        # Desenhar Setas com escala dinâmica se houver hover
-        left_scale = 1.4 if self.left_arrow_hover else 1.0
-        right_scale = 1.4 if self.right_arrow_hover else 1.0
+        # Desenhar Setas com escala dinâmica se houver hover. A escala base
+        # acompanha a resolução (ui_scale) para casar com cards e hitboxes.
+        left_scale = (1.4 if self.left_arrow_hover else 1.0) * self.ui_scale
+        right_scale = (1.4 if self.right_arrow_hover else 1.0) * self.ui_scale
+        tip_x = int(60 * self.ui_scale)
 
-        draw_pixel_chevron(surface, 60, -1, CUSTOM_GOLD, arrow_alpha, left_scale)
+        draw_pixel_chevron(surface, tip_x, -1, CUSTOM_GOLD, arrow_alpha, left_scale)
         draw_pixel_chevron(
-            surface, Config.SCREEN_WIDTH - 60, 1, CUSTOM_GOLD, arrow_alpha, right_scale
+            surface,
+            Config.SCREEN_WIDTH - tip_x,
+            1,
+            CUSTOM_GOLD,
+            arrow_alpha,
+            right_scale,
         )
