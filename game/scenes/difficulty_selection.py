@@ -44,9 +44,15 @@ class DifficultySelectionView:
         self.on_back = on_back
         self.renderer = renderer
 
-        self.title_font = get_font(36)
-        self.button_font = get_font(16)
-        self.desc_font = get_font(13)
+        # Escala de UI relativa ao design base (1280×720). Todas as resoluções
+        # ofertadas são 16:9, então um único fator (largura) cobre os dois
+        # eixos. Mantém cards, fontes e botões proporcionais fora de 720p
+        # (consistente com a seleção de mundos e o loadout).
+        self.ui_scale = Config.SCREEN_WIDTH / 1280.0
+
+        self.title_font = get_font(max(12, int(36 * self.ui_scale)))
+        self.button_font = get_font(max(8, int(16 * self.ui_scale)))
+        self.desc_font = get_font(max(8, int(13 * self.ui_scale)))
 
         # Cores por dificuldade
         self.difficulty_colors = {
@@ -75,17 +81,18 @@ class DifficultySelectionView:
 
     def setup_ui(self):
         """Configura elementos da interface."""
+        s = self.ui_scale
         center_x = Config.SCREEN_WIDTH // 2
 
         # Título
         self.title_text = self.title_font.render(
             "Selecione a Dificuldade", True, CUSTOM_GOLD
         )
-        self.title_rect = self.title_text.get_rect(center=(center_x, 80))
+        self.title_rect = self.title_text.get_rect(center=(center_x, int(80 * s)))
 
-        # Configurações dos botões (agora como quadrados horizontais)
-        card_size = 220
-        spacing = 30  # Espaçamento entre cards
+        # Configurações dos botões (agora como quadrados horizontais), escaladas.
+        card_size = int(220 * s)
+        spacing = int(30 * s)  # Espaçamento entre cards
         num_cards = len(DifficultyPreset)
 
         # Calcular largura total dos cards
@@ -105,7 +112,7 @@ class DifficultySelectionView:
 
             # Descrição com quebra de linha
             desc_lines = wrap_text(
-                self.desc_font, settings["description"], card_size - 30
+                self.desc_font, settings["description"], card_size - int(30 * s)
             )
             desc_surfaces = [
                 self.desc_font.render(line, True, WHITE) for line in desc_lines
@@ -137,9 +144,11 @@ class DifficultySelectionView:
             }
 
         # Botão Voltar (Canto inferior esquerdo)
-        btn_w = 160
-        btn_h = 40
-        self.back_button_rect = pygame.Rect(40, Config.SCREEN_HEIGHT - 60, btn_w, btn_h)
+        btn_w = int(160 * s)
+        btn_h = int(40 * s)
+        self.back_button_rect = pygame.Rect(
+            int(40 * s), Config.SCREEN_HEIGHT - int(60 * s), btn_w, btn_h
+        )
 
     def reset(self):
         """Reseta o estado da view para reiniciar animação."""
@@ -331,6 +340,8 @@ class DifficultySelectionView:
     def render(self, surface: pygame.Surface):
         """Renderiza a view."""
         # Calcular alpha baseado no progresso
+        s = self.ui_scale
+        radius = max(4, int(12 * s))
         alpha = int(255 * self.entry_progress)
         offset_y = int(30 * (1.0 - self.entry_progress))
 
@@ -359,7 +370,7 @@ class DifficultySelectionView:
 
             # 1. Desenhar Glow se hovered
             if hover_p > 0:
-                glow_size = int(12 * hover_p)
+                glow_size = max(1, int(12 * hover_p * s))
                 glow_rect = rect.inflate(glow_size * 2, glow_size * 2)
                 glow_surface = pygame.Surface(
                     (glow_rect.width, glow_rect.height), pygame.SRCALPHA
@@ -377,7 +388,7 @@ class DifficultySelectionView:
                             rect.width + i * 2,
                             rect.height + i * 2,
                         ),
-                        border_radius=15,
+                        border_radius=max(4, int(15 * s)),
                     )
                 surface.blit(glow_surface, glow_rect.topleft)
 
@@ -389,17 +400,17 @@ class DifficultySelectionView:
                 temp_surface,
                 (20, 20, 30, int(alpha * 0.8)),
                 temp_surface.get_rect(),
-                border_radius=12,
+                border_radius=radius,
             )
 
             # Borda do quadrado (Agora com a cor da dificuldade)
-            border_width = 3 + int(2 * hover_p)
+            border_width = max(2, int((3 + 2 * hover_p) * s))
             pygame.draw.rect(
                 temp_surface,
                 (*color, alpha),
                 temp_surface.get_rect(),
                 border_width,
-                border_radius=12,
+                border_radius=radius,
             )
 
             # Blit no surface principal
@@ -409,24 +420,29 @@ class DifficultySelectionView:
             # Nome (Título da dificuldade) - Cor da dificuldade para o título tbm
             name_surface = self.button_font.render(button_data["name"], True, color)
             name_surface.set_alpha(alpha)
-            name_rect = name_surface.get_rect(centerx=rect.centerx, top=rect.top + 20)
+            name_rect = name_surface.get_rect(
+                centerx=rect.centerx, top=rect.top + int(20 * s)
+            )
             surface.blit(name_surface, name_rect)
 
             # Descrição (centralizada verticalmente no quadrado)
-            total_desc_h = sum(s.get_height() + 5 for s in button_data["desc_surfaces"])
+            desc_gap = int(5 * s)
+            total_desc_h = sum(
+                surf.get_height() + desc_gap for surf in button_data["desc_surfaces"]
+            )
             y_ptr = rect.centery - total_desc_h // 2
             for desc_surf in button_data["desc_surfaces"]:
                 ds = desc_surf.copy()
                 ds.set_alpha(alpha)
                 dr = ds.get_rect(centerx=rect.centerx, top=y_ptr)
                 surface.blit(ds, dr)
-                y_ptr += ds.get_height() + 5
+                y_ptr += ds.get_height() + desc_gap
 
             # Vidas
             lives_surface = button_data["lives_text"].copy()
             lives_surface.set_alpha(alpha)
             lives_rect = lives_surface.get_rect(
-                centerx=rect.centerx, bottom=rect.bottom - 20
+                centerx=rect.centerx, bottom=rect.bottom - int(20 * s)
             )
             surface.blit(lives_surface, lives_rect)
 
