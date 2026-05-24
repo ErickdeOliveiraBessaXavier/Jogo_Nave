@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, List, Optional
 
 import pygame
 
@@ -43,6 +43,7 @@ class BulletPool:
         is_side_scroll: bool = False,
         direction: tuple[float, float] | None = None,
         ship_id: str = "padrao",
+        owner_ship: Optional[Any] = None,
     ) -> Bullet:
         """
         Obtém uma bala do pool, reutilizando uma inativa ou criando nova.
@@ -60,6 +61,7 @@ class BulletPool:
                 is_side_scroll=is_side_scroll,
                 direction=direction,
                 ship_id=ship_id,
+                owner_ship=owner_ship,
             )
             self.active.append(bullet)
             return bullet
@@ -76,6 +78,7 @@ class BulletPool:
             is_side_scroll=is_side_scroll,
             direction=direction,
             ship_id=ship_id,
+            owner_ship=owner_ship,
         )
         self.pool.append(bullet)
         self.active.append(bullet)

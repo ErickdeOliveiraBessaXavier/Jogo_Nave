@@ -168,6 +168,7 @@ class MiniShip:
                 vx,
                 vy,
                 piercing=self.player.piercing_shot_timer > 0,
+                owner_ship=self.player,
             )
         )
 

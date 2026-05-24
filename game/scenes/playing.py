@@ -327,7 +327,11 @@ class PlayingScene(Scene):
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
         self.entity_manager = EntityManager(
-            sound_manager=sound_manager, is_side_scroll=self.is_side_scroll
+            sound_manager=sound_manager,
+            is_side_scroll=self.is_side_scroll,
+            aggressiveness_multiplier=self.difficulty_settings.get(
+                "aggressiveness_multiplier", 1.0
+            ),
         )
         self._apply_world_theme()
 
@@ -508,10 +512,15 @@ class PlayingScene(Scene):
         self.boss_controller.reset()
         self.entity_manager.clear_for_level_transition()
 
-        if self.ship.mini_ships_timer > 0.0:
-            self.build_mini_ships()
-        else:
-            self._build_permanent_mini_ships()
+        # Em coop, cada slot pode ter perfil próprio (ex: Engenheiro como P2).
+        # Itera sobre todos os slots vivos para rebuildar permanentes de cada
+        # um — chamada legada sem slot só restaurava o primário, perdendo as
+        # mini-naves de outros Engenheiros na transição.
+        for slot in self.roster.alive_slots():
+            if slot.ship.mini_ships_timer > 0.0:
+                self.build_mini_ships(slot)
+            else:
+                self._build_permanent_mini_ships(slot)
 
         if theme_changed:
             self._start_world_transition_cutscene(new_world)
@@ -1609,12 +1618,12 @@ class PlayingScene(Scene):
 
         if destroyed > 0:
             self.star_spawner.add_kills(destroyed, self.entity_manager.stars)
-            # Reverberador: combo é per-ship; cada inimigo abatido conta para
-            # todos os jogadores vivos (em multiplayer, ambos participam do
-            # combate). Refinar atribuição por dano em fase futura se preciso.
-            for slot in self.roster.alive_slots():
-                for _ in range(destroyed):
-                    slot.ship.register_kill()
+            # Reverberador: o combo agora é creditado per-projétil dentro de
+            # cada `collisions.*_vs_enemies`, via `_credit_kill(b)` que lê o
+            # `owner_ship` da bala/laser/feixe. Em coop, P1 não rouba combo
+            # do P2 e vice-versa. AoE sem owner rastreável (mine_explosion,
+            # air_strike) não atribui — combo é prêmio por skill, não por
+            # spray-and-pray.
 
         if self.entity_manager.spikes:
             all_player_projectiles = (
@@ -1923,6 +1932,8 @@ class PlayingScene(Scene):
             m for m in self.entity_manager.mini_ships if m.player is not p2.ship
         ]
         self.roster.remove(p2)
+        # Volta ao escalonamento solo na próxima fase.
+        self.level_controller.set_player_count(self.roster.count())
         logger.info("P2 saiu da partida (motivo=%s).", reason)
 
     def _is_p2_join_trigger(self, event: pygame.event.Event) -> bool:
@@ -1990,6 +2001,9 @@ class PlayingScene(Scene):
         p2_ship.lives = lives
         self.roster.add(p2_slot)
         self._build_permanent_mini_ships(p2_slot)
+        # Atualiza scaling de coop pra próxima fase (a fase atual mantém o
+        # valor antigo — mudar inimigos vivos seria confuso pro jogador).
+        self.level_controller.set_player_count(self.roster.count())
 
         logger.info(
             "P2 entrou na partida com a nave '%s' (vidas=%d) e animação de entrada.",

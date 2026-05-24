@@ -19,6 +19,7 @@ class MeteorPool(PoolStatsMixin):
         initial_size: int = 100,
         max_size: int = 500,
         is_side_scroll: bool = False,
+        aggressiveness_multiplier: float = 1.0,
     ):
         """
         Inicializa o pool com meteoros inativos.
@@ -27,6 +28,7 @@ class MeteorPool(PoolStatsMixin):
             initial_size: Quantidade inicial de meteoros no pool
             max_size: Tamanho máximo permitido (evita crescimento infinito)
             is_side_scroll: Se está em modo side-scroll
+            aggressiveness_multiplier: Escala velocidade dos meteoros (>1.0 = mais letal)
 
         Raises:
             ValueError: If max_size < initial_size
@@ -37,6 +39,7 @@ class MeteorPool(PoolStatsMixin):
         self.initial_size = initial_size
         self.max_size = max_size
         self.is_side_scroll = is_side_scroll
+        self.aggressiveness_multiplier = aggressiveness_multiplier
 
         self.pool: List[Meteor] = []
         self.active: List[Meteor] = []
@@ -71,10 +74,14 @@ class MeteorPool(PoolStatsMixin):
         Returns:
             Meteoro ativo e configurado
         """
+        mult = self.aggressiveness_multiplier
         # Procura um meteoro inativo no pool
         for meteor in self.pool:
             if not meteor.active:
-                meteor.reset(size=size, x=x, y=y, vx=vx, vy=vy)
+                meteor.reset(
+                    size=size, x=x, y=y, vx=vx, vy=vy,
+                    aggressiveness_multiplier=mult,
+                )
                 meteor.is_side_scroll = self.is_side_scroll
                 self.active.append(meteor)
                 self.reused_count += 1
@@ -83,7 +90,10 @@ class MeteorPool(PoolStatsMixin):
 
         # Se não houver disponível, tenta criar novo
         if len(self.pool) < self.max_size:
-            meteor = Meteor(size=size, x=x, y=y, vx=vx, vy=vy)
+            meteor = Meteor(
+                size=size, x=x, y=y, vx=vx, vy=vy,
+                aggressiveness_multiplier=mult,
+            )
             meteor.is_side_scroll = self.is_side_scroll
             self.pool.append(meteor)
             self.active.append(meteor)
@@ -94,14 +104,20 @@ class MeteorPool(PoolStatsMixin):
             # Pool está no máximo - reutiliza o mais antigo (fallback)
             if self.active:
                 meteor = self.active.pop(0)
-                meteor.reset(size=size, x=x, y=y, vx=vx, vy=vy)
+                meteor.reset(
+                    size=size, x=x, y=y, vx=vx, vy=vy,
+                    aggressiveness_multiplier=mult,
+                )
                 meteor.is_side_scroll = self.is_side_scroll
                 self.active.append(meteor)
                 self._update_peak()
                 return meteor
             else:
                 # Nunca deve chegar aqui
-                m = Meteor(size=size, x=x, y=y, vx=vx, vy=vy)
+                m = Meteor(
+                    size=size, x=x, y=y, vx=vx, vy=vy,
+                    aggressiveness_multiplier=mult,
+                )
                 m.is_side_scroll = self.is_side_scroll
                 return m
 

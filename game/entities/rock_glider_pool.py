@@ -14,6 +14,7 @@ class RockGliderPool(PoolStatsMixin):
         initial_size: int = 24,
         max_size: int = 60,
         is_side_scroll: bool = False,
+        aggressiveness_multiplier: float = 1.0,
     ):
         if max_size < initial_size:
             raise ValueError("max_size must be greater than or equal to initial_size")
@@ -21,6 +22,7 @@ class RockGliderPool(PoolStatsMixin):
         self.initial_size = initial_size
         self.max_size = max_size
         self.is_side_scroll = is_side_scroll
+        self.aggressiveness_multiplier = aggressiveness_multiplier
 
         self.pool: List[RockGlider] = []
         self.active: List[RockGlider] = []
@@ -46,9 +48,13 @@ class RockGliderPool(PoolStatsMixin):
         vx: float | None = None,
         vy: float | None = None,
     ) -> RockGlider:
+        mult = self.aggressiveness_multiplier
         if self.free:
             glider = self.free.pop()
-            glider.reset(size=size, x=x, y=y, vx=vx, vy=vy)
+            glider.reset(
+                size=size, x=x, y=y, vx=vx, vy=vy,
+                aggressiveness_multiplier=mult,
+            )
             glider.active = True
             self.active.append(glider)
             self.reused_count += 1
@@ -57,6 +63,12 @@ class RockGliderPool(PoolStatsMixin):
 
         if len(self.pool) < self.max_size:
             glider = RockGlider(size=size, x=x, y=y, vx=vx, vy=vy)
+            # RockGlider.__init__ não aceita aggressiveness; aplica via reset
+            # imediato para passar pelo super().reset(...) com o multiplicador.
+            glider.reset(
+                size=size, x=x, y=y, vx=vx, vy=vy,
+                aggressiveness_multiplier=mult,
+            )
             glider.active = True
             self.pool.append(glider)
             self.active.append(glider)
@@ -66,13 +78,21 @@ class RockGliderPool(PoolStatsMixin):
 
         if self.active:
             glider = self.active.pop(0)
-            glider.reset(size=size, x=x, y=y, vx=vx, vy=vy)
+            glider.reset(
+                size=size, x=x, y=y, vx=vx, vy=vy,
+                aggressiveness_multiplier=mult,
+            )
             glider.active = True
             self.active.append(glider)
             self._update_peak()
             return glider
 
-        return RockGlider(size=size, x=x, y=y, vx=vx, vy=vy)
+        glider = RockGlider(size=size, x=x, y=y, vx=vx, vy=vy)
+        glider.reset(
+            size=size, x=x, y=y, vx=vx, vy=vy,
+            aggressiveness_multiplier=mult,
+        )
+        return glider
 
     def release(self, glider: RockGlider) -> None:
         try:

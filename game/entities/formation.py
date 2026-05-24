@@ -42,6 +42,7 @@ class Formation:
         entry_x: float,
         entry_y: float,
         patterns_sequence: List[FormationPattern] | None = None,
+        enemy_kwargs: dict[str, Any] | None = None,
     ):
         """
         Inicializa uma formação.
@@ -52,6 +53,8 @@ class Formation:
             entry_x: Posição X central de entrada
             entry_y: Posição Y inicial (geralmente acima da tela)
             patterns_sequence: Sequência de padrões (padrão: espiral -> círculo -> V)
+            enemy_kwargs: kwargs passados ao construtor de cada inimigo (ex.:
+                aggressiveness_multiplier para escalar letalidade por dificuldade)
         """
 
         self.enemy_type = enemy_type
@@ -60,9 +63,10 @@ class Formation:
         self.center_y = entry_y
 
         # Criar inimigos
+        kwargs = enemy_kwargs or {}
         self.enemies: List[Any] = []
         for i in range(count):
-            enemy = enemy_type()
+            enemy = enemy_type(**kwargs)
             # Desabilitar movimento padrão do inimigo
             enemy.formation_controlled = True
             enemy.formation_index = i

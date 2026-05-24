@@ -45,3 +45,13 @@ def get_preferences_path() -> Path:
 def get_error_log_path() -> Path:
     """Retorna o caminho para o arquivo de log de erros."""
     return get_user_data_dir() / "error.log"
+
+
+def get_game_log_path() -> Path:
+    """Retorna o caminho para o arquivo de log contínuo do jogo.
+
+    Captura `logger.info/warning/error` de todos os módulos. Útil para
+    diagnosticar bugs intermitentes (reconexão de gamepad, crashes em
+    bosses, etc.) que não chegam a matar o processo.
+    """
+    return get_user_data_dir() / "game.log"

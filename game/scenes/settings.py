@@ -102,6 +102,10 @@ class SettingsView:
 
         # Estado do pop-up de confirmação
         self.show_restart_popup = False
+        # Pop-up informativo (texto livre + botão OK). Usado quando o usuário
+        # tenta alterar configs sensíveis ao modo coop durante uma partida
+        # multiplayer ativa.
+        self.info_popup_text: str | None = None
 
         self._calculate_layout()
 
@@ -236,6 +240,12 @@ class SettingsView:
             start_btn_x + btn_w + btn_gap, btn_y, btn_w, btn_h
         )
 
+        # Pop-up informativo (mesmo bounding-box, apenas 1 botão "OK").
+        info_btn_x = popup_x + (popup_w - btn_w) // 2
+        self.layout_rects["info_popup_ok_button"] = pygame.Rect(
+            info_btn_x, btn_y, btn_w, btn_h
+        )
+
     def reset(self):
         """Reseta o estado da view para reiniciar animação."""
         self.entry_progress = 0.0
@@ -285,12 +295,37 @@ class SettingsView:
     def handle_event(self, event: pygame.event.Event) -> bool:
         """Processa eventos da view."""
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            if self.info_popup_text is not None:
+                self.info_popup_text = None
+                return True
             if self.show_restart_popup:
                 self.show_restart_popup = False
                 return True
             self.preferences.save()
             self.on_back()
             return True
+
+        # Info popup é modal — qualquer click ou botão fecha.
+        if self.info_popup_text is not None:
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                # Click em qualquer lugar fecha; verificar o botão OK só pra
+                # UX consistente com outros popups.
+                self.info_popup_text = None
+                return True
+            if event.type == pygame.JOYBUTTONDOWN:
+                from ..core.gamepad import XboxButton
+
+                if event.button in (XboxButton.A, XboxButton.B, XboxButton.BACK):
+                    self.info_popup_text = None
+                    return True
+            # Consumir demais eventos pra bloquear click-through.
+            if event.type in (
+                pygame.MOUSEBUTTONUP,
+                pygame.MOUSEMOTION,
+                pygame.MOUSEWHEEL,
+                pygame.KEYDOWN,
+            ):
+                return True
 
         # Enquanto o pop-up estiver aberto, bloquear interação com o restante da tela.
         if self.show_restart_popup:
@@ -370,6 +405,8 @@ class SettingsView:
             # Toggles
             for key, rect in self.layout_rects["toggles"].items():
                 if rect.collidepoint(pos):
+                    if self._try_show_coop_block(key):
+                        return True
                     self.toggles[key] = not self.toggles[key]
                     # Salvar nas preferências
                     if key == "p1_prefers_keyboard":
@@ -423,6 +460,42 @@ class SettingsView:
         pygame.quit()
         sys.exit(0)
 
+    def _is_runtime_coop_active(self) -> bool:
+        """True quando há partida coop em andamento (2+ slots no roster).
+
+        Usado para travar toggles que reorganizam slots de gamepad mid-game
+        (ex.: `gamepad_enabled`, `p1_prefers_keyboard`). Trocar o roteamento
+        de input com P2 já ativo deixaria a nave dele sem input até o usuário
+        voltar e religar — UX ruim. Pedimos pra voltar ao menu antes.
+        """
+        rs = self._runtime_scene
+        if rs is None:
+            return False
+        roster = getattr(rs, "roster", None)
+        if roster is None:
+            return False
+        try:
+            return roster.count() >= 2
+        except (AttributeError, TypeError):
+            return False
+
+    def _try_show_coop_block(self, key: str) -> bool:
+        """Se o toggle `key` é sensível e coop está ativo, mostra info popup.
+
+        Retorna True quando o toggle foi bloqueado (o handler deve abortar
+        a aplicação da mudança SEM flipar o valor).
+        """
+        if key not in ("gamepad_enabled", "p1_prefers_keyboard"):
+            return False
+        if not self._is_runtime_coop_active():
+            return False
+        self.info_popup_text = (
+            "Essa opção só pode ser alterada fora de uma partida "
+            "cooperativa. Volte ao menu principal e ajuste antes "
+            "de iniciar o coop."
+        )
+        return True
+
     def _activate_at(self, pos: tuple[int, int]) -> bool:
         """Aciona o elemento de UI sob ``pos`` (botão, toggle, slider center).
 
@@ -452,8 +525,13 @@ class SettingsView:
             if rect.inflate(60, 0).collidepoint(pos):
                 # Hitbox inflado horizontalmente cobre rótulo — torna a
                 # mira do controle mais perdoadora ao apontar pro toggle.
+                if self._try_show_coop_block(key):
+                    return True
                 self.toggles[key] = not self.toggles[key]
-                if key == "mouse_control":
+                if key == "p1_prefers_keyboard":
+                    self.preferences.p1_prefers_keyboard = self.toggles[key]
+                    self._apply_live_control_settings()
+                elif key == "mouse_control":
                     self.preferences.mouse_control = self.toggles[key]
                     self._apply_live_control_settings()
                 elif key == "auto_fire":
@@ -560,6 +638,8 @@ class SettingsView:
         # Pop-up de confirmação
         if self.show_restart_popup:
             self._draw_restart_popup(surface)
+        if self.info_popup_text is not None:
+            self._draw_info_popup(surface)
 
     def _draw_button(
         self,
@@ -763,6 +843,13 @@ class SettingsView:
         }
         gamepad = getattr(self._app, "gamepad", None) if self._app is not None else None
         gamepad_connected = bool(gamepad is not None and gamepad.connected)
+        # Contadores reais por slot — refletem estado pós-fix do add_device.
+        slot0_active = bool(gamepad is not None and gamepad.is_slot_connected(0))
+        slot1_active = bool(gamepad is not None and gamepad.is_slot_connected(1))
+        physical_count = (
+            int(pygame.joystick.get_count()) if pygame.joystick.get_init() else 0
+        )
+        coop_active = self._is_runtime_coop_active()
 
         for key in self.toggles:
             rect = self.layout_rects["toggles"][key].copy()
@@ -780,14 +867,29 @@ class SettingsView:
                 check_surf.fill((*CUSTOM_GOLD, alpha))
                 surface.blit(check_surf, (rect.x + 3, rect.y + 3))
 
-            # Label (com sufixo de status para o toggle de gamepad)
+            # Label (com sufixo de status para os toggles de gamepad)
             label_text = labels[key]
+            label_color = colors.WHITE
             if key == "gamepad_enabled":
-                suffix = " (conectado)" if gamepad_connected else " (desconectado)"
-                label_color = colors.WHITE if gamepad_connected else colors.GRAY
+                if not gamepad_connected:
+                    suffix = " (desconectado)"
+                    label_color = colors.GRAY
+                elif slot0_active and slot1_active:
+                    suffix = " (2 controles — P1 + P2)"
+                else:
+                    suffix = " (1 controle conectado)"
                 label_text += suffix
-            else:
-                label_color = colors.WHITE
+            elif key == "p1_prefers_keyboard":
+                # Sinaliza quando há controle físico ocioso por causa desta
+                # preferência (fix do add_device: prefer_slot_1 + 2 ctrls
+                # deixa o 2º controle de fora pra preservar teclado em slot 0).
+                used = (1 if slot0_active else 0) + (1 if slot1_active else 0)
+                if is_checked and physical_count > used:
+                    suffix = f" ({physical_count - used} controle ocioso)"
+                    label_text += suffix
+            if coop_active and key in ("gamepad_enabled", "p1_prefers_keyboard"):
+                label_text += " (bloqueado em coop)"
+                label_color = colors.GRAY
             label_surf = self.item_font.render(label_text, True, label_color)
             label_surf.set_alpha(alpha)
             surface.blit(
@@ -919,6 +1021,59 @@ class SettingsView:
             surface, self.layout_rects["popup_no_button"], "Não", CUSTOM_PURPLE, 255, 0
         )
 
+    def _draw_info_popup(self, surface: pygame.Surface):
+        """Desenha popup informativo (1 botão OK) — usado para bloqueios mid-coop."""
+        popup_rect = self.layout_rects["popup_rect"]
+        message = self.info_popup_text or ""
+
+        overlay = pygame.Surface((surface.get_width(), surface.get_height()))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(128)
+        surface.blit(overlay, (0, 0))
+
+        pygame.draw.rect(surface, colors.DARK_GRAY, popup_rect, border_radius=10)
+        pygame.draw.rect(surface, CUSTOM_GOLD, popup_rect, 2, border_radius=10)
+
+        title_surf = self.header_font.render("Aviso", True, CUSTOM_GOLD)
+        surface.blit(
+            title_surf,
+            (popup_rect.centerx - title_surf.get_width() // 2, popup_rect.y + 20),
+        )
+
+        text_max_width = popup_rect.width - 60
+        message_lines = wrap_text(self.item_font, message, text_max_width)
+
+        line_height = self.item_font.get_linesize()
+        line_gap = 4
+        block_height = (len(message_lines) * line_height) + (
+            max(0, len(message_lines) - 1) * line_gap
+        )
+        message_top = popup_rect.y + 60
+        message_bottom = self.layout_rects["info_popup_ok_button"].y - 12
+        available_height = max(0, message_bottom - message_top)
+
+        if block_height > available_height:
+            msg_font = self.small_font
+            line_height = msg_font.get_linesize()
+            message_lines = wrap_text(msg_font, message, text_max_width)
+            block_height = (len(message_lines) * line_height) + (
+                max(0, len(message_lines) - 1) * line_gap
+            )
+        else:
+            msg_font = self.item_font
+
+        y_offset = message_top + max(0, (available_height - block_height) // 2)
+        for line in message_lines:
+            text_surf = msg_font.render(line, True, colors.WHITE)
+            surface.blit(
+                text_surf, (popup_rect.centerx - text_surf.get_width() // 2, y_offset)
+            )
+            y_offset += line_height + line_gap
+
+        self._draw_button(
+            surface, self.layout_rects["info_popup_ok_button"], "OK", CUSTOM_PURPLE, 255, 0
+        )
+
 
 class SettingsScene(Scene, FadeTransitionMixin):
     """Cena de configurações."""
@@ -954,6 +1109,8 @@ class SettingsScene(Scene, FadeTransitionMixin):
     def get_focusable_rects(self) -> list[pygame.Rect]:
         # Quando popup de reinício está aberto, foco fica restrito aos
         # botões dele — bloqueia DPad de vazar pra controles atrás.
+        if self.view.info_popup_text is not None:
+            return [self.view.layout_rects["info_popup_ok_button"]]
         if self.view.show_restart_popup:
             return [
                 self.view.layout_rects["popup_yes_button"],

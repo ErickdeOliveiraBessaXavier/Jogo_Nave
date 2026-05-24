@@ -1,3 +1,5 @@
+from typing import Any, Optional
+
 import pygame
 
 from ..core import colors
@@ -13,6 +15,7 @@ class MiniShipBullet:
         vy: float,
         damage: int = Config.MINI_SHIP_BULLET_DAMAGE,
         piercing: bool = False,
+        owner_ship: Optional[Any] = None,
     ):
         self.x = x
         self.y = y
@@ -23,6 +26,9 @@ class MiniShipBullet:
         self.damage = damage
         self.dead = False
         self.piercing = piercing  # Now configurable
+        # Nave que controlou o mini ship/wingman que disparou — para
+        # atribuição de kill ao Reverberador certo em coop.
+        self.owner_ship: Optional[Any] = owner_ship
 
     @property
     def rect(self) -> pygame.Rect:

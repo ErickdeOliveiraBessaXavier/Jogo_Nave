@@ -137,7 +137,8 @@ class ShootingSystem:
                 cx, cy,
                 damage=adjusted_damage,
                 direction=dir_vec,
-                ship_id="berserk"
+                ship_id="berserk",
+                owner_ship=ship,
             )
         
         # Efeito sonoro
@@ -209,6 +210,7 @@ class ShootingSystem:
                 low_ammo=is_low_ammo,
                 direction=direction,
                 ship_id=ship.profile.id,
+                owner_ship=ship,
             )
             if is_explosive:
                 ship.consume_explosive_shot()
@@ -258,6 +260,7 @@ class ShootingSystem:
                 y,
                 direction=unit_dir,
                 damage=adjusted_damage,
+                owner_ship=ship,
             )
 
     def _fire_cacador_charge(
@@ -269,9 +272,14 @@ class ShootingSystem:
     ) -> None:
         """Dispara 5 tiros teleguiados com targets round-robin.
 
-        No-op se já existem teleguiados em tela — evita acúmulo.
+        No-op se a NAVE deste Caçador já tem teleguiados em tela — evita
+        acúmulo do mesmo jogador, mas permite que P1 e P2 (ambos Caçador)
+        atirem simultaneamente em coop.
         """
-        if self._em.homing_bullets:
+        if any(
+            getattr(b, "source_ship", None) is ship and not b.dead
+            for b in self._em.homing_bullets
+        ):
             return
         self._bus.emit(
             events.PlayerShot(
@@ -308,4 +316,5 @@ class ShootingSystem:
                     damage=adjusted_damage,
                     direction=dir_vec,
                     locked_target=target,
+                    source_ship=ship,
                 )

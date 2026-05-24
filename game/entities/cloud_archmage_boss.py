@@ -384,6 +384,7 @@ class CloudArchmageBoss:
         x: float | None = None,
         y: float | None = None,
         difficulty_multiplier: float = 1.0,
+        aggressiveness_multiplier: float = 1.0,
     ) -> None:
         sw = Config.SCREEN_WIDTH
         self.w, self.h = self.WIDTH, self.HEIGHT
@@ -394,6 +395,8 @@ class CloudArchmageBoss:
         # uma chuva de estalagmites + fire zones idêntica ao Normal.
         self.difficulty_multiplier: float = difficulty_multiplier
         self._attack_pace_mult: float = 1.0 / max(0.5, difficulty_multiplier)
+        # Aplicado aos enxames de RockGlider/MountainPropeller spawned pelo boss.
+        self.aggressiveness_multiplier: float = aggressiveness_multiplier
         # Cap de fire zones ativas escala com dificuldade (Casual: 4, Normal:
         # 5, Hardcore: 6-7, Pesadelo: 7-8) para evitar campo minado em Casual.
         self._max_fire_zones: int = max(
@@ -1275,7 +1278,13 @@ class CloudArchmageBoss:
                 self._phase1_propeller_timer += dt
                 while self._phase1_rock_glider_timer >= _PHASE1_ROCK_GLIDER_INTERVAL:
                     self._phase1_rock_glider_timer -= _PHASE1_ROCK_GLIDER_INTERVAL
-                    spawned.append(RockGlider())
+                    glider = RockGlider()
+                    # RockGlider.__init__ não aceita o multiplicador; aplica
+                    # via reset com defaults None pra preservar randomização.
+                    glider.reset(
+                        aggressiveness_multiplier=self.aggressiveness_multiplier
+                    )
+                    spawned.append(glider)
                 while self._phase1_propeller_timer >= _PHASE1_PROPELLER_INTERVAL:
                     self._phase1_propeller_timer -= _PHASE1_PROPELLER_INTERVAL
                     spawned.append(MountainPropeller())

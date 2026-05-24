@@ -30,6 +30,7 @@ class HomingBullet:
         homing_speed: float | None = None,
         turn_rate: float = 5.0,
         locked_target: Any | None = None,
+        source_ship: Any | None = None,
     ) -> None:
         self.x = float(x)
         self.y = float(y)
@@ -43,6 +44,9 @@ class HomingBullet:
         # Alvo fixo: quando definido, o projétil ignora outros inimigos enquanto
         # o alvo estiver vivo. Ao morrer, cai no _find_best_target normal.
         self.locked_target: Any | None = locked_target
+        # Nave que originou o projétil. Em coop, evita que P1 e P2 (ambos
+        # Caçador) compartilhem o mesmo gate de "homing já em tela".
+        self.source_ship: Any | None = source_ship
 
         speed = (
             homing_speed

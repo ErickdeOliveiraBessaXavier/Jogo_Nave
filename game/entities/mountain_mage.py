@@ -193,6 +193,11 @@ class MountainStalagmite:
             _StalagState.ACTIVE,
         )
 
+    def collision_circle(self) -> tuple[float, float, float]:
+        """Geometria circular para chain_shot/AoE — fallback via rect."""
+        r = self.rect
+        return float(r.centerx), float(r.centery), float(max(r.width, r.height) / 2)
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -847,6 +852,11 @@ class MountainStalactite:
             _StalagState.RISING,
             _StalagState.ACTIVE,
         )
+
+    def collision_circle(self) -> tuple[float, float, float]:
+        """Geometria circular para chain_shot/AoE — fallback via rect."""
+        r = self.rect
+        return float(r.centerx), float(r.centery), float(max(r.width, r.height) / 2)
 
     # ------------------------------------------------------------------
     # Public API

@@ -26,6 +26,7 @@ class GuidedMeteor(Meteor):
         vy: float = 0,
         target_x: float = 0,
         target_y: float = 0,
+        aggressiveness_multiplier: float = 1.0,
     ):
         """
         Initialize guided meteor.
@@ -35,8 +36,11 @@ class GuidedMeteor(Meteor):
             x, y: Posição inicial
             vx, vy: Velocidade inicial (será modificada pelo sistema de guiamento)
             target_x, target_y: Posição inicial do alvo (será atualizada dinamicamente)
+            aggressiveness_multiplier: Escala de letalidade (>1.0 em dificuldades altas)
         """
-        super().__init__(size, x, y, vx, vy)
+        super().__init__(
+            size, x, y, vx, vy, aggressiveness_multiplier=aggressiveness_multiplier
+        )
 
         # Configurações de guiamento
         self.id = "guided_meteor"

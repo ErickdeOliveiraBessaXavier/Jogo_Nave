@@ -37,7 +37,7 @@ class RevivalBeacon:
     POST_REVIVE_INVULN_MS: Final[float] = 2000.0
     """Invuln aplicado à nave revivida (2s) para evitar morte imediata."""
 
-    LIVES_ON_REVIVE: Final[int] = 1
+    LIVES_ON_REVIVE: Final[int] = 3
     """Vidas com que o slot volta após o revive."""
 
     def __init__(

@@ -109,6 +109,16 @@ class LevelProgressionController:
         self._recompute_score_multiplier()
         self.reset_level_stats()
 
+    def set_player_count(self, count: int) -> None:
+        """Atualiza o número de jogadores ativos para escalar próximas fases.
+
+        Chamado em `_join_p2`/`_remove_p2_slot` quando o roster muda mid-game.
+        A fase ATUAL já foi gerada com o valor antigo (mudar inimigos vivos
+        seria confuso visualmente); o novo valor passa a valer no próximo
+        `get_adjusted_level_config`, ou seja, na transição de fase.
+        """
+        self._player_count = max(1, int(count))
+
     def get_adjusted_level_config(self, level_number: int) -> LevelConfig:
         """Carrega LevelConfig ajustado pelo meta-progression."""
         base = get_level_config(

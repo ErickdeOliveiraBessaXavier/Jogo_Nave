@@ -346,7 +346,10 @@ class BossFightController:
             boss.health = int(boss.health * enemy_health_multiplier)
             boss.max_health = boss.health
         elif boss_type == CloudArchmageBoss:
-            boss = CloudArchmageBoss(difficulty_multiplier=enemy_health_multiplier)
+            boss = CloudArchmageBoss(
+                difficulty_multiplier=enemy_health_multiplier,
+                aggressiveness_multiplier=self._em.aggressiveness_multiplier,
+            )
             self._em.boss = boss
         else:
             assert boss_type is not None

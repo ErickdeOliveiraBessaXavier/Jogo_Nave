@@ -78,6 +78,11 @@ class _GamepadSlotState:
     axis_right_x: int = XboxAxis.RIGHT_X
     axis_right_y: int = XboxAxis.RIGHT_Y
     axis_rt: int = XboxAxis.RT
+    # False até detectarmos o layout. No `JOYDEVICEADDED` os eventos
+    # de repouso dos eixos ainda não chegaram → detectar imediatamente
+    # devolve 0.0 e cai no fallback errado. Adiamos para o primeiro
+    # `JOYAXISMOTION` real, quando o SDL já reportou estados de repouso.
+    layout_detected: bool = False
 
 
 class GamepadManager:
@@ -185,9 +190,14 @@ class GamepadManager:
 
         ``prefer_slot_1=True`` reserva o gamepad pro slot 1 (candidato a P2),
         deixando o slot 0 vago — útil quando o caller (app.py) decide que P1
-        está jogando teclado e o novo controle deve ser do P2. Se o slot 1
-        já estiver ocupado ou inexistente, cai no comportamento padrão de
-        preencher o primeiro slot vazio.
+        está jogando teclado e o novo controle deve ser do P2.
+
+        Quando `prefer_slot_1=True` e o slot 1 já está ocupado, o controle
+        adicional NÃO ocupa o slot 0 — fica ocioso. Justificativa: o usuário
+        explicitamente marcou "P1 no teclado / P2 no controle"; preencher
+        slot 0 com gamepad anularia a preferência e dispararia o auto-supress
+        de teclado em `input.poll_held_for` (cenário "coop com 2 gamepads"),
+        deixando P1 sem input nenhum.
         """
         try:
             probe = pygame.joystick.Joystick(device_index)
@@ -197,9 +207,14 @@ class GamepadManager:
         if any(s and s.instance_id == iid for s in self._slots):
             return None  # já mapeado
         target_slot: Optional[int] = None
-        if prefer_slot_1 and MAX_GAMEPAD_SLOTS > 1 and self._slots[1] is None:
-            target_slot = 1
-        if target_slot is None:
+        if prefer_slot_1 and MAX_GAMEPAD_SLOTS > 1:
+            if self._slots[1] is None:
+                target_slot = 1
+            else:
+                # Slot 1 ocupado E user prefere teclado em slot 0 →
+                # não alocar 2º controle (fica ocioso até preferência mudar).
+                return None
+        else:
             target_slot = self._first_empty_slot()
         if target_slot is None:
             return None
@@ -213,7 +228,7 @@ class GamepadManager:
         return None
 
     def _claim_slot(self, slot: int, joy: Any) -> None:
-        """Inicializa o joystick, detecta layout e ocupa o slot informado."""
+        """Inicializa o joystick e ocupa o slot. Layout detectado depois."""
         try:
             joy.init()
         except pygame.error as e:
@@ -229,28 +244,31 @@ class GamepadManager:
             joy.get_numbuttons(),
             joy.get_numhats(),
         )
-        self._detect_axis_layout(slot)
+        # Não detectamos layout aqui — SDL ainda não emitiu os JOYAXISMOTION
+        # iniciais de repouso. Adiamos para o primeiro evento real
+        # (`_try_detect_axis_layout` chamado em `handle_event`).
 
-    def _detect_axis_layout(self, slot: int) -> None:
+    def _try_detect_axis_layout(self, slot: int) -> None:
         """Identifica se o controle do slot reporta layout XInput ou PS4.
 
-        Em pygame 2.x, triggers descansam em -1 (estado solto) e sticks
-        descansam em ~0. Layout XInput (Xbox 360/One/PS5 via SDL): LT=axis 2,
-        RS=axis 3/4. Layout PS4: RS=axis 2/3, LT=axis 4. Probe checa o valor
-        de repouso do axis 2: se < -0.5, é um trigger → XInput. Senão, é um
-        stick e o LT está no axis 4 → PS4-like.
+        Chamado a cada `JOYAXISMOTION` recebido enquanto o slot não tem
+        layout detectado. Em pygame 2.x, triggers descansam em -1 (estado
+        solto) e sticks descansam em ~0. Layout XInput (Xbox 360/One/PS5
+        via SDL): LT=axis 2, RS=axis 3/4. Layout PS4: RS=axis 2/3, LT=axis 4.
 
-        Bug capturado: sem detecção, a leitura de RS Y caía no axis 4 do
-        controle PS4 (que na verdade é o LT, em repouso -1) e empurrava
-        o cursor virtual constantemente para cima.
+        Probe checa o valor de repouso do axis 2: se < -0.5, é um trigger
+        → XInput. Senão, axis 4 < -0.5 → PS4-like. Sem nenhum dos dois,
+        aguarda novo evento (não chuta default).
+
+        Bug capturado anteriormente: detectar imediatamente no JOYDEVICEADDED
+        retornava 0.0 (SDL ainda não flushou) e caía no fallback errado,
+        bagunçando o mapeamento do RS no controle PS4 (axis 4 era o LT em
+        repouso -1, empurrando cursor virtual pra cima constantemente).
         """
         state = self._slots[slot]
-        if state is None:
+        if state is None or state.layout_detected:
             return
         joy = state.joystick
-        # Pump events força o SDL a flushar os valores iniciais para que
-        # get_axis() reflita o estado de repouso e não 0.0 padrão.
-        pygame.event.pump()
         try:
             axis2 = joy.get_axis(2)
             axis4 = joy.get_axis(4) if joy.get_numaxes() > 4 else 0.0
@@ -258,6 +276,7 @@ class GamepadManager:
             return
 
         if axis2 < -0.5:
+            state.layout_detected = True
             logger.info(
                 "Slot %d — layout XInput (LT=axis 2, RS=axis 3/4, RT=axis 5)",
                 slot,
@@ -266,18 +285,14 @@ class GamepadManager:
             state.axis_right_x = 2
             state.axis_right_y = 3
             state.axis_lt = 4
+            state.layout_detected = True
             logger.info(
                 "Slot %d — layout PS4-like (LT=axis 4, RS=axis 2/3, RT=axis 5)",
                 slot,
             )
-        else:
-            logger.warning(
-                "Slot %d — layout indetectável (axis2=%.2f axis4=%.2f). "
-                "Usando default XInput.",
-                slot,
-                axis2,
-                axis4,
-            )
+        # Se nenhum trigger ainda chegou a -0.5, aguardamos próximo evento.
+        # NÃO chutamos default — é melhor input ficar levemente atrasado
+        # nos primeiros milissegundos do que mapear axis errado.
 
     def handle_event(self, event: pygame.event.Event) -> None:
         """Processa eventos de hot-plug e cacheia estado contínuo (hat)."""
@@ -301,6 +316,18 @@ class GamepadManager:
             for state in self._slots:
                 if state and state.instance_id == event.instance_id:
                     state.hat_state = event.value
+                    return
+
+        if event.type == pygame.JOYAXISMOTION:
+            # Detecta layout no primeiro axis motion real do device.
+            # Após detectado, é no-op (guard em `_try_detect_axis_layout`).
+            for i, state in enumerate(self._slots):
+                if (
+                    state
+                    and state.instance_id == event.instance_id
+                    and not state.layout_detected
+                ):
+                    self._try_detect_axis_layout(i)
                     return
 
     # ------------------------------------------------------------------
@@ -330,6 +357,19 @@ class GamepadManager:
             if state and state.instance_id == instance_id:
                 return i
         return None
+
+    def slot_axis_lt(self, slot: int) -> int:
+        """Índice do axis LT para o slot dado (per-slot, não global).
+
+        XInput usa axis 2 para LT, PS4-like usa axis 4. Se cada controle
+        tem layout diferente, o `gp.axis_lt` global (sempre slot 0) rotearia
+        errado em coop. Use este para detectar charge shot / dash do slot
+        certo.
+        """
+        if not 0 <= slot < MAX_GAMEPAD_SLOTS:
+            return XboxAxis.LT
+        state = self._slots[slot]
+        return state.axis_lt if state else XboxAxis.LT
 
     @property
     def connected(self) -> bool:

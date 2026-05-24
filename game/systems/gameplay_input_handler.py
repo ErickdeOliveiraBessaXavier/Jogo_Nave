@@ -268,12 +268,11 @@ class GameplayInputHandler:
         gp_slot_idx = gp.slot_of_instance_id(instance_id)
         if gp_slot_idx is None:
             return
-        # Cada gamepad pode reportar `axis_lt` diferente (XInput vs PS4-like).
-        # Como o layout é detectado no spawn em propriedades da instância,
-        # consultamos o axis_lt geral (que é da slot 0). Para multiplayer
-        # robusto seria ideal expor axis_lt per-slot — por ora, ambos os
-        # gamepads costumam usar o mesmo layout em hardware comum.
-        if axis != gp.axis_lt:
+        # `slot_axis_lt(slot)` resolve per-slot — necessário em coop quando
+        # P1 e P2 usam controles de layouts diferentes (XInput vs PS4-like).
+        # Antes usávamos `gp.axis_lt` global (sempre slot 0), o que fazia
+        # eventos do LT do P2 nunca casarem se ele tinha layout diferente.
+        if axis != gp.slot_axis_lt(gp_slot_idx):
             return
 
         # Defesa contra falsa detecção, por slot.

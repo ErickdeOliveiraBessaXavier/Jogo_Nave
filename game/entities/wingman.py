@@ -207,11 +207,12 @@ class Wingman:
         # Usa MiniShipBullet para consistência
         bullets.append(
             MiniShipBullet(
-                cx - 2, 
-                cy - 2, 
-                math.cos(angle) * b_speed, 
+                cx - 2,
+                cy - 2,
+                math.cos(angle) * b_speed,
                 math.sin(angle) * b_speed,
-                damage=Config.MINI_SHIP_BULLET_DAMAGE * 1.5 # Wingman é um pouco mais forte
+                damage=Config.MINI_SHIP_BULLET_DAMAGE * 1.5,  # Wingman é um pouco mais forte
+                owner_ship=self.player,
             )
         )
         sound_manager.play_shot()

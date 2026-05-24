@@ -130,6 +130,7 @@ class Bullet:
         is_side_scroll: bool = False,
         direction: tuple[float, float] | None = None,
         ship_id: str = "padrao",
+        owner_ship: Optional[Any] = None,
     ):
         self.x, self.y = x, y
         self.damage = damage
@@ -150,6 +151,9 @@ class Bullet:
         self.vy = 0.0
         self.direction = direction
         self.ship_id = ship_id
+        # Nave que disparou — usado para atribuir kills ao Reverberador certo
+        # em coop (sem isso, o combo do P2 cresce com kills do P1 e vice-versa).
+        self.owner_ship: Optional[Any] = owner_ship
 
         # Rect persistente — atualizado in-place em vez de alocar por acesso.
         self._rect = pygame.Rect(int(x), int(y), 1, 1)
@@ -177,6 +181,7 @@ class Bullet:
         is_side_scroll: bool = False,
         direction: tuple[float, float] | None = None,
         ship_id: str = "padrao",
+        owner_ship: Optional[Any] = None,
     ):
         """Reconfigura a bala para reutilização no pool."""
         self.x, self.y = x, y
@@ -196,6 +201,7 @@ class Bullet:
         self.vy = 0.0
         self.direction = direction
         self.ship_id = ship_id
+        self.owner_ship = owner_ship
         self._configure_shape_and_velocity(direction)
         self._sync_rect()
 

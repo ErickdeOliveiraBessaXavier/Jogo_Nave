@@ -64,10 +64,21 @@ class Input:
         Slot 0 (P1) inclui teclado + gamepad. Demais slots leem apenas
         gamepad — P2/P3 jogam exclusivamente com controle, sem fallback
         para teclado para evitar conflito de input com P1.
+
+        Em modo coop (2 gamepads conectados), o teclado é suprimido
+        automaticamente para evitar conflito de inputs — P1 joga só com
+        o controle do slot 0, P2 só com o slot 1. Sem essa supressão,
+        teclas WASD vazariam pra P1 mesmo quando ele está usando gamepad.
         """
         held: set[str] = set()
 
-        if slot == 0:
+        coop_active = (
+            gamepad is not None
+            and gamepad.is_slot_active(0)
+            and gamepad.is_slot_active(1)
+        )
+
+        if slot == 0 and not coop_active:
             keys = pygame.key.get_pressed()
             if keys[pygame.K_LEFT] or keys[pygame.K_a]:
                 held.add("hold_left")

@@ -372,6 +372,15 @@ class SerpentBlock:
     def get_points_value(self) -> int:
         return self.POINTS_VALUE
 
+    def collision_circle(self) -> tuple[float, float, float]:
+        """Geometria circular do bloco (consumida por chain_shot, AoE, etc).
+
+        SerpentBlock é redondo: usa (cx, cy, RADIUS) como hitbox preciso.
+        Sem este método, sistemas que iteram inimigos genéricos quebram
+        ao topar com um bloco (AttributeError em `cand.collision_circle()`).
+        """
+        return float(self.cx), float(self.cy), float(self.RADIUS)
+
     def take_damage(self, amount: int) -> None:
         if self.dead:
             return

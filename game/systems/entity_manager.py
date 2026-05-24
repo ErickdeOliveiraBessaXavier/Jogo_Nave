@@ -84,10 +84,14 @@ class EntityManager:
     """Gerencia todas as entidades do jogo, coordenando update, draw e cleanup."""
 
     def __init__(
-        self, sound_manager: Any | None = None, is_side_scroll: bool = False
+        self,
+        sound_manager: Any | None = None,
+        is_side_scroll: bool = False,
+        aggressiveness_multiplier: float = 1.0,
     ) -> None:
         self.sound_manager = sound_manager
         self.is_side_scroll = is_side_scroll
+        self.aggressiveness_multiplier = aggressiveness_multiplier
 
         # Listas de projéteis e efeitos
         self.bullets: list[Bullet] = []
@@ -143,9 +147,15 @@ class EntityManager:
         self.black_holes: list[BlackHole] = []
 
         # Pools de performance
-        self.meteor_pool = MeteorPool(initial_size=100, is_side_scroll=is_side_scroll)
+        self.meteor_pool = MeteorPool(
+            initial_size=100,
+            is_side_scroll=is_side_scroll,
+            aggressiveness_multiplier=aggressiveness_multiplier,
+        )
         self.rock_glider_pool = RockGliderPool(
-            initial_size=24, is_side_scroll=is_side_scroll
+            initial_size=24,
+            is_side_scroll=is_side_scroll,
+            aggressiveness_multiplier=aggressiveness_multiplier,
         )
         self.bullet_pool = BulletPool(initial_size=50)
         self.explosion_pool = ExplosionPool(initial_size=50)
@@ -377,6 +387,7 @@ class EntityManager:
         y: float,
         direction: tuple[float, float],
         damage: int,
+        owner_ship: Any | None = None,
     ) -> BossLaser:
         # Mesmo comportamento visual/temporal do BossLaser, mas usado como poder do jogador.
         distance = float(max(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT) * 2)
@@ -387,6 +398,7 @@ class EntityManager:
             target_x=x + dx * distance,
             target_y=y + dy * distance,
             damage=damage,
+            owner_ship=owner_ship,
         )
         self.cacador_lasers.append(laser)
         return laser
@@ -398,11 +410,14 @@ class EntityManager:
         damage: int,
         direction: tuple[float, float] | None = None,
         locked_target: Any | None = None,
+        source_ship: Any | None = None,
     ) -> HomingBullet:
         """Spawna um tiro teleguiado consumível (Caçador).
 
         locked_target: inimigo que este projétil perseguirá exclusivamente enquanto
         estiver vivo. Permite distribuir alvos entre múltiplos projéteis simultâneos.
+        source_ship: nave que originou o tiro (P1 vs P2). Necessário em coop
+        para o gate "1 burst de homing por Caçador na tela".
         """
         homing = HomingBullet(
             x=x,
@@ -411,6 +426,7 @@ class EntityManager:
             is_side_scroll=self.is_side_scroll,
             direction=direction,
             locked_target=locked_target,
+            source_ship=source_ship,
         )
         self.homing_bullets.append(homing)
         return homing
@@ -1180,6 +1196,7 @@ class EntityManager:
         low_ammo: bool = False,
         direction: tuple[float, float] | None = None,
         ship_id: str = "padrao",
+        owner_ship: Any | None = None,
     ) -> Bullet:
         bullet = self.bullet_pool.get(
             x=x,
@@ -1192,6 +1209,7 @@ class EntityManager:
             is_side_scroll=self.is_side_scroll,
             direction=direction,
             ship_id=ship_id,
+            owner_ship=owner_ship,
         )
         if homing:
             target = self._assign_homing_target(bullet)

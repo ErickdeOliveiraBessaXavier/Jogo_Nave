@@ -735,7 +735,9 @@ class EnemySpawner:
                 EYE_NORMAL_X_MIN, Config.SCREEN_WIDTH - EYE_NORMAL_X_MAX_OFFSET
             )
             y = random.randint(EYE_NORMAL_Y_MIN, EYE_NORMAL_Y_MAX)
-        new_enemy = EyeEnemy(x, y)
+        new_enemy = EyeEnemy(
+            x, y, aggressiveness_multiplier=self.aggressiveness_multiplier
+        )
         new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
         entity_manager.enemies.append(new_enemy)
         return True
@@ -1175,7 +1177,16 @@ class EnemySpawner:
 
         entry_y = float(self._formation_entry_y.get(formation_type, 80.0))
         entity_manager.formations.append(
-            Formation(Alien, count, entry_x, entry_y, patterns)
+            Formation(
+                Alien,
+                count,
+                entry_x,
+                entry_y,
+                patterns,
+                enemy_kwargs={
+                    "aggressiveness_multiplier": self.aggressiveness_multiplier
+                },
+            )
         )
 
     def _update_guided_meteor_spawner(
@@ -1213,6 +1224,7 @@ class EnemySpawner:
             vy=GUIDED_METEOR_INITIAL_VY,
             target_x=player_x,
             target_y=player_y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
         )
         entity_manager.enemies.append(guided)
 

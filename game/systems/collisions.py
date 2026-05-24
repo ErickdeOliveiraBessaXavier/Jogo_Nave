@@ -112,6 +112,23 @@ class Collisions:
         return get_rect_mask(width, height)
 
     @staticmethod
+    def _credit_kill(projectile: Any) -> None:
+        """Notifica a nave que disparou o projétil sobre o kill.
+
+        Usa duck typing: tenta `owner_ship` (Bullet, MiniShipBullet, BossLaser),
+        `source_ship` (HomingBullet) e `ship` (PlayerLaser) nessa ordem. Sem
+        owner_ship rastreável (ex.: AoE de mina), kill não é atribuído — combo
+        do Reverberador não conta para "spray and pray".
+        """
+        owner = (
+            getattr(projectile, "owner_ship", None)
+            or getattr(projectile, "source_ship", None)
+            or getattr(projectile, "ship", None)
+        )
+        if owner is not None and hasattr(owner, "register_kill"):
+            owner.register_kill()
+
+    @staticmethod
     def _circles_collide(
         c1_x: float,
         c1_y: float,
@@ -813,6 +830,7 @@ class Collisions:
                     score_gain += result.points
                     if result.killed:
                         destroyed_count += 1
+                        self._credit_kill(b)
                         if result.points > 0:
                             score_events.append((b.x, b.y, result.points))
 
@@ -827,6 +845,7 @@ class Collisions:
                             already_hit=already_hit,
                             enemy_grid=enemy_grid,
                             entity_manager=entity_manager,
+                            owner_ship=getattr(b, "owner_ship", None),
                         )
                         score_gain += eg
                         destroyed_count += ed
@@ -878,6 +897,7 @@ class Collisions:
             score_gain += r.points
             if r.killed:
                 destroyed_count += 1
+                self._credit_kill(bullet)
                 if r.points > 0:
                     score_events.append((ncx, ncy, r.points))
 
@@ -933,6 +953,7 @@ class Collisions:
                     score_gain += result.points
                     if result.killed:
                         destroyed_count += 1
+                        self._credit_kill(b)
                         if result.points > 0:
                             score_events.append((b.x, b.y, result.points))
 
@@ -951,6 +972,7 @@ class Collisions:
         enemy_grid: SpatialGrid[Any],
         entity_manager: "EntityManager",
         extra_padding: int = 0,
+        owner_ship: Any | None = None,
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Aplica dano de um feixe (linha p1→p2) aos inimigos na grid."""
         score_gain = 0
@@ -974,6 +996,8 @@ class Collisions:
                     score_gain += result.points
                     if result.killed:
                         destroyed_count += 1
+                        if owner_ship is not None and hasattr(owner_ship, "register_kill"):
+                            owner_ship.register_kill()
                         if result.points > 0:
                             score_events.append((hx, hy, result.points))
                     break
@@ -1001,6 +1025,7 @@ class Collisions:
             sr: pygame.Rect = shield.rect
             damage = max(1, int(shield.damage * dt))
             pad = CollisionConstants.SPATIAL_QUERY_PADDING
+            owner = getattr(shield, "ship", None)
 
             candidates = enemy_grid.query(
                 sr.x - pad, sr.y - pad, sr.width + pad * 2, sr.height + pad * 2
@@ -1015,6 +1040,8 @@ class Collisions:
                 score_gain += result.points
                 if result.killed:
                     destroyed_count += 1
+                    if owner is not None and hasattr(owner, "register_kill"):
+                        owner.register_kill()
                     if result.points > 0:
                         score_events.append((hx, hy, result.points))
 
@@ -1042,7 +1069,9 @@ class Collisions:
             damage = max(1, int(beam.damage * dt))
             extra_pad = int(getattr(beam, "current_width", 0))
             g, d, ev = self._apply_continuous_beam_hits(
-                p1, p2, damage, enemy_grid, entity_manager, extra_padding=extra_pad
+                p1, p2, damage, enemy_grid, entity_manager,
+                extra_padding=extra_pad,
+                owner_ship=getattr(beam, "ship", None),
             )
             score_gain += g
             destroyed_count += d
@@ -1070,12 +1099,21 @@ class Collisions:
                 continue
             p1, p2 = link.get_collision_line()
             damage = max(1, int(link.damage * dt))
+            # Coop kill: ambos os jogadores recebem combo (mecânica do CoopLink
+            # é cooperativa por design — o feixe só existe se os 2 estão ativos).
             g, d, ev = self._apply_continuous_beam_hits(
-                p1, p2, damage, enemy_grid, entity_manager
+                p1, p2, damage, enemy_grid, entity_manager,
+                owner_ship=getattr(link, "ship1", None),
             )
             score_gain += g
             destroyed_count += d
             score_events.extend(ev)
+            # Atribuir também ao ship2 — sem dupla contagem porque o
+            # `_apply_continuous_beam_hits` interno só credita o owner_ship.
+            ship2 = getattr(link, "ship2", None)
+            if ship2 is not None and hasattr(ship2, "register_kill"):
+                for _ in range(d):
+                    ship2.register_kill()
 
         return score_gain, destroyed_count, score_events
 
@@ -1136,12 +1174,14 @@ class Collisions:
         already_hit: set[int],
         enemy_grid: "SpatialGrid[Any]",
         entity_manager: "EntityManager",
+        owner_ship: Any | None = None,
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Executa os saltos do Chain Shot iterativamente.
 
         Cada salto busca o inimigo vivo mais próximo dentro de CHAIN_SHOT_RADIUS
         que ainda não foi atingido nesta cadeia, aplica dano escalado e cria o
-        efeito visual ChainLightning.
+        efeito visual ChainLightning. Kills propagados são creditados ao
+        `owner_ship` (mesma nave que disparou a bala original).
         """
         score_gain = 0
         destroyed_count = 0
@@ -1199,6 +1239,8 @@ class Collisions:
             score_gain += result.points
             if result.killed:
                 destroyed_count += 1
+                if owner_ship is not None and hasattr(owner_ship, "register_kill"):
+                    owner_ship.register_kill()
                 if result.points > 0:
                     score_events.append((best_cx, best_cy, result.points))
 
@@ -1677,6 +1719,7 @@ class Collisions:
                     score_gain += result.points
                     if result.killed:
                         destroyed_count += 1
+                        self._credit_kill(laser)
                         if result.points > 0:
                             score_events.append((cx, cy, result.points))
         return score_gain, destroyed_count, score_events
@@ -1844,6 +1887,7 @@ class Collisions:
                     score_gain += result.points
                     if result.killed:
                         destroyed_count += 1
+                        self._credit_kill(laser)
                         if result.points > 0:
                             score_events.append((cx, cy, result.points))
         return score_gain, destroyed_count, score_events

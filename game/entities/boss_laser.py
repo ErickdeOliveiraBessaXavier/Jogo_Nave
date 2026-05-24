@@ -1,5 +1,5 @@
 import random
-from typing import List, Set
+from typing import Any, List, Set
 
 import pygame
 
@@ -16,6 +16,7 @@ class BossLaser:
         target_y: float,
         lifetime: float = Config.BOSS_LASER_LIFETIME,
         damage: int = 0,
+        owner_ship: Any | None = None,
     ):
         self.x = x
         self.y = y
@@ -26,6 +27,9 @@ class BossLaser:
         self.dead = False
         self.damage = damage
         self.hit_enemies: Set[int] = set()
+        # Para o caso de uso como cacador_laser (charge shot do Magneto),
+        # rastreia a nave de origem para atribuição de kill no combo.
+        self.owner_ship = owner_ship
 
         self.lifetime = lifetime
         self.expand_time = 0.1
