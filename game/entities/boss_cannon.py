@@ -40,6 +40,8 @@ class BossCannon:
         # Estado de carregamento (para efeito de brilho)
         self.charging = False
         self.charge_progress = 0.0
+        # Optional relative position inside boss (rel_x, rel_y), set by owner
+        self._rel: Tuple[float, float] | None = None
 
     def update_position(
         self, boss_x: float, boss_y: float, boss_width: float, boss_height: float
@@ -47,6 +49,11 @@ class BossCannon:
         """Atualiza a posição do canhão para ficar na parte inferior do boss."""
         self.x = boss_x + boss_width / 2
         self.y = boss_y + boss_height
+
+    def set_position(self, x: float, y: float) -> None:
+        """Define a posição do canhão explicitamente (uso para canhões laterais)."""
+        self.x = x
+        self.y = y
 
     def aim_at(self, target_x: float, target_y: float) -> None:
         """Atualiza a rotação do canhão para mirar no alvo."""
@@ -66,8 +73,12 @@ class BossCannon:
 
     def get_barrel_tip_position(self) -> Tuple[float, float]:
         """Retorna a posição da base do canhão (onde o laser sai)."""
-        # Laser sai da base circular, não da ponta do cano
-        return (self.x, self.y)
+        # Calcular a ponta do cano usando rotação e comprimento
+        cos_r = math.cos(self.rotation)
+        sin_r = math.sin(self.rotation)
+        tip_x = self.x + cos_r * self.barrel_length
+        tip_y = self.y + sin_r * self.barrel_length
+        return (tip_x, tip_y)
 
     def get_direction(self) -> pygame.Vector2:
         """Retorna o vetor de direção normalizado."""

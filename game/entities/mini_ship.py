@@ -8,7 +8,6 @@ from ..core.assets import get_image
 from ..core.config import config as Config
 from ..core.sound import sound_manager
 from .alien import Alien
-from .boss import Boss
 from .explosive_mine import ExplosiveMine
 from .eye_enemy import EyeEnemy
 from .meteor import Meteor

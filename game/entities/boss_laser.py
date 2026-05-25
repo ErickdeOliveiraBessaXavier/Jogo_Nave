@@ -17,11 +17,22 @@ class BossLaser:
         lifetime: float = Config.BOSS_LASER_LIFETIME,
         damage: int = 0,
         owner_ship: Any | None = None,
+        owner: Any | None = None,
+        start_delay: float = 0.0,
     ):
         self.x = x
         self.y = y
         self.target_x = target_x
         self.target_y = target_y
+        self.owner = owner
+        
+        # Guarda offsets se houver dono
+        if owner:
+            self.offset_x = x - owner.x
+            self.offset_y = y - owner.y
+            self.target_offset_x = target_x - owner.x
+            self.target_offset_y = target_y - owner.y
+
         self.w = 0
         self.max_w = 18
         self.dead = False
@@ -34,7 +45,8 @@ class BossLaser:
         self.lifetime = lifetime
         self.expand_time = 0.1
         self.hold_time = 0.3
-        self.timer = 0.0
+        # timer can be started negative to implement a start delay
+        self.timer = -float(start_delay)
 
         self.state = "alive"
         self.death_particles: List[DeathParticle] = []
@@ -53,6 +65,13 @@ class BossLaser:
 
     def update(self, dt: float) -> None:
         self.timer += dt
+        
+        # Seguir o dono se ele existir
+        if self.owner and not getattr(self.owner, "dead", False):
+            self.x = self.owner.x + self.offset_x
+            self.y = self.owner.y + self.offset_y
+            self.target_x = self.owner.x + self.target_offset_x
+            self.target_y = self.owner.y + self.target_offset_y
 
         if self.state == "alive":
             if self.timer >= self.lifetime:

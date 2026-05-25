@@ -34,11 +34,16 @@ class SquareMinionBoss(SquareProjectileBase):
         player_y: float,
         speed: float = 200.0,
         size: float = 30.0,
+        palette: dict[str, tuple[int, int, int]] | None = None,
     ):
         super().__init__(x, y, size)
         self.health = 1  # Can be destroyed
         self.w = size
         self.h = size
+
+        # Palette support
+        from .boss_pixel_map import COLORS_NORMAL
+        self.palette = palette or COLORS_NORMAL
 
         # Calculate direction towards player at spawn
         dx = player_x - x
@@ -120,21 +125,36 @@ class SquareMinionBoss(SquareProjectileBase):
         if self.dead or not self.visible:
             return
 
+        # Paleta de cores dinâmica
+        from .boss_pixel_map import PROJECTILE_COLOR_KEY, PROJECTILE_HIGHLIGHT_KEY, TRAIL_COLOR_KEY
+        
+        hull_color = self.palette.get(PROJECTILE_COLOR_KEY, (200, 0, 0))
+        energy_color = self.palette.get(PROJECTILE_HIGHLIGHT_KEY, (255, 255, 255))
+        trail_base = self.palette.get(TRAIL_COLOR_KEY, (255, 100, 0))
+
         # Desenhar partículas de trail primeiro (apenas em charging)
         if self.state == "charging" and self.trail_particles:
             for p in self.trail_particles:
                 if p.alpha > 0:
-                    color_intensity = int(128 + 127 * p.life)
-                    trail_color = (255, color_intensity // 2, 0)
+                    # Interpola a cor da trilha
+                    r = int(trail_base[0] * p.life + 255 * (1 - p.life))
+                    g = int(trail_base[1] * p.life + 50 * (1 - p.life))
+                    b = int(trail_base[2] * p.life)
                     draw_square_trail_particle(
-                        surface, p.x, p.y, p.size, trail_color, p.alpha
+                        surface, p.x, p.y, p.size, (r, g, b), p.alpha
                     )
 
-        # Color: Red for enemy
+        # Color: Pulsating based on energy color
         anim_value = (self.animation_timer + self.animation_offset) * 57.3
-        intensity = int(128 + 127 * abs(pygame.math.Vector2(1, 0).rotate(anim_value).x))
-        color = (intensity, 0, 0)  # Red pulsating
-        border_color = (255, 255, 255)
+        pulse = abs(pygame.math.Vector2(1, 0).rotate(anim_value).x)
+        
+        # Interpola entre hull_color e energy_color
+        r = int(hull_color[0] + (energy_color[0] - hull_color[0]) * pulse * 0.4)
+        g = int(hull_color[1] + (energy_color[1] - hull_color[1]) * pulse * 0.4)
+        b = int(hull_color[2] + (energy_color[2] - hull_color[2]) * pulse * 0.4)
+        color = (r, g, b)
+        
+        border_color = energy_color
 
         rotated_corners = rotated_square_corners(
             self.x, self.y, self.size / 2, math.radians(self.rotation)

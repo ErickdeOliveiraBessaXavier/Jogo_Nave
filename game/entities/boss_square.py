@@ -32,10 +32,14 @@ class BossSquare(SquareProjectileBase):
         orbit_angle: float = 0,
         orbit_speed: float = 0,
         speed_var: float = 1.0,
+        palette: dict[str, tuple[int, int, int]] | None = None,
     ):
         super().__init__(x, y, size)
         self.vx = vx
         self.vy = vy
+
+        # Palette support
+        self.palette = palette
 
         # Orbital attributes
         self.is_orbital = is_orbital
@@ -126,20 +130,41 @@ class BossSquare(SquareProjectileBase):
         if self.dead:
             return
 
+        # Paleta de cores dinâmica
+        from .boss_pixel_map import PROJECTILE_COLOR_KEY, PROJECTILE_HIGHLIGHT_KEY, TRAIL_COLOR_KEY
+        
+        # Cores padrão caso não haja paleta
+        hull_color = (255, 0, 0)
+        energy_color = (255, 255, 100)
+        trail_base = (255, 50, 0)
+        
+        if self.palette:
+            hull_color = self.palette.get(PROJECTILE_COLOR_KEY, hull_color)
+            energy_color = self.palette.get(PROJECTILE_HIGHLIGHT_KEY, energy_color)
+            trail_base = self.palette.get(TRAIL_COLOR_KEY, trail_base)
+
         # Desenhar partículas de trail primeiro (atrás do quadrado)
         for p in self.trail_particles:
             if p.alpha > 0:
-                color_intensity = int(128 + 127 * p.life)
-                trail_color = (255, color_intensity, int(color_intensity * 0.5))
+                # Interpola a cor da trilha baseada na vida da partícula
+                r = int(trail_base[0] * p.life + 255 * (1 - p.life))
+                g = int(trail_base[1] * p.life + 100 * (1 - p.life))
+                b = int(trail_base[2] * p.life)
                 draw_square_trail_particle(
-                    surface, p.x, p.y, p.size, trail_color, p.alpha
+                    surface, p.x, p.y, p.size, (r, g, b), p.alpha
                 )
 
         # Calcular cor com intensidade alternada (usa offset para dessincronizar)
         anim_value = self.animation_timer + self.animation_offset
-        intensity = int(128 + 127 * abs(math.cos(anim_value)))
-        color = (255, intensity, intensity)
-        border_color = (255, 255, 255)
+        cos_val = abs(math.cos(anim_value))
+        
+        # Interpola entre hull_color e energy_color para efeito pulsante
+        r = int(hull_color[0] + (energy_color[0] - hull_color[0]) * cos_val * 0.3)
+        g = int(hull_color[1] + (energy_color[1] - hull_color[1]) * cos_val * 0.3)
+        b = int(hull_color[2] + (energy_color[2] - hull_color[2]) * cos_val * 0.3)
+        color = (r, g, b)
+        
+        border_color = energy_color
 
         rotated_corners = rotated_square_corners(
             self.x, self.y, self.size / 2, math.radians(self.rotation)

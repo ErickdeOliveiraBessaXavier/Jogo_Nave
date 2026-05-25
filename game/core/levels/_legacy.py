@@ -1,6 +1,6 @@
+import copy
 import logging
 import math
-import copy
 import random
 import zlib
 from dataclasses import dataclass
@@ -1683,9 +1683,10 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         enemies_to_clear=0,
         theme_name="Tutorial",
         # boss_type=SlimeBoss,
-          boss_type=SpikeBoss,
+        # boss_type=SpikeBoss,
         # boss_type=StoneGolemBoss,
         # boss_type=MountainSerpentBoss,
+        boss_type=Boss,
         score_multiplier=1.0,
     ),
     # Nível 3: Primeiro Boss - Mountain Serpent (Montanhas)

@@ -1,11 +1,14 @@
 import random
-from typing import List
+from typing import List, Optional, TYPE_CHECKING
 
 import pygame
 
 from ..core import colors
 from .laser_utils import compute_laser_width
 from .particle_types import DeathParticle
+
+if TYPE_CHECKING:
+    from .spike_boss import SpikeBoss
 
 
 class SpikeBossLaser:
@@ -21,18 +24,27 @@ class SpikeBossLaser:
         target_y: float,
         width: int = 120,
         lifetime: float = 1.5,
+        owner: Optional["SpikeBoss"] = None,
     ):
         """
         Args:
-            x: Posição X inicial (centro do boss)
-            y: Posição Y inicial (parte inferior do boss)
+            x: Posição X inicial (centro do laser)
+            y: Posição Y inicial (parte inferior da abertura)
             target_y: Posição Y final (fundo da tela)
             width: Largura do laser (mesma do boss)
             lifetime: Duração total do laser
+            owner: Referência ao SpikeBoss para seguir sua posição
         """
         self.x = x
         self.y = y
         self.target_y = target_y
+        self.owner = owner
+        
+        # Guarda offsets se houver dono
+        if owner:
+            self.offset_x = x - owner.x
+            self.offset_y = y - owner.y
+
         self.w = 0
         self.max_w = width * 0.70
         self.dead = False
@@ -59,6 +71,11 @@ class SpikeBossLaser:
     def update(self, dt: float):
         self.timer += dt
         self.pulse_timer += dt * 10  # Velocidade da pulsação
+
+        # Seguir o dono se ele existir
+        if self.owner and not self.owner.dead:
+            self.x = self.owner.x + self.offset_x
+            self.y = self.owner.y + self.offset_y
 
         if self.state == "alive":
             if self.timer >= self.lifetime:

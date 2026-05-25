@@ -138,7 +138,9 @@ class ActiveUpgrade:
         return getattr(ctx, "scene", None)
 
     @staticmethod
-    def _ctx_attr(ctx: Optional[UpgradeContextProtocol], name: str, default: Any = None) -> Any:
+    def _ctx_attr(
+        ctx: Optional[UpgradeContextProtocol], name: str, default: Any = None
+    ) -> Any:
         return getattr(ctx, name, default)
 
     def additional_can_activate(self, _ctx: UpgradeContextProtocol) -> bool:
@@ -153,23 +155,30 @@ class ActiveUpgrade:
     def on_after_activate(self, ctx: UpgradeContextProtocol) -> None:
         try:
             sm = self._ctx_attr(ctx, "sound_manager")
-            if sm: sm.play_upgrade_activate()
-        except: pass
+            if sm:
+                sm.play_upgrade_activate()
+        except Exception:
+            pass
 
     def on_denied(self, ctx: UpgradeContextProtocol) -> None:
+
         try:
             sm = self._ctx_attr(ctx, "sound_manager")
-            if sm: sm.play_upgrade_denied()
-        except: pass
+            if sm:
+                sm.play_upgrade_denied()
+        except Exception:
+            pass
 
     def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         pass
 
     def get_effective_cooldown(self, ctx: Optional[UpgradeContextProtocol]) -> float:
         cd = self.meta.base_cooldown
-        if self._ctx_attr(ctx, "god_mode", False): return 1.0
+        if self._ctx_attr(ctx, "god_mode", False):
+            return 1.0
         ds = self._ctx_attr(ctx, "difficulty_settings")
-        if ds and "no_powerups" in ds.get("special_rules", []): cd *= 1.5
+        if ds and "no_powerups" in ds.get("special_rules", []):
+            cd *= 1.5
         return cd
 
     def get_effective_duration(self, _ctx: Optional[UpgradeContextProtocol]) -> float:
@@ -198,8 +207,10 @@ class ShieldBurstUpgrade(ActiveUpgrade):
         return False
 
     def can_activate(self, ctx: UpgradeContextProtocol) -> bool:
-        if self._monitoring_shield: return False
-        if self.cooldown_left > 0.0: return False
+        if self._monitoring_shield:
+            return False
+        if self.cooldown_left > 0.0:
+            return False
         return self.additional_can_activate(ctx)
 
     def activate(self, ctx: UpgradeContextProtocol) -> bool:
@@ -234,9 +245,11 @@ class HealUpgrade(ActiveUpgrade):
         self.usage_count = 0
 
     def additional_can_activate(self, ctx: UpgradeContextProtocol) -> bool:
-        if self.usage_count >= 2: return False
+        if self.usage_count >= 2:
+            return False
         ship = self._ctx_ship(ctx)
-        if not ship: return False
+        if not ship:
+            return False
         cap = getattr(ship, "max_lives", 5)
         return getattr(ship, "lives", 0) < cap
 
@@ -248,7 +261,9 @@ class HealUpgrade(ActiveUpgrade):
             if scene and hasattr(scene, "_change_lives"):
                 scene._change_lives(1)
             else:
-                ship.lives = min(getattr(ship, "max_lives", 5), getattr(ship, "lives", 0) + 1)
+                ship.lives = min(
+                    getattr(ship, "max_lives", 5), getattr(ship, "lives", 0) + 1
+                )
 
 
 class EMPUpgrade(ActiveUpgrade):
@@ -258,21 +273,24 @@ class EMPUpgrade(ActiveUpgrade):
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         em = self._ctx_entity_manager(ctx)
         ship = self._ctx_ship(ctx)
-        if not em: return
+        if not em:
+            return
         duration = self.get_effective_duration(ctx)
         if ship and hasattr(em, "spawn_emp_wave"):
-            em.spawn_emp_wave(ship.x + ship.w/2, ship.y + ship.h/2)
+            em.spawn_emp_wave(ship.x + ship.w / 2, ship.y + ship.h / 2)
         setattr(em, "emp_active", True)
         setattr(em, "emp_timer", duration)
         # Fator de lentidão: o refactor parou de setá-lo e o _emp_state lia 1.0
         # → o EMP não desacelerava mais. Import local evita ciclo com
         # upgrades_config (que importa UpgradeType deste módulo).
         from .upgrades_config import EMP_SLOW_FACTOR
+
         setattr(em, "emp_slow_factor", float(EMP_SLOW_FACTOR))
 
     def on_expire(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         em = self._ctx_entity_manager(ctx)
-        if em: setattr(em, "emp_active", False)
+        if em:
+            setattr(em, "emp_active", False)
 
 
 class BlinkDashUpgrade(ActiveUpgrade):
@@ -314,7 +332,7 @@ class GravityBombUpgrade(ActiveUpgrade):
         if not em or not hasattr(em, "spawn_black_hole"):
             return
         sw, sh = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-        min_dist_sq = self.VORTEX_MIN_DISTANCE ** 2
+        min_dist_sq = self.VORTEX_MIN_DISTANCE**2
         best_pos = None
         for _ in range(self.VORTEX_PLACEMENT_ATTEMPTS):
             rx = random.uniform(sw * 0.1, sw * 0.9)
@@ -331,7 +349,9 @@ class GravityBombUpgrade(ActiveUpgrade):
                 random.uniform(sh * 0.1, sh * 0.9),
             )
         self._spawned_positions.append(best_pos)
-        em.spawn_black_hole(best_pos[0], best_pos[1], self.VORTEX_DURATION, is_vortex=True)
+        em.spawn_black_hole(
+            best_pos[0], best_pos[1], self.VORTEX_DURATION, is_vortex=True
+        )
 
 
 class ChainLightningUpgrade(ActiveUpgrade):
@@ -412,7 +432,9 @@ class BlackHoleUpgrade(ActiveUpgrade):
         ship = self._ctx_ship(ctx)
         em = self._ctx_entity_manager(ctx)
         if ship and em and hasattr(em, "spawn_black_hole"):
-            em.spawn_black_hole(ship.x + ship.w/2, ship.y - 100, self.get_effective_duration(ctx))
+            em.spawn_black_hole(
+                ship.x + ship.w / 2, ship.y - 100, self.get_effective_duration(ctx)
+            )
 
 
 class AirStrikeUpgrade(ActiveUpgrade):
@@ -420,7 +442,7 @@ class AirStrikeUpgrade(ActiveUpgrade):
         ship = self._ctx_ship(ctx)
         em = self._ctx_entity_manager(ctx)
         if ship and em and hasattr(em, "spawn_air_strike"):
-            em.spawn_air_strike(ship.x + ship.w/2, ship.y - 200)
+            em.spawn_air_strike(ship.x + ship.w / 2, ship.y - 200)
 
 
 class CannonTowerUpgrade(ActiveUpgrade):
@@ -486,7 +508,8 @@ def upgrade_factory(upgrade_type: UpgradeType) -> ActiveUpgrade:
         UpgradeType.COOP_LINK: CoopLinkUpgrade,
     }
     cls = factories.get(upgrade_type)
-    if cls: return cls(UPGRADES_META[upgrade_type])
+    if cls:
+        return cls(UPGRADES_META[upgrade_type])
     raise ValueError(f"Unknown upgrade type: {upgrade_type}")
 
 
@@ -496,12 +519,72 @@ def create_upgrade(upgrade_type: UpgradeType) -> ActiveUpgrade:
 
 
 UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
-    UpgradeType.SHIELD_BURST: UpgradeMeta(UpgradeType.SHIELD_BURST, "SHLD", "Escudo absorve 1 hit.", "shield_burst", UpgradeCategory.DEFENSIVE, 45, 0, None, 2),
-    UpgradeType.HEAL: UpgradeMeta(UpgradeType.HEAL, "HEAL", "Restaura 1 vida.", "heal", UpgradeCategory.DEFENSIVE, 60, 0, None, 1),
-    UpgradeType.EMP: UpgradeMeta(UpgradeType.EMP, "EMP", "Onda que desacelera inimigos.", "emp", UpgradeCategory.UTILITY, 50, 10, None, 2),
-    UpgradeType.BLINK_DASH: UpgradeMeta(UpgradeType.BLINK_DASH, "DASH", "Dash curto invulnerável.", "blink_dash", UpgradeCategory.DEFENSIVE, 15, 0.4, None, 1),
-    UpgradeType.GRAVITY_BOMB: UpgradeMeta(UpgradeType.GRAVITY_BOMB, "GRAV", "5 mini-vórtices corrosivos (15s).", "gravity_bomb", UpgradeCategory.UTILITY, 60, 15, None, 2),
-    UpgradeType.CHAIN_LIGHTNING: UpgradeMeta(UpgradeType.CHAIN_LIGHTNING, "LIGH", "Tiros que saltam entre inimigos.", "chain_lightning", UpgradeCategory.OFFENSIVE, 60, 10, None, 2),
+    UpgradeType.SHIELD_BURST: UpgradeMeta(
+        UpgradeType.SHIELD_BURST,
+        "SHLD",
+        "Escudo absorve 1 hit.",
+        "shield_burst",
+        UpgradeCategory.DEFENSIVE,
+        45,
+        0,
+        None,
+        2,
+    ),
+    UpgradeType.HEAL: UpgradeMeta(
+        UpgradeType.HEAL,
+        "HEAL",
+        "Restaura 1 vida.",
+        "heal",
+        UpgradeCategory.DEFENSIVE,
+        60,
+        0,
+        None,
+        1,
+    ),
+    UpgradeType.EMP: UpgradeMeta(
+        UpgradeType.EMP,
+        "EMP",
+        "Onda que desacelera inimigos.",
+        "emp",
+        UpgradeCategory.UTILITY,
+        50,
+        10,
+        None,
+        2,
+    ),
+    UpgradeType.BLINK_DASH: UpgradeMeta(
+        UpgradeType.BLINK_DASH,
+        "DASH",
+        "Dash curto invulnerável.",
+        "blink_dash",
+        UpgradeCategory.DEFENSIVE,
+        15,
+        0.4,
+        None,
+        1,
+    ),
+    UpgradeType.GRAVITY_BOMB: UpgradeMeta(
+        UpgradeType.GRAVITY_BOMB,
+        "GRAV",
+        "5 mini-vórtices corrosivos (15s).",
+        "gravity_bomb",
+        UpgradeCategory.UTILITY,
+        60,
+        15,
+        None,
+        2,
+    ),
+    UpgradeType.CHAIN_LIGHTNING: UpgradeMeta(
+        UpgradeType.CHAIN_LIGHTNING,
+        "LIGH",
+        "Tiros que saltam entre inimigos.",
+        "chain_lightning",
+        UpgradeCategory.OFFENSIVE,
+        60,
+        10,
+        None,
+        2,
+    ),
     UpgradeType.ORBITAL_SHIELD: UpgradeMeta(
         UpgradeType.ORBITAL_SHIELD,
         "ORB",
@@ -513,7 +596,17 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         None,
         2,
     ),
-    UpgradeType.PLASMA_BEAM: UpgradeMeta(UpgradeType.PLASMA_BEAM, "BEAM", "Lança de Plasma com explosão final.", "plasma_beam", UpgradeCategory.OFFENSIVE, 110, 5, None, 3),
+    UpgradeType.PLASMA_BEAM: UpgradeMeta(
+        UpgradeType.PLASMA_BEAM,
+        "BEAM",
+        "Lança de Plasma com explosão final.",
+        "plasma_beam",
+        UpgradeCategory.OFFENSIVE,
+        110,
+        5,
+        None,
+        3,
+    ),
     UpgradeType.WINGMAN: UpgradeMeta(
         UpgradeType.WINGMAN,
         "WING",
@@ -525,10 +618,50 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         None,
         2,
     ),
-    UpgradeType.BERSERK: UpgradeMeta(UpgradeType.BERSERK, "BERS", "Rajadas rotativas (Estrela Espiral).", "berserk", UpgradeCategory.OFFENSIVE, 120, 8, None, 3),
-    UpgradeType.BLACK_HOLE: UpgradeMeta(UpgradeType.BLACK_HOLE, "HOLE", "Buraco negro móvel Ultimate.", "black_hole", UpgradeCategory.OFFENSIVE, 120, 8, None, 3),
-    UpgradeType.AIR_STRIKE: UpgradeMeta(UpgradeType.AIR_STRIKE, "AIR", "Bombardeio aéreo massivo.", "air_strike", UpgradeCategory.OFFENSIVE, 180, 0, 30, 3),
-    UpgradeType.CANNON_TOWER: UpgradeMeta(UpgradeType.CANNON_TOWER, "CANNON", "Torres de minas estáticas.", "cannon_tower", UpgradeCategory.OFFENSIVE, 200, 0, None, 3),
+    UpgradeType.BERSERK: UpgradeMeta(
+        UpgradeType.BERSERK,
+        "BERS",
+        "Rajadas rotativas (Estrela Espiral).",
+        "berserk",
+        UpgradeCategory.OFFENSIVE,
+        120,
+        8,
+        None,
+        3,
+    ),
+    UpgradeType.BLACK_HOLE: UpgradeMeta(
+        UpgradeType.BLACK_HOLE,
+        "HOLE",
+        "Buraco negro móvel Ultimate.",
+        "black_hole",
+        UpgradeCategory.OFFENSIVE,
+        120,
+        8,
+        None,
+        3,
+    ),
+    UpgradeType.AIR_STRIKE: UpgradeMeta(
+        UpgradeType.AIR_STRIKE,
+        "AIR",
+        "Bombardeio aéreo massivo.",
+        "air_strike",
+        UpgradeCategory.OFFENSIVE,
+        180,
+        0,
+        30,
+        3,
+    ),
+    UpgradeType.CANNON_TOWER: UpgradeMeta(
+        UpgradeType.CANNON_TOWER,
+        "CANNON",
+        "Torres de minas estáticas.",
+        "cannon_tower",
+        UpgradeCategory.OFFENSIVE,
+        200,
+        0,
+        None,
+        3,
+    ),
     UpgradeType.COOP_LINK: UpgradeMeta(
         UpgradeType.COOP_LINK,
         "LINK",
@@ -542,8 +675,10 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     ),
 }
 
+
 def list_all_upgrades_meta() -> list[UpgradeMeta]:
     return list(UPGRADES_META.values())
+
 
 def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
     mapping = {
@@ -561,5 +696,6 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
         "berserk": "Z",
         "link": "C",
     }
-    if icon_id and icon_id in mapping: return mapping[icon_id]
+    if icon_id and icon_id in mapping:
+        return mapping[icon_id]
     return upgrade_name[0].upper() if upgrade_name else "?"

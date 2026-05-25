@@ -79,7 +79,7 @@ class ShootingSystem:
                     del self._cooldowns[ship_id]
                 else:
                     self._cooldowns[ship_id] = new_cd
-        
+
         if self._cooldowns_berserk:
             for ship_id in list(self._cooldowns_berserk.keys()):
                 new_cd = self._cooldowns_berserk[ship_id] - dt
@@ -97,10 +97,12 @@ class ShootingSystem:
                 self._charged_laser_channel.stop()
                 self._charged_laser_channel = None
 
-    def fire_berserk(self, ship: Ship, player_damage_multiplier: float, dt: float) -> None:
+    def fire_berserk(
+        self, ship: Ship, player_damage_multiplier: float, dt: float
+    ) -> None:
         """Dispara projéteis em leque rotativo (Estrela Espiral) durante o modo Berserk."""
         ship_id = id(ship)
-        
+
         # Decrementar o timer de cooldown do berserk se ele existir (fallback caso update não tenha rodado)
         if ship_id in self._cooldowns_berserk:
             # Note: O update() já decrementa, mas em PlayingScene o fire_berserk é chamado antes do update do ShootingSystem
@@ -116,12 +118,12 @@ class ShootingSystem:
 
         cx = ship.x + ship.w / 2
         cy = ship.y + ship.h / 2
-        
+
         # Bônus de dano Berserk (1.5x)
         adjusted_damage = int(
-            Config.BULLET_BASE_DAMAGE 
-            * player_damage_multiplier 
-            * ship.damage_multiplier 
+            Config.BULLET_BASE_DAMAGE
+            * player_damage_multiplier
+            * ship.damage_multiplier
             * 1.5
         )
 
@@ -131,16 +133,17 @@ class ShootingSystem:
             angle_deg = (i * 90.0) + self._berserk_rotation
             angle_rad = math.radians(angle_deg)
             dir_vec = (math.cos(angle_rad), math.sin(angle_rad))
-            
+
             # Usando BulletPool via EntityManager.spawn_bullet
             self._em.spawn_bullet(
-                cx, cy,
+                cx,
+                cy,
                 damage=adjusted_damage,
                 direction=dir_vec,
                 ship_id="berserk",
                 owner_ship=ship,
             )
-        
+
         # Efeito sonoro
         sound_manager.play_shot()
 
