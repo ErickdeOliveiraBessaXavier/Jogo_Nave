@@ -45,6 +45,9 @@ class Boss(BossHitMixin):
     FRENZY_LASER_ANGLES: List[float] = [-0.349, 0, 0.349]
     LASER_DISTANCE: int = 2000
     MAX_CHARGE_RADIUS: float = 15.0
+    PRE_FIRE_LOCK_RELEASE_TIME: float = 1.0
+    _FRENZY_SALVO_INTERVAL: float = 0.85
+    _FRENZY_SALVO_AIM_WINDOW: float = 0.25
 
     def __init__(
         self, x: float, y: float, health: int = Config.BOSS_HEALTH, hit_score: int = 50
@@ -78,6 +81,10 @@ class Boss(BossHitMixin):
         self._shake_offset_x: int = 0
         self._shake_offset_y: int = 0
         self.pending_frenzy = False
+        # Padrão de ataque escolhido no início de cada ciclo (AIMING). None fora
+        # do frenzy ou quando não há 3 canhões. Valores: "wall" | "salvo" | "single".
+        self._frenzy_pattern: str | None = None
+        self._active_salvo_cannon_idx: int | None = None
         self.square_attack_timer = Timer(random.uniform(2.0, 3.5))
 
         # Attack system
@@ -91,6 +98,7 @@ class Boss(BossHitMixin):
 
         self.particle_system = BossParticleSystem()
         self.fired_lasers: List[BossLaser] = []
+        self._sound_events: List[BossSoundEvent] = []
 
         # Orientation system
         self.rotation_angle = 0.0
@@ -171,31 +179,50 @@ class Boss(BossHitMixin):
                 self.current_palette[key] = (r, g, b)
 
     def _update_orientation(self, player_x: float, player_y: float) -> None:
-        """Update cannon orientation."""
-        # Update central cannon position and aim; lateral cannons aim from their fixed positions
-        if self.cannons and len(self.cannons) >= 1:
-            # assume last is central if frenzy created
-            central = self.cannons[-1]
-            central.update_position(self.x, self.y, self.w, self.h)
-            central.aim_at(player_x, player_y)
-            # lateral cannons aim independently (they keep explicit positions)
-            for c in self.cannons[:-1]:
-                # if cannon has a relative offset, update its absolute position so it follows the boss
-                rel = getattr(c, "_rel", None)
-                if rel is not None:
-                    relx, rely = rel
-                    c.set_position(self.x + relx * self.w, self.y + rely * self.h)
-                c.aim_at(player_x, player_y)
-            # face_center remains the central barrel tip for legacy behaviors
-            self.face_center.x, self.face_center.y = central.get_barrel_tip_position()
-            self.facing_direction = central.get_direction()
-        else:
+        """Atualiza a mira de cada canhão e o vetor de face."""
+        if not self.cannons or len(self.cannons) < 1:
             self.cannon.update_position(self.x, self.y, self.w, self.h)
             self.cannon.aim_at(player_x, player_y)
             self.face_center.x, self.face_center.y = (
                 self.cannon.get_barrel_tip_position()
             )
             self.facing_direction = self.cannon.get_direction()
+            return
+
+        central = self.cannons[-1]
+        central.update_position(self.x, self.y, self.w, self.h)
+
+        # Reposiciona canhões laterais conforme o offset relativo do boss.
+        for c in self.cannons[:-1]:
+            rel = getattr(c, "_rel", None)
+            if rel is not None:
+                relx, rely = rel
+                c.set_position(self.x + relx * self.w, self.y + rely * self.h)
+
+        # Todos os canhões seguem o jogador o tempo todo, exceto no padrão
+        # wall, onde os laterais ficam presos a um desvio angular fixo.
+        central.aim_at(player_x, player_y)
+        wall_telegraph = self._frenzy_pattern == "wall" and self.frenzy_mode
+        if wall_telegraph:
+            base_dir = self.cannons[-1].get_direction()
+            side_angle = self.FRENZY_LASER_ANGLES[2]
+            left_dir = pygame.Vector2(
+                base_dir.x * math.cos(-side_angle) - base_dir.y * math.sin(-side_angle),
+                base_dir.x * math.sin(-side_angle) + base_dir.y * math.cos(-side_angle),
+            )
+            right_dir = pygame.Vector2(
+                base_dir.x * math.cos(side_angle) - base_dir.y * math.sin(side_angle),
+                base_dir.x * math.sin(side_angle) + base_dir.y * math.cos(side_angle),
+            )
+            self.cannons[0].rotation = math.atan2(left_dir.y, left_dir.x)
+            self.cannons[1].rotation = math.atan2(right_dir.y, right_dir.x)
+        else:
+            for c in self.cannons[:-1]:
+                c.aim_at(player_x, player_y)
+
+        # face_center continua o tip do canhão central (efeitos legados de carga).
+        self.face_center.x, self.face_center.y = central.get_barrel_tip_position()
+        self.facing_direction = central.get_direction()
 
     def _init_attack_system(self) -> None:
         self.attack_timer = Timer(random.uniform(*Config.BOSS_CALM_ATTACK_INTERVAL))
@@ -255,14 +282,10 @@ class Boss(BossHitMixin):
             else Config.BOSS_CHARGE_DURATION
         )
 
-    def update_boss(
-        self, dt: float, ctx: "BossUpdateContext"
-    ) -> "BossUpdateResult":
+    def update_boss(self, dt: float, ctx: "BossUpdateContext") -> "BossUpdateResult":
         from ..systems.boss_context import BossUpdateResult
 
-        lasers, squares, sound_events = self.update(
-            dt, ctx.player_x, ctx.player_y
-        )
+        lasers, squares, sound_events = self.update(dt, ctx.player_x, ctx.player_y)
         result = BossUpdateResult(
             new_lasers=list(lasers),
             new_squares=list(squares),
@@ -321,7 +344,11 @@ class Boss(BossHitMixin):
                 if square.state == "preparing" and square.prepare_timer >= 1.0:
                     square.state = "ready_to_launch"
 
-        if player_y is not None:
+        if player_y is not None and self.state in (
+            BossState.AIMING,
+            BossState.CHARGING,
+            BossState.CONVERGING,
+        ):
             self._update_orientation(player_x, player_y)
 
         if self.frenzy_shake_timer <= 0:
@@ -407,7 +434,20 @@ class Boss(BossHitMixin):
         if self.frenzy_shake_timer <= 0:
             self.attack_timer.update(dt)
             if self.attack_timer.done():
+                # Decide o padrão antes de entrar em AIMING — _update_orientation
+                # precisa saber para mirar os canhões nos targets do muro.
+                self._frenzy_pattern = self._select_frenzy_pattern()
                 self.state = BossState.AIMING
+
+    def _select_frenzy_pattern(self) -> str:
+        """Sorteia entre os padrões de tiro frenzy (3 canhões).
+
+        Fora do frenzy ou sem 3 canhões, devolve "single" — o caminho legado de
+        laser único de `_create_laser_pattern` é tomado em `_create_lasers_from_data`.
+        """
+        if not self.frenzy_mode or len(self.cannons) < 3:
+            return "single"
+        return random.choice(["wall", "salvo"])
 
     def _update_charging_state(self, dt: float) -> None:
         acc_dt = self._get_accelerated_dt(dt)
@@ -445,6 +485,24 @@ class Boss(BossHitMixin):
         return []
 
     def _prepare_laser_data(self) -> dict[str, Any]:
+        pattern = self._frenzy_pattern or "single"
+        if pattern in ("wall", "salvo") and (
+            not self.frenzy_mode or len(self.cannons) < 3
+        ):
+            pattern = "single"
+
+        locked_cannons: List[dict[str, Any]] = []
+        for cannon in self.cannons:
+            tip_x, tip_y = cannon.get_barrel_tip_position()
+            direction = cannon.get_direction()
+            locked_cannons.append(
+                {
+                    "tip_x": tip_x,
+                    "tip_y": tip_y,
+                    "dir_x": direction.x,
+                    "dir_y": direction.y,
+                }
+            )
         return {
             "face_x": self.face_center.x,
             "face_y": self.face_center.y,
@@ -453,29 +511,124 @@ class Boss(BossHitMixin):
             if self.frenzy_mode
             else Config.BOSS_LASER_LIFETIME,
             "frenzy_mode": self.frenzy_mode,
+            "pattern": pattern,
+            # Estado da salva sequencial — só usado quando pattern == "salvo".
+            # Ordem esquerdo → direito → central força zigue-zague (boss te
+            # persegue lateralmente, depois trava no centro).
+            "salvo_idx": 0,
+            "salvo_order": [0, 1, 2],
+            "locked_cannons": locked_cannons,
         }
 
     def _update_preparing_to_fire_state(self, dt: float) -> List[BossLaser]:
         self.laser_delay_timer -= dt
         blink = (int(self.laser_delay_timer * 10) % 2) == 0
-        for c in self.cannons:
-            c.set_charging(True, 1.0 if blink else 0.7)
+        if (
+            self.pending_laser_data
+            and self.pending_laser_data.get("pattern") == "salvo"
+        ):
+            next_idx = self.pending_laser_data["salvo_order"][
+                self.pending_laser_data["salvo_idx"]
+            ]
+            if self.laser_delay_timer <= self._FRENZY_SALVO_AIM_WINDOW:
+                self._active_salvo_cannon_idx = next_idx
+                for i, c in enumerate(self.cannons):
+                    c.set_charging(
+                        i == next_idx,
+                        1.0
+                        if blink and i == next_idx
+                        else 0.7
+                        if i == next_idx
+                        else 0.0,
+                    )
+            else:
+                self._active_salvo_cannon_idx = None
+                for c in self.cannons:
+                    c.set_charging(False, 0.0)
+        else:
+            for c in self.cannons:
+                c.set_charging(True, 1.0 if blink else 0.7)
         self.particle_system.update_circle_disappear_particles(
             self._get_accelerated_dt(dt)
         )
 
-        if self.laser_delay_timer <= 0 and self.pending_laser_data:
-            new_lasers = self._create_lasers_from_data(self.pending_laser_data)
-            self._sound_events.append("play_fire")
-            self.fired_lasers.extend(new_lasers)
-            self.fire_timer = Timer(self.pending_laser_data["lifetime"])
+        if self.laser_delay_timer > 0 or not self.pending_laser_data:
+            return []
+
+        # Salva: dispara um laser por vez, com re-mira viva no jogador.
+        if self.pending_laser_data.get("pattern") == "salvo":
+            return self._fire_next_salvo_shot()
+
+        # Wall / single: dispara tudo de uma vez e entra em FIRING.
+        new_lasers = self._create_lasers_from_data(self.pending_laser_data)
+        self._sound_events.append("play_fire")
+        self.fired_lasers.extend(new_lasers)
+        self.fire_timer = Timer(self.pending_laser_data["lifetime"])
+        self.fire_timer.start()
+        self.state = BossState.FIRING
+        self.pending_laser_data = None
+        self._frenzy_pattern = None
+        return new_lasers
+
+    def _fire_next_salvo_shot(self) -> List[BossLaser]:
+        """Dispara o próximo laser da salva sequencial, re-mirado no jogador."""
+        if not hasattr(self, "_sound_events"):
+            self._sound_events = []
+        data = self.pending_laser_data
+        if data is None:
+            return []
+
+        idx = data["salvo_idx"]
+        order = data["salvo_order"]
+        cannon_idx = order[idx]
+        locked_cannons = data.get("locked_cannons", [])
+        cannon_state = (
+            locked_cannons[cannon_idx] if cannon_idx < len(locked_cannons) else None
+        )
+        self._active_salvo_cannon_idx = cannon_idx
+
+        if cannon_state is not None:
+            tip_x = cannon_state["tip_x"]
+            tip_y = cannon_state["tip_y"]
+            dirv = pygame.Vector2(cannon_state["dir_x"], cannon_state["dir_y"])
+        else:
+            cannon = self.cannons[cannon_idx]
+            tip_x, tip_y = cannon.get_barrel_tip_position()
+            dirv = cannon.get_direction()
+
+        laser = BossLaser(
+            tip_x,
+            tip_y,
+            tip_x + dirv.x * self.LASER_DISTANCE,
+            tip_y + dirv.y * self.LASER_DISTANCE,
+            lifetime=data["lifetime"],
+            owner=cannon,
+        )
+        self.fired_lasers.append(laser)
+        self._sound_events.append("play_fire")
+
+        data["salvo_idx"] = idx + 1
+        if data["salvo_idx"] >= len(order):
+            # Último disparo — entra em FIRING. fire_timer cobre o lifetime do
+            # último laser; os anteriores acabam antes naturalmente.
+            self.fire_timer = Timer(data["lifetime"])
             self.fire_timer.start()
             self.state = BossState.FIRING
             self.pending_laser_data = None
-            return new_lasers
-        return []
+            self._frenzy_pattern = None
+        else:
+            # Permanece em PREPARING_TO_FIRE; próximo disparo após o intervalo.
+            self.laser_delay_timer = self._FRENZY_SALVO_INTERVAL
+            self._active_salvo_cannon_idx = None
+
+        return [laser]
 
     def _create_lasers_from_data(self, laser_data: dict[str, Any]) -> List[BossLaser]:
+        # Salvo é tratado em _fire_next_salvo_shot (um laser por chamada).
+        # Wall usa o helper dedicado com offsets laterais grandes.
+        # Single cai no caminho legado (laser único não-frenzy ou fallback).
+        if laser_data.get("pattern") == "wall" and len(self.cannons) >= 3:
+            return self._create_wall_lasers(laser_data["lifetime"])
         return self._create_laser_pattern(
             laser_data["face_x"],
             laser_data["face_y"],
@@ -483,6 +636,68 @@ class Boss(BossHitMixin):
             laser_data["frenzy_mode"],
             laser_data["face_normal"],
         )
+
+    def _create_wall_lasers(self, lifetime: float) -> List[BossLaser]:
+        """Muro de Morte: 3 lasers simultâneos com o central normal.
+
+        O laser do meio segue a direção principal do boss. Os laterais não
+        fazem lock-in no jogador; eles apenas abrem em ângulo fixo em relação
+        ao feixe principal, criando a parede sem depender de mira lateral.
+        """
+        if len(self.cannons) < 3:
+            return []
+
+        tip_cx, tip_cy = self.cannons[2].get_barrel_tip_position()
+        base_dir = self.cannons[2].get_direction()
+
+        def rotated_direction(angle: float) -> pygame.Vector2:
+            cos_a, sin_a = math.cos(angle), math.sin(angle)
+            return pygame.Vector2(
+                base_dir.x * cos_a - base_dir.y * sin_a,
+                base_dir.x * sin_a + base_dir.y * cos_a,
+            )
+
+        side_angle = self.FRENZY_LASER_ANGLES[2]
+        left_dir = rotated_direction(-side_angle)
+        right_dir = rotated_direction(side_angle)
+
+        lasers: List[BossLaser] = []
+        # lateral esquerdo
+        tip_x, tip_y = self.cannons[0].get_barrel_tip_position()
+        lasers.append(
+            BossLaser(
+                tip_x,
+                tip_y,
+                tip_x + left_dir.x * self.LASER_DISTANCE,
+                tip_y + left_dir.y * self.LASER_DISTANCE,
+                lifetime=lifetime,
+                owner=self.cannons[0],
+            )
+        )
+        # lateral direito
+        tip_x, tip_y = self.cannons[1].get_barrel_tip_position()
+        lasers.append(
+            BossLaser(
+                tip_x,
+                tip_y,
+                tip_x + right_dir.x * self.LASER_DISTANCE,
+                tip_y + right_dir.y * self.LASER_DISTANCE,
+                lifetime=lifetime,
+                owner=self.cannons[1],
+            )
+        )
+        # meio normal
+        lasers.append(
+            BossLaser(
+                tip_cx,
+                tip_cy,
+                tip_cx + base_dir.x * self.LASER_DISTANCE,
+                tip_cy + base_dir.y * self.LASER_DISTANCE,
+                lifetime=lifetime,
+                owner=self.cannons[2],
+            )
+        )
+        return lasers
 
     def _create_laser_pattern(
         self,
@@ -497,26 +712,20 @@ class Boss(BossHitMixin):
             if hasattr(self, "cannons") and len(self.cannons) >= 3:
                 lasers: List[BossLaser] = []
                 # offsets and sequence delays for left, right, center
-                side_offset = (
-                    self.w * 0.25
-                )  # increase lateral separation for visible 'wall'
                 seq_delays = [0.0, 0.15, 0.35]  # tighter sequential cadence
                 for idx, c in enumerate(self.cannons):
                     tip_x, tip_y = c.get_barrel_tip_position()
-                    # compute a target near the player's position with lateral offset for sides
-                    target_x = self.player_x if self.player_x is not None else tip_x
-                    target_y = self.player_y if self.player_y is not None else tip_y + 1
-                    if idx == 0:  # left
-                        target_x = target_x - side_offset
-                    elif idx == 1:  # right
-                        target_x = target_x + side_offset
-                    # compute direction toward target
-                    dx, dy = target_x - tip_x, target_y - tip_y
-                    dist = math.hypot(dx, dy)
-                    if dist > 0:
-                        dx, dy = dx / dist, dy / dist
-                    else:
-                        dx, dy = face_normal.x, face_normal.y
+                    # Salva sequencial: o deslocamento vem da ordem e não de
+                    # mira lateral. Cada canhão herda o vetor principal e aplica
+                    # um pequeno desvio angular, sem lock-in nos adjacentes.
+                    angle = 0.0
+                    if idx == 0:
+                        angle = -self.FRENZY_LASER_ANGLES[2]
+                    elif idx == 1:
+                        angle = self.FRENZY_LASER_ANGLES[2]
+                    cos_a, sin_a = math.cos(angle), math.sin(angle)
+                    dx = face_normal.x * cos_a - face_normal.y * sin_a
+                    dy = face_normal.x * sin_a + face_normal.y * cos_a
                     lasers.append(
                         BossLaser(
                             tip_x,
@@ -589,22 +798,45 @@ class Boss(BossHitMixin):
         for c in self.cannons:
             c.set_charging(True, 0.0)
 
+    # Velocidade-base calibrada para 720p (altura de referência do design).
+    # Em resoluções menores, a distância vertical boss→player encolhe
+    # proporcionalmente; sem escalar a velocidade, a janela de reação fica
+    # impossível em 576p/600p. Escalar pela altura mantém o time-to-impact
+    # constante entre resoluções.
+    _SQUARE_PROJECTILE_BASE_SPEED: float = 250.0
+    _SQUARE_PROJECTILE_REF_HEIGHT: float = 720.0
+    # Spread aleatório aplicado à direção normalizada. ±0.35 dá ~±20° de leque,
+    # menos caótico que ±0.5 (que chegava a ±45° e cobria meia tela em 576p).
+    _SQUARE_PROJECTILE_SPREAD: float = 0.35
+
+    # Padrões de tiro frenzy com 3 canhões:
+    #   "wall"  — 3 lasers simultâneos com offset lateral. Força fuga lateral
+    #             ou encaixe em gap. Lasers em [-OFFSET, 0, +OFFSET] do alvo.
+    #   "salvo" — 3 lasers sequenciais (esquerdo → direito → central), cada
+    #             um re-mirando no jogador no instante do próprio disparo.
+    #             Força movimento contínuo (zigue-zague).
+    _FRENZY_WALL_OFFSET: float = 140.0  # px de distância lateral dos lasers do muro
+    _FRENZY_SALVO_INTERVAL: float = 0.40  # s entre disparos da salva sequencial
+
     def _create_square_projectile(
         self, square: BossSquare, px: float, py: float
     ) -> BossSquare:
         dx, dy = px - square.x, py - square.y
         dist = math.sqrt(dx * dx + dy * dy)
         if dist > 0:
+            spread = self._SQUARE_PROJECTILE_SPREAD
             dx, dy = (
-                dx / dist + random.uniform(-0.5, 0.5),
-                dy / dist + random.uniform(-0.5, 0.5),
+                dx / dist + random.uniform(-spread, spread),
+                dy / dist + random.uniform(-spread, spread),
             )
             new_dist = math.sqrt(dx * dx + dy * dy)
             if new_dist > 0:
                 dx, dy = dx / new_dist, dy / new_dist
         else:
             dx, dy = 0, 1
-        return BossSquare(square.x, square.y, dx * 250, dy * 250, square.base_size)
+        scale = Config.SCREEN_HEIGHT / self._SQUARE_PROJECTILE_REF_HEIGHT
+        speed = self._SQUARE_PROJECTILE_BASE_SPEED * scale
+        return BossSquare(square.x, square.y, dx * speed, dy * speed, square.base_size)
 
     def _get_animation_speed_multiplier(self) -> float:
         return (
@@ -617,11 +849,9 @@ class Boss(BossHitMixin):
         return dt * self._get_animation_speed_multiplier()
 
     def _get_laser_delay(self) -> float:
-        return (
-            Config.BOSS_FRENZY_LASER_DELAY
-            if self.frenzy_mode
-            else Config.BOSS_LASER_DELAY
-        )
+        if self._frenzy_pattern == "salvo":
+            return self.PRE_FIRE_LOCK_RELEASE_TIME
+        return self.PRE_FIRE_LOCK_RELEASE_TIME
 
     def _render_layer(self, layer_cells: set[str]) -> pygame.Surface:
         surf = pygame.Surface((int(self.w), int(self.h)), pygame.SRCALPHA)
@@ -700,7 +930,12 @@ class Boss(BossHitMixin):
             self.cannon.draw(surface, self._shake_offset_x, self._shake_offset_y)
         if self.state != BossState.ENTERING:
             self._draw_health_bar(surface)
-        if self.state in (BossState.AIMING, BossState.CHARGING, BossState.CONVERGING):
+        if self.state in (
+            BossState.AIMING,
+            BossState.CHARGING,
+            BossState.CONVERGING,
+            BossState.PREPARING_TO_FIRE,
+        ):
             self._draw_aiming_line(surface)
 
         # 5. Effects
@@ -822,23 +1057,103 @@ class Boss(BossHitMixin):
             return 0.3 + self.charge_progress * 0.5  # 0.3 -> 0.8
         elif self.state == BossState.CONVERGING:
             return 1.0  # Máximo intensidade antes de preparar para disparar
+        elif self.state == BossState.PREPARING_TO_FIRE:
+            # Brecha de reação: mira continua visível durante o delay final para
+            # que o jogador enxergue o vetor do laser e tenha chance de desviar.
+            # Pulsa rápido (~5Hz) sinalizando disparo iminente.
+            if self.laser_delay_duration > 0:
+                t = 1.0 - max(0.0, self.laser_delay_timer) / self.laser_delay_duration
+            else:
+                t = 1.0
+            pulse = 0.5 + 0.5 * math.sin(t * 30.0)
+            return 0.85 + 0.15 * pulse
         return 0.0
 
     def _draw_aiming_line(self, surface: pygame.Surface) -> None:
+        if self.state == BossState.PREPARING_TO_FIRE:
+            return
         total_cycle = Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
-        time_based_offset = int(pygame.time.get_ticks() * 0.1) % total_cycle
         intensity = self._get_aiming_line_intensity()
+        # A animação do tracejado só acelera quando o disparo está iminente.
+        # Nas fases de AIMING/CHARGING/CONVERGING, a linha se move em ritmo
+        # normal para não parecer que o laser vai sair antes da janela de reação.
+        speed_factor = 1.0
+        if self.state == BossState.PREPARING_TO_FIRE:
+            speed_factor = 1.0 + max(0.0, min(1.0, intensity)) * 5.0
+        time_based_offset = (
+            int(pygame.time.get_ticks() * 0.1 * speed_factor) % total_cycle
+        )
         if self.frenzy_mode and len(self.cannons) > 1:
-            # Draw aiming lines for each cannon from its barrel tip
-            for i, c in enumerate(self.cannons):
-                tip_x, tip_y = c.get_barrel_tip_position()
-                tip = pygame.Vector2(tip_x, tip_y)
-                dirv = c.get_direction()
-                # consider central cannon as primary for styling
-                primary = i == len(self.cannons) - 1
-                self._draw_dashed_line(
-                    surface, tip, dirv, time_based_offset, primary, intensity
-                )
+            if (
+                self._frenzy_pattern == "salvo"
+                and self.state == BossState.PREPARING_TO_FIRE
+            ):
+                idx = self._active_salvo_cannon_idx
+                if idx is not None and 0 <= idx < len(self.cannons):
+                    c = self.cannons[idx]
+                    tip_x, tip_y = c.get_barrel_tip_position()
+                    tip = pygame.Vector2(tip_x, tip_y)
+                    dirv = c.get_direction()
+                    self._draw_dashed_line(
+                        surface,
+                        tip,
+                        dirv,
+                        time_based_offset,
+                        idx == len(self.cannons) - 1,
+                        intensity,
+                    )
+            else:
+                # Wall: laterais seguem um vetor fixo relativo ao canhão central.
+                if self._frenzy_pattern == "wall":
+                    center_cannon = self.cannons[-1]
+                    center_tip = pygame.Vector2(center_cannon.get_barrel_tip_position())
+                    center_dir = center_cannon.get_direction()
+                    angle = self.FRENZY_LASER_ANGLES[2]
+                    left_dir = pygame.Vector2(
+                        center_dir.x * math.cos(-angle)
+                        - center_dir.y * math.sin(-angle),
+                        center_dir.x * math.sin(-angle)
+                        + center_dir.y * math.cos(-angle),
+                    )
+                    right_dir = pygame.Vector2(
+                        center_dir.x * math.cos(angle) - center_dir.y * math.sin(angle),
+                        center_dir.x * math.sin(angle) + center_dir.y * math.cos(angle),
+                    )
+                    self._draw_dashed_line(
+                        surface,
+                        pygame.Vector2(self.cannons[0].get_barrel_tip_position()),
+                        left_dir,
+                        time_based_offset,
+                        False,
+                        intensity,
+                    )
+                    self._draw_dashed_line(
+                        surface,
+                        pygame.Vector2(self.cannons[1].get_barrel_tip_position()),
+                        right_dir,
+                        time_based_offset,
+                        False,
+                        intensity,
+                    )
+                    self._draw_dashed_line(
+                        surface,
+                        center_tip,
+                        center_dir,
+                        time_based_offset,
+                        True,
+                        intensity,
+                    )
+                else:
+                    # Draw aiming lines for each cannon from its barrel tip
+                    for i, c in enumerate(self.cannons):
+                        tip_x, tip_y = c.get_barrel_tip_position()
+                        tip = pygame.Vector2(tip_x, tip_y)
+                        dirv = c.get_direction()
+                        # consider central cannon as primary for styling
+                        primary = i == len(self.cannons) - 1
+                        self._draw_dashed_line(
+                            surface, tip, dirv, time_based_offset, primary, intensity
+                        )
         else:
             self._draw_dashed_line(
                 surface,
