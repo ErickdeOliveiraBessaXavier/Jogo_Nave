@@ -29,6 +29,7 @@ from .stone_palette import STONE_FRAGMENT_PALETTE
 
 if TYPE_CHECKING:
     from ..core.events import EventBus
+    from ..systems.boss_context import BossUpdateContext, BossUpdateResult
     from ..systems.hit_result import HitResult
 
 logger = logging.getLogger(__name__)
@@ -1283,6 +1284,21 @@ class StoneGolemBoss(BossHitMixin):
     def emerge_debris(self) -> List[EmergeDebris]:
         """Expõe os detritos de emerge/submerge para colisão externa."""
         return self._emerge_debris
+
+    def update_boss(
+        self, dt: float, ctx: "BossUpdateContext"
+    ) -> "BossUpdateResult":
+        from ..systems.boss_context import BossUpdateResult
+
+        new_mines, new_shards, orbital = self.update(
+            dt, ctx.player_x, ctx.player_y or 0.0, ctx.entity_manager
+        )
+        # OrbitalDebris é uma visão do estado interno do boss — EM sincroniza.
+        ctx.entity_manager.orbital_debris = list(orbital)
+        return BossUpdateResult(
+            new_mines=list(new_mines),
+            new_shards=list(new_shards),
+        )
 
     def update(
         self,

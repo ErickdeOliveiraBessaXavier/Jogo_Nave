@@ -11,12 +11,20 @@ import pygame
 from ..core.assets import get_font
 from ..core.config import config as Config
 from ..core.sound_config import MusicState
+from .cloud_archmage_pixel_map import (
+    ARM_MAP,
+    BODY_MAP,
+    CHAR_TO_KEY,
+    HAT_MAP,
+    PALETTES,
+)
 from .fire_zone import FireZone
 from .mountain_mage import MountainStalactite, MountainStalagmite
 from .mountain_propeller import MountainPropeller
 from .rock_glider import RockGlider
 
 if TYPE_CHECKING:
+    from ..systems.boss_context import BossUpdateContext, BossUpdateResult
     from ..systems.hit_result import HitResult
 
 
@@ -196,108 +204,8 @@ class FireZoneWarning:
 
 
 # ---------------------------------------------------------------------------
-# Pixel maps
+# Pixel maps / paletas vivem em `cloud_archmage_pixel_map.py`.
 # ---------------------------------------------------------------------------
-
-HAT_MAP: Final[list[str]] = [
-    ".........H........",
-    "........H*H.......",
-    ".......H**H.......",
-    "......H***H.......",
-    ".....HH****H......",
-    "....H******HH.....",
-    "...HH********H....",
-    "..HHHHHHHHHHHHHH..",
-    ".HOOOOOOOOOOOOOOH.",
-    "H****************H",
-]
-
-BODY_MAP: Final[list[str]] = [
-    "....GGGGGGGG....",
-    "...GBBBBBBBBG...",
-    "..GBBMMMMMMBBG..",
-    "..BBMEEEEEEMBB..",
-    "..BBMEEEEEEMBB..",
-    "..BBOOOOOOOOBB.",
-    "..BBBB....BBBB..",
-    ".BBBB......BBBB.",
-]
-
-ARM_MAP: Final[list[str]] = [
-    "..GG..",
-    ".GBBG.",
-    ".BBBB.",
-    "..MM..",
-    ".MOOM.",
-    ".MDDM.",
-    "..DD..",
-]
-
-# ---------------------------------------------------------------------------
-# Palettes
-# ---------------------------------------------------------------------------
-
-_PALETTES: Final[dict[str, dict[str, Color]]] = {
-    "normal": {
-        "robe": (60, 45, 110),
-        "metal": (100, 105, 115),
-        "visor": (10, 10, 20),
-        "core": (30, 25, 45),
-        "hat": (45, 30, 85),
-        "hat_hl": (80, 60, 150),
-        "joint": (30, 30, 35),
-        "gold": (212, 175, 55),
-        "gola": (80, 70, 140),
-    },
-    "phase3": {
-        "robe": (40, 10, 60),
-        "metal": (60, 65, 80),
-        "visor": (20, 0, 0),
-        "core": (25, 5, 30),
-        "hat": (30, 5, 50),
-        "hat_hl": (100, 20, 50),
-        "joint": (20, 10, 15),
-        "gold": (180, 130, 40),
-        "gola": (60, 20, 80),
-    },
-    "flash": {
-        k: (255, 255, 255)
-        for k in (
-            "robe",
-            "metal",
-            "visor",
-            "core",
-            "hat",
-            "hat_hl",
-            "joint",
-            "gold",
-            "gola",
-        )
-    },
-    "white": {
-        "robe": (90, 100, 120),
-        "metal": (130, 140, 155),
-        "visor": (20, 25, 40),
-        "core": (180, 210, 240),
-        "hat": (80, 90, 110),
-        "hat_hl": (150, 170, 190),
-        "joint": (50, 55, 70),
-        "gold": (160, 170, 180),
-        "gola": (110, 125, 145),
-    },
-}
-
-_CHAR_TO_KEY: Final[dict[str, str]] = {
-    "H": "hat",
-    "*": "hat_hl",
-    "M": "metal",
-    "V": "visor",
-    "E": "core",
-    "D": "joint",
-    "O": "gold",
-    "G": "gola",
-    "B": "robe",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -555,7 +463,7 @@ class CloudArchmageBoss:
     # ------------------------------------------------------------------
 
     def _render_all_parts(self) -> None:
-        for state_name, pal in _PALETTES.items():
+        for state_name, pal in PALETTES.items():
             self._sprites["hat"][state_name] = self._bake_surface(HAT_MAP, pal)
             self._sprites["body"][state_name] = self._bake_surface(BODY_MAP, pal)
             self._sprites["arm"][state_name] = self._bake_surface(ARM_MAP, pal)
@@ -570,7 +478,7 @@ class CloudArchmageBoss:
             for c_idx, char in enumerate(row):
                 if char == ".":
                     continue
-                key = _CHAR_TO_KEY.get(char, "robe")
+                key = CHAR_TO_KEY.get(char, "robe")
                 pygame.draw.rect(
                     surf,
                     pal[key],
@@ -679,6 +587,31 @@ class CloudArchmageBoss:
     # ------------------------------------------------------------------
     # Update
     # ------------------------------------------------------------------
+
+    def update_boss(
+        self, dt: float, ctx: "BossUpdateContext"
+    ) -> "BossUpdateResult":
+        from ..systems.boss_context import BossUpdateResult
+
+        py = ctx.player_y if ctx.player_y is not None else 0.0
+        spawned = self.update(dt, (ctx.player_x, py))
+        result = BossUpdateResult()
+        if not spawned:
+            return result
+
+        em = ctx.entity_manager
+        regular_enemies: list[Any] = []
+        for s in spawned:
+            if isinstance(s, RockGlider):
+                em.rock_glider_pool.pool.append(s)
+                em.rock_glider_pool.active.append(s)
+                em.enemies.append(s)
+            elif isinstance(s, MountainPropeller):
+                em.mountain_propellers.append(s)
+            else:
+                regular_enemies.append(s)
+        result.spawned_enemies = regular_enemies
+        return result
 
     def update(
         self, dt: float, player_pos: tuple[float, float] | None = None

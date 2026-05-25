@@ -12,6 +12,7 @@ from ..core.sprite_loader import sprite_loader
 from .slime_drip import SlimeDrippingEffect
 
 if TYPE_CHECKING:
+    from ..systems.boss_context import BossUpdateContext, BossUpdateResult
     from ..systems.entity_manager import EntityManager
     from ..systems.hit_result import HitResult
 
@@ -138,6 +139,14 @@ class SlimeBoss:
 
         # Velocidades de entrada/saída
         self.leaving_speed = Config.SLIME_BOSS_LEAVING_SPEED
+
+    def update_boss(
+        self, dt: float, ctx: "BossUpdateContext"
+    ) -> "BossUpdateResult":
+        from ..systems.boss_context import BossUpdateResult
+
+        self.update(dt, ctx.player_x, ctx.player_y, ctx.entity_manager)
+        return BossUpdateResult()
 
     def update(
         self,

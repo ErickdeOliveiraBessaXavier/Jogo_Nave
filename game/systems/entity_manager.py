@@ -51,7 +51,6 @@ from ..entities.mountain_serpent_boss import (
 )
 from ..entities.player_laser import PlayerLaser
 from ..entities.powerup import PowerUp
-from ..entities.rock_glider import RockGlider
 from ..entities.rock_glider_pool import RockGliderPool
 from ..entities.slime_boss import SlimeBoss
 from ..entities.slime_drip import SlimeDrip
@@ -72,6 +71,7 @@ from ..entities.stone_golem_boss import (
 from ..entities.stone_sentry import StoneSentry
 from ..entities.wingman import Wingman
 from ..entities.coop_link import CoopLink
+from .boss_context import BossUpdateContext, BossUpdateResult
 from .collision_protocols import Removable
 from .entity_context import EnemyUpdateContext
 from .hit_result import MeteorSpec
@@ -709,57 +709,36 @@ class EntityManager:
             s.update(enemy_dt * mul, player_x, player_y, ac)
 
     def _update_boss(self, enemy_dt: float, player_x: float, player_y: float) -> None:
-        """Dispatch específico por boss (assinaturas de update divergem)."""
+        """Dispatch polimórfico via boss.update_boss(dt, ctx)."""
         if not self.boss:
             return
-        if isinstance(self.boss, SpikeBoss):
-            ss, bls = self.boss.update(enemy_dt, player_x, player_y, self.spikes)
-            if ss:
-                self.spikes.extend(ss)
-            if bls:
-                self.boss_lasers.extend(bls)
-        elif isinstance(self.boss, SlimeBoss):
-            self.boss.update(enemy_dt, player_x, player_y, self)
-        elif isinstance(self.boss, GiantMeteorBoss):
-            self.boss.update(enemy_dt, self)
-        elif isinstance(self.boss, StoneGolemBoss):
-            nb, ns, orks = self.boss.update(enemy_dt, player_x, player_y, self)
-            if nb:
-                self.boulders.extend(nb)
-            if ns:
-                self.attack_debris.extend(ns)
-            self.orbital_debris = orks
-        elif isinstance(self.boss, MountainSerpentBoss):
-            bb, fragments = self.boss.update(enemy_dt, player_x, player_y)
-            if bb:
-                self.serpent_bullets.extend(bb)
-            for f in fragments:
-                if isinstance(f, SerpentRockBullet):
-                    self.serpent_bullets.append(f)
-                else:
-                    self.enemies.append(f)
-        elif isinstance(self.boss, CloudArchmageBoss):
-            spawned = self.boss.update(enemy_dt, (player_x, player_y))
-            if spawned:
-                for s in spawned:
-                    if isinstance(s, RockGlider):
-                        self.rock_glider_pool.pool.append(s)
-                        self.rock_glider_pool.active.append(s)
-                        self.enemies.append(s)  # type: ignore[arg-type]
-                    elif isinstance(s, MountainPropeller):
-                        self.mountain_propellers.append(s)
-                    else:
-                        self.enemies.append(s)
-        else:
-            ls, sqs, sound_events = self.boss.update(enemy_dt, player_x, player_y)
-            if ls:
-                self.boss_lasers.extend(ls)
-            if sqs:
-                self.boss_squares.extend(sqs)
-            self._dispatch_boss_sound_events(sound_events)
-            for q in self.boss.floating_squares:
-                if q not in self.boss_squares:
-                    self.boss_squares.append(q)
+        ctx = BossUpdateContext(
+            dt=enemy_dt,
+            player_x=player_x,
+            player_y=player_y,
+            entity_manager=self,
+        )
+        result = self.boss.update_boss(enemy_dt, ctx)
+        self._consume_boss_result(result)
+
+    def _consume_boss_result(self, result: "BossUpdateResult") -> None:
+        """Aplica as emissões de um BossUpdateResult aos grupos do EntityManager."""
+        if result.new_lasers:
+            self.boss_lasers.extend(result.new_lasers)
+        if result.new_squares:
+            self.boss_squares.extend(result.new_squares)
+        if result.new_spikes:
+            self.spikes.extend(result.new_spikes)
+        if result.new_serpent_bullets:
+            self.serpent_bullets.extend(result.new_serpent_bullets)
+        if result.new_mines:
+            self.boulders.extend(result.new_mines)
+        if result.new_shards:
+            self.attack_debris.extend(result.new_shards)
+        if result.spawned_enemies:
+            self.enemies.extend(result.spawned_enemies)
+        if result.sound_events:
+            self._dispatch_boss_sound_events(result.sound_events)
 
     def _update_enemies(
         self,
@@ -896,54 +875,13 @@ class EntityManager:
         self.explosion_pool.update(dt)
 
         if self.boss:
-            if isinstance(self.boss, SpikeBoss):
-                ss, bls = self.boss.update(dt, player_x, player_y, self.spikes)
-                if ss:
-                    self.spikes.extend(ss)
-                if bls:
-                    self.boss_lasers.extend(bls)
-            elif isinstance(self.boss, SlimeBoss):
-                self.boss.update(dt, player_x, player_y, self)
-            elif isinstance(self.boss, GiantMeteorBoss):
-                self.boss.update(dt, self)
-            elif isinstance(self.boss, StoneGolemBoss):
-                nb, ns, orks = self.boss.update(dt, player_x, player_y, self)
-                if nb:
-                    self.boulders.extend(nb)
-                if ns:
-                    self.attack_debris.extend(ns)
-                self.orbital_debris = orks
-            elif isinstance(self.boss, MountainSerpentBoss):
-                bb, fragments = self.boss.update(dt, player_x, player_y)
-                if bb:
-                    self.serpent_bullets.extend(bb)
-                for f in fragments:
-                    if isinstance(f, SerpentRockBullet):
-                        self.serpent_bullets.append(f)
-                    else:
-                        self.enemies.append(f)
-            elif isinstance(self.boss, CloudArchmageBoss):
-                spawned = self.boss.update(dt, (player_x, player_y))
-                if spawned:
-                    for s in spawned:
-                        if isinstance(s, RockGlider):
-                            self.rock_glider_pool.pool.append(s)
-                            self.rock_glider_pool.active.append(s)
-                            self.enemies.append(s)  # type: ignore[arg-type]
-                        elif isinstance(s, MountainPropeller):
-                            self.mountain_propellers.append(s)
-                        else:
-                            self.enemies.append(s)
-            else:
-                # Many boss subclasses return (lasers, squares). Use a cast
-                # to give the type-checker a concrete signature here.
-                result = self.boss.update(dt, player_x, player_y)
-                ls, sqs, sound_events = result
-                if ls:
-                    self.boss_lasers.extend(ls)
-                if sqs:
-                    self.boss_squares.extend(sqs)
-                self._dispatch_boss_sound_events(sound_events)
+            ctx = BossUpdateContext(
+                dt=dt,
+                player_x=player_x,
+                player_y=player_y,
+                entity_manager=self,
+            )
+            self._consume_boss_result(self.boss.update_boss(dt, ctx))
         self.cleanup()
 
     def draw(

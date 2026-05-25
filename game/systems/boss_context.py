@@ -27,9 +27,9 @@ def _empty_any_list() -> List[Any]:
 class BossUpdateContext:
     """Contexto compartilhado passado a `update_boss()` de cada boss.
 
-    Centraliza toda informação necesária para um boss atualizar seu estado,
-    sem exigir acesso direto ao EntityManager (exceto onde explicitamente
-    necessário, como spikes do SpikeBoss).
+    Carrega dt + posição do player + referência ao EntityManager. O boss
+    consulta `entity_manager` quando precisa de listas específicas (spikes,
+    pools auxiliares) ou para sincronizar estado interno (orbital_debris).
     """
 
     dt: float
@@ -37,31 +37,29 @@ class BossUpdateContext:
     player_y: float | None
     entity_manager: EntityManager
 
-    # Buffers de emissão preenchidos pelo boss durante update.
-    # O EntityManager consome-os após a chamada.
-    new_bullets: List[Any] = field(default_factory=_empty_any_list)
-    new_lasers: List[Any] = field(default_factory=_empty_any_list)
-    new_squares: List[Any] = field(default_factory=_empty_any_list)
-    new_mines: List[Any] = field(default_factory=_empty_any_list)
-    new_shards: List[Any] = field(default_factory=_empty_any_list)
-    orbital_debris: List[Any] = field(default_factory=_empty_any_list)
-    spawned_enemies: List[Any] = field(default_factory=_empty_any_list)
-    sound_events: List[str] = field(default_factory=list)
-
 
 @dataclass
 class BossUpdateResult:
     """Resultado unificado retornado por `update_boss()`.
 
     Mapeia todos os tipos de emissão que qualquer boss pode gerar.
+    Roteamento (cada lista vai para o grupo correspondente no EntityManager):
+      - new_serpent_bullets  -> em.serpent_bullets
+      - new_lasers           -> em.boss_lasers
+      - new_squares          -> em.boss_squares
+      - new_mines            -> em.boulders        (StoneGolem)
+      - new_shards           -> em.attack_debris   (StoneGolem)
+      - new_spikes           -> em.spikes          (SpikeBoss)
+      - spawned_enemies      -> em.enemies
+      - sound_events         -> dispatched via _dispatch_boss_sound_events
     """
 
-    new_bullets: List[Any] = field(default_factory=_empty_any_list)
+    new_serpent_bullets: List[Any] = field(default_factory=_empty_any_list)
     new_lasers: List[Any] = field(default_factory=_empty_any_list)
     new_squares: List[Any] = field(default_factory=_empty_any_list)
     new_mines: List[Any] = field(default_factory=_empty_any_list)
     new_shards: List[Any] = field(default_factory=_empty_any_list)
-    orbital_debris: List[Any] = field(default_factory=_empty_any_list)
+    new_spikes: List[Any] = field(default_factory=_empty_any_list)
     spawned_enemies: List[Any] = field(default_factory=_empty_any_list)
     sound_events: List[str] = field(default_factory=list)
 

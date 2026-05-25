@@ -1,6 +1,6 @@
 import math
 import random
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import pygame
 
@@ -23,6 +23,9 @@ from .spike_boss_pixel_map import (
     PIXEL_COLS,
     PIXEL_MAP,
 )
+
+if TYPE_CHECKING:
+    from ..systems.boss_context import BossUpdateContext, BossUpdateResult
 
 
 class SpikeBoss(BossHitMixin):
@@ -187,6 +190,19 @@ class SpikeBoss(BossHitMixin):
                 target_eye_y = math.sin(self.eye_frenetic_timer * 10) * pupil_offset_max_y
         self.eye_offset_x += (target_eye_x - self.eye_offset_x) * self.eye_lerp_speed * dt
         self.eye_offset_y += (target_eye_y - self.eye_offset_y) * self.eye_lerp_speed * dt
+
+    def update_boss(
+        self, dt: float, ctx: "BossUpdateContext"
+    ) -> "BossUpdateResult":
+        from ..systems.boss_context import BossUpdateResult
+
+        new_spikes, new_lasers = self.update(
+            dt, ctx.player_x, ctx.player_y or 0.0, ctx.entity_manager.spikes
+        )
+        return BossUpdateResult(
+            new_spikes=list(new_spikes),
+            new_lasers=list(new_lasers),
+        )
 
     def update(self, dt: float, player_x: float, player_y: float, spikes: List[Spike]) -> Tuple[List[Spike], List[SpikeBossLaser]]:
         spawned_spikes: List[Spike] = []

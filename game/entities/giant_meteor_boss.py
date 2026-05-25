@@ -9,6 +9,7 @@ from ..core.config import config
 from ..core.sound import sound_manager
 
 if TYPE_CHECKING:
+    from ..systems.boss_context import BossUpdateContext, BossUpdateResult
     from ..systems.entity_manager import EntityManager
     from ..systems.hit_result import HitResult, MeteorSpec
 
@@ -190,6 +191,14 @@ class GiantMeteorBoss:
         self.health -= damage
         if self.health <= 0:
             self.dead, self.state = True, "dying"
+
+    def update_boss(
+        self, dt: float, ctx: "BossUpdateContext"
+    ) -> "BossUpdateResult":
+        from ..systems.boss_context import BossUpdateResult
+
+        self.update(dt, ctx.entity_manager)
+        return BossUpdateResult()
 
     def update(self, dt: float, entity_manager: "EntityManager") -> None:
         if self.dead:

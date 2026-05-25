@@ -1,7 +1,7 @@
 import logging
 import math
 import random
-from typing import Any, List, Literal, Tuple
+from typing import TYPE_CHECKING, Any, List, Literal, Tuple
 
 import pygame
 
@@ -21,6 +21,9 @@ from .boss_pixel_map import (
 from .boss_square import BossSquare
 from .boss_state import BossState
 from .draw_utils import rotated_square_corners
+
+if TYPE_CHECKING:
+    from ..systems.boss_context import BossUpdateContext, BossUpdateResult
 
 # Sound events emitted by Boss.update() — executed by EntityManager
 BossSoundEvent = Literal[
@@ -251,6 +254,27 @@ class Boss(BossHitMixin):
             if self.frenzy_mode
             else Config.BOSS_CHARGE_DURATION
         )
+
+    def update_boss(
+        self, dt: float, ctx: "BossUpdateContext"
+    ) -> "BossUpdateResult":
+        from ..systems.boss_context import BossUpdateResult
+
+        lasers, squares, sound_events = self.update(
+            dt, ctx.player_x, ctx.player_y
+        )
+        result = BossUpdateResult(
+            new_lasers=list(lasers),
+            new_squares=list(squares),
+            sound_events=list(sound_events),
+        )
+        # floating_squares orbitam o boss mas precisam estar em em.boss_squares
+        # para que colisão e render do EM os capturem.
+        em_squares = ctx.entity_manager.boss_squares
+        for q in self.floating_squares:
+            if q not in result.new_squares and q not in em_squares:
+                result.new_squares.append(q)
+        return result
 
     def update(
         self, dt: float, player_x: float, player_y: float | None = None

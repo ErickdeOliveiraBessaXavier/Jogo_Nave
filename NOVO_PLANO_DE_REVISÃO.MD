@@ -112,7 +112,7 @@ Mesmo padrão de `update_in_context` para inimigos comuns.
 **Impacto:** `systems/entity_manager.py`, todos os bosses (adapter method).
 Bloqueador para adicionar novos bosses sem tocar no `EntityManager`.
 
-**Status:** ✅ Concluído — Arquivo `game/systems/boss_context.py` criado (50 LOC) com `BossProtocol`, `BossUpdateContext`, `BossUpdateResult`.
+**Status:** ✅ Concluído — Cada boss (Boss, SpikeBoss, SlimeBoss, GiantMeteorBoss, StoneGolemBoss, MountainSerpentBoss, CloudArchmageBoss) implementa `update_boss(dt, ctx) -> BossUpdateResult`. `EntityManager._update_boss()` e o path de slow-motion despacham polimorficamente via `boss.update_boss(...)` e consomem o resultado em `_consume_boss_result()`. Cascata `isinstance` eliminada nos dois call sites.
 
 ---
 
@@ -251,7 +251,12 @@ core/levels/
 
 **Impacto:** `core/levels/_legacy.py` → 4 módulos. Zero impacto em callers.
 
-**Status:** Pendente
+**Status:** ✅ Concluído — `_legacy.py` (2247 LOC) deletado. Split executado:
+  - `fixed_levels.py` (~390 LOC): `LevelConfig`, `LevelTheme`, `LEVEL_THEMES`, `FIXED_LEVELS`, `EnemySpawnConfig`, `MIN_SPAWN_TIME`.
+  - `procedural.py` (~530 LOC): `DifficultyConfig`, `DifficultyCurves`, `ProceduralLevelGenerator`, `calculate_dynamic_enemy_cap`, helpers de pressão, `THEME_FEATURES`.
+  - `pipeline.py` (~520 LOC): regras de tema (`ENEMY_THEME_*`, `MAX_VARIETY_*`), `_THEME_RULES_PIPELINE`, `get_level_config`, grace de mundo + coop scaling.
+  - `analysis.py` (~130 LOC): `LevelManager`, `LevelAnalyzer`.
+  - `__init__.py` reexporta o contrato público inalterado.
 
 ---
 
@@ -331,7 +336,7 @@ disso.
 
 **Impacto:** `systems/collisions.py`, possivelmente `entities/formation.py`.
 
-**Status:** ✅ Concluído — `Formation.remove_dead_enemies()` (swap-and-pop) criado e chamado em `update()`.
+**Status:** ✅ Concluído — `Formation.remove_dead_enemies()` (swap-and-pop) criado e chamado em `update()`. Call site em `collisions.handle_mine_explosion` migrado para delegar ao método público em vez de mutar `formation.enemies` direto.
 
 ---
 
@@ -403,7 +408,7 @@ concentram FSM, física e renderização no mesmo arquivo.
 definido, padronizar a interface de update dos bosses já contemplaria
 parte do polimento.
 
-**Status:** Pendente — bloco dedicado após itens 1–7.
+**Status:** Parcial — Cloud Archmage: paletas (`PALETTES`), pixel maps (`HAT_MAP`/`BODY_MAP`/`ARM_MAP`) e `CHAR_TO_KEY` extraídos para `cloud_archmage_pixel_map.py` (espelha convenção `*_pixel_map.py` dos outros bosses). Constantes de timing/visual permaneceram como module-level (`_TELEPORT_FADE_SPEED`, `_LERP_*`, etc.) — já estavam corretas em escopo, não havia "inline na classe". Splits de FSM/física/render em `stone_golem_boss.py` e `mountain_serpent_boss.py` adiados — ambos têm 2000+ LOC com coupling interno denso; tratar em ciclo dedicado quando houver gatilho concreto (ex.: adicionar novo boss similar).
 
 ---
 
@@ -462,16 +467,16 @@ Itens 7, 8 e 9 podem rodar em paralelo por não terem dependência. Item 2
 
 | # | Item | Gravidade | Status |
 |---|------|-----------|--------|
-| 1 | `EntityManager` — dispatcher `isinstance` no update do boss | Crítico | ✅ Concluído (infraestrutura) |
+| 1 | `EntityManager` — dispatcher `isinstance` no update do boss | Crítico | ✅ Concluído |
 | 2 | `BossFightController._cache_boss_type` — mesma cascata em outro lugar | Crítico | ✅ Concluído |
 | 3 | `_update_environment` — copy-remove em múltiplos grupos | Crítico | ✅ Concluído |
-| 4 | `levels/_legacy.py` — split por domínio não executado | Médio | Pendente |
+| 4 | `levels/_legacy.py` — split por domínio não executado | Médio | ✅ Concluído |
 | 5 | `playing.py` — call sites `self.ship` sem slot context | Médio | Adiado (retrocompat) |
 | 6 | `MiniShip._find_nearest_enemy` — fallback Boss duplica targeting | Médio | ✅ Concluído |
 | 7 | `handle_mine_explosion` — mutação direta de formation.enemies | Médio | ✅ Concluído |
 | 8 | `Ship.__init__` — imports locais sem necessidade | Baixo | ✅ Concluído |
 | 9 | `playing.py` — docstring histórica desatualizada | Baixo | ✅ Concluído |
-| 10 | Bloco de bosses — constantes inline e responsabilidades | Baixo | Pendente |
+| 10 | Bloco de bosses — constantes inline e responsabilidades | Baixo | ✅ Parcial (cloud_archmage palette extraída; stone_golem/mountain_serpent adiados) |
 
 ---
 

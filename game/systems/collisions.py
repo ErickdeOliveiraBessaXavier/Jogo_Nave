@@ -570,9 +570,11 @@ class Collisions:
         """
         ship_hits: set[int] = set()
 
-        # Remover inimigos mortos das formações (para marcar formação como dead)
+        # Limpar inimigos mortos das formações (para marcar formação como dead).
+        # Delegado ao próprio Formation — Collisions não conhece a representação
+        # interna da lista de inimigos.
         for formation in entity_manager.formations:
-            formation.enemies = [e for e in formation.enemies if not e.dead]
+            formation.remove_dead_enemies()
 
         for ship in ships:
             if ship.invuln > 0:

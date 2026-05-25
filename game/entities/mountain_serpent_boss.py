@@ -16,6 +16,7 @@ from .mountain_serpent_pixel_map import C as _PIX_COLORS
 from .stone_sentry import StoneSentry
 
 if TYPE_CHECKING:
+    from ..systems.boss_context import BossUpdateContext, BossUpdateResult
     from ..systems.hit_result import HitResult
 
 # ---------------------------------------------------------------------------
@@ -1783,6 +1784,26 @@ class MountainSerpentBoss(BossHitMixin):
     # ------------------------------------------------------------------
     # Loop de jogo
     # ------------------------------------------------------------------
+
+    def update_boss(
+        self, dt: float, ctx: "BossUpdateContext"
+    ) -> "BossUpdateResult":
+        from ..systems.boss_context import BossUpdateResult
+
+        bullets, fragments = self.update(
+            dt, ctx.player_x, ctx.player_y or 0.0
+        )
+        routed_bullets: list = list(bullets)
+        routed_enemies: list = []
+        for f in fragments:
+            if isinstance(f, SerpentRockBullet):
+                routed_bullets.append(f)
+            else:
+                routed_enemies.append(f)
+        return BossUpdateResult(
+            new_serpent_bullets=routed_bullets,
+            spawned_enemies=routed_enemies,
+        )
 
     def update(
         self, dt: float, player_x: float = 0.0, player_y: float = 0.0

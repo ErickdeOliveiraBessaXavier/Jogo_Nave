@@ -1,345 +1,302 @@
-# Tutorial: Criando um Novo Boss para o Jogo (Versão Precisa)
+# Tutorial: Criando um Novo Boss para o Jogo (Versão Polimórfica)
 
-> **Versão Atualizada**: Este tutorial está **alinhado com a arquitetura real** do projeto. Diferentes do tutorial anterior, ele documenta os padrões implementados nos 4 bosses existentes.
+> **Versão Atualizada (2026-05-25)**: Refatoração polimórfica concluída — adicionar
+> um boss novo **não exige mais editar cascata `isinstance`** em `EntityManager`
+> nem em `BossFightController._cache_boss_type`. O contrato é o `BossProtocol`
+> em `game/systems/boss_context.py`. Este tutorial reflete a arquitetura real
+> após a conclusão dos itens 1 e 2 do `NOVO_PLANO_DE_REVISÃO.MD`.
 
 ## Padrões Arquiteturais
 
 ### ✅ O Que Você Precisa Saber
 
-1. **Hierarquia de Bosses**: Não existe herança - cada boss é uma classe **independente**
-2. **Union Types**: Bosses são gerenciados como: `Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | None`
-3. **Padrão de Retorno**: Cada boss retorna entidades de formas **diferentes**
-4. **Visual**: Apenas SlimeBoss usa `sprite_loader` para carregar frames de `.png`. Os demais (Boss, SpikeBoss, GiantMeteorBoss) usam desenho geométrico com `pygame.draw` (círculos, retângulos, polígonos)
-5. **Sistema EMP**: Todos os bosses sofrem com o efeito de slowdown do EMP (upgrade ativável que desacelera 65% por 10s). Aplicado automaticamente via multiplicador no `entity_manager.update()` - nenhuma ação necessária
+1. **Sem herança forçada** — cada boss é uma classe independente, podendo opcionalmente
+   herdar de `BossHitMixin` (`game/entities/boss_hit_mixin.py`) para ganhar o contrato
+   de colisão (`take_damage`, `on_hit`, `collision_circle`, `is_boss = True`).
+2. **Protocolo unificado** — todo boss implementa o `BossProtocol`:
+   - Atributos: `is_boss: bool`, `BOSS_TYPE_NAME: str`, `dead`, `health`, `max_health`, `w`, `h`, `x`, `y`.
+   - Método: `update_boss(dt: float, ctx: BossUpdateContext) -> BossUpdateResult`.
+3. **Dispatch polimórfico** — `EntityManager._update_boss` (e o caminho de slow-motion)
+   chamam `boss.update_boss(dt, ctx)` e roteiam o `BossUpdateResult` via
+   `_consume_boss_result()`. Não há mais cascata de `isinstance`.
+4. **Identificação por nome** — `BossFightController` consulta `BOSS_TYPE_NAME`
+   via `getattr(type(boss), "BOSS_TYPE_NAME", "normal")`. Sem cascata.
+5. **Visual** — `SlimeBoss` e `MountainSerpentBoss` usam sprites; os demais
+   (`Boss`, `SpikeBoss`, `GiantMeteorBoss`, `StoneGolemBoss`, `CloudArchmageBoss`)
+   desenham proceduralmente com `pygame.draw` + pixel maps em ASCII (paletas e
+   layouts ficam em arquivos `*_pixel_map.py` dedicados).
+6. **Sistema EMP** — aplicado automaticamente via multiplicador em
+   `entity_manager._emp_multiplier()`. Nenhuma ação extra no boss.
 
 ---
 
-## 📊 Comparação de Padrões Existentes
+## 📊 Bosses Existentes (Estado Atual)
 
-| Boss | Update Retorna | Spawn | Visual | Particularidade |
-|------|---|---|---|---|
-| **Boss** | `(lasers[], squares[])` | Externo | Geométrico (pygame.draw) | Face tracking |
-| **SpikeBoss** | `(spikes[], lasers[])` | Externo | Geométrico (pygame.draw) | Pausa o jogo |
-| **SlimeBoss** | `None` | Interno | **Sprite animado** | Recebe EntityManager |
-| **GiantMeteorBoss** | `None` | Interno | Geométrico (pygame.draw) | Cai e causa dano área |
+| Boss | `BOSS_TYPE_NAME` | Mixin | Visual | Especificidade |
+|------|------------------|-------|--------|----------------|
+| `Boss` | `"normal"` | `BossHitMixin` | Pixel-map procedural | Squares orbitais + laser |
+| `SpikeBoss` | `"spike"` | `BossHitMixin` | Pixel-map procedural | Espinhos nas laterais |
+| `SlimeBoss` | `"slime"` | (próprio `is_boss`) | Sprite animado | Slime drips + serpent move |
+| `GiantMeteorBoss` | `"giant_meteor"` | (próprio `is_boss`) | Procedural | Meteoro que cai |
+| `StoneGolemBoss` | `"stone_golem"` | `BossHitMixin` | Pixel-map + FSM | Boulders + debris orbital |
+| `MountainSerpentBoss` | `"mountain_serpent"` | `BossHitMixin` | Pixel-map | Blocos laterais + rock bullets |
+| `CloudArchmageBoss` | `"cloud_archmage"` | (próprio `is_boss`) | Pixel-map (HAT/BODY/ARM) | Orbes + spawn de RockGlider/Propeller |
 
 ---
 
-## 🔌 Sistema EMP Explicado
+## 🧩 O Contrato `BossProtocol`
 
-### O Que É?
-
-**EMP (Electromagnetic Pulse)** é um upgrade ativável do jogador que desacelera todos os inimigos e bosses.
-
-### Como Funciona?
-
-1. **Ativação**: Jogador pressiona tecla do upgrade EMP
-2. **Efeito Visual**: Onda expandindo-se do centro da nave (classe `EMPWave`)
-3. **Desaceleração**: TODOS os inimigos/bosses ficam a **35% da velocidade** (65% mais lento)
-4. **Duração**: 10 segundos
-5. **Linger**: Após a onda passar, o slowdown persiste por mais 8 segundos
-
-### Configuração
+Definido em `game/systems/boss_context.py`:
 
 ```python
-# Em game/core/upgrades_config.py
-EMP_SLOW_FACTOR: float = 0.35          # 35% velocidade = 65% desaceleração
-EMP_BASE_DURATION: float = 10.0        # Segundos do efeito principal
-EMP_LINGER_DURATION: float = 8.0       # Segundos após onda passar
+@dataclass
+class BossUpdateContext:
+    dt: float
+    player_x: float
+    player_y: float | None
+    entity_manager: EntityManager
+
+@dataclass
+class BossUpdateResult:
+    new_serpent_bullets: list[Any] = ...  # → em.serpent_bullets
+    new_lasers: list[Any] = ...           # → em.boss_lasers
+    new_squares: list[Any] = ...          # → em.boss_squares
+    new_mines: list[Any] = ...            # → em.boulders   (StoneGolem)
+    new_shards: list[Any] = ...           # → em.attack_debris (StoneGolem)
+    new_spikes: list[Any] = ...           # → em.spikes     (SpikeBoss)
+    spawned_enemies: list[Any] = ...      # → em.enemies
+    sound_events: list[str] = ...         # → _dispatch_boss_sound_events
+
+class BossProtocol(Protocol):
+    is_boss: bool
+    dead: bool
+    health: int
+    max_health: int
+    w: float
+    h: float
+    x: float
+    y: float
+    BOSS_TYPE_NAME: str
+
+    def update_boss(self, dt: float, ctx: BossUpdateContext) -> BossUpdateResult: ...
 ```
 
-### Como Afeta Novos Bosses
+### Regras de roteamento
 
-**Automático!** No `entity_manager.update()`, há um multiplicador que verifica:
-
-```python
-def emp_mul_for(entity: Any) -> float:
-    if not emp_active:
-        return 1.0
-    return slow_factor  # 0.35
-```
-
-Todos os `dt` são multiplicados por este valor. **Você não precisa fazer nada especial** - basta usar `enemy_dt` ao invés de `dt` e o EMP funciona automaticamente.
+- Cada lista do `BossUpdateResult` vai para um grupo específico do `EntityManager`.
+- Se precisar de uma rota nova (ex.: lista nova de `fireballs`), adicione um campo
+  a `BossUpdateResult` e estenda `EntityManager._consume_boss_result()`.
+- Para mutações fora desse padrão (ex.: sincronizar `orbital_debris` do StoneGolem,
+  rotear `RockGlider` para o pool no CloudArchmage), o boss acessa
+  `ctx.entity_manager` diretamente dentro do `update_boss` — preferindo,
+  porém, manter as listas no resultado quando dá.
 
 ---
+
+## 🔌 Sistema EMP (sem mudanças)
+
+EMP continua automático: `EntityManager._emp_multiplier(entity, ...)` multiplica
+o `dt` antes de chamar `update_in_context` (inimigos comuns) ou `update_boss`
+(bosses). O `ctx.dt` que chega ao seu boss já vem ajustado em slow-motion / EMP /
+ice. Não toque nesse caminho.
+
+---
+
+## Passo 1: Criar o Novo Boss
 
 ### 1.1 Estrutura Base
 
 Crie `game/entities/fire_boss.py`:
 
 ```python
+"""FireBoss — boss de fogo procedural.
+
+Adere ao BossProtocol: implementa update_boss(dt, ctx) e devolve um
+BossUpdateResult com fireballs em `spawned_enemies` (são entidades — vão para
+em.enemies). Se quisesse roteá-las para uma lista dedicada, adicionaria um
+campo `new_fireballs` em BossUpdateResult + tratamento em
+EntityManager._consume_boss_result.
+"""
+
+from __future__ import annotations
+
 import math
-import random
-import logging
-from typing import List, Tuple
+from typing import TYPE_CHECKING, List
 
 import pygame
 
 from ..core.config import config as Config
-from ..core.sound import sound_manager
-from ..core.sprite_loader import sprite_loader
-from ..core.colors import *
+from .boss_hit_mixin import BossHitMixin
+
+if TYPE_CHECKING:
+    from ..systems.boss_context import BossUpdateContext, BossUpdateResult
 
 
-class FireBoss:
-    """
-    Boss de fogo com ataque de projéteis teleguiados.
-    
-    Padrão Arc (como Boss original):
-    - Spawna entidades EXTERNAS (fireballs)
-    - Retorna entidades para o EntityManager adicionar
-    - Usa sprite_loader para animações
-    - Suporta EMP slowdown automático
-    """
+class FireBoss(BossHitMixin):
+    """Boss de fogo. Move lateralmente, dispara fireballs em padrões alternados."""
 
-    # Cache de frames (carregado uma vez na classe)
-    _animation_frames: list[pygame.Surface] | None = None
+    # === Contrato BossProtocol ===
+    BOSS_TYPE_NAME: str = "fire"
+    # is_boss vem de BossHitMixin = True
 
-    @classmethod
-    def load_animation_frames(cls) -> list[pygame.Surface]:
-        """Carrega e redimensiona sprites de animação."""
-        if cls._animation_frames is not None:
-            return cls._animation_frames
-        
-        # ✅ IMPORTANTE: Registrar no sprite_loader para preload
-        sprite_loader.register("fire_boss", cls.load_frames_for_preload)
-        
-        # Carregar se já não estivesse
-        return cls._load_frames()
-
-    @classmethod
-    def load_frames_for_preload(cls) -> list[pygame.Surface]:
-        """Método público para preload."""
-        return cls._load_frames()
-
-    @classmethod
-    def _load_frames(cls) -> list[pygame.Surface]:
-        """Carrega os frames do sprite sheet."""
-        # Exemplo: usando sprite sheet com 8 frames em linha
-        frames = sprite_loader.load_animation_frames(
-            "sprite_boss_fire",  # Nome do arquivo: sprite_boss_fire.png
-            8,  # Número de frames horizontais
-            "FireBoss"  # Identificador para logging
-        )
-        cls._animation_frames = frames
-        return frames
+    # Constantes class-level (visíveis externamente, ex.: para HUD ou hit-detect).
+    WIDTH: int = 100
+    HEIGHT: int = 80
+    DEFAULT_HEALTH: int = 400
 
     def __init__(
-        self, 
-        x: float, 
-        y: float, 
+        self,
+        x: float,
+        y: float,
         health: int | None = None,
         difficulty_multiplier: float = 1.0,
-    ):
-        # ===== POSIÇÃO E TAMANHO =====
-        self.w = Config.FIRE_BOSS_WIDTH if hasattr(Config, 'FIRE_BOSS_WIDTH') else 100
-        self.h = Config.FIRE_BOSS_HEIGHT if hasattr(Config, 'FIRE_BOSS_HEIGHT') else 80
+        aggressiveness_multiplier: float = 1.0,
+    ) -> None:
+        # Geometria
+        self.w = self.WIDTH
+        self.h = self.HEIGHT
         self.x = x
-        self.y = -self.h  # Começar fora da tela
-        self.target_y = y  # Posição final após entrada
+        self.y = -self.h  # entra de cima
+        self.target_y = y
 
-        # ===== SAÚDE E ESTADO =====
-        self.health = health if health is not None else Config.FIRE_BOSS_HEALTH if hasattr(Config, 'FIRE_BOSS_HEALTH') else 300
-        self.max_health = self.health
+        # Saúde
+        base = health if health is not None else self.DEFAULT_HEALTH
+        self.max_health = int(base * difficulty_multiplier)
+        self.health = self.max_health
         self.dead = False
-        self.state = "entering"  # Estados: entering, normal, dying
-        self.hit_score = 50  # Pontos por acertar o boss
 
-        # ===== MOVIMENTO =====
-        self.speed = Config.FIRE_BOSS_SPEED if hasattr(Config, 'FIRE_BOSS_SPEED') else 100
+        # Aggressiveness afeta cadência/velocidade de spawn (modos Hardcore/Nightmare).
+        self.aggressiveness_multiplier = aggressiveness_multiplier
+
+        # Movimento
+        self.speed = 120.0
         self.direction = 1
-        self.entry_speed = Config.FIRE_BOSS_ENTRY_SPEED if hasattr(Config, 'FIRE_BOSS_ENTRY_SPEED') else 150
+        self.entry_speed = 150.0
 
-        # ===== ATAQUE PATTERN =====
+        # Ataque
+        self.state = "entering"  # entering | normal
         self.attack_timer = 0.0
-        self.attack_cooldown = Config.FIRE_BOSS_ATTACK_COOLDOWN if hasattr(Config, 'FIRE_BOSS_ATTACK_COOLDOWN') else 1.5
-        self.attack_pattern = 0  # Padrão de ataque cíclico (0=reto, 1=teleguiado, 2=spread)
+        self.attack_cooldown = 1.5 / max(0.5, aggressiveness_multiplier)
+        self.attack_pattern = 0
 
-        # ===== ANIMAÇÃO =====
-        self.animation_frames = self.load_animation_frames()
-        self.has_valid_frames = bool(self.animation_frames and len(self.animation_frames) > 0)
-        self.current_frame = 0
-        self.animation_timer = 0.0
-        self.animation_speed = 0.1  # segundos por frame
+        # rect lazy (BossHitMixin.collision_circle usa o property `rect`)
 
-        # ===== COLISÃO =====
-        self.rect = pygame.Rect(x, y, self.w, self.h)
+    @property
+    def rect(self) -> pygame.Rect:
+        return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
-        # ✅ IMPORTANTE: Suporte a EMP (obrigatório)
-        self.emp_linger_timer = 0.0
-
-    def update(
-        self, 
-        dt: float, 
-        player_x: float, 
-        player_y: float,
-    ) -> Tuple[List["Fireball"], List["FlameTrail"]]:
-        """
-        Atualiza o boss e retorna entidades criadas.
-        
-        ⚠️ IMPORTANTE:
-        - Não recebe entity_manager (ao contrário de SlimeBoss)
-        - Retorna entidades para EntityManager adicionar
-        - É afetado automaticamente por EMP (não fazer nada especial)
-        
-        Args:
-            dt: Delta time
-            player_x: Posição X do jogador
-            player_y: Posição Y do jogador
-        
-        Returns:
-            (fireballs_criadas, flame_trails_criadas)
-        """
-        fireballs: List["Fireball"] = []
-        flame_trails: List["FlameTrail"] = []
-
-        if self.state == "entering":
-            # Descendo na tela
-            self.y += self.entry_speed * dt
-            if self.y >= self.target_y:
-                self.state = "normal"
-                self.y = self.target_y
-
-        elif self.state == "normal":
-            # Movimento lateral
-            self.x += self.speed * self.direction * dt
-            
-            # Inverter direção ao bater nas bordas
-            if self.x <= Config.SCREEN_WIDTH * 0.1 or self.x >= Config.SCREEN_WIDTH * 0.9 - self.w:
-                self.direction *= -1
-
-            # Sistema de ataque
-            self.attack_timer += dt
-            if self.attack_timer >= self.attack_cooldown:
-                self.attack_timer = 0.0
-                
-                # Rotacionar padrão de ataque
-                self.attack_pattern = (self.attack_pattern + 1) % 3
-                
-                # ===== PADRÃO 0: Tiro teleguiado direto =====
-                if self.attack_pattern == 0:
-                    fireball = Fireball(
-                        self.x + self.w / 2,
-                        self.y + self.h,
-                        player_x,
-                        player_y,
-                        damage=20
-                    )
-                    fireballs.append(fireball)
-                    
-                    # Criar trilha visual
-                    trail = FlameTrail(self.x + self.w / 2, self.y + self.h)
-                    flame_trails.append(trail)
-                
-                # ===== PADRÃO 1: Cone de 3 projéteis =====
-                elif self.attack_pattern == 1:
-                    angles = [-20, 0, 20]  # graus relativos
-                    for angle_offset in angles:
-                        fb = Fireball(
-                            self.x + self.w / 2,
-                            self.y + self.h,
-                            player_x,
-                            player_y,
-                            damage=15,
-                            angle_offset=angle_offset
-                        )
-                        fireballs.append(fb)
-                
-                # ===== PADRÃO 2: Spread em múltiplas direções =====
-                elif self.attack_pattern == 2:
-                    for angle in range(0, 360, 90):  # 4 direções
-                        fb = Fireball(
-                            self.x + self.w / 2,
-                            self.y + self.h,
-                            player_x,
-                            player_y,
-                            damage=15,
-                            fixed_angle=angle
-                        )
-                        fireballs.append(fb)
-
-        elif self.state == "dying":
-            # Animação de morte (opcional - remover se não usar)
-            pass
-
-        # ===== ANIMAÇÃO =====
-        self.animation_timer += dt
-        if self.animation_timer >= self.animation_speed:
-            self.animation_timer = 0.0
-            self.current_frame = (self.current_frame + 1) % len(self.animation_frames)
-
-        # ===== ATUALIZAR RECT =====
-        self.rect.x = self.x
-        self.rect.y = self.y
-
-        return fireballs, flame_trails
-
-    def take_damage(self, damage: int):
-        """Recebe dano e verifica morte."""
-        self.health -= damage
+    def take_damage(self, amount: int) -> None:
+        self.health -= amount
         if self.health <= 0:
             self.dead = True
-            self.state = "dying"
 
-    def draw(self, surface: pygame.Surface):
-        """Desenha o boss."""
-        if not self.has_valid_frames or not self.animation_frames:
-            # Fallback: desenho primitivo se sprites não carregarem
-            pygame.draw.rect(surface, RED, self.rect)
-            return
-        
-        # Desenhar frame atual
-        frame = self.animation_frames[self.current_frame]
-        surface.blit(frame, (int(self.x), int(self.y)))
-        
-        # ===== HUD DO BOSS (barra de vida) =====
-        # Barra de fundo
-        bar_width = self.w
-        bar_height = 8
-        bar_x = self.x
-        bar_y = self.y - 15
-        pygame.draw.rect(surface, DARK_GRAY, (bar_x, bar_y, bar_width, bar_height))
-        
-        # Barra de vida
+    # ============================================================
+    # CONTRATO BossProtocol
+    # ============================================================
+    def update_boss(
+        self, dt: float, ctx: "BossUpdateContext"
+    ) -> "BossUpdateResult":
+        """Adaptador polimórfico chamado por EntityManager._update_boss."""
+        from ..systems.boss_context import BossUpdateResult
+
+        player_y = ctx.player_y if ctx.player_y is not None else 0.0
+        fireballs = self._tick(dt, ctx.player_x, player_y)
+
+        # Fireballs são inimigos do ponto de vista do EntityManager — vão para em.enemies.
+        # Se preferir uma lista dedicada, adicione `new_fireballs` em BossUpdateResult
+        # e estenda _consume_boss_result.
+        return BossUpdateResult(spawned_enemies=list(fireballs))
+
+    # ============================================================
+    # Lógica interna (poderia estar inline no update_boss, separamos para clareza)
+    # ============================================================
+    def _tick(self, dt: float, player_x: float, player_y: float) -> List["Fireball"]:
+        from .fireball import Fireball  # import local evita ciclo
+
+        fireballs: List[Fireball] = []
+        if self.state == "entering":
+            self.y += self.entry_speed * dt
+            if self.y >= self.target_y:
+                self.y = self.target_y
+                self.state = "normal"
+            return fireballs
+
+        # Movimento lateral.
+        self.x += self.speed * self.direction * dt
+        if self.x <= Config.SCREEN_WIDTH * 0.1:
+            self.direction = 1
+        elif self.x >= Config.SCREEN_WIDTH * 0.9 - self.w:
+            self.direction = -1
+
+        # Tiro com padrões alternados.
+        self.attack_timer += dt
+        if self.attack_timer >= self.attack_cooldown:
+            self.attack_timer = 0.0
+            cx = self.x + self.w / 2
+            cy = self.y + self.h
+            if self.attack_pattern == 0:
+                fireballs.append(Fireball(cx, cy, player_x, player_y))
+            elif self.attack_pattern == 1:
+                for ang in (-20, 0, 20):
+                    fireballs.append(
+                        Fireball(cx, cy, player_x, player_y, angle_offset=ang)
+                    )
+            else:  # 2: spread 4-cardeal
+                for ang in (0, 90, 180, 270):
+                    fireballs.append(
+                        Fireball(cx, cy, player_x, player_y, fixed_angle=ang)
+                    )
+            self.attack_pattern = (self.attack_pattern + 1) % 3
+
+        return fireballs
+
+    def draw(self, surface: pygame.Surface) -> None:
+        """Procedural: corpo vermelho + 2 olhos + barra de HP."""
+        pygame.draw.rect(surface, (200, 50, 30), self.rect)
+        pygame.draw.circle(surface, (255, 230, 80), (int(self.x + 25), int(self.y + 25)), 8)
+        pygame.draw.circle(surface, (255, 230, 80), (int(self.x + self.w - 25), int(self.y + 25)), 8)
+
+        # HUD
+        bw, bh = self.w, 6
+        bx, by = self.x, self.y - 12
+        pygame.draw.rect(surface, (40, 40, 40), (bx, by, bw, bh))
         if self.max_health > 0:
-            health_width = (self.health / self.max_health) * bar_width
-            pygame.draw.rect(surface, RED, (bar_x, bar_y, health_width, bar_height))
-            
-            # Borda
-            pygame.draw.rect(surface, WHITE, (bar_x, bar_y, bar_width, bar_height), 2)
+            pct = self.health / self.max_health
+            pygame.draw.rect(surface, (220, 60, 40), (bx, by, bw * pct, bh))
+        pygame.draw.rect(surface, (255, 255, 255), (bx, by, bw, bh), 1)
 ```
 
-### 1.2 Adicionar Constantes em `config.py`
+> **Observação importante.** Bosses com pixel-map ASCII em vários parts (como
+> `Boss`, `SpikeBoss`, `StoneGolemBoss`, `CloudArchmageBoss`) seguem a
+> convenção de externar pixel maps + paletas em `*_pixel_map.py`. Se o seu boss
+> usar pixel-map, faça o mesmo: crie `fire_boss_pixel_map.py` com `PIXEL_MAP`,
+> `PALETTE`, `CHAR_TO_KEY`, etc.
 
-Em `game/core/config.py`, procure a seção de configuração de bosses e adicione:
+### 1.2 (Opcional) Constantes em `config.py`
 
-```python
-# ========================================
-# FIRE BOSS SETTINGS
-# ========================================
-FIRE_BOSS_HEALTH: int = 400
-FIRE_BOSS_WIDTH: int = 100
-FIRE_BOSS_HEIGHT: int = 80
-FIRE_BOSS_SPEED: float = 120.0
-FIRE_BOSS_ENTRY_SPEED: float = 150.0
-FIRE_BOSS_ATTACK_COOLDOWN: float = 1.5
-```
+Se quiser parametrizar via `Config`, registre no `ConfigurationManager`. Como o
+ciclo anterior migrou `config.py` para dataclasses `frozen=True`, evite
+constantes soltas — coloque dentro do dataclass apropriado (`BossConfig` ou
+crie um `FireBossConfig` no mesmo padrão).
 
 ---
 
-## Passo 2: Criar as Entidades de Ataque
+## Passo 2: Entidades de Ataque (Fireball)
 
-### 2.1 Criar `game/entities/fireball.py`
+Crie `game/entities/fireball.py`:
 
 ```python
 import math
+
 import pygame
+
 from ..core.config import config as Config
-from ..core.colors import *
 
 
 class Fireball:
-    """Bola de fogo do FireBoss com suporte a diferentes padrões."""
+    """Bola de fogo do FireBoss. Trata-se como inimigo (vai para em.enemies)."""
+
+    is_boss: bool = False
 
     def __init__(
         self,
@@ -348,539 +305,369 @@ class Fireball:
         target_x: float,
         target_y: float,
         damage: int = 20,
-        angle_offset: float = 0.0,  # Offset em graus para cone
-        fixed_angle: float | None = None,  # Ângulo fixo (para spread)
-    ):
+        angle_offset: float = 0.0,
+        fixed_angle: float | None = None,
+    ) -> None:
         self.x = x
         self.y = y
-        self.speed = 250  # pixels/segundo
+        self.w = self.h = 12
+        self.speed = 250.0
         self.damage = damage
         self.dead = False
-        self.lifetime = 0.0
-        self.max_lifetime = 10.0  # 10 segundos antes de desaparecer
+        self.lifetime = 10.0
 
-        # ===== CÁLCULO DE DIREÇÃO =====
         if fixed_angle is not None:
-            # Usar ângulo fixo (conversão de graus para radianos)
-            radian = math.radians(fixed_angle)
-            self.vx = math.cos(radian) * self.speed
-            self.vy = math.sin(radian) * self.speed
+            rad = math.radians(fixed_angle)
         else:
-            # Calcular direção para o jogador + offset
-            dx = target_x - x
-            dy = target_y - y
-            distance = math.sqrt(dx * dx + dy * dy)
+            base = math.atan2(target_y - y, target_x - x)
+            rad = base + math.radians(angle_offset)
+        self.vx = math.cos(rad) * self.speed
+        self.vy = math.sin(rad) * self.speed
 
-            if distance > 0:
-                # Normalizar
-                base_angle = math.atan2(dy, dx)
-                # Aplicar offset
-                offset_rad = math.radians(angle_offset)
-                final_angle = base_angle + offset_rad
-                
-                self.vx = math.cos(final_angle) * self.speed
-                self.vy = math.sin(final_angle) * self.speed
-            else:
-                self.vx = 0
-                self.vy = self.speed
+    @property
+    def rect(self) -> pygame.Rect:
+        return pygame.Rect(int(self.x - 6), int(self.y - 6), self.w, self.h)
 
-        self.rect = pygame.Rect(x - 5, y - 5, 10, 10)
+    # Inimigos comuns ganham EMP/ice via update_in_context — implemente se quiser
+    # que a fireball desacelere quando o jogador usar EMP.
+    def update_in_context(self, ctx) -> None:
+        self.update(ctx.sdt)
 
-    def update(self, dt: float):
-        """Atualiza posição."""
+    def update(self, dt: float) -> None:
         self.x += self.vx * dt
         self.y += self.vy * dt
-        self.lifetime += dt
-
-        self.rect.centerx = self.x
-        self.rect.centery = self.y
-
-        # Verificar se saiu da tela ou expirou
-        if (
+        self.lifetime -= dt
+        off = (
             self.x < -50
             or self.x > Config.SCREEN_WIDTH + 50
             or self.y < -50
             or self.y > Config.SCREEN_HEIGHT + 50
-            or self.lifetime >= self.max_lifetime
-        ):
+        )
+        if off or self.lifetime <= 0:
             self.dead = True
 
-    def draw(self, surface: pygame.Surface):
-        """Desenha a fireball."""
-        # Núcleo (vermelho/laranja)
-        pygame.draw.circle(surface, (255, 100, 0), (int(self.x), int(self.y)), 6)
-        # Brilho exterior (amarelo)
-        pygame.draw.circle(surface, YELLOW, (int(self.x), int(self.y)), 3)
-```
-
-### 2.2 Criar `game/entities/flame_trail.py`
-
-```python
-import pygame
-from ..core.colors import *
-
-
-class FlameTrail:
-    """Trilha de fogo deixada pelo FireBoss."""
-
-    def __init__(self, x: float, y: float, radius: float = 15.0):
-        self.x = x
-        self.y = y
-        self.radius = radius
-        self.lifetime = 2.0  # 2 segundos
-        self.max_lifetime = 2.0
-        self.damage = 10
-        self.dead = False
-
-        self.rect = pygame.Rect(x - radius, y - radius, radius * 2, radius * 2)
-
-    def update(self, dt: float):
-        """Atualiza a trilha."""
-        self.lifetime -= dt
-        if self.lifetime <= 0:
-            self.dead = True
-
-        self.rect.centerx = self.x
-        self.rect.centery = self.y
-
-    def draw(self, surface: pygame.Surface):
-        """Desenha com fade-out."""
-        # Calcular alpha baseado no tempo restante
-        alpha_progress = self.lifetime / self.max_lifetime
-        
-        # Usar surface com alpha para fade
-        trail_surface = pygame.Surface(
-            (int(self.radius * 2), int(self.radius * 2)), pygame.SRCALPHA
-        )
-        
-        # Cor com alpha
-        color = (255, 150, 0, int(150 * alpha_progress))
-        pygame.draw.circle(
-            trail_surface,
-            color,
-            (int(self.radius), int(self.radius)),
-            int(self.radius)
-        )
-        
-        # Desenhar na tela
-        surface.blit(
-            trail_surface,
-            (int(self.x - self.radius), int(self.y - self.radius))
-        )
+    def draw(self, surface: pygame.Surface) -> None:
+        pygame.draw.circle(surface, (255, 100, 0), (int(self.x), int(self.y)), 7)
+        pygame.draw.circle(surface, (255, 230, 60), (int(self.x), int(self.y)), 3)
 ```
 
 ---
 
-## Passo 3: Atualizar o EntityManager
+## Passo 3: Integração com `EntityManager`
 
-### 3.1 Importar e Adicionar Lista
+### 3.1 Atualizar o union type de `self.boss`
 
-Em `game/systems/entity_manager.py`, adicione no `__init__`:
+Em `game/systems/entity_manager.py`, expanda a anotação do `self.boss`:
 
 ```python
-# Imports no topo do arquivo
-from ..entities.fire_boss import FireBoss
-from ..entities.fireball import Fireball
-from ..entities.flame_trail import FlameTrail
-
-# ... no __init__, depois de self.boss e outras listas:
-self.fireballs: list[Fireball] = []
-self.flame_trails: list[FlameTrail] = []
+self.boss: Union[
+    Boss,
+    SpikeBoss,
+    SlimeBoss,
+    GiantMeteorBoss,
+    StoneGolemBoss,
+    MountainSerpentBoss,
+    CloudArchmageBoss,
+    FireBoss,            # ← novo
+    None,
+] = None
 ```
 
-### 3.2 Atualizar Tipo de Boss
+E importe `FireBoss` no topo.
 
-Em `game/systems/entity_manager.py`, procure por:
+### 3.2 Cascata `_update_boss`? **Nada a fazer.**
 
-```python
-self.boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | None = None
-```
-
-E altere para:
+Esse era o passo doloroso antes. Agora `_update_boss` é polimórfico:
 
 ```python
-self.boss: Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | FireBoss | None = None
-```
-
-### 3.3 Atualizar Método `update()`
-
-Em `game/systems/entity_manager.py`, procure a seção onde os bosses são atualizados:
-
-```python
-if self.boss:
-    # SpikeBoss retorna (List[Spike], List[SpikeBossLaser])
-    if isinstance(self.boss, SpikeBoss):
-        # ... código do SpikeBoss
-    # SlimeBoss apenas atualiza (internamente spawna drips)
-    elif isinstance(self.boss, SlimeBoss):
-        # ... código do SlimeBoss
-    # GiantMeteorBoss apenas atualiza
-    elif isinstance(self.boss, GiantMeteorBoss):
-        # ... código do GiantMeteorBoss
-    # Boss normal retorna (List[BossLaser], List[BossSquare])
-    else:  # isinstance(self.boss, Boss)
-        # ... código do Boss normal
-```
-
-E adicione **ANTES** do`elif isinstance(self.boss, SlimeBoss)`:
-
-```python
-# FireBoss retorna (List[Fireball], List[FlameTrail])
-elif isinstance(self.boss, FireBoss):
-    fireballs, flame_trails = self.boss.update(
-        enemy_dt, player_x, player_y
+def _update_boss(self, enemy_dt, player_x, player_y) -> None:
+    if not self.boss:
+        return
+    ctx = BossUpdateContext(
+        dt=enemy_dt, player_x=player_x, player_y=player_y, entity_manager=self,
     )
-    if fireballs:
-        self.fireballs.extend(fireballs)
-    if flame_trails:
-        self.flame_trails.extend(flame_trails)
+    self._consume_boss_result(self.boss.update_boss(enemy_dt, ctx))
 ```
 
-### 3.4 Atualizar Método `cleanup()`
+Como o seu `FireBoss.update_boss` devolve `spawned_enemies=[fireballs]`, o
+`_consume_boss_result` já roteia para `self.enemies.extend(...)`. **Zero
+edição** em `EntityManager` para o caso comum.
 
-Procure pelo método `cleanup()` e adicione:
+### 3.3 Quando precisar de uma rota nova
 
-```python
-# Limpar fireballs e flame trails
-self.fireballs = [fb for fb in self.fireballs if not fb.dead]
-self.flame_trails = [ft for ft in self.flame_trails if not ft.dead]
-```
+Se quisesse manter as fireballs em uma lista **separada** (`em.fireballs` em
+vez de misturar com `em.enemies`):
 
-### 3.5 Atualizar Método `draw()`
+1. Em `EntityManager.__init__`: `self.fireballs: list[Fireball] = []`.
+2. Em `EntityManager.cleanup()`: `self._filter_dead_inplace(self.fireballs)`.
+3. Em `EntityManager.clear_for_level_transition()`: `self.fireballs.clear()`.
+4. Em `BossUpdateResult` (em `boss_context.py`):
 
-Procure pela seção `def draw()` e adicione:
+   ```python
+   new_fireballs: list[Any] = field(default_factory=_empty_any_list)
+   ```
 
-```python
-# Desenhar fireballs
-for fireball in self.fireballs:
-    fireball.draw(surface)
+5. Em `EntityManager._consume_boss_result`:
 
-# Desenhar flame trails
-for trail in self.flame_trails:
-    trail.draw(surface)
-```
+   ```python
+   if result.new_fireballs:
+       self.fireballs.extend(result.new_fireballs)
+   ```
 
-### 3.6 Atualizar Método `clear_for_level_transition()`
+6. Em `FireBoss.update_boss`, devolva via o campo novo:
 
-Procure e adicione:
+   ```python
+   return BossUpdateResult(new_fireballs=list(fireballs))
+   ```
 
-```python
-self.fireballs.clear()
-self.flame_trails.clear()
-```
+7. Atualize o roteamento de roteamento no docstring do `BossUpdateResult`.
+
+### 3.4 `draw()` do EntityManager
+
+Se as fireballs ficarem em `em.enemies`, o `draw()` já lida — `Fireball.draw()`
+é chamado pelo loop genérico de inimigos. Se virem uma lista dedicada
+`em.fireballs`, adicione um loop de draw no método `draw()` apropriado de
+`EntityManager`.
 
 ---
 
-## Passo 4: Implementar Colisões em `collisions.py`
+## Passo 4: Spawn — `BossFightController._spawn_boss`
 
-Em `game/systems/collisions.py`, adicione:
-
-```python
-def bullets_vs_fire_boss(
-    self,
-    bullets: list[Bullet],
-    fire_boss: FireBoss,
-    floating_scores: list[FloatingScore],
-    entity_manager: "EntityManager",
-) -> int:
-    """Detecta colisão entre balas do jogador e FireBoss."""
-    if not bullets or not fire_boss or fire_boss.dead:
-        return 0
-    
-    score_gain = 0
-    
-    for bullet in bullets[:]:
-        if bullet.rect.colliderect(fire_boss.rect):
-            damage = bullet.damage
-            fire_boss.take_damage(damage)
-            
-            # Criar floating score
-            floating_scores.append(FloatingScore(bullet.x, bullet.y, damage))
-            
-            # Efeito visual
-            entity_manager.spawn_explosion(bullet.x, bullet.y, size=20)
-            
-            # Remover bala
-            bullets.remove(bullet)
-            entity_manager.bullet_pool.release(bullet)
-            
-            score_gain += damage
-    
-    return score_gain
-
-
-def fireballs_vs_ship(
-    self,
-    ship: "Ship",
-    fireballs: list[Fireball],
-) -> bool:
-    """Detecta colisão entre fireballs e nave."""
-    for fireball in fireballs[:]:
-        if fireball.rect.colliderect(ship.rect):
-            fireballs.remove(fireball)
-            return True
-    return False
-
-
-def flame_trails_vs_ship(
-    self,
-    ship: "Ship",
-    flame_trails: list[FlameTrail],
-) -> bool:
-    """Detecta colisão entre flame trails e nave."""
-    for trail in flame_trails[:]:
-        if trail.rect.colliderect(ship.rect):
-            return True
-    return False
-```
-
----
-
-## Passo 5: Atualizar PlayingScene
-
-### 5.1 Importar na Seção de Imports
-
-Em `game/scenes/playing.py`, adicione:
+A cascata de **identificação por tipo** foi eliminada, mas a de **construção
+no spawn** ainda existe (cada boss tem assinatura de construtor diferente). Em
+`game/systems/boss_fight_controller.py`, no método `_spawn_boss`, adicione um
+ramo:
 
 ```python
-from ..entities.fire_boss import FireBoss
-from ..entities.fireball import Fireball
-from ..entities.flame_trail import FlameTrail
-```
-
-### 5.2 Atualizar Cache de Tipo de Boss
-
-Em `playing.py`, na função `_cache_boss_type()`:
-
-```python
-def _cache_boss_type(self):
-    """Cachear tipo de boss quando ele spawna"""
-    if self.entity_manager.boss:
-        from ..entities.giant_meteor_boss import GiantMeteorBoss
-        from ..entities.slime_boss import SlimeBoss
-        from ..entities.spike_boss import SpikeBoss
-        from ..entities.fire_boss import FireBoss
-
-        if isinstance(self.entity_manager.boss, SpikeBoss):
-            self._boss_type_cache = "spike"
-        elif isinstance(self.entity_manager.boss, SlimeBoss):
-            self._boss_type_cache = "slime"
-        elif isinstance(self.entity_manager.boss, GiantMeteorBoss):
-            self._boss_type_cache = "giant_meteor"
-        elif isinstance(self.entity_manager.boss, FireBoss):
-            self._boss_type_cache = "fire"
-        else:
-            self._boss_type_cache = "normal"
-    else:
-        self._boss_type_cache = None
-```
-
-### 5.3 Adicionar Colisões do Boss
-
-Em `playing.py`, na função `_check_boss_collisions()`, adicione **ANTES** do `elif self._boss_type_cache == "slime"`:
-
-```python
-elif self._boss_type_cache == "fire":
-    from ..entities.fire_boss import FireBoss
-
-    fire_boss = cast(FireBoss, boss)
-    score_gain = self.collisions.bullets_vs_fire_boss(
-        self.entity_manager.bullets,
-        fire_boss,
-        self.entity_manager.floating_scores,
-        self.entity_manager,
+elif boss_type == FireBoss:
+    boss = FireBoss(
+        Config.SCREEN_WIDTH / 2 - 50,
+        50,
+        difficulty_multiplier=enemy_health_multiplier,
+        aggressiveness_multiplier=agg,
     )
+    self._em.boss = boss
 ```
 
-### 5.4 Adicionar Dano do Boss à Nave
+E importe `FireBoss` no topo do arquivo (ou no import local no início de
+`_spawn_boss`).
 
-Em `playing.py`, na função `_check_ship_damage()`, adicione no final:
+### `_cache_boss_type`? **Nada a fazer.**
 
-```python
-# ===== COLISÕES COM FIREBALLS E FLAME TRAILS =====
-if self.entity_manager.fireballs:
-    if self.collisions.fireballs_vs_ship(self.ship, self.entity_manager.fireballs):
-        self._handle_ship_hit()
-
-if self.entity_manager.flame_trails:
-    if self.collisions.flame_trails_vs_ship(self.ship, self.entity_manager.flame_trails):
-        self._handle_ship_hit()
-```
+`_cache_boss_type` consulta `getattr(type(boss), "BOSS_TYPE_NAME", "normal")`
+e seu `FireBoss.BOSS_TYPE_NAME = "fire"` já cuida disso.
 
 ---
 
-## Passo 6: Atualizar Levels
+## Passo 5: Colisões (`collisions.py`)
 
-### 6.1 Importar em `levels.py`
+Bosses com `BossHitMixin` herdam `take_damage`/`on_hit`/`collision_circle`, e
+o pipeline genérico `projectiles_vs_enemies` em `collisions.py` já trata bosses
+quando `entity_manager.boss` é exposto via os mesmos sistemas de hit. Para
+**ataques de boss vs nave**:
 
-```python
-from ..entities.fire_boss import FireBoss
-```
+- Se a fireball está em `em.enemies` e implementa `rect`, o caminho existente
+  `enemies_vs_ship` já cobre.
+- Para listas dedicadas (`em.fireballs`), adicione um método `fireballs_vs_ship`
+  espelhando o padrão `enemy_projectiles_vs_ship`, e chame-o no `playing.py`.
 
-### 6.2 Atualizar Union Type
-
-Em `game/core/levels.py`, procure por:
-
-```python
-boss_type: Type[Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss] | None = None
-```
-
-E altere para:
-
-```python
-boss_type: Type[Boss | SpikeBoss | SlimeBoss | GiantMeteorBoss | FireBoss] | None = None
-```
-
-### 6.3 Adicionar Level com FireBoss
-
-Em `FIXED_LEVELS` (em `levels.py`), adicione:
-
-```python
-    10: LevelConfig(
-        level_number=10,
-        enemy_spawn_config={
-            Meteor: 1.0,
-            Alien: 2.0,
-            EyeEnemy: 3.0,
-        },
-        enemies_to_clear=150,
-        boss_type=FireBoss,  # ← Novo boss!
-        mines_enabled=True,
-        formations_enabled=True,
-        theme_name="Vulcão Infernal",
-        score_multiplier=1.8,
-    ),
-```
+> **Não duplique a verificação de boss `is_boss`** — o `apply_hit` em
+> `collision_physics.py` já consulta `getattr(target, "is_boss", False)` e
+> suprime `EnemyDestroyed` corretamente.
 
 ---
 
-## Passo 7: Criar Arquivo de Sprite (Essencial)
+## Passo 6: `PlayingScene` — Caches e Colisões
 
-Você precisa fornecer um sprite sheet para o boss funcionar:
+### 6.1 `_check_boss_collisions`
 
-1. **Locação**: `game/assets/images/sprite_boss_fire.png`
-2. **Dimensões**: 800x80 pixels (8 frames de 100x80)
-3. **Formato**: PNG com transparência (ou fazer fallback em `config.py`)
+`PlayingScene` consulta `entity_manager.boss` e despacha colisões. Como o
+`BossFightController.boss_type` é setado via `BOSS_TYPE_NAME`, você pode
+ramificar pelo string:
 
-Sem o arquivo PNG, o boss usará fallback de desenho primitivo (retângulo vermelho).
+```python
+if self.boss_controller.boss_type == "fire":
+    fire_boss = cast(FireBoss, self.entity_manager.boss)
+    # rotear colisões específicas se houver
+```
+
+Mas, na maioria dos casos, `projectiles_vs_enemies` + `BossHitMixin.on_hit` já
+cobre o hit do jogador no boss. Adicione um ramo aqui só se o boss tiver
+hitbox custom (caso do MountainSerpent, com blocos laterais).
+
+### 6.2 Dano da nave por fireballs
+
+Se as fireballs vão para `em.enemies`, o caminho `enemies_vs_ship` já trata.
+Se você criou `em.fireballs` separado, chame `fireballs_vs_ship` em
+`_check_ship_damage`.
 
 ---
 
-## Passo 8: Testes e Validação
+## Passo 7: Configurar Level (`core/levels/fixed_levels.py`)
 
-### 8.1 Verificar Sintaxe
+> ⚠️ Após o split do item 4, `core/levels.py` virou `core/levels/` (pacote).
+> `FIXED_LEVELS` e `LevelConfig` vivem em **`core/levels/fixed_levels.py`**.
+
+### 7.1 Atualizar o union type do `LevelConfig.boss_type`
+
+Em `game/core/levels/fixed_levels.py`:
+
+```python
+boss_type: (
+    Type[
+        Boss
+        | SpikeBoss
+        | SlimeBoss
+        | GiantMeteorBoss
+        | StoneGolemBoss
+        | MountainSerpentBoss
+        | CloudArchmageBoss
+        | FireBoss              # ← novo
+    ]
+    | None
+) = None
+```
+
+E importe `FireBoss`:
+
+```python
+from ...entities.fire_boss import FireBoss
+```
+
+### 7.2 Adicionar entrada em `FIXED_LEVELS`
+
+```python
+30: LevelConfig(
+    level_number=30,
+    enemy_spawn_config={
+        Meteor: 1.0,
+        Alien: 2.5,
+        EyeEnemy: 4.0,
+    },
+    enemies_to_clear=400,
+    boss_type=FireBoss,
+    mines_enabled=True,
+    formations_enabled=False,
+    theme_name="Vulcao Infernal",
+    score_multiplier=1.8,
+),
+```
+
+> Cuidado: os níveis 1, 3, 6, 10, 12, 16, 20 e 25 já têm bosses fixos.
+> Escolha um número livre.
+
+---
+
+## Passo 8: Sprites? (Opcional)
+
+A maioria dos bosses desenha proceduralmente. Se o seu boss usa sprite sheet
+(como `SlimeBoss`), siga o padrão:
+
+1. Coloque `sprite_boss_fire.png` em `game/assets/images/`.
+2. Carregue via `sprite_loader.load_animation_frames(...)` em
+   `@classmethod load_animation_frames`.
+3. Registre no preload: `sprite_loader.register("fire_boss", cls.load_frames_for_preload)`.
+
+Se for procedural (recomendado para começar), pule este passo.
+
+---
+
+## Passo 9: Validação
+
+### 9.1 Sintaxe + imports
 
 ```bash
-python -m py_compile game/entities/fire_boss.py
-python -m py_compile game/entities/fireball.py
-python -m py_compile game/entities/flame_trail.py
-python -m py_compile game/systems/entity_manager.py
-python -m py_compile game/systems/collisions.py
-python -m py_compile game/scenes/playing.py
+python -c "from game.entities.fire_boss import FireBoss; print('ok')"
+python -c "from game.entities.fireball import Fireball; print('ok')"
+python -c "
+from game.entities.fire_boss import FireBoss
+assert hasattr(FireBoss, 'update_boss'), 'missing update_boss'
+assert hasattr(FireBoss, 'BOSS_TYPE_NAME'), 'missing BOSS_TYPE_NAME'
+assert FireBoss.BOSS_TYPE_NAME == 'fire'
+print('FireBoss adere ao BossProtocol')
+"
 ```
 
-### 8.2 Testar no Jogo
+### 9.2 Spawn smoke test
 
-1. Iniciar o jogo
-2. Ir ao nível 10 (ou qualquer nível com FireBoss)
-3. Verificar:
-   - ✅ Boss aparece do topo
+```bash
+python -c "
+import pygame; pygame.init(); pygame.display.set_mode((1,1))
+from game.entities.fire_boss import FireBoss
+from game.systems.boss_context import BossUpdateContext, BossUpdateResult
+
+b = FireBoss(100, 100)
+# Mock minimo de EntityManager: precisa de .enemies, .spikes, .boss_lasers, etc.
+class FakeEM:
+    enemies = []
+    spikes = []
+    boss_lasers = []
+    boss_squares = []
+    boulders = []
+    attack_debris = []
+    serpent_bullets = []
+    sound_manager = None
+    def _dispatch_boss_sound_events(self, e): pass
+em = FakeEM()
+ctx = BossUpdateContext(dt=0.016, player_x=400, player_y=600, entity_manager=em)
+result = b.update_boss(0.016, ctx)
+assert isinstance(result, BossUpdateResult)
+print('FireBoss.update_boss OK, retornou BossUpdateResult')
+pygame.quit()
+"
+```
+
+### 9.3 Em jogo
+
+1. Inicie o jogo, vá para o nível configurado.
+2. Verifique:
+   - ✅ Boss entra do topo
    - ✅ Move lateralmente
-   - ✅ Lança fireballs em diferentes padrões
-   - ✅ Trilhas de fogo aparecem
-   - ✅ Colisão de balas contra boss funciona
-   - ✅ FireBalls causam dano à nave
-   - ✅ Boss pode ser derrotado
-   - ✅ Explosões e efeitos visuais aparecem
-
-### 8.3 Possíveis Erros
-
-| Erro | Solução |
-|------|---------|
-| `ModuleNotFoundError: No module named 'fire_boss'` | Verificar if `__init__.py` está correto em `game/entities/` |
-| `AttributeError: type object 'FireBoss' has no attribute 'boss'` | Typo no tipo de boss em config.py |
-| Boss não aparece | Verificar if nível está configurado corretamente em `levels.py` |
-| Balas não causam dano | Verificar if `_check_boss_collisions()` está chamando `bullets_vs_fire_boss` |
-| Sem sprite visual | Criar/adicionar arquivo `.png` em `game/assets/images/` |
+   - ✅ Atira fireballs em padrões alternados
+   - ✅ Toma dano normalmente
+   - ✅ Morre + drop de score
+   - ✅ EMP desacelera o boss (e as fireballs)
+   - ✅ `boss_controller.boss_type == "fire"` durante o fight
 
 ---
 
 ## Checklist Final
 
-- [ ] `fire_boss.py` criado com estrutura correta
-- [ ] `fireball.py` criado com lógica de movimento
-- [ ] `flame_trail.py` criado com fade-out
-- [ ] Constantes adicionadas em `config.py`
-- [ ] Imports adicionados em `entity_manager.py`
-- [ ] Listas `fireballs` e `flame_trails` criadas em Entity Manager
-- [ ] Chamada de `update()` do FireBoss adicionada
-- [ ] `cleanup()` atualizado
-- [ ] `draw()` atualizado
-- [ ] Colisões implementadas em `collisions.py`
-- [ ] Cache de tipo de boss atualizado em `playing.py`
-- [ ] Colisões do boss adicionadas em `playing.py`
-- [ ] Colisões da nave com projéteis adicionadas
-- [ ] Type hint atualizado em `levels.py`
-- [ ] Level com FireBoss criado em `levels.py`
-- [ ] Arquivo sprite criado (ou verificado fallback)
-- [ ] Testes de compilação passando
-- [ ] Boss aparece no jogo
-- [ ] Colisões funcionam corretamente
+- [ ] `fire_boss.py` criado, implementa `update_boss(dt, ctx) -> BossUpdateResult`
+- [ ] `BOSS_TYPE_NAME = "fire"` declarado como class attribute
+- [ ] Herda de `BossHitMixin` ou declara `is_boss = True` + `take_damage` + `rect`
+- [ ] `fireball.py` criado com `rect` property e `update_in_context` (para EMP)
+- [ ] Union type de `EntityManager.self.boss` expandido + import
+- [ ] Union type de `LevelConfig.boss_type` em `fixed_levels.py` expandido + import
+- [ ] Entrada em `FIXED_LEVELS` adicionada
+- [ ] Ramo em `BossFightController._spawn_boss` adicionado
+- [ ] (Se aplicável) `BossUpdateResult` ganhou campo novo + roteamento em `_consume_boss_result`
+- [ ] Smoke test do `update_boss` passa
+- [ ] Validação em-jogo OK
 
 ---
 
-## Diferenças Importantes vs Tutorial Anterior
+## Comparação: Antes (Cascata) vs Agora (Polimórfico)
 
-| Aspecto | Tutorial Antigo | Este Tutorial |
-|--------|---|---|
-| **Herança** | `class FireBoss(Boss)` | `class FireBoss` (nenhuma herança) |
-| **Update** | `def update(dt, player_x, player_y)` | Igual, mas padrão documentado |
-| **Sprites** | ❌ "Todos usam sprite_loader" | ✅ "Apenas SlimeBoss usa sprites" |
-| **Retorno** | Sempre retorna entidades | Documentado: FireBoss retorna, SlimeBoss não |
-| **EntityManager** | Novos atributos | Usa padrões existentes |
-| **EMP System** | Não menciona | ✅ Explicado: automático, 65% slowdown |
-
----
-
-## 👀 Opções de Visual para Novo Boss
-
-### Opção 1: Desenho Geométrico (Como Boss, SpikeBoss, GiantMeteorBoss)
-
-Mais simples, sem necesidade de arquivos PNG:
-
-```python
-def draw(self, surface: pygame.Surface):
-    # Desenhar corpo com pygame.draw
-    pygame.draw.rect(surface, RED, (self.x, self.y, self.w, self.h))
-    
-    # Desenhar olhos
-    pygame.draw.circle(surface, YELLOW, (self.x + 20, self.y + 15), 8)
-    pygame.draw.circle(surface, YELLOW, (self.x + self.w - 20, self.y + 15), 8)
-    
-    # Barra de vida
-    pygame.draw.rect(surface, DARK_GRAY, (self.x, self.y - 15, self.w, 8))
-    health_width = (self.health / self.max_health) * self.w
-    pygame.draw.rect(surface, RED, (self.x, self.y - 15, health_width, 8))
-```
-
-### Opção 2: Sprite Animado (Como SlimeBoss)
-
-Requer arquivo PNG mas oferece visual melhor:
-
-```python
-# Carrega sprite sheet: game/assets/images/sprite_boss_fire.png (800x80 = 8 frames)
-self.animation_frames = self.load_animation_frames()
-frame = self.animation_frames[self.current_frame]
-surface.blit(frame, (int(self.x), int(self.y)))
-```
+| Aspecto | Antes (legado) | Agora (após item 1) |
+|---------|---------------|---------------------|
+| **Update no EntityManager** | `elif isinstance(self.boss, FireBoss): ...` (edita 2 lugares) | Nada — `boss.update_boss(ctx)` |
+| **Identificação no Controller** | `elif isinstance(self.boss, FireBoss): self.boss_type = "fire"` | Nada — `getattr(type(boss), "BOSS_TYPE_NAME")` |
+| **Roteamento de emissões** | Boss-específico, inline na cascata | Genérico via `BossUpdateResult` |
+| **Adicionar boss novo** | Edita `entity_manager.py` (2x) + `boss_fight_controller.py` (1x) | Implementa `update_boss(dt, ctx)` no boss |
+| **Slow-motion (game-over)** | Cascata duplicada | Mesmo `update_boss` rodando com `dt * slow_factor` |
 
 ---
 
 ## Referências
 
-- [Boss Real](../game/entities/boss.py) - Padrão de boss com face tracking
-- [SlimeBoss Real](../game/entities/slime_boss.py) - Padrão com spawning interno
-- [SpikeBoss Real](../game/entities/spike_boss.py) - Padrão com pausa de jogo
-- [EntityManager](../game/systems/entity_manager.py) - Como entidades são gerenciadas
-- [Collisions](../game/systems/collisions.py) - Sistema de colisão com máscara
-
+- [BossProtocol + Context](../game/systems/boss_context.py) — Contrato unificado.
+- [Boss base](../game/entities/boss.py) — Exemplo com `update_boss` + floating squares.
+- [SpikeBoss](../game/entities/spike_boss.py) — Exemplo retornando `new_spikes` + `new_lasers`.
+- [SlimeBoss](../game/entities/slime_boss.py) — Boss que muta EntityManager direto (`update_boss` é só adapter).
+- [StoneGolemBoss](../game/entities/stone_golem_boss.py) — Exemplo com 3 rotas + sync de `orbital_debris`.
+- [CloudArchmageBoss](../game/entities/cloud_archmage_boss.py) — Roteamento custom de spawned (RockGlider, MountainPropeller).
+- [BossHitMixin](../game/entities/boss_hit_mixin.py) — Contrato de colisão padrão.
+- [EntityManager `_update_boss` + `_consume_boss_result`](../game/systems/entity_manager.py) — Dispatcher polimórfico.
+- [BossFightController `_cache_boss_type` + `_spawn_boss`](../game/systems/boss_fight_controller.py) — Identificação via `BOSS_TYPE_NAME`, construção ainda por tipo.
+- [Plano de revisão (item 1)](../NOVO_PLANO_DE_REVISÃO.MD) — Contexto da migração polimórfica.
