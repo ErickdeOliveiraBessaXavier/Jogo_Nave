@@ -693,7 +693,7 @@ class EntityManager:
         for fs in self.floating_scores:
             fs.update(dt)
         for ms in self.mini_ships:
-            ms.update(dt, self._cached_all_enemies, self.mini_ship_bullets)
+            ms.update(dt, self, self.mini_ship_bullets)
 
     def _update_spikes(
         self, dt: float, enemy_dt: float, player_x: float, player_y: float
@@ -867,7 +867,7 @@ class EntityManager:
         # MiniShip exige listas explícitas de alvos/balas — em slow-motion
         # passamos vazias para evitar disparos durante a death sequence.
         for ms in self.mini_ships:
-            ms.update(dt, [], [])
+            ms.update(dt, self, [])
 
         # Demais grupos têm assinatura uniforme update(dt).
         uniform_groups: list[list[Any]] = [

@@ -1,6 +1,6 @@
 import math
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import pygame
 
@@ -15,6 +15,9 @@ from .meteor import Meteor
 from .mini_ship_bullet import MiniShipBullet
 from .ship import Ship
 from .stone_sentry import StoneSentry
+
+if TYPE_CHECKING:
+    from ..systems.entity_manager import EntityManager
 
 _SPRITE_PATH = (
     Path(__file__).resolve().parent.parent / "assets" / "icons" / "mini_ship.png"
@@ -84,7 +87,7 @@ class MiniShip:
     def update(
         self,
         dt: float,
-        enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry],
+        entity_manager: "EntityManager",
         bullets: list[MiniShipBullet],
     ):
         # Movement
@@ -98,44 +101,20 @@ class MiniShip:
         # Shooting
         self.shoot_timer -= dt
         if self.shoot_timer <= 0:
-            nearest_enemy = self._find_nearest_enemy(enemies)
+            nearest_enemy = self._find_nearest_enemy(entity_manager)
             if nearest_enemy:
                 self.shoot(nearest_enemy, bullets)
                 self.shoot_timer = self.shoot_cooldown
 
     def _find_nearest_enemy(
-        self, enemies: list[Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry]
-    ) -> Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry | None:
-        from ..systems.targeting import find_nearest_in_list
+        self, entity_manager: "EntityManager"
+    ) -> Optional[Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry]:
+        """Usa a função de targeting compartilhada com range máximo."""
+        from ..systems.targeting import find_nearest_enemy
 
-        nearest = find_nearest_in_list(
-            self.x, self.y, enemies, max_range_sq=_MAX_TARGETING_RANGE_SQ
+        return find_nearest_enemy(
+            self.x, self.y, entity_manager, max_range_sq=_MAX_TARGETING_RANGE_SQ
         )
-        if nearest is not None:
-            return nearest
-
-        # Fallback: explicitly consider Boss instances (some bosses may
-        # implement `can_take_damage` semantics that exclude them from the
-        # generic helper). Allow mini-ships to target visible bosses.
-        best = None
-        best_sq = _MAX_TARGETING_RANGE_SQ
-        for e in enemies:
-            if isinstance(e, Boss) and not getattr(e, "dead", False):
-                if hasattr(e, "w") and hasattr(e, "h"):
-                    cx = float(e.x + e.w / 2)
-                    cy = float(e.y + e.h / 2)
-                elif hasattr(e, "radius"):
-                    cx = float(e.x)
-                    cy = float(e.y)
-                else:
-                    continue
-                dx = cx - self.x
-                dy = cy - self.y
-                dist_sq = dx * dx + dy * dy
-                if dist_sq < best_sq:
-                    best_sq = dist_sq
-                    best = e
-        return best
 
     def shoot(
         self,

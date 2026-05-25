@@ -304,7 +304,7 @@ unifica o caminho de busca. Exige que `MiniShip.update()` receba o
 
 **Impacto:** `entities/mini_ship.py`, `scenes/playing.py` (caller).
 
-**Status:** Pendente
+**Status:** ✅ Concluído — `MiniShip.update()` agora recebe `entity_manager`. Fallback manual de `Boss` eliminado. Delegação para `find_nearest_enemy()` unificada.
 
 ---
 
@@ -467,7 +467,7 @@ Itens 7, 8 e 9 podem rodar em paralelo por não terem dependência. Item 2
 | 3 | `_update_environment` — copy-remove em múltiplos grupos | Crítico | ✅ Concluído |
 | 4 | `levels/_legacy.py` — split por domínio não executado | Médio | Pendente |
 | 5 | `playing.py` — call sites `self.ship` sem slot context | Médio | Adiado (retrocompat) |
-| 6 | `MiniShip._find_nearest_enemy` — fallback Boss duplica targeting | Médio | Pendente |
+| 6 | `MiniShip._find_nearest_enemy` — fallback Boss duplica targeting | Médio | ✅ Concluído |
 | 7 | `handle_mine_explosion` — mutação direta de formation.enemies | Médio | ✅ Concluído |
 | 8 | `Ship.__init__` — imports locais sem necessidade | Baixo | ✅ Concluído |
 | 9 | `playing.py` — docstring histórica desatualizada | Baixo | ✅ Concluído |
