@@ -9,6 +9,9 @@ from ..core.config import config as Config
 from ..core.ship_types import ShipProfile, get_ship_profile
 from ..core.sound import sound_manager
 from .particle_types import ParticleDict, step_particle
+from .ship_movement import ShipMovement
+from .ship_powerups import ShipPowerups
+from .ship_renderer import ShipRenderer
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -210,10 +213,6 @@ class Ship:
         self.draw_time: float = 0.0
 
         # Componentes extraídos: Ship vira fachada e delega.
-        from .ship_movement import ShipMovement
-        from .ship_powerups import ShipPowerups
-        from .ship_renderer import ShipRenderer
-
         self._renderer = ShipRenderer(self)
         self._powerups = ShipPowerups(self)
         self._movement = ShipMovement(self)

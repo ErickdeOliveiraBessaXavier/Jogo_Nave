@@ -812,6 +812,7 @@ class StoneGolemBoss(BossHitMixin):
     Implementação otimizada com FSM modularizada.
     """
 
+    BOSS_TYPE_NAME: str = "stone_golem"
     is_boss: bool = True
     SCALE = 10
     MAX_CHARGE_PARTICLES = 100

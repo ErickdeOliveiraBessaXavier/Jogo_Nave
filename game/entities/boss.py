@@ -38,6 +38,8 @@ class Boss(BossHitMixin):
     - Frenzy mode with enhanced attacks
     """
 
+    BOSS_TYPE_NAME: str = "normal"
+
     # Attack constants (boss-specific values)
     FRENZY_LASER_ANGLES: List[float] = [-0.349, 0, 0.349]  # 20 degrees in radians
     LASER_DISTANCE: int = 2000  # Maximum laser reach (visual, boss-specific)

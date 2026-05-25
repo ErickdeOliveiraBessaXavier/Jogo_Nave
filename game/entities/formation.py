@@ -182,7 +182,7 @@ class Formation:
         else:
             self._update_pattern_positions(dt)
 
-        # Atualizar cada inimigo e coletar balas (swap-and-pop para mortos).
+        # Atualizar cada inimigo e coletar balas
         all_bullets: List[Any] = []
         i = 0
         while i < len(self.enemies):
@@ -211,6 +211,9 @@ class Formation:
                 )
             i += 1
 
+        # Remover inimigos mortos
+        self.remove_dead_enemies()
+
         # Formação morre se todos os inimigos morrerem
         if len(self.enemies) == 0:
             self.dead = True
@@ -221,6 +224,16 @@ class Formation:
             self.dead = True
 
         return all_bullets
+
+    def remove_dead_enemies(self) -> None:
+        """Remove inimigos mortos da formação usando swap-and-pop (O(n))."""
+        i = 0
+        while i < len(self.enemies):
+            if getattr(self.enemies[i], "dead", False):
+                self.enemies[i] = self.enemies[-1]
+                self.enemies.pop()
+            else:
+                i += 1
 
     def _update_entry(self, dt: float):
         """Delega para o método de entrada correto baseado no padrão escolhido."""

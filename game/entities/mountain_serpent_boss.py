@@ -866,6 +866,7 @@ class MountainSerpentBoss(BossHitMixin):
       * Renderizar a cabeca animada e a barra de HP.
     """
 
+    BOSS_TYPE_NAME: str = "mountain_serpent"
     is_boss: bool = True
 
     # ------------------------------------------------------------------

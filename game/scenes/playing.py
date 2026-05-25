@@ -1,21 +1,22 @@
 """
 playing.py — Cena principal de gameplay.
 
-Melhorias aplicadas (boas práticas Python / Pygame):
-  1. Constantes de módulo extraídas do __init__ para evitar "magic numbers".
-  2. __init__ dividido em métodos _init_* coesos (Single Responsibility).
-  3. UpgradeContext substituído por dataclass tipada (elimina `type(..., (), ...)(...)`).
-  4. build_mini_ships() elimina duplicação em _process_powerups_and_stars.
-  5. _apply_powerup() com dict-dispatch substitui cadeia de elif crescente.
-  6. Progressão de nível extraída em LevelProgressionController.
-  7. Boss fight extraído em BossFightController (systems/boss_fight_controller.py).
-  8. _compute_shake_offset() encapsula lógica de screen-shake.
-  9. Sistema de tiro extraído em ShootingSystem (systems/shooting_system.py).
- 10. Docstrings e type hints revisados; comentários inline redundantes removidos.
- 11. Importações locais reagrupadas no topo quando possível; ciclos restantes mantidos.
- 12. f-strings usadas de forma consistente no logging.
- 13. Variável `t` ambígua renomeada para `blink_t` (evita colisão com variável de
-     cutscene e melhora legibilidade).
+Orquestra todo o ciclo de jogo: entrada de jogador, atualização de entidades,
+colisões, renderização e progresso de nível.
+
+Responsabilidades principais:
+  - Gerenciar máquina de estados (preparation, playing, defeat, victory, boss_intro)
+  - Instanciar e coordenar EntityManager (entidades), Collisions (física),
+    GameRenderer (renderização), BossFightController e ShootingSystem
+  - Atualizar DeltaTime para slow-motion (game over, boss warning)
+  - Emitir eventos de progresso (level complete, score milestones) para EventBus
+  - Sincronizar estado com metaprogression (level_config dinâmico)
+
+Arquitetura:
+  - EntityManager: concentra todas as entidades (inimigos, projéteis, efeitos)
+  - Systems extraídos: LevelProgressionController, BossFightController, ShootingSystem
+  - RenderFrame DTO: desacopla necessidades de renderização da lógica de jogo
+  - Context objects: EnemyUpdateContext, BossUpdateContext (unificam assinaturas)
 """
 
 from __future__ import annotations

@@ -110,6 +110,7 @@ class CrackPosition(TypedDict):
 class GiantMeteorBoss:
     """Boss simples: um meteoro gigante caindo lentamente."""
 
+    BOSS_TYPE_NAME: str = "giant_meteor"
     is_boss: bool = True
 
     def __init__(self, _x: float, _y: float) -> None:

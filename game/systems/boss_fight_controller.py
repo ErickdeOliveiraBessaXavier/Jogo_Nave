@@ -295,26 +295,9 @@ class BossFightController:
             self.boss_type = None
             return
 
-        from ..entities.cloud_archmage_boss import CloudArchmageBoss
-        from ..entities.giant_meteor_boss import GiantMeteorBoss
-        from ..entities.mountain_serpent_boss import MountainSerpentBoss
-        from ..entities.slime_boss import SlimeBoss
-        from ..entities.spike_boss import SpikeBoss
-        from ..entities.stone_golem_boss import StoneGolemBoss
-
-        type_map: dict[type, str] = {
-            SpikeBoss: "spike",
-            SlimeBoss: "slime",
-            GiantMeteorBoss: "giant_meteor",
-            StoneGolemBoss: "stone_golem",
-            MountainSerpentBoss: "mountain_serpent",
-            CloudArchmageBoss: "archmage",
-        }
-        for cls, name in type_map.items():
-            if isinstance(boss, cls):
-                self.boss_type = name
-                return
-        self.boss_type = "normal"
+        # Cada boss declara BOSS_TYPE_NAME como class attribute.
+        # Consultar via getattr elimina a cascata de isinstance.
+        self.boss_type = getattr(type(boss), "BOSS_TYPE_NAME", "normal")
 
     def _spawn_boss(
         self, level_config: LevelConfig, enemy_health_multiplier: float

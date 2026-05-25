@@ -35,6 +35,8 @@ class SpikeBoss(BossHitMixin):
     - Intervalo entre ondas muda em modo frenzy
     """
 
+    BOSS_TYPE_NAME: str = "spike"
+
     def __init__(self, x: float, y: float, health: int = Config.SPIKE_BOSS_HEALTH):
         # Posição e tamanho
         self.w = 120

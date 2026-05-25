@@ -809,10 +809,9 @@ class EntityManager:
         """Elementos dinâmicos: boss_squares, boulders/debris, bombs, towers, mines, black holes."""
         sw, sh = self._screen_size
 
-        for q in self.boss_squares[:]:
+        for q in self.boss_squares:
             q.update(enemy_dt, sw, sh)
-            if q.dead:
-                self.boss_squares.remove(q)
+        self._filter_dead_inplace(self.boss_squares)
 
         for m in self.boulders:
             es = m.update(dt)
@@ -822,20 +821,17 @@ class EntityManager:
         for s in self.attack_debris:
             s.update(dt)
 
-        for b in self.air_strike_bombs[:]:
+        for b in self.air_strike_bombs:
             b.update(enemy_dt)
-            if b.dead:
-                self.air_strike_bombs.remove(b)
+        self._filter_dead_inplace(self.air_strike_bombs)
 
-        for t in self.cannon_towers[:]:
+        for t in self.cannon_towers:
             t.update(enemy_dt)
-            if t.dead:
-                self.cannon_towers.remove(t)
+        self._filter_dead_inplace(self.cannon_towers)
 
-        for m in self.cannon_mines[:]:
+        for m in self.cannon_mines:
             m.update(enemy_dt)
-            if m.dead:
-                self.cannon_mines.remove(m)
+        self._filter_dead_inplace(self.cannon_mines)
 
         for b in self.black_holes:
             b.update(dt)
