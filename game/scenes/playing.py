@@ -553,7 +553,15 @@ class PlayingScene(Scene):
 
     def _reset_ship_for_level_entry(self) -> None:
         """Reposiciona a nave para a posição de entrada do nível atual e inicia animação."""
-        if self.is_side_scroll:
+        if self._in_atmosphere and self._atmosphere_route == "entering":
+            # Entering (descida na atmosfera): a nave entra pela borda SUPERIOR e
+            # atira pra baixo (facing "south", setado em _start_atmosphere_interstitial);
+            # os meteoros sobem de baixo. Espelha o ramo top-down, mas pelo topo.
+            start_x = Config.SCREEN_WIDTH / 2.0 - 20
+            start_y = -100.0
+            target_x = start_x
+            target_y = float(_TOP_DOWN_SHIP_TARGET_Y_OFFSET)
+        elif self.is_side_scroll:
             start_x = -100.0
             start_y = (Config.SCREEN_HEIGHT - 35) / 2.0
             target_x = float(_SIDE_SCROLL_SHIP_ENTRY_X)
@@ -829,6 +837,11 @@ class PlayingScene(Scene):
         self.is_side_scroll = False
         self.r.set_atmosphere_mode(route)
 
+        # Trigger pop-up de mudança de fase
+        is_exiting = route == "exiting"
+        self.level_popup_text = "SAINDO DA ATMOSFERA" if is_exiting else "ENTRANDO NA ATMOSFERA"
+        self.level_popup_timer = self.level_popup_duration
+
         level_number = self.level_controller.current_level_number
         self.enemy_spawner.set_level(
             level_number,
@@ -849,15 +862,46 @@ class PlayingScene(Scene):
         self.ship.set_facing(config.facing if config else "north")
         logger.info("[ATMOSPHERE] Interstício jogável iniciado: %s", route)
 
+    def _apply_atmosphere_death_penalty(self) -> None:
+        """Morte no interstício: em vez de game over, corta o progresso pela
+        metade (piso 0%), revive todos os slots com as vidas iniciais da run e
+        limpa os meteoros em tela. A fase continua.
+        """
+        self._atmosphere_progress = max(0.0, self._atmosphere_progress * 0.5)
+        # Se a altitude havia chegado a 100% (spawner parado), religa a chuva.
+        self.enemy_spawner.stopped = False
+
+        initial_lives = int(self.difficulty_settings["lives"])
+        for slot in self.roster.all_slots():
+            slot.is_dead = False
+            slot.revival_beacon = None
+            self._sync_lives_for(slot, initial_lives)
+            slot.ship.invuln = RevivalBeacon.POST_REVIVE_INVULN_MS
+            self._build_permanent_mini_ships(slot)
+
+        # Recomeço limpo: remove meteoros/hostis em tela.
+        self.entity_manager.meteor_pool.clear_active()
+        self.entity_manager.enemies.clear()
+
+        logger.info(
+            "[ATMOSPHERE] Morte: progresso -> %.0f%%, revive com %d vidas.",
+            self._atmosphere_progress * 100.0,
+            initial_lives,
+        )
+
     def _update_atmosphere_progress(self, dt: float) -> None:
-        """Avança o medidor de altitude; ao encher, dispara a cutscene 2."""
+        """Avança o medidor de altitude."""
+        if self._atmosphere_progress >= 1.0:
+            return
+
         config = get_phase_config(self._atmosphere_route)
         length = config.altitude_length if config else 40.0
         self._atmosphere_progress = min(
             1.0, self._atmosphere_progress + dt / max(0.1, length)
         )
         if self._atmosphere_progress >= 1.0:
-            self._finish_atmosphere_interstitial()
+            self.enemy_spawner.stopped = True
+            logger.info("[ATMOSPHERE] Altitude atingida, aguardando limpeza de tela...")
 
     def _finish_atmosphere_interstitial(self) -> None:
         """Conclui a fase e dispara a cutscene de chegada (cutscene 2)."""
@@ -866,8 +910,9 @@ class PlayingScene(Scene):
         self._atmosphere_route = None
         logger.info("[ATMOSPHERE] Interstício concluído")
 
-        # Limpa os meteoros da fase e restaura o spawner para o nível destino
-        # (a fase sobrescreveu a config do spawner com a chuva de meteoros).
+        # Restaura o spawner para o nível destino (a fase tinha parado ele
+        # ao atingir 100% de altitude). O entity_manager.clear_for_level_transition
+        # aqui é salvaguarda caso algo tenha restado.
         self.boss_controller.reset()
         self.entity_manager.clear_for_level_transition()
         for slot in self.roster.alive_slots():
@@ -894,13 +939,19 @@ class PlayingScene(Scene):
         Pula o controller de nível para o fim do mundo atual e avança — o
         próximo nível cruza a fronteira de mundo, disparando o fluxo normal
         (theme change → cutscene 1 → interstício de atmosfera se a rota
-        qualificar → cutscene 2 → destino corretamente configurado, pois
-        `start_next_level` seta o spawner do mundo destino). Pula o boss do
-        mundo atual.
+        qualificar → cutscene 2 → destino corretamente configurado).
+        
+        Se já estiver no interstício de atmosfera, pula ele instantaneamente.
         """
-        if self.world_transition_cutscene_active or self._in_atmosphere:
+        if self.world_transition_cutscene_active:
             logger.info("[DEBUG] Transição já em andamento")
             return
+
+        if self._in_atmosphere:
+            logger.info("[DEBUG] F8: pulando interstício de atmosfera")
+            self._finish_atmosphere_interstitial()
+            return
+
         boss_level = self.current_world.boss_level
         self.level_controller.current_level_index = boss_level - 1
         logger.info(
@@ -1143,6 +1194,9 @@ class PlayingScene(Scene):
             # normal de nível (sem boss, sem "enemies_to_clear").
             if self.transition_phase == TransitionPhase.PLAYING:
                 self._update_atmosphere_progress(dt)
+                # Se a altitude chegou a 100% e a tela está limpa de inimigos, finaliza.
+                if self._atmosphere_progress >= 1.0 and not self.entity_manager.enemies:
+                    self._finish_atmosphere_interstitial()
             return
         if self.boss_controller.active:
             if self.entity_manager.boss and self.entity_manager.boss.dead:
@@ -1901,6 +1955,13 @@ class PlayingScene(Scene):
         # Em coop, se restar pelo menos um vivo, o beacon do morto pode ser
         # ativado — o slot reviverá no próximo update sem disparar game over.
         is_game_over = all(s.lives <= 0 for s in self.roster.all_slots())
+
+        # Interstício de atmosfera: perder todas as vidas NÃO é game over — corta
+        # o progresso pela metade e a fase continua (regra própria da fase).
+        if is_game_over and self._in_atmosphere:
+            self._apply_atmosphere_death_penalty()
+            return
+
         # No game over, persistir o ganho da fase incompleta (record_clear não
         # roda nesse caso). Em perdas de vida com vidas restantes, deixar para
         # record_clear capturar o total quando a fase for concluída.

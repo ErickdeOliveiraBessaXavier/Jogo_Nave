@@ -146,8 +146,9 @@ Os backgrounds atuais (`render/backgrounds.py`) têm a direção embutida (`upda
       facing north, meteoros caindo, colisões); fim por altitude → cutscene 2
 ✅ 4. Medidor de altitude + Barra no HUD: loop visual completo              [HUD]
 ✅ 5. Meteoros invertidos + Background de nuvens: imersão completa          [visual/entidades]
-🟡 6. Inimigos custom da fase + Entering invertido (clamp topo, meteoros subindo)
-   7. Penalidade de morte (barra pela metade)                               [regra de falha]
+🟡 6. Entering: meteoros subindo ✅ + nave entra pelo TOPO ✅;
+      clamp da nave na faixa superior e inimigos custom da fase pendentes
+✅ 7. Penalidade de morte (barra pela metade, revive com vidas iniciais)    [regra de falha]
    8. Pacing/intensidade + polimento visual                                 [tuning]
 ```
 
@@ -157,7 +158,9 @@ Marcos jogáveis: passo 4 fecha o loop (entra/sai mesmo vazio); passo 5 dá um E
 
 ## 11. Pontos a confirmar antes/durante a implementação
 
-- Vidas restauradas após a penalidade de morte (quanto?) e piso da barra de progresso.
+- ✅ Penalidade de morte: revive com as **vidas iniciais da run**
+  (`difficulty_settings["lives"]`); barra cortada pela metade com **piso em 0%**
+  (`progress = max(0.0, progress * 0.5)`).
 - `altitude_length` concreta ("bem longa" = quanto, em segundos/distância?).
 - Quantos/quais inimigos custom além dos meteoros.
 - Se cutscene 1 e cutscene 2 reutilizam a animação atual de lançamento ou ganham variação (entrar vs sair da atmosfera).
@@ -272,3 +275,44 @@ direção da nave; meteoros subindo no Entering funcionam corretamente; ruff lim
 - **Passo 6:** Inimigos custom da fase + Entering real (nave no topo, clamp).
 - Morte = game over normal (penalidade "barra pela metade" é o passo 7).
 - `altitude_length = 40s` (em `atmosphere_phase.py`) — ajustável para teste.
+
+### 2026-05-26 — Passo 6 (parcial): entrada da nave pelo topo no Entering
+
+Complemento ao meteoro invertido já feito (passo 5): no Entering a nave agora
+**entra pela borda superior** em vez de surgir embaixo.
+
+- **`_reset_ship_for_level_entry`:** ramo novo no topo — se
+  `self._in_atmosphere and self._atmosphere_route == "entering"`, a nave parte de
+  `y = -100` e desliza para a faixa superior (`_TOP_DOWN_SHIP_TARGET_Y_OFFSET`),
+  espelhando o ramo top-down padrão mas pela borda de cima. O facing "south"
+  (atira pra baixo) já vinha de `_start_atmosphere_interstitial`. Exiting e os
+  níveis normais ficam intactos (caem nos ramos `elif`).
+- Resultado: Entering = nave no topo atirando pra baixo, meteoros subindo de
+  baixo. Coerente.
+
+**Verificado:** ruff limpo; `playing.py` importa.
+
+**Ainda pendente no passo 6:**
+- **Clamp** da nave à faixa superior no Entering (hoje ela pode descer até onde
+  os meteoros nascem). Próximo ajuste natural.
+- **Inimigos custom** da fase (além dos meteoros).
+
+### 2026-05-26 — Passo 7 (penalidade de morte)
+
+Perder **todas as vidas** durante o interstício deixou de ser game over.
+
+- **Interceptação em `_handle_ship_hit`:** logo após `is_game_over = all(...)`,
+  se `is_game_over and self._in_atmosphere` → chama `_apply_atmosphere_death_penalty()`
+  e retorna (não grava death nem abre a tela de Game Over).
+- **`_apply_atmosphere_death_penalty`:**
+  - `_atmosphere_progress = max(0.0, _atmosphere_progress * 0.5)` (piso 0%).
+  - `enemy_spawner.stopped = False` (religa a chuva caso a altitude já estivesse
+    em 100% e o spawner tivesse parado).
+  - Revive **todos os slots**: `is_dead=False`, beacon zerado, vidas restauradas
+    para `difficulty_settings["lives"]`, i-frames (`POST_REVIVE_INVULN_MS`) e
+    rebuild de mini-naves permanentes.
+  - Recomeço limpo: `meteor_pool.clear_active()` + `enemies.clear()`.
+- Perdas de vida **com vidas restantes** seguem o fluxo normal (respawn com
+  i-frames) — só o caso "todas as vidas" é reinterpretado.
+
+**Verificado:** ruff limpo; import ok; método presente.
