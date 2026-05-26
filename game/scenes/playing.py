@@ -639,15 +639,29 @@ class PlayingScene(Scene):
                     "color": (255, random.randint(120, 230), 0),
                 }
             else:
-                particle = {
-                    "offset_x": sprite_w / 2 + random.uniform(-9, 9),
-                    "offset_y": sprite_h + random.uniform(-4, 10),
-                    "vx": random.uniform(-90, 90),
-                    "vy": random.uniform(220, 460),
-                    "lifetime": random.uniform(0.14, 0.34),
-                    "size": random.uniform(2.0, 4.8),
-                    "color": (255, random.randint(120, 230), 0),
-                }
+                # Top-down
+                if self._cutscene_launch_down:
+                    # Re-entry: Nave desce, partículas sobem (saem do topo)
+                    particle = {
+                        "offset_x": sprite_w / 2 + random.uniform(-9, 9),
+                        "offset_y": random.uniform(-10, 4),
+                        "vx": random.uniform(-90, 90),
+                        "vy": -random.uniform(220, 460),
+                        "lifetime": random.uniform(0.14, 0.34),
+                        "size": random.uniform(2.0, 4.8),
+                        "color": (255, random.randint(120, 230), 0),
+                    }
+                else:
+                    # Normal / Exit: Nave sobe, partículas descem (saem da base)
+                    particle = {
+                        "offset_x": sprite_w / 2 + random.uniform(-9, 9),
+                        "offset_y": sprite_h + random.uniform(-4, 10),
+                        "vx": random.uniform(-90, 90),
+                        "vy": random.uniform(220, 460),
+                        "lifetime": random.uniform(0.14, 0.34),
+                        "size": random.uniform(2.0, 4.8),
+                        "color": (255, random.randint(120, 230), 0),
+                    }
             self.world_transition_thruster_particles.append(particle)
 
     def _update_world_transition_thruster_particles(self, dt: float) -> None:
@@ -2355,6 +2369,16 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
 
     def render(self, surface: pygame.Surface) -> None:
+        # Se uma cena-filha (ex.: WorldTransitionScene) foi empilhada durante o
+        # update DESTE mesmo frame, o app.run() ainda chama o render da cena
+        # capturada ANTES do update — esta. Sem o guard, a PlayingScene vaza um
+        # único frame: notadamente o background da atmosfera recém-ativado em
+        # `_start_atmosphere_interstitial` (set_atmosphere_mode) aparece por um
+        # instante antes do painel cobrir a tela — o "blink" da transição
+        # mundo→atmosfera. Como o app só renderiza a cena do topo, esta condição
+        # só é verdadeira nesse frame de borda.
+        if self.app.states.current() is not self:
+            return
         self.game_renderer.render(self._build_render_frame(), surface)
 
     def _build_render_frame(self) -> RenderFrame:
@@ -2387,6 +2411,12 @@ class PlayingScene(Scene):
             upgrade_select_index=self._upgrade_select_index,
             upgrade_slots=self.upgrade_slots,
             upgrade_keybindings=list(keybindings),
+            world_transition_cutscene_active=(
+                self.transitions.phase == TransitionPhase.CUTSCENE_EXIT
+                or self.state == GameState.PREPARING
+            ),
+            world_transition_cutscene_timer=self.world_transition_cutscene_timer,
+            is_arrival_cutscene=self.state == GameState.PREPARING,
             world_transition_thruster_particles=self.world_transition_thruster_particles,
             ship=self.ship,
             entity_manager=self.entity_manager,

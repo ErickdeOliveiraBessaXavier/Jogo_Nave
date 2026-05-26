@@ -234,6 +234,26 @@ class MountainStalagmite:
             self.health = 0
             self._begin_shattering()
 
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        # Já estilhaçando/morto: absorve sem feedback nem crédito de kill (o
+        # estado SHATTERING faz take_damage retornar cedo, então o killed só
+        # pode disparar no hit de transição — evita double-count no score).
+        if self.dead or self._state is _StalagState.SHATTERING:
+            return HitResult()
+
+        self.take_damage(damage)
+        shattered = self._state is _StalagState.SHATTERING
+        return HitResult(
+            killed=shattered,
+            points=self.get_points_value() if shattered else 0,
+            # Sem explosão no kill: a animação de fragmentos já cobre o visual.
+            explosion_size=0 if shattered else 8,
+            sound=hit_sounds.EXPLOSION_ASTEROID if shattered else hit_sounds.BOSS_DAMAGE,
+        )
+
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
@@ -893,6 +913,26 @@ class MountainStalactite:
         if self.health <= 0:
             self.health = 0
             self._begin_shattering()
+
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+
+        # Já estilhaçando/morto: absorve sem feedback nem crédito de kill (o
+        # estado SHATTERING faz take_damage retornar cedo, então o killed só
+        # pode disparar no hit de transição — evita double-count no score).
+        if self.dead or self._state is _StalagState.SHATTERING:
+            return HitResult()
+
+        self.take_damage(damage)
+        shattered = self._state is _StalagState.SHATTERING
+        return HitResult(
+            killed=shattered,
+            points=self.get_points_value() if shattered else 0,
+            # Sem explosão no kill: a animação de fragmentos já cobre o visual.
+            explosion_size=0 if shattered else 8,
+            sound=hit_sounds.EXPLOSION_ASTEROID if shattered else hit_sounds.BOSS_DAMAGE,
+        )
 
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds

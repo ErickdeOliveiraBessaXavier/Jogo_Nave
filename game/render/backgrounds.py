@@ -12,7 +12,7 @@ import logging
 import math
 import random
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type, cast
 
 import pygame
 
@@ -956,8 +956,8 @@ class VerticalCloud:
         self.color = color
         self.is_entering = is_entering
 
-        # Gera uma superfície de nuvem simples (circular/elíptica)
-        self.base_surface = self._generate_cloud_surface()
+        # Surface inicial
+        self.scaled_surface = pygame.Surface((1, 1), pygame.SRCALPHA)
         self.reset(is_first_time=True)
 
     def _generate_cloud_surface(self) -> pygame.Surface:
@@ -974,25 +974,29 @@ class VerticalCloud:
         return _optimize_alpha_surface(surf)
 
     def reset(self, is_first_time: bool = False) -> None:
+        # Regenera a superfície para cada reset para maior variedade visual
+        base_surface = self._generate_cloud_surface()
+        
         scale = random.uniform(0.6, 1.4)
         self.scaled_surface = pygame.transform.smoothscale(
-            self.base_surface,
+            base_surface,
             (
-                int(self.base_surface.get_width() * scale),
-                int(self.base_surface.get_height() * scale),
+                int(base_surface.get_width() * scale),
+                int(base_surface.get_height() * scale),
             ),
         )
 
         self.x = random.uniform(-50, self.screen_width - 100)
-        if is_first_time:
-            self.y = random.uniform(-100, self.screen_height + 100)
-        else:
-            # Entering (nave no topo) -> Nuvens sobem (spawn embaixo)
-            # Exiting (nave embaixo) -> Nuvens descem (spawn no topo)
-            if self.is_entering:
-                self.y = self.screen_height + random.randint(50, 200)
-            else:
-                self.y = -self.scaled_surface.get_height() - random.randint(50, 200)
+        
+        # Para um efeito orgânico de "entrar" na camada de nuvens, 
+        # as nuvens SEMPRE começam fora da tela e entram nela.
+        # Usamos um range maior no primeiro spawn para elas não entrarem todas juntas.
+        stagger = random.randint(20, 800) if is_first_time else random.randint(20, 150)
+        
+        if self.is_entering: # Sobe (spawn embaixo)
+            self.y = self.screen_height + stagger
+        else: # Desce (spawn em cima)
+            self.y = -self.scaled_surface.get_height() - stagger
 
         self.speed = random.uniform(self.speed_range[0], self.speed_range[1])
 
@@ -1008,8 +1012,103 @@ class VerticalCloud:
             if self.y > self.screen_height:
                 self.reset()
 
-    def draw(self, surface: pygame.Surface) -> None:
-        surface.blit(self.scaled_surface, (int(self.x), int(self.y)))
+    def draw(self, surface: pygame.Surface, alpha_mult: float = 1.0) -> None:
+        if alpha_mult <= 0:
+            return
+
+        # Calcula um fade local para evitar "pop" nas bordas de spawn
+        # Quando está perto da borda de spawn, o alpha diminui
+        edge_fade = 1.0
+        fade_margin = 100.0
+        
+        if self.is_entering: # Sobe (spawn em screen_height)
+            dist_to_spawn = (self.screen_height - self.y)
+            if dist_to_spawn < fade_margin:
+                edge_fade = max(0.0, dist_to_spawn / fade_margin)
+        else: # Desce (spawn em -height)
+            cloud_h = self.scaled_surface.get_height()
+            dist_to_spawn = (self.y + cloud_h)
+            if dist_to_spawn < fade_margin:
+                edge_fade = max(0.0, dist_to_spawn / fade_margin)
+
+        final_alpha = int(255 * alpha_mult * edge_fade)
+        if final_alpha <= 0:
+            return
+            
+        if final_alpha < 255:
+            # Para SRCALPHA, set_alpha multiplica o alpha existente na blit
+            self.scaled_surface.set_alpha(final_alpha)
+            surface.blit(self.scaled_surface, (int(self.x), int(self.y)))
+            # Importante resetar o alpha para blits futuros (ou se for reutilizada)
+            self.scaled_surface.set_alpha(255)
+        else:
+            surface.blit(self.scaled_surface, (int(self.x), int(self.y)))
+
+
+class AtmosphereStreak:
+    """Riscos que simulam o vento vertical durante entrada/re-entrada."""
+
+    def __init__(self, width: int, height: int, is_entering: bool):
+        self.width = width
+        self.height = height
+        self.is_entering = is_entering
+        self.x = 0.0
+        self.y = 0.0
+        self.speed = 0.0
+        self.length = 0.0
+        self.alpha = 0
+        self.reset(is_first_time=True)
+
+    def reset(self, is_first_time: bool = False) -> None:
+        self.x = random.uniform(0, self.width)
+        self.length = random.uniform(60, 180)
+        self.speed = random.uniform(1400, 2200)
+        self.alpha = random.randint(40, 110)
+
+        # Para um efeito orgânico, sempre começa fora da tela.
+        # Stagger inicial para não entrarem todos em uma linha só.
+        stagger = random.uniform(20, 1200) if is_first_time else random.uniform(20, 150)
+
+        if self.is_entering:  # Sobe (spawn embaixo)
+            self.y = self.height + stagger
+        else:  # Desce (spawn em cima)
+            self.y = -self.length - stagger
+
+    def update(self, dt: float, speed_mult: float = 1.0) -> None:
+        direction = -1.0 if self.is_entering else 1.0
+        self.y += direction * self.speed * dt * speed_mult
+
+        if self.is_entering:
+            # Margem maior para o reset quando esticado
+            if self.y + self.length < -400:
+                self.reset()
+        else:
+            if self.y > self.height + 400:
+                self.reset()
+
+    def draw(
+        self, surface: pygame.Surface, global_alpha: float = 1.0, speed_mult: float = 1.0
+    ) -> None:
+        alpha = int(self.alpha * global_alpha)
+        if alpha <= 0:
+            return
+
+        # Estica o rastro proporcionalmente à velocidade
+        # Para speed_mult=30x, o rastro fica bem longo para dar sensação de warp
+        stretch_factor = 1.0 + (speed_mult - 1.0) * 0.4
+        draw_length = self.length * stretch_factor
+
+        # Desenha o rastro como uma linha vertical branca com alpha
+        # Se is_entering (sobe), o rastro "estica" para baixo a partir de y
+        if self.is_entering:
+            start_pos = (int(self.x), int(self.y + draw_length))
+            end_pos = (int(self.x), int(self.y))
+        else:
+            start_pos = (int(self.x), int(self.y))
+            end_pos = (int(self.x), int(self.y + draw_length))
+
+        # Linha principal
+        pygame.draw.line(surface, (255, 255, 255, alpha), start_pos, end_pos, 1)
 
 
 class AtmosphereBackground(Background):
@@ -1020,6 +1119,7 @@ class AtmosphereBackground(Background):
         self.route = route
         self.is_entering = route == "entering"
         self.progress: float = 0.0
+        self.last_speed_mult: float = 1.0
 
         # Cores: [Space (Dark)] <-> [Sky (Cyan/Blue)]
         # Exiting: progress 0 (Sky) -> progress 1 (Space)
@@ -1037,14 +1137,22 @@ class AtmosphereBackground(Background):
                 )
             )
 
+        self.streaks: List[AtmosphereStreak] = []
+        for _ in range(25):
+            self.streaks.append(AtmosphereStreak(width, height, self.is_entering))
+
     def set_progress(self, progress: float) -> None:
         self.progress = max(0.0, min(1.0, progress))
 
     def update(self, dt: float, speed_mult: float = 1.0) -> None:
+        self.last_speed_mult = speed_mult
         # A densidade de nuvens e velocidade pode mudar com o progresso
         # mas por ora mantemos fixo para fluidez.
         for cloud in self.clouds:
             cloud.update(dt, speed_mult)
+
+        for streak in self.streaks:
+            streak.update(dt, speed_mult)
 
     def draw(self, surface: pygame.Surface) -> None:
         # Calcula cores atuais baseadas no progresso e rota
@@ -1052,32 +1160,42 @@ class AtmosphereBackground(Background):
         # Entering: p=0 (Space), p=1 (Atmo) -> t = 1 - progress
         t = self.progress if self.route == "exiting" else 1.0 - self.progress
 
-        c_top = tuple(
-            int(self.color_sky_top[i] * (1 - t) + self.color_space_top[i] * t)
-            for i in range(3)
+        c_top: tuple[int, int, int] = (
+            int(self.color_sky_top[0] * (1 - t) + self.color_space_top[0] * t),
+            int(self.color_sky_top[1] * (1 - t) + self.color_space_top[1] * t),
+            int(self.color_sky_top[2] * (1 - t) + self.color_space_top[2] * t),
         )
-        c_bottom = tuple(
-            int(self.color_sky_bottom[i] * (1 - t) + self.color_space_bottom[i] * t)
-            for i in range(3)
+        c_bottom: tuple[int, int, int] = (
+            int(self.color_sky_bottom[0] * (1 - t) + self.color_space_bottom[0] * t),
+            int(self.color_sky_bottom[1] * (1 - t) + self.color_space_bottom[1] * t),
+            int(self.color_sky_bottom[2] * (1 - t) + self.color_space_bottom[2] * t),
         )
 
         # Desenha gradiente de fundo
         self._draw_gradient(surface, c_top, c_bottom)
 
+        # Intensidade do efeito de vento/nuvens baseada na proximidade com a atmosfera
+        # t=0 (Atmosphere), t=1 (Space)
+        effect_intensity = 1.0 - (t * 0.8)
+
         # Desenha nuvens (alpha/densidade proporcional à proximidade com a atmosfera)
-        # Mais nuvens quando t é baixo (perto da atmosfera)
-        cloud_alpha = int(255 * (1.0 - t * 0.8))
+        cloud_alpha_base = effect_intensity
         for i, cloud in enumerate(self.clouds):
             # Algumas nuvens somem primeiro
-            individual_alpha = max(0, cloud_alpha - (i % 4) * 30)
+            individual_alpha = max(0.0, cloud_alpha_base - (i % 4) * 0.15)
             if individual_alpha > 0:
-                # Nota: VerticalCloud gera sua própria surface, precisaríamos
-                # aplicar alpha global ou mutar as existentes. Por simplicidade
-                # as nuvens estão sempre lá, mas o céu muda.
-                cloud.draw(surface)
+                cloud.draw(surface, individual_alpha)
+
+        # Desenha riscos de vento
+        streak_global_alpha = effect_intensity
+        for streak in self.streaks:
+            streak.draw(surface, streak_global_alpha, self.last_speed_mult)
 
     def _draw_gradient(
-        self, surface: pygame.Surface, top: tuple, bottom: tuple
+        self,
+        surface: pygame.Surface,
+        top: tuple[int, int, int],
+        bottom: tuple[int, int, int],
     ) -> None:
         """Desenha gradiente vertical."""
         # Otimização: desenha em uma surface pequena e escala
@@ -1090,12 +1208,15 @@ class AtmosphereBackground(Background):
 
     def reset(self) -> None:
         self.progress = 0.0
+        self.last_speed_mult = 1.0
         for cloud in self.clouds:
             cloud.reset(is_first_time=True)
+        for streak in self.streaks:
+            streak.reset(is_first_time=True)
 
 
 # Factory function para facilitar criação
-def create_background(bg_type: str, width: int, height: int, **kwargs) -> Background:
+def create_background(bg_type: str, width: int, height: int, **kwargs: Any) -> Background:
     """
     Cria um background baseado no tipo especificado.
 
@@ -1126,7 +1247,7 @@ def create_background(bg_type: str, width: int, height: int, **kwargs) -> Backgr
         )
 
     if bg_class is AtmosphereBackground:
-        route = kwargs.get("route", "exiting")
+        route = cast(str, kwargs.get("route", "exiting"))
         return AtmosphereBackground(width, height, route=route)
 
     return bg_class(width, height)

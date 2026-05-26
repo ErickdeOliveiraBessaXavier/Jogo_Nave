@@ -92,18 +92,32 @@ class GameRenderer:
         speed_multiplier = 1.0
         boss_active = False
 
-        if frame.state == GameState.PREPARING:
-            progress = min(
-                1.0,
-                max(
-                    0.0,
-                    (Config.PREPARATION_TIME - frame.preparation_time_left)
-                    / Config.PREPARATION_TIME,
-                ),
-            )
-            speed_multiplier = 1.0 + (Config.WARP_SPEED_MULTIPLIER - 1.0) * (
-                1.0 - progress**2
-            )
+        if frame.world_transition_cutscene_active:
+            if frame.is_arrival_cutscene:
+                # Arrival (re-entry/entrada no mundo): Decelera de warp para normal
+                progress = min(
+                    1.0,
+                    max(
+                        0.0,
+                        (Config.PREPARATION_TIME - frame.preparation_time_left)
+                        / Config.PREPARATION_TIME,
+                    ),
+                )
+                speed_multiplier = 1.0 + (Config.WARP_SPEED_MULTIPLIER - 1.0) * (
+                    1.0 - progress**2
+                )
+            else:
+                # Departure (saída do mundo): Acelera de normal para warp
+                charge_dur = Config.WORLD_TRANSITION_CUTSCENE_CHARGE_DURATION
+                total_dur = Config.WORLD_TRANSITION_CUTSCENE_DURATION
+                if frame.world_transition_cutscene_timer > charge_dur:
+                    launch_time = frame.world_transition_cutscene_timer - charge_dur
+                    launch_total = total_dur - charge_dur
+                    progress = min(1.0, launch_time / max(0.1, launch_total))
+                    # Aceleração quadrática para o efeito visual de "disparo"
+                    speed_multiplier = 1.0 + (Config.WARP_SPEED_MULTIPLIER - 1.0) * (
+                        progress**2
+                    )
         else:
             boss_active = bool(
                 frame.boss_controller.active

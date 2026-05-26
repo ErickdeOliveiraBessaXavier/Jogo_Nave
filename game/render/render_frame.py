@@ -84,6 +84,9 @@ class RenderFrame:
     upgrade_keybindings: list[int]
 
     # Cutscene de transição de mundo
+    world_transition_cutscene_active: bool
+    world_transition_cutscene_timer: float
+    is_arrival_cutscene: bool
     world_transition_thruster_particles: list["ThrusterParticle"]
 
     # Refs a sistemas (estáveis — não são internals da cena)
