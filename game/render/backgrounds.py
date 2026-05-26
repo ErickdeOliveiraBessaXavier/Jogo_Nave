@@ -16,6 +16,8 @@ from typing import Any, Dict, List, Optional, Tuple, Type, cast
 
 import pygame
 
+from ..core.assets import BASE_DIR, get_image
+
 logger = logging.getLogger(__name__)
 
 
@@ -1114,6 +1116,12 @@ class AtmosphereStreak:
 class AtmosphereBackground(Background):
     """Background para transição de atmosfera com transição de cor e nuvens."""
 
+    # Planeta no rodapé: só translação vertical conforme a proximidade da
+    # atmosfera. Perto (re-entry/ENTRANDO) ele sobe; longe (saída/ascensão ao
+    # espaço) ele desce e some. Sem rotação nem escala.
+    PLANET_CENTER_NEAR_OFFSET: float = 420.0  # px abaixo da base quando perto (0 = metade fora)
+    PLANET_TRAVEL: float = 240.0  # px que o planeta desce do perto até o longe
+
     def __init__(self, width: int, height: int, route: str = "exiting"):
         super().__init__(width, height)
         self.route = route
@@ -1140,6 +1148,23 @@ class AtmosphereBackground(Background):
         self.streaks: List[AtmosphereStreak] = []
         for _ in range(25):
             self.streaks.append(AtmosphereStreak(width, height, self.is_entering))
+
+        # Planeta no rodapé. Carregado e escalado para a largura da tela uma
+        # única vez (proporção mantida); a cada frame só é reposicionado na
+        # vertical, sem transformação — blit direto, custo ~zero.
+        planet_path = BASE_DIR / "assets" / "images" / "Imagem.png"
+        planet_raw = get_image(planet_path, alpha=True)
+        raw_w, raw_h = planet_raw.get_size()
+        if raw_w > 0 and raw_h > 0:
+            scaled_h = max(1, int(raw_h * width / raw_w))
+            self.planet_base: pygame.Surface = pygame.transform.smoothscale(
+                planet_raw, (width, scaled_h)
+            )
+        else:
+            self.planet_base = planet_raw
+        # Pré-cálculo de posicionamento (base ocupa a largura toda → x = 0).
+        self._planet_x: int = (width - self.planet_base.get_width()) // 2
+        self._planet_half_h: float = self.planet_base.get_height() / 2.0
 
     def set_progress(self, progress: float) -> None:
         self.progress = max(0.0, min(1.0, progress))
@@ -1177,6 +1202,25 @@ class AtmosphereBackground(Background):
         # Intensidade do efeito de vento/nuvens baseada na proximidade com a atmosfera
         # t=0 (Atmosphere), t=1 (Space)
         effect_intensity = 1.0 - (t * 0.8)
+
+        # Planeta no rodapé (atrás das nuvens/vento). `t` codifica a proximidade
+        # independente da rota (t=0 atmosfera/perto, t=1 espaço/longe). Como
+        # `proximity = 1 - t`, o planeta sobe ao se aproximar (re-entry: t→0) e
+        # desce ao se afastar (saída ao espaço: t→1), esmaecendo. Só translação
+        # vertical — o centro repousa na base da tela (metade fora) quando perto.
+        planet_alpha = max(0, min(255, int(255 * effect_intensity)))
+        if planet_alpha > 0:
+            proximity = 1.0 - t
+            self.planet_base.set_alpha(planet_alpha)
+            center_y = (
+                self.height
+                + self.PLANET_CENTER_NEAR_OFFSET
+                + self.PLANET_TRAVEL * (1.0 - proximity)
+            )
+            surface.blit(
+                self.planet_base,
+                (self._planet_x, int(center_y - self._planet_half_h)),
+            )
 
         # Desenha nuvens (alpha/densidade proporcional à proximidade com a atmosfera)
         cloud_alpha_base = effect_intensity

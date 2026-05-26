@@ -96,9 +96,16 @@ class WorldTransitionScene(Scene):
         center_x = surface.get_width() // 2
         center_y = surface.get_height() // 2
 
-        # Cartão principal (altura extra para acomodar títulos com 2 linhas)
+        # Cartão principal. A altura adapta ao título: nomes longos — caso dos
+        # mundos procedurais ("Setor N - <tema>") — quebram em 2 linhas na fonte
+        # do título e empurravam o conteúdo para fora do cartão (overflow sobre
+        # as barras de cor). Pré-medimos as linhas (mesma largura/limite do blit
+        # do título abaixo) e somamos a altura de uma linha extra quando há duas.
         card_width = min(760, surface.get_width() - 80)
-        card_height = 380
+        title_text = self.title_override or self.new_world.name
+        title_line_count = len(wrap_text(self.font_title, title_text, card_width - 80)[:2])
+        extra_title_height = (self.font_title.get_height() + 2) if title_line_count > 1 else 0
+        card_height = 380 + extra_title_height
         card_x = center_x - card_width // 2
         card_y = center_y - card_height // 2
         card_rect = pygame.Rect(card_x, card_y, card_width, card_height)
