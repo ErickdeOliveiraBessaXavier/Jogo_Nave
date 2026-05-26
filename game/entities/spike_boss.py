@@ -500,6 +500,9 @@ class SpikeBoss(BossHitMixin):
                 self.proximity_telegraph_timer = 0.0
                 self.proximity_attack_active = True
                 self.proximity_wave_timer = 0.0
+                # Stop the looping warning sound started in `_trigger_proximity_attack`
+                if hasattr(sound_manager, "stop_warning"):
+                    sound_manager.stop_warning()  # type: ignore
                 sound_manager.play_explosion_boss()
             return
         if self.proximity_attack_active:

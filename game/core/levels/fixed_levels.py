@@ -298,7 +298,8 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             RockGlider: 1.5,
         },
         enemies_to_clear=0,
-        boss_type=Boss,
+        # boss_type=Boss,
+        # boss_type=SpikeBoss,
         score_multiplier=1.0,
     ),
     # Nível 3: Primeiro Boss - Mountain Serpent (Montanhas)

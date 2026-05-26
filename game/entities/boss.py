@@ -46,6 +46,7 @@ class Boss(BossHitMixin):
     LASER_DISTANCE: int = 2000
     MAX_CHARGE_RADIUS: float = 15.0
     _FRENZY_SALVO_AIM_WINDOW: float = 0.25
+    _FRENZY_SALVO_REARM_DELAY: float = 0.8
 
     def __init__(
         self, x: float, y: float, health: int = Config.BOSS_HEALTH, hit_score: int = 50
@@ -114,6 +115,7 @@ class Boss(BossHitMixin):
 
         # Janela de reação (mira travada -> laser). Fonte única: BOSS_LASER_DELAY.
         self.laser_delay_timer = 0.0
+        self._salvo_rearm_timer = 0.0
         self.pending_laser_data: dict[str, Any] | None = None
 
         # Floating squares
@@ -414,7 +416,7 @@ class Boss(BossHitMixin):
                             sq for sq in self.floating_squares if sq.state == "orbiting"
                         ]
                         if orbiting:
-                            num = random.randint(3, min(6, len(orbiting)))
+                            num = random.randint(2, min(3, len(orbiting)))
                             for sq in random.sample(orbiting, num):
                                 sq.state, sq.prepare_timer = "preparing", 0.0
                     self.square_attack_timer.start(random.uniform(2.0, 3.5))
@@ -542,8 +544,8 @@ class Boss(BossHitMixin):
             "frenzy_mode": self.frenzy_mode,
             "pattern": pattern,
             # Estado da salva sequencial — só usado quando pattern == "salvo".
-            # Ordem esquerdo → direito → central força zigue-zague (boss te
-            # persegue lateralmente, depois trava no centro).
+            # Ordem esquerdo → direito → central faz a sequência parecer o
+            # laser principal executado 3 vezes em fila, só mais rápido.
             "salvo_idx": 0,
             "salvo_order": [0, 1, 2],
             "locked_cannons": locked_cannons,
@@ -561,6 +563,17 @@ class Boss(BossHitMixin):
             ]
             if self.laser_delay_timer <= self._FRENZY_SALVO_AIM_WINDOW:
                 self._active_salvo_cannon_idx = next_idx
+                salvo_target_x = self.pending_laser_data.get("salvo_target_x")
+                salvo_target_y = self.pending_laser_data.get("salvo_target_y")
+                if salvo_target_x is None or salvo_target_y is None:
+                    salvo_target_x = self.player_x
+                    salvo_target_y = self.player_y
+                    self.pending_laser_data["salvo_target_x"] = salvo_target_x
+                    self.pending_laser_data["salvo_target_y"] = salvo_target_y
+                if salvo_target_y is not None:
+                    # Keep the visual telegraph locked to the same saved target
+                    # that will be used by the actual laser shot.
+                    self._aim_cannons(salvo_target_x, salvo_target_y)
                 for i, c in enumerate(self.cannons):
                     c.set_charging(
                         i == next_idx,
@@ -581,7 +594,9 @@ class Boss(BossHitMixin):
         if self.laser_delay_timer > 0 or not self.pending_laser_data:
             return []
 
-        # Salva: dispara um laser por vez, com re-mira viva no jogador.
+        # Salva: dispara um canhão por vez, repetindo a lógica do disparo
+        # normal em ciclo curto. Cada tiro re-mira no jogador no instante do
+        # disparo e depois aguarda a pausa curta de rearmamento.
         if self.pending_laser_data.get("pattern") == "salvo":
             return self._fire_next_salvo_shot()
 
@@ -607,25 +622,26 @@ class Boss(BossHitMixin):
         idx: int = data["salvo_idx"]
         order: List[int] = data["salvo_order"]
         cannon_idx: int = order[idx]
-        locked_cannons: List[dict[str, Any]] = data.get("locked_cannons", [])
-        cannon_state: dict[str, Any] | None = (
-            locked_cannons[cannon_idx] if cannon_idx < len(locked_cannons) else None
-        )
+        # locked_cannons snapshot is not used for salvo shots anymore
+        # (we re-aim at firing time), so omit the unused local variables.
         self._active_salvo_cannon_idx = cannon_idx
 
-        # owner é sempre o canhão real; tip/direção vêm do snapshot travado em
-        # _prepare_laser_data (disparo na posição congelada) ou, na falta dele,
-        # da pose viva como fallback.
+        # owner é sempre o canhão real; tip/direção vêm do alvo salvo na janela
+        # de mira. Se não houver snapshot, cai no alvo atual como fallback.
         cannon = self.cannons[cannon_idx]
-        if cannon_state is not None:
-            tip_x = float(cannon_state["tip_x"])
-            tip_y = float(cannon_state["tip_y"])
-            dirv = pygame.Vector2(
-                float(cannon_state["dir_x"]), float(cannon_state["dir_y"])
-            )
-        else:
-            tip_x, tip_y = cannon.get_barrel_tip_position()
-            dirv = cannon.get_direction()
+        target_x = data.get("salvo_target_x")
+        target_y = data.get("salvo_target_y")
+        if target_x is None or target_y is None:
+            target_x = self.player_x
+            target_y = self.player_y if self.player_y is not None else self.player_y
+
+        if target_y is not None:
+            # Re-aim using the saved player pose so the shot lands on the
+            # older position rather than the live one.
+            self._aim_cannons(target_x, target_y)
+
+        tip_x, tip_y = cannon.get_barrel_tip_position()
+        dirv = cannon.get_direction()
 
         laser = BossLaser(
             tip_x,
@@ -638,19 +654,28 @@ class Boss(BossHitMixin):
         self.fired_lasers.append(laser)
         self._sound_events.append("play_fire")
 
+        # Clear the saved target so the next salvo step captures a fresh pose.
+        data["salvo_target_x"] = None
+        data["salvo_target_y"] = None
+
         data["salvo_idx"] = idx + 1
         if data["salvo_idx"] >= len(order):
-            # Último disparo — entra em FIRING. fire_timer cobre o lifetime do
-            # último laser; os anteriores acabam antes naturalmente.
+            # Último disparo — entra em FIRING até o laser terminar de fato.
             self.fire_timer = Timer(data["lifetime"])
             self.fire_timer.start()
             self.state = BossState.FIRING
             self.pending_laser_data = None
             self.frenzy_pattern = None
-        else:
-            # Permanece em PREPARING_TO_FIRE; próximo disparo após o intervalo.
-            self.laser_delay_timer = self._FRENZY_SALVO_INTERVAL
             self._active_salvo_cannon_idx = None
+            self._salvo_rearm_timer = 0.0
+        else:
+            # A próxima janela de mira reabre após uma pausa curta, sem esperar
+            # o laser anterior terminar de viver.
+            self.fire_timer = Timer(data["lifetime"])
+            self.fire_timer.start()
+            self.state = BossState.FIRING
+            self._active_salvo_cannon_idx = None
+            self._salvo_rearm_timer = self._FRENZY_SALVO_REARM_DELAY
 
         return [laser]
 
@@ -801,6 +826,17 @@ class Boss(BossHitMixin):
     def _update_firing_state(self, dt: float) -> None:
         self.fire_timer.update(dt)
 
+        if self.pending_laser_data and self.pending_laser_data.get("pattern") == "salvo":
+            if self._salvo_rearm_timer > 0:
+                self._salvo_rearm_timer = max(0.0, self._salvo_rearm_timer - dt)
+                if self._salvo_rearm_timer == 0.0 and self.pending_laser_data:
+                    if self.pending_laser_data["salvo_idx"] < len(
+                        self.pending_laser_data["salvo_order"]
+                    ):
+                        self.state = BossState.PREPARING_TO_FIRE
+                        self.laser_delay_timer = self._get_laser_delay()
+                        return
+
         # A carga não congela no disparo: enquanto o feixe está vivo, o glow do
         # canhão segue aceso. As partículas da convergência seguem animando pelo
         # tick central em update(), sem congelar ao entrar em FIRING.
@@ -836,6 +872,9 @@ class Boss(BossHitMixin):
         self.state = BossState.CHARGING
         self.charge_progress = 0.0
         self.charge_timer.start()
+        # Emit sound event for charging start so the sound system can play it
+        if hasattr(self, "_sound_events"):
+            self._sound_events.append("play_charging")
         for c in self.cannons:
             c.set_charging(True, 0.0)
 
@@ -857,7 +896,6 @@ class Boss(BossHitMixin):
     #             um re-mirando no jogador no instante do próprio disparo.
     #             Força movimento contínuo (zigue-zague).
     _FRENZY_WALL_OFFSET: float = 140.0  # px de distância lateral dos lasers do muro
-    _FRENZY_SALVO_INTERVAL: float = 0.40  # s entre disparos da salva sequencial
 
     def _create_square_projectile(
         self, square: BossSquare, px: float, py: float
@@ -1091,19 +1129,45 @@ class Boss(BossHitMixin):
         return 0.0
 
     def _draw_aiming_line(self, surface: pygame.Surface) -> None:
-        # A mira é encerrada ao travar o alvo: em PREPARING_TO_FIRE não há
-        # tracejado. A janela de reação é cega — o jogador lê a ameaça pela pose
-        # congelada do canhão, e o disparo sai exatamente na direção travada
-        # (ver _prepare_laser_data / _fire_next_salvo_shot).
-        if self.state == BossState.PREPARING_TO_FIRE:
-            return
+        # Gradual ramp: start smoothing in late CHARGING, ramp through
+        # CONVERGING and reach full intensity in PREPARING_TO_FIRE. This
+        # provides a progressive visual anticipation instead of a sudden
+        # jump.
         total_cycle = Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
-        intensity = self._get_aiming_line_intensity()
-        # Tracejado em ritmo constante durante AIMING/CHARGING/CONVERGING; não
-        # acelera, para não sugerir que o laser sai antes da janela de reação.
-        time_based_offset = int(pygame.time.get_ticks() * 0.1) % total_cycle
+        base_intensity = self._get_aiming_line_intensity()
+
+        if self.state == BossState.PREPARING_TO_FIRE:
+            ramp = 1.0
+        elif self.state == BossState.CONVERGING:
+            ramp = 0.8
+        elif self.state == BossState.CHARGING:
+            # Start ramping after ~40% charge, finish by 100%.
+            ramp = min(max((self.charge_progress - 0.4) / 0.6, 0.0), 1.0)
+        else:
+            ramp = 0.0
+
+        # Slightly bias ramp in frenzy for more urgency
+        if self.frenzy_mode:
+            ramp = min(1.0, ramp + 0.15)
+
+        # Blend intensity and animation speed based on ramp (smooth transition)
+        intensity = base_intensity + (1.0 - base_intensity) * ramp
+        time_multiplier = 0.1 + (0.45 - 0.1) * ramp
+        time_based_offset = int(pygame.time.get_ticks() * time_multiplier) % total_cycle
+
+        # Suppress dashed aiming during salvo rearm transitions or if data is missing.
+        if self.state == BossState.PREPARING_TO_FIRE:
+            if self.pending_laser_data is None:
+                return
+            if (
+                self.pending_laser_data.get("pattern") == "salvo"
+                and self.laser_delay_timer > self._FRENZY_SALVO_AIM_WINDOW
+            ):
+                return
+
+        # Avoid drawing the full aiming fan during salvo rearm transitions.
+        # For salvo we only draw the active cannon when inside the aim window.
         if self.frenzy_mode and len(self.cannons) > 1:
-            # Wall: laterais seguem um vetor fixo relativo ao canhão central.
             if self.frenzy_pattern == "wall":
                 center_cannon = self.central
                 center_tip = pygame.Vector2(center_cannon.get_barrel_tip_position())
@@ -1142,12 +1206,23 @@ class Boss(BossHitMixin):
                     intensity,
                 )
             else:
-                # Demais padrões: uma linha de mira por canhão, da própria ponta.
+                # If we're in a salvo prepare phase, only show the aiming line
+                # for the active salvo cannon and only when inside the aim window.
+                is_salvo = (
+                    self.pending_laser_data is not None
+                    and self.pending_laser_data.get("pattern") == "salvo"
+                )
+                if is_salvo and self.state == BossState.PREPARING_TO_FIRE:
+                    # show only when within the final aim window
+                    if self.laser_delay_timer > self._FRENZY_SALVO_AIM_WINDOW:
+                        return
                 for i, c in enumerate(self.cannons):
+                    # when salvo, skip non-active cannons
+                    if is_salvo and i != self._active_salvo_cannon_idx:
+                        continue
                     tip_x, tip_y = c.get_barrel_tip_position()
                     tip = pygame.Vector2(tip_x, tip_y)
                     dirv = c.get_direction()
-                    # consider central cannon as primary for styling
                     primary = i == len(self.cannons) - 1
                     self._draw_dashed_line(
                         surface, tip, dirv, time_based_offset, primary, intensity
