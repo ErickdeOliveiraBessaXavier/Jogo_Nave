@@ -504,15 +504,20 @@ class Ship:
             int(round(PARTICLE_THRUSTER_COUNT * self.profile.thruster_intensity_mult)),
         )
 
-        # Partículas de entrada (desabilitar em side-scroll)
+        # Partículas de entrada / atrito (desabilitar em side-scroll). No re-entry
+        # (facing "south": a nave entra pelo TOPO), o atrito sai pela BASE da nave
+        # e sobe — invertido em relação à entrada padrão (sai do topo e desce).
         if self.is_entering and not is_side_scroll:
+            inverted_entry = self.facing == "south"
+            entry_emit_y = (self.y + sprite_h) if inverted_entry else self.y
+            entry_vy = -80.0 if inverted_entry else 80.0
             for _ in range(PARTICLE_ENTRY_COUNT):
                 min_size, max_size = PARTICLE_ENTRY_SIZE
                 particle = ParticleDict(
                     x=self.x + sprite_w / 2,
-                    y=self.y,
+                    y=entry_emit_y,
                     vx=random.uniform(*PARTICLE_ENTRY_VELOCITY),
-                    vy=random.uniform(80, 80),
+                    vy=entry_vy,
                     lifetime=random.uniform(*PARTICLE_ENTRY_LIFETIME),
                     size=random.uniform(min_size, max_size),
                     color=(255, random.randint(100, 220), 0),

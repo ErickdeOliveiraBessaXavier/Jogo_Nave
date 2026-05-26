@@ -862,6 +862,29 @@ class PlayingScene(Scene):
         self.ship.set_facing(config.facing if config else "north")
         logger.info("[ATMOSPHERE] Interstício jogável iniciado: %s", route)
 
+        # Intro estilo "novo mundo" (fundo preto + texto central) para a fase.
+        # Reaproveita WorldTransitionScene com texto custom; some a linha de
+        # estágios. Ao fechar, a PlayingScene retoma na entrada da nave (PREPARING).
+        if self.pending_world_transition is not None:
+            from .world_transition import WorldTransitionScene
+
+            is_exiting = route == "exiting"
+            self.app.states.push(
+                WorldTransitionScene(
+                    self.app,
+                    self.pending_world_transition,
+                    title_override=(
+                        "SAINDO DA ATMOSFERA" if is_exiting else "ENTRANDO NA ATMOSFERA"
+                    ),
+                    description_override=(
+                        "Rumo ao espaço sideral."
+                        if is_exiting
+                        else "Atravessando a atmosfera do planeta."
+                    ),
+                    stage_text_override="",
+                )
+            )
+
     def _apply_atmosphere_death_penalty(self) -> None:
         """Morte no interstício: em vez de game over, corta o progresso pela
         metade (piso 0%), revive todos os slots com as vidas iniciais da run e

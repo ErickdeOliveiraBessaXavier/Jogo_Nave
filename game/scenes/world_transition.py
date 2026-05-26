@@ -24,9 +24,23 @@ if TYPE_CHECKING:
 class WorldTransitionScene(Scene):
     """Transição visual entre mundos."""
 
-    def __init__(self, app: "GameApp", new_world: WorldConfig):
+    def __init__(
+        self,
+        app: "GameApp",
+        new_world: WorldConfig,
+        *,
+        title_override: str | None = None,
+        description_override: str | None = None,
+        stage_text_override: str | None = None,
+    ):
         super().__init__(app)
         self.new_world = new_world
+        # Overrides opcionais — a fase de atmosfera reaproveita este painel
+        # (fundo preto + texto central) sem ser um WorldConfig de verdade.
+        # `stage_text_override=""` esconde a linha de estágios.
+        self.title_override = title_override
+        self.description_override = description_override
+        self.stage_text_override = stage_text_override
         self.timer: float = 0.0
         self.duration: float = 3.0  # 3 segundos
         self.font_title = get_font(60)
@@ -119,7 +133,7 @@ class WorldTransitionScene(Scene):
         title_height = self._blit_wrapped_centered_text(
             overlay,
             self.font_title,
-            self.new_world.name,
+            self.title_override or self.new_world.name,
             colors.WHITE,
             center_x,
             current_y,
@@ -140,7 +154,7 @@ class WorldTransitionScene(Scene):
         desc_height = self._blit_wrapped_centered_text(
             overlay,
             self.font_desc,
-            self.new_world.description,
+            self.description_override or self.new_world.description,
             (210, 210, 210),
             center_x,
             current_y,
@@ -153,20 +167,23 @@ class WorldTransitionScene(Scene):
 
         # Apenas informação essencial do progresso.
         stage_text = (
-            f"Estágios {self.new_world.start_level} - {self.new_world.end_level}"
+            self.stage_text_override
+            if self.stage_text_override is not None
+            else f"Estágios {self.new_world.start_level} - {self.new_world.end_level}"
         )
-        self._blit_wrapped_centered_text(
-            overlay,
-            self.font_meta,
-            stage_text,
-            colors.WHITE,
-            center_x,
-            current_y,
-            card_width - 120,
-            alpha,
-            max_lines=1,
-            line_spacing=0,
-        )
+        if stage_text:
+            self._blit_wrapped_centered_text(
+                overlay,
+                self.font_meta,
+                stage_text,
+                colors.WHITE,
+                center_x,
+                current_y,
+                card_width - 120,
+                alpha,
+                max_lines=1,
+                line_spacing=0,
+            )
 
         # === CORES DO MUNDO (visual) ===
         bar_height = 8

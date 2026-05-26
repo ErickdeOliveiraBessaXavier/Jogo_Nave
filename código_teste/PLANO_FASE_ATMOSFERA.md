@@ -316,3 +316,20 @@ Perder **todas as vidas** durante o interstício deixou de ser game over.
   i-frames) — só o caso "todas as vidas" é reinterpretado.
 
 **Verificado:** ruff limpo; import ok; método presente.
+
+### 2026-05-26 — Polimento: atrito invertido no re-entry + intro de fase
+
+Dois ajustes pedidos:
+
+- **Partícula de atrito invertida (re-entry):** em `Ship._update_particles`, o
+  bloco de `entry_particles` agora detecta `facing == "south"` (re-entry, nave
+  entra pelo topo) e emite o atrito pela **base** da nave subindo (`vy < 0`), em
+  vez do topo descendo. Entrada padrão (north / níveis normais) inalterada.
+- **Mensagem de intro estilo "novo mundo":** `WorldTransitionScene` ganhou
+  overrides opcionais (`title_override`, `description_override`,
+  `stage_text_override`). `_start_atmosphere_interstitial` empurra o painel
+  (fundo preto + texto central) com "SAINDO/ENTRANDO NA ATMOSFERA"; ao fechar, a
+  cena retoma na entrada da nave (PREPARING). Coexiste com o `level_popup` HUD
+  que já havia (pop-up curto durante o jogo).
+
+**Verificado:** ruff limpo; imports ok (ship, world_transition, playing).
