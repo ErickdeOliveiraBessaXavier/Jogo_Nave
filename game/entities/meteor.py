@@ -341,7 +341,9 @@ class Meteor:
         """Default factory for creating fragment meteors."""
         return Meteor(size=size, x=x, y=y, vx=vx, vy=vy)
 
-    def _build_fragment_specs(self, is_side_scroll: bool):
+    def _build_fragment_specs(
+        self, is_side_scroll: bool, inverted_vertical: bool = False
+    ):
         """Constrói tuplas leves (size, x, y, vx, vy) para serem materializadas
         pelo EntityManager via meteor_pool.get(*spec). Mantém o pool isolado
         da entidade.
@@ -374,6 +376,12 @@ class Meteor:
             vx = cos_ang * speed + self.vx * 0.3
             if is_side_scroll:
                 vy = sin_ang * speed + self.vy * 0.2
+            elif inverted_vertical:
+                # Atmosfera (Entering): a nave fica no topo e os meteoros sobem;
+                # os fragmentos seguem pra CIMA (espelho da gravidade). Sem isso,
+                # o +50 cancela a vy negativa do pai e o fragmento fica com vy≈0,
+                # preso na tela — causando o softlock da condição "tela limpa".
+                vy = -(abs(sin_ang * speed) + 50.0) + self.vy * 0.2
             else:
                 vy = abs(sin_ang * speed) + self.vy * 0.2 + 50.0
             fx = cx + cos_ang * size_offset_x - s
@@ -391,7 +399,7 @@ class Meteor:
 
         self.dead = True
         is_side_scroll = getattr(self, "is_side_scroll", False)
-        fragments = self._build_fragment_specs(is_side_scroll)
+        fragments = self._build_fragment_specs(is_side_scroll, self.inverted_vertical)
         return HitResult(
             killed=True,
             points=self.get_points_value(),

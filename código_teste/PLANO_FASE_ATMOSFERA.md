@@ -333,3 +333,23 @@ Dois ajustes pedidos:
   que já havia (pop-up curto durante o jogo).
 
 **Verificado:** ruff limpo; imports ok (ship, world_transition, playing).
+
+### 2026-05-26 — Correções: softlock por fragmentos + direção da cutscene no re-entry
+
+- **Softlock (fragmentos):** em `Meteor._build_fragment_specs`, o ramo top-down
+  dava `vy = abs(...) + self.vy*0.2 + 50` (sempre pra baixo). No **Entering** o
+  meteoro pai sobe (`self.vy < 0`), então o `+50` cancelava e o fragmento ficava
+  com **vy ≈ 0** — preso na tela, e a condição "tela limpa" nunca era satisfeita.
+  Agora `_build_fragment_specs` recebe `inverted_vertical` e, no Entering, os
+  fragmentos sobem (`vy = -(abs(...) + 50) + self.vy*0.2`). `on_hit` passa
+  `self.inverted_vertical`.
+- **Timeout de segurança:** o gate em `_update_level_logic` agora finaliza a fase
+  ao atingir 100% de altitude E (tela limpa OU 6s de espera) — defesa contra
+  qualquer hostil preso. `_atmosphere_clear_timer` resetado em
+  `_start_atmosphere_interstitial`.
+- **Cutscene do re-entry ia pra cima:** `_start_world_transition_cutscene` ganhou
+  `launch_down`; no Entering a nave é lançada pra BAIXO (descendo na atmosfera) e
+  com facing "south". `_finish_atmosphere_interstitial` passa `launch_down` quando
+  a rota era "entering".
+
+**Verificado:** ruff limpo; imports ok (meteor, playing).

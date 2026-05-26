@@ -307,9 +307,14 @@ class PlayingScene(Scene):
         self._atmosphere_route: Optional[str] = None
         self._atmosphere_progress: float = 0.0
         self._atmosphere_phase_done: bool = False
+        # Tempo aguardando a tela limpar após atingir 100% de altitude (timeout
+        # de segurança contra softlock).
+        self._atmosphere_clear_timer: float = 0.0
         # Marca que a fase de atmosfera está em curso (transição roda como
         # PLAYING reusando o loop normal; a progressão de nível fica gateada).
         self._in_atmosphere: bool = False
+        # Cutscene de chegada do re-entry (Entering) lança a nave para baixo.
+        self._cutscene_launch_down: bool = False
 
     def _init_fade(self) -> None:
         """Configura o fade-in inicial para evitar corte abrupto."""
@@ -662,9 +667,17 @@ class PlayingScene(Scene):
         ]
 
     def _start_world_transition_cutscene(
-        self, target_world: WorldConfig, debug_mode: bool = False
+        self,
+        target_world: WorldConfig,
+        debug_mode: bool = False,
+        launch_down: bool = False,
     ) -> None:
-        """Inicia a cutscene de saída da nave antes do painel de transição."""
+        """Inicia a cutscene de saída da nave antes do painel de transição.
+
+        `launch_down=True` (re-entry/Entering) lança a nave para BAIXO em vez de
+        para cima no modo top-down — a nave está descendo na atmosfera.
+        """
+        self._cutscene_launch_down = launch_down
         self._set_transition_phase(TransitionPhase.CUTSCENE_EXIT)
         self.world_transition_cutscene_timer = 0.0
         self.world_transition_cutscene_launch_speed = (
@@ -685,7 +698,13 @@ class PlayingScene(Scene):
         # Força o sprite a apontar na direção do launch — evita que uma rotação
         # CTRL anterior do jogador faça a nave voar de costas/de lado durante a
         # cutscene. O facing volta ao default no próximo mundo via apply_world_mode.
-        self.ship.set_facing("east" if self.is_side_scroll else "north")
+        if self.is_side_scroll:
+            cutscene_facing = "east"
+        elif launch_down:
+            cutscene_facing = "south"
+        else:
+            cutscene_facing = "north"
+        self.ship.set_facing(cutscene_facing)
         logger.info(
             "[CUTSCENE] Iniciando saída da nave para %s (debug=%s)",
             target_world.name,
@@ -796,9 +815,10 @@ class PlayingScene(Scene):
                     + self.world_transition_cutscene_launch_distance
                 )
             else:
+                launch_dir = 1.0 if self._cutscene_launch_down else -1.0
                 self.ship.y = (
                     self.world_transition_cutscene_origin[1]
-                    - self.world_transition_cutscene_launch_distance
+                    + launch_dir * self.world_transition_cutscene_launch_distance
                 )
             self._spawn_world_transition_thruster_particles(intensity=14)
 
@@ -832,6 +852,7 @@ class PlayingScene(Scene):
         self._in_atmosphere = True
         self._atmosphere_route = route
         self._atmosphere_progress = 0.0
+        self._atmosphere_clear_timer = 0.0
 
         # Atmosfera é sempre vertical (top-down), independente dos mundos vizinhos.
         self.is_side_scroll = False
@@ -930,6 +951,7 @@ class PlayingScene(Scene):
         """Conclui a fase e dispara a cutscene de chegada (cutscene 2)."""
         self._in_atmosphere = False
         self._atmosphere_phase_done = True
+        is_entering = self._atmosphere_route == "entering"
         self._atmosphere_route = None
         logger.info("[ATMOSPHERE] Interstício concluído")
 
@@ -954,7 +976,8 @@ class PlayingScene(Scene):
             # Salvaguarda: sem destino, aplica direto (não deveria ocorrer).
             self._apply_pending_world_transition()
             return
-        self._start_world_transition_cutscene(target)
+        # Re-entry (Entering): a nave desce na atmosfera — cutscene lança pra baixo.
+        self._start_world_transition_cutscene(target, launch_down=is_entering)
 
     def debug_force_world_transition(self) -> None:
         """[DEBUG/F8] Força a transição para o próximo mundo via fluxo REAL.
@@ -1217,9 +1240,15 @@ class PlayingScene(Scene):
             # normal de nível (sem boss, sem "enemies_to_clear").
             if self.transition_phase == TransitionPhase.PLAYING:
                 self._update_atmosphere_progress(dt)
-                # Se a altitude chegou a 100% e a tela está limpa de inimigos, finaliza.
-                if self._atmosphere_progress >= 1.0 and not self.entity_manager.enemies:
-                    self._finish_atmosphere_interstitial()
+                # Finaliza ao limpar a tela; timeout de segurança (6s) evita
+                # softlock caso algum hostil fique preso.
+                if self._atmosphere_progress >= 1.0:
+                    self._atmosphere_clear_timer += dt
+                    if (
+                        not self.entity_manager.enemies
+                        or self._atmosphere_clear_timer >= 6.0
+                    ):
+                        self._finish_atmosphere_interstitial()
             return
         if self.boss_controller.active:
             if self.entity_manager.boss and self.entity_manager.boss.dead:
