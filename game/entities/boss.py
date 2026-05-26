@@ -76,12 +76,12 @@ class Boss(BossHitMixin):
         self.state = BossState.ENTERING
         self.frenzy_mode = False
         self.frenzy_shake_timer = 0.0
-        self._shake_offset_x: int = 0
-        self._shake_offset_y: int = 0
+        self.shake_offset_x: int = 0
+        self.shake_offset_y: int = 0
         self.pending_frenzy = False
         # Padrão de ataque escolhido no início de cada ciclo (AIMING). None fora
         # do frenzy ou quando não há 3 canhões. Valores: "wall" | "salvo" | "single".
-        self._frenzy_pattern: str | None = None
+        self.frenzy_pattern: str | None = None
         self._active_salvo_cannon_idx: int | None = None
         self.square_attack_timer = Timer(random.uniform(2.0, 3.5))
 
@@ -203,7 +203,7 @@ class Boss(BossHitMixin):
         # Todos os canhões seguem o jogador o tempo todo, exceto no padrão
         # wall, onde os laterais ficam presos a um desvio angular fixo.
         central.aim_at(player_x, player_y)
-        wall_telegraph = self._frenzy_pattern == "wall" and self.frenzy_mode
+        wall_telegraph = self.frenzy_pattern == "wall" and self.frenzy_mode
         if wall_telegraph:
             base_dir = central.get_direction()
             side_angle = self.FRENZY_LASER_ANGLES[2]
@@ -302,7 +302,7 @@ class Boss(BossHitMixin):
         )
 
     @property
-    def _shows_aiming_line(self) -> bool:
+    def shows_aiming_line(self) -> bool:
         """Estados em que a linha de mira é desenhada (telegrafo do ataque)."""
         return self.state in (
             BossState.AIMING,
@@ -312,7 +312,7 @@ class Boss(BossHitMixin):
         )
 
     @property
-    def _shows_charge_circle(self) -> bool:
+    def shows_charge_circle(self) -> bool:
         """Estados em que o círculo de carga/convergência aparece no rosto."""
         return self.state in (
             BossState.CHARGING,
@@ -329,11 +329,11 @@ class Boss(BossHitMixin):
         self.frenzy_shake_timer = max(0.0, self.frenzy_shake_timer - dt)
 
         if self.frenzy_shake_timer > 0:
-            self._shake_offset_x = random.randint(-3, 3)
-            self._shake_offset_y = random.randint(-3, 3)
+            self.shake_offset_x = random.randint(-3, 3)
+            self.shake_offset_y = random.randint(-3, 3)
         else:
-            self._shake_offset_x = 0
-            self._shake_offset_y = 0
+            self.shake_offset_x = 0
+            self.shake_offset_y = 0
 
         self.player_x = player_x
         self.player_y = player_y
@@ -468,7 +468,7 @@ class Boss(BossHitMixin):
             if self.attack_timer.done():
                 # Decide o padrão antes de entrar em AIMING — _aim_cannons
                 # precisa saber para mirar os canhões nos targets do muro.
-                self._frenzy_pattern = self._select_frenzy_pattern()
+                self.frenzy_pattern = self._select_frenzy_pattern()
                 self.state = BossState.AIMING
 
     def _select_frenzy_pattern(self) -> str:
@@ -514,7 +514,7 @@ class Boss(BossHitMixin):
         return []
 
     def _prepare_laser_data(self) -> dict[str, Any]:
-        pattern = self._frenzy_pattern or "single"
+        pattern = self.frenzy_pattern or "single"
         if pattern in ("wall", "salvo") and (
             not self.frenzy_mode or len(self.cannons) < 3
         ):
@@ -593,7 +593,7 @@ class Boss(BossHitMixin):
         self.fire_timer.start()
         self.state = BossState.FIRING
         self.pending_laser_data = None
-        self._frenzy_pattern = None
+        self.frenzy_pattern = None
         return new_lasers
 
     def _fire_next_salvo_shot(self) -> List[BossLaser]:
@@ -646,7 +646,7 @@ class Boss(BossHitMixin):
             self.fire_timer.start()
             self.state = BossState.FIRING
             self.pending_laser_data = None
-            self._frenzy_pattern = None
+            self.frenzy_pattern = None
         else:
             # Permanece em PREPARING_TO_FIRE; próximo disparo após o intervalo.
             self.laser_delay_timer = self._FRENZY_SALVO_INTERVAL
@@ -943,11 +943,11 @@ class Boss(BossHitMixin):
         surface.blit(lsurf, (int(dx + off_x), int(dy + off_y)))
 
     def draw(self, surface: pygame.Surface) -> None:
-        dx, dy = int(self.x + self._shake_offset_x), int(self.y + self._shake_offset_y)
+        dx, dy = int(self.x + self.shake_offset_x), int(self.y + self.shake_offset_y)
 
         # 1. Squares Behind
         self._draw_floating_squares(
-            surface, self._shake_offset_x, self._shake_offset_y, behind=True
+            surface, self.shake_offset_x, self.shake_offset_y, behind=True
         )
 
         # 2. Body Layers with breathing
@@ -958,20 +958,20 @@ class Boss(BossHitMixin):
 
         # 3. Squares Front
         self._draw_floating_squares(
-            surface, self._shake_offset_x, self._shake_offset_y, behind=False
+            surface, self.shake_offset_x, self.shake_offset_y, behind=False
         )
 
         # 4. Interactive Elements
         # draw all cannons (central last so it renders on top)
         for c in self.cannons:
-            c.draw(surface, self._shake_offset_x, self._shake_offset_y)
+            c.draw(surface, self.shake_offset_x, self.shake_offset_y)
         if self.state != BossState.ENTERING:
             self._draw_health_bar(surface)
-        if self._shows_aiming_line:
+        if self.shows_aiming_line:
             self._draw_aiming_line(surface)
 
         # 5. Effects
-        if self._shows_charge_circle:
+        if self.shows_charge_circle:
             rad = (
                 self.charge_progress * Config.BOSS_CHARGE_CIRCLE_MAX_RADIUS
                 if self.state == BossState.CHARGING
@@ -982,8 +982,8 @@ class Boss(BossHitMixin):
                     surface,
                     (255, 255, 100),
                     (
-                        int(self.face_center.x + self._shake_offset_x),
-                        int(self.face_center.y + self._shake_offset_y),
+                        int(self.face_center.x + self.shake_offset_x),
+                        int(self.face_center.y + self.shake_offset_y),
                     ),
                     int(rad),
                     4,
@@ -993,14 +993,14 @@ class Boss(BossHitMixin):
                         surface,
                         (255, 255, 0),
                         (
-                            int(self.face_center.x + self._shake_offset_x),
-                            int(self.face_center.y + self._shake_offset_y),
+                            int(self.face_center.x + self.shake_offset_x),
+                            int(self.face_center.y + self.shake_offset_y),
                         ),
                         int(rad - 8),
                         2,
                     )
             self.particle_system.draw_particles(
-                surface, self._shake_offset_x, self._shake_offset_y
+                surface, self.shake_offset_x, self.shake_offset_y
             )
 
         if self.state == BossState.PREPARING_TO_FIRE:
@@ -1009,15 +1009,15 @@ class Boss(BossHitMixin):
                     surface,
                     (255, 255, 255),
                     (
-                        int(self.face_center.x + self._shake_offset_x),
-                        int(self.face_center.y + self._shake_offset_y),
+                        int(self.face_center.x + self.shake_offset_x),
+                        int(self.face_center.y + self.shake_offset_y),
                     ),
                     12,
                     3,
                 )
 
         self.particle_system.draw_circle_disappear_particles(
-            surface, self._shake_offset_x, self._shake_offset_y
+            surface, self.shake_offset_x, self.shake_offset_y
         )
 
     def _draw_floating_squares(
@@ -1104,7 +1104,7 @@ class Boss(BossHitMixin):
         time_based_offset = int(pygame.time.get_ticks() * 0.1) % total_cycle
         if self.frenzy_mode and len(self.cannons) > 1:
             # Wall: laterais seguem um vetor fixo relativo ao canhão central.
-            if self._frenzy_pattern == "wall":
+            if self.frenzy_pattern == "wall":
                 center_cannon = self.central
                 center_tip = pygame.Vector2(center_cannon.get_barrel_tip_position())
                 center_dir = center_cannon.get_direction()
