@@ -600,7 +600,7 @@ class Ship:
     ):
         self.draw_time += dt
 
-        if self.is_entering:
+        if self.is_entering and self.entering_duration > 0:
             self.entering_timer += dt
             progress = min(1.0, self.entering_timer / self.entering_duration)
             eased = 1.0 - (1.0 - progress) ** 3  # ease-out cúbico
@@ -614,6 +614,7 @@ class Ship:
             )
             if progress >= 1.0:
                 self.is_entering = False
+                self.entering_duration = 0.0  # Reset para evitar re-triggering indesejado
 
         self._powerups.update_timers(dt)
         self.berserk_timer = max(0.0, self.berserk_timer - dt)

@@ -219,6 +219,7 @@ class EnemySpawner:
             self.current_level_number, self.difficulty_preset
         )
         self.stopped: bool = False
+        self.inverted_vertical: bool = False
 
         self._validate_formation_types()
 
@@ -839,7 +840,7 @@ class EnemySpawner:
                 vy=random.uniform(-50, 50),
             )
         else:
-            meteor = self.meteor_pool.get()
+            meteor = self.meteor_pool.get(inverted_vertical=self.inverted_vertical)
 
         meteor.health = int(meteor.health * self.enemy_health_multiplier)
         entity_manager.enemies.append(meteor)  # type: ignore[arg-type]
@@ -1258,6 +1259,7 @@ class EnemySpawner:
         level_number: int,
         is_world_transition: bool = False,
         level_config: Any | None = None,
+        inverted_vertical: bool = False,
     ) -> None:
         self.current_level_number = level_number
         # Se um LevelConfig pré-ajustado (ex: com meta-progression aplicado) for
@@ -1272,6 +1274,7 @@ class EnemySpawner:
         )
         self.stopped = False
         self._is_world_transition = is_world_transition
+        self.inverted_vertical = inverted_vertical
         # Troca de mundo: warm-up estendido para dar ao jogador tempo de respirar
         # antes que o novo mundo ganhe pressão máxima.
         extra = WORLD_TRANSITION_WARMUP_EXTRA if is_world_transition else 0.0

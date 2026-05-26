@@ -41,6 +41,12 @@ from ..core.sound_config import MusicState
 from ..core.state import Scene
 from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
+from ..core.atmosphere_phase import (
+    ATMOSPHERE_PHASE_ENABLED,
+    build_spawn_config,
+    classify_route,
+    get_phase_config,
+)
 from ..core.world_config import (
     WorldConfig,
     format_stage_name,
@@ -296,6 +302,15 @@ class PlayingScene(Scene):
         self.world_transition_cutscene_debug_mode: bool = False
         self.world_transition_thruster_particles: list[ThrusterParticle] = []
 
+        # Interstício "Entering/Exiting the Atmosphere" (ver core/atmosphere_phase.py
+        # e código_teste/PLANO_FASE_ATMOSFERA.md).
+        self._atmosphere_route: Optional[str] = None
+        self._atmosphere_progress: float = 0.0
+        self._atmosphere_phase_done: bool = False
+        # Marca que a fase de atmosfera está em curso (transição roda como
+        # PLAYING reusando o loop normal; a progressão de nível fica gateada).
+        self._in_atmosphere: bool = False
+
     def _init_fade(self) -> None:
         """Configura o fade-in inicial para evitar corte abrupto."""
         self.start_fade_active: bool = True
@@ -503,6 +518,10 @@ class PlayingScene(Scene):
 
         if theme_changed:
             self.pending_world_transition = new_world
+            # Reinicia o estado do interstício para esta transição.
+            self._atmosphere_phase_done = False
+            self._atmosphere_route = None
+            self._atmosphere_progress = 0.0
         else:
             self.current_world = new_world
             self.pending_world_transition = None
@@ -533,15 +552,23 @@ class PlayingScene(Scene):
             self._begin_playing_state()
 
     def _reset_ship_for_level_entry(self) -> None:
-        """Reposiciona a nave para a posição de entrada do nível atual."""
+        """Reposiciona a nave para a posição de entrada do nível atual e inicia animação."""
         if self.is_side_scroll:
-            self.ship.x = -50.0
-            self.ship.y = (Config.SCREEN_HEIGHT - 35) / 2.0
-            self.ship.set_rotation(90.0)
+            start_x = -100.0
+            start_y = (Config.SCREEN_HEIGHT - 35) / 2.0
+            target_x = float(_SIDE_SCROLL_SHIP_ENTRY_X)
+            target_y = start_y
         else:
-            self.ship.x = Config.SCREEN_WIDTH / 2.0 - 20
-            self.ship.y = float(Config.SCREEN_HEIGHT + 100)
-        self.ship.is_entering = True
+            start_x = Config.SCREEN_WIDTH / 2.0 - 20
+            start_y = float(Config.SCREEN_HEIGHT + 100)
+            target_x = start_x
+            target_y = float(Config.SCREEN_HEIGHT - _TOP_DOWN_SHIP_TARGET_Y_OFFSET)
+
+        # Garante que a animação de entrada comece do zero com as posições corretas
+        # para o modo de jogo atual (evita "pular" de posições de temas anteriores).
+        self.ship.start_entering_animation(
+            (start_x, start_y), (target_x, target_y), Config.PREPARATION_TIME
+        )
         self.ship.apply_world_mode(self.is_side_scroll)
 
     def _begin_playing_state(self) -> None:
@@ -579,17 +606,6 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
     # Cutscene de transição de mundo
     # ------------------------------------------------------------------
-
-    def _find_next_world_for_debug_preview(
-        self,
-    ) -> tuple[Optional[WorldConfig], Optional[int]]:
-        """Encontra o próximo mundo diferente para o preview de debug."""
-        for offset in range(1, 20):
-            candidate_level = self.current_level_index + 1 + offset
-            candidate_world = get_world_for_level(candidate_level)
-            if candidate_world.theme != self.current_world.theme:
-                return candidate_world, candidate_level
-        return None, None
 
     def _spawn_world_transition_thruster_particles(self, intensity: int) -> None:
         """Gera partículas extras para o impulso da cutscene."""
@@ -652,7 +668,11 @@ class PlayingScene(Scene):
         self.world_transition_cutscene_target_world = target_world
         self.world_transition_cutscene_debug_mode = debug_mode
         self.world_transition_thruster_particles.clear()
+
+        # Ativa o tremor visual da nave, mas desativa a interpolação automática
+        # de posição do Ship.update (entering_duration=0) para controle manual.
         self.ship.is_entering = True
+        self.ship.entering_duration = 0.0
         self.ship.is_side_scroll = self.is_side_scroll
         # Força o sprite a apontar na direção do launch — evita que uma rotação
         # CTRL anterior do jogador faça a nave voar de costas/de lado durante a
@@ -681,6 +701,19 @@ class PlayingScene(Scene):
 
         if target_world is None:
             return
+
+        if (
+            ATMOSPHERE_PHASE_ENABLED
+            and not debug_mode
+            and not self._atmosphere_phase_done
+            and self.pending_world_transition is not None
+        ):
+            route = classify_route(self.current_world, target_world)
+            if route is not None:
+                # Cutscene 1 concluída → interstício jogável (não abre o painel
+                # ainda). Ao terminar, dispara a cutscene 2 → painel → Mundo Y.
+                self._start_atmosphere_interstitial(route)
+                return
 
         if debug_mode:
             self._begin_level_preparation()
@@ -775,24 +808,107 @@ class PlayingScene(Scene):
         ):
             self._finish_world_transition_cutscene()
 
-    def trigger_world_transition_debug_preview(self) -> None:
-        """Abre a transição de mundo manualmente, sem mexer na progressão."""
-        if self.world_transition_cutscene_active:
-            logger.info("[DEBUG] Cutscene já está ativa")
-            return
+    # ------------------------------------------------------------------
+    # Interstício "Entering / Exiting the Atmosphere" (esqueleto de fluxo)
+    # ------------------------------------------------------------------
 
-        world, level = self._find_next_world_for_debug_preview()
-        if world is None:
-            logger.warning("[DEBUG] Nenhum próximo mundo encontrado para preview")
-            return
+    def _start_atmosphere_interstitial(self, route: str) -> None:
+        """Entra na fase de atmosfera (jogável) após a cutscene de saída.
 
-        logger.info(
-            "[DEBUG] Preview de transição: %s -> %s (nível alvo %s)",
-            self.current_world.name,
-            world.name,
-            level,
+        Reaproveita o loop normal: monta uma "level config" de atmosfera (chuva
+        de meteoros), orienta a nave e entra em PREPARING→PLAYING. A progressão
+        de nível fica gateada por `_in_atmosphere` (ver `_update_level_logic`);
+        o fim é por altitude → cutscene 2.
+        """
+        config = get_phase_config(route)
+        self._in_atmosphere = True
+        self._atmosphere_route = route
+        self._atmosphere_progress = 0.0
+
+        # Atmosfera é sempre vertical (top-down), independente dos mundos vizinhos.
+        self.is_side_scroll = False
+        self.r.set_atmosphere_mode(route)
+
+        level_number = self.level_controller.current_level_number
+        self.enemy_spawner.set_level(
+            level_number,
+            is_world_transition=True,
+            level_config=LevelConfig(
+                level_number=level_number,
+                enemy_spawn_config=build_spawn_config(route),
+                enemies_to_clear=10_000,  # fim é por altitude, não por kills
+                theme_name="Atmosfera",
+            ),
+            inverted_vertical=config.inverted_vertical if config else False,
         )
-        self._start_world_transition_cutscene(world, debug_mode=True)
+
+        # Entrada da nave + orientação. `_begin_level_preparation` posiciona a
+        # nave para a entrada top-down (is_side_scroll=False) e roda
+        # PREPARING→PLAYING. Exiting = facing "north" (sobe de baixo, atira pra cima).
+        self._begin_level_preparation()
+        self.ship.set_facing(config.facing if config else "north")
+        logger.info("[ATMOSPHERE] Interstício jogável iniciado: %s", route)
+
+    def _update_atmosphere_progress(self, dt: float) -> None:
+        """Avança o medidor de altitude; ao encher, dispara a cutscene 2."""
+        config = get_phase_config(self._atmosphere_route)
+        length = config.altitude_length if config else 40.0
+        self._atmosphere_progress = min(
+            1.0, self._atmosphere_progress + dt / max(0.1, length)
+        )
+        if self._atmosphere_progress >= 1.0:
+            self._finish_atmosphere_interstitial()
+
+    def _finish_atmosphere_interstitial(self) -> None:
+        """Conclui a fase e dispara a cutscene de chegada (cutscene 2)."""
+        self._in_atmosphere = False
+        self._atmosphere_phase_done = True
+        self._atmosphere_route = None
+        logger.info("[ATMOSPHERE] Interstício concluído")
+
+        # Limpa os meteoros da fase e restaura o spawner para o nível destino
+        # (a fase sobrescreveu a config do spawner com a chuva de meteoros).
+        self.boss_controller.reset()
+        self.entity_manager.clear_for_level_transition()
+        for slot in self.roster.alive_slots():
+            if slot.ship.mini_ships_timer > 0.0:
+                self.build_mini_ships(slot)
+            else:
+                self._build_permanent_mini_ships(slot)
+        self.enemy_spawner.set_level(
+            self.level_controller.current_level_number,
+            is_world_transition=True,
+            level_config=self.level_controller.level_config,
+        )
+
+        target = self.pending_world_transition
+        if target is None:
+            # Salvaguarda: sem destino, aplica direto (não deveria ocorrer).
+            self._apply_pending_world_transition()
+            return
+        self._start_world_transition_cutscene(target)
+
+    def debug_force_world_transition(self) -> None:
+        """[DEBUG/F8] Força a transição para o próximo mundo via fluxo REAL.
+
+        Pula o controller de nível para o fim do mundo atual e avança — o
+        próximo nível cruza a fronteira de mundo, disparando o fluxo normal
+        (theme change → cutscene 1 → interstício de atmosfera se a rota
+        qualificar → cutscene 2 → destino corretamente configurado, pois
+        `start_next_level` seta o spawner do mundo destino). Pula o boss do
+        mundo atual.
+        """
+        if self.world_transition_cutscene_active or self._in_atmosphere:
+            logger.info("[DEBUG] Transição já em andamento")
+            return
+        boss_level = self.current_world.boss_level
+        self.level_controller.current_level_index = boss_level - 1
+        logger.info(
+            "[DEBUG] F8: pulando para o fim de %s (nível %s) e avançando de mundo",
+            self.current_world.name,
+            boss_level,
+        )
+        self._start_next_level()
 
     # ------------------------------------------------------------------
     # Ciclo de vida da cena
@@ -1022,6 +1138,12 @@ class PlayingScene(Scene):
             self.star_spawner.update(self.entity_manager.stars)
 
     def _update_level_logic(self, dt: float) -> None:
+        if self._in_atmosphere:
+            # Fase de atmosfera: progride por altitude e ignora a progressão
+            # normal de nível (sem boss, sem "enemies_to_clear").
+            if self.transition_phase == TransitionPhase.PLAYING:
+                self._update_atmosphere_progress(dt)
+            return
         if self.boss_controller.active:
             if self.entity_manager.boss and self.entity_manager.boss.dead:
                 self._end_boss_fight()
@@ -2169,6 +2291,9 @@ class PlayingScene(Scene):
             level_popup_text=self.level_popup_text,
             level_popup_timer=self.level_popup_timer,
             level_popup_duration=self.level_popup_duration,
+            in_atmosphere=self._in_atmosphere,
+            atmosphere_progress=self._atmosphere_progress,
+            atmosphere_route=self._atmosphere_route,
         )
 
     def _build_p2_hud_info(self) -> Optional[P2HudInfo]:

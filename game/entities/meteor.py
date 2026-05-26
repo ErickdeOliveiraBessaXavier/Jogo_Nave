@@ -57,6 +57,7 @@ class Meteor:
         vx: float | None = None,
         vy: float | None = None,
         aggressiveness_multiplier: float = 1.0,
+        inverted_vertical: bool = False,
     ):
         # Initialize attributes with type hints
         self.size: int
@@ -74,6 +75,7 @@ class Meteor:
         self.active: bool
         self.health: int
         self.aggressiveness_multiplier: float = aggressiveness_multiplier
+        self.inverted_vertical: bool = inverted_vertical
 
         # Configure all attributes
         self.size = (
@@ -83,21 +85,30 @@ class Meteor:
         )
         self.w = self.h = self.size * 2
 
-        self._configure_position(x, y)
-        self._configure_velocity(vx, vy)
+        self._configure_position(x, y, inverted_vertical=inverted_vertical)
+        self._configure_velocity(vx, vy, inverted_vertical=inverted_vertical)
         self._configure_rotation()
         self._configure_appearance()
         self._configure_health()
 
-    def _configure_position(self, x: float | None, y: float | None) -> None:
+    def _configure_position(
+        self, x: float | None, y: float | None, inverted_vertical: bool = False
+    ) -> None:
         """Configure meteor position."""
         if x is None:
             self.x = random.randint(0, Config.SCREEN_WIDTH - self.w)
         else:
             self.x = x
-        self.y = -self.h if y is None else y
 
-    def _configure_velocity(self, vx: float | None, vy: float | None) -> None:
+        if y is not None:
+            self.y = y
+        else:
+            # Entering (re-entry) = nave no topo, meteoros sobem de baixo
+            self.y = Config.SCREEN_HEIGHT if inverted_vertical else -self.h
+
+    def _configure_velocity(
+        self, vx: float | None, vy: float | None, inverted_vertical: bool = False
+    ) -> None:
         """Configure meteor velocity based on size."""
         ratio = (self.size - Config.MIN_METEOR_SIZE) / (
             Config.MAX_METEOR_SIZE - Config.MIN_METEOR_SIZE + 1e-6
@@ -108,7 +119,8 @@ class Meteor:
         )
 
         if vy is None:
-            self.vy = base_vy * self.aggressiveness_multiplier
+            final_vy = base_vy * self.aggressiveness_multiplier
+            self.vy = -final_vy if inverted_vertical else final_vy
         else:
             self.vy = vy * self.aggressiveness_multiplier
 
@@ -116,7 +128,7 @@ class Meteor:
             if random.random() < Config.DIAGONAL_CHANCE:
                 self.vx = (
                     random.uniform(-120.0, 120.0)
-                    * (self.vy / max(Config.FAST_METEOR_SPEED, 1e-6))
+                    * (abs(self.vy) / max(Config.FAST_METEOR_SPEED, 1e-6))
                     * self.aggressiveness_multiplier
                 )
             else:
@@ -157,9 +169,11 @@ class Meteor:
         vx: float | None = None,
         vy: float | None = None,
         aggressiveness_multiplier: float = 1.0,
+        inverted_vertical: bool = False,
     ):
         """Reconfigura o meteoro para reutilização no pool."""
         self.aggressiveness_multiplier = aggressiveness_multiplier
+        self.inverted_vertical = inverted_vertical
         self.size = (
             size
             if size is not None
@@ -167,8 +181,8 @@ class Meteor:
         )
         self.w = self.h = self.size * 2
 
-        self._configure_position(x, y)
-        self._configure_velocity(vx, vy)
+        self._configure_position(x, y, inverted_vertical=inverted_vertical)
+        self._configure_velocity(vx, vy, inverted_vertical=inverted_vertical)
         self._configure_rotation()
         self._configure_appearance()
         self._configure_health()
@@ -190,8 +204,11 @@ class Meteor:
             if self.x < -self.w or self.y > Config.SCREEN_HEIGHT or self.y < -self.h:
                 self.dead = True
         else:
+            # Em top-down vertical (incluindo atmosfera), morre se sair pelas
+            # bordas laterais ou se cruzar o topo (Exiting) / fundo (Entering).
             if (
-                (self.y > Config.SCREEN_HEIGHT)
+                (self.y > Config.SCREEN_HEIGHT + self.h)
+                or (self.y < -self.h * 2)  # Margem extra para meteoros subindo
                 or (self.x < -self.w)
                 or (self.x > Config.SCREEN_WIDTH + self.w)
             ):

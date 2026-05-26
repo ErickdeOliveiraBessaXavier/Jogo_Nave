@@ -1,3 +1,4 @@
+import logging
 import math
 import random
 import time
@@ -15,11 +16,15 @@ from ..core.render_config import RenderConfig
 from ..core.sprite_loader import sprite_loader
 from ..core.world_config import WorldTheme
 from .backgrounds import (
+    AtmosphereBackground,
     Background,
     CityBackground,
     MountainsBackground,
     VolcanicBackground,
+    create_background,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
@@ -511,12 +516,28 @@ class Renderer:
             self.current_background = None  # Usa sistema original
             self._use_starfield_background = True
 
+    def set_atmosphere_mode(self, route: str) -> None:
+        """Configura o background para a fase de atmosfera."""
+        if (
+            isinstance(self.current_background, AtmosphereBackground)
+            and self.current_background.route == route
+        ):
+            return
+
+        self.current_background = create_background(
+            "atmosphere", Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT, route=route
+        )
+        self.current_theme = None
+        self._use_starfield_background = False
+        logger.info("[RENDERER] Background de atmosfera ativado: %s", route)
+
     def background(
         self,
         surface: pygame.Surface,
         dt: float,
         speed_multiplier: float = 1.0,
         draw_celestials: bool = True,
+        atmosphere_progress: float = 0.0,
     ):
         surface.fill(colors.BLACK)
 
@@ -529,9 +550,11 @@ class Renderer:
             self.starfield.draw(surface)
             self.celestial_manager.draw(surface)
         else:
-            # Para temas customizados (MOUNTAINS, CITY, VOLCANIC)
+            # Para temas customizados (MOUNTAINS, CITY, VOLCANIC, ATMOSPHERE)
             # NÃO desenhar starfield, apenas o background do tema
             if self.current_background is not None:
+                if isinstance(self.current_background, AtmosphereBackground):
+                    self.current_background.set_progress(atmosphere_progress)
                 self.current_background.update(dt, speed_multiplier)
                 self.current_background.draw(surface)
 

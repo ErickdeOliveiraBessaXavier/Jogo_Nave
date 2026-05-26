@@ -64,12 +64,14 @@ class MeteorPool(PoolStatsMixin):
         y: float | None = None,
         vx: float | None = None,
         vy: float | None = None,
+        inverted_vertical: bool = False,
     ) -> Meteor:
         """
         Obtém um meteoro do pool, reutilizando um inativo ou criando novo.
 
         Args:
             size, x, y, vx, vy: Parâmetros de configuração do meteoro
+            inverted_vertical: Se o meteoro deve se mover de baixo para cima
 
         Returns:
             Meteoro ativo e configurado
@@ -79,8 +81,13 @@ class MeteorPool(PoolStatsMixin):
         for meteor in self.pool:
             if not meteor.active:
                 meteor.reset(
-                    size=size, x=x, y=y, vx=vx, vy=vy,
+                    size=size,
+                    x=x,
+                    y=y,
+                    vx=vx,
+                    vy=vy,
                     aggressiveness_multiplier=mult,
+                    inverted_vertical=inverted_vertical,
                 )
                 meteor.is_side_scroll = self.is_side_scroll
                 self.active.append(meteor)
@@ -91,8 +98,13 @@ class MeteorPool(PoolStatsMixin):
         # Se não houver disponível, tenta criar novo
         if len(self.pool) < self.max_size:
             meteor = Meteor(
-                size=size, x=x, y=y, vx=vx, vy=vy,
+                size=size,
+                x=x,
+                y=y,
+                vx=vx,
+                vy=vy,
                 aggressiveness_multiplier=mult,
+                inverted_vertical=inverted_vertical,
             )
             meteor.is_side_scroll = self.is_side_scroll
             self.pool.append(meteor)
@@ -105,8 +117,13 @@ class MeteorPool(PoolStatsMixin):
             if self.active:
                 meteor = self.active.pop(0)
                 meteor.reset(
-                    size=size, x=x, y=y, vx=vx, vy=vy,
+                    size=size,
+                    x=x,
+                    y=y,
+                    vx=vx,
+                    vy=vy,
                     aggressiveness_multiplier=mult,
+                    inverted_vertical=inverted_vertical,
                 )
                 meteor.is_side_scroll = self.is_side_scroll
                 self.active.append(meteor)
@@ -115,8 +132,13 @@ class MeteorPool(PoolStatsMixin):
             else:
                 # Nunca deve chegar aqui
                 m = Meteor(
-                    size=size, x=x, y=y, vx=vx, vy=vy,
+                    size=size,
+                    x=x,
+                    y=y,
+                    vx=vx,
+                    vy=vy,
                     aggressiveness_multiplier=mult,
+                    inverted_vertical=inverted_vertical,
                 )
                 m.is_side_scroll = self.is_side_scroll
                 return m

@@ -408,7 +408,11 @@ concentram FSM, física e renderização no mesmo arquivo.
 definido, padronizar a interface de update dos bosses já contemplaria
 parte do polimento.
 
-**Status:** Parcial — Cloud Archmage: paletas (`PALETTES`), pixel maps (`HAT_MAP`/`BODY_MAP`/`ARM_MAP`) e `CHAR_TO_KEY` extraídos para `cloud_archmage_pixel_map.py` (espelha convenção `*_pixel_map.py` dos outros bosses). Constantes de timing/visual permaneceram como module-level (`_TELEPORT_FADE_SPEED`, `_LERP_*`, etc.) — já estavam corretas em escopo, não havia "inline na classe". Splits de FSM/física/render em `stone_golem_boss.py` e `mountain_serpent_boss.py` adiados — ambos têm 2000+ LOC com coupling interno denso; tratar em ciclo dedicado quando houver gatilho concreto (ex.: adicionar novo boss similar).
+**Status:** ✅ Concluído na parte cabível; split de FSM/física/render **adiado deliberadamente** (sem gatilho concreto).
+
+- **Feito — Cloud Archmage:** paletas (`PALETTES`), pixel maps (`HAT_MAP`/`BODY_MAP`/`ARM_MAP`) e `CHAR_TO_KEY` extraídos para `cloud_archmage_pixel_map.py` (espelha convenção `*_pixel_map.py` dos outros bosses). Constantes de timing/visual permaneceram como module-level (`_TELEPORT_FADE_SPEED`, `_LERP_*`, etc.) — já estavam corretas em escopo, não havia "inline na classe". Stone Golem e Mountain Serpent já têm pixel map/paleta extraídos (`stone_golem_pixel_map.py`, `stone_palette.py`, `mountain_serpent_pixel_map.py`).
+
+- **Adiado — split FSM/física/render de `stone_golem_boss.py` (2571 LOC) e `mountain_serpent_boss.py` (2003 LOC).** Revisão (2026-05-26) confirmou que extrair o render para um `*Renderer` no padrão `ShipRenderer` **não reduz acoplamento — converte acoplamento intra-classe (acesso a `self._x` privado, legítimo) em acoplamento inter-objeto** (renderer irmão lendo ~15 privados de domínio do boss: `_jitter_x`, `_current_float_y`, `_sweep_angle`, `_fire_shots_count`, `_orb_shots_done`...). Isso é exatamente o `reportPrivateUsage` que o CLAUDE.md §1 trata como fronteira borrada; fazer "certo" exigiria promover esses ~15 atributos a públicos, espalhando rename por todo o FSM. Diferente da `Ship`, o render do golem é genuinamente acoplado ao FSM (troca visual por `fsm_state`, lê `fsm_ticks`/contadores de disparo) — o padrão `ShipRenderer` (que lê estado visual público e limpo) não encaixa. Conclusão: churn de ~2500 LOC, risco médio (regressão visual só observável jogando até o boss; sem testes no repo), em item de prioridade Baixa, **sem ganho de desacoplamento**. Manter como está. Reabrir com `BossProtocol` (sinérgico com item 1) quando um boss novo similar justificar a abstração da interface.
 
 ---
 
@@ -436,6 +440,13 @@ Itens 7, 8 e 9 podem rodar em paralelo por não terem dependência. Item 2
 - **Item 5 deste ciclo (`playing.py` — call sites `self.ship`)** — property
   é retrocompat documentada do plano multiplayer. Migrar incrementalmente
   conforme novos contextos exigirem slot.
+
+- **Split FSM/física/render de `stone_golem_boss.py` e `mountain_serpent_boss.py`
+  (item 10)** — analisado e adiado em 2026-05-26. Extrair o render para um
+  `*Renderer` converteria acoplamento intra-classe (privado, ok) em acoplamento
+  inter-objeto lendo ~15 privados de domínio do boss — sem ganho de
+  desacoplamento, com churn de ~2500 LOC e risco visual não testável. Reabrir
+  apenas com gatilho concreto (boss novo similar) e via `BossProtocol`.
 
 - **`_spawn_boss` em `boss_fight_controller`** — construtores realmente
   diferem entre bosses. Factory por `boss_type` é uma decisão arquitetural
@@ -476,7 +487,7 @@ Itens 7, 8 e 9 podem rodar em paralelo por não terem dependência. Item 2
 | 7 | `handle_mine_explosion` — mutação direta de formation.enemies | Médio | ✅ Concluído |
 | 8 | `Ship.__init__` — imports locais sem necessidade | Baixo | ✅ Concluído |
 | 9 | `playing.py` — docstring histórica desatualizada | Baixo | ✅ Concluído |
-| 10 | Bloco de bosses — constantes inline e responsabilidades | Baixo | ✅ Parcial (cloud_archmage palette extraída; stone_golem/mountain_serpent adiados) |
+| 10 | Bloco de bosses — constantes inline e responsabilidades | Baixo | ✅ Constantes extraídas; split FSM/render adiado (sem gatilho, não reduz acoplamento) |
 
 ---
 

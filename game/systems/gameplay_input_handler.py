@@ -76,7 +76,7 @@ class GameplayInputHandler:
                 "ATIVADO" if scene.show_enemy_hitboxes else "DESATIVADO",
             )
         elif event.key == pygame.K_F8:
-            scene.trigger_world_transition_debug_preview()
+            scene.debug_force_world_transition()
         elif event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
             if not scene.ship.is_entering and scene.can_handle_gameplay_actions():
                 scene.ship.cycle_facing()

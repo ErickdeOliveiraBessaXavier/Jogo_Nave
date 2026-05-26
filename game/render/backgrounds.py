@@ -939,15 +939,171 @@ class VolcanicBackground(Background):
         self._create_embers()
 
 
+class VerticalCloud:
+    """Nuvem que se move verticalmente para a fase de atmosfera."""
+
+    def __init__(
+        self,
+        width: int,
+        height: int,
+        speed_range: Tuple[float, float],
+        color: Tuple[int, int, int],
+        is_entering: bool,
+    ):
+        self.screen_width = width
+        self.screen_height = height
+        self.speed_range = speed_range
+        self.color = color
+        self.is_entering = is_entering
+
+        # Gera uma superfície de nuvem simples (circular/elíptica)
+        self.base_surface = self._generate_cloud_surface()
+        self.reset(is_first_time=True)
+
+    def _generate_cloud_surface(self) -> pygame.Surface:
+        w, h = random.randint(150, 350), random.randint(80, 180)
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        # Desenha várias elipses sobrepostas para dar volume
+        for _ in range(5):
+            ew = random.randint(w // 2, w)
+            eh = random.randint(h // 2, h)
+            ex = random.randint(0, w - ew)
+            ey = random.randint(0, h - eh)
+            alpha = random.randint(40, 100)
+            pygame.draw.ellipse(surf, (*self.color, alpha), (ex, ey, ew, eh))
+        return _optimize_alpha_surface(surf)
+
+    def reset(self, is_first_time: bool = False) -> None:
+        scale = random.uniform(0.6, 1.4)
+        self.scaled_surface = pygame.transform.smoothscale(
+            self.base_surface,
+            (
+                int(self.base_surface.get_width() * scale),
+                int(self.base_surface.get_height() * scale),
+            ),
+        )
+
+        self.x = random.uniform(-50, self.screen_width - 100)
+        if is_first_time:
+            self.y = random.uniform(-100, self.screen_height + 100)
+        else:
+            # Entering (nave no topo) -> Nuvens sobem (spawn embaixo)
+            # Exiting (nave embaixo) -> Nuvens descem (spawn no topo)
+            if self.is_entering:
+                self.y = self.screen_height + random.randint(50, 200)
+            else:
+                self.y = -self.scaled_surface.get_height() - random.randint(50, 200)
+
+        self.speed = random.uniform(self.speed_range[0], self.speed_range[1])
+
+    def update(self, dt: float, speed_mult: float = 1.0) -> None:
+        # Direção: -1 se entering (sobe), 1 se exiting (desce)
+        direction = -1.0 if self.is_entering else 1.0
+        self.y += direction * self.speed * dt * speed_mult
+
+        if self.is_entering:
+            if self.y < -self.scaled_surface.get_height():
+                self.reset()
+        else:
+            if self.y > self.screen_height:
+                self.reset()
+
+    def draw(self, surface: pygame.Surface) -> None:
+        surface.blit(self.scaled_surface, (int(self.x), int(self.y)))
+
+
+class AtmosphereBackground(Background):
+    """Background para transição de atmosfera com transição de cor e nuvens."""
+
+    def __init__(self, width: int, height: int, route: str = "exiting"):
+        super().__init__(width, height)
+        self.route = route
+        self.is_entering = route == "entering"
+        self.progress: float = 0.0
+
+        # Cores: [Space (Dark)] <-> [Sky (Cyan/Blue)]
+        # Exiting: progress 0 (Sky) -> progress 1 (Space)
+        # Entering: progress 0 (Space) -> progress 1 (Sky)
+        self.color_space_top = (5, 8, 15)
+        self.color_space_bottom = (15, 25, 45)
+        self.color_sky_top = (30, 100, 180)
+        self.color_sky_bottom = (120, 200, 255)
+
+        self.clouds: List[VerticalCloud] = []
+        for _ in range(12):
+            self.clouds.append(
+                VerticalCloud(
+                    width, height, (100, 250), (220, 230, 255), self.is_entering
+                )
+            )
+
+    def set_progress(self, progress: float) -> None:
+        self.progress = max(0.0, min(1.0, progress))
+
+    def update(self, dt: float, speed_mult: float = 1.0) -> None:
+        # A densidade de nuvens e velocidade pode mudar com o progresso
+        # mas por ora mantemos fixo para fluidez.
+        for cloud in self.clouds:
+            cloud.update(dt, speed_mult)
+
+    def draw(self, surface: pygame.Surface) -> None:
+        # Calcula cores atuais baseadas no progresso e rota
+        # Exiting: p=0 (Atmo), p=1 (Space) -> t = progress
+        # Entering: p=0 (Space), p=1 (Atmo) -> t = 1 - progress
+        t = self.progress if self.route == "exiting" else 1.0 - self.progress
+
+        c_top = tuple(
+            int(self.color_sky_top[i] * (1 - t) + self.color_space_top[i] * t)
+            for i in range(3)
+        )
+        c_bottom = tuple(
+            int(self.color_sky_bottom[i] * (1 - t) + self.color_space_bottom[i] * t)
+            for i in range(3)
+        )
+
+        # Desenha gradiente de fundo
+        self._draw_gradient(surface, c_top, c_bottom)
+
+        # Desenha nuvens (alpha/densidade proporcional à proximidade com a atmosfera)
+        # Mais nuvens quando t é baixo (perto da atmosfera)
+        cloud_alpha = int(255 * (1.0 - t * 0.8))
+        for i, cloud in enumerate(self.clouds):
+            # Algumas nuvens somem primeiro
+            individual_alpha = max(0, cloud_alpha - (i % 4) * 30)
+            if individual_alpha > 0:
+                # Nota: VerticalCloud gera sua própria surface, precisaríamos
+                # aplicar alpha global ou mutar as existentes. Por simplicidade
+                # as nuvens estão sempre lá, mas o céu muda.
+                cloud.draw(surface)
+
+    def _draw_gradient(
+        self, surface: pygame.Surface, top: tuple, bottom: tuple
+    ) -> None:
+        """Desenha gradiente vertical."""
+        # Otimização: desenha em uma surface pequena e escala
+        grad = pygame.Surface((1, 2), pygame.SRCALPHA)
+        grad.set_at((0, 0), top)
+        grad.set_at((0, 1), bottom)
+        surface.blit(
+            pygame.transform.smoothscale(grad, (self.width, self.height)), (0, 0)
+        )
+
+    def reset(self) -> None:
+        self.progress = 0.0
+        for cloud in self.clouds:
+            cloud.reset(is_first_time=True)
+
+
 # Factory function para facilitar criação
-def create_background(bg_type: str, width: int, height: int) -> Background:
+def create_background(bg_type: str, width: int, height: int, **kwargs) -> Background:
     """
     Cria um background baseado no tipo especificado.
 
     Args:
-        bg_type: Tipo do background ('mountains', 'city', 'volcanic')
+        bg_type: Tipo do background ('mountains', 'city', 'volcanic', 'atmosphere')
         width: Largura da tela
         height: Altura da tela
+        **kwargs: Argumentos extras (ex: route para atmosphere)
 
     Returns:
         Instância do background apropriado
@@ -959,6 +1115,7 @@ def create_background(bg_type: str, width: int, height: int) -> Background:
         "mountains": MountainsBackground,
         "city": CityBackground,
         "volcanic": VolcanicBackground,
+        "atmosphere": AtmosphereBackground,
     }
 
     bg_class = backgrounds.get(bg_type.lower())
@@ -967,5 +1124,9 @@ def create_background(bg_type: str, width: int, height: int) -> Background:
             f"Tipo de background inválido: {bg_type}. "
             f"Tipos válidos: {', '.join(backgrounds.keys())}"
         )
+
+    if bg_class is AtmosphereBackground:
+        route = kwargs.get("route", "exiting")
+        return AtmosphereBackground(width, height, route=route)
 
     return bg_class(width, height)

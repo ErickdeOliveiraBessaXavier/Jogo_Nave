@@ -109,3 +109,8 @@ class RenderFrame:
     level_popup_text: str = ""
     level_popup_timer: float = 0.0
     level_popup_duration: float = 2.5
+
+    # Fase de atmosfera (interstício)
+    in_atmosphere: bool = False
+    atmosphere_progress: float = 0.0
+    atmosphere_route: Optional[str] = None

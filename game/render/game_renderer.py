@@ -119,6 +119,7 @@ class GameRenderer:
             dt=dt,
             speed_multiplier=speed_multiplier,
             draw_celestials=not boss_active,
+            atmosphere_progress=frame.atmosphere_progress,
         )
 
         # 2. Entidades
@@ -256,6 +257,10 @@ class GameRenderer:
         # 2. Caixa Superior Direita (Vidas e Powerups)
         self._render_players_status_box(frame, surface)
 
+        # 3. Interstício de Atmosfera (Barra de Altitude)
+        if frame.in_atmosphere:
+            self._render_atmosphere_hud(frame, surface)
+
         # 4. Cofre (Cofre é centralizado logo abaixo do topo se houver espaço)
         p2_hud = frame.p2_hud
         p2_ship = p2_hud.ship if p2_hud is not None else None
@@ -266,6 +271,42 @@ class GameRenderer:
 
         # 6. Combo (Bottom Right)
         self._render_combo_hud(frame.ship, surface)
+
+    def _render_atmosphere_hud(
+        self, frame: RenderFrame, surface: pygame.Surface
+    ) -> None:
+        """Desenha a barra de altitude durante o interstício de atmosfera."""
+        bar_w, bar_h = 300, 12
+        x = (Config.SCREEN_WIDTH - bar_w) // 2
+        y = 35  # Logo abaixo do topo, centralizada entre as caixas de score/status
+
+        # Determina o label e a direção visual da altitude
+        # Exiting: Planeta -> Espaço (Altitude sobe de 0% a 100%)
+        # Entering: Espaço -> Planeta (Altitude desce de 100% a 0%)
+        is_exiting = frame.atmosphere_route == "exiting"
+        label = "ALTITUDE" if is_exiting else "RE-ENTRY"
+        display_ratio = (
+            frame.atmosphere_progress if is_exiting else 1.0 - frame.atmosphere_progress
+        )
+
+        # Fundo da barra
+        self._draw_hud_bar(surface, x, y, bar_w, bar_h, 1.0, (20, 20, 30))
+        # Preenchimento
+        color = colors.CYAN if is_exiting else colors.ORANGE
+        self._draw_hud_bar(surface, x, y, bar_w, bar_h, display_ratio, color)
+        # Borda
+        pygame.draw.rect(
+            surface, colors.WHITE, (x, y, bar_w, bar_h), 1, border_radius=bar_h // 2
+        )
+
+        # Texto Centralizado acima da barra
+        txt_surf = self.hud_font_tiny.render(label, True, colors.WHITE)
+        surface.blit(txt_surf, (x + (bar_w - txt_surf.get_width()) // 2, y - 16))
+
+        # Porcentagem (opcional, pequeno do lado)
+        pct_txt = f"{int(display_ratio * 100)}%"
+        pct_surf = self.hud_font_tiny.render(pct_txt, True, colors.GRAY)
+        surface.blit(pct_surf, (x + bar_w + 10, y - 2))
 
     def _render_score_kills_box(
         self, frame: RenderFrame, surface: pygame.Surface
