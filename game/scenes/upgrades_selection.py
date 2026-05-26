@@ -1,7 +1,7 @@
 import math
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple, TypeVar
 
 import pygame
 
@@ -22,6 +22,9 @@ from .ui_helpers import wrap_text, draw_bordered_button
 
 if TYPE_CHECKING:
     from ..app import GameApp
+
+# Elemento genérico de uma página de grid (UpgradeMeta, ShipProfile, ...).
+_GridItem = TypeVar("_GridItem")
 
 
 @dataclass
@@ -293,8 +296,8 @@ class UpgradesSelectionScene(Scene):
         return grid, left, right
 
     def _build_paged_grid(
-        self, area: pygame.Rect, items: list, page: int
-    ) -> Tuple[List[pygame.Rect], list, int, int]:
+        self, area: pygame.Rect, items: List[_GridItem], page: int
+    ) -> Tuple[List[pygame.Rect], List[_GridItem], int, int]:
         """Monta uma página de um grid 3×3 centralizado em ``area``.
 
         Células são quadradas, dimensionadas pelo menor limite (largura ou

@@ -41,7 +41,7 @@ class BossCannon:
         self.charging = False
         self.charge_progress = 0.0
         # Optional relative position inside boss (rel_x, rel_y), set by owner
-        self._rel: Tuple[float, float] | None = None
+        self.rel: Tuple[float, float] | None = None
 
     def update_position(
         self, boss_x: float, boss_y: float, boss_width: float, boss_height: float

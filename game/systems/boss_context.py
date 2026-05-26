@@ -61,7 +61,7 @@ class BossUpdateResult:
     new_shards: List[Any] = field(default_factory=_empty_any_list)
     new_spikes: List[Any] = field(default_factory=_empty_any_list)
     spawned_enemies: List[Any] = field(default_factory=_empty_any_list)
-    sound_events: List[str] = field(default_factory=list)
+    sound_events: List[str] = field(default_factory=list[str])
 
 
 class BossProtocol(Protocol):
