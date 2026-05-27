@@ -7,6 +7,8 @@ import pygame
 from ..core.assets import get_image
 from ..core.config import config as Config
 from ..core.sound import sound_manager
+from ..systems import aiming
+from ..systems.targeting import find_nearest_enemy, is_targetable, target_point
 from .alien import Alien
 from .explosive_mine import ExplosiveMine
 from .eye_enemy import EyeEnemy
@@ -27,23 +29,17 @@ _MAX_TARGETING_RANGE_SQ = 400 * 400
 
 
 class MiniShip:
-    # Sprites pré-escalados e pré-rotacionados (cache de classe para não
-    # recriar a cada instância). ``_sprite_top_down`` é o sprite original
-    # apontando para cima; ``_sprite_side_scroll`` é rotacionado 90° para
-    # apontar à direita nas fases de scroll horizontal.
-    _sprite_top_down: Optional[pygame.Surface] = None
-    _sprite_side_scroll: Optional[pygame.Surface] = None
+    # Sprite-base pré-escalado apontando para cima (cache de classe para não
+    # recriar a cada instância). A rotação na direção do alvo é aplicada no
+    # desenho via ``aiming.rotate_sprite_up``.
+    _sprite: Optional[pygame.Surface] = None
 
     @classmethod
-    def _ensure_sprites(cls, size: int) -> None:
-        if cls._sprite_top_down is not None:
+    def _ensure_sprite(cls, size: int) -> None:
+        if cls._sprite is not None:
             return
         raw = get_image(_SPRITE_PATH)
-        scaled = pygame.transform.smoothscale(raw, (size, size))
-        cls._sprite_top_down = scaled
-        # Rotação negativa em pygame = sentido horário; -90 leva o topo
-        # do sprite para o lado direito.
-        cls._sprite_side_scroll = pygame.transform.rotate(scaled, -90)
+        cls._sprite = pygame.transform.smoothscale(raw, (size, size))
 
     def __init__(
         self,
@@ -60,7 +56,7 @@ class MiniShip:
         self.permanent = permanent
         self.w = 20
         self.h = 20
-        self._ensure_sprites(self.w)
+        self._ensure_sprite(self.w)
         self.x = self.player.x
         self.y = self.player.y
         self.shoot_cooldown = 0.75
@@ -69,6 +65,12 @@ class MiniShip:
         self.target_offset_x = 0
         self.target_offset_y = 0
         self.set_orientation(is_side_scroll)
+
+        # Alvo cacheado entre frames (re-adquirido quando morre ou sai do
+        # alcance) e estado de rotação do sprite na direção da mira.
+        self.target: Optional[Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry] = None
+        self.current_angle = self._idle_angle
+        self.target_angle = self._idle_angle
 
     def set_orientation(self, is_side_scroll: bool) -> None:
         """Atualiza offsets de formação conforme o modo da fase."""
@@ -82,6 +84,11 @@ class MiniShip:
             # Em top-down, escolta lateral clássica.
             self.target_offset_x = -40 if self.side == "left" else 40
             self.target_offset_y = 10
+
+    @property
+    def _idle_angle(self) -> float:
+        """Orientação de repouso (sem alvo): direita em side-scroll, cima em top-down."""
+        return aiming.ANGLE_RIGHT if self.is_side_scroll else aiming.ANGLE_UP
 
     def update(
         self,
@@ -97,20 +104,59 @@ class MiniShip:
         self.x += (target_x - self.x) * 7 * dt
         self.y += (target_y - self.y) * 7 * dt
 
+        self._acquire_target(entity_manager)
+
+        # Orientação: gira na direção do alvo; sem alvo volta ao repouso.
+        if self.target is not None:
+            cx, cy = self._aim_point(self.target)
+            self.target_angle = aiming.angle_to(
+                cx - (self.x + self.w / 2), cy - (self.y + self.h / 2)
+            )
+        else:
+            self.target_angle = self._idle_angle
+        self.current_angle = aiming.approach_angle(
+            self.current_angle, self.target_angle, dt
+        )
+
         # Shooting
         self.shoot_timer -= dt
-        if self.shoot_timer <= 0:
-            nearest_enemy = self._find_nearest_enemy(entity_manager)
-            if nearest_enemy:
-                self.shoot(nearest_enemy, bullets)
-                self.shoot_timer = self.shoot_cooldown
+        if self.shoot_timer <= 0 and self.target is not None:
+            self.shoot(self.target, bullets)
+            self.shoot_timer = self.shoot_cooldown
+
+    def _acquire_target(self, entity_manager: "EntityManager") -> None:
+        """Mantém o alvo atual enquanto atacável e em alcance; senão re-adquire.
+
+        ``is_targetable`` cobre morte e invulnerabilidade (boss em fase
+        protegida), garantindo que o MiniShip largue um alvo que ficou imune.
+        """
+        current = self.target
+        if (
+            current is not None
+            and is_targetable(current)
+            and self._in_range(current)
+        ):
+            return
+        self.target = self._find_nearest_enemy(entity_manager)
+
+    def _in_range(
+        self, target: Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry
+    ) -> bool:
+        cx, cy = self._aim_point(target)
+        dx = cx - (self.x + self.w / 2)
+        dy = cy - (self.y + self.h / 2)
+        return dx * dx + dy * dy <= _MAX_TARGETING_RANGE_SQ
+
+    def _aim_point(
+        self, target: Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry
+    ) -> tuple[float, float]:
+        """Ponto-alvo da mira — usa a geometria precisa compartilhada."""
+        return target_point(target) or (target.x, target.y)
 
     def _find_nearest_enemy(
         self, entity_manager: "EntityManager"
     ) -> Optional[Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry]:
         """Usa a função de targeting compartilhada com range máximo."""
-        from ..systems.targeting import find_nearest_enemy
-
         return find_nearest_enemy(
             self.x, self.y, entity_manager, max_range_sq=_MAX_TARGETING_RANGE_SQ
         )
@@ -120,17 +166,11 @@ class MiniShip:
         target: Meteor | Alien | ExplosiveMine | EyeEnemy | StoneSentry,
         bullets: list[MiniShipBullet],
     ):
-        if isinstance(target, ExplosiveMine):
-            target_cx, target_cy = target.x, target.y
-        else:
-            target_cx, target_cy = target.x + target.w / 2, target.y + target.h / 2
+        target_cx, target_cy = self._aim_point(target)
 
-        if self.is_side_scroll:
-            origin_x = self.x + self.w
-            origin_y = self.y + self.h / 2
-        else:
-            origin_x = self.x + self.w / 2
-            origin_y = self.y
+        # Dispara do centro; o sprite já aponta para o alvo via rotação.
+        origin_x = self.x + self.w / 2
+        origin_y = self.y + self.h / 2
 
         angle = math.atan2(target_cy - origin_y, target_cx - origin_x)
         bullet_speed = Config.BULLET_SPEED * 1.2
@@ -158,13 +198,11 @@ class MiniShip:
         if should_blink and int(pygame.time.get_ticks() / 150) % 2 == 0:
             return
 
-        sprite = (
-            self._sprite_side_scroll if self.is_side_scroll else self._sprite_top_down
-        )
-        if sprite is None:
+        if self._sprite is None:
             return  # fallback defensivo se o asset não carregou.
-        # Centraliza o sprite na bounding box (importante no caso side-scroll,
-        # onde a rotação pode mudar o tamanho da surface).
+        # Rotaciona o sprite-base (aponta para cima) na direção da mira.
+        sprite = aiming.rotate_sprite_up(self._sprite, self.current_angle)
+        # Centraliza na bounding box (a rotação muda o tamanho da surface).
         rect = sprite.get_rect(
             center=(int(self.x + self.w / 2), int(self.y + self.h / 2))
         )

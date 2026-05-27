@@ -8,6 +8,8 @@ import pygame
 from ..core.assets import get_image
 from ..core.config import config as Config
 from ..core.sound import sound_manager
+from ..systems import aiming
+from ..systems.targeting import is_targetable, target_point
 from .mini_ship_bullet import MiniShipBullet
 
 _SPRITE_PATH = (
@@ -49,9 +51,9 @@ class Wingman:
         self.target = None
         self.state = "FOLLOW"  # "FOLLOW" ou "HUNT"
         
-        # Lógica de rotação
-        self.current_angle = 270.0 # Olhando para cima inicialmente
-        self.target_angle = 270.0
+        # Lógica de rotação (giro suave do sprite na direção da mira)
+        self.current_angle = aiming.ANGLE_UP
+        self.target_angle = aiming.ANGLE_UP
         
         # Lógica de Animação de Nascimento
         self.spawn_timer = 0.0
@@ -84,8 +86,9 @@ class Wingman:
 
         self.scale = 1.0
 
-        # Busca alvo se não tiver um ou se o atual morreu
-        if not self.target or getattr(self.target, "dead", False):
+        # Re-adquire se não houver alvo ou se o atual morreu / ficou
+        # invulnerável (ex.: cabeça da Serpente volta a ficar protegida).
+        if self.target is None or not is_targetable(self.target):
             self.target = self._find_target(enemies)
         
         if self.target:
@@ -104,21 +107,19 @@ class Wingman:
 
         # Atualizar ângulo visual
         if self.state == "HUNT" and self.target:
-            tx = getattr(self.target, "x", 0) + getattr(self.target, "w", 0) / 2
-            ty = getattr(self.target, "y", 0) + getattr(self.target, "h", 0) / 2
-            dx = tx - (self.x + self.w / 2)
-            dy = ty - (self.y + self.h / 2)
-            # No pygame, 0 é direita, 90 é baixo. Rotate usa graus (anti-horário)
-            # atan2 retorna radianos (-PI a PI)
-            self.target_angle = math.degrees(-math.atan2(dy, dx))
+            tx, ty = self._target_center(self.target)
+            self.target_angle = aiming.angle_to(
+                tx - (self.x + self.w / 2), ty - (self.y + self.h / 2)
+            )
         elif math.hypot(self.vx, self.vy) > 10:
-            self.target_angle = math.degrees(-math.atan2(self.vy, self.vx))
+            self.target_angle = aiming.angle_to(self.vx, self.vy)
         else:
-            self.target_angle = 90.0 # Olhando para cima padrão
+            self.target_angle = aiming.ANGLE_UP
 
         # Interpolação suave do ângulo (evita snaps bruscos)
-        angle_diff = (self.target_angle - self.current_angle + 180) % 360 - 180
-        self.current_angle += angle_diff * 10 * dt
+        self.current_angle = aiming.approach_angle(
+            self.current_angle, self.target_angle, dt
+        )
 
         # Limites da tela
         margin = 20
@@ -131,15 +132,28 @@ class Wingman:
             self._shoot(bullets)
             self.shoot_timer = self.shoot_cooldown
 
+    def _target_center(self, target: Any) -> tuple[float, float]:
+        """Ponto de mira do alvo, usando a geometria precisa compartilhada.
+
+        Crucial para o boss da Serpente, cujo ``(x, y, w, h)`` é um bound fixo
+        de tela inteira: ``target_point`` segue a cabeça via ``collision_circle``.
+        """
+        point = target_point(target)
+        if point is not None:
+            return point
+        return (
+            getattr(target, "x", 0.0) + getattr(target, "w", 0.0) / 2,
+            getattr(target, "y", 0.0) + getattr(target, "h", 0.0) / 2,
+        )
+
     def _find_target(self, enemies: List[Any]) -> Any:
         best = None
         best_d = 600 * 600 # Alcance máximo de detecção
         for e in enemies:
-            if getattr(e, "dead", False):
+            # Ignora mortos e invulneráveis (boss em entrada/fase protegida)
+            if not is_targetable(e):
                 continue
-            # Ignorar alguns tipos se necessário, mas geralmente queremos atacar tudo que for hostil
-            ex = getattr(e, "x", 0) + getattr(e, "w", 0) / 2
-            ey = getattr(e, "y", 0) + getattr(e, "h", 0) / 2
+            ex, ey = self._target_center(e)
             dx = ex - (self.x + self.w / 2)
             dy = ey - (self.y + self.h / 2)
             d = dx * dx + dy * dy
@@ -151,10 +165,9 @@ class Wingman:
     def _hunt_behavior(self, dt: float):
         if not self.target:
             return
-            
-        tx = getattr(self.target, "x", 0) + getattr(self.target, "w", 0) / 2
-        ty = getattr(self.target, "y", 0) + getattr(self.target, "h", 0) / 2
-        
+
+        tx, ty = self._target_center(self.target)
+
         # Mantém uma distância segura enquanto persegue
         dx = tx - (self.x + self.w / 2)
         dy = ty - (self.y + self.h / 2)
@@ -195,9 +208,8 @@ class Wingman:
     def _shoot(self, bullets: List[Any]):
         if not self.target:
             return
-        
-        tx = getattr(self.target, "x", 0) + getattr(self.target, "w", 0) / 2
-        ty = getattr(self.target, "y", 0) + getattr(self.target, "h", 0) / 2
+
+        tx, ty = self._target_center(self.target)
         cx = self.x + self.w / 2
         cy = self.y + self.h / 2
         
@@ -223,9 +235,9 @@ class Wingman:
             if self.timer < 3.0 and int(self.timer * 10) % 2 == 0:
                 return
             
-            # Aplicar rotação ao sprite (ajustando 90 graus pois o original olha para cima)
-            rotated_sprite = pygame.transform.rotate(self._sprite, self.current_angle - 90)
-            
+            # Aplicar rotação ao sprite (base aponta para cima)
+            rotated_sprite = aiming.rotate_sprite_up(self._sprite, self.current_angle)
+
             # Desenha com um brilho ciano suave ao redor
             rect = rotated_sprite.get_rect(center=(int(self.x + self.w / 2), int(self.y + self.h / 2)))
             
