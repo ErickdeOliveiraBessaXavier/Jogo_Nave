@@ -94,5 +94,16 @@ def build_spawn_config(route: str) -> dict[type, float]:
     `Meteor` evita ciclo de import no load do módulo.
     """
     from ..entities.meteor import Meteor
+    from ..entities.satellite import Satellite
 
-    return {Meteor: 0.9}
+    if route == EXITING:
+        return {
+            Meteor: 0.9,
+            Satellite: 3.0,
+        }
+
+    # Entering: meteoros subindo (inverted_vertical) + Satélites
+    return {
+        Meteor: 0.9,
+        Satellite: 4.0,
+    }

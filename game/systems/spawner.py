@@ -42,6 +42,7 @@ from ..entities.mountain_mage import MountainMage
 from ..entities.mountain_propeller import MountainPropeller
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
+from ..entities.satellite import Satellite
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
 from ..entities.stone_sentry import StoneSentry
@@ -62,6 +63,7 @@ SPAWNER_CAP_MOUNTAIN_MAGE: int = 1
 SPAWNER_CAP_MOUNTAIN_PROPELLER: int = 3
 SPAWNER_CAP_ALIEN: int = 4  # Limite máximo de Aliens simultâneos
 SPAWNER_CAP_EYE_ENEMY: int = 3  # Limite máximo de EyeEnemies simultâneos
+SPAWNER_CAP_SATELLITE: int = 5  # Limite máximo de Satélites simultâneos
 SPAWNER_CAP_FORMATIONS: int = 2  # Limite máximo de Formações ativas simultâneas
 SPAWNER_STORM_ENEMY_CAP: int = 30
 
@@ -386,6 +388,7 @@ class EnemySpawner:
             "StoneSentry": "stone_sentry",
             "MountainMage": "mountain_mage",
             "MountainPropeller": "mountain_propeller",
+            "Satellite": "satellite",
         }
         return aliases.get(enemy_type.__name__, enemy_type.__name__.lower())
 
@@ -474,6 +477,7 @@ class EnemySpawner:
             "stone_sentry": 0,
             "mountain_mage": 0,
             "mountain_propeller": 0,
+            "satellite": 0,
             "total": 0,
         }
 
@@ -495,6 +499,8 @@ class EnemySpawner:
                 counts["stone_sentry"] += 1
             elif isinstance(enemy, MountainMage):
                 counts["mountain_mage"] += 1
+            elif isinstance(enemy, Satellite):
+                counts["satellite"] += 1
 
         for prop in entity_manager.mountain_propellers:
             if not prop.dead:
@@ -529,6 +535,8 @@ class EnemySpawner:
         if enemy_type == Alien and counts["alien"] >= SPAWNER_CAP_ALIEN:
             return True
         if enemy_type == EyeEnemy and counts["eye"] >= SPAWNER_CAP_EYE_ENEMY:
+            return True
+        if enemy_type == Satellite and counts["satellite"] >= SPAWNER_CAP_SATELLITE:
             return True
         return False
 
@@ -735,10 +743,19 @@ class EnemySpawner:
             prop.health = max(1, int(prop.health * self.enemy_health_multiplier))
             return True
 
+        if enemy_type == Satellite:
+            return self._spawn_satellite(entity_manager)
+
         # Fallback genérico
         new_enemy = cast(EnemyWithHealth, enemy_type())
         new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
         entity_manager.enemies.append(new_enemy)  # type: ignore[arg-type]
+        return True
+
+    def _spawn_satellite(self, entity_manager: "EntityManager") -> bool:
+        new_enemy = Satellite(inverted_vertical=self.inverted_vertical)
+        new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
+        entity_manager.enemies.append(new_enemy)
         return True
 
     def _spawn_eye_enemy(
