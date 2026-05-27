@@ -39,7 +39,7 @@ from ..core.meta_progression_service import MetaProgressionService
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
-from ..core.upgrades import ActiveUpgrade, HealUpgrade, create_upgrade
+from ..core.upgrades import ActiveUpgrade, create_upgrade
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 from ..core.atmosphere_phase import (
     ATMOSPHERE_PHASE_ENABLED,
@@ -2656,8 +2656,6 @@ class PlayingScene(Scene):
             else:
                 try:
                     upgrade = create_upgrade(t)
-                    if isinstance(upgrade, HealUpgrade):
-                        upgrade.usage_count = self.app.heal_usage_count
                     self.upgrade_slots.append(upgrade)
                 except (ValueError, AttributeError):
                     self.upgrade_slots.append(None)
@@ -2826,7 +2824,5 @@ class PlayingScene(Scene):
         ctx = self._build_upgrade_ctx()
         try:
             upg.activate(ctx)
-            if isinstance(upg, HealUpgrade):
-                self.app.heal_usage_count = upg.usage_count
         except (AttributeError, TypeError):
             pass

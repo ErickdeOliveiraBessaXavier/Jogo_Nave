@@ -471,9 +471,6 @@ class MainMenuScene(Scene):
         # Armazenar dificuldade no app
         self.app.selected_difficulty = preset
 
-        # Resetar contador de uso do HEAL para novo jogo
-        self.app.heal_usage_count = 0
-
         # Determinar nível inicial baseado no mundo selecionado
         selected_world_id = self.app.player_profile.selected_world_id
         world_config = get_world_for_level_by_id(selected_world_id)

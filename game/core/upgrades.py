@@ -242,11 +242,8 @@ class ShieldBurstUpgrade(ActiveUpgrade):
 class HealUpgrade(ActiveUpgrade):
     def __init__(self, meta: UpgradeMeta) -> None:
         super().__init__(meta)
-        self.usage_count = 0
 
     def additional_can_activate(self, ctx: UpgradeContextProtocol) -> bool:
-        if self.usage_count >= 2:
-            return False
         ship = self._ctx_ship(ctx)
         if not ship:
             return False
@@ -254,7 +251,6 @@ class HealUpgrade(ActiveUpgrade):
         return getattr(ship, "lives", 0) < cap
 
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
-        self.usage_count += 1
         ship = self._ctx_ship(ctx)
         scene = self._ctx_scene(ctx)
         if ship:

@@ -163,7 +163,6 @@ class GameApp:
         self.renderer = Renderer()
 
         self.selected_difficulty = DifficultyPreset.NORMAL
-        self.heal_usage_count = 0
 
         self.states.push(MainMenuScene(self))
 
