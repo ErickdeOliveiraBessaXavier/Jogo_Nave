@@ -153,7 +153,15 @@ class PausedScene(Scene):
 
     def render(self, surface: pygame.Surface):
         if self.previous_scene:
-            self.previous_scene.render(surface)
+            # Cenas de gameplay expõem `render_world` para desenhar como fundo
+            # sem o guard de cena-topo (que aborta render quando a PlayingScene
+            # não é o topo da pilha — caso da pausa). Demais cenas caem no
+            # `render` normal.
+            render_world = getattr(self.previous_scene, "render_world", None)
+            if callable(render_world):
+                render_world(surface)
+            else:
+                self.previous_scene.render(surface)
 
         overlay = pygame.Surface(
             (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA

@@ -42,7 +42,7 @@ from ..entities.mountain_mage import MountainMage
 from ..entities.mountain_propeller import MountainPropeller
 from ..entities.powerup import PowerUp
 from ..entities.rock_glider import RockGlider
-from ..entities.satellite import Satellite
+from ..entities.satellite import Satellite, SatelliteFragment
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
 from ..entities.stone_sentry import StoneSentry
@@ -746,6 +746,9 @@ class EnemySpawner:
         if enemy_type == Satellite:
             return self._spawn_satellite(entity_manager)
 
+        if enemy_type == SatelliteFragment:
+            return self._spawn_satellite_fragment(entity_manager)
+
         # Fallback genérico
         new_enemy = cast(EnemyWithHealth, enemy_type())
         new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
@@ -756,6 +759,18 @@ class EnemySpawner:
         new_enemy = Satellite(inverted_vertical=self.inverted_vertical)
         new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
         entity_manager.enemies.append(new_enemy)
+        return True
+
+    def _spawn_satellite_fragment(self, entity_manager: "EntityManager") -> bool:
+        # Lixo espacial à deriva (entra pela borda respeitando entry/re-entry),
+        # diferente dos fragmentos que explodem de um satélite destruído.
+        fragment = SatelliteFragment.spawn_ambient(
+            inverted_vertical=self.inverted_vertical
+        )
+        fragment.health = max(
+            1, int(fragment.health * self.enemy_health_multiplier)
+        )
+        entity_manager.enemies.append(fragment)
         return True
 
     def _spawn_eye_enemy(

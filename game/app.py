@@ -99,12 +99,14 @@ class GameApp:
         from .core.sprite_loader import sprite_loader
         from .entities.mountain_serpent_boss import MountainSerpentBoss, SerpentBlock
         from .entities.slime_boss import SlimeBoss
+        from .entities.satellite import Satellite
 
         sprite_loader.register("slime_boss", SlimeBoss.load_frames_for_preload)
         sprite_loader.register(
             "mountain_serpent_boss", MountainSerpentBoss.load_frames_for_preload
         )
         sprite_loader.register("serpent_block", SerpentBlock.load_frames_for_preload)
+        sprite_loader.register("Satellite", Satellite.load_animation_frames)
         sprite_loader.load_all()
 
         pygame.display.set_caption("Space Shooter")

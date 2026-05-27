@@ -1,88 +1,97 @@
 import random
-from typing import TYPE_CHECKING, Dict, Tuple, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import pygame
 
 from ..core.config import config as Config
+from ..core.sprite_loader import sprite_loader
 from .enemy_hit_mixin import EnemyHitMixin
-from .satellite_pixel_map import PIXEL_MAP, PIXEL_COLS, PIXEL_ROWS, C
 
 if TYPE_CHECKING:
     from ..systems.entity_context import EnemyUpdateContext
     from ..systems.hit_result import HitResult
 
-# Cache estático de superfícies para evitar redesenhar o pixel map todo frame
-_SATELLITE_SURFACE_CACHE: Dict[int, pygame.Surface] = {}
 
-
-def _get_satellite_surface(scale: int) -> pygame.Surface:
-    if scale in _SATELLITE_SURFACE_CACHE:
-        return _SATELLITE_SURFACE_CACHE[scale]
-
-    w = PIXEL_COLS * scale
-    h = PIXEL_ROWS * scale
-    surf = pygame.Surface((w, h), pygame.SRCALPHA)
-
-    for row_i, row in enumerate(PIXEL_MAP):
-        for col_i, cell in enumerate(row):
-            if cell is None:
-                continue
-            color = C[cell]
-            pygame.draw.rect(surf, color, (col_i * scale, row_i * scale, scale, scale))
-
-    try:
-        surf = surf.convert_alpha()
-    except pygame.error:
-        pass
-
-    _SATELLITE_SURFACE_CACHE[scale] = surf
-    return surf
-
-
-class Satellite(EnemyHitMixin):
+class SatelliteFragment(EnemyHitMixin):
     """
-    Satélite — Inimigo custom para a fase da atmosfera.
-    Usa renderização via pixel-map.
+    Fragmento de Satélite — destroços que surgem ao destruir um satélite ou,
+    naturalmente, como lixo espacial à deriva (ver `spawn_ambient`).
     """
 
-    SCALE = 4
-    POINTS = 300
-    HEALTH = 5
+    TARGET_SIZE = 48  # Fragmentos são menores
 
-    def __init__(self, inverted_vertical: bool = False):
-        self.scale = self.SCALE
-        self.w = PIXEL_COLS * self.scale
-        self.h = PIXEL_ROWS * self.scale
+    # Cache de imagem por índice de fragmento: evita reler o PNG do disco a cada
+    # spawn (relevante agora que aparecem como lixo espacial recorrente).
+    _image_cache: Dict[int, pygame.Surface] = {}
 
-        self.inverted_vertical = inverted_vertical
+    @classmethod
+    def _get_image(cls, fragment_idx: int) -> pygame.Surface:
+        cached = cls._image_cache.get(fragment_idx)
+        if cached is not None:
+            return cached
+        path = f"game/assets/images/Sprite_Inimigo_Satélite/Fragmento_0{fragment_idx}.png"
+        raw_image = pygame.image.load(path).convert_alpha()
+        orig_w, orig_h = raw_image.get_size()
+        scale_factor = cls.TARGET_SIZE / max(orig_w, orig_h)
+        image = pygame.transform.scale(
+            raw_image, (int(orig_w * scale_factor), int(orig_h * scale_factor))
+        )
+        cls._image_cache[fragment_idx] = image
+        return image
 
-        # Posição inicial
-        # Margem para não nascer colado na borda
-        margin = 10
-        self.x = float(random.randint(margin, Config.SCREEN_WIDTH - self.w - margin))
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        fragment_idx: int,
+        speed_x: Optional[float] = None,
+        speed_y: Optional[float] = None,
+    ):
+        self.x = x
+        self.y = y
 
-        if inverted_vertical:
-            # Entering: vem de baixo para cima
-            self.y = float(Config.SCREEN_HEIGHT + self.h)
-            self.speed_y = -random.uniform(120, 180)
-        else:
-            # Exiting: vem de cima para baixo
-            self.y = -float(self.h)
-            self.speed_y = random.uniform(120, 180)
+        self.base_image = self._get_image(fragment_idx)
+        self.image = self.base_image
+        self.w, self.h = self.image.get_size()
 
-        # Trajetória diagonal mais pronunciada
-        # Move-se sempre em direção ao centro da tela inicialmente
-        if self.x < Config.SCREEN_WIDTH / 2:
-            self.speed_x = random.uniform(80, 140)
-        else:
-            self.speed_x = -random.uniform(80, 140)
+        # Velocidade: default = explosão (sai do satélite e cai); callers podem
+        # sobrescrever (ex.: lixo espacial entrando devagar pela borda).
+        self.speed_x = random.uniform(-150, 150) if speed_x is None else speed_x
+        self.speed_y = random.uniform(50, 150) if speed_y is None else speed_y
+
+        # Lógica de rotação
+        self.angle = random.uniform(0, 360)
+        self.rotation_speed = random.uniform(-360, 360)  # Graus por segundo
 
         self.dead = False
-        self.health = self.HEALTH
+        self.health = Config.SATELLITE_FRAGMENT_HEALTH
+        # Sobe de baixo pra cima? (lixo espacial no re-entry). Usado pelo culling
+        # do EntityManager para não matar o destroço ao nascer abaixo do rodapé.
+        self.inverted_vertical = False
 
-        # Timer para o piscar da luz vermelha (pixel 'G' no mapa)
-        self.blink_timer = 0.0
-        self.blink_state = True
+    @classmethod
+    def spawn_ambient(cls, inverted_vertical: bool = False) -> "SatelliteFragment":
+        """Cria um fragmento como lixo espacial à deriva, entrando por fora da
+        tela. Top-down padrão (exiting): entra pelo topo e desce; invertido
+        (re-entry/entering): entra pela base e sobe. Deriva lateral leve."""
+        fragment_idx = random.randint(1, 4)
+        x = float(random.randint(0, max(1, Config.SCREEN_WIDTH - cls.TARGET_SIZE)))
+        drift_x = random.uniform(-50, 50)
+        speed = random.uniform(80, 140)
+        frag = cls(
+            x,
+            0.0,
+            fragment_idx,
+            speed_x=drift_x,
+            speed_y=(-speed if inverted_vertical else speed),
+        )
+        frag.y = (
+            float(Config.SCREEN_HEIGHT + frag.h)
+            if inverted_vertical
+            else float(-frag.h * 2)
+        )
+        frag.inverted_vertical = inverted_vertical
+        return frag
 
     @property
     def rect(self) -> pygame.Rect:
@@ -95,11 +104,153 @@ class Satellite(EnemyHitMixin):
             self.dead = True
 
     def get_points_value(self) -> int:
-        return self.POINTS
+        return Config.SATELLITE_FRAGMENT_POINTS
 
     def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
-        # ctx.sdt é o delta time do jogo com fator de velocidade/slowdown
         self.update(ctx.sdt)
+
+    def update(self, dt: float) -> None:
+        self.x += self.speed_x * dt
+        self.y += self.speed_y * dt
+
+        # Atualiza rotação
+        self.angle += self.rotation_speed * dt
+
+        # Bounce nas bordas horizontais
+        if self.x <= 0:
+            self.x = 0
+            self.speed_x *= -0.8  # Perde energia no impacto
+            self.rotation_speed *= -1 # Inverte rotação no impacto lateral
+        elif self.x + self.w >= Config.SCREEN_WIDTH:
+            self.x = float(Config.SCREEN_WIDTH - self.w)
+            self.speed_x *= -0.8
+            self.rotation_speed *= -1
+
+        # Remoção se sair da tela
+        if self.y > Config.SCREEN_HEIGHT + self.h * 2 or self.y < -self.h * 2:
+            self.dead = True
+
+    def draw(self, surface: pygame.Surface) -> None:
+        if self.dead:
+            return
+            
+        # Desenha rotacionado e centralizado
+        rotated_surf = pygame.transform.rotate(self.base_image, self.angle)
+        rect = rotated_surf.get_rect(center=(int(self.x + self.w/2), int(self.y + self.h/2)))
+        surface.blit(rotated_surf, rect.topleft)
+
+    def should_remove(self) -> bool:
+        return self.dead
+
+    def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
+        from ..systems import hit_sounds
+        from ..systems.hit_result import HitResult
+        self.dead = True
+        return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ALIEN)
+
+
+class Satellite(EnemyHitMixin):
+    """
+    Satélite — Inimigo custom para a fase da atmosfera.
+    Usa animação de sprites PNG.
+    """
+
+    # Frames: satellite_pixel_map_01.png até satellite_pixel_map_05.png
+    SPRITE_DIR = "Sprite_Inimigo_Satélite"
+
+    _frames_cache: List[pygame.Surface] = []
+
+    def __init__(self, inverted_vertical: bool = False):
+        # Garante que os frames estão carregados
+        if not self._frames_cache:
+            self.load_animation_frames()
+            
+        self.frames = self._frames_cache
+        self.current_frame = 0
+        self.animation_timer = 0.0
+        self.animation_direction = 1  # 1 para frente, -1 para trás
+        
+        # Usa o primeiro frame para definir dimensões
+        if self.frames:
+            self.image = self.frames[self.current_frame]
+            self.w, self.h = self.image.get_size()
+        else:
+            # Fallback caso falhe o carregamento
+            self.image = pygame.Surface((Config.SATELLITE_TARGET_SIZE, Config.SATELLITE_TARGET_SIZE), pygame.SRCALPHA)
+            self.w, self.h = Config.SATELLITE_TARGET_SIZE, Config.SATELLITE_TARGET_SIZE
+
+        self.inverted_vertical = inverted_vertical
+
+        # Posição inicial
+        margin = 10
+        self.x = float(random.randint(margin, Config.SCREEN_WIDTH - self.w - margin))
+
+        if inverted_vertical:
+            self.y = float(Config.SCREEN_HEIGHT + self.h)
+            self.speed_y = -random.uniform(Config.SATELLITE_SPEED_Y_MIN, Config.SATELLITE_SPEED_Y_MAX)
+        else:
+            self.y = -float(self.h)
+            self.speed_y = random.uniform(Config.SATELLITE_SPEED_Y_MIN, Config.SATELLITE_SPEED_Y_MAX)
+
+        if self.x < Config.SCREEN_WIDTH / 2:
+            self.speed_x = random.uniform(Config.SATELLITE_SPEED_X_MIN, Config.SATELLITE_SPEED_X_MAX)
+        else:
+            self.speed_x = -random.uniform(Config.SATELLITE_SPEED_X_MIN, Config.SATELLITE_SPEED_X_MAX)
+
+        self.dead = False
+        self.health = Config.SATELLITE_HEALTH
+
+    @classmethod
+    def load_animation_frames(cls) -> List[pygame.Surface]:
+        """Carrega e escala os frames da animação mantendo a proporção."""
+        if cls._frames_cache:
+            return cls._frames_cache
+            
+        raw_frames = sprite_loader.load_animation_frames(
+            base_path=cls.SPRITE_DIR,
+            num_frames=5,
+            name="Satellite",
+            filename_pattern="satellite_pixel_map_0{i}.png"
+        )
+        
+        if not raw_frames:
+            return []
+
+        # Calcula a escala baseada na altura desejada (SATELLITE_TARGET_SIZE)
+        # Mantendo a proporção original
+        cls._frames_cache = []
+        for frame in raw_frames:
+            orig_w, orig_h = frame.get_size()
+            scale_factor = Config.SATELLITE_TARGET_SIZE / orig_h
+            new_w = int(orig_w * scale_factor)
+            new_h = Config.SATELLITE_TARGET_SIZE
+            
+            scaled = pygame.transform.scale(frame, (new_w, new_h))
+            cls._frames_cache.append(scaled)
+            
+        return cls._frames_cache
+
+    @property
+    def rect(self) -> pygame.Rect:
+        return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+
+    def take_damage(self, amount: int) -> None:
+        self.health -= amount
+        if self.health <= 0:
+            self.health = 0
+            self.dead = True
+
+    def get_points_value(self) -> int:
+        return Config.SATELLITE_POINTS
+
+    def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
+        self.update(ctx.sdt)
+        
+        # Verifica se morreu para spawnar fragmentos via contexto
+        if self.dead and self.health <= 0:
+            for i in range(1, 5):
+                fragment = SatelliteFragment(self.x + self.w/2, self.y + self.h/2, i)
+                ctx.new_enemies.append(fragment)
 
     def update(self, dt: float) -> None:
         self.x += self.speed_x * dt
@@ -113,13 +264,26 @@ class Satellite(EnemyHitMixin):
             self.x = float(Config.SCREEN_WIDTH - self.w)
             self.speed_x *= -1
 
-        # Lógica do piscar (luz indicadora)
-        self.blink_timer += dt
-        if self.blink_timer >= 0.4:
-            self.blink_timer = 0
-            self.blink_state = not self.blink_state
+        # Lógica de animação (Ping-Pong)
+        if self.frames and len(self.frames) > 1:
+            self.animation_timer += dt
+            if self.animation_timer >= Config.SATELLITE_ANIMATION_SPEED:
+                self.animation_timer = 0
+                
+                # Atualiza o índice baseado na direção
+                self.current_frame += self.animation_direction
+                
+                # Inverte a direção se atingir os limites
+                if self.current_frame >= len(self.frames) - 1:
+                    self.current_frame = len(self.frames) - 1
+                    self.animation_direction = -1
+                elif self.current_frame <= 0:
+                    self.current_frame = 0
+                    self.animation_direction = 1
+                    
+                self.image = self.frames[self.current_frame]
 
-        # Remoção se sair completamente da tela
+        # Remoção se sair da tela
         if self.inverted_vertical:
             if self.y < -self.h * 2:
                 self.dead = True
@@ -128,23 +292,9 @@ class Satellite(EnemyHitMixin):
                 self.dead = True
 
     def draw(self, surface: pygame.Surface) -> None:
-        if self.dead:
+        if self.dead or not self.image:
             return
-
-        base_surf = _get_satellite_surface(self.scale)
-        surface.blit(base_surf, (int(self.x), int(self.y)))
-
-        # Efeito de brilho na luz vermelha (pixel 'G' está em row 8, cols 11-12 no novo mapa)
-        if self.blink_state:
-            # Cores do brilho
-            glow_color = (255, 180, 180)  # Vermelho claro
-            # Posição relativa ao self.x, self.y
-            gx = int(self.x) + 11 * self.scale
-            gy = int(self.y) + 8 * self.scale
-            # Desenha um pequeno retângulo de brilho
-            pygame.draw.rect(
-                surface, glow_color, (gx, gy, 2 * self.scale, 1 * self.scale)
-            )
+        surface.blit(self.image, (int(self.x), int(self.y)))
 
     def should_remove(self) -> bool:
         return self.dead
@@ -155,3 +305,6 @@ class Satellite(EnemyHitMixin):
 
         self.dead = True
         return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ALIEN)
+
+# Registra para o preload
+sprite_loader.register("Satellite", Satellite.load_animation_frames)

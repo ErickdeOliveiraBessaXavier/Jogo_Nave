@@ -192,6 +192,21 @@ class EntityManager:
         # Cache do tamanho da tela — evita pygame.display.get_surface() por inimigo/frame.
         self._screen_size: tuple[int, int] = (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
 
+    def set_side_scroll(self, value: bool) -> None:
+        """Atualiza o modo de jogo (top-down vs side-scroll) e propaga aos pools.
+
+        Crítico na transição entre mundos: o modo é definido no `__init__`, mas
+        ao cruzar de um mundo side-scroll (ex.: Cordilheira) para um top-down
+        (ex.: Espaço Sideral) o `EntityManager` precisa trocar as regras de
+        culling off-screen e de movimento dos meteoros. Sem isso, entidades que
+        saem pela lateral direita em top-down não eram removidas (a regra
+        side-scroll só removia pela esquerda), ficando contadas como hostis
+        ativos e travando o fim de fase.
+        """
+        self.is_side_scroll = value
+        self.meteor_pool.is_side_scroll = value
+        self.rock_glider_pool.is_side_scroll = value
+
     def _dispatch_boss_sound_events(self, sound_events: Sequence[str]) -> None:
         """Executa eventos de som emitidos por Boss.update()."""
         if not sound_events or not self.sound_manager:
@@ -1198,6 +1213,12 @@ class EntityManager:
 
         # Para a Serpente, permitimos que os blocos existam abaixo do limite inferior (spawn)
         if isinstance(enemy, SerpentBlock):
+            return enemy.y < -eh or enemy.x < -ew or enemy.x > sw
+
+        # Entidades de spawn invertido (re-entry/entering: sobem de baixo pra
+        # cima) nascem ABAIXO do rodapé e saem pelo topo. Sem isto, eram mortas
+        # no spawn (y > sh) — por isso satélites/destroços sumiam no re-entry.
+        if getattr(enemy, "inverted_vertical", False):
             return enemy.y < -eh or enemy.x < -ew or enemy.x > sw
 
         return enemy.y > sh or enemy.x < -ew or enemy.x > sw

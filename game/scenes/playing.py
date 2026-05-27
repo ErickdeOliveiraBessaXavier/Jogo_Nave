@@ -88,6 +88,17 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 _SIDE_SCROLL_SHIP_ENTRY_X = 100
 _TOP_DOWN_SHIP_TARGET_Y_OFFSET = 80
+# Regressão de altitude ao morrer na atmosfera (animada, não corte seco).
+_ATMOSPHERE_REGRESS_RATE = 0.5  # progresso (0-1) revertido por segundo
+_ATMOSPHERE_REGRESS_MIN_DURATION = 0.8  # piso para sempre ler como animação
+# Nocaute na atmosfera: a nave "desmaia", gira e mergulha pra fora da tela, e
+# segundos depois re-entra de cima (estilo "entering").
+_ATMOSPHERE_DEATH_OUT_DURATION = 1.6  # desmaio: gira e mergulha pra fora + beat
+_ATMOSPHERE_DEATH_RETURN_DURATION = 1.2  # re-entrada deslizando do topo
+_ATMOSPHERE_DEATH_SWOON_HSPEED = 700.0  # px/s rumo ao lado oposto
+_ATMOSPHERE_DEATH_SWOON_VY0 = -340.0  # px/s inicial (sobe antes de mergulhar)
+_ATMOSPHERE_DEATH_SWOON_GRAVITY = 1700.0  # px/s² puxando para o mergulho
+_ATMOSPHERE_DEATH_SWOON_SPIN = 600.0  # graus/s (a "volta"/tumbling)
 _HUD_UPGRADE_SLOT_SIZE = 50
 _HUD_UPGRADE_SLOT_GAP = 6
 
@@ -156,7 +167,7 @@ class PlayingScene(Scene):
         # Índice 0-based; starting_level é 1-based
         self.current_level_index: int = starting_level - 1
         self.current_world = get_world_for_level(self.current_level_index + 1)
-        self.is_side_scroll: bool = is_side_scroll_mode(self.current_world.theme)
+        self.is_side_scroll = is_side_scroll_mode(self.current_world.theme)
 
         self._init_player_profile()
         self._init_ship()
@@ -169,6 +180,21 @@ class PlayingScene(Scene):
         # `entity_manager` existe (criado em `_init_systems`).
         self._build_permanent_mini_ships()
         self._init_upgrades_from_profile()
+
+    @property
+    def is_side_scroll(self) -> bool:
+        return self._is_side_scroll
+
+    @is_side_scroll.setter
+    def is_side_scroll(self, value: bool) -> None:
+        """Fonte de verdade do modo de jogo. Propaga para o `EntityManager`
+        (e seus pools) para manter as regras de culling/movimento coerentes ao
+        cruzar mundos side-scroll↔top-down. O guard cobre o `__init__`, em que
+        o modo é definido antes de `entity_manager` existir."""
+        self._is_side_scroll = value
+        em = getattr(self, "entity_manager", None)
+        if em is not None:
+            em.set_side_scroll(value)
 
     @property
     def level_config(self) -> Optional[LevelConfig]:
@@ -307,9 +333,22 @@ class PlayingScene(Scene):
         self._atmosphere_route: Optional[str] = None
         self._atmosphere_progress: float = 0.0
         self._atmosphere_phase_done: bool = False
-        # Tempo aguardando a tela limpar após atingir 100% de altitude (timeout
-        # de segurança contra softlock).
-        self._atmosphere_clear_timer: float = 0.0
+        # Regressão animada ao morrer na atmosfera: a altitude desce suavemente
+        # de `from` até `to` (o background e a barra de HUD seguem
+        # `_atmosphere_progress`), vendendo a sensação de a nave perder altitude
+        # de verdade em vez de cortar para a nova posição.
+        self._atmosphere_regressing: bool = False
+        self._atmosphere_regress_from: float = 0.0
+        self._atmosphere_regress_to: float = 0.0
+        self._atmosphere_regress_elapsed: float = 0.0
+        self._atmosphere_regress_duration: float = 0.0
+        # Cinematic de nocaute: desmaio (gira + mergulha pra fora) → re-entrada
+        # pelo topo. Roda concorrente à regressão de altitude.
+        self._atmosphere_death_active: bool = False
+        self._atmosphere_death_phase: str = "out"  # "out" | "return"
+        self._atmosphere_death_timer: float = 0.0
+        # Por nave: (ship, start_x, start_y, dir_x) capturado no início do desmaio.
+        self._atmosphere_death_ships: list[tuple[Any, float, float, float]] = []
         # Marca que a fase de atmosfera está em curso (transição roda como
         # PLAYING reusando o loop normal; a progressão de nível fica gateada).
         self._in_atmosphere: bool = False
@@ -527,6 +566,8 @@ class PlayingScene(Scene):
             self._atmosphere_phase_done = False
             self._atmosphere_route = None
             self._atmosphere_progress = 0.0
+            self._atmosphere_regressing = False
+            self._atmosphere_death_active = False
         else:
             self.current_world = new_world
             self.pending_world_transition = None
@@ -866,7 +907,9 @@ class PlayingScene(Scene):
         self._in_atmosphere = True
         self._atmosphere_route = route
         self._atmosphere_progress = 0.0
-        self._atmosphere_clear_timer = 0.0
+        self._atmosphere_regressing = False
+        self._atmosphere_death_active = False
+        self._atmosphere_death_ships = []
 
         # Atmosfera é sempre vertical (top-down), independente dos mundos vizinhos.
         self.is_side_scroll = False
@@ -921,29 +964,71 @@ class PlayingScene(Scene):
             )
 
     def _apply_atmosphere_death_penalty(self) -> None:
-        """Morte no interstício: em vez de game over, corta o progresso pela
-        metade (piso 0%), revive todos os slots com as vidas iniciais da run e
-        limpa os meteoros em tela. A fase continua.
+        """Morte no interstício: em vez de game over, a nave leva um NOCAUTE —
+        desmaia (gira e mergulha pra fora da tela) e segundos depois re-entra
+        pelo topo, estilo "entering". Ao mesmo tempo a altitude REGRIDE pela
+        metade (o background/HUD seguem `_atmosphere_progress`). Revive todos os
+        slots e limpa a tela; a fase continua.
         """
-        self._atmosphere_progress = max(0.0, self._atmosphere_progress * 0.5)
-        # Se a altitude havia chegado a 100% (spawner parado), religa a chuva.
-        self.enemy_spawner.stopped = False
+        if self._atmosphere_death_active:
+            return  # já em nocaute — não reinicia
+
+        from_progress = self._atmosphere_progress
+        target = max(0.0, from_progress * 0.5)
+
+        # Regressão de altitude concorrente: `_update_atmosphere_regression`
+        # interpola `_atmosphere_progress` de `from` até `target` (background e
+        # barra seguem sozinhos). Duração proporcional à queda, com piso.
+        self._atmosphere_regressing = True
+        self._atmosphere_regress_from = from_progress
+        self._atmosphere_regress_to = target
+        self._atmosphere_regress_elapsed = 0.0
+        drop = from_progress - target
+        self._atmosphere_regress_duration = max(
+            _ATMOSPHERE_REGRESS_MIN_DURATION, drop / _ATMOSPHERE_REGRESS_RATE
+        )
+
+        # Pausa a chuva durante o nocaute (religada quando a nave volta ao
+        # controle, em `_finish_atmosphere_death`). Tranco do impacto.
+        self.enemy_spawner.stopped = True
+        self._request_screen_shake(0.4, Config.SCREEN_SHAKE_NORMAL)
 
         initial_lives = int(self.difficulty_settings["lives"])
         for slot in self.roster.all_slots():
             slot.is_dead = False
             slot.revival_beacon = None
             self._sync_lives_for(slot, initial_lives)
-            slot.ship.invuln = RevivalBeacon.POST_REVIVE_INVULN_MS
+            # Invuln cobre todo o cinematic + uma folga após o retorno.
+            slot.ship.invuln = (
+                _ATMOSPHERE_DEATH_OUT_DURATION + _ATMOSPHERE_DEATH_RETURN_DURATION
+            ) * 1000.0 + RevivalBeacon.POST_REVIVE_INVULN_MS
             self._build_permanent_mini_ships(slot)
 
         # Recomeço limpo: remove meteoros/hostis em tela.
         self.entity_manager.meteor_pool.clear_active()
         self.entity_manager.enemies.clear()
 
+        # Inicia o desmaio: captura posição e a direção do mergulho (rumo ao
+        # lado oposto) de cada nave viva.
+        self._atmosphere_death_active = True
+        self._atmosphere_death_phase = "out"
+        self._atmosphere_death_timer = 0.0
+        center_x = Config.SCREEN_WIDTH / 2.0
+        self._atmosphere_death_ships = [
+            (
+                slot.ship,
+                float(slot.ship.x),
+                float(slot.ship.y),
+                1.0 if slot.ship.x < center_x else -1.0,
+            )
+            for slot in self.roster.alive_slots()
+        ]
+
         logger.info(
-            "[ATMOSPHERE] Morte: progresso -> %.0f%%, revive com %d vidas.",
-            self._atmosphere_progress * 100.0,
+            "[ATMOSPHERE] Morte: regressão %.0f%% -> %.0f%% em %.1fs, revive com %d vidas.",
+            from_progress * 100.0,
+            target * 100.0,
+            self._atmosphere_regress_duration,
             initial_lives,
         )
 
@@ -960,6 +1045,92 @@ class PlayingScene(Scene):
         if self._atmosphere_progress >= 1.0:
             self.enemy_spawner.stopped = True
             logger.info("[ATMOSPHERE] Altitude atingida, aguardando limpeza de tela...")
+
+    def _update_atmosphere_regression(self, dt: float) -> None:
+        """Anima a perda de altitude após morte na atmosfera (pano de fundo do
+        nocaute). Interpola `_atmosphere_progress` de `from` até `to` com
+        ease-out — o background (cor, planeta, nuvens) e a barra de altitude
+        regridem juntos. O religamento da chuva fica a cargo do cinematic
+        (`_finish_atmosphere_death`), que dura mais que esta regressão.
+        """
+        self._atmosphere_regress_elapsed += dt
+        duration = max(1e-3, self._atmosphere_regress_duration)
+        t = min(1.0, self._atmosphere_regress_elapsed / duration)
+        eased = 1.0 - (1.0 - t) ** 3  # ease-out cúbico (rápido no início)
+        self._atmosphere_progress = (
+            self._atmosphere_regress_from
+            + (self._atmosphere_regress_to - self._atmosphere_regress_from) * eased
+        )
+        if t >= 1.0:
+            self._atmosphere_progress = self._atmosphere_regress_to
+            self._atmosphere_regressing = False
+
+    def _update_atmosphere_death_cinematic(self, dt: float) -> None:
+        """Conduz o nocaute da nave: desmaio (gira + mergulha pra fora) e, em
+        seguida, re-entrada deslizando do topo (estilo "entering")."""
+        self._atmosphere_death_timer += dt
+
+        if self._atmosphere_death_phase == "out":
+            t = self._atmosphere_death_timer
+            for ship, start_x, start_y, dir_x in self._atmosphere_death_ships:
+                # Trajetória de desmaio: leve subida e mergulho (gravidade) com
+                # deriva horizontal rumo ao lado oposto, girando (tumbling).
+                ship.x = start_x + dir_x * _ATMOSPHERE_DEATH_SWOON_HSPEED * t
+                ship.y = (
+                    start_y
+                    + _ATMOSPHERE_DEATH_SWOON_VY0 * t
+                    + 0.5 * _ATMOSPHERE_DEATH_SWOON_GRAVITY * t * t
+                )
+                ship.set_rotation((dir_x * _ATMOSPHERE_DEATH_SWOON_SPIN * t) % 360.0)
+            if self._atmosphere_death_timer >= _ATMOSPHERE_DEATH_OUT_DURATION:
+                self._begin_atmosphere_death_return()
+        elif self._atmosphere_death_phase == "return":
+            # A re-entrada é tocada pela animação de entering de cada nave
+            # (rodada em `_update_ship`). Só aguardamos a duração acabar.
+            if self._atmosphere_death_timer >= _ATMOSPHERE_DEATH_RETURN_DURATION:
+                self._finish_atmosphere_death()
+
+    def _begin_atmosphere_death_return(self) -> None:
+        """Transição desmaio → re-entrada: cada nave ressurge pela mesma borda
+        do fluxo da rota. Entering (de cima pra baixo) volta deslizando do topo;
+        exiting (de baixo pra cima) ressurge subindo pela base — sempre até a
+        posição de jogo, com o nariz no sentido da rota."""
+        self._atmosphere_death_phase = "return"
+        self._atmosphere_death_timer = 0.0
+
+        config = get_phase_config(self._atmosphere_route)
+        facing = config.facing if config else "north"
+        if self._atmosphere_route == "entering":
+            # Re-entry: joga no topo, ressurge pelo topo (nariz pra baixo).
+            play_y = float(_TOP_DOWN_SHIP_TARGET_Y_OFFSET)
+            start_y = -120.0
+        else:
+            # Exiting (de baixo pra cima): joga no rodapé, ressurge pela base
+            # (nariz pra cima).
+            play_y = float(Config.SCREEN_HEIGHT - _TOP_DOWN_SHIP_TARGET_Y_OFFSET)
+            start_y = float(Config.SCREEN_HEIGHT + 120.0)
+
+        margin = 40.0
+        for ship, start_x, _start_y, _dir_x in self._atmosphere_death_ships:
+            target_x = max(margin, min(Config.SCREEN_WIDTH - margin, start_x))
+            ship.set_facing(facing)  # endireita o tumbling no sentido da rota
+            ship.start_entering_animation(
+                (target_x, start_y),
+                (target_x, play_y),
+                _ATMOSPHERE_DEATH_RETURN_DURATION,
+            )
+
+    def _finish_atmosphere_death(self) -> None:
+        """Encerra o nocaute: restaura a orientação da rota, devolve o controle
+        e religa a chuva de meteoros."""
+        self._atmosphere_death_active = False
+        self._atmosphere_death_ships = []
+        config = get_phase_config(self._atmosphere_route)
+        route_facing = config.facing if config else "north"
+        for slot in self.roster.alive_slots():
+            slot.ship.is_entering = False
+            slot.ship.set_facing(route_facing)
+        self.enemy_spawner.stopped = False
 
     def _finish_atmosphere_interstitial(self) -> None:
         """Conclui a fase e dispara a cutscene de chegada (cutscene 2)."""
@@ -1178,7 +1349,7 @@ class PlayingScene(Scene):
 
             boss_pausing = cast(SpikeBoss, self.entity_manager.boss).is_pausing_game()
 
-        if self.can_handle_gameplay_actions():
+        if self.can_handle_gameplay_actions() and not self._atmosphere_death_active:
             for slot in self.roster.alive_slots():
                 ship = slot.ship
                 if ship.is_entering:
@@ -1253,14 +1424,21 @@ class PlayingScene(Scene):
             # Fase de atmosfera: progride por altitude e ignora a progressão
             # normal de nível (sem boss, sem "enemies_to_clear").
             if self.transition_phase == TransitionPhase.PLAYING:
-                self._update_atmosphere_progress(dt)
-                # Finaliza ao limpar a tela; timeout de segurança (6s) evita
-                # softlock caso algum hostil fique preso.
-                if self._atmosphere_progress >= 1.0:
-                    self._atmosphere_clear_timer += dt
+                if self._atmosphere_death_active:
+                    # Nocaute: nave desmaia, sai de tela e re-entra; a altitude
+                    # regride junto como pano de fundo.
+                    self._update_atmosphere_death_cinematic(dt)
+                    if self._atmosphere_regressing:
+                        self._update_atmosphere_regression(dt)
+                else:
+                    self._update_atmosphere_progress(dt)
+                    # Atingida a altitude máxima, só transiciona quando a tela
+                    # estiver limpa. Os hostis da fase (Meteor/Satellite) saem
+                    # sozinhos pelo eixo Y — com o culling respeitando o modo
+                    # top-down, nenhum fica preso, então não há mais timeout.
                     if (
-                        not self.entity_manager.enemies
-                        or self._atmosphere_clear_timer >= 6.0
+                        self._atmosphere_progress >= 1.0
+                        and not self.entity_manager.enemies
                     ):
                         self._finish_atmosphere_interstitial()
             return
@@ -2379,6 +2557,16 @@ class PlayingScene(Scene):
         # só é verdadeira nesse frame de borda.
         if self.app.states.current() is not self:
             return
+        self.render_world(surface)
+
+    def render_world(self, surface: pygame.Surface) -> None:
+        """Renderiza o mundo do jogo SEM o guard de cena-topo.
+
+        Usado por cenas-overlay (ex.: `PausedScene`) que desenham a
+        `PlayingScene` como fundo via delegação — o guard de `render` aborta
+        nesse caso (a overlay é o topo), deixando o fundo preto. Chamar este
+        método direto preserva o fundo (background da atmosfera/tema, HUD, etc.).
+        """
         self.game_renderer.render(self._build_render_frame(), surface)
 
     def _build_render_frame(self) -> RenderFrame:

@@ -104,7 +104,7 @@ def _get_worlds() -> dict[int, WorldConfig]:
             theme_modifiers={
                 "meteor_weight": 0.9,
                 "alien_weight": 0.75,  # Menos aliens durante a curva inteira
-                "spawn_rate_multiplier": 0.78,  # Entrada e meio de mundo mais legíveis
+                "spawn_rate_multiplier": 1.0,  # Ritmo padrão entre fases
                 "formation_chance": 0.45,  # Formações menos frequentes no mundo 2
             },
         ),

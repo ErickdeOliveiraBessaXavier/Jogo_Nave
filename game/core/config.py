@@ -446,6 +446,20 @@ class ParticleConfig:
     PARTICLE_THRUSTER_SIZE = (2, 4)
 
 
+@dataclass(frozen=True)
+class SatelliteConfig:
+    SATELLITE_POINTS: int = 300
+    SATELLITE_HEALTH: int = 80
+    SATELLITE_ANIMATION_SPEED: float = 0.15
+    SATELLITE_TARGET_SIZE: int = 90
+    SATELLITE_SPEED_Y_MIN: float = 80.0
+    SATELLITE_SPEED_Y_MAX: float = 100.0
+    SATELLITE_SPEED_X_MIN: float = 40.0
+    SATELLITE_SPEED_X_MAX: float = 90.0
+    SATELLITE_FRAGMENT_HEALTH: int = 15
+    SATELLITE_FRAGMENT_POINTS: int = 100
+
+
 class ConfigurationManager:
     """
     Gerencia as configurações globais do jogo agrupadas por domínio.
@@ -469,6 +483,7 @@ class ConfigurationManager:
         self.visuals = VisualEffectConfig()
         self.scoring = ScoringConfig()
         self.particles = ParticleConfig()
+        self.satellite = SatelliteConfig()
 
         # Overrides dinâmicos (ex: resolução)
         self._overrides: dict[str, Any] = {
@@ -483,7 +498,7 @@ class ConfigurationManager:
 
         # 2. Verificar em todos os domínios (busca linear para compatibilidade)
         # Em um projeto maior, poderíamos usar um mapa de lookup.
-        domains = [
+        domains: tuple[object, ...] = (
             self.display,
             self.gameplay,
             self.meteors,
@@ -499,7 +514,8 @@ class ConfigurationManager:
             self.visuals,
             self.scoring,
             self.particles,
-        ]
+            self.satellite,
+        )
         for domain in domains:
             if hasattr(domain, name):
                 return getattr(domain, name)

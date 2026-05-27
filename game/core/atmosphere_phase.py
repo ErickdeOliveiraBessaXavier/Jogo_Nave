@@ -68,13 +68,13 @@ ATMOSPHERE_PHASES: dict[str, AtmospherePhaseConfig] = {
         route=ENTERING,
         facing="south",
         inverted_vertical=True,
-        altitude_length=40.0,
+        altitude_length=120.0,
     ),
     EXITING: AtmospherePhaseConfig(
         route=EXITING,
         facing="north",
         inverted_vertical=False,
-        altitude_length=40.0,
+        altitude_length=120.0,
     ),
 }
 
@@ -94,16 +94,18 @@ def build_spawn_config(route: str) -> dict[type, float]:
     `Meteor` evita ciclo de import no load do módulo.
     """
     from ..entities.meteor import Meteor
-    from ..entities.satellite import Satellite
+    from ..entities.satellite import Satellite, SatelliteFragment
 
     if route == EXITING:
         return {
             Meteor: 0.9,
             Satellite: 3.0,
+            SatelliteFragment: 2.2,  # Lixo espacial à deriva
         }
 
-    # Entering: meteoros subindo (inverted_vertical) + Satélites
+    # Entering: meteoros subindo (inverted_vertical) + Satélites + destroços
     return {
         Meteor: 0.9,
         Satellite: 4.0,
+        SatelliteFragment: 2.2,  # Lixo espacial à deriva
     }
