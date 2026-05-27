@@ -451,10 +451,18 @@ class GameOverScene(Scene):
         self.playing_scene.screen_shake_timer = 0.6
         self.playing_scene.screen_shake_intensity = Config.SCREEN_SHAKE_GAME_OVER
 
-        # Layout padronizado
+        # Layout padronizado: menu no canto inferior esquerdo, continuar no
+        # canto inferior direito (mais largo para acomodar o rótulo).
         btn_w, btn_h = 280, 40
+        continue_w = 420
         self.back_to_menu_button = pygame.Rect(
             40, Config.SCREEN_HEIGHT - 60, btn_w, btn_h
+        )
+        self.continue_button = pygame.Rect(
+            Config.SCREEN_WIDTH - 40 - continue_w,
+            Config.SCREEN_HEIGHT - 60,
+            continue_w,
+            btn_h,
         )
 
         self.high_score_qualified = self.app.player_profile.qualifies_for_high_score(
@@ -507,15 +515,16 @@ class GameOverScene(Scene):
             return
 
         if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-            self._restart_level()
+            self._continue_run()
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.back_to_menu_button.collidepoint(event.pos):
                 self._return_to_menu()
+            elif self.continue_button.collidepoint(event.pos):
+                self._continue_run()
         elif event.type == pygame.JOYBUTTONDOWN:
-            # Suporte ao controle: A ativa o botão sob o cursor (Voltar ao
-            # Menu) ou, se a mira não estiver sobre nenhum botão, dispara
-            # restart como ação padrão do prompt "PRESSIONE R". Y é atalho
-            # explícito de restart; B também volta ao menu (consistente com
+            # Suporte ao controle: A ativa o botão sob o cursor. Sem a mira
+            # sobre nenhum botão, A dispara Continuar como ação padrão. Y é
+            # atalho explícito de continuar; B volta ao menu (consistente com
             # "B = cancelar/voltar" no resto do jogo).
             from ..core.gamepad import XboxButton
 
@@ -523,19 +532,25 @@ class GameOverScene(Scene):
                 if self.back_to_menu_button.collidepoint(pygame.mouse.get_pos()):
                     self._return_to_menu()
                 else:
-                    self._restart_level()
+                    self._continue_run()
             elif event.button == XboxButton.B:
                 self._return_to_menu()
             elif event.button == XboxButton.Y:
-                self._restart_level()
+                self._continue_run()
 
     def get_focusable_rects(self) -> list[pygame.Rect]:
-        """Apenas o botão Voltar ao Menu — DPad snap leva o cursor pra ele."""
+        """Continuar (direita) e Voltar ao Menu (esquerda) — DPad alterna entre
+        eles. Durante a entrada de iniciais, nenhum (o widget tem foco)."""
         if self.entry_widget is not None and not self.entry_submitted:
             return []
-        return [self.back_to_menu_button]
+        return [self.continue_button, self.back_to_menu_button]
 
-    def _restart_level(self) -> None:
+    def _continue_run(self) -> None:
+        """Continua a run reiniciando a fase onde o jogador morreu (passada como
+        `restart_level`) com a pontuação ZERADA — a `PlayingScene` é recriada do
+        zero, então o score recomeça em 0. O high score já foi submetido antes
+        desta tela.
+        """
         from .playing import PlayingScene
 
         self.app.states.switch(
@@ -627,16 +642,18 @@ class GameOverScene(Scene):
             if self.entry_widget is not None and not self.entry_submitted:
                 self.entry_widget.render(surface, sub_alpha)
             else:
-                restart_surf = self.game_over_font_prompt.render(
-                    "PRESSIONE 'R' PARA REINICIAR", True, colors.WHITE
+                hint_surf = self.game_over_font_prompt.render(
+                    "Continuar reinicia esta fase com a pontuação zerada",
+                    True,
+                    (180, 180, 180),
                 )
-                restart_surf.set_alpha(sub_alpha)
+                hint_surf.set_alpha(sub_alpha)
                 surface.blit(
-                    restart_surf,
-                    restart_surf.get_rect(center=(center_x, center_y + 40)),
+                    hint_surf,
+                    hint_surf.get_rect(center=(center_x, center_y + 40)),
                 )
 
-                # Botão "Voltar ao Menu"
+                # Botão "Voltar ao Menu" (canto inferior esquerdo)
                 draw_bordered_button(
                     surface,
                     self.back_to_menu_button,
@@ -644,6 +661,29 @@ class GameOverScene(Scene):
                     self.game_over_font_button,
                     CUSTOM_PURPLE,
                     sub_alpha,
+                )
+
+                # Botão "Continuar de onde parou" (canto inferior direito) —
+                # recomeça a fase onde morreu, com a pontuação zerada.
+                draw_bordered_button(
+                    surface,
+                    self.continue_button,
+                    "CONTINUAR DE ONDE PAROU",
+                    self.game_over_font_button,
+                    CUSTOM_GOLD,
+                    sub_alpha,
+                )
+
+                # Legenda do atalho de teclado para Continuar (tecla R).
+                r_hint_surf = self.game_over_font_button.render(
+                    "Pressione R", True, (150, 150, 160)
+                )
+                r_hint_surf.set_alpha(sub_alpha)
+                surface.blit(
+                    r_hint_surf,
+                    r_hint_surf.get_rect(
+                        center=(self.continue_button.centerx, self.continue_button.top - 16)
+                    ),
                 )
 
     def exit(self):

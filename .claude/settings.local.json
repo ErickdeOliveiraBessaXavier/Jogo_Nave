@@ -31,7 +31,8 @@
       "PowerShell(& \".\\\\.venv\\\\Scripts\\\\python.exe\" -m ruff check game/scenes/playing.py 2>$null; $env:SDL_VIDEODRIVER='dummy'; & \".\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import game.scenes.playing; print\\('import ok'\\)\")",
       "PowerShell(& \".\\\\.venv\\\\Scripts\\\\python.exe\" -m ruff check game/scenes/playing.py 2>$null; $env:SDL_VIDEODRIVER='dummy'; & \".\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import game.scenes.playing as p; assert hasattr\\(p.PlayingScene, '_apply_atmosphere_death_penalty'\\); print\\('import ok, penalty method present'\\)\")",
       "PowerShell(& \".\\\\.venv\\\\Scripts\\\\python.exe\" -m ruff check game/entities/ship.py game/scenes/world_transition.py game/scenes/playing.py 2>$null; $env:SDL_VIDEODRIVER='dummy'; & \".\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import game.scenes.playing; import game.scenes.world_transition; import game.entities.ship; print\\('import ok'\\)\")",
-      "PowerShell(& \".\\\\.venv\\\\Scripts\\\\python.exe\" -m ruff check game/entities/meteor.py game/scenes/playing.py 2>$null; $env:SDL_VIDEODRIVER='dummy'; & \".\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import game.scenes.playing; import game.entities.meteor; print\\('import ok'\\)\")"
+      "PowerShell(& \".\\\\.venv\\\\Scripts\\\\python.exe\" -m ruff check game/entities/meteor.py game/scenes/playing.py 2>$null; $env:SDL_VIDEODRIVER='dummy'; & \".\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import game.scenes.playing; import game.entities.meteor; print\\('import ok'\\)\")",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

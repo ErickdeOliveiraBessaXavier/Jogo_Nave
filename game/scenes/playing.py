@@ -2226,7 +2226,10 @@ class PlayingScene(Scene):
             final_score = self.score
             if self._permadeath_mode:
                 self.score = 0
-            next_level = self.player_profile.reset_to_checkpoint()
+            # Continuar reinicia a PRÓPRIA fase onde o jogador morreu (não o
+            # início do mundo). `reset_to_checkpoint` é leitura pura; ignoramos
+            # o retorno dele de propósito em favor do nível atual.
+            next_level = self.current_level_index + 1
             logger.info("Game Over! Reinício preparado para nível %d", next_level)
             self._game_over_triggered = True
 
