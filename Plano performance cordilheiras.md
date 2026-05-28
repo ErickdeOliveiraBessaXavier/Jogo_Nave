@@ -314,6 +314,22 @@ surface intermediária SRCALPHA por frame.
 
 #### 6. `MountainsBackground` — fillrate do parallax de 6 camadas
 
+> **Atualização 2026-05-28 — Aplicado.**
+>
+> Teste empírico (skip do blit das 6 layers) confirmou: FPS subiu de 55-70
+> para ~85-95+. Diferença observada vs Starfield: ~6 ms, consistente com
+> ~4.2M pixels SRCALPHA/frame das layers.
+>
+> **Fix aplicado:** trim + split de cada layer em duas faixas. Apenas a
+> região jagged entre `highest_y` (pico mais alto) e `lowest_peak_y` (pico
+> mais baixo) precisa de SRCALPHA. Acima do pico mais alto é 100%
+> transparente (não é blittado); abaixo do pico mais baixo é 100% opaco
+> (blit opaco ~2x mais rápido). `LayerData` carrega `top_surface`,
+> `bot_surface` e os offsets `top_y_offset`/`bot_y_offset` (relativos à
+> layer) para posicionamento correto. Margens de 1-2px evitam artefato de
+> borda. Confirmado empiricamente: FPS subiu significativamente vs versão
+> sem otimização.
+
 **Observação:**
 
 - 6 camadas, cada uma de largura ≥ screen_width
@@ -414,7 +430,7 @@ não afeta gameplay regular do Mundo 1.
 | 3 | `MountainStalagmite._draw_body` — caminho rápido alpha=255 | — | **Inválido** (método não existe; draw real já usa polígono direto) |
 | 4 | `SerpentRockBullet` rotated-alpha cache (escopo corrigido) | Médio | Pendente — bloquear em profiling |
 | 5 | `MountainStalactite._draw_body` (espelho do item 3) | — | **Inválido** (mesma razão do item 3) |
-| 6 | `MountainsBackground` parallax — profile primeiro | A medir | Bloqueado |
+| 6 | `MountainsBackground` parallax — split top SRCALPHA + bot opaco | Alto | **Aplicado (2026-05-28)** |
 
 ---
 

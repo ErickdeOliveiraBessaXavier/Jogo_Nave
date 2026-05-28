@@ -48,21 +48,43 @@ class ColorPalette:
 
 
 class LayerData:
-    """Dados de uma camada de parallax."""
+    """Dados de uma camada de parallax.
+
+    A surface da camada é trimada nas regiões irrelevantes e dividida em
+    duas faixas para otimização de fillrate:
+
+    - ``top_surface``: faixa SRCALPHA com a silhueta jagged. Posicionada em
+      ``y_pos + top_y_offset``. A região acima de ``highest_y`` (que seria
+      100% transparente) **não** é blittada.
+    - ``bot_surface``: faixa OPACA com a área totalmente preenchida abaixo do
+      pico mais baixo. Posicionada em ``y_pos + bot_y_offset``. Blit opaco
+      é ~2x mais rápido que SRCALPHA em pygame.
+
+    ``bot_surface`` pode ser ``None`` em layers degenerados (silhueta encosta
+    na base).
+    """
 
     def __init__(
         self,
-        surface: pygame.Surface,
+        top_surface: pygame.Surface,
+        bot_surface: Optional[pygame.Surface],
+        top_y_offset: int,
+        bot_y_offset: int,
         speed: float,
         offset: float = 0.0,
         y_pos: int = 0,
     ) -> None:
-        self.surface: pygame.Surface = surface
+        self.top_surface: pygame.Surface = top_surface
+        self.bot_surface: Optional[pygame.Surface] = bot_surface
+        self.top_y_offset: int = top_y_offset
+        self.bot_y_offset: int = bot_y_offset
         self.speed: float = speed
         self.offset: float = offset
         # Dimensões cacheadas — evitam get_width/get_height por frame
-        self.width: int = surface.get_width()
-        self.height: int = surface.get_height()
+        self.width: int = top_surface.get_width()
+        self.height: int = bot_y_offset + (
+            bot_surface.get_height() if bot_surface is not None else 0
+        )
         self.y_pos: int = y_pos
 
 
@@ -370,7 +392,7 @@ class MountainsBackground(Background):
         speed_multiplier = 50  # Ajuste de escala
 
         for i in range(6):
-            layer_surface = _optimize_alpha_surface(
+            top_raw, bot_raw, top_y_offset, bot_y_offset = (
                 self._generate_mountain_surface(
                     self.PALETTES[i],
                     self.PEAKS_COUNTS[i],
@@ -378,20 +400,51 @@ class MountainsBackground(Background):
                     self.HEIGHT_PERCENTAGES[i],
                 )
             )
+            top_surface = _optimize_alpha_surface(top_raw)
+            bot_surface = _optimize_surface(bot_raw) if bot_raw is not None else None
+
+            # Altura total considera a posição original da layer (do topo do
+            # surf_height original até a base da tela), não o tamanho dos
+            # strips — a região acima de top_y_offset era transparente e
+            # continua "ausente" sem mudar o alinhamento visual.
+            total_h = bot_y_offset + (
+                bot_raw.get_height() if bot_raw is not None else 0
+            )
 
             self.layers.append(
                 LayerData(
-                    surface=layer_surface,
+                    top_surface=top_surface,
+                    bot_surface=bot_surface,
+                    top_y_offset=top_y_offset,
+                    bot_y_offset=bot_y_offset,
                     speed=self.LAYER_SPEEDS[i] * speed_multiplier,
                     offset=0.0,
-                    y_pos=self.height - layer_surface.get_height(),
+                    y_pos=self.height - total_h,
                 )
             )
 
     def _generate_mountain_surface(
         self, palette: ColorPalette, peaks: int, roughness: int, h_pct: float
-    ) -> pygame.Surface:
-        """Cria superfície otimizada da montanha com gradiente."""
+    ) -> Tuple[pygame.Surface, Optional[pygame.Surface], int, int]:
+        """Cria superfícies otimizadas da montanha com gradiente.
+
+        Retorna ``(top_surf, bot_surf, top_y_offset, bot_y_offset)``:
+        - ``top_surf`` SRCALPHA com a silhueta jagged (de y=top_y_offset a
+          y=bot_y_offset). Acima do pico mais alto é 100% transparente,
+          então o strip é recortado para começar nesse y — economiza
+          fillrate sem mudança visual.
+        - ``bot_surf`` opaca com a faixa totalmente preenchida abaixo do pico
+          mais baixo (de y=bot_y_offset a y=surf_height), ou ``None`` quando
+          a silhueta encosta na base.
+        - ``top_y_offset`` é o y onde o top strip começa (relativo à layer).
+        - ``bot_y_offset`` é o y onde o bot strip começa (relativo à layer).
+
+        Justificativa: blit opaco é ~2x mais rápido que SRCALPHA em pygame.
+        Como a região abaixo do pico mais baixo está 100% preenchida e a
+        região acima do pico mais alto é 100% transparente, dá pra remover
+        as duas extremidades do strip SRCALPHA — só a área jagged precisa
+        de blending per-pixel.
+        """
         surf_height = int(self.height * h_pct)
         # Largura igual à tela — o parallax infinito é feito desenhando 2 cópias lado a lado
         surf_width = self.width
@@ -403,7 +456,11 @@ class MountainsBackground(Background):
         points = self._generate_mountain_points(
             surf_width, surf_height, peaks, roughness
         )
-        highest_y = min(p[1] for p in points[1:-1])  # Ignorar pontos de fechamento
+        silhouette_ys = [p[1] for p in points[1:-1]]  # Ignorar pontos de fechamento
+        highest_y = min(silhouette_ys)
+        # Pico mais BAIXO (maior y entre os pontos da silhueta) — abaixo dele
+        # o polígono está totalmente preenchido.
+        lowest_peak_y = max(silhouette_ys)
 
         # Criar gradiente (otimizado com surface lock)
         grad_surf = self._create_gradient_surface(
@@ -417,7 +474,27 @@ class MountainsBackground(Background):
         final_surf.blit(grad_surf, (0, 0))
         final_surf.blit(mask_surf, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
 
-        return final_surf
+        # Limites do split com margens de segurança de 1-2px para evitar
+        # artefato visível de borda entre as faixas.
+        bot_y_offset = min(surf_height, max(0, lowest_peak_y + 2))
+        top_y_offset = max(0, highest_y - 1)
+
+        # Bot strip (opaca) — só vale criar se sobra área útil
+        bot_h = surf_height - bot_y_offset
+        if bot_h <= 1:
+            bot_surf: Optional[pygame.Surface] = None
+            bot_y_offset = surf_height
+            bot_h = 0
+        else:
+            bot_surf = pygame.Surface((surf_width, bot_h))  # opaca (sem SRCALPHA)
+            bot_surf.blit(final_surf, (0, -bot_y_offset))
+
+        # Top strip (SRCALPHA) — recortado para conter só a silhueta jagged
+        top_h = max(1, bot_y_offset - top_y_offset)
+        top_surf = pygame.Surface((surf_width, top_h), pygame.SRCALPHA)
+        top_surf.blit(final_surf, (0, -top_y_offset))
+
+        return top_surf, bot_surf, top_y_offset, bot_y_offset
 
     def _generate_mountain_points(
         self, width: int, height: int, peaks: int, roughness: int
@@ -599,7 +676,7 @@ class MountainsBackground(Background):
         for layer in self.layers:
             layer.offset += layer.speed * dt * speed_mult
             # Wrap via módulo — evita acúmulo de float e mantém offset em [0, layer_w)
-            layer.offset %= layer.surface.get_width()
+            layer.offset %= layer.width
 
         # Atualizar nuvens — iterar sem criar lista temporária
         for cloud in self.clouds_back:
@@ -698,14 +775,29 @@ class MountainsBackground(Background):
                 offset_y = int(display_progress * self._sun_dive_distance)
                 surface.blit(self.sun_surface, self.sun_rect.move(0, offset_y))
 
-        # Desenhar camadas de montanhas (parallax) — dimensões cacheadas em LayerData.
+        # Desenhar camadas de montanhas (parallax). Cada layer é dividida em
+        # top SRCALPHA (silhueta jagged) + bot opaco (faixa cheia abaixo do
+        # pico mais baixo). Blit opaco é ~2x mais rápido em pygame, então
+        # mover a maior parte dos pixels para a faixa opaca reduz fillrate
+        # drasticamente — gap observado de ~6 ms no Mundo 1 vs Starfield.
         blit = surface.blit
         for layer in self.layers:
             layer_w = layer.width
             x_offset = -(int(layer.offset) % layer_w)
-            blit(layer.surface, (x_offset, layer.y_pos))
+            top_surf = layer.top_surface
+            bot_surf = layer.bot_surface
+            y_top = layer.y_pos + layer.top_y_offset
+            y_bot = layer.y_pos + layer.bot_y_offset
+
+            blit(top_surf, (x_offset, y_top))
+            if bot_surf is not None:
+                blit(bot_surf, (x_offset, y_bot))
+
             if x_offset != 0:
-                blit(layer.surface, (x_offset + layer_w, layer.y_pos))
+                x_wrap = x_offset + layer_w
+                blit(top_surf, (x_wrap, y_top))
+                if bot_surf is not None:
+                    blit(bot_surf, (x_wrap, y_bot))
 
         # Desenhar nuvens da frente
         for cloud in self.clouds_front:
@@ -984,6 +1076,9 @@ class VerticalCloud:
 
         # Surface inicial
         self.scaled_surface = pygame.Surface((1, 1), pygame.SRCALPHA)
+        # Último alpha aplicado à scaled_surface — evita set_alpha redundante
+        # quando o alpha não muda entre frames (set_alpha dispara reformat).
+        self._last_alpha: int = 255
         self.reset(is_first_time=True)
 
     def _generate_cloud_surface(self) -> pygame.Surface:
@@ -1011,6 +1106,9 @@ class VerticalCloud:
                 int(base_surface.get_height() * scale),
             ),
         )
+        # Nova surface começa com alpha implícito 255 — ressincroniza o tracker
+        # para que o próximo set_alpha em draw() execute sem ser pulado.
+        self._last_alpha = 255
 
         self.x = random.uniform(-50, self.screen_width - 100)
 
@@ -1061,14 +1159,13 @@ class VerticalCloud:
         if final_alpha <= 0:
             return
 
-        if final_alpha < 255:
-            # Para SRCALPHA, set_alpha multiplica o alpha existente na blit
+        # set_alpha dispara reformat interno do SDL — só atualiza quando o
+        # valor mudou. Cada instância tem sua própria scaled_surface, então
+        # não há conflito com outras nuvens (sem necessidade de reset).
+        if final_alpha != self._last_alpha:
             self.scaled_surface.set_alpha(final_alpha)
-            surface.blit(self.scaled_surface, (int(self.x), int(self.y)))
-            # Importante resetar o alpha para blits futuros (ou se for reutilizada)
-            self.scaled_surface.set_alpha(255)
-        else:
-            surface.blit(self.scaled_surface, (int(self.x), int(self.y)))
+            self._last_alpha = final_alpha
+        surface.blit(self.scaled_surface, (int(self.x), int(self.y)))
 
 
 class AtmosphereStreak:
@@ -1166,6 +1263,18 @@ class AtmosphereBackground(Background):
         self.color_sky_top = (30, 100, 180)
         self.color_sky_bottom = (120, 200, 255)
 
+        # Cache do gradiente fullscreen: recompõe só quando alguma componente
+        # RGB inteira de c_top ou c_bottom mudar. Em transição típica de
+        # progresso, isso acontece a cada ~10-50 frames — o resto reutiliza.
+        # Sem cache, o método anterior fazia smoothscale 1×2 → fullscreen +
+        # blit SRCALPHA per frame, dominando o frame time desse background.
+        self._gradient_cache: Optional[pygame.Surface] = None
+        self._gradient_cache_key: Optional[
+            Tuple[Tuple[int, int, int], Tuple[int, int, int]]
+        ] = None
+        # Último alpha aplicado ao planeta — evita set_alpha redundante por frame
+        self._planet_last_alpha: int = -1
+
         self.clouds: List[VerticalCloud] = []
         for _ in range(12):
             self.clouds.append(
@@ -1240,7 +1349,11 @@ class AtmosphereBackground(Background):
         planet_alpha = max(0, min(255, int(255 * effect_intensity)))
         if planet_alpha > 0:
             proximity = 1.0 - t
-            self.planet_base.set_alpha(planet_alpha)
+            # set_alpha dispara reformat interno do SDL — evita chamar quando
+            # o valor não mudou desde o frame anterior.
+            if planet_alpha != self._planet_last_alpha:
+                self.planet_base.set_alpha(planet_alpha)
+                self._planet_last_alpha = planet_alpha
             center_y = (
                 self.height
                 + self.PLANET_CENTER_NEAR_OFFSET
@@ -1270,14 +1383,24 @@ class AtmosphereBackground(Background):
         top: tuple[int, int, int],
         bottom: tuple[int, int, int],
     ) -> None:
-        """Desenha gradiente vertical."""
-        # Otimização: desenha em uma surface pequena e escala
-        grad = pygame.Surface((1, 2), pygame.SRCALPHA)
-        grad.set_at((0, 0), top)
-        grad.set_at((0, 1), bottom)
-        surface.blit(
-            pygame.transform.smoothscale(grad, (self.width, self.height)), (0, 0)
-        )
+        """Desenha gradiente vertical com cache de surface fullscreen.
+
+        A composição (1×2 SRCALPHA + smoothscale para fullscreen + blit) é
+        executada apenas quando as cores discretizadas mudam. O resto dos
+        frames faz 1 blit fullscreen opaco direto do cache.
+        """
+        key = (top, bottom)
+        if self._gradient_cache_key != key or self._gradient_cache is None:
+            grad = pygame.Surface((1, 2), pygame.SRCALPHA)
+            grad.set_at((0, 0), top)
+            grad.set_at((0, 1), bottom)
+            scaled = pygame.transform.smoothscale(grad, (self.width, self.height))
+            # Achata em surface opaca — blit fullscreen ~2x mais rápido.
+            opaque = pygame.Surface((self.width, self.height))
+            opaque.blit(scaled, (0, 0))
+            self._gradient_cache = _optimize_surface(opaque)
+            self._gradient_cache_key = key
+        surface.blit(self._gradient_cache, (0, 0))
 
     def reset(self) -> None:
         self.progress = 0.0
