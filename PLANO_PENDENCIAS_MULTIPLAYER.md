@@ -13,7 +13,7 @@ investigada**, **direção de fix** e **risco/esforço**.
 ✅ Bug 4 — Caçador special funciona simultaneamente em coop
 ✅ Bug 2 — Teclado auto-suprime quando 2 gamepads conectados
 ✅ Bug 6 — Crash `SerpentBlock.collision_circle` em chain shot
-✅ Bônus — Logging em arquivo (`%LOCALAPPDATA%\SpaceShooter\game.log`)
+✅ Bônus — Logging em arquivo (`%LOCALAPPDATA%\PixelPatrol\game.log`)
 ✅ Item 3 — Aggressiveness propagado a Meteor, RockGlider, EyeEnemy, Alien (via Formation),
    GuidedMeteor e RockGliders spawned pelo CloudArchmageBoss
 ✅ Item 5 — `collision_circle` formalizado: fallback no `EnemyHitMixin` e `BossHitMixin`;
@@ -240,9 +240,9 @@ Auditar todos os tipos que entram em `entity_manager.enemies`:
 
 ## Como capturar mais dados antes do próximo ciclo
 
-1. **Rebuilde o exe** com os fixes atuais (`pyinstaller Space_Shooter.spec`)
+1. **Rebuilde o exe** com os fixes atuais (`pyinstaller Pixel_Patrol.spec`)
 2. **Jogue normalmente** algumas sessões coop, tentando reproduzir cada bug
-3. **Anexe `%LOCALAPPDATA%\SpaceShooter\game.log`** quando for retomar —
+3. **Anexe `%LOCALAPPDATA%\PixelPatrol\game.log`** quando for retomar —
    o `RotatingFileHandler` mantém histórico até 4 MB
 4. Para o **Bug 1** especificamente: tentar desconectar/reconectar
    controles de layouts diferentes (XInput + PS4) e observar logs do

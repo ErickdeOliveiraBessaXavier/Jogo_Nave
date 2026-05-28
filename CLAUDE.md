@@ -1,4 +1,4 @@
-# CLAUDE.md — Diretrizes do Projeto Space Shooter
+# CLAUDE.md — Diretrizes do Projeto Pixel Patrol
 
 Documento de **princípios e convenções** do projeto. Não é arquivo de
 planejamento — itens de revisão, backlog e status vivem em

@@ -1,4 +1,4 @@
-# Plano de Revisão — Space Shooter
+# Plano de Revisão — Pixel Patrol
 
 Próximo ciclo de revisão técnica. Item levantado, avaliado, classificado e fechado
 quando concluído. O arquivo deve refletir o estado atual — atualize gravidade/status

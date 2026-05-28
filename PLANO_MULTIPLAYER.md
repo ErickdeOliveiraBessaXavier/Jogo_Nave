@@ -1,6 +1,6 @@
 # Plano — Multiplayer Local Cooperativo
 
-Implementação de coop local para o Space Shooter. Documento vivo: marcar
+Implementação de coop local para o Pixel Patrol. Documento vivo: marcar
 status conforme cada fase é concluída.
 
 ---

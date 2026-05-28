@@ -1,4 +1,4 @@
-# 🚀 Space Shooter - Jogo de Nave Espacial
+# 🚀 Pixel Patrol - Jogo de Nave Espacial
 
 Um emocionante jogo de tiro espacial com progressão infinita, desenvolvido em Python com Pygame. Desafie suas habilidades evitando asteroides, destruindo naves alienígenas, enfrentando chefes poderosos e coletando poder-ups para alcançar a maior pontuação possível!
 
@@ -59,9 +59,9 @@ O jogo foi otimizado para oferecer uma experiência suave e fluida:
 
 ### Opção 1: Executável (Recomendado para Usuários)
 
-1. Baixe o instalador `setup_spaceshooter.exe` na página de [Releases](https://github.com/ErickdeOliveiraBessaXavier/Jogo_Nave/releases)
+1. Baixe o instalador `setup_pixel_patrol.exe` na página de [Releases](https://github.com/ErickdeOliveiraBessaXavier/Jogo_Nave/releases)
 2. Execute o instalador e siga as instruções
-3. Clique em "Space Shooter" no menu Iniciar ou na Área de Trabalho para jogar
+3. Clique em "Pixel Patrol" no menu Iniciar ou na Área de Trabalho para jogar
 
 ### Opção 2: Executar do Código-fonte (Para Desenvolvedores)
 
@@ -130,7 +130,7 @@ Jogo_Nave/
 │       └── spawner.py           # Spawner de inimigos
 ├── requirements.txt         # Dependências Python
 ├── run.py                   # Ponto de entrada
-├── Space_Shooter.spec       # Configuração PyInstaller
+├── Pixel_Patrol.spec       # Configuração PyInstaller
 ├── installer_script.iss     # Script Inno Setup
 └── README.md                # Este arquivo
 ```
@@ -168,7 +168,7 @@ python código_teste/optimization_report.py
 ### Jogo não inicia após instalação
 - Tente reinstalar o jogo
 - Verifique se sua placa de vídeo suporta OpenGL
-- Consulte o arquivo de log em `%LOCALAPPDATA%\SpaceShooter\error.log`
+- Consulte o arquivo de log em `%LOCALAPPDATA%\PixelPatrol\error.log`
 
 ### Sons não funcionam
 - Verifique o volume nas configurações (ESC → Configurações)

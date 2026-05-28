@@ -72,7 +72,7 @@ class MenuStrings:
     UPGRADES = "Aprimoramentos"
     SETTINGS = "Configurações"
     EXIT = "Sair"
-    TITLE = "Space Shooter"
+    TITLE = "Pixel Patrol"
 
 
 class ButtonIndices:
@@ -325,7 +325,7 @@ class AutoPlay:
 
 class MainMenuScene(Scene):
     """
-    Main menu scene for the Space Shooter game.
+    Main menu scene for the Pixel Patrol game.
 
     Handles the display and interaction of the main menu, including title animation,
     button interactions, and navigation to other scenes.

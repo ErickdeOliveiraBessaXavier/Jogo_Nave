@@ -16,8 +16,8 @@ def _setup_logging():
     Em modo windowed (PyInstaller console=False), `sys.stdout` é None e
     o StreamHandler isolado some silenciosamente. Adicionar FileHandler
     garante que `logger.info/warning/error` ficam persistidos em
-    `%LOCALAPPDATA%\\SpaceShooter\\game.log` (Windows) ou
-    `~/.local/share/SpaceShooter/game.log` (Linux/Mac).
+    `%LOCALAPPDATA%\\PixelPatrol\\game.log` (Windows) ou
+    `~/.local/share/PixelPatrol/game.log` (Linux/Mac).
 
     Útil para diagnosticar bugs intermitentes (reconexão de gamepad,
     crashes em bosses) que não chegam a derrubar o processo.
@@ -56,7 +56,7 @@ def main():
     """Main entry point for the game."""
     _setup_logging()
     logger = logging.getLogger(__name__)
-    logger.info("=== Space Shooter iniciado ===")
+    logger.info("=== Pixel Patrol iniciado ===")
 
     try:
         from game.app import GameApp

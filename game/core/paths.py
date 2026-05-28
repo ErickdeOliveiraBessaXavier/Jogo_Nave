@@ -10,19 +10,19 @@ def get_user_data_dir() -> Path:
     Retorna o diretório de dados do usuário para o jogo.
 
     Em desenvolvimento: usa o diretório atual
-    Em produção (executável): usa AppData/Local/SpaceShooter no Windows
+    Em produção (executável): usa AppData/Local/PixelPatrol no Windows
     """
     if getattr(sys, "frozen", False):
         # Executável PyInstaller
         if sys.platform == "win32":
-            # Windows: %LOCALAPPDATA%/SpaceShooter
+            # Windows: %LOCALAPPDATA%/PixelPatrol
             data_dir = (
                 Path(os.getenv("LOCALAPPDATA", os.path.expanduser("~")))
-                / "SpaceShooter"
+                / "PixelPatrol"
             )
         else:
-            # Linux/Mac: ~/.local/share/SpaceShooter
-            data_dir = Path.home() / ".local" / "share" / "SpaceShooter"
+            # Linux/Mac: ~/.local/share/PixelPatrol
+            data_dir = Path.home() / ".local" / "share" / "PixelPatrol"
 
         # Criar diretório se não existir
         data_dir.mkdir(parents=True, exist_ok=True)

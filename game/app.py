@@ -109,7 +109,7 @@ class GameApp:
         sprite_loader.register("Satellite", Satellite.load_animation_frames)
         sprite_loader.load_all()
 
-        pygame.display.set_caption("Space Shooter")
+        pygame.display.set_caption("Pixel Patrol")
         self.clock = pygame.time.Clock()
         self.running = True
 
