@@ -67,11 +67,11 @@ class SoundCategory(Enum):
 # Configurações de volume — fonte única de verdade para defaults de áudio.
 # UserPreferences importa estes valores; a UI os expõe como sliders 0–100%.
 VOLUME_CONFIG: Dict[str, float] = {
-    "master": 0.8,  # Multiplicador global (não exposto na UI)
+    "master": 1.0,  # Multiplicador global (não exposto na UI)
     "music": 0.75,  # Música de background
     "sfx": 0.3,  # Efeitos sonoros
     "shots": 0.2,  # Tiros (canal separado)
-    "boss_music": 0.8,  # Multiplicador da música de boss sobre "music"
+    "boss_music": 1.0,  # Multiplicador da música de boss sobre "music"
 }
 
 # Configurações de canais

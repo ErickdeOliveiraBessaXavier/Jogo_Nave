@@ -920,7 +920,7 @@ class StoneGolemBoss(BossHitMixin):
         self._dive_timer: float = 0.0
         self._dive_start_y: float = 0.0
         self._time: float = 0.0
-        self.rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
+        self._rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)
         self.emp_linger_timer: float = 0.0
         self._screen_w: int = 0
         self._screen_h: int = 0
@@ -934,6 +934,17 @@ class StoneGolemBoss(BossHitMixin):
         self._init_stats(health, difficulty_multiplier)
         self._init_fsm(y)
         self._init_surfaces()
+
+    @property
+    def rect(self) -> pygame.Rect:
+        """Rect de colisão (fonte única de verdade), atualizado in-place.
+
+        Override concreto da property abstrata de ``BossHitMixin``: a base
+        declara ``rect`` como property, então armazenar como atributo simples
+        colidiria com o descriptor (sem setter). O rect real vive em
+        ``self._rect`` e acompanha float vertical + jitter no ``update``.
+        """
+        return self._rect
 
     def _init_stats(self, health: Optional[int], difficulty_multiplier: float) -> None:
         """Inicializa atributos de status e dificuldade."""
@@ -1008,7 +1019,7 @@ class StoneGolemBoss(BossHitMixin):
         self._sentry_spawn_timer = 0.0
         self._active_sentry = None
         self._time = 0.0
-        self.rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+        self._rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
         self.emp_linger_timer = 0.0
 
     def _init_surfaces(self) -> None:
@@ -1391,8 +1402,8 @@ class StoneGolemBoss(BossHitMixin):
         # Rect acompanha float vertical e jitter para casar com a posição desenhada.
         # get_collision_mask_data usa self.rect como fonte única de verdade,
         # por isso jitter também deve entrar aqui.
-        self.rect.x = int(self.x + self._jitter_x)
-        self.rect.y = int(self.y + self._current_float_y + self._jitter_y)
+        self._rect.x = int(self.x + self._jitter_x)
+        self._rect.y = int(self.y + self._current_float_y + self._jitter_y)
         self._entity_manager = None
         return new_mines, new_shards, self._orbital_debris
 
@@ -2202,7 +2213,7 @@ class StoneGolemBoss(BossHitMixin):
         # Usa self.rect como fonte única de verdade: já inclui float vertical
         # e jitter, garantindo alinhamento perfeito com o AABB pré-filtro do
         # sistema de colisão e com a posição visual desenhada.
-        return mask, (self.rect.x, self.rect.y)
+        return mask, (self._rect.x, self._rect.y)
 
     def can_take_damage(self) -> bool:
         """O boss não recebe dano durante a introdução ou se estiver morto."""

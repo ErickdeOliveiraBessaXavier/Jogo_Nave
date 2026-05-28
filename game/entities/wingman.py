@@ -1,7 +1,7 @@
 import math
 import random
 from pathlib import Path
-from typing import Any, Optional, List
+from typing import Any, Final, Optional, List
 
 import pygame
 
@@ -15,6 +15,11 @@ from .mini_ship_bullet import MiniShipBullet
 _SPRITE_PATH = (
     Path(__file__).resolve().parent.parent / "assets" / "icons" / "mini_ship.png"
 )
+
+# Nerf de dano aplicado SÓ contra bosses (sobre o multiplicador global de
+# upgrades). O Wingman tem cadência alta (0.4 s), dano 1.5x e podem existir
+# vários — sem isso o DPS em boss fica desproporcional ao das outras escoltas.
+_WINGMAN_BOSS_DAMAGE_MULT: Final = 0.5
 
 class Wingman:
     _sprite: Optional[pygame.Surface] = None
@@ -225,6 +230,7 @@ class Wingman:
                 math.sin(angle) * b_speed,
                 damage=Config.MINI_SHIP_BULLET_DAMAGE * 1.5,  # Wingman é um pouco mais forte
                 owner_ship=self.player,
+                boss_damage_mult=_WINGMAN_BOSS_DAMAGE_MULT,  # nerf só em boss
             )
         )
         sound_manager.play_shot()

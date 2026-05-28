@@ -356,7 +356,13 @@ class Collisions:
             if not (is_piercing_allowed and getattr(proj, "piercing", False)):
                 proj.dead = True
 
-            damage = int(proj.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+            # Nerf global de upgrade + nerf por-projétil (Wingman tem o seu;
+            # demais projéteis usam 1.0 via getattr → sem mudança).
+            damage = int(
+                proj.damage
+                * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER
+                * getattr(proj, "boss_damage_mult", 1.0)
+            )
             result = self._apply_hit(
                 boss, damage, proj.x, proj.y, entity_manager, floating_scores
             )

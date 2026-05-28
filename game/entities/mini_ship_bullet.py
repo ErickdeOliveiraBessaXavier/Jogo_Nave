@@ -16,6 +16,7 @@ class MiniShipBullet:
         damage: int = Config.MINI_SHIP_BULLET_DAMAGE,
         piercing: bool = False,
         owner_ship: Optional[Any] = None,
+        boss_damage_mult: float = 1.0,
     ):
         self.x = x
         self.y = y
@@ -26,6 +27,10 @@ class MiniShipBullet:
         self.damage = damage
         self.dead = False
         self.piercing = piercing  # Now configurable
+        # Multiplicador extra aplicado SÓ contra bosses (1.0 = sem efeito).
+        # Usado pelo Wingman, que tem cadência alta e some várias unidades —
+        # sem isso o DPS dele em boss fica desproporcional.
+        self.boss_damage_mult = boss_damage_mult
         # Nave que controlou o mini ship/wingman que disparou — para
         # atribuição de kill ao Reverberador certo em coop.
         self.owner_ship: Optional[Any] = owner_ship

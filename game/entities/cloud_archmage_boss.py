@@ -780,6 +780,16 @@ class CloudArchmageBoss:
     def _start_intro_sequence(self) -> None:
         self._state = ArchmageState.INTRO
         self.active = False
+        # A introdução (orbs convergindo + materialização da cabeça) acontece
+        # via fade de alpha na posição atual — o estado INTRO não desliza o boss
+        # para dentro. Como o y inicial é off-screen (acima da tela), sem
+        # reposicionar aqui todo o efeito ocorre fora da tela e o jogador só vê
+        # o escurecimento. Faz snap ao alvo on-screen e re-sincroniza os lerps
+        # das partes do sprite para a cabeça materializar no lugar certo.
+        tx, ty = self._target_pos
+        self.x = tx - self.w / 2
+        self.y = ty
+        self._sync_lerp_to_position()
         self._state_timer = 0.0
         self._intro_spawn_timer = 0.0
         self._intro_orbs_spawned = 0

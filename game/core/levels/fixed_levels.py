@@ -297,9 +297,12 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         enemy_spawn_config={
             RockGlider: 1.5,
         },
-        enemies_to_clear=0,
+        enemies_to_clear=75,
         # boss_type=Boss,
         # boss_type=SpikeBoss,
+        # boss_type=CloudArchmageBoss,
+        # boss_type=StoneGolemBoss,
+        # boss_type=GiantMeteorBoss,
         score_multiplier=1.0,
     ),
     # Nível 3: Primeiro Boss - Mountain Serpent (Montanhas)
