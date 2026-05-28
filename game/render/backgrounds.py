@@ -245,6 +245,13 @@ class MountainsBackground(Background):
         self.sky_warm_gradient: Optional[pygame.Surface] = None
         self.sky_night_gradient: Optional[pygame.Surface] = None
 
+        # Surface opaca com o céu warm+night já composto. Recomposta apenas
+        # quando o alpha do night muda em 0..255. Como o progresso varia
+        # ~0,00003/frame durante transições de 10 min, a maioria dos frames
+        # reaproveita o cache — 1 blit fullscreen opaco no lugar de 2 SRCALPHA.
+        self._sky_composited: Optional[pygame.Surface] = None
+        self._sky_composited_alpha: int = -1
+
         # Ciclo contínuo dia/noite: anoitecer → noite → amanhecer → dia → repete.
         # _phase: 'sunset' (0→1), 'night' (permanece 1), 'sunrise' (1→0), 'day' (permanece 0)
         self._phase: str = "day"
@@ -643,21 +650,38 @@ class MountainsBackground(Background):
         """Desenha todos os elementos do background."""
         progress = self._current_progress
         display_progress = self._ease_progress(progress)
-        # Skip de blits nos extremos: full-day usa apenas warm, full-night
-        # usa apenas night. Evita um blit fullscreen quando não há mistura.
-        if progress <= 0.001:
-            if self.sky_warm_gradient:
-                surface.blit(self.sky_warm_gradient, (0, 0))
-        elif progress >= 0.999:
-            if self.sky_night_gradient:
-                self.sky_night_gradient.set_alpha(255)
-                surface.blit(self.sky_night_gradient, (0, 0))
-        else:
-            if self.sky_warm_gradient:
-                surface.blit(self.sky_warm_gradient, (0, 0))
-            if self.sky_night_gradient:
-                self.sky_night_gradient.set_alpha(int(progress * 255))
-                surface.blit(self.sky_night_gradient, (0, 0))
+
+        # Céu composto cacheado: recompõe warm+night apenas quando o alpha
+        # discretizado em 0..255 muda. Durante sunset/sunrise (10 min),
+        # 1 unidade de alpha leva ~14 frames a 60 FPS — recompõe raramente
+        # e per-frame faz só 1 blit fullscreen opaco.
+        if self._sky_composited is None and self.sky_warm_gradient is not None:
+            self._sky_composited = _optimize_surface(
+                pygame.Surface((self.width, self.height))
+            )
+
+        night_alpha = max(0, min(255, int(progress * 255)))
+        if (
+            self._sky_composited is not None
+            and night_alpha != self._sky_composited_alpha
+        ):
+            if night_alpha == 0:
+                if self.sky_warm_gradient is not None:
+                    self._sky_composited.blit(self.sky_warm_gradient, (0, 0))
+            elif night_alpha == 255:
+                if self.sky_night_gradient is not None:
+                    self.sky_night_gradient.set_alpha(255)
+                    self._sky_composited.blit(self.sky_night_gradient, (0, 0))
+            else:
+                if self.sky_warm_gradient is not None:
+                    self._sky_composited.blit(self.sky_warm_gradient, (0, 0))
+                if self.sky_night_gradient is not None:
+                    self.sky_night_gradient.set_alpha(night_alpha)
+                    self._sky_composited.blit(self.sky_night_gradient, (0, 0))
+            self._sky_composited_alpha = night_alpha
+
+        if self._sky_composited is not None:
+            surface.blit(self._sky_composited, (0, 0))
 
         # Desenhar estrelas (brilho escalado em _draw_stars conforme o progresso)
         self._draw_stars(surface)
@@ -978,7 +1002,7 @@ class VerticalCloud:
     def reset(self, is_first_time: bool = False) -> None:
         # Regenera a superfície para cada reset para maior variedade visual
         base_surface = self._generate_cloud_surface()
-        
+
         scale = random.uniform(0.6, 1.4)
         self.scaled_surface = pygame.transform.smoothscale(
             base_surface,
@@ -989,15 +1013,15 @@ class VerticalCloud:
         )
 
         self.x = random.uniform(-50, self.screen_width - 100)
-        
-        # Para um efeito orgânico de "entrar" na camada de nuvens, 
+
+        # Para um efeito orgânico de "entrar" na camada de nuvens,
         # as nuvens SEMPRE começam fora da tela e entram nela.
         # Usamos um range maior no primeiro spawn para elas não entrarem todas juntas.
         stagger = random.randint(20, 800) if is_first_time else random.randint(20, 150)
-        
-        if self.is_entering: # Sobe (spawn embaixo)
+
+        if self.is_entering:  # Sobe (spawn embaixo)
             self.y = self.screen_height + stagger
-        else: # Desce (spawn em cima)
+        else:  # Desce (spawn em cima)
             self.y = -self.scaled_surface.get_height() - stagger
 
         self.speed = random.uniform(self.speed_range[0], self.speed_range[1])
@@ -1022,21 +1046,21 @@ class VerticalCloud:
         # Quando está perto da borda de spawn, o alpha diminui
         edge_fade = 1.0
         fade_margin = 100.0
-        
-        if self.is_entering: # Sobe (spawn em screen_height)
-            dist_to_spawn = (self.screen_height - self.y)
+
+        if self.is_entering:  # Sobe (spawn em screen_height)
+            dist_to_spawn = self.screen_height - self.y
             if dist_to_spawn < fade_margin:
                 edge_fade = max(0.0, dist_to_spawn / fade_margin)
-        else: # Desce (spawn em -height)
+        else:  # Desce (spawn em -height)
             cloud_h = self.scaled_surface.get_height()
-            dist_to_spawn = (self.y + cloud_h)
+            dist_to_spawn = self.y + cloud_h
             if dist_to_spawn < fade_margin:
                 edge_fade = max(0.0, dist_to_spawn / fade_margin)
 
         final_alpha = int(255 * alpha_mult * edge_fade)
         if final_alpha <= 0:
             return
-            
+
         if final_alpha < 255:
             # Para SRCALPHA, set_alpha multiplica o alpha existente na blit
             self.scaled_surface.set_alpha(final_alpha)
@@ -1089,7 +1113,10 @@ class AtmosphereStreak:
                 self.reset()
 
     def draw(
-        self, surface: pygame.Surface, global_alpha: float = 1.0, speed_mult: float = 1.0
+        self,
+        surface: pygame.Surface,
+        global_alpha: float = 1.0,
+        speed_mult: float = 1.0,
     ) -> None:
         alpha = int(self.alpha * global_alpha)
         if alpha <= 0:
@@ -1119,7 +1146,9 @@ class AtmosphereBackground(Background):
     # Planeta no rodapé: só translação vertical conforme a proximidade da
     # atmosfera. Perto (re-entry/ENTRANDO) ele sobe; longe (saída/ascensão ao
     # espaço) ele desce e some. Sem rotação nem escala.
-    PLANET_CENTER_NEAR_OFFSET: float = 420.0  # px abaixo da base quando perto (0 = metade fora)
+    PLANET_CENTER_NEAR_OFFSET: float = (
+        420.0  # px abaixo da base quando perto (0 = metade fora)
+    )
     PLANET_TRAVEL: float = 240.0  # px que o planeta desce do perto até o longe
 
     def __init__(self, width: int, height: int, route: str = "exiting"):
@@ -1260,7 +1289,9 @@ class AtmosphereBackground(Background):
 
 
 # Factory function para facilitar criação
-def create_background(bg_type: str, width: int, height: int, **kwargs: Any) -> Background:
+def create_background(
+    bg_type: str, width: int, height: int, **kwargs: Any
+) -> Background:
     """
     Cria um background baseado no tipo especificado.
 

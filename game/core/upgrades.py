@@ -465,6 +465,36 @@ class CannonTowerUpgrade(ActiveUpgrade):
         em.spawn_cannon_tower(right_x, tower_y)
 
 
+class HomingShotUpgrade(ActiveUpgrade):
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        if not ship:
+            return
+        from .upgrades_config import HOMING_FIRE_RATE_PENALTY, HOMING_SPEED_PENALTY
+
+        ship.activate_homing_shots(
+            self.get_effective_duration(ctx),
+            HOMING_SPEED_PENALTY,
+            HOMING_FIRE_RATE_PENALTY,
+        )
+
+
+class LaserShotUpgrade(ActiveUpgrade):
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        if ship:
+            ship.activate_orbital_lasers(self.get_effective_duration(ctx))
+
+
+class ExplosiveShotUpgrade(ActiveUpgrade):
+    BULLETS_PER_ACTIVATION = 15
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        if ship:
+            ship.activate_explosive_shots(self.BULLETS_PER_ACTIVATION)
+
+
 class CoopLinkUpgrade(ActiveUpgrade):
     """Feixe de alta voltagem que conecta dois jogadores."""
 
@@ -491,6 +521,9 @@ def upgrade_factory(upgrade_type: UpgradeType) -> ActiveUpgrade:
         UpgradeType.SHIELD_BURST: ShieldBurstUpgrade,
         UpgradeType.HEAL: HealUpgrade,
         UpgradeType.EMP: EMPUpgrade,
+        UpgradeType.HOMING_SHOT: HomingShotUpgrade,
+        UpgradeType.LASER_SHOT: LaserShotUpgrade,
+        UpgradeType.EXPLOSIVE_SHOT: ExplosiveShotUpgrade,
         UpgradeType.BLINK_DASH: BlinkDashUpgrade,
         UpgradeType.GRAVITY_BOMB: GravityBombUpgrade,
         UpgradeType.CHAIN_LIGHTNING: ChainLightningUpgrade,
@@ -545,6 +578,39 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         UpgradeCategory.UTILITY,
         50,
         10,
+        None,
+        2,
+    ),
+    UpgradeType.HOMING_SHOT: UpgradeMeta(
+        UpgradeType.HOMING_SHOT,
+        "HOMING",
+        "Tiros teleguiados com cadência reduzida.",
+        "homing_shot",
+        UpgradeCategory.OFFENSIVE,
+        60,
+        12,
+        None,
+        2,
+    ),
+    UpgradeType.LASER_SHOT: UpgradeMeta(
+        UpgradeType.LASER_SHOT,
+        "LASER",
+        "Orbes laser disparam em sequência.",
+        "laser_shot",
+        UpgradeCategory.OFFENSIVE,
+        80,
+        0,
+        None,
+        2,
+    ),
+    UpgradeType.EXPLOSIVE_SHOT: UpgradeMeta(
+        UpgradeType.EXPLOSIVE_SHOT,
+        "EXPL",
+        "Próximos tiros explodem em área.",
+        "explosive_shot",
+        UpgradeCategory.OFFENSIVE,
+        70,
+        0,
         None,
         2,
     ),
@@ -681,6 +747,9 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
         "shield_burst": "S",
         "heal": "H",
         "emp": "E",
+        "homing_shot": "T",
+        "laser_shot": "X",
+        "explosive_shot": "V",
         "air_strike": "A",
         "black_hole": "B",
         "blink_dash": "D",
