@@ -905,14 +905,17 @@ class StoneSentry(EnemyHitMixin):
         )
 
     def _update_particles(self, dt: float) -> None:
-        updated_particles: list[Particle] = []
-        for particle in self._particles:
-            particle.x += particle.vx * dt
-            particle.y += particle.vy * dt
-            particle.lifetime -= dt
-            if particle.lifetime > 0 and particle.y < Config.SCREEN_HEIGHT + 20:
-                updated_particles.append(particle)
-        self._particles = updated_particles
+        particles = self._particles
+        write = 0
+        max_y = Config.SCREEN_HEIGHT + 20
+        for p in particles:
+            p.x += p.vx * dt
+            p.y += p.vy * dt
+            p.lifetime -= dt
+            if p.lifetime > 0 and p.y < max_y:
+                particles[write] = p
+                write += 1
+        del particles[write:]
 
     def _shoot(self, player_pos: Tuple[float, float] | None) -> List[AlienBullet]:
         left_tip, right_tip = self._claw_tips or self._get_claw_tips()
