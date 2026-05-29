@@ -700,6 +700,25 @@ class PlayerProfile:
         logger.warning("Checkpoint inválido, fallback para nível 1")
         return 1
 
+    def record_run_best_score(self, score: int) -> None:
+        """Registra o melhor score de uma run que alcançou o checkpoint atual.
+
+        Chamado no game over com o score final da run. Mantém o máximo por
+        mundo-checkpoint — é o "BEST" exibido no card da seleção de mundo.
+        Salva imediatamente, como os demais mutadores de ``world_unlocks``.
+        """
+        status = self.world_unlocks.get(self.current_checkpoint_world)
+        if status is None:
+            return
+        if score > status.last_best_score_at_checkpoint:
+            status.last_best_score_at_checkpoint = score
+            self.save()
+            logger.info(
+                "🏆 Novo BEST do Mundo %s: %s",
+                self.current_checkpoint_world,
+                score,
+            )
+
     def get_total_equipped_weight(self) -> int:
         """Retorna o peso total de todos os upgrades equipados."""
         from .upgrades import UPGRADES_META

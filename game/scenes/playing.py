@@ -2224,6 +2224,8 @@ class PlayingScene(Scene):
             # Captura o score final ANTES de qualquer zeragem para a tela de
             # Game Over exibir o valor real (sem isso, permadeath mostraria 0).
             final_score = self.score
+            # Recorde do checkpoint atual: melhor run que chegou a este mundo.
+            self.player_profile.record_run_best_score(final_score)
             if self._permadeath_mode:
                 self.score = 0
             # Continuar reinicia a PRÓPRIA fase onde o jogador morreu (não o

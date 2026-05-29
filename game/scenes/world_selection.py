@@ -8,7 +8,7 @@ Mostra status de desbloqueio e checkpoint atual.
 import math
 import random
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, List, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Tuple
 
 import pygame
 
@@ -17,11 +17,29 @@ from ..core.colors import CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.config import config as Config
 from ..core.sound import sound_manager
 from ..core.world_config import WorldConfig, get_all_worlds
-from ..render.backgrounds import create_background
+from ..render.backgrounds import Background, create_background
 from .ui_helpers import UIParticle, draw_bordered_button
 
 if TYPE_CHECKING:
     from ..render.renderer import Renderer
+
+
+# Backgrounds dependem só de (tema, largura, altura) — tudo estático. Construir
+# um MountainsBackground custa ~77ms (medido), o que estourava o frame da
+# transição menu→seleção de mundo a CADA entrada. Memoizamos por (tema, W, H)
+# no nível do módulo: construído no máximo uma vez por processo e reusado por
+# qualquer instância da view (o menu é recriado a cada retorno do jogo). Só uma
+# view existe por vez, então compartilhar a instância animada é seguro.
+_background_memo: Dict[Tuple[str, int, int], Background] = {}
+
+
+def _get_cached_background(theme: str, width: int, height: int) -> Background:
+    key = (theme, width, height)
+    bg = _background_memo.get(key)
+    if bg is None:
+        bg = create_background(theme, width, height)
+        _background_memo[key] = bg
+    return bg
 
 
 def render_text_wrapped(
@@ -388,6 +406,9 @@ class WorldSelectionView:
         # Cache de backgrounds pré-construídos por índice de card
         self._background_cache: List[Any] = []
 
+        # Pré-aquece o memo de backgrounds agora (fora da transição visível).
+        self._prewarm_backgrounds()
+
     @staticmethod
     def _resolve_theme(world_config: Any) -> str:
         """Retorna o theme_str resolvido (expande 'procedural')."""
@@ -404,7 +425,12 @@ class WorldSelectionView:
             self.current_background = self._background_cache[index]
 
     def _prebuild_all_backgrounds(self) -> None:
-        """Constrói todos os backgrounds durante reset (tela preta)."""
+        """Popula o cache por índice de card a partir do memo (sem reconstruir).
+
+        Backgrounds já vêm do memo de módulo — pré-aquecido no ``__init__`` —,
+        então isto é O(n) de lookups, sem o custo de geração que estourava o
+        frame da transição.
+        """
         self._background_cache = []
         for card in self.world_cards:
             theme_str = self._resolve_theme(card.world_config)
@@ -412,12 +438,28 @@ class WorldSelectionView:
                 self._background_cache.append(None)
             else:
                 try:
-                    bg = create_background(
-                        theme_str, Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+                    self._background_cache.append(
+                        _get_cached_background(
+                            theme_str, Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+                        )
                     )
-                    self._background_cache.append(bg)
                 except (ValueError, OSError):
                     self._background_cache.append(None)
+
+    def _prewarm_backgrounds(self) -> None:
+        """Gera os backgrounds dos temas existentes uma vez, no momento da
+        criação da view (startup / transição de retorno ao menu), tirando o
+        custo do caminho da transição menu→seleção de mundo."""
+        for world_config in get_all_worlds():
+            theme_str = self._resolve_theme(world_config)
+            if theme_str == "starfield":
+                continue
+            try:
+                _get_cached_background(
+                    theme_str, Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+                )
+            except (ValueError, OSError):
+                pass
 
     def reset(self) -> None:
         """Reinicia a view com dados atualizados."""
