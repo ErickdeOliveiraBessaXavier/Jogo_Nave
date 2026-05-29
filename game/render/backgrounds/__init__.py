@@ -11,6 +11,7 @@ from .base import Background
 from .city import CityBackground
 from .factory import create_background
 from .mountains import MountainsBackground
+from .starfield import CelestialManager, StarField, StarfieldBackground
 from .volcanic import VolcanicBackground
 
 __all__ = [
@@ -20,4 +21,7 @@ __all__ = [
     "CityBackground",
     "VolcanicBackground",
     "AtmosphereBackground",
+    "StarField",
+    "CelestialManager",
+    "StarfieldBackground",
 ]

@@ -45,6 +45,15 @@ class Background(ABC):
         """Reseta para estado inicial."""
         raise NotImplementedError
 
+    def set_progress(self, _progress: float) -> None:
+        """Hook opcional: progresso 0..1 (usado pela atmosfera). No-op por padrão."""
+        return None
+
+    def set_allow_spawning(self, _allow: bool) -> None:
+        """Hook opcional: liga/desliga spawn de elementos (corpos celestes do
+        starfield). No-op por padrão."""
+        return None
+
     def set_day_night_paused(self, _paused: bool) -> None:
         """Optional hook to pause/resume day/night cycle.
 

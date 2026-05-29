@@ -6,6 +6,7 @@ from .atmosphere import AtmosphereBackground
 from .base import Background
 from .city import CityBackground
 from .mountains import MountainsBackground
+from .starfield import StarfieldBackground
 from .volcanic import VolcanicBackground
 
 
@@ -32,6 +33,7 @@ def create_background(
         "city": CityBackground,
         "volcanic": VolcanicBackground,
         "atmosphere": AtmosphereBackground,
+        "starfield": StarfieldBackground,
     }
 
     bg_class = backgrounds.get(bg_type.lower())
