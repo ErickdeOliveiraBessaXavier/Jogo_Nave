@@ -488,10 +488,10 @@ class GameRenderer:
             surface.blit(txt, (rect.left + 40, rect.top + txt_y_offset))
 
         # 2. Powerups Ativos (Mini ícones na parte de baixo do rect)
-        self._render_active_powerups_in_box(surface, ship, rect, is_p2)
+        self._render_active_powerups_in_box(surface, ship, rect)
 
     def _render_active_powerups_in_box(
-        self, surface: pygame.Surface, ship: Ship, rect: pygame.Rect, is_p2: bool
+        self, surface: pygame.Surface, ship: Ship, rect: pygame.Rect
     ) -> None:
         """Desenha powerups ativos na linha inferior da caixa do jogador."""
         active: list[tuple[str, float]] = []

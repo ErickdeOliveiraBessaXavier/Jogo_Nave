@@ -3,7 +3,6 @@ import math
 import random
 from typing import Any
 
-from ..core.config import config
 from ..core.sound import sound_manager
 
 class PlasmaBeam:
@@ -84,9 +83,9 @@ class PlasmaBeam:
         pygame.draw.line(surface, (255, 255, 255), p1, p2, max(1, draw_width // 3))
         
         # 4. Partículas de energia na ponta e na base
-        self._draw_energy_sparks(surface, p1, p2)
+        self._draw_energy_sparks(surface, p2)
 
-    def _draw_energy_sparks(self, surface: pygame.Surface, p1, p2):
+    def _draw_energy_sparks(self, surface: pygame.Surface, p2: tuple[float, float]):
         # Faíscas na ponta da lança
         for _ in range(3):
             angle = random.uniform(0, math.pi * 2)

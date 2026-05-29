@@ -382,12 +382,12 @@ class SpikeBoss(BossHitMixin):
         self._draw_layer(surface, "core_inner", draw_x, int(draw_y + jaw_gap))
 
         # Efeitos adicionais
-        self._draw_effects(surface, draw_x, int(draw_y), body_stretch, jaw_gap)
+        self._draw_effects(surface, int(draw_y), jaw_gap)
 
         if self.state != "entering":
             self._draw_health_bar(surface, draw_x, int(draw_y))
 
-    def _draw_effects(self, surface: pygame.Surface, draw_x: int, draw_y: int, body_stretch: int, jaw_gap: int = 0):
+    def _draw_effects(self, surface: pygame.Surface, draw_y: int, jaw_gap: int = 0):
         """Desenha os efeitos ao redor do boss (telegraph, charging laser)."""
         boss_center_x = int(self.x + self.w / 2)
         boss_center_y = int(self.y + self.h / 2)

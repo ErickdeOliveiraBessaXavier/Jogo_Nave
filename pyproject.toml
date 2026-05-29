@@ -15,3 +15,6 @@ ignore = [
 [tool.vulture]
 min_confidence = 80
 paths = ["game/"]
+
+# Config do pylint vive em .pylintrc (que tem precedência sobre este arquivo
+# na auto-descoberta do pylint). Mantida lá para evitar config duplicada.

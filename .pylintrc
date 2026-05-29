@@ -4,12 +4,23 @@ ignore-patterns=test_.*?\.py
 extension-pkg-allow-list=pygame
 
 [MESSAGES CONTROL]
-# Desabilitar warnings menos importantes
+# Pylint complementa ruff (formato/imports/unused) e pyright strict (tipos);
+# focamos só no que eles NÃO cobrem e que aponta bug/risco real: Errors (E),
+# Fatals (F) e os Warnings (W) restantes — destaque para W0212 (protected-access),
+# que reforça o §1 do CLAUDE.md.
+#
+# Categorias inteiras desligadas por serem ruído neste projeto:
+# - C (Convention): C0415 (import-outside-toplevel) é sancionado pelo §10;
+#   C0303/ordem de import são domínio do ruff.
+# - R (Refactor): métricas de complexidade (too-many-*) disparam em massa em
+#   cenas grandes; duplicate-code e refactors de estilo (no-else-return,
+#   consider-using-in/min) são de baixo valor aqui.
+# W0201 (attribute-defined-outside-init): falso positivo do padrão pygame
+#   __init__ -> self.reset(). Remova daqui para reativar.
 disable=
-    missing-docstring,
-    too-few-public-methods,
-    invalid-name,
-    line-too-long,
+    C,
+    R,
+    attribute-defined-outside-init,
 
 [DESIGN]
 # Limites para complexidade
