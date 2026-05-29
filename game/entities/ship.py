@@ -207,6 +207,9 @@ class Ship:
 
         # Reverberador: combo de dano sem tomar hit.
         self.combo_kills: int = 0  # abates consecutivos sem dano
+        # Instante (em draw_time) do último incremento de combo — alimenta o
+        # "pop" de escala do HUD. Escrito no update, lido no draw (§3).
+        self.combo_pop_time: float = -999.0
 
         # Acumulador de tempo para animações no draw() — substitui time.time()
         # e garante compatibilidade com pausa/slow-motion.
@@ -276,6 +279,7 @@ class Ship:
         if self.profile.combo_damage_per_kill <= 0:
             return
         self.combo_kills += 1
+        self.combo_pop_time = self.draw_time
 
     def reset_combo(self) -> None:
         """Reseta o combo do Reverberador (chamado ao tomar dano)."""

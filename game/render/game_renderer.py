@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import math
 import random
-import time
 from typing import TYPE_CHECKING, Any, Optional, TypedDict, cast
 
 import pygame
@@ -659,38 +658,81 @@ class GameRenderer:
         pass
 
     def _render_combo_hud(self, ship: Ship, surface: pygame.Surface) -> None:
-        """Indicador do combo do Reverberador."""
+        """Indicador compacto do combo do Reverberador (canto inferior direito).
+
+        Painel arredondado com barra de progresso até o cap. Animação por
+        ``ship.draw_time`` (acumulador alimentado pelo update — §3, compatível
+        com pausa/slow-motion): 'pop' de escala a cada abate e brilho pulsante
+        quando o combo atinge o cap. Ancorado pela borda inferior-direita, então
+        nunca vaza a tela por mais que o combo cresça.
+        """
         if ship.profile.combo_damage_per_kill <= 0:
             return
 
         kills = ship.combo_kills
         bonus = ship.combo_damage_bonus
         cap = ship.profile.combo_damage_cap
+        now = ship.draw_time
+        at_cap = cap > 0 and bonus >= cap
+        fill = (min(1.0, bonus / cap) if cap > 0 else min(1.0, bonus))
 
-        font_label = get_font(14)
-        font_value = get_font(22)
-
+        # Cor de destaque: cinza (sem combo) -> âmbar conforme enche -> dourado
+        # pulsante no cap.
         if kills == 0:
-            color = (160, 160, 160)
-        elif 0 < cap <= bonus:
-            pulse = int(40 + 40 * abs(math.sin(time.time() * 6)))
-            color = (255, 220 - pulse // 4, 60)
+            accent = (150, 150, 160)
+        elif at_cap:
+            p = 0.5 + 0.5 * math.sin(now * 8.0)
+            accent = (255, int(200 + 55 * p), int(70 + 70 * p))
         else:
-            fade = min(1.0, bonus / cap) if cap > 0 else min(1.0, bonus)
-            color = (
-                int(180 + 75 * fade),
-                int(180 + 40 * fade),
-                int(140 - 80 * fade),
+            accent = (
+                int(180 + 75 * fill),
+                int(190 + 30 * fill),
+                int(150 - 90 * fill),
             )
 
-        # Posicionado no canto inferior direito
-        x, y = Config.SCREEN_WIDTH - 150, Config.SCREEN_HEIGHT - 70
-        label = font_label.render("COMBO", True, colors.WHITE)
-        surface.blit(label, (x, y))
+        # Conteúdo (fontes menores que antes: 11/18 vs 14/22).
+        f_label, f_value = get_font(11), get_font(18)
+        label = f_label.render("COMBO", True, (200, 200, 210))
+        value = f_value.render(f"x{kills}", True, accent)
+        pct = f_label.render(f"+{int(round(bonus * 100))}%", True, accent)
 
-        bonus_pct = int(round(bonus * 100))
-        text = font_value.render(f"x{kills}  +{bonus_pct}%", True, color)
-        surface.blit(text, (x, y + 16))
+        pad, gap, bar_h, value_gap = 8, 3, 4, 6
+        inner_w = max(label.get_width(), value.get_width() + value_gap + pct.get_width(), 60)
+        inner_h = label.get_height() + gap + value.get_height() + gap + bar_h
+        panel_w, panel_h = inner_w + pad * 2, inner_h + pad * 2
+
+        # Painel próprio: permite escalar no 'pop' sem distorcer o resto do HUD.
+        panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        rect = pygame.Rect(0, 0, panel_w, panel_h)
+        pygame.draw.rect(panel, (16, 16, 24, 205), rect, border_radius=8)
+        border_col = accent if kills > 0 else (70, 70, 82)
+        pygame.draw.rect(panel, (*border_col, 255), rect, 2 if at_cap else 1, border_radius=8)
+
+        panel.blit(label, (pad, pad))
+        vy = pad + label.get_height() + gap
+        panel.blit(value, (pad, vy))
+        panel.blit(pct, (pad + value.get_width() + value_gap,
+                         vy + value.get_height() - pct.get_height()))
+
+        # Barra de progresso até o cap.
+        by = vy + value.get_height() + gap
+        pygame.draw.rect(panel, (255, 255, 255, 40), pygame.Rect(pad, by, inner_w, bar_h), border_radius=2)
+        if fill > 0:
+            fill_w = max(2, int(inner_w * fill))
+            pygame.draw.rect(panel, (*accent, 255), pygame.Rect(pad, by, fill_w, bar_h), border_radius=2)
+
+        # 'Pop' de escala logo após um abate (estoura e relaxa em ~0.25s).
+        elapsed = now - ship.combo_pop_time
+        sw, sh = panel_w, panel_h
+        if 0.0 <= elapsed < 0.25:
+            scale = 1.0 + 0.18 * (1.0 - elapsed / 0.25)
+            sw, sh = int(panel_w * scale), int(panel_h * scale)
+            panel = pygame.transform.smoothscale(panel, (sw, sh))
+
+        # Âncora na borda inferior-direita: cresce do canto, nunca sai da tela.
+        margin = 16
+        surface.blit(panel, (Config.SCREEN_WIDTH - margin - sw,
+                             Config.SCREEN_HEIGHT - margin - sh))
 
     def _render_storage_slots_hud(
         self,

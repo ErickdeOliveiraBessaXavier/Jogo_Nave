@@ -34,6 +34,14 @@ _VIRTUAL_CURSOR_DEAD_ZONE = 0.30
 # levavam o cursor instantaneamente para a borda superior da tela.
 _VIRTUAL_CURSOR_MAX_DT = 1.0 / 30.0
 
+# Clamp do passo de tempo do loop. Um frame lento (construção da PlayingScene +
+# carga de assets na 1ª partida, alt-tab, breakpoint) gera um dt enorme no frame
+# seguinte que fast-forwarda animações e física — era o que "comia" o fade-in de
+# início de partida só na primeira vez (depois do game over os assets já estão em
+# cache, o frame é rápido e o fade roda suave). Limitar o passo a ~30fps absorve o
+# pico sem teleportar o mundo.
+_MAX_FRAME_DT = 1.0 / 30.0
+
 # Mapeamento de botões Xbox para teclas equivalentes em menus (Camada A).
 # Permite que cenas que já tratam K_RETURN/K_ESCAPE/K_P/setas ganhem suporte
 # a controle sem mudança no handle_event delas.
@@ -478,6 +486,7 @@ class GameApp:
         try:
             while self.running:
                 dt = self.clock.tick(Config.FPS) / 1000.0
+                dt = min(dt, _MAX_FRAME_DT)
 
                 current_scene = self.states.current()
 
