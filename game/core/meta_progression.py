@@ -1135,6 +1135,7 @@ class PlayerProfile:
             for wid_key, wdata in cast(Dict[Any, Any], world_unlocks_raw).items():
                 if not (isinstance(wid_key, str) and isinstance(wdata, dict)):
                     continue
+                wdata = cast(Dict[str, Any], wdata)
                 try:
                     wid = int(wid_key)
                     world_unlocks[wid] = WorldUnlockStatus(

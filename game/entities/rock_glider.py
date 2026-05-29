@@ -165,6 +165,7 @@ class RockGlider(Meteor):
         vx: float | None = None,
         vy: float | None = None,
         aggressiveness_multiplier: float = 1.0,
+        inverted_vertical: bool = False,
     ):
         glider_size = (
             size
@@ -181,6 +182,7 @@ class RockGlider(Meteor):
             vx=vx,
             vy=vy,
             aggressiveness_multiplier=aggressiveness_multiplier,
+            inverted_vertical=inverted_vertical,
         )
 
         # Pedras maiores ficam mais lentas; pedras menores, mais rapidas.

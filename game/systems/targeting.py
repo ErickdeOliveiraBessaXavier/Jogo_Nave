@@ -9,7 +9,7 @@ A função é pura: não muta entidades, não emite eventos.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Iterable, Optional
+from typing import TYPE_CHECKING, Any, Iterable, Optional, cast
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -29,7 +29,7 @@ def target_point(enemy: Any) -> Optional[tuple[float, float]]:
     """
     collision_circle = getattr(enemy, "collision_circle", None)
     if callable(collision_circle):
-        cx, cy, _r = collision_circle()
+        cx, cy, _r = cast("tuple[float, float, float]", collision_circle())
         return float(cx), float(cy)
     if hasattr(enemy, "w") and hasattr(enemy, "h"):
         return float(enemy.x + enemy.w / 2), float(enemy.y + enemy.h / 2)
