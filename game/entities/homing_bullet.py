@@ -4,6 +4,7 @@ from typing import Any, Iterable
 import pygame
 
 from ..core.config import config as Config
+from ..systems.targeting import is_targetable, target_point
 
 
 class HomingBullet:
@@ -80,19 +81,27 @@ class HomingBullet:
         if self.life <= 0.0:
             self.dead = True
 
+    def _target_center(self, target: Any) -> tuple[float, float] | None:
+        """Ponto de mira do alvo via geometria precisa compartilhada.
+
+        Essencial para o boss da Serpente, cujo ``(x, y, w, h)`` é um bound
+        fixo de tela inteira: ``target_point`` segue a cabeça via
+        ``collision_circle``. Mirar em ``x + w/2`` levaria o projétil a um
+        ponto invisível no topo central da tela.
+        """
+        return target_point(target)
+
     def _find_best_target(self, enemies: Iterable[Any]) -> Any | None:
         best = None
         best_d = float("inf")
         for e in enemies:
-            if getattr(e, "dead", False):
+            # Ignora mortos e invulneráveis (boss em entrada/fase protegida).
+            if not is_targetable(e):
                 continue
-            ex = getattr(e, "x", None)
-            ey = getattr(e, "y", None)
-            ew = getattr(e, "w", getattr(getattr(e, "rect", None), "width", 0))
-            eh = getattr(e, "h", getattr(getattr(e, "rect", None), "height", 0))
-            if ex is None or ey is None:
+            center = self._target_center(e)
+            if center is None:
                 continue
-            cx, cy = ex + ew / 2, ey + eh / 2
+            cx, cy = center
             d = (cx - (self.x + self.w / 2)) ** 2 + (cy - (self.y + self.h / 2)) ** 2
             if d < best_d:
                 best_d = d
@@ -124,20 +133,22 @@ class HomingBullet:
             self.dead = True
             return
 
-        # Homing logic: preferir locked_target se ainda vivo, senão buscar o mais próximo.
+        # Homing logic: preferir locked_target se ainda alvejável, senão buscar
+        # o mais próximo. Re-adquire se o alvo morreu OU ficou invulnerável
+        # (ex.: cabeça da Serpente volta a ficar protegida).
         if enemies:
-            if self.locked_target is not None and getattr(
-                self.locked_target, "dead", False
+            if self.locked_target is not None and not is_targetable(
+                self.locked_target
             ):
-                self.locked_target = None  # alvo morreu — libera para busca livre
+                self.locked_target = None
             target = (
                 self.locked_target
                 if self.locked_target is not None
                 else self._find_best_target(enemies)
             )
-            if target is not None:
-                tx = getattr(target, "x", 0) + getattr(target, "w", 0) / 2
-                ty = getattr(target, "y", 0) + getattr(target, "h", 0) / 2
+            center = self._target_center(target) if target is not None else None
+            if center is not None:
+                tx, ty = center
                 cx = self.x + self.w / 2
                 cy = self.y + self.h / 2
                 desired = math.atan2(ty - cy, tx - cx)
