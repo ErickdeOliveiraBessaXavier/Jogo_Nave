@@ -72,15 +72,29 @@ class GameRenderer:
     def __init__(self, base_renderer: Any) -> None:
         self.r = base_renderer
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
-        self.warning_font = get_font(Config.WARNING_FONT_SIZE)
 
-        # Fontes do HUD
-        self.hud_font_tiny = get_font(10)
-        self.hud_font_small = get_font(13)
-        self.hud_font_medium = get_font(18)
-        self.hud_font_large = get_font(24)
-        self.hud_font_score = get_font(32)
-        self.hud_font_score_small = get_font(26)
+        # Escala de UI relativa ao design base (1280×720). Como todas as
+        # resoluções ofertadas são 16:9, um único fator (largura) cobre os dois
+        # eixos. O HUD é desenhado em pixels fixos do design base; sem este
+        # fator, fontes/caixas/slots ficavam desproporcionais fora de 720p
+        # (mesma convenção dos menus — ver memory/menu-ui-scale-convention).
+        # Em 720p ui_scale == 1.0, então o layout é idêntico ao original.
+        self.ui_scale = Config.SCREEN_WIDTH / 1280.0
+
+        self.warning_font = get_font(max(8, int(Config.WARNING_FONT_SIZE * self.ui_scale)))
+
+        # Fontes do HUD (escaladas)
+        self.hud_font_tiny = get_font(max(8, int(10 * self.ui_scale)))
+        self.hud_font_small = get_font(max(8, int(13 * self.ui_scale)))
+        self.hud_font_medium = get_font(max(8, int(18 * self.ui_scale)))
+        self.hud_font_large = get_font(max(8, int(24 * self.ui_scale)))
+        self.hud_font_score = get_font(max(8, int(32 * self.ui_scale)))
+        self.hud_font_score_small = get_font(max(8, int(26 * self.ui_scale)))
+
+    def _s(self, value: float) -> int:
+        """Escala um valor de pixel do design base (1280×720) para a resolução
+        lógica atual. Em 720p retorna o valor original (ui_scale == 1.0)."""
+        return int(value * self.ui_scale)
 
     def render(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """Método principal de renderização chamado a cada frame."""
@@ -208,13 +222,17 @@ class GameRenderer:
                 f"Max: {fps_stats['max_frame_time']:.1f}ms"
             )
             fps_surface = self.r.font_small.render(fps_text, True, colors.YELLOW)
-            self.game_surface.blit(fps_surface, (10, Config.SCREEN_HEIGHT - 30))
+            self.game_surface.blit(
+                fps_surface, (self._s(10), Config.SCREEN_HEIGHT - self._s(30))
+            )
 
         if frame.show_enemy_hitboxes:
             hitbox_text = self.r.font_small.render(
                 "F7 Hitbox Debug: ON", True, (255, 200, 40)
             )
-            self.game_surface.blit(hitbox_text, (10, Config.SCREEN_HEIGHT - 50))
+            self.game_surface.blit(
+                hitbox_text, (self._s(10), Config.SCREEN_HEIGHT - self._s(50))
+            )
 
         # 9. Blit final com Screen Shake
         surface.blit(self.game_surface, self._compute_shake_offset(frame))
@@ -289,9 +307,9 @@ class GameRenderer:
         self, frame: RenderFrame, surface: pygame.Surface
     ) -> None:
         """Desenha a barra de altitude durante o interstício de atmosfera."""
-        bar_w, bar_h = 300, 12
+        bar_w, bar_h = self._s(300), self._s(12)
         x = (Config.SCREEN_WIDTH - bar_w) // 2
-        y = 35  # Logo abaixo do topo, centralizada entre as caixas de score/status
+        y = self._s(35)  # Logo abaixo do topo, entre as caixas de score/status
 
         # Determina o label e a direção visual da altitude
         # Exiting: Planeta -> Espaço (Altitude sobe de 0% a 100%)
@@ -314,12 +332,12 @@ class GameRenderer:
 
         # Texto Centralizado acima da barra
         txt_surf = self.hud_font_tiny.render(label, True, colors.WHITE)
-        surface.blit(txt_surf, (x + (bar_w - txt_surf.get_width()) // 2, y - 16))
+        surface.blit(txt_surf, (x + (bar_w - txt_surf.get_width()) // 2, y - self._s(16)))
 
         # Porcentagem (opcional, pequeno do lado)
         pct_txt = f"{int(display_ratio * 100)}%"
         pct_surf = self.hud_font_tiny.render(pct_txt, True, colors.GRAY)
-        surface.blit(pct_surf, (x + bar_w + 10, y - 2))
+        surface.blit(pct_surf, (x + bar_w + self._s(10), y - self._s(2)))
 
     def _render_score_kills_box(
         self, frame: RenderFrame, surface: pygame.Surface
@@ -328,20 +346,22 @@ class GameRenderer:
         score_text: str = f"{frame.score:06d}"
         kills_text = f"KILLS: {frame.total_enemies_destroyed}"
 
-        # Calcular largura necessária
+        # Calcular largura necessária (threshold escalado junto das fontes)
+        score_w_limit = self._s(300)
         score_w = self.hud_font_score.size(score_text)[0]
-        if score_w > 300:
+        if score_w > score_w_limit:
             score_text = f"{frame.score:.2e}".replace("e+0", "e+").replace("e-0", "e-")
             score_w = self.hud_font_score.size(score_text)[0]
-            if score_w > 300:
+            if score_w > score_w_limit:
                 score_w = self.hud_font_score_small.size(score_text)[0]
         kills_w = self.hud_font_tiny.size(kills_text)[0]
         content_w = max(score_w, kills_w)
 
-        box_padding = 20
+        box_padding = self._s(20)
         box_w = content_w + (box_padding * 2)
-        box_h = 85
-        rect = pygame.Rect(15, 0, box_w, box_h)
+        box_h = self._s(85)
+        radius = self._s(15)
+        rect = pygame.Rect(self._s(15), 0, box_w, box_h)
 
         # Fundo da Caixa
         overlay = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
@@ -349,26 +369,26 @@ class GameRenderer:
             overlay,
             (0, 0, 0, 160),
             (0, 0, box_w, box_h),
-            border_bottom_left_radius=15,
-            border_bottom_right_radius=15,
+            border_bottom_left_radius=radius,
+            border_bottom_right_radius=radius,
         )
         surface.blit(overlay, rect.topleft)
 
         # Score
         score_font = (
             self.hud_font_score
-            if self.hud_font_score.size(score_text)[0] <= 300
+            if self.hud_font_score.size(score_text)[0] <= score_w_limit
             else self.hud_font_score_small
         )
         score_surf = score_font.render(score_text, True, colors.WHITE)
         surface.blit(
-            score_surf, (rect.centerx - score_surf.get_width() // 2, rect.top + 15)
+            score_surf, (rect.centerx - score_surf.get_width() // 2, rect.top + self._s(15))
         )
 
         # Kills
         kills_surf = self.hud_font_tiny.render(kills_text, True, colors.GRAY)
         surface.blit(
-            kills_surf, (rect.centerx - kills_surf.get_width() // 2, rect.top + 60)
+            kills_surf, (rect.centerx - kills_surf.get_width() // 2, rect.top + self._s(60))
         )
 
     def _render_players_status_box(
@@ -382,7 +402,9 @@ class GameRenderer:
         # Bloco P1
         p1_lives_txt = str(frame.lives)
         p1_lives_w = self.hud_font_large.size(p1_lives_txt)[0]
-        p1_block_w = 32 + 8 + p1_lives_w  # Icon (32) + Gap (8) + Text
+        icon_px = self._s(32)
+        block_gap = self._s(8)
+        p1_block_w = icon_px + block_gap + p1_lives_w  # Icon + Gap + Text
 
         # Bloco P2 ou Convite
         if is_coop:
@@ -396,18 +418,18 @@ class GameRenderer:
             p2_lives_w = (
                 self.hud_font_small if p2_info.is_dead else self.hud_font_large
             ).size(p2_lives_txt)[0]
-            p2_block_w = 32 + 8 + p2_lives_w
+            p2_block_w = icon_px + block_gap + p2_lives_w
         else:
             invite_w1 = self.hud_font_tiny.size("P2")[0]
             invite_w2 = self.hud_font_small.size("PRESS START")[0]
             p2_block_w = max(invite_w1, invite_w2)
 
         # 2. Definir dimensões da caixa com base no conteúdo
-        internal_gap = 40  # Espaço entre P1 e P2 (space-between feeling)
-        side_padding = 20
+        internal_gap = self._s(40)  # Espaço entre P1 e P2 (space-between feeling)
+        side_padding = self._s(20)
         box_w = p1_block_w + internal_gap + p2_block_w + (side_padding * 2)
-        box_h = 85
-        rect = pygame.Rect(Config.SCREEN_WIDTH - box_w - 15, 0, box_w, box_h)
+        box_h = self._s(85)
+        rect = pygame.Rect(Config.SCREEN_WIDTH - box_w - self._s(15), 0, box_w, box_h)
 
         # Fundo da Caixa
         overlay = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
@@ -415,8 +437,8 @@ class GameRenderer:
             overlay,
             (0, 0, 0, 160),
             (0, 0, box_w, box_h),
-            border_bottom_left_radius=15,
-            border_bottom_right_radius=15,
+            border_bottom_left_radius=self._s(15),
+            border_bottom_right_radius=self._s(15),
         )
         surface.blit(overlay, rect.topleft)
 
@@ -440,11 +462,11 @@ class GameRenderer:
                 )
                 surface.blit(
                     p2_label,
-                    (p2_rect.centerx - p2_label.get_width() // 2, p2_rect.top + 20),
+                    (p2_rect.centerx - p2_label.get_width() // 2, p2_rect.top + self._s(20)),
                 )
                 surface.blit(
                     invite_surf,
-                    (p2_rect.centerx - invite_surf.get_width() // 2, p2_rect.top + 40),
+                    (p2_rect.centerx - invite_surf.get_width() // 2, p2_rect.top + self._s(40)),
                 )
         else:
             p2_info = p2_hud
@@ -470,21 +492,22 @@ class GameRenderer:
         """Helper para renderizar info de um jogador dentro de sua área alocada."""
         # 1. Ícone da Nave + Vidas
         if ship and ship.ship_image:
-            icon = pygame.transform.scale(ship.ship_image, (32, 32))
+            icon_px = self._s(32)
+            icon = pygame.transform.scale(ship.ship_image, (icon_px, icon_px))
 
             # Vidas ou Status Morto
             if is_p2 and p2_info and p2_info.is_dead:
                 pct = int(p2_info.beacon_progress * 100)
                 txt = self.hud_font_small.render(f"{pct}%", True, colors.CYAN)
-                txt_y_offset = 20
+                txt_y_offset = self._s(20)
             else:
                 txt = self.hud_font_large.render(str(lives), True, colors.WHITE)
-                txt_y_offset = 14
+                txt_y_offset = self._s(14)
 
             # O rect passado já define a largura exata do bloco (Ícone + Gap + Texto)
             # Então apenas desenhamos a partir da esquerda do rect.
-            surface.blit(icon, (rect.left, rect.top + 12))
-            surface.blit(txt, (rect.left + 40, rect.top + txt_y_offset))
+            surface.blit(icon, (rect.left, rect.top + self._s(12)))
+            surface.blit(txt, (rect.left + self._s(40), rect.top + txt_y_offset))
 
         # 2. Powerups Ativos (Mini ícones na parte de baixo do rect)
         self._render_active_powerups_in_box(surface, ship, rect)
@@ -514,9 +537,9 @@ class GameRenderer:
         if not active:
             return
 
-        icon_size = 20
-        gap = 4
-        y = rect.top + 55
+        icon_size = self._s(20)
+        gap = self._s(4)
+        y = rect.top + self._s(55)
 
         # Centralizar ícones na área do jogador
         total_w = len(active) * (icon_size + gap) - gap
@@ -531,22 +554,23 @@ class GameRenderer:
             data = self.POWERUP_UI_DATA.get(key, default_data)
 
             icon_rect = pygame.Rect(curr_x, y, icon_size, icon_size)
-            pygame.draw.rect(surface, (20, 20, 30, 180), icon_rect, border_radius=4)
+            radius = self._s(4)
+            pygame.draw.rect(surface, (20, 20, 30, 180), icon_rect, border_radius=radius)
             pygame.draw.rect(
-                surface, data["color"], icon_rect, width=1, border_radius=4
+                surface, data["color"], icon_rect, width=1, border_radius=radius
             )
 
             sym_surf = self.hud_font_tiny.render(data["symbol"], True, data["color"])
             surface.blit(sym_surf, sym_surf.get_rect(center=icon_rect.center))
 
             # Mini barra de progresso horizontal
-            pygame.draw.rect(
-                surface, (40, 40, 40), (curr_x, y + icon_size + 1, icon_size, 2)
-            )
+            bar_y = y + icon_size + self._s(1)
+            bar_h = max(1, self._s(2))
+            pygame.draw.rect(surface, (40, 40, 40), (curr_x, bar_y, icon_size, bar_h))
             pygame.draw.rect(
                 surface,
                 data["color"],
-                (curr_x, y + icon_size + 1, int(icon_size * ratio), 2),
+                (curr_x, bar_y, int(icon_size * ratio), bar_h),
             )
 
             curr_x += icon_size + gap
@@ -691,22 +715,32 @@ class GameRenderer:
             )
 
         # Conteúdo (fontes menores que antes: 11/18 vs 14/22).
-        f_label, f_value = get_font(11), get_font(18)
+        f_label, f_value = (
+            get_font(max(8, int(11 * self.ui_scale))),
+            get_font(max(8, int(18 * self.ui_scale))),
+        )
         label = f_label.render("COMBO", True, (200, 200, 210))
         value = f_value.render(f"x{kills}", True, accent)
         pct = f_label.render(f"+{int(round(bonus * 100))}%", True, accent)
 
-        pad, gap, bar_h, value_gap = 8, 3, 4, 6
-        inner_w = max(label.get_width(), value.get_width() + value_gap + pct.get_width(), 60)
+        pad, gap, bar_h, value_gap = self._s(8), self._s(3), self._s(4), self._s(6)
+        inner_w = max(
+            label.get_width(),
+            value.get_width() + value_gap + pct.get_width(),
+            self._s(60),
+        )
         inner_h = label.get_height() + gap + value.get_height() + gap + bar_h
         panel_w, panel_h = inner_w + pad * 2, inner_h + pad * 2
 
         # Painel próprio: permite escalar no 'pop' sem distorcer o resto do HUD.
         panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
         rect = pygame.Rect(0, 0, panel_w, panel_h)
-        pygame.draw.rect(panel, (16, 16, 24, 205), rect, border_radius=8)
+        panel_radius = self._s(8)
+        pygame.draw.rect(panel, (16, 16, 24, 205), rect, border_radius=panel_radius)
         border_col = accent if kills > 0 else (70, 70, 82)
-        pygame.draw.rect(panel, (*border_col, 255), rect, 2 if at_cap else 1, border_radius=8)
+        pygame.draw.rect(
+            panel, (*border_col, 255), rect, 2 if at_cap else 1, border_radius=panel_radius
+        )
 
         panel.blit(label, (pad, pad))
         vy = pad + label.get_height() + gap
@@ -730,7 +764,7 @@ class GameRenderer:
             panel = pygame.transform.smoothscale(panel, (sw, sh))
 
         # Âncora na borda inferior-direita: cresce do canto, nunca sai da tela.
-        margin = 16
+        margin = self._s(16)
         surface.blit(panel, (Config.SCREEN_WIDTH - margin - sw,
                              Config.SCREEN_HEIGHT - margin - sh))
 
@@ -751,9 +785,13 @@ class GameRenderer:
         if not groups:
             return
 
-        font_label, font_hint, font_icon = get_font(20), get_font(12), get_font(18)
-        font_group = get_font(11)
-        slot_size, gap, group_gap = 56, 12, 28
+        font_label, font_hint, font_icon = (
+            get_font(max(8, int(20 * self.ui_scale))),
+            get_font(max(8, int(12 * self.ui_scale))),
+            get_font(max(8, int(18 * self.ui_scale))),
+        )
+        font_group = get_font(max(8, int(11 * self.ui_scale)))
+        slot_size, gap, group_gap = self._s(56), self._s(12), self._s(28)
 
         # Largura total
         total_w = 0
@@ -764,7 +802,7 @@ class GameRenderer:
                 total_w += group_gap
 
         # Centralizado abaixo da barra de score
-        start_x, y = (Config.SCREEN_WIDTH - total_w) // 2, 65
+        start_x, y = (Config.SCREEN_WIDTH - total_w) // 2, self._s(65)
 
         cur_x = start_x
         for g_ship, group_label, hint_keys in groups:
@@ -776,17 +814,18 @@ class GameRenderer:
                 label_surf = font_group.render(group_label, True, colors.CYAN)
                 surface.blit(
                     label_surf,
-                    (cur_x + (group_w - label_surf.get_width()) // 2, y - 14),
+                    (cur_x + (group_w - label_surf.get_width()) // 2, y - self._s(14)),
                 )
 
             for i, kind in enumerate(slots):
                 x = cur_x + i * (slot_size + gap)
                 slot_surface = pygame.Surface((slot_size, slot_size), pygame.SRCALPHA)
+                slot_radius = self._s(8)
                 pygame.draw.rect(
                     slot_surface,
                     (20, 20, 30, 200),
                     (0, 0, slot_size, slot_size),
-                    border_radius=8,
+                    border_radius=slot_radius,
                 )
 
                 border_color = (
@@ -797,12 +836,13 @@ class GameRenderer:
                     border_color,
                     (0, 0, slot_size, slot_size),
                     2,
-                    border_radius=8,
+                    border_radius=slot_radius,
                 )
 
                 key_label = hint_keys[i] if i < len(hint_keys) else str(i + 1)
                 slot_surface.blit(
-                    font_hint.render(key_label, True, colors.WHITE), (5, 3)
+                    font_hint.render(key_label, True, colors.WHITE),
+                    (self._s(5), self._s(3)),
                 )
 
                 if kind is not None:
@@ -815,9 +855,10 @@ class GameRenderer:
                         },
                     )
                     color = data["color"]
-                    center = (slot_size // 2, slot_size // 2 + 4)
-                    pygame.draw.circle(slot_surface, color, center, 16)
-                    pygame.draw.circle(slot_surface, colors.WHITE, center, 16, 2)
+                    circle_r = self._s(16)
+                    center = (slot_size // 2, slot_size // 2 + self._s(4))
+                    pygame.draw.circle(slot_surface, color, center, circle_r)
+                    pygame.draw.circle(slot_surface, colors.WHITE, center, circle_r, 2)
                     symbol = data["symbol"]
                     content = font_icon.render(symbol, True, colors.BLACK)
                     slot_surface.blit(content, content.get_rect(center=center))
@@ -839,10 +880,13 @@ class GameRenderer:
         if not active_slots:
             return
 
-        font, font_small = get_font(20), get_font(12)
-        slot_w, slot_h = 50, 50
-        gap = 10
-        pad_x, pad_y = 15, 10
+        font, font_small = (
+            get_font(max(8, int(20 * self.ui_scale))),
+            get_font(max(8, int(12 * self.ui_scale))),
+        )
+        slot_w, slot_h = self._s(50), self._s(50)
+        gap = self._s(10)
+        pad_x, pad_y = self._s(15), self._s(10)
 
         # Calcular dimensões do container
         n = len(active_slots)
@@ -862,8 +906,8 @@ class GameRenderer:
             overlay,
             (0, 0, 0, 160),
             (0, 0, container_w, container_h),
-            border_top_left_radius=15,
-            border_top_right_radius=15,
+            border_top_left_radius=self._s(15),
+            border_top_right_radius=self._s(15),
         )
         surface.blit(overlay, container_rect.topleft)
 
@@ -874,15 +918,19 @@ class GameRenderer:
             slot_y = container_rect.top + pad_y
 
             slot_surface = pygame.Surface((slot_w, slot_h), pygame.SRCALPHA)
+            slot_radius = self._s(8)
             pygame.draw.rect(
-                slot_surface, (30, 30, 30, 180), (0, 0, slot_w, slot_h), border_radius=8
+                slot_surface,
+                (30, 30, 30, 180),
+                (0, 0, slot_w, slot_h),
+                border_radius=slot_radius,
             )
             pygame.draw.rect(
                 slot_surface,
                 (*colors.WHITE, 200),
                 (0, 0, slot_w, slot_h),
                 2,
-                border_radius=8,
+                border_radius=slot_radius,
             )
 
             try:
@@ -890,7 +938,10 @@ class GameRenderer:
                 key_label = pygame.key.name(keycode).upper()
             except (IndexError, TypeError):
                 key_label = str(i + 1)
-            slot_surface.blit(font_small.render(key_label, True, colors.WHITE), (4, 2))
+            slot_surface.blit(
+                font_small.render(key_label, True, colors.WHITE),
+                (self._s(4), self._s(2)),
+            )
 
             ui = upg.get_ui_state()
             icon = get_upgrade_icon(
@@ -910,25 +961,31 @@ class GameRenderer:
             cd_base = float(ui["cooldown"]) if ui.get("cooldown") is not None else 1.0
             if cd_left > 0.0:
                 pct = max(0.0, min(1.0, cd_left / cd_base))
-                bar_h = 4
+                bar_h = max(1, self._s(4))
+                inset = self._s(2)
+                bar_inner_w = slot_w - self._s(4)
+                bar_y = slot_h - bar_h - inset
                 pygame.draw.rect(
                     slot_surface,
                     (120, 120, 120, 150),
-                    (2, slot_h - bar_h - 2, slot_w - 4, bar_h),
-                    border_radius=2,
+                    (inset, bar_y, bar_inner_w, bar_h),
+                    border_radius=self._s(2),
                 )
                 pygame.draw.rect(
                     slot_surface,
                     (80, 180, 255, 200),
-                    (2, slot_h - bar_h - 2, int((slot_w - 4) * pct), bar_h),
-                    border_radius=2,
+                    (inset, bar_y, int(bar_inner_w * pct), bar_h),
+                    border_radius=self._s(2),
                 )
 
             charges = ui.get("charges_left")
             if charges is not None:
                 c_txt = font_small.render(f"{charges}", True, colors.WHITE)
                 slot_surface.blit(
-                    c_txt, c_txt.get_rect(bottomright=(slot_w - 3, slot_h - 3))
+                    c_txt,
+                    c_txt.get_rect(
+                        bottomright=(slot_w - self._s(3), slot_h - self._s(3))
+                    ),
                 )
 
             surface.blit(slot_surface, (slot_x, slot_y))
@@ -939,24 +996,25 @@ class GameRenderer:
                     colors.GREEN,
                     pygame.Rect(slot_x, slot_y, slot_w, slot_h),
                     3,
-                    border_radius=8,
+                    border_radius=self._s(8),
                 )
 
             if frame.upgrade_select_mode and i == frame.upgrade_select_index:
                 t_ticks = pygame.time.get_ticks()
                 shake_x = int(math.sin(t_ticks / 35.0) * 2)
                 shake_y = int(math.cos(t_ticks / 42.0) * 2)
+                grow = self._s(3)
                 pygame.draw.rect(
                     surface,
                     colors.CUSTOM_GOLD,
                     pygame.Rect(
-                        slot_x - 3 + shake_x,
-                        slot_y - 3 + shake_y,
-                        slot_w + 6,
-                        slot_h + 6,
+                        slot_x - grow + shake_x,
+                        slot_y - grow + shake_y,
+                        slot_w + grow * 2,
+                        slot_h + grow * 2,
                     ),
                     3,
-                    border_radius=10,
+                    border_radius=self._s(10),
                 )
 
         if frame.upgrade_select_mode:
@@ -967,6 +1025,6 @@ class GameRenderer:
                 hint,
                 (
                     container_rect.centerx - hint.get_width() // 2,
-                    container_rect.top - 25,
+                    container_rect.top - self._s(25),
                 ),
             )

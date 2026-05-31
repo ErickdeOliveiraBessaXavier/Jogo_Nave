@@ -17,30 +17,31 @@ class PausedScene(Scene):
         super().__init__(app)
         self.r = app.renderer  # Usar renderer compartilhado
         self.previous_scene = previous_scene
-        self.title_font = get_font(60)
-        self.button_font = get_font(22)
-        self.hint_font = get_font(14)
+        self.title_font = get_font(max(8, int(60 * self.ui_scale)))
+        self.button_font = get_font(max(8, int(22 * self.ui_scale)))
+        self.hint_font = get_font(max(8, int(14 * self.ui_scale)))
         self.go_to_settings = False
         self.go_to_menu = False
         self.first_entry = True
 
         # Button Rects and Texts
-        self.continue_button_rect = pygame.Rect(0, 0, 280, 60)
+        btn_w, btn_h = self._s(280), self._s(60)
+        self.continue_button_rect = pygame.Rect(0, 0, btn_w, btn_h)
         self.continue_button_rect.center = (
             Config.SCREEN_WIDTH // 2,
-            Config.SCREEN_HEIGHT // 2 - 40,
+            Config.SCREEN_HEIGHT // 2 - self._s(40),
         )
 
-        self.settings_button_rect = pygame.Rect(0, 0, 280, 60)
+        self.settings_button_rect = pygame.Rect(0, 0, btn_w, btn_h)
         self.settings_button_rect.center = (
             Config.SCREEN_WIDTH // 2,
-            Config.SCREEN_HEIGHT // 2 + 40,
+            Config.SCREEN_HEIGHT // 2 + self._s(40),
         )
 
-        self.menu_button_rect = pygame.Rect(0, 0, 280, 60)
+        self.menu_button_rect = pygame.Rect(0, 0, btn_w, btn_h)
         self.menu_button_rect.center = (
             Config.SCREEN_WIDTH // 2,
-            Config.SCREEN_HEIGHT // 2 + 120,
+            Config.SCREEN_HEIGHT // 2 + self._s(120),
         )
 
         # Hover states
@@ -204,7 +205,7 @@ class PausedScene(Scene):
         # Hint
         hint_text = self.hint_font.render("Pressione P para continuar", True, WHITE)
         hint_rect = hint_text.get_rect(
-            center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT - 40)
+            center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT - self._s(40))
         )
         surface.blit(hint_text, hint_rect)
 
@@ -224,7 +225,7 @@ class PausedScene(Scene):
             border_color = CUSTOM_GOLD if is_hovered else CUSTOM_PURPLE
 
         # Apenas borda, sem fundo
-        pygame.draw.rect(surface, border_color, rect, 2, border_radius=10)
+        pygame.draw.rect(surface, border_color, rect, 2, border_radius=self._s(10))
 
         # Texto centralizado
         text_surf = self.button_font.render(text, True, WHITE)

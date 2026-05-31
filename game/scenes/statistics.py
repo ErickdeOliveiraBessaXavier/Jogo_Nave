@@ -69,11 +69,17 @@ class StatisticsView:
         self.profile: PlayerProfile | None = None
         self.dialog: ConfirmationDialog | None = None
 
+        # Escala de UI (CLAUDE.md §12). Esta View não é uma Scene, então mantém
+        # o próprio fator/helper.
+        from ..core.config import config as Config
+
+        self.ui_scale = Config.SCREEN_WIDTH / 1280.0
+
         # Fonts
-        self.title_font = get_font(36)
-        self.header_font = get_font(18)
-        self.item_font = get_font(16)
-        self.small_font = get_font(13)
+        self.title_font = get_font(max(8, int(36 * self.ui_scale)))
+        self.header_font = get_font(max(8, int(18 * self.ui_scale)))
+        self.item_font = get_font(max(8, int(16 * self.ui_scale)))
+        self.small_font = get_font(max(8, int(13 * self.ui_scale)))
 
         # Sistema de abas
         self.current_tab = StatTab.OVERVIEW
@@ -94,51 +100,55 @@ class StatisticsView:
 
         self._calculate_layout()
 
+    def _s(self, value: float) -> int:
+        """Escala um valor de pixel do design base (1280×720)."""
+        return int(value * self.ui_scale)
+
     def _calculate_layout(self):
         from ..core.config import config as Config
 
         screen_w, screen_h = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
 
         # Dimensões e espaçamentos consistentes com settings.py
-        outer_pad = 40
+        outer_pad = self._s(40)
 
         # Abas
         num_tabs = len(StatTab)
-        tab_h = 50
-        tab_gap = 20
+        tab_h = self._s(50)
+        tab_gap = self._s(20)
 
         # Área de Conteúdo
         # Altura total do bloco (abas + gap + conteúdo)
-        total_content_height = screen_h - 220  # Reservar espaço para título e botões
+        total_content_height = screen_h - self._s(220)  # Espaço p/ título e botões
 
         # Centralizar o bloco verticalmente
-        block_y = (screen_h - total_content_height) // 2 + 20
+        block_y = (screen_h - total_content_height) // 2 + self._s(20)
 
         available_width = screen_w - (2 * outer_pad)
         tab_w = (available_width - (num_tabs - 1) * tab_gap) / num_tabs
 
+        content_gap = self._s(10)
         tab_buttons: List[pygame.Rect] = []
         for i, _ in enumerate(StatTab):
             rect = pygame.Rect(outer_pad + i * (tab_w + tab_gap), block_y, tab_w, tab_h)
             tab_buttons.append(rect)
         self.layout_rects["tab_buttons"] = tab_buttons
 
-        content_y = (
-            block_y + tab_h + 10
-        )  # Reduzido gap para aproximar conteúdo das abas
+        content_y = block_y + tab_h + content_gap  # gap reduzido p/ aproximar das abas
         self.layout_rects["content_area"] = pygame.Rect(
-            outer_pad, content_y, available_width, total_content_height - tab_h - 10
+            outer_pad, content_y, available_width, total_content_height - tab_h - content_gap
         )
 
         # Botões de Ação
-        btn_w = 160
-        btn_h = 40
+        btn_w = self._s(160)
+        btn_h = self._s(40)
+        btn_bottom_y = screen_h - self._s(60)
 
         self.layout_rects["back_button"] = pygame.Rect(
-            outer_pad, screen_h - 60, btn_w, btn_h
+            outer_pad, btn_bottom_y, btn_w, btn_h
         )
         self.layout_rects["reset_button"] = pygame.Rect(
-            screen_w - outer_pad - btn_w, screen_h - 60, btn_w, btn_h
+            screen_w - outer_pad - btn_w, btn_bottom_y, btn_w, btn_h
         )
 
     def _switch_tab(self, new_tab: StatTab):
@@ -280,14 +290,14 @@ class StatisticsView:
         """Renderiza a view."""
         # Calcular alpha baseado no progresso
         alpha = int(255 * self.entry_progress)
-        offset_y = int(30 * (1.0 - self.entry_progress))
+        offset_y = int(self._s(30) * (1.0 - self.entry_progress))
 
         # Título
         title_surf = self.title_font.render("Estatísticas", True, CUSTOM_GOLD)
         title_surf.set_alpha(alpha)
         # Centralizar título
         title_x = (surface.get_width() - title_surf.get_width()) // 2
-        surface.blit(title_surf, (title_x, 20 + offset_y))
+        surface.blit(title_surf, (title_x, self._s(20) + offset_y))
 
         if not self.profile:
             # Tratamento se o perfil não carregar
@@ -358,19 +368,21 @@ class StatisticsView:
             )
 
             # Criar surface temporária para aplicar alpha
+            pad = self._s(2)
+            radius = self._s(8)
             temp_surface = pygame.Surface(
-                (rect.width + 4, rect.height + 4), pygame.SRCALPHA
+                (rect.width + pad * 2, rect.height + pad * 2), pygame.SRCALPHA
             )
-            temp_rect = pygame.Rect(2, 2, rect.width, rect.height)
+            temp_rect = pygame.Rect(pad, pad, rect.width, rect.height)
             pygame.draw.rect(
                 temp_surface,
                 (*border_color, alpha),
                 temp_rect,
                 2,
-                border_top_left_radius=8,
-                border_top_right_radius=8,
+                border_top_left_radius=radius,
+                border_top_right_radius=radius,
             )
-            surface.blit(temp_surface, (rect.x - 2, rect.y - 2))
+            surface.blit(temp_surface, (rect.x - pad, rect.y - pad))
 
             text_surf = self.item_font.render(tab.value, True, text_color)
             text_surf.set_alpha(alpha)
@@ -397,12 +409,13 @@ class StatisticsView:
             (*colors.GRAY, alpha),
             pygame.Rect(1, 1, content_rect.width, content_rect.height),
             1,
-            border_radius=8,
+            border_radius=self._s(8),
         )
         surface.blit(temp_surface, (content_rect.x - 1, content_rect.y - 1))
 
         # Clipping para garantir que o conteúdo não saia da área
-        clip_area = content_rect.inflate(-20, -20)
+        clip_inset = self._s(20)
+        clip_area = content_rect.inflate(-clip_inset, -clip_inset)
         surface.set_clip(clip_area)
 
         if self.current_tab == StatTab.OVERVIEW:
@@ -421,7 +434,7 @@ class StatisticsView:
             return
         summary = ProfileStatsFormatter.statistics_summary(self.profile)
 
-        indent_x = 30
+        indent_x = self._s(30)
 
         # Dados para exibição
         stats_data = [
@@ -438,17 +451,20 @@ class StatisticsView:
 
         # Configuração de Layout
         cols = 2
-        col_width = (area.width - 60) / cols  # Ajustado para novo indent
+        col_width = (area.width - self._s(60)) / cols  # Ajustado para novo indent
+        row_h = self._s(35)
+        recom_lh = self._s(28)
+        card_pad = self._s(60)  # header (15) + offset stats (60-15) por card
 
         # Calcular altura do Card 1
         rows = (len(stats_data) + cols - 1) // cols
-        card1_height = 60 + rows * 35 + 20
+        card1_height = card_pad + rows * row_h + self._s(20)
 
         # Calcular altura do Card 2
         num_recom = len(summary["recommendations"]) if summary["recommendations"] else 1
-        card2_height = 60 + num_recom * 28 + 20
+        card2_height = card_pad + num_recom * recom_lh + self._s(20)
 
-        total_height = card1_height + 20 + card2_height
+        total_height = card1_height + self._s(20) + card2_height
 
         visible_height = area.height
         if total_height > visible_height:
@@ -468,15 +484,15 @@ class StatisticsView:
 
         header = self.header_font.render("Resumo do Piloto", True, CUSTOM_GOLD)
         header.set_alpha(alpha)
-        content_surface.blit(header, (card_rect.x + indent_x, card_rect.y + 15))
+        content_surface.blit(header, (card_rect.x + indent_x, card_rect.y + self._s(15)))
 
-        stats_y = card_rect.y + 60
+        stats_y = card_rect.y + self._s(60)
 
         for i, (label, value) in enumerate(stats_data):
             col = i % cols
             row = i // cols
             x_pos = card_rect.x + indent_x + col * col_width
-            y_pos = stats_y + row * 35
+            y_pos = stats_y + row * row_h
 
             label_surf = self.item_font.render(label, True, colors.GRAY)
             label_surf.set_alpha(alpha)
@@ -486,7 +502,7 @@ class StatisticsView:
             value_surf.set_alpha(alpha)
             content_surface.blit(value_surf, (x_pos + label_surf.get_width(), y_pos))
 
-        current_y += card1_height + 20
+        current_y += card1_height + self._s(20)
 
         # --- Card 2: Recomendações ---
         recom_rect = pygame.Rect(0, current_y, area.width, card2_height)
@@ -494,24 +510,24 @@ class StatisticsView:
 
         header = self.header_font.render("Recomendações", True, CUSTOM_GOLD)
         header.set_alpha(alpha)
-        content_surface.blit(header, (recom_rect.x + indent_x, recom_rect.y + 15))
+        content_surface.blit(header, (recom_rect.x + indent_x, recom_rect.y + self._s(15)))
 
-        recom_y_inner = recom_rect.y + 60
+        recom_y_inner = recom_rect.y + self._s(60)
         if summary["recommendations"]:
             for recom in summary["recommendations"]:
                 recom_surf = self.small_font.render(f"• {recom}", True, colors.GRAY)
                 recom_surf.set_alpha(alpha)
                 content_surface.blit(
-                    recom_surf, (recom_rect.x + indent_x + 5, recom_y_inner)
+                    recom_surf, (recom_rect.x + indent_x + self._s(5), recom_y_inner)
                 )
-                recom_y_inner += 28
+                recom_y_inner += recom_lh
         else:
             recom_surf = self.small_font.render(
                 "Nenhuma recomendação no momento. Continue jogando!", True, colors.GRAY
             )
             recom_surf.set_alpha(alpha)
             content_surface.blit(
-                recom_surf, (recom_rect.x + indent_x + 5, recom_y_inner)
+                recom_surf, (recom_rect.x + indent_x + self._s(5), recom_y_inner)
             )
 
         content_surface.set_alpha(alpha)
@@ -527,12 +543,15 @@ class StatisticsView:
         if not self.profile:
             return
 
-        indent_x = 30
+        indent_x = self._s(30)
+        line_spacing = self._s(25)
+        card_extra = self._s(20) + self._s(10)  # padding topo+base do card
+        card_gap = self._s(15)
         header = self.header_font.render("Performance por Nível", True, CUSTOM_GOLD)
         header.set_alpha(alpha)
         surface.blit(header, (area.x + indent_x, area.y))
 
-        y = area.y + 50
+        y = area.y + self._s(50)
         if not self.profile.level_stats:
             text = self.item_font.render(
                 "Nenhum nível jogado ainda.", True, colors.GRAY
@@ -549,10 +568,10 @@ class StatisticsView:
             num_lines = 3
             if stats.best_time:
                 num_lines += 2
-            card_height = 20 + (num_lines * 25) + 10
-            total_height += card_height + 15
+            card_height = card_extra + (num_lines * line_spacing)
+            total_height += card_height + card_gap
 
-        visible_height = area.height - 50
+        visible_height = area.height - self._s(50)
         if total_height > visible_height:
             self.scroll_y = max(0, min(self.scroll_y, total_height - visible_height))
         else:
@@ -568,7 +587,7 @@ class StatisticsView:
             num_lines = 3
             if stats.best_time:
                 num_lines += 2
-            card_height = 20 + (num_lines * 25) + 10
+            card_height = card_extra + (num_lines * line_spacing)
             card_rect = pygame.Rect(0, content_y, area.width, card_height)
             self._draw_card_background(content_surface, card_rect, alpha)
 
@@ -584,12 +603,12 @@ class StatisticsView:
             pygame.draw.rect(
                 content_surface,
                 (*bar_color, alpha),
-                (card_rect.x, card_rect.y, 10, card_rect.height),
-                border_radius=8,
+                (card_rect.x, card_rect.y, self._s(10), card_rect.height),
+                border_radius=self._s(8),
             )
 
-            line_y = card_rect.y + 15
-            line_spacing = 25
+            line_y = card_rect.y + self._s(15)
+            gap5 = self._s(5)
 
             level_label = self.item_font.render("Nível", True, colors.GRAY)
             level_label.set_alpha(alpha)
@@ -598,9 +617,9 @@ class StatisticsView:
             content_surface.blit(level_label, (card_rect.x + indent_x, line_y))
             content_surface.blit(
                 level_value,
-                (card_rect.x + indent_x + level_label.get_width() + 5, line_y),
+                (card_rect.x + indent_x + level_label.get_width() + gap5, line_y),
             )
-            line_y += line_spacing + 10
+            line_y += line_spacing + self._s(10)
 
             attempts_label = self.small_font.render("Tentativas:", True, colors.GRAY)
             attempts_label.set_alpha(alpha)
@@ -611,7 +630,7 @@ class StatisticsView:
             content_surface.blit(attempts_label, (card_rect.x + indent_x, line_y))
             content_surface.blit(
                 attempts_value,
-                (card_rect.x + indent_x + attempts_label.get_width() + 5, line_y),
+                (card_rect.x + indent_x + attempts_label.get_width() + gap5, line_y),
             )
             line_y += line_spacing
 
@@ -624,7 +643,7 @@ class StatisticsView:
             content_surface.blit(success_label, (card_rect.x + indent_x, line_y))
             content_surface.blit(
                 success_value,
-                (card_rect.x + indent_x + success_label.get_width() + 5, line_y),
+                (card_rect.x + indent_x + success_label.get_width() + gap5, line_y),
             )
             line_y += line_spacing
 
@@ -638,7 +657,7 @@ class StatisticsView:
                 content_surface.blit(time_label, (card_rect.x + indent_x, line_y))
                 content_surface.blit(
                     time_value,
-                    (card_rect.x + indent_x + time_label.get_width() + 5, line_y),
+                    (card_rect.x + indent_x + time_label.get_width() + gap5, line_y),
                 )
                 line_y += line_spacing
 
@@ -653,10 +672,10 @@ class StatisticsView:
                 content_surface.blit(score_label, (card_rect.x + indent_x, line_y))
                 content_surface.blit(
                     score_value,
-                    (card_rect.x + indent_x + score_label.get_width() + 5, line_y),
+                    (card_rect.x + indent_x + score_label.get_width() + gap5, line_y),
                 )
 
-            content_y += card_rect.height + 15
+            content_y += card_rect.height + card_gap
 
         # Aplicar alpha à superfície de conteúdo
         content_surface.set_alpha(alpha)
@@ -664,7 +683,7 @@ class StatisticsView:
         # Blitar a parte visível da superfície de conteúdo
         surface.blit(
             content_surface,
-            (area.x, area.y + 50),
+            (area.x, area.y + self._s(50)),
             area=(0, self.scroll_y, area.width, visible_height),
         )
 
@@ -675,17 +694,17 @@ class StatisticsView:
             return
 
         # Indentação padrão para alinhar com as colunas da tabela
-        indent_x = 30
+        indent_x = self._s(30)
 
         header = self.header_font.render("HALL DA FAMA", True, CUSTOM_GOLD)
         header.set_alpha(alpha)
         surface.blit(header, (area.x + indent_x, area.y))
 
         # Filtros por dificuldade (Todas, Casual, Normal, Hardcore, Pesadelo)
-        filters_y = area.y + 50  # Aumentado de 40 para 50 para mais respiro
-        btn_h = 30
-        btn_padding_x = 14
-        btn_gap = 10
+        filters_y = area.y + self._s(50)  # respiro extra
+        btn_h = self._s(30)
+        btn_padding_x = self._s(14)
+        btn_gap = self._s(10)
         cursor_x = area.x + indent_x
         self._difficulty_filter_rects = []
         filter_options: List[Optional[DifficultyPreset]] = [
@@ -733,7 +752,9 @@ class StatisticsView:
 
             if bg_color[3] > 0:
                 bg_surf = pygame.Surface(rect.size, pygame.SRCALPHA)
-                pygame.draw.rect(bg_surf, bg_color, bg_surf.get_rect(), border_radius=6)
+                pygame.draw.rect(
+                    bg_surf, bg_color, bg_surf.get_rect(), border_radius=self._s(6)
+                )
                 surface.blit(bg_surf, rect.topleft)
 
             border_surf = pygame.Surface(rect.size, pygame.SRCALPHA)
@@ -742,7 +763,7 @@ class StatisticsView:
                 (*border_color, alpha),
                 border_surf.get_rect(),
                 2 if is_active else 1,
-                border_radius=6,
+                border_radius=self._s(6),
             )
             surface.blit(border_surf, rect.topleft)
 
@@ -760,23 +781,25 @@ class StatisticsView:
         else:
             entries = all_entries
 
-        list_top = filters_y + btn_h + 30  # Aumentado gap para a tabela
+        list_top = filters_y + btn_h + self._s(30)  # gap para a tabela
         list_visible_height = area.height - (list_top - area.y)
 
         # Frame estilo Arcade
+        frame_pad = self._s(5)
+        frame_radius = self._s(10)
         frame_rect = pygame.Rect(
-            area.x, list_top - 5, area.width, list_visible_height + 5
+            area.x, list_top - frame_pad, area.width, list_visible_height + frame_pad
         )
         frame_surf = pygame.Surface(frame_rect.size, pygame.SRCALPHA)
         pygame.draw.rect(
-            frame_surf, (20, 20, 30, alpha), frame_surf.get_rect(), border_radius=10
+            frame_surf, (20, 20, 30, alpha), frame_surf.get_rect(), border_radius=frame_radius
         )
         pygame.draw.rect(
             frame_surf,
             (*CUSTOM_PURPLE, alpha // 2),
             frame_surf.get_rect(),
             2,
-            border_radius=10,
+            border_radius=frame_radius,
         )
         surface.blit(frame_surf, frame_rect.topleft)
 
@@ -787,22 +810,22 @@ class StatisticsView:
                 colors.GRAY,
             )
             empty.set_alpha(alpha)
-            surface.blit(empty, (area.x + indent_x, list_top + 40))
+            surface.blit(empty, (area.x + indent_x, list_top + self._s(40)))
             return
 
         # Layout de linha (Refinado para melhor espaçamento)
-        row_h = 52
-        col_rank_w = 80
-        col_initials_w = 150
-        col_score_w = 280
-        col_level_w = 150
-        col_diff_w = 220
-        col_date_w = 150
+        row_h = self._s(52)
+        col_rank_w = self._s(80)
+        col_initials_w = self._s(150)
+        col_score_w = self._s(280)
+        col_level_w = self._s(150)
+        col_diff_w = self._s(220)
+        col_date_w = self._s(150)
         row_padding_x = indent_x
 
         # Cabeçalho da tabela
-        header_h = 40
-        header_y = list_top + 10
+        header_h = self._s(40)
+        header_y = list_top + self._s(10)
         header_color = CUSTOM_GOLD
         col_titles = [
             ("#", col_rank_w),
@@ -822,9 +845,11 @@ class StatisticsView:
             surface.blit(txt, (cx, txt_y))
             cx += w
 
-        rows_top = header_y + header_h + 5
+        rows_top = header_y + header_h + self._s(5)
         total_height = row_h * len(entries)
-        visible_rows_height = max(0, list_visible_height - (rows_top - list_top) - 10)
+        visible_rows_height = max(
+            0, list_visible_height - (rows_top - list_top) - self._s(10)
+        )
         if total_height > visible_rows_height:
             self.scroll_y = max(
                 0, min(self.scroll_y, total_height - visible_rows_height)
@@ -853,7 +878,7 @@ class StatisticsView:
                     content_surface,
                     (*CUSTOM_GOLD, glow_alpha),
                     (0, row_y, area.width, row_h),
-                    border_radius=5,
+                    border_radius=self._s(5),
                 )
             elif idx < 3:
                 row_color = colors.LIGHT_GRAY
@@ -908,8 +933,9 @@ class StatisticsView:
                 diff_label = entry.difficulty.upper()
 
             # Desenhar fundo da badge
-            badge_w = self.small_font.size(diff_label)[0] + 16
-            badge_h = 26
+            badge_w = self.small_font.size(diff_label)[0] + self._s(16)
+            badge_h = self._s(26)
+            badge_radius = self._s(6)
             badge_rect = pygame.Rect(
                 cx, row_y + (row_h - badge_h) // 2, badge_w, badge_h
             )
@@ -917,20 +943,20 @@ class StatisticsView:
                 content_surface,
                 (*tag_color, int(row_alpha * 0.2)),
                 badge_rect,
-                border_radius=6,
+                border_radius=badge_radius,
             )
             pygame.draw.rect(
                 content_surface,
                 (*tag_color, int(row_alpha * 0.5)),
                 badge_rect,
                 1,
-                border_radius=6,
+                border_radius=badge_radius,
             )
 
             diff_text = self.small_font.render(diff_label, True, tag_color)
             diff_text.set_alpha(row_alpha)
             content_surface.blit(
-                diff_text, (cx + 8, row_y + (row_h - diff_text.get_height()) // 2)
+                diff_text, (cx + self._s(8), row_y + (row_h - diff_text.get_height()) // 2)
             )
             cx += col_diff_w
 
@@ -961,7 +987,7 @@ class StatisticsView:
             (*colors.GRAY, alpha),
             pygame.Rect(1, 1, rect.width, rect.height),
             1,
-            border_radius=8,
+            border_radius=self._s(8),
         )
         surface.blit(temp_surface, (rect.x - 1, rect.y - 1))
 
@@ -1086,40 +1112,45 @@ class ConfirmationDialog:
     ):
         self.on_yes = on_yes
         self.on_no = on_no
-        self.header_font = get_font(18)
-        self.item_font = get_font(16)
-        self.small_font = get_font(13)
+
+        from ..core.config import config as Config
+
+        self.ui_scale = Config.SCREEN_WIDTH / 1280.0
+
+        self.header_font = get_font(max(8, int(18 * self.ui_scale)))
+        self.item_font = get_font(max(8, int(16 * self.ui_scale)))
+        self.small_font = get_font(max(8, int(13 * self.ui_scale)))
 
         # Box
-        box_w, box_h = 450, 200
+        box_w, box_h = self._s(450), self._s(200)
         screen_w, screen_h = pygame.display.get_surface().get_size()
         self.box_rect = pygame.Rect(
             screen_w / 2 - box_w / 2, screen_h / 2 - box_h / 2, box_w, box_h
         )
 
         # Botões
-        btn_w, btn_h = 150, 40
-        btn_y = self.box_rect.bottom - btn_h - 20
+        btn_w, btn_h = self._s(150), self._s(40)
+        btn_y = self.box_rect.bottom - btn_h - self._s(20)
         self.yes_rect = pygame.Rect(
-            self.box_rect.centerx - btn_w - 10, btn_y, btn_w, btn_h
+            self.box_rect.centerx - btn_w - self._s(10), btn_y, btn_w, btn_h
         )
-        self.no_rect = pygame.Rect(self.box_rect.centerx + 10, btn_y, btn_w, btn_h)
+        self.no_rect = pygame.Rect(self.box_rect.centerx + self._s(10), btn_y, btn_w, btn_h)
 
         # Texto com quebra automática para evitar overflow
-        self.text_max_width = self.box_rect.width - 50
+        self.text_max_width = self.box_rect.width - self._s(50)
         message_text = " ".join(question_lines)
         self.message_font = self.item_font
         self.message_lines = wrap_text(
             self.message_font, message_text, self.text_max_width
         )
 
-        line_gap = 8
+        line_gap = self._s(8)
         line_height = self.message_font.get_linesize()
         text_block_height = (len(self.message_lines) * line_height) + (
             max(0, len(self.message_lines) - 1) * line_gap
         )
-        text_top = self.box_rect.y + 25
-        text_bottom = self.yes_rect.y - 12
+        text_top = self.box_rect.y + self._s(25)
+        text_bottom = self.yes_rect.y - self._s(12)
         available_height = max(0, text_bottom - text_top)
 
         if text_block_height > available_height:
@@ -1145,6 +1176,10 @@ class ConfirmationDialog:
         # Overlay
         self.overlay = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
         self.overlay.fill((0, 0, 0, 180))
+
+    def _s(self, value: float) -> int:
+        """Escala um valor de pixel do design base (1280×720)."""
+        return int(value * self.ui_scale)
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -1175,8 +1210,9 @@ class ConfirmationDialog:
     def render(self, surface: pygame.Surface):
         surface.blit(self.overlay, (0, 0))
         # Caixa
-        pygame.draw.rect(surface, colors.DARK_GRAY, self.box_rect, border_radius=12)
-        pygame.draw.rect(surface, colors.WHITE, self.box_rect, 2, border_radius=12)
+        box_radius = self._s(12)
+        pygame.draw.rect(surface, colors.DARK_GRAY, self.box_rect, border_radius=box_radius)
+        pygame.draw.rect(surface, colors.WHITE, self.box_rect, 2, border_radius=box_radius)
 
         # Texto
         for line_text, rect in zip(self.message_lines, self.line_rects):
@@ -1192,8 +1228,8 @@ class ConfirmationDialog:
     ):
         is_hovered = rect.collidepoint(pygame.mouse.get_pos())
         bg_color = tuple(min(c + 20, 255) for c in color) if is_hovered else color
-        pygame.draw.rect(surface, bg_color, rect, border_radius=8)
-        pygame.draw.rect(surface, colors.WHITE, rect, 1, border_radius=8)
+        pygame.draw.rect(surface, bg_color, rect, border_radius=self._s(8))
+        pygame.draw.rect(surface, colors.WHITE, rect, 1, border_radius=self._s(8))
         text_surf = self.item_font.render(text, True, colors.WHITE)
         surface.blit(
             text_surf,

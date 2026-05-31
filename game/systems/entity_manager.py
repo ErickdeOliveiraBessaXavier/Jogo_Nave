@@ -1223,6 +1223,23 @@ class EntityManager:
 
         return enemy.y > sh or enemy.x < -ew or enemy.x > sw
 
+    def is_on_screen(self, entity: Any) -> bool:
+        """True se o rect da entidade intersecta a área visível (teste estrito).
+
+        Difere de ``_is_enemy_off_screen``, que — por regra de gameplay — mantém
+        "vivos" inimigos ACIMA do topo prestes a entrar. Aqui o teste é estrito:
+        usado pela progressão de fase ("há hostil VISÍVEL?"). Assim, formações
+        ainda paradas acima do topo (``y = -100`` durante a entrada), ou qualquer
+        hostil já fora da área por qualquer borda, NÃO seguram o avanço quando a
+        tela está visualmente vazia.
+        """
+        sw, sh = self._screen_size
+        ew = getattr(entity, "w", getattr(getattr(entity, "rect", None), "width", 50))
+        eh = getattr(entity, "h", getattr(getattr(entity, "rect", None), "height", 50))
+        x = getattr(entity, "x", 0.0)
+        y = getattr(entity, "y", 0.0)
+        return x + ew > 0 and x < sw and y + eh > 0 and y < sh
+
     @staticmethod
     def _filter_dead_inplace(
         lst: list[Any], is_dead_fn: Callable[[Any], bool] | None = None

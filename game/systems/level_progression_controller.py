@@ -179,22 +179,37 @@ class LevelProgressionController:
             self.level_attempt_recorded = True
 
     def _count_active_stage_hostiles(self) -> int:
-        """Hostis vivos relevantes para conclusão da fase."""
+        """Hostis vivos **na tela** relevantes para conclusão da fase.
+
+        Só conta quem ainda está na área visível: hostis que já saíram da tela
+        (pelas laterais, etc.) não devem segurar o avanço — sem este filtro, a
+        fase ficava esperando vários segundos com a tela já vazia.
+        """
         em = self._em
-        active_enemies = sum(1 for e in em.enemies if not getattr(e, "dead", False))
+        on = em.is_on_screen  # bind local; só hostis VISÍVEIS na tela contam
+        active_enemies = sum(
+            1 for e in em.enemies if not getattr(e, "dead", False) and on(e)
+        )
         active_formation_enemies = sum(
             1
             for f in em.formations
             if not getattr(f, "dead", False)
             for e in f.get_enemies()
-            if not getattr(e, "dead", False)
+            if not getattr(e, "dead", False) and on(e)
         )
-        active_boulders = sum(1 for m in em.boulders if not m.dead)
-        active_attack_debris = sum(1 for s in em.attack_debris if not s.dead)
+        active_boulders = sum(1 for m in em.boulders if not m.dead and on(m))
+        active_attack_debris = sum(
+            1 for s in em.attack_debris if not s.dead and on(s)
+        )
         active_orbital_debris = sum(
             1
             for r in em.orbital_debris
-            if not r.dead and getattr(r, "causes_damage", False)
+            if not r.dead and getattr(r, "causes_damage", False) and on(r)
+        )
+        # Explosões de mina ainda animando (e causando dano) seguram o avanço
+        # até terminarem — respeita a animação/explosão antes de mudar de fase.
+        active_mine_explosions = sum(
+            1 for e in em.mine_explosions if not e.finished() and on(e)
         )
         return (
             active_enemies
@@ -202,6 +217,7 @@ class LevelProgressionController:
             + active_boulders
             + active_attack_debris
             + active_orbital_debris
+            + active_mine_explosions
         )
 
     def check_level_progression(

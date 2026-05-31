@@ -33,9 +33,17 @@ if TYPE_CHECKING:
 
 class Renderer:
     def __init__(self):
-        self.font_small = get_font(12)
-        self.font_medium = get_font(24)
-        self.font_large = get_font(32)
+        # Escala de UI relativa ao design base (1280×720). Resoluções ofertadas
+        # são 16:9, então um único fator (largura) cobre os dois eixos. Overlays
+        # in-game desenhados em pixels do design base (preparation/level_popup)
+        # precisam dele para não ficarem desproporcionais fora de 720p — mesma
+        # convenção dos menus e do HUD (ver memory/menu-ui-scale-convention).
+        # Em 720p ui_scale == 1.0, então nada muda.
+        self.ui_scale = Config.SCREEN_WIDTH / 1280.0
+
+        self.font_small = get_font(max(8, int(12 * self.ui_scale)))
+        self.font_medium = get_font(max(8, int(24 * self.ui_scale)))
+        self.font_large = get_font(max(8, int(32 * self.ui_scale)))
 
         # === NOVO: Sistema de cache de textos ===
         self._hud_cache: dict[str, Optional[pygame.Surface]] = {
@@ -81,6 +89,11 @@ class Renderer:
             "min_frame_time": 0.0,
         }
         # === FIM DO SISTEMA DE FPS ===
+
+    def _s(self, value: float) -> int:
+        """Escala um valor de pixel do design base (1280×720) para a resolução
+        lógica atual. Em 720p retorna o valor original (ui_scale == 1.0)."""
+        return int(value * self.ui_scale)
 
     @property
     def starfield(self) -> StarField:
@@ -328,9 +341,11 @@ class Renderer:
         exit_scale = 1.0 + exit_progress * 1.5  # Expande conforme some
 
         # 1. Painel de fundo sutil com gradiente otimizado
-        panel_h = 240
+        panel_h = self._s(240)
         panel_y = Config.SCREEN_HEIGHT // 2 - panel_h // 2
 
+        # grad_w é só a resolução interna de amostragem do gradiente (é
+        # esticado para a largura da tela depois) — independe da resolução.
         grad_w = 200
         grad_surf = pygame.Surface((grad_w, 1), pygame.SRCALPHA)
         for x in range(grad_w):
@@ -348,10 +363,10 @@ class Renderer:
         )
         surface.blit(overlay, (0, panel_y))
 
-        # Fontes
-        warning_font = get_font(Config.WARNING_FONT_SIZE)
-        info_font = get_font(24)
-        diff_font = get_font(18)
+        # Fontes (escaladas)
+        warning_font = get_font(max(8, int(Config.WARNING_FONT_SIZE * self.ui_scale)))
+        info_font = get_font(max(8, int(24 * self.ui_scale)))
+        diff_font = get_font(max(8, int(18 * self.ui_scale)))
 
         # 2. Nome do Estágio (Acima do contador)
         if stage_name:
@@ -362,7 +377,7 @@ class Renderer:
                 st_surf,
                 (
                     Config.SCREEN_WIDTH // 2 - st_surf.get_width() // 2,
-                    Config.SCREEN_HEIGHT // 2 - 95 - int(exit_progress * 40),
+                    Config.SCREEN_HEIGHT // 2 - self._s(95) - int(exit_progress * self._s(40)),
                 ),
             )
 
@@ -404,23 +419,25 @@ class Renderer:
             d_surf.set_alpha(global_alpha)
 
             dx = Config.SCREEN_WIDTH // 2 - d_surf.get_width() // 2
-            dy = Config.SCREEN_HEIGHT // 2 + 70 + int(exit_progress * 40)
+            dy = Config.SCREEN_HEIGHT // 2 + self._s(70) + int(exit_progress * self._s(40))
 
             # Linhas decorativas laterais
-            line_w = 60
+            line_w = self._s(60)
+            line_gap = self._s(10)
+            line_y = dy + self._s(12)
             l_alpha = global_alpha
             pygame.draw.line(
                 surface,
                 (*d_color, l_alpha),
-                (dx - line_w - 10, dy + 12),
-                (dx - 10, dy + 12),
+                (dx - line_w - line_gap, line_y),
+                (dx - line_gap, line_y),
                 2,
             )
             pygame.draw.line(
                 surface,
                 (*d_color, l_alpha),
-                (dx + d_surf.get_width() + 10, dy + 12),
-                (dx + d_surf.get_width() + line_w + 10, dy + 12),
+                (dx + d_surf.get_width() + line_gap, line_y),
+                (dx + d_surf.get_width() + line_w + line_gap, line_y),
                 2,
             )
 
@@ -436,44 +453,51 @@ class Renderer:
         # Animação de slide
         # 0.5s entrada, dur-1.0s espera, 0.5s saída
         slide_duration = 0.5
+        slide_hidden = -self._s(60)  # posição inicial acima do topo
+        slide_travel = self._s(80)  # distância percorrida no slide
         if timer > duration - slide_duration:
             # Entrada
             progress = (duration - timer) / slide_duration
-            y_offset = -60 + 80 * (1.0 - (1.0 - progress) ** 3)  # Ease out cubic
+            y_offset = slide_hidden + slide_travel * (1.0 - (1.0 - progress) ** 3)
         elif timer < slide_duration:
             # Saída
             progress = timer / slide_duration
-            y_offset = -60 + 80 * progress
+            y_offset = slide_hidden + slide_travel * progress
         else:
             # Espera
-            y_offset = 20
+            y_offset = self._s(20)
 
         # Design do Pop-up
-        font = get_font(22)
+        font = get_font(max(8, int(22 * self.ui_scale)))
         txt_surf = font.render(text, True, colors.WHITE)
 
-        box_w = txt_surf.get_width() + 60
-        box_h = 45
+        box_w = txt_surf.get_width() + self._s(60)
+        box_h = self._s(45)
         box_x = Config.SCREEN_WIDTH // 2 - box_w // 2
         box_y = y_offset
+        radius = self._s(10)
+        glow_pad = self._s(5)
 
         # Fundo do painel
         panel = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-        pygame.draw.rect(panel, (0, 0, 0, 180), (0, 0, box_w, box_h), border_radius=10)
+        pygame.draw.rect(panel, (0, 0, 0, 180), (0, 0, box_w, box_h), border_radius=radius)
         pygame.draw.rect(
-            panel, colors.CUSTOM_GOLD, (0, 0, box_w, box_h), 2, border_radius=10
+            panel, colors.CUSTOM_GOLD, (0, 0, box_w, box_h), 2, border_radius=radius
         )
 
         # Brilho sutil nas bordas
-        glow = pygame.Surface((box_w + 10, box_h + 10), pygame.SRCALPHA)
+        glow = pygame.Surface((box_w + glow_pad * 2, box_h + glow_pad * 2), pygame.SRCALPHA)
         pygame.draw.rect(
-            glow, (218, 165, 32, 50), (5, 5, box_w, box_h), border_radius=12
+            glow,
+            (218, 165, 32, 50),
+            (glow_pad, glow_pad, box_w, box_h),
+            border_radius=radius + self._s(2),
         )
 
-        surface.blit(glow, (box_x - 5, box_y - 5))
+        surface.blit(glow, (box_x - glow_pad, box_y - glow_pad))
         surface.blit(panel, (box_x, box_y))
         surface.blit(
-            txt_surf, (box_x + 30, box_y + (box_h - txt_surf.get_height()) // 2)
+            txt_surf, (box_x + self._s(30), box_y + (box_h - txt_surf.get_height()) // 2)
         )
 
     def update_fps(self, dt: float):

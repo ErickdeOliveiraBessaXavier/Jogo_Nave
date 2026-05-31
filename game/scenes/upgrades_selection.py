@@ -113,16 +113,16 @@ class UpgradesSelectionScene(Scene):
     def __init__(self, app: "GameApp"):
         super().__init__(app)
         self.r = app.renderer
-        self.title_font = get_font(36)
-        self.header_font = get_font(18)
-        self.item_font = get_font(16)
-        self.small_font = get_font(13)
-        self.tiny_font = get_font(11)
+        self.title_font = get_font(max(8, int(36 * self.ui_scale)))
+        self.header_font = get_font(max(8, int(18 * self.ui_scale)))
+        self.item_font = get_font(max(8, int(16 * self.ui_scale)))
+        self.small_font = get_font(max(8, int(13 * self.ui_scale)))
+        self.tiny_font = get_font(max(8, int(11 * self.ui_scale)))
 
-        # Metrics para consistência total
-        self.MARGIN = 24
-        self.GAP = 12
-        self.RADIUS = 8
+        # Metrics para consistência total (escaladas — propagam a todo o layout)
+        self.MARGIN = self._s(24)
+        self.GAP = self._s(12)
+        self.RADIUS = self._s(8)
 
         # Estoque/Hangar agora são grids paginados 3×3 navegados por chevrons
         # laterais (mesmo design da seleção de mundos), em vez de scroll.
@@ -130,7 +130,7 @@ class UpgradesSelectionScene(Scene):
         self.GRID_ROWS = 3
         self._page_size = self.GRID_COLS * self.GRID_ROWS
         # Largura reservada para a coluna do chevron de cada lado do grid.
-        self.CHEVRON_W = 30
+        self.CHEVRON_W = self._s(30)
         # Acumulador de tempo para a pulsação dos chevrons.
         self._time = 0.0
 
@@ -140,7 +140,8 @@ class UpgradesSelectionScene(Scene):
         self.star_icon = get_image(
             BASE_DIR / "assets" / "images" / "icons" / "icon_star.png"
         )
-        self.star_icon_small = pygame.transform.scale(self.star_icon, (18, 18))
+        star_px = self._s(18)
+        self.star_icon_small = pygame.transform.scale(self.star_icon, (star_px, star_px))
 
         # Reusa a instância oficial do app. Criar uma nova aqui causaria
         # divergência: as mudanças (loadout/nave) seriam salvas no JSON mas
@@ -211,14 +212,14 @@ class UpgradesSelectionScene(Scene):
         size_slots = (lw - self.MARGIN * 2 - (cols_slots - 1) * self.GAP) // cols_slots
         lx_slots = self.MARGIN
 
-        # Alinhamento dos Cabeçalhos: y = 100
-        header_y = 100
+        # Alinhamento dos Cabeçalhos
+        header_y = self._s(100)
         self.layout.active_slots_header = pygame.Rect(
-            self.MARGIN, header_y, lw - self.MARGIN * 2, 25
+            self.MARGIN, header_y, lw - self.MARGIN * 2, self._s(25)
         )
 
         # Conteúdo começa abaixo do cabeçalho
-        ly = header_y + 40
+        ly = header_y + self._s(40)
         for i in range(UPGRADE_SLOT_COUNT):
             r, c = i // cols_slots, i % cols_slots
             self.layout.active_slots.append(
@@ -231,13 +232,13 @@ class UpgradesSelectionScene(Scene):
             )
 
         # 2. Estoque (Starting after slots)
-        stock_header_y = self.layout.active_slots[-1].bottom + 35
-        self._stock_start_y = stock_header_y + 35
+        stock_header_y = self.layout.active_slots[-1].bottom + self._s(35)
+        self._stock_start_y = stock_header_y + self._s(35)
         stock_full = pygame.Rect(
             self.MARGIN,
             self._stock_start_y,
             lw - self.MARGIN * 2,
-            sh - self._stock_start_y - 80,
+            sh - self._stock_start_y - self._s(80),
         )
         (
             self.layout.upgrade_area,
@@ -248,8 +249,8 @@ class UpgradesSelectionScene(Scene):
 
         # --- NAVE (Centro) ---
         # Preview menor para liberar espaço abaixo para descrição e habilidades.
-        preview_s = min(260, cw - 60)
-        preview_y = 110
+        preview_s = min(self._s(260), cw - self._s(60))
+        preview_y = self._s(110)
         self.layout.ship_preview_rect = pygame.Rect(
             lw + cw // 2 - preview_s // 2, preview_y, preview_s, preview_s
         )
@@ -258,12 +259,15 @@ class UpgradesSelectionScene(Scene):
         # 1. Atributos
         rx = self.layout.right_area.x + self.MARGIN
         ry = header_y  # Alinhado com Arsenal Ativo
-        self.layout.stats_area = pygame.Rect(rx, ry, rw - self.MARGIN * 2, 110)
+        self.layout.stats_area = pygame.Rect(rx, ry, rw - self.MARGIN * 2, self._s(110))
 
         # 2. Ship Collection
-        self._ship_start_y = self.layout.stats_area.bottom + 70
+        self._ship_start_y = self.layout.stats_area.bottom + self._s(70)
         ship_full = pygame.Rect(
-            rx, self._ship_start_y, rw - self.MARGIN * 2, sh - self._ship_start_y - 80
+            rx,
+            self._ship_start_y,
+            rw - self.MARGIN * 2,
+            sh - self._ship_start_y - self._s(80),
         )
         (
             self.layout.ship_area,
@@ -272,9 +276,9 @@ class UpgradesSelectionScene(Scene):
         ) = self._split_grid_area(ship_full)
         self._rebuild_ship_grid()
 
-        btn_w = 160
-        btn_h = 40
-        self.layout.back_button = pygame.Rect(self.MARGIN, sh - 60, btn_w, btn_h)
+        btn_w = self._s(160)
+        btn_h = self._s(40)
+        self.layout.back_button = pygame.Rect(self.MARGIN, sh - self._s(60), btn_w, btn_h)
 
     def _split_grid_area(
         self, full: pygame.Rect
@@ -289,7 +293,7 @@ class UpgradesSelectionScene(Scene):
         grid = pygame.Rect(
             full.x + cw, full.y, full.width - cw * 2, full.height
         )
-        ch_h = 64
+        ch_h = self._s(64)
         cy = full.centery - ch_h // 2
         left = pygame.Rect(full.x, cy, cw, ch_h)
         right = pygame.Rect(full.right - cw, cy, cw, ch_h)
@@ -732,7 +736,8 @@ class UpgradesSelectionScene(Scene):
         surface.blit(
             title,
             title.get_rect(
-                centerx=surface.get_width() // 2, top=24 + int(20 * (1.0 - alpha_mult))
+                centerx=surface.get_width() // 2,
+                top=self._s(24) + int(self._s(20) * (1.0 - alpha_mult)),
             ),
         )
 
@@ -754,9 +759,9 @@ class UpgradesSelectionScene(Scene):
         # Padding consistente: 10px horizontal, top em 80 (logo abaixo do título da tela)
         # e bottom em sh-70 (logo acima do botão Voltar). Engloba header + conteúdo.
         sh = surface.get_height()
-        panel_top = 80
-        panel_h = sh - panel_top - 70
-        side_pad = 10
+        panel_top = self._s(80)
+        panel_h = sh - panel_top - self._s(70)
+        side_pad = self._s(10)
         border_color = (255, 255, 255, 30)
 
         panel_l = pygame.Rect(
@@ -814,20 +819,20 @@ class UpgradesSelectionScene(Scene):
 
         # Nome da nave logo abaixo do preview.
         cx = rect.centerx
-        y = rect.bottom + 8
+        y = rect.bottom + self._s(8)
         name_surf = self.title_font.render(ship.display_name.upper(), True, CUSTOM_GOLD)
         surface.blit(
             name_surf, name_surf.get_rect(center=(cx, y + name_surf.get_height() // 2))
         )
-        y += name_surf.get_height() + 6
+        y += name_surf.get_height() + self._s(6)
 
         # Largura máxima para todo o texto: respeita a coluna central com folga.
         # Mantém uma margem interna de 20px de cada lado.
         center_x = self.layout.center_area.x
         center_w = self.layout.center_area.width
-        max_w = max(120, center_w - 40)
-        text_left = center_x + 20
-        text_right = center_x + center_w - 20
+        max_w = max(self._s(120), center_w - self._s(40))
+        text_left = center_x + self._s(20)
+        text_right = center_x + center_w - self._s(20)
 
         # Helper local: renderiza texto centralizado com wrap respeitando max_w.
         def _draw_wrapped(
@@ -846,7 +851,7 @@ class UpgradesSelectionScene(Scene):
                         center=(cx, y_pos + line_surf.get_height() // 2)
                     ),
                 )
-                y_pos += line_surf.get_height() + 2
+                y_pos += line_surf.get_height() + self._s(2)
             return y_pos
 
         # Tags (categoria) em uma linha discreta.
@@ -854,7 +859,7 @@ class UpgradesSelectionScene(Scene):
             y = _draw_wrapped(
                 " · ".join(ship.tags), self.small_font, (160, 160, 200), y, max_lines=1
             )
-            y += 6
+            y += self._s(6)
 
         # Descrição: cap alto o suficiente para caber as descrições mais longas
         # (Reverberador, Caçador) sem truncar. Clip da coluna garante que nada
@@ -863,11 +868,11 @@ class UpgradesSelectionScene(Scene):
         # legenda conforme o input ativo via `format_ship_description`.
         desc_text = format_ship_description(ship, self.app.gamepad.is_active)
         y = _draw_wrapped(desc_text, self.small_font, colors.WHITE, y, max_lines=4)
-        y += 6
+        y += self._s(6)
 
         # Linha divisória sutil.
         pygame.draw.line(surface, (90, 90, 110), (text_left, y), (text_right, y), 1)
-        y += 8
+        y += self._s(8)
 
         # Atributos numéricos: só os que diferem do padrão.
         stat_rows: list[tuple[str, str]] = []
@@ -886,7 +891,7 @@ class UpgradesSelectionScene(Scene):
             )
 
         if stat_rows:
-            y += 8
+            y += self._s(8)
 
         # Habilidades especiais com as teclas necessárias.
         ability_rows = self._ship_ability_descriptions(ship)
@@ -895,13 +900,13 @@ class UpgradesSelectionScene(Scene):
             surface.blit(
                 header, header.get_rect(center=(cx, y + header.get_height() // 2))
             )
-            y += header.get_height() + 4
+            y += header.get_height() + self._s(4)
             for line in ability_rows:
                 # Cada habilidade pode quebrar em até 2 linhas se for longa.
                 y = _draw_wrapped(
                     line, self.small_font, (200, 220, 255), y, max_lines=2
                 )
-                y += 1
+                y += self._s(1)
 
     @staticmethod
     def _fmt_mult(value: float) -> str:
@@ -966,11 +971,12 @@ class UpgradesSelectionScene(Scene):
 
         # Barra de capacidade de peso logo abaixo do título.
         bar_x = h.x
-        bar_y = h.bottom + 4
+        bar_y = h.bottom + self._s(4)
         bar_w = h.width
-        bar_h = 6
+        bar_h = self._s(6)
+        bar_radius = self._s(3)
         pygame.draw.rect(
-            surface, (40, 40, 50), (bar_x, bar_y, bar_w, bar_h), border_radius=3
+            surface, (40, 40, 50), (bar_x, bar_y, bar_w, bar_h), border_radius=bar_radius
         )
         if cap > 0:
             fill_w = int(bar_w * min(1.0, total_weight / cap))
@@ -984,7 +990,10 @@ class UpgradesSelectionScene(Scene):
                 fill_color = (100, 200, 120)
             if fill_w > 0:
                 pygame.draw.rect(
-                    surface, fill_color, (bar_x, bar_y, fill_w, bar_h), border_radius=3
+                    surface,
+                    fill_color,
+                    (bar_x, bar_y, fill_w, bar_h),
+                    border_radius=bar_radius,
                 )
 
         for i, r in enumerate(self.layout.active_slots):
@@ -995,7 +1004,7 @@ class UpgradesSelectionScene(Scene):
             )
             lock, dr = i >= self.player_profile.unlocked_slots, r.copy()
             if self.shaking_slot == i:
-                dr.x += int(8 * math.sin((time.time() - self.shake_start_time) * 40))
+                dr.x += int(self._s(8) * math.sin((time.time() - self.shake_start_time) * 40))
 
             is_valid_target = False
             if self.dragging_upgrade and not lock:
@@ -1031,18 +1040,17 @@ class UpgradesSelectionScene(Scene):
                 meta = next((u for u in self.all_upgrades if u.type == eq), None)
                 if meta:
                     icon_radius = int(dr.width * 0.35)
+                    icon_cy = dr.centery - self._s(4)
                     pygame.draw.circle(
                         surface,
                         CUSTOM_PURPLE,
-                        (dr.centerx, dr.centery - 4),
+                        (dr.centerx, icon_cy),
                         icon_radius,
                     )
                     surf = self.header_font.render(
                         get_upgrade_icon(meta.name, meta.icon_id), True, CUSTOM_GOLD
                     )
-                    surface.blit(
-                        surf, surf.get_rect(center=(dr.centerx, dr.centery - 4))
-                    )
+                    surface.blit(surf, surf.get_rect(center=(dr.centerx, icon_cy)))
                     # Badge de peso no canto inferior esquerdo (consistente com Estoque).
                     self._draw_weight_badge(surface, dr, meta.slot_weight, dim=False)
                     self._draw_equipped_badge(surface, dr)
@@ -1053,7 +1061,7 @@ class UpgradesSelectionScene(Scene):
                 True,
                 colors.WHITE,
             ),
-            (self.MARGIN, self._stock_start_y - 35),
+            (self.MARGIN, self._stock_start_y - self._s(35)),
         )
         # Pré-calcula peso atual equipado para decidir se cada upgrade ainda cabe.
         current_weight = self.player_profile.get_total_equipped_weight()
@@ -1122,7 +1130,8 @@ class UpgradesSelectionScene(Scene):
             self.header_font.render("Atributos", True, colors.WHITE),
             self.layout.stats_area.topleft,
         )
-        sy = self.layout.stats_area.y + 35
+        sy = self.layout.stats_area.y + self._s(35)
+        stat_gap = self._s(30)
         self._draw_stat_bar(
             surface,
             self.layout.stats_area.x,
@@ -1135,7 +1144,7 @@ class UpgradesSelectionScene(Scene):
         self._draw_stat_bar(
             surface,
             self.layout.stats_area.x,
-            sy + 30,
+            sy + stat_gap,
             self.layout.stats_area.width,
             "CADÊNCIA",
             ship.fire_rate_mult,
@@ -1144,7 +1153,7 @@ class UpgradesSelectionScene(Scene):
         self._draw_stat_bar(
             surface,
             self.layout.stats_area.x,
-            sy + 60,
+            sy + stat_gap * 2,
             self.layout.stats_area.width,
             "AGILIDADE",
             ship.speed_mult,
@@ -1159,7 +1168,7 @@ class UpgradesSelectionScene(Scene):
             ),
             (
                 self.layout.right_area.x + self.MARGIN,
-                self.layout.stats_area.bottom + 30,
+                self.layout.stats_area.bottom + self._s(30),
             ),
         )
         for i, rect in enumerate(self.layout.ship_grid_cells):
@@ -1170,7 +1179,7 @@ class UpgradesSelectionScene(Scene):
             )
             dr = rect.move(
                 (
-                    int(6 * math.sin((time.time() - self.shake_start_time) * 40))
+                    int(self._s(6) * math.sin((time.time() - self.shake_start_time) * 40))
                     if self.shaking_ship_id == s.id
                     else 0
                 ),
@@ -1221,7 +1230,7 @@ class UpgradesSelectionScene(Scene):
             self.layout.ship_right_chevron,
             self.max_ship_page,
         )
-        bal_y = self.app.screen.get_height() - 55
+        bal_y = self.app.screen.get_height() - self._s(55)
         surface.blit(
             self.star_icon_small, (self.layout.right_area.x + self.MARGIN, bal_y)
         )
@@ -1229,7 +1238,7 @@ class UpgradesSelectionScene(Scene):
             self.item_font.render(
                 f"{self.player_profile.available_stars} Estrelas", True, CUSTOM_GOLD
             ),
-            (self.layout.right_area.x + self.MARGIN + 25, bal_y + 1),
+            (self.layout.right_area.x + self.MARGIN + self._s(25), bal_y + self._s(1)),
         )
 
     @staticmethod
@@ -1256,21 +1265,21 @@ class UpgradesSelectionScene(Scene):
         # `<` com o bico à esquerda do box; `>` com o bico à direita.
         self._draw_pixel_chevron(
             surface,
-            left.x + 4,
+            left.x + self._s(4),
             left.centery,
             -1,
             CUSTOM_GOLD,
             alpha,
-            1.3 if left.collidepoint(mouse) else 1.0,
+            (1.3 if left.collidepoint(mouse) else 1.0) * self.ui_scale,
         )
         self._draw_pixel_chevron(
             surface,
-            right.right - 4,
+            right.right - self._s(4),
             right.centery,
             1,
             CUSTOM_GOLD,
             alpha,
-            1.3 if right.collidepoint(mouse) else 1.0,
+            (1.3 if right.collidepoint(mouse) else 1.0) * self.ui_scale,
         )
 
     @staticmethod
@@ -1329,41 +1338,45 @@ class UpgradesSelectionScene(Scene):
         (amarelo=hover/seleção, dourado=equipado) para não confundir."""
         pulse = (math.sin(self._time * 6) + 1) * 0.5
         color = (int(80 + 70 * pulse), int(190 + 50 * pulse), 255)
-        ring = rect.inflate(8, 8)
+        ring = rect.inflate(self._s(8), self._s(8))
         pygame.draw.rect(
-            surface, color, ring, 3, border_radius=self.RADIUS + 3
+            surface, color, ring, 3, border_radius=self.RADIUS + self._s(3)
         )
 
     def _draw_lock_indicator(
         self, surface: pygame.Surface, rect: pygame.Rect, cost: int
     ):
         can = self.player_profile.available_stars >= cost
-        surface.blit(self.star_icon_small, (rect.centerx - 18, rect.y + 4))
+        surface.blit(self.star_icon_small, (rect.centerx - self._s(18), rect.y + self._s(4)))
         surface.blit(
             self.tiny_font.render(str(cost), True, colors.GREEN if can else colors.RED),
-            (rect.centerx + 4, rect.y + 6),
+            (rect.centerx + self._s(4), rect.y + self._s(6)),
         )
         icon_s = int(rect.width * 0.4)
         surface.blit(
             pygame.transform.scale(self.locked_icon, (icon_s, icon_s)),
-            (rect.centerx - icon_s // 2, rect.centery - 2),
+            (rect.centerx - icon_s // 2, rect.centery - self._s(2)),
         )
 
     def _draw_equipped_badge(self, surface: pygame.Surface, rect: pygame.Rect):
-        pygame.draw.circle(surface, colors.YELLOW, (rect.right - 8, rect.y + 8), 7)
+        pygame.draw.circle(
+            surface, colors.YELLOW, (rect.right - self._s(8), rect.y + self._s(8)), self._s(7)
+        )
         surface.blit(
-            self.tiny_font.render("E", True, BLACK), (rect.right - 12, rect.y + 2)
+            self.tiny_font.render("E", True, BLACK),
+            (rect.right - self._s(12), rect.y + self._s(2)),
         )
 
     def _draw_weight_badge(
         self, surface: pygame.Surface, rect: pygame.Rect, weight: int, dim: bool
     ):
         """Badge circular com o peso do upgrade no canto inferior esquerdo."""
-        cx, cy = rect.x + 10, rect.bottom - 10
+        cx, cy = rect.x + self._s(10), rect.bottom - self._s(10)
+        r = self._s(8)
         bg = (90, 60, 30) if dim else (50, 50, 70)
         fg = (200, 150, 100) if dim else colors.WHITE
-        pygame.draw.circle(surface, bg, (cx, cy), 8)
-        pygame.draw.circle(surface, fg, (cx, cy), 8, 1)
+        pygame.draw.circle(surface, bg, (cx, cy), r)
+        pygame.draw.circle(surface, fg, (cx, cy), r, 1)
         txt = self.tiny_font.render(str(weight), True, fg)
         surface.blit(txt, txt.get_rect(center=(cx, cy)))
 
@@ -1390,7 +1403,7 @@ class UpgradesSelectionScene(Scene):
         curr: float,
     ):
         surface.blit(self.tiny_font.render(label, True, (180, 180, 180)), (x, y))
-        by, bh = y + 14, 6
+        by, bh = y + self._s(14), self._s(6)
         pygame.draw.rect(
             surface, (40, 40, 40), (x, by, w, bh), border_radius=self.RADIUS
         )
@@ -1423,8 +1436,9 @@ class UpgradesSelectionScene(Scene):
         if self.dragging_upgrade is None:
             return
         pos = pygame.mouse.get_pos()
+        drag_sz = self._s(55)
         rect = pygame.Rect(
-            pos[0] - self.drag_offset[0], pos[1] - self.drag_offset[1], 55, 55
+            pos[0] - self.drag_offset[0], pos[1] - self.drag_offset[1], drag_sz, drag_sz
         )
         bg = (80, 40, 40, 200) if self.drag_invalid_target else (60, 60, 60, 200)
         pygame.draw.rect(surface, bg, rect, border_radius=self.RADIUS)
@@ -1432,7 +1446,7 @@ class UpgradesSelectionScene(Scene):
             surface,
             (150, 50, 50) if self.drag_invalid_target else CUSTOM_PURPLE,
             rect.center,
-            18,
+            self._s(18),
         )
         initial = get_upgrade_icon(
             self.dragging_upgrade.name, self.dragging_upgrade.icon_id
@@ -1464,10 +1478,10 @@ class UpgradesSelectionScene(Scene):
         profile = self.player_profile
 
         # Largura fixa, altura dinâmica
-        w = 280
-        padding = 12
-        line_height = 20
-        stat_lh = 16
+        w = self._s(280)
+        padding = self._s(12)
+        line_height = self._s(20)
+        stat_lh = self._s(16)
 
         # Quebrar o texto em linhas antes de calcular a altura
         wrapped_lines = wrap_text(self.small_font, upg.desc, w - (padding * 2))
@@ -1488,61 +1502,63 @@ class UpgradesSelectionScene(Scene):
 
         # Altura: top + nome + separador + descrição + gap + stats + aviso + base
         h = (
-            10
-            + 24
-            + 10
+            self._s(10)
+            + self._s(24)
+            + self._s(10)
             + (len(wrapped_lines) * line_height)
-            + 8
+            + self._s(8)
             + (len(stat_lines) * stat_lh)
-            + (18 if warn else 0)
-            + 10
+            + (self._s(18) if warn else 0)
+            + self._s(10)
         )
 
-        x, y = pos[0] + 20, pos[1] + 20
+        x, y = pos[0] + self._s(20), pos[1] + self._s(20)
 
         # Ajustar posição para não sair da tela
         if y + h > surface.get_height():
-            y = pos[1] - h - 10
+            y = pos[1] - h - self._s(10)
         if x + w > surface.get_width():
-            x = pos[0] - w - 10
+            x = pos[0] - w - self._s(10)
 
         # Garantir que não saia pelo topo ou esquerda
-        x = max(10, x)
-        y = max(10, y)
+        x = max(self._s(10), x)
+        y = max(self._s(10), y)
 
         # Criar superfície do tooltip
         tooltip_surf = pygame.Surface((w, h), pygame.SRCALPHA)
 
         # Fundo e borda
+        tip_radius = self._s(10)
         pygame.draw.rect(
-            tooltip_surf, (15, 15, 25, 245), tooltip_surf.get_rect(), border_radius=10
+            tooltip_surf, (15, 15, 25, 245), tooltip_surf.get_rect(), border_radius=tip_radius
         )
         pygame.draw.rect(
             tooltip_surf,
             (200, 200, 220, 200),
             tooltip_surf.get_rect(),
             1,
-            border_radius=10,
+            border_radius=tip_radius,
         )
 
         # Nome do upgrade
         name_surf = self.item_font.render(upg.name, True, colors.YELLOW)
-        tooltip_surf.blit(name_surf, (padding, 10))
+        tooltip_surf.blit(name_surf, (padding, self._s(10)))
 
         # Linha separadora sutil
+        sep_y = self._s(38)
         pygame.draw.line(
-            tooltip_surf, (60, 60, 80), (padding, 38), (w - padding, 38), 1
+            tooltip_surf, (60, 60, 80), (padding, sep_y), (w - padding, sep_y), 1
         )
 
         # Descrição (todas as linhas)
-        dy = 48
+        dy = self._s(48)
         for line in wrapped_lines:
             line_surf = self.small_font.render(line, True, colors.WHITE)
             tooltip_surf.blit(line_surf, (padding, dy))
             dy += line_height
 
         # Stats em fonte miúda, cor fria para se distinguir da descrição.
-        dy += 4
+        dy += self._s(4)
         for line in stat_lines:
             stat_surf = self.tiny_font.render(line, True, (170, 195, 225))
             tooltip_surf.blit(stat_surf, (padding, dy))

@@ -48,16 +48,25 @@ class InitialsEntryWidget:
         self.score = score
         self.app = app
 
+        # Escala de UI (CLAUDE.md §12). Este widget não é uma Scene, então
+        # mantém seu próprio fator e helper. As COL_*/LETTER_HEIGHT de classe
+        # são o design base 1280×720; aqui derivamos as versões escaladas.
+        self.ui_scale = Config.SCREEN_WIDTH / 1280.0
+        self.col_w = self._s(self.COL_W)
+        self.col_h = self._s(self.COL_H)
+        self.col_gap = self._s(self.COL_GAP)
+        self.letter_height = self._s(self.LETTER_HEIGHT)
+
         # Offset de scroll por coluna (px). 0 = letra centrada. Animado a cada
         # mudança e amortecido para 0 em update() criando o efeito de rolagem.
         self._scroll_offset: List[float] = [0.0, 0.0, 0.0]
 
-        self.font_letter = get_font(60)
-        self.font_letter_small = get_font(36)
-        self.font_letter_tiny = get_font(22)
-        self.font_label = get_font(16)
-        self.font_button = get_font(16)
-        self.font_rank = get_font(18)
+        self.font_letter = get_font(max(8, int(60 * self.ui_scale)))
+        self.font_letter_small = get_font(max(8, int(36 * self.ui_scale)))
+        self.font_letter_tiny = get_font(max(8, int(22 * self.ui_scale)))
+        self.font_label = get_font(max(8, int(16 * self.ui_scale)))
+        self.font_button = get_font(max(8, int(16 * self.ui_scale)))
+        self.font_rank = get_font(max(8, int(18 * self.ui_scale)))
 
         self.entry_anim_timer = 0.0
         self.highlight_pulse_timer = 0.0
@@ -70,19 +79,23 @@ class InitialsEntryWidget:
         # se sobrepunha ao botão quando a fonte renderizava em tamanho maior.
         self._build_layout()
 
+    def _s(self, value: float) -> int:
+        """Escala um valor de pixel do design base (1280×720)."""
+        return int(value * self.ui_scale)
+
     def _build_layout(self) -> None:
         """Calcula posições e tamanho do modal a partir das alturas reais
         dos elementos, garantindo que nada se sobreponha em qualquer fonte.
         """
-        # Paddings consistentes — única fonte de espaçamento.
-        pad_top = 24
-        pad_bottom = 24
-        gap_title_rank = 8
-        gap_rank_cols = 28
-        gap_cols_label = 24
-        gap_label_btn = 22
-        line_gap = 6
-        arrow_to_col = 6  # espaço entre seta ▲▼ e a borda da coluna
+        # Paddings consistentes — única fonte de espaçamento (escalados).
+        pad_top = self._s(24)
+        pad_bottom = self._s(24)
+        gap_title_rank = self._s(8)
+        gap_rank_cols = self._s(28)
+        gap_cols_label = self._s(24)
+        gap_label_btn = self._s(22)
+        line_gap = self._s(6)
+        arrow_to_col = self._s(6)  # espaço entre seta ▲▼ e a borda da coluna
 
         # Alturas medidas das fontes
         title_h = self.font_label.get_linesize()
@@ -90,8 +103,8 @@ class InitialsEntryWidget:
         arrow_h = self.font_label.get_linesize()
         label_line_h = self.font_label.get_linesize()
         label_total_h = label_line_h * 2 + line_gap  # 2 linhas de legenda
-        btn_h = 40
-        col_h = self.COL_H
+        btn_h = self._s(40)
+        col_h = self.col_h
 
         # Acumula altura total
         total_h = (
@@ -113,9 +126,9 @@ class InitialsEntryWidget:
 
         # Largura: cobre as 3 colunas + paddings laterais. Mantém mínimo
         # confortável para a legenda em 2 linhas.
-        total_cols_w = self.COL_W * self.MAX_LEN + self.COL_GAP * (self.MAX_LEN - 1)
-        side_pad = 32
-        self.modal_w = max(540, total_cols_w + side_pad * 2)
+        total_cols_w = self.col_w * self.MAX_LEN + self.col_gap * (self.MAX_LEN - 1)
+        side_pad = self._s(32)
+        self.modal_w = max(self._s(540), total_cols_w + side_pad * 2)
         self.modal_h = total_h
 
         self.rect = pygame.Rect(
@@ -143,9 +156,9 @@ class InitialsEntryWidget:
         cols_x0 = self.rect.centerx - total_cols_w // 2
         self.col_rects = [
             pygame.Rect(
-                cols_x0 + i * (self.COL_W + self.COL_GAP),
+                cols_x0 + i * (self.col_w + self.col_gap),
                 col_y,
-                self.COL_W,
+                self.col_w,
                 col_h,
             )
             for i in range(self.MAX_LEN)
@@ -157,8 +170,8 @@ class InitialsEntryWidget:
         y += label_total_h
         y += gap_label_btn
 
-        btn_w = 160
-        btn_gap = 20
+        btn_w = self._s(160)
+        btn_gap = self._s(20)
         self.save_button = pygame.Rect(
             self.rect.centerx - btn_w - btn_gap // 2, y, btn_w, btn_h
         )
@@ -196,7 +209,7 @@ class InitialsEntryWidget:
         idx = self.active_pos
         self.indices[idx] = (self.indices[idx] + direction) % len(_ALPHABET)
         # Offset começa onde a letra antiga estava → anima de volta a 0.
-        self._scroll_offset[idx] = -direction * self.LETTER_HEIGHT
+        self._scroll_offset[idx] = -direction * self.letter_height
         sound_manager.play_sound("button_hover")
 
     def _change_column(self, direction: int) -> None:
@@ -285,8 +298,11 @@ class InitialsEntryWidget:
         modal_overlay.fill((0, 0, 0, int(alpha * 0.7)))
         surface.blit(modal_overlay, (0, 0))
 
-        pygame.draw.rect(surface, (15, 15, 25, alpha), self.rect, border_radius=15)
-        pygame.draw.rect(surface, (*CUSTOM_GOLD, alpha), self.rect, 2, border_radius=15)
+        modal_radius = self._s(15)
+        pygame.draw.rect(surface, (15, 15, 25, alpha), self.rect, border_radius=modal_radius)
+        pygame.draw.rect(
+            surface, (*CUSTOM_GOLD, alpha), self.rect, 2, border_radius=modal_radius
+        )
 
         title_text = self.font_label.render("DIGITE SUAS INICIAIS", True, colors.WHITE)
         title_text.set_alpha(alpha)
@@ -317,7 +333,7 @@ class InitialsEntryWidget:
                 line_surf,
                 line_surf.get_rect(centerx=self.rect.centerx, top=label_y),
             )
-            label_y += line_surf.get_height() + 6
+            label_y += line_surf.get_height() + self._s(6)
 
         draw_bordered_button(
             surface, self.save_button, "SALVAR", self.font_button, CUSTOM_GOLD, alpha
@@ -340,7 +356,9 @@ class InitialsEntryWidget:
         scroll = self._scroll_offset[idx]
 
         # Clip vertical para não vazar pra fora da coluna durante o scroll.
-        clip_rect = pygame.Rect(rect.x - 4, rect.y, rect.width + 8, rect.height)
+        clip_rect = pygame.Rect(
+            rect.x - self._s(4), rect.y, rect.width + self._s(8), rect.height
+        )
         previous_clip = surface.get_clip()
         surface.set_clip(clip_rect)
         try:
@@ -350,15 +368,15 @@ class InitialsEntryWidget:
             for k in range(-self.VISIBLE_RADIUS, self.VISIBLE_RADIUS + 1):
                 letter_idx = (self.indices[idx] + k) % len(_ALPHABET)
                 letter = _ALPHABET[letter_idx]
-                y = cy + k * self.LETTER_HEIGHT + scroll
+                y = cy + k * self.letter_height + scroll
 
                 # Distância normalizada do centro pra graduar tamanho/alpha.
-                normalized = abs(k * self.LETTER_HEIGHT + scroll) / (
-                    self.LETTER_HEIGHT * self.VISIBLE_RADIUS + 1
+                normalized = abs(k * self.letter_height + scroll) / (
+                    self.letter_height * self.VISIBLE_RADIUS + 1
                 )
                 normalized = min(1.0, normalized)
 
-                if k == 0 and abs(scroll) < self.LETTER_HEIGHT * 0.5:
+                if k == 0 and abs(scroll) < self.letter_height * 0.5:
                     font = self.font_letter
                     base_color = CUSTOM_GOLD if is_active else colors.WHITE
                     letter_alpha = alpha
@@ -380,7 +398,8 @@ class InitialsEntryWidget:
         # Caixa visual da coluna ativa: pulso suave + setas pra cima/baixo.
         if is_active:
             pulse = 0.7 + 0.3 * (1.0 + math.sin(self.highlight_pulse_timer)) / 2.0
-            box = pygame.Rect(0, 0, rect.width + 8, rect.height + 8)
+            grow = self._s(8)
+            box = pygame.Rect(0, 0, rect.width + grow, rect.height + grow)
             box.center = rect.center
             border = pygame.Surface((box.width, box.height), pygame.SRCALPHA)
             pygame.draw.rect(
@@ -388,24 +407,26 @@ class InitialsEntryWidget:
                 (*CUSTOM_GOLD, int(alpha * pulse)),
                 border.get_rect(),
                 3,
-                border_radius=10,
+                border_radius=self._s(10),
             )
             surface.blit(border, box.topleft)
             # Setinhas indicadoras (▲ ▼) em cima e embaixo.
+            arrow_gap = self._s(4)
             arrow_up = self.font_label.render("▲", True, CUSTOM_GOLD)
             arrow_up.set_alpha(int(alpha * pulse))
             surface.blit(
                 arrow_up,
-                arrow_up.get_rect(centerx=cx, bottom=rect.top - 4),
+                arrow_up.get_rect(centerx=cx, bottom=rect.top - arrow_gap),
             )
             arrow_dn = self.font_label.render("▼", True, CUSTOM_GOLD)
             arrow_dn.set_alpha(int(alpha * pulse))
             surface.blit(
                 arrow_dn,
-                arrow_dn.get_rect(centerx=cx, top=rect.bottom + 4),
+                arrow_dn.get_rect(centerx=cx, top=rect.bottom + arrow_gap),
             )
         else:
-            box = pygame.Rect(0, 0, rect.width + 4, rect.height + 4)
+            grow = self._s(4)
+            box = pygame.Rect(0, 0, rect.width + grow, rect.height + grow)
             box.center = rect.center
             border = pygame.Surface((box.width, box.height), pygame.SRCALPHA)
             pygame.draw.rect(
@@ -413,7 +434,7 @@ class InitialsEntryWidget:
                 (100, 100, 120, alpha),
                 border.get_rect(),
                 1,
-                border_radius=8,
+                border_radius=self._s(8),
             )
             surface.blit(border, box.topleft)
 
@@ -433,10 +454,10 @@ class GameOverScene(Scene):
         self.r = playing_scene.r
 
         self.game_over_timer = 0.0
-        self.game_over_font_title = get_font(80)
-        self.game_over_font_score = get_font(36)
-        self.game_over_font_prompt = get_font(18)
-        self.game_over_font_button = get_font(16)
+        self.game_over_font_title = get_font(max(8, int(80 * self.ui_scale)))
+        self.game_over_font_score = get_font(max(8, int(36 * self.ui_scale)))
+        self.game_over_font_prompt = get_font(max(8, int(18 * self.ui_scale)))
+        self.game_over_font_button = get_font(max(8, int(16 * self.ui_scale)))
 
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
 
@@ -453,14 +474,14 @@ class GameOverScene(Scene):
 
         # Layout padronizado: menu no canto inferior esquerdo, continuar no
         # canto inferior direito (mais largo para acomodar o rótulo).
-        btn_w, btn_h = 280, 40
-        continue_w = 420
-        self.back_to_menu_button = pygame.Rect(
-            40, Config.SCREEN_HEIGHT - 60, btn_w, btn_h
-        )
+        btn_w, btn_h = self._s(280), self._s(40)
+        continue_w = self._s(420)
+        margin = self._s(40)
+        bottom_y = Config.SCREEN_HEIGHT - self._s(60)
+        self.back_to_menu_button = pygame.Rect(margin, bottom_y, btn_w, btn_h)
         self.continue_button = pygame.Rect(
-            Config.SCREEN_WIDTH - 40 - continue_w,
-            Config.SCREEN_HEIGHT - 60,
+            Config.SCREEN_WIDTH - margin - continue_w,
+            bottom_y,
             continue_w,
             btn_h,
         )
@@ -622,7 +643,7 @@ class GameOverScene(Scene):
         # Título: GAME OVER
         title_surf = self.game_over_font_title.render("GAME OVER", True, colors.WHITE)
         title_surf.set_alpha(text_alpha)
-        title_rect = title_surf.get_rect(center=(center_x, center_y - 140))
+        title_rect = title_surf.get_rect(center=(center_x, center_y - self._s(140)))
         surface.blit(title_surf, title_rect)
 
         # Score
@@ -636,7 +657,7 @@ class GameOverScene(Scene):
                 f"PONTUAÇÃO: {self.score:,}".replace(",", "."), True, colors.WHITE
             )
             score_surf.set_alpha(sub_alpha)
-            score_rect = score_surf.get_rect(center=(center_x, center_y - 40))
+            score_rect = score_surf.get_rect(center=(center_x, center_y - self._s(40)))
             surface.blit(score_surf, score_rect)
 
             if self.entry_widget is not None and not self.entry_submitted:
@@ -650,7 +671,7 @@ class GameOverScene(Scene):
                 hint_surf.set_alpha(sub_alpha)
                 surface.blit(
                     hint_surf,
-                    hint_surf.get_rect(center=(center_x, center_y + 40)),
+                    hint_surf.get_rect(center=(center_x, center_y + self._s(40))),
                 )
 
                 # Botão "Voltar ao Menu" (canto inferior esquerdo)
@@ -682,7 +703,10 @@ class GameOverScene(Scene):
                 surface.blit(
                     r_hint_surf,
                     r_hint_surf.get_rect(
-                        center=(self.continue_button.centerx, self.continue_button.top - 16)
+                        center=(
+                            self.continue_button.centerx,
+                            self.continue_button.top - self._s(16),
+                        )
                     ),
                 )
 

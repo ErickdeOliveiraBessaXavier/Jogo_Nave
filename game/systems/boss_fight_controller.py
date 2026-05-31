@@ -24,6 +24,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Backstop anti-softlock: tempo máximo aguardando hostis ainda NA TELA após a
+# cota antes do force-kill (com blink de aviso). Normalmente a fase avança bem
+# antes — assim que não há mais hostis na tela (ver progressão).
 _ENEMY_CLEANUP_DURATION: float = 20.0
 _BLINK_FAST_INTERVAL: float = 0.05
 _BLINK_SLOW_INTERVAL: float = 0.40

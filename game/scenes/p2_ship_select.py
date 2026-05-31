@@ -52,11 +52,11 @@ class P2ShipSelectScene(Scene):
         self.on_confirm = on_confirm
 
         # Fontes escalonadas
-        self.title_font = get_font(42)
-        self.name_font = get_font(32)
-        self.tag_font = get_font(12)
-        self.desc_font = get_font(18)
-        self.hint_font = get_font(16)
+        self.title_font = get_font(max(8, int(42 * self.ui_scale)))
+        self.name_font = get_font(max(8, int(32 * self.ui_scale)))
+        self.tag_font = get_font(max(8, int(12 * self.ui_scale)))
+        self.desc_font = get_font(max(8, int(18 * self.ui_scale)))
+        self.hint_font = get_font(max(8, int(16 * self.ui_scale)))
 
         unlocked_ids = playing_scene.player_profile.unlocked_ships
         self.profiles: List[ShipProfile] = [
@@ -75,11 +75,11 @@ class P2ShipSelectScene(Scene):
         )
 
         # Configurações de layout
-        self.card_w = 600
-        self.card_h = 450
+        self.card_w = self._s(600)
+        self.card_h = self._s(450)
         self.card_rect = pygame.Rect(
             (Config.SCREEN_WIDTH - self.card_w) // 2,
-            (Config.SCREEN_HEIGHT - self.card_h) // 2 + 20,
+            (Config.SCREEN_HEIGHT - self.card_h) // 2 + self._s(20),
             self.card_w,
             self.card_h,
         )
@@ -167,28 +167,33 @@ class P2ShipSelectScene(Scene):
         # Título
         title_surf = self.title_font.render("JOGADOR 2 — NAVE", True, CUSTOM_GOLD)
         surface.blit(
-            title_surf, ((Config.SCREEN_WIDTH - title_surf.get_width()) // 2, 60)
+            title_surf, ((Config.SCREEN_WIDTH - title_surf.get_width()) // 2, self._s(60))
         )
 
         # Card Central
-        pygame.draw.rect(surface, CUSTOM_DARK_BG, self.card_rect, border_radius=15)
+        card_radius = self._s(15)
+        pygame.draw.rect(surface, CUSTOM_DARK_BG, self.card_rect, border_radius=card_radius)
         pygame.draw.rect(
-            surface, CUSTOM_PURPLE, self.card_rect, width=3, border_radius=15
+            surface, CUSTOM_PURPLE, self.card_rect, width=3, border_radius=card_radius
         )
 
         profile = self.profiles[self.index]
 
-        # 1. Sprite da Nave (Escalado)
+        # 1. Sprite da Nave (Escalado — fator base ×4 ajustado pela ui_scale)
         icon_path = BASE_DIR / "assets" / "icons" / profile.sprite_filename
         icon_surf = get_image(icon_path)
         if icon_surf:
-            scaled_size = (icon_surf.get_width() * 4, icon_surf.get_height() * 4)
+            preview_factor = 4 * self.ui_scale
+            scaled_size = (
+                int(icon_surf.get_width() * preview_factor),
+                int(icon_surf.get_height() * preview_factor),
+            )
             ship_preview = pygame.transform.scale(icon_surf, scaled_size)
             surface.blit(
                 ship_preview,
                 (
                     self.card_rect.centerx - ship_preview.get_width() // 2,
-                    self.card_rect.top + 40,
+                    self.card_rect.top + self._s(40),
                 ),
             )
 
@@ -198,33 +203,39 @@ class P2ShipSelectScene(Scene):
             name_surf,
             (
                 self.card_rect.centerx - name_surf.get_width() // 2,
-                self.card_rect.top + 160,
+                self.card_rect.top + self._s(160),
             ),
         )
 
         # 3. Tags
         if profile.tags:
-            tag_y = self.card_rect.top + 210
-            total_tags_w = sum(self.tag_font.size(t)[0] + 20 for t in profile.tags) - 10
+            tag_y = self.card_rect.top + self._s(210)
+            total_tags_w = (
+                sum(self.tag_font.size(t)[0] + self._s(20) for t in profile.tags)
+                - self._s(10)
+            )
             start_x = self.card_rect.centerx - total_tags_w // 2
 
             curr_x = start_x
             for tag in profile.tags:
                 tag_surf = self.tag_font.render(tag, True, CUSTOM_GOLD)
                 tag_bg = pygame.Rect(
-                    curr_x, tag_y, tag_surf.get_width() + 16, tag_surf.get_height() + 8
+                    curr_x,
+                    tag_y,
+                    tag_surf.get_width() + self._s(16),
+                    tag_surf.get_height() + self._s(8),
                 )
-                pygame.draw.rect(surface, (40, 40, 60), tag_bg, border_radius=5)
-                surface.blit(tag_surf, (tag_bg.x + 8, tag_bg.y + 4))
-                curr_x += tag_bg.width + 10
+                pygame.draw.rect(surface, (40, 40, 60), tag_bg, border_radius=self._s(5))
+                surface.blit(tag_surf, (tag_bg.x + self._s(8), tag_bg.y + self._s(4)))
+                curr_x += tag_bg.width + self._s(10)
 
         # 4. Descrição (Formatada e com Wrap)
         desc_text = format_ship_description(profile, gamepad_active=True)
         self._draw_wrapped_centered(
             surface,
             desc_text,
-            y_start=self.card_rect.top + 260,
-            max_width=self.card_w - 60,
+            y_start=self.card_rect.top + self._s(260),
+            max_width=self.card_w - self._s(60),
         )
 
         # Setas de navegação
@@ -233,11 +244,17 @@ class P2ShipSelectScene(Scene):
         )
         # Esquerda
         self._draw_arrow(
-            surface, (self.card_rect.left - 40, self.card_rect.centery), -1, arrow_color
+            surface,
+            (self.card_rect.left - self._s(40), self.card_rect.centery),
+            -1,
+            arrow_color,
         )
         # Direita
         self._draw_arrow(
-            surface, (self.card_rect.right + 40, self.card_rect.centery), 1, arrow_color
+            surface,
+            (self.card_rect.right + self._s(40), self.card_rect.centery),
+            1,
+            arrow_color,
         )
 
         # Contador
@@ -248,21 +265,21 @@ class P2ShipSelectScene(Scene):
             counter,
             (
                 self.card_rect.centerx - counter.get_width() // 2,
-                self.card_rect.bottom + 15,
+                self.card_rect.bottom + self._s(15),
             ),
         )
 
         # Dicas de controles
-        hint_y = Config.SCREEN_HEIGHT - 60
+        hint_y = Config.SCREEN_HEIGHT - self._s(60)
         hints = [("L/R", "Navegar"), ("A", "Confirmar"), ("B", "Cancelar")]
 
-        hint_x_start = Config.SCREEN_WIDTH // 2 - 200
+        hint_x_start = Config.SCREEN_WIDTH // 2 - self._s(200)
         for btn, action in hints:
             b_surf = self.hint_font.render(btn, True, CUSTOM_GOLD)
             a_surf = self.hint_font.render(action, True, WHITE)
             surface.blit(b_surf, (hint_x_start, hint_y))
-            surface.blit(a_surf, (hint_x_start + b_surf.get_width() + 10, hint_y))
-            hint_x_start += 160
+            surface.blit(a_surf, (hint_x_start + b_surf.get_width() + self._s(10), hint_y))
+            hint_x_start += self._s(160)
 
     def _draw_arrow(
         self,
@@ -272,7 +289,7 @@ class P2ShipSelectScene(Scene):
         color: tuple[int, int, int],
     ) -> None:
         x, y = pos
-        size = 20
+        size = self._s(20)
         points = [(x, y - size), (x + direction * size, y), (x, y + size)]
         pygame.draw.polygon(surface, color, points)
 
@@ -298,7 +315,7 @@ class P2ShipSelectScene(Scene):
         if current:
             lines.append(" ".join(current))
 
-        line_h = self.desc_font.get_linesize() + 4
+        line_h = self.desc_font.get_linesize() + self._s(4)
         for i, line in enumerate(lines):
             surf = self.desc_font.render(line, True, WHITE)
             surface.blit(

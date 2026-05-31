@@ -25,9 +25,9 @@ class ControlsModalScene(Scene):
             True  # Estado do checkbox (invertido para salvar em show_controls_modal)
         )
 
-        self.title_font = get_font(32)
-        self.item_font = get_font(18)
-        self.small_font = get_font(16)
+        self.title_font = get_font(max(8, int(32 * self.ui_scale)))
+        self.item_font = get_font(max(8, int(18 * self.ui_scale)))
+        self.small_font = get_font(max(8, int(16 * self.ui_scale)))
 
         self._calculate_layout()
 
@@ -35,8 +35,8 @@ class ControlsModalScene(Scene):
         screen_w, screen_h = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
 
         # Modal mais largo para garantir que as colunas não se sobreponham
-        self.modal_w = 760
-        self.modal_h = 420
+        self.modal_w = self._s(760)
+        self.modal_h = self._s(420)
         self.modal_rect = pygame.Rect(
             (screen_w - self.modal_w) // 2,
             (screen_h - self.modal_h) // 2,
@@ -45,20 +45,20 @@ class ControlsModalScene(Scene):
         )
 
         # Botão "Entendi" - Centralizado horizontalmente na parte inferior
-        btn_w = 200
-        btn_h = 45
+        btn_w = self._s(200)
+        btn_h = self._s(45)
         self.button_rect = pygame.Rect(
             self.modal_rect.centerx - btn_w // 2,
-            self.modal_rect.bottom - 120,
+            self.modal_rect.bottom - self._s(120),
             btn_w,
             btn_h,
         )
 
         # Checkbox "Não mostrar mais" - Abaixo do botão
-        cb_size = 18
+        cb_size = self._s(18)
         self.checkbox_rect = pygame.Rect(
-            self.modal_rect.centerx - 110,
-            self.button_rect.bottom + 15,
+            self.modal_rect.centerx - self._s(110),
+            self.button_rect.bottom + self._s(15),
             cb_size,
             cb_size,
         )
@@ -70,7 +70,7 @@ class ControlsModalScene(Scene):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             pos = event.pos
             # Checkbox (hitbox facilitada)
-            click_rect = self.checkbox_rect.inflate(200, 10)
+            click_rect = self.checkbox_rect.inflate(self._s(200), self._s(10))
             if click_rect.collidepoint(pos):
                 self._toggle_checkbox()
             # Botão Entendi
@@ -89,7 +89,7 @@ class ControlsModalScene(Scene):
             # para alternar o checkbox sem precisar mirar.
             if event.button == XboxButton.A:
                 pos = pygame.mouse.get_pos()
-                if self.checkbox_rect.inflate(200, 10).collidepoint(pos):
+                if self.checkbox_rect.inflate(self._s(200), self._s(10)).collidepoint(pos):
                     self._toggle_checkbox()
                 else:
                     self._finish()
@@ -107,7 +107,7 @@ class ControlsModalScene(Scene):
 
     def get_focusable_rects(self):
         # Inflado igual ao hitbox de mouse pra DPad alternar entre checkbox e botão.
-        return [self.button_rect, self.checkbox_rect.inflate(200, 10)]
+        return [self.button_rect, self.checkbox_rect.inflate(self._s(200), self._s(10))]
 
     def _finish(self):
         sound_manager.play_sound("button_click")
@@ -132,8 +132,11 @@ class ControlsModalScene(Scene):
         surface.blit(overlay, (0, 0))
 
         # Fundo do modal (preto)
-        pygame.draw.rect(surface, BLACK, self.modal_rect, border_radius=15)
-        pygame.draw.rect(surface, CUSTOM_GOLD, self.modal_rect, 2, border_radius=15)
+        modal_radius = self._s(15)
+        pygame.draw.rect(surface, BLACK, self.modal_rect, border_radius=modal_radius)
+        pygame.draw.rect(
+            surface, CUSTOM_GOLD, self.modal_rect, 2, border_radius=modal_radius
+        )
 
         # Título
         title_surf = self.title_font.render("Instruções de Voo", True, CUSTOM_GOLD)
@@ -141,14 +144,14 @@ class ControlsModalScene(Scene):
             title_surf,
             (
                 self.modal_rect.centerx - title_surf.get_width() // 2,
-                self.modal_rect.y + 25,
+                self.modal_rect.y + self._s(25),
             ),
         )
 
         # Configuração das colunas
-        left_x = self.modal_rect.x + 40
-        right_x = self.modal_rect.centerx + 20
-        max_col_w = (self.modal_w // 2) - 60
+        left_x = self.modal_rect.x + self._s(40)
+        right_x = self.modal_rect.centerx + self._s(20)
+        max_col_w = (self.modal_w // 2) - self._s(60)
 
         # Instruções: trocam entre teclado e controle conforme o input ativo
         # (preferência ligada + gamepad conectado).
@@ -185,10 +188,10 @@ class ControlsModalScene(Scene):
                 for line in wrapped_lines:
                     text_surf = self.item_font.render(line, True, WHITE)
                     surface.blit(text_surf, (start_x, curr_y))
-                    curr_y += 25  # Espaço entre linhas da mesma instrução
-                curr_y += 15  # Espaço extra entre instruções diferentes
+                    curr_y += self._s(25)  # Espaço entre linhas da mesma instrução
+                curr_y += self._s(15)  # Espaço extra entre instruções diferentes
 
-        y_start = self.modal_rect.y + 90
+        y_start = self.modal_rect.y + self._s(90)
         draw_column(left_col_raw, left_x, y_start)
         draw_column(right_col_raw, right_x, y_start)
 
@@ -199,7 +202,7 @@ class ControlsModalScene(Scene):
             timer_surf,
             (
                 self.modal_rect.centerx - timer_surf.get_width() // 2,
-                self.modal_rect.bottom - 25,
+                self.modal_rect.bottom - self._s(25),
             ),
         )
 
@@ -209,18 +212,20 @@ class ControlsModalScene(Scene):
         )
 
         # Checkbox "Não mostrar mais" abaixo do botão
-        pygame.draw.rect(surface, CUSTOM_GOLD, self.checkbox_rect, 1, border_radius=3)
+        pygame.draw.rect(
+            surface, CUSTOM_GOLD, self.checkbox_rect, 1, border_radius=self._s(3)
+        )
         if not self.show_again:
-            inner_rect = self.checkbox_rect.inflate(-6, -6)
-            pygame.draw.rect(surface, CUSTOM_GOLD, inner_rect, border_radius=1)
+            inner_rect = self.checkbox_rect.inflate(-self._s(6), -self._s(6))
+            pygame.draw.rect(surface, CUSTOM_GOLD, inner_rect, border_radius=self._s(1))
 
         # Fonte menor para o checkbox
-        tiny_font = get_font(12)
+        tiny_font = get_font(max(8, int(12 * self.ui_scale)))
         label_surf = tiny_font.render("Não mostrar novamente", True, colors.GRAY)
         surface.blit(
             label_surf,
             (
-                self.checkbox_rect.right + 8,
+                self.checkbox_rect.right + self._s(8),
                 self.checkbox_rect.centery - label_surf.get_height() // 2,
             ),
         )

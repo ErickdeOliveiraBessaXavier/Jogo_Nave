@@ -11,7 +11,7 @@ class VolcanicBackground(Background):
     """Background vulcânico em caverna com parallax, estalactites, estalagmites irregulares, colunas e lava."""
 
     # Constantes da Lava e Brasas
-    NUM_LAVA_POOLS = 3
+    NUM_LAVA_POOLS = 5
     NUM_EMBERS = 60
     WAVE_SPEED = 2.0
     LAVA_RESOLUTION = 20
@@ -30,12 +30,7 @@ class VolcanicBackground(Background):
         self._create_embers()
 
     def _create_layers(self) -> None:
-        """Camadas de parallax: fundo mais claro/lento → frente escura/rápida.
-
-        4 camadas (antes 6): em ordem painter as traseiras ficavam quase
-        totalmente cobertas pelas frontais — overdraw puro. 4 dão o mesmo
-        gradiente com ~1/3 menos draw calls e fill rate.
-        """
+        """Camadas de parallax: fundo mais claro/lento → frente escura/rápida."""
         layer_configs: List[Dict[str, Any]] = [
             {"speed": 12.0, "color": (50, 18, 9), "num_objects": 10, "base_thickness": 40},
             {"speed": 35.0, "color": (35, 12, 5), "num_objects": 8, "base_thickness": 70},
@@ -137,13 +132,32 @@ class VolcanicBackground(Background):
         }
 
     def _create_lava(self) -> None:
-        """Cria pools de lava na parte inferior."""
-        for _ in range(self.NUM_LAVA_POOLS):
+        """Cria pools de lava com alturas escalonadas para garantir que todas sejam visíveis."""
+        # Paleta expandida para 5 camadas (da mais escura/fundo para a mais clara/frente)
+        lava_colors = [
+            ((120, 30, 0), (160, 40, 0)),   # 1. Fundo (mais profunda/escura)
+            ((170, 45, 0), (210, 60, 0)),   # 2.
+            ((210, 60, 10), (255, 100, 0)),  # 3. Média
+            ((240, 80, 15), (255, 140, 30)), # 4.
+            ((255, 110, 30), (255, 200, 60)) # 5. Frente (mais brilhante/quente)
+        ]
+        
+        for i in range(self.NUM_LAVA_POOLS):
+            color, border = lava_colors[i % len(lava_colors)]
+            # Escalonamento vertical: cada camada tem um "degrau" diferente
+            # i=0 (fundo) é mais alta na tela, i=4 (frente) é mais baixa
+            base_y = self.height - (100 - (i * 15))
+            
             self.lava_pools.append({
-                "y": self.height - random.randint(20, 60),
-                "amplitude": random.randint(5, 12),
-                "frequency": random.uniform(0.5, 1.2),
+                "y": base_y - random.randint(0, 10),
+                "amplitude": random.randint(12, 22),
+                "frequency": random.uniform(0.6, 1.1),
                 "phase": random.uniform(0, 6.28),
+                "anim_speed": random.uniform(1.2, 2.8),
+                "current_anim": random.uniform(0, 100),
+                "parallax_factor": 0.05 + (i * 0.1),
+                "color": color,
+                "border_color": border
             })
 
     def _create_embers(self) -> None:
@@ -161,15 +175,17 @@ class VolcanicBackground(Background):
         """Atualiza físicas de scroll, lava e partículas."""
         self.wave_offset += dt * self.WAVE_SPEED * speed_mult
 
+        # Lava: movimento orgânico independente do scroll
+        for pool in self.lava_pools:
+            pool["current_anim"] += dt * pool["anim_speed"]
+            # Um pequeno componente de scroll para a lava não parecer "colada" na tela
+            pool["phase"] += (80.0 * pool["parallax_factor"] * dt * speed_mult) / 50.0
+
         # Scroll do Parallax
         for layer in self.layers:
             scroll_speed = layer["speed"] * dt * speed_mult
             
-            # Scroll do terreno. `while` (não `if`): no warp do "entering" o
-            # scroll de um frame pode passar de vários `terrain_res`; com `if` o
-            # terrain_x afundava sem voltar ao intervalo e o terreno dessincronizava
-            # (a camada mais rápida "não acompanhava"). O while alcança todos os
-            # passos pendentes no mesmo frame.
+            # Scroll do terreno.
             layer["terrain_x"] -= scroll_speed
             base = layer["base_thickness"]
             while layer["terrain_x"] <= -layer["terrain_res"]:
@@ -195,7 +211,7 @@ class VolcanicBackground(Background):
                     obj["type"] = new_obj["type"]
                     rightmost = new_x + new_obj["width"]
 
-        # Brasas: sobem pela tela inteira e reaparecem embaixo (como antes).
+        # Brasas
         for ember in self.embers:
             ember["y"] -= ember["speed"] * dt * speed_mult
             if ember["y"] < -10:
@@ -203,25 +219,22 @@ class VolcanicBackground(Background):
                 ember["x"] = random.randint(0, self.width)
 
     def draw(self, surface: pygame.Surface) -> None:
-        """Desenha o ambiente: rocha (parallax) ao fundo, lava no piso à frente."""
+        """Desenha o ambiente: parallax ao fundo e lava à frente para visibilidade total."""
         # Fundo base bem escuro
         surface.fill((10, 5, 2))
 
-        # 1. Camadas de parallax (teto, chão e formações de rocha)
+        # 1. Desenhar todas as camadas de parallax (rochas, teto e chão)
         for layer in self.layers:
             self._draw_layer_elements(surface, layer)
 
-        # 2. Lava no piso, desenhada À FRENTE da rocha (senão o terreno do chão
-        #    das camadas frontais, que desce até a base da tela, cobria a lava).
-        #    A camada escura do parallax encosta no limite inferior; a lava fica
-        #    direto contra ela, sem faixa de "chão" intermediária.
+        # 2. Desenhar a lava (por cima do chão das camadas de parallax)
         for pool in self.lava_pools:
             points = self._calculate_lava_wave(pool)
             if len(points) >= 3:
-                pygame.draw.polygon(surface, (210, 60, 10), points)
-                pygame.draw.polygon(surface, (255, 120, 0), points, 2)
+                pygame.draw.polygon(surface, pool["color"], points)
+                pygame.draw.polygon(surface, pool["border_color"], points, 2)
 
-        # 3. Brasas por cima de tudo (cor alaranjada do efeito clássico)
+        # 3. Desenhar brasas por cima de tudo
         for ember in self.embers:
             brightness = int(255 * ember["brightness"])
             color = (brightness, brightness // 3, 0)
@@ -231,15 +244,13 @@ class VolcanicBackground(Background):
 
     def _draw_layer_elements(self, surface: pygame.Surface, layer: Dict[str, Any]) -> None:
         """Desenha os elementos de uma camada (teto, chão e formações)."""
-        draw_poly = pygame.draw.polygon  # bind local — chamado várias vezes (§7)
+        draw_poly = pygame.draw.polygon
         color = layer["color"]
         tx = layer["terrain_x"]
         tres = layer["terrain_res"]
         n = layer["num_points"]
         h = self.height
 
-        # Teto e chão: escreve nos buffers persistentes in-place (sem realocar
-        # a lista nem recriar os pontos de fechamento).
         ceil_buf = layer["ceiling_buf"]
         floor_buf = layer["floor_buf"]
         ceil_t = layer["ceiling_terrain"]
@@ -251,7 +262,6 @@ class VolcanicBackground(Background):
         draw_poly(surface, color, ceil_buf)
         draw_poly(surface, color, floor_buf)
 
-        # Formações (estalactites, estalagmites, colunas)
         for obj in layer["objects"]:
             x_offset = obj["x"]
             world_points = [(px + x_offset, py) for px, py in obj["points_offsets"]]
@@ -259,16 +269,16 @@ class VolcanicBackground(Background):
 
     def _calculate_lava_wave(self, pool: Dict[str, Any]) -> List[Tuple[int, int]]:
         points: List[Tuple[int, int]] = []
+        anim = pool["current_anim"]
+        phase = pool["phase"]
 
         for x in range(0, self.width + self.LAVA_RESOLUTION, self.LAVA_RESOLUTION):
             if x > self.width: x = self.width 
             
-            wave = math.sin(
-                (x * pool["frequency"] / 100)
-                + (self.wave_offset * pool["frequency"])
-                + pool["phase"]
-            )
-            y = pool["y"] + wave * pool["amplitude"]
+            wave1 = math.sin((x * pool["frequency"] / 80) + phase + anim)
+            wave2 = math.sin((x * pool["frequency"] / 30) - anim * 1.5) * 0.3
+            
+            y = pool["y"] + (wave1 + wave2) * pool["amplitude"]
             points.append((x, int(y)))
 
         points.append((self.width, self.height))

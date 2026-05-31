@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING, List, Optional
 
 import pygame
 
+from .config import config as Config
+
 if TYPE_CHECKING:
     from ..app import GameApp
 
@@ -10,6 +12,17 @@ if TYPE_CHECKING:
 class Scene(ABC):
     def __init__(self, app: "GameApp") -> None:
         self.app = app
+        # Escala de UI relativa ao design base (1280×720). O jogo roda com
+        # pygame.SCALED numa resolução lógica escolhida; pixels fixos de UI
+        # precisam deste fator para não ficarem desproporcionais fora de 720p
+        # (CLAUDE.md §12). Em 720p ui_scale == 1.0. Resoluções são 16:9, então
+        # um único fator cobre os dois eixos. Subclasses usam self._s(px).
+        self.ui_scale: float = Config.SCREEN_WIDTH / 1280.0
+
+    def _s(self, value: float) -> int:
+        """Escala um valor de pixel do design base para a resolução lógica
+        atual. Em 720p retorna o valor original (ui_scale == 1.0)."""
+        return int(value * self.ui_scale)
 
     def enter(self):
         pass

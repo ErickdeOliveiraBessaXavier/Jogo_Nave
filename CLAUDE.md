@@ -182,7 +182,33 @@ deve segui-los; código existente que os viola é candidato a revisão.
 
 ---
 
-## §12 — Documentos do projeto
+## §12 — Escala de UI por resolução
+
+**UI desenhada em pixels do design base (1280×720) escala por `ui_scale`.**
+
+- O jogo roda com `pygame.SCALED`: gameplay desenha numa resolução lógica fixa
+  e o pygame escala o frame inteiro para a tela física (mantendo 16:9, com
+  letterbox). Posições de **mundo/spawn** já usam fração de `Config.SCREEN_WIDTH`
+  — adaptam-se sozinhas. Tamanhos de **UI** (fontes, caixas, slots, offsets)
+  são pixels fixos e **não** se adaptam quando a resolução lógica muda
+  (`settings.py` oferece 576p→1080p; aplicada no restart via `set_screen_resolution`).
+- Convenção: `self.ui_scale = Config.SCREEN_WIDTH / 1280.0` (um fator serve aos
+  dois eixos por ser 16:9) e todo pixel fixo é multiplicado por ele via o helper
+  `self._s(valor) -> int(valor * ui_scale)`. Fontes:
+  `get_font(max(8, int(base * ui_scale)))`. Em 720p `ui_scale == 1.0` → layout
+  idêntico ao design, sem regressão.
+- A base `Scene` (`core/state.py`) já provê `ui_scale` e `_s` no `__init__` —
+  toda cena que chama `super().__init__(app)` herda. Classes de UI que **não**
+  são `Scene` (renderers como `GameRenderer`/`Renderer`, views, widgets,
+  diálogos) declaram o próprio `ui_scale`/`_s` com a mesma fórmula.
+- Não escalar espessura de borda (1–3px, piso visual) nem amplitude de animação
+  cosmética.
+- Validar headless em 576p/720p/1080p antes de fechar: nada estoura a tela e
+  720p não muda. Detalhe e telas pendentes em `memory/menu-ui-scale-convention`.
+
+---
+
+## §13 — Documentos do projeto
 
 - **`CLAUDE.md`** (este arquivo): princípios duráveis. Muda raramente.
 - **`memory/`**: contexto persistente entre sessões (decisões, convenções
@@ -209,3 +235,4 @@ deve segui-los; código existente que os viola é candidato a revisão.
 - [ ] Colisão via spatial grid; dano via `apply_hit`/`HitResult`
 - [ ] Classe grande decomposta por composição, fachada preservada
 - [ ] Imports no topo; local só para ciclo real
+- [ ] UI (fontes/caixas/offsets) escalada por `ui_scale`; validada fora de 720p

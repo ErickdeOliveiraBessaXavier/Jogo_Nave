@@ -43,9 +43,9 @@ class WorldTransitionScene(Scene):
         self.stage_text_override = stage_text_override
         self.timer: float = 0.0
         self.duration: float = 3.0  # 3 segundos
-        self.font_title = get_font(60)
-        self.font_desc = get_font(24)
-        self.font_meta = get_font(20)
+        self.font_title = get_font(max(8, int(60 * self.ui_scale)))
+        self.font_desc = get_font(max(8, int(24 * self.ui_scale)))
+        self.font_meta = get_font(max(8, int(20 * self.ui_scale)))
 
     def enter(self) -> None:
         """Ativada ao entrar na cena."""
@@ -101,40 +101,45 @@ class WorldTransitionScene(Scene):
         # do título e empurravam o conteúdo para fora do cartão (overflow sobre
         # as barras de cor). Pré-medimos as linhas (mesma largura/limite do blit
         # do título abaixo) e somamos a altura de uma linha extra quando há duas.
-        card_width = min(760, surface.get_width() - 80)
+        card_width = min(self._s(760), surface.get_width() - self._s(80))
+        title_wrap_w = card_width - self._s(80)
         title_text = self.title_override or self.new_world.name
-        title_line_count = len(wrap_text(self.font_title, title_text, card_width - 80)[:2])
-        extra_title_height = (self.font_title.get_height() + 2) if title_line_count > 1 else 0
-        card_height = 380 + extra_title_height
+        title_line_count = len(wrap_text(self.font_title, title_text, title_wrap_w)[:2])
+        extra_title_height = (
+            (self.font_title.get_height() + self._s(2)) if title_line_count > 1 else 0
+        )
+        card_height = self._s(380) + extra_title_height
         card_x = center_x - card_width // 2
         card_y = center_y - card_height // 2
+        card_radius = self._s(20)
+        banner_h = self._s(10)
         card_rect = pygame.Rect(card_x, card_y, card_width, card_height)
-        pygame.draw.rect(overlay, (16, 16, 22, 245), card_rect, border_radius=20)
+        pygame.draw.rect(overlay, (16, 16, 22, 245), card_rect, border_radius=card_radius)
         pygame.draw.rect(
             overlay,
             (*primary_rgb, 200),
             card_rect,
             width=2,
-            border_radius=20,
+            border_radius=card_radius,
         )
 
         # Faixa superior do cartão
-        banner_rect = pygame.Rect(card_x, card_y, card_width, 10)
+        banner_rect = pygame.Rect(card_x, card_y, card_width, banner_h)
         pygame.draw.rect(
             overlay,
             primary_rgb,
             banner_rect,
-            border_top_left_radius=20,
-            border_top_right_radius=20,
+            border_top_left_radius=card_radius,
+            border_top_right_radius=card_radius,
         )
         pygame.draw.rect(
             overlay,
             secondary_rgb,
-            (card_x + card_width // 2, card_y, card_width // 2, 10),
-            border_top_right_radius=20,
+            (card_x + card_width // 2, card_y, card_width // 2, banner_h),
+            border_top_right_radius=card_radius,
         )
 
-        current_y = card_y + 45
+        current_y = card_y + self._s(45)
 
         # === TÍTULO DO MUNDO ===
         title_height = self._blit_wrapped_centered_text(
@@ -144,18 +149,18 @@ class WorldTransitionScene(Scene):
             colors.WHITE,
             center_x,
             current_y,
-            card_width - 80,
+            title_wrap_w,
             alpha,
             max_lines=2,
-            line_spacing=2,
+            line_spacing=self._s(2),
         )
-        current_y += title_height + 15
+        current_y += title_height + self._s(15)
 
         # Linha separadora minimalista para reforçar hierarquia visual.
-        sep_width = 140
+        sep_width = self._s(140)
         sep_rect = pygame.Rect(center_x - sep_width // 2, current_y, sep_width, 2)
         pygame.draw.rect(overlay, primary_rgb, sep_rect)
-        current_y += 20
+        current_y += self._s(20)
 
         # === DESCRIÇÃO ===
         desc_height = self._blit_wrapped_centered_text(
@@ -165,12 +170,12 @@ class WorldTransitionScene(Scene):
             (210, 210, 210),
             center_x,
             current_y,
-            card_width - 90,
+            card_width - self._s(90),
             alpha,
             max_lines=3,
-            line_spacing=6,
+            line_spacing=self._s(6),
         )
-        current_y += desc_height + 30
+        current_y += desc_height + self._s(30)
 
         # Apenas informação essencial do progresso.
         stage_text = (
@@ -186,24 +191,25 @@ class WorldTransitionScene(Scene):
                 colors.WHITE,
                 center_x,
                 current_y,
-                card_width - 120,
+                card_width - self._s(120),
                 alpha,
                 max_lines=1,
                 line_spacing=0,
             )
 
         # === CORES DO MUNDO (visual) ===
-        bar_height = 8
-        bar_y = card_y + card_height - 48
-        bar_width = 240
+        bar_height = self._s(8)
+        bar_y = card_y + card_height - self._s(48)
+        bar_width = self._s(240)
         bar_x = center_x - bar_width // 2
+        bar_radius = self._s(4)
 
         # Barra cor primária
         pygame.draw.rect(
             overlay,
             primary_rgb,
             (bar_x, bar_y, bar_width // 2, bar_height),
-            border_radius=4,
+            border_radius=bar_radius,
         )
 
         # Barra cor secundária
@@ -211,7 +217,7 @@ class WorldTransitionScene(Scene):
             overlay,
             secondary_rgb,
             (bar_x + bar_width // 2, bar_y, bar_width // 2, bar_height),
-            border_radius=4,
+            border_radius=bar_radius,
         )
 
         overlay.set_alpha(alpha)

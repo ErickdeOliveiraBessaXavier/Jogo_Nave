@@ -48,12 +48,18 @@ class SettingsView:
         self.preferences = UserPreferences(get_preferences_path())
         self.player_profile = PlayerProfile(get_profile_path())
 
+        # Escala de UI (CLAUDE.md §12). Esta View não é uma Scene, mantém o
+        # próprio fator/helper.
+        from ..core.config import config as Config
+
+        self.ui_scale = Config.SCREEN_WIDTH / 1280.0
+
         # Fonts
-        self.title_font = get_font(36)
-        self.header_font = get_font(18)
-        self.item_font = get_font(16)
-        self.small_font = get_font(13)
-        self.percent_font = get_font(13)
+        self.title_font = get_font(max(8, int(36 * self.ui_scale)))
+        self.header_font = get_font(max(8, int(18 * self.ui_scale)))
+        self.item_font = get_font(max(8, int(16 * self.ui_scale)))
+        self.small_font = get_font(max(8, int(13 * self.ui_scale)))
+        self.percent_font = get_font(max(8, int(13 * self.ui_scale)))
 
         # Estado da UI
         self.sliders: Dict[str, float] = {
@@ -109,23 +115,27 @@ class SettingsView:
 
         self._calculate_layout()
 
+    def _s(self, value: float) -> int:
+        """Escala um valor de pixel do design base (1280×720)."""
+        return int(value * self.ui_scale)
+
     def _calculate_layout(self):
         from ..core.config import config as Config
 
         screen_w, screen_h = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
 
         # Dimensões e espaçamentos
-        outer_pad = 40
-        card_gap = 40
-        card_inner_pad_x = 30
+        outer_pad = self._s(40)
+        card_gap = self._s(40)
+        card_inner_pad_x = self._s(30)
 
         # Calcular largura dinâmica para ocupar a tela toda
         available_width = screen_w - (2 * outer_pad)
         card_width = (available_width - card_gap) / 2
-        card_height = screen_h - 180
+        card_height = screen_h - self._s(180)
 
         # Centralizar cards verticalmente
-        card_y = (screen_h - card_height) // 2 + 20
+        card_y = (screen_h - card_height) // 2 + self._s(20)
 
         # Posição inicial X
         start_x = outer_pad
@@ -135,15 +145,15 @@ class SettingsView:
         self.layout_rects["audio_card"] = audio_card_rect
 
         self.layout_rects["sliders"] = {}
-        slider_w = card_width - 60
-        slider_h = 20
-        y_offset = audio_card_rect.y + 80
+        slider_w = card_width - self._s(60)
+        slider_h = self._s(20)
+        y_offset = audio_card_rect.y + self._s(80)
 
         for key in ["music", "sfx", "shot"]:
             self.layout_rects["sliders"][key] = pygame.Rect(
                 audio_card_rect.x + card_inner_pad_x, y_offset, slider_w, slider_h
             )
-            y_offset += 100
+            y_offset += self._s(100)
 
         # Card de Controles (Direita)
         controls_card_rect = pygame.Rect(
@@ -153,8 +163,8 @@ class SettingsView:
 
         # Toggles de controle
         self.layout_rects["toggles"] = {}
-        toggle_w, toggle_h = 30, 30
-        y_offset = controls_card_rect.y + 60
+        toggle_w, toggle_h = self._s(30), self._s(30)
+        y_offset = controls_card_rect.y + self._s(60)
 
         # Agrupar toggles
         for key in [
@@ -166,15 +176,15 @@ class SettingsView:
             self.layout_rects["toggles"][key] = pygame.Rect(
                 controls_card_rect.x + card_inner_pad_x, y_offset, toggle_w, toggle_h
             )
-            y_offset += 50
+            y_offset += self._s(50)
 
         # Seletor de resolução
-        y_offset += 20
+        y_offset += self._s(20)
         self.layout_rects["resolution_label"] = pygame.Rect(
             controls_card_rect.x + card_inner_pad_x,
             y_offset,
             controls_card_rect.width - (2 * card_inner_pad_x),
-            30,
+            self._s(30),
         )
 
         # Grid de botões de resolução
@@ -182,13 +192,13 @@ class SettingsView:
 
         # Configuração do grid
         cols = 3
-        button_gap_x = 10
-        button_gap_y = 10
+        button_gap_x = self._s(10)
+        button_gap_y = self._s(10)
         available_width_for_buttons = controls_card_rect.width - (2 * card_inner_pad_x)
         button_w = (available_width_for_buttons - (cols - 1) * button_gap_x) / cols
-        button_h = 35
+        button_h = self._s(35)
 
-        grid_start_y = y_offset + 40
+        grid_start_y = y_offset + self._s(40)
 
         from typing import List, cast
 
@@ -211,13 +221,13 @@ class SettingsView:
 
         # Botão de Voltar (Canto inferior esquerdo)
         back_text_width = self.item_font.size("Voltar")[0]
-        back_btn_width = back_text_width + 60
+        back_btn_width = back_text_width + self._s(60)
         self.layout_rects["back_button"] = pygame.Rect(
-            outer_pad, screen_h - 60, back_btn_width, 40
+            outer_pad, screen_h - self._s(60), back_btn_width, self._s(40)
         )
 
         # Pop-up de confirmação (Centralizado na tela)
-        popup_w, popup_h = 500, 220
+        popup_w, popup_h = self._s(500), self._s(220)
         popup_x = (screen_w - popup_w) // 2
         popup_y = (screen_h - popup_h) // 2
         self.layout_rects["popup_rect"] = pygame.Rect(
@@ -225,13 +235,13 @@ class SettingsView:
         )
 
         # Botões do pop-up
-        btn_w = 100
-        btn_h = 40
-        btn_gap = 20
+        btn_w = self._s(100)
+        btn_h = self._s(40)
+        btn_gap = self._s(20)
         total_btn_width = (btn_w * 2) + btn_gap
 
         start_btn_x = popup_x + (popup_w - total_btn_width) // 2
-        btn_y = popup_y + popup_h - btn_h - 25
+        btn_y = popup_y + popup_h - btn_h - self._s(25)
 
         self.layout_rects["popup_yes_button"] = pygame.Rect(
             start_btn_x, btn_y, btn_w, btn_h
@@ -612,14 +622,14 @@ class SettingsView:
         """Renderiza a view."""
         # Calcular alpha baseado no progresso
         alpha = int(255 * self.entry_progress)
-        offset_y = int(30 * (1.0 - self.entry_progress))
+        offset_y = int(self._s(30) * (1.0 - self.entry_progress))
 
         # Título
         title_surf = self.title_font.render("Configurações", True, CUSTOM_GOLD)
         title_surf.set_alpha(alpha)
         # Centralizar título
         title_x = (surface.get_width() - title_surf.get_width()) // 2
-        surface.blit(title_surf, (title_x, 20 + offset_y))
+        surface.blit(title_surf, (title_x, self._s(20) + offset_y))
 
         # Desenhar Cards com alpha
         self._draw_audio_card(surface, alpha, offset_y)
@@ -674,13 +684,13 @@ class SettingsView:
             (*colors.GRAY, alpha),
             pygame.Rect(1, 1, adjusted_rect.width, adjusted_rect.height),
             1,
-            border_radius=8,
+            border_radius=self._s(8),
         )
         surface.blit(temp_surface, (adjusted_rect.x - 1, adjusted_rect.y - 1))
 
         title_surf = self.header_font.render(title, True, CUSTOM_GOLD)
         title_surf.set_alpha(alpha)
-        surface.blit(title_surf, (adjusted_rect.x + 15, adjusted_rect.y + 15))
+        surface.blit(title_surf, (adjusted_rect.x + self._s(15), adjusted_rect.y + self._s(15)))
 
     def _draw_audio_card(
         self, surface: pygame.Surface, alpha: int = 255, offset_y: int = 0
@@ -694,9 +704,11 @@ class SettingsView:
         labels = {"music": "Música", "sfx": "Efeitos (SFX)", "shot": "Tiros"}
 
         # Criar clipping para o card
-        clip_rect = card_rect.inflate(-10, -10)
+        clip_inset = self._s(10)
+        clip_rect = card_rect.inflate(-clip_inset, -clip_inset)
         surface.set_clip(clip_rect)
 
+        slider_radius = self._s(10)
         for key in self.sliders:
             rect = self.layout_rects["sliders"][key].copy()
             rect.y += offset_y
@@ -704,14 +716,14 @@ class SettingsView:
             # Label
             label_surf = self.item_font.render(labels[key], True, colors.WHITE)
             label_surf.set_alpha(alpha)
-            surface.blit(label_surf, (rect.x, rect.y - 30))
+            surface.blit(label_surf, (rect.x, rect.y - self._s(30)))
 
             # Slider
             val = self.sliders[key]
             # Barra de fundo
             temp_bg = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
             pygame.draw.rect(
-                temp_bg, (10, 10, 10, alpha), temp_bg.get_rect(), border_radius=10
+                temp_bg, (10, 10, 10, alpha), temp_bg.get_rect(), border_radius=slider_radius
             )
             surface.blit(temp_bg, rect.topleft)
 
@@ -720,7 +732,7 @@ class SettingsView:
             fill_rect = pygame.Rect(0, 0, fill_width, rect.height)
             temp_fill = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
             pygame.draw.rect(
-                temp_fill, (*CUSTOM_PURPLE, alpha), fill_rect, border_radius=10
+                temp_fill, (*CUSTOM_PURPLE, alpha), fill_rect, border_radius=slider_radius
             )
             surface.blit(temp_fill, rect.topleft)
 
@@ -733,13 +745,13 @@ class SettingsView:
                 (*colors.GRAY, alpha),
                 pygame.Rect(1, 1, rect.width, rect.height),
                 1,
-                border_radius=10,
+                border_radius=slider_radius,
             )
             surface.blit(temp_border, (rect.x - 1, rect.y - 1))
 
             # Knob
             knob_x = rect.x + int(val * rect.w)
-            knob_rect = pygame.Rect(0, 0, 10, rect.height + 10)
+            knob_rect = pygame.Rect(0, 0, self._s(10), rect.height + self._s(10))
             knob_rect.center = (knob_x, rect.centery)
             temp_knob = pygame.Surface(
                 (knob_rect.width + 2, knob_rect.height + 2), pygame.SRCALPHA
@@ -748,7 +760,7 @@ class SettingsView:
                 temp_knob,
                 (*CUSTOM_GOLD, alpha),
                 pygame.Rect(1, 1, knob_rect.width, knob_rect.height),
-                border_radius=3,
+                border_radius=self._s(3),
             )
             surface.blit(temp_knob, (knob_rect.x - 1, knob_rect.y - 1))
 
@@ -757,7 +769,8 @@ class SettingsView:
             percent_surf = self.percent_font.render(percent_text, True, colors.GRAY)
             percent_surf.set_alpha(alpha)
             percent_x = min(
-                rect.right + 5, card_rect.right - percent_surf.get_width() - 25
+                rect.right + self._s(5),
+                card_rect.right - percent_surf.get_width() - self._s(25),
             )
             surface.blit(
                 percent_surf, (percent_x, rect.centery - percent_surf.get_height() / 2)
@@ -797,15 +810,16 @@ class SettingsView:
                 slider_rect.bottom
                 for slider_rect in self.layout_rects["sliders"].values()
             ),
-            default=card_rect.y + 80,
+            default=card_rect.y + self._s(80),
         )
-        instruction_start_y = slider_bottom + 18 + offset_y
-        instruction_x = card_rect.x + 30
-        instruction_max_width = card_rect.width - 60
+        instruction_start_y = slider_bottom + self._s(18) + offset_y
+        instruction_x = card_rect.x + self._s(30)
+        instruction_max_width = card_rect.width - self._s(60)
         instruction_font = self.small_font
+        instruction_lh = self._s(18)
         for line in instructions:
             if line == "":
-                instruction_start_y += 8
+                instruction_start_y += self._s(8)
                 continue
             color = CUSTOM_GOLD if ":" in line or "DICA" in line else colors.WHITE
             wrapped_lines = wrap_text(instruction_font, line, instruction_max_width)
@@ -813,7 +827,7 @@ class SettingsView:
                 text_surf = instruction_font.render(wrapped_line, True, color)
                 text_surf.set_alpha(alpha)
                 surface.blit(text_surf, (instruction_x, instruction_start_y))
-                instruction_start_y += 18
+                instruction_start_y += instruction_lh
 
         surface.set_clip(None)
 
@@ -831,7 +845,8 @@ class SettingsView:
         )
 
         # Criar clipping para o card
-        clip_rect = card_rect.inflate(-10, -10)
+        clip_inset = self._s(10)
+        clip_rect = card_rect.inflate(-clip_inset, -clip_inset)
         surface.set_clip(clip_rect)
 
         # Toggles
@@ -859,13 +874,14 @@ class SettingsView:
             is_checked = self.toggles[key]
             checkbox_color = CUSTOM_GOLD if is_checked else colors.GRAY
             pygame.draw.rect(
-                surface, (*checkbox_color, alpha), rect, 2, border_radius=5
+                surface, (*checkbox_color, alpha), rect, 2, border_radius=self._s(5)
             )
             if is_checked:
                 # Checkmark
-                check_surf = pygame.Surface((rect.width - 6, rect.height - 6))
+                inset = self._s(6)
+                check_surf = pygame.Surface((rect.width - inset, rect.height - inset))
                 check_surf.fill((*CUSTOM_GOLD, alpha))
-                surface.blit(check_surf, (rect.x + 3, rect.y + 3))
+                surface.blit(check_surf, (rect.x + inset // 2, rect.y + inset // 2))
 
             # Label (com sufixo de status para os toggles de gamepad)
             label_text = labels[key]
@@ -894,7 +910,7 @@ class SettingsView:
             label_surf.set_alpha(alpha)
             surface.blit(
                 label_surf,
-                (rect.right + 10, rect.centery - label_surf.get_height() / 2),
+                (rect.right + self._s(10), rect.centery - label_surf.get_height() / 2),
             )
 
         # Label da resolução
@@ -939,18 +955,19 @@ class SettingsView:
 
             mouse_x, mouse_y = pygame.mouse.get_pos()
             tooltip_x = mouse_x - tooltip_surf.get_width() // 2
-            tooltip_y = mouse_y - 35
+            tooltip_y = mouse_y - self._s(35)
 
             tooltip_x = max(
-                10, min(tooltip_x, Config.SCREEN_WIDTH - tooltip_surf.get_width() - 10)
+                self._s(10),
+                min(tooltip_x, Config.SCREEN_WIDTH - tooltip_surf.get_width() - self._s(10)),
             )
-            tooltip_y = max(10, tooltip_y)
+            tooltip_y = max(self._s(10), tooltip_y)
 
             bg_rect = pygame.Rect(
-                tooltip_x - 5,
-                tooltip_y - 3,
-                tooltip_surf.get_width() + 10,
-                tooltip_surf.get_height() + 6,
+                tooltip_x - self._s(5),
+                tooltip_y - self._s(3),
+                tooltip_surf.get_width() + self._s(10),
+                tooltip_surf.get_height() + self._s(6),
             )
             bg_surf = pygame.Surface((bg_rect.width, bg_rect.height))
             bg_surf.fill(BLACK)
@@ -970,29 +987,30 @@ class SettingsView:
         overlay.set_alpha(128)
         surface.blit(overlay, (0, 0))
 
-        pygame.draw.rect(surface, colors.DARK_GRAY, popup_rect, border_radius=10)
-        pygame.draw.rect(surface, CUSTOM_GOLD, popup_rect, 2, border_radius=10)
+        popup_radius = self._s(10)
+        pygame.draw.rect(surface, colors.DARK_GRAY, popup_rect, border_radius=popup_radius)
+        pygame.draw.rect(surface, CUSTOM_GOLD, popup_rect, 2, border_radius=popup_radius)
 
         title_surf = self.header_font.render("Reinício Necessário", True, CUSTOM_GOLD)
         surface.blit(
             title_surf,
-            (popup_rect.centerx - title_surf.get_width() // 2, popup_rect.y + 20),
+            (popup_rect.centerx - title_surf.get_width() // 2, popup_rect.y + self._s(20)),
         )
 
         message_text = (
             "As alterações só serão vistas ao reiniciar o jogo. "
             "Deseja fazer isso agora?"
         )
-        text_max_width = popup_rect.width - 60
+        text_max_width = popup_rect.width - self._s(60)
         message_lines = wrap_text(self.item_font, message_text, text_max_width)
 
         line_height = self.item_font.get_linesize()
-        line_gap = 4
+        line_gap = self._s(4)
         block_height = (len(message_lines) * line_height) + (
             max(0, len(message_lines) - 1) * line_gap
         )
-        message_top = popup_rect.y + 60
-        message_bottom = self.layout_rects["popup_yes_button"].y - 12
+        message_top = popup_rect.y + self._s(60)
+        message_bottom = self.layout_rects["popup_yes_button"].y - self._s(12)
         available_height = max(0, message_bottom - message_top)
 
         if block_height > available_height:
@@ -1031,25 +1049,26 @@ class SettingsView:
         overlay.set_alpha(128)
         surface.blit(overlay, (0, 0))
 
-        pygame.draw.rect(surface, colors.DARK_GRAY, popup_rect, border_radius=10)
-        pygame.draw.rect(surface, CUSTOM_GOLD, popup_rect, 2, border_radius=10)
+        popup_radius = self._s(10)
+        pygame.draw.rect(surface, colors.DARK_GRAY, popup_rect, border_radius=popup_radius)
+        pygame.draw.rect(surface, CUSTOM_GOLD, popup_rect, 2, border_radius=popup_radius)
 
         title_surf = self.header_font.render("Aviso", True, CUSTOM_GOLD)
         surface.blit(
             title_surf,
-            (popup_rect.centerx - title_surf.get_width() // 2, popup_rect.y + 20),
+            (popup_rect.centerx - title_surf.get_width() // 2, popup_rect.y + self._s(20)),
         )
 
-        text_max_width = popup_rect.width - 60
+        text_max_width = popup_rect.width - self._s(60)
         message_lines = wrap_text(self.item_font, message, text_max_width)
 
         line_height = self.item_font.get_linesize()
-        line_gap = 4
+        line_gap = self._s(4)
         block_height = (len(message_lines) * line_height) + (
             max(0, len(message_lines) - 1) * line_gap
         )
-        message_top = popup_rect.y + 60
-        message_bottom = self.layout_rects["info_popup_ok_button"].y - 12
+        message_top = popup_rect.y + self._s(60)
+        message_bottom = self.layout_rects["info_popup_ok_button"].y - self._s(12)
         available_height = max(0, message_bottom - message_top)
 
         if block_height > available_height:
