@@ -12,6 +12,8 @@ class ExplosionType:
     DEFAULT = None  # Laranja/vermelho padrão
     SLIME = [(80, 57, 89), (204, 176, 217), (38, 2, 89), (77, 13, 166), (65, 11, 140)]
     ALIEN = [(37, 217, 166), (78, 217, 74)]  # Verde
+    # CITY: "static pop" — descarga elétrica azul → magenta → branco.
+    CYBER = [(40, 200, 255), (180, 220, 255), (255, 50, 200), (255, 255, 255)]
 
 
 class Explosion:

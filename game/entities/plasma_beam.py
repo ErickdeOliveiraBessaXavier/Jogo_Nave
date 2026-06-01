@@ -8,7 +8,7 @@ from ..core.sound import sound_manager
 class PlasmaBeam:
     """
     Lança de Plasma Hiper-Estabilizada:
-    Um feixe que cresce em comprimento e largura, penetra tudo e 
+    Um feixe que cresce em comprimento e largura, penetra tudo e
     causa uma explosão massiva no final.
     """
     def __init__(self, ship: Any, duration: float):
@@ -72,7 +72,7 @@ class PlasmaBeam:
             color = (50, 0, 255, alpha)
             glow_width = draw_width + (i * 8)
             
-            # Criar surface temporária para alpha se necessário, mas para linhas síncronas 
+            # Criar surface temporária para alpha se necessário, mas para linhas síncronas
             # costumamos desenhar direto com larguras variadas
             pygame.draw.line(surface, color[:3], p1, p2, glow_width)
 

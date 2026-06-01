@@ -36,6 +36,7 @@ from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.formation import Formation, FormationPattern
 from ..entities.guided_meteor import GuidedMeteor
+from ..entities.Inimigos_Tema_Cidade.city_drone import CityDrone
 from ..entities.meteor import Meteor
 from ..entities.meteor_pool import MeteorPool
 from ..entities.mountain_mage import MountainMage
@@ -61,6 +62,9 @@ SPAWNER_CAP_ELEMENTAL_ROBOT: int = 1
 SPAWNER_CAP_STONE_SENTRY: int = 2
 SPAWNER_CAP_MOUNTAIN_MAGE: int = 1
 SPAWNER_CAP_MOUNTAIN_PROPELLER: int = 3
+SPAWNER_CAP_CITY_DRONE: int = 12  # Limite de City Drones simultâneos (enxame)
+CITY_DRONE_CLUSTER_MIN: int = 5  # Tamanho mínimo da leva (clustering)
+CITY_DRONE_CLUSTER_MAX: int = 8  # Tamanho máximo da leva
 SPAWNER_CAP_ALIEN: int = 4  # Limite máximo de Aliens simultâneos
 SPAWNER_CAP_EYE_ENEMY: int = 3  # Limite máximo de EyeEnemies simultâneos
 SPAWNER_CAP_SATELLITE: int = 5  # Limite máximo de Satélites simultâneos
@@ -389,6 +393,7 @@ class EnemySpawner:
             "MountainMage": "mountain_mage",
             "MountainPropeller": "mountain_propeller",
             "Satellite": "satellite",
+            "CityDrone": "city_drone",
         }
         return aliases.get(enemy_type.__name__, enemy_type.__name__.lower())
 
@@ -478,6 +483,7 @@ class EnemySpawner:
             "mountain_mage": 0,
             "mountain_propeller": 0,
             "satellite": 0,
+            "city_drone": 0,
             "total": 0,
         }
 
@@ -501,6 +507,8 @@ class EnemySpawner:
                 counts["mountain_mage"] += 1
             elif isinstance(enemy, Satellite):
                 counts["satellite"] += 1
+            elif isinstance(enemy, CityDrone):
+                counts["city_drone"] += 1
 
         for prop in entity_manager.mountain_propellers:
             if not prop.dead:
@@ -537,6 +545,8 @@ class EnemySpawner:
         if enemy_type == EyeEnemy and counts["eye"] >= SPAWNER_CAP_EYE_ENEMY:
             return True
         if enemy_type == Satellite and counts["satellite"] >= SPAWNER_CAP_SATELLITE:
+            return True
+        if enemy_type == CityDrone and counts["city_drone"] >= SPAWNER_CAP_CITY_DRONE:
             return True
         return False
 
@@ -746,6 +756,9 @@ class EnemySpawner:
         if enemy_type == Satellite:
             return self._spawn_satellite(entity_manager)
 
+        if enemy_type == CityDrone:
+            return self._spawn_city_drone_cluster(entity_manager, is_side_scroll)
+
         if enemy_type == SatelliteFragment:
             return self._spawn_satellite_fragment(entity_manager)
 
@@ -771,6 +784,53 @@ class EnemySpawner:
             1, int(fragment.health * self.enemy_health_multiplier)
         )
         entity_manager.enemies.append(fragment)
+        return True
+
+    def _spawn_city_drone_cluster(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        """Spawna uma leva (cluster) de 5-8 City Drones — "nuvem desordenada".
+
+        Diferente dos outros spawns (uma unidade por tick), o enxame nasce em
+        leva. O tamanho é limitado pela folga até o cap de drones e o cap total
+        de inimigos para não estourar a tela.
+        """
+        current_drones = sum(
+            1 for e in entity_manager.enemies if isinstance(e, CityDrone) and not e.dead
+        )
+        drone_room = SPAWNER_CAP_CITY_DRONE - current_drones
+        if drone_room <= 0:
+            return False
+
+        active_total = sum(
+            1 for e in entity_manager.enemies if not getattr(e, "dead", False)
+        )
+        total_room = self._get_current_enemy_cap() - active_total
+        room = min(drone_room, total_room)
+        if room <= 0:
+            return False
+
+        cluster_size = min(
+            random.randint(CITY_DRONE_CLUSTER_MIN, CITY_DRONE_CLUSTER_MAX), room
+        )
+
+        max_y = max(40, Config.SCREEN_HEIGHT - 40 - CityDrone.MAX_SIZE)
+        for _ in range(cluster_size):
+            if is_side_scroll:
+                # Entra pela direita, espalhado numa banda fora da tela.
+                x = Config.SCREEN_WIDTH + random.uniform(20.0, 160.0)
+                y = random.uniform(40.0, max_y)
+            else:
+                x = random.uniform(20.0, Config.SCREEN_WIDTH - 20.0 - CityDrone.MAX_SIZE)
+                y = -random.uniform(20.0, 160.0)
+            drone = CityDrone(
+                x,
+                y,
+                aggressiveness_multiplier=self.aggressiveness_multiplier,
+                side_scroll=is_side_scroll,
+            )
+            drone.health = max(1, int(drone.health * self.enemy_health_multiplier))
+            entity_manager.enemies.append(drone)
         return True
 
     def _spawn_eye_enemy(

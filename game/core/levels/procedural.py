@@ -16,6 +16,7 @@ import random
 from ...entities.alien import Alien
 from ...entities.bot_elemental import ElementalRobot
 from ...entities.eye_enemy import EyeEnemy
+from ...entities.Inimigos_Tema_Cidade.city_drone import CityDrone
 from ...entities.giant_meteor_boss import GiantMeteorBoss
 from ...entities.meteor import Meteor
 from ...entities.mountain_mage import MountainMage
@@ -106,6 +107,7 @@ class DifficultyConfig:
         "stone_sentry": 30.0,
         "mountain_mage": 8.0,
         "mountain_propeller": 5.0,
+        "city_drone": 4.0,
     }
 
     DIFFICULTY_SCALING: float = 0.15
@@ -411,6 +413,30 @@ class ProceduralLevelGenerator:
                 (15.0 / difficulty / spawn_multiplier) * (2.0 / robot_weight)
             )
 
+    def _configure_city_spawn(
+        self,
+        enemy_spawn_config: EnemySpawnConfig,
+        stage_progress: float,
+        difficulty: float,
+        spawn_multiplier: float,
+    ) -> None:
+        """Injeta o City Drone (enxame) no pool do bioma CITY.
+
+        Disponível desde o início do mundo para dar identidade ao tema; o
+        intervalo encurta conforme o estágio avança. O spawn real acontece em
+        cluster (5-8 unidades) no `EnemySpawner`, então o intervalo aqui é o
+        tempo entre *levas*, não entre drones.
+        """
+        if stage_progress < 0.40:
+            drone_base = 7.0
+        elif stage_progress < 0.70:
+            drone_base = 5.5
+        else:
+            drone_base = 4.0
+        enemy_spawn_config[CityDrone] = self._clamp_spawn_time(
+            (drone_base / difficulty) / spawn_multiplier
+        )
+
     def _configure_stage_banded_spawn(
         self,
         enemy_spawn_config: EnemySpawnConfig,
@@ -556,6 +582,11 @@ class ProceduralLevelGenerator:
 
             if world.theme == WorldTheme.MOUNTAINS:
                 self._configure_mountains_spawn(
+                    enemy_spawn_config, stage_progress, difficulty, spawn_multiplier
+                )
+
+            if world.theme == WorldTheme.CITY:
+                self._configure_city_spawn(
                     enemy_spawn_config, stage_progress, difficulty, spawn_multiplier
                 )
 
