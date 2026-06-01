@@ -25,8 +25,8 @@ class Particle(TypedDict):
 class BlackHole:
     """Buraco negro com movimento orientado pelo modo da fase."""
 
-    SPAWN_DURATION = 1.0 # Segundos para crescer
-    DEATH_DURATION = 0.5 # Segundos para implodir
+    SPAWN_DURATION = 1.0  # Segundos para crescer
+    DEATH_DURATION = 0.5  # Segundos para implodir
 
     def __init__(
         self,
@@ -43,11 +43,11 @@ class BlackHole:
         self.is_vortex = is_vortex
         self.lifetime = 0.0
         self.dead = False
-        
+
         # Estados: "spawning", "active", "dying"
         self.state = "spawning"
         self.state_timer = 0.0
-        self.scale = 0.0 # 0.0 a 1.0 para animações
+        self.scale = 0.0  # 0.0 a 1.0 para animações
 
         # Tocar som do buraco negro
         sound_manager.play_black_hole()
@@ -67,7 +67,7 @@ class BlackHole:
 
         self.core_radius = base_core_radius
         self.event_horizon = self.core_radius * 2
-        
+
         initial_pull = config.BLACK_HOLE_INITIAL_PULL_RADIUS
         if self.is_vortex:
             initial_pull *= 0.6
@@ -85,10 +85,10 @@ class BlackHole:
         # Dano (Vortex agora dá dano constante tipo "veneno" no núcleo)
         # Inspirado em IcePoisonZone: dano em ticks discretos com feedback visual.
         self.damage_tick_timer = 0.0
-        self.damage_interval = 0.25 # 4 ticks por segundo
+        self.damage_interval = 0.25  # 4 ticks por segundo
         # Queremos ~1HP a cada 3s. Total de 12 ticks em 3s.
         # 1.0 / 12 = ~0.083 HP por tick.
-        self.damage_per_tick = 0.0834 
+        self.damage_per_tick = 0.0834
 
         self.growth_rate = config.BLACK_HOLE_GROWTH_RATE
         self.particles: list[Particle] = []
@@ -104,20 +104,30 @@ class BlackHole:
             angle = random.uniform(0, math.pi * 2)
             dist_min = 0.3 if self.is_vortex else 0.4
             dist_max = 0.7 if self.is_vortex else 1.0
-            distance = random.uniform(self.pull_radius * dist_min, self.pull_radius * dist_max)
-            
+            distance = random.uniform(
+                self.pull_radius * dist_min, self.pull_radius * dist_max
+            )
+
             if self.is_vortex:
-                color = (random.randint(0, 100), random.randint(150, 255), random.randint(200, 255))
+                color = (
+                    random.randint(0, 100),
+                    random.randint(150, 255),
+                    random.randint(200, 255),
+                )
             else:
                 color = random.choice(BLACK_HOLE_PARTICLE_COLORS)
 
             particle: Particle = {
                 "x": self.x + math.cos(angle) * distance,
                 "y": self.y + math.sin(angle) * distance,
-                "size": random.randint(1, 5) if self.is_vortex else random.randint(2, 4),
+                "size": random.randint(1, 5)
+                if self.is_vortex
+                else random.randint(2, 4),
                 "angle": angle,
                 "orbit_radius": distance,
-                "base_speed": random.uniform(0.1, 0.3) if self.is_vortex else random.uniform(0.2, 0.5),
+                "base_speed": random.uniform(0.1, 0.3)
+                if self.is_vortex
+                else random.uniform(0.2, 0.5),
                 "opacity": random.uniform(0.3, 1.0),
                 "color": color,
             }
@@ -127,7 +137,7 @@ class BlackHole:
         self.lifetime += dt
         self.animation_timer += dt
         self.state_timer += dt
-        
+
         # Timer de tick de dano (veneno)
         if self.is_vortex and self.state == "active":
             self.damage_tick_timer += dt
@@ -158,18 +168,25 @@ class BlackHole:
 
         # Crescimento gradual dos atributos base
         if self.core_radius < self.max_core_radius:
-            self.core_radius = min(self.max_core_radius, self.core_radius + self.growth_rate * dt)
+            self.core_radius = min(
+                self.max_core_radius, self.core_radius + self.growth_rate * dt
+            )
             self.event_horizon = self.core_radius * 2
-            
+
         if self.pull_radius < self.max_pull_radius:
-            self.pull_radius = min(self.max_pull_radius, self.pull_radius + self.growth_rate * 5 * dt)
+            self.pull_radius = min(
+                self.max_pull_radius, self.pull_radius + self.growth_rate * 5 * dt
+            )
 
         # Culling por saída da tela
         if not self.is_vortex and self.state == "active":
             if self.is_side_scroll:
-                if self.x > config.SCREEN_WIDTH + self.pull_radius: self.state = "dying"; self.state_timer = 0.0
+                if self.x > config.SCREEN_WIDTH + self.pull_radius:
+                    self.state = "dying"
+                    self.state_timer = 0.0
             elif self.y < -self.pull_radius:
-                self.state = "dying"; self.state_timer = 0.0
+                self.state = "dying"
+                self.state_timer = 0.0
 
         # Atualizar partículas
         for particle in self.particles:
@@ -178,13 +195,17 @@ class BlackHole:
             distance_squared = dx * dx + dy * dy
             distance = math.sqrt(distance_squared)
 
-            dist_ref = self.pull_radius * 0.4 if self.is_vortex else self.pull_radius * 0.5
+            dist_ref = (
+                self.pull_radius * 0.4 if self.is_vortex else self.pull_radius * 0.5
+            )
             distance_factor = max(0.2, distance / dist_ref)
             acceleration_factor = 1 / distance_factor
 
             angular_speed = (1 / max(1, distance)) * 20 * acceleration_factor
             particle["angle"] += angular_speed * particle["base_speed"]
-            particle["orbit_radius"] -= particle["base_speed"] * 0.1 * acceleration_factor
+            particle["orbit_radius"] -= (
+                particle["base_speed"] * 0.1 * acceleration_factor
+            )
 
             # Escala afeta a posição das partículas (elas convergem na morte)
             draw_radius = particle["orbit_radius"] * self.scale
@@ -192,9 +213,13 @@ class BlackHole:
             particle["y"] = self.y + math.sin(particle["angle"]) * draw_radius
 
             # Resetar partículas próximas ao centro
-            if particle["orbit_radius"] < self.core_radius + (10 if self.is_vortex else 20):
+            if particle["orbit_radius"] < self.core_radius + (
+                10 if self.is_vortex else 20
+            ):
                 angle = random.uniform(0, math.pi * 2)
-                distance = random.uniform(self.pull_radius * 0.3, self.pull_radius * 1.0)
+                distance = random.uniform(
+                    self.pull_radius * 0.3, self.pull_radius * 1.0
+                )
                 particle["orbit_radius"] = distance
                 particle["angle"] = angle
 
@@ -206,7 +231,7 @@ class BlackHole:
 
         pull_radius_sq = (self.pull_radius * self.scale) ** 2
         core_radius_sq = (self.core_radius * self.scale) ** 2
-        
+
         # Lógica de Tick de Veneno (Sincronizado com IcePoisonZone)
         trigger_damage_tick = False
         if self.is_vortex and self.damage_tick_timer >= self.damage_interval:
@@ -216,13 +241,18 @@ class BlackHole:
         for enemy in enemies:
             if getattr(enemy, "dead", False):
                 continue
-                
+
             # opt-out via ``pullable_by_black_hole = False``.
             if not getattr(enemy, "pullable_by_black_hole", True):
                 continue
 
             # Imunidade de Bosses principais
-            if enemy.__class__.__name__ in ("Boss", "SlimeBoss", "SpikeBoss", "GiantMeteorBoss"):
+            if enemy.__class__.__name__ in (
+                "Boss",
+                "SlimeBoss",
+                "SpikeBoss",
+                "GiantMeteorBoss",
+            ):
                 continue
 
             enemy_x = getattr(enemy, "x", 0) + getattr(enemy, "w", 0) / 2
@@ -238,10 +268,13 @@ class BlackHole:
                 if not self.is_vortex:
                     # Black Hole Ultimate mata tudo instantaneamente
                     enemy.dead = True
-                    if spawn_explosion_callback: spawn_explosion_callback(enemy_x, enemy_y, size=30)
+                    if spawn_explosion_callback:
+                        spawn_explosion_callback(enemy_x, enemy_y, size=30)
                 elif trigger_damage_tick:
                     # Vortex aplica dano em ticks discretos com feedback visual completo
-                    self._apply_vortex_damage(enemy, self.damage_per_tick, spawn_explosion_callback)
+                    self._apply_vortex_damage(
+                        enemy, self.damage_per_tick, spawn_explosion_callback
+                    )
                 continue
 
             # Atração Gravitacional (aplica a todos dentro do pull_radius)
@@ -254,12 +287,14 @@ class BlackHole:
                 enemy.x += (dx / dist) * pull_speed * dt
                 enemy.y += (dy / dist) * pull_speed * dt
 
-    def _apply_vortex_damage(self, enemy: Any, damage: float, spawn_explosion_callback: Any = None) -> None:
+    def _apply_vortex_damage(
+        self, enemy: Any, damage: float, spawn_explosion_callback: Any = None
+    ) -> None:
         """Aplica dano e dispara feedback visual (on_hit) sincronizado com o tick."""
         killed = False
         res = None
-        hit_x = enemy.x + getattr(enemy, "w", 0)/2
-        hit_y = enemy.y + getattr(enemy, "h", 0)/2
+        hit_x = enemy.x + getattr(enemy, "w", 0) / 2
+        hit_y = enemy.y + getattr(enemy, "h", 0) / 2
 
         # 1. Tentar aplicar via on_hit (melhor para efeitos visuais e partes)
         if hasattr(enemy, "on_hit"):
@@ -282,33 +317,46 @@ class BlackHole:
                 if new_lives <= 0:
                     enemy.dead = True
                     killed = True
-            
+
             # Se o fallback não tiver on_hit mas disparou flash manual
-            if not killed and not hasattr(enemy, "on_hit") and hasattr(enemy, "_hit_flash"):
+            if (
+                not killed
+                and not hasattr(enemy, "on_hit")
+                and hasattr(enemy, "_hit_flash")
+            ):
                 setattr(enemy, "_hit_flash", 0.15)
 
         # 3. Se morreu, disparar explosão autêntica baseada no inimigo
         if killed and spawn_explosion_callback:
             expl_size = getattr(res, "explosion_size", 25) if res else 25
             expl_type = getattr(res, "explosion_type", None) if res else None
-            spawn_explosion_callback(hit_x, hit_y, size=expl_size, explosion_type=expl_type)
+            spawn_explosion_callback(
+                hit_x, hit_y, size=expl_size, explosion_type=expl_type
+            )
 
     def draw(self, surface: pygame.Surface):
-        if self.scale <= 0: return
-        
+        if self.scale <= 0:
+            return
+
         # Partículas
         for particle in self.particles:
-            color_with_alpha = particle["color"] + (int(particle["opacity"] * 255 * self.scale),)
+            color_with_alpha = particle["color"] + (
+                int(particle["opacity"] * 255 * self.scale),
+            )
             pygame.draw.circle(
-                surface, color_with_alpha, (int(particle["x"]), int(particle["y"])), 
-                max(1, int(particle["size"] * self.scale))
+                surface,
+                color_with_alpha,
+                (int(particle["x"]), int(particle["y"])),
+                max(1, int(particle["size"] * self.scale)),
             )
 
         # Núcleo
         core_r = int(self.core_radius * self.scale)
         if core_r > 0:
             pygame.draw.circle(surface, (0, 0, 0), (int(self.x), int(self.y)), core_r)
-            pygame.draw.circle(surface, (50, 50, 50), (int(self.x), int(self.y)), core_r, 1)
+            pygame.draw.circle(
+                surface, (50, 50, 50), (int(self.x), int(self.y)), core_r, 1
+            )
 
     @property
     def rect(self) -> pygame.Rect:

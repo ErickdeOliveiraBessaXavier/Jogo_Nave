@@ -32,10 +32,30 @@ class VolcanicBackground(Background):
     def _create_layers(self) -> None:
         """Camadas de parallax: fundo mais claro/lento → frente escura/rápida."""
         layer_configs: List[Dict[str, Any]] = [
-            {"speed": 12.0, "color": (50, 18, 9), "num_objects": 10, "base_thickness": 40},
-            {"speed": 35.0, "color": (35, 12, 5), "num_objects": 8, "base_thickness": 70},
-            {"speed": 80.0, "color": (22, 9, 2), "num_objects": 5, "base_thickness": 110},
-            {"speed": 180.0, "color": (8, 3, 0), "num_objects": 3, "base_thickness": 150},
+            {
+                "speed": 12.0,
+                "color": (50, 18, 9),
+                "num_objects": 10,
+                "base_thickness": 40,
+            },
+            {
+                "speed": 35.0,
+                "color": (35, 12, 5),
+                "num_objects": 8,
+                "base_thickness": 70,
+            },
+            {
+                "speed": 80.0,
+                "color": (22, 9, 2),
+                "num_objects": 5,
+                "base_thickness": 110,
+            },
+            {
+                "speed": 180.0,
+                "color": (8, 3, 0),
+                "num_objects": 3,
+                "base_thickness": 150,
+            },
         ]
 
         for config in layer_configs:
@@ -50,7 +70,9 @@ class VolcanicBackground(Background):
             terrain_res = 50  # Distância entre pontos do terreno
             num_points = int(self.width / terrain_res) + 4
             base = config["base_thickness"]
-            ceiling_terrain = [random.uniform(0.6, 1.4) * base for _ in range(num_points)]
+            ceiling_terrain = [
+                random.uniform(0.6, 1.4) * base for _ in range(num_points)
+            ]
             floor_terrain = [random.uniform(0.6, 1.4) * base for _ in range(num_points)]
 
             # Buffers de pontos reutilizados no draw (evita realocar a lista por
@@ -62,42 +84,52 @@ class VolcanicBackground(Background):
             floor_buf[num_points] = (self.width + 100, self.height + 100)
             floor_buf[num_points + 1] = (-100, self.height + 100)
 
-            self.layers.append({
-                "speed": config["speed"],
-                "color": config["color"],
-                "base_thickness": base,
-                "objects": objects,
-                "ceiling_terrain": ceiling_terrain,
-                "floor_terrain": floor_terrain,
-                "ceiling_buf": ceiling_buf,
-                "floor_buf": floor_buf,
-                "num_points": num_points,
-                "terrain_x": 0.0,
-                "terrain_res": terrain_res,
-            })
+            self.layers.append(
+                {
+                    "speed": config["speed"],
+                    "color": config["color"],
+                    "base_thickness": base,
+                    "objects": objects,
+                    "ceiling_terrain": ceiling_terrain,
+                    "floor_terrain": floor_terrain,
+                    "ceiling_buf": ceiling_buf,
+                    "floor_buf": floor_buf,
+                    "num_points": num_points,
+                    "terrain_x": 0.0,
+                    "terrain_res": terrain_res,
+                }
+            )
 
-    def _generate_cave_object(self, start_x: float, speed: float = 0.0) -> Dict[str, Any]:
-        """Gera polígonos irregulares para simular rochas realistas. 
+    def _generate_cave_object(
+        self, start_x: float, speed: float = 0.0
+    ) -> Dict[str, Any]:
+        """Gera polígonos irregulares para simular rochas realistas.
         O tamanho escala significativamente com a velocidade (camada)."""
-        obj_type = random.choices(["stalactite", "stalagmite", "column"], weights=[4, 4, 2])[0]
-        
+        obj_type = random.choices(
+            ["stalactite", "stalagmite", "column"], weights=[4, 4, 2]
+        )[0]
+
         # Escalar tamanho baseado na camada (speed maior = mais perto = maior)
         # Aumentado para evitar o efeito "achatado"
-        scale = 1.0 + (speed / 150.0) 
+        scale = 1.0 + (speed / 150.0)
         width = int(random.randint(70, 200) * scale)
         # Altura mais agressiva para ocupar o espaço vertical
         height = int(random.randint(150, self.height - 100) * (0.4 + scale * 0.6))
-        
+
         # Gerar pontos irregulares
         points_offsets: List[Tuple[float, float]] = []
         segments = random.randint(4, 8)
-        
+
         if obj_type == "stalactite":
             points_offsets.append((0, 0))
             for j in range(1, segments):
                 px = (width / segments) * j
                 # Ponta principal e secundárias
-                py = height * random.uniform(0.7, 1.1) if j == segments // 2 else height * random.uniform(0.1, 0.7)
+                py = (
+                    height * random.uniform(0.7, 1.1)
+                    if j == segments // 2
+                    else height * random.uniform(0.1, 0.7)
+                )
                 points_offsets.append((px, py))
             points_offsets.append((width, 0))
 
@@ -105,7 +137,11 @@ class VolcanicBackground(Background):
             points_offsets.append((0, self.height))
             for j in range(1, segments):
                 px = (width / segments) * j
-                py_offset = height * random.uniform(0.7, 1.1) if j == segments // 2 else height * random.uniform(0.1, 0.7)
+                py_offset = (
+                    height * random.uniform(0.7, 1.1)
+                    if j == segments // 2
+                    else height * random.uniform(0.1, 0.7)
+                )
                 points_offsets.append((px, self.height - py_offset))
             points_offsets.append((width, self.height))
 
@@ -114,62 +150,66 @@ class VolcanicBackground(Background):
             mid_w_left = width * random.uniform(0.2, 0.5)
             mid_w_right = width * random.uniform(0.5, 0.8)
             points_offsets = [
-                (0, 0), 
+                (0, 0),
                 (mid_w_left, self.height * 0.3),
                 (mid_w_left * 0.8, self.height * 0.7),
                 (0, self.height),
-                (width, self.height), 
+                (width, self.height),
                 (mid_w_right * 1.2, self.height * 0.7),
                 (mid_w_right, self.height * 0.3),
-                (width, 0)
+                (width, 0),
             ]
 
         return {
             "type": obj_type,
             "x": start_x,
             "width": width,
-            "points_offsets": points_offsets
+            "points_offsets": points_offsets,
         }
 
     def _create_lava(self) -> None:
         """Cria pools de lava com alturas escalonadas para garantir que todas sejam visíveis."""
         # Paleta expandida para 5 camadas (da mais escura/fundo para a mais clara/frente)
         lava_colors = [
-            ((120, 30, 0), (160, 40, 0)),   # 1. Fundo (mais profunda/escura)
-            ((170, 45, 0), (210, 60, 0)),   # 2.
+            ((120, 30, 0), (160, 40, 0)),  # 1. Fundo (mais profunda/escura)
+            ((170, 45, 0), (210, 60, 0)),  # 2.
             ((210, 60, 10), (255, 100, 0)),  # 3. Média
-            ((240, 80, 15), (255, 140, 30)), # 4.
-            ((255, 110, 30), (255, 200, 60)) # 5. Frente (mais brilhante/quente)
+            ((240, 80, 15), (255, 140, 30)),  # 4.
+            ((255, 110, 30), (255, 200, 60)),  # 5. Frente (mais brilhante/quente)
         ]
-        
+
         for i in range(self.NUM_LAVA_POOLS):
             color, border = lava_colors[i % len(lava_colors)]
             # Escalonamento vertical: cada camada tem um "degrau" diferente
             # i=0 (fundo) é mais alta na tela, i=4 (frente) é mais baixa
             base_y = self.height - (100 - (i * 15))
-            
-            self.lava_pools.append({
-                "y": base_y - random.randint(0, 10),
-                "amplitude": random.randint(12, 22),
-                "frequency": random.uniform(0.6, 1.1),
-                "phase": random.uniform(0, 6.28),
-                "anim_speed": random.uniform(1.2, 2.8),
-                "current_anim": random.uniform(0, 100),
-                "parallax_factor": 0.05 + (i * 0.1),
-                "color": color,
-                "border_color": border
-            })
+
+            self.lava_pools.append(
+                {
+                    "y": base_y - random.randint(0, 10),
+                    "amplitude": random.randint(12, 22),
+                    "frequency": random.uniform(0.6, 1.1),
+                    "phase": random.uniform(0, 6.28),
+                    "anim_speed": random.uniform(1.2, 2.8),
+                    "current_anim": random.uniform(0, 100),
+                    "parallax_factor": 0.05 + (i * 0.1),
+                    "color": color,
+                    "border_color": border,
+                }
+            )
 
     def _create_embers(self) -> None:
         """Brasas flutuantes subindo pela tela inteira (efeito clássico)."""
         for _ in range(self.NUM_EMBERS):
-            self.embers.append({
-                "x": random.randint(0, self.width),
-                "y": random.randint(0, self.height),
-                "speed": random.uniform(20, 80),
-                "size": random.randint(2, 5),
-                "brightness": random.uniform(0.5, 1.0),
-            })
+            self.embers.append(
+                {
+                    "x": random.randint(0, self.width),
+                    "y": random.randint(0, self.height),
+                    "speed": random.uniform(20, 80),
+                    "size": random.randint(2, 5),
+                    "brightness": random.uniform(0.5, 1.0),
+                }
+            )
 
     def update(self, dt: float, speed_mult: float = 1.0) -> None:
         """Atualiza físicas de scroll, lava e partículas."""
@@ -184,7 +224,7 @@ class VolcanicBackground(Background):
         # Scroll do Parallax
         for layer in self.layers:
             scroll_speed = layer["speed"] * dt * speed_mult
-            
+
             # Scroll do terreno.
             layer["terrain_x"] -= scroll_speed
             base = layer["base_thickness"]
@@ -197,8 +237,10 @@ class VolcanicBackground(Background):
 
             objects = layer["objects"]
             # Borda direita do objeto mais distante
-            rightmost = max(o["x"] + o["width"] for o in objects) if objects else self.width
-            
+            rightmost = (
+                max(o["x"] + o["width"] for o in objects) if objects else self.width
+            )
+
             for obj in objects:
                 obj["x"] -= scroll_speed
 
@@ -242,7 +284,9 @@ class VolcanicBackground(Background):
                 surface, color, (int(ember["x"]), int(ember["y"])), ember["size"]
             )
 
-    def _draw_layer_elements(self, surface: pygame.Surface, layer: Dict[str, Any]) -> None:
+    def _draw_layer_elements(
+        self, surface: pygame.Surface, layer: Dict[str, Any]
+    ) -> None:
         """Desenha os elementos de uma camada (teto, chão e formações)."""
         draw_poly = pygame.draw.polygon
         color = layer["color"]
@@ -273,11 +317,12 @@ class VolcanicBackground(Background):
         phase = pool["phase"]
 
         for x in range(0, self.width + self.LAVA_RESOLUTION, self.LAVA_RESOLUTION):
-            if x > self.width: x = self.width 
-            
+            if x > self.width:
+                x = self.width
+
             wave1 = math.sin((x * pool["frequency"] / 80) + phase + anim)
             wave2 = math.sin((x * pool["frequency"] / 30) - anim * 1.5) * 0.3
-            
+
             y = pool["y"] + (wave1 + wave2) * pool["amplitude"]
             points.append((x, int(y)))
 
@@ -291,7 +336,7 @@ class VolcanicBackground(Background):
         self.embers.clear()
         self.layers.clear()
         self.wave_offset = 0.0
-        
+
         self._create_layers()
         self._create_lava()
         self._create_embers()
