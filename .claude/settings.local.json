@@ -40,7 +40,10 @@
       "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/cyber_tank.py game/entities/Inimigos_Tema_Cidade/cyber_tank_pixel_map.py game/entities/Inimigos_Tema_Cidade/tank_meltdown.py game/entities/Inimigos_Tema_Cidade/neon_bolt.py game/systems/entity_manager.py game/systems/spawner.py game/systems/hit_sounds.py game/core/levels/pipeline.py game/core/levels/procedural.py)",
       "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/tank_meltdown.py game/entities/Inimigos_Tema_Cidade/police_crash.py)",
       "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/cyber_tank.py)",
-      "Bash(SDL_VIDEODRIVER=dummy python -c \"import ast,sys; t=ast.parse\\(open\\('game/entities/Inimigos_Tema_Cidade/cyber_tank.py',encoding='utf-8'\\).read\\(\\)\\); print\\('parse OK'\\)\")"
+      "Bash(SDL_VIDEODRIVER=dummy python -c \"import ast,sys; t=ast.parse\\(open\\('game/entities/Inimigos_Tema_Cidade/cyber_tank.py',encoding='utf-8'\\).read\\(\\)\\); print\\('parse OK'\\)\")",
+      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/cyber_tank.py game/entities/Inimigos_Tema_Cidade/cyber_tank_pixel_map.py)",
+      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/cyber_tank.py game/entities/Inimigos_Tema_Cidade/tank_meltdown.py)",
+      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/tank_meltdown.py)"
     ]
   }
 }

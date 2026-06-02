@@ -37,14 +37,11 @@ from .cyber_tank_pixel_map import (
     CANNON_BARREL_CELLS,
     CORE_NEON,
     CORE_NEON_DIM,
-    ENGINE_CELLS,
-    ENGINE_NEON,
-    ENGINE_NEON_DIM,
     MOUNT_OFFSET_X,
     PIXEL_COLS,
     PIXEL_ROWS,
     build_cannon_surface,
-    build_tank_surface,
+    build_pod_surface,
 )
 from .neon_bolt import NeonBolt
 
@@ -90,17 +87,30 @@ class _Turret:
 
 
 class CyberTank(EnemyHitMixin):
-    CELL: int = 4
-    SIZE: int = PIXEL_COLS * CELL  # 100px (largura)
+    CELL: int = 5  # colosso maior (25*5 = 125px de largura, 13*5 = 65px de altura)
+    SIZE: int = PIXEL_COLS * CELL
 
     HEALTH: int = 1400  # Fortaleza móvel
     POINTS: int = 1500
 
-    # ── Juggernaut ──────────────────────────────────────────────────────────
-    ADVANCE_SPEED: float = 48.0
-    MAX_VERTICAL_SPEED: float = 22.0
+    # ── Movimentação "Primal Aspid": predador inquieto que jockeia ────────────
+    # Não atravessa a tela: entra, fica perto da zona de combate e reposiciona
+    # constantemente em torno do jogador — mantém uma distância, busca ângulos,
+    # faz pequenas correções e dardos ocasionais. Sensação de perseguição/opressão.
+    ENTER_SPEED: float = 105.0  # voa pra dentro até a zona de combate
+    ENTER_FRAC: float = 0.82  # x-centro (fração) onde passa a jockear
+    STANDOFF_MIN: float = 365.0  # distância de combate preferida (faixa apertada)
+    STANDOFF_MAX: float = 430.0
+    MAX_SPEED: float = 135.0  # colosso pesado — reposiciona devagar, sem agilidade
+    STEER_GAIN: float = 2.3  # ganho do steering até a posição desejada
+    STEER_RESP: float = 3.6  # resposta da aceleração (1/s) — pesado/inerte
+    JOCKEY_SPAN: float = 1.0  # rad (~57°): cone à direita do jogador onde paira
+    RETARGET_MIN: float = 0.9  # correções de trajetória mais calmas/espaçadas
+    RETARGET_MAX: float = 1.8
+    DART_CHANCE: float = 0.12  # dardos raros (reposicionamento maior p/ ângulo)
+    ZONE_X_MIN_FRAC: float = 0.33  # mantém-se à direita do jogador (não invade o canto)
+    ZONE_X_MAX_FRAC: float = 0.93  # nem encosta na borda direita
     EDGE_MARGIN: float = 28.0
-    EXIT_MARGIN: float = 140.0
     BODY_SPIN_RATE: float = 0.7  # rad/s — a ampulheta gira no próprio eixo
 
     # ── Canhões (miram sempre o jogador) ─────────────────────────────────────
@@ -144,6 +154,13 @@ class CyberTank(EnemyHitMixin):
             _Turret("RAILCANNON", +mx, 0.0, self.RAIL_INTERVAL),
         ]
 
+        self.state: str = "enter"  # "enter" → "dominate" (jockeying)
+        self.vx: float = 0.0
+        self.vy: float = 0.0
+        self.jockey_angle: float = random.uniform(-0.5, 0.5)  # ângulo à direita do alvo
+        self.standoff: float = random.uniform(self.STANDOFF_MIN, self.STANDOFF_MAX)
+        self.retarget_timer: float = 0.0
+
         self._warned: bool = False  # toca o aviso "Heavy Unit Incoming" 1×
         self.pulse: float = random.uniform(0.0, math.tau)
         self.body_spin: float = random.uniform(0.0, math.tau)  # giro contínuo
@@ -177,8 +194,7 @@ class CyberTank(EnemyHitMixin):
         return mx, my
 
     def _is_entering(self) -> bool:
-        # Ainda surgindo pela direita — fase de aviso/telegraph.
-        return self.x > Config.SCREEN_WIDTH * 0.72
+        return self.state == "enter"
 
     # ── Update ──────────────────────────────────────────────────────────────
     def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
@@ -203,29 +219,76 @@ class CyberTank(EnemyHitMixin):
         if self.hit_timer > 0.0:
             self.hit_timer = max(0.0, self.hit_timer - dt)
 
-        # Avanço constante para a esquerda (juggernaut).
-        self.x -= self.ADVANCE_SPEED * dt
-
-        # Rastreio vertical preguiçoso do jogador (limitado).
-        cx, cy = self._center()
-        lo = self.EDGE_MARGIN + self.h / 2
-        hi = Config.SCREEN_HEIGHT - self.EDGE_MARGIN - self.h / 2
-        desired = max(lo, min(hi, player_y))
-        dvy = desired - cy
-        step = min(self.MAX_VERTICAL_SPEED * dt, abs(dvy))
-        self.y += math.copysign(step, dvy)
-
-        self._check_exit()
-
-        # Canhões só miram/atiram depois de surgir na tela.
-        if self._is_entering():
+        # ── Movimentação: entra; depois jockeia em torno do jogador. ──
+        if self.state == "enter":
+            self.x -= self.ENTER_SPEED * dt
+            cy = self.y + self.h / 2
+            self.y = cy + (player_y - cy) * min(1.0, dt * 1.6) - self.h / 2
+            if self.x + self.w / 2 <= self.ENTER_FRAC * Config.SCREEN_WIDTH:
+                self.state = "dominate"
+                self.retarget_timer = 0.0
             self._idle_turrets(dt)
             return None
+
+        self._jockey(dt, player_x, player_y)
         return self._update_turrets(dt, player_x, player_y)
 
-    def _check_exit(self) -> None:
-        if self.x + self.w < -self.EXIT_MARGIN:
-            self.dead = True
+    def _jockey(self, dt: float, player_x: float, player_y: float) -> None:
+        """Reposiciona inquietamente em torno do jogador (estilo Primal Aspid):
+        mantém uma distância à direita, corrige a trajetória sem parar e dá
+        dardos ocasionais para um ângulo melhor — perseguição + controle de espaço."""
+        # Correções de trajetória constantes (+ dardos ocasionais p/ novo ângulo).
+        self.retarget_timer -= dt
+        if self.retarget_timer <= 0.0:
+            self.retarget_timer = random.uniform(self.RETARGET_MIN, self.RETARGET_MAX)
+            if random.random() < self.DART_CHANCE:
+                self.jockey_angle = random.uniform(-self.JOCKEY_SPAN, self.JOCKEY_SPAN)
+                self.standoff = random.uniform(self.STANDOFF_MIN, self.STANDOFF_MAX)
+            else:
+                self.jockey_angle = max(
+                    -self.JOCKEY_SPAN,
+                    min(self.JOCKEY_SPAN, self.jockey_angle + random.uniform(-0.3, 0.3)),
+                )
+                self.standoff = max(
+                    self.STANDOFF_MIN,
+                    min(self.STANDOFF_MAX, self.standoff + random.uniform(-35.0, 35.0)),
+                )
+
+        # Prioridade: MANTER A DISTÂNCIA. Corrige o raio no rumo atual (sem precisar
+        # rodar em volta do jogador) e só desliza para o ângulo de jockey aos poucos
+        # → distância consistente + reposicionamento lento (sem agilidade).
+        cx, cy = self._center()
+        bx, by = cx - player_x, cy - player_y
+        cur_d = math.hypot(bx, by) or 1.0
+        rad_x = player_x + (bx / cur_d) * self.standoff
+        rad_y = player_y + (by / cur_d) * self.standoff
+        ang = self.jockey_angle
+        jx = player_x + math.cos(ang) * self.standoff
+        jy = player_y + math.sin(ang) * self.standoff
+        angular_pull = 0.18  # quão rápido desliza p/ o ângulo de jockey (baixo = calmo)
+        dx = rad_x + (jx - rad_x) * angular_pull + math.sin(self.pulse * 3.1) * 5.0
+        dy = rad_y + (jy - rad_y) * angular_pull + math.cos(self.pulse * 3.7) * 5.0
+
+        # Mantém dentro da zona de combate (não atravessa nem sai da tela).
+        xmin = self.ZONE_X_MIN_FRAC * Config.SCREEN_WIDTH
+        xmax = self.ZONE_X_MAX_FRAC * Config.SCREEN_WIDTH
+        lo = self.EDGE_MARGIN + self.h / 2
+        hi = Config.SCREEN_HEIGHT - self.EDGE_MARGIN - self.h / 2
+        dx = max(xmin, min(xmax, dx))
+        dy = max(lo, min(hi, dy))
+
+        # Steering: acelera para a posição desejada (responsivo, mas suave).
+        cx, cy = self._center()
+        des_vx = max(-self.MAX_SPEED, min(self.MAX_SPEED, (dx - cx) * self.STEER_GAIN))
+        des_vy = max(-self.MAX_SPEED, min(self.MAX_SPEED, (dy - cy) * self.STEER_GAIN))
+        k = min(1.0, dt * self.STEER_RESP)
+        self.vx += (des_vx - self.vx) * k
+        self.vy += (des_vy - self.vy) * k
+
+        ncx = max(xmin, min(xmax, cx + self.vx * dt))
+        ncy = max(lo, min(hi, cy + self.vy * dt))
+        self.x = ncx - self.w / 2
+        self.y = ncy - self.h / 2
 
     def _idle_turrets(self, dt: float) -> None:
         # Enquanto entra: só decai os timers visuais (sem mirar/atirar).
@@ -312,17 +375,19 @@ class CyberTank(EnemyHitMixin):
         return self.POINTS
 
     def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
+        from ...entities.explosion import ExplosionType
         from ...systems import hit_sounds
         from ...systems.hit_result import HitResult
 
         self.take_damage(damage)
         if self.dead:
-            # explosion_size=0: o "Structural Failure" (via triggers_special_death)
-            # substitui a explosão — placas voam + poça de metal fundido.
+            # 1º a explosão NORMAL da nave (destrói a estrutura externa); o núcleo
+            # azul fica e entra em colapso crítico via TankMeltdown (special death).
             return HitResult(
                 killed=True,
                 points=self.get_points_value(),
-                explosion_size=0,
+                explosion_size=int(self.w * 0.9),
+                explosion_type=ExplosionType.CYBER,
                 sound=hit_sounds.EXPLOSION_BOSS,
                 triggers_special_death=True,
             )
@@ -353,40 +418,50 @@ class CyberTank(EnemyHitMixin):
     def draw(self, surface: pygame.Surface) -> None:
         cell = self.cell
         cx, cy = self._center()
-        rad = self.body_spin
-        cos_r, sin_r = math.cos(rad), math.sin(rad)
+        deg = math.degrees(self.body_spin)
 
         if self._is_entering():
             self._draw_warning(surface)
 
-        # 1. Chassi (ampulheta) GIRANDO no próprio eixo. Flash de hit com
-        # BLEND_RGB_ADD (preserva alpha dos cantos transparentes).
-        base = build_tank_surface(cell)
+        # 1 + 3. As DUAS metades da ampulheta (pods) GIRAM em torno do eixo,
+        # 180° opostas, com um vão claro até o núcleo no meio. Flash de hit
+        # com BLEND_RGB_ADD (preserva alpha dos cantos transparentes).
+        pod = build_pod_surface(cell)
         if self.hit_timer > 0.0:
-            base = base.copy()
-            base.fill((180, 180, 180), special_flags=pygame.BLEND_RGB_ADD)
-        rotated = pygame.transform.rotate(base, math.degrees(rad))
-        surface.blit(rotated, rotated.get_rect(center=(int(cx), int(cy))))
+            pod = pod.copy()
+            pod.fill((180, 180, 180), special_flags=pygame.BLEND_RGB_ADD)
+        for extra in (0.0, 180.0):
+            rot = pygame.transform.rotate(pod, deg + extra)
+            surface.blit(rot, rot.get_rect(center=(int(cx), int(cy))))
 
-        # 2. Conduítes/vents laranja — acompanham o giro do chassi.
-        eflick = 0.5 + 0.5 * math.sin(self.pulse * 16.0)
-        ecol = pal.lerp(ENGINE_NEON_DIM, ENGINE_NEON, 0.4 + 0.6 * eflick)
-        for c, r in ENGINE_CELLS:
-            ox = (c + 0.5) * cell - self.w / 2
-            oy = (r + 0.5) * cell - self.h / 2
-            gx = int(cx + ox * cos_r + oy * sin_r)
-            gy = int(cy - ox * sin_r + oy * cos_r)
-            self._blit_glow(surface, gx, gy, int(cell * 1.4), ecol)
-
-        # 3. Reator central ESTÁTICO (não gira) — pulsa no centro do eixo.
-        pulse = 0.5 + 0.5 * math.sin(self.pulse * 5.0)
-        core_col = pal.lerp(CORE_NEON_DIM, CORE_NEON, pulse)
-        self._blit_glow(surface, int(cx), int(cy), int(cell * 3.4 + cell * pulse), core_col)
-        pygame.draw.circle(surface, (235, 250, 255), (int(cx), int(cy)), max(2, int(cell * 0.9)))
+        # 2. Núcleo energético circular ESTÁTICO no centro — parte distinta,
+        # separada das metades pelo vão. Energia = pulso + faíscas orbitando.
+        self._draw_core(surface, cx, cy)
 
         # 4. Canhões nas pontas (orbitam com o giro), sempre mirando o jogador.
         for t in self.turrets:
             self._draw_turret(surface, t)
+
+    def _draw_core(self, surface: pygame.Surface, cx: float, cy: float) -> None:
+        cell = self.cell
+        icx, icy = int(cx), int(cy)
+        pulse = 0.5 + 0.5 * math.sin(self.pulse * 5.0)
+
+        # Halo de energia (aditivo) + orbe sólido com anel de contenção.
+        self._blit_glow(surface, icx, icy, int(cell * 3.6 + cell * pulse), pal.ELECTRIC_BLUE)
+        base_r = int(cell * 2.3)
+        pygame.draw.circle(surface, pal.DEEP_SLATE, (icx, icy), base_r)
+        pygame.draw.circle(surface, pal.OUTLINE, (icx, icy), base_r, 1)
+        core_col = pal.lerp(CORE_NEON_DIM, CORE_NEON, pulse)
+        pygame.draw.circle(surface, core_col, (icx, icy), int(cell * 1.5))
+        pygame.draw.circle(surface, (235, 250, 255), (icx, icy), max(2, int(cell * 0.7)))
+
+        # Faíscas de energia orbitando o núcleo (animação de energia, não de giro).
+        for k in range(3):
+            a = self.pulse * 2.4 + k * (math.tau / 3.0)
+            ex = icx + int(math.cos(a) * cell * 2.0)
+            ey = icy + int(math.sin(a) * cell * 2.0)
+            self._blit_glow(surface, ex, ey, int(cell * 0.9), (200, 245, 255))
 
     def _draw_turret(self, surface: pygame.Surface, t: _Turret) -> None:
         cell = self.cell

@@ -301,7 +301,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             RockGlider: 1.5,
             NeonSniper: 3.0,
             PoliceInterceptor: 4.0,
-            CyberTank: 5.0,
+            CyberTank: 1.0,
         },
         enemies_to_clear=75,
         # boss_type=Boss,

@@ -1,11 +1,19 @@
-"""TankMeltdown — efeito de morte "Structural Failure" do Cyber Tank.
+"""TankMeltdown — colapso do núcleo do Cyber Tank (estilo estrela colapsando).
 
-Cosmético puro (como o `CoreImplosion`/`PoliceCrash`): as **placas de blindagem
-voam em todas as direções** (estilhaços girando, meramente visuais) e o chassi
-**derrete numa poça de metal fundido neon** que brilha quente e esfria. Sem dano.
+A explosão NORMAL da nave (que destrói a estrutura externa) é disparada pelo
+`HitResult` da morte. Este efeito é só o **núcleo energético azul** que sobra no
+lugar e entra em estado crítico:
 
-Interface duck-typed dos efeitos do EntityManager: `update(dt)`, `draw(surface)`,
-`dead`, `rect`. Não entra em grid de colisão nem na lista de inimigos.
+  1-3. `critical` (~3s): estático, **acumula energia** — cresce gradualmente,
+       com tremores e instabilidade crescentes (partículas atraídas para dentro,
+       estática elétrica e pulsos luminosos cada vez mais intensos).
+  4-5. `collapse` (~0.2s): **contração súbita** — encolhe rápido para um ponto,
+       como toda a energia comprimida (colapso de estrela).
+  6-7. `explode` (~0.7s): **explosão azul** principal + onda de choque expandindo
+       rápido para fora (liberação colossal de uma vez).
+
+Cosmético puro. Interface duck-typed dos efeitos do EntityManager: `update(dt)`,
+`draw(surface)`, `dead`, `rect`.
 """
 
 from __future__ import annotations
@@ -16,43 +24,43 @@ from typing import List
 
 import pygame
 
+from ...core.config import config as Config
 from . import city_glow
 from . import city_palette as pal
 
-DURATION: float = 1.5
-PLATE_COUNT_MIN: int = 12
-PLATE_COUNT_MAX: int = 18
+CRITICAL_TIME: float = 3.0
+COLLAPSE_TIME: float = 0.20
+EXPLODE_TIME: float = 0.42  # explosão rápida e violenta (referência: MineExplosion)
+
+_BLUE: pal.RGB = pal.ELECTRIC_BLUE
+_HOT: pal.RGB = (210, 245, 255)  # azul-branco quente
 
 
-def _scale(color: pal.RGB, factor: float) -> pal.RGB:
-    """Escurece uma cor por um fator 0..1 (para fade aditivo → preto = invisível)."""
-    return (int(color[0] * factor), int(color[1] * factor), int(color[2] * factor))
+def _scale(color: pal.RGB, f: float) -> pal.RGB:
+    f = 0.0 if f < 0.0 else 1.0 if f > 1.0 else f
+    return (int(color[0] * f), int(color[1] * f), int(color[2] * f))
 
 
-class _Plate:
-    __slots__ = ("x", "y", "vx", "vy", "angle", "spin", "size", "color", "age", "life")
+class _Spark:
+    """Partícula de energia atraída para o núcleo (acreção)."""
 
-    def __init__(
-        self,
-        x: float,
-        y: float,
-        vx: float,
-        vy: float,
-        spin: float,
-        size: float,
-        color: pal.RGB,
-        life: float,
-    ) -> None:
-        self.x = x
-        self.y = y
-        self.vx = vx
-        self.vy = vy
-        self.angle = random.uniform(0.0, math.tau)
-        self.spin = spin
+    __slots__ = ("angle", "dist", "swirl", "size")
+
+    def __init__(self, angle: float, dist: float, swirl: float, size: float) -> None:
+        self.angle = angle
+        self.dist = dist
+        self.swirl = swirl
         self.size = size
-        self.color = color
+
+
+class _Pulse:
+    """Anel de luz expandindo (pulso luminoso)."""
+
+    __slots__ = ("age", "life")
+
+    def __init__(self, life: float) -> None:
         self.age = 0.0
-        self.life = life  # vida própria (escalonada) → não somem todos juntos
+        self.life = life
 
 
 class TankMeltdown:
@@ -62,121 +70,214 @@ class TankMeltdown:
         self.cell: int = cell
         self.t: float = 0.0
         self.dead: bool = False
-        self.puddle_r: float = float(cell) * 5.0
+        self.phase: str = "critical"
 
-        plate_colors = (pal.HULL_LIGHT, pal.GUNMETAL, pal.HULL_SHADOW)
-        count = random.randint(PLATE_COUNT_MIN, PLATE_COUNT_MAX)
-        self.plates: List[_Plate] = []
-        for _ in range(count):
-            ang = random.uniform(0.0, math.tau)
-            sp = random.uniform(120.0, 320.0)
-            self.plates.append(
-                _Plate(
-                    x=cx + random.uniform(-cell * 2, cell * 2),
-                    y=cy + random.uniform(-cell * 2, cell * 2),
-                    vx=math.cos(ang) * sp,
-                    vy=math.sin(ang) * sp,
-                    spin=random.uniform(-8.0, 8.0),
-                    size=random.uniform(cell * 0.9, cell * 2.0),
-                    color=random.choice(plate_colors),
-                    life=random.uniform(0.85, 1.35),
-                )
-            )
+        self.base_r: float = cell * 1.8
+        self.peak_r: float = cell * 7.5  # tamanho máximo da sobrecarga
+        self.collapse_from: float = self.peak_r  # raio capturado ao iniciar o colapso
+        # Onda de choque GIGANTE — ocupa boa parte da tela (poder extremo).
+        self.max_shock: float = min(
+            Config.SCREEN_WIDTH * 0.5, Config.SCREEN_HEIGHT * 0.78
+        )
+        # Surface translúcida pré-alocada (reusada por frame, à la MineExplosion).
+        d = int(self.max_shock) * 2 + 4
+        self._boom_surf: pygame.Surface = pygame.Surface((d, d), pygame.SRCALPHA)
+        self._boom_half: int = d // 2
+
+        self.sparks: List[_Spark] = []
+        self.pulses: List[_Pulse] = []
+        self._spark_timer: float = 0.0
+        self._pulse_timer: float = 0.0
+        self.phase_t: float = 0.0  # tempo dentro de collapse/explode
 
     @property
     def rect(self) -> pygame.Rect:
-        r = int(self.puddle_r + self.cell * 8)
+        r = int(self.max_shock)
         return pygame.Rect(int(self.cx) - r, int(self.cy) - r, r * 2, r * 2)
 
+    # ── Update ──────────────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
         if dt <= 0.0:
             return
         self.t += dt
-        for p in self.plates:
-            p.age += dt
-            p.x += p.vx * dt
-            p.y += p.vy * dt
-            damp = 1.0 - min(1.0, dt * 1.6)
-            p.vx *= damp
-            p.vy *= damp
-            p.angle += p.spin * dt
-        if self.t >= DURATION:
-            self.dead = True
 
-    def _frac(self) -> float:
-        return min(1.0, self.t / DURATION)
+        if self.phase == "critical":
+            self._update_critical(dt)
+            if self.t >= CRITICAL_TIME:
+                self.phase = "collapse"
+                self.phase_t = 0.0
+                self.collapse_from = self._critical_radius()
+        elif self.phase == "collapse":
+            self.phase_t += dt
+            # Partículas sugadas violentamente para o ponto central.
+            for s in self.sparks:
+                s.dist = max(0.0, s.dist - dt * 900.0)
+                s.angle += s.swirl * dt * 2.0
+            if self.phase_t >= COLLAPSE_TIME:
+                self.phase = "explode"
+                self.phase_t = 0.0
+                self.sparks.clear()
+        else:  # explode
+            self.phase_t += dt
+            if self.phase_t >= EXPLODE_TIME:
+                self.dead = True
+
+    def _update_critical(self, dt: float) -> None:
+        prog = min(1.0, self.t / CRITICAL_TIME)
+
+        # Emissão de partículas de acreção (cada vez mais frequente).
+        self._spark_timer -= dt
+        if self._spark_timer <= 0.0:
+            self._spark_timer = 0.05 * (1.0 - 0.7 * prog) + 0.008
+            for _ in range(1 + int(prog * 3)):
+                self.sparks.append(
+                    _Spark(
+                        angle=random.uniform(0.0, math.tau),
+                        dist=self.cell * random.uniform(7.0, 14.0),
+                        swirl=random.uniform(1.5, 4.0) * random.choice((-1.0, 1.0)),
+                        size=random.uniform(1.5, 3.5),
+                    )
+                )
+        inward = self.cell * (3.0 + 9.0 * prog)
+        alive: List[_Spark] = []
+        for s in self.sparks:
+            s.dist -= inward * dt
+            s.angle += s.swirl * dt
+            if s.dist > 1.5:
+                alive.append(s)
+        self.sparks = alive
+
+        # Pulsos luminosos (intervalo encurta com a sobrecarga).
+        self._pulse_timer -= dt
+        if self._pulse_timer <= 0.0:
+            self._pulse_timer = 0.55 - 0.42 * prog
+            self.pulses.append(_Pulse(life=random.uniform(0.4, 0.6)))
+        for p in self.pulses:
+            p.age += dt
+        if self.pulses:
+            self.pulses = [p for p in self.pulses if p.age < p.life]
+
+    def _critical_radius(self) -> float:
+        prog = min(1.0, self.t / CRITICAL_TIME)
+        return self.base_r + (self.peak_r - self.base_r) * (prog ** 1.6)
 
     # ── Render ──────────────────────────────────────────────────────────────
-    def draw(self, surface: pygame.Surface) -> None:
-        frac = self._frac()
-
-        # Poça de metal fundido: brilha branco-quente, vira laranja e esfria;
-        # halo aditivo + rim azul neon ("metal fundido neon" da proposta).
-        if frac < 0.3:
-            heat = frac / 0.3
-            core = pal.lerp(pal.TOXIC_ORANGE, (255, 255, 235), heat)
-        else:
-            heat = 1.0 - (frac - 0.3) / 0.7
-            core = pal.lerp((70, 32, 18), pal.TOXIC_ORANGE, heat)
-        # Fade global da poça nos últimos 30% para não "estourar" ao sumir.
-        end_fade = 1.0 if frac < 0.7 else 1.0 - (frac - 0.7) / 0.3
-        pr = int(self.puddle_r * (0.7 + 0.5 * frac))
-        if pr > 0 and end_fade > 0.0:
-            glow = city_glow.get_glow(pr, _scale(core, end_fade))
-            surface.blit(
-                glow,
-                (int(self.cx) - pr, int(self.cy) - pr),
-                special_flags=pygame.BLEND_RGBA_ADD,
-            )
-            rim = pal.lerp(pal.ELECTRIC_BLUE, (20, 40, 70), frac)
-            rr = int(pr * 0.62)
-            rglow = city_glow.get_glow(rr, _scale(rim, end_fade))
-            surface.blit(
-                rglow,
-                (int(self.cx) - rr, int(self.cy) - rr),
-                special_flags=pygame.BLEND_RGBA_ADD,
-            )
-
-        # Estilhaços de placa girando (meramente visuais): fade de alpha suave +
-        # leve encolhimento ao longo da vida própria de cada placa.
-        for p in self.plates:
-            pf = min(1.0, p.age / p.life)
-            af = (1.0 - pf) ** 1.4  # ease-out: cheio no início, esmaece no fim
-            if af <= 0.0:
-                continue
-            alpha = int(255 * af)
-            scale = 0.6 + 0.4 * af  # recua um pouco enquanto some
-            self._blit_plate(surface, p, scale, alpha)
-            # Brilho "quente" só enquanto jovem, acompanhando o fade.
-            if pf < 0.5:
-                heat = (1.0 - pf * 2.0) * af
-                hot = int(self.cell * 0.9 * heat)
-                if hot > 0:
-                    g = city_glow.get_glow(hot, _scale(pal.TOXIC_ORANGE, heat))
-                    surface.blit(
-                        g,
-                        (int(p.x) - hot, int(p.y) - hot),
-                        special_flags=pygame.BLEND_RGBA_ADD,
-                    )
-
-    def _blit_plate(
-        self, surface: pygame.Surface, p: "_Plate", scale: float, alpha: int
-    ) -> None:
-        """Desenha a placa rotacionada com alpha (fade real, sem 'pop')."""
-        s = p.size * scale
-        ca, sa = math.cos(p.angle), math.sin(p.angle)
-        corners = ((-s, -s * 0.6), (s, -s * 0.6), (s, s * 0.6), (-s, s * 0.6))
-        pts = [
-            (p.x + cx * ca - cy * sa, p.y + cx * sa + cy * ca) for cx, cy in corners
-        ]
-        xs = [q[0] for q in pts]
-        ys = [q[1] for q in pts]
-        minx, miny = int(min(xs)) - 1, int(min(ys)) - 1
-        w, h = int(max(xs)) - minx + 2, int(max(ys)) - miny + 2
-        if w <= 0 or h <= 0:
+    def _blit_glow(self, surface, x, y, radius, color) -> None:
+        if radius < 1:
             return
-        tmp = pygame.Surface((w, h), pygame.SRCALPHA)
-        local = [(q[0] - minx, q[1] - miny) for q in pts]
-        pygame.draw.polygon(tmp, (*p.color, alpha), local)
-        pygame.draw.polygon(tmp, (*pal.OUTLINE, alpha), local, 1)
-        surface.blit(tmp, (minx, miny))
+        glow = city_glow.get_glow(int(radius), color)
+        surface.blit(
+            glow, (int(x) - int(radius), int(y) - int(radius)),
+            special_flags=pygame.BLEND_RGBA_ADD,
+        )
+
+    def draw(self, surface: pygame.Surface) -> None:
+        if self.phase == "critical":
+            self._draw_critical(surface)
+        elif self.phase == "collapse":
+            self._draw_collapse(surface)
+        else:
+            self._draw_explode(surface)
+
+    def _draw_critical(self, surface: pygame.Surface) -> None:
+        cell = self.cell
+        prog = min(1.0, self.t / CRITICAL_TIME)
+        # Tremor crescente.
+        amp = int(1 + 11 * prog * prog)
+        ccx = int(self.cx + random.randint(-amp, amp))
+        ccy = int(self.cy + random.randint(-amp, amp))
+
+        # Pulsos luminosos (anéis expandindo).
+        for p in self.pulses:
+            f = p.age / p.life
+            rr = int(cell * (1.5 + 7.0 * f))
+            self._blit_glow(surface, self.cx, self.cy, rr, _scale(_BLUE, (1.0 - f) * 0.6))
+
+        # Partículas de acreção (energia sendo puxada para dentro).
+        for s in self.sparks:
+            sx = self.cx + math.cos(s.angle) * s.dist
+            sy = self.cy + math.sin(s.angle) * s.dist
+            self._blit_glow(surface, sx, sy, int(s.size + cell * 0.4), _HOT)
+
+        # Núcleo: cresce + halo pulsante + estática elétrica em volta.
+        core_r = self._critical_radius()
+        flick = 0.5 + 0.5 * math.sin(self.t * (8.0 + 30.0 * prog))
+        self._blit_glow(surface, ccx, ccy, int(core_r * 1.9 + cell * flick), _BLUE)
+        pygame.draw.circle(surface, pal.DEEP_SLATE, (ccx, ccy), int(core_r))
+        pygame.draw.circle(surface, _scale(_BLUE, 0.5 + 0.5 * flick), (ccx, ccy), int(core_r * 0.8))
+        pygame.draw.circle(surface, _HOT, (ccx, ccy), max(2, int(core_r * 0.4)))
+        self._draw_arcs(surface, ccx, ccy, core_r, prog)
+
+    def _draw_arcs(self, surface, ccx, ccy, core_r, prog) -> None:
+        # Estática elétrica: raios irregulares saindo do núcleo, mais densos
+        # e longos conforme a instabilidade cresce.
+        n = int(2 + prog * 5)
+        for _ in range(n):
+            a = random.uniform(0.0, math.tau)
+            segs = 4
+            r0 = core_r * 0.7
+            r1 = core_r * (1.4 + prog * 2.2)
+            pts = []
+            for k in range(segs + 1):
+                rr = r0 + (r1 - r0) * (k / segs)
+                jitter = random.uniform(-core_r * 0.35, core_r * 0.35)
+                pa = a + jitter / max(1.0, rr)
+                pts.append((int(ccx + math.cos(pa) * rr), int(ccy + math.sin(pa) * rr)))
+            col = _HOT if random.random() < 0.4 else _BLUE
+            pygame.draw.lines(surface, col, False, pts, 1)
+
+    def _draw_collapse(self, surface: pygame.Surface) -> None:
+        cell = self.cell
+        f = min(1.0, self.phase_t / COLLAPSE_TIME)
+        # Contração súbita: encolhe MUITO rápido para um ponto (ease-out forte).
+        cr = self.collapse_from * (1.0 - f) ** 2.2 + cell * 0.4
+        # Partículas restantes convergindo.
+        for s in self.sparks:
+            sx = self.cx + math.cos(s.angle) * s.dist
+            sy = self.cy + math.sin(s.angle) * s.dist
+            self._blit_glow(surface, sx, sy, int(cell * 0.5), _HOT)
+        # Halo encolhendo + ponto comprimido brilhante (energia indo a um ponto).
+        self._blit_glow(surface, self.cx, self.cy, int(cr * 1.6), _BLUE)
+        pygame.draw.circle(surface, _HOT, (int(self.cx), int(self.cy)), max(2, int(cr)))
+        # Brilho-semente intensificando no fim do colapso (prestes a estourar).
+        seed = int(cell * (1.0 + 3.0 * f))
+        self._blit_glow(surface, self.cx, self.cy, seed, (255, 255, 255))
+
+    def _draw_explode(self, surface: pygame.Surface) -> None:
+        cell = self.cell
+        icx, icy = int(self.cx), int(self.cy)
+        f = min(1.0, self.phase_t / EXPLODE_TIME)
+        # Expansão ESTOURADA: ease-out forte → quase todo o raio em poucos frames.
+        exp = 1.0 - (1.0 - f) ** 3.5
+
+        # 1. Disco azul translúcido GIGANTE (referência MineExplosion) — desabrocha
+        #    e some rápido; cobre boa parte da tela. Surface reaproveitada.
+        half = self._boom_half
+        self._boom_surf.fill((0, 0, 0, 0))
+        radius = int(self.max_shock * exp)
+        if radius > 2:
+            disc_a = int(150 * (1.0 - f))
+            if disc_a > 0:
+                pygame.draw.circle(self._boom_surf, (*_BLUE, disc_a), (half, half), radius)
+            # Frente de onda quente (anel brilhante grosso) na borda do disco.
+            ring_a = int(235 * (1.0 - f) ** 0.5)
+            if ring_a > 0:
+                pygame.draw.circle(
+                    self._boom_surf, (*_HOT, ring_a), (half, half), radius,
+                    max(2, int(cell * 2.4 * (1.0 - f))),
+                )
+            surface.blit(self._boom_surf, (icx - half, icy - half))
+
+        # 2. Núcleo da descarga: clarão aditivo quente e instantâneo, esmaece veloz.
+        flash_i = (1.0 - f) ** 1.4
+        self._blit_glow(surface, icx, icy, int(cell * (5.0 + 16.0 * (1.0 - f))), _scale(_HOT, flash_i))
+        self._blit_glow(surface, icx, icy, int(self.max_shock * 0.45 * exp), _scale(_BLUE, flash_i))
+
+        # 3. Raios de energia disparando para fora (só no instante inicial).
+        if f < 0.3:
+            si = 1.0 - f / 0.3
+            r1 = self.max_shock * (0.55 + 0.45 * f)
+            for k in range(12):
+                a = k * (math.tau / 12)
+                p1 = (int(icx + math.cos(a) * r1), int(icy + math.sin(a) * r1))
+                pygame.draw.line(surface, _scale(_HOT, si), (icx, icy), p1, max(1, int(cell * 0.7)))

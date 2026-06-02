@@ -59,10 +59,37 @@ ENGINE_NEON: RGB = pal.TOXIC_ORANGE
 ENGINE_NEON_DIM: RGB = pal.TOXIC_ORANGE_DIM
 
 
+_CENTER_C = PIXEL_COLS // 2  # 12 (coluna central)
+# Vão entre o pod e o núcleo: o pod é recortado antes do centro, criando a
+# **separação visual clara** entre as 3 partes (pod | vão | núcleo | vão | pod).
+GAP_COLS = 4
+_POD_INNER_COL = _CENTER_C - GAP_COLS  # 8
+
+
 def _inside(x: int, r: int) -> bool:
     if x < 0 or x >= PIXEL_COLS or r < 0 or r >= PIXEL_ROWS:
         return False
     return abs(r - _CENTER_R) <= _HALF[x]
+
+
+def _inside_pod(x: int, r: int) -> bool:
+    # Apenas a vagem de uma ponta (lado esquerdo do canvas), recortada no vão.
+    return _inside(x, r) and x <= _POD_INNER_COL
+
+
+def _shade(x: int, r: int) -> str:
+    """Sombreamento top-lit (volume metálico) de um cell interior."""
+    h = _HALF[x]
+    frac = (r - (_CENTER_R - h)) / (2 * h) if h > 0 else 0.5
+    if frac < 0.25:
+        return "a"
+    if frac < 0.5:
+        return "m"
+    if frac < 0.7:
+        return "l"
+    if frac < 0.88:
+        return "h"
+    return "d"
 
 
 def _build_body_map() -> List[str]:
@@ -83,19 +110,7 @@ def _build_body_map() -> List[str]:
                 # Rim light no topo; contorno escuro no resto.
                 grid[r][x] = "S" if (not _inside(x, r - 1) and r <= _CENTER_R) else "o"
                 continue
-            # Sombreamento vertical (luz vinda de cima) → volume metálico.
-            h = _HALF[x]
-            frac = (r - (_CENTER_R - h)) / (2 * h) if h > 0 else 0.5
-            if frac < 0.25:
-                grid[r][x] = "a"
-            elif frac < 0.5:
-                grid[r][x] = "m"
-            elif frac < 0.7:
-                grid[r][x] = "l"
-            elif frac < 0.88:
-                grid[r][x] = "h"
-            else:
-                grid[r][x] = "d"
+            grid[r][x] = _shade(x, r)
 
     def interior(x: int, r: int) -> bool:
         return (
@@ -126,7 +141,39 @@ def _build_body_map() -> List[str]:
     return ["".join(row) for row in grid]
 
 
+def _build_pod_map() -> List[str]:
+    """Gera UMA vagem (lado esquerdo do canvas, recortada no vão). É desenhada
+    duas vezes (rotacionada por `body_spin` e +180°) → as duas metades giram em
+    torno do núcleo estático. Pivô = centro do canvas (= centro do tanque)."""
+    grid = [["." for _ in range(PIXEL_COLS)] for _ in range(PIXEL_ROWS)]
+    for r in range(PIXEL_ROWS):
+        for x in range(PIXEL_COLS):
+            if not _inside_pod(x, r):
+                continue
+            border = (
+                not _inside_pod(x, r - 1)
+                or not _inside_pod(x, r + 1)
+                or not _inside_pod(x - 1, r)
+                or not _inside_pod(x + 1, r)
+            )
+            if border:
+                grid[r][x] = (
+                    "S" if (not _inside_pod(x, r - 1) and r <= _CENTER_R) else "o"
+                )
+            else:
+                grid[r][x] = _shade(x, r)
+
+    def interior(x: int, r: int) -> bool:
+        return grid[r][x] not in (".", "o", "S")
+
+    for x, r in ((2, 4), (2, 8), (4, 5), (4, 7), (6, 6)):
+        if interior(x, r):
+            grid[r][x] = "r"
+    return ["".join(row) for row in grid]
+
+
 PIXEL_MAP: List[str] = _build_body_map()
+POD_MAP: List[str] = _build_pod_map()
 
 CORE_CELLS: List[Tuple[int, int]] = [
     (c, r) for r, row in enumerate(PIXEL_MAP) for c, ch in enumerate(row) if ch == "c"
@@ -171,6 +218,7 @@ assert len(CANNON_MAP) == CANNON_ROWS, "CANNON_MAP: 7 linhas"
 
 # ── Builders cacheados ────────────────────────────────────────────────────────
 _body_cache: Dict[int, pygame.Surface] = {}
+_pod_cache: Dict[int, pygame.Surface] = {}
 _cannon_cache: Dict[int, pygame.Surface] = {}
 
 
@@ -192,6 +240,16 @@ def build_tank_surface(cell: int) -> pygame.Surface:
     if cached is None:
         cached = _build_from_map(PIXEL_MAP, cell)
         _body_cache[cell] = cached
+    return cached
+
+
+def build_pod_surface(cell: int) -> pygame.Surface:
+    """Surface de UMA vagem (metade da ampulheta), cacheada por `cell`. Mesmo
+    tamanho do corpo (pivô = centro) para rotacionar em torno do eixo central."""
+    cached = _pod_cache.get(cell)
+    if cached is None:
+        cached = _build_from_map(POD_MAP, cell)
+        _pod_cache[cell] = cached
     return cached
 
 
