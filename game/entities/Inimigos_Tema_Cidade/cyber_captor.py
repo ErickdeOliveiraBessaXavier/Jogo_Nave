@@ -5,7 +5,8 @@ Esfera mecânica cercada por **anéis orbitais** (desenhados no draw). Não desc
 **raio de energia** que tenta **prender o jogador** o maior tempo possível. O
 raio tem um **ponto de trava** que persegue o jogador com velocidade limitada
 (`LOCK_SPEED`); enquanto o jogador é alcançado, drena vida (dano periódico). O
-jogador escapa correndo mais rápido que a trava ou saindo do alcance (`BEAM_RANGE`).
+jogador escapa **correndo mais rápido que a trava** (`LOCK_SPEED`), que então fica
+para trás e perde a conexão. O Captor ataca em ciclo (aim→beam→cooldown).
 
 Spawn **"Shadow Support"**: nasce próximo/atrás de um inimigo maior (escondido),
 escolhido pelo `EnemySpawner`. Morte **"EMP Discharge"**: o EntityManager dispara
@@ -57,10 +58,9 @@ class CyberCaptor(EnemyHitMixin):
     ORBIT_RX: float = 62.0
     ORBIT_RY: float = 44.0
     ORBIT_SPEED: float = 0.85  # rad/s
-    ENTER_SPEED: float = 150.0  # desliza da posição de spawn até a âncora
+    ENTER_DURATION: float = 0.8  # tempo de "deslize" do spawn até a órbita
 
     # ── Raio (armadilha de energia) ──────────────────────────────────────────
-    BEAM_RANGE: float = 560.0  # alcance máximo para conectar
     LOCK_SPEED: float = 300.0  # velocidade com que a trava persegue o jogador
     CAPTURE: float = 38.0  # quão perto a trava precisa estar p/ "prender"
     AIM_TIME: float = 0.7  # telegraph antes do raio
@@ -100,6 +100,11 @@ class CyberCaptor(EnemyHitMixin):
             self.ORBIT_RY + 40.0, min(Config.SCREEN_HEIGHT * 0.45, ay)
         )
         self.orbit_angle: float = random.uniform(0.0, math.tau)
+        # Deslize de entrada baseado em TEMPO (o ponto de órbita se move, então
+        # não dá pra esperar "encostar" nele — senão `entering` nunca terminava).
+        self.spawn_x: float = float(x)
+        self.spawn_y: float = float(y)
+        self.enter_t: float = 0.0
         self.entering: bool = True
 
         self.state: str = "cooldown"
@@ -148,10 +153,14 @@ class CyberCaptor(EnemyHitMixin):
         target_x = ox - self.w / 2
         target_y = oy - self.h / 2
         if self.entering:
-            # Desliza suavemente da posição de spawn (atrás do "escudo") até a órbita.
-            self.x += (target_x - self.x) * min(1.0, dt * 2.2)
-            self.y += (target_y - self.y) * min(1.0, dt * 2.2)
-            if abs(target_x - self.x) < 2.0 and abs(target_y - self.y) < 2.0:
+            # Lerp temporal (smoothstep) do spawn até o ponto de órbita atual;
+            # termina sempre em ENTER_DURATION e faz o handoff suave para a órbita.
+            self.enter_t += dt
+            p = min(1.0, self.enter_t / self.ENTER_DURATION)
+            e = p * p * (3.0 - 2.0 * p)
+            self.x = self.spawn_x + (target_x - self.spawn_x) * e
+            self.y = self.spawn_y + (target_y - self.spawn_y) * e
+            if p >= 1.0:
                 self.entering = False
         else:
             self.x, self.y = target_x, target_y
@@ -163,10 +172,11 @@ class CyberCaptor(EnemyHitMixin):
             self.connected = False
             self.cooldown_timer -= dt
             if self.cooldown_timer <= 0.0 and not self.entering:
-                if math.hypot(player_x - cx, player_y - cy) <= self.BEAM_RANGE:
-                    self.state = "aim"
-                    self.aim_timer = self.AIM_TIME
-                    self.lock_x, self.lock_y = cx, cy
+                # Ataca em ciclo (sem gate de alcance): o dano só acontece se a
+                # trava alcançar o jogador — ele foge correndo mais que a trava.
+                self.state = "aim"
+                self.aim_timer = self.AIM_TIME
+                self.lock_x, self.lock_y = cx, cy
         elif self.state == "aim":
             self.lock_x, self.lock_y = cx, cy  # raio "nasce" no captor
             self.aim_timer -= dt
@@ -188,7 +198,6 @@ class CyberCaptor(EnemyHitMixin):
 
             caught = (
                 math.hypot(player_x - self.lock_x, player_y - self.lock_y) < self.CAPTURE
-                and math.hypot(player_x - cx, player_y - cy) < self.BEAM_RANGE
             )
             self.connected = caught
             self.dmg_timer -= dt
