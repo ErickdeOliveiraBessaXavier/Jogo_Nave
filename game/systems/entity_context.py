@@ -42,4 +42,5 @@ class EnemyUpdateContext:
     new_alien_bullets: List[Any] = field(default_factory=_empty_any_list)
     new_eye_lasers: List[Any] = field(default_factory=_empty_any_list)
     new_energy_orbs: List[Any] = field(default_factory=_empty_any_list)
+    new_neon_bolts: List[Any] = field(default_factory=_empty_any_list)
     new_enemies: List[Any] = field(default_factory=_empty_any_list)

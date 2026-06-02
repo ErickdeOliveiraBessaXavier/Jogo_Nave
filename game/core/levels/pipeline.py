@@ -22,6 +22,7 @@ from ...entities.bot_elemental import ElementalRobot
 from ...entities.explosive_mine import ExplosiveMine
 from ...entities.eye_enemy import EyeEnemy
 from ...entities.Inimigos_Tema_Cidade.city_drone import CityDrone
+from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ...entities.meteor import Meteor
 from ...entities.mountain_geode import MountainGeode
 from ...entities.mountain_mage import MountainMage
@@ -81,6 +82,7 @@ ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
         WorldTheme.PROCEDURAL,
     },
     CityDrone: {WorldTheme.CITY},
+    NeonSniper: {WorldTheme.CITY},
     RockGlider: {WorldTheme.MOUNTAINS},
     StoneSentry: {WorldTheme.MOUNTAINS},
     ElementalRobot: {WorldTheme.MOUNTAINS},
@@ -104,7 +106,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             ElementalRobot: 1.10,
         },
         WorldTheme.STARFIELD: {Alien: 1.05, EyeEnemy: 1.05},
-        WorldTheme.CITY: {CityDrone: 1.20, Alien: 1.10, EyeEnemy: 1.10},
+        WorldTheme.CITY: {CityDrone: 1.20, NeonSniper: 0.80, Alien: 1.10, EyeEnemy: 1.10},
         WorldTheme.VOLCANIC: {Meteor: 1.12, EyeEnemy: 1.05},
         WorldTheme.PROCEDURAL: {Meteor: 1.05, Alien: 1.05, EyeEnemy: 1.00},
     },
@@ -115,7 +117,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             ElementalRobot: 1.18,
         },
         WorldTheme.STARFIELD: {Alien: 1.10, EyeEnemy: 1.08},
-        WorldTheme.CITY: {CityDrone: 1.30, Alien: 1.15, EyeEnemy: 1.18},
+        WorldTheme.CITY: {CityDrone: 1.30, NeonSniper: 0.90, Alien: 1.15, EyeEnemy: 1.18},
         WorldTheme.VOLCANIC: {Meteor: 1.18, EyeEnemy: 1.08},
         WorldTheme.PROCEDURAL: {Meteor: 1.08, Alien: 1.08, EyeEnemy: 1.05},
     },
@@ -126,7 +128,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             ElementalRobot: 1.25,
         },
         WorldTheme.STARFIELD: {Alien: 1.15, EyeEnemy: 1.10},
-        WorldTheme.CITY: {CityDrone: 1.40, Alien: 1.20, EyeEnemy: 1.25},
+        WorldTheme.CITY: {CityDrone: 1.40, NeonSniper: 1.00, Alien: 1.20, EyeEnemy: 1.25},
         WorldTheme.VOLCANIC: {Meteor: 1.25, EyeEnemy: 1.10},
         WorldTheme.PROCEDURAL: {Meteor: 1.12, Alien: 1.12, EyeEnemy: 1.08},
     },
@@ -242,7 +244,7 @@ ENEMY_STAGE_WEIGHT_MULTIPLIERS = ENEMY_STAGE_WEIGHT_PROFILES[_ACTIVE_PROFILE]
 THEME_FALLBACK_ENEMIES: dict[WorldTheme, list[type]] = {
     WorldTheme.MOUNTAINS: [RockGlider, MountainMage, StoneSentry, ElementalRobot],
     WorldTheme.STARFIELD: [Meteor, Alien, EyeEnemy],
-    WorldTheme.CITY: [CityDrone, Alien, EyeEnemy, Meteor],
+    WorldTheme.CITY: [CityDrone, NeonSniper, Alien, EyeEnemy, Meteor],
     WorldTheme.VOLCANIC: [Meteor, EyeEnemy, Alien],
     WorldTheme.PROCEDURAL: [Meteor, Alien, EyeEnemy],
 }
@@ -257,6 +259,7 @@ DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
     MountainMage: 18.0,
     MountainPropeller: 15.0,
     CityDrone: 5.5,
+    NeonSniper: 16.0,
 }
 
 THEME_ENEMY_REPLACEMENTS: dict[tuple[WorldTheme, type], type] = {
@@ -287,6 +290,14 @@ THEME_BASE_ENEMY: dict[WorldTheme, type] = {
     WorldTheme.CITY: CityDrone,
     WorldTheme.VOLCANIC: Meteor,
     WorldTheme.PROCEDURAL: Meteor,
+}
+
+# Specials "assinatura" do tema: entram GARANTIDOS no pool e somam ao cap de
+# variedade. O variety cap escolhe os demais tipos por loteria ponderada em
+# 1/spawn_time, que penaliza fortemente inimigos raros (spawn_time alto) — sem
+# esta garantia, um especial como o Neon Sniper quase nunca sobrevive ao corte.
+THEME_SIGNATURE_ENEMIES: dict[WorldTheme, tuple[type, ...]] = {
+    WorldTheme.CITY: (NeonSniper,),
 }
 
 
@@ -465,6 +476,13 @@ def _apply_enemy_variety_cap(
         cap = MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3)
     spawn_config = config.enemy_spawn_config
 
+    # Specials assinatura entram garantidos e somam ao cap (aditivos), para não
+    # roubar a vaga dos inimigos de volume nem disputar a loteria 1/spawn_time.
+    signatures = [
+        t for t in THEME_SIGNATURE_ENEMIES.get(world.theme, ()) if t in spawn_config
+    ]
+    cap += len(signatures)
+
     if len(spawn_config) <= cap:
         return config
 
@@ -476,6 +494,9 @@ def _apply_enemy_variety_cap(
     base = THEME_BASE_ENEMY.get(world.theme)
     if base is not None and base in spawn_config:
         chosen.append(base)
+    for sig in signatures:
+        if sig not in chosen:
+            chosen.append(sig)
 
     candidates = [t for t in spawn_config if t not in chosen]
     weights = [1.0 / max(spawn_config[t], 0.01) for t in candidates]
@@ -586,7 +607,13 @@ def _create_world_boss_level(
     elif world.theme == WorldTheme.STARFIELD:
         enemy_spawn_config = {Meteor: 1.2, Alien: 2.0, EyeEnemy: 6.0}
     elif world.theme == WorldTheme.CITY:
-        enemy_spawn_config = {CityDrone: 2.5, Alien: 2.5, EyeEnemy: 5.0, Meteor: 3.0}
+        enemy_spawn_config = {
+            CityDrone: 2.5,
+            NeonSniper: 12.0,
+            Alien: 2.5,
+            EyeEnemy: 5.0,
+            Meteor: 3.0,
+        }
     elif world.theme == WorldTheme.VOLCANIC:
         enemy_spawn_config = {Meteor: 0.7, EyeEnemy: 4.0}
     else:  # PROCEDURAL

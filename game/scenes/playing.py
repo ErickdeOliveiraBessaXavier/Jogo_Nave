@@ -1921,6 +1921,10 @@ class PlayingScene(Scene):
             ship, em.serpent_bullets, em.enemy_projectile_grid
         ):
             self._handle_ship_hit(slot)
+        if self.collisions.enemy_projectiles_vs_ship(
+            ship, em.neon_bolts, em.enemy_projectile_grid
+        ):
+            self._handle_ship_hit(slot)
         if self.collisions.eye_laser_vs_ship(ship, em.eye_lasers):
             self._handle_ship_hit(slot)
 

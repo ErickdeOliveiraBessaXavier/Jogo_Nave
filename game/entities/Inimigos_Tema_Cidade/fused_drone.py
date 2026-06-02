@@ -18,6 +18,7 @@ import pygame
 from ...core.config import config as Config
 from ...core.sound import sound_manager
 from ..enemy_hit_mixin import EnemyHitMixin
+from . import city_glow
 from . import city_palette as pal
 from .city_drone import CityDrone
 from .city_drone_pixel_map import PIXEL_COLS, build_static_surface
@@ -198,7 +199,7 @@ class FusedDrone(EnemyHitMixin):
         radius: int,
         color: tuple[int, int, int],
     ) -> None:
-        glow = CityDrone._get_glow(radius, color)
+        glow = city_glow.get_glow(radius, color)
         surface.blit(
             glow, (cx - radius, cy - radius), special_flags=pygame.BLEND_RGBA_ADD
         )

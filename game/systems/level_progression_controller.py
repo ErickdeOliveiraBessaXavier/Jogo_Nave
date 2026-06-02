@@ -220,6 +220,25 @@ class LevelProgressionController:
             + active_mine_explosions
         )
 
+    def _has_active_death_animations(self) -> bool:
+        """Há animação de morte (cosmética) ainda rodando na tela?
+
+        Explosões de morte comuns (`explosion_pool`) e a implosão do Neon Sniper
+        (`core_implosions`) não são hostis — não causam dano nem disparam o blink
+        de cleanup —, mas a transição de fase deve **esperá-las terminar** para
+        não cortar a animação no meio (ex.: último abate ao virar de fase).
+        Difere das `mine_explosions`, que causam dano e contam como hostil.
+        """
+        em = self._em
+        on = em.is_on_screen
+        for ex in em.explosion_pool.active:
+            if not ex.finished() and on(ex):
+                return True
+        for ci in em.core_implosions:
+            if not ci.dead and on(ci):
+                return True
+        return False
+
     def check_level_progression(
         self, current_score: int, enemy_cleanup_active: bool
     ) -> ProgressionStatus:
@@ -234,12 +253,17 @@ class LevelProgressionController:
             if not enemy_cleanup_active:
                 return ProgressionStatus.CLEANUP_NEEDED
             return ProgressionStatus.NONE
+
+        # Tela sem hostis: espera as animações de morte (explosões/implosões)
+        # terminarem antes de concluir — não corta a animação na virada de fase.
+        if self._has_active_death_animations():
+            return ProgressionStatus.NONE
+
+        if self.has_boss:
+            return ProgressionStatus.BOSS_READY
         else:
-            if self.has_boss:
-                return ProgressionStatus.BOSS_READY
-            else:
-                self.record_clear(current_score)
-                return ProgressionStatus.LEVEL_CLEARED
+            self.record_clear(current_score)
+            return ProgressionStatus.LEVEL_CLEARED
 
     def advance_after_boss(self, current_score: int) -> ProgressionStatus:
         """Inicia fluxo de transição após vitória contra o boss."""

@@ -37,6 +37,7 @@ from ..entities.eye_enemy import EyeEnemy
 from ..entities.formation import Formation, FormationPattern
 from ..entities.guided_meteor import GuidedMeteor
 from ..entities.Inimigos_Tema_Cidade.city_drone import CityDrone
+from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ..entities.meteor import Meteor
 from ..entities.meteor_pool import MeteorPool
 from ..entities.mountain_mage import MountainMage
@@ -65,6 +66,7 @@ SPAWNER_CAP_MOUNTAIN_PROPELLER: int = 3
 SPAWNER_CAP_CITY_DRONE: int = 12  # Limite de City Drones simultâneos (enxame)
 CITY_DRONE_CLUSTER_MIN: int = 5  # Tamanho mínimo da leva (clustering)
 CITY_DRONE_CLUSTER_MAX: int = 8  # Tamanho máximo da leva
+SPAWNER_CAP_NEON_SNIPER: int = 3  # Sentinelas de longa distância (perch units)
 SPAWNER_CAP_ALIEN: int = 4  # Limite máximo de Aliens simultâneos
 SPAWNER_CAP_EYE_ENEMY: int = 3  # Limite máximo de EyeEnemies simultâneos
 SPAWNER_CAP_SATELLITE: int = 5  # Limite máximo de Satélites simultâneos
@@ -394,6 +396,7 @@ class EnemySpawner:
             "MountainPropeller": "mountain_propeller",
             "Satellite": "satellite",
             "CityDrone": "city_drone",
+            "NeonSniper": "neon_sniper",
         }
         return aliases.get(enemy_type.__name__, enemy_type.__name__.lower())
 
@@ -407,6 +410,7 @@ class EnemySpawner:
             StoneSentry,
             MountainMage,
             MountainPropeller,
+            NeonSniper,
         ):
             base_gap = max(base_gap, self.level_config.get_spawn_time(enemy_type))
 
@@ -484,6 +488,7 @@ class EnemySpawner:
             "mountain_propeller": 0,
             "satellite": 0,
             "city_drone": 0,
+            "neon_sniper": 0,
             "total": 0,
         }
 
@@ -509,6 +514,8 @@ class EnemySpawner:
                 counts["satellite"] += 1
             elif isinstance(enemy, CityDrone):
                 counts["city_drone"] += 1
+            elif isinstance(enemy, NeonSniper):
+                counts["neon_sniper"] += 1
 
         for prop in entity_manager.mountain_propellers:
             if not prop.dead:
@@ -548,6 +555,8 @@ class EnemySpawner:
             return True
         if enemy_type == CityDrone and counts["city_drone"] >= SPAWNER_CAP_CITY_DRONE:
             return True
+        if enemy_type == NeonSniper and counts["neon_sniper"] >= SPAWNER_CAP_NEON_SNIPER:
+            return True
         return False
 
     def _should_spawn_enemy(
@@ -576,6 +585,11 @@ class EnemySpawner:
         if (
             enemy_type == MountainMage
             and counts["mountain_mage"] >= SPAWNER_CAP_MOUNTAIN_MAGE
+        ):
+            return False
+        if (
+            enemy_type == NeonSniper
+            and counts["neon_sniper"] >= SPAWNER_CAP_NEON_SNIPER
         ):
             return False
 
@@ -759,6 +773,9 @@ class EnemySpawner:
         if enemy_type == CityDrone:
             return self._spawn_city_drone_cluster(entity_manager, is_side_scroll)
 
+        if enemy_type == NeonSniper:
+            return self._spawn_neon_sniper(entity_manager, is_side_scroll)
+
         if enemy_type == SatelliteFragment:
             return self._spawn_satellite_fragment(entity_manager)
 
@@ -784,6 +801,36 @@ class EnemySpawner:
             1, int(fragment.health * self.enemy_health_multiplier)
         )
         entity_manager.enemies.append(fragment)
+        return True
+
+    def _spawn_neon_sniper(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        """Spawna 1 Neon Sniper como "perch unit" entrando por uma extremidade
+        superior (sentinela), diferente do enxame em leva do City Drone."""
+        size = NeonSniper.SIZE
+        if is_side_scroll:
+            # Entra pela direita, numa banda superior (canto de cima).
+            x = Config.SCREEN_WIDTH + random.uniform(20.0, 80.0)
+            y = random.uniform(40.0, Config.SCREEN_HEIGHT * 0.35)
+        else:
+            # Entra pelo topo, encostado num dos cantos (esquerdo/direito).
+            if random.random() < 0.5:
+                x = random.uniform(30.0, Config.SCREEN_WIDTH * 0.18)
+            else:
+                x = random.uniform(
+                    Config.SCREEN_WIDTH * 0.82 - size, Config.SCREEN_WIDTH - 30.0 - size
+                )
+            y = -(size + random.uniform(20.0, 80.0))
+
+        sniper = NeonSniper(
+            x,
+            y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+        )
+        sniper.health = max(1, int(sniper.health * self.enemy_health_multiplier))
+        entity_manager.enemies.append(sniper)
         return True
 
     def _spawn_city_drone_cluster(

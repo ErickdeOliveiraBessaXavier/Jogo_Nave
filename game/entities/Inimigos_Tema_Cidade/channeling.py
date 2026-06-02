@@ -46,11 +46,15 @@ class ChannelingGroup:
         self.broken = False
         self.spawned = False
 
+        # Vida original de cada membro antes do boost. Estado do ritual (não do
+        # drone): vive aqui para não furar a fronteira do CityDrone (§1).
+        self._health_before: dict[CityDrone, int] = {}
+
         n = len(self.members)
         for i, member in enumerate(self.members):
             member.channel_group = self
             member.channel_angle = i * (math.tau / n)
-            member._health_before_channel = member.health
+            self._health_before[member] = member.health
             member.health = int(member.health * self.HP_BOOST) + 1
             member.vx = 0.0
             member.vy = 0.0
@@ -81,7 +85,7 @@ class ChannelingGroup:
         for m in self.members:
             if not m.dead:
                 # Remove o boost remanescente (não pode ficar tanky para sempre).
-                m.health = min(m.health, m._health_before_channel)
+                m.health = min(m.health, self._health_before[m])
             m.channel_group = None
 
     def spawn_boss(self, ctx: "EnemyUpdateContext") -> None:

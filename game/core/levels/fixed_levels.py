@@ -11,6 +11,8 @@ import random
 from dataclasses import dataclass
 from typing import Type
 
+from game.entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
+
 from ...entities.alien import Alien
 from ...entities.boss import Boss
 from ...entities.bot_elemental import ElementalRobot
@@ -296,6 +298,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         level_number=1,
         enemy_spawn_config={
             RockGlider: 1.5,
+            NeonSniper: 3.0,
         },
         enemies_to_clear=75,
         # boss_type=Boss,

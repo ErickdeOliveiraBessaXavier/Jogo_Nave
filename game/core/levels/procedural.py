@@ -17,6 +17,7 @@ from ...entities.alien import Alien
 from ...entities.bot_elemental import ElementalRobot
 from ...entities.eye_enemy import EyeEnemy
 from ...entities.Inimigos_Tema_Cidade.city_drone import CityDrone
+from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ...entities.giant_meteor_boss import GiantMeteorBoss
 from ...entities.meteor import Meteor
 from ...entities.mountain_mage import MountainMage
@@ -108,6 +109,7 @@ class DifficultyConfig:
         "mountain_mage": 8.0,
         "mountain_propeller": 5.0,
         "city_drone": 4.0,
+        "neon_sniper": 10.0,
     }
 
     DIFFICULTY_SCALING: float = 0.15
@@ -172,6 +174,7 @@ ENEMY_PRESSURE_TIER_BY_KEY: dict[str, str] = {
     "square_minion_boss": "strong",
     "elemental_robot": "strong",
     "stone_sentry": "strong",
+    "neon_sniper": "strong",
 }
 
 ENEMY_PRESSURE_TIER_CURVE: dict[str, tuple[float, float]] = {
@@ -188,6 +191,7 @@ ENEMY_PRESSURE_UNLOCK_START: dict[str, float] = {
     "square_minion_boss": 0.30,
     "elemental_robot": 0.55,
     "stone_sentry": 0.42,
+    "neon_sniper": 0.30,
 }
 
 ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
@@ -198,6 +202,7 @@ ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
     "square_minion_boss": 0.32,
     "elemental_robot": 0.30,
     "stone_sentry": 0.30,
+    "neon_sniper": 0.30,
 }
 
 
@@ -435,6 +440,17 @@ class ProceduralLevelGenerator:
             drone_base = 4.0
         enemy_spawn_config[CityDrone] = self._clamp_spawn_time(
             (drone_base / difficulty) / spawn_multiplier
+        )
+
+        # Neon Sniper: sentinela "assinatura" do bioma. Presente desde o início
+        # do mundo (garantido no pool pelo variety cap via THEME_SIGNATURE_ENEMIES)
+        # e mais frequente conforme o estágio avança. O cap de 3 simultâneos
+        # (SPAWNER_CAP_NEON_SNIPER) controla a presença em tela; aqui é só o
+        # intervalo entre perch units. Intervalo direto (sem 2/weight, que
+        # explodia para >200s no ramp-up e o excluía da loteria de variedade).
+        sniper_base = 15.0 if stage_progress < 0.5 else 10.0
+        enemy_spawn_config[NeonSniper] = self._clamp_spawn_time(
+            (sniper_base / difficulty) / spawn_multiplier
         )
 
     def _configure_stage_banded_spawn(

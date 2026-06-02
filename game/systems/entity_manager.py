@@ -27,6 +27,9 @@ from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.eye_laser import EyeLaser
+from ..entities.Inimigos_Tema_Cidade.core_implosion import CoreImplosion
+from ..entities.Inimigos_Tema_Cidade.neon_bolt import NeonBolt
+from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ..entities.fire_zone import FireZone
 from ..entities.floating_score import FloatingScore
 from ..entities.formation import Formation
@@ -107,6 +110,8 @@ class EntityManager:
         self.boss_squares: list[BossSquare] = []
         self.slime_drips: list[SlimeDrip] = []
         self.eye_lasers: list[EyeLaser] = []
+        self.neon_bolts: list[NeonBolt] = []
+        self.core_implosions: list[CoreImplosion] = []
         self.mine_explosions: list[MineExplosion] = []
         self.ice_poison_zones: list[IcePoisonZone] = []
         self.fire_zones: list[FireZone] = []
@@ -300,6 +305,10 @@ class EntityManager:
         """Dispara cinemáticas de morte específicas (ex.: SlimeBoss)."""
         if isinstance(target, SlimeBoss):
             self.trigger_slime_boss_death(target)
+        elif isinstance(target, NeonSniper):
+            cx = target.x + target.w / 2
+            cy = target.y + target.h / 2
+            self.core_implosions.append(CoreImplosion(cx, cy))
 
     def trigger_slime_boss_death(self, boss: SlimeBoss) -> None:
         cx, cy = boss.x + boss.w / 2, boss.y + boss.h / 2
@@ -489,6 +498,9 @@ class EntityManager:
         for o in self.energy_orbs:
             if not o.dead:
                 self.enemy_projectile_grid.insert_from_rect(o)
+        for b in self.neon_bolts:
+            if not b.dead:
+                self.enemy_projectile_grid.insert_from_rect(b)
 
         self._grid_needs_rebuild = False
 
@@ -562,6 +574,7 @@ class EntityManager:
         new_alien_bullets.extend(ctx_emissions.new_alien_bullets)
         new_eye_lasers: list[EyeLaser] = list(ctx_emissions.new_eye_lasers)
         self.energy_orbs.extend(ctx_emissions.new_energy_orbs)
+        self.neon_bolts.extend(ctx_emissions.new_neon_bolts)
         self.enemies.extend(ctx_emissions.new_enemies)
 
         self._update_mountain_propellers(dt)
@@ -677,12 +690,16 @@ class EntityManager:
             b.update(enemy_dt)
         for b in self.eye_lasers:
             b.update(enemy_dt)
+        for b in self.neon_bolts:
+            b.update(enemy_dt)
 
     def _update_misc_effects(self, dt: float) -> None:
         """Pool de explosões e mine_explosions."""
         self.explosion_pool.update(dt)
         for me in self.mine_explosions:
             me.update(dt)
+        for ci in self.core_implosions:
+            ci.update(dt)
 
     def _update_collectibles(
         self,
@@ -1011,6 +1028,8 @@ class EntityManager:
             self.player_lasers,
             self.mini_ship_bullets,
             self.eye_lasers,
+            self.neon_bolts,
+            self.core_implosions,
             self.boss_squares,
             self.powerups,
             self.stars,
@@ -1294,6 +1313,8 @@ class EntityManager:
         self._filter_dead_inplace(self.boss_squares)
         self._filter_dead_inplace(self.slime_drips)
         self._filter_dead_inplace(self.eye_lasers)
+        self._filter_dead_inplace(self.neon_bolts)
+        self._filter_dead_inplace(self.core_implosions)
         self._filter_dead_inplace(self.mini_ship_bullets)
         self._filter_dead_inplace(self.wingmen)
         self._filter_dead_inplace(self.coop_links)
@@ -1348,6 +1369,8 @@ class EntityManager:
         self.boss_squares.clear()
         self.slime_drips.clear()
         self.eye_lasers.clear()
+        self.neon_bolts.clear()
+        self.core_implosions.clear()
         self.powerups.clear()
         self.stars.clear()
         self.floating_scores.clear()
@@ -1389,6 +1412,8 @@ class EntityManager:
         self.energy_orbs.clear()
         self.boss_squares.clear()
         self.eye_lasers.clear()
+        self.neon_bolts.clear()
+        self.core_implosions.clear()
         # homing_bullets e cacador_lasers são projéteis do jogador — preservados
         # pela mesma razão que air_strike_bombs e black_holes (ver comentário abaixo).
         self.floating_scores.clear()

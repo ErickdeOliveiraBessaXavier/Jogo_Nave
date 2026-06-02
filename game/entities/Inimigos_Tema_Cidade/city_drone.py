@@ -21,12 +21,13 @@ from __future__ import annotations
 
 import math
 import random
-from typing import TYPE_CHECKING, Dict, List, Tuple
+from typing import TYPE_CHECKING, List, Tuple
 
 import pygame
 
 from ...core.config import config as Config
 from ..enemy_hit_mixin import EnemyHitMixin
+from . import city_glow
 from . import city_palette as pal
 from .channeling import ChannelingGroup
 from .city_drone_pixel_map import (
@@ -86,11 +87,6 @@ class CityDrone(EnemyHitMixin):
     DART_CHANCE = 0.20  # ao re-alvejar: chance de investir no jogador
     HOVER_CHANCE = 0.18  # chance de pairar brevemente
 
-    # Cache de sprites de glow (radius_px, color) → surface aditiva. Compartilhado
-    # por todos os drones; bucketizado para não estourar (§7).
-    _glow_cache: Dict[Tuple[int, RGB], pygame.Surface] = {}
-    _glow_cache_limit = 192
-
     def __init__(
         self,
         x: float,
@@ -118,8 +114,8 @@ class CityDrone(EnemyHitMixin):
         self.cell = cell
         self.w = PIXEL_COLS * cell
         self.h = self.w
-        self.x = float(x)
-        self.y = float(y)
+        self.x: float = float(x)
+        self.y: float = float(y)
 
         self.dead = False
         self.health = health
@@ -135,29 +131,28 @@ class CityDrone(EnemyHitMixin):
         self.homing_life = self.HOMING_LIFETIME
 
         self._max_speed = self.MAX_SPEED * aggressiveness_multiplier * speed_mult
-        self.vx = 0.0
-        self.vy = 0.0
+        self.vx: float = 0.0
+        self.vy: float = 0.0
 
         # Steering: weave coerente + lane (home) que faz random-walk lento.
         cy = self.y + self.h / 2
         cx = self.x + self.w / 2
-        self.home = cy if side_scroll else cx  # posição-base no eixo do weave
-        self.anchor = cx if side_scroll else cy  # trava de posição durante hover
+        self.home: float = cy if side_scroll else cx  # posição-base no eixo do weave
+        self.anchor: float = cx if side_scroll else cy  # trava de posição durante hover
         self.weave_phase = random.uniform(0.0, math.tau)
         self.weave_freq = random.uniform(1.4, 2.6)
         self.weave_amp = random.uniform(40.0, 85.0)
         self.cruise_lead = random.uniform(70.0, 110.0)
 
         self.mode = "cruise"
-        self.target_x = cx
-        self.target_y = cy
+        self.target_x: float = cx
+        self.target_y: float = cy
         self.retarget_timer = random.uniform(0.6, 1.0)
 
         # Canalização em grupo (mini-chefe dinâmico). channel_group é setado
         # pela ChannelingGroup quando este drone entra num ritual.
         self.channel_group: ChannelingGroup | None = None
         self.channel_angle = 0.0
-        self._health_before_channel = self.health
         self._scan_timer = random.uniform(0.3, 0.9)
 
         # Animação (alimentada pelo update; lida pelo draw — §3).
@@ -476,34 +471,10 @@ class CityDrone(EnemyHitMixin):
         return self.dead
 
     # ── Render ──────────────────────────────────────────────────────────────
-    @classmethod
-    def _get_glow(cls, radius: int, color: RGB) -> pygame.Surface:
-        """Sprite de glow radial aditivo, cacheado por (raio, cor bucketizada)."""
-        # Bucketiza a cor em passos de 24 para limitar variações no cache.
-        bucket = (color[0] // 24 * 24, color[1] // 24 * 24, color[2] // 24 * 24)
-        key = (radius, bucket)
-        cached = cls._glow_cache.get(key)
-        if cached is not None:
-            return cached
-
-        diameter = max(2, radius * 2)
-        glow = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
-        # Algumas camadas concêntricas → halo suave (alpha decrescente).
-        layers = 4
-        for i in range(layers, 0, -1):
-            r = max(1, int(radius * i / layers))
-            alpha = int(120 * (i / layers) ** 2)
-            pygame.draw.circle(glow, (*bucket, alpha), (radius, radius), r)
-
-        if len(cls._glow_cache) >= cls._glow_cache_limit:
-            cls._glow_cache.clear()
-        cls._glow_cache[key] = glow
-        return glow
-
     def _blit_glow(
         self, surface: pygame.Surface, cx: int, cy: int, radius: int, color: RGB
     ) -> None:
-        glow = self._get_glow(radius, color)
+        glow = city_glow.get_glow(radius, color)
         surface.blit(
             glow, (cx - radius, cy - radius), special_flags=pygame.BLEND_RGBA_ADD
         )
