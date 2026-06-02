@@ -10,12 +10,13 @@ Catálogo planejado (ver proposta):
   - NeonSniper    — "Olho de Longa Distância"  (implementado)
   - PoliceInterceptor — "O Perseguidor"        (implementado)
   - CyberTank     — "O Colosso Urbano"         (implementado)
-  - CyberCaptor   — "Armadilha de Energia"
+  - CyberCaptor   — "Armadilha de Energia"      (implementado)
   - TeslaTwins    — "Barreira Vertical"
 """
 
 from .channeling import ChannelingGroup
 from .city_drone import CityDrone
+from .cyber_captor import CyberCaptor
 from .cyber_tank import CyberTank
 from .fused_drone import FusedDrone
 from .neon_sniper import NeonSniper
@@ -24,6 +25,7 @@ from .police_interceptor import PoliceInterceptor
 __all__ = [
     "CityDrone",
     "ChannelingGroup",
+    "CyberCaptor",
     "CyberTank",
     "FusedDrone",
     "NeonSniper",

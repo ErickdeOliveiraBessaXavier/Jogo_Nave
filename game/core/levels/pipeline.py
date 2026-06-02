@@ -22,6 +22,7 @@ from ...entities.bot_elemental import ElementalRobot
 from ...entities.explosive_mine import ExplosiveMine
 from ...entities.eye_enemy import EyeEnemy
 from ...entities.Inimigos_Tema_Cidade.city_drone import CityDrone
+from ...entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ...entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ...entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
@@ -59,27 +60,25 @@ ACTIVE_ENEMY_TUNING_PROFILE = "moderate"
 # Registro central de elegibilidade por tema.
 # Se um inimigo está aqui, ele só aparece nos temas listados.
 ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
+    # CITY tem a própria linhagem completa (Inimigos_Tema_Cidade) — não usa mais
+    # os inimigos emprestados de outros temas (Meteor/Alien/EyeEnemy/SquareMinion).
     Meteor: {
         WorldTheme.STARFIELD,
-        WorldTheme.CITY,
         WorldTheme.VOLCANIC,
         WorldTheme.PROCEDURAL,
     },
     Alien: {
         WorldTheme.STARFIELD,
-        WorldTheme.CITY,
         WorldTheme.VOLCANIC,
         WorldTheme.PROCEDURAL,
     },
     EyeEnemy: {
         WorldTheme.STARFIELD,
-        WorldTheme.CITY,
         WorldTheme.VOLCANIC,
         WorldTheme.PROCEDURAL,
     },
     SquareMinionBoss: {
         WorldTheme.STARFIELD,
-        WorldTheme.CITY,
         WorldTheme.VOLCANIC,
         WorldTheme.PROCEDURAL,
     },
@@ -87,6 +86,7 @@ ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
     NeonSniper: {WorldTheme.CITY},
     PoliceInterceptor: {WorldTheme.CITY},
     CyberTank: {WorldTheme.CITY},
+    CyberCaptor: {WorldTheme.CITY},
     RockGlider: {WorldTheme.MOUNTAINS},
     StoneSentry: {WorldTheme.MOUNTAINS},
     ElementalRobot: {WorldTheme.MOUNTAINS},
@@ -115,8 +115,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             NeonSniper: 0.80,
             PoliceInterceptor: 0.85,
             CyberTank: 0.50,
-            Alien: 1.10,
-            EyeEnemy: 1.10,
+            CyberCaptor: 0.70,
         },
         WorldTheme.VOLCANIC: {Meteor: 1.12, EyeEnemy: 1.05},
         WorldTheme.PROCEDURAL: {Meteor: 1.05, Alien: 1.05, EyeEnemy: 1.00},
@@ -133,8 +132,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             NeonSniper: 0.90,
             PoliceInterceptor: 0.95,
             CyberTank: 0.60,
-            Alien: 1.15,
-            EyeEnemy: 1.18,
+            CyberCaptor: 0.80,
         },
         WorldTheme.VOLCANIC: {Meteor: 1.18, EyeEnemy: 1.08},
         WorldTheme.PROCEDURAL: {Meteor: 1.08, Alien: 1.08, EyeEnemy: 1.05},
@@ -151,8 +149,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             NeonSniper: 1.00,
             PoliceInterceptor: 1.10,
             CyberTank: 0.70,
-            Alien: 1.20,
-            EyeEnemy: 1.25,
+            CyberCaptor: 0.90,
         },
         WorldTheme.VOLCANIC: {Meteor: 1.25, EyeEnemy: 1.10},
         WorldTheme.PROCEDURAL: {Meteor: 1.12, Alien: 1.12, EyeEnemy: 1.08},
@@ -175,9 +172,9 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
             "late": {Alien: 1.05, EyeEnemy: 1.08},
         },
         WorldTheme.CITY: {
-            "early": {Alien: 1.00, EyeEnemy: 0.95, PoliceInterceptor: 0.80},
-            "mid": {Alien: 1.05, EyeEnemy: 1.05, PoliceInterceptor: 1.05, CyberTank: 0.50},
-            "late": {Alien: 1.10, EyeEnemy: 1.12, PoliceInterceptor: 1.18, CyberTank: 1.05},
+            "early": {PoliceInterceptor: 0.80},
+            "mid": {PoliceInterceptor: 1.05, CyberTank: 0.50, CyberCaptor: 0.70},
+            "late": {PoliceInterceptor: 1.18, CyberTank: 1.05, CyberCaptor: 1.10},
         },
         WorldTheme.VOLCANIC: {
             "early": {Meteor: 1.05, EyeEnemy: 0.95},
@@ -202,9 +199,9 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
             "late": {Alien: 1.08, EyeEnemy: 1.12},
         },
         WorldTheme.CITY: {
-            "early": {Alien: 1.00, EyeEnemy: 0.95, PoliceInterceptor: 0.85},
-            "mid": {Alien: 1.08, EyeEnemy: 1.08, PoliceInterceptor: 1.10, CyberTank: 0.55},
-            "late": {Alien: 1.14, EyeEnemy: 1.18, PoliceInterceptor: 1.25, CyberTank: 1.15},
+            "early": {PoliceInterceptor: 0.85},
+            "mid": {PoliceInterceptor: 1.10, CyberTank: 0.55, CyberCaptor: 0.80},
+            "late": {PoliceInterceptor: 1.25, CyberTank: 1.15, CyberCaptor: 1.20},
         },
         WorldTheme.VOLCANIC: {
             "early": {Meteor: 1.08, EyeEnemy: 0.95},
@@ -229,9 +226,9 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
             "late": {Alien: 1.10, EyeEnemy: 1.15},
         },
         WorldTheme.CITY: {
-            "early": {Alien: 1.00, EyeEnemy: 0.95, PoliceInterceptor: 0.90},
-            "mid": {Alien: 1.10, EyeEnemy: 1.10, PoliceInterceptor: 1.15, CyberTank: 0.60},
-            "late": {Alien: 1.20, EyeEnemy: 1.25, PoliceInterceptor: 1.32, CyberTank: 1.25},
+            "early": {PoliceInterceptor: 0.90},
+            "mid": {PoliceInterceptor: 1.15, CyberTank: 0.60, CyberCaptor: 0.90},
+            "late": {PoliceInterceptor: 1.32, CyberTank: 1.25, CyberCaptor: 1.30},
         },
         WorldTheme.VOLCANIC: {
             "early": {Meteor: 1.10, EyeEnemy: 0.95},
@@ -269,15 +266,7 @@ ENEMY_STAGE_WEIGHT_MULTIPLIERS = ENEMY_STAGE_WEIGHT_PROFILES[_ACTIVE_PROFILE]
 THEME_FALLBACK_ENEMIES: dict[WorldTheme, list[type]] = {
     WorldTheme.MOUNTAINS: [RockGlider, MountainMage, StoneSentry, ElementalRobot],
     WorldTheme.STARFIELD: [Meteor, Alien, EyeEnemy],
-    WorldTheme.CITY: [
-        CityDrone,
-        NeonSniper,
-        PoliceInterceptor,
-        CyberTank,
-        Alien,
-        EyeEnemy,
-        Meteor,
-    ],
+    WorldTheme.CITY: [CityDrone, NeonSniper, PoliceInterceptor, CyberTank, CyberCaptor],
     WorldTheme.VOLCANIC: [Meteor, EyeEnemy, Alien],
     WorldTheme.PROCEDURAL: [Meteor, Alien, EyeEnemy],
 }
@@ -295,6 +284,7 @@ DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
     NeonSniper: 16.0,
     PoliceInterceptor: 14.0,
     CyberTank: 24.0,
+    CyberCaptor: 17.0,
 }
 
 THEME_ENEMY_REPLACEMENTS: dict[tuple[WorldTheme, type], type] = {
@@ -332,7 +322,7 @@ THEME_BASE_ENEMY: dict[WorldTheme, type] = {
 # 1/spawn_time, que penaliza fortemente inimigos raros (spawn_time alto) — sem
 # esta garantia, um especial como o Neon Sniper quase nunca sobrevive ao corte.
 THEME_SIGNATURE_ENEMIES: dict[WorldTheme, tuple[type, ...]] = {
-    WorldTheme.CITY: (NeonSniper, PoliceInterceptor, CyberTank),
+    WorldTheme.CITY: (NeonSniper, PoliceInterceptor, CyberTank, CyberCaptor),
 }
 
 

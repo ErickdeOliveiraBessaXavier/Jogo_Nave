@@ -17,6 +17,7 @@ from ...entities.alien import Alien
 from ...entities.bot_elemental import ElementalRobot
 from ...entities.eye_enemy import EyeEnemy
 from ...entities.Inimigos_Tema_Cidade.city_drone import CityDrone
+from ...entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ...entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ...entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
@@ -54,7 +55,9 @@ _STAGE_BANDED_THEMES: tuple[WorldTheme, ...] = (
 THEME_FEATURES: dict[WorldTheme, set[str]] = {
     WorldTheme.STARFIELD: {"formations", "mines", "guided_meteors"},
     WorldTheme.MOUNTAINS: {"mines", "propellers"},
-    WorldTheme.CITY: {"formations", "mines", "guided_meteors"},
+    # CITY usa só a própria linhagem coordenada — sem formações de Alien nem
+    # meteoros guiados (inimigos de outros temas). Mantém apenas mines (hazard).
+    WorldTheme.CITY: {"mines"},
     WorldTheme.VOLCANIC: {"formations", "mines"},
     WorldTheme.PROCEDURAL: {"formations", "mines", "guided_meteors"},
 }
@@ -114,6 +117,7 @@ class DifficultyConfig:
         "neon_sniper": 10.0,
         "police_interceptor": 9.0,
         "cyber_tank": 22.0,
+        "cyber_captor": 12.0,
     }
 
     DIFFICULTY_SCALING: float = 0.15
@@ -181,6 +185,7 @@ ENEMY_PRESSURE_TIER_BY_KEY: dict[str, str] = {
     "neon_sniper": "strong",
     "police_interceptor": "strong",
     "cyber_tank": "strong",
+    "cyber_captor": "strong",
 }
 
 ENEMY_PRESSURE_TIER_CURVE: dict[str, tuple[float, float]] = {
@@ -200,6 +205,7 @@ ENEMY_PRESSURE_UNLOCK_START: dict[str, float] = {
     "neon_sniper": 0.30,
     "police_interceptor": 0.45,
     "cyber_tank": 0.60,
+    "cyber_captor": 0.50,
 }
 
 ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
@@ -213,6 +219,7 @@ ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
     "neon_sniper": 0.30,
     "police_interceptor": 0.30,
     "cyber_tank": 0.30,
+    "cyber_captor": 0.30,
 }
 
 
@@ -489,6 +496,15 @@ class ProceduralLevelGenerator:
             )
             tank_time = (22.0 / difficulty / spawn_multiplier) * (2.0 / tank_weight)
             enemy_spawn_config[CyberTank] = self._clamp_spawn_time(tank_time)
+
+        # Cyber-Captor: armadilha de energia da metade do mundo em diante (gate
+        # ligeiramente abaixo do UNLOCK_START 0.50). Cap 2 controla a presença.
+        if stage_progress >= 0.45:
+            captor_weight = _get_progressive_enemy_weight(
+                "cyber_captor", 1.0, stage_progress
+            )
+            captor_time = (16.0 / difficulty / spawn_multiplier) * (2.0 / captor_weight)
+            enemy_spawn_config[CyberCaptor] = self._clamp_spawn_time(captor_time)
 
     def _configure_stage_banded_spawn(
         self,

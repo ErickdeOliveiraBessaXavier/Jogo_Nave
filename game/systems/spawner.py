@@ -37,6 +37,7 @@ from ..entities.eye_enemy import EyeEnemy
 from ..entities.formation import Formation, FormationPattern
 from ..entities.guided_meteor import GuidedMeteor
 from ..entities.Inimigos_Tema_Cidade.city_drone import CityDrone
+from ..entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ..entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ..entities.Inimigos_Tema_Cidade.interceptor_squad import InterceptorSquad
 from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
@@ -72,6 +73,7 @@ CITY_DRONE_CLUSTER_MAX: int = 8  # Tamanho máximo da leva
 SPAWNER_CAP_NEON_SNIPER: int = 3  # Sentinelas de longa distância (perch units)
 SPAWNER_CAP_POLICE_INTERCEPTOR: int = 4  # Perseguidores (spawnam em duplas)
 SPAWNER_CAP_CYBER_TANK: int = 1  # Colosso "gatekeeper" — sempre sozinho
+SPAWNER_CAP_CYBER_CAPTOR: int = 2  # Armadilhas de energia (orbitam o topo)
 SPAWNER_CAP_ALIEN: int = 4  # Limite máximo de Aliens simultâneos
 SPAWNER_CAP_EYE_ENEMY: int = 3  # Limite máximo de EyeEnemies simultâneos
 SPAWNER_CAP_SATELLITE: int = 5  # Limite máximo de Satélites simultâneos
@@ -404,6 +406,7 @@ class EnemySpawner:
             "NeonSniper": "neon_sniper",
             "PoliceInterceptor": "police_interceptor",
             "CyberTank": "cyber_tank",
+            "CyberCaptor": "cyber_captor",
         }
         return aliases.get(enemy_type.__name__, enemy_type.__name__.lower())
 
@@ -420,6 +423,7 @@ class EnemySpawner:
             NeonSniper,
             PoliceInterceptor,
             CyberTank,
+            CyberCaptor,
         ):
             base_gap = max(base_gap, self.level_config.get_spawn_time(enemy_type))
 
@@ -500,6 +504,7 @@ class EnemySpawner:
             "neon_sniper": 0,
             "police_interceptor": 0,
             "cyber_tank": 0,
+            "cyber_captor": 0,
             "total": 0,
         }
 
@@ -531,6 +536,8 @@ class EnemySpawner:
                 counts["police_interceptor"] += 1
             elif isinstance(enemy, CyberTank):
                 counts["cyber_tank"] += 1
+            elif isinstance(enemy, CyberCaptor):
+                counts["cyber_captor"] += 1
 
         for prop in entity_manager.mountain_propellers:
             if not prop.dead:
@@ -579,6 +586,11 @@ class EnemySpawner:
             return True
         if enemy_type == CyberTank and counts["cyber_tank"] >= SPAWNER_CAP_CYBER_TANK:
             return True
+        if (
+            enemy_type == CyberCaptor
+            and counts["cyber_captor"] >= SPAWNER_CAP_CYBER_CAPTOR
+        ):
+            return True
         return False
 
     def _should_spawn_enemy(
@@ -620,6 +632,11 @@ class EnemySpawner:
         ):
             return False
         if enemy_type == CyberTank and counts["cyber_tank"] >= SPAWNER_CAP_CYBER_TANK:
+            return False
+        if (
+            enemy_type == CyberCaptor
+            and counts["cyber_captor"] >= SPAWNER_CAP_CYBER_CAPTOR
+        ):
             return False
 
         max_enemies = self._get_current_enemy_cap()
@@ -811,6 +828,9 @@ class EnemySpawner:
         if enemy_type == CyberTank:
             return self._spawn_cyber_tank(entity_manager, is_side_scroll)
 
+        if enemy_type == CyberCaptor:
+            return self._spawn_cyber_captor(entity_manager, is_side_scroll)
+
         if enemy_type == SatelliteFragment:
             return self._spawn_satellite_fragment(entity_manager)
 
@@ -866,6 +886,44 @@ class EnemySpawner:
         )
         sniper.health = max(1, int(sniper.health * self.enemy_health_multiplier))
         entity_manager.enemies.append(sniper)
+        return True
+
+    def _spawn_cyber_captor(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        """Spawna 1 Cyber-Captor com "Shadow Support": nasce escondido atrás de um
+        inimigo maior (se houver) e orbita uma âncora no alto da tela."""
+        size = CyberCaptor.SIZE
+        # Procura um inimigo "grande" para nascer atrás (escondido).
+        big = [
+            e
+            for e in entity_manager.enemies
+            if not getattr(e, "dead", False)
+            and getattr(e, "w", 0) >= size * 1.2
+            and isinstance(e, (CyberTank, CityDrone))
+        ]
+        if big:
+            host = random.choice(big)
+            spawn_x = host.x + getattr(host, "w", size) / 2 - size / 2
+            spawn_y = host.y + getattr(host, "h", size) / 2 - size / 2
+        else:
+            spawn_x = Config.SCREEN_WIDTH + random.uniform(10.0, 60.0)
+            spawn_y = random.uniform(40.0, Config.SCREEN_HEIGHT * 0.30)
+
+        # Âncora da órbita: alto da tela, à direita do centro.
+        anchor = (
+            random.uniform(Config.SCREEN_WIDTH * 0.45, Config.SCREEN_WIDTH * 0.80),
+            random.uniform(Config.SCREEN_HEIGHT * 0.18, Config.SCREEN_HEIGHT * 0.38),
+        )
+        captor = CyberCaptor(
+            spawn_x,
+            spawn_y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+            anchor=anchor,
+        )
+        captor.health = max(1, int(captor.health * self.enemy_health_multiplier))
+        entity_manager.enemies.append(captor)
         return True
 
     def _spawn_cyber_tank(

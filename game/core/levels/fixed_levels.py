@@ -17,6 +17,7 @@ from ...entities.bot_elemental import ElementalRobot
 from ...entities.cloud_archmage_boss import CloudArchmageBoss
 from ...entities.eye_enemy import EyeEnemy
 from ...entities.giant_meteor_boss import GiantMeteorBoss
+from ...entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ...entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ...entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
@@ -302,6 +303,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             NeonSniper: 3.0,
             PoliceInterceptor: 4.0,
             CyberTank: 1.0,
+            CyberCaptor: 1.0,
         },
         enemies_to_clear=75,
         # boss_type=Boss,

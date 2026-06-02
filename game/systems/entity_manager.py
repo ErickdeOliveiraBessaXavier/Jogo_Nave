@@ -27,7 +27,9 @@ from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.eye_laser import EyeLaser
+from ..entities.Inimigos_Tema_Cidade.captor_emp import CaptorEMP
 from ..entities.Inimigos_Tema_Cidade.core_implosion import CoreImplosion
+from ..entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ..entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ..entities.Inimigos_Tema_Cidade.neon_bolt import NeonBolt
 from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
@@ -118,8 +120,9 @@ class EntityManager:
         self.core_implosions: list[CoreImplosion] = []
         self.police_crashes: list[PoliceCrash] = []
         self.tank_meltdowns: list[TankMeltdown] = []
-        # Blasts de área one-shot (cx, cy, raio) emitidos por efeitos neste frame;
-        # consumidos pela cena (handle_mine_explosion) para aplicar dano à nave.
+        self.captor_emps: list[CaptorEMP] = []
+        # Blasts de área one-shot (cx, cy, raio) emitidos por efeitos/inimigos neste
+        # frame; consumidos pela cena (handle_mine_explosion) p/ aplicar dano à nave.
         self.area_blasts: list[tuple[float, float, float]] = []
         self.mine_explosions: list[MineExplosion] = []
         self.ice_poison_zones: list[IcePoisonZone] = []
@@ -328,6 +331,24 @@ class EntityManager:
             cx = target.x + target.w / 2
             cy = target.y + target.h / 2
             self.tank_meltdowns.append(TankMeltdown(cx, cy, target.cell))
+        elif isinstance(target, CyberCaptor):
+            cx = target.x + target.w / 2
+            cy = target.y + target.h / 2
+            self._trigger_captor_emp(cx, cy, float(target.EMP_RADIUS))
+
+    def _trigger_captor_emp(self, cx: float, cy: float, radius: float) -> None:
+        """EMP Discharge: onda amarela + neutraliza (limpa) os projéteis inimigos
+        no raio — a "desativação" temporária da proposta."""
+        self.captor_emps.append(CaptorEMP(cx, cy, radius))
+        r2 = radius * radius
+        for lst in (self.alien_bullets, self.serpent_bullets, self.energy_orbs, self.neon_bolts):
+            for proj in lst:
+                px = getattr(proj, "x", None)
+                py = getattr(proj, "y", None)
+                if px is None or py is None:
+                    continue
+                if (px - cx) ** 2 + (py - cy) ** 2 <= r2:
+                    proj.dead = True
 
     def trigger_slime_boss_death(self, boss: SlimeBoss) -> None:
         cx, cy = boss.x + boss.w / 2, boss.y + boss.h / 2
@@ -595,6 +616,7 @@ class EntityManager:
         self.energy_orbs.extend(ctx_emissions.new_energy_orbs)
         self.neon_bolts.extend(ctx_emissions.new_neon_bolts)
         self.enemies.extend(ctx_emissions.new_enemies)
+        self.area_blasts.extend(ctx_emissions.new_area_blasts)
 
         self._update_mountain_propellers(dt)
         self._update_energy_orbs(dt)
@@ -726,6 +748,8 @@ class EntityManager:
             blast = tm.pop_blast()
             if blast is not None:
                 self.area_blasts.append(blast)
+        for ce in self.captor_emps:
+            ce.update(dt)
 
     def _update_collectibles(
         self,
@@ -1058,6 +1082,7 @@ class EntityManager:
             self.core_implosions,
             self.police_crashes,
             self.tank_meltdowns,
+            self.captor_emps,
             self.boss_squares,
             self.powerups,
             self.stars,
@@ -1345,6 +1370,7 @@ class EntityManager:
         self._filter_dead_inplace(self.core_implosions)
         self._filter_dead_inplace(self.police_crashes)
         self._filter_dead_inplace(self.tank_meltdowns)
+        self._filter_dead_inplace(self.captor_emps)
         self._filter_dead_inplace(self.mini_ship_bullets)
         self._filter_dead_inplace(self.wingmen)
         self._filter_dead_inplace(self.coop_links)
@@ -1403,6 +1429,7 @@ class EntityManager:
         self.core_implosions.clear()
         self.police_crashes.clear()
         self.tank_meltdowns.clear()
+        self.captor_emps.clear()
         self.area_blasts.clear()
         self.powerups.clear()
         self.stars.clear()
@@ -1449,6 +1476,7 @@ class EntityManager:
         self.core_implosions.clear()
         self.police_crashes.clear()
         self.tank_meltdowns.clear()
+        self.captor_emps.clear()
         self.area_blasts.clear()
         # homing_bullets e cacador_lasers são projéteis do jogador — preservados
         # pela mesma razão que air_strike_bombs e black_holes (ver comentário abaixo).
