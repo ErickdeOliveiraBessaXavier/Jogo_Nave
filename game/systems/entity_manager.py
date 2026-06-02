@@ -28,8 +28,12 @@ from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
 from ..entities.eye_laser import EyeLaser
 from ..entities.Inimigos_Tema_Cidade.core_implosion import CoreImplosion
+from ..entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ..entities.Inimigos_Tema_Cidade.neon_bolt import NeonBolt
 from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
+from ..entities.Inimigos_Tema_Cidade.police_crash import PoliceCrash
+from ..entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
+from ..entities.Inimigos_Tema_Cidade.tank_meltdown import TankMeltdown
 from ..entities.fire_zone import FireZone
 from ..entities.floating_score import FloatingScore
 from ..entities.formation import Formation
@@ -112,6 +116,8 @@ class EntityManager:
         self.eye_lasers: list[EyeLaser] = []
         self.neon_bolts: list[NeonBolt] = []
         self.core_implosions: list[CoreImplosion] = []
+        self.police_crashes: list[PoliceCrash] = []
+        self.tank_meltdowns: list[TankMeltdown] = []
         self.mine_explosions: list[MineExplosion] = []
         self.ice_poison_zones: list[IcePoisonZone] = []
         self.fire_zones: list[FireZone] = []
@@ -309,6 +315,16 @@ class EntityManager:
             cx = target.x + target.w / 2
             cy = target.y + target.h / 2
             self.core_implosions.append(CoreImplosion(cx, cy))
+        elif isinstance(target, PoliceInterceptor):
+            cx = target.x + target.w / 2
+            cy = target.y + target.h / 2
+            self.police_crashes.append(
+                PoliceCrash(cx, cy, target.cell, target.vx, target.vy)
+            )
+        elif isinstance(target, CyberTank):
+            cx = target.x + target.w / 2
+            cy = target.y + target.h / 2
+            self.tank_meltdowns.append(TankMeltdown(cx, cy, target.cell))
 
     def trigger_slime_boss_death(self, boss: SlimeBoss) -> None:
         cx, cy = boss.x + boss.w / 2, boss.y + boss.h / 2
@@ -700,6 +716,10 @@ class EntityManager:
             me.update(dt)
         for ci in self.core_implosions:
             ci.update(dt)
+        for pc in self.police_crashes:
+            pc.update(dt)
+        for tm in self.tank_meltdowns:
+            tm.update(dt)
 
     def _update_collectibles(
         self,
@@ -1030,6 +1050,8 @@ class EntityManager:
             self.eye_lasers,
             self.neon_bolts,
             self.core_implosions,
+            self.police_crashes,
+            self.tank_meltdowns,
             self.boss_squares,
             self.powerups,
             self.stars,
@@ -1315,6 +1337,8 @@ class EntityManager:
         self._filter_dead_inplace(self.eye_lasers)
         self._filter_dead_inplace(self.neon_bolts)
         self._filter_dead_inplace(self.core_implosions)
+        self._filter_dead_inplace(self.police_crashes)
+        self._filter_dead_inplace(self.tank_meltdowns)
         self._filter_dead_inplace(self.mini_ship_bullets)
         self._filter_dead_inplace(self.wingmen)
         self._filter_dead_inplace(self.coop_links)
@@ -1371,6 +1395,8 @@ class EntityManager:
         self.eye_lasers.clear()
         self.neon_bolts.clear()
         self.core_implosions.clear()
+        self.police_crashes.clear()
+        self.tank_meltdowns.clear()
         self.powerups.clear()
         self.stars.clear()
         self.floating_scores.clear()
@@ -1414,6 +1440,8 @@ class EntityManager:
         self.eye_lasers.clear()
         self.neon_bolts.clear()
         self.core_implosions.clear()
+        self.police_crashes.clear()
+        self.tank_meltdowns.clear()
         # homing_bullets e cacador_lasers são projéteis do jogador — preservados
         # pela mesma razão que air_strike_bombs e black_holes (ver comentário abaixo).
         self.floating_scores.clear()

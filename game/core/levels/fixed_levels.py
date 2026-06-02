@@ -11,14 +11,15 @@ import random
 from dataclasses import dataclass
 from typing import Type
 
-from game.entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
-
 from ...entities.alien import Alien
 from ...entities.boss import Boss
 from ...entities.bot_elemental import ElementalRobot
 from ...entities.cloud_archmage_boss import CloudArchmageBoss
 from ...entities.eye_enemy import EyeEnemy
 from ...entities.giant_meteor_boss import GiantMeteorBoss
+from ...entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
+from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
+from ...entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
 from ...entities.meteor import Meteor
 from ...entities.mountain_mage import MountainMage
 from ...entities.mountain_propeller import MountainPropeller
@@ -299,6 +300,8 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         enemy_spawn_config={
             RockGlider: 1.5,
             NeonSniper: 3.0,
+            PoliceInterceptor: 4.0,
+            CyberTank: 5.0,
         },
         enemies_to_clear=75,
         # boss_type=Boss,

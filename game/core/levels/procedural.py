@@ -17,7 +17,9 @@ from ...entities.alien import Alien
 from ...entities.bot_elemental import ElementalRobot
 from ...entities.eye_enemy import EyeEnemy
 from ...entities.Inimigos_Tema_Cidade.city_drone import CityDrone
+from ...entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
+from ...entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
 from ...entities.giant_meteor_boss import GiantMeteorBoss
 from ...entities.meteor import Meteor
 from ...entities.mountain_mage import MountainMage
@@ -110,6 +112,8 @@ class DifficultyConfig:
         "mountain_propeller": 5.0,
         "city_drone": 4.0,
         "neon_sniper": 10.0,
+        "police_interceptor": 9.0,
+        "cyber_tank": 22.0,
     }
 
     DIFFICULTY_SCALING: float = 0.15
@@ -175,6 +179,8 @@ ENEMY_PRESSURE_TIER_BY_KEY: dict[str, str] = {
     "elemental_robot": "strong",
     "stone_sentry": "strong",
     "neon_sniper": "strong",
+    "police_interceptor": "strong",
+    "cyber_tank": "strong",
 }
 
 ENEMY_PRESSURE_TIER_CURVE: dict[str, tuple[float, float]] = {
@@ -192,6 +198,8 @@ ENEMY_PRESSURE_UNLOCK_START: dict[str, float] = {
     "elemental_robot": 0.55,
     "stone_sentry": 0.42,
     "neon_sniper": 0.30,
+    "police_interceptor": 0.45,
+    "cyber_tank": 0.60,
 }
 
 ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
@@ -203,6 +211,8 @@ ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
     "elemental_robot": 0.30,
     "stone_sentry": 0.30,
     "neon_sniper": 0.30,
+    "police_interceptor": 0.30,
+    "cyber_tank": 0.30,
 }
 
 
@@ -452,6 +462,33 @@ class ProceduralLevelGenerator:
         enemy_spawn_config[NeonSniper] = self._clamp_spawn_time(
             (sniper_base / difficulty) / spawn_multiplier
         )
+
+        # Police Interceptor: perseguidor que entra na metade do mundo (gate
+        # ligeiramente abaixo do UNLOCK_START 0.45 p/ o ramp-up suave da
+        # gate_mult ter espaço). Spawna em duplas (cap 4 controla a tela); o
+        # valor aqui é o intervalo entre *duplas*. Peso ponderado via tier
+        # "strong" + gate (idêntico ao padrão do guia).
+        if stage_progress >= 0.40:
+            interceptor_weight = _get_progressive_enemy_weight(
+                "police_interceptor", 1.0, stage_progress
+            )
+            interceptor_time = (14.0 / difficulty / spawn_multiplier) * (
+                2.0 / interceptor_weight
+            )
+            enemy_spawn_config[PoliceInterceptor] = self._clamp_spawn_time(
+                interceptor_time
+            )
+
+        # Cyber Tank: "gatekeeper" raro do fim do mundo (gate abaixo do
+        # UNLOCK_START 0.60 p/ o ramp-up suave da gate_mult ter espaço). Cap 1
+        # (SPAWNER_CAP_CYBER_TANK) garante que apareça sozinho; o valor é o
+        # intervalo entre aparições. BASE_TIME alto (mini-boss).
+        if stage_progress >= 0.55:
+            tank_weight = _get_progressive_enemy_weight(
+                "cyber_tank", 1.0, stage_progress
+            )
+            tank_time = (22.0 / difficulty / spawn_multiplier) * (2.0 / tank_weight)
+            enemy_spawn_config[CyberTank] = self._clamp_spawn_time(tank_time)
 
     def _configure_stage_banded_spawn(
         self,

@@ -33,7 +33,14 @@
       "PowerShell(& \".\\\\.venv\\\\Scripts\\\\python.exe\" -m ruff check game/entities/ship.py game/scenes/world_transition.py game/scenes/playing.py 2>$null; $env:SDL_VIDEODRIVER='dummy'; & \".\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import game.scenes.playing; import game.scenes.world_transition; import game.entities.ship; print\\('import ok'\\)\")",
       "PowerShell(& \".\\\\.venv\\\\Scripts\\\\python.exe\" -m ruff check game/entities/meteor.py game/scenes/playing.py 2>$null; $env:SDL_VIDEODRIVER='dummy'; & \".\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import game.scenes.playing; import game.entities.meteor; print\\('import ok'\\)\")",
       "mcp__ide__getDiagnostics",
-      "Bash(SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy python -c ' *)"
+      "Bash(SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy python -c ' *)",
+      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/police_interceptor.py game/entities/Inimigos_Tema_Cidade/police_interceptor_pixel_map.py game/entities/Inimigos_Tema_Cidade/police_crash.py game/entities/Inimigos_Tema_Cidade/interceptor_squad.py game/systems/entity_manager.py game/systems/spawner.py)",
+      "Bash(cd /c/Users/User/Desktop/Jogo_Nave)",
+      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/police_interceptor.py game/entities/Inimigos_Tema_Cidade/turbine_flame.py)",
+      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/cyber_tank.py game/entities/Inimigos_Tema_Cidade/cyber_tank_pixel_map.py game/entities/Inimigos_Tema_Cidade/tank_meltdown.py game/entities/Inimigos_Tema_Cidade/neon_bolt.py game/systems/entity_manager.py game/systems/spawner.py game/systems/hit_sounds.py game/core/levels/pipeline.py game/core/levels/procedural.py)",
+      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/tank_meltdown.py game/entities/Inimigos_Tema_Cidade/police_crash.py)",
+      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/cyber_tank.py)",
+      "Bash(SDL_VIDEODRIVER=dummy python -c \"import ast,sys; t=ast.parse\\(open\\('game/entities/Inimigos_Tema_Cidade/cyber_tank.py',encoding='utf-8'\\).read\\(\\)\\); print\\('parse OK'\\)\")"
     ]
   }
 }

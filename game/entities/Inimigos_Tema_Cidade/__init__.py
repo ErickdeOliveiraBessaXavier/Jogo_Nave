@@ -6,16 +6,26 @@ com a paleta cyberpunk compartilhada (`city_palette`) e o sistema de
 Layered Pixel-Maps descrito em `PROPOSTA_INIMIGOS_CIDADE.md`.
 
 Catálogo planejado (ver proposta):
-  - CityDrone     — "O Enxame"        (implementado)
-  - NeonSniper    — "Olho de Longa Distância"
-  - PoliceInterceptor — "O Perseguidor"
-  - CyberTank     — "O Colosso Urbano"
+  - CityDrone     — "O Enxame"                 (implementado)
+  - NeonSniper    — "Olho de Longa Distância"  (implementado)
+  - PoliceInterceptor — "O Perseguidor"        (implementado)
+  - CyberTank     — "O Colosso Urbano"         (implementado)
   - CyberCaptor   — "Armadilha de Energia"
   - TeslaTwins    — "Barreira Vertical"
 """
 
 from .channeling import ChannelingGroup
 from .city_drone import CityDrone
+from .cyber_tank import CyberTank
 from .fused_drone import FusedDrone
+from .neon_sniper import NeonSniper
+from .police_interceptor import PoliceInterceptor
 
-__all__ = ["CityDrone", "ChannelingGroup", "FusedDrone"]
+__all__ = [
+    "CityDrone",
+    "ChannelingGroup",
+    "CyberTank",
+    "FusedDrone",
+    "NeonSniper",
+    "PoliceInterceptor",
+]

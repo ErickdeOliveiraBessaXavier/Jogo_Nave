@@ -37,7 +37,10 @@ from ..entities.eye_enemy import EyeEnemy
 from ..entities.formation import Formation, FormationPattern
 from ..entities.guided_meteor import GuidedMeteor
 from ..entities.Inimigos_Tema_Cidade.city_drone import CityDrone
+from ..entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
+from ..entities.Inimigos_Tema_Cidade.interceptor_squad import InterceptorSquad
 from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
+from ..entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
 from ..entities.meteor import Meteor
 from ..entities.meteor_pool import MeteorPool
 from ..entities.mountain_mage import MountainMage
@@ -67,6 +70,8 @@ SPAWNER_CAP_CITY_DRONE: int = 12  # Limite de City Drones simultâneos (enxame)
 CITY_DRONE_CLUSTER_MIN: int = 5  # Tamanho mínimo da leva (clustering)
 CITY_DRONE_CLUSTER_MAX: int = 8  # Tamanho máximo da leva
 SPAWNER_CAP_NEON_SNIPER: int = 3  # Sentinelas de longa distância (perch units)
+SPAWNER_CAP_POLICE_INTERCEPTOR: int = 4  # Perseguidores (spawnam em duplas)
+SPAWNER_CAP_CYBER_TANK: int = 1  # Colosso "gatekeeper" — sempre sozinho
 SPAWNER_CAP_ALIEN: int = 4  # Limite máximo de Aliens simultâneos
 SPAWNER_CAP_EYE_ENEMY: int = 3  # Limite máximo de EyeEnemies simultâneos
 SPAWNER_CAP_SATELLITE: int = 5  # Limite máximo de Satélites simultâneos
@@ -397,6 +402,8 @@ class EnemySpawner:
             "Satellite": "satellite",
             "CityDrone": "city_drone",
             "NeonSniper": "neon_sniper",
+            "PoliceInterceptor": "police_interceptor",
+            "CyberTank": "cyber_tank",
         }
         return aliases.get(enemy_type.__name__, enemy_type.__name__.lower())
 
@@ -411,6 +418,8 @@ class EnemySpawner:
             MountainMage,
             MountainPropeller,
             NeonSniper,
+            PoliceInterceptor,
+            CyberTank,
         ):
             base_gap = max(base_gap, self.level_config.get_spawn_time(enemy_type))
 
@@ -489,6 +498,8 @@ class EnemySpawner:
             "satellite": 0,
             "city_drone": 0,
             "neon_sniper": 0,
+            "police_interceptor": 0,
+            "cyber_tank": 0,
             "total": 0,
         }
 
@@ -516,6 +527,10 @@ class EnemySpawner:
                 counts["city_drone"] += 1
             elif isinstance(enemy, NeonSniper):
                 counts["neon_sniper"] += 1
+            elif isinstance(enemy, PoliceInterceptor):
+                counts["police_interceptor"] += 1
+            elif isinstance(enemy, CyberTank):
+                counts["cyber_tank"] += 1
 
         for prop in entity_manager.mountain_propellers:
             if not prop.dead:
@@ -557,6 +572,13 @@ class EnemySpawner:
             return True
         if enemy_type == NeonSniper and counts["neon_sniper"] >= SPAWNER_CAP_NEON_SNIPER:
             return True
+        if (
+            enemy_type == PoliceInterceptor
+            and counts["police_interceptor"] >= SPAWNER_CAP_POLICE_INTERCEPTOR
+        ):
+            return True
+        if enemy_type == CyberTank and counts["cyber_tank"] >= SPAWNER_CAP_CYBER_TANK:
+            return True
         return False
 
     def _should_spawn_enemy(
@@ -591,6 +613,13 @@ class EnemySpawner:
             enemy_type == NeonSniper
             and counts["neon_sniper"] >= SPAWNER_CAP_NEON_SNIPER
         ):
+            return False
+        if (
+            enemy_type == PoliceInterceptor
+            and counts["police_interceptor"] >= SPAWNER_CAP_POLICE_INTERCEPTOR
+        ):
+            return False
+        if enemy_type == CyberTank and counts["cyber_tank"] >= SPAWNER_CAP_CYBER_TANK:
             return False
 
         max_enemies = self._get_current_enemy_cap()
@@ -776,6 +805,12 @@ class EnemySpawner:
         if enemy_type == NeonSniper:
             return self._spawn_neon_sniper(entity_manager, is_side_scroll)
 
+        if enemy_type == PoliceInterceptor:
+            return self._spawn_police_interceptor_pair(entity_manager, is_side_scroll)
+
+        if enemy_type == CyberTank:
+            return self._spawn_cyber_tank(entity_manager, is_side_scroll)
+
         if enemy_type == SatelliteFragment:
             return self._spawn_satellite_fragment(entity_manager)
 
@@ -831,6 +866,72 @@ class EnemySpawner:
         )
         sniper.health = max(1, int(sniper.health * self.enemy_health_multiplier))
         entity_manager.enemies.append(sniper)
+        return True
+
+    def _spawn_cyber_tank(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        """Spawna 1 Cyber Tank "gatekeeper" (sozinho), entrando pela direita numa
+        faixa central — colosso que atravessa a tela avançando."""
+        size = CyberTank.SIZE
+        x = Config.SCREEN_WIDTH + random.uniform(10.0, 50.0)
+        y = random.uniform(
+            Config.SCREEN_HEIGHT * 0.30, Config.SCREEN_HEIGHT * 0.70 - size
+        )
+        tank = CyberTank(
+            x,
+            y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+        )
+        tank.health = max(1, int(tank.health * self.enemy_health_multiplier))
+        entity_manager.enemies.append(tank)
+        return True
+
+    def _spawn_police_interceptor_pair(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        """Spawna uma **dupla sincronizada** ("Squad Pairs") de Police Interceptors.
+
+        Ambos entram pela direita (convenção side-scroll do bioma CITY), um na
+        banda superior e outro na inferior, com viés vertical oposto — assim se
+        cruzam ao atravessar a tela. Se só há folga para um até o cap, spawna um.
+        """
+        current = sum(
+            1
+            for e in entity_manager.enemies
+            if isinstance(e, PoliceInterceptor) and not e.dead
+        )
+        room = SPAWNER_CAP_POLICE_INTERCEPTOR - current
+        if room <= 0:
+            return False
+
+        size = PoliceInterceptor.SIZE
+        x = Config.SCREEN_WIDTH + random.uniform(20.0, 70.0)
+        top_y = random.uniform(50.0, Config.SCREEN_HEIGHT * 0.32)
+        bottom_y = random.uniform(
+            Config.SCREEN_HEIGHT * 0.68 - size, Config.SCREEN_HEIGHT - 50.0 - size
+        )
+        # (y, viés vertical): superior desce, inferior sobe → cruzam-se.
+        plan = [(top_y, 1.0), (bottom_y, -1.0)][: max(1, min(2, room))]
+
+        squad_members: list[PoliceInterceptor] = []
+        for y, bias in plan:
+            unit = PoliceInterceptor(
+                x,
+                y,
+                aggressiveness_multiplier=self.aggressiveness_multiplier,
+                side_scroll=is_side_scroll,
+                patrol_bias=bias if is_side_scroll else 0.0,
+            )
+            unit.health = max(1, int(unit.health * self.enemy_health_multiplier))
+            entity_manager.enemies.append(unit)
+            squad_members.append(unit)
+
+        # Pincer sincronizado: une a dupla num esquadrão que coordena o bote
+        # conjunto. Unidade única (sem folga p/ a dupla) age sozinha (squad=None).
+        if len(squad_members) >= 2:
+            InterceptorSquad(squad_members)
         return True
 
     def _spawn_city_drone_cluster(
