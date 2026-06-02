@@ -1674,6 +1674,15 @@ class PlayingScene(Scene):
         destroyed += mine_destroyed
         score_events.extend(mine_events)
 
+        # Blasts de área one-shot (ex.: explosão do núcleo do CyberTank) — dano à
+        # nave no raio telegrafado, reusando o roteador de explosão de mina.
+        if self.entity_manager.area_blasts:
+            for bx, by, br in self.entity_manager.area_blasts:
+                ship_hits |= self.collisions.handle_mine_explosion(
+                    bx, by, int(br), alive_ships, self.entity_manager
+                )
+            self.entity_manager.area_blasts.clear()
+
         if self.entity_manager.ice_poison_zones:
             iz_gain, iz_dest, iz_events = self.collisions.ice_poison_zones_vs_entities(
                 self.entity_manager.ice_poison_zones,

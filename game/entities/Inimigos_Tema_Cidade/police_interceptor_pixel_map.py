@@ -31,25 +31,25 @@ from . import city_palette as pal
 
 RGB = Tuple[int, int, int]
 
-# ── Grade 15×11 ─────────────────────────────────────────────────────────────
-# Nariz em cunha apontando para a ESQUERDA (cols 0-2), corpo arredondado e
-# **um único bocal-foguete** (t) na traseira-centro (cols 13-14, linhas 4-6).
+# ── Grade 19×11 ─────────────────────────────────────────────────────────────
+# Nariz em cunha ultra-aerodinâmico apontando para a ESQUERDA (cols 0-2),
+# corpo alongado e bocal-foguete (t) na traseira-centro (cols 17-18).
 # Simétrica em torno da linha 5.
 PIXEL_MAP: List[str] = [
-    "......ooo......",
-    "....oohhhoo....",
-    "..ohhlllllhho..",
-    ".ohhlllllllhho.",
-    "ohhllllbblllhtt",
-    "ohlllbwwblllhtt",
-    "ohhllllbblllhtt",
-    ".ohhlllllllhho.",
-    "..ohhlllllhho..",
-    "....oohhhoo....",
-    "......ooo......",
+    "...........oooo....",
+    ".........oohhhho...",
+    ".......oohhhhhhho..",
+    ".....oohhlllllllho.",
+    "...oohhhllbbbbllhht",
+    "oohhhhwwbbbbbbwwltt",
+    "...oohhhllbbbbllhht",
+    ".....oohhlllllllho.",
+    ".......oohhhhhhho..",
+    ".........oohhhho...",
+    "...........oooo....",
 ]
 
-PIXEL_COLS = 15
+PIXEL_COLS = 19
 PIXEL_ROWS = 11
 
 # Zonas estáticas resolvidas para cor da paleta.
@@ -86,7 +86,7 @@ LIGHT_CELLS: List[Tuple[int, int]] = [
 # Validação de integridade do mapa (falha cedo se alguém editar errado).
 assert len(PIXEL_MAP) == PIXEL_ROWS, "PIXEL_MAP deve ter 11 linhas"
 assert all(len(row) == PIXEL_COLS for row in PIXEL_MAP), (
-    "Toda linha de PIXEL_MAP deve ter 15 colunas"
+    f"Toda linha de PIXEL_MAP deve ter {PIXEL_COLS} colunas"
 )
 
 # Cache de surfaces estáticas por `cell` (§7: sem alocação repetida por frame).

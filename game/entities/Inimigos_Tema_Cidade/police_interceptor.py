@@ -61,7 +61,7 @@ def _lerp_angle(cur: float, target: float, t: float) -> float:
 
 class PoliceInterceptor(EnemyHitMixin):
     CELL: int = 4
-    SIZE: int = PIXEL_COLS * CELL  # 60px (eixo maior)
+    SIZE: int = PIXEL_COLS * CELL  # 76px (eixo maior)
 
     HEALTH: int = 70
     POINTS: int = 230

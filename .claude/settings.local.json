@@ -43,7 +43,9 @@
       "Bash(SDL_VIDEODRIVER=dummy python -c \"import ast,sys; t=ast.parse\\(open\\('game/entities/Inimigos_Tema_Cidade/cyber_tank.py',encoding='utf-8'\\).read\\(\\)\\); print\\('parse OK'\\)\")",
       "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/cyber_tank.py game/entities/Inimigos_Tema_Cidade/cyber_tank_pixel_map.py)",
       "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/cyber_tank.py game/entities/Inimigos_Tema_Cidade/tank_meltdown.py)",
-      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/tank_meltdown.py)"
+      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/tank_meltdown.py)",
+      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/tank_meltdown.py game/systems/entity_manager.py game/scenes/playing.py)",
+      "Bash(SDL_VIDEODRIVER=dummy python -c ' *)"
     ]
   }
 }

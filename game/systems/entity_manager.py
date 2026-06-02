@@ -118,6 +118,9 @@ class EntityManager:
         self.core_implosions: list[CoreImplosion] = []
         self.police_crashes: list[PoliceCrash] = []
         self.tank_meltdowns: list[TankMeltdown] = []
+        # Blasts de área one-shot (cx, cy, raio) emitidos por efeitos neste frame;
+        # consumidos pela cena (handle_mine_explosion) para aplicar dano à nave.
+        self.area_blasts: list[tuple[float, float, float]] = []
         self.mine_explosions: list[MineExplosion] = []
         self.ice_poison_zones: list[IcePoisonZone] = []
         self.fire_zones: list[FireZone] = []
@@ -720,6 +723,9 @@ class EntityManager:
             pc.update(dt)
         for tm in self.tank_meltdowns:
             tm.update(dt)
+            blast = tm.pop_blast()
+            if blast is not None:
+                self.area_blasts.append(blast)
 
     def _update_collectibles(
         self,
@@ -1397,6 +1403,7 @@ class EntityManager:
         self.core_implosions.clear()
         self.police_crashes.clear()
         self.tank_meltdowns.clear()
+        self.area_blasts.clear()
         self.powerups.clear()
         self.stars.clear()
         self.floating_scores.clear()
@@ -1442,6 +1449,7 @@ class EntityManager:
         self.core_implosions.clear()
         self.police_crashes.clear()
         self.tank_meltdowns.clear()
+        self.area_blasts.clear()
         # homing_bullets e cacador_lasers são projéteis do jogador — preservados
         # pela mesma razão que air_strike_bombs e black_holes (ver comentário abaixo).
         self.floating_scores.clear()

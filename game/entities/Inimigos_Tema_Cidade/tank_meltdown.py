@@ -75,14 +75,19 @@ class TankMeltdown:
         self.base_r: float = cell * 1.8
         self.peak_r: float = cell * 7.5  # tamanho máximo da sobrecarga
         self.collapse_from: float = self.peak_r  # raio capturado ao iniciar o colapso
-        # Onda de choque GIGANTE — ocupa boa parte da tela (poder extremo).
+        # Raio da explosão = raio do DANO = raio do indicador (WYSIWYG). Grande,
+        # mas reduzido p/ não comprometer a jogabilidade.
         self.max_shock: float = min(
-            Config.SCREEN_WIDTH * 0.5, Config.SCREEN_HEIGHT * 0.78
+            Config.SCREEN_WIDTH * 0.38, Config.SCREEN_HEIGHT * 0.56
         )
         # Surface translúcida pré-alocada (reusada por frame, à la MineExplosion).
         d = int(self.max_shock) * 2 + 4
         self._boom_surf: pygame.Surface = pygame.Surface((d, d), pygame.SRCALPHA)
         self._boom_half: int = d // 2
+
+        # Blast one-shot consumido pelo EntityManager/cena no instante da detonação
+        # (aplica o dano de área via handle_mine_explosion). (cx, cy, raio).
+        self._blast: tuple[float, float, float] | None = None
 
         self.sparks: List[_Spark] = []
         self.pulses: List[_Pulse] = []
@@ -117,10 +122,19 @@ class TankMeltdown:
                 self.phase = "explode"
                 self.phase_t = 0.0
                 self.sparks.clear()
+                # Dispara o dano de área de uma só vez (no raio telegrafado).
+                self._blast = (self.cx, self.cy, self.max_shock)
         else:  # explode
             self.phase_t += dt
             if self.phase_t >= EXPLODE_TIME:
                 self.dead = True
+
+    def pop_blast(self) -> "tuple[float, float, float] | None":
+        """Devolve (cx, cy, raio) do dano da explosão uma única vez (no instante
+        da detonação) — consumido pelo EntityManager para aplicar o dano de área."""
+        b = self._blast
+        self._blast = None
+        return b
 
     def _update_critical(self, dt: float) -> None:
         prog = min(1.0, self.t / CRITICAL_TIME)
@@ -179,9 +193,30 @@ class TankMeltdown:
         else:
             self._draw_explode(surface)
 
+    def _draw_danger_zone(self, surface: pygame.Surface, prog: float) -> None:
+        half = self._boom_half
+        r = int(self.max_shock)
+        surf = self._boom_surf
+        surf.fill((0, 0, 0, 0))
+        # Preenchimento leve (lê como "área"), intensifica com a sobrecarga.
+        pygame.draw.circle(surf, (60, 150, 255, int(10 + 26 * prog)), (half, half), r)
+        # Anel de borda pulsante — mais brilhante/urgente perto da detonação.
+        pulse = 0.5 + 0.5 * math.sin(self.t * (4.0 + 12.0 * prog))
+        ring_a = min(255, int((90 + 130 * prog) * (0.45 + 0.55 * pulse)))
+        pygame.draw.circle(
+            surf, (150, 225, 255, ring_a), (half, half), r, max(2, int(self.cell * 0.7))
+        )
+        surface.blit(surf, (int(self.cx) - half, int(self.cy) - half))
+
     def _draw_critical(self, surface: pygame.Surface) -> None:
         cell = self.cell
         prog = min(1.0, self.t / CRITICAL_TIME)
+
+        # INDICADOR DA ZONA DE PERIGO: mostra até onde o dano vai chegar, durante
+        # toda a instabilidade. Fica mais nítido/urgente conforme a detonação se
+        # aproxima (pulso mais rápido). Raio == raio real do dano (WYSIWYG).
+        self._draw_danger_zone(surface, prog)
+
         # Tremor crescente.
         amp = int(1 + 11 * prog * prog)
         ccx = int(self.cx + random.randint(-amp, amp))
