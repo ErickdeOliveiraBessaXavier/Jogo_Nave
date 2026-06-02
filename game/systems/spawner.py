@@ -891,19 +891,19 @@ class EnemySpawner:
     def _spawn_cyber_captor(
         self, entity_manager: "EntityManager", is_side_scroll: bool
     ) -> bool:
-        """Spawna 1 Cyber-Captor com "Shadow Support": nasce escondido atrás de um
-        inimigo maior (se houver) e orbita uma âncora no alto da tela."""
+        """Spawna 1 Cyber-Captor com "Shadow Support": nasce escondido em meio a um
+        **enxame de City Drones** (clutter visual), e orbita uma âncora no alto da
+        tela. NÃO usa o CyberTank como cobertura (parecia que o tanque o invocava)."""
         size = CyberCaptor.SIZE
-        # Procura um inimigo "grande" para nascer atrás (escondido).
-        big = [
+        # Esconde-se num enxame de drones (precisa de uma "nuvem" para de fato
+        # camuflar). Sem enxame, entra discretamente pela borda.
+        drones = [
             e
             for e in entity_manager.enemies
-            if not getattr(e, "dead", False)
-            and getattr(e, "w", 0) >= size * 1.2
-            and isinstance(e, (CyberTank, CityDrone))
+            if isinstance(e, CityDrone) and not e.dead
         ]
-        if big:
-            host = random.choice(big)
+        if len(drones) >= 3:
+            host = random.choice(drones)
             spawn_x = host.x + getattr(host, "w", size) / 2 - size / 2
             spawn_y = host.y + getattr(host, "h", size) / 2 - size / 2
         else:

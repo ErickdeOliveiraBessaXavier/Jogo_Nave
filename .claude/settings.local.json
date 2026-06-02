@@ -48,7 +48,8 @@
       "Bash(SDL_VIDEODRIVER=dummy python -c ' *)",
       "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/core/levels/pipeline.py)",
       "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/core/levels/procedural.py game/core/levels/pipeline.py)",
-      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/cyber_captor.py)"
+      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/entities/Inimigos_Tema_Cidade/cyber_captor.py)",
+      "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/systems/spawner.py)"
     ]
   }
 }
