@@ -182,12 +182,21 @@ class SquareMinionBoss(SquareProjectileBase):
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x + self.size / 2, self.y + self.size / 2, self.size / 2
 
-    def on_hit(self, _damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
-        # Imune — só feedback visual
-        return HitResult(explosion_size=20, sound=hit_sounds.BOSS_DAMAGE)
+        # Inimigo comum destrutível: roteia o dano via take_damage (§8) para que
+        # health e o enemy_health_multiplier do spawner deixem de ser no-op (§11).
+        self.take_damage(damage)
+        if self.dead:
+            return HitResult(
+                killed=True,
+                points=self.get_points_value(),
+                explosion_size=35,
+                sound=hit_sounds.EXPLOSION_ALIEN,
+            )
+        return HitResult(explosion_size=10, sound=hit_sounds.BOSS_DAMAGE)
 
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds

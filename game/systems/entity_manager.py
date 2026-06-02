@@ -933,7 +933,7 @@ class EntityManager:
         if enemy_visible:
             # Note: meteor_pool.draw removed from here to avoid duplicate and move to higher layer
             for e in self.enemies:
-                if isinstance(e, Meteor):
+                if getattr(e, "DRAWN_BY_POOL", False):
                     continue  # Will be drawn later via meteor_pool
                 # MountainMage em APPEARING já foi desenhado acima — skip para evitar duplo draw
                 if isinstance(e, MountainMage) and not e.dead and e.is_appearing:

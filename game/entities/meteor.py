@@ -49,6 +49,12 @@ def _get_or_create_shape(size: int) -> List[Tuple[float, float]]:
 
 
 class Meteor:
+    # Meteoros do pool vivem em enemies E em meteor_pool.active; o draw do
+    # EntityManager os pula no loop de enemies e delega ao meteor_pool.draw().
+    # Subclasses fora do pool (ex.: GuidedMeteor) sobrescrevem para False para
+    # serem desenhadas no loop de enemies — senão ninguém as desenha.
+    DRAWN_BY_POOL: bool = True
+
     def __init__(
         self,
         size: int | None = None,

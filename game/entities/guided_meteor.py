@@ -17,6 +17,9 @@ class GuidedMeteor(Meteor):
     Tem velocidade inicial menor mas acelera em direção ao alvo.
     """
 
+    # Não usa meteor_pool — vive só em enemies e é desenhado no loop de enemies.
+    DRAWN_BY_POOL: bool = False
+
     def __init__(
         self,
         size: int = 20,
