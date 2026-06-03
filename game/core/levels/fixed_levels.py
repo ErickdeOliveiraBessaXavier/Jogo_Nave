@@ -17,13 +17,33 @@ from ...entities.bot_elemental import ElementalRobot
 from ...entities.cloud_archmage_boss import CloudArchmageBoss
 from ...entities.eye_enemy import EyeEnemy
 from ...entities.giant_meteor_boss import GiantMeteorBoss
+
+# Linhagem CITY — todos com `# noqa: F401` porque são usados apenas no level de
+# debug (nível 1) e podem estar comentados lá; o noqa impede o autofix do ruff de
+# removê-los, mantendo-os disponíveis para ligar/desligar à vontade.
+from ...entities.Inimigos_Tema_Cidade.city_drone import CityDrone  # noqa: F401
+from ...entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor  # noqa: F401
+from ...entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank  # noqa: F401
+from ...entities.Inimigos_Tema_Cidade.jammer_node import JammerNode  # noqa: F401
+from ...entities.Inimigos_Tema_Cidade.mirror_pylon import MirrorPylon  # noqa: F401
+from ...entities.Inimigos_Tema_Cidade.mortar_drone import MortarDrone  # noqa: F401
+from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper  # noqa: F401
+from ...entities.Inimigos_Tema_Cidade.police_interceptor import (  # noqa: F401
+    PoliceInterceptor,
+)
+from ...entities.Inimigos_Tema_Cidade.riot_van import RiotVan  # noqa: F401
+from ...entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone  # noqa: F401
+from ...entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank  # noqa: F401
+from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin  # noqa: F401
 from ...entities.meteor import Meteor
 from ...entities.mountain_mage import MountainMage
 from ...entities.mountain_propeller import MountainPropeller
 from ...entities.mountain_serpent_boss import MountainSerpentBoss
 from ...entities.rock_glider import RockGlider
+from ...entities.satellite import Satellite  # noqa: F401  (só no level de debug)
 from ...entities.slime_boss import SlimeBoss
 from ...entities.spike_boss import SpikeBoss
+from ...entities.square_minion_boss import SquareMinionBoss  # noqa: F401  (debug)
 from ...entities.stone_golem_boss import StoneGolemBoss
 from ...entities.stone_sentry import StoneSentry
 
@@ -304,7 +324,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # ── Comuns / enxame ──────────────────────────────────────────────
             # RockGlider: 1.2,
             # Meteor: 1.6,
-            # CityDrone: 4.0,          # nasce em leva (cluster) de 5-8
+            # CityDrone: 4.0,  # nasce em leva (cluster) de 5-8
             # Alien: 3.0,
             # ── Mundo 1 (MOUNTAINS) ──────────────────────────────────────────
             # MountainPropeller: 5.0,
@@ -319,15 +339,15 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # NeonSniper: 8.0,
             # PoliceInterceptor: 8.0,  # spawna em duplas
             # CyberCaptor: 10.0,
-            # TeslaTwin: 12.0,         # spawna o par
+            TeslaTwin: 12.0,  # spawna o par
             # CyberTank: 14.0,
             # ── CITY (variantes novas) ───────────────────────────────────────
             # JammerNode: 10.0,
             # MortarDrone: 8.0,
             # SapperDrone: 8.0,
             # RiotVan: 14.0,
-            # SplitterTank: 16.0,
-            # MirrorPylon: 14.0,
+            SplitterTank: 1.0,
+            # MirrorPylon: 1.0,
         },
         enemies_to_clear=75,
         # ── Descomente UM boss por vez ───────────────────────────────────────

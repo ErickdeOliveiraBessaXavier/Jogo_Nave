@@ -195,13 +195,27 @@ class Collisions:
         if hitboxes:
             for hitbox in hitboxes:
                 if rect.colliderect(hitbox):
-                    # Validação secundária: se o inimigo oferece collision_circle(),
-                    # valida com círculo para ser mais preciso (evita falsos positivos)
+                    # Validação secundária: se o inimigo oferece collision_circles() ou collision_circle(),
+                    # valida com círculos para ser mais preciso (evita falsos positivos)
+                    proj_cx, proj_cy = float(rect.centerx), float(rect.centery)
+                    proj_r = float(max(rect.width, rect.height) / 2.0)
+
+                    # Tenta múltiplos círculos primeiro
+                    circles_getter = getattr(enemy, "collision_circles", None)
+                    if callable(circles_getter):
+                        try:
+                            circles: Sequence[tuple[float, float, float]] = circles_getter()
+                            for cx, cy, r in circles:
+                                if cls._circles_collide(proj_cx, proj_cy, proj_r, cx, cy, r):
+                                    return True
+                            return False # Estava no rect mas fora de todos os círculos específicos
+                        except (TypeError, ValueError):
+                            pass
+
+                    # Fallback para círculo único
                     if hasattr(enemy, "collision_circle") and callable(
                         enemy.collision_circle
                     ):
-                        proj_cx, proj_cy = float(rect.centerx), float(rect.centery)
-                        proj_r = float(max(rect.width, rect.height) / 2.0)
                         try:
                             circle_data: tuple[float, float, float] = cast(
                                 tuple[float, float, float], enemy.collision_circle()

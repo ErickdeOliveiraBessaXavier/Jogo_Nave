@@ -1,17 +1,17 @@
-"""Mirror Pylon (Refletor) — Layered Pixel-Map.
+"""Mirror Pylon (Refletor) — Estrutura Triangular Equilibrada.
 
-Variante da linhagem do Tesla Twin: um **pilar vertical** com uma **face
-espelhada** na dianteira (lado do jogador) que **reflete os tiros da nave**. O
-chassi é gunmetal; a face espelhada e o núcleo usam um **ciano-branco** brilhante
-(superfície refletora). A barra refletora em si é animada pela entidade; aqui é
-só o corpo + a coluna de espelho.
-
-Builder cacheado por `cell` (§7). Núcleo ('c') e células de espelho ('m')
-recebem glow animado por cima no draw.
+Refinamento (§5):
+- Grid 32x41: a coluna extra à direita evita que o contorno do Núcleo (centro
+  x=24, raio 6 + borda) seja cortado pela borda do grid — sem isso a esfera fica
+  assimétrica (incha para a esquerda). Proporções compactas e equilibradas.
+- Emiissores (Frontais): Menores (raio 3), mais próximos do núcleo.
+- Núcleo (Traseiro): Elemento dominante (raio 6).
+- A reflexão é restaurada logicamente nos feixes entre os emissores.
 """
 
 from __future__ import annotations
 
+import math
 from typing import Dict, List, Tuple
 
 import pygame
@@ -20,72 +20,79 @@ from . import city_palette as pal
 
 RGB = Tuple[int, int, int]
 
-PIXEL_COLS = 11
-PIXEL_ROWS = 17
+PIXEL_COLS = 32
+PIXEL_ROWS = 41
 
-MIRROR: RGB = (200, 240, 255)       # superfície espelhada (ciano-branco)
-MIRROR_DIM: RGB = (90, 150, 190)
+# Cores para Emiissores (Metálicos)
+EMITTER_LENS: RGB = (100, 220, 255)
+
+# Cores para Núcleo (Energético)
+CORE_SHINE: RGB = (255, 255, 255)
+CORE_MAIN: RGB = (180, 240, 255)
+CORE_DARK: RGB = (60, 140, 190)
 
 _ZONE_COLORS: Dict[str, RGB] = {
     "o": pal.OUTLINE,
-    "a": pal.HULL_LIGHT,
-    "l": pal.GUNMETAL,
-    "h": pal.HULL_SHADOW,
-    "d": pal.DEEP_SLATE,
-    "c": MIRROR_DIM,    # núcleo (glow animado no draw)
-    "m": MIRROR,        # coluna espelhada (glow animado no draw)
+    "l": pal.GUNMETAL,      # Emiissor: Corpo
+    "h": pal.HULL_SHADOW,   # Emiissor: Sombra
+    "a": pal.HULL_LIGHT,    # Emiissor: Brilho metálico
+    "e": EMITTER_LENS,      # Emiissor: Lente
+    # Núcleo: Energia
+    "c": CORE_SHINE,
+    "g": CORE_MAIN,
+    "k": CORE_DARK,
 }
 
-CORE_NEON: RGB = MIRROR
-CORE_NEON_DIM: RGB = MIRROR_DIM
-MIRROR_NEON: RGB = MIRROR
+CORE_NEON: RGB = CORE_MAIN
+CORE_NEON_DIM: RGB = CORE_DARK
+MIRROR_NEON: RGB = EMITTER_LENS
 
+def _build_pylon_map() -> List[str]:
+    grid = [["." for _ in range(PIXEL_COLS)] for _ in range(PIXEL_ROWS)]
 
-def _build_map() -> List[str]:
-    cols, rows = PIXEL_COLS, PIXEL_ROWS
-    grid = [["." for _ in range(cols)] for _ in range(rows)]
-    for y in range(rows):
-        for x in range(cols):
-            corner = (x in (0, cols - 1)) and (y in (0, rows - 1))
-            if corner:
-                continue
-            edge = x in (0, cols - 1) or y in (0, rows - 1)
-            if edge:
-                grid[y][x] = "o"
-            elif x <= 2:
-                grid[y][x] = "a"   # face frontal iluminada (perto do espelho)
-            elif x <= cols - 3:
-                grid[y][x] = "l"
-            else:
-                grid[y][x] = "h"
+    def draw_sphere(cx, cy, radius, main_ch, shine_ch, dark_ch, outline_ch, lens_ch=None):
+        for y in range(cy - radius - 1, cy + radius + 2):
+            for x in range(cx - radius - 1, cx + radius + 2):
+                if x < 0 or x >= PIXEL_COLS or y < 0 or y >= PIXEL_ROWS:
+                    continue
+                d = math.hypot(x - cx, y - cy)
+                if d > radius + 0.5:
+                    if d <= radius + 1.2:
+                        grid[y][x] = outline_ch
+                    continue
+                
+                if lens_ch and d < 1.2:
+                    grid[y][x] = lens_ch
+                elif d < radius * 0.4:
+                    grid[y][x] = shine_ch
+                elif d < radius * 0.8:
+                    grid[y][x] = main_ch
+                else:
+                    grid[y][x] = dark_ch
 
-    # Coluna espelhada na dianteira (col 1, lado do jogador), miolo vertical.
-    for y in range(2, rows - 2):
-        grid[y][1] = "m"
-    # Núcleo: bloco central.
-    cx, cy = cols // 2, rows // 2
-    for yy in (cy - 1, cy, cy + 1):
-        grid[yy][cx] = "c"
+    # 1. Emiissores Frontais (x=11, y=5 e y=35) - Distância aumentada 1.5x
+    draw_sphere(11, 5, 3, "l", "a", "h", "o", "e")
+    draw_sphere(11, 35, 3, "l", "a", "h", "o", "e")
+
+    # 2. Núcleo Traseiro (x=24, y=20) - Sem borda preta (usa 'k' como outline)
+    draw_sphere(24, 20, 6, "g", "c", "k", "k")
+
     return ["".join(row) for row in grid]
 
-
-PIXEL_MAP: List[str] = _build_map()
+PIXEL_MAP: List[str] = _build_pylon_map()
 
 CORE_CELLS: List[Tuple[int, int]] = [
-    (c, r) for r, row in enumerate(PIXEL_MAP) for c, ch in enumerate(row) if ch == "c"
+    (c, r) for r, row in enumerate(PIXEL_MAP) for c, ch in enumerate(row) if ch in ("c", "g")
 ]
 MIRROR_CELLS: List[Tuple[int, int]] = [
-    (c, r) for r, row in enumerate(PIXEL_MAP) for c, ch in enumerate(row) if ch == "m"
+    (c, r) for r, row in enumerate(PIXEL_MAP) for c, ch in enumerate(row) if ch == "e"
 ]
 
 assert len(PIXEL_MAP) == PIXEL_ROWS and all(len(r) == PIXEL_COLS for r in PIXEL_MAP)
-assert CORE_CELLS and MIRROR_CELLS
 
 _cache: Dict[int, pygame.Surface] = {}
 
-
 def build_pylon_surface(cell: int) -> pygame.Surface:
-    """Surface estática do pilar, cacheada por `cell`."""
     cached = _cache.get(cell)
     if cached is not None:
         return cached

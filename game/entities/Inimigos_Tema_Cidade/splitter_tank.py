@@ -22,19 +22,17 @@ from typing import TYPE_CHECKING, List, Tuple
 
 import pygame
 
+from ...core.assets import BASE_DIR, get_image
 from ...core.config import config as Config
 from ...entities.explosion import ExplosionType
 from ..enemy_hit_mixin import EnemyHitMixin
 from . import city_glow
 from . import city_palette as pal
 from .splitter_tank_pixel_map import (
-    CORE_CELLS,
     CORE_NEON,
     CORE_NEON_DIM,
     PIXEL_COLS,
     PIXEL_ROWS,
-    SEAM_NEON,
-    build_tank_surface,
 )
 
 if TYPE_CHECKING:
@@ -44,10 +42,16 @@ if TYPE_CHECKING:
 MAX_TIER: int = 1
 _SPLIT_COUNT: int = 3  # quantos filhos o tier 0 gera
 
-_CELL_BY_TIER: dict[int, int] = {0: 6, 1: 4}
+_CELL_BY_TIER: dict[int, int] = {0: 6, 1: 5}
+
+# Sprites pixel-art (32×32) feitos à mão: tier 0 pulsa o núcleo em 6 frames,
+# o mini (tier 1) em 2. Escalados por tier ao tamanho do chassi.
+_SPRITE_DIR = BASE_DIR / "assets" / "images" / "Sprites_Splitter_Tank"
+_FRAMES_BY_TIER: dict[int, int] = {0: 6, 1: 2}
+_ANIM_FPS: float = 8.0
 _HEALTH_BY_TIER: dict[int, int] = {0: 180, 1: 55}
 _POINTS_BY_TIER: dict[int, int] = {0: 380, 1: 110}
-_SPEED_BY_TIER: dict[int, float] = {0: 46.0, 1: 90.0}
+_SPEED_BY_TIER: dict[int, float] = {0: 46.0, 1: 130.0}
 
 
 class SplitterTank(EnemyHitMixin):
@@ -56,6 +60,30 @@ class SplitterTank(EnemyHitMixin):
 
     VERTICAL_TRACK: float = 26.0  # quão rápido persegue o jogador no eixo lento
     _explosion_size_hit: int = 12
+
+    # Frames já escalados ao chassi do tier, carregados uma vez (§7).
+    _frames_by_tier: dict[int, List[pygame.Surface]] = {}
+
+    @classmethod
+    def _frames(cls, tier: int) -> List[pygame.Surface]:
+        cached = cls._frames_by_tier.get(tier)
+        if cached is not None:
+            return cached
+        cell = _CELL_BY_TIER[tier]
+        size = (PIXEL_COLS * cell, PIXEL_ROWS * cell)
+        if tier == 0:
+            paths = [
+                _SPRITE_DIR / f"splitter_tank_sprite_{i:02d}.png"
+                for i in range(1, _FRAMES_BY_TIER[0] + 1)
+            ]
+        else:
+            paths = [
+                _SPRITE_DIR / "splitter_mini" / f"splitter_tank_mini_sprite_{i:02d}.png"
+                for i in range(1, _FRAMES_BY_TIER[1] + 1)
+            ]
+        frames = [pygame.transform.scale(get_image(p), size) for p in paths]
+        cls._frames_by_tier[tier] = frames
+        return frames
 
     def __init__(
         self,
@@ -96,6 +124,7 @@ class SplitterTank(EnemyHitMixin):
             self.vy = vy if vy is not None else 0.0
 
         self.pulse: float = random.uniform(0.0, math.tau)
+        self.anim_time: float = random.uniform(0.0, 1.0)  # dessincroniza o pulso
         self.hit_timer: float = 0.0
 
     # ── Geometria ─────────────────────────────────────────────────────────────
@@ -117,6 +146,7 @@ class SplitterTank(EnemyHitMixin):
         if dt <= 0.0:
             return
         self.pulse += dt
+        self.anim_time += dt
         if self.hit_timer > 0.0:
             self.hit_timer = max(0.0, self.hit_timer - dt)
 
@@ -151,7 +181,7 @@ class SplitterTank(EnemyHitMixin):
         child_speed = _SPEED_BY_TIER[self.tier + 1] * self.aggressiveness_multiplier
         for i in range(_SPLIT_COUNT):
             # Leque de direções em torno do avanço (esquerda no side-scroll).
-            spread = (i - (_SPLIT_COUNT - 1) / 2) * 0.5
+            spread = (i - (_SPLIT_COUNT - 1) / 2) * 0.85
             if self.side_scroll:
                 vx = -child_speed * math.cos(spread)
                 vy = child_speed * math.sin(spread)
@@ -223,33 +253,24 @@ class SplitterTank(EnemyHitMixin):
         )
 
     def draw(self, surface: pygame.Surface) -> None:
-        cell = self.cell
-        base = build_tank_surface(cell)
+        frames = self._frames(self.tier)
+        base = frames[int(self.anim_time * _ANIM_FPS) % len(frames)]
+        pos = (int(self.x), int(self.y))
         if self.hit_timer > 0.0:
             img = base.copy()
             img.fill((200, 200, 200), special_flags=pygame.BLEND_RGB_ADD)
-            surface.blit(img, (int(self.x), int(self.y)))
+            surface.blit(img, pos)
         else:
-            surface.blit(base, (int(self.x), int(self.y)))
+            surface.blit(base, pos)
 
-        # Costura de fratura brilhante (pisca mais quando ferido → "vai partir").
+        # Bloom neon no núcleo: telegrafa o split — pisca mais forte quanto mais
+        # ferido ("vai partir"). Ancorado um pouco abaixo do centro do sprite.
         cx, cy = self._center()
+        cy += self.cell * 1.2
         hurt = 1.0 - self.health / max(1, self.max_health)
-        flick = 0.5 + 0.5 * math.sin(self.pulse * (6.0 + 10.0 * hurt))
-        seam_col = pal.lerp(CORE_NEON_DIM, SEAM_NEON, 0.4 + 0.6 * flick)
-        top = int(self.y + 2 * cell)
-        bot = int(self.y + self.h - 2 * cell)
-        pygame.draw.line(surface, seam_col, (int(cx), top), (int(cx), bot), max(2, cell // 2))
-
-        # Núcleo pulsante na costura.
-        pulse = 0.5 + 0.5 * math.sin(self.pulse * 5.0)
+        pulse = 0.5 + 0.5 * math.sin(self.pulse * (5.0 + 6.0 * hurt))
         core_col = pal.lerp(CORE_NEON_DIM, CORE_NEON, 0.4 + 0.6 * pulse)
-        core_r = int(cell * (1.4 + pulse + hurt))
-        for c, r in CORE_CELLS:
-            self._blit_glow(
-                surface,
-                int(self.x + (c + 0.5) * cell),
-                int(self.y + (r + 0.5) * cell),
-                core_r,
-                core_col,
-            )
+        # Mais transparente: escurece a cor → contribuição aditiva mais fraca.
+        core_col = pal.lerp((0, 0, 0), core_col, 0.5)
+        core_r = int(self.cell * (1.2 + 0.6 * pulse + 1.2 * hurt))
+        self._blit_glow(surface, int(cx), int(cy), core_r, core_col)
