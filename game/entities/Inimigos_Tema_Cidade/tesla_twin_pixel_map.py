@@ -33,6 +33,8 @@ _ZONE_COLORS: Dict[str, RGB] = {
     "c": pal.ELECTRIC_BLUE_DIM,  # núcleo (glow animado no draw)
     "w": pal.TOXIC_ORANGE,       # cobre brilhante (winding)
     "k": pal.TOXIC_ORANGE_DIM,   # cobre escuro (winding)
+    "b": pal.GRID_BAR,           # grade industrial
+    "m": pal.CYBER_MAGENTA_DIM,  # acento de status
 }
 
 CORE_NEON: RGB = pal.ELECTRIC_BLUE
@@ -43,13 +45,17 @@ COIL_NEON: RGB = pal.TOXIC_ORANGE
 def _half_width(y: int) -> float:
     """Meia-largura (em cells) do perfil da torre por linha."""
     if y == 0:
-        return 2.0
+        return 2.0  # Topo plano
     if y == 1:
-        return 2.8
-    if y < _COIL_START:
-        return 3.2  # corpo reto
-    # Bobina: bandas alternadas (mais larga / mais estreita) → look de windings.
-    return 4.0 if (y - _COIL_START) % 2 == 0 else 3.3
+        return 3.0  # Alargamento (suporte)
+    if y == 2:
+        return 2.5  # Pescoço
+    if y < _COIL_START - 1:
+        return 3.2  # Corpo principal
+    if y == _COIL_START - 1:
+        return 4.0  # Flare antes da bobina
+    # Bobina: look de discos/windings empilhados.
+    return 4.2 if (y - _COIL_START) % 2 == 0 else 3.4
 
 
 def _build_map() -> List[str]:
@@ -60,21 +66,45 @@ def _build_map() -> List[str]:
             d = abs(x - _CX)
             if d > half + 0.25:
                 continue
-            outline = d > half - 0.8
+            outline = d > half - 0.75
+
+            # 1. Bobina de cobre (base do emissor)
             if y >= _COIL_START:
-                # Bobina de cobre: windings claros/escuros alternados.
-                grid[y][x] = "o" if outline else (
-                    "w" if (y - _COIL_START) % 2 == 0 else "k"
-                )
+                if outline:
+                    grid[y][x] = "o"
+                elif d <= 1.2:
+                    # Haste central metálica visível entre as voltas
+                    grid[y][x] = "d" if x > _CX else "g"
+                else:
+                    # Windings de cobre
+                    grid[y][x] = "w" if (y - _COIL_START) % 2 == 0 else "k"
                 continue
+
+            # 2. Contorno geral do corpo
             if outline:
                 grid[y][x] = "o"
                 continue
-            # Núcleo azul (indicador de estado) no meio do corpo.
-            if 4 <= y <= 7 and d <= 1.1:
-                grid[y][x] = "c"
+
+            # 3. Núcleo azul com grade protetora
+            if 4 <= y <= 7 and d <= 1.2:
+                # Barras horizontais da grade (y=5 e y=7)
+                if y in (5, 7):
+                    grid[y][x] = "b"
+                else:
+                    grid[y][x] = "c"
                 continue
-            # Sombreamento top-lit (luz vinda da esquerda).
+
+            # 4. Acentos de status (magenta)
+            if y == 2 and 1.0 <= d <= 1.8:
+                grid[y][x] = "m"
+                continue
+
+            # 5. Banda estrutural (anel de reforço)
+            if y == 3:
+                grid[y][x] = "d"
+                continue
+
+            # 6. Sombreamento padrão (metal industrial)
             rel = x - _CX
             if rel <= -1.5:
                 grid[y][x] = "a"

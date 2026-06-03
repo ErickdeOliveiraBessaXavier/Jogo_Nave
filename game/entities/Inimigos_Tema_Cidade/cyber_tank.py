@@ -56,7 +56,7 @@ _RAIL_CORE: pal.RGB = (235, 250, 255)
 _RAIL_GLOW: pal.RGB = pal.ELECTRIC_BLUE
 
 # ── Seta-aviso (chevron pixel-art do telegraph de entrada) ───────────────────
-_ARROW_COLS, _ARROW_ROWS = 7, 11
+_ARROW_COLS, _ARROW_ROWS = 11, 7
 _arrow_cache: dict[int, pygame.Surface] = {}
 
 
@@ -139,12 +139,13 @@ class CyberTank(EnemyHitMixin):
     # ── Telegraph de entrada ("Heavy Unit Incoming") ─────────────────────────
     # Antes de surgir, um chevron grande entra pela borda direita e desliza até
     # o ponto de entrada — alerta clássico que cria expectativa segundos antes.
-    WARNING_DURATION: float = 2.6   # telegraph total antes do tank entrar em cena
+    WARNING_DURATION: float = 5.0   # antecipação: 5s de telegraph antes do tank
     WARNING_SOUND_TIME: float = 1.0  # som de aviso toca ~1s (depois só o visual)
     WARNING_ARROW_CELL: int = 6      # tamanho do pixel da seta pixel-art
     WARNING_EDGE_INSET: float = 30.0  # recuo da seta a partir da borda direita
-    WARNING_BOB_AMP: float = 48.0    # amplitude do sobe-desce (px)
-    WARNING_BOB_RATE: float = 5.0    # rad/s do sobe-desce
+    WARNING_SPIN_RATE: float = 4.0   # rad/s do giro no próprio eixo (ilusão 3D)
+    WARNING_GROW_MIN: float = 0.45   # escala no início (mini boss distante)
+    WARNING_GROW_MAX: float = 1.5    # escala ao fim (mini boss perto, prestes a surgir)
 
     # ── Canhões (miram sempre o jogador) ─────────────────────────────────────
     # Gatling (uma ponta): rajada rápida.
@@ -562,11 +563,21 @@ class CyberTank(EnemyHitMixin):
             )
 
     def _draw_warning(self, surface: pygame.Surface) -> None:
-        """Seta pixel-art na lateral direita (lado de entrada do tank), indo e
-        voltando na horizontal para chamar a atenção. Sem efeitos."""
+        """Seta pixel-art na lateral direita girando no próprio eixo (peão) e
+        CRESCENDO conforme o mini boss se aproxima (pequena = distante, grande =
+        perto). A altura ~cos(t) + flip dá a ilusão 3D de rotação no eixo Y 
+        (cima-baixo); a escala geral vem do progresso do telegraph (0..1). 
+        Sem outros efeitos."""
         arrow = _build_warning_arrow(self.WARNING_ARROW_CELL)
         aw, ah = arrow.get_size()
-        bob = math.sin(self.pulse * self.WARNING_BOB_RATE) * self.WARNING_BOB_AMP
-        x = Config.SCREEN_WIDTH - self.WARNING_EDGE_INSET - aw + bob
+        p = min(1.0, self.warning_timer / self.WARNING_DURATION)  # aproximação
+        g = self.WARNING_GROW_MIN + (self.WARNING_GROW_MAX - self.WARNING_GROW_MIN) * p
+        cx = Config.SCREEN_WIDTH - self.WARNING_EDGE_INSET - aw / 2  # centro fixo na lateral
         cy = self.y + self.h / 2
-        surface.blit(arrow, (int(x), int(cy - ah / 2)))
+        sy = math.cos(self.pulse * self.WARNING_SPIN_RATE)  # -1..1: altura aparente
+        w = max(1, int(aw * g))
+        h = max(1, int(ah * g * abs(sy)))
+        img = pygame.transform.scale(arrow, (w, h))
+        if sy < 0:
+            img = pygame.transform.flip(img, False, True)  # girou no eixo Y → vira
+        surface.blit(img, (int(cx - w / 2), int(cy - h / 2)))
