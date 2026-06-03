@@ -70,14 +70,15 @@ class TeslaTwin(EnemyHitMixin):
     H: int = PIXEL_ROWS * CELL  # 75px
     SIZE: int = H  # eixo maior (usado por margens do spawner)
 
-    HEALTH: int = 70
+    HEALTH: int = 130
     POINTS: int = 210
 
     ENTER_SPEED: float = 165.0
     ADVANCE_SPEED: float = 40.0       # parede avança devagar p/ a esquerda
     ENTER_TARGET_FRAC: float = 0.86   # x-centro onde para de entrar (perto da direita)
 
-    BEAM_HIT_RADIUS: float = 16.0     # tolerância de colisão do feixe
+    BEAM_HIT_RADIUS: float = 16.0     # tolerância de colisão do feixe (vs. nave)
+    BEAM_BLOCK_RADIUS: float = 14.0   # tolerância p/ bloquear projéteis da nave
     BEAM_BLAST_RADIUS: int = 18       # raio do area_blast emitido no contato
 
     SHORT_CIRCUIT_TIME: float = 2.0
@@ -189,6 +190,23 @@ class TeslaTwin(EnemyHitMixin):
             ctx.new_area_blasts.append(
                 (ctx.player_x, ctx.player_y, float(self.BEAM_BLAST_RADIUS))
             )
+
+    def projectile_fields(self) -> list[tuple[object, ...]]:
+        """Campos que bloqueiam projéteis da nave (contrato duck-typed do §5,
+        consumido por `Collisions.projectiles_vs_blocker_fields`).
+
+        O feixe vertical é uma parede sem brecha — bloqueia inclusive tiros. Só
+        o líder (topo) reporta, para não duplicar. Lista vazia se inativo.
+        """
+        link = self.link
+        if link is None or not link.beam_active() or not link.is_leader(self):
+            return []
+        partner = link.partner_of(self)
+        if partner is None:
+            return []
+        ax, ay = self.emitter_point()
+        bx, by = partner.emitter_point()
+        return [("seg", ax, ay, bx, by, self.BEAM_BLOCK_RADIUS)]
 
     def begin_overload(self) -> None:
         """Short Circuit: o sobrevivente sobrecarrega e vai se autodestruir."""

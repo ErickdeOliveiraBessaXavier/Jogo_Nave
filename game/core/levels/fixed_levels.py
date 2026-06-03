@@ -290,24 +290,57 @@ class LevelConfig:
 
 
 FIXED_LEVELS: dict[int, LevelConfig] = {
-    # Nível 1: Tutorial — RockGlider em ritmo controlado (MOUNTAINS).
-    # Pool intencionalmente único para o jogador absorver o básico de movimento e tiro.
+    # Nível 1: LEVEL DE DEBUG — todos os inimigos e todos os bosses.
+    # Fixed levels pulam o filtro de tema (allowlist) do pipeline, então qualquer
+    # inimigo listado aqui spawna direto (mesmo sendo MOUNTAINS/side-scroll). Os
+    # caps por tipo (SPAWNER_CAP_*) controlam a quantidade simultânea de cada um.
+    # Comente/descomente livremente para isolar o que quer testar.
+    #
+    # BOSS: só UM boss_type pode estar ativo por vez — descomente um da lista.
+    # Para chegar ao boss rápido, baixe `enemies_to_clear` (ex.: 10).
     1: LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            RockGlider: 1.5,
-            # NeonSniper: 3.0,
-            # PoliceInterceptor: 4.0,
-            # CyberTank: 1.0,
-            # CyberCaptor: 1.0,
-            # TeslaTwin: 1.0,
+            # ── Comuns / enxame ──────────────────────────────────────────────
+            # RockGlider: 1.2,
+            # Meteor: 1.6,
+            # CityDrone: 4.0,          # nasce em leva (cluster) de 5-8
+            # Alien: 3.0,
+            # ── Mundo 1 (MOUNTAINS) ──────────────────────────────────────────
+            # MountainPropeller: 5.0,
+            # MountainMage: 10.0,
+            # ElementalRobot: 10.0,
+            # StoneSentry: 20.0,
+            # ── STARFIELD / espaço ───────────────────────────────────────────
+            # EyeEnemy: 6.0,
+            # Satellite: 6.0,
+            # SquareMinionBoss: 12.0,
+            # ── CITY (linhagem original) ─────────────────────────────────────
+            # NeonSniper: 8.0,
+            # PoliceInterceptor: 8.0,  # spawna em duplas
+            # CyberCaptor: 10.0,
+            # TeslaTwin: 12.0,         # spawna o par
+            # CyberTank: 14.0,
+            # ── CITY (variantes novas) ───────────────────────────────────────
+            # JammerNode: 10.0,
+            # MortarDrone: 8.0,
+            # SapperDrone: 8.0,
+            # RiotVan: 14.0,
+            # SplitterTank: 16.0,
+            # MirrorPylon: 14.0,
         },
         enemies_to_clear=75,
+        # ── Descomente UM boss por vez ───────────────────────────────────────
         # boss_type=Boss,
         # boss_type=SpikeBoss,
-        # boss_type=CloudArchmageBoss,
-        # boss_type=StoneGolemBoss,
+        # boss_type=SlimeBoss,
         # boss_type=GiantMeteorBoss,
+        # boss_type=StoneGolemBoss,
+        # boss_type=MountainSerpentBoss,
+        # boss_type=CloudArchmageBoss,
+        mines_enabled=True,  # também spawna minas (tema CITY → mina temática)
+        formations_enabled=True,  # formações (só disparam em temas que as suportam)
+        formation_types=["spiral_circle", "spiral_v", "spiral_square"],
         score_multiplier=1.0,
     ),
     # Nível 3: Primeiro Boss - Mountain Serpent (Montanhas)

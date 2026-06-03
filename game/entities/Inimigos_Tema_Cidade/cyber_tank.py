@@ -139,13 +139,13 @@ class CyberTank(EnemyHitMixin):
     # ── Telegraph de entrada ("Heavy Unit Incoming") ─────────────────────────
     # Antes de surgir, um chevron grande entra pela borda direita e desliza até
     # o ponto de entrada — alerta clássico que cria expectativa segundos antes.
-    WARNING_DURATION: float = 5.0   # antecipação: 5s de telegraph antes do tank
+    WARNING_DURATION: float = 5.0  # antecipação: 5s de telegraph antes do tank
     WARNING_SOUND_TIME: float = 1.0  # som de aviso toca ~1s (depois só o visual)
-    WARNING_ARROW_CELL: int = 6      # tamanho do pixel da seta pixel-art
+    WARNING_ARROW_CELL: int = 6  # tamanho do pixel da seta pixel-art
     WARNING_EDGE_INSET: float = 30.0  # recuo da seta a partir da borda direita
-    WARNING_SPIN_RATE: float = 4.0   # rad/s do giro no próprio eixo (ilusão 3D)
-    WARNING_GROW_MIN: float = 0.45   # escala no início (mini boss distante)
-    WARNING_GROW_MAX: float = 1.5    # escala ao fim (mini boss perto, prestes a surgir)
+    WARNING_SPIN_RATE: float = 4.0  # rad/s do giro no próprio eixo (ilusão 3D)
+    WARNING_GROW_MIN: float = 0.45  # escala no início (mini boss distante)
+    WARNING_GROW_MAX: float = 1.5  # escala ao fim (mini boss perto, prestes a surgir)
 
     # ── Canhões (miram sempre o jogador) ─────────────────────────────────────
     # Gatling (uma ponta): rajada rápida.
@@ -209,8 +209,10 @@ class CyberTank(EnemyHitMixin):
         # Rect um pouco maior p/ abranger os canhões que projetam das pontas.
         pad = int(self.cell * 5)
         return pygame.Rect(
-            int(self.x) - pad, int(self.y) - self.cell,
-            self.w + pad * 2, self.h + self.cell * 2,
+            int(self.x) - pad,
+            int(self.y) - self.cell,
+            self.w + pad * 2,
+            self.h + self.cell * 2,
         )
 
     def collision_circle(self) -> Tuple[float, float, float]:
@@ -307,7 +309,9 @@ class CyberTank(EnemyHitMixin):
             else:
                 self.jockey_angle = max(
                     -self.JOCKEY_SPAN,
-                    min(self.JOCKEY_SPAN, self.jockey_angle + random.uniform(-0.3, 0.3)),
+                    min(
+                        self.JOCKEY_SPAN, self.jockey_angle + random.uniform(-0.3, 0.3)
+                    ),
                 )
                 self.standoff = max(
                     self.STANDOFF_MIN,
@@ -395,7 +399,9 @@ class CyberTank(EnemyHitMixin):
                 # Carga clampeada a 1.0 (antes crescia sem limite quando o timer
                 # ficava negativo → "carregando pra sempre"). Dispara assim que o
                 # timer zera — a mira já está sempre no jogador.
-                t.charge = min(1.0, max(0.0, 1.0 - t.fire_timer / self.RAIL_CHARGE_TIME))
+                t.charge = min(
+                    1.0, max(0.0, 1.0 - t.fire_timer / self.RAIL_CHARGE_TIME)
+                )
                 if t.fire_timer <= 0.0:
                     if shells is None:
                         shells = []
@@ -415,13 +421,25 @@ class CyberTank(EnemyHitMixin):
         if t.type == "GATLING":
             speed = self.SHELL_SPEED * (0.9 + 0.2 * agg)
             return NeonBolt(
-                mux, muy, math.cos(t.angle) * speed, math.sin(t.angle) * speed,
-                core=_SHELL_CORE, glow=_SHELL_GLOW, radius=5, glow_radius=14,
+                mux,
+                muy,
+                math.cos(t.angle) * speed,
+                math.sin(t.angle) * speed,
+                core=_SHELL_CORE,
+                glow=_SHELL_GLOW,
+                radius=5,
+                glow_radius=14,
             )
         speed = self.RAIL_SPEED * (0.95 + 0.1 * agg)
         return NeonBolt(
-            mux, muy, math.cos(t.angle) * speed, math.sin(t.angle) * speed,
-            core=_RAIL_CORE, glow=_RAIL_GLOW, radius=9, glow_radius=26,
+            mux,
+            muy,
+            math.cos(t.angle) * speed,
+            math.sin(t.angle) * speed,
+            core=_RAIL_CORE,
+            glow=_RAIL_GLOW,
+            radius=9,
+            glow_radius=26,
         )
 
     # ── Dano / morte ──────────────────────────────────────────────────────────
@@ -510,13 +528,17 @@ class CyberTank(EnemyHitMixin):
         pulse = 0.5 + 0.5 * math.sin(self.pulse * 5.0)
 
         # Halo de energia (aditivo) + orbe sólido com anel de contenção.
-        self._blit_glow(surface, icx, icy, int(cell * 3.6 + cell * pulse), pal.ELECTRIC_BLUE)
+        self._blit_glow(
+            surface, icx, icy, int(cell * 3.6 + cell * pulse), pal.ELECTRIC_BLUE
+        )
         base_r = int(cell * 2.3)
         pygame.draw.circle(surface, pal.DEEP_SLATE, (icx, icy), base_r)
         pygame.draw.circle(surface, pal.OUTLINE, (icx, icy), base_r, 1)
         core_col = pal.lerp(CORE_NEON_DIM, CORE_NEON, pulse)
         pygame.draw.circle(surface, core_col, (icx, icy), int(cell * 1.5))
-        pygame.draw.circle(surface, (235, 250, 255), (icx, icy), max(2, int(cell * 0.7)))
+        pygame.draw.circle(
+            surface, (235, 250, 255), (icx, icy), max(2, int(cell * 0.7))
+        )
 
         # Faíscas de energia orbitando o núcleo (animação de energia, não de giro).
         for k in range(3):
@@ -565,14 +587,16 @@ class CyberTank(EnemyHitMixin):
     def _draw_warning(self, surface: pygame.Surface) -> None:
         """Seta pixel-art na lateral direita girando no próprio eixo (peão) e
         CRESCENDO conforme o mini boss se aproxima (pequena = distante, grande =
-        perto). A altura ~cos(t) + flip dá a ilusão 3D de rotação no eixo Y 
-        (cima-baixo); a escala geral vem do progresso do telegraph (0..1). 
+        perto). A altura ~cos(t) + flip dá a ilusão 3D de rotação no eixo Y
+        (cima-baixo); a escala geral vem do progresso do telegraph (0..1).
         Sem outros efeitos."""
         arrow = _build_warning_arrow(self.WARNING_ARROW_CELL)
         aw, ah = arrow.get_size()
         p = min(1.0, self.warning_timer / self.WARNING_DURATION)  # aproximação
         g = self.WARNING_GROW_MIN + (self.WARNING_GROW_MAX - self.WARNING_GROW_MIN) * p
-        cx = Config.SCREEN_WIDTH - self.WARNING_EDGE_INSET - aw / 2  # centro fixo na lateral
+        cx = (
+            Config.SCREEN_WIDTH - self.WARNING_EDGE_INSET - aw / 2
+        )  # centro fixo na lateral
         cy = self.y + self.h / 2
         sy = math.cos(self.pulse * self.WARNING_SPIN_RATE)  # -1..1: altura aparente
         w = max(1, int(aw * g))

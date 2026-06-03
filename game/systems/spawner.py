@@ -40,6 +40,12 @@ from ..entities.Inimigos_Tema_Cidade.city_drone import CityDrone
 from ..entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ..entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ..entities.Inimigos_Tema_Cidade.interceptor_squad import InterceptorSquad
+from ..entities.Inimigos_Tema_Cidade.jammer_node import JammerNode
+from ..entities.Inimigos_Tema_Cidade.mirror_pylon import MirrorPylon
+from ..entities.Inimigos_Tema_Cidade.mortar_drone import MortarDrone
+from ..entities.Inimigos_Tema_Cidade.riot_van import RiotVan
+from ..entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone
+from ..entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
 from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ..entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
 from ..entities.Inimigos_Tema_Cidade.tesla_link import TeslaLink
@@ -76,12 +82,25 @@ SPAWNER_CAP_NEON_SNIPER: int = 3  # Sentinelas de longa distância (perch units)
 SPAWNER_CAP_POLICE_INTERCEPTOR: int = 4  # Perseguidores (spawnam em duplas)
 SPAWNER_CAP_CYBER_TANK: int = 1  # Colosso "gatekeeper" — sempre sozinho
 SPAWNER_CAP_CYBER_CAPTOR: int = 2  # Armadilhas de energia (orbitam o topo)
+SPAWNER_CAP_JAMMER: int = 2  # Nós de interferência (orbitam o topo, suprimem tiros)
+SPAWNER_CAP_MORTAR: int = 2  # Artilheiros (perch no alto, bombardeio de área)
+SPAWNER_CAP_RIOT_VAN: int = 1  # Escudeiros (escolta blindada, escudo frontal)
+SPAWNER_CAP_SPLITTER: int = 1  # Splitter Tanks (conta filhotes → limita o enxame)
+SPAWNER_CAP_SAPPER: int = 2  # Rebocadores (suporte de blindagem)
+SPAWNER_CAP_MIRROR: int = 1  # Mirror Pylons (refletem tiros — sempre sozinho)
 SPAWNER_CAP_TESLA_TWIN: int = 2  # Barreira vertical: 1 par (2 unidades) por vez
 SPAWNER_CAP_ALIEN: int = 4  # Limite máximo de Aliens simultâneos
 SPAWNER_CAP_EYE_ENEMY: int = 3  # Limite máximo de EyeEnemies simultâneos
 SPAWNER_CAP_SATELLITE: int = 5  # Limite máximo de Satélites simultâneos
 SPAWNER_CAP_FORMATIONS: int = 2  # Limite máximo de Formações ativas simultâneas
 SPAWNER_STORM_ENEMY_CAP: int = 30
+
+# EnemySpawner — escala de HP de inimigos COMUNS em coop. Por jogador extra,
+# soma este fator ao multiplicador de vida (ex.: 2 jogadores = +15%). Fica
+# abaixo do boss (+40%, `PlayingScene._COOP_BOSS_HP_PER_EXTRA_PLAYER`): o boss
+# concentra o ajuste; nos comuns o coop já pesa via cadência/cap/meta de abates.
+# Propagado até a entidade no spawn (§11), recalculado em `set_player_count`.
+SPAWNER_COOP_ENEMY_HP_PER_EXTRA_PLAYER: float = 0.15
 
 # EnemySpawner — spawn de minas. Pesos relativos para o número de minas spawnadas
 # em cada leva: 2 é o caso comum (~59%), 3 é frequente (~29%), 5 é raro (~12%).
@@ -152,6 +171,13 @@ WORLD_TRANSITION_RAMP_DURATION: float = (
     25.0  # segundos para atingir spawn_intensity=1.0
 )
 NORMAL_RAMP_DURATION: float = 15.0  # rampa padrão (troca de fase normal)
+
+# DIRETOR DE ONDAS — faixa base de duração do REST (respiro entre ondas), em
+# segundos. Encurtada do antigo (4.0, 7.0) para tirar o "buraco" entre ciclos.
+# A duração efetiva escala pela dificuldade via DIFFICULTY_SPAWN_GAP_MULTIPLIER
+# (mesmo multiplicador dos gaps de spawn): presets mais difíceis dão menos
+# respiro. Ver `EnemySpawner._roll_rest_duration`.
+DIRECTOR_REST_DURATION_RANGE: tuple[float, float] = (2.5, 4.5)
 
 
 # ---------------------------------------------------------------------------
@@ -226,12 +252,18 @@ class EnemySpawner:
         self.level_manager = level_manager
         self.meteor_pool = meteor_pool
         self.difficulty_preset = difficulty_preset
-        self.enemy_health_multiplier = enemy_health_multiplier
+        # HP base vem do preset de dificuldade; o multiplicador efetivo aplicado
+        # às entidades soma a escala de coop por cima (ver
+        # `_recompute_enemy_health_multiplier`). Guardamos o base separado para
+        # poder recalcular quando P2 entra/sai mid-game.
+        self._base_enemy_health_multiplier = enemy_health_multiplier
         self.aggressiveness_multiplier = aggressiveness_multiplier
         # Player count alimenta o cap dinâmico de inimigos em tela (coop ganha
-        # +20% por jogador extra). Atualizado via `set_player_count` quando
-        # P2 entra/sai mid-game.
+        # +20% por jogador extra) e o HP de inimigos comuns (+15% por extra).
+        # Atualizado via `set_player_count` quando P2 entra/sai mid-game.
         self.player_count = max(1, player_count)
+        # Define `self.enemy_health_multiplier` (efetivo = base × coop).
+        self._recompute_enemy_health_multiplier()
         self.current_level_number: int = 1
         self.level_config: Any = self.level_manager.get_level(
             self.current_level_number, self.difficulty_preset
@@ -306,7 +338,7 @@ class EnemySpawner:
         # Duração base dos ciclos (com variação randômica)
         self._dir_buildup_dur = random.uniform(8.0, 12.0)
         self._dir_peak_dur = random.uniform(12.0, 18.0)
-        self._dir_rest_dur = random.uniform(4.0, 7.0)
+        self._dir_rest_dur = self._roll_rest_duration()
 
         self.guided_meteor_timer = Timer(3.0)
 
@@ -411,6 +443,12 @@ class EnemySpawner:
             "CyberTank": "cyber_tank",
             "CyberCaptor": "cyber_captor",
             "TeslaTwin": "tesla_twin",
+            "JammerNode": "jammer",
+            "MortarDrone": "mortar",
+            "RiotVan": "riot_van",
+            "SplitterTank": "splitter",
+            "SapperDrone": "sapper",
+            "MirrorPylon": "mirror",
         }
         return aliases.get(enemy_type.__name__, enemy_type.__name__.lower())
 
@@ -429,6 +467,12 @@ class EnemySpawner:
             CyberTank,
             CyberCaptor,
             TeslaTwin,
+            JammerNode,
+            MortarDrone,
+            RiotVan,
+            SplitterTank,
+            SapperDrone,
+            MirrorPylon,
         ):
             base_gap = max(base_gap, self.level_config.get_spawn_time(enemy_type))
 
@@ -442,6 +486,16 @@ class EnemySpawner:
                 self.difficulty_preset, 1.0
             )
         )
+
+    def _roll_rest_duration(self) -> float:
+        """Sorteia a duração do REST (respiro entre ondas) já escalada pela
+        dificuldade. Reusa o multiplicador dos gaps de spawn — presets mais
+        difíceis encurtam o respiro (menos folga para o jogador)."""
+        lo, hi = DIRECTOR_REST_DURATION_RANGE
+        difficulty_mult = DifficultyConfig.DIFFICULTY_SPAWN_GAP_MULTIPLIER.get(
+            self.difficulty_preset, 1.0
+        )
+        return random.uniform(lo, hi) * difficulty_mult
 
     def _can_spawn_now(self, enemy_type: type) -> bool:
         if self.spawn_clock - self.last_spawn_clock < self._get_min_global_spawn_gap():
@@ -491,8 +545,25 @@ class EnemySpawner:
         Justificativa: o cap é consultado a cada spawn tentado, então
         passar a permitir mais inimigos na tela logo após P2 entrar
         casa com a expectativa do jogador.
+
+        O HP de inimigos comuns também reescala imediatamente — os próximos
+        spawns nascem com a vida do novo player_count (entidades já em campo
+        mantêm a vida com que nasceram).
         """
         self.player_count = max(1, int(count))
+        self._recompute_enemy_health_multiplier()
+
+    def _coop_hp_multiplier(self) -> float:
+        """Fator de HP de coop para inimigos comuns (1.0 = solo)."""
+        return 1.0 + SPAWNER_COOP_ENEMY_HP_PER_EXTRA_PLAYER * max(
+            0, self.player_count - 1
+        )
+
+    def _recompute_enemy_health_multiplier(self) -> None:
+        """Recompõe o multiplicador de HP efetivo = base (preset) × coop."""
+        self.enemy_health_multiplier = (
+            self._base_enemy_health_multiplier * self._coop_hp_multiplier()
+        )
 
     def _count_enemies_by_type(self, entity_manager: "EntityManager") -> dict[str, int]:
         counts: dict[str, int] = {
@@ -511,6 +582,12 @@ class EnemySpawner:
             "cyber_tank": 0,
             "cyber_captor": 0,
             "tesla_twin": 0,
+            "jammer": 0,
+            "mortar": 0,
+            "riot_van": 0,
+            "splitter": 0,
+            "sapper": 0,
+            "mirror": 0,
             "total": 0,
         }
 
@@ -546,6 +623,18 @@ class EnemySpawner:
                 counts["cyber_captor"] += 1
             elif isinstance(enemy, TeslaTwin):
                 counts["tesla_twin"] += 1
+            elif isinstance(enemy, JammerNode):
+                counts["jammer"] += 1
+            elif isinstance(enemy, MortarDrone):
+                counts["mortar"] += 1
+            elif isinstance(enemy, RiotVan):
+                counts["riot_van"] += 1
+            elif isinstance(enemy, SplitterTank):
+                counts["splitter"] += 1
+            elif isinstance(enemy, SapperDrone):
+                counts["sapper"] += 1
+            elif isinstance(enemy, MirrorPylon):
+                counts["mirror"] += 1
 
         for prop in entity_manager.mountain_propellers:
             if not prop.dead:
@@ -601,6 +690,18 @@ class EnemySpawner:
             return True
         if enemy_type == TeslaTwin and counts["tesla_twin"] >= SPAWNER_CAP_TESLA_TWIN:
             return True
+        if enemy_type == JammerNode and counts["jammer"] >= SPAWNER_CAP_JAMMER:
+            return True
+        if enemy_type == MortarDrone and counts["mortar"] >= SPAWNER_CAP_MORTAR:
+            return True
+        if enemy_type == RiotVan and counts["riot_van"] >= SPAWNER_CAP_RIOT_VAN:
+            return True
+        if enemy_type == SplitterTank and counts["splitter"] >= SPAWNER_CAP_SPLITTER:
+            return True
+        if enemy_type == SapperDrone and counts["sapper"] >= SPAWNER_CAP_SAPPER:
+            return True
+        if enemy_type == MirrorPylon and counts["mirror"] >= SPAWNER_CAP_MIRROR:
+            return True
         return False
 
     def _should_spawn_enemy(
@@ -649,6 +750,18 @@ class EnemySpawner:
         ):
             return False
         if enemy_type == TeslaTwin and counts["tesla_twin"] >= SPAWNER_CAP_TESLA_TWIN:
+            return False
+        if enemy_type == JammerNode and counts["jammer"] >= SPAWNER_CAP_JAMMER:
+            return False
+        if enemy_type == MortarDrone and counts["mortar"] >= SPAWNER_CAP_MORTAR:
+            return False
+        if enemy_type == RiotVan and counts["riot_van"] >= SPAWNER_CAP_RIOT_VAN:
+            return False
+        if enemy_type == SplitterTank and counts["splitter"] >= SPAWNER_CAP_SPLITTER:
+            return False
+        if enemy_type == SapperDrone and counts["sapper"] >= SPAWNER_CAP_SAPPER:
+            return False
+        if enemy_type == MirrorPylon and counts["mirror"] >= SPAWNER_CAP_MIRROR:
             return False
 
         max_enemies = self._get_current_enemy_cap()
@@ -843,6 +956,24 @@ class EnemySpawner:
         if enemy_type == CyberCaptor:
             return self._spawn_cyber_captor(entity_manager, is_side_scroll)
 
+        if enemy_type == JammerNode:
+            return self._spawn_jammer(entity_manager, is_side_scroll)
+
+        if enemy_type == MortarDrone:
+            return self._spawn_mortar(entity_manager, is_side_scroll)
+
+        if enemy_type == RiotVan:
+            return self._spawn_riot_van(entity_manager, is_side_scroll)
+
+        if enemy_type == SplitterTank:
+            return self._spawn_splitter_tank(entity_manager, is_side_scroll)
+
+        if enemy_type == SapperDrone:
+            return self._spawn_sapper(entity_manager, is_side_scroll)
+
+        if enemy_type == MirrorPylon:
+            return self._spawn_mirror_pylon(entity_manager, is_side_scroll)
+
         if enemy_type == TeslaTwin:
             return self._spawn_tesla_twins(entity_manager, is_side_scroll)
 
@@ -939,6 +1070,158 @@ class EnemySpawner:
         )
         captor.health = max(1, int(captor.health * self.enemy_health_multiplier))
         entity_manager.enemies.append(captor)
+        return True
+
+    def _spawn_mirror_pylon(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        """Spawna 1 Mirror Pylon entrando pela direita numa faixa central — pilar
+        que avança refletindo os tiros da nave pela face espelhada frontal."""
+        h = MirrorPylon.H
+        if is_side_scroll:
+            x = Config.SCREEN_WIDTH + random.uniform(20.0, 60.0)
+            y = random.uniform(
+                Config.SCREEN_HEIGHT * 0.25, Config.SCREEN_HEIGHT * 0.70 - h
+            )
+        else:
+            x = random.uniform(40.0, Config.SCREEN_WIDTH - 40.0 - MirrorPylon.W)
+            y = -(h + random.uniform(20.0, 60.0))
+        pylon = MirrorPylon(
+            x,
+            y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+            health_multiplier=self.enemy_health_multiplier,
+        )
+        # Vida já escalada no construtor (§11) — não reaplicar externamente.
+        entity_manager.enemies.append(pylon)
+        return True
+
+    def _spawn_sapper(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        """Spawna 1 Rebocador entrando pela borda numa banda ampla — vai caçar um
+        aliado ferido para blindar."""
+        size = SapperDrone.SIZE
+        if is_side_scroll:
+            x = Config.SCREEN_WIDTH + random.uniform(20.0, 80.0)
+            y = random.uniform(50.0, Config.SCREEN_HEIGHT - 50.0 - size)
+        else:
+            x = random.uniform(40.0, Config.SCREEN_WIDTH - 40.0 - size)
+            y = -(size + random.uniform(20.0, 80.0))
+        sapper = SapperDrone(
+            x,
+            y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+            health_multiplier=self.enemy_health_multiplier,
+        )
+        # Vida já escalada no construtor (§11) — não reaplicar externamente.
+        entity_manager.enemies.append(sapper)
+        return True
+
+    def _spawn_splitter_tank(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        """Spawna 1 Splitter Tank (tier 0) entrando numa faixa central — colosso
+        que avança e se parte em unidades menores ao morrer."""
+        # Dimensões do tier 0 (sem instanciar): cell 6 × grade 15×13.
+        size_w = SplitterTank.PIXEL_COLS * 6
+        size_h = SplitterTank.PIXEL_ROWS * 6
+        if is_side_scroll:
+            x = Config.SCREEN_WIDTH + random.uniform(10.0, 50.0)
+            y = random.uniform(
+                Config.SCREEN_HEIGHT * 0.25, Config.SCREEN_HEIGHT * 0.70 - size_h
+            )
+        else:
+            x = random.uniform(40.0, Config.SCREEN_WIDTH - 40.0 - size_w)
+            y = -(size_h + random.uniform(20.0, 60.0))
+        tank = SplitterTank(
+            x,
+            y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+            health_multiplier=self.enemy_health_multiplier,
+            tier=0,
+        )
+        entity_manager.enemies.append(tank)
+        return True
+
+    def _spawn_riot_van(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        """Spawna 1 Escudeiro entrando pela direita (side-scroll) numa faixa
+        central — escolta blindada que avança projetando o escudo frontal."""
+        h = RiotVan.H
+        if is_side_scroll:
+            x = Config.SCREEN_WIDTH + random.uniform(20.0, 60.0)
+            y = random.uniform(
+                Config.SCREEN_HEIGHT * 0.25, Config.SCREEN_HEIGHT * 0.70 - h
+            )
+        else:
+            x = random.uniform(40.0, Config.SCREEN_WIDTH - 40.0 - RiotVan.W)
+            y = -(h + random.uniform(20.0, 60.0))
+        van = RiotVan(
+            x,
+            y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+            health_multiplier=self.enemy_health_multiplier,
+        )
+        # Vida já escalada no construtor (§11) — não reaplicar externamente.
+        entity_manager.enemies.append(van)
+        return True
+
+    def _spawn_mortar(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        """Spawna 1 Artilheiro como perch unit numa banda superior (entra pela
+        direita no side-scroll, pelo topo no vertical) e ancora p/ bombardear."""
+        size = MortarDrone.SIZE
+        if is_side_scroll:
+            x = Config.SCREEN_WIDTH + random.uniform(20.0, 80.0)
+            y = random.uniform(40.0, Config.SCREEN_HEIGHT * 0.40)
+        else:
+            x = random.uniform(40.0, Config.SCREEN_WIDTH - 40.0 - size)
+            y = -(size + random.uniform(20.0, 80.0))
+        mortar = MortarDrone(
+            x,
+            y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+            health_multiplier=self.enemy_health_multiplier,
+        )
+        # Vida já escalada no construtor (§11) — não reaplicar externamente.
+        entity_manager.enemies.append(mortar)
+        return True
+
+    def _spawn_jammer(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        """Spawna 1 Jammer Node entrando pela borda e orbitando uma âncora no
+        alto da tela (à esquerda do centro, p/ não sobrepor a do Cyber-Captor)."""
+        size = JammerNode.SIZE
+        if is_side_scroll:
+            spawn_x = Config.SCREEN_WIDTH + random.uniform(10.0, 60.0)
+            spawn_y = random.uniform(40.0, Config.SCREEN_HEIGHT * 0.30)
+        else:
+            spawn_x = random.uniform(40.0, Config.SCREEN_WIDTH - 40.0 - size)
+            spawn_y = -(size + random.uniform(20.0, 80.0))
+
+        anchor = (
+            random.uniform(Config.SCREEN_WIDTH * 0.20, Config.SCREEN_WIDTH * 0.55),
+            random.uniform(Config.SCREEN_HEIGHT * 0.18, Config.SCREEN_HEIGHT * 0.38),
+        )
+        jammer = JammerNode(
+            spawn_x,
+            spawn_y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+            anchor=anchor,
+            health_multiplier=self.enemy_health_multiplier,
+        )
+        # Vida já escalada no construtor (§11) — não reaplicar externamente.
+        entity_manager.enemies.append(jammer)
         return True
 
     def _spawn_tesla_twins(
@@ -1373,9 +1656,8 @@ class EnemySpawner:
                 if self.director_timer >= self._dir_peak_dur:
                     self.director_state = "REST"
                     self.director_timer = 0.0
-                    self._dir_rest_dur = random.uniform(
-                        4.0, 7.0
-                    )  # Sorteia próximo Rest
+                    # Próximo Rest: faixa base encurtada e escalada por dificuldade
+                    self._dir_rest_dur = self._roll_rest_duration()
 
             elif self.director_state == "REST":
                 # Quebra o spawn quase a zero para o jogador respirar

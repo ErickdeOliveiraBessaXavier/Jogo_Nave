@@ -31,7 +31,9 @@ from ..entities.Inimigos_Tema_Cidade.captor_emp import CaptorEMP
 from ..entities.Inimigos_Tema_Cidade.core_implosion import CoreImplosion
 from ..entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ..entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
+from ..entities.Inimigos_Tema_Cidade.jammer_node import JammerNode
 from ..entities.Inimigos_Tema_Cidade.neon_bolt import NeonBolt
+from ..entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
 from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ..entities.Inimigos_Tema_Cidade.police_crash import PoliceCrash
 from ..entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
@@ -331,10 +333,15 @@ class EntityManager:
             cx = target.x + target.w / 2
             cy = target.y + target.h / 2
             self.tank_meltdowns.append(TankMeltdown(cx, cy, target.cell))
-        elif isinstance(target, CyberCaptor):
+        elif isinstance(target, (CyberCaptor, JammerNode)):
             cx = target.x + target.w / 2
             cy = target.y + target.h / 2
             self._trigger_captor_emp(cx, cy, float(target.EMP_RADIUS))
+        elif isinstance(target, SplitterTank):
+            cx = target.x + target.w / 2
+            cy = target.y + target.h / 2
+            self.spawn_explosion(cx, cy, size=28, explosion_type=ExplosionType.CYBER)
+            self.enemies.extend(target.make_children())
 
     def _trigger_captor_emp(self, cx: float, cy: float, radius: float) -> None:
         """EMP Discharge: onda amarela + neutraliza (limpa) os projéteis inimigos

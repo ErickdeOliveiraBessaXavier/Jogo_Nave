@@ -19,6 +19,12 @@ from ...entities.eye_enemy import EyeEnemy
 from ...entities.Inimigos_Tema_Cidade.city_drone import CityDrone
 from ...entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ...entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
+from ...entities.Inimigos_Tema_Cidade.jammer_node import JammerNode
+from ...entities.Inimigos_Tema_Cidade.mirror_pylon import MirrorPylon
+from ...entities.Inimigos_Tema_Cidade.mortar_drone import MortarDrone
+from ...entities.Inimigos_Tema_Cidade.riot_van import RiotVan
+from ...entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone
+from ...entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
 from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ...entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
 from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin
@@ -120,6 +126,7 @@ class DifficultyConfig:
         "cyber_tank": 22.0,
         "cyber_captor": 12.0,
         "tesla_twin": 16.0,
+        "jammer": 13.0,
     }
 
     DIFFICULTY_SCALING: float = 0.15
@@ -210,6 +217,12 @@ ENEMY_PRESSURE_UNLOCK_START: dict[str, float] = {
     "cyber_tank": 0.60,
     "cyber_captor": 0.50,
     "tesla_twin": 0.50,
+    "jammer": 0.50,
+    "mortar": 0.35,
+    "riot_van": 0.55,
+    "splitter": 0.55,
+    "sapper": 0.45,
+    "mirror": 0.55,
 }
 
 ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
@@ -225,6 +238,12 @@ ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
     "cyber_tank": 0.30,
     "cyber_captor": 0.30,
     "tesla_twin": 0.30,
+    "jammer": 0.30,
+    "mortar": 0.30,
+    "riot_van": 0.30,
+    "splitter": 0.30,
+    "sapper": 0.30,
+    "mirror": 0.30,
 }
 
 
@@ -520,6 +539,63 @@ class ProceduralLevelGenerator:
             )
             tesla_time = (18.0 / difficulty / spawn_multiplier) * (2.0 / tesla_weight)
             enemy_spawn_config[TeslaTwin] = self._clamp_spawn_time(tesla_time)
+
+        # Jammer Node: nó de interferência (suprime tiros por área), da metade do
+        # mundo em diante (gate 0.45, abaixo do UNLOCK_START 0.50). Cap 2 controla
+        # a presença; o valor é o intervalo entre aparições (tier "strong" + gate).
+        if stage_progress >= 0.45:
+            jammer_weight = _get_progressive_enemy_weight(
+                "jammer", 1.0, stage_progress
+            )
+            jammer_time = (17.0 / difficulty / spawn_multiplier) * (2.0 / jammer_weight)
+            enemy_spawn_config[JammerNode] = self._clamp_spawn_time(jammer_time)
+
+        # Artilheiro: bombardeio de área da metade do mundo em diante (gate 0.35).
+        # Cap 2 controla a presença; o valor é o intervalo entre aparições.
+        if stage_progress >= 0.35:
+            mortar_weight = _get_progressive_enemy_weight(
+                "mortar", 1.0, stage_progress
+            )
+            mortar_time = (16.0 / difficulty / spawn_multiplier) * (2.0 / mortar_weight)
+            enemy_spawn_config[MortarDrone] = self._clamp_spawn_time(mortar_time)
+
+        # Escudeiro: escolta blindada do fim do mundo (gate 0.55). Cap 1 garante
+        # que apareça sozinho; o valor é o intervalo entre aparições (mini-boss).
+        if stage_progress >= 0.55:
+            van_weight = _get_progressive_enemy_weight(
+                "riot_van", 1.0, stage_progress
+            )
+            van_time = (22.0 / difficulty / spawn_multiplier) * (2.0 / van_weight)
+            enemy_spawn_config[RiotVan] = self._clamp_spawn_time(van_time)
+
+        # Splitter Tank: colosso modular do fim do mundo (gate 0.55). Cap 1
+        # (conta filhotes) garante que apareça sozinho; intervalo entre aparições.
+        if stage_progress >= 0.55:
+            splitter_weight = _get_progressive_enemy_weight(
+                "splitter", 1.0, stage_progress
+            )
+            splitter_time = (24.0 / difficulty / spawn_multiplier) * (
+                2.0 / splitter_weight
+            )
+            enemy_spawn_config[SplitterTank] = self._clamp_spawn_time(splitter_time)
+
+        # Rebocador: suporte de blindagem da metade do mundo (gate 0.45). Cap 2
+        # controla a presença; o valor é o intervalo entre aparições.
+        if stage_progress >= 0.45:
+            sapper_weight = _get_progressive_enemy_weight(
+                "sapper", 1.0, stage_progress
+            )
+            sapper_time = (18.0 / difficulty / spawn_multiplier) * (2.0 / sapper_weight)
+            enemy_spawn_config[SapperDrone] = self._clamp_spawn_time(sapper_time)
+
+        # Mirror Pylon: refletor de controle do fim do mundo (gate 0.55). Cap 1
+        # garante que apareça sozinho; o valor é o intervalo entre aparições.
+        if stage_progress >= 0.55:
+            mirror_weight = _get_progressive_enemy_weight(
+                "mirror", 1.0, stage_progress
+            )
+            mirror_time = (20.0 / difficulty / spawn_multiplier) * (2.0 / mirror_weight)
+            enemy_spawn_config[MirrorPylon] = self._clamp_spawn_time(mirror_time)
 
     def _configure_stage_banded_spawn(
         self,

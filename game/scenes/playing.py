@@ -1579,6 +1579,17 @@ class PlayingScene(Scene):
         all_player_projectiles = (
             self.entity_manager.bullets + self.entity_manager.mini_ship_bullets
         )
+        # Campos que bloqueiam tiros (parede do Tesla Twin, campo do Jammer Node):
+        # destroem os projéteis da nave que os cruzam antes de atingir inimigos
+        # atrás deles. Detecção duck-typed via `projectile_fields()` (§5).
+        self.collisions.projectiles_vs_blocker_fields(
+            all_player_projectiles, self.entity_manager.enemies
+        )
+        # Mirror Pylon reflete os tiros que cruzam a face espelhada (vira-os em
+        # bolts inimigos). Roda no mesmo ponto, antes de atingir inimigos atrás.
+        self.collisions.projectiles_vs_reflectors(
+            all_player_projectiles, self.entity_manager.enemies, self.entity_manager
+        )
         gain, destroyed, score_events = self.collisions.projectiles_vs_enemies(
             all_player_projectiles,
             enemy_grid,

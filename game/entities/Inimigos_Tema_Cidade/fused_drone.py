@@ -1,10 +1,11 @@
 """FusedDrone — mini-chefe dinâmico nascido da fusão de 4 City Drones.
 
 Gerado quando uma `ChannelingGroup` completa a transformação. É uma criatura
-bem mais perigosa: disco grande e brilhante, muita vida, persegue o jogador
-pesadamente, cospe drones homing periodicamente e **sobrevive ao contato**
-(diferente dos drones comuns). Não é um boss formal (não usa BossHitMixin nem
-música de boss) — é um inimigo tanky gerado em runtime.
+bem mais perigosa: disco grande e brilhante, muita vida, cospe drones homing
+periodicamente e **sobrevive ao contato** (diferente dos drones comuns). Seu
+diferencial é de **suporte**: mantém distância do jogador (não vai para o
+corpo-a-corpo) enquanto "dá luz" aos outros inimigos. Não é um boss formal
+(não usa BossHitMixin nem música de boss) — é um inimigo tanky gerado em runtime.
 """
 
 from __future__ import annotations
@@ -41,6 +42,9 @@ class FusedDrone(EnemyHitMixin):
     SPRING_K = 6.0
     SPRING_DAMPING = 4.5
     EDGE = 30.0
+    # Suporte, não perseguidor: orbita a esta distância do jogador (px),
+    # recuando se ele se aproxima e reaproximando se fica longe demais.
+    STANDOFF_DISTANCE = 300.0
 
     ATTACK_INTERVAL = 3.2  # intervalo entre rajadas de drones homing
     SPAWN_COUNT = 2
@@ -106,10 +110,19 @@ class FusedDrone(EnemyHitMixin):
         cx = self.x + self.w / 2
         cy = self.y + self.h / 2
 
-        # Perseguição pesada com leve gingado (mola mole + teto de velocidade).
+        # Standoff/kite (mola mole + teto de velocidade): o alvo fica sobre a
+        # linha jogador→drone, a STANDOFF_DISTANCE do jogador. Recua quando o
+        # jogador se aproxima e reaproxima quando fica longe — sem corpo-a-corpo.
+        dx = cx - player_x
+        dy = cy - player_y
+        dist = math.hypot(dx, dy)
+        if dist > 1e-3:
+            ux, uy = dx / dist, dy / dist
+        else:
+            ux, uy = 0.0, -1.0  # jogador exatamente em cima → escolhe subir
         wobble = math.sin(self.pulse * 1.3) * 40.0
-        tx = player_x
-        ty = player_y + wobble
+        tx = player_x + ux * self.STANDOFF_DISTANCE
+        ty = player_y + uy * self.STANDOFF_DISTANCE + wobble
         ax = self.SPRING_K * (tx - cx) - self.SPRING_DAMPING * self.vx
         ay = self.SPRING_K * (ty - cy) - self.SPRING_DAMPING * self.vy
         self.vx += ax * dt

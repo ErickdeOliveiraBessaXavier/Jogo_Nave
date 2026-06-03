@@ -20,6 +20,7 @@ from ..entities.eye_laser import EyeLaser
 from ..entities.fire_zone import FireZone
 from ..entities.floating_score import FloatingScore
 from ..entities.homing_bullet import HomingBullet
+from ..entities.Inimigos_Tema_Cidade.neon_bolt import NeonBolt
 from ..entities.ice_poison_zone import IcePoisonZone
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
@@ -44,6 +45,23 @@ if TYPE_CHECKING:
 
 
 Projectile: TypeAlias = Bullet | MiniShipBullet
+
+
+def _point_segment_dist_sq(
+    px: float, py: float, ax: float, ay: float, bx: float, by: float
+) -> float:
+    """Distância² do ponto (px,py) ao segmento A-B. Quadrado para evitar sqrt
+    no hot path — o chamador compara contra raio²."""
+    abx, aby = bx - ax, by - ay
+    seg_sq = abx * abx + aby * aby
+    if seg_sq < 1e-6:
+        dx, dy = px - ax, py - ay
+        return dx * dx + dy * dy
+    t = ((px - ax) * abx + (py - ay) * aby) / seg_sq
+    t = 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
+    dx = px - (ax + abx * t)
+    dy = py - (ay + aby * t)
+    return dx * dx + dy * dy
 
 
 # Constantes de colisão
@@ -822,6 +840,8 @@ class Collisions:
         )
 
         for b in projectiles[:]:
+            if getattr(b, "dead", False):
+                continue  # ex.: bloqueada pelo feixe do Tesla Twin neste frame
             potential_enemies = projectile_targets.get(id(b), [])
             if not potential_enemies:
                 continue
@@ -875,6 +895,127 @@ class Collisions:
                     ):
                         break
         return score_gain, destroyed_count, score_events
+
+    def projectiles_vs_blocker_fields(
+        self,
+        projectiles: Sequence[Projectile],
+        enemies: Sequence[Any],
+    ) -> None:
+        """Campos de inimigos que bloqueiam (destroem) projéteis da nave.
+
+        Detecção por duck typing (§5): qualquer inimigo que exponha
+        `projectile_fields()` participa, sem `isinstance`. Cada campo é uma tupla
+        com a forma na primeira posição:
+          - `("seg", ax, ay, bx, by, raio)`  — parede do Tesla Twin
+          - `("circle", cx, cy, raio)`       — campo estático do Jammer Node
+        Bloqueia inclusive balas perfurantes (são paredes/campos sem brecha).
+        Deve rodar antes de `projectiles_vs_enemies` para a bala não atingir
+        inimigos atrás do campo.
+        """
+        if not projectiles:
+            return
+
+        fields: list[tuple[Any, ...]] = []
+        for e in enemies:
+            getter = getattr(e, "projectile_fields", None)
+            if getter is None:
+                continue
+            fs = getter()
+            if fs:
+                fields.extend(fs)
+        if not fields:
+            return
+
+        for b in projectiles:
+            if getattr(b, "dead", False):
+                continue
+            br = b.rect
+            bx, by = br.centerx, br.centery
+            for field in fields:
+                kind = field[0]
+                if kind == "seg":
+                    _, ax, ay, sx, sy, radius = field
+                    if _point_segment_dist_sq(bx, by, ax, ay, sx, sy) <= radius * radius:
+                        b.dead = True
+                        break
+                elif kind == "circle":
+                    _, cx, cy, radius = field
+                    dx, dy = bx - cx, by - cy
+                    if dx * dx + dy * dy <= radius * radius:
+                        b.dead = True
+                        break
+
+    def projectiles_vs_reflectors(
+        self,
+        projectiles: Sequence[Projectile],
+        enemies: Sequence[Any],
+        entity_manager: "EntityManager",
+    ) -> None:
+        """Face espelhada do Mirror Pylon **reflete** os tiros da nave: destrói o
+        projétil e devolve um `NeonBolt` inimigo na direção do jogador.
+
+        Duck-typed (§5): inimigos com `reflect_field()` participam, sem
+        `isinstance`. O bolt refletido espalha conforme onde o tiro acertou a face
+        (mais believable que reflexão perfeita). Roda antes de
+        `projectiles_vs_enemies` para o tiro refletido não atingir o corpo atrás.
+        """
+        if not projectiles:
+            return
+
+        mirrors: list[tuple[Any, tuple[Any, ...]]] = []
+        for e in enemies:
+            getter = getattr(e, "reflect_field", None)
+            if getter is None:
+                continue
+            for field in getter():
+                mirrors.append((e, field))
+        if not mirrors:
+            return
+
+        for b in projectiles:
+            if getattr(b, "dead", False):
+                continue
+            br = b.rect
+            bx, by = br.centerx, br.centery
+            for owner, field in mirrors:
+                _, ax, ay, sx, sy, radius, speed = field
+                if _point_segment_dist_sq(bx, by, ax, ay, sx, sy) <= radius * radius:
+                    self._spawn_reflected_bolt(
+                        bx, by, ay, sy, owner, float(speed), entity_manager
+                    )
+                    b.dead = True
+                    break
+
+    @staticmethod
+    def _spawn_reflected_bolt(
+        bx: float,
+        by: float,
+        seg_ay: float,
+        seg_by: float,
+        owner: Any,
+        speed: float,
+        entity_manager: "EntityManager",
+    ) -> None:
+        """Cria o bolt refletido voltando para o lado do jogador. O espalhamento
+        deriva de onde o tiro acertou a face (off em -1..1)."""
+        if getattr(owner, "side_scroll", True):
+            mid = (seg_ay + seg_by) / 2.0
+            half = max(1.0, abs(seg_by - seg_ay) / 2.0)
+            off = max(-1.0, min(1.0, (by - mid) / half))
+            vx = -speed * 0.92          # de volta p/ a esquerda (jogador)
+            vy = off * speed * 0.45
+        else:
+            mid = (seg_ay + seg_by) / 2.0  # no vertical, ay/sy carregam x
+            half = max(1.0, abs(seg_by - seg_ay) / 2.0)
+            off = max(-1.0, min(1.0, (bx - mid) / half))
+            vx = off * speed * 0.45
+            vy = -speed * 0.92          # de volta p/ cima
+        entity_manager.neon_bolts.append(
+            NeonBolt(bx, by, vx, vy, core=(255, 255, 255), glow=(200, 240, 255))
+        )
+        notify = getattr(owner, "notify_reflected", None)
+        if notify is not None:
+            notify()
 
     def _handle_explosive_bullet(
         self,
