@@ -295,7 +295,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
     1: LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            # RockGlider: 1.5,
+            RockGlider: 1.5,
             # NeonSniper: 3.0,
             # PoliceInterceptor: 4.0,
             # CyberTank: 1.0,
