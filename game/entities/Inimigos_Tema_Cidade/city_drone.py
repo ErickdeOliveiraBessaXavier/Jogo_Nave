@@ -96,6 +96,7 @@ class CityDrone(EnemyHitMixin):
         variant_index: int | None = None,
         size_tier: int | None = None,
         homing: bool = False,
+        health_multiplier: float = 1.0,
     ) -> None:
         # Variante de cor + tamanho (aleatórios, ou forçados para teste).
         self.variant_index = (
@@ -118,7 +119,11 @@ class CityDrone(EnemyHitMixin):
         self.y: float = float(y)
 
         self.dead = False
-        self.health = health
+        # §11: multiplicador de vida da dificuldade aplicado na própria entidade,
+        # para chegar também aos filhotes emergentes (offspring/FusedDrone) que
+        # nascem fora do caminho do spawner. Guardado para propagar aos filhos.
+        self.health_multiplier = health_multiplier
+        self.health = max(1, int(health * health_multiplier))
         self.points = points
         self._explosion_size_killed = 22 + cell * 4  # pop maior p/ drone maior
         self.aggressiveness_multiplier = aggressiveness_multiplier
@@ -414,6 +419,7 @@ class CityDrone(EnemyHitMixin):
                 variant_index=self.variant_index,
                 size_tier=0,  # scout
                 homing=True,
+                health_multiplier=self.health_multiplier,
             )
             baby.x = cx - baby.w / 2
             baby.y = cy - baby.h / 2

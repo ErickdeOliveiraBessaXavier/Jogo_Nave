@@ -617,6 +617,8 @@ class EntityManager:
         self.neon_bolts.extend(ctx_emissions.new_neon_bolts)
         self.enemies.extend(ctx_emissions.new_enemies)
         self.area_blasts.extend(ctx_emissions.new_area_blasts)
+        for _ex in ctx_emissions.new_explosions:
+            self.spawn_explosion(*_ex)
 
         self._update_mountain_propellers(dt)
         self._update_energy_orbs(dt)
@@ -1018,7 +1020,9 @@ class EntityManager:
                 ):
                     e.draw(surface)
                     continue
-                if is_v(e):
+                # `draws_offscreen`: entidade quer desenhar mesmo fora da tela
+                # (ex.: telegraph do CyberTank, cujo corpo ainda está fora da borda).
+                if is_v(e) or getattr(e, "draws_offscreen", False):
                     if isinstance(e, EyeEnemy):
                         e.draw(surface, player_x, player_y)
                     else:

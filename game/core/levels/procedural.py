@@ -21,6 +21,7 @@ from ...entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ...entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ...entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
+from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin
 from ...entities.giant_meteor_boss import GiantMeteorBoss
 from ...entities.meteor import Meteor
 from ...entities.mountain_mage import MountainMage
@@ -118,6 +119,7 @@ class DifficultyConfig:
         "police_interceptor": 9.0,
         "cyber_tank": 22.0,
         "cyber_captor": 12.0,
+        "tesla_twin": 16.0,
     }
 
     DIFFICULTY_SCALING: float = 0.15
@@ -186,6 +188,7 @@ ENEMY_PRESSURE_TIER_BY_KEY: dict[str, str] = {
     "police_interceptor": "strong",
     "cyber_tank": "strong",
     "cyber_captor": "strong",
+    "tesla_twin": "strong",
 }
 
 ENEMY_PRESSURE_TIER_CURVE: dict[str, tuple[float, float]] = {
@@ -206,6 +209,7 @@ ENEMY_PRESSURE_UNLOCK_START: dict[str, float] = {
     "police_interceptor": 0.45,
     "cyber_tank": 0.60,
     "cyber_captor": 0.50,
+    "tesla_twin": 0.50,
 }
 
 ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
@@ -220,6 +224,7 @@ ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
     "police_interceptor": 0.30,
     "cyber_tank": 0.30,
     "cyber_captor": 0.30,
+    "tesla_twin": 0.30,
 }
 
 
@@ -506,6 +511,16 @@ class ProceduralLevelGenerator:
             captor_time = (16.0 / difficulty / spawn_multiplier) * (2.0 / captor_weight)
             enemy_spawn_config[CyberCaptor] = self._clamp_spawn_time(captor_time)
 
+        # Tesla Twins: barreira vertical de controle, do meio do mundo em diante
+        # (gate 0.45, ligeiramente abaixo do UNLOCK_START 0.50). Cap 1 par controla
+        # a presença; o valor é o intervalo entre *pares* (peso tier "strong" + gate).
+        if stage_progress >= 0.45:
+            tesla_weight = _get_progressive_enemy_weight(
+                "tesla_twin", 1.0, stage_progress
+            )
+            tesla_time = (18.0 / difficulty / spawn_multiplier) * (2.0 / tesla_weight)
+            enemy_spawn_config[TeslaTwin] = self._clamp_spawn_time(tesla_time)
+
     def _configure_stage_banded_spawn(
         self,
         enemy_spawn_config: EnemySpawnConfig,
@@ -597,7 +612,9 @@ class ProceduralLevelGenerator:
             meteor_weight = _get_progressive_enemy_weight(
                 "meteor", meteor_weight, stage_progress
             )
-            if meteor_weight > 0.0:
+            # CITY tem linhagem própria (Inimigos_Tema_Cidade) e bane Meteor no
+            # allowlist — não injeta meteoro emprestado só p/ ser descartado depois.
+            if meteor_weight > 0.0 and world.theme != WorldTheme.CITY:
                 base_meteor_time = (
                     DifficultyConfig.BASE_METEOR_SPAWN_TIME / difficulty
                 ) / spawn_multiplier
@@ -659,7 +676,10 @@ class ProceduralLevelGenerator:
                     enemy_spawn_config, stage_progress, difficulty, spawn_multiplier
                 )
 
-            if world.theme in _STAGE_BANDED_THEMES:
+            # CITY está em _STAGE_BANDED_THEMES só pela lógica de formações; a
+            # linhagem própria já é montada em _configure_city_spawn. Pular o
+            # stage_banded evita injetar Alien/Eye/Square que o allowlist removeria.
+            if world.theme in _STAGE_BANDED_THEMES and world.theme != WorldTheme.CITY:
                 self._configure_stage_banded_spawn(
                     enemy_spawn_config, stage_progress, difficulty, spawn_multiplier
                 )

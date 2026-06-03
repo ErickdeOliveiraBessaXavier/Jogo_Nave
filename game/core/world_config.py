@@ -118,11 +118,13 @@ def _get_worlds() -> dict[int, WorldConfig]:
             start_level=26,
             end_level=35,
             boss_level=35,
-            boss_type=GiantMeteorBoss,
-            theme_modifiers={
-                "eye_weight": 1.5,  # Mais olhos (câmeras de segurança)
-                "mines_chance": 1.3,  # Mais minas (armadilhas urbanas)
-            },
+            boss_type=GiantMeteorBoss,  # Provisório: reusa até os bosses próprios da City Neon.
+            # CITY usa a própria linhagem (Inimigos_Tema_Cidade); o tuning de spawn/
+            # frequência mora em pipeline.py/procedural.py (_configure_city_spawn,
+            # ENEMY_*_WEIGHT_PROFILES). Não há theme_modifiers funcionais aqui:
+            # "eye_weight" era no-op (EyeEnemy é banido do tema pelo allowlist) e
+            # "mines_chance" não é lido por ninguém — removidos para não confundir.
+            theme_modifiers={},
         ),
         4: WorldConfig(
             world_id=4,

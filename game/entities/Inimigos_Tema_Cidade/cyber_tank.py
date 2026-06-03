@@ -55,6 +55,29 @@ _SHELL_GLOW: pal.RGB = pal.TOXIC_ORANGE
 _RAIL_CORE: pal.RGB = (235, 250, 255)
 _RAIL_GLOW: pal.RGB = pal.ELECTRIC_BLUE
 
+# ── Seta-aviso (chevron pixel-art do telegraph de entrada) ───────────────────
+_ARROW_COLS, _ARROW_ROWS = 7, 11
+_arrow_cache: dict[int, pygame.Surface] = {}
+
+
+def _build_warning_arrow(cell: int) -> pygame.Surface:
+    """Chevron '>' em pixel-art (ponta p/ a direita = para a lateral/entrada),
+    traço de 2px, sem contorno. Cacheado por `cell`. Sem glow/efeitos."""
+    cached = _arrow_cache.get(cell)
+    if cached is not None:
+        return cached
+
+    mid = _ARROW_ROWS // 2
+    tip = _ARROW_COLS - 1  # ponta na coluna mais à direita
+    surf = pygame.Surface((_ARROW_COLS * cell, _ARROW_ROWS * cell), pygame.SRCALPHA)
+    for r in range(_ARROW_ROWS):
+        c0 = tip - abs(r - mid)  # ponta no meio (col direita), abre p/ a esquerda
+        for c in (c0, c0 - 1):  # 2px de espessura
+            if 0 <= c < _ARROW_COLS:
+                surf.fill(pal.TOXIC_ORANGE, (c * cell, r * cell, cell, cell))
+    _arrow_cache[cell] = surf
+    return surf
+
 
 class _Turret:
     """Canhão de ponta: mira **sempre** o jogador. Fica num encaixe que orbita o
@@ -113,6 +136,16 @@ class CyberTank(EnemyHitMixin):
     EDGE_MARGIN: float = 28.0
     BODY_SPIN_RATE: float = 0.7  # rad/s — a ampulheta gira no próprio eixo
 
+    # ── Telegraph de entrada ("Heavy Unit Incoming") ─────────────────────────
+    # Antes de surgir, um chevron grande entra pela borda direita e desliza até
+    # o ponto de entrada — alerta clássico que cria expectativa segundos antes.
+    WARNING_DURATION: float = 2.6   # telegraph total antes do tank entrar em cena
+    WARNING_SOUND_TIME: float = 1.0  # som de aviso toca ~1s (depois só o visual)
+    WARNING_ARROW_CELL: int = 6      # tamanho do pixel da seta pixel-art
+    WARNING_EDGE_INSET: float = 30.0  # recuo da seta a partir da borda direita
+    WARNING_BOB_AMP: float = 48.0    # amplitude do sobe-desce (px)
+    WARNING_BOB_RATE: float = 5.0    # rad/s do sobe-desce
+
     # ── Canhões (miram sempre o jogador) ─────────────────────────────────────
     # Gatling (uma ponta): rajada rápida.
     GATLING_INTERVAL: float = 2.4
@@ -154,14 +187,17 @@ class CyberTank(EnemyHitMixin):
             _Turret("RAILCANNON", +mx, 0.0, self.RAIL_INTERVAL),
         ]
 
-        self.state: str = "enter"  # "enter" → "dominate" (jockeying)
+        self.state: str = "warning"  # "warning" → "enter" → "dominate" (jockeying)
         self.vx: float = 0.0
         self.vy: float = 0.0
         self.jockey_angle: float = random.uniform(-0.5, 0.5)  # ângulo à direita do alvo
         self.standoff: float = random.uniform(self.STANDOFF_MIN, self.STANDOFF_MAX)
         self.retarget_timer: float = 0.0
 
-        self._warned: bool = False  # toca o aviso "Heavy Unit Incoming" 1×
+        # Telegraph de entrada (seta pixel-art + som de aviso por ~1s).
+        self.warning_timer: float = 0.0
+        self._warning_started: bool = False
+        self._warning_sound_stopped: bool = False
         self.pulse: float = random.uniform(0.0, math.tau)
         self.body_spin: float = random.uniform(0.0, math.tau)  # giro contínuo
         self.hit_timer: float = 0.0
@@ -183,6 +219,12 @@ class CyberTank(EnemyHitMixin):
     def _center(self) -> Tuple[float, float]:
         return self.x + self.w / 2, self.y + self.h / 2
 
+    @property
+    def draws_offscreen(self) -> bool:
+        """No telegraph o corpo está fora da borda, mas o chevron (desenhado em
+        `draw`) precisa aparecer — pede ao EntityManager para ignorar o culling."""
+        return self.state == "warning"
+
     def _mount_pos(self, t: "_Turret") -> Tuple[float, float]:
         """Posição do encaixe do canhão, orbitando o centro com o giro do chassi.
         Usa a mesma convenção de `pygame.transform.rotate(body_spin)` do draw."""
@@ -192,9 +234,6 @@ class CyberTank(EnemyHitMixin):
         mx = cx + t.off_x * cos_r + t.off_y * sin_r
         my = cy - t.off_x * sin_r + t.off_y * cos_r
         return mx, my
-
-    def _is_entering(self) -> bool:
-        return self.state == "enter"
 
     # ── Update ──────────────────────────────────────────────────────────────
     def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
@@ -208,16 +247,16 @@ class CyberTank(EnemyHitMixin):
         if dt <= 0.0:
             return None
 
-        if not self._warned:
-            self._warned = True
-            from ...systems import hit_sounds
-
-            hit_sounds.WARNING()
-
         self.pulse += dt
         self.body_spin = (self.body_spin + self.BODY_SPIN_RATE * dt) % math.tau
         if self.hit_timer > 0.0:
             self.hit_timer = max(0.0, self.hit_timer - dt)
+
+        # ── Telegraph: chevron + som de aviso, antes de o tank surgir. ──
+        if self.state == "warning":
+            self._update_warning(dt)
+            self._idle_turrets(dt)
+            return None
 
         # ── Movimentação: entra; depois jockeia em torno do jogador. ──
         if self.state == "enter":
@@ -232,6 +271,26 @@ class CyberTank(EnemyHitMixin):
 
         self._jockey(dt, player_x, player_y)
         return self._update_turrets(dt, player_x, player_y)
+
+    def _update_warning(self, dt: float) -> None:
+        """Telegraph de entrada: o aviso sonoro toca ~1s (depois para — só a seta
+        visual continua). Ao fim da janela, o tank entra de fato em cena."""
+        from ...systems import hit_sounds
+
+        if not self._warning_started:
+            self._warning_started = True
+            hit_sounds.WARNING()  # loop no canal dedicado; parado abaixo após ~1s
+
+        self.warning_timer += dt
+        if (
+            not self._warning_sound_stopped
+            and self.warning_timer >= self.WARNING_SOUND_TIME
+        ):
+            self._warning_sound_stopped = True
+            hit_sounds.STOP_WARNING()
+
+        if self.warning_timer >= self.WARNING_DURATION:
+            self.state = "enter"
 
     def _jockey(self, dt: float, player_x: float, player_y: float) -> None:
         """Reposiciona inquietamente em torno do jogador (estilo Primal Aspid):
@@ -416,12 +475,14 @@ class CyberTank(EnemyHitMixin):
         )
 
     def draw(self, surface: pygame.Surface) -> None:
+        # Durante o telegraph, o tank ainda não está em cena: só o chevron.
+        if self.state == "warning":
+            self._draw_warning(surface)
+            return
+
         cell = self.cell
         cx, cy = self._center()
         deg = math.degrees(self.body_spin)
-
-        if self._is_entering():
-            self._draw_warning(surface)
 
         # 1 + 3. As DUAS metades da ampulheta (pods) GIRAM em torno do eixo,
         # 180° opostas, com um vão claro até o núcleo no meio. Flash de hit
@@ -501,14 +562,11 @@ class CyberTank(EnemyHitMixin):
             )
 
     def _draw_warning(self, surface: pygame.Surface) -> None:
-        # Chevrons ">" piscando na borda direita, na faixa vertical do tanque.
-        blink = 0.5 + 0.5 * math.sin(self.pulse * 12.0)
-        if blink < 0.45:
-            return
-        cy = int(self.y + self.h / 2)
-        edge = Config.SCREEN_WIDTH - 14
-        col = pal.lerp((120, 40, 20), (255, 90, 30), blink)
-        for k in range(3):
-            ox = edge - k * 12
-            pts = [(ox - 10, cy - 14), (ox, cy), (ox - 10, cy + 14)]
-            pygame.draw.lines(surface, col, False, pts, 3)
+        """Seta pixel-art na lateral direita (lado de entrada do tank), indo e
+        voltando na horizontal para chamar a atenção. Sem efeitos."""
+        arrow = _build_warning_arrow(self.WARNING_ARROW_CELL)
+        aw, ah = arrow.get_size()
+        bob = math.sin(self.pulse * self.WARNING_BOB_RATE) * self.WARNING_BOB_AMP
+        x = Config.SCREEN_WIDTH - self.WARNING_EDGE_INSET - aw + bob
+        cy = self.y + self.h / 2
+        surface.blit(arrow, (int(x), int(cy - ah / 2)))

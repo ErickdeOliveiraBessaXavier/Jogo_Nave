@@ -26,6 +26,7 @@ from ...entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ...entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ...entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
+from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin
 from ...entities.meteor import Meteor
 from ...entities.mountain_geode import MountainGeode
 from ...entities.mountain_mage import MountainMage
@@ -87,6 +88,7 @@ ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
     PoliceInterceptor: {WorldTheme.CITY},
     CyberTank: {WorldTheme.CITY},
     CyberCaptor: {WorldTheme.CITY},
+    TeslaTwin: {WorldTheme.CITY},
     RockGlider: {WorldTheme.MOUNTAINS},
     StoneSentry: {WorldTheme.MOUNTAINS},
     ElementalRobot: {WorldTheme.MOUNTAINS},
@@ -116,6 +118,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             PoliceInterceptor: 0.85,
             CyberTank: 0.50,
             CyberCaptor: 0.70,
+            TeslaTwin: 0.65,
         },
         WorldTheme.VOLCANIC: {Meteor: 1.12, EyeEnemy: 1.05},
         WorldTheme.PROCEDURAL: {Meteor: 1.05, Alien: 1.05, EyeEnemy: 1.00},
@@ -133,6 +136,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             PoliceInterceptor: 0.95,
             CyberTank: 0.60,
             CyberCaptor: 0.80,
+            TeslaTwin: 0.75,
         },
         WorldTheme.VOLCANIC: {Meteor: 1.18, EyeEnemy: 1.08},
         WorldTheme.PROCEDURAL: {Meteor: 1.08, Alien: 1.08, EyeEnemy: 1.05},
@@ -150,6 +154,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             PoliceInterceptor: 1.10,
             CyberTank: 0.70,
             CyberCaptor: 0.90,
+            TeslaTwin: 0.85,
         },
         WorldTheme.VOLCANIC: {Meteor: 1.25, EyeEnemy: 1.10},
         WorldTheme.PROCEDURAL: {Meteor: 1.12, Alien: 1.12, EyeEnemy: 1.08},
@@ -173,8 +178,8 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
         },
         WorldTheme.CITY: {
             "early": {PoliceInterceptor: 0.80},
-            "mid": {PoliceInterceptor: 1.05, CyberTank: 0.50, CyberCaptor: 0.70},
-            "late": {PoliceInterceptor: 1.18, CyberTank: 1.05, CyberCaptor: 1.10},
+            "mid": {PoliceInterceptor: 1.05, CyberTank: 0.50, CyberCaptor: 0.70, TeslaTwin: 0.70},
+            "late": {PoliceInterceptor: 1.18, CyberTank: 1.05, CyberCaptor: 1.10, TeslaTwin: 1.10},
         },
         WorldTheme.VOLCANIC: {
             "early": {Meteor: 1.05, EyeEnemy: 0.95},
@@ -200,8 +205,8 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
         },
         WorldTheme.CITY: {
             "early": {PoliceInterceptor: 0.85},
-            "mid": {PoliceInterceptor: 1.10, CyberTank: 0.55, CyberCaptor: 0.80},
-            "late": {PoliceInterceptor: 1.25, CyberTank: 1.15, CyberCaptor: 1.20},
+            "mid": {PoliceInterceptor: 1.10, CyberTank: 0.55, CyberCaptor: 0.80, TeslaTwin: 0.80},
+            "late": {PoliceInterceptor: 1.25, CyberTank: 1.15, CyberCaptor: 1.20, TeslaTwin: 1.20},
         },
         WorldTheme.VOLCANIC: {
             "early": {Meteor: 1.08, EyeEnemy: 0.95},
@@ -227,8 +232,8 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
         },
         WorldTheme.CITY: {
             "early": {PoliceInterceptor: 0.90},
-            "mid": {PoliceInterceptor: 1.15, CyberTank: 0.60, CyberCaptor: 0.90},
-            "late": {PoliceInterceptor: 1.32, CyberTank: 1.25, CyberCaptor: 1.30},
+            "mid": {PoliceInterceptor: 1.15, CyberTank: 0.60, CyberCaptor: 0.90, TeslaTwin: 0.90},
+            "late": {PoliceInterceptor: 1.32, CyberTank: 1.25, CyberCaptor: 1.30, TeslaTwin: 1.30},
         },
         WorldTheme.VOLCANIC: {
             "early": {Meteor: 1.10, EyeEnemy: 0.95},
@@ -266,7 +271,9 @@ ENEMY_STAGE_WEIGHT_MULTIPLIERS = ENEMY_STAGE_WEIGHT_PROFILES[_ACTIVE_PROFILE]
 THEME_FALLBACK_ENEMIES: dict[WorldTheme, list[type]] = {
     WorldTheme.MOUNTAINS: [RockGlider, MountainMage, StoneSentry, ElementalRobot],
     WorldTheme.STARFIELD: [Meteor, Alien, EyeEnemy],
-    WorldTheme.CITY: [CityDrone, NeonSniper, PoliceInterceptor, CyberTank, CyberCaptor],
+    WorldTheme.CITY: [
+        CityDrone, NeonSniper, PoliceInterceptor, CyberCaptor, TeslaTwin, CyberTank,
+    ],
     WorldTheme.VOLCANIC: [Meteor, EyeEnemy, Alien],
     WorldTheme.PROCEDURAL: [Meteor, Alien, EyeEnemy],
 }
@@ -285,6 +292,7 @@ DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
     PoliceInterceptor: 14.0,
     CyberTank: 24.0,
     CyberCaptor: 17.0,
+    TeslaTwin: 18.0,
 }
 
 THEME_ENEMY_REPLACEMENTS: dict[tuple[WorldTheme, type], type] = {
@@ -317,12 +325,19 @@ THEME_BASE_ENEMY: dict[WorldTheme, type] = {
     WorldTheme.PROCEDURAL: Meteor,
 }
 
-# Specials "assinatura" do tema: entram GARANTIDOS no pool e somam ao cap de
-# variedade. O variety cap escolhe os demais tipos por loteria ponderada em
-# 1/spawn_time, que penaliza fortemente inimigos raros (spawn_time alto) — sem
-# esta garantia, um especial como o Neon Sniper quase nunca sobrevive ao corte.
+# Specials "assinatura" do tema: têm PRIORIDADE no pool sobre a loteria
+# 1/spawn_time (que penaliza fortemente inimigos raros — sem isso um especial
+# como o Neon Sniper quase nunca sobreviveria ao corte). Ainda respeitam o teto
+# rígido de variedade (MAX_ENEMY_VARIETY_BY_DIFFICULTY): quando há mais
+# assinaturas que vagas, o variety cap sorteia favorecendo as mais recém-liberadas.
+# ORDEM IMPORTA: deve ir do mais antigo (desbloqueado cedo) para o mais novo
+# (desbloqueado tarde) — o índice na tupla é usado como peso de recência.
+# CITY: Sniper (estágio 1) → Police (~estágio 5) → Captor (~estágio 6, gate 0.45)
+#       → Tank (~estágio 6, gate 0.55).
 THEME_SIGNATURE_ENEMIES: dict[WorldTheme, tuple[type, ...]] = {
-    WorldTheme.CITY: (NeonSniper, PoliceInterceptor, CyberTank, CyberCaptor),
+    WorldTheme.CITY: (
+        NeonSniper, PoliceInterceptor, CyberCaptor, TeslaTwin, CyberTank,
+    ),
 }
 
 
@@ -490,23 +505,36 @@ def _apply_enemy_variety_cap(
     world: "WorldConfig",
     difficulty_preset: DifficultyPreset,
 ) -> LevelConfig:
-    """Limita o spawn_config a N tipos diferentes (cap por dificuldade + stage)."""
+    """Limita o spawn_config à "pirâmide de N" tipos por nível (cap por
+    dificuldade + estágio), com teto rígido e rotação das assinaturas.
+
+    Política (P1 Opção A):
+      - O cap da banda de estágio (early/mid/late) define a rampa inicial; as
+        assinaturas presentes ampliam esse cap para garantir presença, MAS o
+        total é clampado ao teto rígido `MAX_ENEMY_VARIETY_BY_DIFFICULTY`
+        (3 no Normal, 4 no Hardcore/Pesadelo) — nunca mais que isso por nível.
+      - Quando há mais candidatos que vagas, escolhe-se: base (volume) sempre;
+        depois as assinaturas por loteria ponderada por RECÊNCIA (as mais
+        recém-liberadas têm prioridade → "novos entram, antigos saem"); por fim,
+        as vagas restantes pelos demais tipos via loteria 1/spawn_time.
+      - Seed determinístico por nível → o subconjunto varia de nível para nível
+        (rotação), mantendo variedade alta ENTRE níveis e ≤ teto POR nível.
+    """
     stage_band = _get_stage_band(world, config.level_number)
     variety_by_stage = MAX_ENEMY_VARIETY_BY_STAGE.get(difficulty_preset)
+    hard_max = MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3)
     if variety_by_stage is not None:
-        cap = variety_by_stage.get(
-            stage_band, MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3)
-        )
+        cap = variety_by_stage.get(stage_band, hard_max)
     else:
-        cap = MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3)
+        cap = hard_max
     spawn_config = config.enemy_spawn_config
 
-    # Specials assinatura entram garantidos e somam ao cap (aditivos), para não
-    # roubar a vaga dos inimigos de volume nem disputar a loteria 1/spawn_time.
+    # Assinaturas presentes ampliam o cap (para sobreviverem à loteria), mas o
+    # total nunca passa do teto rígido de variedade do tema.
     signatures = [
         t for t in THEME_SIGNATURE_ENEMIES.get(world.theme, ()) if t in spawn_config
     ]
-    cap += len(signatures)
+    cap = min(cap + len(signatures), hard_max)
 
     if len(spawn_config) <= cap:
         return config
@@ -519,18 +547,25 @@ def _apply_enemy_variety_cap(
     base = THEME_BASE_ENEMY.get(world.theme)
     if base is not None and base in spawn_config:
         chosen.append(base)
-    for sig in signatures:
-        if sig not in chosen:
-            chosen.append(sig)
 
-    candidates = [t for t in spawn_config if t not in chosen]
-    weights = [1.0 / max(spawn_config[t], 0.01) for t in candidates]
+    # Assinaturas: prioridade sobre os demais, sorteadas por recência (índice na
+    # tupla = antigo→novo; peso i+1 favorece as recém-liberadas). Se houver mais
+    # assinaturas que vagas, as antigas "saem de cena" neste nível (rotação).
+    sigs = [t for t in signatures if t not in chosen]
+    sig_weights = [i + 1 for i in range(len(sigs))]
+    while sigs and len(chosen) < cap:
+        idx = rng.choices(range(len(sigs)), weights=sig_weights, k=1)[0]
+        chosen.append(sigs.pop(idx))
+        sig_weights.pop(idx)
 
-    remaining_slots = cap - len(chosen)
-    for _ in range(min(remaining_slots, len(candidates))):
-        idx = rng.choices(range(len(candidates)), weights=weights, k=1)[0]
-        chosen.append(candidates.pop(idx))
-        weights.pop(idx)
+    # Vagas restantes: demais tipos (não-assinatura) por loteria 1/spawn_time.
+    if len(chosen) < cap:
+        candidates = [t for t in spawn_config if t not in chosen]
+        weights = [1.0 / max(spawn_config[t], 0.01) for t in candidates]
+        while candidates and len(chosen) < cap:
+            idx = rng.choices(range(len(candidates)), weights=weights, k=1)[0]
+            chosen.append(candidates.pop(idx))
+            weights.pop(idx)
 
     adjusted_spawn_config = {t: spawn_config[t] for t in chosen}
     config_copy = copy.copy(config)

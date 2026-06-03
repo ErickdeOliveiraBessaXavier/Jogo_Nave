@@ -103,6 +103,7 @@ class ChannelingGroup:
             self.cy,
             aggressiveness_multiplier=proto.aggressiveness_multiplier,
             side_scroll=self.side_scroll,
+            health_multiplier=proto.health_multiplier,
         )
         ctx.new_enemies.append(boss)
 

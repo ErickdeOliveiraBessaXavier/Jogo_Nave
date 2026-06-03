@@ -54,6 +54,7 @@ class FusedDrone(EnemyHitMixin):
         center_y: float,
         aggressiveness_multiplier: float = 1.0,
         side_scroll: bool = True,
+        health_multiplier: float = 1.0,
     ) -> None:
         self.w = self.SIZE
         self.h = self.SIZE
@@ -61,8 +62,12 @@ class FusedDrone(EnemyHitMixin):
         self.y = center_y - self.h / 2
 
         self.dead = False
-        self.health = self.HEALTH
-        self.max_health = self.HEALTH
+        # §11: escala a vida-base pelo multiplicador da dificuldade (o FusedDrone
+        # nasce fora do spawner, via canalização) e propaga aos bebês homing.
+        self.health_multiplier = health_multiplier
+        scaled_health = max(1, int(self.HEALTH * health_multiplier))
+        self.health = scaled_health
+        self.max_health = scaled_health
         self.aggressiveness_multiplier = aggressiveness_multiplier
         self.side_scroll = side_scroll
 
@@ -141,6 +146,7 @@ class FusedDrone(EnemyHitMixin):
                 side_scroll=self.side_scroll,
                 size_tier=0,
                 homing=True,
+                health_multiplier=self.health_multiplier,
             )
             baby.x = cx - baby.w / 2
             baby.y = cy - baby.h / 2

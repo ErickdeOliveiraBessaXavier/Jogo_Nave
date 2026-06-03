@@ -16,6 +16,7 @@ EXPLOSION_ASTEROID: Callable[[], None] = sound_manager.play_explosion_asteroid
 EXPLOSION_BOSS: Callable[[], None] = sound_manager.play_explosion_boss
 BOSS_DAMAGE: Callable[[], None] = sound_manager.play_boss_damage
 WARNING: Callable[[], None] = sound_manager.play_warning  # ex.: "Heavy Unit Incoming"
+STOP_WARNING: Callable[[], None] = sound_manager.stop_warning  # encerra o loop do warning
 
 # StoneGolemBoss
 GOLEM_MINE_TIMER: Callable[[], None] = sound_manager.play_golem_mine_timer

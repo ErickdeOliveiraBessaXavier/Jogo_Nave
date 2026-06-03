@@ -47,3 +47,7 @@ class EnemyUpdateContext:
     # Blasts de área one-shot (cx, cy, raio) — ex.: dreno do raio do Cyber-Captor.
     # O EntityManager drena para `area_blasts`; a cena aplica dano à nave.
     new_area_blasts: List[Any] = field(default_factory=_empty_any_list)
+    # Explosões pedidas por uma entidade no próprio update (x, y, size, type|None)
+    # — ex.: autodestruição "Short Circuit" do Tesla Twin (morte sem on_hit).
+    # O EntityManager drena chamando `spawn_explosion`.
+    new_explosions: List[Any] = field(default_factory=_empty_any_list)

@@ -42,6 +42,8 @@ from ..entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ..entities.Inimigos_Tema_Cidade.interceptor_squad import InterceptorSquad
 from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ..entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
+from ..entities.Inimigos_Tema_Cidade.tesla_link import TeslaLink
+from ..entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin
 from ..entities.meteor import Meteor
 from ..entities.meteor_pool import MeteorPool
 from ..entities.mountain_mage import MountainMage
@@ -74,6 +76,7 @@ SPAWNER_CAP_NEON_SNIPER: int = 3  # Sentinelas de longa distância (perch units)
 SPAWNER_CAP_POLICE_INTERCEPTOR: int = 4  # Perseguidores (spawnam em duplas)
 SPAWNER_CAP_CYBER_TANK: int = 1  # Colosso "gatekeeper" — sempre sozinho
 SPAWNER_CAP_CYBER_CAPTOR: int = 2  # Armadilhas de energia (orbitam o topo)
+SPAWNER_CAP_TESLA_TWIN: int = 2  # Barreira vertical: 1 par (2 unidades) por vez
 SPAWNER_CAP_ALIEN: int = 4  # Limite máximo de Aliens simultâneos
 SPAWNER_CAP_EYE_ENEMY: int = 3  # Limite máximo de EyeEnemies simultâneos
 SPAWNER_CAP_SATELLITE: int = 5  # Limite máximo de Satélites simultâneos
@@ -407,6 +410,7 @@ class EnemySpawner:
             "PoliceInterceptor": "police_interceptor",
             "CyberTank": "cyber_tank",
             "CyberCaptor": "cyber_captor",
+            "TeslaTwin": "tesla_twin",
         }
         return aliases.get(enemy_type.__name__, enemy_type.__name__.lower())
 
@@ -424,6 +428,7 @@ class EnemySpawner:
             PoliceInterceptor,
             CyberTank,
             CyberCaptor,
+            TeslaTwin,
         ):
             base_gap = max(base_gap, self.level_config.get_spawn_time(enemy_type))
 
@@ -505,6 +510,7 @@ class EnemySpawner:
             "police_interceptor": 0,
             "cyber_tank": 0,
             "cyber_captor": 0,
+            "tesla_twin": 0,
             "total": 0,
         }
 
@@ -538,6 +544,8 @@ class EnemySpawner:
                 counts["cyber_tank"] += 1
             elif isinstance(enemy, CyberCaptor):
                 counts["cyber_captor"] += 1
+            elif isinstance(enemy, TeslaTwin):
+                counts["tesla_twin"] += 1
 
         for prop in entity_manager.mountain_propellers:
             if not prop.dead:
@@ -591,6 +599,8 @@ class EnemySpawner:
             and counts["cyber_captor"] >= SPAWNER_CAP_CYBER_CAPTOR
         ):
             return True
+        if enemy_type == TeslaTwin and counts["tesla_twin"] >= SPAWNER_CAP_TESLA_TWIN:
+            return True
         return False
 
     def _should_spawn_enemy(
@@ -637,6 +647,8 @@ class EnemySpawner:
             enemy_type == CyberCaptor
             and counts["cyber_captor"] >= SPAWNER_CAP_CYBER_CAPTOR
         ):
+            return False
+        if enemy_type == TeslaTwin and counts["tesla_twin"] >= SPAWNER_CAP_TESLA_TWIN:
             return False
 
         max_enemies = self._get_current_enemy_cap()
@@ -831,6 +843,9 @@ class EnemySpawner:
         if enemy_type == CyberCaptor:
             return self._spawn_cyber_captor(entity_manager, is_side_scroll)
 
+        if enemy_type == TeslaTwin:
+            return self._spawn_tesla_twins(entity_manager, is_side_scroll)
+
         if enemy_type == SatelliteFragment:
             return self._spawn_satellite_fragment(entity_manager)
 
@@ -924,6 +939,43 @@ class EnemySpawner:
         )
         captor.health = max(1, int(captor.health * self.enemy_health_multiplier))
         entity_manager.enemies.append(captor)
+        return True
+
+    def _spawn_tesla_twins(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        """Spawna o par de Tesla Twins ("Boundary Link"): duas torres ancoradas
+        no topo e na base, entrando juntas pela direita, ligadas pelo `TeslaLink`.
+        O feixe vertical entre elas é uma parede que avança p/ a esquerda. Spawna
+        o par inteiro de uma vez; se já há um par vivo, não spawna outro."""
+        current = sum(
+            1
+            for e in entity_manager.enemies
+            if isinstance(e, TeslaTwin) and not e.dead
+        )
+        if current > 0:
+            return False
+
+        x = Config.SCREEN_WIDTH + random.uniform(20.0, 60.0)
+        h = TeslaTwin.H
+        y_top = Config.SCREEN_HEIGHT * 0.20 - h / 2
+        y_bottom = Config.SCREEN_HEIGHT * 0.80 - h / 2
+        top = TeslaTwin(
+            x, y_top, is_top=True,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+            health_multiplier=self.enemy_health_multiplier,
+        )
+        bottom = TeslaTwin(
+            x, y_bottom, is_top=False,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+            health_multiplier=self.enemy_health_multiplier,
+        )
+        # Vida já escalada no construtor (§11) — não reaplicar externamente.
+        TeslaLink([top, bottom])
+        entity_manager.enemies.append(top)
+        entity_manager.enemies.append(bottom)
         return True
 
     def _spawn_cyber_tank(
@@ -1034,8 +1086,10 @@ class EnemySpawner:
                 y,
                 aggressiveness_multiplier=self.aggressiveness_multiplier,
                 side_scroll=is_side_scroll,
+                health_multiplier=self.enemy_health_multiplier,
             )
-            drone.health = max(1, int(drone.health * self.enemy_health_multiplier))
+            # Vida já escalada no construtor (propaga aos filhotes emergentes);
+            # não reaplicar aqui para não dobrar o multiplicador.
             entity_manager.enemies.append(drone)
         return True
 

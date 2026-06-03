@@ -58,6 +58,7 @@ Os inimigos não são entidades isoladas, mas extensões da infraestrutura da ci
 *   **Padrão de Movimento:** **"Mirroring"**. Se um se move para a esquerda, o outro espelha o movimento para manter a tensão do raio entre eles.
 *   **Spawn/Organização:** **"Boundary Link"**. Nascem em lados opostos da tela (um na extrema esquerda, outro na direita) criando uma "linha de chegada" que o jogador precisa romper.
 *   **Morte:** **"Short Circuit"**. Se um for destruído, o sobrevivente entra em sobrecarga, fica vermelho e dispara tiros aleatórios por 2 segundos antes de autodestruir-se.
+*   **✅ Implementado (jun/2026).** Resolução da ambiguidade no side-scroll do CITY: os gêmeos ancoram no **topo e na base** (não esquerda/direita) e o feixe é **vertical**, formando uma parede que avança para a esquerda — coerente com o título "Barreira Vertical". O feixe é sempre ON (sem brecha): o counterplay é **abater um gêmeo**. Coordenação no `TeslaLink` (§1); dano do feixe via `area_blast`.
 
 ---
 
