@@ -53,6 +53,36 @@ _HEALTH_BY_TIER: dict[int, int] = {0: 180, 1: 55}
 _POINTS_BY_TIER: dict[int, int] = {0: 380, 1: 110}
 _SPEED_BY_TIER: dict[int, float] = {0: 46.0, 1: 130.0}
 
+# Movimento do mini (tier 1): persegue o jogador, mas mirando um ponto que gira
+# num anel em volta dele — cada mini numa fase própria, então cercam o jogador
+# por lados diferentes (arcos amplos) sem empilhar no mesmo ponto.
+#   orbit_speed  : rad/s da volta no anel (menor = órbitas mais lentas/amplas)
+#   orbit_radius : raio (px) do anel em torno do jogador que o mini persegue
+_MINI_ORBIT_SPEED: float = 2.0
+_MINI_ORBIT_RADIUS: float = 95.0
+# Impulso radial ao nascer: os minis saem do centro "explodindo" para fora em
+# leque (fases distribuídas) e a órbita vai assumindo ao longo deste tempo.
+_MINI_BIRTH_BURST: float = 0.45        # s do impulso antes da órbita assumir 100%
+_MINI_BIRTH_BURST_BOOST: float = 1.7   # quão mais rápido que a órbita é o "pop"
+# Separação: cada mini repele os irmãos que cheguem mais perto que a distância
+# mínima, então mantêm um espaçamento entre si mesmo orbitando o mesmo jogador.
+_MINI_MIN_DISTANCE: float = 64.0       # px de espaçamento desejado entre minis
+_MINI_SEPARATION_FORCE: float = 2.2    # peso da repulsão (≈1 = ordem da órbita)
+
+# Tier 0: cada tiro recebido pode "vazar" minis (além do split na morte).
+_HIT_SPAWN_SINGLE_CHANCE: float = 0.05  # 5% → 1 mini
+_HIT_SPAWN_TRIPLE_CHANCE: float = 0.01  # 1% → 3 minis
+
+# Ajuste fino do bloom neon do núcleo, por tier. Tudo em unidades de `cell`
+# (multiplicado pelo tamanho do pixel do chassi) para acompanhar a escala.
+#   off_x / off_y : desloca o glow a partir do centro do sprite (+x direita, +y baixo)
+#   scale         : multiplica o raio do glow (1.0 = base; menor encolhe)
+#   min_radius    : piso do raio (em px) p/ o glow não sumir no fundo do pulso
+_GLOW_OFFSET_X_BY_TIER: dict[int, float] = {0: 0.15, 1: 0.25}
+_GLOW_OFFSET_Y_BY_TIER: dict[int, float] = {0: 0.92, 1: 0.65}
+_GLOW_SCALE_BY_TIER: dict[int, float] = {0: 1.0, 1: 0.6}
+_GLOW_MIN_RADIUS_BY_TIER: dict[int, int] = {0: 6, 1: 8}
+
 
 class SplitterTank(EnemyHitMixin):
     PIXEL_COLS = PIXEL_COLS
@@ -125,6 +155,11 @@ class SplitterTank(EnemyHitMixin):
 
         self.pulse: float = random.uniform(0.0, math.tau)
         self.anim_time: float = random.uniform(0.0, 1.0)  # dessincroniza o pulso
+        self.orbit_phase: float = random.uniform(0.0, math.tau)  # fase do arco do mini
+        # Impulso radial de nascimento (preenchido pelo pai ao gerar o mini).
+        self.birth_burst: float = 0.0
+        self._burst_vx: float = 0.0
+        self._burst_vy: float = 0.0
         self.hit_timer: float = 0.0
 
     # ── Geometria ─────────────────────────────────────────────────────────────
@@ -140,9 +175,15 @@ class SplitterTank(EnemyHitMixin):
 
     # ── Update ──────────────────────────────────────────────────────────────
     def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
-        self.update(ctx.sdt, ctx.player_x, ctx.player_y)
+        self.update(ctx.sdt, ctx.player_x, ctx.player_y, ctx.other_enemies)
 
-    def update(self, dt: float, player_x: float, player_y: float) -> None:
+    def update(
+        self,
+        dt: float,
+        player_x: float,
+        player_y: float,
+        others: "List[SplitterTank] | None" = None,
+    ) -> None:
         if dt <= 0.0:
             return
         self.pulse += dt
@@ -150,8 +191,18 @@ class SplitterTank(EnemyHitMixin):
         if self.hit_timer > 0.0:
             self.hit_timer = max(0.0, self.hit_timer - dt)
 
-        # Juggernaut: avança constante; persegue lentamente o jogador no eixo
-        # transversal (sobe/desce no side-scroll p/ ameaçar a linha do jogador).
+        if self.tier == 0:
+            self._update_juggernaut(dt, player_x, player_y)
+        else:
+            self._update_mini_orbit(dt, player_x, player_y, others)
+
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self._cull_if_offscreen()
+
+    def _update_juggernaut(self, dt: float, player_x: float, player_y: float) -> None:
+        """Tier 0: avança constante; persegue lentamente o jogador no eixo
+        transversal (sobe/desce no side-scroll p/ ameaçar a linha do jogador)."""
         cx, cy = self._center()
         if self.side_scroll:
             track = max(-self.VERTICAL_TRACK, min(self.VERTICAL_TRACK, player_y - cy))
@@ -160,14 +211,86 @@ class SplitterTank(EnemyHitMixin):
             track = max(-self.VERTICAL_TRACK, min(self.VERTICAL_TRACK, player_x - cx))
             self.vx += (track - self.vx) * min(1.0, dt * 2.0)
 
-        self.x += self.vx * dt
-        self.y += self.vy * dt
+    def _arm_birth_burst(self, base_speed: float) -> None:
+        """Carrega o impulso radial de nascimento na direção da `orbit_phase`, para
+        o mini sair do centro 'explodindo' para fora antes da órbita assumir."""
+        self.birth_burst = _MINI_BIRTH_BURST
+        burst = base_speed * _MINI_BIRTH_BURST_BOOST
+        self._burst_vx = math.cos(self.orbit_phase) * burst
+        self._burst_vy = math.sin(self.orbit_phase) * burst
 
-        # Sai de cena quando atravessa pela borda de avanço.
-        if self.side_scroll:
-            if self.x + self.w < -60.0:
+    def _update_mini_orbit(
+        self,
+        dt: float,
+        player_x: float,
+        player_y: float,
+        others: "List[SplitterTank] | None",
+    ) -> None:
+        """Tier 1: persegue um ponto que gira num anel em torno do jogador. Como
+        cada mini tem uma fase própria, eles cercam o jogador por lados diferentes
+        em curvas amplas, em vez de convergirem (e empilharem) no mesmo ponto. No
+        nascimento, um impulso radial os abre em leque e esmaece para a órbita."""
+        self.orbit_phase += dt * _MINI_ORBIT_SPEED
+        target_x = player_x + math.cos(self.orbit_phase) * _MINI_ORBIT_RADIUS
+        target_y = player_y + math.sin(self.orbit_phase) * _MINI_ORBIT_RADIUS
+        cx, cy = self._center()
+        heading = math.atan2(target_y - cy, target_x - cx)
+        speed = _SPEED_BY_TIER[self.tier] * self.aggressiveness_multiplier
+        ovx = speed * math.cos(heading)
+        ovy = speed * math.sin(heading)
+        if self.birth_burst > 0.0:
+            self.birth_burst = max(0.0, self.birth_burst - dt)
+            t = self.birth_burst / _MINI_BIRTH_BURST  # 1 (nascimento) → 0 (órbita)
+            self.vx = self._burst_vx * t + ovx * (1.0 - t)
+            self.vy = self._burst_vy * t + ovy * (1.0 - t)
+        else:
+            self.vx = ovx
+            self.vy = ovy
+        if others is not None:
+            self._separate_from_siblings(others, speed)
+
+    def _separate_from_siblings(self, others: "List[SplitterTank]", speed: float) -> None:
+        """Repele os minis-irmãos que invadirem `_MINI_MIN_DISTANCE`, somando uma
+        velocidade de fuga (quanto mais perto, mais forte) à órbita. Mantém o
+        espaçamento mínimo mesmo todos perseguindo o mesmo jogador."""
+        cx, cy = self._center()
+        md = _MINI_MIN_DISTANCE
+        push_x = 0.0
+        push_y = 0.0
+        for o in others:
+            # Só irmãos do mesmo tier (e não a si mesmo); leitura intra-classe (§1).
+            if o is self or type(o) is not SplitterTank or o.tier != self.tier:
+                continue
+            ox, oy = o._center()
+            dx = cx - ox
+            dy = cy - oy
+            d2 = dx * dx + dy * dy
+            if 0.0 < d2 < md * md:
+                d = math.sqrt(d2)
+                strength = (md - d) / md  # 0 na borda → 1 colado
+                push_x += (dx / d) * strength
+                push_y += (dy / d) * strength
+        if push_x != 0.0 or push_y != 0.0:
+            self.vx += push_x * speed * _MINI_SEPARATION_FORCE
+            self.vy += push_y * speed * _MINI_SEPARATION_FORCE
+
+    def _cull_if_offscreen(self) -> None:
+        if self.tier == 0:
+            # Juggernaut: sai de cena ao atravessar a borda de avanço.
+            if self.side_scroll:
+                if self.x + self.w < -60.0:
+                    self.dead = True
+            elif self.y - self.h > Config.SCREEN_HEIGHT + 60.0:
                 self.dead = True
-        elif self.y - self.h > Config.SCREEN_HEIGHT + 60.0:
+            return
+        # Mini persegue o jogador: só descarta se sair bem longe de qualquer borda.
+        m = 200.0
+        if (
+            self.x + self.w < -m
+            or self.x > Config.SCREEN_WIDTH + m
+            or self.y + self.h < -m
+            or self.y > Config.SCREEN_HEIGHT + m
+        ):
             self.dead = True
 
     # ── Split (consumido pelo EntityManager no death sequence) ─────────────────
@@ -196,10 +319,49 @@ class SplitterTank(EnemyHitMixin):
                 tier=self.tier + 1,
                 vx=vx, vy=vy,
             )
+            # Nascem no centro (juntos) com fases distribuídas e um impulso radial
+            # nessa direção → "explodem" para fora em leque e depois orbitam.
+            child.orbit_phase = (i / _SPLIT_COUNT) * math.tau
             child.x = cx - child.w / 2
             child.y = cy - child.h / 2
+            child._arm_birth_burst(child_speed)
             children.append(child)
         return children
+
+    def _spawn_minis(self, count: int) -> List["SplitterTank"]:
+        """Minis que "vazam" do tier 0 por tiro recebido, jogados em direções
+        aleatórias a partir do centro. Só o tier 0 chama (minis não geram minis)."""
+        cx, cy = self._center()
+        speed = _SPEED_BY_TIER[self.tier + 1] * self.aggressiveness_multiplier
+        minis: List[SplitterTank] = []
+        base_phase = random.uniform(0.0, math.tau)
+        for i in range(count):
+            # Fases distribuídas a partir de um ângulo base aleatório → nascem
+            # separados e orbitam por lados diferentes (não empilham).
+            ang = base_phase + (i / count) * math.tau
+            mini = SplitterTank(
+                cx, cy,
+                aggressiveness_multiplier=self.aggressiveness_multiplier,
+                side_scroll=self.side_scroll,
+                health_multiplier=self.health_multiplier,
+                tier=self.tier + 1,
+                vx=speed * math.cos(ang), vy=speed * math.sin(ang),
+            )
+            mini.orbit_phase = ang
+            mini.x = cx - mini.w / 2
+            mini.y = cy - mini.h / 2
+            mini._arm_birth_burst(speed)
+            minis.append(mini)
+        return minis
+
+    def _roll_hit_spawn(self) -> Tuple["SplitterTank", ...]:
+        """Sorteia, por tiro, quantos minis vazam: 1% → 3, senão 5% → 1."""
+        r = random.random()
+        if r < _HIT_SPAWN_TRIPLE_CHANCE:
+            return tuple(self._spawn_minis(3))
+        if r < _HIT_SPAWN_TRIPLE_CHANCE + _HIT_SPAWN_SINGLE_CHANCE:
+            return tuple(self._spawn_minis(1))
+        return ()
 
     # ── Dano / morte ──────────────────────────────────────────────────────────
     def take_damage(self, amount: int) -> None:
@@ -217,19 +379,25 @@ class SplitterTank(EnemyHitMixin):
 
         self.take_damage(damage)
         if self.dead:
-            splits = self.tier < MAX_TIER
+            # Ambos os tiers passam pelo death-sequence (explosão + destroços; o
+            # tier 0 ainda gera os filhos). explosion_size=0: a explosão e os
+            # cacos vêm do EntityManager, não do roteador de hit.
             return HitResult(
                 killed=True,
                 points=self.get_points_value(),
-                # tier 0: explosão pequena (o "split" é o espetáculo, via special
-                # death); tier 1: explosão normal de morte.
-                explosion_size=0 if splits else 30,
+                explosion_size=0,
                 explosion_type=ExplosionType.CYBER,
                 sound=hit_sounds.EXPLOSION_ALIEN,
-                triggers_special_death=splits,
+                triggers_special_death=True,
             )
+        # Hit não-fatal: o tier 0 pode "vazar" minis (split na morte é à parte).
+        fragments: Tuple["SplitterTank", ...] = ()
+        if self.tier == 0:
+            fragments = self._roll_hit_spawn()
         return HitResult(
-            explosion_size=self._explosion_size_hit, sound=hit_sounds.BOSS_DAMAGE
+            explosion_size=self._explosion_size_hit,
+            sound=hit_sounds.BOSS_DAMAGE,
+            fragments=fragments,
         )
 
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
@@ -264,13 +432,19 @@ class SplitterTank(EnemyHitMixin):
             surface.blit(base, pos)
 
         # Bloom neon no núcleo: telegrafa o split — pisca mais forte quanto mais
-        # ferido ("vai partir"). Ancorado um pouco abaixo do centro do sprite.
+        # ferido ("vai partir"). Offset/escala por tier ajustáveis no topo do
+        # módulo (_GLOW_*_BY_TIER) para casar com o centro visual da arte.
         cx, cy = self._center()
-        cy += self.cell * 1.2
+        cx += self.cell * _GLOW_OFFSET_X_BY_TIER[self.tier]
+        cy += self.cell * _GLOW_OFFSET_Y_BY_TIER[self.tier]
         hurt = 1.0 - self.health / max(1, self.max_health)
         pulse = 0.5 + 0.5 * math.sin(self.pulse * (5.0 + 6.0 * hurt))
         core_col = pal.lerp(CORE_NEON_DIM, CORE_NEON, 0.4 + 0.6 * pulse)
         # Mais transparente: escurece a cor → contribuição aditiva mais fraca.
         core_col = pal.lerp((0, 0, 0), core_col, 0.5)
-        core_r = int(self.cell * (1.2 + 0.6 * pulse + 1.2 * hurt))
+        core_r = int(
+            self.cell * (1.2 + 0.6 * pulse + 1.2 * hurt) * _GLOW_SCALE_BY_TIER[self.tier]
+        )
+        # Piso para o pulso/fase aleatória não encolher o glow até sumir.
+        core_r = max(_GLOW_MIN_RADIUS_BY_TIER[self.tier], core_r)
         self._blit_glow(surface, int(cx), int(cy), core_r, core_col)

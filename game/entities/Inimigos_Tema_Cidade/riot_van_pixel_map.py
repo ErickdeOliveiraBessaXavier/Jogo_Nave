@@ -31,6 +31,8 @@ _ZONE_COLORS: Dict[str, RGB] = {
     "d": pal.DEEP_SLATE,
     "c": pal.ELECTRIC_BLUE_DIM,   # núcleo (glow animado no draw)
     "e": pal.ELECTRIC_BLUE,       # emissores de escudo (glow animado no draw)
+    "v": (40, 50, 65),            # Vidro da cabine (dark blue-gray)
+    "w": (20, 25, 30),            # Rodas / mecânica inferior
 }
 
 CORE_NEON: RGB = pal.ELECTRIC_BLUE
@@ -39,38 +41,64 @@ EMITTER_NEON: RGB = pal.ELECTRIC_BLUE
 
 
 def _build_map() -> List[str]:
-    """Furgão retangular de cantos arredondados. A frente (coluna 0 = esquerda,
-    lado do jogador) carrega os 2 emissores de escudo."""
+    """Furgão de transporte blindado.
+    Colunas 0-4: Cabine e frente.
+    Colunas 5-15: Baía de carga.
+    Coluna 16: Traseira (portas).
+    """
     cols, rows = PIXEL_COLS, PIXEL_ROWS
     grid = [["." for _ in range(cols)] for _ in range(rows)]
-    for y in range(rows):
-        for x in range(cols):
-            # Cantos arredondados (remove 1 célula em cada quina).
-            corner = (x in (0, cols - 1)) and (y in (0, rows - 1))
-            if corner:
-                continue
-            edge = x in (0, cols - 1) or y in (0, rows - 1)
-            if edge:
-                grid[y][x] = "o"
-            else:
-                # Sombreamento top-lit simples por linha.
-                if y <= 2:
-                    grid[y][x] = "a"
-                elif y <= rows - 4:
-                    grid[y][x] = "l"
-                elif y == rows - 3:
-                    grid[y][x] = "h"
-                else:
-                    grid[y][x] = "d"
 
-    # Núcleo: faixa central (energia do escudo).
+    # Preenchimento base (corpo do furgão)
+    for y in range(rows - 2):
+        for x in range(cols):
+            # Cantos arredondados na frente e atrás
+            if x == 0 and (y == 0 or y == rows - 3): continue
+            if x == cols - 1 and (y == 0 or y == rows - 3): continue
+
+            # Shading vertical
+            if y == 0: grid[y][x] = "o"
+            elif y == 1: grid[y][x] = "a"
+            elif y <= rows - 6: grid[y][x] = "l"
+            elif y <= rows - 4: grid[y][x] = "h"
+            else: grid[y][x] = "d"
+
+    # Outline lateral
+    for y in range(rows - 2):
+        if grid[y][0] != ".": grid[y][0] = "o"
+        if grid[y][cols - 1] != ".": grid[y][cols - 1] = "o"
+    for x in range(cols):
+        if grid[rows - 3][x] != ".": grid[rows - 3][x] = "o"
+
+    # Janela da Cabine (frente esquerda)
+    grid[2][1] = "o"
+    grid[2][2] = "v"
+    grid[2][3] = "v"
+    grid[2][4] = "o"
+    grid[3][1] = "o"
+    grid[3][2] = "v"
+    grid[3][3] = "v"
+    grid[3][4] = "o"
+
+    # Rodas / Rodízios Pesados (parte inferior)
+    # Roda Dianteira
+    for x in range(2, 5):
+        grid[rows - 2][x] = "w"
+        grid[rows - 1][x] = "w"
+    # Roda Traseira
+    for x in range(cols - 5, cols - 2):
+        grid[rows - 2][x] = "w"
+        grid[rows - 1][x] = "w"
+
+    # Núcleo: faixa central (energia do escudo / reator)
     cy = rows // 2
     for x in range(cols // 2 - 1, cols // 2 + 2):
         grid[cy][x] = "c"
 
-    # Emissores de escudo na dianteira (coluna 1, esquerda), em cima e embaixo.
-    grid[2][1] = "e"
-    grid[rows - 3][1] = "e"
+    # Emissores de escudo na dianteira
+    grid[1][1] = "e"
+    grid[rows - 4][1] = "e"
+
     return ["".join(row) for row in grid]
 
 

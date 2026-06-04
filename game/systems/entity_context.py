@@ -44,6 +44,9 @@ class EnemyUpdateContext:
     new_energy_orbs: List[Any] = field(default_factory=_empty_any_list)
     new_neon_bolts: List[Any] = field(default_factory=_empty_any_list)
     new_enemies: List[Any] = field(default_factory=_empty_any_list)
+    # Inimigos que devem ser desenhados ATRÁS dos demais (inseridos no início da
+    # lista) — ex.: a caixa de carga do Cargueiro, que emerge por trás dele.
+    new_enemies_behind: List[Any] = field(default_factory=_empty_any_list)
     # Blasts de área one-shot (cx, cy, raio) — ex.: dreno do raio do Cyber-Captor.
     # O EntityManager drena para `area_blasts`; a cena aplica dano à nave.
     new_area_blasts: List[Any] = field(default_factory=_empty_any_list)

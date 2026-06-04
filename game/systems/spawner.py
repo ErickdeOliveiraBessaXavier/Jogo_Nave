@@ -43,7 +43,7 @@ from ..entities.Inimigos_Tema_Cidade.interceptor_squad import InterceptorSquad
 from ..entities.Inimigos_Tema_Cidade.jammer_node import JammerNode
 from ..entities.Inimigos_Tema_Cidade.mirror_pylon import MirrorPylon
 from ..entities.Inimigos_Tema_Cidade.mortar_drone import MortarDrone
-from ..entities.Inimigos_Tema_Cidade.riot_van import RiotVan
+from ..entities.Inimigos_Tema_Cidade.cargo_carrier import CargoCarrier
 from ..entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone
 from ..entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
 from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
@@ -84,7 +84,7 @@ SPAWNER_CAP_CYBER_TANK: int = 1  # Colosso "gatekeeper" — sempre sozinho
 SPAWNER_CAP_CYBER_CAPTOR: int = 2  # Armadilhas de energia (orbitam o topo)
 SPAWNER_CAP_JAMMER: int = 2  # Nós de interferência (orbitam o topo, suprimem tiros)
 SPAWNER_CAP_MORTAR: int = 2  # Artilheiros (perch no alto, bombardeio de área)
-SPAWNER_CAP_RIOT_VAN: int = 1  # Escudeiros (escolta blindada, escudo frontal)
+SPAWNER_CAP_CARGO_CARRIER: int = 1  # Cargueiro (transporte de tropas, larga caixas)
 SPAWNER_CAP_SPLITTER: int = 1  # Splitter Tanks (conta filhotes → limita o enxame)
 SPAWNER_CAP_SAPPER: int = 2  # Rebocadores (suporte de blindagem)
 SPAWNER_CAP_MIRROR: int = 1  # Mirror Pylons (refletem tiros — sempre sozinho)
@@ -445,7 +445,7 @@ class EnemySpawner:
             "TeslaTwin": "tesla_twin",
             "JammerNode": "jammer",
             "MortarDrone": "mortar",
-            "RiotVan": "riot_van",
+            "CargoCarrier": "cargo_carrier",
             "SplitterTank": "splitter",
             "SapperDrone": "sapper",
             "MirrorPylon": "mirror",
@@ -469,7 +469,7 @@ class EnemySpawner:
             TeslaTwin,
             JammerNode,
             MortarDrone,
-            RiotVan,
+            CargoCarrier,
             SplitterTank,
             SapperDrone,
             MirrorPylon,
@@ -584,7 +584,7 @@ class EnemySpawner:
             "tesla_twin": 0,
             "jammer": 0,
             "mortar": 0,
-            "riot_van": 0,
+            "cargo_carrier": 0,
             "splitter": 0,
             "sapper": 0,
             "mirror": 0,
@@ -627,8 +627,8 @@ class EnemySpawner:
                 counts["jammer"] += 1
             elif isinstance(enemy, MortarDrone):
                 counts["mortar"] += 1
-            elif isinstance(enemy, RiotVan):
-                counts["riot_van"] += 1
+            elif isinstance(enemy, CargoCarrier):
+                counts["cargo_carrier"] += 1
             elif isinstance(enemy, SplitterTank):
                 counts["splitter"] += 1
             elif isinstance(enemy, SapperDrone):
@@ -694,7 +694,7 @@ class EnemySpawner:
             return True
         if enemy_type == MortarDrone and counts["mortar"] >= SPAWNER_CAP_MORTAR:
             return True
-        if enemy_type == RiotVan and counts["riot_van"] >= SPAWNER_CAP_RIOT_VAN:
+        if enemy_type == CargoCarrier and counts["cargo_carrier"] >= SPAWNER_CAP_CARGO_CARRIER:
             return True
         if enemy_type == SplitterTank and counts["splitter"] >= SPAWNER_CAP_SPLITTER:
             return True
@@ -755,7 +755,7 @@ class EnemySpawner:
             return False
         if enemy_type == MortarDrone and counts["mortar"] >= SPAWNER_CAP_MORTAR:
             return False
-        if enemy_type == RiotVan and counts["riot_van"] >= SPAWNER_CAP_RIOT_VAN:
+        if enemy_type == CargoCarrier and counts["cargo_carrier"] >= SPAWNER_CAP_CARGO_CARRIER:
             return False
         if enemy_type == SplitterTank and counts["splitter"] >= SPAWNER_CAP_SPLITTER:
             return False
@@ -962,8 +962,8 @@ class EnemySpawner:
         if enemy_type == MortarDrone:
             return self._spawn_mortar(entity_manager, is_side_scroll)
 
-        if enemy_type == RiotVan:
-            return self._spawn_riot_van(entity_manager, is_side_scroll)
+        if enemy_type == CargoCarrier:
+            return self._spawn_cargo_carrier(entity_manager, is_side_scroll)
 
         if enemy_type == SplitterTank:
             return self._spawn_splitter_tank(entity_manager, is_side_scroll)
@@ -1147,21 +1147,25 @@ class EnemySpawner:
         entity_manager.enemies.append(tank)
         return True
 
-    def _spawn_riot_van(
+    def _spawn_cargo_carrier(
         self, entity_manager: "EntityManager", is_side_scroll: bool
     ) -> bool:
-        """Spawna 1 Escudeiro entrando pela direita (side-scroll) numa faixa
-        central — escolta blindada que avança projetando o escudo frontal."""
-        h = RiotVan.H
+        """Spawna 1 Cargueiro entrando pela parte superior da lateral direita —
+        transporte pesado que avança devagar e larga caixas de tropa."""
+        h = CargoCarrier.H
         if is_side_scroll:
             x = Config.SCREEN_WIDTH + random.uniform(20.0, 60.0)
+            # Sempre na faixa superior: deixa espaço p/ a caixa descer abaixo dele.
             y = random.uniform(
-                Config.SCREEN_HEIGHT * 0.25, Config.SCREEN_HEIGHT * 0.70 - h
+                Config.SCREEN_HEIGHT * 0.06, Config.SCREEN_HEIGHT * 0.18
             )
         else:
-            x = random.uniform(40.0, Config.SCREEN_WIDTH - 40.0 - RiotVan.W)
+            # Vertical: enviesa para a direita (entrando pelo topo).
+            x = random.uniform(
+                Config.SCREEN_WIDTH * 0.60, Config.SCREEN_WIDTH - 40.0 - CargoCarrier.W
+            )
             y = -(h + random.uniform(20.0, 60.0))
-        van = RiotVan(
+        carrier = CargoCarrier(
             x,
             y,
             aggressiveness_multiplier=self.aggressiveness_multiplier,
@@ -1169,7 +1173,7 @@ class EnemySpawner:
             health_multiplier=self.enemy_health_multiplier,
         )
         # Vida já escalada no construtor (§11) — não reaplicar externamente.
-        entity_manager.enemies.append(van)
+        entity_manager.enemies.append(carrier)
         return True
 
     def _spawn_mortar(

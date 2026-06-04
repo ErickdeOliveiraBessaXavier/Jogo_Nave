@@ -31,7 +31,7 @@ from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper  # noqa: F40
 from ...entities.Inimigos_Tema_Cidade.police_interceptor import (  # noqa: F401
     PoliceInterceptor,
 )
-from ...entities.Inimigos_Tema_Cidade.riot_van import RiotVan  # noqa: F401
+from ...entities.Inimigos_Tema_Cidade.cargo_carrier import CargoCarrier  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin  # noqa: F401
@@ -339,15 +339,15 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # NeonSniper: 8.0,
             # PoliceInterceptor: 8.0,  # spawna em duplas
             # CyberCaptor: 10.0,
-            TeslaTwin: 12.0,  # spawna o par
+            # TeslaTwin: 12.0,  # spawna o par
             # CyberTank: 14.0,
             # ── CITY (variantes novas) ───────────────────────────────────────
             # JammerNode: 10.0,
             # MortarDrone: 8.0,
             # SapperDrone: 8.0,
-            # RiotVan: 14.0,
+            CargoCarrier: 1.0,
             SplitterTank: 1.0,
-            # MirrorPylon: 1.0,
+            MirrorPylon: 1.0,
         },
         enemies_to_clear=75,
         # ── Descomente UM boss por vez ───────────────────────────────────────

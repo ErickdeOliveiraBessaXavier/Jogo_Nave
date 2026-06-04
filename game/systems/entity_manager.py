@@ -33,6 +33,9 @@ from ..entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ..entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ..entities.Inimigos_Tema_Cidade.jammer_node import JammerNode
 from ..entities.Inimigos_Tema_Cidade.neon_bolt import NeonBolt
+from ..entities.Inimigos_Tema_Cidade.splitter_debris import SplitterDebris
+from ..entities.Inimigos_Tema_Cidade.carrier_debris import CarrierDebris
+from ..entities.Inimigos_Tema_Cidade.cargo_carrier import CargoCarrier
 from ..entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
 from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ..entities.Inimigos_Tema_Cidade.police_crash import PoliceCrash
@@ -122,6 +125,8 @@ class EntityManager:
         self.core_implosions: list[CoreImplosion] = []
         self.police_crashes: list[PoliceCrash] = []
         self.tank_meltdowns: list[TankMeltdown] = []
+        self.splitter_debris: list[SplitterDebris] = []
+        self.carrier_debris: list[CarrierDebris] = []
         self.captor_emps: list[CaptorEMP] = []
         # Blasts de área one-shot (cx, cy, raio) emitidos por efeitos/inimigos neste
         # frame; consumidos pela cena (handle_mine_explosion) p/ aplicar dano à nave.
@@ -340,8 +345,18 @@ class EntityManager:
         elif isinstance(target, SplitterTank):
             cx = target.x + target.w / 2
             cy = target.y + target.h / 2
-            self.spawn_explosion(cx, cy, size=28, explosion_type=ExplosionType.CYBER)
+            # tier 0: explosão menor (o "split" é o espetáculo); tier 1: explosão
+            # cheia de morte. Ambos espalham destroços do chassi.
+            size = 28 if target.tier == 0 else 30
+            self.spawn_explosion(cx, cy, size=size, explosion_type=ExplosionType.CYBER)
+            self.splitter_debris.append(SplitterDebris(cx, cy, target.tier))
             self.enemies.extend(target.make_children())
+        elif isinstance(target, CargoCarrier):
+            cx = target.x + target.w / 2
+            cy = target.y + target.h / 2
+            # Nave grande e pesada: explosão central + chassi estilhaçado em cacos.
+            self.spawn_explosion(cx, cy, size=44, explosion_type=ExplosionType.CYBER)
+            self.carrier_debris.append(CarrierDebris(cx, cy))
 
     def _trigger_captor_emp(self, cx: float, cy: float, radius: float) -> None:
         """EMP Discharge: onda amarela + neutraliza (limpa) os projéteis inimigos
@@ -623,6 +638,9 @@ class EntityManager:
         self.energy_orbs.extend(ctx_emissions.new_energy_orbs)
         self.neon_bolts.extend(ctx_emissions.new_neon_bolts)
         self.enemies.extend(ctx_emissions.new_enemies)
+        # Inimigos "atrás": inseridos no início p/ desenhar antes (sob) os demais.
+        if ctx_emissions.new_enemies_behind:
+            self.enemies[:0] = ctx_emissions.new_enemies_behind
         self.area_blasts.extend(ctx_emissions.new_area_blasts)
         for _ex in ctx_emissions.new_explosions:
             self.spawn_explosion(*_ex)
@@ -757,6 +775,10 @@ class EntityManager:
             blast = tm.pop_blast()
             if blast is not None:
                 self.area_blasts.append(blast)
+        for sd in self.splitter_debris:
+            sd.update(dt)
+        for cd in self.carrier_debris:
+            cd.update(dt)
         for ce in self.captor_emps:
             ce.update(dt)
 
@@ -1093,6 +1115,8 @@ class EntityManager:
             self.core_implosions,
             self.police_crashes,
             self.tank_meltdowns,
+            self.splitter_debris,
+            self.carrier_debris,
             self.captor_emps,
             self.boss_squares,
             self.powerups,
@@ -1381,6 +1405,8 @@ class EntityManager:
         self._filter_dead_inplace(self.core_implosions)
         self._filter_dead_inplace(self.police_crashes)
         self._filter_dead_inplace(self.tank_meltdowns)
+        self._filter_dead_inplace(self.splitter_debris)
+        self._filter_dead_inplace(self.carrier_debris)
         self._filter_dead_inplace(self.captor_emps)
         self._filter_dead_inplace(self.mini_ship_bullets)
         self._filter_dead_inplace(self.wingmen)
@@ -1440,6 +1466,8 @@ class EntityManager:
         self.core_implosions.clear()
         self.police_crashes.clear()
         self.tank_meltdowns.clear()
+        self.splitter_debris.clear()
+        self.carrier_debris.clear()
         self.captor_emps.clear()
         self.area_blasts.clear()
         self.powerups.clear()
@@ -1487,6 +1515,8 @@ class EntityManager:
         self.core_implosions.clear()
         self.police_crashes.clear()
         self.tank_meltdowns.clear()
+        self.splitter_debris.clear()
+        self.carrier_debris.clear()
         self.captor_emps.clear()
         self.area_blasts.clear()
         # homing_bullets e cacador_lasers são projéteis do jogador — preservados

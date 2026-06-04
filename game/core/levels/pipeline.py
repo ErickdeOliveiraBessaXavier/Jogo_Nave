@@ -28,7 +28,7 @@ from ...entities.Inimigos_Tema_Cidade.jammer_node import JammerNode
 from ...entities.Inimigos_Tema_Cidade.mirror_pylon import MirrorPylon
 from ...entities.Inimigos_Tema_Cidade.mortar_drone import MortarDrone
 from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
-from ...entities.Inimigos_Tema_Cidade.riot_van import RiotVan
+from ...entities.Inimigos_Tema_Cidade.cargo_carrier import CargoCarrier
 from ...entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone
 from ...entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
 from ...entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
@@ -97,7 +97,7 @@ ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
     TeslaTwin: {WorldTheme.CITY},
     JammerNode: {WorldTheme.CITY},
     MortarDrone: {WorldTheme.CITY},
-    RiotVan: {WorldTheme.CITY},
+    CargoCarrier: {WorldTheme.CITY},
     SplitterTank: {WorldTheme.CITY},
     SapperDrone: {WorldTheme.CITY},
     MirrorPylon: {WorldTheme.CITY},
@@ -133,7 +133,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             TeslaTwin: 0.65,
             JammerNode: 0.65,
             MortarDrone: 0.70,
-            RiotVan: 0.45,
+            CargoCarrier: 0.45,
             SplitterTank: 0.45,
             SapperDrone: 0.55,
             MirrorPylon: 0.50,
@@ -157,7 +157,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             TeslaTwin: 0.75,
             JammerNode: 0.75,
             MortarDrone: 0.80,
-            RiotVan: 0.55,
+            CargoCarrier: 0.55,
             SplitterTank: 0.55,
             SapperDrone: 0.65,
             MirrorPylon: 0.60,
@@ -181,7 +181,7 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             TeslaTwin: 0.85,
             JammerNode: 0.85,
             MortarDrone: 0.90,
-            RiotVan: 0.65,
+            CargoCarrier: 0.65,
             SplitterTank: 0.65,
             SapperDrone: 0.75,
             MirrorPylon: 0.70,
@@ -208,8 +208,8 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
         },
         WorldTheme.CITY: {
             "early": {PoliceInterceptor: 0.80},
-            "mid": {PoliceInterceptor: 1.05, CyberTank: 0.50, CyberCaptor: 0.70, TeslaTwin: 0.70, JammerNode: 0.70, MortarDrone: 0.75, RiotVan: 0.50, SplitterTank: 0.50, SapperDrone: 0.60, MirrorPylon: 0.52},
-            "late": {PoliceInterceptor: 1.18, CyberTank: 1.05, CyberCaptor: 1.10, TeslaTwin: 1.10, JammerNode: 1.10, MortarDrone: 1.12, RiotVan: 1.05, SplitterTank: 1.05, SapperDrone: 1.05, MirrorPylon: 1.08},
+            "mid": {PoliceInterceptor: 1.05, CyberTank: 0.50, CyberCaptor: 0.70, TeslaTwin: 0.70, JammerNode: 0.70, MortarDrone: 0.75, CargoCarrier: 0.50, SplitterTank: 0.50, SapperDrone: 0.60, MirrorPylon: 0.52},
+            "late": {PoliceInterceptor: 1.18, CyberTank: 1.05, CyberCaptor: 1.10, TeslaTwin: 1.10, JammerNode: 1.10, MortarDrone: 1.12, CargoCarrier: 1.05, SplitterTank: 1.05, SapperDrone: 1.05, MirrorPylon: 1.08},
         },
         WorldTheme.VOLCANIC: {
             "early": {Meteor: 1.05, EyeEnemy: 0.95},
@@ -235,8 +235,8 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
         },
         WorldTheme.CITY: {
             "early": {PoliceInterceptor: 0.85},
-            "mid": {PoliceInterceptor: 1.10, CyberTank: 0.55, CyberCaptor: 0.80, TeslaTwin: 0.80, JammerNode: 0.80, MortarDrone: 0.85, RiotVan: 0.55, SplitterTank: 0.55, SapperDrone: 0.65, MirrorPylon: 0.58},
-            "late": {PoliceInterceptor: 1.25, CyberTank: 1.15, CyberCaptor: 1.20, TeslaTwin: 1.20, JammerNode: 1.20, MortarDrone: 1.22, RiotVan: 1.15, SplitterTank: 1.15, SapperDrone: 1.15, MirrorPylon: 1.18},
+            "mid": {PoliceInterceptor: 1.10, CyberTank: 0.55, CyberCaptor: 0.80, TeslaTwin: 0.80, JammerNode: 0.80, MortarDrone: 0.85, CargoCarrier: 0.55, SplitterTank: 0.55, SapperDrone: 0.65, MirrorPylon: 0.58},
+            "late": {PoliceInterceptor: 1.25, CyberTank: 1.15, CyberCaptor: 1.20, TeslaTwin: 1.20, JammerNode: 1.20, MortarDrone: 1.22, CargoCarrier: 1.15, SplitterTank: 1.15, SapperDrone: 1.15, MirrorPylon: 1.18},
         },
         WorldTheme.VOLCANIC: {
             "early": {Meteor: 1.08, EyeEnemy: 0.95},
@@ -262,8 +262,8 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
         },
         WorldTheme.CITY: {
             "early": {PoliceInterceptor: 0.90},
-            "mid": {PoliceInterceptor: 1.15, CyberTank: 0.60, CyberCaptor: 0.90, TeslaTwin: 0.90, JammerNode: 0.90, MortarDrone: 0.95, RiotVan: 0.62, SplitterTank: 0.62, SapperDrone: 0.72, MirrorPylon: 0.65},
-            "late": {PoliceInterceptor: 1.32, CyberTank: 1.25, CyberCaptor: 1.30, TeslaTwin: 1.30, JammerNode: 1.30, MortarDrone: 1.32, RiotVan: 1.25, SplitterTank: 1.25, SapperDrone: 1.25, MirrorPylon: 1.28},
+            "mid": {PoliceInterceptor: 1.15, CyberTank: 0.60, CyberCaptor: 0.90, TeslaTwin: 0.90, JammerNode: 0.90, MortarDrone: 0.95, CargoCarrier: 0.62, SplitterTank: 0.62, SapperDrone: 0.72, MirrorPylon: 0.65},
+            "late": {PoliceInterceptor: 1.32, CyberTank: 1.25, CyberCaptor: 1.30, TeslaTwin: 1.30, JammerNode: 1.30, MortarDrone: 1.32, CargoCarrier: 1.25, SplitterTank: 1.25, SapperDrone: 1.25, MirrorPylon: 1.28},
         },
         WorldTheme.VOLCANIC: {
             "early": {Meteor: 1.10, EyeEnemy: 0.95},
@@ -303,7 +303,7 @@ THEME_FALLBACK_ENEMIES: dict[WorldTheme, list[type]] = {
     WorldTheme.STARFIELD: [Meteor, Alien, EyeEnemy],
     WorldTheme.CITY: [
         CityDrone, NeonSniper, PoliceInterceptor, CyberCaptor, TeslaTwin, CyberTank,
-        JammerNode, MortarDrone, RiotVan, SplitterTank, SapperDrone, MirrorPylon,
+        JammerNode, MortarDrone, CargoCarrier, SplitterTank, SapperDrone, MirrorPylon,
     ],
     WorldTheme.VOLCANIC: [Meteor, EyeEnemy, Alien],
     WorldTheme.PROCEDURAL: [Meteor, Alien, EyeEnemy],
@@ -326,7 +326,7 @@ DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
     TeslaTwin: 18.0,
     JammerNode: 17.0,
     MortarDrone: 16.0,
-    RiotVan: 22.0,
+    CargoCarrier: 22.0,
     SplitterTank: 24.0,
     SapperDrone: 18.0,
     MirrorPylon: 20.0,
@@ -374,7 +374,7 @@ THEME_BASE_ENEMY: dict[WorldTheme, type] = {
 THEME_SIGNATURE_ENEMIES: dict[WorldTheme, tuple[type, ...]] = {
     WorldTheme.CITY: (
         NeonSniper, PoliceInterceptor, CyberCaptor, TeslaTwin, CyberTank, JammerNode,
-        MortarDrone, RiotVan, SplitterTank, SapperDrone, MirrorPylon,
+        MortarDrone, CargoCarrier, SplitterTank, SapperDrone, MirrorPylon,
     ),
 }
 

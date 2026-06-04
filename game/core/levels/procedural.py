@@ -22,7 +22,7 @@ from ...entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ...entities.Inimigos_Tema_Cidade.jammer_node import JammerNode
 from ...entities.Inimigos_Tema_Cidade.mirror_pylon import MirrorPylon
 from ...entities.Inimigos_Tema_Cidade.mortar_drone import MortarDrone
-from ...entities.Inimigos_Tema_Cidade.riot_van import RiotVan
+from ...entities.Inimigos_Tema_Cidade.cargo_carrier import CargoCarrier
 from ...entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone
 from ...entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
 from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
@@ -219,7 +219,7 @@ ENEMY_PRESSURE_UNLOCK_START: dict[str, float] = {
     "tesla_twin": 0.50,
     "jammer": 0.50,
     "mortar": 0.35,
-    "riot_van": 0.55,
+    "cargo_carrier": 0.55,
     "splitter": 0.55,
     "sapper": 0.45,
     "mirror": 0.55,
@@ -240,7 +240,7 @@ ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
     "tesla_twin": 0.30,
     "jammer": 0.30,
     "mortar": 0.30,
-    "riot_van": 0.30,
+    "cargo_carrier": 0.30,
     "splitter": 0.30,
     "sapper": 0.30,
     "mirror": 0.30,
@@ -559,14 +559,14 @@ class ProceduralLevelGenerator:
             mortar_time = (16.0 / difficulty / spawn_multiplier) * (2.0 / mortar_weight)
             enemy_spawn_config[MortarDrone] = self._clamp_spawn_time(mortar_time)
 
-        # Escudeiro: escolta blindada do fim do mundo (gate 0.55). Cap 1 garante
+        # Cargueiro: transporte de tropas do fim do mundo (gate 0.55). Cap 1 garante
         # que apareça sozinho; o valor é o intervalo entre aparições (mini-boss).
         if stage_progress >= 0.55:
-            van_weight = _get_progressive_enemy_weight(
-                "riot_van", 1.0, stage_progress
+            carrier_weight = _get_progressive_enemy_weight(
+                "cargo_carrier", 1.0, stage_progress
             )
-            van_time = (22.0 / difficulty / spawn_multiplier) * (2.0 / van_weight)
-            enemy_spawn_config[RiotVan] = self._clamp_spawn_time(van_time)
+            carrier_time = (22.0 / difficulty / spawn_multiplier) * (2.0 / carrier_weight)
+            enemy_spawn_config[CargoCarrier] = self._clamp_spawn_time(carrier_time)
 
         # Splitter Tank: colosso modular do fim do mundo (gate 0.55). Cap 1
         # (conta filhotes) garante que apareça sozinho; intervalo entre aparições.
