@@ -95,6 +95,8 @@ def load_sfx(
         "laser_shot": ui.get("laser_shot"),
         "black_hole": ui.get("black_hole"),
         "hit_hurt_meteor_boss": ui.get("hit_hurt_meteor_boss"),
+        "shield_activate": ui.get("shield_activate"),
+        "shield_break": ui.get("shield_break"),
     }
     for key, rel in ui_map.items():
         if not rel:

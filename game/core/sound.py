@@ -113,6 +113,9 @@ class SoundManager:
         )
         self.last_shot_time: float = 0.0
         self.shot_volume_base: float = VOLUME_CONFIG["shots"]
+        # Throttle do "escudo destruído": vários escudos podem quebrar no mesmo
+        # frame (dano em área) — colapsa em um único cue para não sobrepor.
+        self.last_shield_break_time: float = 0.0
 
         # Estado da música
         self.current_music: str | None = None
@@ -230,6 +233,24 @@ class SoundManager:
         """Toca som de dano no boss."""
         if "boss_damage" in self._sounds:
             self._sounds["boss_damage"].play()
+
+    @require_audio
+    def play_shield_activate(self):
+        """Toca o som de escudo concedido (uma vez por pulso do SapperDrone)."""
+        if "shield_activate" in self._sounds:
+            self._sounds["shield_activate"].play()
+
+    @require_audio
+    def play_shield_break(self):
+        """Toca o som de escudo destruído, com throttle p/ não sobrepor quando
+        vários escudos quebram no mesmo instante (dano em área)."""
+        if "shield_break" not in self._sounds:
+            return
+        now = pygame.time.get_ticks() / 1000.0
+        if now - self.last_shield_break_time < 0.07:  # 70ms
+            return
+        self.last_shield_break_time = now
+        self._sounds["shield_break"].play()
 
     @require_audio
     def play_boss_warning(self):

@@ -1,13 +1,15 @@
-"""Sapper Drone (Rebocador) — suporte de blindagem do bioma CITY.
+"""Sapper Drone (Rebocador) — suporte defensivo do bioma CITY.
 
-Variante de apoio da linhagem do City Drone. Não ataca: **engata um cabo** num
-aliado próximo e o **blinda** — injeta HP de armadura (overheal) até um teto por
-alvo, deixando-o mais resistente. O counterplay é **abatê-lo** (vida baixa, alvo
-prioritário): sem o Rebocador, os aliados deixam de ganhar blindagem.
+Variante de apoio da linhagem do City Drone. Não ataca: a cada `PULSE_INTERVAL`
+segundos emite um **pulso de energia**. Todo aliado dentro de `PULSE_RADIUS`
+ganha um **escudo temporário** de 25% do HP atual (no instante do pulso), que
+absorve dano antes da vida. O counterplay é **abatê-lo** (vida baixa, alvo
+prioritário): sem o Rebocador, o grupo deixa de ser blindado.
 
-Sem nova infra: a blindagem é incremento direto de `health` do aliado (atributo
-público — mesmo padrão do `ChannelingGroup`, §1); o cabo é desenhado no draw. O
-teto por alvo evita pump infinito.
+A mecânica de escudo é genérica e reutilizável (`systems/enemy_shield.py`, §9):
+o drone só chama `grant_shield`; a absorção vive no roteador de dano (§8) e o
+render num passe central (§3). O drone não toca no estado interno dos aliados —
+comunica pelo contrato público `health`/`shield_hp` (§1).
 
 Contratos (CLAUDE.md): §5 update polimórfico; §3 `draw` só lê estado; §8 dano via
 `HitResult`; §11 `aggressiveness`/`health_multiplier`.
@@ -17,12 +19,13 @@ from __future__ import annotations
 
 import math
 import random
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any, List, Tuple
 
 import pygame
 
 from ...core.config import config as Config
 from ...entities.explosion import ExplosionType
+from ...systems import enemy_shield
 from ..enemy_hit_mixin import EnemyHitMixin
 from . import city_glow
 from . import city_palette as pal
@@ -34,7 +37,6 @@ from .sapper_drone_pixel_map import (
     CORE_NEON_DIM,
     PIXEL_COLS,
     PIXEL_ROWS,
-    REPAIR,
     build_sapper_surface,
 )
 
@@ -50,13 +52,15 @@ class SapperDrone(EnemyHitMixin):
     HEALTH: int = 50
     POINTS: int = 220
 
-    CABLE_RANGE: float = 230.0       # alcance p/ engatar/manter o cabo
-    HOVER_DIST: float = 90.0         # distância que paira do alvo
-    MOVE_SPEED: float = 130.0
-    DRIFT_SPEED: float = 70.0        # deriva quando sem alvo (avança p/ esquerda)
-    ARMOR_RATE: float = 14.0         # HP de blindagem por segundo
-    ARMOR_PER_TARGET: float = 60.0   # teto de blindagem injetada por aliado
-    RESCAN_INTERVAL: Tuple[float, float] = (0.4, 0.8)
+    PULSE_INTERVAL: float = 8.0      # intervalo entre pulsos de escudo
+    PULSE_RADIUS: float = 260.0      # alcance do pulso
+    SHIELD_FRACTION: float = 0.25    # escudo = 25% do HP atual do alvo
+    PULSE_ANIM_DUR: float = 0.6      # duração da onda visual do pulso
+
+    PACK_RANGE: float = 340.0        # raio para detectar/seguir o grupo
+    HOVER_DIST: float = 120.0        # distância que paira do centro do grupo
+    MOVE_SPEED: float = 120.0
+    DRIFT_SPEED: float = 60.0        # deriva quando sem grupo (avança p/ esquerda)
 
     _explosion_size_hit: int = 10
 
@@ -80,11 +84,9 @@ class SapperDrone(EnemyHitMixin):
         self.health: int = max(1, int(self.HEALTH * health_multiplier))
         self.aggressiveness_multiplier: float = aggressiveness_multiplier
 
-        self.target: Any | None = None
-        self._granted: Dict[int, float] = {}   # id(alvo) -> blindagem já dada
-        self._heal_accum: float = 0.0          # acúmulo fracionário p/ health int
-        self._scan_timer: float = random.uniform(*self.RESCAN_INTERVAL)
-        self.beaming: bool = False             # cabo ativo neste frame (lido no draw)
+        # Primeiro pulso cedo e dessincronizado entre múltiplos drones.
+        self._pulse_timer: float = random.uniform(1.5, self.PULSE_INTERVAL)
+        self._pulse_anim: float = -1.0          # <0 inativo; senão tempo da onda
 
         self.pulse: float = random.uniform(0.0, math.tau)
         self.hit_timer: float = 0.0
@@ -110,22 +112,19 @@ class SapperDrone(EnemyHitMixin):
         self.pulse += dt
         if self.hit_timer > 0.0:
             self.hit_timer = max(0.0, self.hit_timer - dt)
+        if self._pulse_anim >= 0.0:
+            self._pulse_anim += dt
+            if self._pulse_anim > self.PULSE_ANIM_DUR:
+                self._pulse_anim = -1.0
 
         cx, cy = self._center()
 
-        # Re-seleciona alvo periodicamente (ou se o atual morreu/saiu/encheu).
-        self._scan_timer -= dt
-        if self.target is not None and not self._target_valid(self.target, cx, cy):
-            self.target = None
-        if self.target is None and self._scan_timer <= 0.0:
-            self._scan_timer = random.uniform(*self.RESCAN_INTERVAL)
-            self.target = self._pick_target(other_enemies, cx, cy)
+        self._pulse_timer -= dt
+        if self._pulse_timer <= 0.0:
+            self._pulse_timer += self.PULSE_INTERVAL
+            self._emit_pulse(other_enemies, cx, cy)
 
-        self.beaming = False
-        if self.target is not None:
-            self._tend_target(dt, cx, cy)
-        else:
-            self._drift(dt)
+        self._seek_pack(dt, cx, cy, other_enemies)
 
     def _is_ally(self, e: Any) -> bool:
         # Aliado = qualquer inimigo com HP atacável, exceto outro Rebocador e bosses.
@@ -135,62 +134,66 @@ class SapperDrone(EnemyHitMixin):
             return False
         return isinstance(getattr(e, "health", None), int)
 
-    def _pick_target(self, others: List[Any], cx: float, cy: float) -> Any | None:
-        best: Any | None = None
-        best_d2 = self.CABLE_RANGE * self.CABLE_RANGE
+    def _ally_center(self, e: Any, fx: float, fy: float) -> Tuple[float, float]:
+        return (
+            getattr(e, "x", fx) + getattr(e, "w", 0) / 2,
+            getattr(e, "y", fy) + getattr(e, "h", 0) / 2,
+        )
+
+    def _emit_pulse(self, others: List[Any], cx: float, cy: float) -> None:
+        """Blinda todos os aliados no raio com 25% do HP atual deles."""
+        self._pulse_anim = 0.0
+        r2 = self.PULSE_RADIUS * self.PULSE_RADIUS
+        granted = False
         for e in others:
             if not self._is_ally(e):
                 continue
-            if self._granted.get(id(e), 0.0) >= self.ARMOR_PER_TARGET:
+            ex, ey = self._ally_center(e, cx, cy)
+            if (ex - cx) ** 2 + (ey - cy) ** 2 > r2:
                 continue
-            ex = getattr(e, "x", cx) + getattr(e, "w", 0) / 2
-            ey = getattr(e, "y", cy) + getattr(e, "h", 0) / 2
-            d2 = (ex - cx) ** 2 + (ey - cy) ** 2
-            if d2 < best_d2:
-                best_d2 = d2
-                best = e
-        return best
+            hp = getattr(e, "health", 0)
+            if hp > 0:
+                enemy_shield.grant_shield(e, hp * self.SHIELD_FRACTION)
+                granted = True
+        # Som uma única vez por pulso, só se blindou alguém (padrão de chamada
+        # direta a hit_sounds, como o WARNING do CyberTank).
+        if granted:
+            from ...systems import hit_sounds
 
-    def _target_valid(self, t: Any, cx: float, cy: float) -> bool:
-        if not self._is_ally(t):
-            return False
-        if self._granted.get(id(t), 0.0) >= self.ARMOR_PER_TARGET:
-            return False
-        tx = getattr(t, "x", cx) + getattr(t, "w", 0) / 2
-        ty = getattr(t, "y", cy) + getattr(t, "h", 0) / 2
-        return (tx - cx) ** 2 + (ty - cy) ** 2 <= self.CABLE_RANGE * self.CABLE_RANGE
+            hit_sounds.SHIELD_ACTIVATE()
 
-    def _tend_target(self, dt: float, cx: float, cy: float) -> None:
-        t = self.target
-        assert t is not None
-        tx = t.x + getattr(t, "w", 0) / 2
-        ty = t.y + getattr(t, "h", 0) / 2
+    def _seek_pack(
+        self, dt: float, cx: float, cy: float, others: List[Any]
+    ) -> None:
+        """Paira junto ao centro do grupo de aliados; sem grupo, deriva."""
+        sx = sy = 0.0
+        n = 0
+        rng2 = self.PACK_RANGE * self.PACK_RANGE
+        for e in others:
+            if not self._is_ally(e):
+                continue
+            ex, ey = self._ally_center(e, cx, cy)
+            if (ex - cx) ** 2 + (ey - cy) ** 2 <= rng2:
+                sx += ex
+                sy += ey
+                n += 1
+        if n == 0:
+            self._drift(dt)
+            return
+
+        tx, ty = sx / n, sy / n
         dx, dy = tx - cx, ty - cy
         dist = math.hypot(dx, dy) or 1.0
-
-        # Paira a HOVER_DIST do alvo (aproxima se longe, recua se colado).
-        desired = (dist - self.HOVER_DIST)
-        step = max(-self.MOVE_SPEED, min(self.MOVE_SPEED, desired * 2.0)) * dt
-        self.x += dx / dist * step
-        self.y += dy / dist * step
-
-        # Injeta blindagem (HP) até o teto por alvo, dentro do alcance.
-        if dist <= self.CABLE_RANGE:
-            self.beaming = True
-            room = self.ARMOR_PER_TARGET - self._granted.get(id(t), 0.0)
-            add = min(room, self.ARMOR_RATE * dt)
-            if add > 0.0:
-                self._heal_accum += add
-                self._granted[id(t)] = self._granted.get(id(t), 0.0) + add
-                whole = int(self._heal_accum)
-                if whole >= 1:
-                    self._heal_accum -= whole
-                    t.health = int(getattr(t, "health", 0)) + whole
-                    if hasattr(t, "max_health"):
-                        t.max_health = max(int(t.max_health), int(t.health))
+        if dist > self.HOVER_DIST:
+            step = min(self.MOVE_SPEED * dt, dist - self.HOVER_DIST)
+            self.x += dx / dist * step
+            self.y += dy / dist * step
+        # Avanço lento p/ acompanhar o scroll e não ficar preso eternamente.
+        if self.side_scroll:
+            self.x -= self.DRIFT_SPEED * 0.35 * dt
 
     def _drift(self, dt: float) -> None:
-        # Sem alvo: deriva devagar na direção de avanço do bioma.
+        # Sem grupo: deriva devagar na direção de avanço do bioma.
         if self.side_scroll:
             self.x -= self.DRIFT_SPEED * dt
             if self.x + self.w < -40.0:
@@ -256,9 +259,9 @@ class SapperDrone(EnemyHitMixin):
         cx, cy = self._center()
         icx, icy = int(cx), int(cy)
 
-        # Cabo de reparo até o alvo (atrás do corpo).
-        if self.beaming and self.target is not None and not self.target.dead:
-            self._draw_cable(surface, icx, icy)
+        # Onda do pulso (anel expansível) atrás do corpo — feedback do disparo.
+        if self._pulse_anim >= 0.0:
+            self._draw_pulse_ring(surface, icx, icy)
 
         base = build_sapper_surface(cell)
         if self.hit_timer > 0.0:
@@ -268,9 +271,11 @@ class SapperDrone(EnemyHitMixin):
         else:
             surface.blit(base, (int(self.x), int(self.y)))
 
-        # Núcleo verde pulsante (mais forte enquanto reboca).
+        # Núcleo verde pulsante (mais forte logo após emitir o pulso).
         pulse = 0.5 + 0.5 * math.sin(self.pulse * 5.0)
-        boost = 0.5 if self.beaming else 0.0
+        boost = 0.0
+        if self._pulse_anim >= 0.0:
+            boost = max(0.0, 1.0 - self._pulse_anim / self.PULSE_ANIM_DUR) * 0.6
         core_col = pal.lerp(CORE_NEON_DIM, CORE_NEON, min(1.0, pulse + boost))
         core_r = int(cell * (1.3 + pulse) + cell * 1.4 * boost)
         for c, r in CORE_CELLS:
@@ -292,25 +297,23 @@ class SapperDrone(EnemyHitMixin):
                 CLAW_NEON,
             )
 
-    def _draw_cable(self, surface: pygame.Surface, icx: int, icy: int) -> None:
-        t = self.target
-        if t is None:
+    def _draw_pulse_ring(self, surface: pygame.Surface, icx: int, icy: int) -> None:
+        # Anel transiente: só vive ~PULSE_ANIM_DUR a cada 8s, fora do hot path
+        # estável — a alocação da surface por frame durante a onda é aceitável.
+        f = self._pulse_anim / self.PULSE_ANIM_DUR  # 0..1
+        radius = int(self.PULSE_RADIUS * f)
+        if radius < 2:
             return
-        tx = int(t.x + getattr(t, "w", 0) / 2)
-        ty = int(t.y + getattr(t, "h", 0) / 2)
-        # Cabo crepitante (jitter por segmento) verde-ciano.
-        segs = 8
-        flick = 0.5 + 0.5 * math.sin(self.pulse * 22.0)
-        amp = 2.0 + 3.0 * flick
-        prev = (icx, icy)
-        for k in range(1, segs + 1):
-            f = k / segs
-            mx = icx + (tx - icx) * f
-            my = icy + (ty - icy) * f
-            if k < segs:
-                mx += random.uniform(-amp, amp)
-                my += random.uniform(-amp, amp)
-            pygame.draw.line(surface, REPAIR, prev, (int(mx), int(my)), 2)
-            prev = (int(mx), int(my))
-        # Halo no ponto de reparo do aliado.
-        self._blit_glow(surface, tx, ty, int(self.cell * 2.0), REPAIR)
+        alpha = int(140 * (1.0 - f))
+        if alpha <= 0:
+            return
+        size = radius * 2 + 4
+        ring = pygame.Surface((size, size), pygame.SRCALPHA)
+        pygame.draw.circle(
+            ring, (*pal.ELECTRIC_BLUE, alpha), (radius + 2, radius + 2), radius, 3
+        )
+        surface.blit(
+            ring,
+            (icx - radius - 2, icy - radius - 2),
+            special_flags=pygame.BLEND_RGBA_ADD,
+        )

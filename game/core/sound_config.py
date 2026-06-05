@@ -138,6 +138,8 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "laser_shot": "sfx/ui/som_laser_raio.mp3",  # Som do laser do upgrade LASER_SHOT
             "black_hole": "sfx/ui/Buraco_negro_Som.mp3",  # Som do buraco negro
             "hit_hurt_meteor_boss": "sfx/ui/hit_hurt_meteor_boss.wav",  # Som de rachadura do boss meteoro
+            "shield_activate": "sfx/ui/Som_Escudo_Ativando.wav",  # Pulso do SapperDrone concede escudos
+            "shield_break": "sfx/ui/Som_Escudo_Destruído.wav",  # Escudo de inimigo esgotado
         },
     },
 }

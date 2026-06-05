@@ -85,6 +85,7 @@ from ..entities.stone_golem_boss import (
 from ..entities.stone_sentry import StoneSentry
 from ..entities.wingman import Wingman
 from ..entities.coop_link import CoopLink
+from . import enemy_shield
 from .boss_context import BossUpdateContext, BossUpdateResult
 from .collision_protocols import Removable
 from .entity_context import EnemyUpdateContext
@@ -1056,6 +1057,12 @@ class EntityManager:
                         e.draw(surface, player_x, player_y)
                     else:
                         e.draw(surface)
+            # Passe central de escudos (enemy_shield): sobre os corpos, abaixo
+            # de projéteis/boss. Guard barato por getattr para a esmagadora
+            # maioria sem escudo.
+            for e in self.enemies:
+                if getattr(e, "shield_hp", 0.0) > 0.0 and is_v(e):
+                    enemy_shield.draw_shield(surface, e, getattr(e, "pulse", 0.0))
             for f in self.formations:
                 if is_v(f):
                     f.draw(surface)

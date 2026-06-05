@@ -5,11 +5,21 @@ from typing import TYPE_CHECKING, Any, Callable, Sequence, cast
 import pygame
 
 from ..entities.bullet import Bullet
+from ..entities.explosion import ExplosionType
 from ..entities.floating_score import FloatingScore
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..events import game_events as events
+from . import enemy_shield, hit_sounds
 from .collision_protocols import Enemy
 from .hit_result import NO_HIT, HitResult
+
+# Feedback imutável reusado quando o escudo bloqueia o hit inteiro (sem dano ao
+# HP). Só centelha ciano — o som é escolhido/ tocado inline (quebra vs. clink);
+# `sound=None` evita replay pelo fluxo padrão. Zero alocação por hit (§7).
+_SHIELD_BLOCK: HitResult = HitResult(
+    explosion_size=8,
+    explosion_type=ExplosionType.CYBER,
+)
 
 if TYPE_CHECKING:
     from ..core.events import EventBus
@@ -179,6 +189,25 @@ class CollisionPhysics:
         floating_scores: list[FloatingScore] | None = None,
     ) -> HitResult:
         """Roteador único: chama `target.on_hit` e materializa o HitResult."""
+        # Escudo temporário (enemy_shield): absorve antes do HP. Som de quebra
+        # quando o escudo é esgotado; clink quando aguenta. Se engole o hit
+        # inteiro, a entidade não recebe `on_hit` — feedback de centelha.
+        if damage > 0 and getattr(target, "shield_hp", 0.0) > 0.0:
+            damage = enemy_shield.absorb(target, damage)
+            shield_broke = getattr(target, "shield_hp", 0.0) <= 0.0
+            if damage <= 0:
+                entity_manager.spawn_explosion(
+                    hit_x,
+                    hit_y,
+                    size=_SHIELD_BLOCK.explosion_size,
+                    explosion_type=_SHIELD_BLOCK.explosion_type,
+                )
+                (hit_sounds.SHIELD_BREAK if shield_broke else hit_sounds.BOSS_DAMAGE)()
+                return _SHIELD_BLOCK
+            # Escudo esgotado mas com dano sobrando: quebra e o resto vai ao HP.
+            if shield_broke:
+                hit_sounds.SHIELD_BREAK()
+
         result: HitResult = target.on_hit(damage, hit_x, hit_y)
 
         if result.explosion_size > 0:

@@ -18,6 +18,10 @@ BOSS_DAMAGE: Callable[[], None] = sound_manager.play_boss_damage
 WARNING: Callable[[], None] = sound_manager.play_warning  # ex.: "Heavy Unit Incoming"
 STOP_WARNING: Callable[[], None] = sound_manager.stop_warning  # encerra o loop do warning
 
+# Escudo (enemy_shield): concessão pelo pulso do SapperDrone e destruição.
+SHIELD_ACTIVATE: Callable[[], None] = sound_manager.play_shield_activate
+SHIELD_BREAK: Callable[[], None] = sound_manager.play_shield_break
+
 # StoneGolemBoss
 GOLEM_MINE_TIMER: Callable[[], None] = sound_manager.play_golem_mine_timer
 GOLEM_STOP_MINE_TIMER: Callable[[], None] = sound_manager.stop_golem_mine_timer
