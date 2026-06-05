@@ -338,19 +338,14 @@ THEME_ENEMY_REPLACEMENTS: dict[tuple[WorldTheme, type], type] = {
 }
 
 
-# Limite de variedade de inimigos simultâneos por estágio (por dificuldade).
+# Teto rígido de variedade de inimigos simultâneos por dificuldade. A rampa de
+# introdução (X-1→1, X-2→2, X-3+→teto) é derivada do índice absoluto do estágio
+# em `_apply_enemy_variety_cap` via `min(estágio, teto)`.
 MAX_ENEMY_VARIETY_BY_DIFFICULTY: dict[DifficultyPreset, int] = {
     DifficultyPreset.CASUAL: 3,
     DifficultyPreset.NORMAL: 3,
     DifficultyPreset.HARDCORE: 4,
     DifficultyPreset.NIGHTMARE: 4,
-}
-
-MAX_ENEMY_VARIETY_BY_STAGE: dict[DifficultyPreset, dict[str, int]] = {
-    DifficultyPreset.CASUAL: {"early": 1, "mid": 2, "late": 3},
-    DifficultyPreset.NORMAL: {"early": 1, "mid": 2, "late": 3},
-    DifficultyPreset.HARDCORE: {"early": 2, "mid": 3, "late": 4},
-    DifficultyPreset.NIGHTMARE: {"early": 2, "mid": 3, "late": 4},
 }
 
 # Inimigo "base" garantido em cada tema.
@@ -365,16 +360,17 @@ THEME_BASE_ENEMY: dict[WorldTheme, type] = {
 # Specials "assinatura" do tema: têm PRIORIDADE no pool sobre a loteria
 # 1/spawn_time (que penaliza fortemente inimigos raros — sem isso um especial
 # como o Neon Sniper quase nunca sobreviveria ao corte). Ainda respeitam o teto
-# rígido de variedade (MAX_ENEMY_VARIETY_BY_DIFFICULTY): quando há mais
-# assinaturas que vagas, o variety cap sorteia favorecendo as mais recém-liberadas.
-# ORDEM IMPORTA: deve ir do mais antigo (desbloqueado cedo) para o mais novo
-# (desbloqueado tarde) — o índice na tupla é usado como peso de recência.
-# CITY: Sniper (estágio 1) → Police (~estágio 5) → Captor (~estágio 6, gate 0.45)
-#       → Tank (~estágio 6, gate 0.55).
+# rígido de variedade (MAX_ENEMY_VARIETY_BY_DIFFICULTY).
+# ORDEM = ORDEM DE DESBLOQUEIO (gate em `_configure_city_spawn`), do mais cedo ao
+# mais tarde. O variety cap mostra as `n_slots` assinaturas da CAUDA (mais recém-
+# liberadas) → cada uma aparece no estágio em que é introduzida (cobertura
+# garantida) e o conjunto avança junto com os gates ("novos entram, antigos saem").
+# DEVE casar com os gates: Sniper(X-2) → Police(X-3) → Mortar(X-4) → Captor/Sapper
+# (X-5) → Tesla/Jammer(X-6) → CyberTank/Cargo(X-7) → Splitter/Mirror(X-8).
 THEME_SIGNATURE_ENEMIES: dict[WorldTheme, tuple[type, ...]] = {
     WorldTheme.CITY: (
-        NeonSniper, PoliceInterceptor, CyberCaptor, TeslaTwin, CyberTank, JammerNode,
-        MortarDrone, CargoCarrier, SplitterTank, SapperDrone, MirrorPylon,
+        NeonSniper, PoliceInterceptor, MortarDrone, CyberCaptor, SapperDrone,
+        TeslaTwin, JammerNode, CyberTank, CargoCarrier, SplitterTank, MirrorPylon,
     ),
 }
 
@@ -543,36 +539,38 @@ def _apply_enemy_variety_cap(
     world: "WorldConfig",
     difficulty_preset: DifficultyPreset,
 ) -> LevelConfig:
-    """Limita o spawn_config à "pirâmide de N" tipos por nível (cap por
-    dificuldade + estágio), com teto rígido e rotação das assinaturas.
+    """Limita o spawn_config à "pirâmide de N" tipos por nível via uma rampa
+    GLOBAL ancorada no índice absoluto do estágio dentro do mundo.
 
-    Política (P1 Opção A):
-      - O cap da banda de estágio (early/mid/late) define a rampa inicial; as
-        assinaturas presentes ampliam esse cap para garantir presença, MAS o
-        total é clampado ao teto rígido `MAX_ENEMY_VARIETY_BY_DIFFICULTY`
-        (3 no Normal, 4 no Hardcore/Pesadelo) — nunca mais que isso por nível.
+    Regra de design (aplicada a todos os temas, existentes e futuros):
+      - `cap = min(estágio_absoluto, teto_por_dificuldade)`. Logo:
+        X-1 → 1 tipo, X-2 → 2, X-3+ → o teto da dificuldade
+        (`MAX_ENEMY_VARIETY_BY_DIFFICULTY`: 3 no Normal/Casual,
+        4 no Hardcore/Pesadelo, onde o 4º tipo entra em X-4).
+      - É só TETO (limite superior): se o pool do tema ainda tem poucos tipos
+        liberados cedo, mostra menos — sem pico de complexidade na entrada de
+        um mundo novo.
       - Quando há mais candidatos que vagas, escolhe-se: base (volume) sempre;
-        depois as assinaturas por loteria ponderada por RECÊNCIA (as mais
-        recém-liberadas têm prioridade → "novos entram, antigos saem"); por fim,
-        as vagas restantes pelos demais tipos via loteria 1/spawn_time.
-      - Seed determinístico por nível → o subconjunto varia de nível para nível
-        (rotação), mantendo variedade alta ENTRE níveis e ≤ teto POR nível.
+        depois as `n_slots` assinaturas MAIS RECÉM-LIBERADAS (cauda da ordem de
+        unlock em THEME_SIGNATURE_ENEMIES) — cada assinatura aparece no estágio em
+        que é introduzida (cobertura garantida, sem o viés que excluía algumas);
+        por fim, as vagas restantes pelos demais tipos via loteria 1/spawn_time.
+      - O subconjunto de assinaturas é determinístico por estágio (segue os gates);
+        o filler não-assinatura usa seed determinístico por nível.
     """
-    stage_band = _get_stage_band(world, config.level_number)
-    variety_by_stage = MAX_ENEMY_VARIETY_BY_STAGE.get(difficulty_preset)
+    total_stages = max(1, world.total_stages)
+    stage_number = max(
+        1, min(total_stages, world.get_stage_number(config.level_number))
+    )
     hard_max = MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3)
-    if variety_by_stage is not None:
-        cap = variety_by_stage.get(stage_band, hard_max)
-    else:
-        cap = hard_max
+    cap = min(stage_number, hard_max)
     spawn_config = config.enemy_spawn_config
 
-    # Assinaturas presentes ampliam o cap (para sobreviverem à loteria), mas o
-    # total nunca passa do teto rígido de variedade do tema.
+    # Assinaturas têm prioridade na seleção (abaixo), mas NÃO ampliam o cap: a
+    # rampa por estágio é a autoridade única sobre a contagem.
     signatures = [
         t for t in THEME_SIGNATURE_ENEMIES.get(world.theme, ()) if t in spawn_config
     ]
-    cap = min(cap + len(signatures), hard_max)
 
     if len(spawn_config) <= cap:
         return config
@@ -586,15 +584,16 @@ def _apply_enemy_variety_cap(
     if base is not None and base in spawn_config:
         chosen.append(base)
 
-    # Assinaturas: prioridade sobre os demais, sorteadas por recência (índice na
-    # tupla = antigo→novo; peso i+1 favorece as recém-liberadas). Se houver mais
-    # assinaturas que vagas, as antigas "saem de cena" neste nível (rotação).
+    # Assinaturas: prioridade sobre os demais. `signatures` está em ORDEM DE
+    # UNLOCK; pega-se a CAUDA (as `n_slots` mais recém-liberadas). Como os gates
+    # introduzem ~n_slots assinaturas por estágio, cada uma cai na cauda no estágio
+    # em que é liberada → aparece garantidamente ali (cobertura completa), sem o
+    # viés da loteria por recência que fazia Jammer/Mirror/Tesla sumirem. Custo
+    # aceito: nos estágios finais sem novo unlock, repete os "pesados" mais novos.
     sigs = [t for t in signatures if t not in chosen]
-    sig_weights = [i + 1 for i in range(len(sigs))]
-    while sigs and len(chosen) < cap:
-        idx = rng.choices(range(len(sigs)), weights=sig_weights, k=1)[0]
-        chosen.append(sigs.pop(idx))
-        sig_weights.pop(idx)
+    n_slots = cap - len(chosen)
+    if sigs and n_slots > 0:
+        chosen.extend(sigs[-n_slots:])
 
     # Vagas restantes: demais tipos (não-assinatura) por loteria 1/spawn_time.
     if len(chosen) < cap:
@@ -800,6 +799,9 @@ def get_level_config(
         config = copy.copy(config)
         config.enemy_spawn_config = adjusted_spawn
         config.enemies_to_clear = adjusted_to_clear
+        # Níveis handcrafted também seguem a regra global de variedade/elegibilidade
+        # por tema (rampa X-1→1, X-2→2, X-3+→teto; filtro de tema).
+        config = _apply_theme_enemy_rules(config, world, difficulty_preset)
         return config
 
     if difficulty_preset not in _procedural_generators:

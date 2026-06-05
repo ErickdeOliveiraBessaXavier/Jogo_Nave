@@ -213,16 +213,16 @@ ENEMY_PRESSURE_UNLOCK_START: dict[str, float] = {
     "elemental_robot": 0.55,
     "stone_sentry": 0.42,
     "neon_sniper": 0.30,
-    "police_interceptor": 0.45,
-    "cyber_tank": 0.60,
-    "cyber_captor": 0.50,
+    "police_interceptor": 0.20,
+    "cyber_tank": 0.62,
+    "cyber_captor": 0.40,
     "tesla_twin": 0.50,
     "jammer": 0.50,
-    "mortar": 0.35,
-    "cargo_carrier": 0.55,
-    "splitter": 0.55,
-    "sapper": 0.45,
-    "mirror": 0.55,
+    "mortar": 0.30,
+    "cargo_carrier": 0.62,
+    "splitter": 0.74,
+    "sapper": 0.40,
+    "mirror": 0.74,
 }
 
 ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
@@ -423,11 +423,19 @@ class ProceduralLevelGenerator:
         self,
         enemy_spawn_config: EnemySpawnConfig,
         stage_progress: float,
+        stage_number: int,
         difficulty: float,
         spawn_multiplier: float,
     ) -> None:
-        """Configura spawn de MountainMage/Propeller/StoneSentry/ElementalRobot."""
-        if stage_progress >= 0.15:
+        """Configura spawn de MountainMage/Propeller/StoneSentry/ElementalRobot.
+
+        Curva de introdução por estágio absoluto (ver §regra de variedade):
+        RockGlider (base, sempre) → MountainMage (2º, X-2) → MountainPropeller
+        (3º, X-3). StoneSentry e ElementalRobot são os "pesados" tardios e
+        seguem gate por stage_progress (rotacionam no pool depois). A FREQUÊNCIA
+        de todos continua escalando por stage_progress.
+        """
+        if stage_number >= 2:
             if stage_progress < 0.40:
                 mage_base_time = 22.0
             elif stage_progress < 0.70:
@@ -438,7 +446,7 @@ class ProceduralLevelGenerator:
                 (mage_base_time / difficulty) / spawn_multiplier
             )
 
-        if stage_progress >= 0.35:
+        if stage_number >= 3:
             enemy_spawn_config[MountainPropeller] = self._clamp_spawn_time(
                 (20.0 / difficulty) / spawn_multiplier
             )
@@ -494,12 +502,13 @@ class ProceduralLevelGenerator:
             (sniper_base / difficulty) / spawn_multiplier
         )
 
-        # Police Interceptor: perseguidor que entra na metade do mundo (gate
-        # ligeiramente abaixo do UNLOCK_START 0.45 p/ o ramp-up suave da
-        # gate_mult ter espaço). Spawna em duplas (cap 4 controla a tela); o
-        # valor aqui é o intervalo entre *duplas*. Peso ponderado via tier
-        # "strong" + gate (idêntico ao padrão do guia).
-        if stage_progress >= 0.40:
+        # Police Interceptor: 3º inimigo da introdução do CITY (após City Drone e
+        # Neon Sniper). Gate em 0.20 p/ entrar no pool em 3-3 (stage_progress
+        # (3-1)/9 ≈ 0.222), que é quando a rampa de variedade chega a 3 tipos —
+        # mas NÃO em 3-2 (0.111). Casa o UNLOCK_START 0.20 p/ a frequência rampar
+        # daí. Spawna em duplas (cap 4 controla a tela); o valor aqui é o
+        # intervalo entre *duplas*. Peso ponderado via tier "strong" + gate.
+        if stage_progress >= 0.20:
             interceptor_weight = _get_progressive_enemy_weight(
                 "police_interceptor", 1.0, stage_progress
             )
@@ -510,67 +519,66 @@ class ProceduralLevelGenerator:
                 interceptor_time
             )
 
-        # Cyber Tank: "gatekeeper" raro do fim do mundo (gate abaixo do
-        # UNLOCK_START 0.60 p/ o ramp-up suave da gate_mult ter espaço). Cap 1
-        # (SPAWNER_CAP_CYBER_TANK) garante que apareça sozinho; o valor é o
-        # intervalo entre aparições. BASE_TIME alto (mini-boss).
-        if stage_progress >= 0.55:
+        # Cyber Tank: "gatekeeper" mini-boss, introduzido em ~X-7 (gate 0.62).
+        # Cap 1 (SPAWNER_CAP_CYBER_TANK) garante que apareça sozinho; o valor é o
+        # intervalo entre aparições. BASE_TIME alto.
+        if stage_progress >= 0.62:
             tank_weight = _get_progressive_enemy_weight(
                 "cyber_tank", 1.0, stage_progress
             )
             tank_time = (22.0 / difficulty / spawn_multiplier) * (2.0 / tank_weight)
             enemy_spawn_config[CyberTank] = self._clamp_spawn_time(tank_time)
 
-        # Cyber-Captor: armadilha de energia da metade do mundo em diante (gate
-        # ligeiramente abaixo do UNLOCK_START 0.50). Cap 2 controla a presença.
-        if stage_progress >= 0.45:
+        # Cyber-Captor: armadilha de energia, introduzido em ~X-5 (gate 0.40).
+        # Cap 2 controla a presença.
+        if stage_progress >= 0.40:
             captor_weight = _get_progressive_enemy_weight(
                 "cyber_captor", 1.0, stage_progress
             )
             captor_time = (16.0 / difficulty / spawn_multiplier) * (2.0 / captor_weight)
             enemy_spawn_config[CyberCaptor] = self._clamp_spawn_time(captor_time)
 
-        # Tesla Twins: barreira vertical de controle, do meio do mundo em diante
-        # (gate 0.45, ligeiramente abaixo do UNLOCK_START 0.50). Cap 1 par controla
-        # a presença; o valor é o intervalo entre *pares* (peso tier "strong" + gate).
-        if stage_progress >= 0.45:
+        # Tesla Twins: barreira vertical de controle, introduzido em ~X-6 (gate
+        # 0.50). Cap 1 par controla a presença; o valor é o intervalo entre
+        # *pares* (peso tier "strong" + gate).
+        if stage_progress >= 0.50:
             tesla_weight = _get_progressive_enemy_weight(
                 "tesla_twin", 1.0, stage_progress
             )
             tesla_time = (18.0 / difficulty / spawn_multiplier) * (2.0 / tesla_weight)
             enemy_spawn_config[TeslaTwin] = self._clamp_spawn_time(tesla_time)
 
-        # Jammer Node: nó de interferência (suprime tiros por área), da metade do
-        # mundo em diante (gate 0.45, abaixo do UNLOCK_START 0.50). Cap 2 controla
-        # a presença; o valor é o intervalo entre aparições (tier "strong" + gate).
-        if stage_progress >= 0.45:
+        # Jammer Node: nó de interferência (suprime tiros por área), introduzido
+        # em ~X-6 (gate 0.50). Cap 2 controla a presença; o valor é o intervalo
+        # entre aparições (tier "strong" + gate).
+        if stage_progress >= 0.50:
             jammer_weight = _get_progressive_enemy_weight(
                 "jammer", 1.0, stage_progress
             )
             jammer_time = (17.0 / difficulty / spawn_multiplier) * (2.0 / jammer_weight)
             enemy_spawn_config[JammerNode] = self._clamp_spawn_time(jammer_time)
 
-        # Artilheiro: bombardeio de área da metade do mundo em diante (gate 0.35).
-        # Cap 2 controla a presença; o valor é o intervalo entre aparições.
-        if stage_progress >= 0.35:
+        # Artilheiro: bombardeio de área, o 4º tipo do CITY (introduzido em ~X-4,
+        # gate 0.30). Cap 2 controla a presença; o valor é o intervalo entre aparições.
+        if stage_progress >= 0.30:
             mortar_weight = _get_progressive_enemy_weight(
                 "mortar", 1.0, stage_progress
             )
             mortar_time = (16.0 / difficulty / spawn_multiplier) * (2.0 / mortar_weight)
             enemy_spawn_config[MortarDrone] = self._clamp_spawn_time(mortar_time)
 
-        # Cargueiro: transporte de tropas do fim do mundo (gate 0.55). Cap 1 garante
-        # que apareça sozinho; o valor é o intervalo entre aparições (mini-boss).
-        if stage_progress >= 0.55:
+        # Cargueiro: transporte de tropas (mini-boss), introduzido em ~X-7 (gate
+        # 0.62). Cap 1 garante que apareça sozinho; intervalo entre aparições.
+        if stage_progress >= 0.62:
             carrier_weight = _get_progressive_enemy_weight(
                 "cargo_carrier", 1.0, stage_progress
             )
             carrier_time = (22.0 / difficulty / spawn_multiplier) * (2.0 / carrier_weight)
             enemy_spawn_config[CargoCarrier] = self._clamp_spawn_time(carrier_time)
 
-        # Splitter Tank: colosso modular do fim do mundo (gate 0.55). Cap 1
-        # (conta filhotes) garante que apareça sozinho; intervalo entre aparições.
-        if stage_progress >= 0.55:
+        # Splitter Tank: colosso modular do fim do mundo (mini-boss), introduzido
+        # em ~X-8 (gate 0.74). Cap 1 (conta filhotes) garante que apareça sozinho.
+        if stage_progress >= 0.74:
             splitter_weight = _get_progressive_enemy_weight(
                 "splitter", 1.0, stage_progress
             )
@@ -579,18 +587,18 @@ class ProceduralLevelGenerator:
             )
             enemy_spawn_config[SplitterTank] = self._clamp_spawn_time(splitter_time)
 
-        # Rebocador: suporte de blindagem da metade do mundo (gate 0.45). Cap 2
+        # Rebocador: suporte de blindagem, introduzido em ~X-5 (gate 0.40). Cap 2
         # controla a presença; o valor é o intervalo entre aparições.
-        if stage_progress >= 0.45:
+        if stage_progress >= 0.40:
             sapper_weight = _get_progressive_enemy_weight(
                 "sapper", 1.0, stage_progress
             )
             sapper_time = (18.0 / difficulty / spawn_multiplier) * (2.0 / sapper_weight)
             enemy_spawn_config[SapperDrone] = self._clamp_spawn_time(sapper_time)
 
-        # Mirror Pylon: refletor de controle do fim do mundo (gate 0.55). Cap 1
-        # garante que apareça sozinho; o valor é o intervalo entre aparições.
-        if stage_progress >= 0.55:
+        # Mirror Pylon: refletor de controle do fim do mundo, introduzido em ~X-8
+        # (gate 0.74). Cap 1 garante que apareça sozinho; intervalo entre aparições.
+        if stage_progress >= 0.74:
             mirror_weight = _get_progressive_enemy_weight(
                 "mirror", 1.0, stage_progress
             )
@@ -601,11 +609,17 @@ class ProceduralLevelGenerator:
         self,
         enemy_spawn_config: EnemySpawnConfig,
         stage_progress: float,
+        stage_number: int,
         difficulty: float,
         spawn_multiplier: float,
     ) -> None:
-        """Configura Alien/EyeEnemy/SquareMinionBoss por bandas de stage_progress."""
-        if stage_progress < 0.22:
+        """Configura Alien/EyeEnemy/SquareMinionBoss (Starfield/Vulcânico/Proc).
+
+        Curva de introdução por estágio absoluto: Meteor (base, sempre) → Alien
+        (2º, X-2) → EyeEnemy (3º, X-3). SquareMinionBoss é miniboss tardio (gate
+        por stage_progress). A FREQUÊNCIA escala por stage_progress como antes.
+        """
+        if stage_number < 2:
             enemy_spawn_config.pop(Alien, None)
         else:
             if stage_progress < 0.45:
@@ -618,7 +632,7 @@ class ProceduralLevelGenerator:
                 (alien_base / difficulty) / spawn_multiplier
             )
 
-        if stage_progress < 0.45:
+        if stage_number < 3:
             enemy_spawn_config.pop(EyeEnemy, None)
         else:
             if stage_progress < 0.70:
@@ -663,6 +677,11 @@ class ProceduralLevelGenerator:
         spawn_multiplier = theme_spawn_mult * preset_spawn_mult
         enemies_multiplier = theme_enemies_mult
         stage_progress = _get_world_stage_progress(level_number)
+        # Índice absoluto do estágio (1-based) — usado pelos gates de
+        # DISPONIBILIDADE (quando cada tipo entra no pool), para a curva de
+        # introdução X-1→1, X-2→2, X-3+→3 valer independente do tamanho do mundo.
+        # A FREQUÊNCIA de cada tipo continua escalando por stage_progress.
+        stage_number = world.get_stage_number(level_number)
 
         enemy_spawn_config: EnemySpawnConfig = {}
 
@@ -744,7 +763,11 @@ class ProceduralLevelGenerator:
 
             if world.theme == WorldTheme.MOUNTAINS:
                 self._configure_mountains_spawn(
-                    enemy_spawn_config, stage_progress, difficulty, spawn_multiplier
+                    enemy_spawn_config,
+                    stage_progress,
+                    stage_number,
+                    difficulty,
+                    spawn_multiplier,
                 )
 
             if world.theme == WorldTheme.CITY:
@@ -757,7 +780,11 @@ class ProceduralLevelGenerator:
             # stage_banded evita injetar Alien/Eye/Square que o allowlist removeria.
             if world.theme in _STAGE_BANDED_THEMES and world.theme != WorldTheme.CITY:
                 self._configure_stage_banded_spawn(
-                    enemy_spawn_config, stage_progress, difficulty, spawn_multiplier
+                    enemy_spawn_config,
+                    stage_progress,
+                    stage_number,
+                    difficulty,
+                    spawn_multiplier,
                 )
 
         curve = DifficultyConfig.ENEMY_COUNT_CURVE

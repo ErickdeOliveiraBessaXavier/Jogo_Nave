@@ -179,6 +179,21 @@ deve segui-los; código existente que os viola é candidato a revisão.
 - Retrocompat deliberada (ex.: property `self.ship` durante migração
   multiplayer) é documentada no código com a razão e o plano de remoção. Não
   é dívida técnica enquanto rastreada.
+- **Curva global de introdução de variedade.** Todo mundo apresenta os inimigos
+  em rampa pelo **índice absoluto do estágio**: `X-1` no máx. 1 tipo, `X-2` no
+  máx. 2, `X-3+` o teto da dificuldade. Regra única em
+  `_apply_enemy_variety_cap` (`pipeline.py`): `cap = min(estágio_absoluto, teto)`,
+  com `teto = MAX_ENEMY_VARIETY_BY_DIFFICULTY` (3 Normal/Casual, 4 Hardcore/
+  Pesadelo). É **só teto** (limite superior): se o pool do tema liberou menos
+  tipos, mostra menos — sem pico de complexidade ao entrar num mundo novo.
+  Aplica-se a **todos** os caminhos (procedural, meteor_storm e fixed levels);
+  nenhum nível deve burlar o pipeline `_apply_theme_enemy_rules`. A *contagem* é
+  teto global; a *disponibilidade* (quando cada tipo entra no pool) usa o gate de
+  **estágio absoluto** (`stage_number`) para o trio de introdução — 2º tipo em
+  `stage>=2`, 3º em `stage>=3` — em `procedural._configure_*_spawn`, para a regra
+  valer em qualquer tamanho de mundo. A **frequência** de cada tipo continua
+  escalando por `stage_progress`. Tipos tardios/minibosses seguem gate por
+  `stage_progress`.
 
 ---
 

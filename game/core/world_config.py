@@ -148,6 +148,37 @@ def _get_worlds() -> dict[int, WorldConfig]:
 WORLDS = _get_worlds()
 
 
+def _get_procedural_sector_boss(
+    theme: WorldTheme, sector_idx: int
+) -> Optional[Type[Any]]:
+    """Boss do chefe de fim de setor procedural (níveis 46+).
+
+    Reusa os chefes existentes, rotacionando por OCORRÊNCIA do tema (cada 4
+    setores o tema se repete → `sector_idx // 4`) para dar variedade entre
+    setores do mesmo tema. CITY e VOLCANIC ainda não têm chefes nativos: usam
+    um placeholder temporário até os definitivos (ver
+    memory/level-progression-review-backlog).
+    """
+    # Imports locais (mesmo motivo de _get_worlds: evitar import circular).
+    from ..entities.cloud_archmage_boss import CloudArchmageBoss
+    from ..entities.giant_meteor_boss import GiantMeteorBoss
+    from ..entities.mountain_serpent_boss import MountainSerpentBoss
+    from ..entities.slime_boss import SlimeBoss
+    from ..entities.stone_golem_boss import StoneGolemBoss
+
+    rosters: dict[WorldTheme, Tuple[Type[Any], ...]] = {
+        # Montanhas tem 3 chefes próprios → rotaciona para variedade entre setores.
+        WorldTheme.MOUNTAINS: (StoneGolemBoss, MountainSerpentBoss, CloudArchmageBoss),
+        WorldTheme.STARFIELD: (GiantMeteorBoss,),  # chefe espacial (meteoro gigante)
+        WorldTheme.CITY: (GiantMeteorBoss,),  # TEMP até boss nativo do CITY
+        WorldTheme.VOLCANIC: (SlimeBoss,),  # TEMP até boss nativo do Vulcão
+    }
+    roster = rosters.get(theme)
+    if not roster:
+        return None
+    return roster[(sector_idx // 4) % len(roster)]
+
+
 # ============================================================================
 # FUNÇÕES AUXILIARES
 # ============================================================================
@@ -198,7 +229,8 @@ def get_world_for_level(level_number: int) -> WorldConfig:
         start_level=sector_start,
         end_level=sector_end,
         boss_level=sector_end,
-        boss_type=None,  # Rotação procedural de bosses
+        # Chefe de fim de setor, rotacionado por tema (reusa os bosses atuais).
+        boss_type=_get_procedural_sector_boss(theme, sector_idx),
         theme_modifiers=world_template.theme_modifiers.copy(),
     )
 

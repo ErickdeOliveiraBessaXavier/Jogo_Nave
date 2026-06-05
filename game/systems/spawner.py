@@ -102,6 +102,14 @@ SPAWNER_STORM_ENEMY_CAP: int = 30
 # Propagado até a entidade no spawn (§11), recalculado em `set_player_count`.
 SPAWNER_COOP_ENEMY_HP_PER_EXTRA_PLAYER: float = 0.15
 
+# Ramp suave de HP por estágio DENTRO do mundo, resetando a cada mundo novo.
+# +0% no estágio X-1 → +SPAWNER_WORLD_HP_RAMP no último estágio (interpolado por
+# stage_progress). Dá progressão de poder intra-mundo sem virar bullet-sponge nem
+# compor pela campanha (reseta por mundo), coerente com "cada mundo é uma
+# introdução fresca" (ver memory/enemy-variety-intro-curve). Propagado até a
+# entidade via `enemy_health_multiplier` no spawn (§11).
+SPAWNER_WORLD_HP_RAMP: float = 0.15
+
 # EnemySpawner — spawn de minas. Pesos relativos para o número de minas spawnadas
 # em cada leva: 2 é o caso comum (~59%), 3 é frequente (~29%), 5 é raro (~12%).
 # random.choices normaliza, então os valores absolutos só importam pela proporção.
@@ -262,9 +270,10 @@ class EnemySpawner:
         # +20% por jogador extra) e o HP de inimigos comuns (+15% por extra).
         # Atualizado via `set_player_count` quando P2 entra/sai mid-game.
         self.player_count = max(1, player_count)
-        # Define `self.enemy_health_multiplier` (efetivo = base × coop).
-        self._recompute_enemy_health_multiplier()
+        # current_level_number antes do recompute: o ramp de HP por estágio o lê.
         self.current_level_number: int = 1
+        # Define `self.enemy_health_multiplier` (efetivo = base × coop × ramp estágio).
+        self._recompute_enemy_health_multiplier()
         self.level_config: Any = self.level_manager.get_level(
             self.current_level_number, self.difficulty_preset
         )
@@ -559,10 +568,27 @@ class EnemySpawner:
             0, self.player_count - 1
         )
 
+    def _stage_hp_multiplier(self) -> float:
+        """Ramp suave de HP por estágio dentro do mundo, resetando a cada mundo.
+
+        +0% no X-1 → +SPAWNER_WORLD_HP_RAMP no último estágio (linear em
+        stage_progress). Inimigos invocados (filhotes/fragmentos) herdam o mesmo
+        `enemy_health_multiplier`, então o ramp os acompanha.
+        """
+        world = get_world_for_level(self.current_level_number)
+        total = world.total_stages
+        if total <= 1:
+            return 1.0
+        stage = world.get_stage_number(self.current_level_number)
+        progress = max(0.0, min(1.0, (stage - 1) / (total - 1)))
+        return 1.0 + SPAWNER_WORLD_HP_RAMP * progress
+
     def _recompute_enemy_health_multiplier(self) -> None:
-        """Recompõe o multiplicador de HP efetivo = base (preset) × coop."""
+        """Recompõe o HP efetivo = base (preset) × coop × ramp de estágio (mundo)."""
         self.enemy_health_multiplier = (
-            self._base_enemy_health_multiplier * self._coop_hp_multiplier()
+            self._base_enemy_health_multiplier
+            * self._coop_hp_multiplier()
+            * self._stage_hp_multiplier()
         )
 
     def _count_enemies_by_type(self, entity_manager: "EntityManager") -> dict[str, int]:
@@ -1900,6 +1926,8 @@ class EnemySpawner:
         inverted_vertical: bool = False,
     ) -> None:
         self.current_level_number = level_number
+        # Ramp de HP por estágio depende do nível atual → recomputa o multiplicador.
+        self._recompute_enemy_health_multiplier()
         # Se um LevelConfig pré-ajustado (ex: com meta-progression aplicado) for
         # fornecido, usá-lo diretamente em vez de recalcular do zero. Isso garante
         # que o ajuste adaptativo do PerformanceAnalyzer chegue de fato ao spawner.

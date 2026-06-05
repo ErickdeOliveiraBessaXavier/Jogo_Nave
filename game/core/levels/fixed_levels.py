@@ -310,11 +310,13 @@ class LevelConfig:
 
 
 FIXED_LEVELS: dict[int, LevelConfig] = {
-    # Nível 1: LEVEL DE DEBUG — todos os inimigos e todos os bosses.
-    # Fixed levels pulam o filtro de tema (allowlist) do pipeline, então qualquer
-    # inimigo listado aqui spawna direto (mesmo sendo MOUNTAINS/side-scroll). Os
+    # Nível 1: LEVEL DE DEBUG — scratchpad de inimigos/bosses.
+    # ATENÇÃO: fixed levels agora PASSAM pelo pipeline `_apply_theme_enemy_rules`
+    # (filtro de tema + variety cap), igual aos demais caminhos — ver CLAUDE.md §11.
+    # Logo, inimigos de outro tema que o do mundo (mundo 1 = MOUNTAINS) são
+    # FILTRADOS, e a variedade é limitada à rampa do estágio (X-1 → 1 tipo). Para
+    # testar um inimigo específico aqui, liste um inimigo do tema MOUNTAINS. Os
     # caps por tipo (SPAWNER_CAP_*) controlam a quantidade simultânea de cada um.
-    # Comente/descomente livremente para isolar o que quer testar.
     #
     # BOSS: só UM boss_type pode estar ativo por vez — descomente um da lista.
     # Para chegar ao boss rápido, baixe `enemies_to_clear` (ex.: 10).
