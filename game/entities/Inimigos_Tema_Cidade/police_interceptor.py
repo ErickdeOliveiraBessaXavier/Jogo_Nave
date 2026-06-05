@@ -268,7 +268,7 @@ class PoliceInterceptor(EnemyHitMixin):
             self.state = "patrol"
             mult = self.SOLO_COOLDOWN_MULT if self._is_solo() else 1.0
             self.cooldown_timer = self.COOLDOWN * mult
-            cx, cy = self._center()
+            _, cy = self._center()
             self.home = self._clamp_home(cy)
 
     def _clamp_home(self, value: float) -> float:

@@ -16,7 +16,7 @@ abaixo.
 |---|----------|----------|------------------------|---------|
 | 1 | **Jammer Node** (Glitch simpl.) | Cyber-Captor | suprime os tiros da nave numa área | Baixo |
 | 2 | **Artilheiro** | Neon Sniper | AoE telegrafada (negação de área) | Baixo-Médio |
-| 3 | **Escudeiro** (Riot Van) | Police Interceptor | escudo móvel que protege aliados | Médio |
+| 3 | **Escudeiro** (Cargo Carrier, ex-Riot Van) | Police Interceptor | escudo móvel que protege aliados | Médio |
 | 4 | **Splitter Tank** | Cyber Tank | multiplica em unidades menores na morte | Médio |
 | 5 | **Rebocador** (Sapper) | City Drone | cura/blindagem de aliados | Médio-Alto |
 | 6 | **Refletor** (Mirror Pylon) | Tesla Twins | reflete projéteis da nave | Alto |
@@ -75,7 +75,7 @@ Perch no alto + bombardeio de área telegrafado: durante o *aim* desenha o círc
 no chão, ao fim detona `ctx.new_area_blasts` + `ctx.new_explosions` (sem infra
 nova). Acento laranja. Gate 0.35, cap 2.
 
-### Fase 3 — Escudeiro (RiotVan)  ✅
+### Fase 3 — Escudeiro (Cargo Carrier, ex-RiotVan)  ✅
 Furgão que avança com escudo frontal (segmento via Fase 0) bloqueando tiros e
 protegendo aliados atrás. Counterplay: flanquear por cima/baixo. Gate 0.55, cap 1.
 

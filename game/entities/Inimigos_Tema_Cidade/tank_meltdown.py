@@ -176,7 +176,7 @@ class TankMeltdown:
         return self.base_r + (self.peak_r - self.base_r) * (prog ** 1.6)
 
     # ── Render ──────────────────────────────────────────────────────────────
-    def _blit_glow(self, surface, x, y, radius, color) -> None:
+    def _blit_glow(self, surface: pygame.Surface, x: float, y: float, radius: float, color: pal.RGB) -> None:
         if radius < 1:
             return
         glow = city_glow.get_glow(int(radius), color)
@@ -243,7 +243,7 @@ class TankMeltdown:
         pygame.draw.circle(surface, _HOT, (ccx, ccy), max(2, int(core_r * 0.4)))
         self._draw_arcs(surface, ccx, ccy, core_r, prog)
 
-    def _draw_arcs(self, surface, ccx, ccy, core_r, prog) -> None:
+    def _draw_arcs(self, surface: pygame.Surface, ccx: float, ccy: float, core_r: float, prog: float) -> None:
         # Estática elétrica: raios irregulares saindo do núcleo, mais densos
         # e longos conforme a instabilidade cresce.
         n = int(2 + prog * 5)
@@ -252,7 +252,7 @@ class TankMeltdown:
             segs = 4
             r0 = core_r * 0.7
             r1 = core_r * (1.4 + prog * 2.2)
-            pts = []
+            pts: list[tuple[int, int]] = []
             for k in range(segs + 1):
                 rr = r0 + (r1 - r0) * (k / segs)
                 jitter = random.uniform(-core_r * 0.35, core_r * 0.35)

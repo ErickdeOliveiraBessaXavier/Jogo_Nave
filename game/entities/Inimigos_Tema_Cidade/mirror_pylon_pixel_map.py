@@ -12,7 +12,7 @@ Refinamento (§5):
 from __future__ import annotations
 
 import math
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pygame
 
@@ -50,7 +50,16 @@ MIRROR_NEON: RGB = EMITTER_LENS
 def _build_pylon_map() -> List[str]:
     grid = [["." for _ in range(PIXEL_COLS)] for _ in range(PIXEL_ROWS)]
 
-    def draw_sphere(cx, cy, radius, main_ch, shine_ch, dark_ch, outline_ch, lens_ch=None):
+    def draw_sphere(
+        cx: int,
+        cy: int,
+        radius: int,
+        main_ch: str,
+        shine_ch: str,
+        dark_ch: str,
+        outline_ch: str,
+        lens_ch: Optional[str] = None,
+    ) -> None:
         for y in range(cy - radius - 1, cy + radius + 2):
             for x in range(cx - radius - 1, cx + radius + 2):
                 if x < 0 or x >= PIXEL_COLS or y < 0 or y >= PIXEL_ROWS:

@@ -344,7 +344,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             # ── CITY (variantes novas) ───────────────────────────────────────
             # JammerNode: 10.0,
             # MortarDrone: 8.0,
-            # SapperDrone: 8.0,
+            SapperDrone: 1.0,
             CargoCarrier: 1.0,
             SplitterTank: 1.0,
             MirrorPylon: 1.0,
