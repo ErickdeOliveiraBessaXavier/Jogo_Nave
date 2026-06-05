@@ -134,7 +134,7 @@ class DifficultyConfig:
 
     # Limite total de inimigos simultâneos por dificuldade
     DIFFICULTY_TOTAL_ENEMY_CAPS: dict[DifficultyPreset, int] = {
-        DifficultyPreset.CASUAL: 15,
+        DifficultyPreset.CASUAL: 18,
         DifficultyPreset.NORMAL: 20,
         DifficultyPreset.HARDCORE: 22,
         DifficultyPreset.NIGHTMARE: 25,
@@ -244,6 +244,18 @@ ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
     "splitter": 0.30,
     "sapper": 0.30,
     "mirror": 0.30,
+}
+
+
+# Tetos de intervalo de spawn (s) por categoria de inimigo do CITY. O fator
+# `2/weight` em `_configure_city_spawn` estourava o spawn_time p/ 100-500s na
+# introdução (weight no piso), deixando o inimigo no pool mas sem nunca spawnar.
+# Estes tetos garantem que ele apareça de fato desde a introdução E APERTAM
+# conforme o mundo avança (combate mais frenético no fim). (teto na introdução,
+# teto no fim do mundo).
+CITY_SPAWN_TIME_CAP: dict[str, tuple[float, float]] = {
+    "control": (16.0, 9.0),  # Police/Captor/Tesla/Jammer/Mortar/Sapper
+    "miniboss": (38.0, 24.0),  # CyberTank/CargoCarrier/SplitterTank/MirrorPylon
 }
 
 
@@ -419,6 +431,27 @@ class ProceduralLevelGenerator:
     def _clamp_spawn_time(self, time: float) -> float:
         return max(DifficultyConfig.MIN_SPAWN_TIME, time)
 
+    def _city_progressive_spawn_time(
+        self,
+        base: float,
+        weight: float,
+        difficulty: float,
+        spawn_multiplier: float,
+        category: str,
+        progress: float,
+    ) -> float:
+        """spawn_time progressivo do CITY com TETO por categoria.
+
+        Mantém a rampa por `weight` (mais frequente conforme o weight sobe), mas
+        aplica um teto (`CITY_SPAWN_TIME_CAP`) para o inimigo aparecer de fato
+        desde a introdução — o `2/weight` sozinho estourava p/ 100-500s. O teto
+        também aperta com `progress` (intensidade crescente ao longo do mundo).
+        """
+        raw = (base / difficulty / spawn_multiplier) * (2.0 / weight)
+        cap_intro, cap_late = CITY_SPAWN_TIME_CAP[category]
+        cap = cap_intro + (cap_late - cap_intro) * _clamp01(progress)
+        return min(cap, self._clamp_spawn_time(raw))
+
     def _configure_mountains_spawn(
         self,
         enemy_spawn_config: EnemySpawnConfig,
@@ -512,11 +545,9 @@ class ProceduralLevelGenerator:
             interceptor_weight = _get_progressive_enemy_weight(
                 "police_interceptor", 1.0, stage_progress
             )
-            interceptor_time = (14.0 / difficulty / spawn_multiplier) * (
-                2.0 / interceptor_weight
-            )
-            enemy_spawn_config[PoliceInterceptor] = self._clamp_spawn_time(
-                interceptor_time
+            enemy_spawn_config[PoliceInterceptor] = self._city_progressive_spawn_time(
+                14.0, interceptor_weight, difficulty, spawn_multiplier,
+                "control", stage_progress,
             )
 
         # Cyber Tank: "gatekeeper" mini-boss, introduzido em ~X-7 (gate 0.62).
@@ -526,8 +557,10 @@ class ProceduralLevelGenerator:
             tank_weight = _get_progressive_enemy_weight(
                 "cyber_tank", 1.0, stage_progress
             )
-            tank_time = (22.0 / difficulty / spawn_multiplier) * (2.0 / tank_weight)
-            enemy_spawn_config[CyberTank] = self._clamp_spawn_time(tank_time)
+            enemy_spawn_config[CyberTank] = self._city_progressive_spawn_time(
+                22.0, tank_weight, difficulty, spawn_multiplier,
+                "miniboss", stage_progress,
+            )
 
         # Cyber-Captor: armadilha de energia, introduzido em ~X-5 (gate 0.40).
         # Cap 2 controla a presença.
@@ -535,8 +568,10 @@ class ProceduralLevelGenerator:
             captor_weight = _get_progressive_enemy_weight(
                 "cyber_captor", 1.0, stage_progress
             )
-            captor_time = (16.0 / difficulty / spawn_multiplier) * (2.0 / captor_weight)
-            enemy_spawn_config[CyberCaptor] = self._clamp_spawn_time(captor_time)
+            enemy_spawn_config[CyberCaptor] = self._city_progressive_spawn_time(
+                16.0, captor_weight, difficulty, spawn_multiplier,
+                "control", stage_progress,
+            )
 
         # Tesla Twins: barreira vertical de controle, introduzido em ~X-6 (gate
         # 0.50). Cap 1 par controla a presença; o valor é o intervalo entre
@@ -545,8 +580,10 @@ class ProceduralLevelGenerator:
             tesla_weight = _get_progressive_enemy_weight(
                 "tesla_twin", 1.0, stage_progress
             )
-            tesla_time = (18.0 / difficulty / spawn_multiplier) * (2.0 / tesla_weight)
-            enemy_spawn_config[TeslaTwin] = self._clamp_spawn_time(tesla_time)
+            enemy_spawn_config[TeslaTwin] = self._city_progressive_spawn_time(
+                18.0, tesla_weight, difficulty, spawn_multiplier,
+                "control", stage_progress,
+            )
 
         # Jammer Node: nó de interferência (suprime tiros por área), introduzido
         # em ~X-6 (gate 0.50). Cap 2 controla a presença; o valor é o intervalo
@@ -555,8 +592,10 @@ class ProceduralLevelGenerator:
             jammer_weight = _get_progressive_enemy_weight(
                 "jammer", 1.0, stage_progress
             )
-            jammer_time = (17.0 / difficulty / spawn_multiplier) * (2.0 / jammer_weight)
-            enemy_spawn_config[JammerNode] = self._clamp_spawn_time(jammer_time)
+            enemy_spawn_config[JammerNode] = self._city_progressive_spawn_time(
+                17.0, jammer_weight, difficulty, spawn_multiplier,
+                "control", stage_progress,
+            )
 
         # Artilheiro: bombardeio de área, o 4º tipo do CITY (introduzido em ~X-4,
         # gate 0.30). Cap 2 controla a presença; o valor é o intervalo entre aparições.
@@ -564,8 +603,10 @@ class ProceduralLevelGenerator:
             mortar_weight = _get_progressive_enemy_weight(
                 "mortar", 1.0, stage_progress
             )
-            mortar_time = (16.0 / difficulty / spawn_multiplier) * (2.0 / mortar_weight)
-            enemy_spawn_config[MortarDrone] = self._clamp_spawn_time(mortar_time)
+            enemy_spawn_config[MortarDrone] = self._city_progressive_spawn_time(
+                16.0, mortar_weight, difficulty, spawn_multiplier,
+                "control", stage_progress,
+            )
 
         # Cargueiro: transporte de tropas (mini-boss), introduzido em ~X-7 (gate
         # 0.62). Cap 1 garante que apareça sozinho; intervalo entre aparições.
@@ -573,8 +614,10 @@ class ProceduralLevelGenerator:
             carrier_weight = _get_progressive_enemy_weight(
                 "cargo_carrier", 1.0, stage_progress
             )
-            carrier_time = (22.0 / difficulty / spawn_multiplier) * (2.0 / carrier_weight)
-            enemy_spawn_config[CargoCarrier] = self._clamp_spawn_time(carrier_time)
+            enemy_spawn_config[CargoCarrier] = self._city_progressive_spawn_time(
+                22.0, carrier_weight, difficulty, spawn_multiplier,
+                "miniboss", stage_progress,
+            )
 
         # Splitter Tank: colosso modular do fim do mundo (mini-boss), introduzido
         # em ~X-8 (gate 0.74). Cap 1 (conta filhotes) garante que apareça sozinho.
@@ -582,10 +625,10 @@ class ProceduralLevelGenerator:
             splitter_weight = _get_progressive_enemy_weight(
                 "splitter", 1.0, stage_progress
             )
-            splitter_time = (24.0 / difficulty / spawn_multiplier) * (
-                2.0 / splitter_weight
+            enemy_spawn_config[SplitterTank] = self._city_progressive_spawn_time(
+                24.0, splitter_weight, difficulty, spawn_multiplier,
+                "miniboss", stage_progress,
             )
-            enemy_spawn_config[SplitterTank] = self._clamp_spawn_time(splitter_time)
 
         # Rebocador: suporte de blindagem, introduzido em ~X-5 (gate 0.40). Cap 2
         # controla a presença; o valor é o intervalo entre aparições.
@@ -593,8 +636,10 @@ class ProceduralLevelGenerator:
             sapper_weight = _get_progressive_enemy_weight(
                 "sapper", 1.0, stage_progress
             )
-            sapper_time = (18.0 / difficulty / spawn_multiplier) * (2.0 / sapper_weight)
-            enemy_spawn_config[SapperDrone] = self._clamp_spawn_time(sapper_time)
+            enemy_spawn_config[SapperDrone] = self._city_progressive_spawn_time(
+                18.0, sapper_weight, difficulty, spawn_multiplier,
+                "control", stage_progress,
+            )
 
         # Mirror Pylon: refletor de controle do fim do mundo, introduzido em ~X-8
         # (gate 0.74). Cap 1 garante que apareça sozinho; intervalo entre aparições.
@@ -602,8 +647,10 @@ class ProceduralLevelGenerator:
             mirror_weight = _get_progressive_enemy_weight(
                 "mirror", 1.0, stage_progress
             )
-            mirror_time = (20.0 / difficulty / spawn_multiplier) * (2.0 / mirror_weight)
-            enemy_spawn_config[MirrorPylon] = self._clamp_spawn_time(mirror_time)
+            enemy_spawn_config[MirrorPylon] = self._city_progressive_spawn_time(
+                20.0, mirror_weight, difficulty, spawn_multiplier,
+                "miniboss", stage_progress,
+            )
 
     def _configure_stage_banded_spawn(
         self,

@@ -75,9 +75,9 @@ SPAWNER_CAP_ELEMENTAL_ROBOT: int = 1
 SPAWNER_CAP_STONE_SENTRY: int = 2
 SPAWNER_CAP_MOUNTAIN_MAGE: int = 1
 SPAWNER_CAP_MOUNTAIN_PROPELLER: int = 3
-SPAWNER_CAP_CITY_DRONE: int = 12  # Limite de City Drones simultâneos (enxame)
-CITY_DRONE_CLUSTER_MIN: int = 5  # Tamanho mínimo da leva (clustering)
-CITY_DRONE_CLUSTER_MAX: int = 8  # Tamanho máximo da leva
+SPAWNER_CAP_CITY_DRONE: int = 16  # Limite de City Drones simultâneos (enxame)
+CITY_DRONE_CLUSTER_MIN: int = 6  # Tamanho mínimo da leva (clustering)
+CITY_DRONE_CLUSTER_MAX: int = 10  # Tamanho máximo da leva
 SPAWNER_CAP_NEON_SNIPER: int = 3  # Sentinelas de longa distância (perch units)
 SPAWNER_CAP_POLICE_INTERCEPTOR: int = 4  # Perseguidores (spawnam em duplas)
 SPAWNER_CAP_CYBER_TANK: int = 1  # Colosso "gatekeeper" — sempre sozinho
@@ -94,6 +94,14 @@ SPAWNER_CAP_EYE_ENEMY: int = 3  # Limite máximo de EyeEnemies simultâneos
 SPAWNER_CAP_SATELLITE: int = 5  # Limite máximo de Satélites simultâneos
 SPAWNER_CAP_FORMATIONS: int = 2  # Limite máximo de Formações ativas simultâneas
 SPAWNER_STORM_ENEMY_CAP: int = 30
+
+# Hazards/modificadores de encontro (minas, geodes, armadilhas) — categoria
+# COMPLEMENTAR. Não são arquétipos principais: não entram na pirâmide de variedade
+# (não estão no `enemy_spawn_config`) NEM ocupam vaga no cap de população (`total`).
+# Sua presença é decidida por lógica própria (`_update_mine_spawner`). MountainGeode
+# e as minas temáticas são subclasses de ExplosiveMine → cobertas por isinstance;
+# armadilhas futuras devem herdar de ExplosiveMine ou ser adicionadas aqui.
+HAZARD_ENEMY_TYPES: tuple[type, ...] = (ExplosiveMine,)
 
 # EnemySpawner — escala de HP de inimigos COMUNS em coop. Por jogador extra,
 # soma este fator ao multiplicador de vida (ex.: 2 jogadores = +15%). Fica
@@ -619,6 +627,10 @@ class EnemySpawner:
 
         for enemy in entity_manager.enemies:
             if getattr(enemy, "dead", False):
+                continue
+            # Hazards (minas/geodes/armadilhas) são modificadores de encontro:
+            # não contam no `total` p/ não roubar vaga dos arquétipos do tema.
+            if isinstance(enemy, HAZARD_ENEMY_TYPES):
                 continue
             counts["total"] += 1
             if isinstance(enemy, Meteor):
@@ -1374,7 +1386,10 @@ class EnemySpawner:
             return False
 
         active_total = sum(
-            1 for e in entity_manager.enemies if not getattr(e, "dead", False)
+            1
+            for e in entity_manager.enemies
+            if not getattr(e, "dead", False)
+            and not isinstance(e, HAZARD_ENEMY_TYPES)
         )
         total_room = self._get_current_enemy_cap() - active_total
         room = min(drone_room, total_room)
