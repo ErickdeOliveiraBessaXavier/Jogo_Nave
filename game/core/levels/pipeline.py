@@ -42,7 +42,11 @@ from ...entities.satellite import Satellite
 from ...entities.square_minion_boss import SquareMinionBoss
 from ...entities.stone_sentry import StoneSentry
 from ..difficulty import DifficultyPreset, DifficultySettings
-from ..world_config import WorldTheme, get_world_for_level
+from ..world_config import (
+    WorldTheme,
+    get_procedural_midboss_for_level,
+    get_world_for_level,
+)
 from .fixed_levels import (
     EnemySpawnConfig,
     FIXED_LEVELS,
@@ -991,6 +995,12 @@ def get_level_config(
     config = copy.copy(config)
     config.enemy_spawn_config = adjusted_spawn
     config.enemies_to_clear = adjusted_to_clear
+
+    # MID-boss do setor procedural: o fim de setor já vira boss via world.boss_level
+    # (branch acima); aqui injetamos o chefe intermediário derivado (sem hand-author).
+    midboss = get_procedural_midboss_for_level(level_number)
+    if midboss is not None:
+        config.boss_type = midboss
 
     config = _apply_theme_enemy_rules(config, world, difficulty_preset)
     return config

@@ -438,6 +438,60 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         theme_name="Criatura Gelatinosa Alienígena",
         score_multiplier=1.6,
     ),
+    # ── MID-BOSSES DA CIDADE (ver WORLD_BOSS_ROADMAP em world_config.py) ──────
+    # O boss FINAL da Cidade (L40) vem de WorldConfig.boss_level; estes três são
+    # os intermediários, hand-authored aqui porque a Cidade é um mundo nomeado.
+    # boss_type é PLACEHOLDER (reusa chefes existentes) até os nativos da City
+    # Neon serem criados — basta trocar a classe aqui. Adds da própria linhagem
+    # CITY (passam pelo allowlist de tema sem fallback).
+    # Nível 30 (estágio 5): City Boss 1 — placeholder SpikeBoss
+    30: LevelConfig(
+        level_number=30,
+        enemy_spawn_config={
+            CityDrone: 1.0,
+            NeonSniper: 8.0,
+            PoliceInterceptor: 9.0,
+        },
+        enemies_to_clear=280,
+        boss_type=SpikeBoss,
+        mines_enabled=False,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v"],
+        theme_name="Sentinela Neon",
+        score_multiplier=1.5,
+    ),
+    # Nível 34 (estágio 9): City Boss 2 — placeholder GiantMeteorBoss
+    34: LevelConfig(
+        level_number=34,
+        enemy_spawn_config={
+            CityDrone: 1.0,
+            CyberTank: 10.0,
+            MortarDrone: 9.0,
+        },
+        enemies_to_clear=300,
+        boss_type=GiantMeteorBoss,
+        mines_enabled=False,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v", "spiral_square"],
+        theme_name="Colosso Cibernético",
+        score_multiplier=1.55,
+    ),
+    # Nível 37 (estágio 12): City Boss 3 — placeholder SlimeBoss
+    37: LevelConfig(
+        level_number=37,
+        enemy_spawn_config={
+            CityDrone: 0.9,
+            SplitterTank: 10.0,
+            TeslaTwin: 11.0,
+        },
+        enemies_to_clear=320,
+        boss_type=SlimeBoss,
+        mines_enabled=False,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v", "spiral_square"],
+        theme_name="Reator Instável",
+        score_multiplier=1.6,
+    ),
 }
 
 

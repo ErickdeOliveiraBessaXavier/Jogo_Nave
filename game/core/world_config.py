@@ -205,7 +205,7 @@ def get_boss_slots(world_id: int) -> tuple[BossSlot, ...]:
 
 
 def _get_procedural_sector_boss(
-    theme: WorldTheme, sector_idx: int
+    theme: WorldTheme, sector_idx: int, occurrence_offset: int = 0
 ) -> Optional[Type[Any]]:
     """Boss do chefe de fim de setor procedural (níveis 46+).
 
@@ -232,7 +232,44 @@ def _get_procedural_sector_boss(
     roster = rosters.get(theme)
     if not roster:
         return None
-    return roster[(sector_idx // 4) % len(roster)]
+    # `occurrence_offset` distingue mid de final dentro do MESMO setor quando o
+    # roster do tema tem mais de um chefe (ex.: Montanha, 3); para rosters de um
+    # único boss (placeholders City/Vulcão/Espaço) o módulo mantém o mesmo.
+    return roster[(sector_idx // 4 + occurrence_offset) % len(roster)]
+
+
+# Estágio (1-based) do MID-boss dentro de um setor procedural. Os mundos NOMEADOS
+# trazem seus mid-bosses hand-authored em FIXED_LEVELS; o modo infinito não pode
+# ser hand-authored, então deriva a cadência: um mid-boss no meio do setor, além
+# do chefe de fim de setor (WorldConfig.boss_level). Espelha o ritmo "chefes
+# intermediários + final" dos mundos nomeados, sem entradas manuais.
+PROCEDURAL_MIDBOSS_STAGE: int = PROCEDURAL_SECTOR_SIZE // 2  # 5 num setor de 10
+
+
+def get_procedural_midboss_for_level(level_number: int) -> Optional[Type[Any]]:
+    """Mid-boss de um nível procedural (None se não for nível de mid-boss).
+
+    Só vale para o procedural infinito (>= PROCEDURAL_START_LEVEL): mundos
+    nomeados usam FIXED_LEVELS. Retorna a classe do boss quando o nível cai no
+    estágio de mid-boss do seu setor, escolhida pelo mesmo roster por tema de
+    `_get_procedural_sector_boss` — assim mid e final saem da linhagem do tema.
+    """
+    if level_number < PROCEDURAL_START_LEVEL:
+        return None
+    offset = level_number - PROCEDURAL_START_LEVEL
+    sector_idx = offset // PROCEDURAL_SECTOR_SIZE
+    stage = offset % PROCEDURAL_SECTOR_SIZE + 1  # 1-based dentro do setor
+    if stage != PROCEDURAL_MIDBOSS_STAGE:
+        return None
+    theme_cycle = [
+        WorldTheme.MOUNTAINS,
+        WorldTheme.STARFIELD,
+        WorldTheme.CITY,
+        WorldTheme.VOLCANIC,
+    ]
+    theme = theme_cycle[sector_idx % 4]
+    # offset=1: tenta um chefe diferente do final do setor (no-op se roster tem 1).
+    return _get_procedural_sector_boss(theme, sector_idx, occurrence_offset=1)
 
 
 # ============================================================================
