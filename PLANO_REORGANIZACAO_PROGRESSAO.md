@@ -173,7 +173,23 @@ documentada. ✅
 
 ---
 
-## Fase 3 — `ThemeProfile` único por tema (maior valor de escala, maior custo)
+## Limpeza cirúrgica (2026-06-06) — gates do CITY nomeados ✅
+
+Fora das fases, baixo risco: os thresholds de unlock inline de
+`_configure_city_spawn` (0.20/0.30/0.40/0.50/0.62/0.74) viraram constantes
+nomeadas (`CITY_GATE_POLICE`, `CITY_GATE_MORTAR`, ...) em `procedural.py`. Pura
+substituição por valores idênticos — zero mudança funcional (sweep 1-60 × 4
+presets OK; gates de unlock idênticos). Lógica autodocumentada. As *bands* de
+intensidade (`< 0.40/0.70` do drone, `< 0.5` do sniper) ficaram inline: são outro
+conceito (intensidade, não unlock).
+
+## Fase 3 — `ThemeProfile` único por tema — ⏸️ ADIADA (decisão de 2026-06-06)
+
+**Decisão:** adiar. O problema que originou a revisão (boss confuso/duplicado) foi
+resolvido nas Fases 1-2. A Fase 3 é investimento em escala futura (adicionar temas)
+e mexe em balanceamento (risco de regressão sutil ao consolidar ~10 estruturas) —
+melhor fazer com forcing function real: **quando for adicionar um tema novo**.
+Detalhe de implementação abaixo, preservado para esse momento.
 
 Colapsar as ~10 estruturas por tema num objeto por tema. **Fazer isolado**, depois
 das fases 1-2, idealmente quando for adicionar um tema novo.

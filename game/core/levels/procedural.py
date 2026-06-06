@@ -260,6 +260,22 @@ CITY_SPAWN_TIME_CAP: dict[str, tuple[float, float]] = {
 }
 
 
+# Gates de introdução (unlock) dos specials do CITY por `stage_progress`. Cada um
+# marca QUANDO o tipo entra no pool de `_configure_city_spawn` (a frequência rampa
+# a partir daí). Valores casam com a rampa de variedade e os comentários "~X-N"
+# da função. Nomeados aqui para a lógica ficar autodocumentada (sem números soltos).
+CITY_GATE_POLICE: float = 0.20  # ~X-3
+CITY_GATE_MORTAR: float = 0.30  # ~X-4
+CITY_GATE_CAPTOR: float = 0.40  # ~X-5
+CITY_GATE_SAPPER: float = 0.40  # ~X-5
+CITY_GATE_TESLA: float = 0.50  # ~X-6
+CITY_GATE_JAMMER: float = 0.50  # ~X-6
+CITY_GATE_CYBER_TANK: float = 0.62  # ~X-7
+CITY_GATE_CARGO: float = 0.62  # ~X-7
+CITY_GATE_SPLITTER: float = 0.74  # ~X-8
+CITY_GATE_MIRROR: float = 0.74  # ~X-8
+
+
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
@@ -542,7 +558,7 @@ class ProceduralLevelGenerator:
         # mas NÃO em 3-2 (0.111). Casa o UNLOCK_START 0.20 p/ a frequência rampar
         # daí. Spawna em duplas (cap 4 controla a tela); o valor aqui é o
         # intervalo entre *duplas*. Peso ponderado via tier "strong" + gate.
-        if stage_progress >= 0.20:
+        if stage_progress >= CITY_GATE_POLICE:
             interceptor_weight = _get_progressive_enemy_weight(
                 "police_interceptor", 1.0, stage_progress
             )
@@ -554,7 +570,7 @@ class ProceduralLevelGenerator:
         # Cyber Tank: "gatekeeper" mini-boss, introduzido em ~X-7 (gate 0.62).
         # Cap 1 (SPAWNER_CAP_CYBER_TANK) garante que apareça sozinho; o valor é o
         # intervalo entre aparições. BASE_TIME alto.
-        if stage_progress >= 0.62:
+        if stage_progress >= CITY_GATE_CYBER_TANK:
             tank_weight = _get_progressive_enemy_weight(
                 "cyber_tank", 1.0, stage_progress
             )
@@ -565,7 +581,7 @@ class ProceduralLevelGenerator:
 
         # Cyber-Captor: armadilha de energia, introduzido em ~X-5 (gate 0.40).
         # Cap 2 controla a presença.
-        if stage_progress >= 0.40:
+        if stage_progress >= CITY_GATE_CAPTOR:
             captor_weight = _get_progressive_enemy_weight(
                 "cyber_captor", 1.0, stage_progress
             )
@@ -577,7 +593,7 @@ class ProceduralLevelGenerator:
         # Tesla Twins: barreira vertical de controle, introduzido em ~X-6 (gate
         # 0.50). Cap 1 par controla a presença; o valor é o intervalo entre
         # *pares* (peso tier "strong" + gate).
-        if stage_progress >= 0.50:
+        if stage_progress >= CITY_GATE_TESLA:
             tesla_weight = _get_progressive_enemy_weight(
                 "tesla_twin", 1.0, stage_progress
             )
@@ -589,7 +605,7 @@ class ProceduralLevelGenerator:
         # Jammer Node: nó de interferência (suprime tiros por área), introduzido
         # em ~X-6 (gate 0.50). Cap 2 controla a presença; o valor é o intervalo
         # entre aparições (tier "strong" + gate).
-        if stage_progress >= 0.50:
+        if stage_progress >= CITY_GATE_JAMMER:
             jammer_weight = _get_progressive_enemy_weight(
                 "jammer", 1.0, stage_progress
             )
@@ -600,7 +616,7 @@ class ProceduralLevelGenerator:
 
         # Artilheiro: bombardeio de área, o 4º tipo do CITY (introduzido em ~X-4,
         # gate 0.30). Cap 2 controla a presença; o valor é o intervalo entre aparições.
-        if stage_progress >= 0.30:
+        if stage_progress >= CITY_GATE_MORTAR:
             mortar_weight = _get_progressive_enemy_weight(
                 "mortar", 1.0, stage_progress
             )
@@ -611,7 +627,7 @@ class ProceduralLevelGenerator:
 
         # Cargueiro: transporte de tropas (mini-boss), introduzido em ~X-7 (gate
         # 0.62). Cap 1 garante que apareça sozinho; intervalo entre aparições.
-        if stage_progress >= 0.62:
+        if stage_progress >= CITY_GATE_CARGO:
             carrier_weight = _get_progressive_enemy_weight(
                 "cargo_carrier", 1.0, stage_progress
             )
@@ -622,7 +638,7 @@ class ProceduralLevelGenerator:
 
         # Splitter Tank: colosso modular do fim do mundo (mini-boss), introduzido
         # em ~X-8 (gate 0.74). Cap 1 (conta filhotes) garante que apareça sozinho.
-        if stage_progress >= 0.74:
+        if stage_progress >= CITY_GATE_SPLITTER:
             splitter_weight = _get_progressive_enemy_weight(
                 "splitter", 1.0, stage_progress
             )
@@ -633,7 +649,7 @@ class ProceduralLevelGenerator:
 
         # Rebocador: suporte de blindagem, introduzido em ~X-5 (gate 0.40). Cap 2
         # controla a presença; o valor é o intervalo entre aparições.
-        if stage_progress >= 0.40:
+        if stage_progress >= CITY_GATE_SAPPER:
             sapper_weight = _get_progressive_enemy_weight(
                 "sapper", 1.0, stage_progress
             )
@@ -644,7 +660,7 @@ class ProceduralLevelGenerator:
 
         # Mirror Pylon: refletor de controle do fim do mundo, introduzido em ~X-8
         # (gate 0.74). Cap 1 garante que apareça sozinho; intervalo entre aparições.
-        if stage_progress >= 0.74:
+        if stage_progress >= CITY_GATE_MIRROR:
             mirror_weight = _get_progressive_enemy_weight(
                 "mirror", 1.0, stage_progress
             )
