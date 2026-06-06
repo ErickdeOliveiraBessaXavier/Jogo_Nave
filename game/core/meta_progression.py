@@ -507,15 +507,27 @@ class PlayerProfile:
 
     MAX_SESSION_HISTORY = 50  # Limit session history to last 50 sessions
 
-    def _ensure_safe_world_defaults(self) -> None:
-        """Garante estado mínimo seguro para mundos/checkpoint."""
-        if 1 not in self.world_unlocks:
-            self.world_unlocks[1] = WorldUnlockStatus(
+    @staticmethod
+    def _build_initial_world_unlocks() -> Dict[int, WorldUnlockStatus]:
+        """Estado inicial de world_unlocks: só o Mundo 1 desbloqueado, com checkpoint.
+
+        Fonte única usada por `reset()` e `_ensure_safe_world_defaults()` para
+        evitar drift entre os dois. NÃO usar no `__init__`: lá `world_unlocks`
+        começa vazio e é populado por `load()`; este default é só o fallback.
+        """
+        return {
+            1: WorldUnlockStatus(
                 world_id=1,
                 is_unlocked=True,
                 first_accessed_at=datetime.now(),
                 checkpoint_set=True,
             )
+        }
+
+    def _ensure_safe_world_defaults(self) -> None:
+        """Garante estado mínimo seguro para mundos/checkpoint."""
+        if 1 not in self.world_unlocks:
+            self.world_unlocks.update(self._build_initial_world_unlocks())
         self.current_checkpoint_world = 1
 
     def __init__(self, profile_path: Path):
@@ -980,7 +992,12 @@ class PlayerProfile:
         damage_taken: int,
         powerups_collected: int,
     ):
-        """Registra clear detalhado de um nível."""
+        """Registra clear detalhado de um nível.
+
+        Precondição: `record_attempt(level_number)` foi chamado antes nesta
+        sessão. O fluxo de jogo garante isso — não há clear sem tentativa prévia
+        no caminho normal; um KeyError aqui indica bug de sequência no caller.
+        """
         stats = self.level_stats[level_number]
 
         # Contadores
@@ -1038,7 +1055,14 @@ class PlayerProfile:
         morreu, já que ``record_clear`` não roda nesse caso). Para perdas de
         vida sem game over, mantenha ``score=0`` — o ganho do nível será
         persistido por ``record_clear`` quando a fase for concluída.
+
+        Normalmente ``record_attempt`` precede esta chamada, mas o caminho de game
+        over com ``score`` pode chegar de contextos variados; por isso inicializa
+        defensivamente o nível se ele ainda não estiver em ``level_stats``.
         """
+        if level_number not in self.level_stats:
+            self.level_stats[level_number] = LevelPerformance(level_number)
+            self.level_stats[level_number].first_played = datetime.now()
         stats = self.level_stats[level_number]
         stats.deaths += 1
         stats.current_win_streak = 0  # Reset streak
@@ -1528,14 +1552,7 @@ class PlayerProfile:
         self.highest_level_reached = 1
         self.total_deaths = 0
         self.total_score = 0
-        self.world_unlocks = {
-            1: WorldUnlockStatus(
-                world_id=1,
-                is_unlocked=True,
-                first_accessed_at=datetime.now(),
-                checkpoint_set=True,
-            )
-        }
+        self.world_unlocks = self._build_initial_world_unlocks()
         self.current_checkpoint_world = 1
         self.selected_world_id = 1
         self.current_session = None
@@ -1565,6 +1582,11 @@ class PlayerProfile:
         self.last_played = None
         self._dirty = False
         self._last_save = time.time()
+
+        # Invalidar o cache de stats do perfil anterior (senão get_global_stats
+        # devolveria stats velhos até o próximo _mark_dirty).
+        self._cached_global_stats = None
+        self._stats_dirty = True
 
         # Salvar o perfil resetado
         self.save()
