@@ -1064,7 +1064,8 @@ class PlayerProfile:
         deaths``: várias perdas de vida podem ocorrer num mesmo attempt.
         """
         if level_number not in self.level_stats:
-            self.record_attempt(level_number)  # back-fill: morreu ⇒ jogou ⇒ attempts >= 1
+            # back-fill: morreu ⇒ jogou ⇒ attempts >= 1
+            self.record_attempt(level_number)
         stats = self.level_stats[level_number]
         stats.deaths += 1
         stats.current_win_streak = 0  # Reset streak
@@ -1594,4 +1595,3 @@ class PlayerProfile:
         self.save()
 
         logger.info("Perfil do jogador resetado com sucesso!")
-        
