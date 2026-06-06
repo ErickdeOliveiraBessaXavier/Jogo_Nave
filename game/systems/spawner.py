@@ -33,8 +33,10 @@ from ..core.time import Timer
 from ..core.world_config import WorldTheme, get_world_for_level
 from ..entities.alien import Alien
 from ..entities.bot_elemental import ElementalRobot
+from ..entities.cutting_storm import CuttingStorm
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
+from ..entities.ice_golem import IceGolem
 from ..entities.formation import Formation, FormationPattern
 from ..entities.guided_meteor import GuidedMeteor
 from ..entities.Inimigos_Tema_Cidade.city_drone import CityDrone
@@ -55,11 +57,15 @@ from ..entities.meteor import Meteor
 from ..entities.meteor_pool import MeteorPool
 from ..entities.mountain_mage import MountainMage
 from ..entities.mountain_propeller import MountainPropeller
+from ..entities.orbital_turret import OrbitalTurret
 from ..entities.powerup import PowerUp
+from ..entities.repair_drone import RepairDrone
 from ..entities.rock_glider import RockGlider
 from ..entities.satellite import Satellite, SatelliteFragment
 from ..entities.square_minion_boss import SquareMinionBoss
 from ..entities.star import Star
+from ..entities.stealth_fighter import StealthFighter
+from ..entities.stone_eagle import StoneEagle
 from ..entities.stone_sentry import StoneSentry
 
 if TYPE_CHECKING:
@@ -93,6 +99,12 @@ SPAWNER_CAP_TESLA_TWIN: int = 2  # Barreira vertical: 1 par (2 unidades) por vez
 SPAWNER_CAP_ALIEN: int = 4  # Limite máximo de Aliens simultâneos
 SPAWNER_CAP_EYE_ENEMY: int = 3  # Limite máximo de EyeEnemies simultâneos
 SPAWNER_CAP_SATELLITE: int = 5  # Limite máximo de Satélites simultâneos
+SPAWNER_CAP_ORBITAL_TURRET: int = 2  # Torretas sniper (perch no alto)
+SPAWNER_CAP_STEALTH_FIGHTER: int = 3  # Caças furtivos (investida em diagonal)
+SPAWNER_CAP_REPAIR_DRONE: int = 2  # Drones de suporte (curam aliados)
+SPAWNER_CAP_ICE_GOLEM: int = 1  # Golem de Gelo (tanque — sempre sozinho)
+SPAWNER_CAP_CUTTING_STORM: int = 2  # Tempestades cortantes (negação de área)
+SPAWNER_CAP_STONE_EAGLE: int = 3  # Águias de pedra (mergulho)
 SPAWNER_CAP_FORMATIONS: int = 2  # Limite máximo de Formações ativas simultâneas
 SPAWNER_STORM_ENEMY_CAP: int = 30
 
@@ -467,6 +479,12 @@ class EnemySpawner:
             "SplitterTank": "splitter",
             "SapperDrone": "sapper",
             "MirrorPylon": "mirror",
+            "OrbitalTurret": "orbital_turret",
+            "StealthFighter": "stealth_fighter",
+            "RepairDrone": "repair_drone",
+            "IceGolem": "ice_golem",
+            "CuttingStorm": "cutting_storm",
+            "StoneEagle": "stone_eagle",
         }
         return aliases.get(enemy_type.__name__, enemy_type.__name__.lower())
 
@@ -499,6 +517,10 @@ class EnemySpawner:
             SplitterTank,
             SapperDrone,
             MirrorPylon,
+            OrbitalTurret,
+            RepairDrone,
+            IceGolem,
+            CuttingStorm,
         ):
             base_gap = max(base_gap, self.level_config.get_spawn_time(enemy_type))
 
@@ -631,6 +653,12 @@ class EnemySpawner:
             "splitter": 0,
             "sapper": 0,
             "mirror": 0,
+            "orbital_turret": 0,
+            "stealth_fighter": 0,
+            "repair_drone": 0,
+            "ice_golem": 0,
+            "cutting_storm": 0,
+            "stone_eagle": 0,
             "total": 0,
         }
 
@@ -682,6 +710,18 @@ class EnemySpawner:
                 counts["sapper"] += 1
             elif isinstance(enemy, MirrorPylon):
                 counts["mirror"] += 1
+            elif isinstance(enemy, OrbitalTurret):
+                counts["orbital_turret"] += 1
+            elif isinstance(enemy, StealthFighter):
+                counts["stealth_fighter"] += 1
+            elif isinstance(enemy, RepairDrone):
+                counts["repair_drone"] += 1
+            elif isinstance(enemy, IceGolem):
+                counts["ice_golem"] += 1
+            elif isinstance(enemy, CuttingStorm):
+                counts["cutting_storm"] += 1
+            elif isinstance(enemy, StoneEagle):
+                counts["stone_eagle"] += 1
 
         for prop in entity_manager.mountain_propellers:
             if not prop.dead:
@@ -753,6 +793,30 @@ class EnemySpawner:
             return True
         if enemy_type == MirrorPylon and counts["mirror"] >= SPAWNER_CAP_MIRROR:
             return True
+        if (
+            enemy_type == OrbitalTurret
+            and counts["orbital_turret"] >= SPAWNER_CAP_ORBITAL_TURRET
+        ):
+            return True
+        if (
+            enemy_type == StealthFighter
+            and counts["stealth_fighter"] >= SPAWNER_CAP_STEALTH_FIGHTER
+        ):
+            return True
+        if (
+            enemy_type == RepairDrone
+            and counts["repair_drone"] >= SPAWNER_CAP_REPAIR_DRONE
+        ):
+            return True
+        if enemy_type == IceGolem and counts["ice_golem"] >= SPAWNER_CAP_ICE_GOLEM:
+            return True
+        if (
+            enemy_type == CuttingStorm
+            and counts["cutting_storm"] >= SPAWNER_CAP_CUTTING_STORM
+        ):
+            return True
+        if enemy_type == StoneEagle and counts["stone_eagle"] >= SPAWNER_CAP_STONE_EAGLE:
+            return True
         return False
 
     def _should_spawn_enemy(
@@ -815,6 +879,33 @@ class EnemySpawner:
             if enemy_type == SapperDrone and counts["sapper"] >= SPAWNER_CAP_SAPPER:
                 return False
             if enemy_type == MirrorPylon and counts["mirror"] >= SPAWNER_CAP_MIRROR:
+                return False
+            if (
+                enemy_type == OrbitalTurret
+                and counts["orbital_turret"] >= SPAWNER_CAP_ORBITAL_TURRET
+            ):
+                return False
+            if (
+                enemy_type == StealthFighter
+                and counts["stealth_fighter"] >= SPAWNER_CAP_STEALTH_FIGHTER
+            ):
+                return False
+            if (
+                enemy_type == RepairDrone
+                and counts["repair_drone"] >= SPAWNER_CAP_REPAIR_DRONE
+            ):
+                return False
+            if enemy_type == IceGolem and counts["ice_golem"] >= SPAWNER_CAP_ICE_GOLEM:
+                return False
+            if (
+                enemy_type == CuttingStorm
+                and counts["cutting_storm"] >= SPAWNER_CAP_CUTTING_STORM
+            ):
+                return False
+            if (
+                enemy_type == StoneEagle
+                and counts["stone_eagle"] >= SPAWNER_CAP_STONE_EAGLE
+            ):
                 return False
 
         max_enemies = self._get_current_enemy_cap()
@@ -1033,6 +1124,24 @@ class EnemySpawner:
         if enemy_type == SatelliteFragment:
             return self._spawn_satellite_fragment(entity_manager)
 
+        if enemy_type == OrbitalTurret:
+            return self._spawn_orbital_turret(entity_manager, is_side_scroll)
+
+        if enemy_type == StealthFighter:
+            return self._spawn_stealth_fighter(entity_manager, is_side_scroll)
+
+        if enemy_type == RepairDrone:
+            return self._spawn_repair_drone(entity_manager, is_side_scroll)
+
+        if enemy_type == IceGolem:
+            return self._spawn_ice_golem(entity_manager, is_side_scroll)
+
+        if enemy_type == CuttingStorm:
+            return self._spawn_cutting_storm(entity_manager, is_side_scroll)
+
+        if enemy_type == StoneEagle:
+            return self._spawn_stone_eagle(entity_manager, is_side_scroll)
+
         # Fallback genérico
         new_enemy = cast(EnemyWithHealth, enemy_type())
         new_enemy.health = int(new_enemy.health * self.enemy_health_multiplier)
@@ -1055,6 +1164,94 @@ class EnemySpawner:
             1, int(fragment.health * self.enemy_health_multiplier)
         )
         entity_manager.enemies.append(fragment)
+        return True
+
+    def _entry_position(self, w: int, h: int, is_side_scroll: bool) -> tuple[float, float]:
+        """Posição de entrada padrão: topo (top-down) ou borda direita (side-scroll)."""
+        if is_side_scroll:
+            return (
+                Config.SCREEN_WIDTH + random.uniform(20.0, 80.0),
+                random.uniform(50.0, Config.SCREEN_HEIGHT - 50.0 - h),
+            )
+        return (random.uniform(40.0, Config.SCREEN_WIDTH - 40.0 - w), -(h + 10.0))
+
+    def _spawn_orbital_turret(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        x, y = self._entry_position(OrbitalTurret.SIZE, OrbitalTurret.SIZE, is_side_scroll)
+        turret = OrbitalTurret(
+            x, y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+        )
+        turret.health = max(1, int(turret.health * self.enemy_health_multiplier))
+        entity_manager.enemies.append(turret)
+        return True
+
+    def _spawn_stealth_fighter(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        x, y = self._entry_position(StealthFighter.W, StealthFighter.H, is_side_scroll)
+        fighter = StealthFighter(
+            x, y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+        )
+        fighter.health = max(1, int(fighter.health * self.enemy_health_multiplier))
+        entity_manager.enemies.append(fighter)
+        return True
+
+    def _spawn_repair_drone(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        x, y = self._entry_position(RepairDrone.SIZE, RepairDrone.SIZE, is_side_scroll)
+        drone = RepairDrone(
+            x, y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+        )
+        drone.health = max(1, int(drone.health * self.enemy_health_multiplier))
+        entity_manager.enemies.append(drone)
+        return True
+
+    def _spawn_ice_golem(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        x, y = self._entry_position(IceGolem.W, IceGolem.H, is_side_scroll)
+        golem = IceGolem(
+            x, y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+        )
+        golem.health = max(1, int(golem.health * self.enemy_health_multiplier))
+        entity_manager.enemies.append(golem)
+        return True
+
+    def _spawn_cutting_storm(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        size = CuttingStorm.RADIUS * 2
+        x, y = self._entry_position(size, size, is_side_scroll)
+        storm = CuttingStorm(
+            x, y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+        )
+        storm.health = max(1, int(storm.health * self.enemy_health_multiplier))
+        entity_manager.enemies.append(storm)
+        return True
+
+    def _spawn_stone_eagle(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        x, y = self._entry_position(StoneEagle.W, StoneEagle.H, is_side_scroll)
+        eagle = StoneEagle(
+            x, y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+        )
+        eagle.health = max(1, int(eagle.health * self.enemy_health_multiplier))
+        entity_manager.enemies.append(eagle)
         return True
 
     def _spawn_neon_sniper(

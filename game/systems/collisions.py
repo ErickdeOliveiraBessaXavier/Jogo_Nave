@@ -204,7 +204,9 @@ class Collisions:
                     circles_getter = getattr(enemy, "collision_circles", None)
                     if callable(circles_getter):
                         try:
-                            circles: Sequence[tuple[float, float, float]] = circles_getter()
+                            circles = cast(
+                                "Sequence[tuple[float, float, float]]", circles_getter()
+                            )
                             for cx, cy, r in circles:
                                 if cls._circles_collide(proj_cx, proj_cy, proj_r, cx, cy, r):
                                     return True
@@ -455,6 +457,12 @@ class Collisions:
                     mine.dead = True
                     if getattr(mine, "spawns_ice_zone", False):
                         entity_manager.spawn_ice_poison_zone(cx, cy, explosion_radius)
+                    # Resíduos energéticos da Neon City: explosões secundárias
+                    # menores, em cadeia, DENTRO do raio principal (a própria mina
+                    # calcula as posições/atrasos; aqui só orquestramos o spawn).
+                    if getattr(mine, "spawns_neon_residue", False):
+                        for spec in mine.residue_bursts(cx, cy, explosion_radius):
+                            entity_manager.spawn_explosive_effect(**spec)
 
                     pts = self._get_points_value(mine)
                     score_gain += pts

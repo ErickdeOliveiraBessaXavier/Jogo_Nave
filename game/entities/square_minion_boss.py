@@ -26,6 +26,12 @@ class SquareMinionBoss(SquareProjectileBase):
     - Causes damage on collision with player
     """
 
+    # Ameaça OCASIONAL: camada separada da composição do nível. Não disputa vaga
+    # do variety cap nem entra na triangulação/recência/introdução de arquétipos
+    # (ver `_apply_enemy_variety_cap`). Continua spawnando pelo enemy_spawn_config
+    # como evento raro, sem reduzir a variedade dos inimigos principais do tema.
+    OCCASIONAL_THREAT: bool = True
+
     def __init__(
         self,
         x: float,

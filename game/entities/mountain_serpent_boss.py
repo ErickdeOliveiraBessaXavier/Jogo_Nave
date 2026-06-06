@@ -882,7 +882,7 @@ class MountainSerpentBoss(BossHitMixin):
     HEAD_FRAME_REPEAT: Final[int] = 2  # quantas vezes cada frame e repetido
     HEAD_ANIM_SLOW_FACTOR: Final[float] = 1.25  # multiplicador global da animacao
 
-    DEFAULT_HEALTH: Final[int] = 1200  # HP inicial do boss
+    DEFAULT_HEALTH: Final[int] = 1000  # HP inicial do boss
     MUSIC_STATE: Final[MusicState] = MusicState.MOUNTAIN_SERPENT_BOSS
 
     @classmethod
@@ -1793,8 +1793,8 @@ class MountainSerpentBoss(BossHitMixin):
         bullets, fragments = self.update(
             dt, ctx.player_x, ctx.player_y or 0.0
         )
-        routed_bullets: list = list(bullets)
-        routed_enemies: list = []
+        routed_bullets: list[SerpentRockBullet] = list(bullets)
+        routed_enemies: list[object] = []
         for f in fragments:
             if isinstance(f, SerpentRockBullet):
                 routed_bullets.append(f)

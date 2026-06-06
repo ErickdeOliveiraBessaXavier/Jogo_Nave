@@ -22,6 +22,7 @@ from ...entities.bot_elemental import ElementalRobot
 from ...entities.explosive_mine import ExplosiveMine
 from ...entities.eye_enemy import EyeEnemy
 from ...entities.Inimigos_Tema_Cidade.city_drone import CityDrone
+from ...entities.Inimigos_Tema_Cidade.city_mine import CityMine
 from ...entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ...entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ...entities.Inimigos_Tema_Cidade.jammer_node import JammerNode
@@ -33,13 +34,19 @@ from ...entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone
 from ...entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
 from ...entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
 from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin
+from ...entities.cutting_storm import CuttingStorm
+from ...entities.ice_golem import IceGolem
 from ...entities.meteor import Meteor
 from ...entities.mountain_geode import MountainGeode
 from ...entities.mountain_mage import MountainMage
 from ...entities.mountain_propeller import MountainPropeller
+from ...entities.orbital_turret import OrbitalTurret
+from ...entities.repair_drone import RepairDrone
 from ...entities.rock_glider import RockGlider
 from ...entities.satellite import Satellite
 from ...entities.square_minion_boss import SquareMinionBoss
+from ...entities.stealth_fighter import StealthFighter
+from ...entities.stone_eagle import StoneEagle
 from ...entities.stone_sentry import StoneSentry
 from ..difficulty import DifficultyPreset, DifficultySettings
 from ..world_config import (
@@ -97,6 +104,9 @@ ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
         WorldTheme.PROCEDURAL,
     },
     Satellite: {WorldTheme.STARFIELD},  # lixo orbital — exclusivo do Espaço
+    OrbitalTurret: {WorldTheme.STARFIELD},  # sentinela sniper — exclusivo do Espaço
+    StealthFighter: {WorldTheme.STARFIELD},  # caça rush — exclusivo do Espaço
+    RepairDrone: {WorldTheme.STARFIELD},  # suporte/cura — exclusivo do Espaço
     CityDrone: {WorldTheme.CITY},
     NeonSniper: {WorldTheme.CITY},
     PoliceInterceptor: {WorldTheme.CITY},
@@ -115,6 +125,9 @@ ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
     MountainMage: {WorldTheme.MOUNTAINS},
     MountainPropeller: {WorldTheme.MOUNTAINS},
     MountainGeode: {WorldTheme.MOUNTAINS},
+    IceGolem: {WorldTheme.MOUNTAINS},  # tanque — exclusivo das Cordilheiras
+    CuttingStorm: {WorldTheme.MOUNTAINS},  # negação de área — exclusivo das Cordilheiras
+    StoneEagle: {WorldTheme.MOUNTAINS},  # rush em mergulho — exclusivo das Cordilheiras
     ExplosiveMine: {
         WorldTheme.STARFIELD,
         WorldTheme.CITY,
@@ -130,8 +143,17 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             RockGlider: 1.06,
             StoneSentry: 1.15,
             ElementalRobot: 1.10,
+            IceGolem: 0.85,
+            CuttingStorm: 0.90,
+            StoneEagle: 1.00,
         },
-        WorldTheme.STARFIELD: {Alien: 1.05, EyeEnemy: 1.05},
+        WorldTheme.STARFIELD: {
+            Alien: 1.05,
+            EyeEnemy: 1.05,
+            OrbitalTurret: 0.90,
+            StealthFighter: 1.00,
+            RepairDrone: 0.85,
+        },
         WorldTheme.CITY: {
             CityDrone: 1.20,
             NeonSniper: 0.80,
@@ -154,8 +176,17 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             RockGlider: 1.10,
             StoneSentry: 1.30,
             ElementalRobot: 1.18,
+            IceGolem: 0.95,
+            CuttingStorm: 1.00,
+            StoneEagle: 1.10,
         },
-        WorldTheme.STARFIELD: {Alien: 1.10, EyeEnemy: 1.08},
+        WorldTheme.STARFIELD: {
+            Alien: 1.10,
+            EyeEnemy: 1.08,
+            OrbitalTurret: 1.00,
+            StealthFighter: 1.10,
+            RepairDrone: 0.95,
+        },
         WorldTheme.CITY: {
             CityDrone: 1.30,
             NeonSniper: 0.90,
@@ -178,8 +209,17 @@ ENEMY_THEME_WEIGHT_PROFILES: dict[str, dict[WorldTheme, dict[type, float]]] = {
             RockGlider: 1.14,
             StoneSentry: 1.45,
             ElementalRobot: 1.25,
+            IceGolem: 1.05,
+            CuttingStorm: 1.10,
+            StoneEagle: 1.20,
         },
-        WorldTheme.STARFIELD: {Alien: 1.15, EyeEnemy: 1.10},
+        WorldTheme.STARFIELD: {
+            Alien: 1.15,
+            EyeEnemy: 1.10,
+            OrbitalTurret: 1.10,
+            StealthFighter: 1.20,
+            RepairDrone: 1.05,
+        },
         WorldTheme.CITY: {
             CityDrone: 1.40,
             NeonSniper: 1.00,
@@ -237,13 +277,13 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
         # se redistribui QUEM nasce).
         WorldTheme.MOUNTAINS: {
             "early": {RockGlider: 1.15, StoneSentry: 0.85, ElementalRobot: 0.80},
-            "mid": {RockGlider: 1.02, StoneSentry: 1.08, ElementalRobot: 1.03},
-            "late": {RockGlider: 0.88, StoneSentry: 1.35, ElementalRobot: 1.30, MountainMage: 1.20},
+            "mid": {RockGlider: 1.02, StoneSentry: 1.08, ElementalRobot: 1.03, StoneEagle: 1.00},
+            "late": {RockGlider: 0.88, StoneSentry: 1.35, ElementalRobot: 1.30, MountainMage: 1.20, StoneEagle: 1.10, CuttingStorm: 1.15, IceGolem: 1.20},
         },
         WorldTheme.STARFIELD: {
             "early": {Alien: 1.00, EyeEnemy: 0.90},
-            "mid": {Alien: 1.04, EyeEnemy: 1.00},
-            "late": {Meteor: 0.90, Alien: 1.15, EyeEnemy: 1.25, Satellite: 1.20},
+            "mid": {Alien: 1.04, EyeEnemy: 1.00, StealthFighter: 1.00},
+            "late": {Meteor: 0.90, Alien: 1.15, EyeEnemy: 1.25, Satellite: 1.20, StealthFighter: 1.10, OrbitalTurret: 1.20, RepairDrone: 1.10},
         },
         WorldTheme.CITY: {
             "early": {PoliceInterceptor: 0.85},
@@ -313,8 +353,14 @@ ENEMY_STAGE_WEIGHT_MULTIPLIERS = ENEMY_STAGE_WEIGHT_PROFILES[_ACTIVE_PROFILE]
 
 
 THEME_FALLBACK_ENEMIES: dict[WorldTheme, list[type]] = {
-    WorldTheme.MOUNTAINS: [RockGlider, MountainMage, StoneSentry, ElementalRobot],
-    WorldTheme.STARFIELD: [Meteor, Alien, EyeEnemy, Satellite],
+    WorldTheme.MOUNTAINS: [
+        RockGlider, MountainMage, StoneSentry, ElementalRobot,
+        StoneEagle, CuttingStorm, IceGolem,
+    ],
+    WorldTheme.STARFIELD: [
+        Meteor, Alien, EyeEnemy, Satellite,
+        StealthFighter, OrbitalTurret, RepairDrone,
+    ],
     WorldTheme.CITY: [
         CityDrone, NeonSniper, PoliceInterceptor, CyberCaptor, TeslaTwin, CyberTank,
         JammerNode, MortarDrone, CargoCarrier, SplitterTank, SapperDrone, MirrorPylon,
@@ -333,6 +379,12 @@ DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
     ElementalRobot: 2.6,
     MountainMage: 18.0,
     MountainPropeller: 15.0,
+    OrbitalTurret: 16.0,
+    StealthFighter: 9.0,
+    RepairDrone: 18.0,
+    IceGolem: 22.0,
+    CuttingStorm: 16.0,
+    StoneEagle: 9.0,
     CityDrone: 5.5,
     NeonSniper: 16.0,
     PoliceInterceptor: 14.0,
@@ -350,18 +402,14 @@ DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
 THEME_ENEMY_REPLACEMENTS: dict[tuple[WorldTheme, type], type] = {
     (WorldTheme.MOUNTAINS, Meteor): RockGlider,
     (WorldTheme.MOUNTAINS, ExplosiveMine): MountainGeode,
+    (WorldTheme.CITY, ExplosiveMine): CityMine,
 }
 
 
-# Teto rígido de variedade de inimigos simultâneos por dificuldade. A rampa de
-# introdução (X-1→1, X-2→2, X-3+→teto) é derivada do índice absoluto do estágio
-# em `_apply_enemy_variety_cap` via `min(estágio, teto)`.
-MAX_ENEMY_VARIETY_BY_DIFFICULTY: dict[DifficultyPreset, int] = {
-    DifficultyPreset.CASUAL: 3,
-    DifficultyPreset.NORMAL: 3,
-    DifficultyPreset.HARDCORE: 4,
-    DifficultyPreset.NIGHTMARE: 4,
-}
+# Teto de variedade: ver o bloco "ENCOUNTER COMPOSITION CONFIG" (logo antes de
+# `_select_variety_subset`). O teto agora é GLOBAL e dirigido pelo TAMANHO DO POOL
+# — sem tabela fixa por dificuldade nem exceção por tema. A rampa de introdução
+# (X-1→1, X-2→2, …) continua via `min(estágio, teto)`.
 
 # Inimigo "base" garantido em cada tema.
 THEME_BASE_ENEMY: dict[WorldTheme, type] = {
@@ -372,14 +420,12 @@ THEME_BASE_ENEMY: dict[WorldTheme, type] = {
     WorldTheme.PROCEDURAL: Meteor,
 }
 
-# Specials "assinatura" do tema: têm PRIORIDADE no pool sobre a loteria
-# 1/spawn_time (que penaliza fortemente inimigos raros — sem isso um especial
-# como o Neon Sniper quase nunca sobreviveria ao corte). Ainda respeitam o teto
-# rígido de variedade (MAX_ENEMY_VARIETY_BY_DIFFICULTY).
-# ORDEM = ORDEM DE DESBLOQUEIO (gate em `_configure_city_spawn`), do mais cedo ao
-# mais tarde. O variety cap mostra as `n_slots` assinaturas da CAUDA (mais recém-
-# liberadas) → cada uma aparece no estágio em que é introduzida (cobertura
-# garantida) e o conjunto avança junto com os gates ("novos entram, antigos saem").
+# Specials "assinatura" do tema = fonte ÚNICA e declarativa da ORDEM DE INTRODUÇÃO
+# (do mais cedo ao mais tarde). O SPOTLIGHT (ver ENCOUNTER COMPOSITION CONFIG) dá
+# destaque ao special mais recém-introduzido presente no pool e DECAI a cada rank
+# mais antigo até o piso dos veteranos — assim o novo aparece com cobertura no seu
+# estágio de introdução, mas os antigos NÃO são substituídos: voltam à rotação.
+# ORDEM = ORDEM DE DESBLOQUEIO (gate em `_configure_*_spawn`).
 # DEVE casar com os gates: Sniper(X-2) → Police(X-3) → Mortar(X-4) → Captor/Sapper
 # (X-5) → Tesla/Jammer(X-6) → CyberTank/Cargo(X-7) → Splitter/Mirror(X-8).
 THEME_SIGNATURE_ENEMIES: dict[WorldTheme, tuple[type, ...]] = {
@@ -387,6 +433,13 @@ THEME_SIGNATURE_ENEMIES: dict[WorldTheme, tuple[type, ...]] = {
         NeonSniper, PoliceInterceptor, MortarDrone, CyberCaptor, SapperDrone,
         TeslaTwin, JammerNode, CyberTank, CargoCarrier, SplitterTank, MirrorPylon,
     ),
+    # ORDEM = ORDEM DE DESBLOQUEIO (gates em procedural). Sem assinatura, os
+    # specials raros (spawn_time alto) somem na loteria de variedade — ver
+    # memory/variety-cap-exclui-specials-raros. Os emergentes do trio de
+    # introdução (Alien/EyeEnemy, RockGlider/MountainMage) seguem o gate de
+    # stage_number e não precisam de assinatura.
+    WorldTheme.STARFIELD: (StealthFighter, OrbitalTurret, RepairDrone),
+    WorldTheme.MOUNTAINS: (StoneEagle, CuttingStorm, IceGolem),
 }
 
 # Papel de combate (arquétipo) de cada inimigo. Usado pelo variety cap para
@@ -402,37 +455,21 @@ ENEMY_ARCHETYPE: dict[type, str] = {
     MountainPropeller: "swarm",
     Satellite: "hazard",
     EyeEnemy: "shooter",
-    StoneSentry: "sniper", NeonSniper: "sniper",
+    StoneSentry: "sniper", NeonSniper: "sniper", OrbitalTurret: "sniper",
     Alien: "rush", PoliceInterceptor: "rush",
+    StealthFighter: "rush", StoneEagle: "rush",
     MountainMage: "support", JammerNode: "support", SapperDrone: "support",
-    ElementalRobot: "elite", CyberTank: "tank",
+    RepairDrone: "support",
+    ElementalRobot: "elite", CyberTank: "tank", IceGolem: "tank",
     CyberCaptor: "area_denial", MortarDrone: "area_denial", TeslaTwin: "area_denial",
+    CuttingStorm: "area_denial",
     CargoCarrier: "summoner", SplitterTank: "summoner", SquareMinionBoss: "summoner",
     MirrorPylon: "shield",
 }
 
-# Fator aplicado ao score/peso de um candidato cujo papel JÁ está no encontro.
-ROLE_REPEAT_PENALTY: float = 0.18
-
-
 def _enemy_role(enemy_type: type) -> str:
     """Papel de combate do inimigo; fallback ao nome (papel único) se não mapeado."""
     return ENEMY_ARCHETYPE.get(enemy_type, enemy_type.__name__)
-
-
-# Override de teto de variedade por tema (P1). A linhagem CITY tem 12 inimigos
-# desenhados para coexistir coordenados (ver memory/city-neon-design-intent); com
-# o teto global 3 a maioria aparecia 1× por campanha. Um teto maior + seleção
-# complementar (ENEMY_ARCHETYPE) deixa a cidade mostrar trios/quartetos variados
-# por run, sem virar sopa de inimigos. Demais temas seguem o teto global.
-THEME_VARIETY_CAP_OVERRIDE: dict[WorldTheme, dict[DifficultyPreset, int]] = {
-    WorldTheme.CITY: {
-        DifficultyPreset.CASUAL: 4,
-        DifficultyPreset.NORMAL: 4,
-        DifficultyPreset.HARDCORE: 5,
-        DifficultyPreset.NIGHTMARE: 5,
-    },
-}
 
 
 def _is_enemy_allowed_in_theme(enemy_type: type, world_theme: WorldTheme) -> bool:
@@ -594,20 +631,62 @@ def _apply_stage_progression_enemy_weights(
     return config_copy
 
 
-# Janela de recência (P5): tipos escolhidos nos níveis IMEDIATAMENTE anteriores do
-# mesmo mundo têm a chance reduzida (não bloqueada) no nível atual, para encontros
-# consecutivos não repetirem os mesmos inimigos. Penalidade por distância (1 = nível
-# anterior, penaliza mais; 2 = dois atrás, mais leve).
-RECENCY_WINDOW: int = 2
-RECENCY_PENALTY_BY_DISTANCE: dict[int, float] = {1: 0.30, 2: 0.55}
+# ════════════════════════════════════════════════════════════════════════════
+# ENCOUNTER COMPOSITION CONFIG — fonte ÚNICA e GLOBAL da lógica de variedade.
+# Todos os temas (atuais e futuros) compartilham estes knobs; NÃO há exceção por
+# tema. Adicionar inimigos ajusta o comportamento sozinho: o teto cresce com o
+# pool e o spotlight decai com o tempo. Consumido por `_select_variety_subset`.
+# ════════════════════════════════════════════════════════════════════════════
 
-# Pesos da seleção. Assinaturas dominam a loteria (senão a raridade 1/spawn_time as
-# corta). O peso cresce de forma ÍNGREME com a recência de unlock — a recém-
-# liberada aparece de forma confiável no seu estágio de introdução (cobertura) —
-# enquanto a penalidade de recência (`recency_penalty`) a rebaixa nos níveis
-# seguintes, rotacionando a cauda. Peso de assinatura = SIG_FLOOR*(1+rank)^POWER.
-SIGNATURE_WEIGHT_FLOOR: float = 100.0
-SIGNATURE_RECENCY_POWER: float = 2.0
+# — TETO de variedade (global, dirigido pelo tamanho do pool) —
+# cap = min(estágio_absoluto, ceiling); ceiling ≈ FRACTION × |pool|, limitado a
+# [FLOOR, MAX] da dificuldade. Mais tipos liberados → mais vagas. Reproduz o
+# antigo override do CITY (pool 12 → 4/5) e dá 4 a temas de pool 7, SEM tabela.
+VARIETY_CAP_FLOOR_BY_DIFFICULTY: dict[DifficultyPreset, int] = {
+    DifficultyPreset.CASUAL: 3, DifficultyPreset.NORMAL: 3,
+    DifficultyPreset.HARDCORE: 4, DifficultyPreset.NIGHTMARE: 4,
+}
+VARIETY_CAP_MAX_BY_DIFFICULTY: dict[DifficultyPreset, int] = {
+    DifficultyPreset.CASUAL: 4, DifficultyPreset.NORMAL: 4,
+    DifficultyPreset.HARDCORE: 5, DifficultyPreset.NIGHTMARE: 5,
+}
+VARIETY_CAP_POOL_FRACTION: float = 0.5
+
+# — SPOTLIGHT (destaque BRANDO do special recém-introduzido) —
+# Peso do special = BASELINE × (1 + GAIN × DECAY**(ranks desde o mais novo
+# presente)). ADITIVO e modesto de propósito: um empurrão na estreia (cobertura)
+# sem dominar — a RECÊNCIA é o motor principal de rotação e derruba quem acabou de
+# aparecer. Ex. (GAIN=2, DECAY=.5): novo ×3.0 → ×2.0 → ×1.5 → ×1.25 → ~×1.0.
+SPOTLIGHT_GAIN: float = 2.0
+SPOTLIGHT_DECAY: float = 0.5
+SPOTLIGHT_BASELINE: float = 1.0
+SPOTLIGHT_WINDOW: int = 2  # ranks (a partir do mais novo) que contam como "fresco"
+
+# — RECÊNCIA (motor de rotação / anti-repetição no mesmo mundo) —
+# Aplicada a TODOS, inclusive specials (antes a assinatura a ignorava pelo peso).
+# Forte e com janela 3: quem apareceu cai bem abaixo do campo por ~2-3 níveis,
+# forçando rotação — nem o special mais novo se repete em excesso.
+RECENCY_WINDOW: int = 3
+RECENCY_PENALTY_BY_DISTANCE: dict[int, float] = {1: 0.12, 2: 0.30, 3: 0.55}
+
+# — ARQUÉTIPO (encontros COMPLEMENTARES) —
+# Penaliza candidato cujo papel já está no encontro (triangulação support/tank/
+# sniper/swarm/area-denial/…), favorecendo combinações que se complementam.
+ROLE_REPEAT_PENALTY: float = 0.18
+
+# — PERSISTÊNCIA dos antigos —
+# Nº de vagas (além da base) barradas a specials "frescos", garantindo ao menos um
+# veterano/antigo por encontro grande (só aplica se houver candidato não-fresco).
+VETERAN_RESERVE: int = 1
+
+
+def _global_variety_ceiling(pool_size: int, difficulty_preset: DifficultyPreset) -> int:
+    """Teto de variedade GLOBAL dirigido pelo tamanho do pool (sem exceção por
+    tema): mais tipos disponíveis → mais vagas, limitado a [FLOOR, MAX]."""
+    floor = VARIETY_CAP_FLOOR_BY_DIFFICULTY.get(difficulty_preset, 3)
+    ceil_ = VARIETY_CAP_MAX_BY_DIFFICULTY.get(difficulty_preset, 4)
+    target = int(pool_size * VARIETY_CAP_POOL_FRACTION + 0.5)  # round-half-up
+    return max(floor, min(ceil_, target))
 
 
 def _select_variety_subset(
@@ -620,24 +699,30 @@ def _select_variety_subset(
     """Seleciona o subconjunto de tipos de um nível (base + specials).
 
     Determinístico por nível. Combina, num único sorteio ponderado por vaga:
-      - prioridade de ASSINATURA (peso base alto) sobre a loteria 1/spawn_time;
+      - SPOTLIGHT: o special recém-introduzido domina sua vaga e DECAI até o piso
+        dos veteranos (`SPOTLIGHT_*`) — destaque ao novo sem descartar o antigo;
       - TRIANGULAÇÃO: papel já no encontro é penalizado (`ROLE_REPEAT_PENALTY`);
-      - RECÊNCIA: tipo visto nos níveis recentes é penalizado (`recency_penalty`).
-    O sorteio ponderado (seed por nível) faz níveis consecutivos divergirem.
+      - RECÊNCIA: tipo visto nos níveis recentes é penalizado (`recency_penalty`);
+      - PERSISTÊNCIA: `VETERAN_RESERVE` vagas barradas a specials frescos.
+    O teto vem de `_global_variety_ceiling` (dirigido pelo pool, global). O sorteio
+    ponderado (seed por nível) faz níveis consecutivos divergirem.
     """
     total_stages = max(1, world.total_stages)
     stage_number = max(1, min(total_stages, world.get_stage_number(level_number)))
-    hard_max = THEME_VARIETY_CAP_OVERRIDE.get(world.theme, {}).get(
-        difficulty_preset, MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3)
-    )
-    cap = min(stage_number, hard_max)
 
     types = list(spawn_config)
+    cap = min(stage_number, _global_variety_ceiling(len(types), difficulty_preset))
     if len(types) <= cap:
         return types
 
     signatures = THEME_SIGNATURE_ENEMIES.get(world.theme, ())
     sig_rank = {t: i for i, t in enumerate(signatures)}  # maior = mais recém-liberada
+    present_ranks = [sig_rank[t] for t in types if t in sig_rank]
+    newest_rank = max(present_ranks) if present_ranks else -1
+
+    def _is_fresh(t: type) -> bool:
+        """Special recém-introduzido — dentro da janela de spotlight."""
+        return t in sig_rank and (newest_rank - sig_rank[t]) < SPOTLIGHT_WINDOW
 
     # adler32 garante seed determinístico entre sessões (hash(str) é randomizado).
     theme_seed = zlib.adler32(world.theme.value.encode("utf-8"))
@@ -650,16 +735,28 @@ def _select_variety_subset(
         chosen.append(base)
         chosen_roles.add(_enemy_role(base))
 
+    max_fresh = max(0, cap - 1 - VETERAN_RESERVE)  # vagas p/ frescos além da base
+    fresh_count = 0
+
     while len(chosen) < cap:
         candidates = [t for t in types if t not in chosen]
+        # Trava de persistência: atingido o teto de "frescos", reserva a(s) vaga(s)
+        # restante(s) p/ veteranos/antigos — só se houver candidato não-fresco.
+        if fresh_count >= max_fresh:
+            veterans = [t for t in candidates if not _is_fresh(t)]
+            if veterans:
+                candidates = veterans
         if not candidates:
             break
         weights: list[float] = []
         for t in candidates:
             if t in sig_rank:
-                w = SIGNATURE_WEIGHT_FLOOR * (1.0 + sig_rank[t]) ** SIGNATURE_RECENCY_POWER
+                steps_old = newest_rank - sig_rank[t]
+                w = SPOTLIGHT_BASELINE * (
+                    1.0 + SPOTLIGHT_GAIN * SPOTLIGHT_DECAY**steps_old
+                )
             else:
-                w = 1.0 / max(spawn_config[t], 0.01)
+                w = SPOTLIGHT_BASELINE
             if _enemy_role(t) in chosen_roles:
                 w *= ROLE_REPEAT_PENALTY
             w *= recency_penalty.get(t, 1.0)
@@ -668,6 +765,8 @@ def _select_variety_subset(
         pick = candidates[idx]
         chosen.append(pick)
         chosen_roles.add(_enemy_role(pick))
+        if _is_fresh(pick):
+            fresh_count += 1
 
     return chosen
 
@@ -681,8 +780,9 @@ def _apply_enemy_variety_cap(
     GLOBAL ancorada no índice absoluto do estágio dentro do mundo.
 
     Regra de design (aplicada a todos os temas, existentes e futuros):
-      - `cap = min(estágio_absoluto, teto_por_dificuldade)` (com override por tema
-        em `THEME_VARIETY_CAP_OVERRIDE`). X-1 → 1 tipo, X-2 → 2, X-3+ → o teto.
+      - `cap = min(estágio_absoluto, _global_variety_ceiling(|pool|, dif))` — teto
+        GLOBAL dirigido pelo tamanho do pool (sem exceção por tema). X-1 → 1 tipo,
+        X-2 → 2, …, até o teto. Mais tipos liberados → mais vagas.
       - É só TETO: se o pool ainda tem poucos tipos liberados, mostra menos — sem
         pico de complexidade na entrada de um mundo novo.
       - A seleção (`_select_variety_subset`) é base + specials, com assinatura,
@@ -691,6 +791,20 @@ def _apply_enemy_variety_cap(
         diversificando encontros consecutivos sem proibir repetição.
     """
     spawn_config = config.enemy_spawn_config
+
+    # CAMADA SEPARADA — ameaças ocasionais (SquareMinionBoss, GuidedMeteor) marcadas
+    # com OCCASIONAL_THREAT são eventos/ameaças esporádicas, não parte da composição
+    # do tema. Saem da seleção do variety cap (não disputam vaga, não entram na
+    # triangulação/recência/introdução de arquétipos) e voltam intactas no fim —
+    # assim sua aparição não reduz a variedade dos inimigos principais da fase.
+    occasional = {
+        t: st for t, st in spawn_config.items() if getattr(t, "OCCASIONAL_THREAT", False)
+    }
+    composition = (
+        spawn_config
+        if not occasional
+        else {t: st for t, st in spawn_config.items() if t not in occasional}
+    )
 
     # Penalidade de recência: aproximada rodando a seleção recency-FREE dos níveis
     # anteriores sobre o pool atual (estável entre níveis adjacentes do mesmo
@@ -703,7 +817,7 @@ def _apply_enemy_variety_cap(
         if prev < world.start_level:
             break
         prev_chosen = _select_variety_subset(
-            spawn_config, world, difficulty_preset, prev, {}
+            composition, world, difficulty_preset, prev, {}
         )
         factor = RECENCY_PENALTY_BY_DISTANCE.get(dist, 1.0)
         for t in prev_chosen:
@@ -712,10 +826,13 @@ def _apply_enemy_variety_cap(
             recency_penalty[t] = min(recency_penalty.get(t, 1.0), factor)
 
     chosen = _select_variety_subset(
-        spawn_config, world, difficulty_preset, config.level_number, recency_penalty
+        composition, world, difficulty_preset, config.level_number, recency_penalty
     )
 
-    adjusted_spawn_config = {t: spawn_config[t] for t in chosen}
+    # Composição capada + ameaças ocasionais de volta (sempre presentes quando o
+    # gate de spawn as liberou — não foram cortadas pelo teto).
+    adjusted_spawn_config = {t: composition[t] for t in chosen}
+    adjusted_spawn_config.update(occasional)
     if adjusted_spawn_config == spawn_config:
         return config
     config_copy = copy.copy(config)

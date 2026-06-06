@@ -20,6 +20,11 @@ class GuidedMeteor(Meteor):
     # Não usa meteor_pool — vive só em enemies e é desenhado no loop de enemies.
     DRAWN_BY_POOL: bool = False
 
+    # Ameaça OCASIONAL: já vive em camada própria (_update_guided_meteor_spawner),
+    # fora do enemy_spawn_config. A marca documenta a natureza e protege a regra
+    # caso algum dia entre num spawn_config (ver `_apply_enemy_variety_cap`).
+    OCCASIONAL_THREAT: bool = True
+
     def __init__(
         self,
         size: int = 20,

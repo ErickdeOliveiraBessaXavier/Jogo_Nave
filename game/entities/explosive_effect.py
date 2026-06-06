@@ -4,7 +4,13 @@ import pygame
 
 
 class ExplosiveEffect:
-    """Efeito visual simples de explosão - círculo branco que expande e desaparece."""
+    """Efeito visual simples de explosão - círculo que expande e desaparece.
+
+    `delay` adia a ativação (dano + desenho) por N segundos sem custo de scheduler
+    externo: o efeito é criado já agendado e "acende" sozinho quando o atraso zera.
+    Usado para encadear explosões (ex.: resíduos energéticos da CityMine). `color`
+    tinge o círculo (default branco) para temas como o Neon City.
+    """
 
     def __init__(
         self,
@@ -13,6 +19,8 @@ class ExplosiveEffect:
         radius: float = 60.0,
         lifetime: float = 0.4,
         damage: int = 50,
+        delay: float = 0.0,
+        color: tuple[int, int, int] = (255, 255, 255),
     ):
         self.x = x
         self.y = y
@@ -21,14 +29,16 @@ class ExplosiveEffect:
         self.timer = 0.0
         self.dead = False
         self.damage = damage
+        self.delay = max(0.0, delay)
+        self.color = color
 
         # Rastrear inimigos já atingidos
         self.hit_enemies: Set[int] = set()
 
     @property
     def damage_active(self) -> bool:
-        """Retorna True se a zona de dano ainda está ativa."""
-        return not self.dead and self.timer < self.lifetime * 0.8
+        """Retorna True se a zona de dano ainda está ativa (e já passou o delay)."""
+        return not self.dead and self.delay <= 0.0 and self.timer < self.lifetime * 0.8
 
     @property
     def current_damage_radius(self) -> float:
@@ -42,12 +52,17 @@ class ExplosiveEffect:
         return self.max_radius * ease_out
 
     def update(self, dt: float) -> None:
+        if self.delay > 0.0:
+            self.delay -= dt
+            if self.delay > 0.0:
+                return
+            self.delay = 0.0  # acabou de acender; o resto do dt vira lifetime abaixo
         self.timer += dt
         if self.timer >= self.lifetime:
             self.dead = True
 
     def draw(self, surface: pygame.Surface) -> None:
-        if self.dead:
+        if self.dead or self.delay > 0.0:
             return
 
         # Progresso da animação (0.0 a 1.0)
@@ -71,10 +86,10 @@ class ExplosiveEffect:
         effect_surface = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
         center = (surf_size // 2, surf_size // 2)
 
-        # Círculo branco preenchido com fade-out
+        # Círculo preenchido (cor temática) com fade-out
         pygame.draw.circle(
             effect_surface,
-            (255, 255, 255, alpha),
+            (*self.color, alpha),
             center,
             current_radius,
             0,  # Preenchido

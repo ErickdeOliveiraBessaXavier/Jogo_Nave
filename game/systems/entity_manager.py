@@ -393,9 +393,21 @@ class EntityManager:
         self.emp_waves.append(EMPWave(center_x, center_y))
 
     def spawn_explosive_effect(
-        self, x: float, y: float, radius: float = 60.0, damage: int = 50
+        self,
+        x: float,
+        y: float,
+        radius: float = 60.0,
+        damage: int = 50,
+        delay: float = 0.0,
+        color: tuple[int, int, int] = (255, 255, 255),
+        lifetime: float = 0.4,
     ) -> None:
-        self.explosive_effects.append(ExplosiveEffect(x, y, radius=radius, damage=damage))
+        self.explosive_effects.append(
+            ExplosiveEffect(
+                x, y, radius=radius, damage=damage, lifetime=lifetime,
+                delay=delay, color=color,
+            )
+        )
 
     def spawn_ice_poison_zone(
         self, x: float, y: float, radius: int, duration: float = 5.0
@@ -645,6 +657,8 @@ class EntityManager:
         self.area_blasts.extend(ctx_emissions.new_area_blasts)
         for _ex in ctx_emissions.new_explosions:
             self.spawn_explosion(*_ex)
+        for _z in ctx_emissions.new_ice_zones:
+            self.spawn_ice_poison_zone(*_z)
 
         self._update_mountain_propellers(dt)
         self._update_energy_orbs(dt)

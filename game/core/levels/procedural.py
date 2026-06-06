@@ -28,13 +28,19 @@ from ...entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
 from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ...entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
 from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin
+from ...entities.cutting_storm import CuttingStorm
 from ...entities.giant_meteor_boss import GiantMeteorBoss
+from ...entities.ice_golem import IceGolem
 from ...entities.meteor import Meteor
 from ...entities.mountain_mage import MountainMage
 from ...entities.mountain_propeller import MountainPropeller
+from ...entities.orbital_turret import OrbitalTurret
+from ...entities.repair_drone import RepairDrone
 from ...entities.rock_glider import RockGlider
 from ...entities.satellite import Satellite
 from ...entities.square_minion_boss import SquareMinionBoss
+from ...entities.stealth_fighter import StealthFighter
+from ...entities.stone_eagle import StoneEagle
 from ...entities.stone_sentry import StoneSentry
 from ..difficulty import DifficultyPreset, DifficultySettings
 from ..world_config import WorldTheme, get_world_for_level
@@ -135,6 +141,12 @@ class DifficultyConfig:
         "cyber_captor": 12.0,
         "tesla_twin": 16.0,
         "jammer": 13.0,
+        "orbital_turret": 12.0,
+        "stealth_fighter": 7.0,
+        "repair_drone": 14.0,
+        "ice_golem": 18.0,
+        "cutting_storm": 12.0,
+        "stone_eagle": 7.0,
     }
 
     DIFFICULTY_SCALING: float = 0.15
@@ -204,6 +216,12 @@ ENEMY_PRESSURE_TIER_BY_KEY: dict[str, str] = {
     "cyber_tank": "strong",
     "cyber_captor": "strong",
     "tesla_twin": "strong",
+    "orbital_turret": "strong",
+    "stealth_fighter": "intermediate",
+    "repair_drone": "strong",
+    "ice_golem": "strong",
+    "cutting_storm": "strong",
+    "stone_eagle": "intermediate",
 }
 
 ENEMY_PRESSURE_TIER_CURVE: dict[str, tuple[float, float]] = {
@@ -231,6 +249,12 @@ ENEMY_PRESSURE_UNLOCK_START: dict[str, float] = {
     "splitter": 0.74,
     "sapper": 0.40,
     "mirror": 0.74,
+    "stealth_fighter": 0.10,
+    "orbital_turret": 0.30,
+    "repair_drone": 0.50,
+    "stone_eagle": 0.10,
+    "cutting_storm": 0.40,
+    "ice_golem": 0.50,
 }
 
 ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
@@ -252,6 +276,12 @@ ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
     "splitter": 0.30,
     "sapper": 0.30,
     "mirror": 0.30,
+    "stealth_fighter": 0.30,
+    "orbital_turret": 0.30,
+    "repair_drone": 0.30,
+    "stone_eagle": 0.30,
+    "cutting_storm": 0.30,
+    "ice_golem": 0.30,
 }
 
 
@@ -524,6 +554,33 @@ class ProceduralLevelGenerator:
                 (15.0 / difficulty / spawn_multiplier) * (2.0 / robot_weight)
             )
 
+        # Specials novos das Cordilheiras — desbloqueiam DEPOIS do trio de
+        # introdução (RockGlider/MountainMage/Propeller) para não roubar o slot do
+        # 2º/3º tipo. Intervalo direto (sem 2/weight) p/ não estourar a loteria de
+        # variedade; são assinaturas (THEME_SIGNATURE_ENEMIES) — ver §11/pipeline.
+        if stage_number >= 4:  # Águia de Pedra (rush em mergulho)
+            if stage_progress < 0.55:
+                eagle_base = 11.0
+            elif stage_progress < 0.80:
+                eagle_base = 9.0
+            else:
+                eagle_base = 7.0
+            enemy_spawn_config[StoneEagle] = self._clamp_spawn_time(
+                (eagle_base / difficulty) / spawn_multiplier
+            )
+
+        if stage_progress >= 0.55:  # Tempestade Cortante (negação de área)
+            storm_base = 16.0 if stage_progress < 0.75 else 12.0
+            enemy_spawn_config[CuttingStorm] = self._clamp_spawn_time(
+                (storm_base / difficulty) / spawn_multiplier
+            )
+
+        if stage_progress >= 0.65:  # Golem de Gelo (tanque)
+            golem_base = 22.0 if stage_progress < 0.85 else 17.0
+            enemy_spawn_config[IceGolem] = self._clamp_spawn_time(
+                (golem_base / difficulty) / spawn_multiplier
+            )
+
     def _configure_city_spawn(
         self,
         enemy_spawn_config: EnemySpawnConfig,
@@ -751,6 +808,33 @@ class ProceduralLevelGenerator:
         enemy_spawn_config[Satellite] = self._clamp_spawn_time(
             (sat_base / difficulty) / spawn_multiplier
         )
+
+        # Specials novos do Espaço — desbloqueiam DEPOIS do trio de introdução
+        # (Meteor/Alien/EyeEnemy nos estágios 1-3) e do Satélite (X-4), para não
+        # roubar o slot do 2º/3º tipo. Intervalo direto (sem 2/weight) p/ não
+        # estourar a loteria de variedade; são assinaturas — ver §11/pipeline.
+        # Caça Furtivo (rush) entra junto com o Satélite (X-4).
+        if stage_progress < 0.55:
+            fighter_base = 11.0
+        elif stage_progress < 0.80:
+            fighter_base = 9.0
+        else:
+            fighter_base = 7.0
+        enemy_spawn_config[StealthFighter] = self._clamp_spawn_time(
+            (fighter_base / difficulty) / spawn_multiplier
+        )
+
+        if stage_number >= 5:  # Torreta Orbital (sniper) — um estágio após o Caça
+            turret_base = 16.0 if stage_progress < 0.70 else 12.0
+            enemy_spawn_config[OrbitalTurret] = self._clamp_spawn_time(
+                (turret_base / difficulty) / spawn_multiplier
+            )
+
+        if stage_progress >= 0.60:  # Drone Reparador (suporte) — tardio
+            drone_base = 19.0 if stage_progress < 0.80 else 15.0
+            enemy_spawn_config[RepairDrone] = self._clamp_spawn_time(
+                (drone_base / difficulty) / spawn_multiplier
+            )
 
     def _calculate_score_multiplier(self, level_number: int) -> float:
         if level_number in self._score_cache:

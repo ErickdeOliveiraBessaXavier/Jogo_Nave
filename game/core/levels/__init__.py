@@ -24,7 +24,6 @@ from .fixed_levels import (
 from .pipeline import (
     DEFAULT_ENEMY_SPAWN_TIME,
     ENEMY_THEME_ALLOWLIST,
-    MAX_ENEMY_VARIETY_BY_DIFFICULTY,
     THEME_BASE_ENEMY,
     THEME_ENEMY_REPLACEMENTS,
     THEME_FALLBACK_ENEMIES,
@@ -56,7 +55,6 @@ __all__ = [
     "THEME_FALLBACK_ENEMIES",
     "ENEMY_THEME_ALLOWLIST",
     "DEFAULT_ENEMY_SPAWN_TIME",
-    "MAX_ENEMY_VARIETY_BY_DIFFICULTY",
     "THEME_BASE_ENEMY",
     "DifficultyPreset",
     "DifficultySettings",

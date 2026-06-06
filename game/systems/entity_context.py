@@ -54,3 +54,6 @@ class EnemyUpdateContext:
     # — ex.: autodestruição "Short Circuit" do Tesla Twin (morte sem on_hit).
     # O EntityManager drena chamando `spawn_explosion`.
     new_explosions: List[Any] = field(default_factory=_empty_any_list)
+    # Zonas de gelo persistentes pedidas no update (x, y, raio, duração) — ex.: o
+    # slam do Golem de Gelo. O EntityManager drena chamando `spawn_ice_poison_zone`.
+    new_ice_zones: List[Any] = field(default_factory=_empty_any_list)
