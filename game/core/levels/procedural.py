@@ -33,6 +33,7 @@ from ...entities.meteor import Meteor
 from ...entities.mountain_mage import MountainMage
 from ...entities.mountain_propeller import MountainPropeller
 from ...entities.rock_glider import RockGlider
+from ...entities.satellite import Satellite
 from ...entities.square_minion_boss import SquareMinionBoss
 from ...entities.stone_sentry import StoneSentry
 from ..difficulty import DifficultyPreset, DifficultySettings
@@ -700,6 +701,34 @@ class ProceduralLevelGenerator:
                 (square_base / difficulty) / spawn_multiplier
             )
 
+    def _configure_starfield_spawn(
+        self,
+        enemy_spawn_config: EnemySpawnConfig,
+        stage_progress: float,
+        stage_number: int,
+        difficulty: float,
+        spawn_multiplier: float,
+    ) -> None:
+        """Injeta o Satélite (lixo orbital) no pool exclusivo do bioma STARFIELD.
+
+        Entra como perigo espacial de meio de mundo — gate por estágio absoluto
+        em X-4, depois do trio Meteor/Alien/EyeEnemy se estabelecer, para não
+        atropelar a curva de introdução. A FREQUÊNCIA escala por stage_progress.
+        Continua sujeito ao teto de variedade do tema (`_apply_enemy_variety_cap`).
+        """
+        if stage_number < 4:
+            enemy_spawn_config.pop(Satellite, None)
+            return
+        if stage_progress < 0.45:
+            sat_base = 10.0
+        elif stage_progress < 0.75:
+            sat_base = 7.0
+        else:
+            sat_base = 5.0
+        enemy_spawn_config[Satellite] = self._clamp_spawn_time(
+            (sat_base / difficulty) / spawn_multiplier
+        )
+
     def _calculate_score_multiplier(self, level_number: int) -> float:
         if level_number in self._score_cache:
             return self._score_cache[level_number]
@@ -827,6 +856,15 @@ class ProceduralLevelGenerator:
             # stage_banded evita injetar Alien/Eye/Square que o allowlist removeria.
             if world.theme in _STAGE_BANDED_THEMES and world.theme != WorldTheme.CITY:
                 self._configure_stage_banded_spawn(
+                    enemy_spawn_config,
+                    stage_progress,
+                    stage_number,
+                    difficulty,
+                    spawn_multiplier,
+                )
+
+            if world.theme == WorldTheme.STARFIELD:
+                self._configure_starfield_spawn(
                     enemy_spawn_config,
                     stage_progress,
                     stage_number,

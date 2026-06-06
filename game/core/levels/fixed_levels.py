@@ -46,6 +46,7 @@ from ...entities.spike_boss import SpikeBoss
 from ...entities.square_minion_boss import SquareMinionBoss  # noqa: F401  (debug)
 from ...entities.stone_golem_boss import StoneGolemBoss
 from ...entities.stone_sentry import StoneSentry
+from ..world_config import WorldTheme
 
 # Mínimo de spawn em segundos. Replicado também em DifficultyConfig.MIN_SPAWN_TIME
 # (procedural.py) — manter os dois em sincronia.
@@ -310,59 +311,12 @@ class LevelConfig:
 
 
 FIXED_LEVELS: dict[int, LevelConfig] = {
-    # Nível 1: LEVEL DE DEBUG — scratchpad de inimigos/bosses.
-    # ATENÇÃO: fixed levels agora PASSAM pelo pipeline `_apply_theme_enemy_rules`
-    # (filtro de tema + variety cap), igual aos demais caminhos — ver CLAUDE.md §11.
-    # Logo, inimigos de outro tema que o do mundo (mundo 1 = MOUNTAINS) são
-    # FILTRADOS, e a variedade é limitada à rampa do estágio (X-1 → 1 tipo). Para
-    # testar um inimigo específico aqui, liste um inimigo do tema MOUNTAINS. Os
-    # caps por tipo (SPAWNER_CAP_*) controlam a quantidade simultânea de cada um.
-    #
-    # BOSS: só UM boss_type pode estar ativo por vez — descomente um da lista.
-    # Para chegar ao boss rápido, baixe `enemies_to_clear` (ex.: 10).
     1: LevelConfig(
         level_number=1,
         enemy_spawn_config={
-            # ── Comuns / enxame ──────────────────────────────────────────────
-            # RockGlider: 1.2,
-            # Meteor: 1.6,
-            # CityDrone: 4.0,  # nasce em leva (cluster) de 5-8
-            # Alien: 3.0,
-            # ── Mundo 1 (MOUNTAINS) ──────────────────────────────────────────
-            # MountainPropeller: 5.0,
-            # MountainMage: 10.0,
-            # ElementalRobot: 10.0,
-            # StoneSentry: 20.0,
-            # ── STARFIELD / espaço ───────────────────────────────────────────
-            # EyeEnemy: 6.0,
-            # Satellite: 6.0,
-            # SquareMinionBoss: 12.0,
-            # ── CITY (linhagem original) ─────────────────────────────────────
-            # NeonSniper: 8.0,
-            # PoliceInterceptor: 8.0,  # spawna em duplas
-            # CyberCaptor: 10.0,
-            # TeslaTwin: 12.0,  # spawna o par
-            # CyberTank: 14.0,
-            # ── CITY (variantes novas) ───────────────────────────────────────
-            # JammerNode: 10.0,
-            # MortarDrone: 8.0,
-            SapperDrone: 1.0,
-            CargoCarrier: 1.0,
-            SplitterTank: 1.0,
-            MirrorPylon: 1.0,
+            RockGlider: 1.2,
         },
         enemies_to_clear=75,
-        # ── Descomente UM boss por vez ───────────────────────────────────────
-        # boss_type=Boss,
-        # boss_type=SpikeBoss,
-        # boss_type=SlimeBoss,
-        # boss_type=GiantMeteorBoss,
-        # boss_type=StoneGolemBoss,
-        # boss_type=MountainSerpentBoss,
-        # boss_type=CloudArchmageBoss,
-        mines_enabled=True,  # também spawna minas (tema CITY → mina temática)
-        formations_enabled=True,  # formações (só disparam em temas que as suportam)
-        formation_types=["spiral_circle", "spiral_v", "spiral_square"],
         score_multiplier=1.0,
     ),
     # Nível 3: Primeiro Boss - Mountain Serpent (Montanhas)
@@ -483,5 +437,116 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         ],
         theme_name="Criatura Gelatinosa Alienígena",
         score_multiplier=1.6,
+    ),
+}
+
+
+# ============================================================================
+# ARENA DE TESTE POR TEMA (DEV) — valida inimigos de um tema isoladamente
+# ============================================================================
+#
+# Objetivo: jogar diretamente um tema específico, com TODOS os inimigos daquele
+# tema, sem percorrer a campanha e sem interferência de inimigos de outros
+# mundos. Diferente dos fixed levels normais, estas arenas NÃO passam pelo
+# variety cap nem pelo fallback de tema (ver `_build_test_arena_config` em
+# pipeline.py) — todos os tipos listados aparecem, na cadência configurada aqui.
+#
+# COMO USAR:
+#   1. Ligue o flag abaixo: `TEST_ARENA_ENABLED = True`.
+#   2. Rode o jogo, vá em "Selecionar Mundo" (todos destravados no modo teste) e
+#      escolha o mundo do tema que quer validar.
+#   3. Edite a lista do tema correspondente para ligar/desligar inimigos e
+#      ajustar cadência (spawn_time menor = mais frequente).
+#   4. Desligue o flag (`False`) antes de commitar/jogar a campanha — com ele
+#      OFF a campanha é 100% normal (nada aqui afeta os fixed levels acima).
+#
+# NOTA DE DESIGN: só MOUNTAINS e CITY têm inimigos EXCLUSIVOS. STARFIELD e
+# VOLCANIC ainda reusam o trio genérico (Meteor/Alien/EyeEnemy/SquareMinionBoss)
+# — a arena deixa essa lacuna explícita: sem preenchimento com inimigos de
+# outros temas, mostra só o que o tema realmente tem hoje.
+
+TEST_ARENA_ENABLED: bool = True
+
+THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
+    # ── MONTANHAS — linhagem própria completa ────────────────────────────────
+    WorldTheme.MOUNTAINS: LevelConfig(
+        level_number=1,  # sobrescrito pelo nível real em _build_test_arena_config
+        enemy_spawn_config={
+            RockGlider: 1.2,
+            MountainPropeller: 4.0,
+            MountainMage: 8.0,
+            ElementalRobot: 8.0,
+            StoneSentry: 1.0,
+            # MountainGeode NÃO entra aqui: é a mina temática da Montanha
+            # (subclasse de ExplosiveMine), categoria COMPLEMENTAR controlada
+            # por mines_enabled / _update_mine_spawner — ver spawner.py §HAZARD.
+        },
+        enemies_to_clear=40,
+        boss_type=StoneGolemBoss,
+        mines_enabled=True,  # spawna o MountainGeode (mina temática) por lógica própria
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v", "spiral_square"],
+        theme_name="[TESTE] Arena Montanhas",
+        score_multiplier=1.0,
+    ),
+    # ── CIDADE — linhagem Inimigos_Tema_Cidade completa ──────────────────────
+    WorldTheme.CITY: LevelConfig(
+        level_number=26,
+        enemy_spawn_config={
+            CityDrone: 3.0,
+            NeonSniper: 8.0,
+            PoliceInterceptor: 8.0,
+            CyberCaptor: 10.0,
+            TeslaTwin: 12.0,
+            CyberTank: 4.0,
+            JammerNode: 1.0,
+            MortarDrone: 1.0,
+            CargoCarrier: 2.0,
+            SplitterTank: 2.0,
+            SapperDrone: 5.0,
+            MirrorPylon: 2.0,
+        },
+        enemies_to_clear=50,
+        boss_type=GiantMeteorBoss,  # provisório (CITY ainda não tem boss nativo)
+        mines_enabled=True,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v", "spiral_square"],
+        theme_name="[TESTE] Arena Cidade",
+        score_multiplier=1.0,
+    ),
+    # ── ESPAÇO — sem inimigos exclusivos (trio genérico + satélite) ──────────
+    WorldTheme.STARFIELD: LevelConfig(
+        level_number=11,
+        enemy_spawn_config={
+            Meteor: 1.2,
+            Alien: 3.0,
+            EyeEnemy: 6.0,
+            Satellite: 6.0,
+            SquareMinionBoss: 12.0,
+        },
+        enemies_to_clear=40,
+        boss_type=GiantMeteorBoss,
+        mines_enabled=True,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v", "spiral_square"],
+        theme_name="[TESTE] Arena Espaço",
+        score_multiplier=1.0,
+    ),
+    # ── VULCÃO — sem inimigos exclusivos hoje (trio genérico) ────────────────
+    WorldTheme.VOLCANIC: LevelConfig(
+        level_number=36,
+        enemy_spawn_config={
+            Meteor: 1.2,
+            Alien: 3.0,
+            EyeEnemy: 6.0,
+            SquareMinionBoss: 12.0,
+        },
+        enemies_to_clear=40,
+        boss_type=SlimeBoss,
+        mines_enabled=True,
+        formations_enabled=True,
+        formation_types=["spiral_circle", "spiral_v", "spiral_square"],
+        theme_name="[TESTE] Arena Vulcão",
+        score_multiplier=1.0,
     ),
 }

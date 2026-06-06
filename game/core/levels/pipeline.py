@@ -38,6 +38,7 @@ from ...entities.mountain_geode import MountainGeode
 from ...entities.mountain_mage import MountainMage
 from ...entities.mountain_propeller import MountainPropeller
 from ...entities.rock_glider import RockGlider
+from ...entities.satellite import Satellite
 from ...entities.square_minion_boss import SquareMinionBoss
 from ...entities.stone_sentry import StoneSentry
 from ..difficulty import DifficultyPreset, DifficultySettings
@@ -46,6 +47,8 @@ from .fixed_levels import (
     EnemySpawnConfig,
     FIXED_LEVELS,
     LEVEL_THEMES,
+    TEST_ARENA_ENABLED,
+    THEME_TEST_LEVELS,
     LevelConfig,
 )
 from .procedural import (
@@ -89,6 +92,7 @@ ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
         WorldTheme.VOLCANIC,
         WorldTheme.PROCEDURAL,
     },
+    Satellite: {WorldTheme.STARFIELD},  # lixo orbital — exclusivo do Espaço
     CityDrone: {WorldTheme.CITY},
     NeonSniper: {WorldTheme.CITY},
     PoliceInterceptor: {WorldTheme.CITY},
@@ -300,7 +304,7 @@ ENEMY_STAGE_WEIGHT_MULTIPLIERS = ENEMY_STAGE_WEIGHT_PROFILES[_ACTIVE_PROFILE]
 
 THEME_FALLBACK_ENEMIES: dict[WorldTheme, list[type]] = {
     WorldTheme.MOUNTAINS: [RockGlider, MountainMage, StoneSentry, ElementalRobot],
-    WorldTheme.STARFIELD: [Meteor, Alien, EyeEnemy],
+    WorldTheme.STARFIELD: [Meteor, Alien, EyeEnemy, Satellite],
     WorldTheme.CITY: [
         CityDrone, NeonSniper, PoliceInterceptor, CyberCaptor, TeslaTwin, CyberTank,
         JammerNode, MortarDrone, CargoCarrier, SplitterTank, SapperDrone, MirrorPylon,
@@ -314,6 +318,7 @@ DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
     RockGlider: 1.05,
     Alien: 2.5,
     EyeEnemy: 6.0,
+    Satellite: 6.0,
     StoneSentry: 30.0,
     ElementalRobot: 2.6,
     MountainMage: 18.0,
@@ -739,6 +744,25 @@ def _create_world_boss_level(
 _procedural_generators: dict[DifficultyPreset, ProceduralLevelGenerator] = {}
 
 
+def _build_test_arena_config(level_number: int) -> LevelConfig | None:
+    """Arena de teste por tema (dev): config CRUA do tema do nível.
+
+    Usada só quando `TEST_ARENA_ENABLED`. Pega a `LevelConfig` de
+    `THEME_TEST_LEVELS` para o tema do mundo atual e a devolve SEM passar pelo
+    pipeline de regras (sem variety cap, sem filtro/fallback de tema, sem grace
+    nem coop scaling) — o objetivo é mostrar exatamente os inimigos listados,
+    para validar o ecossistema isoladamente. Retorna ``None`` se o tema não tem
+    arena definida (ex.: PROCEDURAL), caindo no fluxo normal.
+    """
+    world = get_world_for_level(level_number)
+    template = THEME_TEST_LEVELS.get(world.theme)
+    if template is None:
+        return None
+    config = copy.copy(template)
+    config.level_number = level_number
+    return config
+
+
 def get_level_config(
     level_number: int,
     difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
@@ -748,10 +772,16 @@ def get_level_config(
     """Retorna a configuração de um nível com dificuldade aplicada.
 
     Sistema Híbrido com Mundos:
+    - arena de teste (dev): se TEST_ARENA_ENABLED, retorna a arena do tema crua
     - boss_level de mundo: retorna config customizada para boss
     - nível em FIXED_LEVELS: retorna versão handcrafted ajustada
     - caso contrário: gera proceduralmente com tema do mundo
     """
+    if TEST_ARENA_ENABLED:
+        test_config = _build_test_arena_config(level_number)
+        if test_config is not None:
+            return test_config
+
     coop_enemies_multiplier = 1.0 + 0.35 * (player_count - 1)
     coop_spawn_multiplier = 1.0 + 0.20 * (player_count - 1)
 

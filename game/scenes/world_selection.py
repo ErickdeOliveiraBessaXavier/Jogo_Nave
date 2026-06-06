@@ -16,6 +16,7 @@ from ..core.assets import BASE_DIR, get_font, get_image
 from ..core.colors import CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.config import config as Config
 from ..core.sound import sound_manager
+from ..core.levels.fixed_levels import TEST_ARENA_ENABLED
 from ..core.world_config import WorldConfig, get_all_worlds
 from ..render.backgrounds import Background, create_background
 from .ui_helpers import UIParticle, draw_bordered_button
@@ -470,7 +471,12 @@ class WorldSelectionView:
         checkpoint_idx = 0
 
         for i, world_config in enumerate(worlds):
-            if world_config.world_id in self.player_profile.world_unlocks:
+            # Modo arena de teste (dev): todos os mundos destravados para pular
+            # direto a qualquer tema sem percorrer a campanha.
+            if TEST_ARENA_ENABLED:
+                state = WorldCardState.UNLOCKED
+                best_score = 0
+            elif world_config.world_id in self.player_profile.world_unlocks:
                 unlock_status = self.player_profile.world_unlocks[world_config.world_id]
                 if unlock_status.is_unlocked:
                     if (

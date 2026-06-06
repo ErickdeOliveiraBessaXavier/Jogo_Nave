@@ -27,6 +27,7 @@ from ..core.levels import (
     DifficultyConfig,
     calculate_dynamic_enemy_cap,
 )
+from ..core.levels.fixed_levels import TEST_ARENA_ENABLED
 from ..core.powerup_weights import get_powerup_weights
 from ..core.time import Timer
 from ..core.world_config import WorldTheme, get_world_for_level
@@ -470,6 +471,14 @@ class EnemySpawner:
         return aliases.get(enemy_type.__name__, enemy_type.__name__.lower())
 
     def _get_min_spawn_gap(self, enemy_type: type) -> float:
+        # Arena de teste (dev): respeita o spawn_time digitado no THEME_TEST_LEVELS,
+        # ignorando o piso por tipo da campanha (ex.: stone_sentry=30s) — senão
+        # inimigos "pesados" quase não aparecem na validação isolada.
+        if TEST_ARENA_ENABLED:
+            return max(
+                DifficultyConfig.MIN_GLOBAL_SPAWN_GAP,
+                self.level_config.get_spawn_time(enemy_type),
+            )
         type_key = self._enemy_type_key(enemy_type)
         base_gap = DifficultyConfig.MIN_SPAWN_GAP_BY_TYPE.get(
             type_key, DifficultyConfig.MIN_GLOBAL_SPAWN_GAP
@@ -684,6 +693,10 @@ class EnemySpawner:
     def _is_hard_capped(self, enemy_type: type, counts: dict[str, int]) -> bool:
         if counts["total"] >= self._get_current_enemy_cap():
             return True
+        # Arena de teste (dev): sem caps por tipo — só o cap global acima limita,
+        # para a validação isolada mostrar muitos de cada inimigo.
+        if TEST_ARENA_ENABLED:
+            return False
         if (
             enemy_type == ElementalRobot
             and counts["elemental_robot"] >= SPAWNER_CAP_ELEMENTAL_ROBOT
@@ -754,53 +767,55 @@ class EnemySpawner:
         if counts is None:
             counts = self._count_enemies_by_type(entity_manager)
 
-        # Caps rígidos de instâncias únicas/duplas
-        if (
-            enemy_type == ElementalRobot
-            and counts["elemental_robot"] >= SPAWNER_CAP_ELEMENTAL_ROBOT
-        ):
-            return False
-        if (
-            enemy_type == StoneSentry
-            and counts["stone_sentry"] >= SPAWNER_CAP_STONE_SENTRY
-        ):
-            return False
-        if (
-            enemy_type == MountainMage
-            and counts["mountain_mage"] >= SPAWNER_CAP_MOUNTAIN_MAGE
-        ):
-            return False
-        if (
-            enemy_type == NeonSniper
-            and counts["neon_sniper"] >= SPAWNER_CAP_NEON_SNIPER
-        ):
-            return False
-        if (
-            enemy_type == PoliceInterceptor
-            and counts["police_interceptor"] >= SPAWNER_CAP_POLICE_INTERCEPTOR
-        ):
-            return False
-        if enemy_type == CyberTank and counts["cyber_tank"] >= SPAWNER_CAP_CYBER_TANK:
-            return False
-        if (
-            enemy_type == CyberCaptor
-            and counts["cyber_captor"] >= SPAWNER_CAP_CYBER_CAPTOR
-        ):
-            return False
-        if enemy_type == TeslaTwin and counts["tesla_twin"] >= SPAWNER_CAP_TESLA_TWIN:
-            return False
-        if enemy_type == JammerNode and counts["jammer"] >= SPAWNER_CAP_JAMMER:
-            return False
-        if enemy_type == MortarDrone and counts["mortar"] >= SPAWNER_CAP_MORTAR:
-            return False
-        if enemy_type == CargoCarrier and counts["cargo_carrier"] >= SPAWNER_CAP_CARGO_CARRIER:
-            return False
-        if enemy_type == SplitterTank and counts["splitter"] >= SPAWNER_CAP_SPLITTER:
-            return False
-        if enemy_type == SapperDrone and counts["sapper"] >= SPAWNER_CAP_SAPPER:
-            return False
-        if enemy_type == MirrorPylon and counts["mirror"] >= SPAWNER_CAP_MIRROR:
-            return False
+        # Caps rígidos de instâncias únicas/duplas.
+        # Arena de teste (dev): pulados — só o cap global de população vale.
+        if not TEST_ARENA_ENABLED:
+            if (
+                enemy_type == ElementalRobot
+                and counts["elemental_robot"] >= SPAWNER_CAP_ELEMENTAL_ROBOT
+            ):
+                return False
+            if (
+                enemy_type == StoneSentry
+                and counts["stone_sentry"] >= SPAWNER_CAP_STONE_SENTRY
+            ):
+                return False
+            if (
+                enemy_type == MountainMage
+                and counts["mountain_mage"] >= SPAWNER_CAP_MOUNTAIN_MAGE
+            ):
+                return False
+            if (
+                enemy_type == NeonSniper
+                and counts["neon_sniper"] >= SPAWNER_CAP_NEON_SNIPER
+            ):
+                return False
+            if (
+                enemy_type == PoliceInterceptor
+                and counts["police_interceptor"] >= SPAWNER_CAP_POLICE_INTERCEPTOR
+            ):
+                return False
+            if enemy_type == CyberTank and counts["cyber_tank"] >= SPAWNER_CAP_CYBER_TANK:
+                return False
+            if (
+                enemy_type == CyberCaptor
+                and counts["cyber_captor"] >= SPAWNER_CAP_CYBER_CAPTOR
+            ):
+                return False
+            if enemy_type == TeslaTwin and counts["tesla_twin"] >= SPAWNER_CAP_TESLA_TWIN:
+                return False
+            if enemy_type == JammerNode and counts["jammer"] >= SPAWNER_CAP_JAMMER:
+                return False
+            if enemy_type == MortarDrone and counts["mortar"] >= SPAWNER_CAP_MORTAR:
+                return False
+            if enemy_type == CargoCarrier and counts["cargo_carrier"] >= SPAWNER_CAP_CARGO_CARRIER:
+                return False
+            if enemy_type == SplitterTank and counts["splitter"] >= SPAWNER_CAP_SPLITTER:
+                return False
+            if enemy_type == SapperDrone and counts["sapper"] >= SPAWNER_CAP_SAPPER:
+                return False
+            if enemy_type == MirrorPylon and counts["mirror"] >= SPAWNER_CAP_MIRROR:
+                return False
 
         max_enemies = self._get_current_enemy_cap()
         if counts["total"] >= max_enemies:
