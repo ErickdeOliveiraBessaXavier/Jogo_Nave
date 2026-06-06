@@ -3,6 +3,12 @@
 Módulo "dados puros": dataclasses (LevelConfig, LevelTheme), aliases de tipo
 (EnemySpawnConfig), tabelas constantes (LEVEL_THEMES, FIXED_LEVELS). Não
 importa nada de `procedural` ou `pipeline` — esses módulos importam daqui.
+
+Responsabilidade de `FIXED_LEVELS` (fonte única do que define): o LAYOUT
+handcrafted (inimigos/quantidade/score/nome/formações) de níveis específicos —
+intros (L1, L11) e ARENAS de boss. NÃO define a CLASSE do boss: essa vem do
+`WORLD_BOSS_ROADMAP` (`world_config.py`) via `get_boss_for_level`, injetada pelo
+pipeline. Trocar um boss = editar o roadmap, nunca aqui.
 """
 
 from __future__ import annotations
@@ -306,7 +312,7 @@ class LevelConfig:
 
 
 # ============================================================================
-# NÍVEIS FIXOS (HANDCRAFTED)
+# NÍVEIS FIXOS (HANDCRAFTED) — só LAYOUT; a classe do boss vem do roadmap
 # ============================================================================
 
 

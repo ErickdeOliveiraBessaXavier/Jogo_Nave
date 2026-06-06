@@ -152,16 +152,24 @@ setores procedurais OK; L10 deixa de ter config morta.
 
 ---
 
-## Fase 2 — `FIXED_LEVELS` reduzido a handcraft puro (baixo custo)
+## Fase 2 — `FIXED_LEVELS` como handcraft puro — ✅ CONCLUÍDA (2026-06-06)
 
-1. Após Fase 1, `FIXED_LEVELS` = `{1: tutorial, 11: abertura Espaço}` (sem boss).
-2. A/B headless: comparar `get_level_config(11)` SEM a entrada fixa (procedural +
-   grace + rampa) com a handcrafted. Se equivalente, **remover L11**; manter só L1.
-3. Documentar no topo de `fixed_levels.py` a responsabilidade única: "override
-   handcrafted de LAYOUT de níveis específicos; bosses vêm do roadmap".
+A **refinada da Fase 1** (manter os layouts handcrafted, remover só `boss_type`)
+**já absorveu o objetivo**: `FIXED_LEVELS` ficou sem duplicidade — tudo nele é
+conteúdo genuinamente handcrafted (intros + arenas de boss), e a classe do boss
+vem do roadmap. Não há mais "camada intermediária desnecessária".
 
-**Definição de pronto:** `FIXED_LEVELS` minúsculo, sem `boss_type`, docstring de
-responsabilidade única.
+**Decisão sobre L11:** A/B headless mostrou que o procedural geraria L11 quase
+idêntico (Meteor-only, clear=80, spawn 2.22 vs 2.86 handcrafted). Diferença de
+cadência pequena mas **não-zero** → remover mudaria levemente o feel da abertura
+do Espaço. Ganho de dedup desprezível (uma entrada). **Mantido o L11** (alinhado
+a "não mudar gameplay").
+
+**Feito:** docstring de `fixed_levels.py` e cabeçalho da seção `FIXED_LEVELS`
+explicitam a responsabilidade única (LAYOUT handcrafted; classe do boss = roadmap).
+
+**Definição de pronto:** `FIXED_LEVELS` sem `boss_type`, responsabilidade
+documentada. ✅
 
 ---
 
