@@ -39,13 +39,19 @@ from ...entities.Inimigos_Tema_Cidade.cargo_carrier import CargoCarrier  # noqa:
 from ...entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin  # noqa: F401
+from ...entities.cutting_storm import CuttingStorm  # noqa: F401  (arena de teste)
+from ...entities.ice_golem import IceGolem  # noqa: F401  (arena de teste)
 from ...entities.meteor import Meteor
 from ...entities.mountain_mage import MountainMage
 from ...entities.mountain_propeller import MountainPropeller
+from ...entities.orbital_turret import OrbitalTurret  # noqa: F401  (arena de teste)
+from ...entities.repair_drone import RepairDrone  # noqa: F401  (arena de teste)
 from ...entities.rock_glider import RockGlider
 from ...entities.satellite import Satellite  # noqa: F401  (só no level de debug)
 from ...entities.slime_boss import SlimeBoss
 from ...entities.square_minion_boss import SquareMinionBoss  # noqa: F401  (debug)
+from ...entities.stealth_fighter import StealthFighter  # noqa: F401  (arena de teste)
+from ...entities.stone_eagle import StoneEagle  # noqa: F401  (arena de teste)
 from ...entities.stone_golem_boss import StoneGolemBoss
 from ...entities.stone_sentry import StoneSentry
 from ..world_config import WorldTheme
@@ -498,10 +504,11 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
 #   4. Desligue o flag (`False`) antes de commitar/jogar a campanha — com ele
 #      OFF a campanha é 100% normal (nada aqui afeta os fixed levels acima).
 #
-# NOTA DE DESIGN: só MOUNTAINS e CITY têm inimigos EXCLUSIVOS. STARFIELD e
-# VOLCANIC ainda reusam o trio genérico (Meteor/Alien/EyeEnemy/SquareMinionBoss)
-# — a arena deixa essa lacuna explícita: sem preenchimento com inimigos de
-# outros temas, mostra só o que o tema realmente tem hoje.
+# NOTA DE DESIGN: MOUNTAINS, CITY e STARFIELD têm inimigos EXCLUSIVOS (Montanha e
+# Espaço ganharam 3 cada — tank/area_denial/rush e sniper/rush/support). Só
+# VOLCANIC ainda reusa o trio genérico (Meteor/Alien/EyeEnemy/SquareMinionBoss) —
+# a arena deixa essa lacuna explícita: sem preenchimento com inimigos de outros
+# temas, mostra só o que o tema realmente tem hoje.
 
 TEST_ARENA_ENABLED: bool = False
 
@@ -515,6 +522,9 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
             MountainMage: 8.0,
             ElementalRobot: 8.0,
             StoneSentry: 1.0,
+            StoneEagle: 6.0,  # rush em mergulho
+            CuttingStorm: 8.0,  # negação de área
+            IceGolem: 10.0,  # tanque (cria zonas de gelo no slam)
             # MountainGeode NÃO entra aqui: é a mina temática da Montanha
             # (subclasse de ExplosiveMine), categoria COMPLEMENTAR controlada
             # por mines_enabled / _update_mine_spawner — ver spawner.py §HAZARD.
@@ -552,7 +562,7 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
         theme_name="[TESTE] Arena Cidade",
         score_multiplier=1.0,
     ),
-    # ── ESPAÇO — sem inimigos exclusivos (trio genérico + satélite) ──────────
+    # ── ESPAÇO — trio genérico + satélite + linhagem própria do bioma ────────
     WorldTheme.STARFIELD: LevelConfig(
         level_number=11,
         enemy_spawn_config={
@@ -560,6 +570,9 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
             Alien: 3.0,
             EyeEnemy: 6.0,
             Satellite: 6.0,
+            StealthFighter: 6.0,  # rush (cloak + investida)
+            OrbitalTurret: 8.0,  # sniper (rajada de plasma)
+            RepairDrone: 10.0,  # suporte (cura aliados)
             SquareMinionBoss: 12.0,
         },
         enemies_to_clear=40,
