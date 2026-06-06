@@ -1056,13 +1056,15 @@ class PlayerProfile:
         vida sem game over, mantenha ``score=0`` — o ganho do nível será
         persistido por ``record_clear`` quando a fase for concluída.
 
-        Normalmente ``record_attempt`` precede esta chamada, mas o caminho de game
-        over com ``score`` pode chegar de contextos variados; por isso inicializa
-        defensivamente o nível se ele ainda não estiver em ``level_stats``.
+        Normalmente ``record_attempt`` precede esta chamada. Se não precedeu
+        (ex.: game over chegando de contexto fora do fluxo normal), faz back-fill
+        via ``record_attempt`` — garante que um nível com mortes tenha
+        ``attempts >= 1`` (nunca um nível com atividade e ``attempts == 0``) e
+        reutiliza a lógica de init sem duplicação. NÃO garante ``attempts >=
+        deaths``: várias perdas de vida podem ocorrer num mesmo attempt.
         """
         if level_number not in self.level_stats:
-            self.level_stats[level_number] = LevelPerformance(level_number)
-            self.level_stats[level_number].first_played = datetime.now()
+            self.record_attempt(level_number)  # back-fill: morreu ⇒ jogou ⇒ attempts >= 1
         stats = self.level_stats[level_number]
         stats.deaths += 1
         stats.current_win_streak = 0  # Reset streak
@@ -1592,3 +1594,4 @@ class PlayerProfile:
         self.save()
 
         logger.info("Perfil do jogador resetado com sucesso!")
+        
