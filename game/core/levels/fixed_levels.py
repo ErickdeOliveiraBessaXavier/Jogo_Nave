@@ -15,12 +15,10 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Type
+from typing import Any, Type
 
 from ...entities.alien import Alien
-from ...entities.boss import Boss
 from ...entities.bot_elemental import ElementalRobot
-from ...entities.cloud_archmage_boss import CloudArchmageBoss
 from ...entities.eye_enemy import EyeEnemy
 from ...entities.giant_meteor_boss import GiantMeteorBoss
 
@@ -44,11 +42,9 @@ from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin  # noqa: F401
 from ...entities.meteor import Meteor
 from ...entities.mountain_mage import MountainMage
 from ...entities.mountain_propeller import MountainPropeller
-from ...entities.mountain_serpent_boss import MountainSerpentBoss
 from ...entities.rock_glider import RockGlider
 from ...entities.satellite import Satellite  # noqa: F401  (só no level de debug)
 from ...entities.slime_boss import SlimeBoss
-from ...entities.spike_boss import SpikeBoss
 from ...entities.square_minion_boss import SquareMinionBoss  # noqa: F401  (debug)
 from ...entities.stone_golem_boss import StoneGolemBoss
 from ...entities.stone_sentry import StoneSentry
@@ -212,18 +208,11 @@ class LevelConfig:
     level_number: int
     enemy_spawn_config: dict[type, float]
     enemies_to_clear: int
-    boss_type: (
-        Type[
-            Boss
-            | SpikeBoss
-            | SlimeBoss
-            | GiantMeteorBoss
-            | StoneGolemBoss
-            | MountainSerpentBoss
-            | CloudArchmageBoss
-        ]
-        | None
-    ) = None
+    # A CLASSE do boss vem do WORLD_BOSS_ROADMAP (injetada pelo pipeline), não
+    # daqui — então `Type[Any]` é honesto: a checagem real está no BossSlot do
+    # roadmap e no runtime do spawner. Uma union manual só daria falsa segurança
+    # estática e exigiria editar a cada boss novo.
+    boss_type: Type[Any] | None = None
     mines_enabled: bool = False
     formations_enabled: bool = False
     formation_types: list[str] | None = None

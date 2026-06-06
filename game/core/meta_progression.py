@@ -3,7 +3,7 @@ import logging
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -495,9 +495,7 @@ class DifficultyAdjuster:
         adjusted_enemies = int(config.enemies_to_clear * multiplier)
         adjusted_enemies = max(20, adjusted_enemies)  # Mínimo de 20 inimigos
 
-        import dataclasses
-
-        return dataclasses.replace(
+        return replace(
             config,
             enemy_spawn_config=adjusted_spawn_config,
             enemies_to_clear=adjusted_enemies,
@@ -1506,9 +1504,9 @@ class PlayerProfile:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with open(path, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
-                logger.debug(f"Async save completed for {path}")
+                logger.debug("Async save completed for %s", path)
             except OSError as e:
-                logger.error(f"Async save failed for {path}: {e}")
+                logger.error("Async save failed for %s: %s", path, e)
 
         # Executar escrita em daemon thread (não bloqueia exit)
         thread = threading.Thread(target=_write_to_disk, daemon=True)

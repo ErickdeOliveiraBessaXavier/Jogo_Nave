@@ -785,18 +785,12 @@ def _apply_world_theme_to_config(
             DifficultyConfig.MIN_SPAWN_TIME, adjusted_spawn_config[enemy_type]
         )
 
-    return LevelConfig(
-        level_number=config.level_number,
-        enemy_spawn_config=adjusted_spawn_config,
-        enemies_to_clear=config.enemies_to_clear,
-        boss_type=config.boss_type,
-        mines_enabled=config.mines_enabled,
-        formations_enabled=config.formations_enabled,
-        formation_types=config.formation_types,
-        theme_name=world.name,
-        score_multiplier=config.score_multiplier,
-        storm_kind=config.storm_kind,
-    )
+    # Padrão do pipeline: copy.copy + mutar só os campos afetados (robusto a
+    # campos novos de LevelConfig, que de outro modo seriam zerados aqui).
+    config_copy = copy.copy(config)
+    config_copy.enemy_spawn_config = adjusted_spawn_config
+    config_copy.theme_name = world.name
+    return config_copy
 
 
 def _create_world_boss_level(
@@ -867,6 +861,10 @@ def _build_test_arena_config(level_number: int) -> LevelConfig | None:
     nem coop scaling) — o objetivo é mostrar exatamente os inimigos listados,
     para validar o ecossistema isoladamente. Retorna ``None`` se o tema não tem
     arena definida (ex.: PROCEDURAL), caindo no fluxo normal.
+
+    EXCEÇÃO ao fluxo de boss: aqui o `boss_type` vem do TEMPLATE da arena
+    (`THEME_TEST_LEVELS`), NÃO do roadmap — é dev/teste e não passa pelo pipeline,
+    então a classe injetada por `get_boss_for_level` não se aplica.
     """
     world = get_world_for_level(level_number)
     template = THEME_TEST_LEVELS.get(world.theme)

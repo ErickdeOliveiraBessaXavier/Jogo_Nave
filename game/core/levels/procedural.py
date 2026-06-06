@@ -50,6 +50,13 @@ from .fixed_levels import (
 # Temas em que Alien/Eye/SquareMinionBoss são configurados via bandas de
 # stage_progress (early/mid/late). Outros temas usam o cálculo baseado em
 # theme.enemy_weight + _get_progressive_enemy_weight.
+#
+# ATENÇÃO ao duplo papel deste conjunto: ele governa DUAS coisas — (a) as bandas
+# de inimigo acima e (b) a lógica banded de FORMAÇÕES em generate_config. A CITY
+# está aqui SÓ por (b): tem linhagem própria montada em _configure_city_spawn e é
+# EXPLICITAMENTE excluída de (a) (ver `... and world.theme != WorldTheme.CITY` em
+# generate_config). Por isso não renomear para "_FORMATION_BANDED_THEMES": o nome
+# atual cobre (a), que vale para STARFIELD/VOLCANIC/PROCEDURAL.
 _STAGE_BANDED_THEMES: tuple[WorldTheme, ...] = (
     WorldTheme.STARFIELD,
     WorldTheme.CITY,
