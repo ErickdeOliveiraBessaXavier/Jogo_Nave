@@ -39,10 +39,8 @@ class WorldConfig:
     # Gameplay
     start_level: int  # Nível inicial (ex: 1, 11, 21)
     end_level: int  # Nível final (ex: 10, 20, 30)
-    boss_level: int  # Nível do boss (sempre end_level)
-
-    # Boss específico (None = procedural)
-    boss_type: Optional[Type[Any]] = None
+    boss_level: int  # Nível FINAL do mundo (transição de mundo). NÃO define a
+    # classe do boss — isso vem do WORLD_BOSS_ROADMAP via get_boss_for_level.
 
     # Modificadores de tema (aplicados à geração procedural)
     theme_modifiers: dict[str, float] = field(default_factory=lambda: {})
@@ -67,12 +65,11 @@ class WorldConfig:
 
 
 def _get_worlds() -> dict[int, WorldConfig]:
-    """Retorna dicionário de mundos configurados."""
-    # Importações locais para evitar circular imports
-    from ..entities.giant_meteor_boss import GiantMeteorBoss
-    from ..entities.slime_boss import SlimeBoss
-    from ..entities.stone_golem_boss import StoneGolemBoss
+    """Retorna dicionário de mundos configurados.
 
+    A CLASSE do boss de cada mundo NÃO mora aqui — vem do WORLD_BOSS_ROADMAP via
+    get_boss_for_level. `boss_level` aqui é só o nível FINAL do mundo.
+    """
     return {
         1: WorldConfig(
             world_id=1,
@@ -84,7 +81,6 @@ def _get_worlds() -> dict[int, WorldConfig]:
             start_level=1,
             end_level=10,
             boss_level=10,
-            boss_type=StoneGolemBoss,  # Boss final das montanhas
             theme_modifiers={
                 "alien_weight": 0.5,  # Menos aliens
                 "formation_chance": 0.5,  # Formações muito raras no começo
@@ -100,7 +96,6 @@ def _get_worlds() -> dict[int, WorldConfig]:
             start_level=11,
             end_level=25,
             boss_level=25,
-            boss_type=None,  # Bosses determinados por FIXED_LEVELS
             theme_modifiers={
                 "meteor_weight": 0.9,
                 "alien_weight": 0.75,  # Menos aliens durante a curva inteira
@@ -117,8 +112,7 @@ def _get_worlds() -> dict[int, WorldConfig]:
             secondary_color=(0, 255, 255),  # Cyan elétrico
             start_level=26,
             end_level=40,  # 15 estágios para acomodar os 4 bosses da Cidade (ver WORLD_BOSS_ROADMAP)
-            boss_level=40,  # boss FINAL (4º). Mid-bosses em FIXED_LEVELS (L30/L34/L37).
-            boss_type=GiantMeteorBoss,  # Provisório: reusa até os bosses próprios da City Neon.
+            boss_level=40,  # nível FINAL. Bosses (mid+final) no WORLD_BOSS_ROADMAP.
             # CITY usa a própria linhagem (Inimigos_Tema_Cidade); o tuning de spawn/
             # frequência mora em pipeline.py/procedural.py (_configure_city_spawn,
             # ENEMY_*_WEIGHT_PROFILES). Não há theme_modifiers funcionais aqui:
@@ -136,7 +130,6 @@ def _get_worlds() -> dict[int, WorldConfig]:
             start_level=41,  # deslocado: Cidade agora vai até 40
             end_level=50,
             boss_level=50,
-            boss_type=SlimeBoss,  # Slime de lava (placeholder até boss nativo do Vulcão)
             theme_modifiers={
                 "meteor_weight": 1.8,  # Muitos fragmentos vulcânicos
                 "spawn_rate_multiplier": 1.15,  # Mais caótico
@@ -157,46 +150,62 @@ PROCEDURAL_SECTOR_SIZE: int = 10
 
 @dataclass(frozen=True)
 class BossSlot:
-    """Slot planejado de boss num mundo (§ arquitetura pronta para receber chefes).
+    """Slot de boss num mundo — FONTE DE VERDADE da classe e posição do chefe.
 
-    `status`: "implemented" (boss nativo já existe) ou "placeholder" (slot já
-    reservado no pipeline, reusando um boss existente até o nativo ser criado).
-    `placeholder` nomeia a classe reusada enquanto isso (só informativo).
+    `boss_type` é a classe que realmente spawna (nativa do tema ou um boss
+    existente reusado como placeholder). `status`: "implemented" (chefe nativo do
+    tema) ou "placeholder" (reusa um boss existente até o nativo ser criado —
+    basta trocar a classe aqui e marcar "implemented"). O resolvedor
+    `get_boss_for_level` lê daqui; nada mais define a classe do boss.
     """
 
     level: int
     label: str
     status: str
-    placeholder: Optional[str] = None
+    boss_type: Type[Any]
 
 
-# Roteiro declarativo de bosses por mundo — FONTE DE VERDADE do plano de chefes.
-# Cada slot já tem nível reservado e wiring real: o boss FINAL de cada mundo vem de
-# `WorldConfig.boss_level`/`boss_type`; os MID-bosses vêm de `FIXED_LEVELS` no mesmo
-# nível (ver `core/levels/fixed_levels.py`). Criar um boss nativo = trocar o
-# `boss_type` do slot e marcar "implemented" aqui — sem mexer na estrutura.
-WORLD_BOSS_ROADMAP: dict[int, tuple[BossSlot, ...]] = {
-    1: (  # MOUNTAINS — 3 bosses nativos
-        BossSlot(3, "Serpente de Pedra", "implemented"),
-        BossSlot(6, "Arquimago das Nuvens", "implemented"),
-        BossSlot(10, "Golem de Pedra (final)", "implemented"),
-    ),
-    2: (  # STARFIELD — bosses fixos atuais (via FIXED_LEVELS)
-        BossSlot(12, "Chefe Clássico", "implemented"),
-        BossSlot(16, "Spike Boss", "implemented"),
-        BossSlot(20, "Meteoro Gigante", "implemented"),
-        BossSlot(25, "Slime (final)", "implemented"),
-    ),
-    3: (  # CITY — 4 bosses NATIVOS planejados; placeholders até serem criados
-        BossSlot(30, "City Boss 1", "placeholder", "SpikeBoss"),
-        BossSlot(34, "City Boss 2", "placeholder", "GiantMeteorBoss"),
-        BossSlot(37, "City Boss 3", "placeholder", "SlimeBoss"),
-        BossSlot(40, "City Boss 4 (final)", "placeholder", "GiantMeteorBoss"),
-    ),
-    4: (  # VOLCANIC — boss final placeholder (inimigos do tema ainda são placeholders)
-        BossSlot(50, "Boss do Vulcão (final)", "placeholder", "SlimeBoss"),
-    ),
-}
+def _get_boss_roadmap() -> dict[int, tuple[BossSlot, ...]]:
+    """Roteiro de bosses por mundo — FONTE DE VERDADE única (classe + posição).
+
+    Imports locais pelo mesmo motivo de `_get_worlds`: evitar ciclo de importação.
+    O boss de CADA nível (mid e final) é resolvido só por aqui via
+    `get_boss_for_level`. Criar um chefe nativo = trocar a classe do slot e marcar
+    "implemented" — sem tocar em `FIXED_LEVELS` nem em `WorldConfig`.
+    """
+    from ..entities.boss import Boss
+    from ..entities.cloud_archmage_boss import CloudArchmageBoss
+    from ..entities.giant_meteor_boss import GiantMeteorBoss
+    from ..entities.mountain_serpent_boss import MountainSerpentBoss
+    from ..entities.slime_boss import SlimeBoss
+    from ..entities.spike_boss import SpikeBoss
+    from ..entities.stone_golem_boss import StoneGolemBoss
+
+    return {
+        1: (  # MOUNTAINS — chefes nativos
+            BossSlot(3, "Serpente de Pedra", "implemented", MountainSerpentBoss),
+            BossSlot(6, "Arquimago das Nuvens", "implemented", CloudArchmageBoss),
+            BossSlot(10, "Golem de Pedra (final)", "implemented", StoneGolemBoss),
+        ),
+        2: (  # STARFIELD — chefes nativos
+            BossSlot(12, "Chefe Clássico", "implemented", Boss),
+            BossSlot(16, "Spike Boss", "implemented", SpikeBoss),
+            BossSlot(20, "Meteoro Gigante", "implemented", GiantMeteorBoss),
+            BossSlot(25, "Slime (final)", "implemented", SlimeBoss),
+        ),
+        3: (  # CITY — placeholders até os chefes nativos da City Neon
+            BossSlot(30, "City Boss 1", "placeholder", SpikeBoss),
+            BossSlot(34, "City Boss 2", "placeholder", GiantMeteorBoss),
+            BossSlot(37, "City Boss 3", "placeholder", SlimeBoss),
+            BossSlot(40, "City Boss 4 (final)", "placeholder", GiantMeteorBoss),
+        ),
+        4: (  # VOLCANIC — placeholder até o chefe nativo do Vulcão
+            BossSlot(50, "Boss do Vulcão (final)", "placeholder", SlimeBoss),
+        ),
+    }
+
+
+WORLD_BOSS_ROADMAP: dict[int, tuple[BossSlot, ...]] = _get_boss_roadmap()
 
 
 def get_boss_slots(world_id: int) -> tuple[BossSlot, ...]:
@@ -272,6 +281,30 @@ def get_procedural_midboss_for_level(level_number: int) -> Optional[Type[Any]]:
     return _get_procedural_sector_boss(theme, sector_idx, occurrence_offset=1)
 
 
+def get_boss_for_level(level_number: int) -> Optional[Type[Any]]:
+    """Classe do boss de um nível, ou None — RESOLVEDOR ÚNICO (mid e final).
+
+    Responde "este nível tem boss, e qual?" para QUALQUER nível:
+      - mundos nomeados: lê o slot exato em `WORLD_BOSS_ROADMAP`;
+      - procedural infinito: chefe de fim de setor (`level == boss_level`) ou
+        mid-boss derivado do setor.
+    É distinto de `WorldConfig.boss_level`, que marca só o nível FINAL do mundo
+    (usado na transição de mundo, não para detectar bosses intermediários).
+    """
+    world = get_world_for_level(level_number)
+    if world.world_id in WORLD_BOSS_ROADMAP:
+        for slot in WORLD_BOSS_ROADMAP[world.world_id]:
+            if slot.level == level_number:
+                return slot.boss_type
+        return None
+    # Setor procedural (sem entrada no roadmap): fim de setor ou mid derivado.
+    offset = level_number - PROCEDURAL_START_LEVEL
+    sector_idx = offset // PROCEDURAL_SECTOR_SIZE
+    if level_number == world.boss_level:
+        return _get_procedural_sector_boss(world.theme, sector_idx)
+    return get_procedural_midboss_for_level(level_number)
+
+
 # ============================================================================
 # FUNÇÕES AUXILIARES
 # ============================================================================
@@ -321,9 +354,7 @@ def get_world_for_level(level_number: int) -> WorldConfig:
         secondary_color=world_template.secondary_color,
         start_level=sector_start,
         end_level=sector_end,
-        boss_level=sector_end,
-        # Chefe de fim de setor, rotacionado por tema (reusa os bosses atuais).
-        boss_type=_get_procedural_sector_boss(theme, sector_idx),
+        boss_level=sector_end,  # chefe de fim de setor resolvido por get_boss_for_level
         theme_modifiers=world_template.theme_modifiers.copy(),
     )
 
@@ -423,8 +454,10 @@ def print_world_summary() -> None:
             world.end_level,
             world.total_stages,
         )
+        final_boss = get_boss_for_level(world.boss_level)
         logger.info(
-            "   Boss: %s", world.boss_type.__name__ if world.boss_type else "Procedural"
+            "   Boss final: %s",
+            final_boss.__name__ if final_boss else "Procedural",
         )
         logger.info("   Tema: %s", world.theme.value)
         logger.info(

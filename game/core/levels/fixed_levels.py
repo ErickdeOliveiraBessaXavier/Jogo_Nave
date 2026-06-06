@@ -328,7 +328,6 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             StoneSentry: 18.0,
         },
         enemies_to_clear=250,
-        boss_type=MountainSerpentBoss,
         mines_enabled=True,
         theme_name="Boss da Serpente de Pedra",
         score_multiplier=1.2,
@@ -342,7 +341,6 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             MountainMage: 10.0,
         },
         enemies_to_clear=300,
-        boss_type=CloudArchmageBoss,
         mines_enabled=True,
         theme_name="O Arquimago das Nuvens",
         score_multiplier=1.3,
@@ -356,7 +354,6 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             MountainPropeller: 10.0,
         },
         enemies_to_clear=350,
-        boss_type=StoneGolemBoss,
         mines_enabled=True,
         theme_name="Chefe do Golem de Pedra",
         score_multiplier=1.5,
@@ -368,7 +365,6 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             Meteor: 1.8,
         },
         enemies_to_clear=80,
-        boss_type=None,
         mines_enabled=False,
         formations_enabled=False,
         theme_name="Aprendendo o Vazio",
@@ -382,7 +378,6 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             Alien: 4.5,
         },
         enemies_to_clear=280,
-        boss_type=Boss,
         mines_enabled=False,
         formations_enabled=False,
         theme_name="Chefe Clássico do Espaço",
@@ -397,7 +392,6 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             EyeEnemy: 5.5,
         },
         enemies_to_clear=340,
-        boss_type=SpikeBoss,
         mines_enabled=False,
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v"],
@@ -412,7 +406,6 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             Alien: 4.0,
         },
         enemies_to_clear=320,
-        boss_type=GiantMeteorBoss,
         mines_enabled=False,
         formations_enabled=False,
         theme_name="Meteorito Gigante",
@@ -427,7 +420,6 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             EyeEnemy: 6.0,
         },
         enemies_to_clear=380,
-        boss_type=SlimeBoss,
         mines_enabled=False,
         formations_enabled=True,
         formation_types=[
@@ -438,13 +430,13 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         theme_name="Criatura Gelatinosa Alienígena",
         score_multiplier=1.6,
     ),
-    # ── MID-BOSSES DA CIDADE (ver WORLD_BOSS_ROADMAP em world_config.py) ──────
-    # O boss FINAL da Cidade (L40) vem de WorldConfig.boss_level; estes três são
-    # os intermediários, hand-authored aqui porque a Cidade é um mundo nomeado.
-    # boss_type é PLACEHOLDER (reusa chefes existentes) até os nativos da City
-    # Neon serem criados — basta trocar a classe aqui. Adds da própria linhagem
+    # ── LAYOUTS DOS MID-BOSSES DA CIDADE ─────────────────────────────────────
+    # Estas entradas definem só o LAYOUT handcrafted (adds/score/nome) das fases de
+    # boss intermediárias da Cidade. A CLASSE do chefe vem do WORLD_BOSS_ROADMAP
+    # (world_config.py) via get_boss_for_level e é injetada pelo pipeline — fonte
+    # única. Trocar o boss = editar o roadmap, não aqui. Adds da própria linhagem
     # CITY (passam pelo allowlist de tema sem fallback).
-    # Nível 30 (estágio 5): City Boss 1 — placeholder SpikeBoss
+    # Nível 30 (estágio 5): City Boss 1
     30: LevelConfig(
         level_number=30,
         enemy_spawn_config={
@@ -453,14 +445,13 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             PoliceInterceptor: 9.0,
         },
         enemies_to_clear=280,
-        boss_type=SpikeBoss,
         mines_enabled=False,
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v"],
         theme_name="Sentinela Neon",
         score_multiplier=1.5,
     ),
-    # Nível 34 (estágio 9): City Boss 2 — placeholder GiantMeteorBoss
+    # Nível 34 (estágio 9): City Boss 2
     34: LevelConfig(
         level_number=34,
         enemy_spawn_config={
@@ -469,14 +460,13 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             MortarDrone: 9.0,
         },
         enemies_to_clear=300,
-        boss_type=GiantMeteorBoss,
         mines_enabled=False,
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v", "spiral_square"],
         theme_name="Colosso Cibernético",
         score_multiplier=1.55,
     ),
-    # Nível 37 (estágio 12): City Boss 3 — placeholder SlimeBoss
+    # Nível 37 (estágio 12): City Boss 3
     37: LevelConfig(
         level_number=37,
         enemy_spawn_config={
@@ -485,7 +475,6 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
             TeslaTwin: 11.0,
         },
         enemies_to_clear=320,
-        boss_type=SlimeBoss,
         mines_enabled=False,
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v", "spiral_square"],

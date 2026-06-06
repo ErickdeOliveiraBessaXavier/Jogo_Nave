@@ -62,10 +62,37 @@ Distinguir dois conceitos hoje confundidos:
 
 ---
 
-## Fase 1 — Boss numa fonte única ⭐ (alto valor, custo médio)
+## Fase 1 — Boss numa fonte única ⭐ — ✅ CONCLUÍDA (2026-06-06)
 
 Tornar `WORLD_BOSS_ROADMAP` o **driver real** do boss; tirar essa responsabilidade
 de `FIXED_LEVELS` e de `WorldConfig.boss_type`.
+
+**Refinada aplicada:** em vez de APAGAR as entradas de boss do `FIXED_LEVELS`
+(trocaria adds/nomes handcrafted por paramétricos = mudança de gameplay), só
+removemos o `boss_type` delas e injetamos a classe do roadmap. Resultado: layouts
+handcrafted preservados, **L10 morto consertado** (adds voltaram a valer), zero
+regressão de composição nas fases de boss já existentes.
+
+**Feito:**
+- `BossSlot.boss_type: Type` (classe, não string); roadmap via `_get_boss_roadmap()`
+  com imports locais; `WORLD_BOSS_ROADMAP` agora tem as classes reais.
+- `get_boss_for_level(level)` — resolvedor único (mid+final, nomeado+procedural).
+- `WorldConfig.boss_type` **removido**; `boss_level` mantido (= nível final).
+  Síntese procedural e `print_world_summary` ajustados.
+- `pipeline.get_level_config`: branch único de boss usa `get_boss_for_level`;
+  boss sem layout handcrafted → `_create_world_boss_level(..., boss_cls)`; boss em
+  `FIXED_LEVELS` → mantém layout, classe injetada. Removida a injeção de mid-boss
+  procedural (coberta pelo branch único).
+- `FIXED_LEVELS`: `boss_type` removido de todas as 11 entradas (layouts intactos).
+- `validate_worlds()` OK; varredura 1-60 × 4 presets sem erro; 12 bosses nomeados
+  + procedural (mid L55 / final L60) corretos.
+
+**Pendência conhecida (pré-existente, fora do escopo):** `enemies_to_clear` dos
+bosses procedurais cresce com `world_id` (`_create_world_boss_level`); o mid-boss
+procedural agora também passa por lá. Não é regressão da Fase 1 (o end-boss já era
+assim) — anotar para um ajuste de balanceamento futuro.
+
+### Passos originais (referência)
 
 **Passos (em ordem):**
 

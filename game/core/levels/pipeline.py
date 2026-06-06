@@ -44,7 +44,7 @@ from ...entities.stone_sentry import StoneSentry
 from ..difficulty import DifficultyPreset, DifficultySettings
 from ..world_config import (
     WorldTheme,
-    get_procedural_midboss_for_level,
+    get_boss_for_level,
     get_world_for_level,
 )
 from .fixed_levels import (
@@ -803,8 +803,14 @@ def _create_world_boss_level(
     world: "WorldConfig",
     level_number: int,
     difficulty_preset: DifficultyPreset,
+    boss_cls: type,
 ) -> LevelConfig:
-    """Cria configuração para o boss de um mundo."""
+    """Cria configuração paramétrica para um boss-level (adds por tema).
+
+    Usado para bosses SEM layout handcrafted em FIXED_LEVELS (setores procedurais
+    e o boss final da Cidade/Vulcão). A classe vem do resolvedor único
+    (`get_boss_for_level`), não de `world.boss_type`.
+    """
     base_enemies_to_clear = 200 + (world.world_id - 1) * 50
 
     enemy_spawn_config: EnemySpawnConfig
@@ -833,7 +839,7 @@ def _create_world_boss_level(
         level_number=level_number,
         enemy_spawn_config=enemy_spawn_config,
         enemies_to_clear=base_enemies_to_clear,
-        boss_type=world.boss_type,
+        boss_type=boss_cls,
         mines_enabled=True,
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v", "spiral_square", "full_cycle"],
@@ -895,12 +901,20 @@ def get_level_config(
 
     world = get_world_for_level(level_number)
 
+    # Fonte ÚNICA da classe do boss (mid + final, nomeado + procedural).
+    boss_cls = get_boss_for_level(level_number)
+
+    # Boss SEM layout handcrafted (setores procedurais, final da Cidade/Vulcão):
+    # adds paramétricos por tema. Bosses COM entrada em FIXED_LEVELS caem no branch
+    # abaixo (mantêm o layout desenhado à mão) e recebem a classe injetada.
     if (
-        level_number == world.boss_level
-        and world.boss_type is not None
+        boss_cls is not None
+        and level_number not in FIXED_LEVELS
         and not force_meteor_storm
     ):
-        config = _create_world_boss_level(world, level_number, difficulty_preset)
+        config = _create_world_boss_level(
+            world, level_number, difficulty_preset, boss_cls
+        )
         return _apply_theme_enemy_rules(config, world, difficulty_preset)
 
     # Para Hardcore e Nightmare, o nível 1 é sempre procedural (sem tutorial)
@@ -937,6 +951,9 @@ def get_level_config(
         config = copy.copy(config)
         config.enemy_spawn_config = adjusted_spawn
         config.enemies_to_clear = adjusted_to_clear
+        # Boss-level handcrafted: a CLASSE vem do roadmap (fonte única); FIXED_LEVELS
+        # contribui só com o layout de inimigos/score/nome.
+        config.boss_type = boss_cls
         # Níveis handcrafted também seguem a regra global de variedade/elegibilidade
         # por tema (rampa X-1→1, X-2→2, X-3+→teto; filtro de tema).
         config = _apply_theme_enemy_rules(config, world, difficulty_preset)
@@ -995,12 +1012,6 @@ def get_level_config(
     config = copy.copy(config)
     config.enemy_spawn_config = adjusted_spawn
     config.enemies_to_clear = adjusted_to_clear
-
-    # MID-boss do setor procedural: o fim de setor já vira boss via world.boss_level
-    # (branch acima); aqui injetamos o chefe intermediário derivado (sem hand-author).
-    midboss = get_procedural_midboss_for_level(level_number)
-    if midboss is not None:
-        config.boss_type = midboss
 
     config = _apply_theme_enemy_rules(config, world, difficulty_preset)
     return config
