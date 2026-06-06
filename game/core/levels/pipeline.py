@@ -227,30 +227,36 @@ ENEMY_STAGE_WEIGHT_PROFILES: dict[
         },
     },
     "moderate": {
+        # P3: nas bandas "late" o base sofre leve TAPER e os specials ganham
+        # reforço — no fim do mundo os arquétipos pesados "leem" mais, sem mudar
+        # a pressão total (o spawn_multiplier/diretor governa o volume; aqui só
+        # se redistribui QUEM nasce).
         WorldTheme.MOUNTAINS: {
             "early": {RockGlider: 1.15, StoneSentry: 0.85, ElementalRobot: 0.80},
             "mid": {RockGlider: 1.02, StoneSentry: 1.08, ElementalRobot: 1.03},
-            "late": {RockGlider: 0.95, StoneSentry: 1.22, ElementalRobot: 1.18},
+            "late": {RockGlider: 0.88, StoneSentry: 1.35, ElementalRobot: 1.30, MountainMage: 1.20},
         },
         WorldTheme.STARFIELD: {
             "early": {Alien: 1.00, EyeEnemy: 0.90},
             "mid": {Alien: 1.04, EyeEnemy: 1.00},
-            "late": {Alien: 1.08, EyeEnemy: 1.12},
+            "late": {Meteor: 0.90, Alien: 1.15, EyeEnemy: 1.25, Satellite: 1.20},
         },
         WorldTheme.CITY: {
             "early": {PoliceInterceptor: 0.85},
             "mid": {PoliceInterceptor: 1.10, CyberTank: 0.55, CyberCaptor: 0.80, TeslaTwin: 0.80, JammerNode: 0.80, MortarDrone: 0.85, CargoCarrier: 0.55, SplitterTank: 0.55, SapperDrone: 0.65, MirrorPylon: 0.58},
-            "late": {PoliceInterceptor: 1.25, CyberTank: 1.15, CyberCaptor: 1.20, TeslaTwin: 1.20, JammerNode: 1.20, MortarDrone: 1.22, CargoCarrier: 1.15, SplitterTank: 1.15, SapperDrone: 1.15, MirrorPylon: 1.18},
+            "late": {CityDrone: 0.80, PoliceInterceptor: 1.35, CyberTank: 1.30, CyberCaptor: 1.32, TeslaTwin: 1.32, JammerNode: 1.32, MortarDrone: 1.34, CargoCarrier: 1.30, SplitterTank: 1.30, SapperDrone: 1.28, MirrorPylon: 1.32},
         },
         WorldTheme.VOLCANIC: {
+            # Antes o base (Meteor) era BOOSTADO no mid/late, agravando o flood;
+            # invertido para taper + reforço de Alien/Eye.
             "early": {Meteor: 1.08, EyeEnemy: 0.95},
-            "mid": {Meteor: 1.13, EyeEnemy: 1.03},
-            "late": {Meteor: 1.20, EyeEnemy: 1.12},
+            "mid": {Meteor: 1.00, Alien: 1.08, EyeEnemy: 1.10},
+            "late": {Meteor: 0.92, Alien: 1.18, EyeEnemy: 1.25},
         },
         WorldTheme.PROCEDURAL: {
             "early": {Meteor: 1.08, Alien: 1.00, EyeEnemy: 0.88},
             "mid": {Meteor: 1.03, Alien: 1.04, EyeEnemy: 1.00},
-            "late": {Meteor: 0.98, Alien: 1.08, EyeEnemy: 1.15},
+            "late": {Meteor: 0.90, Alien: 1.12, EyeEnemy: 1.20},
         },
     },
     "aggressive": {
@@ -377,6 +383,51 @@ THEME_SIGNATURE_ENEMIES: dict[WorldTheme, tuple[type, ...]] = {
         NeonSniper, PoliceInterceptor, MortarDrone, CyberCaptor, SapperDrone,
         TeslaTwin, JammerNode, CyberTank, CargoCarrier, SplitterTank, MirrorPylon,
     ),
+}
+
+# Papel de combate (arquétipo) de cada inimigo. Usado pelo variety cap para
+# montar encontros COMPLEMENTARES (triangulação): ao preencher as vagas de
+# specials, papéis já cobertos são penalizados, evitando empilhar 3 unidades da
+# mesma função (ex.: 3 area-denial) e favorecendo trios que se complementam.
+# Bases/volume recebem papel próprio ("volume") para não penalizar nenhum special.
+# Colisões de papel hoje só existem na linhagem CITY (area_denial×3, support×2,
+# summoner×2) — nos demais temas os specials já têm papéis distintos, então a
+# diversificação é naturalmente um no-op lá.
+ENEMY_ARCHETYPE: dict[type, str] = {
+    Meteor: "volume", RockGlider: "volume", CityDrone: "volume",
+    MountainPropeller: "swarm",
+    Satellite: "hazard",
+    EyeEnemy: "shooter",
+    StoneSentry: "sniper", NeonSniper: "sniper",
+    Alien: "rush", PoliceInterceptor: "rush",
+    MountainMage: "support", JammerNode: "support", SapperDrone: "support",
+    ElementalRobot: "elite", CyberTank: "tank",
+    CyberCaptor: "area_denial", MortarDrone: "area_denial", TeslaTwin: "area_denial",
+    CargoCarrier: "summoner", SplitterTank: "summoner", SquareMinionBoss: "summoner",
+    MirrorPylon: "shield",
+}
+
+# Fator aplicado ao score/peso de um candidato cujo papel JÁ está no encontro.
+ROLE_REPEAT_PENALTY: float = 0.18
+
+
+def _enemy_role(enemy_type: type) -> str:
+    """Papel de combate do inimigo; fallback ao nome (papel único) se não mapeado."""
+    return ENEMY_ARCHETYPE.get(enemy_type, enemy_type.__name__)
+
+
+# Override de teto de variedade por tema (P1). A linhagem CITY tem 12 inimigos
+# desenhados para coexistir coordenados (ver memory/city-neon-design-intent); com
+# o teto global 3 a maioria aparecia 1× por campanha. Um teto maior + seleção
+# complementar (ENEMY_ARCHETYPE) deixa a cidade mostrar trios/quartetos variados
+# por run, sem virar sopa de inimigos. Demais temas seguem o teto global.
+THEME_VARIETY_CAP_OVERRIDE: dict[WorldTheme, dict[DifficultyPreset, int]] = {
+    WorldTheme.CITY: {
+        DifficultyPreset.CASUAL: 4,
+        DifficultyPreset.NORMAL: 4,
+        DifficultyPreset.HARDCORE: 5,
+        DifficultyPreset.NIGHTMARE: 5,
+    },
 }
 
 
@@ -539,6 +590,84 @@ def _apply_stage_progression_enemy_weights(
     return config_copy
 
 
+# Janela de recência (P5): tipos escolhidos nos níveis IMEDIATAMENTE anteriores do
+# mesmo mundo têm a chance reduzida (não bloqueada) no nível atual, para encontros
+# consecutivos não repetirem os mesmos inimigos. Penalidade por distância (1 = nível
+# anterior, penaliza mais; 2 = dois atrás, mais leve).
+RECENCY_WINDOW: int = 2
+RECENCY_PENALTY_BY_DISTANCE: dict[int, float] = {1: 0.30, 2: 0.55}
+
+# Pesos da seleção. Assinaturas dominam a loteria (senão a raridade 1/spawn_time as
+# corta). O peso cresce de forma ÍNGREME com a recência de unlock — a recém-
+# liberada aparece de forma confiável no seu estágio de introdução (cobertura) —
+# enquanto a penalidade de recência (`recency_penalty`) a rebaixa nos níveis
+# seguintes, rotacionando a cauda. Peso de assinatura = SIG_FLOOR*(1+rank)^POWER.
+SIGNATURE_WEIGHT_FLOOR: float = 100.0
+SIGNATURE_RECENCY_POWER: float = 2.0
+
+
+def _select_variety_subset(
+    spawn_config: EnemySpawnConfig,
+    world: "WorldConfig",
+    difficulty_preset: DifficultyPreset,
+    level_number: int,
+    recency_penalty: dict[type, float],
+) -> list[type]:
+    """Seleciona o subconjunto de tipos de um nível (base + specials).
+
+    Determinístico por nível. Combina, num único sorteio ponderado por vaga:
+      - prioridade de ASSINATURA (peso base alto) sobre a loteria 1/spawn_time;
+      - TRIANGULAÇÃO: papel já no encontro é penalizado (`ROLE_REPEAT_PENALTY`);
+      - RECÊNCIA: tipo visto nos níveis recentes é penalizado (`recency_penalty`).
+    O sorteio ponderado (seed por nível) faz níveis consecutivos divergirem.
+    """
+    total_stages = max(1, world.total_stages)
+    stage_number = max(1, min(total_stages, world.get_stage_number(level_number)))
+    hard_max = THEME_VARIETY_CAP_OVERRIDE.get(world.theme, {}).get(
+        difficulty_preset, MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3)
+    )
+    cap = min(stage_number, hard_max)
+
+    types = list(spawn_config)
+    if len(types) <= cap:
+        return types
+
+    signatures = THEME_SIGNATURE_ENEMIES.get(world.theme, ())
+    sig_rank = {t: i for i, t in enumerate(signatures)}  # maior = mais recém-liberada
+
+    # adler32 garante seed determinístico entre sessões (hash(str) é randomizado).
+    theme_seed = zlib.adler32(world.theme.value.encode("utf-8"))
+    rng = random.Random(level_number * 7919 + theme_seed)
+
+    chosen: list[type] = []
+    chosen_roles: set[str] = set()
+    base = THEME_BASE_ENEMY.get(world.theme)
+    if base is not None and base in spawn_config:
+        chosen.append(base)
+        chosen_roles.add(_enemy_role(base))
+
+    while len(chosen) < cap:
+        candidates = [t for t in types if t not in chosen]
+        if not candidates:
+            break
+        weights: list[float] = []
+        for t in candidates:
+            if t in sig_rank:
+                w = SIGNATURE_WEIGHT_FLOOR * (1.0 + sig_rank[t]) ** SIGNATURE_RECENCY_POWER
+            else:
+                w = 1.0 / max(spawn_config[t], 0.01)
+            if _enemy_role(t) in chosen_roles:
+                w *= ROLE_REPEAT_PENALTY
+            w *= recency_penalty.get(t, 1.0)
+            weights.append(max(w, 1e-6))
+        idx = rng.choices(range(len(candidates)), weights=weights, k=1)[0]
+        pick = candidates[idx]
+        chosen.append(pick)
+        chosen_roles.add(_enemy_role(pick))
+
+    return chosen
+
+
 def _apply_enemy_variety_cap(
     config: LevelConfig,
     world: "WorldConfig",
@@ -548,68 +677,43 @@ def _apply_enemy_variety_cap(
     GLOBAL ancorada no índice absoluto do estágio dentro do mundo.
 
     Regra de design (aplicada a todos os temas, existentes e futuros):
-      - `cap = min(estágio_absoluto, teto_por_dificuldade)`. Logo:
-        X-1 → 1 tipo, X-2 → 2, X-3+ → o teto da dificuldade
-        (`MAX_ENEMY_VARIETY_BY_DIFFICULTY`: 3 no Normal/Casual,
-        4 no Hardcore/Pesadelo, onde o 4º tipo entra em X-4).
-      - É só TETO (limite superior): se o pool do tema ainda tem poucos tipos
-        liberados cedo, mostra menos — sem pico de complexidade na entrada de
-        um mundo novo.
-      - Quando há mais candidatos que vagas, escolhe-se: base (volume) sempre;
-        depois as `n_slots` assinaturas MAIS RECÉM-LIBERADAS (cauda da ordem de
-        unlock em THEME_SIGNATURE_ENEMIES) — cada assinatura aparece no estágio em
-        que é introduzida (cobertura garantida, sem o viés que excluía algumas);
-        por fim, as vagas restantes pelos demais tipos via loteria 1/spawn_time.
-      - O subconjunto de assinaturas é determinístico por estágio (segue os gates);
-        o filler não-assinatura usa seed determinístico por nível.
+      - `cap = min(estágio_absoluto, teto_por_dificuldade)` (com override por tema
+        em `THEME_VARIETY_CAP_OVERRIDE`). X-1 → 1 tipo, X-2 → 2, X-3+ → o teto.
+      - É só TETO: se o pool ainda tem poucos tipos liberados, mostra menos — sem
+        pico de complexidade na entrada de um mundo novo.
+      - A seleção (`_select_variety_subset`) é base + specials, com assinatura,
+        triangulação por papel e JANELA DE RECÊNCIA: tipos vistos nos
+        `RECENCY_WINDOW` níveis anteriores (mesmo mundo) têm a chance reduzida,
+        diversificando encontros consecutivos sem proibir repetição.
     """
-    total_stages = max(1, world.total_stages)
-    stage_number = max(
-        1, min(total_stages, world.get_stage_number(config.level_number))
-    )
-    hard_max = MAX_ENEMY_VARIETY_BY_DIFFICULTY.get(difficulty_preset, 3)
-    cap = min(stage_number, hard_max)
     spawn_config = config.enemy_spawn_config
 
-    # Assinaturas têm prioridade na seleção (abaixo), mas NÃO ampliam o cap: a
-    # rampa por estágio é a autoridade única sobre a contagem.
-    signatures = [
-        t for t in THEME_SIGNATURE_ENEMIES.get(world.theme, ()) if t in spawn_config
-    ]
-
-    if len(spawn_config) <= cap:
-        return config
-
-    # adler32 garante seed determinístico entre sessões (hash(str) é randomizado por PYTHONHASHSEED).
-    theme_seed = zlib.adler32(world.theme.value.encode("utf-8"))
-    rng = random.Random(config.level_number * 7919 + theme_seed)
-
-    chosen: list[type] = []
+    # Penalidade de recência: aproximada rodando a seleção recency-FREE dos níveis
+    # anteriores sobre o pool atual (estável entre níveis adjacentes do mesmo
+    # mundo). Sem recursão — a seleção dos anteriores não consulta recência. O base
+    # nunca é penalizado (sempre aparece).
     base = THEME_BASE_ENEMY.get(world.theme)
-    if base is not None and base in spawn_config:
-        chosen.append(base)
+    recency_penalty: dict[type, float] = {}
+    for dist in range(1, RECENCY_WINDOW + 1):
+        prev = config.level_number - dist
+        if prev < world.start_level:
+            break
+        prev_chosen = _select_variety_subset(
+            spawn_config, world, difficulty_preset, prev, {}
+        )
+        factor = RECENCY_PENALTY_BY_DISTANCE.get(dist, 1.0)
+        for t in prev_chosen:
+            if t == base:
+                continue
+            recency_penalty[t] = min(recency_penalty.get(t, 1.0), factor)
 
-    # Assinaturas: prioridade sobre os demais. `signatures` está em ORDEM DE
-    # UNLOCK; pega-se a CAUDA (as `n_slots` mais recém-liberadas). Como os gates
-    # introduzem ~n_slots assinaturas por estágio, cada uma cai na cauda no estágio
-    # em que é liberada → aparece garantidamente ali (cobertura completa), sem o
-    # viés da loteria por recência que fazia Jammer/Mirror/Tesla sumirem. Custo
-    # aceito: nos estágios finais sem novo unlock, repete os "pesados" mais novos.
-    sigs = [t for t in signatures if t not in chosen]
-    n_slots = cap - len(chosen)
-    if sigs and n_slots > 0:
-        chosen.extend(sigs[-n_slots:])
-
-    # Vagas restantes: demais tipos (não-assinatura) por loteria 1/spawn_time.
-    if len(chosen) < cap:
-        candidates = [t for t in spawn_config if t not in chosen]
-        weights = [1.0 / max(spawn_config[t], 0.01) for t in candidates]
-        while candidates and len(chosen) < cap:
-            idx = rng.choices(range(len(candidates)), weights=weights, k=1)[0]
-            chosen.append(candidates.pop(idx))
-            weights.pop(idx)
+    chosen = _select_variety_subset(
+        spawn_config, world, difficulty_preset, config.level_number, recency_penalty
+    )
 
     adjusted_spawn_config = {t: spawn_config[t] for t in chosen}
+    if adjusted_spawn_config == spawn_config:
+        return config
     config_copy = copy.copy(config)
     config_copy.enemy_spawn_config = adjusted_spawn_config
     return config_copy

@@ -202,8 +202,9 @@ class ExplosiveMine:
     def draw(self, surface: pygame.Surface):
         x, y = self.x, self.y
         if self.shake_timer > 0:
-            x += random.randint(-self.shake_intensity, self.shake_intensity)
-            y += random.randint(-self.shake_intensity, self.shake_intensity)
+            shake_int = int(self.shake_intensity)
+            x += random.randint(-shake_int, shake_int)
+            y += random.randint(-shake_int, shake_int)
 
         # Choose sprite based on state
         if self.is_exploding:

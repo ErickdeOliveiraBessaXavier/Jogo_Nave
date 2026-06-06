@@ -116,8 +116,8 @@ def _get_worlds() -> dict[int, WorldConfig]:
             primary_color=(150, 50, 200),  # Roxo neon
             secondary_color=(0, 255, 255),  # Cyan elétrico
             start_level=26,
-            end_level=35,
-            boss_level=35,
+            end_level=40,  # 15 estágios para acomodar os 4 bosses da Cidade (ver WORLD_BOSS_ROADMAP)
+            boss_level=40,  # boss FINAL (4º). Mid-bosses em FIXED_LEVELS (L30/L34/L37).
             boss_type=GiantMeteorBoss,  # Provisório: reusa até os bosses próprios da City Neon.
             # CITY usa a própria linhagem (Inimigos_Tema_Cidade); o tuning de spawn/
             # frequência mora em pipeline.py/procedural.py (_configure_city_spawn,
@@ -133,10 +133,10 @@ def _get_worlds() -> dict[int, WorldConfig]:
             theme=WorldTheme.VOLCANIC,
             primary_color=(255, 80, 0),  # Laranja lava
             secondary_color=(200, 0, 0),  # Vermelho incandescente
-            start_level=36,
-            end_level=45,
-            boss_level=45,
-            boss_type=SlimeBoss,  # Slime de lava
+            start_level=41,  # deslocado: Cidade agora vai até 40
+            end_level=50,
+            boss_level=50,
+            boss_type=SlimeBoss,  # Slime de lava (placeholder até boss nativo do Vulcão)
             theme_modifiers={
                 "meteor_weight": 1.8,  # Muitos fragmentos vulcânicos
                 "spawn_rate_multiplier": 1.15,  # Mais caótico
@@ -146,6 +146,62 @@ def _get_worlds() -> dict[int, WorldConfig]:
 
 
 WORLDS = _get_worlds()
+
+# Os mundos nomeados são contíguos; a rotação procedural infinita começa logo após
+# o último. Derivado (não hardcoded) para sobreviver a mudanças de fronteira como a
+# expansão da Cidade para 15 estágios. SECTOR_SIZE = nº de níveis por setor proc.
+NAMED_WORLDS_COUNT: int = len(WORLDS)
+PROCEDURAL_START_LEVEL: int = max(w.end_level for w in WORLDS.values()) + 1
+PROCEDURAL_SECTOR_SIZE: int = 10
+
+
+@dataclass(frozen=True)
+class BossSlot:
+    """Slot planejado de boss num mundo (§ arquitetura pronta para receber chefes).
+
+    `status`: "implemented" (boss nativo já existe) ou "placeholder" (slot já
+    reservado no pipeline, reusando um boss existente até o nativo ser criado).
+    `placeholder` nomeia a classe reusada enquanto isso (só informativo).
+    """
+
+    level: int
+    label: str
+    status: str
+    placeholder: Optional[str] = None
+
+
+# Roteiro declarativo de bosses por mundo — FONTE DE VERDADE do plano de chefes.
+# Cada slot já tem nível reservado e wiring real: o boss FINAL de cada mundo vem de
+# `WorldConfig.boss_level`/`boss_type`; os MID-bosses vêm de `FIXED_LEVELS` no mesmo
+# nível (ver `core/levels/fixed_levels.py`). Criar um boss nativo = trocar o
+# `boss_type` do slot e marcar "implemented" aqui — sem mexer na estrutura.
+WORLD_BOSS_ROADMAP: dict[int, tuple[BossSlot, ...]] = {
+    1: (  # MOUNTAINS — 3 bosses nativos
+        BossSlot(3, "Serpente de Pedra", "implemented"),
+        BossSlot(6, "Arquimago das Nuvens", "implemented"),
+        BossSlot(10, "Golem de Pedra (final)", "implemented"),
+    ),
+    2: (  # STARFIELD — bosses fixos atuais (via FIXED_LEVELS)
+        BossSlot(12, "Chefe Clássico", "implemented"),
+        BossSlot(16, "Spike Boss", "implemented"),
+        BossSlot(20, "Meteoro Gigante", "implemented"),
+        BossSlot(25, "Slime (final)", "implemented"),
+    ),
+    3: (  # CITY — 4 bosses NATIVOS planejados; placeholders até serem criados
+        BossSlot(30, "City Boss 1", "placeholder", "SpikeBoss"),
+        BossSlot(34, "City Boss 2", "placeholder", "GiantMeteorBoss"),
+        BossSlot(37, "City Boss 3", "placeholder", "SlimeBoss"),
+        BossSlot(40, "City Boss 4 (final)", "placeholder", "GiantMeteorBoss"),
+    ),
+    4: (  # VOLCANIC — boss final placeholder (inimigos do tema ainda são placeholders)
+        BossSlot(50, "Boss do Vulcão (final)", "placeholder", "SlimeBoss"),
+    ),
+}
+
+
+def get_boss_slots(world_id: int) -> tuple[BossSlot, ...]:
+    """Slots de boss planejados de um mundo (vazio se não houver roteiro)."""
+    return WORLD_BOSS_ROADMAP.get(world_id, ())
 
 
 def _get_procedural_sector_boss(
@@ -190,21 +246,21 @@ def get_world_for_level(level_number: int) -> WorldConfig:
 
     Níveis 1-10: Mundo 1 (MOUNTAINS)
     Níveis 11-25: Mundo 2 (STARFIELD)
-    Níveis 26-35: Mundo 3 (CITY)
-    Níveis 36-45: Mundo 4 (VOLCANIC)
-    Níveis 46+: Rotação de temas procedurais (MOUNTAINS -> STARFIELD -> CITY -> VOLCANIC -> ...)
+    Níveis 26-40: Mundo 3 (CITY) — 15 estágios, 4 bosses
+    Níveis 41-50: Mundo 4 (VOLCANIC)
+    Níveis 51+: Rotação de temas procedurais (MOUNTAINS -> STARFIELD -> CITY -> VOLCANIC -> ...)
     """
     for world in WORLDS.values():
         if world.contains_level(level_number):
             return world
 
-    # Níveis 46+: Rotação de temas procedurais
-    # Cada 10 níveis = um novo "setor" com tema rotacionado
-    offset = level_number - 46
-    sector_idx = offset // 10
-    sector_id = sector_idx + 5
-    sector_start = 46 + sector_idx * 10
-    sector_end = sector_start + 9
+    # Procedural infinito: cada PROCEDURAL_SECTOR_SIZE níveis = um setor com tema
+    # rotacionado, começando em PROCEDURAL_START_LEVEL (derivado das fronteiras).
+    offset = level_number - PROCEDURAL_START_LEVEL
+    sector_idx = offset // PROCEDURAL_SECTOR_SIZE
+    sector_id = sector_idx + NAMED_WORLDS_COUNT + 1
+    sector_start = PROCEDURAL_START_LEVEL + sector_idx * PROCEDURAL_SECTOR_SIZE
+    sector_end = sector_start + PROCEDURAL_SECTOR_SIZE - 1
 
     # Rotacionar entre os 4 temas principais
     theme_cycle = [
@@ -213,7 +269,7 @@ def get_world_for_level(level_number: int) -> WorldConfig:
         WorldTheme.CITY,
         WorldTheme.VOLCANIC,
     ]
-    theme_index = sector_idx % 4  # Começa no setor 5 (nível 46+)
+    theme_index = sector_idx % 4  # Começa no 1º setor procedural
     theme = theme_cycle[theme_index]
 
     # Usar colors e modifiers do mundo correspondente ao tema
@@ -248,9 +304,11 @@ def get_world_for_level_by_id(world_id: int) -> Optional[WorldConfig]:
     if world_id in WORLDS:
         return WORLDS[world_id]
 
-    # IDs 5+ representam setores procedurais de 10 níveis.
-    if world_id >= 5:
-        level_number = 46 + (world_id - 5) * 10
+    # IDs após os mundos nomeados representam setores procedurais.
+    if world_id > NAMED_WORLDS_COUNT:
+        level_number = PROCEDURAL_START_LEVEL + (
+            world_id - NAMED_WORLDS_COUNT - 1
+        ) * PROCEDURAL_SECTOR_SIZE
         return get_world_for_level(level_number)
 
     return None
@@ -372,6 +430,24 @@ def validate_worlds() -> bool:
         w2 = WORLDS[i + 1]
         if w1.end_level + 1 != w2.start_level:
             errors.append(f"Mundos {i} e {i + 1} não são contíguos")
+
+    # Cruzar o roteiro de bosses: cada slot deve cair dentro do range do mundo, e o
+    # slot FINAL deve coincidir com o boss_level do WorldConfig.
+    for world_id, slots in WORLD_BOSS_ROADMAP.items():
+        world = WORLDS.get(world_id)
+        if world is None:
+            continue
+        for slot in slots:
+            if not world.start_level <= slot.level <= world.end_level:
+                errors.append(
+                    f"Boss roadmap mundo {world_id}: slot '{slot.label}' "
+                    f"(nível {slot.level}) fora do range {world.start_level}-{world.end_level}"
+                )
+        if slots and slots[-1].level != world.boss_level:
+            errors.append(
+                f"Boss roadmap mundo {world_id}: slot final (nível {slots[-1].level}) "
+                f"!= boss_level {world.boss_level}"
+            )
 
     if errors:
         logger.error("Erros na validação de mundos:")
