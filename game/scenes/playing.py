@@ -2240,6 +2240,7 @@ class PlayingScene(Scene):
             self.current_level_index + 1,
             cause="collision",
             score=level_gain_on_death,
+            ended_attempt=is_game_over,
         )
 
         if not is_game_over:

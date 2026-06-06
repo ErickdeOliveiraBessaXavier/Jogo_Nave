@@ -1051,7 +1051,13 @@ class PlayerProfile:
         if level_number % 5 == 0:
             self.save()
 
-    def record_death(self, level_number: int, cause: str = "unknown", score: int = 0):
+    def record_death(
+        self,
+        level_number: int,
+        cause: str = "unknown",
+        score: int = 0,
+        ended_attempt: bool = True,
+    ):
         """Registra morte em um nível.
 
         Se ``score`` > 0, persiste o ganho da fase incompleta nos agregadores
@@ -1059,6 +1065,13 @@ class PlayerProfile:
         morreu, já que ``record_clear`` não roda nesse caso). Para perdas de
         vida sem game over, mantenha ``score=0`` — o ganho do nível será
         persistido por ``record_clear`` quando a fase for concluída.
+
+        ``ended_attempt`` distingue o DESFECHO de um attempt (game over) de uma
+        perda de vida intra-attempt. Só desfechos vão para ``recent_attempts`` —
+        que é o histórico de OUTCOMES lido por ``improvement_trend`` e
+        ``get_performance_state``; contá-los com perdas de vida enviesaria a taxa
+        de sucesso. ``stats.deaths`` conta TODAS as mortes (perdas de vida
+        incluídas). O caller passa ``ended_attempt=is_game_over``.
 
         Normalmente ``record_attempt`` precede esta chamada. Se não precedeu
         (ex.: game over chegando de contexto fora do fluxo normal), faz back-fill
@@ -1082,14 +1095,16 @@ class PlayerProfile:
             if self.current_session:
                 self.current_session.score += score
 
-        # Histórico recente
-        attempt_data: Dict[str, Any] = {
-            "timestamp": datetime.now().isoformat(),
-            "cleared": False,
-            "cause": cause,
-            "score": score,
-        }
-        stats.recent_attempts.append(attempt_data)
+        # Histórico recente: só o DESFECHO do attempt (game over) entra; perda de
+        # vida intra-attempt já contou em stats.deaths e não é um outcome.
+        if ended_attempt:
+            attempt_data: Dict[str, Any] = {
+                "timestamp": datetime.now().isoformat(),
+                "cleared": False,
+                "cause": cause,
+                "score": score,
+            }
+            stats.recent_attempts.append(attempt_data)
 
         # Sessão
         if self.current_session:
