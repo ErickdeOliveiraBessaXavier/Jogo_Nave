@@ -1,5 +1,6 @@
 import json
 import logging
+import shutil
 import threading
 import time
 from collections import deque
@@ -151,7 +152,7 @@ class LevelPerformance:
         # Dominando completamente
         if self.clear_rate > 0.9 and self.attempts >= 3:
             # Verificar consistência de tempos
-            if self.clears >= 2 and self.best_time and self.avg_time > 0:
+            if self.clears >= 2 and self.best_time is not None and self.avg_time > 0:
                 time_consistency = self.best_time / self.avg_time
                 if time_consistency > 0.8:  # Tempos consistentes
                     return PerformanceState.DOMINATING
@@ -301,12 +302,15 @@ class PerformanceAnalyzer:
             profile.highest_level_reached, avg_clear_rate, profile.total_playtime
         )
 
-        # Analisar tendência geral
-        recent_levels = sorted(profile.level_stats.keys())[-5:]  # Últimos 5 níveis
-        if len(recent_levels) >= 3:
-            recent_clear_rates = [
-                profile.level_stats[lv].clear_rate for lv in recent_levels
-            ]
+        # Analisar tendência geral. "Recentes" = jogados há menos tempo
+        # (por last_played), não os de maior índice — senão revisitar fases
+        # antigas não contaria no overall_trend.
+        recent_stats = sorted(
+            profile.level_stats.values(),
+            key=lambda s: s.last_played or datetime.min,
+        )[-5:]
+        if len(recent_stats) >= 3:
+            recent_clear_rates = [s.clear_rate for s in recent_stats]
             overall_trend = PerformanceAnalyzer._calculate_trend(recent_clear_rates)
         else:
             overall_trend = "neutral"
@@ -1403,8 +1407,6 @@ class PlayerProfile:
             logger.error("Erro ao carregar perfil: %s", e)
             if self.profile_path.exists():
                 backup_path = self.profile_path.with_suffix(".backup.json")
-                import shutil
-
                 shutil.copy2(self.profile_path, backup_path)
                 logger.info("Backup salvo em: %s", backup_path)
             self._ensure_safe_world_defaults()
@@ -1534,12 +1536,17 @@ class PlayerProfile:
                 logger.debug("Async save completed for %s", path)
             except OSError as e:
                 logger.error("Async save failed for %s: %s", path, e)
+                # Re-marca dirty: senão a mudança se perderia silenciosamente
+                # (próximo auto-save tenta de novo). Só ADICIONA dirty, nunca
+                # limpa daqui — evita corrida com _mark_dirty no thread principal.
+                self._dirty = True
 
         # Executar escrita em daemon thread (não bloqueia exit)
         thread = threading.Thread(target=_write_to_disk, daemon=True)
         thread.start()
 
-        # Marcar como saved mesmo que a escrita ainda esteja em progresso
+        # Otimista: marca saved já (a escrita confirma em background). Em falha,
+        # _write_to_disk re-marca dirty para retry.
         self._dirty = False
         self._last_save = time.time()
 
