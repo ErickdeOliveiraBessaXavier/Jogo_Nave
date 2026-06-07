@@ -510,24 +510,21 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
 # a arena deixa essa lacuna explícita: sem preenchimento com inimigos de outros
 # temas, mostra só o que o tema realmente tem hoje.
 
-TEST_ARENA_ENABLED: bool = False
+TEST_ARENA_ENABLED: bool = True
 
 THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
     # ── MONTANHAS — linhagem própria completa ────────────────────────────────
     WorldTheme.MOUNTAINS: LevelConfig(
         level_number=1,  # sobrescrito pelo nível real em _build_test_arena_config
         enemy_spawn_config={
-            RockGlider: 1.2,
-            MountainPropeller: 4.0,
-            MountainMage: 8.0,
-            ElementalRobot: 8.0,
-            StoneSentry: 1.0,
+            # RockGlider: 1.2,
+            # MountainPropeller: 4.0,
+            # MountainMage: 8.0,
+            # ElementalRobot: 8.0,
+            # StoneSentry: 1.0,
             StoneEagle: 6.0,  # rush em mergulho
-            CuttingStorm: 8.0,  # negação de área
-            IceGolem: 10.0,  # tanque (cria zonas de gelo no slam)
-            # MountainGeode NÃO entra aqui: é a mina temática da Montanha
-            # (subclasse de ExplosiveMine), categoria COMPLEMENTAR controlada
-            # por mines_enabled / _update_mine_spawner — ver spawner.py §HAZARD.
+            # CuttingStorm: 8.0,  # negação de área
+            # IceGolem: 10.0,  # tanque (cria zonas de gelo no slam)
         },
         enemies_to_clear=40,
         boss_type=StoneGolemBoss,
