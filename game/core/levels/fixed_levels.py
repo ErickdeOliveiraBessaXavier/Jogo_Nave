@@ -19,8 +19,11 @@ from typing import Any, Type
 
 from ...entities.alien import Alien
 from ...entities.bot_elemental import ElementalRobot
+from ...entities.cutting_storm import CuttingStorm  # noqa: F401  (arena de teste)
 from ...entities.eye_enemy import EyeEnemy
 from ...entities.giant_meteor_boss import GiantMeteorBoss
+from ...entities.ice_golem import IceGolem  # noqa: F401  (arena de teste)
+from ...entities.Inimigos_Tema_Cidade.cargo_carrier import CargoCarrier  # noqa: F401
 
 # Linhagem CITY — todos com `# noqa: F401` porque são usados apenas no level de
 # debug (nível 1) e podem estar comentados lá; o noqa impede o autofix do ruff de
@@ -35,12 +38,9 @@ from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper  # noqa: F40
 from ...entities.Inimigos_Tema_Cidade.police_interceptor import (  # noqa: F401
     PoliceInterceptor,
 )
-from ...entities.Inimigos_Tema_Cidade.cargo_carrier import CargoCarrier  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin  # noqa: F401
-from ...entities.cutting_storm import CuttingStorm  # noqa: F401  (arena de teste)
-from ...entities.ice_golem import IceGolem  # noqa: F401  (arena de teste)
 from ...entities.meteor import Meteor
 from ...entities.mountain_mage import MountainMage
 from ...entities.mountain_propeller import MountainPropeller
@@ -522,9 +522,9 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
             # MountainMage: 8.0,
             # ElementalRobot: 8.0,
             # StoneSentry: 1.0,
-            StoneEagle: 6.0,  # rush em mergulho
+            # StoneEagle: 6.0,  # rush em mergulho
             # CuttingStorm: 8.0,  # negação de área
-            # IceGolem: 10.0,  # tanque (cria zonas de gelo no slam)
+            IceGolem: 10.0,  # tanque (cria zonas de gelo no slam)
         },
         enemies_to_clear=40,
         boss_type=StoneGolemBoss,
