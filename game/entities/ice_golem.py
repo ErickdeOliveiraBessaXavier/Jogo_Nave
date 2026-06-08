@@ -57,6 +57,7 @@ from ..core.assets import BASE_DIR, get_image
 from ..core.config import config as Config
 from ..core.sprite_loader import sprite_loader
 from .enemy_hit_mixin import EnemyHitMixin
+from .explosion import ExplosionType
 
 if TYPE_CHECKING:
     from ..systems.entity_context import EnemyUpdateContext
@@ -138,6 +139,54 @@ class _IceDustParticle:
             surface,
             (int(r * fade), int(g * fade), int(b * fade)),
             (int(self.x), int(self.y), self.size, self.size),
+        )
+
+
+class _GemEnergyMote:
+    """Faísca de energia azul puxada para a gema durante a montagem da formação.
+
+    Sugere o núcleo "atraindo" os fragmentos ao seu redor: nasce a alguma
+    distância e converge para o centro, esmaecendo. Detalhe puramente cosmético
+    do nascimento/reconstrução — `update` move/decai, `draw` só desenha (§3).
+    """
+
+    __slots__ = ("x", "y", "vx", "vy", "life", "max_life", "size", "color")
+
+    _SPEED = (60.0, 120.0)  # px/s rumo ao centro
+    _LIFE = (0.35, 0.7)  # segundos
+    _COLORS = ((120, 220, 255), (180, 240, 255), (90, 180, 255))  # azul/ciano gelo
+
+    def __init__(self, cx: float, cy: float, angle: float, radius: float) -> None:
+        self.x = cx + math.cos(angle) * radius
+        self.y = cy + math.sin(angle) * radius
+        speed = random.uniform(*self._SPEED)
+        # Velocidade apontando para o centro da gema (atração).
+        self.vx = -math.cos(angle) * speed
+        self.vy = -math.sin(angle) * speed
+        self.max_life = random.uniform(*self._LIFE)
+        self.life = self.max_life
+        self.size = random.randint(2, 3)
+        self.color = random.choice(self._COLORS)
+
+    @property
+    def dead(self) -> bool:
+        return self.life <= 0.0
+
+    def update(self, dt: float) -> None:
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.life -= dt
+
+    def draw(self, surface: pygame.Surface) -> None:
+        if self.life <= 0.0:
+            return
+        fade = max(0.0, self.life / self.max_life)
+        r, g, b = self.color
+        pygame.draw.circle(
+            surface,
+            (int(r * fade), int(g * fade), int(b * fade)),
+            (int(self.x), int(self.y)),
+            self.size,
         )
 
 
@@ -285,6 +334,16 @@ class IceGolemFragment(EnemyHitMixin):
     FRAG_SIZE = 46
     BASE_HEALTH = 55
 
+    # As rochas são parte estrutural do golem: a gema as controla pelo ciclo de
+    # vida inteiro (inclusive trazendo-as de volta de fora da tela na expansão e
+    # na reconstrução). Logo NÃO podem ser ceifadas pela regra genérica de
+    # "inimigo fora da tela" do EntityManager. Gate por class attribute (§5),
+    # consultado via getattr — sem isinstance novo no manager.
+    offscreen_cull_exempt = True
+
+    # Velocidade de convergência ao entrar na arena (reconstrução da armadura).
+    ENTER_SPEED = 230.0  # px/s
+
     # Bumerangue — propositalmente lento para priorizar leitura e tempo de
     # reação: o jogador deve ler a trajetória, decidir e esquivar.
     BOOM_DURATION = 1.7  # tempo total do dash (ida + volta)
@@ -325,8 +384,12 @@ class IceGolemFragment(EnemyHitMixin):
             if path.exists():
                 cls._sprites[key] = _scale(get_image(path), cls.FRAG_SIZE)
 
-    def __init__(self, corner: str, base_angle: float):
-        """corner: chave em `_CORNER_FILES`. base_angle: ângulo do slot (rad)."""
+    def __init__(self, corner: str, base_angle: float, entering: bool = False):
+        """corner: chave em `_CORNER_FILES`. base_angle: ângulo do slot (rad).
+
+        entering: se True, a rocha nasce fora da tela e converge para a órbita
+        (usado na reconstrução da armadura), em vez de já colar na posição.
+        """
         if not self._sprites:
             self.load_sprites()
         self.corner = corner
@@ -341,6 +404,9 @@ class IceGolemFragment(EnemyHitMixin):
         self.health = self.BASE_HEALTH
         self.dead = False
         self.hit_timer = 0.0
+
+        # Reconstrução: rocha vindo de fora, ainda convergindo para a formação.
+        self.entering = entering
 
         # Alvo de órbita escrito pela gema (canto superior-esquerdo da rocha).
         self.home_x = 0.0
@@ -379,7 +445,7 @@ class IceGolemFragment(EnemyHitMixin):
 
     def start_boomerang(self, player_x: float, player_y: float) -> None:
         """Inicia o dash em direção ao jogador (chamado pela gema)."""
-        if self.attacking or self.dead:
+        if self.attacking or self.dead or self.entering:
             return
         cx, cy = self.center
         self._launch_cx, self._launch_cy = cx, cy
@@ -406,10 +472,29 @@ class IceGolemFragment(EnemyHitMixin):
 
         if self.attacking:
             self._update_boomerang(dt)
+        elif self.entering:
+            self._update_entering(dt)
         else:
             # Em órbita: cola na posição-alvo escrita pela gema.
             self.x = self.home_x
             self.y = self.home_y
+
+    def _update_entering(self, dt: float) -> None:
+        """Converge de fora da tela até a posição orbital viva (que a gema move).
+
+        Avança a passo constante em direção a `home_x/home_y`; ao alcançar,
+        assume a órbita (`entering = False`) e passa a colar na formação.
+        """
+        dx = self.home_x - self.x
+        dy = self.home_y - self.y
+        dist = math.hypot(dx, dy)
+        step = self.ENTER_SPEED * dt
+        if dist <= step or dist < 1.0:
+            self.x, self.y = self.home_x, self.home_y
+            self.entering = False
+        else:
+            self.x += dx / dist * step
+            self.y += dy / dist * step
 
     def _render_angle(self) -> float:
         """Ângulo de desenho (graus): giro da formação + giro próprio.
@@ -579,6 +664,10 @@ class IceGolemFragment(EnemyHitMixin):
 class IceGolem(EnemyHitMixin):
     """A gema central — núcleo flutuante, ponto fraco e cérebro da formação."""
 
+    # Núcleo estrutural e persistente: nunca ceifado pela regra de "fora da tela"
+    # do EntityManager (§5: gate por class attribute, lido via getattr).
+    offscreen_cull_exempt = True
+
     # Tamanho do alvo (a gema). Pequeno de propósito: é o ponto fraco focado.
     GEM_SIZE = 42
     SPRITE_TARGET = 54  # sprite desenhado um pouco maior que o hitbox
@@ -601,6 +690,12 @@ class IceGolem(EnemyHitMixin):
     PHASE_CLOSED_DURATION = 3.5
     EXPANSION_DURATION = 4.5
     BOOMERANG_STAGGER = 0.85  # intervalo entre disparos individuais
+
+    # Reconstrução da armadura: se a gema ficar sem nenhuma rocha viva por este
+    # tempo, novas rochas surgem de fora (pela base) e convergem para a órbita.
+    REBUILD_DELAY = 10.0  # s sem rochas até disparar a reconstrução
+    REBUILD_ENTRY_MARGIN = 70.0  # px abaixo do rodapé onde as rochas nascem
+    REBUILD_ENTRY_STAGGER = 46.0  # px de escalonamento vertical na entrada
 
     # Animação da gema
     NUM_GEM_FRAMES = 8
@@ -675,6 +770,14 @@ class IceGolem(EnemyHitMixin):
         self._boom_pending: List[IceGolemFragment] = []
         self._boom_timer = 0.0
 
+        # Reconstrução: conta o tempo desde que ficou sem rochas vivas.
+        self._rebuild_timer = self.REBUILD_DELAY
+
+        # Faíscas de energia azul emitidas durante o nascimento/reconstrução
+        # (gema "atraindo" os fragmentos). Cosmético — ver `_update_energy_motes`.
+        self._energy_motes: List[_GemEnergyMote] = []
+        self._mote_timer = 0.0
+
         # Animação cosmética
         self.anim_time = 0.0
         self.anim_phase = random.uniform(0.0, float(self.NUM_GEM_FRAMES))
@@ -705,25 +808,64 @@ class IceGolem(EnemyHitMixin):
     # Update
     # ------------------------------------------------------------------
 
-    def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
-        if not self._fragments_spawned:
-            self._spawn_fragments(ctx)
-            self._fragments_spawned = True
-        self.update(ctx.sdt, ctx.player_x, ctx.player_y)
+    # Cantos do quadrado em screen-space (y para baixo): slot -> ângulo (rad).
+    _FRAGMENT_SLOTS = (
+        ("tl", 5 * math.pi / 4),  # superior-esquerdo
+        ("tr", 7 * math.pi / 4),  # superior-direito
+        ("br", math.pi / 4),  # inferior-direito
+        ("bl", 3 * math.pi / 4),  # inferior-esquerdo
+    )
 
-    def _spawn_fragments(self, ctx: "EnemyUpdateContext") -> None:
-        """Cria as 4 rochas e as registra como inimigos-irmãos (§2/§5)."""
-        # Cantos do quadrado em screen-space (y para baixo).
-        slots = [
-            ("tl", 5 * math.pi / 4),  # superior-esquerdo
-            ("tr", 7 * math.pi / 4),  # superior-direito
-            ("br", math.pi / 4),  # inferior-direito
-            ("bl", 3 * math.pi / 4),  # inferior-esquerdo
-        ]
-        for corner, ang in slots:
-            frag = IceGolemFragment(corner, ang)
+    def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
+        self.update(ctx.sdt, ctx.player_x, ctx.player_y)
+        if not self._fragments_spawned:
+            # Nascimento: a gema entra sozinha (vulnerável e incompleta). Só
+            # quando assenta na posição as rochas começam a emergir de baixo e
+            # convergir para a órbita — a montagem fica visível ao jogador e
+            # reutiliza exatamente a lógica da reconstrução da armadura (§11).
+            if self._entry_done:
+                self._assemble_fragments(ctx)
+                self._fragments_spawned = True
+        else:
+            self._update_rebuild(ctx)
+
+    def _update_rebuild(self, ctx: "EnemyUpdateContext") -> None:
+        """Reconstrói a armadura se a gema passar `REBUILD_DELAY` sem rochas.
+
+        Enquanto houver rocha viva, o timer permanece cheio. Esgotado, dispara a
+        mesma montagem do nascimento: rochas surgem fora da tela (pela base) e
+        convergem para a órbita (`entering`), reformando a proteção mineral.
+        """
+        if self.dead:
+            return
+        if self.live_fragments:
+            self._rebuild_timer = self.REBUILD_DELAY
+            return
+        self._rebuild_timer -= ctx.sdt
+        if self._rebuild_timer <= 0.0:
+            self._assemble_fragments(ctx)
+            self._rebuild_timer = self.REBUILD_DELAY
+
+    def _assemble_fragments(self, ctx: "EnemyUpdateContext") -> None:
+        """Faz 4 rochas nascerem abaixo do rodapé e convergirem para a órbita.
+
+        Serve tanto ao **nascimento** (montagem inicial da relíquia) quanto à
+        **reconstrução** da armadura após destruição — mesma coreografia.
+        """
+        # Descarta as carcaças mortas de um ciclo anterior (one-shot, fora do hot
+        # path: comprehension de rebuild é aceitável — §6). No nascimento a lista
+        # já está vazia, então é no-op.
+        self.fragments = [f for f in self.fragments if not f.dead]
+        cx, _ = self.center
+        base_y = Config.SCREEN_HEIGHT + self.REBUILD_ENTRY_MARGIN
+        for i, (corner, ang) in enumerate(self._FRAGMENT_SLOTS):
+            frag = IceGolemFragment(corner, ang, entering=True)
+            # Nasce fora da tela, escalonado em x/y para emergir em fila.
+            frag.x = cx - frag.w / 2 + (i - 1.5) * frag.w * 0.6
+            frag.y = base_y + i * self.REBUILD_ENTRY_STAGGER
             self.fragments.append(frag)
             ctx.new_enemies.append(frag)
+        # Escreve já o alvo de órbita para a convergência começar neste frame.
         self._position_fragments()
 
     def update(self, dt: float, player_x: float, player_y: float) -> None:
@@ -733,6 +875,10 @@ class IceGolem(EnemyHitMixin):
             self.hit_timer = max(0.0, self.hit_timer - dt)
         if self.shake_timer > 0.0:
             self.shake_timer = max(0.0, self.shake_timer - dt)
+
+        # Faíscas de energia (nascimento/reconstrução) — emitidas inclusive
+        # durante a descida da gema, sinalizando que ela está "chamando" as rochas.
+        self._update_energy_motes(dt)
 
         # Entrada
         if not self._entry_done:
@@ -752,9 +898,46 @@ class IceGolem(EnemyHitMixin):
         # Flutuação cosmética vertical.
         self.y = self.target_y + math.sin(self.anim_time + self.bob_phase) * 4.0
 
-        self._update_phase(dt, player_x, player_y)
+        if self._is_rebuilding():
+            # Armadura reformando: a gema suspende os ataques e gira devagar na
+            # formação fechada até as rochas reassumirem a órbita. Mantém o
+            # núcleo exposto durante a reconstrução (janela de pressão) e evita
+            # perseguir um alvo orbital mais rápido que a velocidade de entrada.
+            self.phase = IceGolemPhase.FORMATION_CLOSED
+            self.phase_timer = self.PHASE_CLOSED_DURATION
+        else:
+            self._update_phase(dt, player_x, player_y)
         self._update_spin_and_orbit(dt)
         self._position_fragments()
+
+    def _is_rebuilding(self) -> bool:
+        """True enquanto alguma rocha ainda converge para a formação."""
+        return any(f.entering for f in self.fragments if not f.dead)
+
+    def _is_assembling(self) -> bool:
+        """True durante o nascimento (gema sozinha) ou enquanto rochas convergem.
+
+        Janela em que a formação ainda está sendo montada: o golem não está
+        plenamente operacional e a gema emite faíscas de atração.
+        """
+        return not self._fragments_spawned or self._is_rebuilding()
+
+    def _update_energy_motes(self, dt: float) -> None:
+        """Emite/atualiza as faíscas azuis de atração enquanto monta a formação."""
+        motes = self._energy_motes
+        for i in range(len(motes) - 1, -1, -1):
+            motes[i].update(dt)
+            if motes[i].dead:
+                motes.pop(i)
+        if not self._is_assembling():
+            return
+        self._mote_timer -= dt
+        if self._mote_timer <= 0.0:
+            cx, cy = self.center
+            ang = random.uniform(0.0, math.tau)
+            radius = random.uniform(self.GEM_SIZE * 0.7, self.orbit_distance + self.GEM_SIZE)
+            motes.append(_GemEnergyMote(cx, cy, ang, radius))
+            self._mote_timer = random.uniform(0.04, 0.10)
 
     def _update_phase(self, dt: float, player_x: float, player_y: float) -> None:
         self.phase_timer -= dt
@@ -845,8 +1028,10 @@ class IceGolem(EnemyHitMixin):
             return min(1.0, 0.45 + 0.55 * open_k)
 
         # Fechada / bumerangue: base ~10% com 4 rochas, sobe ao perder rochas.
+        # Rochas atacando OU ainda convergindo (reconstrução) não protegem o
+        # núcleo — a janela continua aberta até a armadura reformar de fato.
         missing = (4 - n) / 4.0
-        away = sum(1 for f in live if f.attacking) / 4.0
+        away = sum(1 for f in live if f.attacking or f.entering) / 4.0
         return min(1.0, 0.10 + 0.45 * missing + 0.25 * away)
 
     def take_damage(self, amount: int) -> None:
@@ -878,7 +1063,13 @@ class IceGolem(EnemyHitMixin):
         return HitResult(explosion_size=12, sound=hit_sounds.BOSS_DAMAGE)
 
     def _build_death_result(self) -> "HitResult":
-        """Morte da gema = fim do encontro: as rochas estilhaçam junto."""
+        """Morte da gema = colapso do núcleo glacial: as rochas estilhaçam junto.
+
+        Usa a paleta `ICE_CORE` (azul/ciano/gelo) em vez da explosão genérica,
+        reforçando a identidade do núcleo energético azul desabando — partículas
+        azuladas reaproveitando a infra de `Explosion`, somadas aos estilhaços
+        cristalinos das rochas restantes.
+        """
         from ..systems import hit_sounds
         from ..systems.hit_result import HitResult
 
@@ -891,6 +1082,7 @@ class IceGolem(EnemyHitMixin):
             killed=True,
             points=self.get_points_value(),
             explosion_size=self._explosion_size_killed,
+            explosion_type=ExplosionType.ICE_CORE,
             sound=hit_sounds.EXPLOSION_ALIEN,
             fragments=tuple(shards),
         )
@@ -937,6 +1129,10 @@ class IceGolem(EnemyHitMixin):
             a = int(60 * vuln + 30 * (0.5 + 0.5 * math.sin(self.anim_time * 4.0)))
             pygame.draw.circle(glow, (120, 220, 255, max(0, min(120, a))), (halo, halo), halo)
             surface.blit(glow, (cx - halo, cy - halo))
+
+        # Faíscas de energia convergindo para o núcleo (montagem da formação).
+        for mote in self._energy_motes:
+            mote.draw(surface)
 
         self._draw_gem(surface, cx, cy, vuln)
 

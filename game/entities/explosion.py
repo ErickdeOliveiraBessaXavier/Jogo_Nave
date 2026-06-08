@@ -14,6 +14,17 @@ class ExplosionType:
     ALIEN = [(37, 217, 166), (78, 217, 74)]  # Verde
     # CITY: "static pop" — descarga elétrica azul → magenta → branco.
     CYBER = [(40, 200, 255), (180, 220, 255), (255, 50, 200), (255, 255, 255)]
+    # ICE_GOLEM: colapso de núcleo glacial energético. A paleta vai do azul
+    # profundo (partícula se dissipando) ao branco-gelo brilhante (energia
+    # cristalina recém-liberada), passando por ciano. Ordem [morte → nascimento]
+    # porque _get_color indexa por life_ratio (1 = recém-criada).
+    ICE_CORE = [
+        (28, 78, 168),  # azul profundo (energia esfriando)
+        (44, 134, 224),  # azul elétrico
+        (96, 204, 255),  # ciano gelo
+        (168, 236, 255),  # ciano claro
+        (228, 250, 255),  # branco-gelo (núcleo estilhaçando)
+    ]
 
 
 class Explosion:

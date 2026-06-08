@@ -1408,6 +1408,10 @@ class EntityManager:
                 # Stalagmites/stalactites spawn off-screen intentionally (rise from below
                 # or fall from above) — let their own state machine handle removal.
                 and not isinstance(e, (MountainStalagmite, MountainStalactite))
+                # Entidades estruturais que a própria classe controla fora da tela
+                # (ex.: rochas orbitais do IceGolem na expansão/reconstrução) marcam
+                # `offscreen_cull_exempt` (§5: gate por class attribute, não isinstance).
+                and not getattr(e, "offscreen_cull_exempt", False)
                 and self._is_enemy_off_screen(e)
             ):
                 e.dead = True
