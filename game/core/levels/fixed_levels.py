@@ -524,7 +524,7 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
             # StoneSentry: 1.0,
             # StoneEagle: 6.0,  # rush em mergulho
             # CuttingStorm: 8.0,  # negação de área
-            IceGolem: 1.0,
+            IceGolem: 10.0,
         },
         enemies_to_clear=40,
         boss_type=StoneGolemBoss,

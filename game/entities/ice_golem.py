@@ -92,6 +92,55 @@ def _scale(surf: pygame.Surface, target: int) -> pygame.Surface:
 _IMAGE_EXTS = frozenset({".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"})
 
 
+class _IceDustParticle:
+    """Grão de poeira mineral que se desprende de uma rocha orbital.
+
+    Detalhe cosmético discreto: reforça a sensação de massa e desgaste das
+    rochas energizadas. Segue o mesmo padrão do `_SerpentDustParticle`
+    (MountainSerpentBoss) para consistência visual do tema Montanha. `update`
+    move/decai; `draw` apenas desenha (§3).
+    """
+
+    __slots__ = ("x", "y", "vx", "vy", "size", "life", "max_life")
+
+    _VX_RANGE = (-14.0, 14.0)  # px/s
+    _VY_RANGE = (16.0, 44.0)  # px/s (positivo = cai)
+    _GRAVITY = 70.0  # px/s²
+    _LIFE_RANGE = (0.4, 0.85)  # segundos
+    _SIZE_RANGE = (1, 3)  # pixels
+    _BASE_COLOR = (168, 192, 214)  # poeira mineral fria (azul-acinzentada)
+
+    def __init__(self, x: float, y: float) -> None:
+        self.x = x
+        self.y = y
+        self.vx = random.uniform(*self._VX_RANGE)
+        self.vy = random.uniform(*self._VY_RANGE)
+        self.size = random.randint(*self._SIZE_RANGE)
+        self.max_life = random.uniform(*self._LIFE_RANGE)
+        self.life = self.max_life
+
+    @property
+    def dead(self) -> bool:
+        return self.life <= 0.0
+
+    def update(self, dt: float) -> None:
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.vy += self._GRAVITY * dt
+        self.life -= dt
+
+    def draw(self, surface: pygame.Surface) -> None:
+        if self.life <= 0.0:
+            return
+        fade = max(0.0, self.life / self.max_life)
+        r, g, b = self._BASE_COLOR
+        pygame.draw.rect(
+            surface,
+            (int(r * fade), int(g * fade), int(b * fade)),
+            (int(self.x), int(self.y), self.size, self.size),
+        )
+
+
 class IceShard(EnemyHitMixin):
     """Estilhaço físico de uma rocha destruída — entidade independente.
 
@@ -236,10 +285,26 @@ class IceGolemFragment(EnemyHitMixin):
     FRAG_SIZE = 46
     BASE_HEALTH = 55
 
-    # Bumerangue
-    BOOM_DURATION = 1.05  # tempo total do dash (ida + volta)
-    BOOM_ADVANCE_FRAC = 0.45  # fração do tempo gasta avançando
-    BOOM_DASH_DISTANCE = 320.0  # alcance máximo do avanço
+    # Bumerangue — propositalmente lento para priorizar leitura e tempo de
+    # reação: o jogador deve ler a trajetória, decidir e esquivar.
+    BOOM_DURATION = 1.7  # tempo total do dash (ida + volta)
+    BOOM_ADVANCE_FRAC = 0.5  # fração do tempo gasta avançando
+    # Alcance máximo: cobre praticamente toda a tela para que o fragmento chegue
+    # de fato à posição do jogador (cap só para o caso degenerado fora da tela).
+    BOOM_DASH_DISTANCE = 760.0
+
+    # Rotação própria contínua (rocha energizada/instável, não sprite girando em
+    # círculo). Cada rocha sorteia sentido/velocidade próprios.
+    SELF_SPIN_RANGE = (-150.0, 150.0)  # graus/s
+
+    # Rastro fantasmagórico (estilo Alucard) durante o dash — mesma técnica do
+    # SerpentRockBullet: imagens residuais com alpha decrescente.
+    _TRAIL_INTERVAL = 0.045  # s entre fantasmas
+    _TRAIL_LIFETIME = 0.28  # s de vida de cada fantasma
+    _TRAIL_MAX_ALPHA = 120  # alpha inicial do fantasma
+
+    # Poeira mineral desprendendo enquanto orbita.
+    _PARTICLE_INTERVAL = (0.10, 0.22)  # s entre grãos
 
     # Mapeia o slot ao arquivo do canto correspondente (a arte é desenhada para
     # cantos de um quadrado; cada slot recebe a peça que aponta para fora).
@@ -290,6 +355,16 @@ class IceGolemFragment(EnemyHitMixin):
         self._target_cx = 0.0  # ponto de avanço (em direção ao jogador)
         self._target_cy = 0.0
 
+        # Rotação própria contínua sobre o eixo (independente da órbita).
+        self.self_angle = random.uniform(0.0, 360.0)
+        self.self_spin = random.uniform(*self.SELF_SPIN_RANGE)  # graus/s
+
+        # Rastro fantasmagórico (só durante o dash) e poeira mineral (sempre).
+        self._afterimages: List[dict] = []
+        self._trail_timer = 0.0
+        self._particles: List[_IceDustParticle] = []
+        self._particle_timer = random.uniform(*self._PARTICLE_INTERVAL)
+
     @property
     def rect(self) -> pygame.Rect:
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
@@ -324,12 +399,61 @@ class IceGolemFragment(EnemyHitMixin):
         if self.hit_timer > 0.0:
             self.hit_timer = max(0.0, self.hit_timer - dt)
 
+        # Giro próprio contínuo e detalhes cosméticos (poeira / rastro).
+        self.self_angle = (self.self_angle + self.self_spin * dt) % 360.0
+        self._update_particles(dt)
+        self._update_trail(dt)
+
         if self.attacking:
             self._update_boomerang(dt)
         else:
             # Em órbita: cola na posição-alvo escrita pela gema.
             self.x = self.home_x
             self.y = self.home_y
+
+    def _render_angle(self) -> float:
+        """Ângulo de desenho (graus): giro da formação + giro próprio.
+
+        pygame.rotate é CCW(+); o avanço de `orbit_angle` (screen-space) é
+        visualmente horário, então a parte orbital entra com -graus. O giro
+        próprio (`self_angle`) soma por cima para a rocha parecer instável.
+        """
+        return -math.degrees(self.orbit_angle - self.base_angle) + self.self_angle
+
+    def _update_particles(self, dt: float) -> None:
+        """Emite e atualiza grãos de poeira mineral (in-place reversa)."""
+        self._particle_timer -= dt
+        if self._particle_timer <= 0.0:
+            cx, cy = self.center
+            self._particles.append(
+                _IceDustParticle(
+                    cx + random.uniform(-self.w * 0.3, self.w * 0.3),
+                    cy + random.uniform(-self.h * 0.3, self.h * 0.3),
+                )
+            )
+            self._particle_timer = random.uniform(*self._PARTICLE_INTERVAL)
+        parts = self._particles
+        for i in range(len(parts) - 1, -1, -1):
+            parts[i].update(dt)
+            if parts[i].dead:
+                parts.pop(i)
+
+    def _update_trail(self, dt: float) -> None:
+        """Decai os fantasmas existentes; emite novos só durante o dash."""
+        ai = self._afterimages
+        for i in range(len(ai) - 1, -1, -1):
+            ai[i]["life"] -= dt
+            if ai[i]["life"] <= 0.0:
+                ai.pop(i)
+        if not self.attacking:
+            return
+        self._trail_timer -= dt
+        if self._trail_timer <= 0.0:
+            cx, cy = self.center
+            ai.append(
+                {"cx": cx, "cy": cy, "rot": self._render_angle(), "life": self._TRAIL_LIFETIME}
+            )
+            self._trail_timer = self._TRAIL_INTERVAL
 
     def _update_boomerang(self, dt: float) -> None:
         """Ida em direção ao jogador, volta para a posição orbital (que se move)."""
@@ -418,15 +542,28 @@ class IceGolemFragment(EnemyHitMixin):
         return self.dead
 
     def draw(self, surface: pygame.Surface) -> None:
+        # Poeira mineral desenhada atrás da rocha (detalhe sutil de massa).
+        for p in self._particles:
+            p.draw(surface)
+
         sprite = self._sprites.get(self.corner)
         cx, cy = int(self.x + self.w / 2), int(self.y + self.h / 2)
         if sprite is not None:
-            # Gira a arte com a formação: a peça de canto mantém a face interna
-            # apontada para o núcleo durante todo o giro. pygame.rotate é CCW(+);
-            # o avanço de `orbit_angle` (screen-space) é visualmente horário, então
-            # compensa-se com -graus.
-            rot = -math.degrees(self.orbit_angle - self.base_angle)
-            img = pygame.transform.rotate(sprite, rot)
+            # Rastro fantasmagórico (Alucard) durante o dash: imagens residuais
+            # com alpha decrescente, mesma técnica do SerpentRockBullet.
+            for ai in self._afterimages:
+                ghost = pygame.transform.rotate(sprite, ai["rot"])
+                ghost.set_alpha(
+                    int((ai["life"] / self._TRAIL_LIFETIME) * self._TRAIL_MAX_ALPHA)
+                )
+                surface.blit(
+                    ghost,
+                    ghost.get_rect(center=(int(ai["cx"]), int(ai["cy"]))).topleft,
+                )
+
+            # A peça de canto mantém a face interna apontada para o núcleo
+            # (giro da formação) somada ao giro próprio da rocha.
+            img = pygame.transform.rotate(sprite, self._render_angle())
             if self.hit_timer > 0.0:
                 img = img.copy()
                 img.fill(colors.WHITE, special_flags=pygame.BLEND_RGB_ADD)
@@ -443,8 +580,8 @@ class IceGolem(EnemyHitMixin):
     """A gema central — núcleo flutuante, ponto fraco e cérebro da formação."""
 
     # Tamanho do alvo (a gema). Pequeno de propósito: é o ponto fraco focado.
-    GEM_SIZE = 54
-    SPRITE_TARGET = 72  # sprite desenhado um pouco maior que o hitbox
+    GEM_SIZE = 42
+    SPRITE_TARGET = 54  # sprite desenhado um pouco maior que o hitbox
     # `W`/`H`: contrato de tamanho lido pelo spawner (`_entry_position`).
     W = GEM_SIZE
     H = GEM_SIZE
@@ -455,8 +592,8 @@ class IceGolem(EnemyHitMixin):
     CORE_HEALTH = 220
 
     # Órbita
-    BASE_ORBIT_DISTANCE = 60.0
-    EXPANDED_ORBIT_DISTANCE = 128.0
+    BASE_ORBIT_DISTANCE = 82.0
+    EXPANDED_ORBIT_DISTANCE = 188.0
     SPIN_CLOSED = 1.1  # rad/s
     SPIN_EXPANSION = 2.6  # rad/s
 
@@ -468,6 +605,12 @@ class IceGolem(EnemyHitMixin):
     # Animação da gema
     NUM_GEM_FRAMES = 8
     GEM_ANIM_FPS = 7.0
+
+    # Tremor de impacto: feedback forte quando o jogador acerta o ponto fraco.
+    # Curto e perceptível, sem comprometer a leitura do combate.
+    GEM_SHAKE_DURATION = 0.18  # s
+    GEM_SHAKE_AMPLITUDE = 6.0  # px
+    GEM_SHAKE_FREQ = 60.0  # rad/s
 
     _explosion_size_killed = 90
     _gem_frames: List[pygame.Surface] = []
@@ -512,6 +655,7 @@ class IceGolem(EnemyHitMixin):
         self.dead = False
         self.core_health = self.CORE_HEALTH
         self.hit_timer = 0.0
+        self.shake_timer = 0.0  # tremor de impacto ao receber dano efetivo
         self.active = True
         self._deflect = False  # último hit foi defletido pela armadura?
 
@@ -587,6 +731,8 @@ class IceGolem(EnemyHitMixin):
         self.anim_phase += self.GEM_ANIM_FPS * dt
         if self.hit_timer > 0.0:
             self.hit_timer = max(0.0, self.hit_timer - dt)
+        if self.shake_timer > 0.0:
+            self.shake_timer = max(0.0, self.shake_timer - dt)
 
         # Entrada
         if not self._entry_done:
@@ -706,6 +852,9 @@ class IceGolem(EnemyHitMixin):
     def take_damage(self, amount: int) -> None:
         self.core_health -= amount
         self.hit_timer = 0.1
+        # Dano efetivo (chegou à gema): tremor de impacto para sinalizar o acerto
+        # no ponto fraco. Deflexão não chama take_damage, então não treme.
+        self.shake_timer = self.GEM_SHAKE_DURATION
         if self.core_health <= 0:
             self.dead = True
 
@@ -763,6 +912,21 @@ class IceGolem(EnemyHitMixin):
 
     def draw(self, surface: pygame.Surface) -> None:
         cx, cy = int(self.center[0]), int(self.center[1])
+
+        # Tremor de impacto: deslocamento curto e decrescente quando a gema leva
+        # dano efetivo. Usa o acumulador `anim_time` (não time.time()), seguro a
+        # pausa/slow-motion; §3: draw lê estado, quem decai é o update.
+        if self.shake_timer > 0.0:
+            k = self.shake_timer / self.GEM_SHAKE_DURATION
+            cx += int(
+                math.sin(self.anim_time * self.GEM_SHAKE_FREQ) * self.GEM_SHAKE_AMPLITUDE * k
+            )
+            cy += int(
+                math.cos(self.anim_time * self.GEM_SHAKE_FREQ * 1.3)
+                * self.GEM_SHAKE_AMPLITUDE
+                * 0.6
+                * k
+            )
 
         # Halo de exposição: cresce quando a gema está vulnerável (leitura visual
         # da janela de ataque).
