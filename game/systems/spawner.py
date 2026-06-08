@@ -36,9 +36,10 @@ from ..entities.bot_elemental import ElementalRobot
 from ..entities.cutting_storm import CuttingStorm
 from ..entities.explosive_mine import ExplosiveMine
 from ..entities.eye_enemy import EyeEnemy
-from ..entities.ice_golem import IceGolem
 from ..entities.formation import Formation, FormationPattern
 from ..entities.guided_meteor import GuidedMeteor
+from ..entities.ice_golem import IceGolem
+from ..entities.Inimigos_Tema_Cidade.cargo_carrier import CargoCarrier
 from ..entities.Inimigos_Tema_Cidade.city_drone import CityDrone
 from ..entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ..entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
@@ -46,11 +47,10 @@ from ..entities.Inimigos_Tema_Cidade.interceptor_squad import InterceptorSquad
 from ..entities.Inimigos_Tema_Cidade.jammer_node import JammerNode
 from ..entities.Inimigos_Tema_Cidade.mirror_pylon import MirrorPylon
 from ..entities.Inimigos_Tema_Cidade.mortar_drone import MortarDrone
-from ..entities.Inimigos_Tema_Cidade.cargo_carrier import CargoCarrier
-from ..entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone
-from ..entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
 from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ..entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
+from ..entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone
+from ..entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
 from ..entities.Inimigos_Tema_Cidade.tesla_link import TeslaLink
 from ..entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin
 from ..entities.meteor import Meteor
@@ -765,7 +765,10 @@ class EnemySpawner:
             return True
         if enemy_type == CityDrone and counts["city_drone"] >= SPAWNER_CAP_CITY_DRONE:
             return True
-        if enemy_type == NeonSniper and counts["neon_sniper"] >= SPAWNER_CAP_NEON_SNIPER:
+        if (
+            enemy_type == NeonSniper
+            and counts["neon_sniper"] >= SPAWNER_CAP_NEON_SNIPER
+        ):
             return True
         if (
             enemy_type == PoliceInterceptor
@@ -785,7 +788,10 @@ class EnemySpawner:
             return True
         if enemy_type == MortarDrone and counts["mortar"] >= SPAWNER_CAP_MORTAR:
             return True
-        if enemy_type == CargoCarrier and counts["cargo_carrier"] >= SPAWNER_CAP_CARGO_CARRIER:
+        if (
+            enemy_type == CargoCarrier
+            and counts["cargo_carrier"] >= SPAWNER_CAP_CARGO_CARRIER
+        ):
             return True
         if enemy_type == SplitterTank and counts["splitter"] >= SPAWNER_CAP_SPLITTER:
             return True
@@ -815,7 +821,10 @@ class EnemySpawner:
             and counts["cutting_storm"] >= SPAWNER_CAP_CUTTING_STORM
         ):
             return True
-        if enemy_type == StoneEagle and counts["stone_eagle"] >= SPAWNER_CAP_STONE_EAGLE:
+        if (
+            enemy_type == StoneEagle
+            and counts["stone_eagle"] >= SPAWNER_CAP_STONE_EAGLE
+        ):
             return True
         return False
 
@@ -859,22 +868,34 @@ class EnemySpawner:
                 and counts["police_interceptor"] >= SPAWNER_CAP_POLICE_INTERCEPTOR
             ):
                 return False
-            if enemy_type == CyberTank and counts["cyber_tank"] >= SPAWNER_CAP_CYBER_TANK:
+            if (
+                enemy_type == CyberTank
+                and counts["cyber_tank"] >= SPAWNER_CAP_CYBER_TANK
+            ):
                 return False
             if (
                 enemy_type == CyberCaptor
                 and counts["cyber_captor"] >= SPAWNER_CAP_CYBER_CAPTOR
             ):
                 return False
-            if enemy_type == TeslaTwin and counts["tesla_twin"] >= SPAWNER_CAP_TESLA_TWIN:
+            if (
+                enemy_type == TeslaTwin
+                and counts["tesla_twin"] >= SPAWNER_CAP_TESLA_TWIN
+            ):
                 return False
             if enemy_type == JammerNode and counts["jammer"] >= SPAWNER_CAP_JAMMER:
                 return False
             if enemy_type == MortarDrone and counts["mortar"] >= SPAWNER_CAP_MORTAR:
                 return False
-            if enemy_type == CargoCarrier and counts["cargo_carrier"] >= SPAWNER_CAP_CARGO_CARRIER:
+            if (
+                enemy_type == CargoCarrier
+                and counts["cargo_carrier"] >= SPAWNER_CAP_CARGO_CARRIER
+            ):
                 return False
-            if enemy_type == SplitterTank and counts["splitter"] >= SPAWNER_CAP_SPLITTER:
+            if (
+                enemy_type == SplitterTank
+                and counts["splitter"] >= SPAWNER_CAP_SPLITTER
+            ):
                 return False
             if enemy_type == SapperDrone and counts["sapper"] >= SPAWNER_CAP_SAPPER:
                 return False
@@ -1160,13 +1181,13 @@ class EnemySpawner:
         fragment = SatelliteFragment.spawn_ambient(
             inverted_vertical=self.inverted_vertical
         )
-        fragment.health = max(
-            1, int(fragment.health * self.enemy_health_multiplier)
-        )
+        fragment.health = max(1, int(fragment.health * self.enemy_health_multiplier))
         entity_manager.enemies.append(fragment)
         return True
 
-    def _entry_position(self, w: int, h: int, is_side_scroll: bool) -> tuple[float, float]:
+    def _entry_position(
+        self, w: int, h: int, is_side_scroll: bool
+    ) -> tuple[float, float]:
         """Posição de entrada padrão: topo (top-down) ou borda direita (side-scroll)."""
         if is_side_scroll:
             return (
@@ -1178,9 +1199,12 @@ class EnemySpawner:
     def _spawn_orbital_turret(
         self, entity_manager: "EntityManager", is_side_scroll: bool
     ) -> bool:
-        x, y = self._entry_position(OrbitalTurret.SIZE, OrbitalTurret.SIZE, is_side_scroll)
+        x, y = self._entry_position(
+            OrbitalTurret.SIZE, OrbitalTurret.SIZE, is_side_scroll
+        )
         turret = OrbitalTurret(
-            x, y,
+            x,
+            y,
             aggressiveness_multiplier=self.aggressiveness_multiplier,
             side_scroll=is_side_scroll,
         )
@@ -1193,7 +1217,8 @@ class EnemySpawner:
     ) -> bool:
         x, y = self._entry_position(StealthFighter.W, StealthFighter.H, is_side_scroll)
         fighter = StealthFighter(
-            x, y,
+            x,
+            y,
             aggressiveness_multiplier=self.aggressiveness_multiplier,
             side_scroll=is_side_scroll,
         )
@@ -1206,7 +1231,8 @@ class EnemySpawner:
     ) -> bool:
         x, y = self._entry_position(RepairDrone.SIZE, RepairDrone.SIZE, is_side_scroll)
         drone = RepairDrone(
-            x, y,
+            x,
+            y,
             aggressiveness_multiplier=self.aggressiveness_multiplier,
             side_scroll=is_side_scroll,
         )
@@ -1219,11 +1245,14 @@ class EnemySpawner:
     ) -> bool:
         x, y = self._entry_position(IceGolem.W, IceGolem.H, is_side_scroll)
         golem = IceGolem(
-            x, y,
+            x,
+            y,
             aggressiveness_multiplier=self.aggressiveness_multiplier,
             side_scroll=is_side_scroll,
         )
-        golem.health = max(1, int(golem.health * self.enemy_health_multiplier))
+        golem.core_health = max(
+            1, int(golem.core_health * self.enemy_health_multiplier)
+        )
         entity_manager.enemies.append(golem)
         return True
 
@@ -1233,7 +1262,8 @@ class EnemySpawner:
         size = CuttingStorm.RADIUS * 2
         x, y = self._entry_position(size, size, is_side_scroll)
         storm = CuttingStorm(
-            x, y,
+            x,
+            y,
             aggressiveness_multiplier=self.aggressiveness_multiplier,
             side_scroll=is_side_scroll,
         )
@@ -1246,7 +1276,8 @@ class EnemySpawner:
     ) -> bool:
         x, y = self._entry_position(StoneEagle.W, StoneEagle.H, is_side_scroll)
         eagle = StoneEagle(
-            x, y,
+            x,
+            y,
             aggressiveness_multiplier=self.aggressiveness_multiplier,
             side_scroll=is_side_scroll,
         )
@@ -1294,9 +1325,7 @@ class EnemySpawner:
         # Esconde-se num enxame de drones (precisa de uma "nuvem" para de fato
         # camuflar). Sem enxame, entra discretamente pela borda.
         drones = [
-            e
-            for e in entity_manager.enemies
-            if isinstance(e, CityDrone) and not e.dead
+            e for e in entity_manager.enemies if isinstance(e, CityDrone) and not e.dead
         ]
         if len(drones) >= 3:
             host = random.choice(drones)
@@ -1406,9 +1435,7 @@ class EnemySpawner:
         if is_side_scroll:
             x = Config.SCREEN_WIDTH + random.uniform(20.0, 60.0)
             # Sempre na faixa superior: deixa espaço p/ a caixa descer abaixo dele.
-            y = random.uniform(
-                Config.SCREEN_HEIGHT * 0.06, Config.SCREEN_HEIGHT * 0.18
-            )
+            y = random.uniform(Config.SCREEN_HEIGHT * 0.06, Config.SCREEN_HEIGHT * 0.18)
         else:
             # Vertical: enviesa para a direita (entrando pelo topo).
             x = random.uniform(
@@ -1486,9 +1513,7 @@ class EnemySpawner:
         O feixe vertical entre elas é uma parede que avança p/ a esquerda. Spawna
         o par inteiro de uma vez; se já há um par vivo, não spawna outro."""
         current = sum(
-            1
-            for e in entity_manager.enemies
-            if isinstance(e, TeslaTwin) and not e.dead
+            1 for e in entity_manager.enemies if isinstance(e, TeslaTwin) and not e.dead
         )
         if current > 0:
             return False
@@ -1498,13 +1523,17 @@ class EnemySpawner:
         y_top = Config.SCREEN_HEIGHT * 0.20 - h / 2
         y_bottom = Config.SCREEN_HEIGHT * 0.80 - h / 2
         top = TeslaTwin(
-            x, y_top, is_top=True,
+            x,
+            y_top,
+            is_top=True,
             aggressiveness_multiplier=self.aggressiveness_multiplier,
             side_scroll=is_side_scroll,
             health_multiplier=self.enemy_health_multiplier,
         )
         bottom = TeslaTwin(
-            x, y_bottom, is_top=False,
+            x,
+            y_bottom,
+            is_top=False,
             aggressiveness_multiplier=self.aggressiveness_multiplier,
             side_scroll=is_side_scroll,
             health_multiplier=self.enemy_health_multiplier,
@@ -1600,8 +1629,7 @@ class EnemySpawner:
         active_total = sum(
             1
             for e in entity_manager.enemies
-            if not getattr(e, "dead", False)
-            and not isinstance(e, HAZARD_ENEMY_TYPES)
+            if not getattr(e, "dead", False) and not isinstance(e, HAZARD_ENEMY_TYPES)
         )
         total_room = self._get_current_enemy_cap() - active_total
         room = min(drone_room, total_room)
@@ -1619,7 +1647,9 @@ class EnemySpawner:
                 x = Config.SCREEN_WIDTH + random.uniform(20.0, 160.0)
                 y = random.uniform(40.0, max_y)
             else:
-                x = random.uniform(20.0, Config.SCREEN_WIDTH - 20.0 - CityDrone.MAX_SIZE)
+                x = random.uniform(
+                    20.0, Config.SCREEN_WIDTH - 20.0 - CityDrone.MAX_SIZE
+                )
                 y = -random.uniform(20.0, 160.0)
             drone = CityDrone(
                 x,
@@ -2224,7 +2254,9 @@ class PowerUpSpawner:
         # (Hardcore/Pesadelo) → intervalo maior. Clamp para evitar valores
         # degenerados caso o preset venha com multiplicador zero/negativo.
         mult = max(0.1, self._spawn_rate_multiplier)
-        coop_mult = 1.0 + self.COOP_RATE_PER_EXTRA_PLAYER * max(0, self.player_count - 1)
+        coop_mult = 1.0 + self.COOP_RATE_PER_EXTRA_PLAYER * max(
+            0, self.player_count - 1
+        )
         interval = random.uniform(min_t, max_t) / (mult * coop_mult)
         self.timer = Timer(interval)
         self.timer.start()

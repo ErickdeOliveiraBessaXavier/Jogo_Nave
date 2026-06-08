@@ -510,7 +510,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
 # a arena deixa essa lacuna explícita: sem preenchimento com inimigos de outros
 # temas, mostra só o que o tema realmente tem hoje.
 
-TEST_ARENA_ENABLED: bool = False
+TEST_ARENA_ENABLED: bool = True
 
 THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
     # ── MONTANHAS — linhagem própria completa ────────────────────────────────
@@ -524,7 +524,7 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
             # StoneSentry: 1.0,
             # StoneEagle: 6.0,  # rush em mergulho
             # CuttingStorm: 8.0,  # negação de área
-            IceGolem: 10.0,  # tanque (cria zonas de gelo no slam)
+            IceGolem: 1.0,
         },
         enemies_to_clear=40,
         boss_type=StoneGolemBoss,
