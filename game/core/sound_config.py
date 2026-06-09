@@ -140,6 +140,8 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "hit_hurt_meteor_boss": "sfx/ui/hit_hurt_meteor_boss.wav",  # Som de rachadura do boss meteoro
             "shield_activate": "sfx/ui/Som_Escudo_Ativando.wav",  # Pulso do SapperDrone concede escudos
             "shield_break": "sfx/ui/Som_Escudo_Destruído.wav",  # Escudo de inimigo esgotado
+            "gem_birth": "sfx/ui/Birth_Energy_Sound_Gem.wav",  # Nascimento da gema do IceGolem
+            "gem_death": "sfx/ui/Death_Energy_Sound_Gem.wav",  # Colapso/morte da gema do IceGolem
         },
     },
 }

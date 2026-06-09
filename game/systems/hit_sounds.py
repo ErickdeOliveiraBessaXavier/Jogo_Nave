@@ -22,6 +22,10 @@ STOP_WARNING: Callable[[], None] = sound_manager.stop_warning  # encerra o loop 
 SHIELD_ACTIVATE: Callable[[], None] = sound_manager.play_shield_activate
 SHIELD_BREAK: Callable[[], None] = sound_manager.play_shield_break
 
+# IceGolem: nascimento (círculo de energia) e colapso/morte da gema.
+GEM_BIRTH: Callable[[], None] = sound_manager.play_gem_birth
+GEM_DEATH: Callable[[], None] = sound_manager.play_gem_death
+
 # StoneGolemBoss
 GOLEM_MINE_TIMER: Callable[[], None] = sound_manager.play_golem_mine_timer
 GOLEM_STOP_MINE_TIMER: Callable[[], None] = sound_manager.stop_golem_mine_timer

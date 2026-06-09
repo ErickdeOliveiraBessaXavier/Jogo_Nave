@@ -253,6 +253,18 @@ class SoundManager:
         self._sounds["shield_break"].play()
 
     @require_audio
+    def play_gem_birth(self):
+        """Toca o som de nascimento da gema do IceGolem (círculo de energia)."""
+        if "gem_birth" in self._sounds:
+            self._sounds["gem_birth"].play()
+
+    @require_audio
+    def play_gem_death(self):
+        """Toca o som de colapso/morte da gema do IceGolem (energia desabando)."""
+        if "gem_death" in self._sounds:
+            self._sounds["gem_death"].play()
+
+    @require_audio
     def play_boss_warning(self):
         """Toca um som de aviso específico do boss (fallback para `warning`)."""
         if "boss_warning" in self._sounds:

@@ -97,6 +97,8 @@ def load_sfx(
         "hit_hurt_meteor_boss": ui.get("hit_hurt_meteor_boss"),
         "shield_activate": ui.get("shield_activate"),
         "shield_break": ui.get("shield_break"),
+        "gem_birth": ui.get("gem_birth"),
+        "gem_death": ui.get("gem_death"),
     }
     for key, rel in ui_map.items():
         if not rel:

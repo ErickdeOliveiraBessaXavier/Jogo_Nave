@@ -128,6 +128,10 @@ class EntityManager:
         self.tank_meltdowns: list[TankMeltdown] = []
         self.splitter_debris: list[SplitterDebris] = []
         self.carrier_debris: list[CarrierDebris] = []
+        # Cacos de gelo do IceGolem (rochas/núcleo): detritos PURAMENTE visuais —
+        # sem dano nem colisão, fora da spatial grid. Preenchidos pelo `on_remove`
+        # das peças do golem. Mesmo molde de splitter/carrier_debris.
+        self.ice_shards: list[Any] = []
         self.captor_emps: list[CaptorEMP] = []
         # Blasts de área one-shot (cx, cy, raio) emitidos por efeitos/inimigos neste
         # frame; consumidos pela cena (handle_mine_explosion) p/ aplicar dano à nave.
@@ -794,6 +798,8 @@ class EntityManager:
             sd.update(dt)
         for cd in self.carrier_debris:
             cd.update(dt)
+        for ish in self.ice_shards:
+            ish.update(dt)
         for ce in self.captor_emps:
             ce.update(dt)
 
@@ -1138,6 +1144,7 @@ class EntityManager:
             self.tank_meltdowns,
             self.splitter_debris,
             self.carrier_debris,
+            self.ice_shards,
             self.captor_emps,
             self.boss_squares,
             self.powerups,
@@ -1432,6 +1439,7 @@ class EntityManager:
         self._filter_dead_inplace(self.tank_meltdowns)
         self._filter_dead_inplace(self.splitter_debris)
         self._filter_dead_inplace(self.carrier_debris)
+        self._filter_dead_inplace(self.ice_shards)
         self._filter_dead_inplace(self.captor_emps)
         self._filter_dead_inplace(self.mini_ship_bullets)
         self._filter_dead_inplace(self.wingmen)
@@ -1493,6 +1501,7 @@ class EntityManager:
         self.tank_meltdowns.clear()
         self.splitter_debris.clear()
         self.carrier_debris.clear()
+        self.ice_shards.clear()
         self.captor_emps.clear()
         self.area_blasts.clear()
         self.powerups.clear()
@@ -1542,6 +1551,7 @@ class EntityManager:
         self.tank_meltdowns.clear()
         self.splitter_debris.clear()
         self.carrier_debris.clear()
+        self.ice_shards.clear()
         self.captor_emps.clear()
         self.area_blasts.clear()
         # homing_bullets e cacador_lasers são projéteis do jogador — preservados
