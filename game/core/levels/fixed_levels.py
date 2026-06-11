@@ -563,14 +563,14 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
     WorldTheme.STARFIELD: LevelConfig(
         level_number=11,
         enemy_spawn_config={
-            Meteor: 1.2,
-            Alien: 3.0,
-            EyeEnemy: 6.0,
-            Satellite: 6.0,
+            # Meteor: 1.2,
+            # Alien: 3.0,
+            # EyeEnemy: 6.0,
+            # Satellite: 6.0,
             StealthFighter: 6.0,  # rush (cloak + investida)
-            OrbitalTurret: 8.0,  # sniper (rajada de plasma)
-            RepairDrone: 10.0,  # suporte (cura aliados)
-            SquareMinionBoss: 12.0,
+            # OrbitalTurret: 8.0,  # sniper (rajada de plasma)
+            # RepairDrone: 10.0,  # suporte (cura aliados)
+            # SquareMinionBoss: 12.0,
         },
         enemies_to_clear=40,
         boss_type=GiantMeteorBoss,

@@ -1215,7 +1215,20 @@ class EnemySpawner:
     def _spawn_stealth_fighter(
         self, entity_manager: "EntityManager", is_side_scroll: bool
     ) -> bool:
-        x, y = self._entry_position(StealthFighter.W, StealthFighter.H, is_side_scroll)
+        # Sentinela de borda: entra por uma das LATERAIS (top-down) ou pelo
+        # topo/base (side-scroll), começando logo fora da tela para deslizar até
+        # a parede. O eixo de patrulha recebe uma posição aleatória.
+        size = StealthFighter.SIZE
+        sw, sh = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+        margin = random.uniform(8.0, 40.0)
+        if is_side_scroll:
+            # Paredes = topo/base; patrulha no eixo X.
+            y = -size - margin if random.random() < 0.5 else sh + margin
+            x = random.uniform(StealthFighter.EDGE_MARGIN, sw - StealthFighter.EDGE_MARGIN)
+        else:
+            # Paredes = laterais; patrulha no eixo Y.
+            x = -size - margin if random.random() < 0.5 else sw + margin
+            y = random.uniform(StealthFighter.EDGE_MARGIN, sh - StealthFighter.EDGE_MARGIN)
         fighter = StealthFighter(
             x,
             y,

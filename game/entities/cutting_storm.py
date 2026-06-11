@@ -72,10 +72,6 @@ class _VortexParticle:
         self.is_fragment = is_fragment
         self.img_idx = img_idx
 
-    @property
-    def dead(self) -> bool:
-        return self.life <= 0.0
-
     def update(self, dt: float, cx: float, cy: float, state: _DustVortexState, gust_progress: float, ground_y: float):
         self.life -= dt
         
@@ -124,19 +120,34 @@ class CuttingStorm:
     RADIUS: Final = 64
     DAMAGE_RADIUS: Final = 58.0
     GUST_RADIUS: Final = 48.0
-    
+    # Altura da coluna da rajada — compartilhada pelo dano (blasts) e pelo
+    # pilar visual, para que o hitbox nunca exceda o telegrama desenhado.
+    PILLAR_MAX_HEIGHT: Final = 580.0
+
+    # Dano a outros inimigos pego pela coluna/base (ver _apply_damage_to_enemies).
+    # Calibrado para detonar minas/Geodos (HP 50) quando a coluna fica sob eles
+    # durante a rajada: ~1 hit a cada ENEMY_HIT_COOLDOWN, então ~5 hits (~0.75s)
+    # zeram 50 HP. Inimigos leves (mage/glider, HP 20–30) são varridos; tanques
+    # (sentry 80, robot 200) sobrevivem a uma passagem. Ajuste aqui para mudar o
+    # quanto o vento "limpa" a tela.
+    ENEMY_DAMAGE: Final = 10
+    ENEMY_HIT_COOLDOWN: Final = 0.15
+
     # Movimento
     MOVE_SPEED: Final = 115.0
-    
+
     # Timing
     GUST_INTERVAL: Final = (3.5, 6.0)
     GUST_DURATION: Final = 2.4
     GUST_WARNING_TIME: Final = 0.7
     DISSIPATION_DURATION: Final = 1.2
-    
+
     # Assets
     FRAGMENT_SUBDIR = "Ice_Golem_Cristal/Fragmentos"
     _fragment_sprites: List[pygame.Surface] = []
+    # Cache de surfaces de pixel (size, cor) reusadas no draw — evita alocar
+    # uma Surface por partícula por frame (§7). Alpha varia via set_alpha.
+    _pixel_cache: dict[tuple[int, tuple[int, int, int]], pygame.Surface] = {}
 
     def __init__(
         self,
@@ -151,12 +162,15 @@ class CuttingStorm:
         self.w = self.RADIUS * 2
         self.h = self.RADIUS * 2
         # Ground_y alinhado para que a base do ciclone toque o chão
-        self.ground_y = screen_h - 40.0
+        self.ground_y = screen_h - 5.0
         
         self.x = float(x if x is not None else screen_w + 120)
-        # Ajusta y para que o centro da base (layer 0) fique rente ao ground_y
+        # `y` recebido do spawner é ignorado de propósito: o vórtice é colado ao
+        # chão, então o centro da base fica sempre rente ao ground_y.
         self.y = self.ground_y - self.RADIUS
-        
+
+        # Guardado por simetria com os outros inimigos (spawner passa por kwarg);
+        # o vórtice se move só na horizontal, então não altera comportamento.
         self.side_scroll = side_scroll
         self.dead = False
         self.active = True
@@ -213,11 +227,16 @@ class CuttingStorm:
         blasts = self.update(ctx.sdt)
         if blasts:
             ctx.new_area_blasts.extend(blasts)
-            self._apply_damage_to_enemies(blasts, ctx.other_enemies, ctx.dt)
+            self._apply_damage_to_enemies(blasts, ctx.other_enemies, ctx.sdt)
 
-    def _apply_damage_to_enemies(self, blasts: list[tuple[float, float, float]], others: list[Any], dt: float):
+    def _apply_damage_to_enemies(self, blasts: list[tuple[float, float, float]], others: list[Any], sdt: float):
+        # Dano ambiental: o vórtice fere outros inimigos por contato direto
+        # (`take_damage`), NÃO pelo roteador `apply_hit`/`HitResult` (§8). É
+        # deliberado — como hazard, não concede pontos, explosão de morte nem
+        # som de hit a quem ele varre; só empurra o dano cru. `sdt` mantém o
+        # cooldown coerente com slow-motion/EMP, como o resto do update.
         for eid in list(self._enemy_hit_cooldown.keys()):
-            self._enemy_hit_cooldown[eid] -= dt
+            self._enemy_hit_cooldown[eid] -= sdt
             if self._enemy_hit_cooldown[eid] <= 0:
                 del self._enemy_hit_cooldown[eid]
 
@@ -225,20 +244,19 @@ class CuttingStorm:
             for en in others:
                 if en is self or getattr(en, "dead", False):
                     continue
-                
+
                 eid = id(en)
                 if eid in self._enemy_hit_cooldown:
                     continue
 
-                try:
-                    ecx, ecy, er = en.collision_circle()
-                    dist_sq = (bx - ecx)**2 + (by - ecy)**2
-                    if dist_sq < (br + er)**2:
-                        if hasattr(en, "take_damage"):
-                            en.take_damage(1)
-                            self._enemy_hit_cooldown[eid] = 0.15
-                except (AttributeError, TypeError):
+                if not (hasattr(en, "collision_circle") and hasattr(en, "take_damage")):
                     continue
+
+                ecx, ecy, er = en.collision_circle()
+                dist_sq = (bx - ecx) ** 2 + (by - ecy) ** 2
+                if dist_sq < (br + er) ** 2:
+                    en.take_damage(self.ENEMY_DAMAGE)
+                    self._enemy_hit_cooldown[eid] = self.ENEMY_HIT_COOLDOWN
 
     def update(self, dt: float) -> list[tuple[float, float, float]]:
         self._anim_time += dt
@@ -265,10 +283,18 @@ class CuttingStorm:
             warn_frac = self.GUST_WARNING_TIME / self.GUST_DURATION
             if progress > warn_frac:
                 growth = (progress - warn_frac) / (1.0 - warn_frac)
-                num_segments = 7
-                for i in range(1, num_segments):
-                    h_off = i * 120.0 * growth * 2.2
+                # Coluna contígua: passo < 2*raio garante sobreposição entre
+                # blasts (sem buracos). Topo limitado a PILLAR_MAX_HEIGHT, a
+                # mesma altura do pilar visual — o hitbox não passa do telegrama.
+                column_h = self.PILLAR_MAX_HEIGHT * growth
+                step = self.GUST_RADIUS * 1.5
+                h_off = step
+                while h_off <= column_h:
                     blasts.append((cx, cy - h_off, self.GUST_RADIUS))
+                    h_off += step
+                # Tampa o topo exato da coluna para cobrir a sobra < step.
+                if column_h > 0.0:
+                    blasts.append((cx, cy - column_h, self.GUST_RADIUS))
             if self._state_timer <= 0:
                 self._state = _DustVortexState.DISSIPATING
                 self._state_timer = self.DISSIPATION_DURATION
@@ -311,15 +337,26 @@ class CuttingStorm:
             idx = random.randint(0, len(self._fragment_sprites) - 1) if self._fragment_sprites else 0
             self._particles.append(_VortexParticle(cx, cy, orbit, is_frag, idx))
 
+    @classmethod
+    def _pixel_surf(cls, size: int, color: tuple[int, int, int]) -> pygame.Surface:
+        """Surface de pixel reutilizável por (tamanho, cor). Alpha vem por
+        `set_alpha` no draw, então a mesma surface serve a qualquer partícula."""
+        key = (size, color)
+        surf = cls._pixel_cache.get(key)
+        if surf is None:
+            surf = pygame.Surface((size, size))
+            surf.fill(color)
+            cls._pixel_cache[key] = surf
+        return surf
+
     def draw(self, surface: pygame.Surface) -> None:
         cx, cy = self._center
         self._draw_telegraph_body(surface, cx, cy)
         for p in self._particles:
             alpha = int(255 * (p.life / p.max_life))
             if not p.is_fragment:
-                color = (*p.color, alpha)
-                p_surf = pygame.Surface((p.size, p.size), pygame.SRCALPHA)
-                p_surf.fill(color)
+                p_surf = self._pixel_surf(p.size, p.color)
+                p_surf.set_alpha(alpha)
                 surface.blit(p_surf, (int(p.x), int(p.y)))
             else:
                 if self._fragment_sprites:
@@ -379,7 +416,7 @@ class CuttingStorm:
         if is_gusting or is_dissipating:
             progress = 1.0 if is_dissipating else (1.0 - (self._state_timer / self.GUST_DURATION))
             num_pillar_layers = 22
-            max_h = 580.0 * progress
+            max_h = self.PILLAR_MAX_HEIGHT * progress
             for i in range(num_pillar_layers):
                 f = i / num_pillar_layers
                 if f > progress and not is_dissipating:
@@ -401,8 +438,10 @@ class CuttingStorm:
                     surface.blit(arc_surf, rect_col.topleft)
                     if i % 3 == 0:
                         line_col = (*pillar_color, int(alpha_col * 0.7))
-                        lx = random.randint(-w_col//2, w_col//2)
-                        ly_len = random.randint(10, 25)
+                        # Flicker derivado de _anim_time (não random): draw fica
+                        # reprodutível e não consome do RNG global (§3).
+                        lx = int(math.sin(t_col * 2.3 + i) * (w_col * 0.5))
+                        ly_len = int(17 + 8 * math.sin(t_col * 1.7 + i * 2.0))
                         pygame.draw.line(surface, line_col, (int(cx + x_osc + lx), int(y_pos)), (int(cx + x_osc + lx), int(y_pos - ly_len)), 1)
 
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
