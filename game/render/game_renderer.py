@@ -149,6 +149,10 @@ class GameRenderer:
             atmosphere_progress=frame.atmosphere_progress,
         )
 
+        # 1b. Escurecimento de fundo em luta de boss: aplicado sobre o background
+        # e ANTES das entidades, então só o fundo escurece (gameplay segue legível).
+        frame.boss_backdrop_dim.draw(self.game_surface)
+
         # 2. Entidades
         current_fps = self.r.current_fps if self.r.current_fps > 0 else 60.0
         intro_active = bool(
@@ -236,6 +240,10 @@ class GameRenderer:
 
         # 9. Blit final com Screen Shake
         surface.blit(self.game_surface, self._compute_shake_offset(frame))
+
+        # 9b. Vinheta de dano (overlay de borda sobre mundo + HUD, abaixo dos
+        # avisos). Early-out interno quando não há nada visível.
+        frame.damage_vignette.draw(surface)
 
         # 10. Warning de Boss
         warning_timer = frame.boss_controller.warning_timer

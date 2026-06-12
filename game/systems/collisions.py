@@ -1626,10 +1626,13 @@ class Collisions:
         self,
         ship: Ship,
         orbs: list[OrbitalEnergyOrb],
+        entity_manager: "EntityManager",
         grid: "SpatialGrid[Any] | None" = None,
     ) -> bool:
         """Contato de um orbe com a nave: dano à nave e o orbe morre SEM virar
-        campo (`landed=False`). Espelha `energy_orbs_vs_ship`."""
+        campo (`landed=False`). Espelha `energy_orbs_vs_ship`, mas também solta um
+        estouro de energia no ponto de impacto (feedback visual), como acontece
+        quando o orbe é destruído por tiro."""
         if ship.invuln > 0:
             return False
         ship_rect = ship.rect
@@ -1646,16 +1649,25 @@ class Collisions:
                     and not orb.dead
                     and ship_rect.colliderect(orb.rect)
                 ):
-                    orb.dead = True
-                    orb.landed = False
+                    self._burst_orbital_orb(orb, entity_manager)
                     return True
             return False
         for orb in orbs:
             if not orb.dead and ship_rect.colliderect(orb.rect):
-                orb.dead = True
-                orb.landed = False
+                self._burst_orbital_orb(orb, entity_manager)
                 return True
         return False
+
+    @staticmethod
+    def _burst_orbital_orb(
+        orb: OrbitalEnergyOrb, entity_manager: "EntityManager"
+    ) -> None:
+        """Mata o orbe no contato (sem virar campo) e solta o estouro de energia."""
+        orb.dead = True
+        orb.landed = False
+        entity_manager.spawn_explosion(
+            orb.x, orb.y, size=22, explosion_type=ExplosionType.CYBER
+        )
 
     def electric_fields_vs_ships(
         self,

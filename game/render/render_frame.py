@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     from ..core.upgrades import ActiveUpgrade
     from ..entities.revival_beacon import RevivalBeacon
     from ..entities.ship import Ship
+    from .boss_backdrop_dim import BossBackdropDim
+    from .damage_vignette import DamageVignette
     from ..scenes.playing import GameState, ThrusterParticle
     from ..systems.boss_fight_controller import BossFightController
     from ..systems.entity_manager import EntityManager
@@ -93,6 +95,14 @@ class RenderFrame:
     ship: "Ship"
     entity_manager: "EntityManager"
     boss_controller: "BossFightController"
+
+    # Vinheta de dano (overlay de HUD). Renderer só chama `draw()`; estado é
+    # mutado na cena (trigger/update), nunca aqui.
+    damage_vignette: "DamageVignette"
+
+    # Escurecimento de fundo em lutas de boss. Renderer só chama `draw()` (após o
+    # background); estado é mutado na cena (update).
+    boss_backdrop_dim: "BossBackdropDim"
 
     # Multiplayer: naves adicionais (P2 em diante) renderizadas após `ship`.
     # Vazio em single-player. Renderer apenas draw()-a; não inspeciona estado.

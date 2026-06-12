@@ -59,6 +59,8 @@ from ..entities.ship import Ship
 from ..entities.spike_boss_laser import SpikeBossLaser
 from ..events import game_events as events
 from ..render.game_renderer import GameRenderer
+from ..render.boss_backdrop_dim import BossBackdropDim
+from ..render.damage_vignette import DamageVignette
 from ..render.render_frame import P2HudInfo, RenderFrame
 from ..systems.boss_fight_controller import BossFightController
 from ..systems.cheat_input import CheatBuffer
@@ -276,6 +278,11 @@ class PlayingScene(Scene):
 
         self.screen_shake_timer: float = 0.0
         self.screen_shake_intensity: int = Config.SCREEN_SHAKE_NORMAL
+        # Vinheta de dano (feedback de HUD ao tomar hit). Estado na cena, igual ao
+        # screen shake; atualizada no update e desenhada pelo GameRenderer.
+        self.damage_vignette = DamageVignette()
+        # Escurecimento de fundo durante lutas de boss (padrão p/ todos os bosses).
+        self.boss_backdrop_dim = BossBackdropDim()
         self.warning_font = get_font(Config.WARNING_FONT_SIZE)
 
         self.time_stop_timer: float = 0.0
@@ -1310,6 +1317,19 @@ class PlayingScene(Scene):
         else:
             self.screen_shake_timer = max(0.0, self.screen_shake_timer - dt)
 
+        self.damage_vignette.update(dt, self._primary_health_fraction())
+
+        # Escurecimento de fundo: ativo enquanto o boss vive e luta (exceto durante
+        # a cutscene de entrada, que tem seu próprio dim de tela cheia).
+        boss = self.entity_manager.boss
+        boss_dim_active = bool(
+            boss is not None
+            and not boss.dead
+            and self.boss_controller.active
+            and not getattr(boss, "is_intro_active", False)
+        )
+        self.boss_backdrop_dim.update(dt, boss_dim_active)
+
         if self.transitions.update_level_transition_wait(
             dt, self._all_animations_finished()
         ):
@@ -1975,9 +1995,10 @@ class PlayingScene(Scene):
             if ship.invuln > 0:
                 orb_hit.apply_effect(ship)
 
-        # Contato com orbe da Torreta Orbital: dano; o orbe morre sem virar campo.
+        # Contato com orbe da Torreta Orbital: dano; o orbe morre sem virar campo
+        # e solta um estouro de energia no impacto (feedback visual).
         if self.collisions.orbital_orbs_vs_ship(
-            ship, em.orbital_orbs, em.enemy_projectile_grid
+            ship, em.orbital_orbs, em, em.enemy_projectile_grid
         ):
             self._handle_ship_hit(slot)
 
@@ -2194,6 +2215,15 @@ class PlayingScene(Scene):
     # Dano à nave / game over
     # ------------------------------------------------------------------
 
+    def _slot_health_fraction(self, slot: PlayerSlot) -> float:
+        """Vida restante do slot normalizada em [0,1] (para a vinheta de dano)."""
+        ship = slot.ship
+        max_lives = max(1, getattr(ship, "max_lives", 0) or slot.lives or 1)
+        return max(0.0, min(1.0, slot.lives / max_lives))
+
+    def _primary_health_fraction(self) -> float:
+        return self._slot_health_fraction(self.roster.primary())
+
     def _handle_ship_hit(self, slot: Optional[PlayerSlot] = None) -> None:
         """Processa um acerto na nave do slot: god mode, escudo, vidas, game over.
 
@@ -2232,6 +2262,11 @@ class PlayingScene(Scene):
             return
 
         self.change_lives_for(slot, -1)
+        # Vinheta de dano: dispara o feedback de borda. A intensidade já escala
+        # com a vida restante do slot atingido (vida baixa "dói" mais).
+        self.damage_vignette.trigger(
+            damage=1, health_fraction=self._slot_health_fraction(slot)
+        )
         self.level_controller.notify_damage_taken()
         if slot.lives <= 0:
             # Marca o slot como morto — filtragem em alive_slots() impede que
@@ -2664,6 +2699,8 @@ class PlayingScene(Scene):
             ship=self.ship,
             entity_manager=self.entity_manager,
             boss_controller=self.boss_controller,
+            damage_vignette=self.damage_vignette,
+            boss_backdrop_dim=self.boss_backdrop_dim,
             extra_ships=tuple(
                 slot.ship for slot in self.roster.all_slots()[1:] if not slot.is_dead
             ),
