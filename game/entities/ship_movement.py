@@ -45,6 +45,9 @@ class ShipMovement:
             return False
         if ship.dash_cooldown_left > 0.0 or ship.is_dashing:
             return False
+        # Paralisia elétrica trava o dash também.
+        if ship.is_stunned:
+            return False
 
         if current_move_vec.length_squared() > 0:
             direction = current_move_vec.normalize()
@@ -110,10 +113,16 @@ class ShipMovement:
         ship = self.ship
 
         # Fantasma em dash: força velocidade alta na direção travada e ignora input.
+        # Dash tem prioridade sobre a paralisia (i-frames já em curso).
         if ship.is_dashing:
             dash_speed = ship.speed * ship.dash_speed_mult
             ship.x += ship.dash_dir.x * dash_speed * dt
             ship.y += ship.dash_dir.y * dash_speed * dt
+            self._keep_in_bounds(is_side_scroll)
+            return
+
+        # Descarga elétrica: movimento completamente travado durante a paralisia.
+        if ship.is_stunned:
             self._keep_in_bounds(is_side_scroll)
             return
 

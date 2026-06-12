@@ -41,6 +41,7 @@ from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
 from ..entities.Inimigos_Tema_Cidade.police_crash import PoliceCrash
 from ..entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
 from ..entities.Inimigos_Tema_Cidade.tank_meltdown import TankMeltdown
+from ..entities.electric_field_zone import ElectricFieldZone
 from ..entities.fire_zone import FireZone
 from ..entities.floating_score import FloatingScore
 from ..entities.formation import Formation
@@ -58,6 +59,7 @@ from ..entities.mountain_mage import (
     MountainStalagmite,
 )
 from ..entities.mountain_propeller import MountainPropeller
+from ..entities.orbital_energy_orb import OrbitalEnergyOrb
 from ..entities.mountain_serpent_boss import (
     MountainSerpentBoss,
     SerpentBlock,
@@ -139,6 +141,11 @@ class EntityManager:
         self.mine_explosions: list[MineExplosion] = []
         self.ice_poison_zones: list[IcePoisonZone] = []
         self.fire_zones: list[FireZone] = []
+        # Torreta Orbital: orbes destrutíveis em voo e campos elétricos que eles
+        # deixam ao chegar. Listas próprias (como energy_orbs/fire_zones) para
+        # NÃO contarem como hostis na progressão de fase.
+        self.orbital_orbs: list[OrbitalEnergyOrb] = []
+        self.electric_fields: list[ElectricFieldZone] = []
         self.mini_ship_bullets: list[MiniShipBullet] = []
         self.chain_lightnings: list[ChainLightning] = []
         self.orbital_shields: list[OrbitalShield] = []
@@ -577,6 +584,9 @@ class EntityManager:
         for o in self.energy_orbs:
             if not o.dead:
                 self.enemy_projectile_grid.insert_from_rect(o)
+        for o in self.orbital_orbs:
+            if not o.dead:
+                self.enemy_projectile_grid.insert_from_rect(o)
         for b in self.neon_bolts:
             if not b.dead:
                 self.enemy_projectile_grid.insert_from_rect(b)
@@ -654,6 +664,7 @@ class EntityManager:
         new_eye_lasers: list[EyeLaser] = list(ctx_emissions.new_eye_lasers)
         self.energy_orbs.extend(ctx_emissions.new_energy_orbs)
         self.neon_bolts.extend(ctx_emissions.new_neon_bolts)
+        self.orbital_orbs.extend(ctx_emissions.new_orbital_orbs)
         self.enemies.extend(ctx_emissions.new_enemies)
         # Inimigos "atrás": inseridos no início p/ desenhar antes (sob) os demais.
         if ctx_emissions.new_enemies_behind:
@@ -666,6 +677,7 @@ class EntityManager:
 
         self._update_mountain_propellers(dt)
         self._update_energy_orbs(dt)
+        self._update_orbital_orbs(dt)
         self._check_alien_collisions()
         self.alien_bullets.extend(new_alien_bullets)
         self.eye_lasers.extend(new_eye_lasers)
@@ -918,6 +930,27 @@ class EntityManager:
         for o in self.energy_orbs:
             o.update(dt)
 
+    def _update_orbital_orbs(self, dt: float) -> None:
+        """Tick dos orbes da Torreta Orbital; converte os que chegaram em campo.
+
+        Orbe que alcança a posição memorizada (`landed`) vira um
+        `ElectricFieldZone`; orbe destruído por tiro do jogador morre sem campo.
+        Os campos são tickados aqui também (dano/debuff são aplicados na cena).
+        """
+        for o in self.orbital_orbs:
+            o.update(dt)
+            if o.landed:
+                self.spawn_electric_field(o.x, o.y, o.field_radius)
+
+        for fz in self.electric_fields:
+            fz.update(dt)
+
+        self._filter_dead_inplace(self.orbital_orbs)
+        self._filter_dead_inplace(self.electric_fields)
+
+    def spawn_electric_field(self, x: float, y: float, radius: int) -> None:
+        self.electric_fields.append(ElectricFieldZone(x, y, radius))
+
     def _update_environment(self, dt: float, enemy_dt: float) -> None:
         """Elementos dinâmicos: boss_squares, boulders/debris, bombs, towers, mines, black holes."""
         sw, sh = self._screen_size
@@ -1128,6 +1161,8 @@ class EntityManager:
             zone.draw(surface)
         for zone in self.fire_zones:
             zone.draw(surface)
+        for zone in self.electric_fields:
+            zone.draw(surface)
 
         # 4. Desenhar projéteis e efeitos de impacto (devem ficar SOBRE os inimigos)
         lists: list[list[Any]] = [
@@ -1135,6 +1170,7 @@ class EntityManager:
             self.homing_bullets,
             self.alien_bullets,
             self.energy_orbs,
+            self.orbital_orbs,
             self.player_lasers,
             self.mini_ship_bullets,
             self.eye_lasers,
@@ -1426,6 +1462,8 @@ class EntityManager:
         self._filter_dead_inplace(self.alien_bullets)
         self._filter_dead_inplace(self.serpent_bullets)
         self._filter_dead_inplace(self.energy_orbs)
+        self._filter_dead_inplace(self.orbital_orbs)
+        self._filter_dead_inplace(self.electric_fields)
         self._filter_dead_inplace(self.boss_lasers)
         self._filter_dead_inplace(self.player_lasers)
         self._filter_dead_inplace(self.cacador_lasers)
@@ -1517,6 +1555,8 @@ class EntityManager:
         self.mine_explosions.clear()
         self.ice_poison_zones.clear()
         self.fire_zones.clear()
+        self.orbital_orbs.clear()
+        self.electric_fields.clear()
         self.mountain_propellers.clear()
         self.explosive_effects.clear()
         self.air_strike_bombs.clear()
@@ -1561,6 +1601,8 @@ class EntityManager:
         self.mine_explosions.clear()
         self.ice_poison_zones.clear()
         self.fire_zones.clear()
+        self.orbital_orbs.clear()
+        self.electric_fields.clear()
         self.mountain_propellers.clear()
         self.boss = None
         # Mini-naves são limpas completamente; a cena reconstrói o estado

@@ -21,7 +21,9 @@ from ..entities.fire_zone import FireZone
 from ..entities.floating_score import FloatingScore
 from ..entities.homing_bullet import HomingBullet
 from ..entities.Inimigos_Tema_Cidade.neon_bolt import NeonBolt
+from ..entities.electric_field_zone import ElectricFieldZone
 from ..entities.ice_poison_zone import IcePoisonZone
+from ..entities.orbital_energy_orb import OrbitalEnergyOrb
 from ..entities.mine_explosion import MineExplosion
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..entities.player_laser import PlayerLaser
@@ -1569,6 +1571,121 @@ class Collisions:
                 orb.dead = True
                 return orb
         return None
+
+    def player_shots_vs_orbital_orbs(
+        self,
+        orbs: list[OrbitalEnergyOrb],
+        projectiles: Sequence[Any],
+        player_lasers: Sequence[PlayerLaser],
+        entity_manager: "EntityManager",
+    ) -> int:
+        """Tiros da nave destroem os orbes da Torreta Orbital antes que cheguem.
+
+        Orbes são poucos (≤ ~6 em tela) → scan linear é mais barato que a grid
+        aqui (§8). Balas/mini-balas testam por rect; lasers por distância
+        ponto-segmento contra a linha do feixe. Retorna nº de orbes destruídos.
+        """
+        if not orbs:
+            return 0
+        destroyed = 0
+        for orb in orbs:
+            if orb.dead:
+                continue
+            orb_rect = orb.rect
+            for b in projectiles:
+                if getattr(b, "dead", False):
+                    continue
+                if orb_rect.colliderect(b.rect):
+                    orb.take_damage(getattr(b, "damage", 1))
+                    entity_manager.spawn_explosion(
+                        orb.x, orb.y, size=10, explosion_type=ExplosionType.CYBER
+                    )
+                    if not getattr(b, "piercing", False):
+                        b.dead = True
+                    if orb.dead:
+                        break
+            if orb.dead:
+                destroyed += 1
+                continue
+
+            ocx, ocy, orr = orb.collision_circle()
+            for laser in player_lasers:
+                if laser.dead or laser.state != "alive" or laser.w <= 0:
+                    continue
+                (ax, ay), (bx, by) = laser.get_collision_line()
+                reach = laser.w / 2 + orr
+                if _point_segment_dist_sq(ocx, ocy, ax, ay, bx, by) <= reach * reach:
+                    orb.take_damage(laser.damage)
+                    if orb.dead:
+                        break
+            if orb.dead:
+                destroyed += 1
+        return destroyed
+
+    def orbital_orbs_vs_ship(
+        self,
+        ship: Ship,
+        orbs: list[OrbitalEnergyOrb],
+        grid: "SpatialGrid[Any] | None" = None,
+    ) -> bool:
+        """Contato de um orbe com a nave: dano à nave e o orbe morre SEM virar
+        campo (`landed=False`). Espelha `energy_orbs_vs_ship`."""
+        if ship.invuln > 0:
+            return False
+        ship_rect = ship.rect
+        if grid is not None:
+            pad = CollisionConstants.SPATIAL_QUERY_PADDING
+            for orb in grid.query(
+                ship_rect.x - pad,
+                ship_rect.y - pad,
+                ship_rect.width + pad * 2,
+                ship_rect.height + pad * 2,
+            ):
+                if (
+                    isinstance(orb, OrbitalEnergyOrb)
+                    and not orb.dead
+                    and ship_rect.colliderect(orb.rect)
+                ):
+                    orb.dead = True
+                    orb.landed = False
+                    return True
+            return False
+        for orb in orbs:
+            if not orb.dead and ship_rect.colliderect(orb.rect):
+                orb.dead = True
+                orb.landed = False
+                return True
+        return False
+
+    def electric_fields_vs_ships(
+        self,
+        fields: list[ElectricFieldZone],
+        ships: Sequence[Ship],
+        _entity_manager: "EntityManager",
+    ) -> set[int]:
+        """Campos elétricos vs. naves: dano contínuo + debuff de paralisia.
+
+        Só a fase ativa (`damaging`) fere — `expand` é telegrama e `dissipate` é
+        eco. O debuff é aplicado a quem encosta (mesmo em i-frames); o dano
+        respeita invuln e a cadência da zona. Retorna `id(ship)` atingidos.
+        """
+        ship_hits: set[int] = set()
+        for zone in fields:
+            if zone.dead or not zone.damaging:
+                continue
+            for ship in ships:
+                scx = ship.x + ship.w / 2
+                scy = ship.y + ship.h / 2
+                if not zone.in_zone(scx, scy):
+                    continue
+                ship.apply_electric_debuff()
+                if ship.invuln > 0:
+                    continue
+                ship_eid = id(ship)
+                if zone.can_damage(ship_eid):
+                    zone.register_hit(ship_eid)
+                    ship_hits.add(ship_eid)
+        return ship_hits
 
     def eye_laser_vs_ship(self, ship: Ship, eye_lasers: list[EyeLaser]) -> bool:
         if ship.invuln > 0:

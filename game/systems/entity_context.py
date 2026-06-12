@@ -43,6 +43,10 @@ class EnemyUpdateContext:
     new_eye_lasers: List[Any] = field(default_factory=_empty_any_list)
     new_energy_orbs: List[Any] = field(default_factory=_empty_any_list)
     new_neon_bolts: List[Any] = field(default_factory=_empty_any_list)
+    # Orbes da Torreta Orbital: projéteis destrutíveis que memorizam a posição
+    # do jogador e viram `ElectricFieldZone` ao chegar. O EntityManager drena
+    # para `orbital_orbs` e orquestra a conversão em campo.
+    new_orbital_orbs: List[Any] = field(default_factory=_empty_any_list)
     new_enemies: List[Any] = field(default_factory=_empty_any_list)
     # Inimigos que devem ser desenhados ATRÁS dos demais (inseridos no início da
     # lista) — ex.: a caixa de carga do Cargueiro, que emerge por trás dele.

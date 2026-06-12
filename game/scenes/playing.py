@@ -1609,6 +1609,16 @@ class PlayingScene(Scene):
         destroyed += laser_destroyed
         score_events.extend(laser_events)
 
+        # Orbes da Torreta Orbital são destrutíveis pelos tiros da nave (balas e
+        # lasers), impedindo que cheguem ao ponto memorizado e virem campo.
+        if self.entity_manager.orbital_orbs:
+            self.collisions.player_shots_vs_orbital_orbs(
+                self.entity_manager.orbital_orbs,
+                all_player_projectiles,
+                self.entity_manager.player_lasers,
+                self.entity_manager,
+            )
+
         cacador_gain, cacador_destroyed, cacador_events = (
             self.collisions.cacador_lasers_vs_enemies(
                 self.entity_manager.cacador_lasers,
@@ -1718,6 +1728,15 @@ class PlayingScene(Scene):
             destroyed += fz_dest
             score_events.extend(fz_events)
             ship_hits |= fz_ship_hits
+
+        # Campos elétricos deixados pelos orbes da Torreta Orbital: dano contínuo
+        # + debuff de paralisia a quem encosta. Não pontuam nem ferem inimigos.
+        if self.entity_manager.electric_fields:
+            ship_hits |= self.collisions.electric_fields_vs_ships(
+                self.entity_manager.electric_fields,
+                alive_ships,
+                self.entity_manager,
+            )
 
         return gain, destroyed, score_events, ship_hits
 
@@ -1955,6 +1974,12 @@ class PlayingScene(Scene):
             self._handle_ship_hit(slot)
             if ship.invuln > 0:
                 orb_hit.apply_effect(ship)
+
+        # Contato com orbe da Torreta Orbital: dano; o orbe morre sem virar campo.
+        if self.collisions.orbital_orbs_vs_ship(
+            ship, em.orbital_orbs, em.enemy_projectile_grid
+        ):
+            self._handle_ship_hit(slot)
 
         from ..entities.boss_laser import BossLaser
 

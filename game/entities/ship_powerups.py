@@ -166,6 +166,41 @@ class ShipPowerups:
         ship.invert_controls_timer = max(0.0, ship.invert_controls_timer - dt)
         ship.speed_modifier_timer = max(0.0, ship.speed_modifier_timer - dt)
 
+        self._update_electric_debuff(dt)
+
+    def _update_electric_debuff(self, dt: float) -> None:
+        """Debuff elétrico da Torreta Orbital: descarga periódica que paralisa.
+
+        Enquanto "carregada", a nave rola a cada `ELECTRIC_DISCHARGE_INTERVAL`
+        uma chance `ELECTRIC_DISCHARGE_CHANCE` de uma descarga que trava o
+        movimento por `ELECTRIC_STUN_MIN..MAX` segundos.
+        """
+        ship = self.ship
+
+        # Paralisia (descarga ativa) corre sempre, independente do debuff base.
+        if ship.electric_stun_timer > 0.0:
+            ship.electric_stun_timer = max(0.0, ship.electric_stun_timer - dt)
+
+        if ship.electric_debuff_timer <= 0.0:
+            ship._electric_discharge_roll_t = 0.0
+            return
+
+        ship.electric_debuff_timer = max(0.0, ship.electric_debuff_timer - dt)
+
+        # Não rola nova descarga enquanto uma paralisia já está em curso.
+        if ship.is_stunned:
+            return
+
+        ship._electric_discharge_roll_t += dt
+        interval = ship.ELECTRIC_DISCHARGE_INTERVAL
+        while ship._electric_discharge_roll_t >= interval:
+            ship._electric_discharge_roll_t -= interval
+            if random.random() < ship.ELECTRIC_DISCHARGE_CHANCE:
+                ship.electric_stun_timer = random.uniform(
+                    ship.ELECTRIC_STUN_MIN, ship.ELECTRIC_STUN_MAX
+                )
+                break
+
     def update_orbital_lasers(
         self, dt: float, entity_manager: Optional["EntityManager"]
     ) -> None:

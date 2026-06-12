@@ -69,6 +69,14 @@ class Ship:
         self.speed_modifier_timer: float = 0.0  # Nevasca: congelamento
         self.wind_slow_factor: float = 1.0  # Vento: lentidão
 
+        # Debuff elétrico (campo da Torreta Orbital). Enquanto `electric_debuff_timer`
+        # corre, há chance periódica de uma descarga que trava o movimento por
+        # `electric_stun_timer` segundos. São estados distintos com feedback visual
+        # próprio: "carregado" (arcos crepitando) vs "paralisado" (movimento travado).
+        self.electric_debuff_timer: float = 0.0   # "carregado" (10s típico)
+        self.electric_stun_timer: float = 0.0      # movimento travado (até 3s)
+        self._electric_discharge_roll_t: float = 0.0  # acumulador da rolagem de descarga
+
         # Carregar imagem da nave
         try:
             from ..core.assets import BASE_DIR, get_image
@@ -838,6 +846,30 @@ class Ship:
     def recover_life(self, amount: int = 1) -> None:
         """Recupera vidas da nave (respeitando o máximo inicial)."""
         self.lives = min(self.max_lives, self.lives + amount)
+
+    # ── Debuff elétrico (campo da Torreta Orbital) ──────────────────────────
+    ELECTRIC_DEBUFF_DURATION: float = 10.0
+    ELECTRIC_DISCHARGE_CHANCE: float = 0.15
+    ELECTRIC_DISCHARGE_INTERVAL: float = 0.5  # cadência da rolagem de descarga
+    ELECTRIC_STUN_MIN: float = 1.5
+    ELECTRIC_STUN_MAX: float = 3.0
+
+    def apply_electric_debuff(self, duration: float | None = None) -> None:
+        """Aplica/renova o debuff elétrico (refresh, não acumula)."""
+        self.electric_debuff_timer = max(
+            self.electric_debuff_timer,
+            duration if duration is not None else self.ELECTRIC_DEBUFF_DURATION,
+        )
+
+    @property
+    def is_electrified(self) -> bool:
+        """True enquanto o debuff "carregado" está ativo (pode descarregar)."""
+        return self.electric_debuff_timer > 0.0
+
+    @property
+    def is_stunned(self) -> bool:
+        """True enquanto a descarga trava o movimento da nave."""
+        return self.electric_stun_timer > 0.0
 
     def is_dead(self) -> bool:
         return self.lives <= 0

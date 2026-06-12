@@ -170,6 +170,11 @@ class ShipRenderer:
             )
             surface.blit(image_to_draw, (ship.x + shake_x, ship.y + shake_y))
 
+        # Debuff elétrico (campo da Torreta Orbital): arcos crepitando enquanto
+        # "carregada"; gaiola de raios intensa enquanto a descarga paralisa.
+        if ship.is_electrified or ship.is_stunned:
+            self._draw_electric_debuff(surface)
+
         # Desenhar bolas elétricas orbitais
         if ship.orbital_lasers_active:
             self._draw_orbital_lasers(surface)
@@ -177,6 +182,57 @@ class ShipRenderer:
         # Desenhar partículas de entrada (acima da nave)
         for p in ship.entry_particles:
             pygame.draw.circle(surface, p["color"], (p["x"], p["y"]), p["size"])
+
+    def _draw_electric_debuff(self, surface: pygame.Surface) -> None:
+        """Feedback visual do debuff elétrico, distinto entre os dois estados.
+
+        - "carregada" (`is_electrified`): poucos arcos finos crepitando ao redor
+          — sinal de que a nave está infectada e pode descarregar a qualquer
+          momento;
+        - "paralisada" (`is_stunned`): gaiola densa de raios brancos travando a
+          nave, com núcleo pulsante — leitura inequívoca de movimento bloqueado.
+        """
+        ship = self.ship
+        sprite_w, sprite_h = ship.cached_sprite_size
+        cx = int(ship.x + sprite_w / 2)
+        cy = int(ship.y + sprite_h / 2)
+        base_r = max(sprite_w, sprite_h) // 2 + 4
+
+        cos = math.cos
+        sin = math.sin
+        uniform = random.uniform
+        tau = math.tau
+        draw_lines = pygame.draw.lines
+
+        stunned = ship.is_stunned
+        if stunned:
+            # Gaiola intensa: anel pulsante + muitos arcos brancos curtos.
+            pulse = abs((ship.draw_time * 12) % 2 - 1)
+            ring_r = base_r + int(pulse * 4)
+            pygame.draw.circle(surface, (180, 230, 255), (cx, cy), ring_r, 1)
+            num_arcs = 7
+            arc_colors = ((220, 245, 255), (255, 255, 255))
+            spread = (0.25, 0.7)
+            reach = (4, 11)
+        else:
+            # Crepitação leve: poucos arcos ciano finos.
+            if random.random() > 0.7:
+                return
+            num_arcs = 3
+            arc_colors = ((110, 200, 255), (200, 240, 255))
+            spread = (0.2, 0.6)
+            reach = (2, 7)
+
+        for _ in range(num_arcs):
+            a0 = uniform(0, tau)
+            a1 = a0 + uniform(*spread)
+            mid_a = (a0 + a1) * 0.5
+            mid_r = base_r + uniform(*reach)
+            p0 = (cx + cos(a0) * base_r, cy + sin(a0) * base_r)
+            pm_pt = (cx + cos(mid_a) * mid_r, cy + sin(mid_a) * mid_r)
+            p1 = (cx + cos(a1) * base_r, cy + sin(a1) * base_r)
+            color = arc_colors[random.randint(0, len(arc_colors) - 1)]
+            draw_lines(surface, color, False, [p0, pm_pt, p1], 1)
 
     def _draw_charge_indicator(self, surface: pygame.Surface) -> None:
         """Anel de progresso da carga ao redor da nave (Caçador)."""

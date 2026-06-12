@@ -567,8 +567,8 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
             # Alien: 3.0,
             # EyeEnemy: 6.0,
             # Satellite: 6.0,
-            StealthFighter: 6.0,  # rush (cloak + investida)
-            # OrbitalTurret: 8.0,  # sniper (rajada de plasma)
+            # StealthFighter: 6.0,  # rush (cloak + investida)
+            OrbitalTurret: 8.0,  # sniper (rajada de plasma)
             # RepairDrone: 10.0,  # suporte (cura aliados)
             # SquareMinionBoss: 12.0,
         },
