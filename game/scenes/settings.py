@@ -89,6 +89,14 @@ class SettingsView:
             (5120, 2880, "5K"),
         ]
 
+        # Qualidade visual: seletor de 3 níveis (aplicado ao vivo, sem reinício).
+        self.quality_levels: list[tuple[str, str]] = [
+            ("high", "Alto"),
+            ("medium", "Médio"),
+            ("low", "Baixo"),
+        ]
+        self.selected_quality: str = self.preferences.visual_quality
+
         # Carregar resolução salva das preferências
         saved_res = self.preferences.resolution
         self.selected_resolution_index = 1  # default
@@ -219,6 +227,27 @@ class SettingsView:
 
             resolution_buttons.append(pygame.Rect(x, y, button_w, button_h))
 
+        # Seletor de Qualidade Visual — faixa inferior, centralizado. Própria
+        # seção, sem disputar espaço com os dois cards já cheios.
+        q_label = "Qualidade Visual:"
+        q_label_w = self.item_font.size(q_label)[0]
+        q_btn_w = self._s(90)
+        q_btn_h = self._s(34)
+        q_gap = self._s(10)
+        q_buttons_w = 3 * q_btn_w + 2 * q_gap
+        group_w = q_label_w + self._s(14) + q_buttons_w
+        q_x = (screen_w - group_w) // 2
+        q_y = screen_h - self._s(52)
+        self.layout_rects["quality_label"] = pygame.Rect(
+            q_x, q_y, q_label_w, q_btn_h
+        )
+        quality_buttons: list[pygame.Rect] = []
+        bx = q_x + q_label_w + self._s(14)
+        for _i in range(3):
+            quality_buttons.append(pygame.Rect(bx, q_y, q_btn_w, q_btn_h))
+            bx += q_btn_w + q_gap
+        self.layout_rects["quality_buttons"] = quality_buttons
+
         # Botão de Voltar (Canto inferior esquerdo)
         back_text_width = self.item_font.size("Voltar")[0]
         back_btn_width = back_text_width + self._s(60)
@@ -272,6 +301,7 @@ class SettingsView:
         self.toggles["auto_fire"] = self.preferences.auto_fire
         self.toggles["gamepad_enabled"] = self.preferences.gamepad_enabled
         self.toggles["p1_prefers_keyboard"] = self.preferences.p1_prefers_keyboard
+        self.selected_quality = self.preferences.visual_quality
 
         saved_res = self.preferences.resolution
         for i, (w, h, _) in enumerate(self.available_resolutions):
@@ -412,6 +442,12 @@ class SettingsView:
                     self.show_restart_popup = True
                     return True
 
+            # Botões de Qualidade Visual
+            for i, rect in enumerate(self.layout_rects.get("quality_buttons", [])):
+                if rect.collidepoint(pos):
+                    self._select_quality(self.quality_levels[i][0])
+                    return True
+
             # Toggles
             for key, rect in self.layout_rects["toggles"].items():
                 if rect.collidepoint(pos):
@@ -531,6 +567,11 @@ class SettingsView:
                 self.show_restart_popup = True
                 return True
 
+        for i, rect in enumerate(self.layout_rects.get("quality_buttons", [])):
+            if rect.collidepoint(pos):
+                self._select_quality(self.quality_levels[i][0])
+                return True
+
         for key, rect in self.layout_rects["toggles"].items():
             if rect.inflate(60, 0).collidepoint(pos):
                 # Hitbox inflado horizontalmente cobre rótulo — torna a
@@ -574,6 +615,15 @@ class SettingsView:
                 self._update_volume(key)
                 self.preferences.save()
                 return
+
+    def _select_quality(self, name: str) -> None:
+        """Aplica o nível de qualidade visual ao vivo (sem reinício) e persiste."""
+        from ..core.visual_quality import visual_quality
+
+        self.selected_quality = name
+        self.preferences.visual_quality = name
+        visual_quality.set_from_name(name)
+        self.preferences.save()
 
     def _update_volume(self, key: str):
         volume = self.sliders[key]
@@ -634,6 +684,7 @@ class SettingsView:
         # Desenhar Cards com alpha
         self._draw_audio_card(surface, alpha, offset_y)
         self._draw_controls_card(surface, alpha, offset_y)
+        self._draw_quality_selector(surface, alpha, offset_y)
 
         # Botão Voltar com alpha
         self._draw_button(
@@ -663,6 +714,25 @@ class SettingsView:
         draw_bordered_button(
             surface, rect, text, self.item_font, color, alpha, offset_y
         )
+
+    def _draw_quality_selector(
+        self, surface: pygame.Surface, alpha: int = 255, offset_y: int = 0
+    ):
+        """Desenha o seletor 'Qualidade Visual:' (faixa inferior) com o nível ativo."""
+        label_rect = self.layout_rects["quality_label"]
+        label_surf = self.item_font.render("Qualidade Visual:", True, CUSTOM_GOLD)
+        label_surf.set_alpha(alpha)
+        surface.blit(
+            label_surf,
+            (label_rect.x, label_rect.centery - label_surf.get_height() // 2 + offset_y),
+        )
+
+        buttons = self.layout_rects["quality_buttons"]
+        for i, rect in enumerate(buttons):
+            name, label = self.quality_levels[i]
+            is_selected = name == self.selected_quality
+            color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
+            self._draw_button(surface, rect, label, color, alpha, offset_y)
 
     def _draw_card(
         self,
@@ -1147,6 +1217,10 @@ class SettingsScene(Scene, FadeTransitionMixin):
         for r in self.view.layout_rects.get("toggles", {}).values():
             rects.append(r.inflate(60, 0))
         for r in self.view.layout_rects.get("sliders", {}).values():
+            rects.append(r)
+        for r in cast(
+            List[pygame.Rect], self.view.layout_rects.get("quality_buttons", [])
+        ):
             rects.append(r)
         if "back_button" in self.view.layout_rects:
             rects.append(self.view.layout_rects["back_button"])

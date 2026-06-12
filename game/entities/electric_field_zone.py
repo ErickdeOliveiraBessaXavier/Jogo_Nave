@@ -20,6 +20,7 @@ import random
 
 import pygame
 
+from ..core.visual_quality import visual_quality
 from .zone_base import ZoneBase, ZoneParticle
 
 ELECTRIC_BLUE = (110, 190, 255)
@@ -176,7 +177,8 @@ class ElectricFieldZone(ZoneBase):
         # ~40% a 100% do raio para alcançar tanto o miolo quanto a borda — toda a
         # área lida como energizada, alimentada pelo centro.
         bolt_a = int(200 * intensity * flicker)
-        n = self._bolt_count
+        # Nº de raios simultâneos escala pela Qualidade Visual (efeitos elétricos).
+        n = visual_quality.electric(self._bolt_count)
         base = self._bolt_phase + self.anim_timer * 1.4
         step = math.tau / n
         for k in range(n):
@@ -201,8 +203,8 @@ class ElectricFieldZone(ZoneBase):
                 s, (*color, alpha), (lx - ca, ly - sa), (lx + ca, ly + sa), 2
             )
 
-        # Estática: pixels soltos cintilando dentro do campo.
-        static_count = int(10 * intensity)
+        # Estática: pixels soltos cintilando dentro do campo (escala por qualidade).
+        static_count = visual_quality.electric(int(10 * intensity)) if intensity > 0 else 0
         for _ in range(static_count):
             ang = random.uniform(0.0, math.tau)
             dist = er * math.sqrt(random.random())

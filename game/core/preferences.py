@@ -18,6 +18,9 @@ class UserPreferences:
         self.resolution: Tuple[int, int] = (1280, 720)
         self.fullscreen: bool = True
 
+        # Qualidade visual: "high" | "medium" | "low" (default: high).
+        self.visual_quality: str = "high"
+
         # Áudio — defaults vindos de VOLUME_CONFIG (fonte única de verdade)
         self.music_volume: float = VOLUME_CONFIG["music"]
         self.sfx_volume: float = VOLUME_CONFIG["sfx"]
@@ -64,6 +67,11 @@ class UserPreferences:
 
                 self.fullscreen = data.get("fullscreen", self.fullscreen)
 
+                # Qualidade visual
+                vq = data.get("visual_quality", self.visual_quality)
+                if vq in ("high", "medium", "low"):
+                    self.visual_quality = vq
+
                 # Áudio
                 self.music_volume = float(data.get("music_volume", self.music_volume))
                 self.sfx_volume = float(data.get("sfx_volume", self.sfx_volume))
@@ -91,6 +99,7 @@ class UserPreferences:
             data: Dict[str, Any] = {
                 "resolution": list(self.resolution),
                 "fullscreen": self.fullscreen,
+                "visual_quality": self.visual_quality,
                 "music_volume": self.music_volume,
                 "sfx_volume": self.sfx_volume,
                 "shot_volume": self.shot_volume,
@@ -110,6 +119,7 @@ class UserPreferences:
         """Redefine para os padrões de fábrica."""
         self.resolution = (1280, 720)
         self.fullscreen = True
+        self.visual_quality = "high"
         self.music_volume = VOLUME_CONFIG["music"]
         self.sfx_volume = VOLUME_CONFIG["sfx"]
         self.shot_volume = VOLUME_CONFIG["shots"]

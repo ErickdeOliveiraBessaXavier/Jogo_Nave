@@ -24,6 +24,7 @@ import random
 import pygame
 
 from ..core.config import config as Config
+from ..core.visual_quality import visual_quality
 
 _CORE = (240, 250, 255)
 _MID = (140, 205, 255)
@@ -137,10 +138,13 @@ class OrbitalEnergyOrb:
             self.dead = True
 
     def _update_trail(self, dt: float) -> None:
-        # Emite partículas espaçadas pela distância percorrida.
+        # Emite partículas espaçadas pela distância percorrida. O espaçamento
+        # cresce conforme a Qualidade Visual cai (menos rastro/afterimage), sem
+        # remover o efeito por completo.
+        spacing = self._TRAIL_SPACING / max(0.2, visual_quality.trail_scale)
         self._emit_dist += self._speed * dt
-        while self._emit_dist >= self._TRAIL_SPACING:
-            self._emit_dist -= self._TRAIL_SPACING
+        while self._emit_dist >= spacing:
+            self._emit_dist -= spacing
             ang = random.uniform(0.0, math.tau)
             spd = random.uniform(*self._TRAIL_DRIFT)
             off = random.uniform(0.0, self.RADIUS * 0.5)

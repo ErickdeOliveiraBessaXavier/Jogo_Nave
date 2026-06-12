@@ -305,6 +305,46 @@ class EntityManager:
     def eye_enemy_count(self) -> int:
         return sum(1 for e in self.enemies if isinstance(e, EyeEnemy))
 
+    # ── Diagnóstico (overlay de performance) ─────────────────────────────────
+    def debug_entity_count(self) -> int:
+        """Nº aproximado de entidades/projéteis ativos (para o overlay de debug)."""
+        total = (
+            len(self.enemies)
+            + len(self.bullets)
+            + len(self.homing_bullets)
+            + len(self.alien_bullets)
+            + len(self.serpent_bullets)
+            + len(self.energy_orbs)
+            + len(self.orbital_orbs)
+            + len(self.neon_bolts)
+            + len(self.player_lasers)
+            + len(self.mini_ship_bullets)
+            + len(self.eye_lasers)
+            + len(self.spikes)
+            + len(self.powerups)
+            + len(self.stars)
+            + len(self.mini_ships)
+            + len(self.meteor_pool.active)
+            + len(self.rock_glider_pool.active)
+        )
+        for f in self.formations:
+            total += len(f.get_enemies())
+        if self.boss is not None:
+            total += 1
+        return total
+
+    def debug_particle_count(self) -> int:
+        """Nº aproximado de partículas cosméticas ativas (explosões + zonas + orbes)."""
+        total = 0
+        for e in self.explosion_pool.active:
+            total += len(e.particles)
+        for zone_list in (self.ice_poison_zones, self.fire_zones, self.electric_fields):
+            for z in zone_list:
+                total += len(getattr(z, "_particles", ()))
+        for o in self.orbital_orbs:
+            total += len(getattr(o, "_particles", ()))
+        return total
+
     def spawn_explosion(
         self,
         x: float,

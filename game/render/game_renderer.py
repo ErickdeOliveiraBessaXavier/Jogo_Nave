@@ -217,18 +217,9 @@ class GameRenderer:
         # Upgrades e Combo agora são chamados dentro de unified_hud para melhor posicionamento
         # Mas mantemos aqui se preferir manter a ordem original de camadas.
 
-        # 8. Debug info
+        # 8. Debug info / diagnóstico de performance
         if frame.show_fps:
-            fps_stats = self.r.get_fps_stats()
-            fps_text = (
-                f"FPS: {fps_stats['fps']:.1f} | "
-                f"Avg: {fps_stats['avg_frame_time']:.1f}ms | "
-                f"Max: {fps_stats['max_frame_time']:.1f}ms"
-            )
-            fps_surface = self.r.font_small.render(fps_text, True, colors.YELLOW)
-            self.game_surface.blit(
-                fps_surface, (self._s(10), Config.SCREEN_HEIGHT - self._s(30))
-            )
+            self._draw_diagnostics(frame, self.game_surface)
 
         if frame.show_enemy_hitboxes:
             hitbox_text = self.r.font_small.render(
@@ -286,6 +277,60 @@ class GameRenderer:
             random.randint(-intensity, intensity),
             random.randint(-intensity, intensity),
         )
+
+    def _draw_diagnostics(self, frame: RenderFrame, surface: pygame.Surface) -> None:
+        """Overlay de diagnóstico (toggle F): FPS, frame time, partículas, entidades.
+
+        Ajuda a identificar quais sistemas consomem mais — combinado com o seletor
+        de Qualidade Visual, dá pra medir o impacto de cada nível.
+        """
+        from ..core.visual_quality import visual_quality
+
+        stats = self.r.get_fps_stats()
+        em = frame.entity_manager
+
+        ship_particles = 0
+        for s in (frame.ship, *frame.extra_ships):
+            ship_particles += (
+                len(s.entry_particles)
+                + len(s.thruster_particles)
+                + len(s.dash_trail_particles)
+            )
+        particles = em.debug_particle_count() + ship_particles
+        entities = em.debug_entity_count()
+
+        fps = stats["fps"]
+        fps_color = (
+            colors.YELLOW
+            if fps >= 55
+            else (255, 170, 40) if fps >= 30 else (255, 70, 70)
+        )
+        lines: list[tuple[str, colors.Color]] = [
+            (f"FPS: {fps:.0f}", fps_color),
+            (
+                f"Frame: {stats['avg_frame_time']:.1f}ms avg / "
+                f"{stats['max_frame_time']:.1f}ms max",
+                colors.WHITE,
+            ),
+            (f"Particulas: {particles}", colors.WHITE),
+            (f"Entidades: {entities}", colors.WHITE),
+            (f"Qualidade: {visual_quality.level.label}", (150, 220, 255)),
+        ]
+
+        font = self.r.font_small
+        line_h = font.get_linesize()
+        pad = self._s(6)
+        x = self._s(10)
+        y = self._s(10)
+        # Fundo translúcido para legibilidade sobre qualquer cena.
+        box_w = max(font.size(t)[0] for t, _ in lines) + pad * 2
+        box_h = line_h * len(lines) + pad * 2
+        bg = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 150))
+        surface.blit(bg, (x, y))
+        for i, (text, color) in enumerate(lines):
+            surf = font.render(text, True, color)
+            surface.blit(surf, (x + pad, y + pad + i * line_h))
 
     def _render_unified_hud(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """Renderiza todo o HUD de forma integrada e organizada com design simétrico."""

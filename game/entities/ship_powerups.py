@@ -172,14 +172,20 @@ class ShipPowerups:
         """Debuff elétrico da Torreta Orbital: descarga periódica que paralisa.
 
         Enquanto "carregada", a nave rola a cada `ELECTRIC_DISCHARGE_INTERVAL`
-        uma chance `ELECTRIC_DISCHARGE_CHANCE` de uma descarga que trava o
-        movimento por `ELECTRIC_STUN_MIN..MAX` segundos.
+        uma chance `ELECTRIC_DISCHARGE_CHANCE` de uma descarga breve que trava o
+        movimento por `ELECTRIC_STUN_MIN..MAX` segundos. Após cada descarga há uma
+        **janela de recuperação** (`ELECTRIC_STUN_RECOVERY`) imune a nova
+        paralisia — garante tempo de sair do campo e evita chain-stun.
         """
         ship = self.ship
 
-        # Paralisia (descarga ativa) corre sempre, independente do debuff base.
+        # Paralisia (descarga ativa) e imunidade pós-descarga correm sempre.
         if ship.electric_stun_timer > 0.0:
             ship.electric_stun_timer = max(0.0, ship.electric_stun_timer - dt)
+        if ship.electric_stun_recovery_timer > 0.0:
+            ship.electric_stun_recovery_timer = max(
+                0.0, ship.electric_stun_recovery_timer - dt
+            )
 
         if ship.electric_debuff_timer <= 0.0:
             ship._electric_discharge_roll_t = 0.0
@@ -187,8 +193,8 @@ class ShipPowerups:
 
         ship.electric_debuff_timer = max(0.0, ship.electric_debuff_timer - dt)
 
-        # Não rola nova descarga enquanto uma paralisia já está em curso.
-        if ship.is_stunned:
+        # Sem novas descargas durante a paralisia ou a janela de recuperação.
+        if ship.is_stunned or ship.electric_stun_recovery_timer > 0.0:
             return
 
         ship._electric_discharge_roll_t += dt
@@ -196,9 +202,10 @@ class ShipPowerups:
         while ship._electric_discharge_roll_t >= interval:
             ship._electric_discharge_roll_t -= interval
             if random.random() < ship.ELECTRIC_DISCHARGE_CHANCE:
-                ship.electric_stun_timer = random.uniform(
-                    ship.ELECTRIC_STUN_MIN, ship.ELECTRIC_STUN_MAX
-                )
+                dur = random.uniform(ship.ELECTRIC_STUN_MIN, ship.ELECTRIC_STUN_MAX)
+                ship.electric_stun_timer = dur
+                # A imunidade cobre o próprio stun + a folga de recuperação.
+                ship.electric_stun_recovery_timer = dur + ship.ELECTRIC_STUN_RECOVERY
                 break
 
     def update_orbital_lasers(

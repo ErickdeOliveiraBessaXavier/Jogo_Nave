@@ -68,6 +68,13 @@ class GameApp:
         prefs_path = get_preferences_path()
         is_first_run = not prefs_path.exists()
         self.preferences = UserPreferences(prefs_path)
+
+        # Aplica a qualidade visual escolhida ao singleton global no boot, antes
+        # de qualquer sistema de efeitos consultar os multiplicadores.
+        from .core.visual_quality import visual_quality
+
+        visual_quality.set_from_name(self.preferences.visual_quality)
+
         base_width, base_height = self.preferences.resolution
 
         # Carregar perfil de progressão

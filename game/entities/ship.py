@@ -73,8 +73,11 @@ class Ship:
         # corre, há chance periódica de uma descarga que trava o movimento por
         # `electric_stun_timer` segundos. São estados distintos com feedback visual
         # próprio: "carregado" (arcos crepitando) vs "paralisado" (movimento travado).
-        self.electric_debuff_timer: float = 0.0   # "carregado" (10s típico)
-        self.electric_stun_timer: float = 0.0      # movimento travado (até 3s)
+        self.electric_debuff_timer: float = 0.0   # "carregado" (6s típico)
+        self.electric_stun_timer: float = 0.0      # movimento travado (descarga breve)
+        # Imunidade pós-descarga: garante uma janela de mobilidade antes de poder
+        # ser paralisado de novo (evita chain-stun / death-spiral nos campos).
+        self.electric_stun_recovery_timer: float = 0.0
         self._electric_discharge_roll_t: float = 0.0  # acumulador da rolagem de descarga
 
         # Carregar imagem da nave
@@ -848,11 +851,14 @@ class Ship:
         self.lives = min(self.max_lives, self.lives + amount)
 
     # ── Debuff elétrico (campo da Torreta Orbital) ──────────────────────────
-    ELECTRIC_DEBUFF_DURATION: float = 10.0
-    ELECTRIC_DISCHARGE_CHANCE: float = 0.15
-    ELECTRIC_DISCHARGE_INTERVAL: float = 0.5  # cadência da rolagem de descarga
-    ELECTRIC_STUN_MIN: float = 1.5
-    ELECTRIC_STUN_MAX: float = 3.0
+    # Ajustado para ser justo: descarga é um susto breve, não um congelamento
+    # longo, e há janela de recuperação garantida entre paralisias.
+    ELECTRIC_DEBUFF_DURATION: float = 6.0
+    ELECTRIC_DISCHARGE_CHANCE: float = 0.10
+    ELECTRIC_DISCHARGE_INTERVAL: float = 0.6  # cadência da rolagem de descarga
+    ELECTRIC_STUN_MIN: float = 0.5
+    ELECTRIC_STUN_MAX: float = 1.0
+    ELECTRIC_STUN_RECOVERY: float = 2.5  # imunidade a nova paralisia após uma descarga
 
     def apply_electric_debuff(self, duration: float | None = None) -> None:
         """Aplica/renova o debuff elétrico (refresh, não acumula)."""

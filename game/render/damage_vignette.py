@@ -25,6 +25,7 @@ from typing import Dict, List, Tuple
 import pygame
 
 from ..core.config import config as Config
+from ..core.visual_quality import visual_quality
 
 
 class DamageVignette:
@@ -169,7 +170,9 @@ class DamageVignette:
         """Rachaduras de energia ancoradas nas 4 bordas, apontando para dentro."""
         self._cracks = []
         w, h = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-        n = int(4 + strength * 6)
+        # Rachaduras decorativas escalam pela Qualidade Visual (a vinheta de dano
+        # em si permanece — é feedback de gameplay, não puro enfeite).
+        n = visual_quality.electric(int(4 + strength * 6))
         for _ in range(n):
             side = random.randint(0, 3)
             if side == 0:

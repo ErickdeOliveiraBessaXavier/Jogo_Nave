@@ -55,8 +55,11 @@ class Explosion:
 
     def _create_particles(self):
         """Cria partículas da explosão (método separado para reuso no pool)."""
-        # Aumentado o limite para 100 para explosões mais dramáticas
-        count = min(30 + self.size // 2, 100)
+        from ..core.visual_quality import visual_quality
+
+        # Aumentado o limite para 100 para explosões mais dramáticas. A contagem
+        # escala pela Qualidade Visual (nunca zera: piso de 1 partícula).
+        count = visual_quality.particles(min(30 + self.size // 2, 100))
         self.particles.clear()
 
         for _ in range(count):

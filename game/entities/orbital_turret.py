@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, List
 import pygame
 
 from ..core.sound import sound_manager
+from ..core.visual_quality import visual_quality
 from . import orbital_turret_pixel_map as pm
 from .enemy_hit_mixin import EnemyHitMixin
 from .orbital_energy_orb import OrbitalEnergyOrb
@@ -361,8 +362,8 @@ class OrbitalTurret(EnemyHitMixin):
         if random.random() < arc_chance:
             self._draw_sphere_arcs(surface, icx, icy, radius, charge)
 
-        # Cintilações/estática: pixels soltos piscando no entorno.
-        static_n = int(2 + charge * 5)
+        # Cintilações/estática: pixels soltos piscando no entorno (escala/qualidade).
+        static_n = visual_quality.electric(int(2 + charge * 5))
         for _ in range(static_n):
             a = random.uniform(0.0, math.tau)
             d = radius * random.uniform(0.6, 1.6)
@@ -376,7 +377,7 @@ class OrbitalTurret(EnemyHitMixin):
         surface: pygame.Surface, cx: int, cy: int, radius: float, charge: float
     ) -> None:
         cos, sin = math.cos, math.sin
-        num = random.randint(1, 2 + int(charge * 2))
+        num = visual_quality.electric(random.randint(1, 2 + int(charge * 2)))
         for _ in range(num):
             a0 = random.uniform(0.0, math.tau)
             length = radius + random.uniform(4, 9 + charge * 8)
