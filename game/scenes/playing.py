@@ -1317,7 +1317,7 @@ class PlayingScene(Scene):
         else:
             self.screen_shake_timer = max(0.0, self.screen_shake_timer - dt)
 
-        self.damage_vignette.update(dt, self._primary_health_fraction())
+        self.damage_vignette.update(dt, self._primary_is_critical())
 
         # Escurecimento de fundo: ativo enquanto o boss vive e luta (exceto durante
         # a cutscene de entrada, que tem seu próprio dim de tela cheia).
@@ -2215,14 +2215,13 @@ class PlayingScene(Scene):
     # Dano à nave / game over
     # ------------------------------------------------------------------
 
-    def _slot_health_fraction(self, slot: PlayerSlot) -> float:
-        """Vida restante do slot normalizada em [0,1] (para a vinheta de dano)."""
-        ship = slot.ship
-        max_lives = max(1, getattr(ship, "max_lives", 0) or slot.lives or 1)
-        return max(0.0, min(1.0, slot.lives / max_lives))
+    def _primary_is_critical(self) -> bool:
+        """True quando o slot primário está no limite crítico (1 vida) e vivo.
 
-    def _primary_health_fraction(self) -> float:
-        return self._slot_health_fraction(self.roster.primary())
+        Libera o pulso de alerta contínuo da vinheta de dano; acima disso o
+        efeito é só o flash transiente ao tomar hit."""
+        slot = self.roster.primary()
+        return (not slot.is_dead) and slot.lives <= 1
 
     def _handle_ship_hit(self, slot: Optional[PlayerSlot] = None) -> None:
         """Processa um acerto na nave do slot: god mode, escudo, vidas, game over.
@@ -2262,11 +2261,9 @@ class PlayingScene(Scene):
             return
 
         self.change_lives_for(slot, -1)
-        # Vinheta de dano: dispara o feedback de borda. A intensidade já escala
-        # com a vida restante do slot atingido (vida baixa "dói" mais).
-        self.damage_vignette.trigger(
-            damage=1, health_fraction=self._slot_health_fraction(slot)
-        )
+        # Vinheta de dano: flash transiente momentâneo ao tomar hit. O alerta
+        # contínuo (1 vida) é decidido no update via `_primary_is_critical`.
+        self.damage_vignette.trigger(damage=1)
         self.level_controller.notify_damage_taken()
         if slot.lives <= 0:
             # Marca o slot como morto — filtragem em alive_slots() impede que

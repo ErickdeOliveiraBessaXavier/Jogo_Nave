@@ -217,17 +217,11 @@ class GameRenderer:
         # Upgrades e Combo agora são chamados dentro de unified_hud para melhor posicionamento
         # Mas mantemos aqui se preferir manter a ordem original de camadas.
 
-        # 8. Debug info / diagnóstico de performance
-        if frame.show_fps:
+        # 8. Painel de debug único (F3 perf + estado do F7). As hitboxes em si são
+        # desenhadas na camada das entidades; aqui só mostramos o painel, que
+        # aparece quando qualquer toggle de debug está ativo — sem overlays soltos.
+        if frame.show_fps or frame.show_enemy_hitboxes:
             self._draw_diagnostics(frame, self.game_surface)
-
-        if frame.show_enemy_hitboxes:
-            hitbox_text = self.r.font_small.render(
-                "F7 Hitbox Debug: ON", True, (255, 200, 40)
-            )
-            self.game_surface.blit(
-                hitbox_text, (self._s(10), Config.SCREEN_HEIGHT - self._s(50))
-            )
 
         # 9. Blit final com Screen Shake
         surface.blit(self.game_surface, self._compute_shake_offset(frame))
@@ -296,8 +290,11 @@ class GameRenderer:
                 + len(s.thruster_particles)
                 + len(s.dash_trail_particles)
             )
-        particles = em.debug_particle_count() + ship_particles
-        entities = em.debug_entity_count()
+        # Quebra por categoria (fonte única). Partículas da nave somam à linha
+        # de partículas; o total de entidades exclui partículas (linha própria).
+        breakdown = em.debug_entity_breakdown()
+        particles = breakdown["Particulas"] + ship_particles
+        entities = sum(v for k, v in breakdown.items() if k != "Particulas")
 
         fps = stats["fps"]
         fps_color = (
@@ -305,6 +302,7 @@ class GameRenderer:
             if fps >= 55
             else (255, 170, 40) if fps >= 30 else (255, 70, 70)
         )
+        dim: colors.Color = (170, 170, 180)
         lines: list[tuple[str, colors.Color]] = [
             (f"FPS: {fps:.0f}", fps_color),
             (
@@ -312,19 +310,28 @@ class GameRenderer:
                 f"{stats['max_frame_time']:.1f}ms max",
                 colors.WHITE,
             ),
-            (f"Particulas: {particles}", colors.WHITE),
-            (f"Entidades: {entities}", colors.WHITE),
             (f"Qualidade: {visual_quality.level.label}", (150, 220, 255)),
+            (
+                f"Hitboxes (F7): {'ON' if frame.show_enemy_hitboxes else 'OFF'}",
+                (255, 200, 40) if frame.show_enemy_hitboxes else dim,
+            ),
+            (f"Entidades: {entities}", colors.WHITE),
         ]
+        # Quebra por categoria, indentada e em tom suave. Particulas usa o valor
+        # com as partículas da nave para casar com a soma cosmética total.
+        for cat, count in breakdown.items():
+            shown = particles if cat == "Particulas" else count
+            lines.append((f"  {cat}: {shown}", dim))
 
         font = self.r.font_small
         line_h = font.get_linesize()
         pad = self._s(6)
-        x = self._s(10)
-        y = self._s(10)
         # Fundo translúcido para legibilidade sobre qualquer cena.
         box_w = max(font.size(t)[0] for t, _ in lines) + pad * 2
         box_h = line_h * len(lines) + pad * 2
+        # Canto inferior esquerdo, encostado nas bordas (ferramenta discreta).
+        x = self._s(10)
+        y = Config.SCREEN_HEIGHT - box_h - self._s(10)
         bg = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
         bg.fill((0, 0, 0, 150))
         surface.blit(bg, (x, y))

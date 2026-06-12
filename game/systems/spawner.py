@@ -1242,7 +1242,16 @@ class EnemySpawner:
     def _spawn_repair_drone(
         self, entity_manager: "EntityManager", is_side_scroll: bool
     ) -> bool:
-        x, y = self._entry_position(RepairDrone.SIZE, RepairDrone.SIZE, is_side_scroll)
+        # Spawn em posição VISÍVEL: o Reconstrutor "deploya/warpa" em cena (não
+        # desliza de fora), então a animação de entrada precisa estar no campo de
+        # visão. Paira numa banda alta (top-down) ou à direita (side-scroll).
+        w, h = RepairDrone.W, RepairDrone.H
+        if is_side_scroll:
+            x = random.uniform(Config.SCREEN_WIDTH * 0.55, Config.SCREEN_WIDTH - 40.0 - w)
+            y = random.uniform(50.0, Config.SCREEN_HEIGHT - 50.0 - h)
+        else:
+            x = random.uniform(40.0, Config.SCREEN_WIDTH - 40.0 - w)
+            y = random.uniform(50.0, Config.SCREEN_HEIGHT * 0.30)
         drone = RepairDrone(
             x,
             y,

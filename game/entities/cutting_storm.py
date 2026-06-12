@@ -14,8 +14,9 @@ Visual:
 - Fragmentos de rocha (assets de IceGolem).
 - Efeito de vento e turbulência.
 
-Contratos (CLAUDE.md): herda EnemyHitMixin (§9), update via
-update_in_context (§5), draw sem efeitos colaterais (§3).
+Contratos (CLAUDE.md): implementa o contrato de inimigo com on_hit/take_damage
+próprios (perigo indestrutível — sem mixin), update via update_in_context (§5),
+draw sem efeitos colaterais (§3).
 """
 
 import math
@@ -25,10 +26,8 @@ from typing import TYPE_CHECKING, Final, List, Any
 
 import pygame
 
-from ..core import colors
 from ..core.assets import BASE_DIR, get_image
 from ..core.config import config as Config
-from .enemy_hit_mixin import EnemyHitMixin
 
 if TYPE_CHECKING:
     from ..systems.entity_context import EnemyUpdateContext
@@ -64,7 +63,7 @@ class _VortexParticle:
         self.max_life = random.uniform(0.8, 1.8)
         self.life = self.max_life
         self.size = random.randint(1, 3) if not is_fragment else random.randint(4, 9)
-        
+
         # Cores de terra/areia/poeira (Mountain Palette)
         self.color = random.choice([
             (160, 140, 110), (140, 120, 90), (180, 160, 130), (120, 100, 80)
@@ -74,7 +73,7 @@ class _VortexParticle:
 
     def update(self, dt: float, cx: float, cy: float, state: _DustVortexState, gust_progress: float, ground_y: float):
         self.life -= dt
-        
+
         if state == _DustVortexState.GUSTING:
             # Sobe violentamente na rajada
             rise_speed = 700.0 * gust_progress
@@ -91,10 +90,10 @@ class _VortexParticle:
             self.vy += gravity * dt
             self.x += self.vx * dt
             self.y += self.vy * dt
-            
+
             # Atrito horizontal
             self.vx *= 0.95
-            
+
             # Se bater no chão, "quica" ou morre
             if self.y > ground_y:
                 self.y = ground_y
@@ -105,17 +104,17 @@ class _VortexParticle:
             self.angle += self.angular_speed * dt
             self.x = cx + math.cos(self.angle) * self.orbit_radius
             self.y = cy + math.sin(self.angle) * self.orbit_radius * 0.4
-            
+
         return self.life > 0.0
 
 
 class CuttingStorm:
     """Vórtice de Poeira — Implementação renovada da CuttingStorm.
-    
-    Nota: Este inimigo é um perigo ambiental indestrutível. 
+
+    Nota: Este inimigo é um perigo ambiental indestrutível.
     Não recebe dano e não bloqueia tiros.
     """
-    
+
     # Dimensões e Combate (RADIUS usado pelo Spawner)
     RADIUS: Final = 64
     DAMAGE_RADIUS: Final = 58.0
@@ -158,12 +157,12 @@ class CuttingStorm:
     ):
         screen_w = Config.SCREEN_WIDTH
         screen_h = Config.SCREEN_HEIGHT
-        
+
         self.w = self.RADIUS * 2
         self.h = self.RADIUS * 2
         # Ground_y alinhado para que a base do ciclone toque o chão
         self.ground_y = screen_h - 5.0
-        
+
         self.x = float(x if x is not None else screen_w + 120)
         # `y` recebido do spawner é ignorado de propósito: o vórtice é colado ao
         # chão, então o centro da base fica sempre rente ao ground_y.
@@ -177,18 +176,18 @@ class CuttingStorm:
         self.health = 100.0  # Atributo mantido p/ compatibilidade com Spawner
         self.hit_timer = 0.0
         self.causes_damage = True # Causa dano ao contato, mas não recebe
-        
+
         self._aggr = max(0.5, aggressiveness_multiplier)
         self._state = _DustVortexState.MOVING
         self._state_timer = random.uniform(*self.GUST_INTERVAL) / self._aggr
-        
+
         self._particles: List[_VortexParticle] = []
         self._anim_time = 0.0
         self._enemy_hit_cooldown: dict[int, float] = {}
-        
+
         if not self._fragment_sprites:
             self._load_fragments()
-            
+
         self._rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
     @classmethod
@@ -310,7 +309,7 @@ class CuttingStorm:
         gust_p = 1.0
         if self._state == _DustVortexState.GUSTING:
             gust_p = 1.0 - (self._state_timer / self.GUST_DURATION)
-        
+
         i = 0
         while i < len(self._particles):
             p = self._particles[i]
@@ -371,7 +370,7 @@ class CuttingStorm:
         """Desenha o corpo principal e o pilar usando o estilo de espiral de alta intensidade."""
         is_gusting = self._state == _DustVortexState.GUSTING
         is_dissipating = self._state == _DustVortexState.DISSIPATING
-        
+
         # Paleta rica de cores (tons de poeira, terra e areia)
         WIND_COLORS = [
             (215, 200, 180),  # Areia clara
@@ -379,32 +378,32 @@ class CuttingStorm:
             (225, 215, 200),  # Areia muito clara
             (160, 145, 125),  # Terra seca
         ]
-        
+
         num_body_layers = 10
         body_height = 80.0
-        
+
         for layer in range(num_body_layers):
             frac = layer / num_body_layers
             layer_radius = self.RADIUS * (0.4 + frac * 0.7)
             y_layer = cy - frac * body_height
-            
+
             num_arcs_per_layer = 3
             for i in range(num_arcs_per_layer):
                 speed_mult = 14.0 + (i % 2) * 4.0
                 t = self._anim_time * speed_mult + i * (math.tau / num_arcs_per_layer) + layer * 0.5
-                
+
                 r_scale = 0.8 + 0.3 * math.sin(t * 0.4)
                 w = max(1, int(layer_radius * 2.3 * r_scale))
                 h = max(1, int(layer_radius * 0.8 * r_scale))
-                
+
                 rect = pygame.Rect(0, 0, w, h)
                 x_osc = math.sin(t * 0.7) * (5.0 * frac)
                 rect.center = (int(cx + x_osc), int(y_layer))
-                
+
                 angle = t % math.tau
                 dissipation_fade = (self._state_timer / self.DISSIPATION_DURATION) if is_dissipating else 1.0
                 alpha = int((40 + (layer % 3) * 15) * (1.0 - frac * 0.3) * dissipation_fade)
-                
+
                 if alpha > 0:
                     color_idx = (layer + i) % len(WIND_COLORS)
                     current_color = WIND_COLORS[color_idx]
@@ -429,7 +428,7 @@ class CuttingStorm:
                 x_osc = math.sin(t_col * 0.8) * 30.0 * f
                 rect_col = pygame.Rect(0, 0, w_col, h_col)
                 rect_col.center = (int(cx + x_osc), int(y_pos))
-                
+
                 alpha_col = int(75 * (1.0 - f * 0.6) * dissipation_fade)
                 if alpha_col > 0:
                     pillar_color = WIND_COLORS[(i % len(WIND_COLORS))]

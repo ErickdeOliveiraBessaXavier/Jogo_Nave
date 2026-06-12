@@ -1,19 +1,22 @@
 """Vinheta de dano — feedback de HUD ao receber impacto.
 
-Sobreposição vermelha concentrada nas **bordas** da tela (centro praticamente
-livre, para não atrapalhar o combate), no estilo "screen damage" de FPS, mas com
-leitura arcade. Combina dois sinais:
+Sobreposição vermelha concentrada nas **bordas** da tela (centro livre, para não
+atrapalhar o combate), no estilo "screen damage" de FPS com leitura arcade. Tem
+dois modos bem separados:
 
-  - **flash de impacto** (transiente): pico rápido + decaimento suave a cada hit,
-    com uma pulsação curta e rachaduras de energia nas extremidades. Mais forte
-    em danos maiores e quando a vida já está baixa;
-  - **tensão de vida baixa** (persistente): tom vermelho sutil e pulsante nas
-    bordas que cresce conforme a vida cai — pressão visual sem texto/aviso.
+  - **flash de impacto** (transiente): a cada hit sobe rápido até um pico e
+    decai **suavemente até zero** — sem oscilação residual. É só feedback
+    momentâneo; terminado o decaimento, a tela volta ao normal. Acompanha
+    rachaduras de energia curtas nas extremidades;
+  - **alerta crítico** (contínuo, exceção): ativo **apenas** quando o jogador
+    está no limite (1 vida restante). Aí sim as bordas pulsam lenta e
+    continuamente para comunicar perigo iminente. Acima do limite crítico não
+    há nenhum estado permanente — só o flash transiente.
 
 Contratos (CLAUDE.md): a cena chama `trigger()`/`update()` (mutação no update);
 `draw()` só lê estado e desenha (§3). A vinheta-base é pré-renderizada e cacheada
-por tamanho; o desenho por frame reusa um scratch (§7), e faz early-out quando
-não há nada visível.
+por tamanho; o desenho por frame é uma única passada com `set_alpha` blitando só
+as 4 bandas de borda (§7), com early-out quando não há nada visível.
 """
 
 from __future__ import annotations
@@ -30,51 +33,49 @@ from ..core.visual_quality import visual_quality
 
 class DamageVignette:
     # Geometria/cor
-    MARGIN_FRAC = 0.26          # fração de min(w,h) ocupada pela vinheta (resto = centro livre)
+    MARGIN_FRAC = 0.14          # fração de min(w,h) ocupada pela borda (resto = centro livre)
     COLOR: Tuple[int, int, int] = (205, 35, 35)
     EDGE_FALLOFF = 2.2          # expoente: quanto maior, mais a cor "cola" na borda
 
-    # Intensidade
-    EDGE_ALPHA_HIT = 200        # alpha de borda no auge de um hit (antes do clamp)
-    EDGE_ALPHA_LOW_HP = 72      # alpha de borda da tensão persistente (vida baixa)
+    # Intensidade (alpha de borda)
+    FLASH_ALPHA = 200           # contribuição do flash no auge de um hit
+    CRITICAL_ALPHA = 100        # contribuição do pulso de alerta a 1 vida
     EDGE_ALPHA_MAX = 232        # teto para nunca tampar totalmente a borda
 
-    # Envelope do flash
+    # Envelope do flash (attack-decay limpo, sem oscilação)
     FLASH_ATTACK = 0.05         # subida rápida (s)
-    FLASH_DECAY = 0.24          # constante de decaimento (s)
-    LOW_HP_THRESHOLD = 0.5      # abaixo disso começa a tensão persistente
+    FLASH_DECAY = 0.34          # constante de decaimento (s)
+    FLASH_STRENGTH = 0.9        # pico do flash de um hit normal
+
+    # Pulso do alerta crítico (lento e contínuo)
+    CRITICAL_PULSE_SPEED = 2.4  # rad/s — período ~2.6 s
 
     def __init__(self) -> None:
         self._size: Tuple[int, int] = (0, 0)
         self._base: pygame.Surface | None = None
-        self._scratch: pygame.Surface | None = None
+        self._bands: List[pygame.Rect] = []
 
         self._flash = 0.0
         self._flash_age = 0.0
-        self._health_fraction = 1.0
+        self._critical = False
         self._time = 0.0
         self._cracks: List[Dict[str, object]] = []
 
     # ── API da cena ─────────────────────────────────────────────────────────
-    def trigger(self, damage: int = 1, health_fraction: float = 1.0) -> None:
-        """Dispara o flash de impacto. `damage` reforça a intensidade; vida baixa
-        também — um hit perto de morrer 'dói' mais visualmente."""
-        health_fraction = max(0.0, min(1.0, health_fraction))
-        base = 0.58 + 0.20 * max(0, damage - 1)
-        low = (
-            0.0
-            if health_fraction >= self.LOW_HP_THRESHOLD
-            else (self.LOW_HP_THRESHOLD - health_fraction) / self.LOW_HP_THRESHOLD
-        )
-        strength = min(1.2, base + 0.34 * low)
+    def trigger(self, damage: int = 1) -> None:
+        """Dispara o flash de impacto (feedback momentâneo). `damage` reforça
+        levemente a intensidade de golpes maiores; não há mais amplificação por
+        vida baixa — o estado crítico é tratado só pelo pulso contínuo."""
+        strength = min(1.2, self.FLASH_STRENGTH + 0.2 * max(0, damage - 1))
         self._flash = max(self._flash, strength)
         self._flash_age = 0.0
-        self._health_fraction = health_fraction
         self._spawn_cracks(strength)
 
-    def update(self, dt: float, health_fraction: float) -> None:
+    def update(self, dt: float, critical: bool) -> None:
+        """`critical` = jogador no limite (1 vida): libera o pulso de alerta
+        contínuo. Acima disso, só o flash transiente decai e some."""
         self._time += dt
-        self._health_fraction = max(0.0, min(1.0, health_fraction))
+        self._critical = critical
 
         if self._flash > 0.0:
             self._flash_age += dt
@@ -88,6 +89,8 @@ class DamageVignette:
 
     # ── Envelopes ───────────────────────────────────────────────────────────
     def _flash_env(self) -> float:
+        """Attack-decay limpo: sobe até o pico e decai suave até zero, sem
+        pulsação — o flash é puramente momentâneo."""
         if self._flash <= 0.0:
             return 0.0
         a = self._flash_age
@@ -95,36 +98,36 @@ class DamageVignette:
             e = a / self.FLASH_ATTACK
         else:
             e = math.exp(-(a - self.FLASH_ATTACK) / self.FLASH_DECAY)
-        pulse = 0.82 + 0.18 * math.sin(a * 46.0)  # pulsação curta pós-impacto
-        return self._flash * e * pulse
+        return self._flash * e
 
-    def _tension(self) -> float:
-        hf = self._health_fraction
-        if hf >= self.LOW_HP_THRESHOLD:
+    def _critical_env(self) -> float:
+        """Pulso lento e contínuo, só quando crítico. Nunca chega a zero (mantém
+        um brilho de perigo de base que respira para cima)."""
+        if not self._critical:
             return 0.0
-        t = (self.LOW_HP_THRESHOLD - hf) / self.LOW_HP_THRESHOLD
-        breath = 0.55 + 0.45 * abs(math.sin(self._time * 3.2))
-        return t * breath
+        pulse01 = 0.5 + 0.5 * math.sin(self._time * self.CRITICAL_PULSE_SPEED)
+        return 0.35 + 0.65 * pulse01  # 0.35 → 1.0
 
     # ── Render (§3: só lê estado) ───────────────────────────────────────────
     def draw(self, surface: pygame.Surface) -> None:
         flash = self._flash_env()
-        tension = self._tension()
-        edge_a = flash * self.EDGE_ALPHA_HIT + tension * self.EDGE_ALPHA_LOW_HP
+        edge_a = flash * self.FLASH_ALPHA + self._critical_env() * self.CRITICAL_ALPHA
         if edge_a < 2.0 and not self._cracks:
             return
 
         self._ensure_base(surface.get_size())
-        base, scratch = self._base, self._scratch
-        if base is None or scratch is None:
+        base = self._base
+        if base is None:
             return
 
         if edge_a >= 2.0:
             a = int(min(self.EDGE_ALPHA_MAX, edge_a))
-            scratch.blit(base, (0, 0))
-            # Escala o alpha do gradiente por `a` sem mexer no RGB (MULT).
-            scratch.fill((255, 255, 255, a), special_flags=pygame.BLEND_RGBA_MULT)
-            surface.blit(scratch, (0, 0))
+            # Uma passada: `set_alpha` modula o per-pixel-alpha do gradiente no
+            # próprio blit (SDL2). Blita só as 4 bordas — o centro é transparente,
+            # então a tela inteira desperdiçaria pixels por frame (§7).
+            base.set_alpha(a)
+            for r in self._bands:
+                surface.blit(base, r, r)
 
         if self._cracks:
             self._draw_cracks(surface, flash)
@@ -148,7 +151,6 @@ class DamageVignette:
             return
         self._size = size
         w, h = size
-        self._scratch = pygame.Surface(size, pygame.SRCALPHA)
 
         base = pygame.Surface(size, pygame.SRCALPHA)
         margin = max(1, int(min(w, h) * self.MARGIN_FRAC))
@@ -166,11 +168,21 @@ class DamageVignette:
             pygame.draw.rect(base, (cr, cg, cb, a), rect, 1)
         self._base = base
 
+        # As 4 bandas de borda que contêm todo o gradiente (centro = transparente).
+        # `draw` blita só estas regiões em vez da tela inteira.
+        inner_h = max(0, h - 2 * margin)
+        self._bands = [
+            pygame.Rect(0, 0, w, margin),                      # topo
+            pygame.Rect(0, h - margin, w, margin),             # base
+            pygame.Rect(0, margin, margin, inner_h),           # esquerda
+            pygame.Rect(w - margin, margin, margin, inner_h),  # direita
+        ]
+
     def _spawn_cracks(self, strength: float) -> None:
         """Rachaduras de energia ancoradas nas 4 bordas, apontando para dentro."""
         self._cracks = []
         w, h = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-        # Rachaduras decorativas escalam pela Qualidade Visual (a vinheta de dano
+        # Rachaduras decorativas escalam pela Qualidade Visual (o flash de dano
         # em si permanece — é feedback de gameplay, não puro enfeite).
         n = visual_quality.electric(int(4 + strength * 6))
         for _ in range(n):

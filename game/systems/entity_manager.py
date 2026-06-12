@@ -306,11 +306,42 @@ class EntityManager:
         return sum(1 for e in self.enemies if isinstance(e, EyeEnemy))
 
     # ── Diagnóstico (overlay de performance) ─────────────────────────────────
-    def debug_entity_count(self) -> int:
-        """Nº aproximado de entidades/projéteis ativos (para o overlay de debug)."""
-        total = (
+    def debug_entity_breakdown(self) -> dict[str, int]:
+        """Contagem de entidades ativas por categoria (overlay F3).
+
+        Cobre **todas** as listas para que a soma seja completa e nada fique
+        invisível — é a ferramenta para diagnosticar contagem inesperada numa
+        arena aparentemente vazia. Cada objeto entra em **uma** categoria:
+
+        - **Inimigos**: unidades/estruturas hostis (inclui meteoros e debris do
+          grid inimigo, que causam dano);
+        - **Projéteis**: tiros em voo (jogador + inimigos + boss);
+        - **Partículas**: cosmético puro (explosões, faíscas de zonas/orbes);
+        - **Efeitos**: hazards/visuais temporários com vida própria (zonas,
+          implosões, detritos cosméticos, escudos);
+        - **Coletáveis**: powerups e estrelas — caem/perduram na tela mas **não**
+          são gameplay hostil (fonte típica da contagem residual em arena vazia);
+        - **Bosses**: boss ativo;
+        - **Outros**: aliados e bookkeeping (mini-naves, wingmen, links, scores).
+        """
+        enemies = (
             len(self.enemies)
-            + len(self.bullets)
+            + len(self.spikes)
+            + len(self.boulders)
+            + len(self.cannon_towers)
+            + len(self.cannon_mines)
+            + len(self.black_holes)
+            + len(self.mountain_propellers)
+            + len(self.attack_debris)
+            + len(self.orbital_debris)
+            + len(self.meteor_pool.active)
+            + len(self.rock_glider_pool.active)
+        )
+        for f in self.formations:
+            enemies += len(f.get_enemies())
+
+        projectiles = (
+            len(self.bullets)
             + len(self.homing_bullets)
             + len(self.alien_bullets)
             + len(self.serpent_bullets)
@@ -320,18 +351,58 @@ class EntityManager:
             + len(self.player_lasers)
             + len(self.mini_ship_bullets)
             + len(self.eye_lasers)
-            + len(self.spikes)
-            + len(self.powerups)
-            + len(self.stars)
-            + len(self.mini_ships)
-            + len(self.meteor_pool.active)
-            + len(self.rock_glider_pool.active)
+            + len(self.boss_lasers)
+            + len(self.cacador_lasers)
+            + len(self.boss_squares)
+            + len(self.slime_drips)
+            + len(self.plasma_beams)
+            + len(self.chain_lightnings)
+            + len(self.air_strike_bombs)
         )
-        for f in self.formations:
-            total += len(f.get_enemies())
-        if self.boss is not None:
-            total += 1
-        return total
+
+        effects = (
+            len(self.explosion_pool.active)
+            + len(self.ice_poison_zones)
+            + len(self.fire_zones)
+            + len(self.electric_fields)
+            + len(self.mine_explosions)
+            + len(self.emp_waves)
+            + len(self.explosive_effects)
+            + len(self.core_implosions)
+            + len(self.police_crashes)
+            + len(self.tank_meltdowns)
+            + len(self.splitter_debris)
+            + len(self.carrier_debris)
+            + len(self.ice_shards)
+            + len(self.captor_emps)
+            + len(self.orbital_shields)
+        )
+
+        return {
+            "Inimigos": enemies,
+            "Projeteis": projectiles,
+            "Particulas": self.debug_particle_count(),
+            "Efeitos": effects,
+            "Coletaveis": len(self.powerups) + len(self.stars),
+            "Bosses": 1 if self.boss is not None else 0,
+            "Outros": (
+                len(self.mini_ships)
+                + len(self.wingmen)
+                + len(self.coop_links)
+                + len(self.floating_scores)
+            ),
+        }
+
+    def debug_entity_count(self) -> int:
+        """Total de entidades ativas (para o overlay de debug).
+
+        Soma todas as categorias da quebra **exceto** partículas (que têm linha
+        própria). Antes esta conta misturava coletáveis e omitia ~25 listas;
+        agora deriva da quebra única e é completa por construção.
+        """
+        return sum(
+            v for k, v in self.debug_entity_breakdown().items() if k != "Particulas"
+        )
 
     def debug_particle_count(self) -> int:
         """Nº aproximado de partículas cosméticas ativas (explosões + zonas + orbes)."""

@@ -521,10 +521,10 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
             # MountainPropeller: 4.0,
             # MountainMage: 8.0,
             # ElementalRobot: 8.0,
-            # StoneSentry: 1.0,
-            # StoneEagle: 6.0,  # rush em mergulho
-            CuttingStorm: 8.0,  # negação de área
-            # IceGolem: 10.0,
+            # StoneSentry: 10.0,
+            StoneEagle: 6.0,
+            CuttingStorm: 8.0,
+            IceGolem: 10.0,
         },
         enemies_to_clear=40,
         boss_type=StoneGolemBoss,
@@ -568,8 +568,8 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
             # EyeEnemy: 6.0,
             # Satellite: 6.0,
             # StealthFighter: 6.0,  # rush (cloak + investida)
-            OrbitalTurret: 8.0,  # sniper (rajada de plasma)
-            # RepairDrone: 10.0,  # suporte (cura aliados)
+            # OrbitalTurret: 8.0,  # sniper (rajada de plasma)
+            # RepairDrone: 10.0,  # suporte
             # SquareMinionBoss: 12.0,
         },
         enemies_to_clear=40,
