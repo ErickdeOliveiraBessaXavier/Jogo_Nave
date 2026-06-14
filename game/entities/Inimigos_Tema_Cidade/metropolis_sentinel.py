@@ -1,8 +1,9 @@
 """Sentinela Orbital do Metropolis Overlord (Fase 1, tema CITY).
 
-Quatro esferas de energia que percorrem as laterais da tela (perímetro), criando
-um escudo dinâmico e forçando o jogador a se mover. Enquanto qualquer uma vive,
-o corpo do Overlord é invulnerável; destruir as quatro abre a Fase 2.
+Quatro esferas de energia que percorrem as laterais da tela (perímetro). São os
+**geradores do escudo** do Overlord: enquanto pelo menos uma vive, o contorno neon
+do boss permanece energizado e o corpo é invulnerável. Destruir as quatro derruba
+o escudo (descarga visual) e abre a Fase 2 — ver `MetropolisOverlordBoss`.
 
 Cada sentinela tem um papel com projétil custom dedicado:
   "neon"    → rajadas retas rápidas.
