@@ -176,6 +176,9 @@ def _get_boss_roadmap() -> dict[int, tuple[BossSlot, ...]]:
     from ..entities.boss import Boss
     from ..entities.cloud_archmage_boss import CloudArchmageBoss
     from ..entities.giant_meteor_boss import GiantMeteorBoss
+    from ..entities.Inimigos_Tema_Cidade.metropolis_overlord_boss import (
+        MetropolisOverlordBoss,
+    )
     from ..entities.mountain_serpent_boss import MountainSerpentBoss
     from ..entities.slime_boss import SlimeBoss
     from ..entities.spike_boss import SpikeBoss
@@ -193,8 +196,10 @@ def _get_boss_roadmap() -> dict[int, tuple[BossSlot, ...]]:
             BossSlot(20, "Meteoro Gigante", "implemented", GiantMeteorBoss),
             BossSlot(25, "Slime (final)", "implemented", SlimeBoss),
         ),
-        3: (  # CITY — placeholders até os chefes nativos da City Neon
-            BossSlot(30, "City Boss 1", "placeholder", SpikeBoss),
+        3: (  # CITY — primeiro chefe nativo implementado; resto placeholder
+            BossSlot(
+                30, "Metropolis Overlord", "implemented", MetropolisOverlordBoss
+            ),
             BossSlot(34, "City Boss 2", "placeholder", GiantMeteorBoss),
             BossSlot(37, "City Boss 3", "placeholder", SlimeBoss),
             BossSlot(40, "City Boss 4 (final)", "placeholder", GiantMeteorBoss),

@@ -32,6 +32,9 @@ from ..entities.Inimigos_Tema_Cidade.core_implosion import CoreImplosion
 from ..entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
 from ..entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
 from ..entities.Inimigos_Tema_Cidade.jammer_node import JammerNode
+from ..entities.Inimigos_Tema_Cidade.metropolis_overlord_boss import (
+    MetropolisOverlordBoss,
+)
 from ..entities.Inimigos_Tema_Cidade.neon_bolt import NeonBolt
 from ..entities.Inimigos_Tema_Cidade.splitter_debris import SplitterDebris
 from ..entities.Inimigos_Tema_Cidade.carrier_debris import CarrierDebris
@@ -165,6 +168,7 @@ class EntityManager:
             StoneGolemBoss,
             MountainSerpentBoss,
             CloudArchmageBoss,
+            MetropolisOverlordBoss,
             None,
         ] = None
 

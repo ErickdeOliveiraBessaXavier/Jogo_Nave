@@ -307,6 +307,9 @@ class BossFightController:
     ) -> None:
         from ..entities.cloud_archmage_boss import CloudArchmageBoss
         from ..entities.giant_meteor_boss import GiantMeteorBoss
+        from ..entities.Inimigos_Tema_Cidade.metropolis_overlord_boss import (
+            MetropolisOverlordBoss,
+        )
         from ..entities.mountain_serpent_boss import MountainSerpentBoss
         from ..entities.stone_golem_boss import StoneGolemBoss
 
@@ -334,6 +337,14 @@ class BossFightController:
             boss.max_health = boss.health
         elif boss_type == CloudArchmageBoss:
             boss = CloudArchmageBoss(
+                difficulty_multiplier=enemy_health_multiplier,
+                aggressiveness_multiplier=agg,
+            )
+            self._em.boss = boss
+        elif boss_type == MetropolisOverlordBoss:
+            boss = MetropolisOverlordBoss(
+                Config.SCREEN_WIDTH / 2 - MetropolisOverlordBoss.WIDTH / 2,
+                60,
                 difficulty_multiplier=enemy_health_multiplier,
                 aggressiveness_multiplier=agg,
             )

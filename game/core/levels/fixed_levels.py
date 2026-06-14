@@ -32,6 +32,9 @@ from ...entities.Inimigos_Tema_Cidade.city_drone import CityDrone  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.jammer_node import JammerNode  # noqa: F401
+from ...entities.Inimigos_Tema_Cidade.metropolis_overlord_boss import (
+    MetropolisOverlordBoss,
+)
 from ...entities.Inimigos_Tema_Cidade.mirror_pylon import MirrorPylon  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.mortar_drone import MortarDrone  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper  # noqa: F401
@@ -551,8 +554,8 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
             SapperDrone: 5.0,
             MirrorPylon: 2.0,
         },
-        enemies_to_clear=50,
-        boss_type=GiantMeteorBoss,  # provisório (CITY ainda não tem boss nativo)
+        enemies_to_clear=1,
+        boss_type=MetropolisOverlordBoss,  # boss nativo da Cidade (em teste)
         mines_enabled=True,
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v", "spiral_square"],

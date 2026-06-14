@@ -1,67 +1,61 @@
-# 👑 Proposta de Bosses: Tema Cidade (Cyberpunk Aéreo)
+# 🏙️ Proposta de Boss: Tema Cidade (Cyberpunk)
 
-Este documento detalha 4 bosses monumentais projetados para o bioma **CITY**. O combate ocorre no espaço aéreo da metrópole, com os arranha-céus servindo apenas como cenário de fundo (parallax). Os bosses são máquinas voadoras autônomas, projetadas para patrulha, manutenção pesada ou comando aéreo.
+## Nome: **The Metropolis Overlord** (O Soberano da Metrópole)
 
----
-
-## 1. NEON-CORE (O Hub de Processamento Flutuante)
-Um enorme núcleo de processamento vertical que levita usando pulsos anti-gravidade. Possui anéis rotativos que brilham em ciano e um monitor holográfico central.
-
-### Estágios e Mecânicas:
-*   **Estágio 1: Shielded Processing**
-    *   **Voo:** Flutua no centro da tela, movendo-se suavemente para os lados.
-    *   **Ataque:** Dispara projéteis digitais através de seus anéis rotativos.
-    *   **Mecânica:** Protegido por um escudo de dados gerado por 4 mini-drones de suporte que orbitam o núcleo. O jogador deve destruir os drones primeiro.
-*   **Estágio 2: Critical Overclock**
-    *   **Ataque:** Os anéis giram em velocidade máxima, disparando feixes de laser que varrem a tela em 360 graus.
-    *   **Mecânica:** O boss emite um pulso de "Glitch" que distorce levemente a visão do jogador, exigindo foco redobrado nos padrões de bala.
+Este boss foi desenhado para ser o ápice do desafio no bioma **CITY**, utilizando a mecânica de "destruição por camadas" e suporte de unidades orbitais.
 
 ---
 
-## 2. AERIAL-BORE-SHIP (O Perfurador de Rotas)
-Uma nave industrial massiva, projetada para limpar rotas aéreas. Possui uma broca de plasma gigante na frente e múltiplos motores de exaustão que soltam labaredas.
-
-### Estágios e Mecânicas:
-*   **Estágio 1: Industrial Cleansing**
-    *   **Voo:** Persegue o jogador horizontalmente, usando propulsores laterais para manobras bruscas.
-    *   **Ataque:** Lança contêineres de carga explosivos e dispara jatos de fogo pelos motores traseiros.
-    *   **Estratégia:** Atirar nos painéis de resfriamento expostos durante as manobras laterais.
-*   **Estágio 2: Plasma Drill Overdrive**
-    *   **Voo:** A nave inclina-se para frente e avança em investidas rápidas (dashes) na vertical.
-    *   **Ataque:** A broca de plasma frontal é ativada, criando uma onda de choque que empurra a nave do jogador.
-    *   **Estratégia:** Focar o fogo no núcleo da broca quando ela estiver carregando o próximo dash.
+## 🎨 Conceito Estético
+*   **Aparência:** Uma fortaleza voadora massiva que lembra o topo de um arranha-céu tecnológico.
+*   **Visual:** Chassi em cinza industrial fosco com "veias" de neon magenta e azul elétrico pulsando entre as placas de armadura.
+*   **Danos Visuais:** À medida que as camadas são destruídas, o boss revela fiação exposta, pistões hidráulicos soltando fumaça e faíscas elétricas.
 
 ---
 
-## 3. DATA-SERPENT (O Drone de Manutenção de Malha)
-Um drone segmentado extremamente longo, lembrando uma serpente feita de cabos e sensores. Voa de forma sinuosa através das correntes eletromagnéticas da cidade.
-
-### Estágios e Mecânicas:
-*   **Estágio 1: Serpentine Patrol**
-    *   **Voo:** Move-se de forma fluida pela tela em padrões circulares e em "S".
-    *   **Ataque:** Cada segmento do corpo pode disparar pequenas faíscas elétricas. A cabeça dispara um raio de curto alcance.
-    *   **Mecânica:** Apenas a cabeça é vulnerável. Acertar o corpo causa faíscas mas não retira vida do boss.
-*   **Estágio 2: Electro-Cage**
-    *   **Voo:** A serpente fecha um anel ao redor do jogador.
-    *   **Ataque:** O corpo inteiro se torna energizado, criando uma arena circular onde o jogador deve desviar de disparos vindos da cabeça da serpente que circula o anel.
+## 🎬 Sequência de Introdução (Cinemática)
+1.  **O Surgimento:** O boss aparece inicialmente no "horizonte", atrás das camadas de background da cidade (parallax), subindo lentamente como se estivesse emergindo das profundezas dos arranha-céus.
+2.  **A Aproximação:** Após atingir o topo do horizonte, ele faz uma transição para o plano de jogo, descendo da parte superior da tela até se estabilizar no centro superior.
+3.  **Ativação:** Ao estagnar, o boss emite um pulso sonoro industrial e invoca as **4 Esferas de Energia**, que se posicionam e começam a percorrer as laterais da tela.
 
 ---
 
-## 4. SKY-DREADNOUGHT (O Cruzador de Comando)
-Uma nave de guerra vertical, lembrando um arranha-céu voador militarizado. É a unidade de autoridade máxima no espaço aéreo.
+## ⚔️ Mecânicas de Combate
 
-### Estágios e Mecânicas:
-*   **Estágio 1: Fleet Command**
-    *   **Voo:** Permanece no topo da tela, movendo-se lentamente. É tão grande que apenas a metade inferior é visível inicialmente.
-    *   **Ataque:** Abre hangares laterais para lançar ondas de *City Drones* e *Police Interceptors*.
-    *   **Mecânica:** O jogador precisa destruir as múltiplas torres de defesa fixadas no chassi da nave.
-*   **Estágio 2: Ion Annihilator**
-    *   **Ataque:** O "ático" da nave abre, revelando um canhão de íons que dispara um raio massivo que ocupa 1/3 da tela.
-    *   **Mecânica:** Antes do disparo, a nave gera uma atração magnética que dificulta o jogador de sair da zona de impacto.
+### Fase 1: As Sentinelas Orbitais (Esferas de Energia)
+Nesta fase, o corpo principal do boss é **INVULNERÁVEL**. As esferas não ficam estáticas; elas percorrem as laterais da tela (cima, baixo, esquerda, direita) criando um perímetro defensivo em movimento.
+
+*   **Movimentação:** As esferas patrulham as bordas da tela em um padrão retangular, forçando o jogador a persegui-las enquanto desvia dos ataques.
+*   **Esfera Superior Esquerda:** Dispara rajadas rápidas de tiros neon (foco em agilidade).
+*   **Esfera Superior Direita:** Lança micro-mísseis seguidores (foco em evasão).
+*   **Esfera Inferior Esquerda:** Emite feixes de laser verticais que cruzam a tela (foco em posicionamento).
+*   **Esfera Inferior Direita:** Pulsa ondas EMP que reduzem a velocidade dos projéteis do jogador (foco em timing).
+*   **Objetivo:** O jogador deve destruir as 4 esferas para desativar o escudo de energia do Overlord.
+
+### Fase 2: Descascando a Blindagem (O Boss de Camadas)
+Com o escudo desativado, o jogador pode atacar o corpo principal, que possui 3 camadas distintas de armadura:
+
+1.  **Camada Externa (Blindagem Industrial):** Placas de aço pesadas. Requer dano massivo. Partículas de metal e placas inteiras se desprendem visualmente ao serem destruídas.
+2.  **Camada Intermediária (Circuitos de Carbono):** Revela o interior tecnológico. O boss começa a "vazar" energia, disparando tiros aleatórios de seus circuitos danificados.
+3.  **Camada Interna (Chassi Exposto):** Estrutura frágil, mas o boss entra em modo de sobrecarga, movendo-se mais rápido e usando ataques de área mais agressivos.
+
+### Fase 3: O Núcleo Instável (Desespero Final)
+Toda a armadura foi removida, restando apenas o núcleo de energia central exposto.
+*   **Ataque Especial:** "The City Beam" – Um laser massivo que ocupa 30% da tela e requer um tempo de carregamento visível.
+*   **Suporte:** O núcleo invoca pequenos *City Drones* para distrair o jogador.
+*   **Risco:** Se o jogador demorar muito, o núcleo pode tentar regenerar uma das esferas de energia.
 
 ---
 
-## 🎨 Identidade Visual e Tecnologia de Voo
-*   **Propulsão Visível:** Todos os bosses devem ter propulsores ativos (chamas, brilho anti-gravidade ou turbinas rotativas) para justificar o voo.
-*   **Estética Industrial:** Uso de metais escuros, luzes de sinalização aéreas (vermelho/branco piscante) e detalhes em neon.
-*   **Contexto de Background:** Prédios ao fundo devem passar em alta velocidade para reforçar a sensação de que as lutas estão ocorrendo em pleno voo.
+## 🛠️ Detalhes Técnicos Sugeridos
+
+*   **Pixel-Map em Camadas:** Utilizar o sistema de `Layered Pixel-Maps` já estabelecido para o tema CITY.
+*   **Sons:** Sons industriais pesados, alarmes de "Critical Damage" e música synthwave acelerada.
+*   **Feedback de Impacto:** O boss deve tremer violentamente quando uma camada de armadura é rompida, acompanhado de uma pequena explosão de partículas.
+
+---
+
+## 💡 Por que isso funciona?
+1.  **Priorização de Alvos:** Força o jogador a lidar com as esferas antes de focar no boss.
+2.  **Satisfação Visual:** Ver o boss "se despedaçar" camada por camada dá um senso claro de progresso na luta.
+3.  **Variedade de Gameplay:** Cada fase exige um tipo diferente de atenção do jogador (esquiva de mísseis -> posicionamento de laser -> dano puro no núcleo).
