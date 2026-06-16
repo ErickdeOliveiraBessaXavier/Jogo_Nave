@@ -27,7 +27,7 @@ import pygame
 
 from ...core.config import config as Config
 from ..boss_hit_mixin import BossHitMixin
-from .metropolis_drone import EnergyTriangleDrone
+from .metropolis_drone import CoreSentryDrone, EnergyTriangleDrone
 from .metropolis_projectiles import NeonBurstShot
 from .metropolis_segment import MetropolisSegment
 from .metropolis_sentinel import MetropolisSentinel
@@ -193,6 +193,13 @@ class MetropolisOverlordBoss(BossHitMixin):
         self._move_dir = math.radians(35.0)  # rumo inicial da deriva (diagonal)
         self._drone_timer = 1.2              # primeiro enxame logo no início da fase
         self._drone_theme_idx = 0            # cicla pelas cores dos núcleos
+
+        # Fase 2: 3 guardiões orbitais (um por núcleo), nascidos uma vez no início
+        # da fase e orbitando o corpo. Ref própria do boss (como _sentinels/
+        # _segments) só p/ empurrar o centro de órbita e dissipá-los na segmentação;
+        # eles também vivem em em.enemies (roteados por result.spawned_enemies).
+        self._core_drones: List[CoreSentryDrone] = []
+        self._core_sentries_spawned = False
 
         # Fase 1: Sentinelas (geradoras do escudo).
         self._sentinels: List[MetropolisSentinel] = []
@@ -516,6 +523,12 @@ class MetropolisOverlordBoss(BossHitMixin):
         # Deriva livre pela arena (triângulo estável; não persegue a nave).
         self._update_drift(dt)
 
+        # Guardiões orbitais: nascem uma vez e seguem o centro do boss derivando.
+        if not self._core_sentries_spawned:
+            self._spawn_core_sentries(result)
+            self._core_sentries_spawned = True
+        self._update_core_sentries()
+
         self._leak_timer -= dt
         if self._leak_timer <= 0.0:
             self._leak_timer = max(0.3, (1.5 - 0.4 * tier) / self.aggressiveness_multiplier)
@@ -531,6 +544,10 @@ class MetropolisOverlordBoss(BossHitMixin):
 
         if self._destroyed_fraction >= self.SEGMENT_THRESHOLD:
             self._collapse_remaining_cells()
+            # Guardiões orbitais dissipam: o corpo que orbitavam vai se segmentar.
+            for d in self._core_drones:
+                d.dissipate()
+            self._core_drones = []
             self.state = _SEGMENTATION
 
     def _update_instability(self, dt: float) -> None:
@@ -647,6 +664,33 @@ class MetropolisOverlordBoss(BossHitMixin):
         cy = max(min_y, min(max_y, cy))
         self.x = cx - half_w
         self.y = cy - half_h
+
+    def _spawn_core_sentries(self, result: "BossUpdateResult") -> None:
+        """Cria os 3 guardiões orbitais (um por núcleo), 120° apart no anel."""
+        cx, cy = self._center
+        for i, (_rx, _ry, _rr, theme, _phase) in enumerate(self.SPHERE_DEFS):
+            drone = CoreSentryDrone(
+                cx, cy,
+                base_angle=math.radians(120 * i - 90),
+                theme=theme,
+                aggressiveness_multiplier=self.aggressiveness_multiplier,
+            )
+            self._core_drones.append(drone)
+            result.spawned_enemies.append(drone)
+
+    def _update_core_sentries(self) -> None:
+        """Empurra o centro de órbita (boss deriva) e poda os mortos (§1, §6)."""
+        cx, cy = self._center
+        drones = self._core_drones
+        i = 0
+        while i < len(drones):
+            d = drones[i]
+            if d.dead:
+                drones[i] = drones[-1]
+                drones.pop()
+            else:
+                d.orbit_cx, d.orbit_cy = cx, cy
+                i += 1
 
     def _spawn_drones(self, px: float, py: float, tier: int, result: "BossUpdateResult") -> None:
         """Libera 1-2 drones-triângulo perto do boss, cor ciclando pelos núcleos."""
