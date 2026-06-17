@@ -27,8 +27,9 @@ import pygame
 
 from ...core.config import config as Config
 from ..boss_hit_mixin import BossHitMixin
-from .metropolis_drone import CoreSentryDrone, EnergyTriangleDrone
-from .metropolis_projectiles import NeonBurstShot
+from .city_mine import CityMine
+from .metropolis_beam import MetropolisOrbitalBeam
+from .metropolis_drone import CoreSentryDrone
 from .metropolis_segment import MetropolisSegment
 from .metropolis_sentinel import MetropolisSentinel
 from . import metropolis_overlord_pixel_map as pmap
@@ -37,13 +38,16 @@ if TYPE_CHECKING:
     from ...systems.boss_context import BossUpdateContext, BossUpdateResult
     from ...systems.hit_result import HitResult
 
-# Estados da FSM.
+# Estados da FSM. O escudo VAI E VOLTA: cai ao fim da Fase 1, é reconstruído ao fim
+# da Fase 2 (animação invertida), e cai de novo ao fim do interlúdio antes da Fase 3.
 _INTRO_RISE = "intro_rise"
 _INTRO_DESCEND = "intro_descend"
 _PHASE1 = "phase1_sentinels"
-_SHIELD_COLLAPSE = "shield_collapse"  # transição: escudo descarrega ao cair a última sentinela
-_PHASE2 = "phase2_armor"
-_SEGMENTATION = "segmentation"  # boss se divide em 3 triângulos orbitais
+_SHIELD_COLLAPSE = "shield_collapse"  # escudo descarrega pixel-a-pixel (sucessor configurável)
+_PHASE2 = "phase2_lasers_mines"       # centro + lasers rotativos + minas (gate = 5 minas)
+_SHIELD_REBUILD = "shield_rebuild"    # colapso invertido: o contorno se reconstrói
+_INTERLUDE = "phase1_reprise"         # 2ª onda de sentinelas (padrão da Fase 1) com escudo
+_SEGMENTATION = "segmentation"        # Fase 3 final: boss se divide em 3 triângulos orbitais
 
 # Caracteres do pixel-map que compõem a CARCAÇA externa destrutível (placas que
 # se fragmentam ao tomar dano, revelando o frame interno já desenhado). O
@@ -117,34 +121,28 @@ class MetropolisOverlordBoss(BossHitMixin):
     RISE_SPEED: float = 40.0
     DESCENT_SPEED: float = 120.0
 
-    # ── Fase 2: desmonte físico (massa estrutural = vida) ──────────────────────
-    # Blocos removidos por ponto de dano. BULLET_BASE_DAMAGE=10 → ~2 blocos/tiro.
-    DAMAGE_TO_CELLS: float = 0.25
-    # Fração da carcaça destruída que dispara o COLAPSO/segmentação (Fase 3).
-    SEGMENT_THRESHOLD: float = 0.90
-    # Pequeno score por impacto (recompensa o "chip" sem barra de HP).
-    CHIP_SCORE: int = 5
-    # Erosão estrutural: perto do fim a carcaça desmorona sozinha nas bordas dos
-    # buracos — evita "caçar" blocos isolados mantendo o limiar alto.
-    INSTABILITY_START: float = 0.6   # fração destruída a partir da qual erode
-    INSTABILITY_INTERVAL: float = 0.3
-    # Duração do COLAPSO do contorno-escudo (Fase 1 → Fase 2): alguns segundos de
-    # estilhaçamento pixel-a-pixel + arcos elétricos antes do corpo ficar mirável.
+    # ── Dano: o corpo NUNCA é mirável a tiro (em nenhuma fase). Na Fase 2 o único
+    #    dano vem da EXPLOSÃO das minas da City atraídas para o centro. Cada acerto
+    #    erode a carcaça (cosmético) via _destroy_cells_near; 5 acertos encerram a fase.
+    MINE_HITS_TO_ADVANCE: int = 5
+    MINE_HIT_RADIUS: float = 90.0     # raio do corpo p/ contar a explosão de mina
+    DAMAGE_TO_CELLS: float = 0.25     # blocos erodidos por "acerto" cosmético de mina
+    # Minas ESCASSAS/estratégicas: são a única forma de ferir o boss; raras p/ o
+    # jogador ter tempo de administrar lasers + drones + minas sem sobrecarga.
+    MINE_SPAWN_INTERVAL: float = 3.0  # atraso p/ repor um slot livre (escala c/ aggressiveness)
+    MAX_ACTIVE_MINES: int = 2         # teto RÍGIDO de minas vivas na arena ao mesmo tempo
+    # Distância mínima (fração da largura) entre uma mina nova e as já ativas — evita
+    # acúmulos que criem áreas injustas / bloqueiem a movimentação.
+    MIN_MINE_SEPARATION_FRAC: float = 0.23
+    # Pressão secundária: VEM SÓ das 3 sentinelas orbitais (CoreSentryDrone). O boss
+    # NÃO ataca diretamente. Sentinela destruída RENASCE após este tempo (ameaça persistente).
+    SENTRY_RESPAWN_TIME: float = 10.0
+    # Duração do COLAPSO/RECONSTRUÇÃO do contorno-escudo (estilhaçamento pixel-a-pixel
+    # + arcos; a reconstrução é a MESMA animação invertida).
     SHIELD_COLLAPSE_DUR: float = 2.5
 
-    # ── Fase 2: deriva livre pela arena (triângulo ESTÁVEL, sem rotação) ────────
-    # O CENTRO deriva pela arena (NÃO persegue a nave): plataforma energética
-    # flutuando em curvas amplas, virando aos poucos, desviando das bordas (estilo
-    # as sentinelas, mas sem ficar presa ao perímetro). A silhueta triangular é
-    # mantida estável (identidade visual forte) — a complexidade fica nos ataques.
-    DRIFT_SPEED: float = 88.0      # px/s, deslocamento ~constante
-    DRIFT_TURN: float = 0.55       # rad/s — amplitude do giro lento do rumo (curvas)
-    DRIFT_TURN_FREQ: float = 0.23  # rad/s — frequência do balanço do rumo
-    DRIFT_AVOID: float = 150.0     # px do limite onde começa a desviar p/ dentro
-    DRIFT_MAX_TURN: float = 1.7    # rad/s — giro máx. ao contornar a borda
-
-    # Drones-triângulo energéticos (novo ataque da Fase 2): cadência de invocação.
-    DRONE_INTERVAL: float = 3.0    # s entre ondas (escala c/ tier e aggressiveness)
+    # ── Fase 2: posição central fixa (boss vira plataforma de lasers rotativos) ──
+    PHASE2_SETTLE_SPEED: float = 420.0  # px/s do lerp do corpo até o centro da tela
 
     # Escala do pixel map (25 col * 10 = 250px ; 21 lin * 10 = 210px).
     PIXEL_SCALE = 10
@@ -189,19 +187,31 @@ class MetropolisOverlordBoss(BossHitMixin):
         self._intro_scale = 0.4
         self._intro_alpha = 100
 
-        # Fase 2: deriva livre pela arena + invocação de drones-triângulo.
-        self._move_dir = math.radians(35.0)  # rumo inicial da deriva (diagonal)
-        self._drone_timer = 1.2              # primeiro enxame logo no início da fase
-        self._drone_theme_idx = 0            # cicla pelas cores dos núcleos
+        # Fase 2: boss parado no centro. Ataque PRINCIPAL = 3 lasers rotativos; pressão
+        # SECUNDÁRIA = guardiões orbitais + ondas de drones; minas = única fonte de dano.
+        # O corpo NÃO recebe dano de tiro; só as explosões de mina contam (5 → rebuild).
+        self._phase2_settled = False                 # já assentou no centro da tela?
+        self._beams: List[MetropolisOrbitalBeam] = []  # refs p/ matar ao sair da fase
+        self._beams_spawned = False
+        self._mine_spawn_timer = 2.0                 # primeira mina alguns segundos depois
+        self._active_mines: List[CityMine] = []      # minas vivas na arena (cap MAX_ACTIVE_MINES)
+        self._mine_hits = 0                          # explosões de mina que tocaram o boss
+        self._mine_hit_ids: set[int] = set()         # ids de MineExplosion já contados
+        self._flash_timer = 0.0                      # clarão branco ao levar acerto de mina
 
-        # Fase 2: 3 guardiões orbitais (um por núcleo), nascidos uma vez no início
-        # da fase e orbitando o corpo. Ref própria do boss (como _sentinels/
-        # _segments) só p/ empurrar o centro de órbita e dissipá-los na segmentação;
-        # eles também vivem em em.enemies (roteados por result.spawned_enemies).
-        self._core_drones: List[CoreSentryDrone] = []
+        # Pressão secundária EXCLUSIVA das sentinelas: 3 guardiões orbitais (um por
+        # núcleo) que RENASCEM 10s após serem destruídos. Cada slot = um guardião
+        # (theme/base_angle fixos) com ref viva ou timer de respawn. O boss não atira.
         self._core_sentries_spawned = False
+        self._sentry_slots: List[dict] = []  # {theme, base_angle, drone|None, respawn_t}
 
-        # Fase 1: Sentinelas (geradoras do escudo).
+        # Escudo vai-e-volta: sucessores configuráveis do colapso e da reconstrução.
+        self._after_collapse = _PHASE2               # 1º colapso → Fase 2
+        self._after_rebuild = _INTERLUDE             # reconstrução → interlúdio (padrão Fase 1)
+        self._shield_rebuild_t = 0.0                 # timer da reconstrução (0 → DUR)
+
+        # Fase 1: Sentinelas (geradoras do escudo). `_sentinels_spawned` é rearmado
+        # no interlúdio para nascer a 2ª onda.
         self._sentinels: List[MetropolisSentinel] = []
         self._sentinels_spawned = False
 
@@ -226,10 +236,6 @@ class MetropolisOverlordBoss(BossHitMixin):
         self._shield_shatter_idx = 0        # quantas células já estilhaçaram
         self._shield_arcs: List[List[tuple[float, float]]] = []  # arcos elétricos (draw)
         self._shield_arc_timer = 0.0
-
-        # Fase 2: Atiradores + erosão estrutural.
-        self._leak_timer = 1.5
-        self._instability_timer = self.INSTABILITY_INTERVAL
 
         # Segmentação: o boss vira coordenador invisível de 3 segmentos.
         self._segments: List[MetropolisSegment] = []
@@ -264,33 +270,21 @@ class MetropolisOverlordBoss(BossHitMixin):
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 
     def can_take_damage(self) -> bool:
-        # Só a carcaça (Fase 2) é mirável. Na Fase 1 o escudo (gerado pelas
-        # sentinelas) protege; na segmentação o alvo são os 3 segmentos (entidades
-        # próprias) e o coordenador fica intocável.
-        return self.state == _PHASE2 and not self.dead
+        # O CORPO nunca é mirável a tiro em fase alguma: na Fase 1/interlúdio o escudo
+        # (gerado pelas sentinelas) protege; na Fase 2 o único dano vem da EXPLOSÃO das
+        # minas (contabilizada internamente, ver _update_phase2); na segmentação o alvo
+        # são os 3 segmentos. `rect`/`collision_circle` ficam off-screen → tiros e
+        # player-lasers atravessam o boss sem efeito.
+        return False
 
-    # ── Dano: destruição localizada de blocos (sem HP invisível) ──────────────
+    # ── Dano: o corpo não responde a tiro; só explosão de mina (Fase 2) o fere ──
     def on_hit(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
-        from ...systems import hit_sounds
         from ...systems.hit_result import HitResult
 
-        if not self.can_take_damage():
-            return HitResult()
-        k = max(1, int(damage * self.DAMAGE_TO_CELLS))
-        # Triângulo estável (sem rotação): impacto → coords locais diretas.
-        self._destroy_cells_near(hit_x - self.x, hit_y - self.y, k)
-        return HitResult(
-            explosion_size=12,
-            points=self.CHIP_SCORE,
-            sound=hit_sounds.BOSS_DAMAGE,
-        )
+        return HitResult()  # disparos atravessam o corpo sem dano
 
     def take_damage(self, amount: int) -> None:
-        # Fallback de protocolo (AoE/cadeias que chamam take_damage direto): mira o
-        # centro. O caminho normal é `on_hit` com as coords reais do impacto.
-        if not self.can_take_damage():
-            return
-        self._destroy_cells_near(self.w / 2.0, self.h / 2.0, max(1, int(amount * self.DAMAGE_TO_CELLS)))
+        return  # corpo imune a dano direto (AoE/cadeias); só a mecânica de minas o fere
 
     def _destroy_cells_near(self, lx: float, ly: float, k: int) -> None:
         """Remove os `k` blocos de carcaça intactos mais próximos de (lx, ly) local.
@@ -348,19 +342,17 @@ class MetropolisOverlordBoss(BossHitMixin):
         return self.x + self.w / 2, self.y + self.h / 2
 
     @property
-    def _destroyed_fraction(self) -> float:
-        if self._total_mass <= 0:
-            return 1.0
-        return 1.0 - len(self._intact_cells) / self._total_mass
-
-    @property
     def _shield_energy(self) -> float:
-        """Energia do escudo ∈[0,1]: 1.0 com o escudo pleno (intro/Fase 1), decaindo
-        durante o colapso, 0.0 quando o corpo está vulnerável (Fase 2+)."""
-        if self.state in (_INTRO_RISE, _INTRO_DESCEND, _PHASE1):
+        """Energia do escudo ∈[0,1]: 1.0 com o escudo pleno (intro/Fase 1/interlúdio),
+        decaindo no colapso, subindo na reconstrução, 0.0 na Fase 2/segmentação."""
+        if self.state in (_INTRO_RISE, _INTRO_DESCEND, _PHASE1, _INTERLUDE):
             return 1.0
+        if self.SHIELD_COLLAPSE_DUR <= 0.0:
+            return 0.0
         if self.state == _SHIELD_COLLAPSE:
-            return self._shield_collapse_t / self.SHIELD_COLLAPSE_DUR if self.SHIELD_COLLAPSE_DUR else 0.0
+            return self._shield_collapse_t / self.SHIELD_COLLAPSE_DUR
+        if self.state == _SHIELD_REBUILD:
+            return self._shield_rebuild_t / self.SHIELD_COLLAPSE_DUR
         return 0.0
 
     @property
@@ -370,15 +362,25 @@ class MetropolisOverlordBoss(BossHitMixin):
             return 1.0
         return 1.0 - self._shield_collapse_t / self.SHIELD_COLLAPSE_DUR
 
-    def _armor_tier(self) -> int:
-        """Escala a agressividade da Fase 2 pela fração JÁ desmontada (mais exposto
-        → mais agressivo), não por HP invisível."""
-        d = self._destroyed_fraction
-        if d < 0.33:
-            return 0
-        if d < 0.66:
-            return 1
-        return 2
+    @property
+    def _shield_rebuild_progress(self) -> float:
+        """0.0 no início da reconstrução → 1.0 quando o contorno-escudo se refez."""
+        if self.SHIELD_COLLAPSE_DUR <= 0.0:
+            return 1.0
+        return self._shield_rebuild_t / self.SHIELD_COLLAPSE_DUR
+
+    # ── Gatilhos do escudo (sucessor configurável) ─────────────────────────────
+    def _trigger_shield_collapse(self, next_state: str) -> None:
+        self._after_collapse = next_state
+        self.state = _SHIELD_COLLAPSE
+        self._shield_collapse_t = self.SHIELD_COLLAPSE_DUR
+        self._shield_shatter_idx = 0
+
+    def _trigger_shield_rebuild(self, next_state: str) -> None:
+        self._after_rebuild = next_state
+        self.state = _SHIELD_REBUILD
+        self._shield_rebuild_t = 0.0
+        self._shield_shatter_idx = 0
 
     # ── Update ────────────────────────────────────────────────────────────────
     def update_boss(self, dt: float, ctx: "BossUpdateContext") -> "BossUpdateResult":
@@ -386,6 +388,8 @@ class MetropolisOverlordBoss(BossHitMixin):
         result = BossUpdateResult()
         if dt <= 0.0: return result
         self.anim_time += dt
+        if self._flash_timer > 0.0:
+            self._flash_timer = max(0.0, self._flash_timer - dt)
         self._update_fragments(dt)
 
         if self.state == _INTRO_RISE:
@@ -403,8 +407,11 @@ class MetropolisOverlordBoss(BossHitMixin):
         elif self.state == _SHIELD_COLLAPSE:
             self._update_shield_collapse(dt)
         elif self.state == _PHASE2:
-            player_y = ctx.player_y if ctx.player_y is not None else Config.SCREEN_HEIGHT / 2
-            self._update_phase2(dt, ctx.player_x, player_y, result)
+            self._update_phase2(dt, ctx, result)
+        elif self.state == _SHIELD_REBUILD:
+            self._update_shield_rebuild(dt)
+        elif self.state == _INTERLUDE:
+            self._update_interlude(dt, ctx)
         elif self.state == _SEGMENTATION:
             self._update_segmentation(ctx)
 
@@ -418,9 +425,7 @@ class MetropolisOverlordBoss(BossHitMixin):
         # Escudo cai junto com a última sentinela-geradora → colapso pixel-a-pixel.
         if self._sentinels and all(s.dead for s in self._sentinels):
             self._sentinels = []
-            self.state = _SHIELD_COLLAPSE
-            self._shield_collapse_t = self.SHIELD_COLLAPSE_DUR
-            self._shield_shatter_idx = 0
+            self._trigger_shield_collapse(_PHASE2)
 
     def _spawn_sentinels(self, ctx: "BossUpdateContext") -> None:
         roles = ["neon", "missile", "laser", "emp"]
@@ -449,7 +454,7 @@ class MetropolisOverlordBoss(BossHitMixin):
         self._update_shield_arcs(dt, p)
 
         if self._shield_collapse_t <= 0.0:
-            self.state = _PHASE2
+            self.state = self._after_collapse
             self._shield_arcs = []
 
     def _spawn_edge_shard(self, r: int, c: int) -> None:
@@ -513,73 +518,209 @@ class MetropolisOverlordBoss(BossHitMixin):
         pts.append((x2, y2))
         return pts
 
-    def _update_phase2(self, dt: float, px: float, py: float, result: "BossUpdateResult") -> None:
-        # `health` é só um proxy derivado da massa restante p/ o BossProtocol/leitores
-        # externos (música/score) — NÃO há barra de vida; a progressão é física.
-        self.health = max(1, int(self.max_health * (1.0 - self._destroyed_fraction)))
-        self._update_instability(dt)
+    def _update_phase2(self, dt: float, ctx: "BossUpdateContext", result: "BossUpdateResult") -> None:
+        """Centro fixo + 3 lasers rotativos (principal) + minas da City (secundário).
 
-        tier = self._armor_tier()
-        # Deriva livre pela arena (triângulo estável; não persegue a nave).
-        self._update_drift(dt)
+        O corpo é IMUNE a tiro; o único dano vem da EXPLOSÃO das minas atraídas para o
+        centro. `health` é só um proxy (música/score) do progresso de minas; a fase
+        encerra ao 5º acerto → reconstrução do escudo.
+        """
+        self.health = max(
+            1, int(self.max_health * (1.0 - self._mine_hits / self.MINE_HITS_TO_ADVANCE))
+        )
 
-        # Guardiões orbitais: nascem uma vez e seguem o centro do boss derivando.
-        if not self._core_sentries_spawned:
-            self._spawn_core_sentries(result)
-            self._core_sentries_spawned = True
-        self._update_core_sentries()
+        # 1) Assenta no centro da tela (lerp curto) e trava ali.
+        if not self._phase2_settled:
+            self._settle_to_center(dt)
 
-        self._leak_timer -= dt
-        if self._leak_timer <= 0.0:
-            self._leak_timer = max(0.3, (1.5 - 0.4 * tier) / self.aggressiveness_multiplier)
-            cx, cy = self._center
-            for k in range(1 + tier):
-                result.spawned_enemies.append(NeonBurstShot(cx, cy, px + (k - tier / 2) * 80, py))
+        # 2) Lasers rotativos (PRINCIPAL): nascem UMA vez, após assentar.
+        if self._phase2_settled and not self._beams_spawned:
+            self._spawn_beams(result)
+            self._beams_spawned = True
 
-        # Drones-triângulo energéticos: o boss libera fragmentos da própria energia.
-        self._drone_timer -= dt
-        if self._drone_timer <= 0.0:
-            self._drone_timer = max(1.3, (self.DRONE_INTERVAL - 0.45 * tier) / self.aggressiveness_multiplier)
-            self._spawn_drones(px, py, tier, result)
+        # 3) Pressão SECUNDÁRIA EXCLUSIVA das 3 sentinelas orbitais (o boss NÃO atira):
+        #    nascem uma vez e RENASCEM 10s após destruídas (ameaça persistente).
+        if self._phase2_settled:
+            if not self._core_sentries_spawned:
+                self._spawn_core_sentries(result)
+                self._core_sentries_spawned = True
+            self._update_core_sentries(dt, result)
 
-        if self._destroyed_fraction >= self.SEGMENT_THRESHOLD:
-            self._collapse_remaining_cells()
-            # Guardiões orbitais dissipam: o corpo que orbitavam vai se segmentar.
-            for d in self._core_drones:
-                d.dissipate()
-            self._core_drones = []
-            self.state = _SEGMENTATION
+        # 4) Minas ESCASSAS (única fonte de dano): NO MÁX. 2 ativas; uma nova só surge
+        #    quando uma das atuais detona/expira/some (`_prune_active_mines` libera o slot).
+        self._prune_active_mines()
+        self._mine_spawn_timer -= dt
+        if len(self._active_mines) < self.MAX_ACTIVE_MINES and self._mine_spawn_timer <= 0.0:
+            self._mine_spawn_timer = max(1.5, self.MINE_SPAWN_INTERVAL / self.aggressiveness_multiplier)
+            mine = self._make_mine()
+            self._active_mines.append(mine)
+            result.spawned_enemies.append(mine)
 
-    def _update_instability(self, dt: float) -> None:
-        """Perto do fim, desprende blocos nas bordas dos buracos: a carcaça desmorona
-        sozinha (cada vez mais instável) sem obrigar o jogador a caçar peças isoladas."""
-        if self._destroyed_fraction < self.INSTABILITY_START:
-            return
-        self._instability_timer -= dt
-        if self._instability_timer > 0.0:
-            return
-        self._instability_timer = self.INSTABILITY_INTERVAL
-        # Acelera conforme desmonta: 1 bloco no início da instabilidade → ~4 no fim.
-        span = max(1e-6, 1.0 - self.INSTABILITY_START)
-        ramp = (self._destroyed_fraction - self.INSTABILITY_START) / span
-        self._erode_near_holes(1 + int(ramp * 3))
+        # 5) Conta explosões de mina que tocaram o corpo (auto-contido, lê em.*).
+        self._count_mine_hits(ctx)
 
-    def _erode_near_holes(self, count: int) -> None:
-        cells = self._intact_cells
-        removed = self._removed_set
-        candidates = [
-            i
-            for i, (r, c, _ch, _px, _py) in enumerate(cells)
-            if (r - 1, c) in removed or (r + 1, c) in removed
-            or (r, c - 1) in removed or (r, c + 1) in removed
-        ]
-        if not candidates:
-            return
-        random.shuffle(candidates)
-        # Remove dos maiores índices p/ menores: mantém os índices restantes válidos
-        # sob swap-and-pop (§6).
-        for idx in sorted(candidates[:count], reverse=True):
-            self._detach_cell(idx)
+        if self._mine_hits >= self.MINE_HITS_TO_ADVANCE:
+            self._kill_beams()
+            for slot in self._sentry_slots:
+                if slot["drone"] is not None:
+                    slot["drone"].dissipate()
+            self._sentry_slots = []  # encerra os respawns ao sair da fase
+            self._trigger_shield_rebuild(_INTERLUDE)
+
+    def _settle_to_center(self, dt: float) -> None:
+        """Lerp do corpo até o centro da tela; trava ao chegar."""
+        tx = Config.SCREEN_WIDTH / 2.0 - self.w / 2.0
+        ty = Config.SCREEN_HEIGHT / 2.0 - self.h / 2.0
+        dx, dy = tx - self.x, ty - self.y
+        dist = math.hypot(dx, dy)
+        step = self.PHASE2_SETTLE_SPEED * dt
+        if dist <= step or dist < 1.0:
+            self.x, self.y = tx, ty
+            self._phase2_settled = True
+        else:
+            self.x += dx / dist * step
+            self.y += dy / dist * step
+
+    def _spawn_beams(self, result: "BossUpdateResult") -> None:
+        """Cria os 3 feixes rotativos (um por orb), 120° apart, COR do núcleo, mesma
+        espessura, roteados p/ em.boss_lasers."""
+        grid_w = pmap.PIXEL_COLS * self.PIXEL_SCALE
+        grid_h = pmap.PIXEL_ROWS * self.PIXEL_SCALE
+        for i, (rx, ry, _rr, theme, _phase) in enumerate(self.SPHERE_DEFS):
+            beam = MetropolisOrbitalBeam(
+                self.x + rx * grid_w,
+                self.y + ry * grid_h,
+                base_angle=math.radians(120 * i),
+                theme=theme,
+                aggressiveness_multiplier=self.aggressiveness_multiplier,
+            )
+            self._beams.append(beam)
+            result.new_lasers.append(beam)
+
+    def _kill_beams(self) -> None:
+        # Dissipa progressivamente (não some abrupto); os feixes seguem vivos em
+        # em.boss_lasers até a animação de fade terminar e eles se marcarem `dead`.
+        for b in self._beams:
+            b.begin_fade()
+        self._beams = []
+
+    def _new_sentry(self, theme: str, base_angle: float) -> CoreSentryDrone:
+        cx, cy = self._center
+        return CoreSentryDrone(
+            cx, cy,
+            base_angle=base_angle,
+            theme=theme,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+        )
+
+    def _spawn_core_sentries(self, result: "BossUpdateResult") -> None:
+        """Cria os 3 guardiões orbitais (um por núcleo), 120° apart, e seus slots."""
+        for i, (_rx, _ry, _rr, theme, _phase) in enumerate(self.SPHERE_DEFS):
+            ba = math.radians(120 * i - 90)
+            drone = self._new_sentry(theme, ba)
+            self._sentry_slots.append(
+                {"theme": theme, "base_angle": ba, "drone": drone, "respawn_t": 0.0}
+            )
+            result.spawned_enemies.append(drone)
+
+    def _update_core_sentries(self, dt: float, result: "BossUpdateResult") -> None:
+        """Mantém o centro de órbita (boss central) e RENASCE a sentinela 10s após
+        destruída (mesma animação de criação, retomando órbita + ataques)."""
+        cx, cy = self._center
+        for slot in self._sentry_slots:
+            d = slot["drone"]
+            if d is not None:
+                if d.should_remove():            # terminou a animação de morte → renasce depois
+                    slot["drone"] = None
+                    slot["respawn_t"] = self.SENTRY_RESPAWN_TIME
+                else:
+                    d.orbit_cx, d.orbit_cy = cx, cy
+            else:
+                slot["respawn_t"] -= dt
+                if slot["respawn_t"] <= 0.0:
+                    nd = self._new_sentry(slot["theme"], slot["base_angle"])
+                    slot["drone"] = nd
+                    result.spawned_enemies.append(nd)
+
+    def _make_mine(self) -> CityMine:
+        """Mina da City caindo do topo, x com viés ao centro e a uma distância MÍNIMA
+        das minas já ativas (valida a posição antes de definir o local de surgimento).
+
+        Subtrai do intervalo de spawn as zonas proibidas (±min_sep) de cada mina ativa
+        e sorteia dentro dos trechos restantes — garante a separação sempre que houver
+        espaço; sem espaço, usa o ponto mais distante possível das existentes.
+        """
+        cx = Config.SCREEN_WIDTH / 2.0
+        lo = max(40.0, cx - 0.32 * Config.SCREEN_WIDTH)
+        hi = min(Config.SCREEN_WIDTH - 40.0, cx + 0.32 * Config.SCREEN_WIDTH)
+        min_sep = self.MIN_MINE_SEPARATION_FRAC * Config.SCREEN_WIDTH
+        existing = [m.x for m in self._active_mines]
+
+        allowed: List[tuple[float, float]] = [(lo, hi)]
+        for ex in existing:
+            nxt: List[tuple[float, float]] = []
+            for a, b in allowed:
+                if ex - min_sep > a:
+                    nxt.append((a, min(b, ex - min_sep)))
+                if ex + min_sep < b:
+                    nxt.append((max(a, ex + min_sep), b))
+            allowed = [(a, b) for a, b in nxt if b > a]
+
+        if allowed:
+            total = sum(b - a for a, b in allowed)
+            r = random.uniform(0.0, total)
+            x = allowed[-1][1]
+            for a, b in allowed:
+                if r <= b - a:
+                    x = a + r
+                    break
+                r -= b - a
+        else:
+            # Sem espaço suficiente: o ponto mais distante das minas ativas.
+            x = max((lo, hi), key=lambda c: min(abs(c - ex) for ex in existing))
+        return CityMine(x, None)  # y=None → nasce no topo e cai
+
+    def _prune_active_mines(self) -> None:
+        """Libera o slot de minas que detonaram (`dead`) ou saíram da tela (§6)."""
+        mines = self._active_mines
+        i = 0
+        while i < len(mines):
+            m = mines[i]
+            if m.dead or m.is_off_screen():
+                mines[i] = mines[-1]
+                mines.pop()
+            else:
+                i += 1
+
+    def _count_mine_hits(self, ctx: "BossUpdateContext") -> None:
+        """Conta cada MineExplosion ativa cujo disco cobre o corpo (uma vez por explosão).
+
+        Dedup por `id()` da explosão, mas PODANDO para os ids ainda vivos na lista a
+        cada frame: `id()` é reciclado após o GC remover a explosão, então sem a poda
+        uma explosão nova poderia reusar um id já contado e ser ignorada (undercount).
+        """
+        explosions = ctx.entity_manager.mine_explosions
+        self._mine_hit_ids.intersection_update(id(ex) for ex in explosions)
+        bcx, bcy = self._center
+        reach = self.MINE_HIT_RADIUS
+        for ex in explosions:
+            if ex.finished():
+                continue
+            eid = id(ex)
+            if eid in self._mine_hit_ids:
+                continue
+            dx, dy = ex.x - bcx, ex.y - bcy
+            rr = ex.max_radius + reach
+            if dx * dx + dy * dy <= rr * rr:
+                self._mine_hit_ids.add(eid)
+                self._register_mine_hit(ex.x, ex.y)
+
+    def _register_mine_hit(self, ex: float, ey: float) -> None:
+        """Acerto de mina: flash + erosão cosmética da carcaça no ponto da explosão."""
+        self._mine_hits += 1
+        self._flash_timer = 0.2
+        k = max(3, int(self._total_mass / (self.MINE_HITS_TO_ADVANCE + 1)))
+        self._destroy_cells_near(ex - self.x, ey - self.y, k)
 
     def _collapse_remaining_cells(self) -> None:
         """Colapso estrutural: o que sobrou da carcaça vira fragmento de uma vez."""
@@ -592,6 +733,7 @@ class MetropolisOverlordBoss(BossHitMixin):
         """O boss se divide em 3 triângulos orbitais. Coordenador invisível: só
         cria os segmentos e morre quando os três caem."""
         if not self._segmented:
+            self._collapse_remaining_cells()  # o que sobrou da carcaça explode antes de dividir
             self._spawn_segments(ctx)
             self._segmented = True
         # Vitória quando todos os segmentos foram destruídos.
@@ -624,89 +766,65 @@ class MetropolisOverlordBoss(BossHitMixin):
             self._segments.append(seg)
             ctx.entity_manager.enemies.append(seg)
 
-    def _update_drift(self, dt: float) -> None:
-        """Deriva livre do CENTRO pela arena (plataforma energética flutuando).
+    # ── Reconstrução do escudo (colapso INVERTIDO) ─────────────────────────────
+    def _update_shield_rebuild(self, dt: float) -> None:
+        """Reconstrói o contorno-escudo: a MESMA animação do colapso, invertida.
 
-        Velocidade ~constante num rumo que vira aos poucos (curvas amplas), com desvio
-        suave das bordas — atravessa o interior, não persegue a nave nem gruda no
-        perímetro. Independente da rotação da carcaça.
+        A frente de rachadura varre em ordem inversa; cada célula `E` reaparece
+        (frente branco-quente → assenta em neon) e os cacos CONVERGEM para a borda
+        (caminho contrário ao colapso). Ao fim, o escudo está 100% reativado.
         """
-        half_w, half_h = self.w / 2.0, self.h / 2.0
-        m = 12.0
-        min_x, max_x = half_w + m, Config.SCREEN_WIDTH - half_w - m
-        min_y, max_y = half_h + m, Config.SCREEN_HEIGHT - half_h - m
-        cx, cy = self._center
+        self._shield_rebuild_t = min(self.SHIELD_COLLAPSE_DUR, self._shield_rebuild_t + dt)
+        p = self._shield_rebuild_progress
 
-        # Giro lento do rumo → curvas amplas e fluidas (deslocamento contínuo).
-        self._move_dir += self.DRIFT_TURN * math.sin(self.anim_time * self.DRIFT_TURN_FREQ) * dt
+        n = len(self._edge_cells_order)
+        target = int(p * n)
+        while self._shield_shatter_idx < target:
+            r, c = self._edge_cells_order[n - 1 - self._shield_shatter_idx]  # ordem inversa
+            self._shield_shatter_idx += 1
+            self._spawn_rebuild_shard(r, c)
 
-        # Desvio das bordas: empurra o rumo p/ dentro quando o centro se aproxima do
-        # limite (cresce perto da borda), curvando antes de encostar.
-        push_x = push_y = 0.0
-        if cx < min_x + self.DRIFT_AVOID:
-            push_x += (min_x + self.DRIFT_AVOID - cx) / self.DRIFT_AVOID
-        elif cx > max_x - self.DRIFT_AVOID:
-            push_x -= (cx - (max_x - self.DRIFT_AVOID)) / self.DRIFT_AVOID
-        if cy < min_y + self.DRIFT_AVOID:
-            push_y += (min_y + self.DRIFT_AVOID - cy) / self.DRIFT_AVOID
-        elif cy > max_y - self.DRIFT_AVOID:
-            push_y -= (cy - (max_y - self.DRIFT_AVOID)) / self.DRIFT_AVOID
-        if push_x or push_y:
-            target = math.atan2(math.sin(self._move_dir) + push_y, math.cos(self._move_dir) + push_x)
-            diff = (target - self._move_dir + math.pi) % (2 * math.pi) - math.pi
-            lim = self.DRIFT_MAX_TURN * dt
-            self._move_dir += max(-lim, min(lim, diff))
+        # Arcos crepitam mais no INÍCIO (energia instável se assentando) e somem no fim.
+        self._update_shield_arcs(dt, 1.0 - p)
 
-        # Avança em velocidade constante; clamp de segurança mantém on-screen.
-        cx += math.cos(self._move_dir) * self.DRIFT_SPEED * dt
-        cy += math.sin(self._move_dir) * self.DRIFT_SPEED * dt
-        cx = max(min_x, min(max_x, cx))
-        cy = max(min_y, min(max_y, cy))
-        self.x = cx - half_w
-        self.y = cy - half_h
+        if self._shield_rebuild_t >= self.SHIELD_COLLAPSE_DUR:
+            self._sentinels_spawned = False  # rearma p/ a 2ª onda do interlúdio
+            self.state = self._after_rebuild
+            self._shield_arcs = []
+            self._shield_shatter_idx = 0
 
-    def _spawn_core_sentries(self, result: "BossUpdateResult") -> None:
-        """Cria os 3 guardiões orbitais (um por núcleo), 120° apart no anel."""
-        cx, cy = self._center
-        for i, (_rx, _ry, _rr, theme, _phase) in enumerate(self.SPHERE_DEFS):
-            drone = CoreSentryDrone(
-                cx, cy,
-                base_angle=math.radians(120 * i - 90),
-                theme=theme,
-                aggressiveness_multiplier=self.aggressiveness_multiplier,
+    def _spawn_rebuild_shard(self, r: int, c: int) -> None:
+        """Caco de energia CONVERGINDO para a célula `E` (inverso de _spawn_edge_shard)."""
+        px = self.x + (c + 0.5) * self.PIXEL_SCALE
+        py = self.y + (r + 0.5) * self.PIXEL_SCALE
+        bcx, bcy = self._center
+        ang = math.atan2(py - bcy, px - bcx)
+        out = random.uniform(24.0, 70.0)  # começa afastado p/ fora e converge p/ a borda
+        spd = random.uniform(60.0, 170.0)
+        vx = -math.cos(ang) * spd + random.uniform(-30.0, 30.0)
+        vy = -math.sin(ang) * spd + random.uniform(-30.0, 30.0)
+        color = pmap.EDGE_GLOW if random.random() < 0.5 else pmap.COLORS["E"]
+        self._fragments.append(
+            _ArmorFragment(
+                px + math.cos(ang) * out, py + math.sin(ang) * out, vx, vy,
+                self.PIXEL_SCALE * random.uniform(0.5, 0.9),
+                color,
+                gravity=-40.0,  # leve flutuação (energia, não detrito que cai)
+                life=(0.45, 0.9),
             )
-            self._core_drones.append(drone)
-            result.spawned_enemies.append(drone)
+        )
 
-    def _update_core_sentries(self) -> None:
-        """Empurra o centro de órbita (boss deriva) e poda os mortos (§1, §6)."""
-        cx, cy = self._center
-        drones = self._core_drones
-        i = 0
-        while i < len(drones):
-            d = drones[i]
-            if d.dead:
-                drones[i] = drones[-1]
-                drones.pop()
-            else:
-                d.orbit_cx, d.orbit_cy = cx, cy
-                i += 1
-
-    def _spawn_drones(self, px: float, py: float, tier: int, result: "BossUpdateResult") -> None:
-        """Libera 1-2 drones-triângulo perto do boss, cor ciclando pelos núcleos."""
-        cx, cy = self._center
-        count = 2 if tier >= 2 else 1  # mais "se desfazendo" perto do fim
-        for _ in range(count):
-            theme = self.SPHERE_DEFS[self._drone_theme_idx % len(self.SPHERE_DEFS)][3]
-            self._drone_theme_idx += 1
-            sx = cx + random.uniform(-self.w * 0.28, self.w * 0.28)
-            sy = cy + random.uniform(-self.h * 0.2, self.h * 0.32)
-            result.spawned_enemies.append(
-                EnergyTriangleDrone(
-                    sx, sy, px, py, theme,
-                    aggressiveness_multiplier=self.aggressiveness_multiplier,
-                )
-            )
+    # ── Interlúdio: padrão da Fase 1 com escudo reconstruído ───────────────────
+    def _update_interlude(self, dt: float, ctx: "BossUpdateContext") -> None:
+        """2ª onda de sentinelas (mesma mecânica da Fase 1). Matar todas derruba o
+        escudo de novo → Fase 3 (segmentação)."""
+        if not self._sentinels_spawned:
+            self._spawn_sentinels(ctx)
+            self._sentinels_spawned = True
+        self.x += math.sin(self.anim_time) * 15.0 * dt
+        if self._sentinels and all(s.dead for s in self._sentinels):
+            self._sentinels = []
+            self._trigger_shield_collapse(_SEGMENTATION)
 
     # ── Render (§3) ────────────────────────────────────────────────────────────
     def draw(self, surface: pygame.Surface) -> None:
@@ -725,9 +843,16 @@ class MetropolisOverlordBoss(BossHitMixin):
                 # Triângulo estável (sem rotação) na Fase 1/colapso/Fase 2.
                 self._draw_pixel_map(surface, draw_x, draw_y, self.PIXEL_SCALE)
 
-            # Arcos elétricos instáveis nos instantes finais do colapso do escudo.
-            if self.state == _SHIELD_COLLAPSE:
+            # Arcos elétricos instáveis no colapso e na reconstrução do escudo.
+            if self.state in (_SHIELD_COLLAPSE, _SHIELD_REBUILD):
                 self._draw_shield_arcs(surface)
+
+            # Clarão branco ao corpo levar um acerto de mina (Fase 2).
+            if self._flash_timer > 0.0:
+                a = int(150 * min(1.0, self._flash_timer / 0.2))
+                flash = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
+                flash.fill((255, 255, 255, a))
+                surface.blit(flash, (int(self.x), int(self.y)))
 
         # Fragmentos da carcaça / cacos de energia do escudo (por cima de tudo).
         for frag in self._fragments:
@@ -782,6 +907,18 @@ class MetropolisOverlordBoss(BossHitMixin):
             glow = 0.5 + 0.5 * math.sin(self.anim_time * 9.0 + th * 25.0)
             neon, hot = pmap.COLORS["E"], pmap.EDGE_GLOW
             return tuple(int(neon[i] + (hot[i] - neon[i]) * glow * 0.6) for i in range(3))
+        if self.state == _SHIELD_REBUILD:
+            # Espelho do colapso: a célula REAPARECE quando a frente (inversa) a cruza.
+            p = self._shield_rebuild_progress
+            th = self._edge_threshold.get((r, c), 0.0)
+            band = 0.10
+            front = 1.0 - th  # reaparece quando p passa de (1 - th)
+            if p >= front + band:  # já reconstruída → neon assentado pulsante
+                pulse = 0.5 + 0.5 * math.sin(self.anim_time * 4.0)
+                return pmap.EDGE_GLOW if pulse > 0.6 else pmap.COLORS["E"]
+            if p >= front - band:  # frente de reconstrução → branco-quente
+                return (225, 250, 255)
+            return None  # ainda não reconstruída
         if self._shield_energy >= 1.0:  # escudo vivo: neon pulsante
             pulse = 0.5 + 0.5 * math.sin(self.anim_time * 4.0)
             return pmap.EDGE_GLOW if pulse > 0.6 else pmap.COLORS["E"]
