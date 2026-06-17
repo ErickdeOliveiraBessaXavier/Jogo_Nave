@@ -1,8 +1,11 @@
 """Feixe orbital rotativo do Metropolis Overlord — ataque PRINCIPAL da Fase 2.
 
 Três feixes contínuos (um por núcleo/orb) que partem do corpo do boss parado no
-centro da arena e GIRAM numa direção fixa — varrendo a tela e obrigando o jogador a
-se reposicionar o tempo todo.
+centro da arena e GIRAM numa direção (varrendo a tela, obrigando o jogador a se
+reposicionar). A DIREÇÃO INICIAL (`base_angle`) de cada feixe é a ESTRUTURAL do seu
+núcleo — do centroide do triângulo para fora, passando pela orb (superior p/ cima,
+inferiores p/ as pontas da base) — então os três giram preservando a relação de
+120°. A velocidade do giro é configurável por `ang_speed` (0.0 = feixe fixo).
 
 É subclasse de `BossLaser` de propósito: assim vive em `em.boss_lasers`, é incluído
 pelo filtro `isinstance(laser, BossLaser)` e atinge a nave via
@@ -28,7 +31,7 @@ from __future__ import annotations
 
 import math
 import random
-from typing import List
+from typing import Callable, List, Optional, Tuple
 
 import pygame
 
@@ -43,8 +46,8 @@ _FADING = "fading"
 
 
 class MetropolisOrbitalBeam(BossLaser):
-    """Feixe neon contínuo (cor do núcleo) que gira numa única direção fixa, com
-    apresentação de carga/dissipação elaborada."""
+    """Feixe neon contínuo (cor do núcleo) que GIRA a partir de uma direção inicial
+    estrutural; `ang_speed` controla a velocidade do giro (0.0 = fixo)."""
 
     BEAM_W: float = 13.0          # largura/raio de colisão do feixe — IGUAL p/ os 3
     ANG_SPEED: float = 0.42       # rad/s — giro LENTO/cadenciado (legível, antecipável)
@@ -61,14 +64,27 @@ class MetropolisOrbitalBeam(BossLaser):
         theme: str = "cyan",
         aggressiveness_multiplier: float = 1.0,
         length: float | None = None,
+        ang_speed: float | None = None,
+        origin_provider: Optional[Callable[[], Tuple[float, float]]] = None,
     ) -> None:
         if length is None:
             length = math.hypot(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT) * 1.2
         self._length = length
+        # Âncora ao orb emissor: se fornecida, a origem é RELIDA a cada frame (o feixe
+        # acompanha o orb/boss e nunca memoriza posição fixa no mundo). Sem provider,
+        # usa a origem fixa passada (compat. com outros usos).
+        self._origin_provider = origin_provider
+        if origin_provider is not None:
+            origin_x, origin_y = origin_provider()
         self._origin_x = float(origin_x)
         self._origin_y = float(origin_y)
         self._angle = float(base_angle)
-        self._ang_speed = self.ANG_SPEED * max(0.5, aggressiveness_multiplier)
+        # `ang_speed=0.0` → feixe de direção FIXA (descarga estrutural). None → giro
+        # padrão escalado pela agressividade (compat. com outros usos).
+        if ang_speed is None:
+            self._ang_speed = self.ANG_SPEED * max(0.5, aggressiveness_multiplier)
+        else:
+            self._ang_speed = ang_speed
 
         # Cores do núcleo: glow vívido (bright), camada média (mid) e versão dim p/ halo.
         _dark, self._mid, self._glow = pmap.PLASMA_THEMES.get(theme, pmap.PLASMA_THEMES["cyan"])
@@ -104,7 +120,11 @@ class MetropolisOrbitalBeam(BossLaser):
         self._anim += dt
         self._phase_t += dt
 
-        # Giro contínuo em direção FIXA (também durante carga/dissipação).
+        # Âncora dinâmica: relê a posição ATUAL do orb emissor (acompanha o boss).
+        if self._origin_provider is not None:
+            self._origin_x, self._origin_y = self._origin_provider()
+
+        # Giro contínuo a partir da direção estrutural (também durante carga/dissipação).
         self._angle += self._ang_speed * dt
         self.x = self._origin_x
         self.y = self._origin_y
