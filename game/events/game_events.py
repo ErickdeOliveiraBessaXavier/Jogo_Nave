@@ -104,6 +104,18 @@ class ScreenShake(Event):
 
 
 @dataclass
+class ImpactFlash(Event):
+    """Solicita um flash branco curtíssimo de tela (impact frame / white frames).
+
+    `alpha` = opacidade de pico (0-255); `duration` em segundos (1-3 frames).
+    Usar com moderação — só para momentos de impacto importantes.
+    """
+
+    duration: float = 0.05
+    alpha: int = 180
+
+
+@dataclass
 class SpawnEffect(Event):
     """Solicita o spawn de um efeito visual (ex: explosão)."""
 

@@ -72,6 +72,8 @@ class GameRenderer:
     def __init__(self, base_renderer: Any) -> None:
         self.r = base_renderer
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
+        # Surface branca reusada para o impact flash (set_alpha por frame; sem alocar).
+        self._flash_surface: pygame.Surface | None = None
 
         # Escala de UI relativa ao design base (1280×720). Como todas as
         # resoluções ofertadas são 16:9, um único fator (largura) cobre os dois
@@ -226,6 +228,9 @@ class GameRenderer:
         # 9. Blit final com Screen Shake
         surface.blit(self.game_surface, self._compute_shake_offset(frame))
 
+        # 9a. Impact flash (white frames) sobre o mundo, abaixo de HUD/avisos.
+        self._draw_impact_flash(frame, surface)
+
         # 9b. Vinheta de dano (overlay de borda sobre mundo + HUD, abaixo dos
         # avisos). Early-out interno quando não há nada visível.
         frame.damage_vignette.draw(surface)
@@ -261,6 +266,21 @@ class GameRenderer:
         if frame.start_fade_active:
             frame.start_fade_overlay.fill((0, 0, 0, int(frame.start_fade_alpha)))
             surface.blit(frame.start_fade_overlay, (0, 0))
+
+    def _draw_impact_flash(self, frame: RenderFrame, surface: pygame.Surface) -> None:
+        """White frames: clarão branco curto que esmaece em 1-3 frames (impact frame)."""
+        if frame.flash_timer <= 0.0 or frame.flash_duration <= 0.0 or frame.flash_alpha <= 0:
+            return
+        a = int(frame.flash_alpha * (frame.flash_timer / frame.flash_duration))
+        if a <= 0:
+            return
+        if self._flash_surface is None:
+            self._flash_surface = pygame.Surface(
+                (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
+            )
+            self._flash_surface.fill((255, 255, 255))
+        self._flash_surface.set_alpha(min(255, a))
+        surface.blit(self._flash_surface, (0, 0))
 
     def _compute_shake_offset(self, frame: RenderFrame) -> tuple[int, int]:
         """Calcula o deslocamento aleatório para o efeito de screen shake."""

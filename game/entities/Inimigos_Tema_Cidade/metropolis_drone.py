@@ -44,11 +44,13 @@ import pygame
 from ...core.config import config as Config
 from ...core.visual_quality import visual_quality as vq
 from ..enemy_hit_mixin import EnemyHitMixin
-from .metropolis_projectiles import EMPPulse
 from . import metropolis_overlord_pixel_map as pmap
+from .metropolis_projectiles import EMPPulse
 
 
-def _jagged_line(x1: float, y1: float, x2: float, y2: float, jitter: float, segs: int = 4):
+def _jagged_line(
+    x1: float, y1: float, x2: float, y2: float, jitter: float, segs: int = 4
+):
     """Polilinha em ziguezague entre dois pontos (raio elétrico). Para `draw` (§3)."""
     dx, dy = x2 - x1, y2 - y1
     length = math.hypot(dx, dy) or 1.0
@@ -60,6 +62,7 @@ def _jagged_line(x1: float, y1: float, x2: float, y2: float, jitter: float, segs
         pts.append((x1 + dx * t + nx * off, y1 + dy * t + ny * off))
     pts.append((x2, y2))
     return pts
+
 
 if TYPE_CHECKING:
     from ...systems.entity_context import EnemyUpdateContext
@@ -81,21 +84,21 @@ class EnergyTriangleDrone(EnemyHitMixin):
     is_boss: bool = False
     HEALTH: int = 6
     POINTS: int = 60
-    SIZE: float = 14.0              # meia-altura do triângulo (raio de colisão ~igual)
+    SIZE: float = 14.0  # meia-altura do triângulo (raio de colisão ~igual)
 
     INITIAL_SPEED: float = 95.0
     ACCEL: float = 340.0
     MAX_SPEED: float = 420.0
-    TURN_RATE: float = 1.9         # rad/s — correção mais agressiva
-    CORRECT_WINDOW: float = 3.2    # s; depois disso para de corrigir (voa reto)
+    TURN_RATE: float = 1.9  # rad/s — correção mais agressiva
+    CORRECT_WINDOW: float = 3.2  # s; depois disso para de corrigir (voa reto)
     LIFETIME: float = 5.8
 
-    BIRTH_TIME: float = 0.34       # nascimento: portal/condensação → forma materializa
-    SPIN_MIN: float = 3.0          # rad/s — rotação própria (só visual, não afeta rumo)
+    BIRTH_TIME: float = 0.34  # nascimento: portal/condensação → forma materializa
+    SPIN_MIN: float = 3.0  # rad/s — rotação própria (só visual, não afeta rumo)
     SPIN_MAX: float = 5.5
-    DEATH_BURST: float = 0.26      # duração da explosão energética simples
+    DEATH_BURST: float = 0.26  # duração da explosão energética simples
 
-    _explosion_size_killed = 0     # explosão é própria (energética), não a genérica
+    _explosion_size_killed = 0  # explosão é própria (energética), não a genérica
     _explosion_size_hit = 0
 
     def __init__(
@@ -119,22 +122,28 @@ class EnergyTriangleDrone(EnemyHitMixin):
         self.lifetime = self.LIFETIME
 
         # Cores do tema do núcleo (dark, mid, bright).
-        self._dark, self._mid, self._bright = pmap.PLASMA_THEMES.get(theme, pmap.PLASMA_THEMES["cyan"])
+        self._dark, self._mid, self._bright = pmap.PLASMA_THEMES.get(
+            theme, pmap.PLASMA_THEMES["cyan"]
+        )
 
         # Rumo inicial APROXIMADO ao jogador (com jitter — impulsivo, não preciso).
-        self.heading = math.atan2(target_y - y, target_x - x) + random.uniform(-0.4, 0.4)
+        self.heading = math.atan2(target_y - y, target_x - x) + random.uniform(
+            -0.4, 0.4
+        )
         self.speed = self.INITIAL_SPEED
 
         # Rotação própria contínua (só visual, NÃO altera o rumo): ângulo + velocidade
         # com sinal/intensidade aleatórios (instabilidade energética por drone).
         self._spin = random.uniform(0.0, 2.0 * math.pi)
-        self._spin_speed = random.choice((-1.0, 1.0)) * random.uniform(self.SPIN_MIN, self.SPIN_MAX)
+        self._spin_speed = random.choice((-1.0, 1.0)) * random.uniform(
+            self.SPIN_MIN, self.SPIN_MAX
+        )
 
         # Nascimento: emerge por um portal/condensação antes de perseguir.
         self._birth = True
         self._birth_t = self.BIRTH_TIME
 
-        self._trail: List[Tuple[float, float, float]] = [] # x, y, angle
+        self._trail: List[Tuple[float, float, float]] = []  # x, y, angle
         self._sparks: List[List[float]] = []  # [x, y, vx, vy, life, maxlife]
         self._spark_timer = 0.0
 
@@ -184,7 +193,9 @@ class EnergyTriangleDrone(EnemyHitMixin):
             return HitResult()
         self.take_damage(damage)
         if self._dying:  # morreu neste hit
-            return HitResult(killed=True, points=self.POINTS, sound=hit_sounds.EXPLOSION_ALIEN)
+            return HitResult(
+                killed=True, points=self.POINTS, sound=hit_sounds.EXPLOSION_ALIEN
+            )
         return HitResult(sound=hit_sounds.BOSS_DAMAGE)
 
     def on_ship_contact(self, _cx: float, _cy: float) -> "HitResult":
@@ -227,7 +238,9 @@ class EnergyTriangleDrone(EnemyHitMixin):
         if self._age < self.CORRECT_WINDOW:
             desired = math.atan2(ctx.player_y - self.y, ctx.player_x - self.x)
             diff = (desired - self.heading + math.pi) % (2 * math.pi) - math.pi
-            fade = 1.0 - (self._age / self.CORRECT_WINDOW) ** 1.5 # decai mais suave no início
+            fade = (
+                1.0 - (self._age / self.CORRECT_WINDOW) ** 1.5
+            )  # decai mais suave no início
             lim = self.TURN_RATE * self._aggr * fade * dt
             self.heading += max(-lim, min(lim, diff))
 
@@ -254,15 +267,21 @@ class EnergyTriangleDrone(EnemyHitMixin):
             self._spark_timer = 0.035
             ang = self.heading + math.pi + random.uniform(-0.8, 0.8)
             sp = random.uniform(30.0, 90.0)
-            self._sparks.append([
-                self.x, self.y, math.cos(ang) * sp, math.sin(ang) * sp,
-                random.uniform(0.2, 0.5), 0.5,
-            ])
+            self._sparks.append(
+                [
+                    self.x,
+                    self.y,
+                    math.cos(ang) * sp,
+                    math.sin(ang) * sp,
+                    random.uniform(0.2, 0.5),
+                    0.5,
+                ]
+            )
 
         if self.lifetime <= 0.0:
-            self._start_death()   # expira na arena → explosão energética simples
+            self._start_death()  # expira na arena → explosão energética simples
         elif _off_screen(self.x, self.y):
-            self.dead = True      # saiu da arena → some (invisível, sem efeito)
+            self.dead = True  # saiu da arena → some (invisível, sem efeito)
 
     def _update_sparks(self, dt: float) -> None:
         sparks = self._sparks
@@ -288,27 +307,38 @@ class EnergyTriangleDrone(EnemyHitMixin):
         # Rastro: wireframe fantasmagórico dos triângulos passados.
         n = len(self._trail)
         for i, (tx, ty, tang) in enumerate(self._trail):
-            if i % 2 != 0: continue # pula alguns p/ não poluir
+            if i % 2 != 0:
+                continue  # pula alguns p/ não poluir
             a = (i + 1) / n
             # Triângulo de rastro menor e mais transparente.
             pts = self._tri_points(tx, ty, tang, self.SIZE * 0.7 * a)
-            col = (int(self._mid[0] * a * 0.5), int(self._mid[1] * a * 0.5), int(self._mid[2] * a * 0.5))
+            col = (
+                int(self._mid[0] * a * 0.5),
+                int(self._mid[1] * a * 0.5),
+                int(self._mid[2] * a * 0.5),
+            )
             pygame.draw.polygon(surface, col, pts, 1)
 
         # Faíscas.
         for s in self._sparks:
             a = max(0.0, s[4] / s[5])
-            col = (int(self._bright[0] * a), int(self._bright[1] * a), int(self._bright[2] * a))
-            pygame.draw.circle(surface, col, (int(s[0]), int(s[1])), max(1, int(2.5 * a)))
+            col = (
+                int(self._bright[0] * a),
+                int(self._bright[1] * a),
+                int(self._bright[2] * a),
+            )
+            pygame.draw.circle(
+                surface, col, (int(s[0]), int(s[1])), max(1, int(2.5 * a))
+            )
 
         # Corpo: triângulo principal (vazado no centro com pulsar interno).
         pts = self._tri_points(self.x, self.y, self._spin, self.SIZE)
-        
+
         # Brilho externo (glow sutil via outline).
         body = (255, 255, 255) if self.hit_timer > 0.0 else self._mid
         pygame.draw.polygon(surface, body, pts)
         pygame.draw.polygon(surface, self._bright, pts, 2)
-        
+
         # Núcleo pulsante (substitui o ponto fixo por algo mais dinâmico).
         # Um triângulo interno que pulsa em escala e gira invertido.
         p_scale = 0.4 + 0.15 * math.sin(self.anim_time * 15.0)
@@ -316,8 +346,9 @@ class EnergyTriangleDrone(EnemyHitMixin):
         pygame.draw.polygon(surface, self._bright, i_pts, 1)
         # Pequenos arcos internos ligando o centro aos vértices (opcional, p/ "tecnológico")
         for px, py in i_pts:
-            pygame.draw.line(surface, self._bright, (int(self.x), int(self.y)), (int(px), int(py)), 1)
-
+            pygame.draw.line(
+                surface, self._bright, (int(self.x), int(self.y)), (int(px), int(py)), 1
+            )
 
     def _draw_birth(self, surface: pygame.Surface) -> None:
         """Nascimento: anel de condensação contraindo + cacos convergindo + o
@@ -328,7 +359,11 @@ class EnergyTriangleDrone(EnemyHitMixin):
         # Anel de portal/condensação contraindo conforme a energia se concentra.
         ring_r = int(self.SIZE * (2.1 - 1.1 * p))
         ring_a = (1.0 - p) * 0.9
-        rc = (int(self._bright[0] * ring_a), int(self._bright[1] * ring_a), int(self._bright[2] * ring_a))
+        rc = (
+            int(self._bright[0] * ring_a),
+            int(self._bright[1] * ring_a),
+            int(self._bright[2] * ring_a),
+        )
         if ring_r > 0:
             pygame.draw.circle(surface, rc, (x, y), ring_r, 2)
 
@@ -345,7 +380,11 @@ class EnergyTriangleDrone(EnemyHitMixin):
         pts = self._tri_points(self.x, self.y, self._spin, self.SIZE * scale)
         body = (int(self._mid[0] * p), int(self._mid[1] * p), int(self._mid[2] * p))
         pygame.draw.polygon(surface, body, pts)
-        ec = (int(self._bright[0] * p), int(self._bright[1] * p), int(self._bright[2] * p))
+        ec = (
+            int(self._bright[0] * p),
+            int(self._bright[1] * p),
+            int(self._bright[2] * p),
+        )
         pygame.draw.polygon(surface, ec, pts, 2)
 
     def _draw_death(self, surface: pygame.Surface) -> None:
@@ -353,11 +392,19 @@ class EnergyTriangleDrone(EnemyHitMixin):
         t = 1.0 - max(0.0, self._death_t) / self.DEATH_BURST
         r = int(self.SIZE * (0.8 + 2.6 * t))
         a = 1.0 - t
-        col = (int(self._bright[0] * a), int(self._bright[1] * a), int(self._bright[2] * a))
+        col = (
+            int(self._bright[0] * a),
+            int(self._bright[1] * a),
+            int(self._bright[2] * a),
+        )
         if r > 0:
-            pygame.draw.circle(surface, col, (int(self.x), int(self.y)), r, max(1, int(3 * a)))
+            pygame.draw.circle(
+                surface, col, (int(self.x), int(self.y)), r, max(1, int(3 * a))
+            )
         core = (int(self._mid[0] * a), int(self._mid[1] * a), int(self._mid[2] * a))
-        pygame.draw.circle(surface, core, (int(self.x), int(self.y)), max(1, int(self.SIZE * a)))
+        pygame.draw.circle(
+            surface, core, (int(self.x), int(self.y)), max(1, int(self.SIZE * a))
+        )
 
     @staticmethod
     def _tri_points(x: float, y: float, angle: float, radius: float):
@@ -366,7 +413,10 @@ class EnergyTriangleDrone(EnemyHitMixin):
         return [
             (x + math.cos(angle) * radius, y + math.sin(angle) * radius),
             (x + math.cos(angle + step) * radius, y + math.sin(angle + step) * radius),
-            (x + math.cos(angle + 2.0 * step) * radius, y + math.sin(angle + 2.0 * step) * radius),
+            (
+                x + math.cos(angle + 2.0 * step) * radius,
+                y + math.sin(angle + 2.0 * step) * radius,
+            ),
         ]
 
 
@@ -390,18 +440,18 @@ class CoreSentryDrone(EnemyHitMixin):
     HEALTH: int = 45
     POINTS: int = 120
 
-    CORE_RADIUS: float = 13.0      # raio do núcleo de plasma (visual + colisão fina)
-    SHELL_RADIUS: float = 22.0     # casca triangular girando ao redor do núcleo
-    ORBIT_RADIUS: float = 170.0    # distância ao centro do boss
-    ORBIT_PULSE: float = 14.0      # respiração do raio (sobe/desce levemente)
-    ORBIT_SPEED: float = 0.42      # rad/s do giro ao redor do boss (pressão sem caos)
+    CORE_RADIUS: float = 13.0  # raio do núcleo de plasma (visual + colisão fina)
+    SHELL_RADIUS: float = 22.0  # casca triangular girando ao redor do núcleo
+    ORBIT_RADIUS: float = 170.0  # distância ao centro do boss
+    ORBIT_PULSE: float = 14.0  # respiração do raio (sobe/desce levemente)
+    ORBIT_SPEED: float = 0.42  # rad/s do giro ao redor do boss (pressão sem caos)
     ORBIT_PULSE_FREQ: float = 1.3  # rad/s da respiração do raio
 
-    SPIN_MIN: float = 1.8          # rad/s — rotação própria da casca (só visual)
+    SPIN_MIN: float = 1.8  # rad/s — rotação própria da casca (só visual)
     SPIN_MAX: float = 3.2
 
-    BIRTH_TIME: float = 0.7        # materialização energética deliberada (3 estágios)
-    DEATH_BURST: float = 0.55      # destruição: implosão → fragmentação → resíduo
+    BIRTH_TIME: float = 0.7  # materialização energética deliberada (3 estágios)
+    DEATH_BURST: float = 0.55  # destruição: implosão → fragmentação → resíduo
 
     # Tema do núcleo → papel (mesma associação de SPHERE_DEFS/_spawn_segments).
     _THEME_ROLE = {"cyan": "neon", "magenta": "missile", "amber": "emp"}
@@ -414,12 +464,12 @@ class CoreSentryDrone(EnemyHitMixin):
     _S_AIM = "aim"
     _S_FIRE = "fire"
     _S_RECOVER = "recover"
-    _ROLE_IDLE = {"neon": 0.9, "missile": 1.2, "emp": 1.6}   # repouso entre ataques (s)
+    _ROLE_IDLE = {"neon": 0.9, "missile": 1.2, "emp": 1.6}  # repouso entre ataques (s)
     _ROLE_AIM = {"neon": 0.7, "missile": 0.85, "emp": 1.05}  # duração do telegrafo (s)
     FIRE_TIME: float = 0.14
     RECOVER_TIME: float = 0.5
 
-    _explosion_size_killed = 0     # explosão é própria (energética), não a genérica
+    _explosion_size_killed = 0  # explosão é própria (energética), não a genérica
     _explosion_size_hit = 0
 
     def __init__(
@@ -472,10 +522,15 @@ class CoreSentryDrone(EnemyHitMixin):
         self._state_t = self._idle_dur() + random.uniform(0.0, 0.7)
         self._charge = 0.0
         self._aim_dur = self._ROLE_AIM.get(self.role, 0.8)
-        self._aim_x, self._aim_y = self.x, self.y  # alvo travado no início da preparação
+        self._aim_x, self._aim_y = (
+            self.x,
+            self.y,
+        )  # alvo travado no início da preparação
         self._flash = 0.0  # clarão curto ao disparar (visual)
 
-        self._rect = pygame.Rect(0, 0, int(self.SHELL_RADIUS * 2), int(self.SHELL_RADIUS * 2))
+        self._rect = pygame.Rect(
+            0, 0, int(self.SHELL_RADIUS * 2), int(self.SHELL_RADIUS * 2)
+        )
         self._sync_rect()
 
     # ── Geometria / colisão ────────────────────────────────────────────────
@@ -516,14 +571,18 @@ class CoreSentryDrone(EnemyHitMixin):
         for _ in range(vq.particles(8)):
             ang = random.uniform(0.0, 2.0 * math.pi)
             spd = random.uniform(90.0, 290.0)
-            self._frags.append([
-                self.x, self.y,                                  # 0,1 pos
-                math.cos(ang) * spd, math.sin(ang) * spd,        # 2,3 vel
-                random.uniform(0.0, 2.0 * math.pi),              # 4 ângulo
-                random.choice((-1.0, 1.0)) * random.uniform(6.0, 14.0),  # 5 spin
-                random.uniform(3.5, 8.0),                        # 6 tamanho
-                random.random() < 0.4,                           # 7 hot (branco)
-            ])
+            self._frags.append(
+                [
+                    self.x,
+                    self.y,  # 0,1 pos
+                    math.cos(ang) * spd,
+                    math.sin(ang) * spd,  # 2,3 vel
+                    random.uniform(0.0, 2.0 * math.pi),  # 4 ângulo
+                    random.choice((-1.0, 1.0)) * random.uniform(6.0, 14.0),  # 5 spin
+                    random.uniform(3.5, 8.0),  # 6 tamanho
+                    random.random() < 0.4,  # 7 hot (branco)
+                ]
+            )
 
     def dissipate(self) -> None:
         """Pedido externo de fim (boss entrou na segmentação): dissipa em vez de
@@ -538,7 +597,9 @@ class CoreSentryDrone(EnemyHitMixin):
             return HitResult()
         self.take_damage(damage)
         if self._dying:  # morreu neste hit
-            return HitResult(killed=True, points=self.POINTS, sound=hit_sounds.EXPLOSION_ALIEN)
+            return HitResult(
+                killed=True, points=self.POINTS, sound=hit_sounds.EXPLOSION_ALIEN
+            )
         return HitResult(sound=hit_sounds.BOSS_DAMAGE)
 
     def on_ship_contact(self, _cx: float, _cy: float) -> "HitResult":
@@ -561,7 +622,9 @@ class CoreSentryDrone(EnemyHitMixin):
             self.hit_timer = max(0.0, self.hit_timer - dt)
         if self._flash > 0.0:
             self._flash = max(0.0, self._flash - dt)
-        self._spin += self._spin_speed * dt  # rotação própria (inclusive nascendo/morrendo)
+        self._spin += (
+            self._spin_speed * dt
+        )  # rotação própria (inclusive nascendo/morrendo)
 
         if self._dying:
             self._death_t -= dt
@@ -607,7 +670,10 @@ class CoreSentryDrone(EnemyHitMixin):
             self._advance_orbit(dt, 0.15)
             if self._state_t <= 0.0:
                 self._charge = 0.0
-                self._state, self._state_t = self._S_RECOVER, self.RECOVER_TIME / self._aggr
+                self._state, self._state_t = (
+                    self._S_RECOVER,
+                    self.RECOVER_TIME / self._aggr,
+                )
         else:  # RECOVER
             self._advance_orbit(dt, 1.0)
             if self._state_t <= 0.0:
@@ -633,7 +699,11 @@ class CoreSentryDrone(EnemyHitMixin):
     def _fire(self) -> List[object]:
         # Arremessa o caco da cor do núcleo rumo ao alvo TRAVADO no telegrafo; o
         # efeito de contato (reto/teleguiado/EMP) é do próprio caco, por tema.
-        return [EnergyShardTriangle(self.x, self.y, self._aim_x, self._aim_y, self.theme, self._aggr)]
+        return [
+            EnergyShardTriangle(
+                self.x, self.y, self._aim_x, self._aim_y, self.theme, self._aggr
+            )
+        ]
 
     def _update_death_frags(self, dt: float) -> None:
         for f in self._frags:
@@ -696,11 +766,15 @@ class CoreSentryDrone(EnemyHitMixin):
             sa = self.anim_time * 1.7 + i * (2.0 * math.pi / 3.0)
             srx = int(cx + math.cos(sa) * (sr + 10))
             sry = int(cy + math.sin(sa) * (sr + 10))
-            pygame.draw.circle(surface, self._bright, (srx, sry), 2 if st == self._S_AIM else 1)
+            pygame.draw.circle(
+                surface, self._bright, (srx, sry), 2 if st == self._S_AIM else 1
+            )
 
         # Anel tecnológico externo: hexágono girando + nós nos vértices.
         hexpts = self._ngon(cx, cy, 6, sr + 5, self._spin * 0.4)
-        pygame.draw.polygon(surface, self._dark, [(int(hx), int(hy)) for hx, hy in hexpts], 1)
+        pygame.draw.polygon(
+            surface, self._dark, [(int(hx), int(hy)) for hx, hy in hexpts], 1
+        )
         for hx, hy in hexpts:
             pygame.draw.circle(surface, self._bright, (int(hx), int(hy)), 2)
 
@@ -716,21 +790,35 @@ class CoreSentryDrone(EnemyHitMixin):
             if random.random() < bolt_chance:
                 bolt = _jagged_line(x, y, px, py, jitter=3.0, segs=3)
                 pygame.draw.lines(
-                    surface, self._bright, False,
-                    [(int(bx), int(by)) for bx, by in bolt], 1,
+                    surface,
+                    self._bright,
+                    False,
+                    [(int(bx), int(by)) for bx, by in bolt],
+                    1,
                 )
 
         # Núcleo de plasma (foco; intensidade pelo estado + flash do disparo).
         intensity = min(1.4, 0.6 + 0.55 * energy + 0.5 * self._flash)
         pmap.draw_plasma_sphere(
-            surface, x, y, self.CORE_RADIUS, self.theme, self._spin, intensity, self.anim_time
+            surface,
+            x,
+            y,
+            self.CORE_RADIUS,
+            self.theme,
+            self._spin,
+            intensity,
+            self.anim_time,
         )
 
         # Anel de carga apertando (preparação) → clarão de disparo (disparo).
         if st == self._S_AIM:
             ring_r = int(self.CORE_RADIUS + 14 - 10 * self._charge)
             ca = 0.4 + 0.6 * self._charge
-            col = (int(self._bright[0] * ca), int(self._bright[1] * ca), int(self._bright[2] * ca))
+            col = (
+                int(self._bright[0] * ca),
+                int(self._bright[1] * ca),
+                int(self._bright[2] * ca),
+            )
             pygame.draw.circle(surface, col, (x, y), max(1, ring_r), 2)
         elif st == self._S_FIRE:
             fr = int(self.CORE_RADIUS + 6 + 22 * (self._flash / self.FIRE_TIME))
@@ -744,35 +832,54 @@ class CoreSentryDrone(EnemyHitMixin):
         cx, cy = self.x, self.y
         ax, ay = self._aim_x, self._aim_y
         a = 0.3 + 0.6 * tp
-        col = (int(self._bright[0] * a), int(self._bright[1] * a), int(self._bright[2] * a))
+        col = (
+            int(self._bright[0] * a),
+            int(self._bright[1] * a),
+            int(self._bright[2] * a),
+        )
 
-        if self.role == "neon":          # cyan: laser-sight reto (sidestep p/ desviar)
+        if self.role == "neon":  # cyan: laser-sight reto (sidestep p/ desviar)
             ang = math.atan2(ay - cy, ax - cx)
             ex, ey = cx + math.cos(ang) * 1000.0, cy + math.sin(ang) * 1000.0
-            pygame.draw.line(surface, col, (int(cx), int(cy)), (int(ex), int(ey)), 1 if tp < 0.7 else 2)
+            pygame.draw.line(
+                surface,
+                col,
+                (int(cx), int(cy)),
+                (int(ex), int(ey)),
+                1 if tp < 0.7 else 2,
+            )
             if tp > 0.55 and int(self.anim_time * 20) % 2 == 0:
                 pygame.draw.circle(surface, self._bright, (int(ax), int(ay)), 7, 1)
-        elif self.role == "missile":     # magenta: anel + chevrons girando (rastreia)
+        elif self.role == "missile":  # magenta: anel + chevrons girando (rastreia)
             rr = int(self.SHELL_RADIUS + 12 + 6 * tp)
             pygame.draw.circle(surface, col, (int(cx), int(cy)), rr, 1)
             for k in range(3):
                 ca2 = self.anim_time * 3.0 + k * (2.0 * math.pi / 3.0)
                 pygame.draw.circle(
-                    surface, self._bright,
-                    (int(cx + math.cos(ca2) * rr), int(cy + math.sin(ca2) * rr)), 3,
+                    surface,
+                    self._bright,
+                    (int(cx + math.cos(ca2) * rr), int(cy + math.sin(ca2) * rr)),
+                    3,
                 )
-        else:                            # amber: zona de impacto na área-alvo
+        else:  # amber: zona de impacto na área-alvo
             zr = int(18 + 64 * tp)
             pygame.draw.circle(surface, col, (int(ax), int(ay)), zr, 2)
-            pygame.draw.line(surface, col, (int(ax) - 8, int(ay)), (int(ax) + 8, int(ay)), 1)
-            pygame.draw.line(surface, col, (int(ax), int(ay) - 8), (int(ax), int(ay) + 8), 1)
+            pygame.draw.line(
+                surface, col, (int(ax) - 8, int(ay)), (int(ax) + 8, int(ay)), 1
+            )
+            pygame.draw.line(
+                surface, col, (int(ax), int(ay) - 8), (int(ax), int(ay) + 8), 1
+            )
 
     @staticmethod
     def _ngon(cx: float, cy: float, n: int, radius: float, angle: float):
         """Vértices de um polígono regular de `n` lados (anel tecnológico)."""
         step = 2.0 * math.pi / n
         return [
-            (cx + math.cos(angle + i * step) * radius, cy + math.sin(angle + i * step) * radius)
+            (
+                cx + math.cos(angle + i * step) * radius,
+                cy + math.sin(angle + i * step) * radius,
+            )
             for i in range(n)
         ]
 
@@ -787,7 +894,11 @@ class CoreSentryDrone(EnemyHitMixin):
         # 1) Partículas convergindo de LONGE (campo se condensando).
         gather = self.SHELL_RADIUS * (3.0 - 2.2 * p)
         for k in range(vq.particles(11)):
-            ang = self._spin * 0.5 + k * (2.0 * math.pi / 11.0) + random.uniform(-0.3, 0.3)
+            ang = (
+                self._spin * 0.5
+                + k * (2.0 * math.pi / 11.0)
+                + random.uniform(-0.3, 0.3)
+            )
             d = gather * random.uniform(0.5, 1.2)
             base = self._bright if random.random() < 0.4 else self._mid
             ga = (0.4 + 0.6 * (1.0 - p)) * random.uniform(0.6, 1.0)
@@ -802,23 +913,42 @@ class CoreSentryDrone(EnemyHitMixin):
                 axx, ayy = x + cos(ang) * d, y + sin(ang) * d
                 col = self._bright if random.random() < 0.6 else (220, 245, 255)
                 pts = _jagged_line(axx, ayy, x, y, jitter=4.0 + 5.0 * (1.0 - p), segs=4)
-                pygame.draw.lines(surface, col, False, [(int(px), int(py)) for px, py in pts], 1)
+                pygame.draw.lines(
+                    surface, col, False, [(int(px), int(py)) for px, py in pts], 1
+                )
 
         # 3) Casca triangular fechando (+ hexágono surgindo na metade final).
         scale = 0.3 + 0.7 * p
-        pts = EnergyTriangleDrone._tri_points(self.x, self.y, self._spin, self.SHELL_RADIUS * scale)
+        pts = EnergyTriangleDrone._tri_points(
+            self.x, self.y, self._spin, self.SHELL_RADIUS * scale
+        )
         ec = (int(self._mid[0] * p), int(self._mid[1] * p), int(self._mid[2] * p))
         pygame.draw.polygon(surface, ec, pts, 2)
         if p > 0.45:
             hp = (p - 0.45) / 0.55
-            hexpts = self._ngon(self.x, self.y, 6, (self.SHELL_RADIUS + 5) * scale, self._spin * 0.4)
-            hc = (int(self._dark[0] * hp), int(self._dark[1] * hp), int(self._dark[2] * hp))
-            pygame.draw.polygon(surface, hc, [(int(hx), int(hy)) for hx, hy in hexpts], 1)
+            hexpts = self._ngon(
+                self.x, self.y, 6, (self.SHELL_RADIUS + 5) * scale, self._spin * 0.4
+            )
+            hc = (
+                int(self._dark[0] * hp),
+                int(self._dark[1] * hp),
+                int(self._dark[2] * hp),
+            )
+            pygame.draw.polygon(
+                surface, hc, [(int(hx), int(hy)) for hx, hy in hexpts], 1
+            )
 
         # 4) Núcleo materializando.
         if p > 0.2:
             pmap.draw_plasma_sphere(
-                surface, x, y, self.CORE_RADIUS * p, self.theme, self._spin, p, self.anim_time
+                surface,
+                x,
+                y,
+                self.CORE_RADIUS * p,
+                self.theme,
+                self._spin,
+                p,
+                self.anim_time,
             )
 
         # 5) ESTABILIZAÇÃO (0.8→1.0): anel contraindo + flicker assentando.
@@ -829,7 +959,9 @@ class CoreSentryDrone(EnemyHitMixin):
             sc = (int(225 * sa + 30), int(245 * sa + 10), 255)
             pygame.draw.circle(surface, sc, (x, y), max(1, sr), 2)
             if snap < 0.6 and random.random() < 0.4:  # núcleo "pisca" antes de firmar
-                pygame.draw.circle(surface, (255, 255, 255), (x, y), int(self.CORE_RADIUS * 0.8), 1)
+                pygame.draw.circle(
+                    surface, (255, 255, 255), (x, y), int(self.CORE_RADIUS * 0.8), 1
+                )
 
     def _draw_death(self, surface: pygame.Surface) -> None:
         """Destruição IMPACTANTE: implosão (casca suga + núcleo carrega) → ESTOURO
@@ -849,11 +981,25 @@ class CoreSentryDrone(EnemyHitMixin):
             for _ in range(vq.electric(3)):
                 ang = random.uniform(0.0, 2.0 * math.pi)
                 d = self.SHELL_RADIUS * (1.6 - it)
-                p2 = _jagged_line(x + cos(ang) * d, y + sin(ang) * d, x, y, jitter=4.0, segs=3)
-                pygame.draw.lines(surface, (230, 248, 255), False, [(int(px), int(py)) for px, py in p2], 1)
+                p2 = _jagged_line(
+                    x + cos(ang) * d, y + sin(ang) * d, x, y, jitter=4.0, segs=3
+                )
+                pygame.draw.lines(
+                    surface,
+                    (230, 248, 255),
+                    False,
+                    [(int(px), int(py)) for px, py in p2],
+                    1,
+                )
             pmap.draw_plasma_sphere(
-                surface, x, y, self.CORE_RADIUS * (1.0 + 0.5 * it), self.theme, self._spin,
-                min(1.4, 1.1 + it), self.anim_time,
+                surface,
+                x,
+                y,
+                self.CORE_RADIUS * (1.0 + 0.5 * it),
+                self.theme,
+                self._spin,
+                min(1.4, 1.1 + it),
+                self.anim_time,
             )
             return
 
@@ -864,7 +1010,11 @@ class CoreSentryDrone(EnemyHitMixin):
         # Onda de choque (anel expandindo/afinando).
         r = int(self.SHELL_RADIUS * (0.6 + 3.2 * bt))
         if r > 0 and ba > 0.0:
-            ring = (int(self._bright[0] * ba), int(self._bright[1] * ba), int(self._bright[2] * ba))
+            ring = (
+                int(self._bright[0] * ba),
+                int(self._bright[1] * ba),
+                int(self._bright[2] * ba),
+            )
             pygame.draw.circle(surface, ring, (x, y), r, max(1, int(3 * ba)))
 
         # Fragmentos triangulares girando (fragmentação da carcaça).
@@ -881,7 +1031,9 @@ class CoreSentryDrone(EnemyHitMixin):
             ex, ey = x + cos(ang) * reach, y + sin(ang) * reach
             col = (230, 248, 255) if random.random() < 0.5 else self._bright
             p2 = _jagged_line(x, y, ex, ey, jitter=6.0 * ba + 2.0, segs=4)
-            pygame.draw.lines(surface, col, False, [(int(px), int(py)) for px, py in p2], 1)
+            pygame.draw.lines(
+                surface, col, False, [(int(px), int(py)) for px, py in p2], 1
+            )
 
         # Estática espalhando junto da frente da onda.
         for _ in range(vq.particles(int(10 * ba) + 1)):
@@ -920,8 +1072,8 @@ class EnergyShardTriangle(EnemyHitMixin):
 
     is_boss: bool = False
     HEALTH: int = 5
-    POINTS: int = 0          # é hazard/projétil, não inimigo (convenção da Cidade)
-    SIZE: float = 12.0       # meia-altura do triângulo (~raio de colisão)
+    POINTS: int = 0  # é hazard/projétil, não inimigo (convenção da Cidade)
+    SIZE: float = 12.0  # meia-altura do triângulo (~raio de colisão)
     LIFETIME: float = 4.2
 
     SPIN_MIN: float = 4.0
@@ -929,14 +1081,14 @@ class EnergyShardTriangle(EnemyHitMixin):
     DEATH_BURST: float = 0.24
 
     # Velocidades/giro por papel do tema.
-    SPEED_STRAIGHT: float = 440.0   # cyan
-    SPEED_HOMING: float = 300.0     # magenta
-    HOMING_TURN: float = 2.4        # rad/s — teto do giro (quanto menor, + desviável)
-    SPEED_EMP: float = 235.0        # amber
+    SPEED_STRAIGHT: float = 440.0  # cyan
+    SPEED_HOMING: float = 300.0  # magenta
+    HOMING_TURN: float = 2.4  # rad/s — teto do giro (quanto menor, + desviável)
+    SPEED_EMP: float = 235.0  # amber
 
     _THEME_ROLE = {"cyan": "neon", "magenta": "missile", "amber": "emp"}
 
-    _explosion_size_killed = 0      # explosão própria (energética), não a genérica
+    _explosion_size_killed = 0  # explosão própria (energética), não a genérica
     _explosion_size_hit = 0
 
     def __init__(
@@ -965,8 +1117,10 @@ class EnergyShardTriangle(EnemyHitMixin):
 
         self.angle = math.atan2(target_y - y, target_x - x)  # rumo (homing usa)
         speed = (
-            self.SPEED_HOMING if self.role == "missile"
-            else self.SPEED_EMP if self.role == "emp"
+            self.SPEED_HOMING
+            if self.role == "missile"
+            else self.SPEED_EMP
+            if self.role == "emp"
             else self.SPEED_STRAIGHT
         )
         self.speed = speed
@@ -974,7 +1128,9 @@ class EnergyShardTriangle(EnemyHitMixin):
         self.vy = math.sin(self.angle) * speed
 
         self._spin = random.uniform(0.0, 2.0 * math.pi)
-        self._spin_speed = random.choice((-1.0, 1.0)) * random.uniform(self.SPIN_MIN, self.SPIN_MAX)
+        self._spin_speed = random.choice((-1.0, 1.0)) * random.uniform(
+            self.SPIN_MIN, self.SPIN_MAX
+        )
 
         self._trail: List[Tuple[float, float, float]] = []  # x, y, angle
         self._sparks: List[List[float]] = []  # [x, y, vx, vy, life, maxlife]
@@ -982,7 +1138,9 @@ class EnergyShardTriangle(EnemyHitMixin):
 
         self._dying = False
         self._death_t = 0.0
-        self._should_detonate = False  # amber: detona EMP ao morrer por contato/expiração
+        self._should_detonate = (
+            False  # amber: detona EMP ao morrer por contato/expiração
+        )
         self._detonated = False
 
         self._rect = pygame.Rect(0, 0, int(self.SIZE * 2), int(self.SIZE * 2))
@@ -1028,7 +1186,9 @@ class EnergyShardTriangle(EnemyHitMixin):
             return HitResult()
         self.take_damage(damage)
         if self._dying:  # morreu neste hit
-            return HitResult(killed=True, points=self.POINTS, sound=hit_sounds.EXPLOSION_ALIEN)
+            return HitResult(
+                killed=True, points=self.POINTS, sound=hit_sounds.EXPLOSION_ALIEN
+            )
         return HitResult(sound=hit_sounds.BOSS_DAMAGE)
 
     def on_ship_contact(self, _cx: float, _cy: float) -> "HitResult":
@@ -1084,10 +1244,16 @@ class EnergyShardTriangle(EnemyHitMixin):
             self._spark_timer = 0.04
             sa = math.atan2(self.vy, self.vx) + math.pi + random.uniform(-0.7, 0.7)
             sp = random.uniform(30.0, 80.0)
-            self._sparks.append([
-                self.x, self.y, math.cos(sa) * sp, math.sin(sa) * sp,
-                random.uniform(0.18, 0.42), 0.42,
-            ])
+            self._sparks.append(
+                [
+                    self.x,
+                    self.y,
+                    math.cos(sa) * sp,
+                    math.sin(sa) * sp,
+                    random.uniform(0.18, 0.42),
+                    0.42,
+                ]
+            )
 
         self.lifetime -= dt
         if self.lifetime <= 0.0:
@@ -1120,14 +1286,24 @@ class EnergyShardTriangle(EnemyHitMixin):
                 continue
             a = (i + 1) / n
             pts = EnergyTriangleDrone._tri_points(tx, ty, tang, self.SIZE * 0.7 * a)
-            col = (int(self._mid[0] * a * 0.5), int(self._mid[1] * a * 0.5), int(self._mid[2] * a * 0.5))
+            col = (
+                int(self._mid[0] * a * 0.5),
+                int(self._mid[1] * a * 0.5),
+                int(self._mid[2] * a * 0.5),
+            )
             pygame.draw.polygon(surface, col, pts, 1)
 
         # Faíscas.
         for s in self._sparks:
             a = max(0.0, s[4] / s[5])
-            col = (int(self._bright[0] * a), int(self._bright[1] * a), int(self._bright[2] * a))
-            pygame.draw.circle(surface, col, (int(s[0]), int(s[1])), max(1, int(2.2 * a)))
+            col = (
+                int(self._bright[0] * a),
+                int(self._bright[1] * a),
+                int(self._bright[2] * a),
+            )
+            pygame.draw.circle(
+                surface, col, (int(s[0]), int(s[1])), max(1, int(2.2 * a))
+            )
 
         # Corpo: triângulo preenchido + contorno brilhante.
         pts = EnergyTriangleDrone._tri_points(self.x, self.y, self._spin, self.SIZE)
@@ -1137,7 +1313,9 @@ class EnergyShardTriangle(EnemyHitMixin):
 
         # Núcleo interno pulsante (triângulo invertido).
         p_scale = 0.4 + 0.15 * math.sin(self.anim_time * 15.0)
-        i_pts = EnergyTriangleDrone._tri_points(self.x, self.y, -self._spin * 0.7, self.SIZE * p_scale)
+        i_pts = EnergyTriangleDrone._tri_points(
+            self.x, self.y, -self._spin * 0.7, self.SIZE * p_scale
+        )
         pygame.draw.polygon(surface, self._bright, i_pts, 1)
 
     def _draw_death(self, surface: pygame.Surface) -> None:
@@ -1145,8 +1323,16 @@ class EnergyShardTriangle(EnemyHitMixin):
         t = 1.0 - max(0.0, self._death_t) / self.DEATH_BURST
         r = int(self.SIZE * (0.8 + 2.4 * t))
         a = 1.0 - t
-        col = (int(self._bright[0] * a), int(self._bright[1] * a), int(self._bright[2] * a))
+        col = (
+            int(self._bright[0] * a),
+            int(self._bright[1] * a),
+            int(self._bright[2] * a),
+        )
         if r > 0:
-            pygame.draw.circle(surface, col, (int(self.x), int(self.y)), r, max(1, int(3 * a)))
+            pygame.draw.circle(
+                surface, col, (int(self.x), int(self.y)), r, max(1, int(3 * a))
+            )
         core = (int(self._mid[0] * a), int(self._mid[1] * a), int(self._mid[2] * a))
-        pygame.draw.circle(surface, core, (int(self.x), int(self.y)), max(1, int(self.SIZE * 0.6 * a)))
+        pygame.draw.circle(
+            surface, core, (int(self.x), int(self.y)), max(1, int(self.SIZE * 0.6 * a))
+        )

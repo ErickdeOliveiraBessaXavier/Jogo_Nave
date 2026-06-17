@@ -278,6 +278,10 @@ class PlayingScene(Scene):
 
         self.screen_shake_timer: float = 0.0
         self.screen_shake_intensity: int = Config.SCREEN_SHAKE_NORMAL
+        # Impact flash (white frames): clarão branco curto p/ momentos importantes.
+        self.impact_flash_timer: float = 0.0
+        self.impact_flash_duration: float = 0.0
+        self.impact_flash_alpha: int = 0
         # Vinheta de dano (feedback de HUD ao tomar hit). Estado na cena, igual ao
         # screen shake; atualizada no update e desenhada pelo GameRenderer.
         self.damage_vignette = DamageVignette()
@@ -375,6 +379,15 @@ class PlayingScene(Scene):
     def _request_screen_shake(self, duration: float, intensity: int) -> None:
         self.screen_shake_timer = duration
         self.screen_shake_intensity = intensity
+
+    def _request_impact_flash(self, duration: float, alpha: int) -> None:
+        """Flash branco de impacto (white frames). Não acumula: um flash em curso
+        só é substituído por outro de pico >= (evita que um fraco corte um forte)."""
+        if self.impact_flash_timer > 0.0 and alpha < self.impact_flash_alpha:
+            return
+        self.impact_flash_timer = duration
+        self.impact_flash_duration = duration
+        self.impact_flash_alpha = alpha
 
     def _get_background(self) -> Any | None:
         return getattr(self.r, "current_background", None)
@@ -1316,6 +1329,9 @@ class PlayingScene(Scene):
             self.screen_shake_timer = 0.1
         else:
             self.screen_shake_timer = max(0.0, self.screen_shake_timer - dt)
+
+        if self.impact_flash_timer > 0.0:
+            self.impact_flash_timer = max(0.0, self.impact_flash_timer - dt)
 
         self.damage_vignette.update(dt, self._primary_is_critical())
 
@@ -2677,6 +2693,9 @@ class PlayingScene(Scene):
             score_multiplier_timer=self.score_multiplier_timer,
             shake_timer=self.screen_shake_timer,
             shake_intensity=self.screen_shake_intensity,
+            flash_timer=self.impact_flash_timer,
+            flash_duration=self.impact_flash_duration,
+            flash_alpha=self.impact_flash_alpha,
             start_fade_active=self.start_fade_active,
             start_fade_alpha=self.start_fade_alpha,
             start_fade_overlay=self.start_fade_overlay,

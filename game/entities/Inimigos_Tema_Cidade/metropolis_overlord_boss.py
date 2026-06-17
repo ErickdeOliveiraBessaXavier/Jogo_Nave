@@ -21,18 +21,18 @@ from __future__ import annotations
 
 import math
 import random
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Any, List
 
 import pygame
 
 from ...core.config import config as Config
 from ..boss_hit_mixin import BossHitMixin
+from . import metropolis_overlord_pixel_map as pmap
 from .city_mine import CityMine
 from .metropolis_beam import MetropolisOrbitalBeam
 from .metropolis_drone import CoreSentryDrone
 from .metropolis_segment import MetropolisSegment
-from .metropolis_sentinel import MetropolisSentinel
-from . import metropolis_overlord_pixel_map as pmap
+from .metropolis_sentinel import MetropolisSentinel, SentinelNetwork
 
 if TYPE_CHECKING:
     from ...systems.boss_context import BossUpdateContext, BossUpdateResult
@@ -43,11 +43,13 @@ if TYPE_CHECKING:
 _INTRO_RISE = "intro_rise"
 _INTRO_DESCEND = "intro_descend"
 _PHASE1 = "phase1_sentinels"
-_SHIELD_COLLAPSE = "shield_collapse"  # escudo descarrega pixel-a-pixel (sucessor configurável)
-_PHASE2 = "phase2_lasers_mines"       # centro + lasers rotativos + minas (gate = 5 minas)
-_SHIELD_REBUILD = "shield_rebuild"    # colapso invertido: o contorno se reconstrói
-_INTERLUDE = "phase1_reprise"         # 2ª onda de sentinelas (padrão da Fase 1) com escudo
-_SEGMENTATION = "segmentation"        # Fase 3 final: boss se divide em 3 triângulos orbitais
+_SHIELD_COLLAPSE = (
+    "shield_collapse"  # escudo descarrega pixel-a-pixel (sucessor configurável)
+)
+_PHASE2 = "phase2_lasers_mines"  # centro + lasers rotativos + minas (gate = 5 minas)
+_SHIELD_REBUILD = "shield_rebuild"  # colapso invertido: o contorno se reconstrói
+_INTERLUDE = "phase1_reprise"  # 2ª onda de sentinelas (padrão da Fase 1) com escudo
+_SEGMENTATION = "segmentation"  # Fase 3 final: boss se divide em 3 triângulos orbitais
 
 # Caracteres do pixel-map que compõem a CARCAÇA externa destrutível (placas que
 # se fragmentam ao tomar dano, revelando o frame interno já desenhado). O
@@ -62,7 +64,19 @@ class _ArmorFragment:
     progressão. Atualizado no `update` e desenhado no `draw` (§3).
     """
 
-    __slots__ = ("x", "y", "vx", "vy", "angle", "spin", "size", "color", "life", "max_life", "gravity")
+    __slots__ = (
+        "x",
+        "y",
+        "vx",
+        "vy",
+        "angle",
+        "spin",
+        "size",
+        "color",
+        "life",
+        "max_life",
+        "gravity",
+    )
 
     def __init__(
         self,
@@ -104,7 +118,9 @@ class _ArmorFragment:
         surf = pygame.Surface((s, s), pygame.SRCALPHA)
         surf.fill((*self.color, int(255 * alpha)))
         rot = pygame.transform.rotate(surf, self.angle)
-        surface.blit(rot, (int(self.x - rot.get_width() / 2), int(self.y - rot.get_height() / 2)))
+        surface.blit(
+            rot, (int(self.x - rot.get_width() / 2), int(self.y - rot.get_height() / 2))
+        )
 
 
 class MetropolisOverlordBoss(BossHitMixin):
@@ -114,7 +130,7 @@ class MetropolisOverlordBoss(BossHitMixin):
     BOSS_TYPE_NAME: str = "metropolis_overlord"
     is_boss: bool = True
 
-    WIDTH: int = 250   # 25 col * 10
+    WIDTH: int = 250  # 25 col * 10
     HEIGHT: int = 210  # 21 lin * 10
     DEFAULT_HEALTH: int = 1200
 
@@ -125,12 +141,14 @@ class MetropolisOverlordBoss(BossHitMixin):
     #    dano vem da EXPLOSÃO das minas da City atraídas para o centro. Cada acerto
     #    erode a carcaça (cosmético) via _destroy_cells_near; 5 acertos encerram a fase.
     MINE_HITS_TO_ADVANCE: int = 5
-    MINE_HIT_RADIUS: float = 90.0     # raio do corpo p/ contar a explosão de mina
-    DAMAGE_TO_CELLS: float = 0.25     # blocos erodidos por "acerto" cosmético de mina
+    MINE_HIT_RADIUS: float = 90.0  # raio do corpo p/ contar a explosão de mina
+    DAMAGE_TO_CELLS: float = 0.25  # blocos erodidos por "acerto" cosmético de mina
     # Minas ESCASSAS/estratégicas: são a única forma de ferir o boss; raras p/ o
     # jogador ter tempo de administrar lasers + drones + minas sem sobrecarga.
-    MINE_SPAWN_INTERVAL: float = 3.0  # atraso p/ repor um slot livre (escala c/ aggressiveness)
-    MAX_ACTIVE_MINES: int = 2         # teto RÍGIDO de minas vivas na arena ao mesmo tempo
+    MINE_SPAWN_INTERVAL: float = (
+        3.0  # atraso p/ repor um slot livre (escala c/ aggressiveness)
+    )
+    MAX_ACTIVE_MINES: int = 2  # teto RÍGIDO de minas vivas na arena ao mesmo tempo
     # Distância mínima (fração da largura) entre uma mina nova e as já ativas — evita
     # acúmulos que criem áreas injustas / bloqueiem a movimentação.
     MIN_MINE_SEPARATION_FRAC: float = 0.23
@@ -165,7 +183,9 @@ class MetropolisOverlordBoss(BossHitMixin):
         health: int | None = None,
         difficulty_multiplier: float = 1.0,
         aggressiveness_multiplier: float = 1.0,
+        event_bus: Any = None,
     ) -> None:
+        self._bus = event_bus  # EventBus p/ game feel (shake/flash); None em testes
         self.w = self.WIDTH
         self.h = self.HEIGHT
         self.x = float(x)
@@ -190,30 +210,38 @@ class MetropolisOverlordBoss(BossHitMixin):
         # Fase 2: boss parado no centro. Ataque PRINCIPAL = 3 lasers rotativos; pressão
         # SECUNDÁRIA = guardiões orbitais + ondas de drones; minas = única fonte de dano.
         # O corpo NÃO recebe dano de tiro; só as explosões de mina contam (5 → rebuild).
-        self._phase2_settled = False                 # já assentou no centro da tela?
+        self._phase2_settled = False  # já assentou no centro da tela?
         self._beams: List[MetropolisOrbitalBeam] = []  # refs p/ matar ao sair da fase
         self._beams_spawned = False
-        self._mine_spawn_timer = 2.0                 # primeira mina alguns segundos depois
-        self._active_mines: List[CityMine] = []      # minas vivas na arena (cap MAX_ACTIVE_MINES)
-        self._mine_hits = 0                          # explosões de mina que tocaram o boss
-        self._mine_hit_ids: set[int] = set()         # ids de MineExplosion já contados
-        self._flash_timer = 0.0                      # clarão branco ao levar acerto de mina
+        self._mine_spawn_timer = 2.0  # primeira mina alguns segundos depois
+        self._active_mines: List[
+            CityMine
+        ] = []  # minas vivas na arena (cap MAX_ACTIVE_MINES)
+        self._mine_hits = 0  # explosões de mina que tocaram o boss
+        self._mine_hit_ids: set[int] = set()  # ids de MineExplosion já contados
+        self._flash_timer = 0.0  # clarão branco ao levar acerto de mina
 
         # Pressão secundária EXCLUSIVA das sentinelas: 3 guardiões orbitais (um por
         # núcleo) que RENASCEM 10s após serem destruídos. Cada slot = um guardião
         # (theme/base_angle fixos) com ref viva ou timer de respawn. O boss não atira.
         self._core_sentries_spawned = False
-        self._sentry_slots: List[dict] = []  # {theme, base_angle, drone|None, respawn_t}
+        self._sentry_slots: List[
+            dict
+        ] = []  # {theme, base_angle, drone|None, respawn_t}
 
         # Escudo vai-e-volta: sucessores configuráveis do colapso e da reconstrução.
-        self._after_collapse = _PHASE2               # 1º colapso → Fase 2
-        self._after_rebuild = _INTERLUDE             # reconstrução → interlúdio (padrão Fase 1)
-        self._shield_rebuild_t = 0.0                 # timer da reconstrução (0 → DUR)
+        self._after_collapse = _PHASE2  # 1º colapso → Fase 2
+        self._after_rebuild = _INTERLUDE  # reconstrução → interlúdio (padrão Fase 1)
+        self._shield_rebuild_t = 0.0  # timer da reconstrução (0 → DUR)
+        self._collapse_rumble_t = 0.0  # acumulador do rumble durante o colapso
 
         # Fase 1: Sentinelas (geradoras do escudo). `_sentinels_spawned` é rearmado
         # no interlúdio para nascer a 2ª onda.
         self._sentinels: List[MetropolisSentinel] = []
         self._sentinels_spawned = False
+        self._network: SentinelNetwork | None = (
+            None  # inteligência central da onda atual
+        )
 
         # Colapso do contorno-escudo: as células "E" do mapa interno, ordenadas por
         # ângulo (frente de rachadura varrendo a borda). Cada uma estilhaça quando a
@@ -232,9 +260,11 @@ class MetropolisOverlordBoss(BossHitMixin):
         self._edge_threshold: dict[tuple[int, int], float] = {
             rc: i / n_edge for i, rc in enumerate(edge_cells)
         }
-        self._shield_collapse_t = 0.0       # timer do colapso
-        self._shield_shatter_idx = 0        # quantas células já estilhaçaram
-        self._shield_arcs: List[List[tuple[float, float]]] = []  # arcos elétricos (draw)
+        self._shield_collapse_t = 0.0  # timer do colapso
+        self._shield_shatter_idx = 0  # quantas células já estilhaçaram
+        self._shield_arcs: List[
+            List[tuple[float, float]]
+        ] = []  # arcos elétricos (draw)
         self._shield_arc_timer = 0.0
 
         # Segmentação: o boss vira coordenador invisível de 3 segmentos.
@@ -323,9 +353,7 @@ class MetropolisOverlordBoss(BossHitMixin):
         vx = math.cos(ang) * spd + random.uniform(-50.0, 50.0)
         vy = math.sin(ang) * spd - random.uniform(40.0, 160.0)  # tende a saltar p/ cima
         color = pmap.COLORS.get(ch, (200, 205, 215))
-        self._fragments.append(
-            _ArmorFragment(px, py, vx, vy, self.PIXEL_SCALE, color)
-        )
+        self._fragments.append(_ArmorFragment(px, py, vx, vy, self.PIXEL_SCALE, color))
 
     def _update_fragments(self, dt: float) -> None:
         frags = self._fragments
@@ -370,23 +398,43 @@ class MetropolisOverlordBoss(BossHitMixin):
         return self._shield_rebuild_t / self.SHIELD_COLLAPSE_DUR
 
     # ── Gatilhos do escudo (sucessor configurável) ─────────────────────────────
+    # ── Game feel (shake/flash via EventBus, §2) ───────────────────────────────
+    def _emit_shake(self, intensity: int, duration: float) -> None:
+        if self._bus is not None:
+            from ...events import game_events as events
+            self._bus.emit(events.ScreenShake(intensity=intensity, duration=duration))
+
+    def _emit_flash(self, alpha: int, duration: float = 0.06) -> None:
+        if self._bus is not None:
+            from ...events import game_events as events
+            self._bus.emit(events.ImpactFlash(duration=duration, alpha=alpha))
+
     def _trigger_shield_collapse(self, next_state: str) -> None:
         self._after_collapse = next_state
         self.state = _SHIELD_COLLAPSE
         self._shield_collapse_t = self.SHIELD_COLLAPSE_DUR
         self._shield_shatter_idx = 0
+        self._collapse_rumble_t = 0.0
+        # Momento cinematográfico: última esfera/escudo cai → mudança de fase.
+        # Impacto forte (maior que o do raio) + white frame.
+        self._emit_shake(16, 0.5)
+        self._emit_flash(200, 0.07)
 
     def _trigger_shield_rebuild(self, next_state: str) -> None:
         self._after_rebuild = next_state
         self.state = _SHIELD_REBUILD
         self._shield_rebuild_t = 0.0
         self._shield_shatter_idx = 0
+        self._emit_shake(12, 0.4)  # transição de fase (reconstrução do escudo)
+        self._emit_flash(150, 0.06)
 
     # ── Update ────────────────────────────────────────────────────────────────
     def update_boss(self, dt: float, ctx: "BossUpdateContext") -> "BossUpdateResult":
         from ...systems.boss_context import BossUpdateResult
+
         result = BossUpdateResult()
-        if dt <= 0.0: return result
+        if dt <= 0.0:
+            return result
         self.anim_time += dt
         if self._flash_timer > 0.0:
             self._flash_timer = max(0.0, self._flash_timer - dt)
@@ -401,7 +449,12 @@ class MetropolisOverlordBoss(BossHitMixin):
             self._intro_alpha = min(255, self._intro_alpha + 400 * dt)
             self.y += self.DESCENT_SPEED * dt
             if self.y >= self.target_y:
-                self.y, self.state, self._intro_scale, self._intro_alpha = self.target_y, _PHASE1, 1.0, 255
+                self.y, self.state, self._intro_scale, self._intro_alpha = (
+                    self.target_y,
+                    _PHASE1,
+                    1.0,
+                    255,
+                )
         elif self.state == _PHASE1:
             self._update_phase1(dt, ctx)
         elif self.state == _SHIELD_COLLAPSE:
@@ -421,6 +474,8 @@ class MetropolisOverlordBoss(BossHitMixin):
         if not self._sentinels_spawned:
             self._spawn_sentinels(ctx)
             self._sentinels_spawned = True
+        if self._network is not None:
+            self._network.update(dt)  # coordena o revezamento das sentinelas (1×/frame)
         self.x += math.sin(self.anim_time) * 15.0 * dt
         # Escudo cai junto com a última sentinela-geradora → colapso pixel-a-pixel.
         if self._sentinels and all(s.dead for s in self._sentinels):
@@ -429,8 +484,16 @@ class MetropolisOverlordBoss(BossHitMixin):
 
     def _spawn_sentinels(self, ctx: "BossUpdateContext") -> None:
         roles = ["neon", "missile", "laser", "emp"]
+        self._network = SentinelNetwork()  # rede nova por onda (coordena o revezamento)
         for i, role in enumerate(roles):
-            s = MetropolisSentinel(role=role, start_t=i * 0.25, aggressiveness_multiplier=self.aggressiveness_multiplier, activation_delay=1.0 + i * 0.5)
+            s = MetropolisSentinel(
+                role=role,
+                start_t=i * 0.25,
+                aggressiveness_multiplier=self.aggressiveness_multiplier,
+                activation_delay=1.0 + i * 0.5,
+                network=self._network,
+                event_bus=self._bus,
+            )
             self._sentinels.append(s)
             ctx.entity_manager.enemies.append(s)
 
@@ -443,6 +506,13 @@ class MetropolisOverlordBoss(BossHitMixin):
         """
         self._shield_collapse_t = max(0.0, self._shield_collapse_t - dt)
         p = self._shield_collapse_progress
+
+        # Rumble que ACOMPANHA a fragmentação (estrutura gigantesca colapsando):
+        # pulsos curtos de shake re-emitidos periodicamente enquanto a borda quebra.
+        self._collapse_rumble_t -= dt
+        if self._collapse_rumble_t <= 0.0:
+            self._collapse_rumble_t = 0.35
+            self._emit_shake(8, 0.3)
 
         # Ejeção pixel-a-pixel: um caco por célula que a frente já cruzou.
         target = int(p * len(self._edge_cells_order))
@@ -469,7 +539,10 @@ class MetropolisOverlordBoss(BossHitMixin):
         color = pmap.EDGE_GLOW if random.random() < 0.5 else pmap.COLORS["E"]
         self._fragments.append(
             _ArmorFragment(
-                px, py, vx, vy,
+                px,
+                py,
+                vx,
+                vy,
                 self.PIXEL_SCALE * random.uniform(0.5, 0.9),
                 color,
                 gravity=140.0,
@@ -498,14 +571,18 @@ class MetropolisOverlordBoss(BossHitMixin):
             (r2, c2) = cells[random.randrange(len(cells))]
             arcs.append(
                 self._jagged_arc(
-                    self.x + (c1 + 0.5) * sc, self.y + (r1 + 0.5) * sc,
-                    self.x + (c2 + 0.5) * sc, self.y + (r2 + 0.5) * sc,
+                    self.x + (c1 + 0.5) * sc,
+                    self.y + (r1 + 0.5) * sc,
+                    self.x + (c2 + 0.5) * sc,
+                    self.y + (r2 + 0.5) * sc,
                 )
             )
         self._shield_arcs = arcs
 
     @staticmethod
-    def _jagged_arc(x1: float, y1: float, x2: float, y2: float, segs: int = 5) -> List[tuple[float, float]]:
+    def _jagged_arc(
+        x1: float, y1: float, x2: float, y2: float, segs: int = 5
+    ) -> List[tuple[float, float]]:
         """Polilinha em ziguezague entre dois pontos (raio elétrico)."""
         dx, dy = x2 - x1, y2 - y1
         length = math.hypot(dx, dy) or 1.0
@@ -518,7 +595,9 @@ class MetropolisOverlordBoss(BossHitMixin):
         pts.append((x2, y2))
         return pts
 
-    def _update_phase2(self, dt: float, ctx: "BossUpdateContext", result: "BossUpdateResult") -> None:
+    def _update_phase2(
+        self, dt: float, ctx: "BossUpdateContext", result: "BossUpdateResult"
+    ) -> None:
         """Centro fixo + 3 lasers rotativos (principal) + minas da City (secundário).
 
         O corpo é IMUNE a tiro; o único dano vem da EXPLOSÃO das minas atraídas para o
@@ -526,7 +605,8 @@ class MetropolisOverlordBoss(BossHitMixin):
         encerra ao 5º acerto → reconstrução do escudo.
         """
         self.health = max(
-            1, int(self.max_health * (1.0 - self._mine_hits / self.MINE_HITS_TO_ADVANCE))
+            1,
+            int(self.max_health * (1.0 - self._mine_hits / self.MINE_HITS_TO_ADVANCE)),
         )
 
         # 1) Assenta no centro da tela (lerp curto) e trava ali.
@@ -550,8 +630,13 @@ class MetropolisOverlordBoss(BossHitMixin):
         #    quando uma das atuais detona/expira/some (`_prune_active_mines` libera o slot).
         self._prune_active_mines()
         self._mine_spawn_timer -= dt
-        if len(self._active_mines) < self.MAX_ACTIVE_MINES and self._mine_spawn_timer <= 0.0:
-            self._mine_spawn_timer = max(1.5, self.MINE_SPAWN_INTERVAL / self.aggressiveness_multiplier)
+        if (
+            len(self._active_mines) < self.MAX_ACTIVE_MINES
+            and self._mine_spawn_timer <= 0.0
+        ):
+            self._mine_spawn_timer = max(
+                1.5, self.MINE_SPAWN_INTERVAL / self.aggressiveness_multiplier
+            )
             mine = self._make_mine()
             self._active_mines.append(mine)
             result.spawned_enemies.append(mine)
@@ -607,7 +692,8 @@ class MetropolisOverlordBoss(BossHitMixin):
     def _new_sentry(self, theme: str, base_angle: float) -> CoreSentryDrone:
         cx, cy = self._center
         return CoreSentryDrone(
-            cx, cy,
+            cx,
+            cy,
             base_angle=base_angle,
             theme=theme,
             aggressiveness_multiplier=self.aggressiveness_multiplier,
@@ -630,7 +716,7 @@ class MetropolisOverlordBoss(BossHitMixin):
         for slot in self._sentry_slots:
             d = slot["drone"]
             if d is not None:
-                if d.should_remove():            # terminou a animação de morte → renasce depois
+                if d.should_remove():  # terminou a animação de morte → renasce depois
                     slot["drone"] = None
                     slot["respawn_t"] = self.SENTRY_RESPAWN_TIME
                 else:
@@ -719,6 +805,9 @@ class MetropolisOverlordBoss(BossHitMixin):
         """Acerto de mina: flash + erosão cosmética da carcaça no ponto da explosão."""
         self._mine_hits += 1
         self._flash_timer = 0.2
+        # Game feel do dano ao boss (raro: ≤5/fase): white frame breve + shake leve.
+        self._emit_flash(120, 0.05)
+        self._emit_shake(6, 0.18)
         k = max(3, int(self._total_mass / (self.MINE_HITS_TO_ADVANCE + 1)))
         self._destroy_cells_near(ex - self.x, ey - self.y, k)
 
@@ -746,7 +835,10 @@ class MetropolisOverlordBoss(BossHitMixin):
         center = (Config.SCREEN_WIDTH / 2.0, Config.SCREEN_HEIGHT * 0.34)
         orbit_radius = min(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT) * 0.28
         seg_health = max(120, int(self.max_health * 0.18))
-        grid_w, grid_h = pmap.PIXEL_COLS * self.PIXEL_SCALE, pmap.PIXEL_ROWS * self.PIXEL_SCALE
+        grid_w, grid_h = (
+            pmap.PIXEL_COLS * self.PIXEL_SCALE,
+            pmap.PIXEL_ROWS * self.PIXEL_SCALE,
+        )
         roles = {"cyan": "laser", "magenta": "missile", "amber": "emp"}
 
         for i, (rx, ry, _rr, theme, _phase) in enumerate(self.SPHERE_DEFS):
@@ -774,13 +866,17 @@ class MetropolisOverlordBoss(BossHitMixin):
         (frente branco-quente → assenta em neon) e os cacos CONVERGEM para a borda
         (caminho contrário ao colapso). Ao fim, o escudo está 100% reativado.
         """
-        self._shield_rebuild_t = min(self.SHIELD_COLLAPSE_DUR, self._shield_rebuild_t + dt)
+        self._shield_rebuild_t = min(
+            self.SHIELD_COLLAPSE_DUR, self._shield_rebuild_t + dt
+        )
         p = self._shield_rebuild_progress
 
         n = len(self._edge_cells_order)
         target = int(p * n)
         while self._shield_shatter_idx < target:
-            r, c = self._edge_cells_order[n - 1 - self._shield_shatter_idx]  # ordem inversa
+            r, c = self._edge_cells_order[
+                n - 1 - self._shield_shatter_idx
+            ]  # ordem inversa
             self._shield_shatter_idx += 1
             self._spawn_rebuild_shard(r, c)
 
@@ -799,14 +895,19 @@ class MetropolisOverlordBoss(BossHitMixin):
         py = self.y + (r + 0.5) * self.PIXEL_SCALE
         bcx, bcy = self._center
         ang = math.atan2(py - bcy, px - bcx)
-        out = random.uniform(24.0, 70.0)  # começa afastado p/ fora e converge p/ a borda
+        out = random.uniform(
+            24.0, 70.0
+        )  # começa afastado p/ fora e converge p/ a borda
         spd = random.uniform(60.0, 170.0)
         vx = -math.cos(ang) * spd + random.uniform(-30.0, 30.0)
         vy = -math.sin(ang) * spd + random.uniform(-30.0, 30.0)
         color = pmap.EDGE_GLOW if random.random() < 0.5 else pmap.COLORS["E"]
         self._fragments.append(
             _ArmorFragment(
-                px + math.cos(ang) * out, py + math.sin(ang) * out, vx, vy,
+                px + math.cos(ang) * out,
+                py + math.sin(ang) * out,
+                vx,
+                vy,
                 self.PIXEL_SCALE * random.uniform(0.5, 0.9),
                 color,
                 gravity=-40.0,  # leve flutuação (energia, não detrito que cai)
@@ -821,6 +922,8 @@ class MetropolisOverlordBoss(BossHitMixin):
         if not self._sentinels_spawned:
             self._spawn_sentinels(ctx)
             self._sentinels_spawned = True
+        if self._network is not None:
+            self._network.update(dt)  # coordena o revezamento das sentinelas (1×/frame)
         self.x += math.sin(self.anim_time) * 15.0 * dt
         if self._sentinels and all(s.dead for s in self._sentinels):
             self._sentinels = []
@@ -828,15 +931,23 @@ class MetropolisOverlordBoss(BossHitMixin):
 
     # ── Render (§3) ────────────────────────────────────────────────────────────
     def draw(self, surface: pygame.Surface) -> None:
-        draw_w, draw_h = int(self.w * self._intro_scale), int(self.h * self._intro_scale)
-        draw_x, draw_y = int(self.x + (self.w - draw_w) / 2), int(self.y + (self.h - draw_h) / 2)
+        draw_w, draw_h = (
+            int(self.w * self._intro_scale),
+            int(self.h * self._intro_scale),
+        )
+        draw_x, draw_y = (
+            int(self.x + (self.w - draw_w) / 2),
+            int(self.y + (self.h - draw_h) / 2),
+        )
 
         # Na segmentação o corpo grande não existe mais — só os 3 segmentos
         # (entidades próprias) e os fragmentos da carcaça ainda voando.
         if self.state != _SEGMENTATION:
             if self.state in (_INTRO_RISE, _INTRO_DESCEND):
                 temp_surf = pygame.Surface((draw_w, draw_h), pygame.SRCALPHA)
-                self._draw_pixel_map(temp_surf, 0, 0, self.PIXEL_SCALE * self._intro_scale)
+                self._draw_pixel_map(
+                    temp_surf, 0, 0, self.PIXEL_SCALE * self._intro_scale
+                )
                 temp_surf.set_alpha(int(self._intro_alpha))
                 surface.blit(temp_surf, (draw_x, draw_y))
             else:
@@ -858,7 +969,9 @@ class MetropolisOverlordBoss(BossHitMixin):
         for frag in self._fragments:
             frag.draw(surface)
 
-    def _draw_pixel_map(self, surface: pygame.Surface, x: float, y: float, scale: float) -> None:
+    def _draw_pixel_map(
+        self, surface: pygame.Surface, x: float, y: float, scale: float
+    ) -> None:
         cell = int(scale + 1)
 
         # 1) CAMADA INTERNA — frame escuro (G) + contorno-escudo (E). Cada "E" é
@@ -867,20 +980,24 @@ class MetropolisOverlordBoss(BossHitMixin):
         #    borda inerte. Na Fase 2+ o contorno já se foi (não desenha).
         for r, row in enumerate(pmap.PIXEL_MAP_INTERNAL):
             for c, char in enumerate(row):
-                if char == ".": continue
+                if char == ".":
+                    continue
                 if char == "E":
                     color = self._edge_draw_color(r, c)
                     if color is None:
                         continue  # contorno estilhaçado/ausente → some da silhueta
                 else:
                     color = pmap.COLORS.get(char, (255, 0, 255))
-                pygame.draw.rect(surface, color, (int(x + c * scale), int(y + r * scale), cell, cell))
+                pygame.draw.rect(
+                    surface, color, (int(x + c * scale), int(y + r * scale), cell, cell)
+                )
 
         # 2) CARCAÇA EXTERNA (placas P intactas) por cima. Conforme caem (dano
         #    localizado/erosão/colapso), saem de `_intact_cells` revelando o frame.
         for r, c, _ch, _px, _py in self._intact_cells:
             pygame.draw.rect(
-                surface, pmap.COLORS["P"],
+                surface,
+                pmap.COLORS["P"],
                 (int(x + c * scale), int(y + r * scale), cell, cell),
             )
 
@@ -906,7 +1023,9 @@ class MetropolisOverlordBoss(BossHitMixin):
                 return (225, 250, 255)
             glow = 0.5 + 0.5 * math.sin(self.anim_time * 9.0 + th * 25.0)
             neon, hot = pmap.COLORS["E"], pmap.EDGE_GLOW
-            return tuple(int(neon[i] + (hot[i] - neon[i]) * glow * 0.6) for i in range(3))
+            return tuple(
+                int(neon[i] + (hot[i] - neon[i]) * glow * 0.6) for i in range(3)
+            )
         if self.state == _SHIELD_REBUILD:
             # Espelho do colapso: a célula REAPARECE quando a frente (inversa) a cruza.
             p = self._shield_rebuild_progress
@@ -929,11 +1048,16 @@ class MetropolisOverlordBoss(BossHitMixin):
         for pts in self._shield_arcs:
             if len(pts) >= 2:
                 pygame.draw.lines(
-                    surface, (205, 248, 255), False,
-                    [(int(px), int(py)) for px, py in pts], 2,
+                    surface,
+                    (205, 248, 255),
+                    False,
+                    [(int(px), int(py)) for px, py in pts],
+                    2,
                 )
 
-    def _draw_plasma_cores(self, surface: pygame.Surface, x: float, y: float, scale: float) -> None:
+    def _draw_plasma_cores(
+        self, surface: pygame.Surface, x: float, y: float, scale: float
+    ) -> None:
         """Desenha os 3 núcleos com plasma vivo, posicionados no triângulo."""
         grid_w = pmap.PIXEL_COLS * scale
         grid_h = pmap.PIXEL_ROWS * scale

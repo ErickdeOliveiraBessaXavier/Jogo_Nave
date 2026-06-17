@@ -35,6 +35,7 @@ class EffectsSystem:
         self._bus.on(events.SpawnEffect, self._on_spawn_effect)
         self._bus.on(events.SpawnFloatingScore, self._on_spawn_floating_score)
         self._bus.on(events.ScreenShake, self._on_screen_shake)
+        self._bus.on(events.ImpactFlash, self._on_impact_flash)
 
     def _on_screen_shake(self, event: events.ScreenShake) -> None:
         """Handler para tremor de tela — repassa os dados para a cena."""
@@ -46,6 +47,11 @@ class EffectsSystem:
                 # Fallback direto caso o método mude
                 self._scene.screen_shake_timer = event.duration
                 self._scene.screen_shake_intensity = event.intensity
+
+    def _on_impact_flash(self, event: events.ImpactFlash) -> None:
+        """Handler para o flash de impacto (white frames) — repassa para a cena."""
+        if self._scene is not None and hasattr(self._scene, "_request_impact_flash"):
+            self._scene._request_impact_flash(event.duration, event.alpha)
 
     def _on_spawn_effect(self, event: events.SpawnEffect) -> None:
         """Handler genérico para criar efeitos visuais."""
@@ -72,3 +78,5 @@ class EffectsSystem:
         """Remove handlers registrados no EventBus."""
         self._bus.off(events.SpawnEffect, self._on_spawn_effect)
         self._bus.off(events.SpawnFloatingScore, self._on_spawn_floating_score)
+        self._bus.off(events.ScreenShake, self._on_screen_shake)
+        self._bus.off(events.ImpactFlash, self._on_impact_flash)

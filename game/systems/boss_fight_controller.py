@@ -347,6 +347,7 @@ class BossFightController:
                 60,
                 difficulty_multiplier=enemy_health_multiplier,
                 aggressiveness_multiplier=agg,
+                event_bus=self._bus,
             )
             self._em.boss = boss
         else:

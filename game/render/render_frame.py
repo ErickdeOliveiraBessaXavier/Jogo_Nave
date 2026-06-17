@@ -127,3 +127,9 @@ class RenderFrame:
     in_atmosphere: bool = False
     atmosphere_progress: float = 0.0
     atmosphere_route: Optional[str] = None
+
+    # Impact flash (white frames): clarão branco curtíssimo sobre o mundo para
+    # momentos importantes. Renderer compõe alpha = flash_alpha * (timer/duração).
+    flash_timer: float = 0.0
+    flash_duration: float = 0.0
+    flash_alpha: int = 0
