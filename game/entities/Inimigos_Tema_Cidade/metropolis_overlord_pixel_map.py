@@ -144,3 +144,118 @@ def draw_plasma_sphere(
 
     # SEM aro de contenção (removido a pedido): núcleo limpo, só o plasma vivo —
     # o campo de metaballs já escurece nas bordas, dando vinheta orgânica sem anel.
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Estrutura interna "viva" + borda neon — COMPARTILHADA pelo boss e pelos
+# mini-Overlords (segmentos da Fase 3). Funções puras de `anim_time` (§3).
+# ─────────────────────────────────────────────────────────────────────────────
+INNER_A: RGB = (46, 38, 82)        # violeta-escuro (placa)
+INNER_B: RGB = (28, 52, 86)        # azul-aço escuro (placa)
+INNER_FLOW: RGB = (70, 165, 225)   # corrente ciano-elétrica
+INNER_VEIN: RGB = (140, 110, 215)  # veia violeta luminosa
+FRAME_A: RGB = (20, 22, 40)        # frame escuro (violeta)
+FRAME_B: RGB = (28, 30, 52)        # frame escuro (azul)
+SILHOUETTE: RGB = (40, 44, 58)     # silhueta cinza-azulada (intro)
+EDGE_SILHOUETTE: RGB = (20, 150, 205)  # bordas azuis estáticas (intro)
+
+
+def inner_cell_color(r: int, c: int, kind: str, anim_time: float) -> RGB:
+    """Cor energética de UMA célula interna (placa `P` / frame `G`): respiração de
+    cor + corrente diagonal + veias (só placas) + pulso. Determinístico (§3)."""
+    t = anim_time
+    sin = math.sin
+    a, b = (INNER_A, INNER_B) if kind == "P" else (FRAME_A, FRAME_B)
+    m = 0.5 + 0.5 * sin(t * 0.5 + (r + c) * 0.18)
+    r0 = a[0] + (b[0] - a[0]) * m
+    g0 = a[1] + (b[1] - a[1]) * m
+    b0 = a[2] + (b[2] - a[2]) * m
+    band = sin((r - c) * 0.5 - t * 2.0)
+    if band > 0.5:
+        gain = (band - 0.5) * 2.0 * (0.55 if kind == "P" else 0.3)
+        fl = INNER_FLOW
+        r0 += (fl[0] - r0) * gain
+        g0 += (fl[1] - g0) * gain
+        b0 += (fl[2] - b0) * gain
+    if kind == "P":
+        vein = sin((r * 1.3 + c * 0.7) - t * 1.2)
+        if vein > 0.86:
+            gv = (vein - 0.86) * 7.0 * 0.5
+            vc = INNER_VEIN
+            r0 += (vc[0] - r0) * gv
+            g0 += (vc[1] - g0) * gv
+            b0 += (vc[2] - b0) * gv
+    pulse = 0.9 + 0.1 * sin(t * 3.0 + r * 0.7 - c * 0.4)
+    return (min(255, int(r0 * pulse)), min(255, int(g0 * pulse)), min(255, int(b0 * pulse)))
+
+
+def shield_live_color(th: float, anim_time: float) -> RGB:
+    """Cor de uma célula de BORDA (`E`) com a corrente energética CIRCULANDO pelo
+    perímetro (posição `th`∈[0,1]) + nós branco-quentes viajando. Determinístico."""
+    t = anim_time
+    for k in range(2):
+        node = (t * 0.16 + k * 0.5) % 1.0
+        d = abs(((th - node + 0.5) % 1.0) - 0.5)
+        if d < 0.045:
+            f = 1.0 - d / 0.045
+            hot, g = (235, 252, 255), EDGE_GLOW
+            return (int(g[0] + (hot[0] - g[0]) * f), int(g[1] + (hot[1] - g[1]) * f), int(g[2] + (hot[2] - g[2]) * f))
+    wave = 0.5 + 0.5 * math.sin(th * (2.0 * math.pi * 3.0) - t * 2.4)
+    wave *= 0.85 + 0.15 * math.sin(t * 1.3)
+    neon, glow = COLORS["E"], EDGE_GLOW
+    return (int(neon[0] + (glow[0] - neon[0]) * wave), int(neon[1] + (glow[1] - neon[1]) * wave), int(neon[2] + (glow[2] - neon[2]) * wave))
+
+
+def _build_edge_threshold() -> Dict[Tuple[int, int], float]:
+    """Posição de perímetro (0→1) de cada célula `E`, ordenada por ângulo em torno
+    do centro — base da corrente que circula a borda. Idêntica em qualquer escala."""
+    cx, cy = PIXEL_COLS / 2.0, PIXEL_ROWS / 2.0
+    cells = [
+        (r, c)
+        for r, row in enumerate(PIXEL_MAP_INTERNAL)
+        for c, ch in enumerate(row)
+        if ch == "E"
+    ]
+    cells.sort(key=lambda rc: math.atan2(rc[0] - cy, rc[1] - cx))
+    n = max(1, len(cells))
+    return {rc: i / n for i, rc in enumerate(cells)}
+
+
+EDGE_THRESHOLD: Dict[Tuple[int, int], float] = _build_edge_threshold()
+
+
+def draw_mini_overlord(
+    surface: pygame.Surface,
+    cx: float,
+    cy: float,
+    scale: float,
+    theme: str,
+    anim_time: float,
+    hit: bool = False,
+    core_phase: float = 0.0,
+) -> None:
+    """Desenha um MINI Metropolis Overlord centrado em (cx,cy): a MESMA silhueta
+    pixel-art do boss (placas `P` energizadas + bordas `E` com corrente neon),
+    escalada, com UM único núcleo de plasma no centro. `draw` puro (§3)."""
+    cell = int(scale + 1)
+    grid_w = PIXEL_COLS * scale
+    grid_h = PIXEL_ROWS * scale
+    x = cx - grid_w / 2.0
+    y = cy - grid_h / 2.0
+    white = (255, 255, 255)
+    for r, row in enumerate(PIXEL_MAP):  # PIXEL_MAP = triângulo cheio (P + bordas E)
+        py = int(y + r * scale)
+        for c, ch in enumerate(row):
+            if ch == ".":
+                continue
+            if ch == "E":
+                color = white if hit else shield_live_color(EDGE_THRESHOLD.get((r, c), 0.0), anim_time)
+            else:  # "P"
+                color = inner_cell_color(r, c, "P", anim_time)
+            pygame.draw.rect(surface, color, (int(x + c * scale), py, cell, cell))
+    # UM núcleo de plasma no centro do triângulo (foco do fragmento).
+    core_cx = int(x + 0.5 * grid_w)
+    core_cy = int(y + 0.60 * grid_h)
+    radius = 0.17 * grid_w
+    intensity = 1.0 + 0.15 * (0.5 + 0.5 * math.sin(anim_time * 4.0))
+    draw_plasma_sphere(surface, core_cx, core_cy, radius, theme, core_phase, intensity, anim_time)

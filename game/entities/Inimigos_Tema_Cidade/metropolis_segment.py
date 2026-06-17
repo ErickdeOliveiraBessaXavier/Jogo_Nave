@@ -20,7 +20,6 @@ energéticos com leve perseguição (`TriShard`). Roteados via `ctx.new_enemies`
 from __future__ import annotations
 
 import math
-import random
 from typing import TYPE_CHECKING, List
 
 import pygame
@@ -35,65 +34,50 @@ if TYPE_CHECKING:
     from ...systems.entity_context import EnemyUpdateContext
     from ...systems.hit_result import HitResult
 
-_WHITE = (255, 255, 255)
-_TAU = 2.0 * math.pi
-
-
-def _jagged(x1: float, y1: float, x2: float, y2: float, jitter: float, segs: int = 3):
-    """Polilinha em ziguezague (descarga elétrica). Para `draw` puro (§3)."""
-    dx, dy = x2 - x1, y2 - y1
-    length = math.hypot(dx, dy) or 1.0
-    nx, ny = -dy / length, dx / length
-    pts = [(x1, y1)]
-    for i in range(1, segs):
-        t = i / segs
-        off = random.uniform(-jitter, jitter)
-        pts.append((x1 + dx * t + nx * off, y1 + dy * t + ny * off))
-    pts.append((x2, y2))
-    return pts
-
-
-def _lerp(a: tuple, b: tuple, f: float) -> tuple:
-    return (
-        int(a[0] + (b[0] - a[0]) * f),
-        int(a[1] + (b[1] - a[1]) * f),
-        int(a[2] + (b[2] - a[2]) * f),
-    )
-
-
 class SegmentNetwork:
     """Inteligência central RESIDUAL: coordena os 3 fragmentos como uma só mente.
 
     Um relógio compartilhado (avançado 1×/frame pelo boss-coordenador) ritma:
       • respiração de raio sincronizada (movimentos pequenos em grupo);
-      • volley em ONDA a cada `CYCLE` (cada fragmento dispara defasado por `STAGGER`,
+      • volley em ONDA a cada ciclo (cada fragmento dispara defasado por `STAGGER`,
         em ordem — ataques complementares lendo como um pulso único);
-      • REORGANIZAÇÃO em grupo a cada `REORG_EVERY` ciclos (sem volley: o grupo
-        contrai/expande o anel e respira) — breve janela de descanso, não caos.
+      • REORGANIZAÇÃO em grupo (sem volley) só enquanto os 3 vivem — breve respiro.
 
-    Contrato explícito (§1): o segmento só lê `cycle/fire_phase/is_reorg/radius_scale`
-    e nunca toca no estado das irmãs.
+    ESCALADA: a mente CONCENTRA o poder conforme perde corpos. Quanto menos
+    fragmentos vivos, menor o intervalo entre volleys e menos pausas — matar um
+    torna os sobreviventes mais agressivos (tensão + curva de dificuldade). A
+    contagem de vivos é informada pelo boss a cada frame (`update(dt, alive)`).
+
+    Contrato explícito (§1): o segmento só lê `cycle/fire_phase/is_reorg/...`.
     """
 
-    CYCLE = 2.6        # intervalo entre volleys coordenadas (s)
-    STAGGER = 0.2      # defasagem da onda entre fragmentos (s)
-    REORG_EVERY = 4    # a cada N ciclos, um ciclo de reorganização (sem volley)
+    STAGGER = 0.18  # defasagem da onda entre fragmentos (s)
+    # Intervalo entre volleys e frequência de reorganização POR nº de vivos.
+    _CYCLE_BY_ALIVE = {3: 2.0, 2: 1.5, 1: 1.05}   # base apertada (era 2.6) + escalada
+    _REORG_BY_ALIVE = {3: 6, 2: 0, 1: 0}          # 0 = sem pausa (implacável c/ poucos)
 
     def __init__(self) -> None:
         self.clock = 0.0
         self.cycle = 0
         self._t = 0.0
+        self.alive = 3
 
-    def update(self, dt: float) -> None:
+    @property
+    def cycle_dur(self) -> float:
+        return self._CYCLE_BY_ALIVE.get(self.alive, 2.0)
+
+    def update(self, dt: float, alive: int = 3) -> None:
+        self.alive = max(1, alive)
         self.clock += dt
         self._t += dt
-        if self._t >= self.CYCLE:
-            self._t -= self.CYCLE
+        while self._t >= self.cycle_dur:  # while: cobre a queda brusca do ciclo na escalada
+            self._t -= self.cycle_dur
             self.cycle += 1
 
     @property
     def is_reorg(self) -> bool:
-        return self.cycle > 0 and self.cycle % self.REORG_EVERY == 0
+        every = self._REORG_BY_ALIVE.get(self.alive, 0)
+        return every > 0 and self.cycle > 0 and self.cycle % every == 0
 
     def fire_phase(self) -> float:
         return self._t
@@ -112,9 +96,11 @@ class MetropolisSegment(EnemyHitMixin):
     is_boss: bool = False
     POINTS = 400
     ORBIT_SPEED = 0.55  # rad/s ao redor do ponto invisível (suave/coordenado)
+    _ORBIT_MULT = {3: 1.0, 2: 1.22, 1: 1.5}  # escalada: + ágil conforme perde corpos
     ENTRY_TIME = 0.6    # ease da posição de split até o anel de órbita
     COLLISION_RADIUS = 40.0
     _THRUSTER_Y = 32.0  # offset da base (de onde sai o propulsor)
+    _MINI_SCALE = 3.7   # px por célula do pixel-map (mini-Overlord ~92px de largura)
 
     _explosion_size_killed = 60
     _explosion_size_hit = 12
@@ -218,7 +204,9 @@ class MetropolisSegment(EnemyHitMixin):
             self._fire_flash = max(0.0, self._fire_flash - dt)
 
         # Órbita SINCRONIZADA: mesmo centro/velocidade, raio respira em grupo (rede).
-        self._orbit_angle += self.ORBIT_SPEED * dt
+        # Velocidade ESCALA com a perda de corpos (sobreviventes mais ágeis).
+        alive = self._net.alive if self._net is not None else 3
+        self._orbit_angle += self.ORBIT_SPEED * self._ORBIT_MULT.get(alive, 1.0) * dt
         rscale = self._net.radius_scale() if self._net is not None else 1.0
         radius = self.orbit_radius * rscale
         ox = self.center[0] + math.cos(self._orbit_angle) * radius
@@ -260,90 +248,53 @@ class MetropolisSegment(EnemyHitMixin):
             self._fire_flash = 0.3
             ctx.new_enemies.extend(self._fire(ctx.player_x, ctx.player_y))
 
-    def _fire(self, px: float, py: float) -> List[object]:
-        """Ataques MENORES reaproveitando a linguagem visual nova. Complementares
-        entre os papéis → a volley coordenada lê como um pulso único."""
-        if self.role == "drone":  # pequeno feixe/drone preciso
-            return [EnergyDrone(self.x, self.y, px, py)]
-        if self.role == "shard":  # triângulo energético com leve perseguição
-            return [TriShard(self.x, self.y, px, py)]
-        if self.role == "pulse":  # pequeno pulso: leque curto de drones (descarga)
-            out: List[object] = []
-            base = math.atan2(py - self.y, px - self.x)
-            for s in (-0.26, 0.26):
-                a = base + s
-                out.append(EnergyDrone(self.x, self.y, self.x + math.cos(a) * 100.0, self.y + math.sin(a) * 100.0))
-            return out
+    def _drone(self, ang: float) -> object:
+        return EnergyDrone(self.x, self.y, self.x + math.cos(ang) * 100.0, self.y + math.sin(ang) * 100.0)
+
+    def _fire_role(self, role: str, px: float, py: float) -> List[object]:
+        """Padrão-base de UM papel (reaproveita a linguagem nova)."""
+        base = math.atan2(py - self.y, px - self.x)
+        if role == "drone":  # rajada: 2 feixes em leque apertado
+            return [self._drone(base - 0.1), self._drone(base + 0.1)]
+        if role == "shard":  # 2 triângulos com perseguição (alvos levemente abertos)
+            return [TriShard(self.x, self.y, px - 28.0, py), TriShard(self.x, self.y, px + 28.0, py)]
+        if role == "pulse":  # descarga: leque de 3 drones
+            return [self._drone(base + s) for s in (-0.32, 0.0, 0.32)]
         return []
+
+    def _fire(self, px: float, py: float) -> List[object]:
+        """Volley do fragmento. ESCALA com a perda de corpos: o ÚLTIMO sobrevivente
+        concentra o poder, somando o padrão de um papel caído (last stand)."""
+        alive = self._net.alive if self._net is not None else 3
+        shots = self._fire_role(self.role, px, py)
+        if alive == 1:
+            extra = "shard" if self.role != "shard" else "pulse"
+            shots += self._fire_role(extra, px, py)
+        return shots
 
     # ── Render (§3) ───────────────────────────────────────────────────────
     def draw(self, surface: pygame.Surface) -> None:
         cx, cy = int(self.x), int(self.y)
         t = self.anim_time
-        hit = self.hit_timer > 0.0
         boost = self._fire_flash / 0.3  # 1→0 logo após disparar
 
-        # Thruster ATRÁS do fragmento (flare + partículas na base).
+        # Thruster ATRÁS do fragmento (anéis na base).
         self._thruster.draw(surface, self.x, self.y + self._THRUSTER_Y, self._thruster_intensity)
 
-        # Silhueta com respiração sutil de tamanho (vivo, não rígido).
-        s = 1.0 + 0.04 * math.sin(t * 3.0) + 0.05 * boost
-        up, dn, hw = int(48 * s), int(32 * s), int(46 * s)
-        apex = (cx, cy - up)
-        bl = (cx - hw, cy + dn)
-        br = (cx + hw, cy + dn)
-        pts = [apex, bl, br]
+        # MINI-OVERLORD: a MESMA silhueta pixel-art do boss (placas energizadas +
+        # bordas neon com corrente), escalada, com 1 núcleo central da cor do tema.
+        # Respiração sutil de tamanho (vivo) + leve aumento ao disparar.
+        scale = self._MINI_SCALE * (1.0 + 0.04 * math.sin(t * 3.0) + 0.05 * boost)
+        pmap.draw_mini_overlord(
+            surface, cx, cy, scale, self.theme, t,
+            hit=self.hit_timer > 0.0, core_phase=self._phase,
+        )
 
-        # 1) Base de energia (NÃO chapada): escuro do tema com leve tinta migrando.
-        m = 0.5 + 0.5 * math.sin(t * 0.6 + self._phase)
-        base = _lerp(self._dark, self._mid, 0.12 + 0.10 * m)
-        pygame.draw.polygon(surface, base, pts)
-
-        # 2) Veias de energia do núcleo → vértices (fluxo interno) + nós correndo.
-        for k, vtx in enumerate(pts):
-            vg = 0.5 + 0.5 * math.sin(t * 4.0 + k * 2.1)
-            pygame.draw.line(surface, _lerp(self._dark, self._bright, 0.35 + 0.4 * vg), (cx, cy), vtx, 1)
-            frac = (t * 0.7 + k / 3.0) % 1.0  # nó de energia escorrendo p/ fora
-            nx = int(cx + (vtx[0] - cx) * frac)
-            ny = int(cy + (vtx[1] - cy) * frac)
-            pygame.draw.circle(surface, self._bright, (nx, ny), 2)
-
-        # 3) Pequena descarga elétrica interna ocasional (crepitar — §3).
-        if random.random() < 0.18 + 0.5 * boost:
-            ang = random.uniform(0.0, _TAU)
-            ex = cx + math.cos(ang) * hw * 0.7
-            ey = cy + math.sin(ang) * (up * 0.6)
-            arc = _jagged(cx, cy, ex, ey, jitter=4.0, segs=3)
-            pygame.draw.lines(surface, self._bright, False, [(int(ax), int(ay)) for ax, ay in arc], 1)
-
-        # 4) Núcleo de plasma — o foco (mesma linguagem das Fases 1/2).
-        intensity = 1.05 + 0.15 * (0.5 + 0.5 * math.sin(t * 4.0)) + 0.25 * boost
-        pmap.draw_plasma_sphere(surface, cx, cy, 26.0, self.theme, self._phase, intensity, t)
-
-        # 5) Borda neon VIVA: corrente pulsando + nó branco-quente circulando o perímetro.
-        self._draw_living_edge(surface, pts, t, hit, boost)
-
-        # 6) Barra de vida do fragmento (cor do tema).
+        # Barra de vida do fragmento (cor do tema), acima da silhueta.
+        half_h = int(pmap.PIXEL_ROWS * scale * 0.5)
         bw = 72
         bx = cx - bw // 2
-        by = max(2, min(Config.SCREEN_HEIGHT - 7, cy - up - 12))
+        by = max(2, min(Config.SCREEN_HEIGHT - 7, cy - half_h - 10))
         pygame.draw.rect(surface, (30, 30, 30), (bx, by, bw, 5))
         frac = max(0.0, self.health / self.max_health)
         pygame.draw.rect(surface, self._bright, (bx, by, int(bw * frac), 5))
-
-    def _draw_living_edge(self, surface: pygame.Surface, pts: list, t: float, hit: bool, boost: float) -> None:
-        """Contorno energizado: cor pulsando (corrente) + um nó branco-quente que
-        VIAJA pelo perímetro do triângulo (energia circulando o fragmento)."""
-        glow = 0.55 + 0.45 * math.sin(t * 3.5 + self._phase)
-        edge = _WHITE if hit else _lerp(self._mid, self._bright, min(1.0, glow + 0.4 * boost))
-        pygame.draw.polygon(surface, edge, pts, 3)
-        # Nó viajando: parametriza o perímetro (apex→bl→br→apex).
-        perim = ((pts[0], pts[1]), (pts[1], pts[2]), (pts[2], pts[0]))
-        pos = (t * 0.22) % 3.0
-        i = int(pos)
-        f = pos - i
-        a, b = perim[i]
-        nx = int(a[0] + (b[0] - a[0]) * f)
-        ny = int(a[1] + (b[1] - a[1]) * f)
-        pygame.draw.circle(surface, self._bright, (nx, ny), 4)
-        pygame.draw.circle(surface, _WHITE, (nx, ny), 2)

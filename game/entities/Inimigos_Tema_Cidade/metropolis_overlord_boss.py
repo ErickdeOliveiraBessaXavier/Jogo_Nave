@@ -61,35 +61,26 @@ _SEGMENTATION = "segmentation"  # Fase 3 final: boss se divide em 3 triângulos 
 # contorno neon ("E") e o frame escuro ("G") persistem.
 _SHELL_CHARS = ("P",)
 
-# Estrutura interna "viva" sob a carcaça/frame: corrente energética em vez de
-# preenchimento chapado. Tons neon SUAVES que se alternam no tempo (respiração) +
-# banda de fluxo diagonal + veias luminosas migrando. Deterministico (sem random)
-# p/ fluxo contínuo e §3-puro; defasado por posição p/ nunca virar cor única.
-_INNER_A = (46, 38, 82)       # violeta-escuro
-_INNER_B = (28, 52, 86)       # azul-aço escuro
-_INNER_FLOW = (70, 165, 225)  # corrente ciano-elétrica (suave)
-_INNER_VEIN = (140, 110, 215) # veia violeta luminosa
-_FRAME_A = (20, 22, 40)       # frame interno escuro (violeta)
-_FRAME_B = (28, 30, 52)       # frame interno escuro (azul)
+# A estrutura interna "viva" (corrente energética em vez de preenchimento chapado)
+# e a corrente da borda neon agora vivem em `pmap` (`inner_cell_color`,
+# `shield_live_color`) — FONTE ÚNICA compartilhada com os mini-Overlords (segmentos).
 
 # Flutuação VISUAL (entidade suspensa, viva). Aplicada só no draw (não toca
 # hitbox/ataques). EXCLUSIVAMENTE vertical — uma senóide única, suave e contínua;
 # sem deslocamento horizontal nem rotação.
-_FLOAT_AMP = 5.0       # px — amplitude do bob vertical (pequena)
-_FLOAT_FREQ = 0.9      # rad/s — lento
+_FLOAT_AMP = 5.0  # px — amplitude do bob vertical (pequena)
+_FLOAT_FREQ = 0.9  # rad/s — lento
 
 # Micro-tremor da Fase 2 enquanto os núcleos disparam os lasers (tensão interna /
 # enorme liberação de energia). Muito sutil; só visual; não desloca exageradamente.
-_LASER_SHAKE_AMP = 2   # px — jitter máximo por eixo durante o disparo
+_LASER_SHAKE_AMP = 2  # px — jitter máximo por eixo durante o disparo
 
 # Cada orb desce este tanto (equilíbrio visual da composição interna). Aplicado na
 # FONTE ÚNICA da posição do orb (`_orb_world_position`) → núcleos, lasers e splits.
-_ORB_DROP_PX = 1
+_ORB_DROP_PX = 10
 
-# Entrada dramática: na subida (silhueta) o corpo é cinza-escuro com BORDAS azuis
-# energizadas (sem detalhe interno / núcleos). A ativação faz `lerp` p/ a vida plena.
-_SILHOUETTE = (40, 44, 58)         # cinza-azulado escuro da estrutura colossal
-_EDGE_SILHOUETTE = (20, 150, 205)  # bordas azuis energizadas, estáticas (sem fluxo)
+# Entrada dramática: a silhueta cinza + bordas azuis (`pmap.SILHOUETTE` /
+# `pmap.EDGE_SILHOUETTE`) faz `lerp` para a vida plena conforme a ativação.
 
 
 def _lerp(a: tuple, b: tuple, f: float) -> tuple:
@@ -183,10 +174,10 @@ class MetropolisOverlordBoss(BossHitMixin):
 
     # ── Entrada dramática (total ≤ 8s). Sobe 75% lenta como silhueta, ATIVA (núcleos
     #    acendem) e dispara os 25% finais ~3× mais rápido até a posição de combate.
-    INTRO_RISE_DUR: float = 6.0       # subida lenta/pesada (75% do percurso)
-    INTRO_ACTIVATE_DUR: float = 1.0   # despertar dos núcleos / interior ganha vida
-    INTRO_SURGE_DUR: float = 0.7      # arranque final (25%, ~3× a velocidade média)
-    INTRO_RISE_FRAC: float = 0.75     # fração do percurso coberta na subida lenta
+    INTRO_RISE_DUR: float = 6.0  # subida lenta/pesada (75% do percurso)
+    INTRO_ACTIVATE_DUR: float = 1.0  # despertar dos núcleos / interior ganha vida
+    INTRO_SURGE_DUR: float = 0.7  # arranque final (25%, ~3× a velocidade média)
+    INTRO_RISE_FRAC: float = 0.75  # fração do percurso coberta na subida lenta
 
     # ── Dano: o corpo NUNCA é mirável a tiro (em nenhuma fase). Na Fase 2 o único
     #    dano vem da EXPLOSÃO das minas da City atraídas para o centro. Cada acerto
@@ -258,12 +249,14 @@ class MetropolisOverlordBoss(BossHitMixin):
         self.direction = 1
         self._intro_start_y = self.y
         _d = self._intro_start_y - self.target_y
-        self._intro_act_y = self.target_y + (1.0 - self.INTRO_RISE_FRAC) * _d  # ponto dos 75%
-        self._intro_t = 0.0          # relógio do ato atual da intro
-        self._activation = 0.0       # 0 = só silhueta; 1 = núcleos/energia plenos
-        self._intro_scale = 0.78     # começa "distante" e cresce até 1.0 (revela tamanho)
+        self._intro_act_y = (
+            self.target_y + (1.0 - self.INTRO_RISE_FRAC) * _d
+        )  # ponto dos 75%
+        self._intro_t = 0.0  # relógio do ato atual da intro
+        self._activation = 0.0  # 0 = só silhueta; 1 = núcleos/energia plenos
+        self._intro_scale = 0.78  # começa "distante" e cresce até 1.0 (revela tamanho)
         self._intro_alpha = 255
-        self._thruster = EnergyThruster(scale=1.0)   # propulsor da entrada
+        self._thruster = EnergyThruster(scale=1.0)  # propulsor da entrada
         self._thruster_intensity = 0.0
 
         # Fase 2: boss parado no centro. Ataque PRINCIPAL = 3 lasers rotativos; pressão
@@ -466,11 +459,13 @@ class MetropolisOverlordBoss(BossHitMixin):
     def _emit_shake(self, intensity: int, duration: float) -> None:
         if self._bus is not None:
             from ...events import game_events as events
+
             self._bus.emit(events.ScreenShake(intensity=intensity, duration=duration))
 
     def _emit_flash(self, alpha: int, duration: float = 0.06) -> None:
         if self._bus is not None:
             from ...events import game_events as events
+
             self._bus.emit(events.ImpactFlash(duration=duration, alpha=alpha))
 
     def _trigger_shield_collapse(self, next_state: str) -> None:
@@ -520,7 +515,9 @@ class MetropolisOverlordBoss(BossHitMixin):
         # Offset visual do frame (flutuação/tremor), calculado UMA vez aqui e reusado
         # pelo draw e pela âncora dos orbs/lasers — mantém tudo perfeitamente em sync.
         self._draw_offset = self._float_offset()
-        self._update_thruster(dt)  # propulsor sempre ativo (forte na intro, normal depois)
+        self._update_thruster(
+            dt
+        )  # propulsor sempre ativo (forte na intro, normal depois)
         return result
 
     def _thruster_origin(self) -> tuple[float, float]:
@@ -555,19 +552,19 @@ class MetropolisOverlordBoss(BossHitMixin):
             e = p * p * (3.0 - 2.0 * p)  # smoothstep: subida pesada/imponente
             self.y = self._intro_start_y + (self._intro_act_y - self._intro_start_y) * e
             self._intro_scale = 0.78 + 0.22 * e  # cresce: revela o verdadeiro tamanho
-            self._activation = 0.0               # só silhueta + bordas azuis
+            self._activation = 0.0  # só silhueta + bordas azuis
             if p >= 1.0:
                 self.y = self._intro_act_y
                 self.state, self._intro_t = _INTRO_ACTIVATE, 0.0
         elif self.state == _INTRO_ACTIVATE:
-            self.y = self._intro_act_y           # quase parado: a entidade DESPERTA
+            self.y = self._intro_act_y  # quase parado: a entidade DESPERTA
             self._intro_scale = 1.0
             self._activation = min(1.0, self._intro_t / self.INTRO_ACTIVATE_DUR)
             if self._intro_t >= self.INTRO_ACTIVATE_DUR:
                 self.state, self._intro_t = _INTRO_SURGE, 0.0
         else:  # _INTRO_SURGE — dispara os 25% finais
             p = min(1.0, self._intro_t / self.INTRO_SURGE_DUR)
-            e = 1.0 - (1.0 - p) * (1.0 - p)      # ease-out: arranca forte e assenta
+            e = 1.0 - (1.0 - p) * (1.0 - p)  # ease-out: arranca forte e assenta
             self.y = self._intro_act_y + (self.target_y - self._intro_act_y) * e
             self._activation = 1.0
             if p >= 1.0:
@@ -580,7 +577,9 @@ class MetropolisOverlordBoss(BossHitMixin):
         inten = min(1.0, 0.12 + speed / 320.0)
         if self.state == _INTRO_ACTIVATE:
             inten = max(inten, 0.30 + 0.35 * self._activation)
-        self._thruster_intensity = inten  # o update do thruster ocorre em _update_thruster
+        self._thruster_intensity = (
+            inten  # o update do thruster ocorre em _update_thruster
+        )
 
     def _update_phase1(self, dt: float, ctx: "BossUpdateContext") -> None:
         if not self._sentinels_spawned:
@@ -948,7 +947,8 @@ class MetropolisOverlordBoss(BossHitMixin):
             self._spawn_segments(ctx)
             self._segmented = True
         if self._segment_network is not None:
-            self._segment_network.update(ctx.dt)  # ritma a coordenação dos 3 (1×/frame)
+            alive = sum(1 for s in self._segments if not s.dead)
+            self._segment_network.update(ctx.dt, alive)  # ritma + ESCALA pela perda de corpos
         # Vitória quando todos os segmentos foram destruídos.
         if self._segments and all(s.dead for s in self._segments):
             self.dead = True
@@ -1097,7 +1097,11 @@ class MetropolisOverlordBoss(BossHitMixin):
                 # Corpo: SILHUETA (cinza + bordas azuis) que GANHA VIDA com a ativação.
                 temp_surf = pygame.Surface((draw_w, draw_h), pygame.SRCALPHA)
                 self._draw_intro_body(
-                    temp_surf, 0, 0, self.PIXEL_SCALE * self._intro_scale, self._activation
+                    temp_surf,
+                    0,
+                    0,
+                    self.PIXEL_SCALE * self._intro_scale,
+                    self._activation,
                 )
                 if self._intro_alpha < 255:
                     temp_surf.set_alpha(int(self._intro_alpha))
@@ -1126,7 +1130,7 @@ class MetropolisOverlordBoss(BossHitMixin):
         cell = int(scale + 1)
         inner = self._inner_cell_color
         draw_rect = pygame.draw.rect
-        sil, edge_sil = _SILHOUETTE, _EDGE_SILHOUETTE
+        sil, edge_sil = pmap.SILHOUETTE, pmap.EDGE_SILHOUETTE
 
         # 1) Frame (G) + bordas (E): silhueta → vida. Bordas azuis desde o início.
         for r, row in enumerate(pmap.PIXEL_MAP_INTERNAL):
@@ -1140,7 +1144,9 @@ class MetropolisOverlordBoss(BossHitMixin):
                     color = _lerp(sil, inner(r, c, "G"), act)
                 else:
                     color = _lerp(sil, pmap.COLORS.get(char, (255, 0, 255)), act)
-                draw_rect(surface, color, (int(x + c * scale), int(y + r * scale), cell, cell))
+                draw_rect(
+                    surface, color, (int(x + c * scale), int(y + r * scale), cell, cell)
+                )
 
         # 2) Placas (P): silhueta cinza → estrutura viva (fluxos/veias) com a ativação.
         for r, c, _ch, _px, _py in self._intact_cells:
@@ -1154,12 +1160,21 @@ class MetropolisOverlordBoss(BossHitMixin):
         if act > 0.02:
             grid_w = pmap.PIXEL_COLS * scale
             grid_h = pmap.PIXEL_ROWS * scale
-            intensity = (0.85 + 0.15 * (0.5 + 0.5 * math.sin(self.anim_time * 4.0))) * act
+            intensity = (
+                0.85 + 0.15 * (0.5 + 0.5 * math.sin(self.anim_time * 4.0))
+            ) * act
             for rx, ry, rr, theme, phase in self.SPHERE_DEFS:
                 cx = int(x + rx * grid_w)
                 cy = int(y + ry * grid_h) + _ORB_DROP_PX
                 pmap.draw_plasma_sphere(
-                    surface, cx, cy, rr * grid_w, theme, phase, intensity, self.anim_time
+                    surface,
+                    cx,
+                    cy,
+                    rr * grid_w,
+                    theme,
+                    phase,
+                    intensity,
+                    self.anim_time,
                 )
 
     def _draw_pixel_map(
@@ -1239,61 +1254,14 @@ class MetropolisOverlordBoss(BossHitMixin):
         return None  # Fase 2+: contorno destruído, não desenha
 
     def _shield_live_color(self, th: float) -> tuple:
-        """Cor de uma célula `E` do escudo VIVO na posição de perímetro `th` (0..1).
-
-        Em vez de um pulso global (estático), a energia CIRCULA: uma onda de brilho
-        corre pela borda numa direção e nós branco-quentes viajam pelo contorno —
-        o escudo parece vivo/energizado mesmo com o boss parado. Puro (§3)."""
-        t = self.anim_time
-        # Nós branco-quentes orbitando a borda (energia concentrada viajando).
-        for k in range(2):
-            node = (t * 0.16 + k * 0.5) % 1.0
-            d = abs(((th - node + 0.5) % 1.0) - 0.5)  # distância circular no perímetro
-            if d < 0.045:
-                f = 1.0 - d / 0.045
-                hot, g = (235, 252, 255), pmap.EDGE_GLOW
-                return tuple(int(g[i] + (hot[i] - g[i]) * f) for i in range(3))
-        # Onda de brilho correndo numa direção (neon ↔ glow) + leve respiração global.
-        wave = 0.5 + 0.5 * math.sin(th * (2.0 * math.pi * 3.0) - t * 2.4)
-        wave *= 0.85 + 0.15 * math.sin(t * 1.3)  # intensidade luminosa variando no tempo
-        neon, glow = pmap.COLORS["E"], pmap.EDGE_GLOW
-        return tuple(int(neon[i] + (glow[i] - neon[i]) * wave) for i in range(3))
+        """Cor da borda VIVA (corrente circulando) — delega à fonte única do `pmap`,
+        compartilhada com os mini-Overlords (segmentos)."""
+        return pmap.shield_live_color(th, self.anim_time)
 
     def _inner_cell_color(self, r: int, c: int, kind: str) -> tuple:
-        """Cor energética de UMA célula interna (placa `P` / frame `G`).
-
-        Substitui o preenchimento chapado por uma estrutura VIVA: respiração lenta
-        entre tons neon suaves (defasada por posição → nunca cor única), uma banda
-        de corrente diagonal correndo, veias luminosas migrando (só nas placas) e um
-        pulso sutil. Determinístico (sem random) p/ fluxo contínuo e §3-puro."""
-        t = self.anim_time
-        sin = math.sin
-        a, b = (_INNER_A, _INNER_B) if kind == "P" else (_FRAME_A, _FRAME_B)
-        # 1) Respiração: troca lenta entre dois tons, defasada por posição.
-        m = 0.5 + 0.5 * sin(t * 0.5 + (r + c) * 0.18)
-        r0 = a[0] + (b[0] - a[0]) * m
-        g0 = a[1] + (b[1] - a[1]) * m
-        b0 = a[2] + (b[2] - a[2]) * m
-        # 2) Corrente energética: banda diagonal correndo pela estrutura.
-        band = sin((r - c) * 0.5 - t * 2.0)
-        if band > 0.5:
-            gain = (band - 0.5) * 2.0 * (0.55 if kind == "P" else 0.3)
-            fl = _INNER_FLOW
-            r0 += (fl[0] - r0) * gain
-            g0 += (fl[1] - g0) * gain
-            b0 += (fl[2] - b0) * gain
-        # 3) Veias luminosas esparsas migrando (só nas placas, p/ não poluir o frame).
-        if kind == "P":
-            vein = sin((r * 1.3 + c * 0.7) - t * 1.2)
-            if vein > 0.86:
-                gv = (vein - 0.86) * 7.0 * 0.5
-                vc = _INNER_VEIN
-                r0 += (vc[0] - r0) * gv
-                g0 += (vc[1] - g0) * gv
-                b0 += (vc[2] - b0) * gv
-        # 4) Pulso sutil de atividade.
-        pulse = 0.9 + 0.1 * sin(t * 3.0 + r * 0.7 - c * 0.4)
-        return (min(255, int(r0 * pulse)), min(255, int(g0 * pulse)), min(255, int(b0 * pulse)))
+        """Cor energética de uma célula interna (placa/frame) — delega à fonte única
+        do `pmap`, compartilhada com os mini-Overlords (segmentos)."""
+        return pmap.inner_cell_color(r, c, kind, self.anim_time)
 
     def _draw_shield_arcs(self, surface: pygame.Surface) -> None:
         """Desenha os arcos elétricos do colapso (estado montado no update, §3)."""
