@@ -1229,6 +1229,7 @@ class PlayingScene(Scene):
 
     def exit(self) -> None:
         pygame.mouse.set_visible(True)
+        sound_manager.stop_all_sfx()
         if hasattr(self, "effects_system"):
             self.effects_system.cleanup()
 

@@ -111,6 +111,9 @@ class SoundManager:
         self.golem_orb_channel: pygame.mixer.Channel = pygame.mixer.Channel(
             CHANNEL_CONFIG["golem_orb"]
         )
+        self.metropolis_laser_channel: pygame.mixer.Channel = pygame.mixer.Channel(
+            CHANNEL_CONFIG["metropolis_laser"]
+        )
         self.last_shot_time: float = 0.0
         self.shot_volume_base: float = VOLUME_CONFIG["shots"]
         # Throttle do "escudo destruído": vários escudos podem quebrar no mesmo
@@ -364,6 +367,37 @@ class SoundManager:
         self.boss_laser_fire_channel.stop()
 
     @require_audio
+    def play_metropolis_laser_loop(self):
+        """Toca o loop do laser do Metropolis Overlord no canal dedicado."""
+        if "metropolis_overlord_laser" in self._sounds:
+            # Se já está tocando ou pausado (canal ocupado), não reinicia para evitar stutters
+            if self.metropolis_laser_channel.get_busy():
+                return
+
+            logging.info("SoundManager: Iniciando loop do laser Metropolis Overlord")
+            sound = self._sounds["metropolis_overlord_laser"]
+            sound.set_volume(self.sfx_volume * self.master_volume)
+            # Toca em loop infinito (-1)
+            self.metropolis_laser_channel.play(sound, loops=-1)
+        else:
+            logging.warning("SoundManager: som 'metropolis_overlord_laser' não encontrado!")
+
+    @require_audio
+    def stop_metropolis_laser_loop(self):
+        """Para o loop do laser do Metropolis Overlord."""
+        self.metropolis_laser_channel.stop()
+
+    @require_audio
+    def pause_metropolis_laser_loop(self):
+        """Pausa o loop do laser do Metropolis Overlord."""
+        self.metropolis_laser_channel.pause()
+
+    @require_audio
+    def resume_metropolis_laser_loop(self):
+        """Retoma o loop do laser do Metropolis Overlord."""
+        self.metropolis_laser_channel.unpause()
+
+    @require_audio
     def _duck_music(self, duck: bool):
         """Controla o volume da música (ducking) para dar espaço aos efeitos do boss."""
         if not hasattr(pygame.mixer, "music") or not pygame.mixer.music.get_busy():
@@ -561,6 +595,7 @@ class SoundManager:
         self.boss_laser_fire_channel.stop()
         self.golem_mine_channel.stop()
         self.golem_orb_channel.stop()
+        self.metropolis_laser_channel.stop()
         for sound in self._sounds.values():
             sound.stop()
 

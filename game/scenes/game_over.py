@@ -574,6 +574,7 @@ class GameOverScene(Scene):
         """
         from .playing import PlayingScene
 
+        sound_manager.stop_all_sfx()
         self.app.states.switch(
             PlayingScene(
                 self.app,
@@ -597,6 +598,7 @@ class GameOverScene(Scene):
 
     def _return_to_menu(self):
         sound_manager.stop_music()
+        sound_manager.stop_all_sfx()
         from ..core.sound_config import MusicState
 
         sound_manager.music_state_manager.transition_to(MusicState.MENU, force=True)

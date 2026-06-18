@@ -82,6 +82,7 @@ CHANNEL_CONFIG: Dict[str, int] = {
     "boss_laser_fire": 3,  # Canal dedicado para disparo do laser do boss
     "golem_mine": 4,  # Canal dedicado para tick da mina do Golem
     "golem_orb": 5,  # Canal dedicado para rajada do orbe roxo do Golem
+    "metropolis_laser": 6,  # Canal dedicado para o loop do laser do Metropolis Overlord
     "max_channels": 8,  # Número máximo de canais
 }
 
@@ -142,6 +143,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "shield_break": "sfx/ui/Som_Escudo_Destruído.wav",  # Escudo de inimigo esgotado
             "gem_birth": "sfx/ui/Birth_Energy_Sound_Gem.wav",  # Nascimento da gema do IceGolem
             "gem_death": "sfx/ui/Death_Energy_Sound_Gem.wav",  # Colapso/morte da gema do IceGolem
+            "metropolis_overlord_laser": "sfx/ui/Laser_Boss_Loop_Metropolis_Overlord_Boss.mp3",
         },
     },
 }

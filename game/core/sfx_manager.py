@@ -99,6 +99,7 @@ def load_sfx(
         "shield_break": ui.get("shield_break"),
         "gem_birth": ui.get("gem_birth"),
         "gem_death": ui.get("gem_death"),
+        "metropolis_overlord_laser": ui.get("metropolis_overlord_laser"),
     }
     for key, rel in ui_map.items():
         if not rel:
@@ -109,6 +110,8 @@ def load_sfx(
                 s = pygame.mixer.Sound(path)
                 s.set_volume(sfx_volume * master_volume)
                 sounds[key] = s
+                if key == "metropolis_overlord_laser":
+                    logging.info("SfxManager: Som 'metropolis_overlord_laser' carregado com sucesso.")
             except pygame.error as e:
                 logging.warning("SfxManager: erro ao carregar %s: %s", path, e)
 

@@ -798,6 +798,16 @@ class MainMenuScene(Scene):
             self._process_cheat_input(event)
 
     # ------------------------------------------------------------------ #
+    # Lifecycle
+    # ------------------------------------------------------------------ #
+
+    def enter(self):
+        """Ativada ao entrar na cena do menu principal."""
+        pygame.mouse.set_visible(True)
+        # Garante que sons de fases anteriores (loops de bosses, etc) sejam parados
+        sound_manager.stop_all_sfx()
+
+    # ------------------------------------------------------------------ #
     # Update
     # ------------------------------------------------------------------ #
 

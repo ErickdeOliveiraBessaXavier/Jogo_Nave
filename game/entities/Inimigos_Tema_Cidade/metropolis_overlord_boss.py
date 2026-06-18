@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, List
 import pygame
 
 from ...core.config import config as Config
+from ...core.sound import sound_manager
 from ..boss_hit_mixin import BossHitMixin
 from . import metropolis_overlord_pixel_map as pmap
 from .city_mine import CityMine
@@ -504,6 +505,11 @@ class MetropolisOverlordBoss(BossHitMixin):
         result = BossUpdateResult()
         if dt <= 0.0:
             return result
+        
+        if self.dead:
+            sound_manager.stop_metropolis_laser_loop()
+            return result
+
         self.anim_time += dt
         self._update_fragments(dt)
 
@@ -798,6 +804,10 @@ class MetropolisOverlordBoss(BossHitMixin):
         # Centroide das 3 orbs (em frações da caixa) → direção INICIAL de cada feixe.
         cen_rx = sum(d[0] for d in self.SPHERE_DEFS) / len(self.SPHERE_DEFS)
         cen_ry = sum(d[1] for d in self.SPHERE_DEFS) / len(self.SPHERE_DEFS)
+
+        # Loop de som do Metropolis Overlord
+        sound_manager.play_metropolis_laser_loop()
+
         for rx, ry, _rr, theme, _phase in self.SPHERE_DEFS:
             ox, oy = self._orb_world_position(rx, ry)
             # Direção natural = do centroide para a orb (em px, p/ respeitar o aspecto).
@@ -816,6 +826,9 @@ class MetropolisOverlordBoss(BossHitMixin):
             result.new_lasers.append(beam)
 
     def _kill_beams(self) -> None:
+        # Para o loop de som
+        sound_manager.stop_metropolis_laser_loop()
+
         # Dissipa progressivamente (não some abrupto); os feixes seguem vivos em
         # em.boss_lasers até a animação de fade terminar e eles se marcarem `dead`.
         for b in self._beams:

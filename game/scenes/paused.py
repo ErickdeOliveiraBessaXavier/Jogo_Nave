@@ -58,11 +58,13 @@ class PausedScene(Scene):
         self.go_to_menu = False
         if self.first_entry:
             sound_manager.pause_music()
+            sound_manager.pause_metropolis_laser_loop()
             self.first_entry = False
 
     def exit(self):
         if not self.go_to_menu and not self.go_to_settings:
             sound_manager.resume_music()
+            sound_manager.resume_metropolis_laser_loop()
 
     def get_focusable_rects(self) -> list[pygame.Rect]:
         return [
@@ -89,6 +91,7 @@ class PausedScene(Scene):
     def _activate_menu(self) -> None:
         self.go_to_menu = True
         sound_manager.stop_music()
+        sound_manager.stop_all_sfx()
         from ..core.sound_config import MusicState
 
         sound_manager.music_state_manager.transition_to(MusicState.MENU, force=True)
