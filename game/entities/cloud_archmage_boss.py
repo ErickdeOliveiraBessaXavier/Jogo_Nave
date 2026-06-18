@@ -10,7 +10,6 @@ import pygame
 
 from ..core.assets import get_font
 from ..core.config import config as Config
-from ..core.sound_config import MusicState
 from .cloud_archmage_pixel_map import (
     ARM_MAP,
     BODY_MAP,
@@ -272,7 +271,6 @@ class ResonanceWave:
 class CloudArchmageBoss:
     BOSS_TYPE_NAME: str = "cloud_archmage"
     is_boss: bool = True
-    MUSIC_STATE: Final = MusicState.CLOUD_ARCHMAGE_BOSS
     MAX_HEALTH: Final[int] = 1200
     WIDTH: Final[int] = 80
     HEIGHT: Final[int] = 110

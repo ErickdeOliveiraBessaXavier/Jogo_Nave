@@ -89,10 +89,16 @@ class PlaySound(Event):
 
 @dataclass
 class MusicStateChange(Event):
-    """Solicita uma mudança no estado da música (play, stop, fade)."""
+    """Solicita uma mudança no estado da música (play, stop, fade).
 
-    state: Any  # Ex: MusicState.BOSS_FIGHT
+    `key` identifica QUAL faixa data-driven tocar: para GAME é a chave do tema
+    (`WorldTheme.value`); para BOSS é o `BOSS_TYPE_NAME`. `None` em GAME retoma o
+    tema atual; irrelevante para MENU/SILENCE.
+    """
+
+    state: Any  # MusicState (MENU | GAME | BOSS | SILENCE)
     fade_ms: int = 0
+    key: str | None = None
 
 
 @dataclass

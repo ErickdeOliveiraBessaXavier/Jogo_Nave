@@ -52,6 +52,7 @@ from ..core.world_config import (
     format_stage_name,
     get_world_for_level,
     is_side_scroll_mode,
+    resolve_theme_key,
 )
 from ..entities.mini_ship import MiniShip
 from ..entities.revival_beacon import RevivalBeacon
@@ -670,6 +671,16 @@ class PlayingScene(Scene):
         self.is_side_scroll = is_side_scroll_mode(new_world.theme)
         self.pending_world_transition = None
         self._apply_world_theme()
+        # Música ambiente do tema novo (data-driven): a descoberta por pasta
+        # troca a rotação para `audio/themes/<tema>/`. Re-emissão do mesmo tema
+        # é deduplicada no MusicManager (não corta a faixa em andamento).
+        self.app.event_bus.emit(
+            events.MusicStateChange(
+                state=MusicState.GAME,
+                key=resolve_theme_key(new_world),
+                fade_ms=0,
+            )
+        )
         # Usa o mesmo fluxo de preparação dos níveis normais — ``_begin_playing_state``
         # direto zerava ``is_entering`` no mesmo frame e a animação de entrada
         # nunca tocava. ``_begin_level_preparation`` mantém ``state=PREPARING``
@@ -1221,7 +1232,11 @@ class PlayingScene(Scene):
         self._init_fade()
         if self.first_entry:
             self.app.event_bus.emit(
-                events.MusicStateChange(state=MusicState.GAME, fade_ms=0)
+                events.MusicStateChange(
+                    state=MusicState.GAME,
+                    key=resolve_theme_key(self.current_world),
+                    fade_ms=0,
+                )
             )
             self.first_entry = False
         if self.transition_phase == TransitionPhase.WORLD_PANEL:

@@ -67,23 +67,13 @@ class SoundSystem:
         self._play_named_sound(event.sound_name)
 
     def _on_music_state_change(self, event: events.MusicStateChange) -> None:
-        """Controla a música de fundo."""
+        """Controla a música. Data-driven: o `key` do evento escolhe a faixa
+        (tema para GAME, BOSS_TYPE_NAME para BOSS); a descoberta por pasta cuida
+        do resto. Não há mais ramo por boss específico."""
         if event.state == MusicState.GAME:
-            sound_manager.play_background_music()
+            sound_manager.play_theme(event.key)
         elif event.state == MusicState.BOSS:
-            sound_manager.play_boss_music()
-        elif event.state == MusicState.SPIKE_BOSS:
-            sound_manager.play_spike_boss_music()
-        elif event.state == MusicState.SLIME_BOSS:
-            sound_manager.play_slime_boss_music()
-        elif event.state == MusicState.GIANT_METEOR_BOSS:
-            sound_manager.play_giant_meteor_boss_music()
-        elif event.state == MusicState.MOUNTAIN_SERPENT_BOSS:
-            sound_manager.play_mountain_serpent_boss_music()
-        elif event.state == MusicState.CLOUD_ARCHMAGE_BOSS:
-            sound_manager.play_cloud_archmage_boss_music()
-        elif event.state == MusicState.STONE_GOLEM_BOSS:
-            sound_manager.play_stone_golem_boss_music()
+            sound_manager.play_boss(event.key)
         elif event.state == MusicState.MENU:
             sound_manager.play_menu_music()
         elif event.state == MusicState.SILENCE:

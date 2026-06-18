@@ -84,7 +84,9 @@ deve segui-los; código existente que os viola é candidato a revisão.
   adicionar um inimigo novo exige só implementar o método na classe, nada
   muda no `EntityManager`.
 - Identificação de tipo por class attribute consultado via `getattr`, não por
-  `isinstance`. Padrão de referência: `getattr(type(boss), "MUSIC_STATE", None)`.
+  `isinstance`. Padrão de referência: `getattr(boss, "BOSS_TYPE_NAME", None)` —
+  ex.: a música de boss é descoberta pela pasta `audio/bosses/<BOSS_TYPE_NAME>/`,
+  sem mapa por boss no código.
 - Distinção de boss usa o atributo formal `is_boss` (de `BossHitMixin`), nunca
   heurística de nome (`"boss" in type(x).__name__.lower()`).
 - Cascata `isinstance`/`if type ==` é code smell. Aceitável só quando

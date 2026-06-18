@@ -1,25 +1,34 @@
-"""MusicManager: lógica de música e transições do jogo.
+"""MusicManager: música data-driven (orientada por pastas) e transições.
 
-Este módulo isola a reprodução de música, estado de transição e controle de
-fade para reduzir o tamanho e a responsabilidade do `SoundManager`.
+Isola a reprodução de música, o estado de transição e o controle de fade do
+`SoundManager`. A escolha de QUAL faixa tocar vem da **descoberta de pastas**
+(`MusicLibrary`): `audio/themes/<tema>/` para a música ambiente de cada tema e
+`audio/bosses/<BOSS_TYPE_NAME>/` para a música exclusiva de cada boss. Nenhuma
+lista de arquivos no código; basta soltar o arquivo na pasta certa.
+
+Rotação dentro de um tema/boss: `TrackRotation` (aleatória, sem repetição
+imediata). Faixas tocam UMA vez (`loops=0`) e o fim de cada uma — sinalizado
+pelo end-event do mixer, bombeado no loop principal (`app.py`) e roteado por
+`advance_current()` — toca a próxima da rotação, dando rotação contínua e
+suave mesmo com uma única faixa (que simplesmente repete).
 """
 
 from __future__ import annotations
 
 import logging
-import os
-import random
-import sys
 import threading
 import time
-from typing import TYPE_CHECKING, Dict, List, Union, cast
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import pygame
 
+from .music_library import MusicLibrary, TrackRotation
 from .sound_config import (
+    AUDIO_BOSSES_ROOT,
+    AUDIO_MENU_ROOT,
+    AUDIO_THEMES_ROOT,
     BEHAVIOR_CONFIG,
     MUSIC_BEHAVIOR_CONFIG,
-    SOUND_PATHS,
     MusicState,
 )
 
@@ -27,13 +36,9 @@ if TYPE_CHECKING:
     from .sound import SoundManager
 
 
-MusicPaths = Dict[str, Union[str, List[str]]]
-
-
-def get_resource_path(relative_path: str) -> str:
-    """Resolve resource path no modo dev e executável."""
-    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
-    return os.path.join(base_path, relative_path)
+# Estados em que há música "de jogo" no ar (ambiente ou boss). Usado para
+# bloquear que o menu sobreponha a partida e para a categoria de volume.
+_GAME_MUSIC_STATES = (MusicState.GAME, MusicState.BOSS)
 
 
 class MusicStateManager:
@@ -47,12 +52,14 @@ class MusicStateManager:
         self.previous_state = MusicState.SILENCE
         self.music_manager.stop_music_internal()
 
-    def transition_to(self, new_state: MusicState, force: bool = False) -> bool:
+    def transition_to(
+        self, new_state: MusicState, force: bool = False, key: Optional[str] = None
+    ) -> bool:
         if not force and self._should_block_transition(new_state):
             return False
 
         self.previous_state = self.current_state
-        self._execute_transition(new_state)
+        self._execute_transition(new_state, key)
         self.current_state = new_state
         return True
 
@@ -60,46 +67,24 @@ class MusicStateManager:
         if not MUSIC_BEHAVIOR_CONFIG["prevent_menu_over_game"]:
             return False
 
-        game_music_types = [
-            MusicState.GAME,
-            MusicState.BOSS,
-            MusicState.SPIKE_BOSS,
-            MusicState.SLIME_BOSS,
-            MusicState.GIANT_METEOR_BOSS,
-            MusicState.MOUNTAIN_SERPENT_BOSS,
-            MusicState.CLOUD_ARCHMAGE_BOSS,
-            MusicState.STONE_GOLEM_BOSS,
-        ]
-
         is_music_paused = self.music_manager.sound_manager.music_paused
-        is_game_music_active = self.current_state in game_music_types or (
-            is_music_paused and self.previous_state in game_music_types
+        is_game_music_active = self.current_state in _GAME_MUSIC_STATES or (
+            is_music_paused and self.previous_state in _GAME_MUSIC_STATES
         )
 
         return new_state == MusicState.MENU and is_game_music_active
 
-    def _execute_transition(self, new_state: MusicState) -> None:
-        if self.current_state == new_state:
-            return
-
+    def _execute_transition(
+        self, new_state: MusicState, key: Optional[str] = None
+    ) -> None:
+        # Sem early-return por estado igual: GAME->GAME pode trocar de tema. A
+        # deduplicação ("já tocando exatamente isto") é feita nos internos.
         if new_state == MusicState.MENU:
             self.music_manager.play_menu_music_internal()
         elif new_state == MusicState.GAME:
-            self.music_manager.play_background_music_internal()
+            self.music_manager.play_theme_internal(key)
         elif new_state == MusicState.BOSS:
-            self.music_manager.play_boss_music_internal()
-        elif new_state == MusicState.SPIKE_BOSS:
-            self.music_manager.play_spike_boss_music_internal()
-        elif new_state == MusicState.SLIME_BOSS:
-            self.music_manager.play_slime_boss_music_internal()
-        elif new_state == MusicState.GIANT_METEOR_BOSS:
-            self.music_manager.play_giant_meteor_boss_music_internal()
-        elif new_state == MusicState.MOUNTAIN_SERPENT_BOSS:
-            self.music_manager.play_mountain_serpent_boss_music_internal()
-        elif new_state == MusicState.CLOUD_ARCHMAGE_BOSS:
-            self.music_manager.play_cloud_archmage_boss_music_internal()
-        elif new_state == MusicState.STONE_GOLEM_BOSS:
-            self.music_manager.play_stone_golem_boss_music_internal()
+            self.music_manager.play_boss_internal(key)
         elif new_state == MusicState.SILENCE:
             self.music_manager.stop_music_internal()
 
@@ -111,39 +96,43 @@ class MusicStateManager:
 
 
 class MusicManager:
+    # Chave do boss GENÉRICO: faixa(s) em `bosses/normal/` usada como fallback
+    # quando a pasta de um boss específico está vazia. É também a música do boss
+    # base (BOSS_TYPE_NAME == "normal").
+    GENERIC_BOSS_KEY: str = "normal"
+
     def __init__(self, sound_manager: "SoundManager") -> None:
         self.sound_manager = sound_manager
         self.music_state_manager = MusicStateManager(self)
+        self.library = MusicLibrary(
+            AUDIO_THEMES_ROOT, AUDIO_BOSSES_ROOT, AUDIO_MENU_ROOT
+        )
+        # Rotações vivas por playlist (chave "theme:<x>" / "boss:<x>").
+        self._rotations: Dict[str, TrackRotation] = {}
+        self._current_theme_key: Optional[str] = None
+        self._current_track: Optional[str] = None  # arquivo tocando agora
+        self._active_rotation_key: Optional[str] = None
+        self._active_music_type: Optional[str] = None  # "game" | "boss" | "menu"
+        # Suprime o end-event disparado quando NÓS paramos a música para trocar
+        # de faixa (senão o avanço por fim-de-faixa entraria em laço com a
+        # própria transição). Limpo ao final de uma transição bem-sucedida.
+        self._suppress_end = False
 
-    def _music_paths(self) -> MusicPaths:
-        return cast(MusicPaths, SOUND_PATHS["music"])
+    # ── API pública (data-driven) ──────────────────────────────────────────────
+    def play_theme(self, key: Optional[str] = None) -> None:
+        """Toca a música ambiente do tema `key` (ou retoma o tema atual se None)."""
+        self.music_state_manager.transition_to(MusicState.GAME, key=key)
 
-    def play_background_music(self) -> None:
-        self.music_state_manager.transition_to(MusicState.GAME)
-
-    def play_boss_music(self) -> None:
-        self.music_state_manager.transition_to(MusicState.BOSS)
-
-    def play_spike_boss_music(self) -> None:
-        self.music_state_manager.transition_to(MusicState.SPIKE_BOSS)
-
-    def play_slime_boss_music(self) -> None:
-        self.music_state_manager.transition_to(MusicState.SLIME_BOSS)
-
-    def play_giant_meteor_boss_music(self) -> None:
-        self.music_state_manager.transition_to(MusicState.GIANT_METEOR_BOSS)
-
-    def play_mountain_serpent_boss_music(self) -> None:
-        self.music_state_manager.transition_to(MusicState.MOUNTAIN_SERPENT_BOSS)
-
-    def play_cloud_archmage_boss_music(self) -> None:
-        self.music_state_manager.transition_to(MusicState.CLOUD_ARCHMAGE_BOSS)
-
-    def play_stone_golem_boss_music(self) -> None:
-        self.music_state_manager.transition_to(MusicState.STONE_GOLEM_BOSS)
+    def play_boss(self, key: Optional[str] = None) -> None:
+        """Toca a música exclusiva do boss `key` (== BOSS_TYPE_NAME)."""
+        self.music_state_manager.transition_to(MusicState.BOSS, key=key)
 
     def play_menu_music(self, force: bool = False) -> None:
         self.music_state_manager.transition_to(MusicState.MENU, force=force)
+
+    # Alias legado mantido para docs/compat; equivale a retomar o tema atual.
+    def play_background_music(self) -> None:
+        self.play_theme(None)
 
     def pause_music(self) -> None:
         self.music_state_manager.pause_current()
@@ -154,59 +143,74 @@ class MusicManager:
     def stop_music(self, force: bool = False) -> None:
         self.music_state_manager.transition_to(MusicState.SILENCE, force=force)
 
-    def play_background_music_internal(self) -> None:
-        background_music_list = self._music_paths()["background"]
-        if isinstance(background_music_list, list) and background_music_list:
-            chosen_music = random.choice(background_music_list)
-            music_path = get_resource_path(
-                os.path.join(str(SOUND_PATHS["base"]), chosen_music)
-            )
-            if (
-                os.path.exists(music_path)
-                and self.sound_manager.current_music != chosen_music
-            ):
-                self._transition_to_music(music_path, "background")
+    def advance_current(self) -> None:
+        """Fim de faixa → próxima da rotação ativa (rotação contínua e suave).
 
-    def play_boss_music_internal(self) -> None:
-        music_path = get_resource_path(
-            os.path.join(str(SOUND_PATHS["base"]), str(self._music_paths()["boss"]))
+        Chamado pelo end-event do mixer no loop principal. Ignora o evento
+        quando fomos nós que paramos a música (transição) ou quando não há
+        rotação ativa (menu/silêncio)."""
+        if self._suppress_end:
+            return
+        if self._active_rotation_key is None or self._active_music_type is None:
+            return
+        rot = self._rotations.get(self._active_rotation_key)
+        if rot is None:
+            return
+        track = rot.next()
+        if track:
+            self._transition_to_music(track, self._active_music_type)
+
+    # ── Internos: resolução data-driven ────────────────────────────────────────
+    def play_theme_internal(self, key: Optional[str] = None) -> None:
+        theme_key = key or self._current_theme_key
+        self._current_theme_key = theme_key
+        # Pasta do tema vazia → `_play_rotation` é no-op (mantém o que toca).
+        self._play_rotation(
+            f"theme:{theme_key}", self.library.theme_tracks(theme_key), "game"
         )
-        if os.path.exists(music_path) and self.sound_manager.current_music != "boss":
-            self._transition_to_music(music_path, "boss")
 
-    def _play_boss_music_by_key(self, key: str) -> None:
-        """Generic handler for all boss music playback."""
-        music_path = get_resource_path(
-            os.path.join(str(SOUND_PATHS["base"]), str(self._music_paths()[key]))
-        )
-        if os.path.exists(music_path) and self.sound_manager.current_music != key:
-            self._transition_to_music(music_path, key)
-
-    def play_spike_boss_music_internal(self) -> None:
-        self._play_boss_music_by_key("spike_boss")
-
-    def play_slime_boss_music_internal(self) -> None:
-        self._play_boss_music_by_key("slime_boss")
-
-    def play_giant_meteor_boss_music_internal(self) -> None:
-        self._play_boss_music_by_key("giant_meteor_boss")
-
-    def play_mountain_serpent_boss_music_internal(self) -> None:
-        self._play_boss_music_by_key("mountain_serpent_boss")
-
-    def play_cloud_archmage_boss_music_internal(self) -> None:
-        self._play_boss_music_by_key("cloud_archmage_boss")
-
-    def play_stone_golem_boss_music_internal(self) -> None:
-        self._play_boss_music_by_key("stone_golem_boss")
+    def play_boss_internal(self, key: Optional[str] = None) -> None:
+        tracks = self.library.boss_tracks(key)
+        if tracks:
+            rotation_key = f"boss:{key}"
+        else:  # pasta do boss vazia → música de boss GENÉRICA (`bosses/normal/`)
+            tracks = self.library.boss_tracks(self.GENERIC_BOSS_KEY)
+            rotation_key = f"boss:{self.GENERIC_BOSS_KEY}"
+        self._play_rotation(rotation_key, tracks, "boss")
 
     def play_menu_music_internal(self) -> None:
-        music_path = get_resource_path(
-            os.path.join(str(SOUND_PATHS["base"]), str(self._music_paths()["menu"]))
-        )
-        if os.path.exists(music_path) and self.sound_manager.current_music != "menu":
-            self._transition_to_music(music_path, "menu")
+        # Data-driven: pasta plana `audio/menu/`. Faixa única → loop gapless;
+        # várias → rotação. Pasta vazia → no-op (mantém o que toca).
+        self._play_rotation("menu", self.library.menu_tracks(), "menu")
 
+    def _play_rotation(
+        self, rotation_key: str, tracks: List[str], music_type: str
+    ) -> None:
+        if not tracks:
+            return
+        # Já tocando exatamente esta playlist? Não reinicia (re-emissão do mesmo
+        # estado/tema não deve cortar a faixa). Mudança de tema usa outra chave.
+        already_active = (
+            self._active_rotation_key == rotation_key
+            and self._current_track is not None
+            and pygame.mixer.music.get_busy()
+        )
+        rot = self._rotations.get(rotation_key)
+        if rot is None or not rot.matches(tracks):
+            rot = TrackRotation(tracks)
+            self._rotations[rotation_key] = rot
+        self._active_rotation_key = rotation_key
+        self._active_music_type = music_type
+        if already_active:
+            return
+        track = rot.next()
+        if track is not None:
+            # Faixa única: loop nativo gapless (sem re-fade por repetição). Com
+            # ≥2 faixas: toca uma vez (loop=0) e o end-event avança a rotação.
+            loop = -1 if len(tracks) == 1 else 0
+            self._transition_to_music(track, music_type, loop=loop)
+
+    # ── Pausa / retomada / parada ──────────────────────────────────────────────
     def pause_music_internal(self) -> None:
         if not self.sound_manager.music_paused:
             pygame.mixer.music.pause()
@@ -218,22 +222,19 @@ class MusicManager:
             self.sound_manager.music_paused = False
 
     def stop_music_internal(self) -> None:
+        self._suppress_end = True  # parada explícita não deve avançar a rotação
         pygame.mixer.music.stop()
         self.sound_manager.current_music = None
         self.sound_manager.music_paused = False
+        self._current_track = None
+        self._active_rotation_key = None
+        self._active_music_type = None
 
+    # ── Volume ─────────────────────────────────────────────────────────────────
     def set_music_volume(self, volume: float) -> None:
         self.sound_manager.music_volume = max(0.0, min(1.0, volume))
 
-        if self.sound_manager.current_music in [
-            "boss",
-            "spike_boss",
-            "slime_boss",
-            "giant_meteor_boss",
-            "mountain_serpent_boss",
-            "cloud_archmage_boss",
-            "stone_golem_boss",
-        ]:
+        if self.sound_manager.current_music == "boss":
             boss_volume = (
                 self.sound_manager.music_volume
                 * self.sound_manager.boss_music_multiplier
@@ -256,34 +257,38 @@ class MusicManager:
 
         if self.sound_manager.current_music is not None:
             base_volume = self.sound_manager.music_volume
-            if self.sound_manager.current_music in [
-                "boss",
-                "spike_boss",
-                "slime_boss",
-                "mountain_serpent_boss",
-                "cloud_archmage_boss",
-            ]:
+            if self.sound_manager.current_music == "boss":
                 base_volume *= self.sound_manager.boss_music_multiplier
             pygame.mixer.music.set_volume(
                 min(1.0, base_volume * self.sound_manager.master_volume)
             )
 
-    def _transition_to_music(self, music_path: str, music_type: str) -> None:
+    # ── Transição com fade (stream único do mixer) ─────────────────────────────
+    def _transition_to_music(
+        self, music_path: str, music_type: str, loop: int = 0
+    ) -> None:
         if (
             self.sound_manager.transition_thread
             and self.sound_manager.transition_thread.is_alive()
         ):
+            self._suppress_end = True
             pygame.mixer.music.stop()
             self.sound_manager.transition_thread.join()
 
+        # Re-armar DEPOIS do join (o worker anterior limpa a flag ao terminar).
+        self._suppress_end = True
+        self._current_track = music_path
+
         self.sound_manager.transition_thread = threading.Thread(
             target=self._smooth_transition,
-            args=(music_path, music_type),
+            args=(music_path, music_type, loop),
             daemon=True,
         )
         self.sound_manager.transition_thread.start()
 
-    def _smooth_transition(self, music_path: str, music_type: str) -> None:
+    def _smooth_transition(
+        self, music_path: str, music_type: str, loop: int = 0
+    ) -> None:
         with self.sound_manager.transition_lock:
             fade_duration = float(BEHAVIOR_CONFIG["music"]["fade_duration"])
             try:
@@ -294,21 +299,13 @@ class MusicManager:
                 pygame.mixer.music.load(music_path)
 
                 base_volume = self.sound_manager.music_volume
-                if music_type in [
-                    "boss",
-                    "spike_boss",
-                    "slime_boss",
-                    "giant_meteor_boss",
-                    "mountain_serpent_boss",
-                    "cloud_archmage_boss",
-                    "stone_golem_boss",
-                ]:
+                if music_type == "boss":
                     base_volume *= self.sound_manager.boss_music_multiplier
 
                 target_volume = min(1.0, base_volume * self.sound_manager.master_volume)
 
                 pygame.mixer.music.set_volume(0)
-                pygame.mixer.music.play(-1)
+                pygame.mixer.music.play(loop)
 
                 fade_steps = 20
                 step_duration = fade_duration / fade_steps
@@ -322,14 +319,21 @@ class MusicManager:
                 self.sound_manager.music_paused = False
             except pygame.error as e:
                 logging.error("Erro na transição de música: %s", e)
+            finally:
+                # Nova faixa no ar: liberar o avanço por fim-de-faixa.
+                self._suppress_end = False
 
     def fade_out_music(self, duration: float | None = None) -> None:
         if duration is None:
             duration = float(BEHAVIOR_CONFIG["music"]["fade_duration"])
 
+        self._suppress_end = True
         pygame.mixer.music.fadeout(int(duration * 1000))
         self.sound_manager.current_music = None
         self.sound_manager.music_paused = False
+        self._current_track = None
+        self._active_rotation_key = None
+        self._active_music_type = None
 
     def play_warning(self) -> None:
         # Stop any previous warning playback on the dedicated channel

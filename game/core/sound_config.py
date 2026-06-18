@@ -7,15 +7,18 @@ from typing import Any, Dict, Union
 
 
 class MusicState(Enum):
+    """Estados de alto nível da música. Genérico e data-driven: o *qual* tema/boss
+    tocar viaja no `key` do `MusicStateChange`, não em um membro por boss.
+
+    `GAME` = música ambiente do tema atual (pasta `audio/themes/<tema>/`).
+    `BOSS` = música exclusiva do boss ativo (pasta `audio/bosses/<BOSS_TYPE_NAME>/`).
+    Antes existia um membro por boss (SPIKE_BOSS, STONE_GOLEM_BOSS, ...); foram
+    removidos — a identidade da faixa agora vem da pasta, não do enum.
+    """
+
     MENU = "menu"
     GAME = "game"
     BOSS = "boss"
-    SPIKE_BOSS = "spike_boss"
-    SLIME_BOSS = "slime_boss"
-    GIANT_METEOR_BOSS = "giant_meteor_boss"
-    MOUNTAIN_SERPENT_BOSS = "mountain_serpent_boss"
-    CLOUD_ARCHMAGE_BOSS = "cloud_archmage_boss"
-    STONE_GOLEM_BOSS = "stone_golem_boss"
     SILENCE = "silence"
 
 
@@ -86,33 +89,20 @@ CHANNEL_CONFIG: Dict[str, int] = {
     "max_channels": 8,  # Número máximo de canais
 }
 
+# Diretórios-base da descoberta data-driven de música (orientada por pastas).
+# São só os DOIS roots — nenhuma lista de arquivos. Cada subpasta = uma chave
+# (tema = WorldTheme.value; boss = BOSS_TYPE_NAME). Ver `music_library.py`.
+AUDIO_THEMES_ROOT = "game/assets/audio/themes"
+AUDIO_BOSSES_ROOT = "game/assets/audio/bosses"
+# Menu é contexto único (sem chave) → pasta PLANA, descoberta direta.
+AUDIO_MENU_ROOT = "game/assets/audio/menu"
+
 # Configurações de paths
+# A MÚSICA é 100% data-driven por pasta (ver AUDIO_*_ROOT e `music_library.py`);
+# não há mais lista de música aqui. Boss sem pasta própria cai na genérica
+# (`bosses/normal/`). Este dict cobre só `base` e SFX.
 SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
     "base": "game/assets/sounds",
-    # Música
-    "music": {
-        "background": [
-            "music/background.mp3",
-            "music/background_02.mp3",
-            "music/Lost_Sector_Loop.mp3",
-            "music/Starcruiser_Loop.mp3",
-            "music/Event_Horizon_Pulse.mp3",
-            "music/Rising_From_Restraint_War.mp3",
-            "music/Rising_From_Restraint.mp3",
-            "music/Cloud_Peak_Circuit.mp3",
-            "music/Cloud_Pass_Relay.mp3",
-            "music/Cloud_Peak_Circuit_Intenso.mp3",
-            "music/Twelve_Alarms_Musica_Cordilheira.mp3",
-        ],
-        "boss": "music/boss.mp3",
-        "menu": "music/menu-music.mp3",
-        "spike_boss": "music/spike_boss_theme.mp3",
-        "slime_boss": "music/Boss-Slime-Theme.mp3",
-        "giant_meteor_boss": "music/Musica_Giant_Meteor_Boss.mp3",
-        "mountain_serpent_boss": "music/Stone_Snake_Themel.mp3",
-        "cloud_archmage_boss": "music/Mago_Robo_Boss.mp3",
-        "stone_golem_boss": "music/Stone_Golem_Music.mp3",
-    },
     # Efeitos sonoros
     "sfx": {
         "shots": "sfx/shots/tiro_{}.wav",  # {} será substituído por 1,2,3

@@ -488,7 +488,7 @@ class GameApp:
             scene.handle_event(motion)
 
     def run(self):
-        from .core.sound import sound_manager
+        from .core.sound import MUSIC_END_EVENT, sound_manager
 
         try:
             while self.running:
@@ -506,6 +506,10 @@ class GameApp:
 
                     if event.type == pygame.QUIT:
                         self.running = False
+                    # Fim de uma faixa de música → avança a rotação data-driven
+                    # do tema/boss ativo (rotação contínua e suave).
+                    elif event.type == MUSIC_END_EVENT:
+                        sound_manager.advance_current()
                     # Removido: ESC global que fechava o jogo
                     # elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     #     self.running = False

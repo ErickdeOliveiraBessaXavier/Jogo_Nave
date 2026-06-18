@@ -369,20 +369,14 @@ class BossFightController:
             setattr(active_boss, "aggressiveness_multiplier", agg)
 
     def _emit_boss_music(self) -> None:
-        _boss_music_map = {
-            "spike": MusicState.SPIKE_BOSS,
-            "slime": MusicState.SLIME_BOSS,
-            "giant_meteor": MusicState.GIANT_METEOR_BOSS,
-            "mountain_serpent": MusicState.MOUNTAIN_SERPENT_BOSS,
-            "archmage": MusicState.CLOUD_ARCHMAGE_BOSS,
-        }
+        # Data-driven: a faixa do boss vem da pasta `audio/bosses/<BOSS_TYPE_NAME>/`.
+        # Basta a chave; nenhum mapa por boss no código. Boss sem pasta cai no
+        # fallback legado dentro do MusicManager.
         boss = self._em.boss
-        boss_music_state = getattr(type(boss), "MUSIC_STATE", None)
-        if boss_music_state is None:
-            boss_music_state = _boss_music_map.get(
-                self.boss_type or "normal", MusicState.BOSS
-            )
-        self._bus.emit(events.MusicStateChange(state=boss_music_state, fade_ms=0))
+        key = getattr(boss, "BOSS_TYPE_NAME", None)
+        self._bus.emit(
+            events.MusicStateChange(state=MusicState.BOSS, key=key, fade_ms=0)
+        )
         self.boss_music_started = True
 
     def _set_day_night_paused(self, paused: bool) -> None:

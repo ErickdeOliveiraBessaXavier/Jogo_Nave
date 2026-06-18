@@ -16,6 +16,11 @@ MusicPaths = Dict[str, Union[str, List[str]]]
 
 F = TypeVar("F", bound=Callable[..., Any])
 
+# Evento postado pelo mixer quando uma faixa de música termina. Bombeado no loop
+# principal (`app.py`) → `sound_manager.advance_current()` para rotação suave.
+# `USEREVENT + 1` é livre (nenhum outro USEREVENT em uso no projeto).
+MUSIC_END_EVENT = pygame.USEREVENT + 1
+
 
 def get_resource_path(relative_path: str) -> str:
     """Get absolute path to resource, works for dev and for PyInstaller"""
@@ -81,6 +86,9 @@ class SoundManager:
 
         # Configurar número de canais
         pygame.mixer.set_num_channels(CHANNEL_CONFIG["max_channels"])
+
+        # Notifica o fim de cada faixa de música → avanço da rotação (app.py).
+        pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
 
         # Dicionários para armazenar sons carregados
         self._sounds: Dict[str, pygame.mixer.Sound] = {}
@@ -406,12 +414,7 @@ class SoundManager:
         if duck:
             # Reduzir volume da música para 60% do normal
             base_volume = self.music_volume
-            if self.current_music in [
-                "boss",
-                "spike_boss",
-                "slime_boss",
-                "stone_golem_boss",
-            ]:
+            if self.current_music == "boss":
                 base_volume *= self.boss_music_multiplier
 
             duck_volume = base_volume * 0.6
@@ -420,12 +423,7 @@ class SoundManager:
         else:
             # Restaurar volume original da música
             base_volume = self.music_volume
-            if self.current_music in [
-                "boss",
-                "spike_boss",
-                "slime_boss",
-                "stone_golem_boss",
-            ]:
+            if self.current_music == "boss":
                 base_volume *= self.boss_music_multiplier
 
             final_volume = min(1.0, base_volume * self.master_volume)
@@ -515,36 +513,24 @@ class SoundManager:
         pygame.mixer.stop()
 
     @require_audio
+    def play_theme(self, key: str | None = None):
+        """Música ambiente data-driven do tema `key` (pasta audio/themes/<key>/)."""
+        self.music_manager.play_theme(key)
+
+    @require_audio
+    def play_boss(self, key: str | None = None):
+        """Música exclusiva data-driven do boss `key` (pasta audio/bosses/<key>/)."""
+        self.music_manager.play_boss(key)
+
+    @require_audio
+    def advance_current(self):
+        """Avança a rotação da playlist ativa (chamado no fim de cada faixa)."""
+        self.music_manager.advance_current()
+
+    # Alias legado mantido para docs/compat: retoma o tema ambiente atual.
+    @require_audio
     def play_background_music(self):
         self.music_manager.play_background_music()
-
-    @require_audio
-    def play_boss_music(self):
-        self.music_manager.play_boss_music()
-
-    @require_audio
-    def play_spike_boss_music(self):
-        self.music_manager.play_spike_boss_music()
-
-    @require_audio
-    def play_slime_boss_music(self):
-        self.music_manager.play_slime_boss_music()
-
-    @require_audio
-    def play_giant_meteor_boss_music(self):
-        self.music_manager.play_giant_meteor_boss_music()
-
-    @require_audio
-    def play_mountain_serpent_boss_music(self):
-        self.music_manager.play_mountain_serpent_boss_music()
-
-    @require_audio
-    def play_cloud_archmage_boss_music(self):
-        self.music_manager.play_cloud_archmage_boss_music()
-
-    @require_audio
-    def play_stone_golem_boss_music(self):
-        self.music_manager.play_stone_golem_boss_music()
 
     @require_audio
     def play_menu_music(self, force: bool = False):

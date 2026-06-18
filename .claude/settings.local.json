@@ -52,7 +52,12 @@
       "Bash(SDL_VIDEODRIVER=dummy python -m py_compile game/systems/spawner.py)",
       "Bash(git --no-pager diff game/core/levels/fixed_levels.py)",
       "Bash(powershell -Command \"\\(Get-Content game/entities/repair_drone.py -Raw\\) -replace 'pm\\\\.REPAIR', 'pm.WELD' | Set-Content game/entities/repair_drone.py -Encoding utf8\")",
-      "Bash(SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy python *)"
+      "Bash(SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy python *)",
+      "Bash(SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy python -m pytest -q)",
+      "Bash(mkdir -p game/assets/audio/menu)",
+      "Bash(touch game/assets/audio/menu/.gitkeep)",
+      "Read(//c/c/Users/User/Desktop/Jogo_Nave/game/assets/**)",
+      "Bash(SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=dummy python -c ' *)"
     ]
   }
 }

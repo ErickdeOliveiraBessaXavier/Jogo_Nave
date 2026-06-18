@@ -31,11 +31,29 @@ de migração adotado no projeto.
 
 ### `SOUND_PATHS`
 
-Contém os caminhos relativos de música e SFX. Para adicionar um som novo:
+Contém os caminhos relativos de **SFX** e a lista **legada** de música (hoje só
+fallback — ver "Música orientada por pastas"). Para adicionar um SFX novo:
 
 1. Adicione o arquivo em `game/assets/sounds/...`.
 2. Registre o caminho em `sound_config.py`.
 3. Se for um som de uso frequente, adicione um método explícito em `sound.py`.
+
+Para **música**, não registre nada: o sistema é data-driven por pasta (abaixo).
+
+## Música orientada por pastas (data-driven)
+
+A música é descoberta por pasta — a presença do arquivo é o registro, sem listas
+no código nem caminhos fixos (`music_library.py`):
+
+- Ambiente de tema: `game/assets/audio/themes/<WorldTheme.value>/`
+  (`mountains/starfield/city/volcanic`).
+- Música de boss: `game/assets/audio/bosses/<BOSS_TYPE_NAME>/`.
+
+Várias faixas numa pasta → rotação aleatória sem repetição imediata, com
+transição suave (fade); pasta vazia → fallback para a lista legada em
+`SOUND_PATHS["music"]`. `MusicState` é genérico (`MENU/GAME/BOSS/SILENCE`) e o
+`key` do `MusicStateChange` (tema ou `BOSS_TYPE_NAME`) escolhe a faixa. Detalhes
+de uso em `game/assets/audio/README.md`.
 
 ## Migração incremental
 
@@ -50,9 +68,11 @@ Contém os caminhos relativos de música e SFX. Para adicionar um som novo:
 - Extrair a reprodução de SFX para um `SfxManager` completo.
 - Extrair a lógica de música para um `MusicManager` com transição controlada.
 - Manter `sound_manager` como fachada para compatibilidade.
-- Para bosses novos, defina em cada classe `MUSIC_STATE` e, na cena, use
-  `getattr(type(boss), "MUSIC_STATE", MusicState.BOSS)` para tocar a trilha
-  correta sem espalhar `if/elif` por tipo de boss.
+- Para bosses novos, **nada a registrar**: basta a classe ter `BOSS_TYPE_NAME`
+  (já é contrato de boss) e soltar a faixa em
+  `game/assets/audio/bosses/<BOSS_TYPE_NAME>/`. O `BossFightController` emite
+  `MusicStateChange(state=BOSS, key=BOSS_TYPE_NAME)` e a descoberta por pasta
+  resolve a trilha — sem `if/elif` por tipo nem membro de enum por boss.
 
 ### Fase 3
 

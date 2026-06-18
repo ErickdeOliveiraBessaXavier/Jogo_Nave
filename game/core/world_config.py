@@ -59,6 +59,24 @@ class WorldConfig:
         return self.start_level <= level_number <= self.end_level
 
 
+# Ordem de expansão dos mundos procedurais em temas concretos (ciclo).
+_PROCEDURAL_THEME_CYCLE = ("mountains", "city", "volcanic")
+
+
+def resolve_theme_key(world: "WorldConfig") -> str:
+    """Chave de tema concreta de um mundo (== nome da pasta em `audio/themes/`).
+
+    Expande `procedural` para um tema real ciclando por `world_id`. Fonte única
+    usada tanto pela seleção de mundo (visual) quanto pela música ambiente, para
+    que pasta e bioma fiquem sempre alinhados.
+    """
+    theme_str = world.theme.value.lower()
+    if theme_str == "procedural":
+        idx = int((world.world_id - 5) % len(_PROCEDURAL_THEME_CYCLE))
+        return _PROCEDURAL_THEME_CYCLE[idx]
+    return theme_str
+
+
 # ============================================================================
 # DEFINIÇÃO DOS MUNDOS
 # ============================================================================

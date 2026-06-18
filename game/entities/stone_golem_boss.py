@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any, Final, List, Optional, Tuple
 import pygame
 
 from ..core.config import config as Config
-from ..core.sound_config import MusicState
 from ..entities.bot_elemental import ElementalRobot
 from ..entities.stone_golem_pixel_map import EYE_COL_END as _EYE_COL_END
 from ..entities.stone_golem_pixel_map import EYE_COL_START as _EYE_COL_START
@@ -823,8 +822,6 @@ class StoneGolemBoss(BossHitMixin):
     # Third phase: segunda submersão + entra em rage (movimento e ataques acelerados).
     HALF_PHASE_HP_FRACTION: Final = 0.75
     THIRD_PHASE_HP_FRACTION: Final = 0.35
-
-    MUSIC_STATE: Final = MusicState.STONE_GOLEM_BOSS
 
     # Otimização: Estados onde o boss deve flutuar ou ficar ancorado
     _ANCHORED_STATES = frozenset(

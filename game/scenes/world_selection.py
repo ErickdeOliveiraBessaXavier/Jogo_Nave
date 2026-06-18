@@ -17,7 +17,7 @@ from ..core.colors import CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.config import config as Config
 from ..core.sound import sound_manager
 from ..core.levels.fixed_levels import TEST_ARENA_ENABLED
-from ..core.world_config import WorldConfig, get_all_worlds
+from ..core.world_config import WorldConfig, get_all_worlds, resolve_theme_key
 from ..render.backgrounds import Background, create_background
 from .ui_helpers import UIParticle, draw_bordered_button
 
@@ -412,13 +412,11 @@ class WorldSelectionView:
 
     @staticmethod
     def _resolve_theme(world_config: Any) -> str:
-        """Retorna o theme_str resolvido (expande 'procedural')."""
-        theme_str = world_config.theme.value.lower()
-        if theme_str == "procedural":
-            themes = ["mountains", "city", "volcanic"]
-            idx = int((world_config.world_id - 5) % len(themes))
-            return themes[idx]
-        return theme_str
+        """Retorna o theme_str resolvido (expande 'procedural').
+
+        Delega para `world_config.resolve_theme_key` — fonte única compartilhada
+        com a música ambiente, garantindo pasta de tema == bioma visual."""
+        return resolve_theme_key(world_config)
 
     def _build_background_for(self, index: int) -> None:
         """Aponta current_background para a entrada pré-construída do cache."""
