@@ -192,13 +192,16 @@ class MetropolisSentinel(EnemyHitMixin):
         activation_delay: float = 0.0,
         network: "SentinelNetwork | None" = None,
         event_bus: "EventBus | None" = None,
+        health_multiplier: float = 1.0,
     ) -> None:
         self.role = role
         self._t = start_t % 1.0
         self._aggr = max(0.5, aggressiveness_multiplier)
         self._net = network  # inteligência central (revezamento de ataques)
         self._bus = event_bus  # repassado ao raio p/ shake ao atingir o jogador
-        self.health = self.HEALTH
+        # HP escalado (preset × coop por nº de players); barra usa `max_health`.
+        self.max_health = max(self.HEALTH, int(self.HEALTH * max(1.0, health_multiplier)))
+        self.health = self.max_health
         self.dead = False
         self.hit_timer = 0.0
         self.anim_time = 0.0
@@ -608,7 +611,7 @@ class MetropolisSentinel(EnemyHitMixin):
         by = max(2, min(Config.SCREEN_HEIGHT - 7, cy - int(self.RADIUS) - 10))
         bx = cx - bw // 2
         pygame.draw.rect(surface, (30, 30, 30), (bx, by, bw, 5))
-        frac = max(0.0, self.health / self.HEALTH)
+        frac = max(0.0, self.health / self.max_health)
         pygame.draw.rect(surface, self._mid, (bx, by, int(bw * frac), 5))
 
     def _draw_telegraph(self, surface: pygame.Surface) -> None:

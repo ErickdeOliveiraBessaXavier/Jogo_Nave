@@ -235,10 +235,20 @@ class MetropolisOverlordBoss(BossHitMixin):
         # Começa ABAIXO da tela (escondido) e EMERGE de baixo p/ cima.
         self.y = float(Config.SCREEN_HEIGHT + 60)
 
+        # Multiplicador de dificuldade EFETIVO (preset × escala coop por nº de
+        # players). Propagado às FASES gateadas por números fixos — sentinelas
+        # (Fase 1) e gate de minas (Fase 2) — p/ a regra de 2 players valer na luta
+        # inteira, não só na barra de HP e nos segmentos da Fase 3.
+        self._difficulty_mult = max(1.0, difficulty_multiplier)
         base = health if health is not None else self.DEFAULT_HEALTH
         self.max_health = int(base * difficulty_multiplier)
         self.health = self.max_health
         self.dead = False
+        # Fase 2: nº de acertos de mina p/ avançar, escalado (mín. o valor base).
+        self.mine_hits_to_advance = max(
+            self.MINE_HITS_TO_ADVANCE,
+            round(self.MINE_HITS_TO_ADVANCE * self._difficulty_mult),
+        )
 
         self.aggressiveness_multiplier = max(0.5, aggressiveness_multiplier)
         self.state = _INTRO_RISE
@@ -604,6 +614,7 @@ class MetropolisOverlordBoss(BossHitMixin):
                 activation_delay=1.0 + i * 0.5,
                 network=self._network,
                 event_bus=self._bus,
+                health_multiplier=self._difficulty_mult,  # escala coop/preset (Fase 1)
             )
             self._sentinels.append(s)
             ctx.entity_manager.enemies.append(s)
@@ -717,7 +728,7 @@ class MetropolisOverlordBoss(BossHitMixin):
         """
         self.health = max(
             1,
-            int(self.max_health * (1.0 - self._mine_hits / self.MINE_HITS_TO_ADVANCE)),
+            int(self.max_health * (1.0 - self._mine_hits / self.mine_hits_to_advance)),
         )
 
         # 1) Assenta no centro da tela (lerp curto) e trava ali.
@@ -755,7 +766,7 @@ class MetropolisOverlordBoss(BossHitMixin):
         # 5) Conta explosões de mina que tocaram o corpo (auto-contido, lê em.*).
         self._count_mine_hits(ctx)
 
-        if self._mine_hits >= self.MINE_HITS_TO_ADVANCE:
+        if self._mine_hits >= self.mine_hits_to_advance:
             self._kill_beams()
             for slot in self._sentry_slots:
                 if slot["drone"] is not None:
@@ -929,7 +940,7 @@ class MetropolisOverlordBoss(BossHitMixin):
         # Game feel do dano ao boss (raro: ≤5/fase): white frame breve + shake leve.
         self._emit_flash(120, 0.05)
         self._emit_shake(6, 0.18)
-        k = max(3, int(self._total_mass / (self.MINE_HITS_TO_ADVANCE + 1)))
+        k = max(3, int(self._total_mass / (self.mine_hits_to_advance + 1)))
         self._destroy_cells_near(ex - self.x, ey - self.y, k)
 
     def _collapse_remaining_cells(self) -> None:
@@ -948,7 +959,9 @@ class MetropolisOverlordBoss(BossHitMixin):
             self._segmented = True
         if self._segment_network is not None:
             alive = sum(1 for s in self._segments if not s.dead)
-            self._segment_network.update(ctx.dt, alive)  # ritma + ESCALA pela perda de corpos
+            self._segment_network.update(
+                ctx.dt, alive
+            )  # ritma + ESCALA pela perda de corpos
         # Vitória quando todos os segmentos foram destruídos.
         if self._segments and all(s.dead for s in self._segments):
             self.dead = True
