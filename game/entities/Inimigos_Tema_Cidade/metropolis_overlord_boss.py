@@ -341,6 +341,10 @@ class MetropolisOverlordBoss(BossHitMixin):
 
         self._rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
+        # Arcos elétricos ambiente: discretos com escudo ativo, intensos quando cai.
+        self._ambient_arcs: List[List[tuple[float, float]]] = []
+        self._ambient_arc_timer: float = 0.0
+
         # Massa estrutural: TODAS as células da carcaça externa (P), com o centro
         # local pré-computado p/ o k-nearest do dano localizado. Removidas via
         # swap-and-pop (§6) ao serem destruídas; `_removed_set` guarda os buracos
@@ -531,6 +535,7 @@ class MetropolisOverlordBoss(BossHitMixin):
         # Offset visual do frame (flutuação/tremor), calculado UMA vez aqui e reusado
         # pelo draw e pela âncora dos orbs/lasers — mantém tudo perfeitamente em sync.
         self._draw_offset = self._float_offset()
+        self._update_ambient_arcs(dt)  # arcos elétricos ambiente (após offset estar pronto)
         self._update_thruster(
             dt
         )  # propulsor sempre ativo (forte na intro, normal depois)
@@ -706,6 +711,72 @@ class MetropolisOverlordBoss(BossHitMixin):
                 )
             )
         self._shield_arcs = arcs
+
+    def _update_ambient_arcs(self, dt: float) -> None:
+        """Mantém arcos elétricos ambiente: discretos com escudo vivo, caóticos sem ele.
+
+        Usa `_draw_offset` já calculado neste frame, então as pontas dos arcos
+        ficam ancoradas exatamente nas mesmas células que o pixel-map desenha.
+        Sem efeito nas fases de colapso/reconstrução (que têm arcos próprios).
+        """
+        if self.state in (_SHIELD_COLLAPSE, _SHIELD_REBUILD, _SEGMENTATION) or self.dead:
+            self._ambient_arcs = []
+            return
+
+        is_unstable = self.state == _PHASE2
+        interval = 0.06 if is_unstable else 0.28
+        self._ambient_arc_timer -= dt
+        if self._ambient_arc_timer > 0.0:
+            return
+        # Jitter no intervalo: arcos não piscam em cadência uniforme.
+        self._ambient_arc_timer = interval * random.uniform(0.75, 1.25)
+
+        cells = self._edge_cells_order
+        if len(cells) < 2:
+            self._ambient_arcs = []
+            return
+
+        n = random.randint(2, 4) if is_unstable else 1
+        sc = self.PIXEL_SCALE
+        offx, offy = self._draw_offset  # posição idêntica à do pixel-map neste frame
+        arcs: List[List[tuple[float, float]]] = []
+
+        for _ in range(n):
+            if is_unstable:
+                # Arcos longos entre células quaisquer — falha estrutural caótica.
+                i1 = random.randrange(len(cells))
+                i2 = random.randrange(len(cells))
+            else:
+                # Arcos curtos entre células vizinhas — fluxo normal discreto.
+                i1 = random.randrange(len(cells))
+                spread = random.randint(1, max(1, len(cells) // 6))
+                i2 = (i1 + spread) % len(cells)
+            r1, c1 = cells[i1]
+            r2, c2 = cells[i2]
+            x1 = self.x + offx + (c1 + 0.5) * sc
+            y1 = self.y + offy + (r1 + 0.5) * sc
+            x2 = self.x + offx + (c2 + 0.5) * sc
+            y2 = self.y + offy + (r2 + 0.5) * sc
+            segs = random.randint(3, 6) if is_unstable else random.randint(2, 4)
+            arcs.append(self._jagged_arc(x1, y1, x2, y2, segs=segs))
+
+        self._ambient_arcs = arcs
+
+    def _draw_ambient_arcs(self, surface: pygame.Surface) -> None:
+        """Desenha arcos elétricos ambiente (estado montado no update, §3).
+
+        Cor discreta com escudo ativo (azul-médio), cyan-brilhante no estado instável.
+        """
+        if not self._ambient_arcs:
+            return
+        is_unstable = self.state == _PHASE2
+        color = (205, 248, 255) if is_unstable else (75, 148, 210)
+        for pts in self._ambient_arcs:
+            if len(pts) >= 2:
+                pygame.draw.lines(
+                    surface, color, False,
+                    [(int(px), int(py)) for px, py in pts], 1,
+                )
 
     @staticmethod
     def _jagged_arc(
@@ -1135,6 +1206,8 @@ class MetropolisOverlordBoss(BossHitMixin):
             else:
                 # Triângulo estável (sem rotação) na Fase 1/colapso/Fase 2.
                 self._draw_pixel_map(surface, draw_x, draw_y, self.PIXEL_SCALE)
+                # Estática ambiente: discreta com escudo, caótica sem ele.
+                self._draw_ambient_arcs(surface)
 
             # Arcos elétricos instáveis no colapso e na reconstrução do escudo.
             if self.state in (_SHIELD_COLLAPSE, _SHIELD_REBUILD):

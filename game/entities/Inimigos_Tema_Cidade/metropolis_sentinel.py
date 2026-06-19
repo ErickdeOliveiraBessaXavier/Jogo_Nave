@@ -51,9 +51,10 @@ if TYPE_CHECKING:
 
 _NEON_WHITE = (255, 255, 255)
 
-# Inset do trajeto em relação à borda real da tela. ~RADIUS para a esfera ficar
-# ENCOSTADA na borda (ancorada ao perímetro) e ainda 100% visível/alcançável.
-_EDGE_INSET = 28.0
+# Raio base da esfera e inset base do trajeto (em pixels de 720p). O valor
+# real de cada instância é computado em __init__ escalado pela resolução (§12).
+_BASE_RADIUS = 26.0   # ligeiramente maior que o original 22px
+_BASE_INSET_EXTRA = 8  # margem adicional além do halo_r
 
 # Estados da FSM de combate (legibilidade).
 _S_IDLE = "idle"
@@ -210,9 +211,17 @@ class MetropolisSentinel(EnemyHitMixin):
             role, self._ROLE_PALETTE["laser"]
         )
 
-        # Halo pré-renderado UMA vez (reuso por frame via set_alpha) — evita criar
-        # uma Surface e redesenhar o círculo a cada frame (§7, alocação no hot path).
-        self._halo_r = int(self.RADIUS + 12)
+        # Tamanho e trajetória responsivos à resolução (§12): esfera e inset
+        # escalam com ui_scale; halo garante que o glow nunca seja cortado pela borda.
+        _ui_scale = Config.SCREEN_WIDTH / 1280.0
+        self.RADIUS = float(max(22.0, round(_BASE_RADIUS * _ui_scale)))
+        _halo_extra = max(14, round(18 * _ui_scale))
+        self._halo_r = int(self.RADIUS + _halo_extra)
+        # Inset mínimo = halo_r + margem → glow nunca clipa na borda da tela.
+        self._edge_inset = float(max(float(self._halo_r + _BASE_INSET_EXTRA),
+                                     round(self.RADIUS * 2.0)))
+
+        # Halo pré-renderado UMA vez (reuso por frame via set_alpha — §7).
         self._halo_surf = pygame.Surface((self._halo_r * 2, self._halo_r * 2), pygame.SRCALPHA)
         pygame.draw.circle(self._halo_surf, (*self._mid, 255), (self._halo_r, self._halo_r), self._halo_r)
 
@@ -267,8 +276,8 @@ class MetropolisSentinel(EnemyHitMixin):
         """(x, y) ao longo do PERÍMETRO da arena, parametrizado por comprimento de arco
         (velocidade uniforme; topo → direita → base → esquerda em loop)."""
         w, h = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-        left, right = _EDGE_INSET, w - _EDGE_INSET
-        top, bottom = _EDGE_INSET, h - _EDGE_INSET
+        left, right = self._edge_inset, w - self._edge_inset
+        top, bottom = self._edge_inset, h - self._edge_inset
         seg_w = right - left
         seg_h = bottom - top
         perim = 2.0 * (seg_w + seg_h)
@@ -589,6 +598,9 @@ class MetropolisSentinel(EnemyHitMixin):
             sry = int(cy + math.sin(sa) * (rr + 9))
             pygame.draw.circle(surface, self._bright, (srx, sry), 2 if st == _S_AIM else 1)
 
+        # Estática energética constante — núcleo vivo mesmo em repouso.
+        self._draw_ambient_energy(surface, cx, cy, rr, st)
+
         # Feixe de varredura durante a PAUSA de patrulha (leitura de vigilância).
         # Suprimido durante mira/disparo para não competir com o telegrafo.
         if self._patrol_phase == "hold" and st not in (_S_AIM, _S_FIRE):
@@ -666,6 +678,53 @@ class MetropolisSentinel(EnemyHitMixin):
         col = (int(self._mid[0] * 0.7), int(self._mid[1] * 0.7), int(self._mid[2] * 0.7))
         pygame.draw.line(surface, col, (x, y), (int(ex), int(ey)), 1)
         pygame.draw.circle(surface, self._bright, (int(ex), int(ey)), 2)
+
+    def _draw_ambient_energy(
+        self, surface: pygame.Surface, cx: float, cy: float, rr: float, state: str
+    ) -> None:
+        """Atividade energética constante: nós pulsando + faíscas + micro-arcos.
+
+        Intensidade discreta em repouso, mais viva na mira — a entidade nunca é
+        estática, independente do estado de combate. Draw puro (§3).
+        """
+        is_aiming = state == _S_AIM
+        cos, sin = math.cos, math.sin
+        t = self.anim_time
+
+        # Nós energéticos: 3 pontos brilhantes orbitando a superfície da esfera.
+        for k in range(3):
+            na = t * 1.7 + k * (math.tau / 3.0) + self._spin * 0.15
+            nx = int(cx + cos(na) * rr * 0.87)
+            ny = int(cy + sin(na) * rr * 0.87)
+            pulse = 0.4 + 0.6 * abs(sin(t * 5.5 + k * 2.0))
+            if is_aiming:
+                pulse = min(1.0, pulse + 0.3)
+            node_r = max(1, int(1 + pulse))
+            nc = _lerp(self._mid, self._bright, pulse)
+            pygame.draw.circle(surface, nc, (nx, ny), node_r)
+
+        # Faíscas orbitando (partículas energéticas flutuando ao redor da esfera).
+        n_sparks = vq.particles(2 if is_aiming else 1)
+        for _ in range(n_sparks):
+            if random.random() < (0.55 if is_aiming else 0.22):
+                sa = t * 3.5 + random.uniform(0.0, math.tau)
+                sd = rr * random.uniform(1.08, 1.42)
+                spx = int(cx + cos(sa) * sd)
+                spy = int(cy + sin(sa) * sd)
+                sc_ = self._bright if random.random() < 0.5 else self._mid
+                surface.fill(sc_, (spx, spy, 1, 1))
+
+        # Micro-arco de superfície (estática esporádica — discreta em repouso).
+        if random.random() < (0.52 if is_aiming else 0.18):
+            a0 = random.uniform(0.0, math.tau)
+            x0 = cx + cos(a0) * rr * 0.94
+            y0 = cy + sin(a0) * rr * 0.94
+            a1 = a0 + random.uniform(-0.65, 0.65)
+            arc_len = rr * random.uniform(0.20, 0.52)
+            x1 = x0 + cos(a1) * arc_len
+            y1 = y0 + sin(a1) * arc_len
+            lc = (230, 248, 255) if random.random() < 0.45 else self._bright
+            pygame.draw.line(surface, lc, (int(x0), int(y0)), (int(x1), int(y1)), 1)
 
     @staticmethod
     def _ngon(cx: float, cy: float, n: int, radius: float, angle: float):
