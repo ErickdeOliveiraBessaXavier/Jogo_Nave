@@ -188,12 +188,17 @@ class MusicManager:
     ) -> None:
         if not tracks:
             return
-        # Já tocando exatamente esta playlist? Não reinicia (re-emissão do mesmo
-        # estado/tema não deve cortar a faixa). Mudança de tema usa outra chave.
+        # Já comprometidos com exatamente esta playlist? Não reinicia (re-emissão
+        # do mesmo estado/tema não deve cortar a faixa). Dedupe por INTENÇÃO, não
+        # por `pygame.mixer.music.get_busy()`: a reprodução roda numa thread de
+        # fundo, então logo após a 1ª chamada `get_busy()` ainda é False e uma 2ª
+        # chamada idêntica (ex.: game_over→MENU seguido de MainMenu.enter→MENU)
+        # dispararia uma 2ª transição, parando e reiniciando a faixa (engasgo).
+        # `_current_track`/`_active_rotation_key` são setados de forma síncrona e
+        # zerados em stop/fade — logo, replay legítimo posterior ainda funciona.
         already_active = (
             self._active_rotation_key == rotation_key
             and self._current_track is not None
-            and pygame.mixer.music.get_busy()
         )
         rot = self._rotations.get(rotation_key)
         if rot is None or not rot.matches(tracks):
@@ -233,20 +238,8 @@ class MusicManager:
     # ── Volume ─────────────────────────────────────────────────────────────────
     def set_music_volume(self, volume: float) -> None:
         self.sound_manager.music_volume = max(0.0, min(1.0, volume))
-
-        if self.sound_manager.current_music == "boss":
-            boss_volume = (
-                self.sound_manager.music_volume
-                * self.sound_manager.boss_music_multiplier
-            )
-            final_volume = min(1.0, boss_volume)
-            pygame.mixer.music.set_volume(
-                final_volume * self.sound_manager.master_volume
-            )
-        elif self.sound_manager.current_music is not None:
-            pygame.mixer.music.set_volume(
-                self.sound_manager.music_volume * self.sound_manager.master_volume
-            )
+        if self.sound_manager.current_music is not None:
+            pygame.mixer.music.set_volume(self.sound_manager.music_target_volume())
 
     def load_config(
         self, music_vol: float, sfx_volume: float, shot_volume: float
@@ -256,12 +249,7 @@ class MusicManager:
         self.sound_manager.shot_volume_base = max(0.0, min(1.0, shot_volume))
 
         if self.sound_manager.current_music is not None:
-            base_volume = self.sound_manager.music_volume
-            if self.sound_manager.current_music == "boss":
-                base_volume *= self.sound_manager.boss_music_multiplier
-            pygame.mixer.music.set_volume(
-                min(1.0, base_volume * self.sound_manager.master_volume)
-            )
+            pygame.mixer.music.set_volume(self.sound_manager.music_target_volume())
 
     # ── Transição com fade (stream único do mixer) ─────────────────────────────
     def _transition_to_music(
@@ -298,11 +286,9 @@ class MusicManager:
 
                 pygame.mixer.music.load(music_path)
 
-                base_volume = self.sound_manager.music_volume
-                if music_type == "boss":
-                    base_volume *= self.sound_manager.boss_music_multiplier
-
-                target_volume = min(1.0, base_volume * self.sound_manager.master_volume)
+                # Volume-alvo já com master, multiplicador de boss e ducking
+                # persistente (fonte única: SoundManager.music_target_volume).
+                target_volume = self.sound_manager.music_target_volume(music_type)
 
                 pygame.mixer.music.set_volume(0)
                 pygame.mixer.music.play(loop)

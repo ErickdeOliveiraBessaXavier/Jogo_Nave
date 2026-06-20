@@ -100,6 +100,11 @@ def load_sfx(
         "gem_birth": ui.get("gem_birth"),
         "gem_death": ui.get("gem_death"),
         "metropolis_overlord_laser": ui.get("metropolis_overlord_laser"),
+        "metropolis_lightning_charge": ui.get("metropolis_lightning_charge"),
+        "metropolis_lightning_strike": ui.get("metropolis_lightning_strike"),
+        "metropolis_energy_zone": ui.get("metropolis_energy_zone"),
+        "metropolis_electric_grid": ui.get("metropolis_electric_grid"),
+        "metropolis_triple_shot": ui.get("metropolis_triple_shot"),
     }
     for key, rel in ui_map.items():
         if not rel:

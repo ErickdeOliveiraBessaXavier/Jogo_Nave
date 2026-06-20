@@ -26,12 +26,15 @@ from typing import TYPE_CHECKING, Any, List
 import pygame
 
 from ...core.config import config as Config
+from ...core.scale import scaled
 from ...core.sound import sound_manager
+from ...core.visual_quality import visual_quality as vq
 from ..boss_hit_mixin import BossHitMixin
 from . import metropolis_overlord_pixel_map as pmap
 from .city_mine import CityMine
 from .city_thruster import EnergyThruster
 from .metropolis_beam import MetropolisOrbitalBeam
+from .metropolis_fence import FenceBeam, build_arena_fence
 from .metropolis_drone import CoreSentryDrone
 from .metropolis_segment import MetropolisSegment, SegmentNetwork
 from .metropolis_sentinel import MetropolisSentinel, SentinelNetwork
@@ -57,6 +60,16 @@ _SHIELD_REBUILD = "shield_rebuild"  # colapso invertido: o contorno se reconstr�
 _INTERLUDE = "phase1_reprise"  # 2ª onda de sentinelas (padrão da Fase 1) com escudo
 _SEGMENTATION = "segmentation"  # Fase 3 final: boss se divide em 3 triângulos orbitais
 
+# Estados em que o CORPO é uma BARREIRA FÍSICA para os tiros do jogador (bloqueia/
+# destrói o projétil, SEM dano — o dano vem só das partes vulneráveis). Vale enquanto
+# o corpo está presente e sólido na arena; NÃO na intro (entrando) nem na segmentação
+# (corpo já se dividiu). Ver `barrier_circle` e `Collisions.projectiles_vs_boss_barrier`.
+_BARRIER_STATES = (_PHASE1, _INTERLUDE, _SHIELD_COLLAPSE, _SHIELD_REBUILD, _PHASE2)
+
+# Faíscas do impacto de um tiro bloqueado pela blindagem (energia azul, leve).
+_IMPACT_BRIGHT = (210, 240, 255)
+_IMPACT_MID = (110, 195, 255)
+
 # Caracteres do pixel-map que compõem a CARCAÇA externa destrutível (placas que
 # se fragmentam ao tomar dano, revelando o frame interno já desenhado). O
 # contorno neon ("E") e o frame escuro ("G") persistem.
@@ -75,6 +88,20 @@ _FLOAT_FREQ = 0.9  # rad/s — lento
 # Micro-tremor da Fase 2 enquanto os núcleos disparam os lasers (tensão interna /
 # enorme liberação de energia). Muito sutil; só visual; não desloca exageradamente.
 _LASER_SHAKE_AMP = 2  # px — jitter máximo por eixo durante o disparo
+
+# Sobrecarga progressiva da Fase 2: a cada mina recebida o boss fica mais instável —
+# os lasers giram mais rápido e o tremor/suor aumentam (perceptível, não exagerado).
+# Tudo escala por `_phase2_overload` ∈[0,1] (minas recebidas / minas p/ avançar).
+_PHASE2_SPIN_RAMP = 0.7    # giro até +70% no acúmulo máximo (urgência crescente)
+_PHASE2_EXTRA_SHAKE = 3    # px extras de tremor no acúmulo máximo (perda de estabilidade)
+
+# Antecipação dos lasers (Fase 2): breve acúmulo visual antes do primeiro disparo.
+_BEAM_WARMUP_DUR: float = 1.3   # s total do build-up (partículas + arcos + pulsação)
+
+# Sobrecarga de energia (Fase 2, durante o disparo): pixels expelidos da estrutura.
+_SWEAT_INTERVAL: float = 0.045  # s entre pixels expelidos
+_SWEAT_LIFE: float = 0.32       # s de vida de cada pixel
+_SWEAT_MAX_SPD: float = 50.0    # velocidade máx. dos pixels (px/s)
 
 # Cada orb desce este tanto (equilíbrio visual da composição interna). Aplicado na
 # FONTE ÚNICA da posição do orb (`_orb_world_position`) → núcleos, lasers e splits.
@@ -276,6 +303,22 @@ class MetropolisOverlordBoss(BossHitMixin):
         self._phase2_settled = False  # já assentou no centro da tela?
         self._beams: List[MetropolisOrbitalBeam] = []  # refs p/ matar ao sair da fase
         self._beams_spawned = False
+
+        # Antecipação dos lasers: build-up visual antes do 1º disparo.
+        self._warmup_active: bool = False
+        self._beam_warmup_t: float = 0.0
+        self._warmup_spawn_t: float = 0.0
+        self._warmup_particles: List[list] = []  # [x, y, vx, vy, life, r, g, b]
+        self._warmup_arc_t: float = 0.0
+        self._warmup_arcs: List[List[tuple]] = []
+
+        # Sobrecarga de energia: pixels expelidos durante o disparo.
+        self._sweat_particles: List[list] = []  # [x, y, vx, vy, life, r, g, b]
+        self._sweat_spawn_t: float = 0.0
+
+        # Faíscas de impacto da BLINDAGEM (tiros bloqueados). Mesmo formato/infra dos
+        # transientes acima (decai/limpa junto). Feedback leve, sem explosão.
+        self._impact_sparks: List[list] = []  # [x, y, vx, vy, life, r, g, b]
         self._mine_spawn_timer = 2.0  # primeira mina alguns segundos depois
         self._active_mines: List[
             CityMine
@@ -324,15 +367,24 @@ class MetropolisOverlordBoss(BossHitMixin):
         }
         self._shield_collapse_t = 0.0  # timer do colapso
         self._shield_shatter_idx = 0  # quantas células já estilhaçaram
-        self._shield_arcs: List[
-            List[tuple[float, float]]
-        ] = []  # arcos elétricos (draw)
+        # Estática elétrica ÚNICA (mesmo design do colapso, permanente c/ intensidade
+        # por estado — ver `_update_static_arcs`). `_draw_shield_arcs` desenha a lista.
+        self._shield_arcs: List[List[tuple[float, float]]] = []
         self._shield_arc_timer = 0.0
 
         # Segmentação: o boss vira coordenador invisível de 3 segmentos.
         self._segments: List[MetropolisSegment] = []
         self._segmented = False
         self._segment_network: SegmentNetwork | None = None  # mente residual da Fase 3
+        # Cerca elétrica da arena (Fase 3): 4 feixes-limite em loop nos cantos.
+        # Vivem em em.boss_lasers (colisão grátis); refs guardadas p/ dissipar na morte.
+        self._fence_beams: List[FenceBeam] = []
+        # Rastreio da morte dos segmentos: ids já mortos + posição do ÚLTIMO a cair.
+        # Usado p/ reposicionar o corpo invisível sobre o último fragmento, de modo
+        # que a explosão final (boss_controller.end) coincida com ele — clarão único,
+        # não um anel fantasma no centro-tela (posição obsoleta da Fase 2).
+        self._dead_segment_ids: set[int] = set()
+        self._last_segment_death_pos: tuple[float, float] | None = None
 
         # Offset visual do corpo no frame atual (flutuação/tremor), calculado 1×/frame
         # no update e LIDO pelo draw e pela posição dos orbs — assim núcleos e lasers
@@ -340,10 +392,6 @@ class MetropolisOverlordBoss(BossHitMixin):
         self._draw_offset: tuple[int, int] = (0, 0)
 
         self._rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
-
-        # Arcos elétricos ambiente: discretos com escudo ativo, intensos quando cai.
-        self._ambient_arcs: List[List[tuple[float, float]]] = []
-        self._ambient_arc_timer: float = 0.0
 
         # Massa estrutural: TODAS as células da carcaça externa (P), com o centro
         # local pré-computado p/ o k-nearest do dano localizado. Removidas via
@@ -387,6 +435,41 @@ class MetropolisOverlordBoss(BossHitMixin):
 
     def take_damage(self, amount: int) -> None:
         return  # corpo imune a dano direto (AoE/cadeias); só a mecânica de minas o fere
+
+    # ── Barreira FÍSICA (conceito SEPARADO do dano) ────────────────────────────
+    # O corpo bloqueia/destrói os tiros do jogador nas Fases 1/2 (presença sólida),
+    # mas NÃO recebe dano — `barrier_circle` alimenta SÓ a colisão física
+    # (`Collisions.projectiles_vs_boss_barrier`), nunca o roteador de dano
+    # (`apply_hit`/`on_hit`, que segue retornando vazio). Dano continua exclusivo das
+    # partes vulneráveis (sentinelas/minas na Fase 2, segmentos na Fase 3).
+    def barrier_circle(self) -> "tuple[float, float, float] | None":
+        """Círculo de colisão física do corpo (centro+raio) quando ele é uma barreira
+        sólida; `None` quando não bloqueia (intro entrando / segmentação dividido).
+        Inclui o offset visual do frame p/ acompanhar a flutuação/tremor do corpo."""
+        if self.state not in _BARRIER_STATES:
+            return None
+        offx, offy = self._draw_offset
+        return (self.x + offx + self.w / 2.0,
+                self.y + offy + self.h / 2.0,
+                self.w * 0.47)  # cobre a massa central da estrutura triangular
+
+    def spawn_barrier_impact(self, x: float, y: float) -> None:
+        """Feedback LEVE de um tiro bloqueado pela blindagem: poucas faíscas curtas
+        que ricocheteiam no ponto de impacto (sem explosão, sem flash de tela).
+        Reusa a infra de partículas transientes (decai/limpa junto)."""
+        for _ in range(vq.particles(4)):
+            ang = random.uniform(0.0, 2.0 * math.pi)
+            spd = scaled(random.uniform(30.0, 120.0))
+            col = _IMPACT_BRIGHT if random.random() < 0.5 else _IMPACT_MID
+            self._impact_sparks.append([x, y, math.cos(ang) * spd, math.sin(ang) * spd,
+                                        random.uniform(0.12, 0.26), col[0], col[1], col[2]])
+
+    def _draw_impact_sparks(self, surface: pygame.Surface) -> None:
+        """Render das faíscas de impacto da blindagem (estado montado no update, §3)."""
+        for p in self._impact_sparks:
+            f = min(1.0, p[4] * 4.5)  # esmaece ao fim da vida
+            surface.fill((int(p[5] * f), int(p[6] * f), int(p[7] * f)),
+                         (int(p[0]), int(p[1]), 2, 2))
 
     def _destroy_cells_near(self, lx: float, ly: float, k: int) -> None:
         """Remove os `k` blocos de carcaça intactos mais próximos de (lx, ly) local.
@@ -437,6 +520,38 @@ class MetropolisOverlordBoss(BossHitMixin):
                 write += 1
         del frags[write:]
 
+    def _tick_transient_particles(self, dt: float) -> None:
+        """Decai/move TODAS as partículas transientes do boss SEMPRE (como
+        `_update_fragments`), independente da fase. O SPAWN é por fase; o avanço e a
+        REMOÇÃO são globais — assim nenhuma partícula congela quando a fase muda
+        antes de ela terminar (raiz do bug dos pixels de "suor" presos). Base
+        durável: toda mecânica transiente futura que decaia aqui nunca vaza.
+
+        Formato da partícula: [x, y, vx, vy, life, r, g, b] (suor, warmup, impacto)."""
+        for lst in (self._sweat_particles, self._warmup_particles, self._impact_sparks):
+            write = 0
+            for part in lst:
+                part[4] -= dt
+                if part[4] > 0.0:
+                    part[0] += part[2] * dt
+                    part[1] += part[3] * dt
+                    lst[write] = part
+                    write += 1
+            del lst[write:]
+
+    def _clear_transient_effects(self) -> None:
+        """Encerra EXPLICITAMENTE todo efeito visual temporário preso a uma fase, ao
+        trocar de estágio / destruir / segmentar — nada de uma fase vaza para a
+        próxima. Os arcos ambiente/escudo já se auto-limpam por estado a cada frame;
+        aqui tratamos os que dependem do loop da fase (suor + acúmulo dos lasers).
+        Estenda esta lista ao adicionar novas mecânicas transientes do boss."""
+        self._sweat_particles.clear()
+        self._warmup_particles.clear()
+        self._warmup_arcs.clear()
+        self._impact_sparks.clear()
+        self._warmup_active = False
+        self._beam_warmup_t = 0.0
+
     @property
     def _center(self) -> tuple[float, float]:
         return self.x + self.w / 2, self.y + self.h / 2
@@ -484,6 +599,7 @@ class MetropolisOverlordBoss(BossHitMixin):
             self._bus.emit(events.ImpactFlash(duration=duration, alpha=alpha))
 
     def _trigger_shield_collapse(self, next_state: str) -> None:
+        self._clear_transient_effects()  # nada da fase anterior vaza para o colapso
         self._after_collapse = next_state
         self.state = _SHIELD_COLLAPSE
         self._shield_collapse_t = self.SHIELD_COLLAPSE_DUR
@@ -495,6 +611,7 @@ class MetropolisOverlordBoss(BossHitMixin):
         self._emit_flash(200, 0.07)
 
     def _trigger_shield_rebuild(self, next_state: str) -> None:
+        self._clear_transient_effects()  # encerra suor/acúmulo da Fase 2 antes de reconstruir
         self._after_rebuild = next_state
         self.state = _SHIELD_REBUILD
         self._shield_rebuild_t = 0.0
@@ -516,6 +633,7 @@ class MetropolisOverlordBoss(BossHitMixin):
 
         self.anim_time += dt
         self._update_fragments(dt)
+        self._tick_transient_particles(dt)  # decai suor/warmup SEMPRE (anti-congelamento)
 
         if self.state in _INTRO_STATES:
             self._update_intro(dt)
@@ -535,7 +653,7 @@ class MetropolisOverlordBoss(BossHitMixin):
         # Offset visual do frame (flutuação/tremor), calculado UMA vez aqui e reusado
         # pelo draw e pela âncora dos orbs/lasers — mantém tudo perfeitamente em sync.
         self._draw_offset = self._float_offset()
-        self._update_ambient_arcs(dt)  # arcos elétricos ambiente (após offset estar pronto)
+        self._update_static_arcs(dt)  # estática elétrica única (após offset estar pronto)
         self._update_thruster(
             dt
         )  # propulsor sempre ativo (forte na intro, normal depois)
@@ -630,6 +748,131 @@ class MetropolisOverlordBoss(BossHitMixin):
             self._sentinels.append(s)
             ctx.entity_manager.enemies.append(s)
 
+    def _update_beam_warmup(self, dt: float) -> None:
+        """Acúmulo pré-laser: partículas convergindo para os orbs + arcos crescentes.
+
+        Progresso p ∈ [0,1] sobre _BEAM_WARMUP_DUR:
+          - p > 0.05: partículas nascem ao redor da carcaça e voam em direção ao orb.
+            O raio de origem encolhe conforme p→1 (rush final; densidade cresce).
+          - p > 0.60: arcos elétricos curtos surgem ao redor dos orbs, cada vez
+            mais frequentes e brancos → sinalizam a iminência do disparo.
+        Mutação de estado; draw lê `_warmup_particles` e `_warmup_arcs` (§3).
+        """
+        p = min(1.0, self._beam_warmup_t / _BEAM_WARMUP_DUR)
+
+        # Spawn de partículas convergentes.
+        self._warmup_spawn_t -= dt
+        if p > 0.05 and self._warmup_spawn_t <= 0.0:
+            self._warmup_spawn_t = max(0.018, 0.10 - 0.07 * p)
+            for rx, ry, rr, theme, _ph in self.SPHERE_DEFS:
+                ox, oy = self._orb_world_position(rx, ry)
+                _dark, mid, bright = pmap.PLASMA_THEMES.get(theme, pmap.PLASMA_THEMES["cyan"])
+                grid_w = pmap.PIXEL_COLS * self.PIXEL_SCALE
+                orb_r = rr * grid_w
+                # Distância de origem encolhe com o tempo (rush ao centro).
+                d = orb_r * random.uniform(1.5 + 1.8 * (1.0 - p), 3.8)
+                ang = random.uniform(0.0, 2.0 * math.pi)
+                sx = ox + math.cos(ang) * d
+                sy = oy + math.sin(ang) * d
+                life = random.uniform(0.22, 0.46)
+                vx = (ox - sx) / life * random.uniform(0.88, 1.12)
+                vy = (oy - sy) / life * random.uniform(0.88, 1.12)
+                col = bright if random.random() < 0.35 else mid
+                self._warmup_particles.append([sx, sy, vx, vy, life, col[0], col[1], col[2]])
+
+        # Arcos nos últimos 40% do acúmulo (ficam mais frequentes e brancos).
+        arc_frac = max(0.0, (p - 0.60) / 0.40)
+        self._warmup_arc_t -= dt
+        if arc_frac > 0.0 and self._warmup_arc_t <= 0.0:
+            self._warmup_arc_t = max(0.035, 0.10 * (1.0 - arc_frac * 0.7))
+            arcs: List[List[tuple]] = []
+            for rx, ry, rr, _theme, _ph in self.SPHERE_DEFS:
+                ox, oy = self._orb_world_position(rx, ry)
+                grid_w = pmap.PIXEL_COLS * self.PIXEL_SCALE
+                reach = rr * grid_w * random.uniform(0.35, 1.1)
+                a = random.uniform(0.0, 2.0 * math.pi)
+                arcs.append(
+                    self._jagged_arc(ox, oy, ox + math.cos(a) * reach, oy + math.sin(a) * reach, segs=4)
+                )
+            self._warmup_arcs = arcs
+        elif arc_frac <= 0.0:
+            self._warmup_arcs = []
+        # O avanço/remoção das partículas é global (_tick_transient_particles), p/ que
+        # elas terminem mesmo se a fase mudar no meio do acúmulo. Aqui é só spawn/arcos.
+
+    def _update_sweat(self, dt: float) -> None:
+        """SPAWN dos pixels de energia expelidos da estrutura (sobrecarga de Fase 2).
+
+        Cor aleatória entre os três temas dos núcleos; posição aleatória sobre
+        o corpo (usando draw_offset para acompanhar o tremor); velocidade baixa;
+        sem hitbox (cosmético puro — não entra em nenhuma lista de colisão). O
+        avanço/remoção é global (`_tick_transient_particles`), não aqui — assim os
+        pixels SEMPRE terminam sua animação mesmo se a fase mudar antes."""
+        self._sweat_spawn_t -= dt
+        if self._sweat_spawn_t <= 0.0:
+            # Sobrecarga: o boss "sua" mais energia conforme acumula minas (até ~2×).
+            self._sweat_spawn_t = _SWEAT_INTERVAL * (1.0 - 0.5 * self._phase2_overload())
+            offx, offy = self._draw_offset
+            bx = self.x + offx + random.uniform(self.w * 0.05, self.w * 0.92)
+            by = self.y + offy + random.uniform(self.h * 0.05, self.h * 0.88)
+            _rx, _ry, _rr, theme, _ph = self.SPHERE_DEFS[random.randrange(3)]
+            _dark, mid, bright = pmap.PLASMA_THEMES.get(theme, pmap.PLASMA_THEMES["cyan"])
+            col = bright if random.random() < 0.38 else mid
+            ang = random.uniform(0.0, 2.0 * math.pi)
+            spd = random.uniform(6.0, _SWEAT_MAX_SPD)
+            self._sweat_particles.append([
+                bx, by,
+                math.cos(ang) * spd, math.sin(ang) * spd,
+                _SWEAT_LIFE, col[0], col[1], col[2],
+            ])
+
+    def _draw_beam_warmup(self, surface: pygame.Surface) -> None:
+        """Render do acúmulo pré-laser: partículas + arcos + pulsação dos orbs (§3)."""
+        p = min(1.0, self._beam_warmup_t / _BEAM_WARMUP_DUR)
+
+        # Partículas convergindo (2×2 px, fade nos últimos instantes de vida).
+        for part in self._warmup_particles:
+            f = min(1.0, part[4] * 5.0)  # fade nos últimos 0.2s
+            col = (int(part[5] * f), int(part[6] * f), int(part[7] * f))
+            surface.fill(col, (int(part[0]), int(part[1]), 2, 2))
+
+        # Arcos elétricos curtos ao redor dos orbs (últimos 40%).
+        arc_p = max(0.0, (p - 0.60) / 0.40)
+        if arc_p > 0.0 and self._warmup_arcs:
+            brightness = int(160 + 95 * arc_p)
+            arc_col = (brightness, brightness, 255)
+            for pts in self._warmup_arcs:
+                if len(pts) >= 2:
+                    pygame.draw.lines(
+                        surface, arc_col, False,
+                        [(int(px), int(py)) for px, py in pts], 1,
+                    )
+
+        # Pulsação dos orbs: halo crescente e branco-quente nos últimos 25%.
+        glow_p = max(0.0, (p - 0.75) / 0.25)
+        if glow_p > 0.0:
+            pulse = 0.5 + 0.5 * math.sin(self.anim_time * 22.0)
+            for rx, ry, rr, theme, _ph in self.SPHERE_DEFS:
+                ox, oy = self._orb_world_position(rx, ry)
+                grid_w = pmap.PIXEL_COLS * self.PIXEL_SCALE
+                orb_r = int(rr * grid_w)
+                _dark, mid, _bright = pmap.PLASMA_THEMES.get(theme, pmap.PLASMA_THEMES["cyan"])
+                halo_r = int(orb_r * (1.25 + 0.4 * pulse * glow_p))
+                if halo_r > orb_r:
+                    halo_col = (
+                        int(mid[0] * 0.55 * glow_p),
+                        int(mid[1] * 0.55 * glow_p),
+                        int(mid[2] * 0.55 * glow_p),
+                    )
+                    pygame.draw.circle(surface, halo_col, (int(ox), int(oy)), halo_r, 2)
+
+    def _draw_sweat(self, surface: pygame.Surface) -> None:
+        """Render dos pixels de sobrecarga expelidos pela estrutura (§3)."""
+        for part in self._sweat_particles:
+            f = max(0.0, part[4] / _SWEAT_LIFE)
+            col = (int(part[5] * f), int(part[6] * f), int(part[7] * f))
+            surface.fill(col, (int(part[0]), int(part[1]), 2, 2))
+
     def _update_shield_collapse(self, dt: float) -> None:
         """Estilhaça o contorno-escudo pixel-a-pixel ao longo de alguns segundos.
 
@@ -654,7 +897,8 @@ class MetropolisOverlordBoss(BossHitMixin):
             self._shield_shatter_idx += 1
             self._spawn_edge_shard(r, c)
 
-        self._update_shield_arcs(dt, p)
+        # A estática (arcos) é dirigida 1×/frame por `_update_static_arcs` (sistema
+        # único); aqui só avança a fragmentação pixel-a-pixel do contorno.
 
         if self._shield_collapse_t <= 0.0:
             self.state = self._after_collapse
@@ -683,100 +927,65 @@ class MetropolisOverlordBoss(BossHitMixin):
             )
         )
 
-    def _update_shield_arcs(self, dt: float, p: float) -> None:
-        """Regenera os arcos elétricos (estado lido pelo draw §3). Só nos ~60% finais,
-        ficando mais numerosos perto do colapso total."""
-        if p < 0.4:
+    def _update_static_arcs(self, dt: float) -> None:
+        """ÚNICO sistema de estática elétrica do boss. Reaproveita EXATAMENTE o design
+        da estática do colapso do escudo (mesma geometria `_jagged_arc` entre células
+        da borda, mesma cor/espessura em `_draw_shield_arcs`), tornando-a PERMANENTE.
+        Só FREQUÊNCIA e QUANTIDADE de arcos variam por estado — nunca um efeito novo:
+
+          - normal (fase 1 / interlúdio): esparso e discreto — sensação constante de
+            uma enorme energia circulando pela estrutura;
+          - instável (fase 2): mais frequente e numeroso (estrutura sob estresse);
+          - colapso / reconstrução do escudo: progressivo (`p`), com pico de caos.
+
+        Roda 1×/frame após `_draw_offset` estar pronto, então as pontas dos arcos
+        ficam ancoradas exatamente nas células que o pixel-map desenha."""
+        # Estados SEM estática (sem corpo a energizar): intro / segmentação / morto.
+        if self.state not in (_PHASE1, _INTERLUDE, _PHASE2, _SHIELD_COLLAPSE, _SHIELD_REBUILD):
             self._shield_arcs = []
             return
+
+        # MESMA velocidade de crepitação do colapso (regenera a cada 0.05s) em TODOS
+        # os estados — design/comportamento idênticos; só a QUANTIDADE de arcos muda.
         self._shield_arc_timer -= dt
         if self._shield_arc_timer > 0.0:
             return
         self._shield_arc_timer = 0.05
+
+        # Nº de arcos por rajada (0 = gap, nada na tela neste tique):
+        if self.state == _SHIELD_COLLAPSE:
+            p = self._shield_collapse_progress
+            count = 1 + int(p * 3) if p >= 0.4 else 0     # progressivo: 1 → 4 (pico de caos)
+        elif self.state == _SHIELD_REBUILD:
+            p = 1.0 - self._shield_rebuild_progress
+            count = 1 + int(p * 3) if p >= 0.4 else 0
+        elif self.state == _PHASE2:
+            count = random.randint(2, 4)                  # instável: contínuo e caótico
+        else:  # _PHASE1 / _INTERLUDE — normal: crepitação OCASIONAL, com gaps de nada
+            count = random.randint(1, 2) if random.random() < 0.10 else 0
+
+        if count <= 0:
+            self._shield_arcs = []
+            return
         cells = self._edge_cells_order
         if len(cells) < 2:
             self._shield_arcs = []
             return
         sc = self.PIXEL_SCALE
+        offx, offy = self._draw_offset  # posição idêntica à do pixel-map neste frame
         arcs: List[List[tuple[float, float]]] = []
-        for _ in range(1 + int(p * 3)):  # 1 → 4 arcos
+        for _ in range(count):
             (r1, c1) = cells[random.randrange(len(cells))]
             (r2, c2) = cells[random.randrange(len(cells))]
             arcs.append(
                 self._jagged_arc(
-                    self.x + (c1 + 0.5) * sc,
-                    self.y + (r1 + 0.5) * sc,
-                    self.x + (c2 + 0.5) * sc,
-                    self.y + (r2 + 0.5) * sc,
+                    self.x + offx + (c1 + 0.5) * sc,
+                    self.y + offy + (r1 + 0.5) * sc,
+                    self.x + offx + (c2 + 0.5) * sc,
+                    self.y + offy + (r2 + 0.5) * sc,
                 )
             )
         self._shield_arcs = arcs
-
-    def _update_ambient_arcs(self, dt: float) -> None:
-        """Mantém arcos elétricos ambiente: discretos com escudo vivo, caóticos sem ele.
-
-        Usa `_draw_offset` já calculado neste frame, então as pontas dos arcos
-        ficam ancoradas exatamente nas mesmas células que o pixel-map desenha.
-        Sem efeito nas fases de colapso/reconstrução (que têm arcos próprios).
-        """
-        if self.state in (_SHIELD_COLLAPSE, _SHIELD_REBUILD, _SEGMENTATION) or self.dead:
-            self._ambient_arcs = []
-            return
-
-        is_unstable = self.state == _PHASE2
-        interval = 0.06 if is_unstable else 0.28
-        self._ambient_arc_timer -= dt
-        if self._ambient_arc_timer > 0.0:
-            return
-        # Jitter no intervalo: arcos não piscam em cadência uniforme.
-        self._ambient_arc_timer = interval * random.uniform(0.75, 1.25)
-
-        cells = self._edge_cells_order
-        if len(cells) < 2:
-            self._ambient_arcs = []
-            return
-
-        n = random.randint(2, 4) if is_unstable else 1
-        sc = self.PIXEL_SCALE
-        offx, offy = self._draw_offset  # posição idêntica à do pixel-map neste frame
-        arcs: List[List[tuple[float, float]]] = []
-
-        for _ in range(n):
-            if is_unstable:
-                # Arcos longos entre células quaisquer — falha estrutural caótica.
-                i1 = random.randrange(len(cells))
-                i2 = random.randrange(len(cells))
-            else:
-                # Arcos curtos entre células vizinhas — fluxo normal discreto.
-                i1 = random.randrange(len(cells))
-                spread = random.randint(1, max(1, len(cells) // 6))
-                i2 = (i1 + spread) % len(cells)
-            r1, c1 = cells[i1]
-            r2, c2 = cells[i2]
-            x1 = self.x + offx + (c1 + 0.5) * sc
-            y1 = self.y + offy + (r1 + 0.5) * sc
-            x2 = self.x + offx + (c2 + 0.5) * sc
-            y2 = self.y + offy + (r2 + 0.5) * sc
-            segs = random.randint(3, 6) if is_unstable else random.randint(2, 4)
-            arcs.append(self._jagged_arc(x1, y1, x2, y2, segs=segs))
-
-        self._ambient_arcs = arcs
-
-    def _draw_ambient_arcs(self, surface: pygame.Surface) -> None:
-        """Desenha arcos elétricos ambiente (estado montado no update, §3).
-
-        Cor discreta com escudo ativo (azul-médio), cyan-brilhante no estado instável.
-        """
-        if not self._ambient_arcs:
-            return
-        is_unstable = self.state == _PHASE2
-        color = (205, 248, 255) if is_unstable else (75, 148, 210)
-        for pts in self._ambient_arcs:
-            if len(pts) >= 2:
-                pygame.draw.lines(
-                    surface, color, False,
-                    [(int(px), int(py)) for px, py in pts], 1,
-                )
 
     @staticmethod
     def _jagged_arc(
@@ -812,10 +1021,23 @@ class MetropolisOverlordBoss(BossHitMixin):
         if not self._phase2_settled:
             self._settle_to_center(dt)
 
-        # 2) Lasers rotativos (PRINCIPAL): nascem UMA vez, após assentar.
+        # 2) Lasers rotativos (PRINCIPAL): nascem UMA vez, após build-up de acúmulo.
         if self._phase2_settled and not self._beams_spawned:
-            self._spawn_beams(result)
-            self._beams_spawned = True
+            if not self._warmup_active:
+                self._warmup_active = True
+                self._beam_warmup_t = 0.0
+            self._beam_warmup_t += dt
+            self._update_beam_warmup(dt)
+            if self._beam_warmup_t >= _BEAM_WARMUP_DUR:
+                self._spawn_beams(result)
+                self._beams_spawned = True
+                self._warmup_active = False
+                self._warmup_particles.clear()
+                self._warmup_arcs.clear()
+
+        # 2.5) Sobrecarga: pixels expelidos enquanto os lasers giram.
+        if self._beams_spawned:
+            self._update_sweat(dt)
 
         # 3) Pressão SECUNDÁRIA EXCLUSIVA das 3 sentinelas orbitais (o boss NÃO atira):
         #    nascem uma vez e RENASCEM 10s após destruídas (ameaça persistente).
@@ -842,6 +1064,13 @@ class MetropolisOverlordBoss(BossHitMixin):
 
         # 5) Conta explosões de mina que tocaram o corpo (auto-contido, lê em.*).
         self._count_mine_hits(ctx)
+
+        # 6) Sobrecarga crescente: a cada mina recebida, os lasers giram um pouco mais
+        #    rápido (urgência). Gradual e perceptível — o tremor/suor sobem em
+        #    `_float_offset`/`_update_sweat` pelo mesmo progresso.
+        spin_mult = 1.0 + _PHASE2_SPIN_RAMP * self._phase2_overload()
+        for beam in self._beams:
+            beam.set_spin_multiplier(spin_mult)
 
         if self._mine_hits >= self.mine_hits_to_advance:
             self._kill_beams()
@@ -1040,21 +1269,44 @@ class MetropolisOverlordBoss(BossHitMixin):
         if not self._segmented:
             self._collapse_remaining_cells()  # o que sobrou da carcaça explode antes de dividir
             self._spawn_segments(ctx)
+            self._spawn_fence(ctx)  # cerca elétrica fecha a arena (controle do campo)
             self._segmented = True
         if self._segment_network is not None:
             alive = sum(1 for s in self._segments if not s.dead)
             self._segment_network.update(
                 ctx.dt, alive
             )  # ritma + ESCALA pela perda de corpos
+
+        # Captura a posição de cada segmento NO FRAME em que morre (a posição congela
+        # depois — o segmento morto retorna cedo do update). O último capturado é o
+        # ponto do clarão final.
+        for s in self._segments:
+            sid = id(s)
+            if s.dead and sid not in self._dead_segment_ids:
+                self._dead_segment_ids.add(sid)
+                self._last_segment_death_pos = (s.x, s.y)
+
         # Vitória quando todos os segmentos foram destruídos.
         if self._segments and all(s.dead for s in self._segments):
+            # Reposiciona o corpo invisível sobre o ÚLTIMO fragmento destruído, p/ a
+            # explosão de morte do boss (boss_controller.end → boss.x/y) nascer ali —
+            # um único clarão coerente, sem o anel fantasma no centro-tela.
+            if self._last_segment_death_pos is not None:
+                lx, ly = self._last_segment_death_pos
+                self.x = lx - self.w / 2.0
+                self.y = ly - self.h / 2.0
+            # Boss derrotado: a cerca dissipa junto (o controle da arena se desfaz).
+            for beam in self._fence_beams:
+                beam.begin_fade()
             self.dead = True
 
     def _spawn_segments(self, ctx: "BossUpdateContext") -> None:
-        # Ponto invisível em torno do qual os 3 segmentos orbitam (centro da arena,
-        # alto o bastante para o anel ficar sempre on-screen e alcançável).
-        center = (Config.SCREEN_WIDTH / 2.0, Config.SCREEN_HEIGHT * 0.34)
-        orbit_radius = min(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT) * 0.28
+        # Ponto invisível FIXO e CENTRALIZADO (horizontal + vertical) em torno do qual
+        # os 3 segmentos orbitam. O centro NÃO se move; a única movimentação é a
+        # respiração do raio (ver SegmentNetwork). Raio base modesto p/ que o pico da
+        # expansão fique sempre on-screen e deixe espaço seguro embaixo (jogador).
+        center = (Config.SCREEN_WIDTH / 2.0, Config.SCREEN_HEIGHT / 2.0)
+        orbit_radius = min(Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT) * 0.22
         seg_health = max(120, int(self.max_health * 0.18))
         # Papéis com a LINGUAGEM NOVA (projéteis das sentinelas, versão menor):
         # drone = pequenos feixes; shard = triângulos energéticos; pulse = descarga.
@@ -1080,6 +1332,14 @@ class MetropolisOverlordBoss(BossHitMixin):
             self._segments.append(seg)
             ctx.entity_manager.enemies.append(seg)
 
+    def _spawn_fence(self, ctx: "BossUpdateContext") -> None:
+        """Cria a cerca elétrica (4 feixes-limite em loop nos cantos). Vivem em
+        `em.boss_lasers` (colisão com a nave de graça via `laser_vs_ship`); guardamos
+        as refs p/ dissipá-las quando o boss morrer. Responsiva à resolução (§12)."""
+        self._fence_beams = build_arena_fence()
+        for beam in self._fence_beams:
+            ctx.entity_manager.boss_lasers.append(beam)
+
     # ── Reconstrução do escudo (colapso INVERTIDO) ─────────────────────────────
     def _update_shield_rebuild(self, dt: float) -> None:
         """Reconstrói o contorno-escudo: a MESMA animação do colapso, invertida.
@@ -1102,8 +1362,8 @@ class MetropolisOverlordBoss(BossHitMixin):
             self._shield_shatter_idx += 1
             self._spawn_rebuild_shard(r, c)
 
-        # Arcos crepitam mais no INÍCIO (energia instável se assentando) e somem no fim.
-        self._update_shield_arcs(dt, 1.0 - p)
+        # A estática (arcos) é dirigida 1×/frame por `_update_static_arcs` (sistema
+        # único), que já intensifica no início da reconstrução e some no fim.
 
         if self._shield_rebuild_t >= self.SHIELD_COLLAPSE_DUR:
             self._sentinels_spawned = False  # rearma p/ a 2ª onda do interlúdio
@@ -1163,9 +1423,15 @@ class MetropolisOverlordBoss(BossHitMixin):
         if self.state in (_PHASE1, _INTERLUDE):
             return (0, int(math.sin(self.anim_time * _FLOAT_FREQ) * _FLOAT_AMP))
         if self.state == _PHASE2 and self._beams_spawned:
-            amp = _LASER_SHAKE_AMP
+            # Tremor cresce com a sobrecarga (minas recebidas): perda de estabilidade.
+            amp = _LASER_SHAKE_AMP + int(round(_PHASE2_EXTRA_SHAKE * self._phase2_overload()))
             return (random.randint(-amp, amp), random.randint(-amp, amp))
         return (0, 0)
+
+    def _phase2_overload(self) -> float:
+        """Progresso de sobrecarga da Fase 2 ∈[0,1] = minas recebidas / minas p/ avançar.
+        Dirige a aceleração do giro, o tremor e a taxa de suor (instabilidade crescente)."""
+        return min(1.0, self._mine_hits / max(1, self.mine_hits_to_advance))
 
     def draw(self, surface: pygame.Surface) -> None:
         draw_w, draw_h = (
@@ -1206,11 +1472,18 @@ class MetropolisOverlordBoss(BossHitMixin):
             else:
                 # Triângulo estável (sem rotação) na Fase 1/colapso/Fase 2.
                 self._draw_pixel_map(surface, draw_x, draw_y, self.PIXEL_SCALE)
-                # Estática ambiente: discreta com escudo, caótica sem ele.
-                self._draw_ambient_arcs(surface)
-
-            # Arcos elétricos instáveis no colapso e na reconstrução do escudo.
-            if self.state in (_SHIELD_COLLAPSE, _SHIELD_REBUILD):
+                # Antecipação/sobrecarga dos lasers: VINCULADOS à Fase 2 (não vazam
+                # para outras fases mesmo que reste alguma partícula em decaimento).
+                if self.state == _PHASE2:
+                    if self._warmup_active:
+                        self._draw_beam_warmup(surface)
+                    if self._sweat_particles:
+                        self._draw_sweat(surface)
+                # Faíscas de tiros bloqueados pela blindagem (Fases 1/2).
+                if self._impact_sparks:
+                    self._draw_impact_sparks(surface)
+                # Estática elétrica ÚNICA (mesmo design do colapso): permanente, com
+                # intensidade por estado — normal discreto, fase 2/colapso intensos.
                 self._draw_shield_arcs(surface)
 
         # O feedback de dano vem dos white frames (ImpactFlash de tela), tremor e
@@ -1363,7 +1636,8 @@ class MetropolisOverlordBoss(BossHitMixin):
         return pmap.inner_cell_color(r, c, kind, self.anim_time)
 
     def _draw_shield_arcs(self, surface: pygame.Surface) -> None:
-        """Desenha os arcos elétricos do colapso (estado montado no update, §3)."""
+        """Desenha a estática elétrica única (lista montada por `_update_static_arcs`,
+        §3). Mesma cor/espessura em todos os estados — só a quantidade de arcos muda."""
         for pts in self._shield_arcs:
             if len(pts) >= 2:
                 pygame.draw.lines(

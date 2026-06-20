@@ -36,6 +36,7 @@ from typing import Callable, List, Optional, Tuple
 import pygame
 
 from ...core.config import config as Config
+from ...core.scale import scaled
 from ...core.visual_quality import visual_quality as vq
 from . import metropolis_overlord_pixel_map as pmap
 from ..boss_laser import BossLaser
@@ -85,10 +86,17 @@ class MetropolisOrbitalBeam(BossLaser):
             self._ang_speed = self.ANG_SPEED * max(0.5, aggressiveness_multiplier)
         else:
             self._ang_speed = ang_speed
+        # Multiplicador de giro dinâmico (Fase 2): o boss o aumenta gradualmente a cada
+        # mina recebida (sobrecarga/urgência crescente). 1.0 = velocidade base.
+        self._spin_mult = 1.0
 
         # Cores do núcleo: glow vívido (bright), camada média (mid) e versão dim p/ halo.
         _dark, self._mid, self._glow = pmap.PLASMA_THEMES.get(theme, pmap.PLASMA_THEMES["cyan"])
         self._glow_dim = tuple(int(c * 0.45) for c in self._glow)
+
+        # Espessura/colisão do feixe escala pela resolução (§12): presença e
+        # legibilidade consistentes. Vira instância → todo `self.BEAM_W` segue.
+        self.BEAM_W = scaled(self.BEAM_W)
 
         # Ciclo de vida próprio.
         self._phase = _CHARGING
@@ -107,6 +115,10 @@ class MetropolisOrbitalBeam(BossLaser):
         self.max_w = self.BEAM_W
 
     # ── Controle externo ────────────────────────────────────────────────────
+    def set_spin_multiplier(self, mult: float) -> None:
+        """Ajusta o multiplicador de velocidade de giro (Fase 2: ramp por minas)."""
+        self._spin_mult = max(0.0, float(mult))
+
     def begin_fade(self) -> None:
         """Pedido do boss p/ encerrar: dissipa progressivamente em vez de sumir."""
         if self._phase != _FADING:
@@ -125,7 +137,8 @@ class MetropolisOrbitalBeam(BossLaser):
             self._origin_x, self._origin_y = self._origin_provider()
 
         # Giro contínuo a partir da direção estrutural (também durante carga/dissipação).
-        self._angle += self._ang_speed * dt
+        # `_spin_mult` cresce com as minas recebidas (Fase 2): urgência crescente.
+        self._angle += self._ang_speed * self._spin_mult * dt
         self.x = self._origin_x
         self.y = self._origin_y
         self.target_x = self._origin_x + math.cos(self._angle) * self._length
@@ -135,7 +148,7 @@ class MetropolisOrbitalBeam(BossLaser):
             p = min(1.0, self._phase_t / self.CHARGE_TIME)
             ease = p * p * (3.0 - 2.0 * p)             # smoothstep
             self._visual_w = self.BEAM_W * ease
-            self._flare = 6.0 + 16.0 * ease
+            self._flare = scaled(6.0 + 16.0 * ease)
             self.w = 0.0                               # telégrafo: sem dano ainda
             self._emit_charge_particles(dt, p)
             if self._phase_t >= self.CHARGE_TIME:
@@ -145,14 +158,14 @@ class MetropolisOrbitalBeam(BossLaser):
             # fica CONSTANTE — pulsação não altera a jogabilidade). Soma de duas senóides
             # p/ um respirar orgânico, não mecânico.
             breathe = math.sin(self._anim * 6.3) + 0.4 * math.sin(self._anim * 11.7)
-            self._visual_w = self.BEAM_W + 1.7 * breathe
-            self._flare = 13.0 + 3.5 * math.sin(self._anim * 9.0)
+            self._visual_w = self.BEAM_W + scaled(1.7) * breathe
+            self._flare = scaled(13.0 + 3.5 * math.sin(self._anim * 9.0))
             self.w = self.BEAM_W
             self._emit_active_sparks(dt)
         else:  # _FADING
             p = min(1.0, self._phase_t / self.FADE_TIME)
             self._visual_w = self.BEAM_W * (1.0 - p)
-            self._flare = 13.0 * (1.0 - p)
+            self._flare = scaled(13.0) * (1.0 - p)
             self.w = self._visual_w
             self._emit_fade_particles(dt, p)
             if self._phase_t >= self.FADE_TIME:
@@ -253,7 +266,8 @@ class MetropolisOrbitalBeam(BossLaser):
             pygame.draw.line(surface, self._CORE, start, end, max(1, int(vw) - 3))
 
             # Raiz mais luminosa: intensifica a origem (extremidade visível do feixe).
-            root = (int(self._origin_x + ca * 70.0), int(self._origin_y + sa * 70.0))
+            root_len = scaled(70.0)
+            root = (int(self._origin_x + ca * root_len), int(self._origin_y + sa * root_len))
             pygame.draw.line(surface, glow, start, root, int(vw) + 7)
             pygame.draw.line(surface, self._CORE, start, root, max(1, int(vw) - 1))
 
@@ -300,7 +314,7 @@ class MetropolisOrbitalBeam(BossLaser):
         length = math.hypot(dx, dy) or 1.0
         nx, ny = -dy / length, dx / length
         segs = 7
-        amp = 5.0 + self._visual_w * 0.5
+        amp = scaled(5.0) + self._visual_w * 0.5
         pts = [(int(x1), int(y1))]
         for i in range(1, segs):
             t = i / segs

@@ -1244,7 +1244,10 @@ class PlayingScene(Scene):
 
     def exit(self) -> None:
         pygame.mouse.set_visible(True)
-        sound_manager.stop_all_sfx()
+        # Para só os SFX em loop/sustentados; one-shots (explosão da nave, som do
+        # raio) seguem soando até o fim — senão a morte fica muda, cortada pela
+        # troca de cena (GameOver toca a explosão ANTES deste exit rodar).
+        sound_manager.stop_looping_sfx()
         if hasattr(self, "effects_system"):
             self.effects_system.cleanup()
 
@@ -1932,6 +1935,13 @@ class PlayingScene(Scene):
         all_player_projectiles = (
             self.entity_manager.bullets + self.entity_manager.mini_ship_bullets
         )
+        # Barreira FÍSICA (corpo sólido): bloqueia/destrói os tiros SEM dano ao corpo.
+        # Conceito separado do passe de dano abaixo. No-op em bosses sem barreira ativa.
+        self.collisions.projectiles_vs_boss_barrier(
+            all_player_projectiles,
+            boss,  # type: ignore[arg-type]
+            self.entity_manager,
+        )
         score_gain = self.collisions.projectiles_vs_boss(
             all_player_projectiles,
             boss,  # type: ignore[arg-type]
@@ -2036,10 +2046,20 @@ class PlayingScene(Scene):
 
         from ..entities.boss_laser import BossLaser
 
+        # A cerca elétrica (Fase 3) também vive em boss_lasers, mas é tratada à parte:
+        # além do dano, aplica o debuff de paralisia (reuso do sistema elétrico). É
+        # identificada por class attribute (`applies_paralysis`), não por isinstance (§5).
+        fence_beams = [
+            laser for laser in em.boss_lasers if getattr(laser, "applies_paralysis", False)
+        ]
         boss_lasers = [
-            laser for laser in em.boss_lasers if isinstance(laser, BossLaser)
+            laser for laser in em.boss_lasers
+            if isinstance(laser, BossLaser) and not getattr(laser, "applies_paralysis", False)
         ]
         if self.collisions.laser_vs_ship(ship, boss_lasers):
+            self._handle_ship_hit(slot)
+
+        if fence_beams and self.collisions.fence_vs_ship(ship, fence_beams):
             self._handle_ship_hit(slot)
 
         spike_lasers: list[SpikeBossLaser] = [

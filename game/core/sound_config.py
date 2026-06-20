@@ -86,7 +86,11 @@ CHANNEL_CONFIG: Dict[str, int] = {
     "golem_mine": 4,  # Canal dedicado para tick da mina do Golem
     "golem_orb": 5,  # Canal dedicado para rajada do orbe roxo do Golem
     "metropolis_laser": 6,  # Canal dedicado para o loop do laser do Metropolis Overlord
-    "max_channels": 8,  # Número máximo de canais
+    # Canais 0–6 são DEDICADOS (loops/sustentados). `reserved` informa ao mixer
+    # quantos canais do início reservar — `Sound.play()` (one-shots) nunca os
+    # auto-aloca, evitando que `stop_looping_sfx()` mate uma explosão recém-tocada.
+    "reserved": 7,  # Reserva canais 0–6; one-shots usam só 7..max-1
+    "max_channels": 16,  # 7 dedicados + 9 livres para one-shots simultâneos
 }
 
 # Diretórios-base da descoberta data-driven de música (orientada por pastas).
@@ -134,6 +138,16 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "gem_birth": "sfx/ui/Birth_Energy_Sound_Gem.wav",  # Nascimento da gema do IceGolem
             "gem_death": "sfx/ui/Death_Energy_Sound_Gem.wav",  # Colapso/morte da gema do IceGolem
             "metropolis_overlord_laser": "sfx/ui/Laser_Boss_Loop_Metropolis_Overlord_Boss.mp3",
+            # Ataques das sentinelas orbitais do Metropolis Overlord (por papel):
+            #   missile → descarga atmosférica: antecipação (carga) + raio caindo (impacto).
+            #   emp     → zona de sobrecarga elétrica (ElectricPulse).
+            #   laser   → grade holográfica energizada (GridSnare).
+            #   neon    → trio de drones energéticos (EnergyDrone).
+            "metropolis_lightning_charge": "sfx/ui/Ataques_Boss_Sons/metropolis_overlord_boss/Ataque_Orb_Elétrico_04_antecipação.mp3",
+            "metropolis_lightning_strike": "sfx/ui/Ataques_Boss_Sons/metropolis_overlord_boss/Ataque_Orb_Elétrico_04_raio_caindo.mp3",
+            "metropolis_energy_zone": "sfx/ui/Ataques_Boss_Sons/metropolis_overlord_boss/Ataque_Orb_Elétrico_01_Área_Circular_de_Energia.mp3",
+            "metropolis_electric_grid": "sfx/ui/Ataques_Boss_Sons/metropolis_overlord_boss/Ataque_Orb_Elétrico_02_Grade_Elétrica.mp3",
+            "metropolis_triple_shot": "sfx/ui/Ataques_Boss_Sons/metropolis_overlord_boss/Ataque_Orb_Elétrico_02_Tiro_Triplo.wav",
         },
     },
 }

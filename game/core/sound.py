@@ -80,12 +80,21 @@ class SoundManager:
             self.transition_thread: threading.Thread | None = None
             self.transition_lock = threading.Lock()
             self.original_music_volume: float = self.music_volume
+            # Fator de ducking da música (1.0 = sem duck). Persistente: honrado em
+            # todo cálculo de volume, sobrevive ao avanço de rotação.
+            self.music_duck_factor: float = 1.0
             self.music_manager = MusicManager(self)
             self.music_state_manager = self.music_manager.music_state_manager
             return
 
         # Configurar número de canais
         pygame.mixer.set_num_channels(CHANNEL_CONFIG["max_channels"])
+
+        # Reserva os canais dedicados (0..reserved-1): `Sound.play()` (one-shots)
+        # só será auto-alocado nos canais livres restantes. Sem isto, um one-shot
+        # (ex.: explosão da nave) podia cair num canal dedicado e ser cortado por
+        # `stop_looping_sfx()` na troca de cena.
+        pygame.mixer.set_reserved(CHANNEL_CONFIG["reserved"])
 
         # Notifica o fim de cada faixa de música → avanço da rotação (app.py).
         pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
@@ -134,6 +143,9 @@ class SoundManager:
         self.transition_thread: threading.Thread | None = None
         self.transition_lock = threading.Lock()
         self.original_music_volume: float = self.music_volume
+        # Fator de ducking da música (1.0 = sem duck). Persistente: honrado em
+        # todo cálculo de volume, sobrevive ao avanço de rotação.
+        self.music_duck_factor: float = 1.0
         self.music_manager = MusicManager(self)
 
         # Carregar sons
@@ -396,6 +408,46 @@ class SoundManager:
         self.metropolis_laser_channel.stop()
 
     @require_audio
+    def play_metropolis_lightning_charge(self):
+        """Toca o som de antecipação (carga) da descarga atmosférica da sentinela."""
+        if "metropolis_lightning_charge" in self._sounds:
+            sound = self._sounds["metropolis_lightning_charge"]
+            sound.set_volume(self.sfx_volume * self.master_volume)
+            sound.play()
+
+    @require_audio
+    def play_metropolis_lightning_strike(self):
+        """Toca o som do raio caindo (impacto) da descarga atmosférica da sentinela."""
+        if "metropolis_lightning_strike" in self._sounds:
+            sound = self._sounds["metropolis_lightning_strike"]
+            sound.set_volume(self.sfx_volume * self.master_volume)
+            sound.play()
+
+    @require_audio
+    def play_metropolis_energy_zone(self):
+        """Toca o som da zona de sobrecarga elétrica (sentinela "emp")."""
+        if "metropolis_energy_zone" in self._sounds:
+            sound = self._sounds["metropolis_energy_zone"]
+            sound.set_volume(self.sfx_volume * self.master_volume)
+            sound.play()
+
+    @require_audio
+    def play_metropolis_electric_grid(self):
+        """Toca o som da grade holográfica energizada (sentinela "laser")."""
+        if "metropolis_electric_grid" in self._sounds:
+            sound = self._sounds["metropolis_electric_grid"]
+            sound.set_volume(self.sfx_volume * self.master_volume)
+            sound.play()
+
+    @require_audio
+    def play_metropolis_triple_shot(self):
+        """Toca o som do trio de drones energéticos (sentinela "neon")."""
+        if "metropolis_triple_shot" in self._sounds:
+            sound = self._sounds["metropolis_triple_shot"]
+            sound.set_volume(self.sfx_volume * self.master_volume)
+            sound.play()
+
+    @require_audio
     def pause_metropolis_laser_loop(self):
         """Pausa o loop do laser do Metropolis Overlord."""
         self.metropolis_laser_channel.pause()
@@ -405,29 +457,29 @@ class SoundManager:
         """Retoma o loop do laser do Metropolis Overlord."""
         self.metropolis_laser_channel.unpause()
 
+    def music_target_volume(self, music_type: str | None = None) -> float:
+        """Volume-alvo da música (0.0–1.0) já com master, multiplicador de boss e
+        o fator de ducking persistente aplicados. Fonte única de verdade do volume
+        da música — usado pela transição, set_music_volume, load_config e duck.
+
+        `music_type` None usa `self.current_music` (categoria atual no ar)."""
+        kind = music_type if music_type is not None else self.current_music
+        base = self.music_volume
+        if kind == "boss":
+            base *= self.boss_music_multiplier
+        return min(1.0, base * self.master_volume) * self.music_duck_factor
+
     @require_audio
-    def _duck_music(self, duck: bool):
-        """Controla o volume da música (ducking) para dar espaço aos efeitos do boss."""
-        if not hasattr(pygame.mixer, "music") or not pygame.mixer.music.get_busy():
-            return
+    def duck_music(self, active: bool, factor: float = 0.5) -> None:
+        """Liga/desliga o ducking da música (abaixa o volume sem cortar nada).
 
-        if duck:
-            # Reduzir volume da música para 60% do normal
-            base_volume = self.music_volume
-            if self.current_music == "boss":
-                base_volume *= self.boss_music_multiplier
-
-            duck_volume = base_volume * 0.6
-            final_volume = min(1.0, duck_volume * self.master_volume)
-            pygame.mixer.music.set_volume(final_volume)
-        else:
-            # Restaurar volume original da música
-            base_volume = self.music_volume
-            if self.current_music == "boss":
-                base_volume *= self.boss_music_multiplier
-
-            final_volume = min(1.0, base_volume * self.master_volume)
-            pygame.mixer.music.set_volume(final_volume)
+        O fator é persistente: fica guardado em `music_duck_factor` e é honrado em
+        todo recálculo de volume, então sobrevive ao avanço de rotação (fim de
+        faixa) durante a tela de Game Over. `active=False` restaura o volume cheio.
+        """
+        self.music_duck_factor = factor if active else 1.0
+        if pygame.mixer.music.get_busy():
+            pygame.mixer.music.set_volume(self.music_target_volume())
 
     @require_audio
     def play_ship_explosion(self):
@@ -573,8 +625,13 @@ class SoundManager:
         self.music_manager.stop_warning()
 
     @require_audio
-    def stop_all_sfx(self):
-        """Para todos os efeitos sonoros (não afeta a música)."""
+    def stop_looping_sfx(self):
+        """Para só os SFX em canais dedicados (loops/sustentados): warning, tiros,
+        lasers de boss, mina/orbe do Golem e o loop do Metropolis.
+
+        NÃO interrompe one-shots (explosões, raio) — esses se encerram sozinhos e
+        devem soar até o fim. Usado ao SAIR da cena de jogo: senão a morte fica
+        muda (a explosão da nave e o som do raio são cortados pela troca de cena)."""
         self.warning_channel.stop()
         self.shot_channel.stop()
         self.boss_laser_channel.stop()
@@ -582,8 +639,17 @@ class SoundManager:
         self.golem_mine_channel.stop()
         self.golem_orb_channel.stop()
         self.metropolis_laser_channel.stop()
-        for sound in self._sounds.values():
-            sound.stop()
+
+    @require_audio
+    def stop_all_sfx(self):
+        """Para os SFX sustentados/looping da partida (não afeta a música).
+
+        Categoria-escopo: NÃO varre o dict inteiro de sons parando one-shots — com
+        os canais dedicados reservados, one-shots (explosão da nave, ranking, raio)
+        vivem nos canais livres e devem soar até o fim ("tudo pode persistir").
+        Equivale a `stop_looping_sfx()`; nome mantido para os call sites existentes.
+        """
+        self.stop_looping_sfx()
 
     def shutdown(self, wait: float = 1.0) -> None:
         """Limpa recursos de áudio e encerra worker threads de transição.

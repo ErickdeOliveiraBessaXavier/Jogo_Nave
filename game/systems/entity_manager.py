@@ -388,7 +388,7 @@ class EntityManager:
             "Particulas": self.debug_particle_count(),
             "Efeitos": effects,
             "Coletaveis": len(self.powerups) + len(self.stars),
-            "Bosses": 1 if self.boss is not None else 0,
+            "Bosses": 1 if (self.boss is not None and not getattr(self.boss, "dead", False)) else 0,
             "Outros": (
                 len(self.mini_ships)
                 + len(self.wingmen)
@@ -407,6 +407,78 @@ class EntityManager:
         return sum(
             v for k, v in self.debug_entity_breakdown().items() if k != "Particulas"
         )
+
+    def debug_active_entity_names(self) -> dict[str, int]:
+        """Contagem de entidades ativas por nome de classe — diagnóstico F3 detalhado.
+
+        Varre TODAS as listas (incluindo pools) e retorna {NomeClasse: count}
+        ordenado por contagem decrescente. Permite identificar exatamente qual tipo
+        está presente quando o total é inesperado (ex.: contagem persistente em
+        arena aparentemente vazia).
+        """
+        counter: dict[str, int] = {}
+
+        def _add(lst: list) -> None:
+            for e in lst:
+                k = type(e).__name__
+                counter[k] = counter.get(k, 0) + 1
+
+        _add(self.enemies)
+        _add(self.spikes)
+        _add(self.boulders)
+        _add(self.cannon_towers)
+        _add(self.cannon_mines)
+        _add(self.black_holes)
+        _add(self.mountain_propellers)
+        _add(self.attack_debris)
+        _add(self.orbital_debris)
+        _add(self.bullets)
+        _add(self.homing_bullets)
+        _add(self.alien_bullets)
+        _add(self.serpent_bullets)
+        _add(self.energy_orbs)
+        _add(self.orbital_orbs)
+        _add(self.neon_bolts)
+        _add(self.player_lasers)
+        _add(self.mini_ship_bullets)
+        _add(self.eye_lasers)
+        _add(self.boss_lasers)
+        _add(self.cacador_lasers)
+        _add(self.boss_squares)
+        _add(self.slime_drips)
+        _add(self.plasma_beams)
+        _add(self.chain_lightnings)
+        _add(self.air_strike_bombs)
+        _add(self.mine_explosions)
+        _add(self.ice_poison_zones)
+        _add(self.fire_zones)
+        _add(self.electric_fields)
+        _add(self.emp_waves)
+        _add(self.explosive_effects)
+        _add(self.core_implosions)
+        _add(self.police_crashes)
+        _add(self.tank_meltdowns)
+        _add(self.splitter_debris)
+        _add(self.carrier_debris)
+        _add(self.ice_shards)
+        _add(self.captor_emps)
+        _add(self.orbital_shields)
+        _add(self.powerups)
+        _add(self.stars)
+        _add(self.floating_scores)
+        _add(self.mini_ships)
+        _add(self.wingmen)
+        _add(self.coop_links)
+        _add(self.formations)
+        _add(self.meteor_pool.active)
+        _add(self.rock_glider_pool.active)
+        _add(self.explosion_pool.active)
+
+        if self.boss is not None and not getattr(self.boss, "dead", False):
+            k = type(self.boss).__name__
+            counter[k] = counter.get(k, 0) + 1
+
+        return dict(sorted(counter.items(), key=lambda kv: -kv[1]))
 
     def debug_particle_count(self) -> int:
         """Nº aproximado de partículas cosméticas ativas (explosões + zonas + orbes)."""
@@ -1709,6 +1781,9 @@ class EntityManager:
         self.ice_shards.clear()
         self.captor_emps.clear()
         self.area_blasts.clear()
+        # Lasers do boss (incl. cerca elétrica da Fase 3): o boss já era; limpeza
+        # definitiva aqui evita qualquer vazamento de feixe-limite para o próximo nível.
+        self.boss_lasers.clear()
         # homing_bullets e cacador_lasers são projéteis do jogador — preservados
         # pela mesma razão que air_strike_bombs e black_holes (ver comentário abaixo).
         self.floating_scores.clear()

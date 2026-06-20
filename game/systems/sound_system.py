@@ -32,6 +32,7 @@ class SoundSystem:
         self._bus.on(events.PlayerShot, self._on_player_shot)
         self._bus.on(events.EnemyDestroyed, self._on_enemy_destroyed)
         self._bus.on(events.BossDefeated, self._on_boss_defeated)
+        self._bus.on(events.GameOver, self._on_game_over)
         self._bus.on(events.PowerupCollected, self._on_powerup_collected)
         self._bus.on(events.PlayerDamaged, self._on_player_damaged)
         self._bus.on(events.PlaySound, self._on_play_sound)
@@ -52,6 +53,12 @@ class SoundSystem:
     def _on_boss_defeated(self, _event: events.BossDefeated) -> None:
         """Toca o som de explosão massiva do boss."""
         sound_manager.play_explosion_boss()
+
+    def _on_game_over(self, _event: events.GameOver) -> None:
+        """Game Over: abaixa o volume da música (ducking), sem cortar SFX. A
+        música atual continua e os one-shots (explosão da nave) soam normalmente.
+        O duck é desfeito ao sair da tela (continuar/menu) em game_over.py."""
+        sound_manager.duck_music(True)
 
     def _on_powerup_collected(self, _event: events.PowerupCollected) -> None:
         """Toca o som de coleta de power-up."""
@@ -109,6 +116,11 @@ class SoundSystem:
             "explosion_boss": sound_manager.play_explosion_boss,
             "explosion_alien": sound_manager.play_explosion_alien,
             "explosion_asteroid": sound_manager.play_explosion_asteroid,
+            "metropolis_lightning_charge": sound_manager.play_metropolis_lightning_charge,
+            "metropolis_lightning_strike": sound_manager.play_metropolis_lightning_strike,
+            "metropolis_energy_zone": sound_manager.play_metropolis_energy_zone,
+            "metropolis_electric_grid": sound_manager.play_metropolis_electric_grid,
+            "metropolis_triple_shot": sound_manager.play_metropolis_triple_shot,
         }
         handler = sound_map.get(sound_name)
         if handler is not None:
@@ -122,6 +134,7 @@ class SoundSystem:
         self._bus.off(events.PlayerShot, self._on_player_shot)
         self._bus.off(events.EnemyDestroyed, self._on_enemy_destroyed)
         self._bus.off(events.BossDefeated, self._on_boss_defeated)
+        self._bus.off(events.GameOver, self._on_game_over)
         self._bus.off(events.PowerupCollected, self._on_powerup_collected)
         self._bus.off(events.PlayerDamaged, self._on_player_damaged)
         self._bus.off(events.PlaySound, self._on_play_sound)

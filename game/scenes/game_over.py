@@ -574,6 +574,7 @@ class GameOverScene(Scene):
         """
         from .playing import PlayingScene
 
+        sound_manager.duck_music(False)  # desfaz o ducking do Game Over
         sound_manager.stop_all_sfx()
         self.app.states.switch(
             PlayingScene(
@@ -597,6 +598,7 @@ class GameOverScene(Scene):
         self.app.player_profile.save()
 
     def _return_to_menu(self):
+        sound_manager.duck_music(False)  # desfaz o ducking do Game Over
         sound_manager.stop_music()
         sound_manager.stop_all_sfx()
         from ..core.sound_config import MusicState

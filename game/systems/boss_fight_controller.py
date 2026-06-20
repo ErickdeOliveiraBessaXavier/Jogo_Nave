@@ -196,6 +196,11 @@ class BossFightController:
             formation.dead = True
         self._em.formations.clear()
 
+        # NÃO limpamos boss_lasers aqui: a cerca elétrica da Fase 3 precisa rodar sua
+        # animação de SAÍDA (dissipação elegante) durante a janela pós-morte. Os feixes
+        # se auto-removem ao fim do fade (dead → cleanup); a limpeza definitiva é na
+        # transição de nível (`clear_for_level_transition`), evitando vazamento.
+
         self._em.boss = None
         self.active = False
         self.boss_type = None

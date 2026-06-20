@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, List
 import pygame
 
 from ...core.config import config as Config
+from ...core.scale import gameplay_scale, scaled
 from ...core.visual_quality import visual_quality as vq
 from ..enemy_hit_mixin import EnemyHitMixin
 from .metropolis_projectiles import (
@@ -67,6 +68,15 @@ def _smoothstep(p: float) -> float:
     """Easing suave 0→1 com derivada nula nas pontas (acel/desacel graduais)."""
     p = max(0.0, min(1.0, p))
     return p * p * (3.0 - 2.0 * p)
+
+
+def _lerp(a: tuple, b: tuple, f: float) -> tuple:
+    """Interpola duas cores RGB (f∈[0,1]). Para transições de render puro (§3)."""
+    return (
+        int(a[0] + (b[0] - a[0]) * f),
+        int(a[1] + (b[1] - a[1]) * f),
+        int(a[2] + (b[2] - a[2]) * f),
+    )
 
 
 def _jagged(x1: float, y1: float, x2: float, y2: float, jitter: float, segs: int = 4):
@@ -213,7 +223,7 @@ class MetropolisSentinel(EnemyHitMixin):
 
         # Tamanho e trajetória responsivos à resolução (§12): esfera e inset
         # escalam com ui_scale; halo garante que o glow nunca seja cortado pela borda.
-        _ui_scale = Config.SCREEN_WIDTH / 1280.0
+        _ui_scale = gameplay_scale()  # FONTE ÚNICA da escala por resolução (§12)
         self.RADIUS = float(max(22.0, round(_BASE_RADIUS * _ui_scale)))
         _halo_extra = max(14, round(18 * _ui_scale))
         self._halo_r = int(self.RADIUS + _halo_extra)
@@ -369,6 +379,12 @@ class MetropolisSentinel(EnemyHitMixin):
     def should_remove(self) -> bool:
         return self.dead
 
+    def _emit_sound(self, name: str) -> None:
+        """Emite um pedido de SFX pelo EventBus (no-op sem bus, ex.: testes). §2."""
+        if self._bus is not None:
+            from ...events import game_events as events
+            self._bus.emit(events.PlaySound(sound_name=name))
+
     # ── Update ──────────────────────────────────────────────────────────────
     def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
         dt = ctx.sdt
@@ -477,11 +493,12 @@ class MetropolisSentinel(EnemyHitMixin):
                     # Controle de espaço: trava o alvo (atual + leve antecipação) e
                     # spawna a zona JÁ — a construção dela É o telegrafo. Marcação,
                     # acúmulo e hitbox ficam no MESMO ponto travado (mira = ataque).
-                    m = ElectricPulse.RADIUS + 8.0
+                    m = scaled(ElectricPulse.RADIUS + 8.0)  # margem escalada (zona cresce c/ a resolução)
                     tx = max(m, min(Config.SCREEN_WIDTH - m, ctx.player_x + self._pvx * 0.25))
                     ty = max(m, min(Config.SCREEN_HEIGHT - m, ctx.player_y + self._pvy * 0.25))
                     self._aim_x, self._aim_y = tx, ty
                     ctx.new_enemies.append(ElectricPulse(tx, ty))
+                    self._emit_sound("metropolis_energy_zone")  # zona de sobrecarga
                     self._aim_dur = ElectricPulse.GATHER
                 else:
                     self._aim_dur = self._ROLE_AIM.get(self.role, 0.8)
@@ -509,10 +526,12 @@ class MetropolisSentinel(EnemyHitMixin):
             for spread in (-0.20, 0.0, 0.20):
                 a = base + spread
                 out.append(EnergyDrone(self.x, self.y, self.x + math.cos(a) * 100.0, self.y + math.sin(a) * 100.0))
+            self._emit_sound("metropolis_triple_shot")  # 1 som p/ o trio inteiro
             return out
         if self.role == "missile":  # DESCARGA: já spawnada no início da mira (canalização)
             return []
         if self.role == "laser":  # SUPORTE: grade holográfica no alvo travado
+            self._emit_sound("metropolis_electric_grid")
             return [GridSnare(ax, ay)]
         if self.role == "emp":  # CONTROLE DE ESPAÇO: zona já spawnada no início da mira
             return []

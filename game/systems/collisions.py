@@ -1438,6 +1438,42 @@ class Collisions:
             projectiles, boss, floating_scores, entity_manager, is_piercing_allowed=True
         )
 
+    def projectiles_vs_boss_barrier(
+        self,
+        projectiles: Sequence[Any],
+        boss: Any,
+        entity_manager: "EntityManager",
+    ) -> None:
+        """Barreira FÍSICA do corpo do boss (blindagem sólida) vs. tiros do jogador.
+
+        Conceito SEPARADO do dano: interrompe/destrói o projétil ao tocar o corpo, mas
+        NÃO passa pelo roteador de dano (`apply_hit`/`on_hit`) — o corpo não toma dano
+        (esse vem só das partes vulneráveis). Pequeno feedback de impacto via
+        `boss.spawn_barrier_impact`. Só age em bosses que exponham `barrier_circle()`
+        ATIVA (Metropolis Overlord nas Fases 1/2); demais bosses → no-op.
+
+        Respeita `piercing` (atravessa, como `_project_into_boss`) — não nerfa o upgrade
+        e o corpo não toma dano de qualquer modo.
+        """
+        if not projectiles or not boss or boss.dead:
+            return
+        get_barrier = getattr(boss, "barrier_circle", None)
+        if not callable(get_barrier):
+            return
+        circle = get_barrier()
+        if circle is None:
+            return
+        bcx, bcy, br = circle
+        br2 = br * br
+        for proj in projectiles:
+            if proj.dead or getattr(proj, "piercing", False):
+                continue
+            r = proj.rect
+            px, py = float(r.centerx), float(r.centery)
+            if (px - bcx) ** 2 + (py - bcy) ** 2 <= br2:
+                proj.dead = True  # tiro interrompido pela blindagem (sem dano ao corpo)
+                boss.spawn_barrier_impact(px, py)
+
     def ship_vs_boss(
         self,
         ship: Ship,
@@ -1714,6 +1750,23 @@ class Collisions:
             if laser.w > 0 and ship.rect.clipline(laser.get_collision_line()):
                 return True
         return False
+
+    def fence_vs_ship(self, ship: Ship, beams: list[BossLaser]) -> bool:
+        """Cerca elétrica (Fase 3) vs. nave: aplica o MESMO debuff elétrico/paralisia
+        da Torreta Orbital (`Ship.apply_electric_debuff`) a quem ENCOSTA — inclusive
+        em i-frames, igual a `electric_fields_vs_ships` — e retorna True se deve ferir
+        (contato com a barreira ATIVA, `w > 0`, e sem invuln). NÃO cria status novo:
+        a cerca é só uma nova ORIGEM do efeito elétrico já existente no jogo.
+        """
+        damaging = False
+        for beam in beams:
+            if beam.w <= 0:  # entrada/saída (telegrafo/colapso) não machucam nem paralisam
+                continue
+            if ship.rect.clipline(beam.get_collision_line()):
+                ship.apply_electric_debuff()  # reuso direto: duração/chance/visual existentes
+                if ship.invuln <= 0:
+                    damaging = True
+        return damaging
 
     def spike_boss_laser_vs_ship(
         self, ship: Ship, lasers: list[SpikeBossLaser]

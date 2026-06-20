@@ -24,6 +24,7 @@ import random
 import pygame
 
 from ..core.config import config as Config
+from ..core.scale import gameplay_scale
 from ..core.visual_quality import visual_quality
 
 _CORE = (240, 250, 255)
@@ -66,7 +67,15 @@ class OrbitalEnergyOrb:
         self.y = float(y)
         self.target_x = float(target_x)
         self.target_y = float(target_y)
-        self.field_radius = int(field_radius if field_radius is not None else self.FIELD_RADIUS)
+        # Escala por resolução (§12): orbe, campo elétrico resultante e velocidade
+        # crescem com a tela. RADIUS fica int (geometria do rect/draw); o campo é
+        # repassado JÁ escalado ao ElectricFieldZone (não re-escalar lá).
+        sc = gameplay_scale()
+        self.RADIUS = max(1, int(round(self.RADIUS * sc)))
+        self.SPEED = self.SPEED * sc
+        self.field_radius = int(
+            (field_radius if field_radius is not None else self.FIELD_RADIUS) * sc
+        )
 
         self.dead = False
         self.landed = False

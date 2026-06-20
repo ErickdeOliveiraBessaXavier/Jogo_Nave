@@ -343,6 +343,16 @@ class GameRenderer:
             shown = particles if cat == "Particulas" else count
             lines.append((f"  {cat}: {shown}", dim))
 
+        # Detalhe por tipo de classe — aparece quando há entidades não-zero além de
+        # partículas. Permite rastrear o que está presente numa arena aparentemente
+        # vazia sem precisar de logs externos.
+        if entities > 0:
+            type_counts = em.debug_active_entity_names()
+            if type_counts:
+                lines.append(("  Tipos:", (200, 200, 80)))
+                for name, count in list(type_counts.items())[:10]:
+                    lines.append((f"    {name}: {count}", (150, 170, 150)))
+
         font = self.r.font_small
         line_h = font.get_linesize()
         pad = self._s(6)

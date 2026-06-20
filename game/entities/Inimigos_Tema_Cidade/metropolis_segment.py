@@ -55,20 +55,42 @@ class SegmentNetwork:
     # Intervalo entre volleys e frequência de reorganização POR nº de vivos.
     _CYCLE_BY_ALIVE = {3: 2.0, 2: 1.5, 1: 1.05}   # base apertada (era 2.6) + escalada
     _REORG_BY_ALIVE = {3: 6, 2: 0, 1: 0}          # 0 = sem pausa (implacável c/ poucos)
+    # Janela inicial de REORGANIZAÇÃO: ao segmentar, os fragmentos se posicionam e
+    # ESTABILIZAM antes do 1º ataque (leitura da nova fase). Os segmentos orbitam e
+    # respiram normalmente — só o disparo é adiado.
+    WARMUP = 1.3
+
+    # RESPIRAÇÃO da formação (Fase 3): o centro de órbita NÃO se move; a única
+    # movimentação é o raio PULSANDO (expande/contrai) com a velocidade de giro
+    # ACOPLADA — gira rápido ao expandir, lento ao contrair. Máquina energética
+    # respirando, sem deslocar pela arena. Tudo sincronizado (todos leem o mesmo).
+    BREATH_FREQ = 1.4        # rad/s — ciclo lento e deliberado (~4.5s por respiração)
+    BREATH_RADIUS_AMP = 0.35  # raio oscila 0.65×..1.35× do base (pulsação visível)
+    BREATH_SPIN_AMP = 0.6     # giro oscila 0.4×..1.6× (rápido expandido, lento contraído)
 
     def __init__(self) -> None:
         self.clock = 0.0
         self.cycle = 0
         self._t = 0.0
         self.alive = 3
+        self._warmup_t = self.WARMUP
 
     @property
     def cycle_dur(self) -> float:
         return self._CYCLE_BY_ALIVE.get(self.alive, 2.0)
 
+    @property
+    def ready(self) -> bool:
+        """True quando a janela de reorganização passou e os ataques podem começar."""
+        return self._warmup_t <= 0.0
+
     def update(self, dt: float, alive: int = 3) -> None:
         self.alive = max(1, alive)
-        self.clock += dt
+        self.clock += dt  # relógio visual (respiração/órbita) corre desde já
+        if self._warmup_t > 0.0:
+            # Reorganização: segura o relógio de volley (sem ataques) até estabilizar.
+            self._warmup_t = max(0.0, self._warmup_t - dt)
+            return
         self._t += dt
         while self._t >= self.cycle_dur:  # while: cobre a queda brusca do ciclo na escalada
             self._t -= self.cycle_dur
@@ -82,12 +104,17 @@ class SegmentNetwork:
     def fire_phase(self) -> float:
         return self._t
 
+    def _breath(self) -> float:
+        """Oscilador de respiração ∈[-1,1] (sincronizado): +1 = expandido, -1 = contraído."""
+        return math.sin(self.clock * self.BREATH_FREQ)
+
     def radius_scale(self) -> float:
-        """Modulação SINCRONIZADA do raio de órbita (todos leem o mesmo valor)."""
-        s = 1.0 + 0.05 * math.sin(self.clock * 1.3)  # respiração sutil contínua
-        if self.is_reorg and self._t < 1.1:
-            s *= 1.0 - 0.18 * math.sin((self._t / 1.1) * math.pi)  # contrai e volta
-        return s
+        """Raio de órbita PULSANDO (todos leem o mesmo valor) — a única movimentação."""
+        return 1.0 + self.BREATH_RADIUS_AMP * self._breath()
+
+    def spin_scale(self) -> float:
+        """Velocidade de giro ACOPLADA ao raio: rápido ao expandir, lento ao contrair."""
+        return 1.0 + self.BREATH_SPIN_AMP * self._breath()
 
 
 class MetropolisSegment(EnemyHitMixin):
@@ -195,7 +222,7 @@ class MetropolisSegment(EnemyHitMixin):
     # ── Update ────────────────────────────────────────────────────────────
     def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
         dt = ctx.sdt
-        if dt <= 0.0:
+        if dt <= 0.0 or self.dead:
             return
         self.anim_time += dt
         if self.hit_timer > 0.0:
@@ -203,10 +230,14 @@ class MetropolisSegment(EnemyHitMixin):
         if self._fire_flash > 0.0:
             self._fire_flash = max(0.0, self._fire_flash - dt)
 
-        # Órbita SINCRONIZADA: mesmo centro/velocidade, raio respira em grupo (rede).
-        # Velocidade ESCALA com a perda de corpos (sobreviventes mais ágeis).
+        # Órbita SINCRONIZADA em torno de um centro FIXO: a única movimentação é o raio
+        # RESPIRANDO (expande/contrai) com a velocidade de giro ACOPLADA — rápido ao
+        # expandir, lento ao contrair. Velocidade também ESCALA com a perda de corpos.
         alive = self._net.alive if self._net is not None else 3
-        self._orbit_angle += self.ORBIT_SPEED * self._ORBIT_MULT.get(alive, 1.0) * dt
+        spin = self.ORBIT_SPEED * self._ORBIT_MULT.get(alive, 1.0)
+        if self._net is not None:
+            spin *= self._net.spin_scale()
+        self._orbit_angle += spin * dt
         rscale = self._net.radius_scale() if self._net is not None else 1.0
         radius = self.orbit_radius * rscale
         ox = self.center[0] + math.cos(self._orbit_angle) * radius
@@ -234,7 +265,8 @@ class MetropolisSegment(EnemyHitMixin):
         net = self._net
         if net is not None:
             if (
-                not net.is_reorg
+                net.ready  # janela de reorganização inicial: sem ataques até estabilizar
+                and not net.is_reorg
                 and net.cycle != self._last_cycle
                 and net.fire_phase() >= self._index * net.STAGGER
             ):

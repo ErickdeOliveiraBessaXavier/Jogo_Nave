@@ -44,6 +44,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from ...core.config import config as Config
+from ...core.scale import gameplay_scale, scaled
 from ...core.visual_quality import visual_quality as vq
 from ..enemy_hit_mixin import EnemyHitMixin
 
@@ -60,11 +61,14 @@ _NEON_AMBER = (255, 190, 80)
 
 
 def _off_screen(x: float, y: float, margin: float = 60.0) -> bool:
+    # Margem de culling escala com a resolução (§12): em telas grandes os projéteis
+    # são maiores, então não devem sumir cedo demais (glow cortado na borda).
+    m = margin * gameplay_scale()
     return (
-        x < -margin
-        or x > Config.SCREEN_WIDTH + margin
-        or y < -margin
-        or y > Config.SCREEN_HEIGHT + margin
+        x < -m
+        or x > Config.SCREEN_WIDTH + m
+        or y < -m
+        or y > Config.SCREEN_HEIGHT + m
     )
 
 
@@ -76,7 +80,16 @@ class _CityProjectile(EnemyHitMixin):
     POINTS: int = 0
     RADIUS: float = 7.0
 
+    # Constantes de TAMANHO/VELOCIDADE (px do design base 1280×720) escaladas para a
+    # resolução atual no __init__ (§12, FONTE ÚNICA em core.scale). Cada subclasse
+    # declara as suas; o valor vira atributo de instância que SOMBREIA a constante de
+    # classe, então todo `self.X` passa a usar o valor escalado sem tocar draw/colisão.
+    _SCALE_ATTRS: tuple[str, ...] = ("RADIUS",)
+
     def __init__(self, x: float, y: float) -> None:
+        sc = gameplay_scale()
+        for _name in self._SCALE_ATTRS:
+            setattr(self, _name, getattr(self, _name) * sc)
         self.x = float(x)
         self.y = float(y)
         self.health = self.HEALTH
@@ -125,6 +138,7 @@ class NeonBurstShot(_CityProjectile):
     HEALTH = 4
     RADIUS = 6.0
     SPEED = 460.0
+    _SCALE_ATTRS = ("RADIUS", "SPEED")
 
     def __init__(self, x: float, y: float, target_x: float, target_y: float) -> None:
         super().__init__(x, y)
@@ -154,8 +168,9 @@ class MicroMissile(_CityProjectile):
     HEALTH = 5
     RADIUS = 7.0
     SPEED = 300.0
-    MAX_TURN_RATE = 2.6  # rad/s — teto do giro; quanto menor, mais desviável
+    MAX_TURN_RATE = 2.6  # rad/s — teto do giro; quanto menor, mais desviável (angular: não escala)
     LIFETIME = 6.0
+    _SCALE_ATTRS = ("RADIUS", "SPEED")
 
     def __init__(self, x: float, y: float, target_x: float, target_y: float) -> None:
         super().__init__(x, y)
@@ -196,6 +211,7 @@ class VerticalLaser(_CityProjectile):
     WIDTH = 18.0
     TELEGRAPH_TIME = 0.7
     FALL_SPEED = 720.0
+    _SCALE_ATTRS = ("RADIUS", "WIDTH", "FALL_SPEED")
 
     def __init__(self, column_x: float) -> None:
         super().__init__(column_x, 0.0)
@@ -268,10 +284,11 @@ class EMPPulse(_CityProjectile):
     MAX_RADIUS = 150.0
     GROWTH = 260.0  # px/s
     THICKNESS = 14.0
+    _SCALE_ATTRS = ("RADIUS", "MAX_RADIUS", "GROWTH", "THICKNESS")
 
     def __init__(self, x: float, y: float) -> None:
         super().__init__(x, y)
-        self.radius = 6.0
+        self.radius = scaled(6.0)
         self.lifetime = 3.0
 
     @property
@@ -359,6 +376,7 @@ class EnergyDrone(_CityProjectile):
     TRAIL_MAX = 6
     COLOR = _NEON_MAGENTA
     BRIGHT = (255, 175, 235)
+    _SCALE_ATTRS = ("RADIUS", "SPEED")
 
     def __init__(self, x: float, y: float, target_x: float, target_y: float) -> None:
         super().__init__(x, y)
@@ -480,11 +498,12 @@ class TriShard(_CityProjectile):
     HEALTH = 5
     RADIUS = 13.0
     SPEED = 230.0
-    MAX_TURN_RATE = 1.5  # rad/s — perseguição leve e desviável (§11/bem-estar)
+    MAX_TURN_RATE = 1.5  # rad/s — perseguição leve e desviável (§11/bem-estar; angular: não escala)
     LIFETIME = 4.6
     DISSIPATE = 0.24
     COLOR = _NEON_AMBER
     BRIGHT = (255, 225, 170)
+    _SCALE_ATTRS = ("RADIUS", "SPEED")
 
     def __init__(self, x: float, y: float, target_x: float, target_y: float) -> None:
         super().__init__(x, y)
@@ -600,12 +619,16 @@ class ElectricPulse(_CityProjectile):
     TOTAL = GATHER + OVERLOAD + COLLAPSE
     COLOR = _PULSE_VIOLET
     BRIGHT = _PULSE_BRIGHT
+    _SCALE_ATTRS = ("RADIUS", "WOBBLE")
 
     def __init__(self, cx: float, cy: float) -> None:
-        m = self.RADIUS + 8.0
-        cx = max(m, min(Config.SCREEN_WIDTH - m, cx))
-        cy = max(m, min(Config.SCREEN_HEIGHT - m, cy))
+        # super() escala RADIUS pela resolução; o clamp da borda usa o RADIUS já
+        # escalado (+margem escalada) p/ a zona inteira caber on-screen em qualquer res.
         super().__init__(cx, cy)  # base dimensiona o rect a RADIUS*2 e centra aqui
+        m = self.RADIUS + scaled(8.0)
+        self.x = max(m, min(Config.SCREEN_WIDTH - m, self.x))
+        self.y = max(m, min(Config.SCREEN_HEIGHT - m, self.y))
+        self._sync_rect()
         self.phase = "gather"  # gather | overload | collapse
         self.phase_t = 0.0
         self.lifetime = 4.0
@@ -777,20 +800,26 @@ class GridSnare(_CityProjectile):
     some a tiro nem ao tocar a nave; o jogador sai da célula a tempo.
     """
 
-    HALF = 64.0
-    RADIUS = 64.0  # = HALF: dimensiona o rect/broadphase à grade inteira
+    # 64 base × 1.3 = 83.2: +30% de área de controle (mais presença em combate). A
+    # escala por resolução (_SCALE_ATTRS) é aplicada por cima no __init__.
+    HALF = 83.2
+    RADIUS = 83.2  # = HALF: dimensiona o rect/broadphase à grade inteira
     FORM = 0.3
     ACTIVE = 0.85
     DISSIPATE = 0.4
     COLOR = _GRID_BLUE
     BRIGHT = _GRID_BRIGHT
     CELLS = 4
+    _SCALE_ATTRS = ("RADIUS", "HALF")
 
     def __init__(self, cx: float, cy: float) -> None:
-        m = self.HALF + 6.0
-        cx = max(m, min(Config.SCREEN_WIDTH - m, cx))
-        cy = max(m, min(Config.SCREEN_HEIGHT - m, cy))
+        # super() escala HALF/RADIUS pela resolução; clamp usa o HALF já escalado
+        # (+margem escalada) p/ a grade inteira caber on-screen em qualquer res.
         super().__init__(cx, cy)
+        m = self.HALF + scaled(6.0)
+        self.x = max(m, min(Config.SCREEN_WIDTH - m, self.x))
+        self.y = max(m, min(Config.SCREEN_HEIGHT - m, self.y))
+        self._sync_rect()
         self.phase = "form"  # form | active | dissipate
         self.phase_t = 0.0
         self.lifetime = 4.0
@@ -930,6 +959,9 @@ class LightningStrike(EnemyHitMixin):
     BRIGHT = _BOLT_BRIGHT
 
     def __init__(self, col_x: float, event_bus: "EventBus | None" = None) -> None:
+        # Largura da coluna escala pela resolução (§12): presença/legibilidade
+        # consistentes. Vira instância → todo `self.WIDTH` (haze, colisão, rect) segue.
+        self.WIDTH = self.WIDTH * gameplay_scale()
         hw = self.WIDTH * 0.5
         self.col_x = max(hw, min(Config.SCREEN_WIDTH - hw, float(col_x)))
         h = Config.SCREEN_HEIGHT
@@ -953,6 +985,15 @@ class LightningStrike(EnemyHitMixin):
         # Partículas elétricas subindo dentro da coluna: [dx, y, vel].
         self._motes = [[random.uniform(-hw, hw), random.uniform(0.0, h), random.uniform(60.0, 150.0)]
                        for _ in range(vq.particles(10))]
+        # Som de antecipação (carga): a coluna de telegrafo nasce AGORA. O som do
+        # impacto é emitido na transição p/ STRIKE (update). §2: via EventBus.
+        self._emit_sound("metropolis_lightning_charge")
+
+    def _emit_sound(self, name: str) -> None:
+        """Emite um pedido de SFX pelo EventBus (no-op sem bus, ex.: testes)."""
+        if self._bus is not None:
+            from ...events import game_events as events
+            self._bus.emit(events.PlaySound(sound_name=name))
 
     # ── Colisão (feixe vertical fiel à largura, só no STRIKE) ──────────────────
     @property
@@ -1024,6 +1065,7 @@ class LightningStrike(EnemyHitMixin):
         if self.phase == "charge":
             if self.phase_t >= self.CHARGE:
                 self.phase, self.phase_t = "strike", 0.0
+                self._emit_sound("metropolis_lightning_strike")  # raio caindo (impacto)
         elif self.phase == "strike":
             if self.phase_t >= self.STRIKE:
                 self.phase, self.phase_t = "dissipate", 0.0
