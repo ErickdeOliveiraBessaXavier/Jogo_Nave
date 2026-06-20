@@ -185,7 +185,7 @@ deve segui-los; código existente que os viola é candidato a revisão.
   em rampa pelo **índice absoluto do estágio**: `X-1` no máx. 1 tipo, `X-2` no
   máx. 2, `X-3+` o teto da dificuldade. Regra única em
   `_apply_enemy_variety_cap` (`pipeline.py`): `cap = min(estágio_absoluto, teto)`,
-  com `teto = MAX_ENEMY_VARIETY_BY_DIFFICULTY` (3 Normal/Casual, 4 Hardcore/
+  com `teto = VARIETY_CAP_MAX_BY_DIFFICULTY` (3 Normal/Casual, 4 Hardcore/
   Pesadelo). É **só teto** (limite superior): se o pool do tema liberou menos
   tipos, mostra menos — sem pico de complexidade ao entrar num mundo novo.
   Aplica-se a **todos** os caminhos (procedural, meteor_storm e fixed levels);
@@ -196,6 +196,23 @@ deve segui-los; código existente que os viola é candidato a revisão.
   valer em qualquer tamanho de mundo. A **frequência** de cada tipo continua
   escalando por `stage_progress`. Tipos tardios/minibosses seguem gate por
   `stage_progress`.
+- **Filosofia "SWARM + N complementares".** O teto conta o **base do tema**
+  (Meteor/RockGlider/CityDrone, papel `volume`) como 1 slot: o base é o SWARM —
+  a massa sempre presente e mais frequente (menor `spawn_time`), garantida em
+  `_select_variety_subset` (adicionado primeiro). Logo `cap` 3 → swarm + 2
+  complementares (Normal/Casual) e `cap` 4 → swarm + 3 (Hardcore/Pesadelo).
+  Nenhuma fase é "só de specials"; os specials **complementam** o swarm. A
+  triangulação por papel (`ENEMY_ARCHETYPE` + `ROLE_REPEAT_PENALTY` escalonado)
+  favorece papéis distintos (pressão + controle + ameaça especializada).
+- **Histórico de combinação (anti-repetição do triângulo).** Além da recência
+  POR TIPO, o **conjunto de specials** não repete a fase imediatamente anterior
+  (proibição dura via re-sorteio com seed perturbado) e evita as
+  `COMBINATION_HISTORY` fases recentes em best-effort. Resolvido recursivamente
+  e memoizado, ancorado no `start_level` do mundo. Exato quando o pool é igual
+  entre fases vizinhas; resíduos só quando o pool **não pode** variar (pool de
+  specials ≤ vagas — ex.: Vulcão só tem Alien+EyeEnemy) ou no exato boundary de
+  desbloqueio de um special (pool cresceu). Repetição forçada por falta de pool
+  é **gap de conteúdo** (faltam inimigos no tema), não bug do algoritmo.
 
 ---
 

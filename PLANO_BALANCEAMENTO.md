@@ -49,13 +49,18 @@ variety cap age naturalmente lá.
 toda a tier "miniboss" (CyberTank/Cargo/Splitter/Mirror) era vista 1× cada.
 
 **Correção implementada (`pipeline.py`):**
-- `THEME_VARIETY_CAP_OVERRIDE`: teto **CITY = 4 (Normal/Casual), 5 (Hard/Pesadelo)**.
-  Demais temas inalterados.
-- **Seleção complementar (triangulação):** `_apply_enemy_variety_cap` agora monta
-  encontros por papel — `ENEMY_ARCHETYPE` + `ROLE_REPEAT_PENALTY`. Duas passadas
-  de assinatura (papéis novos primeiro) + loteria penalizada por papel repetido.
-  Resultado: cada nível da Cidade traz um trio/quarteto de papéis **distintos**
-  (ex.: L32 = drone + support + tank + summoner).
+- ~~`THEME_VARIETY_CAP_OVERRIDE`: teto CITY = 4/5.~~ **REVERTIDO (jun/2026):** o teto
+  global voltou a **3 (Normal/Casual) / 4 (Hardcore/Pesadelo)** sob a filosofia
+  "SWARM + N complementares" (o base do tema conta como 1 slot). Sem override por
+  tema — `VARIETY_CAP_MAX_BY_DIFFICULTY` global. A sub-exposição da tier miniboss
+  passa a ser atacada pela **rotação** (recência + histórico de combinação), não
+  por mais slots simultâneos. Ver `memory/swarm-base-and-combination-history`.
+- **Seleção complementar (triangulação):** `_apply_enemy_variety_cap` monta
+  encontros por papel — `ENEMY_ARCHETYPE` + `ROLE_REPEAT_PENALTY` (escalonado por
+  ocorrência, `PENALTY ** nº`). Loteria ponderada por assinatura/spotlight,
+  penalizada por papel repetido. Resultado: cada nível traz SWARM (drone) + 2
+  complementares de papéis **distintos** no Normal (+1 no Hardcore) — ex.:
+  drone + support + tank.
 
 **Resíduo (backlog):** há 11 specials para ~9 estágios não-boss; mesmo com teto 4
 alguns ainda aparecem 1-2×/campanha. Tensão conteúdo-vs-pacing inerente. Opções

@@ -638,17 +638,22 @@ def _apply_stage_progression_enemy_weights(
 # pool e o spotlight decai com o tempo. Consumido por `_select_variety_subset`.
 # ════════════════════════════════════════════════════════════════════════════
 
-# — TETO de variedade (global, dirigido pelo tamanho do pool) —
-# cap = min(estágio_absoluto, ceiling); ceiling ≈ FRACTION × |pool|, limitado a
-# [FLOOR, MAX] da dificuldade. Mais tipos liberados → mais vagas. Reproduz o
-# antigo override do CITY (pool 12 → 4/5) e dá 4 a temas de pool 7, SEM tabela.
+# — TETO de variedade (filosofia "SWARM + N complementares") —
+# O base do tema (Meteor/RockGlider/CityDrone, papel "volume") é o SWARM: a massa
+# sempre presente e mais frequente. O teto conta o base como 1 dos slots, então:
+#   Normal/Casual  cap 3 → SWARM + 2 complementares (pressão + controle + ameaça);
+#   Hardcore/Pesadelo cap 4 → SWARM + 3 complementares (uma ameaça extra).
+# É um teto FIXO por dificuldade (FLOOR == MAX): a fase nunca vira uma sopa de
+# specials, sempre tem o swarm + um punhado pequeno de papéis distintos. cap final
+# = min(estágio_absoluto, teto) — a rampa X-1→1, X-2→2, … ainda vale na entrada do
+# mundo. (POOL_FRACTION só teria efeito se FLOOR < MAX; mantido p/ extensão futura.)
 VARIETY_CAP_FLOOR_BY_DIFFICULTY: dict[DifficultyPreset, int] = {
     DifficultyPreset.CASUAL: 3, DifficultyPreset.NORMAL: 3,
     DifficultyPreset.HARDCORE: 4, DifficultyPreset.NIGHTMARE: 4,
 }
 VARIETY_CAP_MAX_BY_DIFFICULTY: dict[DifficultyPreset, int] = {
-    DifficultyPreset.CASUAL: 4, DifficultyPreset.NORMAL: 4,
-    DifficultyPreset.HARDCORE: 5, DifficultyPreset.NIGHTMARE: 5,
+    DifficultyPreset.CASUAL: 3, DifficultyPreset.NORMAL: 3,
+    DifficultyPreset.HARDCORE: 4, DifficultyPreset.NIGHTMARE: 4,
 }
 VARIETY_CAP_POOL_FRACTION: float = 0.5
 
@@ -671,13 +676,26 @@ RECENCY_PENALTY_BY_DISTANCE: dict[int, float] = {1: 0.12, 2: 0.30, 3: 0.55}
 
 # — ARQUÉTIPO (encontros COMPLEMENTARES) —
 # Penaliza candidato cujo papel já está no encontro (triangulação support/tank/
-# sniper/swarm/area-denial/…), favorecendo combinações que se complementam.
+# sniper/swarm/area-denial/…), favorecendo combinações que se complementam. A
+# penalidade é ESCALONADA por ocorrência (`PENALTY ** nº já presentes`): o 2º do
+# mesmo papel cai ×0.18, o 3º ×0.0324, … — empurra mais forte contra empilhar a
+# mesma função na cauda de pools grandes (ex.: 3 area_denial da Cidade).
 ROLE_REPEAT_PENALTY: float = 0.18
 
 # — PERSISTÊNCIA dos antigos —
 # Nº de vagas (além da base) barradas a specials "frescos", garantindo ao menos um
 # veterano/antigo por encontro grande (só aplica se houver candidato não-fresco).
 VETERAN_RESERVE: int = 1
+
+# — HISTÓRICO DE COMBINAÇÃO (anti-repetição do "triângulo" inteiro) —
+# Além da recência POR TIPO, evitamos repetir o CONJUNTO de specials (o triângulo
+# sem o swarm) das fases vizinhas. A fase imediatamente anterior (distância 1) é
+# PROIBIDA: se o sorteio reproduzir aquele conjunto exato, re-sorteamos com seed
+# perturbado até diferir. As distâncias 2-3 são EVITADAS em best-effort no mesmo
+# re-sorteio (preferimos um conjunto inédito na janela, mas não falhamos por elas).
+# Só atua quando o pool de specials excede o nº de vagas — senão não há como variar.
+COMBINATION_HISTORY: int = 3
+COMBINATION_RESHUFFLE_ATTEMPTS: int = 16
 
 
 def _global_variety_ceiling(pool_size: int, difficulty_preset: DifficultyPreset) -> int:
@@ -695,6 +713,7 @@ def _select_variety_subset(
     difficulty_preset: DifficultyPreset,
     level_number: int,
     recency_penalty: dict[type, float],
+    seed_salt: int = 0,
 ) -> list[type]:
     """Seleciona o subconjunto de tipos de um nível (base + specials).
 
@@ -725,15 +744,22 @@ def _select_variety_subset(
         return t in sig_rank and (newest_rank - sig_rank[t]) < SPOTLIGHT_WINDOW
 
     # adler32 garante seed determinístico entre sessões (hash(str) é randomizado).
+    # seed_salt perturba o sorteio no re-sorteio do histórico de combinação,
+    # mantendo determinismo por (nível, tentativa).
     theme_seed = zlib.adler32(world.theme.value.encode("utf-8"))
-    rng = random.Random(level_number * 7919 + theme_seed)
+    rng = random.Random(level_number * 7919 + theme_seed + seed_salt * 104729)
 
     chosen: list[type] = []
-    chosen_roles: set[str] = set()
+    # Contagem de papéis já no encontro (não um set): a penalidade de repetição é
+    # escalonada por ocorrência. PREMISSA: o base usa papel exclusivo ("volume"/
+    # "swarm"), que nenhum special compartilha — então ocupar o slot do base não
+    # penaliza nenhum candidato. Se um base futuro herdar papel de uma assinatura,
+    # essa assinatura nasceria penalizada já no 1º slot (rever aqui).
+    chosen_roles: dict[str, int] = {}
     base = THEME_BASE_ENEMY.get(world.theme)
     if base is not None and base in spawn_config:
         chosen.append(base)
-        chosen_roles.add(_enemy_role(base))
+        chosen_roles[_enemy_role(base)] = chosen_roles.get(_enemy_role(base), 0) + 1
 
     max_fresh = max(0, cap - 1 - VETERAN_RESERVE)  # vagas p/ frescos além da base
     fresh_count = 0
@@ -757,18 +783,50 @@ def _select_variety_subset(
                 )
             else:
                 w = SPOTLIGHT_BASELINE
-            if _enemy_role(t) in chosen_roles:
-                w *= ROLE_REPEAT_PENALTY
+            role_reps = chosen_roles.get(_enemy_role(t), 0)
+            if role_reps:
+                w *= ROLE_REPEAT_PENALTY**role_reps
             w *= recency_penalty.get(t, 1.0)
             weights.append(max(w, 1e-6))
         idx = rng.choices(range(len(candidates)), weights=weights, k=1)[0]
         pick = candidates[idx]
         chosen.append(pick)
-        chosen_roles.add(_enemy_role(pick))
+        pick_role = _enemy_role(pick)
+        chosen_roles[pick_role] = chosen_roles.get(pick_role, 0) + 1
         if _is_fresh(pick):
             fresh_count += 1
 
     return chosen
+
+
+def _recency_penalty_for_level(
+    composition: EnemySpawnConfig,
+    world: "WorldConfig",
+    difficulty_preset: DifficultyPreset,
+    level_number: int,
+) -> dict[type, float]:
+    """Penalidade de recência POR TIPO para um nível: aproximada rodando a seleção
+    recency-FREE dos `RECENCY_WINDOW` níveis anteriores sobre o pool atual.
+
+    Sem recursão — a seleção dos anteriores não consulta recência. O base nunca é
+    penalizado (sempre aparece). Reusada pelo nível atual e, no histórico de
+    combinação, para reconstruir a composição dos níveis vizinhos.
+    """
+    base = THEME_BASE_ENEMY.get(world.theme)
+    recency_penalty: dict[type, float] = {}
+    for dist in range(1, RECENCY_WINDOW + 1):
+        prev = level_number - dist
+        if prev < world.start_level:
+            break
+        prev_chosen = _select_variety_subset(
+            composition, world, difficulty_preset, prev, {}
+        )
+        factor = RECENCY_PENALTY_BY_DISTANCE.get(dist, 1.0)
+        for t in prev_chosen:
+            if t == base:
+                continue
+            recency_penalty[t] = min(recency_penalty.get(t, 1.0), factor)
+    return recency_penalty
 
 
 def _apply_enemy_variety_cap(
@@ -785,10 +843,13 @@ def _apply_enemy_variety_cap(
         X-2 → 2, …, até o teto. Mais tipos liberados → mais vagas.
       - É só TETO: se o pool ainda tem poucos tipos liberados, mostra menos — sem
         pico de complexidade na entrada de um mundo novo.
-      - A seleção (`_select_variety_subset`) é base + specials, com assinatura,
-        triangulação por papel e JANELA DE RECÊNCIA: tipos vistos nos
-        `RECENCY_WINDOW` níveis anteriores (mesmo mundo) têm a chance reduzida,
-        diversificando encontros consecutivos sem proibir repetição.
+      - A seleção (`_select_variety_subset`) é base (SWARM) + specials, com
+        assinatura, triangulação por papel e JANELA DE RECÊNCIA: tipos vistos nos
+        `RECENCY_WINDOW` níveis anteriores (mesmo mundo) têm a chance reduzida.
+      - HISTÓRICO DE COMBINAÇÃO: além da recência por tipo, o CONJUNTO de specials
+        não pode repetir a fase imediatamente anterior (proibição dura via
+        re-sorteio) e evita as `COMBINATION_HISTORY` fases recentes em best-effort
+        — o triângulo muda de fase em fase, dando sensação de progressão.
     """
     spawn_config = config.enemy_spawn_config
 
@@ -806,28 +867,62 @@ def _apply_enemy_variety_cap(
         else {t: st for t, st in spawn_config.items() if t not in occasional}
     )
 
-    # Penalidade de recência: aproximada rodando a seleção recency-FREE dos níveis
-    # anteriores sobre o pool atual (estável entre níveis adjacentes do mesmo
-    # mundo). Sem recursão — a seleção dos anteriores não consulta recência. O base
-    # nunca é penalizado (sempre aparece).
     base = THEME_BASE_ENEMY.get(world.theme)
-    recency_penalty: dict[type, float] = {}
-    for dist in range(1, RECENCY_WINDOW + 1):
-        prev = config.level_number - dist
-        if prev < world.start_level:
-            break
-        prev_chosen = _select_variety_subset(
-            composition, world, difficulty_preset, prev, {}
-        )
-        factor = RECENCY_PENALTY_BY_DISTANCE.get(dist, 1.0)
-        for t in prev_chosen:
-            if t == base:
-                continue
-            recency_penalty[t] = min(recency_penalty.get(t, 1.0), factor)
 
-    chosen = _select_variety_subset(
-        composition, world, difficulty_preset, config.level_number, recency_penalty
-    )
+    def _specials(types_list: list[type]) -> frozenset:
+        """Conjunto de specials (o triângulo SEM o swarm-base)."""
+        return frozenset(t for t in types_list if t != base)
+
+    # HISTÓRICO DE COMBINAÇÃO — anti-repetição do "triângulo" inteiro (conjunto de
+    # specials). Resolvido RECURSIVAMENTE e memoizado, ancorado no início do mundo:
+    # cada nível compara seu sorteio contra os conjuntos FINAIS (já resolvidos) das
+    # fases recentes — não contra uma aproximação pré-histórico, que falharia quando
+    # a fase anterior tivesse sido re-sorteada. Distância 1 é PROIBIDA (re-sorteio
+    # com seed perturbado força um conjunto diferente); distâncias 2-3 são evitadas
+    # em best-effort. Só atua quando há specials suficientes para variar.
+    # Aproximação herdada da recência: usa o pool (composition) do nível ATUAL para
+    # reconstruir os vizinhos — estável entre níveis adjacentes do mesmo mundo.
+    resolved: dict[int, list[type]] = {}
+
+    def _resolve(level: int) -> list[type]:
+        cached = resolved.get(level)
+        if cached is not None:
+            return cached
+        recency = _recency_penalty_for_level(
+            composition, world, difficulty_preset, level
+        )
+        picked = _select_variety_subset(
+            composition, world, difficulty_preset, level, recency
+        )
+        recent_sets: list[frozenset] = []
+        for dist in range(1, COMBINATION_HISTORY + 1):
+            prev = level - dist
+            if prev < world.start_level:
+                break
+            recent_sets.append(_specials(_resolve(prev)))
+        if recent_sets and _specials(picked) in set(recent_sets):
+            forbidden = recent_sets[0]  # fase anterior — proibição dura
+            avoid = set(recent_sets)  # janela 1-3 — evitar
+            fallback: list[type] | None = None  # ao menos diverge da fase anterior
+            for salt in range(1, COMBINATION_RESHUFFLE_ATTEMPTS + 1):
+                cand = _select_variety_subset(
+                    composition, world, difficulty_preset, level, recency, salt
+                )
+                cand_set = _specials(cand)
+                if cand_set not in avoid:
+                    picked = cand  # inédito na janela inteira — melhor caso
+                    break
+                if cand_set != forbidden and fallback is None:
+                    fallback = cand
+            else:
+                # Nenhum conjunto inédito na janela; use o que ao menos não repete a
+                # fase anterior. Se nem isso (pool pequeno demais), mantém o sorteio.
+                if fallback is not None:
+                    picked = fallback
+        resolved[level] = picked
+        return picked
+
+    chosen = _resolve(config.level_number)
 
     # Composição capada + ameaças ocasionais de volta (sempre presentes quando o
     # gate de spawn as liberou — não foram cortadas pelo teto).
