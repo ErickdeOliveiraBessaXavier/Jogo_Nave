@@ -5,6 +5,8 @@ feito em Python com Pygame. Atravesse biomas distintos, encare ondas crescentes
 de inimigos, derrote os chefes de cada mundo e colete poder-ups para alcançar a
 maior pontuação possível.
 
+**Jogue ou baixe no itch.io:** https://erick-de-oliveira.itch.io/pixel-patrol
+
 ## Funcionalidades Principais
 
 - **Progressão por mundos:** quatro biomas com identidade própria — Espaço,
@@ -44,6 +46,9 @@ Controles de gamepad também são suportados e podem ser ajustados nas
 configurações.
 
 ## Instalação
+
+A forma mais simples é pela página do jogo no **itch.io**:
+https://erick-de-oliveira.itch.io/pixel-patrol
 
 ### Opção 1: Executável (recomendado para jogar)
 
@@ -116,5 +121,6 @@ distribuir.
 
 ## Desenvolvedor
 
-Erick de Oliveira Bessa Xavier — GitHub:
-[@ErickdeOliveiraBessaXavier](https://github.com/ErickdeOliveiraBessaXavier)
+Erick de Oliveira Bessa Xavier
+- GitHub: [@ErickdeOliveiraBessaXavier](https://github.com/ErickdeOliveiraBessaXavier)
+- itch.io: [erick-de-oliveira.itch.io/pixel-patrol](https://erick-de-oliveira.itch.io/pixel-patrol)
