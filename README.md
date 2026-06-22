@@ -47,10 +47,10 @@ configurações.
 
 ### Opção 1: Executável (recomendado para jogar)
 
-1. Baixe o instalador na página de
+1. Baixe o `Pixel_Patrol.exe` mais recente na página de
    [Releases](https://github.com/ErickdeOliveiraBessaXavier/Jogo_Nave/releases)
-2. Execute o instalador e siga as instruções
-3. Inicie o Pixel Patrol pelo menu Iniciar ou pela Área de Trabalho
+2. Dê dois cliques no `Pixel_Patrol.exe` para jogar — não precisa instalar
+   (na primeira execução o Windows pode pedir uma confirmação de segurança)
 
 ### Opção 2: Executar do código-fonte
 
