@@ -1,213 +1,120 @@
-# 🚀 Pixel Patrol - Jogo de Nave Espacial
+# Pixel Patrol — Jogo de Nave Espacial
 
-Um emocionante jogo de tiro espacial com progressão infinita, desenvolvido em Python com Pygame. Desafie suas habilidades evitando asteroides, destruindo naves alienígenas, enfrentando chefes poderosos e coletando poder-ups para alcançar a maior pontuação possível!
+Um jogo de tiro espacial com progressão por mundos e dificuldade adaptativa,
+feito em Python com Pygame. Atravesse biomas distintos, encare ondas crescentes
+de inimigos, derrote os chefes de cada mundo e colete poder-ups para alcançar a
+maior pontuação possível.
 
-## ✨ Funcionalidades Principais
+## Funcionalidades Principais
 
-- **Jogabilidade Infinita:** Sobreviva o máximo que puder contra ondas crescentes de inimigos.
-- **Sistema de Dificuldade Dinâmico:** O jogo se adapta automaticamente à sua performance.
-- **Inimigos Variados:**
-  - Meteoros simples
-  - Naves alienígenas
-  - Meteoros teleguiados
-  - Chefes desafiadores (Boss Spike, Boss Square, Boss Cannon)
-  - Mini naves inimigas
+- **Progressão por mundos:** quatro biomas com identidade própria — Espaço,
+  Montanha, Cidade e Vulcão — cada um com seus inimigos, chefes e trilha sonora.
+- **Dificuldade dinâmica:** o jogo adapta a pressão das ondas à sua performance,
+  com presets (Casual, Normal, Hardcore, Pesadelo).
+- **Variedade de inimigos:** meteoros, naves alienígenas, projéteis teleguiados,
+  drones e tanques urbanos, torres orbitais e mais — apresentados em rampa para
+  não sobrecarregar de uma vez.
+- **Chefes por mundo:** cada bioma culmina em um chefe próprio com padrões de
+  ataque e fases distintas.
+- **Poder-ups com raridade:** Escudo, Tiro Duplo, Velocidade, Tiro Perfurante,
+  Mini Naves, Vida Extra, Multiplicador de Pontuação, Parada de Tempo, Dano
+  Aumentado e o raríssimo Rainbow, que combina vários efeitos de uma vez.
+- **Sistema de aprimoramentos:** desbloqueie e configure melhorias entre partidas.
+- **Progressão meta:** estatísticas e histórico de desempenho ao longo do tempo.
+- **Efeitos visuais imersivos:** explosões, tremor de tela, partículas e vinhetas
+  de dano.
+- **Áudio completo:** música por mundo/chefe e efeitos sonoros.
+- **Configurações personalizáveis:** volume de música/efeitos, resolução
+  (576p a 1080p) e controles.
+- **Suporte a teclado e controle (gamepad).**
+- **Overlay de performance:** pressione F3 durante o jogo para ver FPS e tempo de
+  frame em tempo real.
 
-- **Sistema de Poder-ups com Raridade:**
-  - **Shield (20%):** Proteção temporária contra danos.
-  - **Double Shot (25%):** Tiros duplos para maior poder de fogo.
-  - **Speed Boost (15%):** Aumenta a velocidade de movimento.
-  - **Piercing Shot (15%):** Seus tiros atravessam múltiplos inimigos.
-  - **Mini Ships (10%):** Adiciona naves auxiliares que disparam com você.
-  - **Extra Life (10%):** Ganhe uma vida extra.
-  - **Score Multiplier (4%):** Multiplique sua pontuação.
-  - **Rainbow (1%):** Ativa todos os outros poder-ups simultaneamente!
+## Como Jogar
 
-- **Sistema de Aprimoramentos:** Desbloqueie e configure aprimoramentos entre partidas
-- **Progressão Meta:** Rastreamento de estatísticas e conquistas ao longo do tempo
-- **Efeitos Visuais Imersivos:** Explosões, efeito de tela tremendo e partículas
-- **Sistema de Som Completo:** Música de fundo, efeitos sonoros e múltiplas faixas musicais
-- **Configurações Personalizáveis:** Ajuste volume de música, SFX e controles
-- **Monitoramento de Performance:** Pressione F3 durante o jogo para ver métricas de FPS em tempo real
+### Controles (teclado)
 
-## ⚡ Otimizações de Performance
+- **WASD ou Setas:** mover a nave
+- **Espaço:** atirar (segure para tiro contínuo)
+- **P:** pausar / despausar
+- **ESC:** voltar / sair
+- **F3:** mostrar / ocultar informações de performance
 
-O jogo foi otimizado para oferecer uma experiência suave e fluida:
+Controles de gamepad também são suportados e podem ser ajustados nas
+configurações.
 
-- **Cache de Imagens Escaladas:** Evita recálculo de imagens de corpos celestiais a cada frame
-- **Redução de Elementos Visuais:** Otimização do campo de estrelas para melhor performance
-- **Renderização Eficiente:** Uso de blitting otimizado e gerenciamento de memória
-- **FPS Médio:** ~52 FPS em dificuldade normal
-- **Frame Time Máximo:** <35ms (sem stuttering)
+## Instalação
 
-## 🎮 Como Jogar
+### Opção 1: Executável (recomendado para jogar)
 
-### Controles
-
-- **WASD ou Setas Direcionais:** Mover a nave
-- **Espaço:** Atirar (mantenha pressionado para tiro contínuo)
-- **P:** Pausar/Despausar o jogo
-- **ESC:** Voltar/Sair
-- **F3:** Mostrar/ocultar informações de performance
-
-### Pré-requisitos
-
-- Python 3.8 ou superior
-- Git (opcional)
-
-## 📥 Instalação
-
-### Opção 1: Executável (Recomendado para Usuários)
-
-1. Baixe o instalador `setup_pixel_patrol.exe` na página de [Releases](https://github.com/ErickdeOliveiraBessaXavier/Jogo_Nave/releases)
+1. Baixe o instalador na página de
+   [Releases](https://github.com/ErickdeOliveiraBessaXavier/Jogo_Nave/releases)
 2. Execute o instalador e siga as instruções
-3. Clique em "Pixel Patrol" no menu Iniciar ou na Área de Trabalho para jogar
+3. Inicie o Pixel Patrol pelo menu Iniciar ou pela Área de Trabalho
 
-### Opção 2: Executar do Código-fonte (Para Desenvolvedores)
+### Opção 2: Executar do código-fonte
+
+Pré-requisitos: Python 3.10 ou superior.
 
 ```bash
 # 1. Clone o repositório
 git clone https://github.com/ErickdeOliveiraBessaXavier/Jogo_Nave.git
-
-# 2. Navegue até o diretório do projeto
 cd Jogo_Nave
 
-# 3. (Recomendado) Crie um ambiente virtual
-# Em Windows
+# 2. (Recomendado) Crie um ambiente virtual
+# Windows
 python -m venv venv
 venv\Scripts\activate
-
-# Em macOS/Linux
+# macOS / Linux
 python3 -m venv venv
 source venv/bin/activate
 
-# 4. Instale as dependências
+# 3. Instale as dependências
 pip install -r requirements.txt
 
-# 5. Execute o jogo
+# 4. Execute o jogo
 python run.py
 ```
 
-## 🏗️ Estrutura do Projeto
-
-O projeto é organizado de forma modular para facilitar manutenção e adição de novas funcionalidades:
+## Estrutura do Projeto
 
 ```
 Jogo_Nave/
 ├── game/
-│   ├── assets/              # Fontes, sons, imagens e ícones
-│   │   ├── cursors/         # Cursores personalizados
-│   │   ├── fonts/           # Arquivos de fonte TTF
-│   │   ├── images/          # Sprites e ícones
-│   │   └── sounds/          # Músicas e efeitos sonoros
-│   ├── core/                # Lógica central do jogo
-│   │   ├── assets.py        # Carregamento de recursos
-│   │   ├── config.py        # Configurações globais
-│   │   ├── difficulty.py    # Sistema de dificuldade
-│   │   ├── meta_progression.py  # Sistema de progressão e estatísticas
-│   │   ├── paths.py         # Gerenciamento de caminhos de arquivo
-│   │   ├── sound.py         # Sistema de som
-│   │   ├── upgrades.py      # Sistema de aprimoramentos
-│   │   └── state.py         # Gerenciador de cenas
-│   ├── entities/            # Todas as entidades do jogo
-│   │   ├── ship.py          # Nave do jogador
-│   │   ├── alien.py         # Inimigos alienígenas
-│   │   ├── bullet.py        # Projéteis
-│   │   ├── boss.py          # Chefes
-│   │   └── ...
-│   ├── render/              # Renderização
-│   │   └── renderer.py      # Engine de renderização
-│   ├── scenes/              # Cenas da aplicação
-│   │   ├── main_menu.py     # Menu principal
-│   │   ├── playing.py       # Cena de jogo
-│   │   ├── paused.py        # Tela de pausa
-│   │   ├── settings.py      # Configurações
-│   │   ├── statistics.py    # Estatísticas
-│   │   └── ...
-│   └── systems/             # Sistemas de gerenciamento
-│       ├── entity_manager.py    # Gerencia entidades
-│       ├── collisions.py        # Detecção de colisões
-│       └── spawner.py           # Spawner de inimigos
-├── requirements.txt         # Dependências Python
-├── run.py                   # Ponto de entrada
-├── Pixel_Patrol.spec       # Configuração PyInstaller
-├── installer_script.iss     # Script Inno Setup
-└── README.md                # Este arquivo
+│   ├── assets/        # Fontes, sons, música, imagens e cursores
+│   ├── core/          # Logica central (config, dificuldade, audio, progressao)
+│   ├── entities/      # Nave, inimigos, chefes, projeteis e poder-ups
+│   ├── render/        # Renderizacao do quadro de jogo
+│   ├── scenes/        # Menu, jogo, pausa, configuracoes, estatisticas
+│   └── systems/       # Gerencia de entidades, colisoes e spawn
+├── requirements.txt   # Dependencias Python
+├── pyproject.toml     # Configuracao do projeto
+└── run.py             # Ponto de entrada
 ```
 
-## 📊 Performance e Monitoramento
+## Tecnologias
 
-O jogo inclui ferramentas avançadas de monitoramento:
+- **Linguagem:** Python 3.10+
+- **Biblioteca gráfica:** Pygame
+- **Arquitetura:** cenas com gerenciamento de estado, comunicação por eventos e
+  sistemas desacoplados
 
-### Monitoramento em Tempo Real
-- Pressione **F3** durante o jogo para ver métricas de performance
-- Exibe FPS, tempo de frame, uso de memória e outras estatísticas
+## Solução de Problemas
 
-### Testes Automatizados (Desenvolvimento)
-```bash
-# Executar teste de performance
-python código_teste/benchmarks/performance_test.py --duration 30 --difficulty normal
+- **O jogo não inicia:** confira se o Python e o Pygame estão instalados
+  (`pip install -r requirements.txt`) e se sua placa de vídeo suporta a
+  aceleração usada pelo Pygame.
+- **Sem som:** verifique o volume nas configurações (ESC, Configurações) e os
+  alto-falantes do sistema.
+- **Performance baixa:** reduza a resolução nas configurações e feche outros
+  aplicativos em segundo plano.
 
-# Profiling detalhado
-python código_teste/profiling/profile_game.py --duration 15
+## Licença
 
-# Gerar relatório de otimizações
-python código_teste/optimization_report.py
-```
+Projeto distribuído sob licença aberta. Sinta-se livre para usar, modificar e
+distribuir.
 
-## 🔧 Tecnologias Utilizadas
+## Desenvolvedor
 
-- **Linguagem:** Python 3.8+
-- **Biblioteca Gráfica:** Pygame
-- **Construção:** PyInstaller
-- **Instalador:** Inno Setup
-- **Arquitetura:** Padrão de Cenas com Gerenciamento de Estado
-
-## 🐛 Solução de Problemas
-
-### Jogo não inicia após instalação
-- Tente reinstalar o jogo
-- Verifique se sua placa de vídeo suporta OpenGL
-- Consulte o arquivo de log em `%LOCALAPPDATA%\PixelPatrol\error.log`
-
-### Sons não funcionam
-- Verifique o volume nas configurações (ESC → Configurações)
-- Certifique-se de que seus alto-falantes estão ligados
-
-### Performance baixa
-- Reduza a qualidade gráfica nas configurações
-- Feche outros aplicativos em segundo plano
-- Verifique a temperatura do seu computador
-
-## 📈 Desenvolvimento Futuro
-
-- [ ] Mais tipos de inimigos
-- [ ] Novos poder-ups
-- [ ] Sistema de pontuação online
-- [ ] Melhorias gráficas
-- [ ] Mais faixas de música
-
-## 📝 Licença
-
-Este projeto é distribuído sob licença aberta. Sinta-se livre para usar, modificar e distribuir.
-
-## 🤝 Contribuições
-
-Contribuições são bem-vindas! Se você gostaria de contribuir:
-
-1. Faça um Fork do repositório
-2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
-3. Faça commit das suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Faça Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
-
-## 👨‍💻 Desenvolvedor
-
-**Erick de Oliveira Bessa Xavier**
-- GitHub: [@ErickdeOliveiraBessaXavier](https://github.com/ErickdeOliveiraBessaXavier)
-
----
-
-**Desenvolvido com ❤️ em Python**
-
-Divirta-se jogando! 🎮
+Erick de Oliveira Bessa Xavier — GitHub:
+[@ErickdeOliveiraBessaXavier](https://github.com/ErickdeOliveiraBessaXavier)

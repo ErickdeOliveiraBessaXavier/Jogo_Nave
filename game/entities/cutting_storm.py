@@ -14,7 +14,7 @@ Visual:
 - Fragmentos de rocha (assets de IceGolem).
 - Efeito de vento e turbulência.
 
-Contratos (CLAUDE.md): implementa o contrato de inimigo com on_hit/take_damage
+Contratos (convenções do projeto): implementa o contrato de inimigo com on_hit/take_damage
 próprios (perigo indestrutível — sem mixin), update via update_in_context (§5),
 draw sem efeitos colaterais (§3).
 """

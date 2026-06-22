@@ -40,7 +40,7 @@ Fases (FSM na gema)
 3. ``EXPANSION`` — giro acelera e a órbita abre e fecha; a gema fica exposta
    (janela de vulnerabilidade) enquanto as rochas controlam mais área.
 
-Contratos (CLAUDE.md): herda `EnemyHitMixin` (§9), update via
+Contratos (convenções do projeto): herda `EnemyHitMixin` (§9), update via
 `update_in_context` (§5), `draw` sem efeitos colaterais (§3); reação de dano via
 `HitResult` (§8); fragmentação pelo canal de `fragments`/pool (§7).
 """

@@ -9,7 +9,7 @@ pelas costas; atirar de frente só alimenta o contra-ataque.
 O design atual é uma **estrutura triangular equilibrada** (31x41) com
 emiissores mecânicos menores e um núcleo energético dominante.
 
-Contratos (CLAUDE.md): §5 update polimórfico; §3 `draw` só lê estado; §8 dano via
+Contratos (convenções do projeto): §5 update polimórfico; §3 `draw` só lê estado; §8 dano via
 `HitResult`; §11 `aggressiveness`/`health_multiplier`.
 """
 

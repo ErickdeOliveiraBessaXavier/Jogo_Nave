@@ -9,7 +9,7 @@ círculo** antes da detonação — pressão posicional, não de mira.
 
 Reusa infra existente (sem novos buffers): o telegrama é desenhado pela própria
 entidade durante o windup; o dano é um `area_blast` one-shot. Contratos
-(CLAUDE.md): §5 update polimórfico; §3 `draw` só lê estado; §8 dano via
+(convenções do projeto): §5 update polimórfico; §3 `draw` só lê estado; §8 dano via
 `area_blast`/`HitResult`; §11 `aggressiveness`/`health_multiplier`.
 """
 

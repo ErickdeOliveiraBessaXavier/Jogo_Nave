@@ -14,7 +14,7 @@ o efeito `CaptorEMP` (onda amarela) e **neutraliza os projéteis inimigos próxi
 
 O dano contínuo do raio é entregue por `ctx.new_area_blasts` (mesmo roteador de
 dano de área da explosão do CyberTank / mina), drenado pelo EntityManager para
-`area_blasts` e aplicado à nave pela cena. Contratos (CLAUDE.md): §5 update
+`area_blasts` e aplicado à nave pela cena. Contratos (convenções do projeto): §5 update
 polimórfico; §3 draw só lê estado; §8 dano via HitResult; §11 aggressiveness.
 """
 

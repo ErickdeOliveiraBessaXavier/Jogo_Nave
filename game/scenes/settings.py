@@ -48,7 +48,7 @@ class SettingsView:
         self.preferences = UserPreferences(get_preferences_path())
         self.player_profile = PlayerProfile(get_profile_path())
 
-        # Escala de UI (CLAUDE.md §12). Esta View não é uma Scene, mantém o
+        # Escala de UI (convenções do projeto §12). Esta View não é uma Scene, mantém o
         # próprio fator/helper.
         from ..core.config import config as Config
 

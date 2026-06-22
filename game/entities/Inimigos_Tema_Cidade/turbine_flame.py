@@ -5,7 +5,7 @@ Emissor de uma chama de **foguete em duas camadas**: um **núcleo amarelo-claro*
 estilizada. Usado pela turbina única do `PoliceInterceptor` (e reutilizável por
 outros propulsores do tema).
 
-Convenções (CLAUDE.md): a simulação (emitir/envelhecer/mover) roda no `update()`
+Convenções (convenções do projeto): a simulação (emitir/envelhecer/mover) roda no `update()`
 de quem possui o emissor; o `draw()` só desenha (§3). Os halos reusam o cache
 aditivo bucketizado de `city_glow` (§7: sem alocar surface por partícula/frame).
 O nº de partículas é limitado (`MAX_PARTICLES`) — emissor de unidade especial de

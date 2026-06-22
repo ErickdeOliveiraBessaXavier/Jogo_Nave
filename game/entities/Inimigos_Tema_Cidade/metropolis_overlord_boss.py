@@ -13,7 +13,7 @@ art — sem barra de vida tradicional, a progressão lê-se no estado físico do
   Fase 3 — COLAPSO: destruída ~90% da massa, a estrutura perde integridade: o resto
     explode em fragmentos e os 3 núcleos se separam em segmentos orbitais.
 
-Contratos (CLAUDE.md): adere ao BossProtocol (§5, despacho polimórfico);
+Contratos (convenções do projeto): adere ao BossProtocol (§5, despacho polimórfico);
 `draw()` só desenha (§3); projéteis/adds roteados por `BossUpdateResult`.
 """
 

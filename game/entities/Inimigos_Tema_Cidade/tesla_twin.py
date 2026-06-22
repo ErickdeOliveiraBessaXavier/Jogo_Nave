@@ -13,7 +13,7 @@ avançam juntos, mantendo o arco vertical e tenso (a coordenação mora no
 joga o sobrevivente em **sobrecarga** — fica vermelho, cospe tiros aleatórios
 por 2s e se autodestrói numa descarga.
 
-Contratos (CLAUDE.md): §5 update polimórfico via `update_in_context` (empurra
+Contratos (convenções do projeto): §5 update polimórfico via `update_in_context` (empurra
 bolts/blasts/explosões nos buffers do ctx); §3 `draw` só lê estado; §8 dano via
 `HitResult`/`area_blast`; §11 `aggressiveness`/`health_multiplier` propagados.
 """

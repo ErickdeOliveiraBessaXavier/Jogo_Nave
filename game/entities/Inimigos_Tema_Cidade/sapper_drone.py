@@ -11,7 +11,7 @@ o drone só chama `grant_shield`; a absorção vive no roteador de dano (§8) e 
 render num passe central (§3). O drone não toca no estado interno dos aliados —
 comunica pelo contrato público `health`/`shield_hp` (§1).
 
-Contratos (CLAUDE.md): §5 update polimórfico; §3 `draw` só lê estado; §8 dano via
+Contratos (convenções do projeto): §5 update polimórfico; §3 `draw` só lê estado; §8 dano via
 `HitResult`; §11 `aggressiveness`/`health_multiplier`.
 """
 

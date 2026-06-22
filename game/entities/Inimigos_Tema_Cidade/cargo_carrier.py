@@ -23,7 +23,7 @@ cargueiro horizontalmente enquanto desce, ficando cada vez mais exposta.
 O id interno do spawner é `"cargo_carrier"` (usado nas tabelas de peso/spawn em
 `spawner`, `procedural`, `pipeline` e `fixed_levels`).
 
-Contratos (CLAUDE.md): §5 update polimórfico; §3 `draw` só lê estado; §7 sprites
+Contratos (convenções do projeto): §5 update polimórfico; §3 `draw` só lê estado; §7 sprites
 e meias-caixas cacheados; §8 colisão/dano via `collision_circle`/`on_hit`/
 `HitResult`; §11 `aggressiveness`/`health_multiplier` propagados aos despejados.
 """

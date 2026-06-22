@@ -69,7 +69,7 @@ class StatisticsView:
         self.profile: PlayerProfile | None = None
         self.dialog: ConfirmationDialog | None = None
 
-        # Escala de UI (CLAUDE.md §12). Esta View não é uma Scene, então mantém
+        # Escala de UI (convenções do projeto §12). Esta View não é uma Scene, então mantém
         # o próprio fator/helper.
         from ..core.config import config as Config
 

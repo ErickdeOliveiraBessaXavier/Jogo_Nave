@@ -12,7 +12,7 @@ ofensiva por área, forçando reposicionamento. O bloqueio em si mora no sistema
 de colisão: este expõe `projectile_fields()` (contrato duck-typed do §5),
 consumido por `Collisions.projectiles_vs_blocker_fields`.
 
-Contratos (CLAUDE.md): §5 update polimórfico via `update_in_context`; §3 `draw`
+Contratos (convenções do projeto): §5 update polimórfico via `update_in_context`; §3 `draw`
 só lê estado; §8 dano via `HitResult`; §11 `aggressiveness`/`health_multiplier`.
 """
 

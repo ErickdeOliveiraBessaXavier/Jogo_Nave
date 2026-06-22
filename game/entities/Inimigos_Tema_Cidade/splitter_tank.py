@@ -10,7 +10,7 @@ se parte mais. O split é disparado pelo EntityManager via
 `triggers_special_death` (lê posição/tier/agressividade do alvo e empurra os
 filhos em `enemies`), no espírito do offspring do City Drone.
 
-Contratos (CLAUDE.md): §5 update polimórfico; §3 `draw` só lê estado; §8 dano via
+Contratos (convenções do projeto): §5 update polimórfico; §3 `draw` só lê estado; §8 dano via
 `HitResult`; §11 `aggressiveness`/`health_multiplier` propagados aos filhos.
 """
 

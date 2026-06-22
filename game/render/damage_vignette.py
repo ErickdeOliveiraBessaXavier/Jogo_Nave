@@ -13,7 +13,7 @@ dois modos bem separados:
     continuamente para comunicar perigo iminente. Acima do limite crítico não
     há nenhum estado permanente — só o flash transiente.
 
-Contratos (CLAUDE.md): a cena chama `trigger()`/`update()` (mutação no update);
+Contratos (convenções do projeto): a cena chama `trigger()`/`update()` (mutação no update);
 `draw()` só lê estado e desenha (§3). A vinheta-base é pré-renderizada e cacheada
 por tamanho; o desenho por frame é uma única passada com `set_alpha` blitando só
 as 4 bandas de borda (§7), com early-out quando não há nada visível.

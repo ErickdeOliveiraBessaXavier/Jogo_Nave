@@ -15,7 +15,7 @@ Incoming": som + chevrons na borda enquanto entra). Morte **"Structural
 Failure"**: o EntityManager dispara `TankMeltdown` (via `triggers_special_death`)
 — placas voam (estilhaços visuais) + poça de metal fundido neon.
 
-Contratos (CLAUDE.md): §5 update polimórfico via `update_in_context` (empurra
+Contratos (convenções do projeto): §5 update polimórfico via `update_in_context` (empurra
 shells em `ctx.new_neon_bolts`); §3 `draw` só lê estado (timers/pulso/heading
 alimentados pelo update); §8 dano via `HitResult`; §11 `aggressiveness_multiplier`
 propaga até cadência/velocidade do tiro.

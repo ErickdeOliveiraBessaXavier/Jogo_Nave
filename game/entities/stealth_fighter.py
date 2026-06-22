@@ -16,7 +16,7 @@ Composição visual em camadas independentes (`stealth_fighter_pixel_map`): pata
 superiores/inferiores caminham e se abrem no carregamento; a gema pulsa por glow.
 Colisão por **máscara da silhueta** (não hitbox genérica).
 
-Contratos (CLAUDE.md): herda `EnemyHitMixin` (§9); update via `update_in_context`
+Contratos (convenções do projeto): herda `EnemyHitMixin` (§9); update via `update_in_context`
 (§5); `draw` sem efeitos colaterais (§3); dano via `HitResult` (§8); laser
 telegrafado emitido por buffer do contexto (`new_eye_lasers`).
 """

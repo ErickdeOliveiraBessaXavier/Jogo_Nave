@@ -17,7 +17,7 @@ três esferas são procedurais (orbitam por ângulo) com arcos, cintilação e
 estática. Colisão pela **silhueta real** (olho + 3 esferas) via
 `collision_circles()` (§8), não uma hitbox genérica.
 
-Contratos (CLAUDE.md): herda `EnemyHitMixin` (§9); update via
+Contratos (convenções do projeto): herda `EnemyHitMixin` (§9); update via
 `update_in_context` (§5); `draw` sem efeitos colaterais (§3); orbes emitidos por
 buffer do contexto (`new_orbital_orbs`).
 """

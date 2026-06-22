@@ -15,7 +15,7 @@ class Scene(ABC):
         # Escala de UI relativa ao design base (1280×720). O jogo roda com
         # pygame.SCALED numa resolução lógica escolhida; pixels fixos de UI
         # precisam deste fator para não ficarem desproporcionais fora de 720p
-        # (CLAUDE.md §12). Em 720p ui_scale == 1.0. Resoluções são 16:9, então
+        # (convenções do projeto §12). Em 720p ui_scale == 1.0. Resoluções são 16:9, então
         # um único fator cobre os dois eixos. Subclasses usam self._s(px).
         self.ui_scale: float = Config.SCREEN_WIDTH / 1280.0
 

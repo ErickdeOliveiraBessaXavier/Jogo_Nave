@@ -136,3 +136,16 @@ Output/
 *.avi
 *.mkv
 *.mov
+
+# Documentos de desenvolvimento e planejamento (mantidos só localmente)
+CLAUDE.md
+PLANO_*.md
+NOVO_PLANO_DE_REVISÃO.MD
+código_teste/
+memory/
+.claude/
+
+# Ferramentas e scripts de desenvolvimento (não necessários para rodar)
+.pylintrc
+installer_script.iss
+scripts/

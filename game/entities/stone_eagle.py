@@ -15,7 +15,7 @@ propulsor fica no canto superior-direito. Toda a compensação angular vive num
 único ponto (`SPRITE_FORWARD_DEG` + `_blit_oriented`): trocar a arte no futuro
 exige ajustar só essa constante, sem caçar offsets espalhados.
 
-Contratos (CLAUDE.md): herda `EnemyHitMixin` (§9), update via
+Contratos (convenções do projeto): herda `EnemyHitMixin` (§9), update via
 `update_in_context` (§5), `draw` sem efeitos colaterais (§3).
 """
 

@@ -19,7 +19,7 @@ Morte **"Crash & Burn"**: não explode na hora — o EntityManager dispara o efe
 diagonal soltando fumaça negra e estourar embaixo numa labareda. Tudo cosmético
 (sem dano — os estilhaços são meramente visuais).
 
-Contratos (CLAUDE.md): §5 update polimórfico via `update_in_context`; §3 `draw`
+Contratos (convenções do projeto): §5 update polimórfico via `update_in_context`; §3 `draw`
 só lê estado (timers/pulso/heading/chama alimentados pelo update); §8 dano via
 `HitResult`; §11 `aggressiveness_multiplier` propagado até velocidade/cadência.
 A coordenação da dupla mora na `InterceptorSquad` (§1: sem ler privado do irmão).

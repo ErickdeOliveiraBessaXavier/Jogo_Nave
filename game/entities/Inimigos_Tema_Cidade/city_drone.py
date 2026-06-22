@@ -10,7 +10,7 @@ Vem em 3 variantes de cor (núcleo azul / magenta / laranja — chassi coeso) e
 3 tamanhos (scout leve, padrão, pesado), cada um com HP, pontos e velocidade
 próprios.
 
-Contratos seguidos (CLAUDE.md):
+Contratos seguidos (convenções do projeto):
   §5 update_in_context polimórfico (sem isinstance no manager).
   §7 surface do chassi cacheada por (cell, variante); glow bucketizado.
   §3 draw() só lê estado — pulso/weave são alimentados pelo update().

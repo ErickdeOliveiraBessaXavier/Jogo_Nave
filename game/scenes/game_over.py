@@ -48,7 +48,7 @@ class InitialsEntryWidget:
         self.score = score
         self.app = app
 
-        # Escala de UI (CLAUDE.md §12). Este widget não é uma Scene, então
+        # Escala de UI (convenções do projeto §12). Este widget não é uma Scene, então
         # mantém seu próprio fator e helper. As COL_*/LETTER_HEIGHT de classe
         # são o design base 1280×720; aqui derivamos as versões escaladas.
         self.ui_scale = Config.SCREEN_WIDTH / 1280.0

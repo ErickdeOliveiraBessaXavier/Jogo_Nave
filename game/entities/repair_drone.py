@@ -7,7 +7,7 @@ feixe fabricador saindo dos braços. Enquanto o Reconstrutor viver, o encontro s
 regenera — o counterplay é **priorizá-lo** (frágil, alvo claro). Aproveita
 exatamente a fragilidade do bioma em vez de lutar contra ela.
 
-Decisões de design (CLAUDE.md):
+Decisões de design (convenções do projeto):
   - §1 fronteiras: o drone só lê estado **público** dos aliados (`type`, `x/y`,
     `w/h`, `dead`, `aggressiveness_multiplier`) — nada de atributo privado;
   - §5 polimorfismo: a reconstrução re-instancia `type(ally)` (sem cascata de

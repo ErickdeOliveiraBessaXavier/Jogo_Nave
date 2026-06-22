@@ -10,7 +10,7 @@ O escurecimento entra e sai por fade (sem pop ao spawnar/morrer o boss). Durante
 a cutscene de entrada do Cloud Archmage o alvo é 0 — a intro já tem o próprio
 escurecimento de tela cheia (`get_intro_dim_alpha`), evitando dobra.
 
-Contratos (CLAUDE.md): a cena chama `update()` (mutação); `draw()` só lê e
+Contratos (convenções do projeto): a cena chama `update()` (mutação); `draw()` só lê e
 desenha (§3). A surface é opaca e cacheada por tamanho; o alpha é global via
 `set_alpha` (blit rápido, sem per-pixel) e sem alocação por frame (§7).
 """
