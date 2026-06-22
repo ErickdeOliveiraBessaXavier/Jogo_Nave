@@ -5,7 +5,7 @@ feito em Python com Pygame. Atravesse biomas distintos, encare ondas crescentes
 de inimigos, derrote os chefes de cada mundo e colete poder-ups para alcançar a
 maior pontuação possível.
 
-**Jogue ou baixe no itch.io:** https://erick-de-oliveira.itch.io/pixel-patrol
+**Baixe no itch.io:** https://erick-de-oliveira.itch.io/pixel-patrol
 
 ## Funcionalidades Principais
 
