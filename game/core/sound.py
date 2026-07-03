@@ -579,6 +579,15 @@ class SoundManager:
         """Avança a rotação da playlist ativa (chamado no fim de cada faixa)."""
         self.music_manager.advance_current()
 
+    @require_audio
+    def update_music(self, dt: float):
+        """Avança transições de música pendentes (1×/frame, na thread principal).
+
+        O crossfade é cooperativo (sem worker thread): pygame não é thread-safe,
+        então o carregamento/início da nova faixa acontece aqui, no loop
+        principal, quando o fade-out assíncrono do SDL termina."""
+        self.music_manager.update(dt)
+
     # Alias legado mantido para docs/compat: retoma o tema ambiente atual.
     @require_audio
     def play_background_music(self):

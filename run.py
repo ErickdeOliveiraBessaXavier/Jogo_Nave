@@ -1,3 +1,4 @@
+import faulthandler
 import logging
 import logging.handlers
 import os
@@ -8,6 +9,36 @@ import traceback
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.append(BASE_DIR)
+
+# Handle global mantido vivo pelo processo inteiro: sem a referência, o GC
+# fecharia o arquivo e o faulthandler perderia o dump.
+_crash_dump_file = None
+
+
+def _enable_faulthandler() -> None:
+    """Ativa o `faulthandler` gravando em `crash.log`.
+
+    Crash NATIVO (segfault/access violation em pygame/SDL, stack overflow C)
+    NÃO levanta exceção Python — o `try/except` do `main()` não o captura e o
+    jogo fecha sem `error.log`. O faulthandler intercepta o sinal fatal e
+    escreve o traceback Python do ponto exato do crash neste arquivo.
+
+    Em modo windowed (`sys.stderr is None`) o dump iria para o vazio; por isso
+    apontamos para um arquivo dedicado, mantido aberto pela vida do processo.
+    """
+    global _crash_dump_file
+    try:
+        from game.core.paths import get_user_data_dir
+
+        crash_path = get_user_data_dir() / "crash.log"
+        _crash_dump_file = open(crash_path, "w", encoding="utf-8")
+        faulthandler.enable(file=_crash_dump_file, all_threads=True)
+    except Exception:
+        # Fallback: stderr (pode ser None em windowed, mas não custa tentar).
+        try:
+            faulthandler.enable(all_threads=True)
+        except Exception:
+            pass
 
 
 def _setup_logging():
@@ -54,6 +85,7 @@ def _setup_logging():
 
 def main():
     """Main entry point for the game."""
+    _enable_faulthandler()
     _setup_logging()
     logger = logging.getLogger(__name__)
     logger.info("=== Pixel Patrol iniciado ===")

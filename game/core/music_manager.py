@@ -16,9 +16,7 @@ suave mesmo com uma única faixa (que simplesmente repete).
 from __future__ import annotations
 
 import logging
-import threading
-import time
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import pygame
 
@@ -117,6 +115,13 @@ class MusicManager:
         # de faixa (senão o avanço por fim-de-faixa entraria em laço com a
         # própria transição). Limpo ao final de uma transição bem-sucedida.
         self._suppress_end = False
+        # Transição de faixa PENDENTE (crossfade cooperativo na thread principal).
+        # Enquanto setada, o fade-out assíncrono do SDL está em curso e a nova
+        # faixa será carregada por `update(dt)` quando o contador zerar. Nenhuma
+        # chamada de pygame roda fora da thread principal (pygame não é
+        # thread-safe — ver `_transition_to_music`).
+        self._pending_transition: Optional[Tuple[str, str, int]] = None
+        self._fade_out_remaining: float = 0.0
 
     # ── API pública (data-driven) ──────────────────────────────────────────────
     def play_theme(self, key: Optional[str] = None) -> None:
@@ -228,6 +233,7 @@ class MusicManager:
 
     def stop_music_internal(self) -> None:
         self._suppress_end = True  # parada explícita não deve avançar a rotação
+        self._pending_transition = None  # cancela troca de faixa em andamento
         pygame.mixer.music.stop()
         self.sound_manager.current_music = None
         self.sound_manager.music_paused = False
@@ -255,65 +261,71 @@ class MusicManager:
     def _transition_to_music(
         self, music_path: str, music_type: str, loop: int = 0
     ) -> None:
-        if (
-            self.sound_manager.transition_thread
-            and self.sound_manager.transition_thread.is_alive()
-        ):
-            self._suppress_end = True
-            pygame.mixer.music.stop()
-            self.sound_manager.transition_thread.join()
+        """Agenda a troca de faixa com crossfade — 100% na thread principal.
 
-        # Re-armar DEPOIS do join (o worker anterior limpa a flag ao terminar).
+        pygame/SDL NÃO é thread-safe: fazer `mixer.music.load/play/fadeout`/
+        `set_volume` numa thread de fundo enquanto o loop principal renderiza
+        causava *access violation* intermitente (duas threads dentro do core do
+        pygame ao mesmo tempo — ver crash em `renderer.smoothscale` × worker de
+        música). Aqui o fade é COOPERATIVO: dispara o fade-out assíncrono do SDL
+        agora e agenda o carregamento da nova faixa para quando ele terminar,
+        avançado por `update(dt)` no loop principal. O fade-in usa o `fade_ms`
+        nativo do SDL (também assíncrono, no thread de áudio do próprio SDL) —
+        sem `time.sleep`, sem stepping manual de volume, sem worker thread.
+        """
+        # Intenção committada de forma síncrona (dedup em `_play_rotation`).
         self._suppress_end = True
         self._current_track = music_path
 
-        self.sound_manager.transition_thread = threading.Thread(
-            target=self._smooth_transition,
-            args=(music_path, music_type, loop),
-            daemon=True,
-        )
-        self.sound_manager.transition_thread.start()
-
-    def _smooth_transition(
-        self, music_path: str, music_type: str, loop: int = 0
-    ) -> None:
-        with self.sound_manager.transition_lock:
+        if pygame.mixer.music.get_busy() and not self.sound_manager.music_paused:
             fade_duration = float(BEHAVIOR_CONFIG["music"]["fade_duration"])
-            try:
-                if pygame.mixer.music.get_busy():
-                    pygame.mixer.music.fadeout(int(fade_duration * 1000))
-                    time.sleep(fade_duration)
+            pygame.mixer.music.fadeout(int(fade_duration * 1000))
+            self._pending_transition = (music_path, music_type, loop)
+            self._fade_out_remaining = fade_duration
+        else:
+            # Nada tocando → entra direto com fade-in nativo.
+            self._pending_transition = None
+            self._start_track(music_path, music_type, loop)
 
-                pygame.mixer.music.load(music_path)
+    def update(self, dt: float) -> None:
+        """Avança a transição de música pendente (1×/frame no loop principal).
 
-                # Volume-alvo já com master, multiplicador de boss e ducking
-                # persistente (fonte única: SoundManager.music_target_volume).
-                target_volume = self.sound_manager.music_target_volume(music_type)
+        Espera o fade-out assíncrono do SDL terminar e então carrega/inicia a
+        nova faixa com fade-in nativo. Todas as chamadas de pygame ficam na
+        thread principal — nenhuma corrida com o render."""
+        if self._pending_transition is None:
+            return
+        self._fade_out_remaining -= dt
+        if self._fade_out_remaining <= 0.0:
+            music_path, music_type, loop = self._pending_transition
+            self._pending_transition = None
+            self._start_track(music_path, music_type, loop)
 
-                pygame.mixer.music.set_volume(0)
-                pygame.mixer.music.play(loop)
-
-                fade_steps = 20
-                step_duration = fade_duration / fade_steps
-                for i in range(fade_steps):
-                    volume = target_volume * (i + 1) / fade_steps
-                    pygame.mixer.music.set_volume(volume)
-                    time.sleep(step_duration)
-
-                pygame.mixer.music.set_volume(target_volume)
-                self.sound_manager.current_music = music_type
-                self.sound_manager.music_paused = False
-            except pygame.error as e:
-                logging.error("Erro na transição de música: %s", e)
-            finally:
-                # Nova faixa no ar: liberar o avanço por fim-de-faixa.
-                self._suppress_end = False
+    def _start_track(self, music_path: str, music_type: str, loop: int) -> None:
+        """Carrega e inicia a faixa com fade-in nativo do SDL (main thread)."""
+        fade_duration = float(BEHAVIOR_CONFIG["music"]["fade_duration"])
+        try:
+            pygame.mixer.music.load(music_path)
+            # Volume-alvo já com master, multiplicador de boss e ducking
+            # persistente (fonte única: SoundManager.music_target_volume). O
+            # `fade_ms` do SDL sobe de 0 até este valor.
+            target_volume = self.sound_manager.music_target_volume(music_type)
+            pygame.mixer.music.set_volume(target_volume)
+            pygame.mixer.music.play(loop, 0.0, int(fade_duration * 1000))
+            self.sound_manager.current_music = music_type
+            self.sound_manager.music_paused = False
+        except pygame.error as e:
+            logging.error("Erro na transição de música: %s", e)
+        finally:
+            # Nova faixa no ar: liberar o avanço por fim-de-faixa.
+            self._suppress_end = False
 
     def fade_out_music(self, duration: float | None = None) -> None:
         if duration is None:
             duration = float(BEHAVIOR_CONFIG["music"]["fade_duration"])
 
         self._suppress_end = True
+        self._pending_transition = None  # cancela troca de faixa em andamento
         pygame.mixer.music.fadeout(int(duration * 1000))
         self.sound_manager.current_music = None
         self.sound_manager.music_paused = False

@@ -519,6 +519,10 @@ class GameApp:
                         # para cenas que já reagem ao teclado (não-gameplay).
                         self._synthesize_menu_events(event, current_scene)
 
+                # Avança transições de música pendentes (crossfade cooperativo,
+                # na thread principal — pygame não é thread-safe).
+                sound_manager.update_music(dt)
+
                 # Camada B: cursor virtual via stick direito (fora de gameplay).
                 if current_scene:
                     self._update_virtual_cursor(dt, current_scene)
