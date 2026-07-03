@@ -513,7 +513,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
 # a arena deixa essa lacuna explícita: sem preenchimento com inimigos de outros
 # temas, mostra só o que o tema realmente tem hoje.
 
-TEST_ARENA_ENABLED: bool = False
+TEST_ARENA_ENABLED: bool = True
 
 THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
     # ── MONTANHAS — linhagem própria completa ────────────────────────────────
