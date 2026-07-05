@@ -23,14 +23,19 @@ MUSIC_END_EVENT = pygame.USEREVENT + 1
 
 
 def get_resource_path(relative_path: str) -> str:
-    """Get absolute path to resource, works for dev and for PyInstaller"""
-    base_path: str
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
-    except AttributeError:
-        base_path = os.path.abspath(".")
+    """Get absolute path to resource, works for dev and for PyInstaller.
 
+    Fora do PyInstaller, resolve contra a RAIZ DO PROJETO (derivada de
+    ``__file__``), NÃO o CWD. `os.path.abspath(".")` quebrava a build
+    distribuída rodada de outro diretório (ex.: Downloads): os assets de áudio
+    (caminhos relativos "game/assets/...") não resolviam e sons/música sumiam
+    silenciosamente. Mesmo motivo do BASE_DIR usado nas imagens.
+    """
+    # game/core/sound.py → 3 dirnames = raiz do projeto (contém "game/").
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    base_path = getattr(sys, "_MEIPASS", project_root)
     return os.path.join(base_path, relative_path)
 
 

@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 import pygame
 
+from ..core.assets import BASE_DIR, get_image
 from ..core.config import config as Config
 from ..core.sprite_loader import sprite_loader
 from .enemy_hit_mixin import EnemyHitMixin
@@ -29,8 +30,20 @@ class SatelliteFragment(EnemyHitMixin):
         cached = cls._image_cache.get(fragment_idx)
         if cached is not None:
             return cached
-        path = f"game/assets/images/Sprite_Inimigo_Satélite/Fragmento_0{fragment_idx}.png"
-        raw_image = pygame.image.load(path).convert_alpha()
+        # Caminho resolvido via BASE_DIR (não relativo ao CWD). Um caminho
+        # relativo "game/assets/..." só funcionava rodando da raiz do repo; na
+        # build distribuída (executada de outra pasta, ex.: Downloads) dava
+        # FileNotFoundError e derrubava o jogo ao spawnar o fragmento na fase de
+        # atmosfera. `get_image` ainda traz fallback resiliente (Surface vazia)
+        # em vez de crashar — mesmo padrão do resto das entidades.
+        path = (
+            BASE_DIR
+            / "assets"
+            / "images"
+            / "Sprite_Inimigo_Satélite"
+            / f"Fragmento_0{fragment_idx}.png"
+        )
+        raw_image = get_image(path)
         orig_w, orig_h = raw_image.get_size()
         scale_factor = cls.TARGET_SIZE / max(orig_w, orig_h)
         image = pygame.transform.scale(

@@ -25,8 +25,18 @@ AUDIO_EXTS = (".mp3", ".ogg", ".wav")
 
 
 def get_resource_path(relative_path: str) -> str:
-    """Resolve path no modo dev e no executável (PyInstaller `_MEIPASS`)."""
-    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    """Resolve path no modo dev e no executável (PyInstaller `_MEIPASS`).
+
+    Fora do PyInstaller, resolve contra a RAIZ DO PROJETO (derivada de
+    ``__file__``), não o CWD — senão a build rodada de outro diretório (ex.:
+    Downloads) não acha os assets de áudio e a música some. Ver o mesmo fix em
+    `sound.get_resource_path` e no BASE_DIR das imagens.
+    """
+    # game/core/music_library.py → 3 dirnames = raiz do projeto (contém "game/").
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    base_path = getattr(sys, "_MEIPASS", project_root)
     return os.path.join(base_path, relative_path)
 
 

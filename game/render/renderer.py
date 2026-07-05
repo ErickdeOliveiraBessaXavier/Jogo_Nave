@@ -347,7 +347,13 @@ class Renderer:
         # grad_w é só a resolução interna de amostragem do gradiente (é
         # esticado para a largura da tela depois) — independe da resolução.
         grad_w = 200
-        grad_surf = pygame.Surface((grad_w, 1), pygame.SRCALPHA)
+        # Altura 2 (não 1): ao expandir na vertical, o smoothscale interpola com
+        # a linha vizinha; uma origem de 1px de altura faz o filtro ler a linha
+        # seguinte (inexistente) → leitura fora dos limites → access violation
+        # intermitente no Windows (depende do layout de heap). O gradiente varia
+        # só na horizontal, então duplicar a linha é visualmente idêntico e
+        # seguro — mesmo padrão do gradiente em render/backgrounds/atmosphere.py.
+        grad_surf = pygame.Surface((grad_w, 2), pygame.SRCALPHA)
         for x in range(grad_w):
             dist_center = abs(x - grad_w // 2)
             alpha = max(
@@ -357,6 +363,7 @@ class Renderer:
             )
             if alpha > 0:
                 grad_surf.set_at((x, 0), (0, 0, 0, alpha))
+                grad_surf.set_at((x, 1), (0, 0, 0, alpha))
 
         overlay = pygame.transform.smoothscale(
             grad_surf, (Config.SCREEN_WIDTH, panel_h)
