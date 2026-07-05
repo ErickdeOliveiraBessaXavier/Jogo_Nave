@@ -34,7 +34,12 @@ from ..core.assets import get_font
 from ..core.config import SlimeBossState
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
-from ..core.levels import LevelConfig, LevelManager, get_level_config
+from ..core.levels import (
+    LevelConfig,
+    LevelManager,
+    get_level_config,
+    set_run_variety_salt,
+)
 from ..core.meta_progression_service import MetaProgressionService
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
@@ -395,6 +400,11 @@ class PlayingScene(Scene):
 
     def _init_systems(self) -> None:
         """Instancia sistemas de jogo (EntityManager, spawners, colisões)."""
+        # Semente de variedade por-partida: sorteada UMA vez por sessão de jogo,
+        # antes de gerar qualquer fase. Faz a seleção de inimigos variar entre runs
+        # (rejogar traz specials diferentes; todo tipo ganha chance real ao longo
+        # das tentativas) sem quebrar a anti-repetição ENTRE fases da mesma run.
+        set_run_variety_salt(random.randrange(1, 2**31))
         player_count = len(self.roster.all_slots())
         initial_level_number = self.current_level_index + 1
         base_config = get_level_config(
@@ -1438,20 +1448,32 @@ class PlayingScene(Scene):
                     self.shooting.fire(ship, self.player_damage_multiplier)
 
     def _apply_environmental_effects(self, dt: float) -> None:
-        """Aplica efeitos ambientais (como vento) à nave do jogador."""
-        if not self.can_handle_gameplay_actions() or self.ship.is_entering:
+        """Aplica efeitos ambientais (como vento) às naves de TODOS os jogadores.
+
+        O vento do MountainPropeller precisa afetar cada nave viva por conta
+        própria — antes só o primário (`self.ship`) era empurrado/desacelerado, e
+        o P2 em co-op ficava imune. O `wind_slow_factor` é por-nave (ship.py), lido
+        no movimento de cada nave (ship_movement.py).
+        """
+        if not self.can_handle_gameplay_actions():
             return
 
-        # Vento do MountainPropeller
-        wind_slow_factor = 1.0
-        for prop in self.entity_manager.mountain_propellers:
-            if prop.is_blowing():
-                wind_rect = prop.get_wind_rect()
-                if self.ship.rect.colliderect(wind_rect):
-                    self.ship.x -= prop.PUSH_FORCE * dt
-                    wind_slow_factor = prop.SLOW_SPEED_MULT
+        # Só as hélices soprando importam — calculado uma vez p/ todas as naves.
+        blowing = [
+            prop for prop in self.entity_manager.mountain_propellers if prop.is_blowing()
+        ]
 
-        self.ship.wind_slow_factor = wind_slow_factor
+        for slot in self.roster.alive_slots():
+            ship = slot.ship
+            if ship.is_entering:
+                ship.wind_slow_factor = 1.0
+                continue
+            wind_slow_factor = 1.0
+            for prop in blowing:
+                if ship.rect.colliderect(prop.get_wind_rect()):
+                    ship.x -= prop.PUSH_FORCE * dt
+                    wind_slow_factor = prop.SLOW_SPEED_MULT
+            ship.wind_slow_factor = wind_slow_factor
 
     def _update_spawners(self, dt: float) -> None:
         if (

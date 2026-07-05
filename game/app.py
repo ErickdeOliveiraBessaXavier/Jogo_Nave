@@ -63,10 +63,7 @@ class GameApp:
         self.event_bus = EventBus()
 
         # Carregar preferências de sistema (vídeo, áudio, controles)
-        # Detecta se é a primeira execução do jogo ANTES de carregar — útil
-        # para decidir auto-ativação de gamepad em quem nunca abriu Settings.
         prefs_path = get_preferences_path()
-        is_first_run = not prefs_path.exists()
         self.preferences = UserPreferences(prefs_path)
 
         # Aplica a qualidade visual escolhida ao singleton global no boot, antes
@@ -139,19 +136,15 @@ class GameApp:
         # Suporte a controle Xbox: singleton compartilhado com a Input e cenas.
         self.gamepad: GamepadManager = GamepadManager()
         self.gamepad.init(prefer_slot_1=self.preferences.p1_prefers_keyboard)
-        # Primeira execução com controle plugado: ativa por padrão pra evitar
-        # que o jogador precise abrir Settings antes de jogar. Sessões
-        # posteriores respeitam o toggle (mesmo que ele tenha sido desligado).
-        if (
-            is_first_run
-            and self.gamepad.connected
-            and not self.preferences.gamepad_enabled
-        ):
-            self.preferences.gamepad_enabled = True
-            self.preferences.save()
-            logger.info(
-                "Primeira execução com controle conectado — gamepad ativado por padrão."
-            )
+        # Auto-ativação do gamepad: liga sozinho quando há controle conectado e o
+        # usuário nunca fez uma escolha explícita (checkbox nunca tocado). Isto
+        # substitui o antigo gate por `is_first_run`, que perdia a corrida de
+        # enumeração do SDL — o controle costuma chegar via JOYDEVICEADDED alguns
+        # frames APÓS o init, quando a checagem inicial já passou, deixando o
+        # checkbox desmarcado mesmo com controle presente. `_maybe_autoenable_gamepad`
+        # é reexecutado no hot-plug (ver `run`), cobrindo qualquer timing. Feita a
+        # escolha, ela é sempre respeitada.
+        self._maybe_autoenable_gamepad()
         self.gamepad.set_enabled(self.preferences.gamepad_enabled)
 
         if self.gamepad.connected:
@@ -195,6 +188,24 @@ class GameApp:
         return any(
             self.gamepad.is_slot_active(slot) for slot in range(MAX_GAMEPAD_SLOTS)
         )
+
+    def _maybe_autoenable_gamepad(self) -> None:
+        """Liga o gamepad automaticamente ao detectar um controle, desde que o
+        usuário ainda não tenha feito uma escolha explícita.
+
+        Chamado no boot e a cada `JOYDEVICEADDED` (hot-plug). Cobre a corrida de
+        enumeração do SDL: se o controle só é reconhecido alguns frames após o
+        init, o auto-ativar do boot é reexecutado quando ele de fato conecta —
+        marcando o checkbox sem exigir ação manual. Assim que o usuário marca ou
+        desmarca o toggle (`gamepad_choice_made`), nunca sobrescrevemos a escolha.
+        """
+        if self.preferences.gamepad_choice_made:
+            return
+        if not self.gamepad.connected or self.preferences.gamepad_enabled:
+            return
+        self.preferences.gamepad_enabled = True
+        self.preferences.save()
+        logger.info("Controle detectado — gamepad ativado automaticamente.")
 
     def _set_cursor_mode(self, mode: str) -> None:
         """Alterna entre ``cursor`` (mouse/stick) e ``focus`` (DPad/teclado).
@@ -500,6 +511,11 @@ class GameApp:
                 for event in pygame.event.get():
                     # Hot-plug e cache de hat antes de qualquer dispatch.
                     self.gamepad.handle_event(event)
+                    # Controle recém-conectado: reexecuta o auto-ativar (cobre a
+                    # corrida de enumeração do startup e o hot-plug em jogo).
+                    if event.type == pygame.JOYDEVICEADDED:
+                        self._maybe_autoenable_gamepad()
+                        self.gamepad.set_enabled(self.preferences.gamepad_enabled)
                     # Atualiza modo cursor/focus ANTES do dispatch — assim a
                     # cena já recebe o estado correto se quiser consultar.
                     self._track_input_mode(event)

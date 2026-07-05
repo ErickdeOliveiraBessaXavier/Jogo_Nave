@@ -697,6 +697,29 @@ VETERAN_RESERVE: int = 1
 COMBINATION_HISTORY: int = 3
 COMBINATION_RESHUFFLE_ATTEMPTS: int = 16
 
+# — SEMENTE POR-PARTIDA (variedade entre runs) —
+# A seleção de variedade é determinística por nível: sem isto, rejogar a MESMA
+# fase (ou uma nova campanha) traz sempre os MESMOS specials, e um tipo que perde
+# o sorteio (ex.: IceGolem no Mundo 1) fica com chance ZERO para sempre, para todo
+# jogador. Este salt é sorteado UMA vez por run (início da PlayingScene, via
+# `set_run_variety_salt`) e somado à seed de TODO nível. Como é constante durante a
+# run, a reconstrução de níveis vizinhos (recência + histórico de combinação) segue
+# batendo com a realidade — a anti-repetição ENTRE fases é preservada. Entre runs
+# distintas o salt muda, então cada tipo (inclusive os raros) ganha chance real ao
+# longo das tentativas. Default 0 = determinístico (análise/testes reproduzíveis).
+_RUN_VARIETY_SALT: int = 0
+
+
+def set_run_variety_salt(salt: int) -> None:
+    """Define o salt de variedade da run atual (0 = determinístico, legado).
+
+    Chamado no início de cada sessão de jogo. Afeta só QUAIS tipos são sorteados
+    por nível — não muda o teto de variedade, os gates de introdução, nem a
+    dificuldade. Persistência global (não thread) espelha `TEST_ARENA_ENABLED`.
+    """
+    global _RUN_VARIETY_SALT
+    _RUN_VARIETY_SALT = int(salt) & 0x7FFFFFFF
+
 
 def _global_variety_ceiling(pool_size: int, difficulty_preset: DifficultyPreset) -> int:
     """Teto de variedade GLOBAL dirigido pelo tamanho do pool (sem exceção por
@@ -745,9 +768,16 @@ def _select_variety_subset(
 
     # adler32 garante seed determinístico entre sessões (hash(str) é randomizado).
     # seed_salt perturba o sorteio no re-sorteio do histórico de combinação,
-    # mantendo determinismo por (nível, tentativa).
+    # mantendo determinismo por (nível, tentativa). `_RUN_VARIETY_SALT` varia por
+    # run (constante DURANTE a run — ver set_run_variety_salt): dá variedade entre
+    # partidas sem quebrar a reconstrução de vizinhos (que usa o mesmo salt global).
     theme_seed = zlib.adler32(world.theme.value.encode("utf-8"))
-    rng = random.Random(level_number * 7919 + theme_seed + seed_salt * 104729)
+    rng = random.Random(
+        level_number * 7919
+        + theme_seed
+        + seed_salt * 104729
+        + _RUN_VARIETY_SALT * 2654435761
+    )
 
     chosen: list[type] = []
     # Contagem de papéis já no encontro (não um set): a penalidade de repetição é

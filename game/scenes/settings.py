@@ -466,6 +466,8 @@ class SettingsView:
                         self._apply_live_control_settings()
                     elif key == "gamepad_enabled":
                         self.preferences.gamepad_enabled = self.toggles[key]
+                        # Escolha explícita: trava o auto-ligar do gamepad.
+                        self.preferences.gamepad_choice_made = True
                         self._apply_live_control_settings()
                     self.preferences.save()
                     return True
@@ -590,6 +592,8 @@ class SettingsView:
                     self._apply_live_control_settings()
                 elif key == "gamepad_enabled":
                     self.preferences.gamepad_enabled = self.toggles[key]
+                    # Escolha explícita: trava o auto-ligar do gamepad.
+                    self.preferences.gamepad_choice_made = True
                     self._apply_live_control_settings()
                 self.preferences.save()
                 return True
@@ -646,6 +650,7 @@ class SettingsView:
         self._app.preferences.mouse_control = self.preferences.mouse_control
         self._app.preferences.auto_fire = self.preferences.auto_fire
         self._app.preferences.gamepad_enabled = self.preferences.gamepad_enabled
+        self._app.preferences.gamepad_choice_made = self.preferences.gamepad_choice_made
         self._app.preferences.p1_prefers_keyboard = self.preferences.p1_prefers_keyboard
 
         # Sincroniza sistema de input global.

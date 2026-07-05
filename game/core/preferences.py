@@ -31,6 +31,12 @@ class UserPreferences:
         self.auto_fire: bool = False
         self.show_controls_modal: bool = True
         self.gamepad_enabled: bool = False
+        # True depois que o usuário marca/desmarca o checkbox do controle na
+        # tela de opções. Enquanto False, o jogo pode LIGAR o gamepad sozinho
+        # quando um controle é detectado (inclusive por hot-plug, cobrindo a
+        # corrida de enumeração do SDL no startup). Uma vez feita a escolha,
+        # a preferência do usuário nunca é sobrescrita automaticamente.
+        self.gamepad_choice_made: bool = False
         # Multiplayer local: roteamento de gamepads recém-conectados.
         # Quando `p1_prefers_keyboard=True`, gamepads novos vão pro slot 1 (P2)
         # mesmo que o slot 0 esteja vazio — P1 fica forçado ao teclado.
@@ -84,6 +90,9 @@ class UserPreferences:
                     "show_controls_modal", self.show_controls_modal
                 )
                 self.gamepad_enabled = data.get("gamepad_enabled", self.gamepad_enabled)
+                self.gamepad_choice_made = data.get(
+                    "gamepad_choice_made", self.gamepad_choice_made
+                )
                 self.p1_prefers_keyboard = data.get(
                     "p1_prefers_keyboard", self.p1_prefers_keyboard
                 )
@@ -107,6 +116,7 @@ class UserPreferences:
                 "auto_fire": self.auto_fire,
                 "show_controls_modal": self.show_controls_modal,
                 "gamepad_enabled": self.gamepad_enabled,
+                "gamepad_choice_made": self.gamepad_choice_made,
                 "p1_prefers_keyboard": self.p1_prefers_keyboard,
                 "p2_coop_enabled": self.p2_coop_enabled,
             }
@@ -127,6 +137,7 @@ class UserPreferences:
         self.auto_fire = False
         self.show_controls_modal = True
         self.gamepad_enabled = False
+        self.gamepad_choice_made = False
         self.p1_prefers_keyboard = False
         self.p2_coop_enabled = True
         self.save()

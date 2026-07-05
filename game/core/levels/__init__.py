@@ -28,6 +28,7 @@ from .pipeline import (
     THEME_ENEMY_REPLACEMENTS,
     THEME_FALLBACK_ENEMIES,
     get_level_config,
+    set_run_variety_salt,
 )
 from .procedural import (
     THEME_FEATURES,
@@ -47,6 +48,7 @@ __all__ = [
     "DifficultyCurves",
     "ProceduralLevelGenerator",
     "get_level_config",
+    "set_run_variety_salt",
     "calculate_dynamic_enemy_cap",
     "LevelAnalyzer",
     "LevelManager",

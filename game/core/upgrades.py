@@ -434,11 +434,49 @@ class BlackHoleUpgrade(ActiveUpgrade):
 
 
 class AirStrikeUpgrade(ActiveUpgrade):
+    """Ultimate: bombardeio aéreo massivo — uma salva de bombas cai em
+    posições aleatórias da tela ao longo de alguns segundos.
+
+    Um refactor antigo reduziu isto a uma única bomba fixa perto da nave (a
+    salva foi perdida). Aqui a contagem e o intervalo ficam na classe e o
+    disparo é sequencial, no mesmo padrão de WingmanUpgrade/GravityBombUpgrade:
+    ``on_activate_effect`` arma a contagem e ``update`` solta uma bomba por vez.
+    Como ``base_duration`` é 0, a salva não depende de ``self.active`` (o
+    contador ``_bombs_remaining`` é a única condição), igual ao Wingman.
+    """
+
+    BOMB_COUNT = 10
+    SPAWN_INTERVAL = 0.25  # segundos entre cada bomba da salva
+
+    def __init__(self, meta: UpgradeMeta) -> None:
+        super().__init__(meta)
+        self._bombs_remaining = 0
+        self._spawn_timer = 0.0
+
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
-        ship = self._ctx_ship(ctx)
+        # Primeira bomba cai na hora (feedback imediato); o resto na salva.
+        self._bombs_remaining = self.BOMB_COUNT
+        self._spawn_timer = 0.0
+        self._spawn_bomb(ctx)
+        self._bombs_remaining -= 1
+
+    def update(self, dt: float, ctx: Optional[UpgradeContextProtocol] = None) -> None:
+        super().update(dt, ctx)
+        if self._bombs_remaining > 0 and ctx is not None:
+            self._spawn_timer += dt
+            if self._spawn_timer >= self.SPAWN_INTERVAL:
+                self._spawn_timer = 0.0
+                self._spawn_bomb(ctx)
+                self._bombs_remaining -= 1
+
+    def _spawn_bomb(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         em = self._ctx_entity_manager(ctx)
-        if ship and em and hasattr(em, "spawn_air_strike"):
-            em.spawn_air_strike(ship.x + ship.w / 2, ship.y - 200)
+        if not em or not hasattr(em, "spawn_air_strike"):
+            return
+        sw, sh = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+        tx = random.uniform(sw * 0.08, sw * 0.92)
+        ty = random.uniform(sh * 0.10, sh * 0.75)
+        em.spawn_air_strike(tx, ty)
 
 
 class CannonTowerUpgrade(ActiveUpgrade):
@@ -705,12 +743,12 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     UpgradeType.AIR_STRIKE: UpgradeMeta(
         UpgradeType.AIR_STRIKE,
         "AIR",
-        "Bombardeio aéreo massivo.",
+        "10 bombas caem em áreas aleatórias.",
         "air_strike",
         UpgradeCategory.OFFENSIVE,
         180,
         0,
-        30,
+        None,
         3,
     ),
     UpgradeType.CANNON_TOWER: UpgradeMeta(
