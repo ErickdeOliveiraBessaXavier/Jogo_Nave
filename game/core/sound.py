@@ -405,7 +405,9 @@ class SoundManager:
             # Toca em loop infinito (-1)
             self.metropolis_laser_channel.play(sound, loops=-1)
         else:
-            logging.warning("SoundManager: som 'metropolis_overlord_laser' não encontrado!")
+            logging.warning(
+                "SoundManager: som 'metropolis_overlord_laser' não encontrado!"
+            )
 
     @require_audio
     def stop_metropolis_laser_loop(self):
@@ -725,5 +727,31 @@ class AudioController:
             logging.exception("Erro ao encerrar o AudioController")
 
 
-# Instância global do gerenciador de som (fachada)
-sound_manager = AudioController()
+class _LazyAudioController:
+    """Proxy que faz lazy initialization do AudioController.
+
+    Permite que sound_manager seja importado ANTES de pygame.init() ser chamado,
+    mas a instância real só é criada na primeira USE (quando pygame.mixer está
+    pronto). Sem isto, pygame.mixer.get_init() falha no import time.
+    """
+
+    _instance: AudioController | None = None
+
+    def __getattr__(self, name: str) -> Any:
+        """Intercepta acesso a atributos, criando a instância se necessário."""
+        if self._instance is None:
+            self._instance = AudioController()
+        return getattr(self._instance, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Intercepta atribuição."""
+        if name == "_instance":
+            object.__setattr__(self, name, value)
+        else:
+            if self._instance is None:
+                self._instance = AudioController()
+            setattr(self._instance, name, value)
+
+
+# Instância global do gerenciador de som (proxy com lazy init)
+sound_manager = _LazyAudioController()

@@ -123,6 +123,13 @@ class MusicManager:
         self._pending_transition: Optional[Tuple[str, str, int]] = None
         self._fade_out_remaining: float = 0.0
 
+    def _is_mixer_ready(self) -> bool:
+        """Verifica se pygame.mixer foi inicializado com sucesso."""
+        return (
+            getattr(self.sound_manager, "audio_available", True)
+            and pygame.mixer.get_init() is not None
+        )
+
     # ── API pública (data-driven) ──────────────────────────────────────────────
     def play_theme(self, key: Optional[str] = None) -> None:
         """Toca a música ambiente do tema `key` (ou retoma o tema atual se None)."""
@@ -222,16 +229,22 @@ class MusicManager:
 
     # ── Pausa / retomada / parada ──────────────────────────────────────────────
     def pause_music_internal(self) -> None:
+        if not self._is_mixer_ready():
+            return
         if not self.sound_manager.music_paused:
             pygame.mixer.music.pause()
             self.sound_manager.music_paused = True
 
     def resume_music_internal(self) -> None:
+        if not self._is_mixer_ready():
+            return
         if self.sound_manager.music_paused:
             pygame.mixer.music.unpause()
             self.sound_manager.music_paused = False
 
     def stop_music_internal(self) -> None:
+        if not self._is_mixer_ready():
+            return
         self._suppress_end = True  # parada explícita não deve avançar a rotação
         self._pending_transition = None  # cancela troca de faixa em andamento
         pygame.mixer.music.stop()
@@ -244,6 +257,8 @@ class MusicManager:
     # ── Volume ─────────────────────────────────────────────────────────────────
     def set_music_volume(self, volume: float) -> None:
         self.sound_manager.music_volume = max(0.0, min(1.0, volume))
+        if not self._is_mixer_ready():
+            return
         if self.sound_manager.current_music is not None:
             pygame.mixer.music.set_volume(self.sound_manager.music_target_volume())
 
@@ -277,6 +292,9 @@ class MusicManager:
         self._suppress_end = True
         self._current_track = music_path
 
+        if not self._is_mixer_ready():
+            return
+
         if pygame.mixer.music.get_busy() and not self.sound_manager.music_paused:
             fade_duration = float(BEHAVIOR_CONFIG["music"]["fade_duration"])
             pygame.mixer.music.fadeout(int(fade_duration * 1000))
@@ -303,6 +321,9 @@ class MusicManager:
 
     def _start_track(self, music_path: str, music_type: str, loop: int) -> None:
         """Carrega e inicia a faixa com fade-in nativo do SDL (main thread)."""
+        if not self._is_mixer_ready():
+            return
+
         fade_duration = float(BEHAVIOR_CONFIG["music"]["fade_duration"])
         try:
             pygame.mixer.music.load(music_path)
@@ -321,6 +342,9 @@ class MusicManager:
             self._suppress_end = False
 
     def fade_out_music(self, duration: float | None = None) -> None:
+        if not self._is_mixer_ready():
+            return
+
         if duration is None:
             duration = float(BEHAVIOR_CONFIG["music"]["fade_duration"])
 
