@@ -1460,7 +1460,7 @@ class Collisions:
         get_barrier = getattr(boss, "barrier_circle", None)
         if not callable(get_barrier):
             return
-        circle = get_barrier()
+        circle: Any = get_barrier()
         if circle is None:
             return
         bcx, bcy, br = circle

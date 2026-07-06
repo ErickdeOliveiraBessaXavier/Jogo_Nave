@@ -53,6 +53,8 @@ from ..entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone
 from ..entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
 from ..entities.Inimigos_Tema_Cidade.tesla_link import TeslaLink
 from ..entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin
+from ..entities.Inimigos_Tema_Espaco.dreadnought import Dreadnought
+from ..entities.Inimigos_Tema_Espaco.gravity_well import GravityWell
 from ..entities.meteor import Meteor
 from ..entities.meteor_pool import MeteorPool
 from ..entities.mountain_mage import MountainMage
@@ -102,6 +104,8 @@ SPAWNER_CAP_SATELLITE: int = 5  # Limite máximo de Satélites simultâneos
 SPAWNER_CAP_ORBITAL_TURRET: int = 2  # Torretas sniper (perch no alto)
 SPAWNER_CAP_STEALTH_FIGHTER: int = 3  # Caças furtivos (investida em diagonal)
 SPAWNER_CAP_REPAIR_DRONE: int = 2  # Drones de suporte (curam aliados)
+SPAWNER_CAP_GRAVITY_WELL: int = 2  # Poços gravitacionais (negação de área, ancorados)
+SPAWNER_CAP_DREADNOUGHT: int = 1  # Couraçado "gatekeeper" — sempre sozinho
 SPAWNER_CAP_ICE_GOLEM: int = 1  # Golem de Gelo (tanque — sempre sozinho)
 SPAWNER_CAP_CUTTING_STORM: int = 2  # Tempestades cortantes (negação de área)
 SPAWNER_CAP_STONE_EAGLE: int = 3  # Águias de pedra (mergulho)
@@ -482,6 +486,8 @@ class EnemySpawner:
             "OrbitalTurret": "orbital_turret",
             "StealthFighter": "stealth_fighter",
             "RepairDrone": "repair_drone",
+            "GravityWell": "gravity_well",
+            "Dreadnought": "dreadnought",
             "IceGolem": "ice_golem",
             "CuttingStorm": "cutting_storm",
             "StoneEagle": "stone_eagle",
@@ -519,6 +525,8 @@ class EnemySpawner:
             MirrorPylon,
             OrbitalTurret,
             RepairDrone,
+            GravityWell,
+            Dreadnought,
             IceGolem,
             CuttingStorm,
         ):
@@ -656,6 +664,8 @@ class EnemySpawner:
             "orbital_turret": 0,
             "stealth_fighter": 0,
             "repair_drone": 0,
+            "gravity_well": 0,
+            "dreadnought": 0,
             "ice_golem": 0,
             "cutting_storm": 0,
             "stone_eagle": 0,
@@ -716,6 +726,10 @@ class EnemySpawner:
                 counts["stealth_fighter"] += 1
             elif isinstance(enemy, RepairDrone):
                 counts["repair_drone"] += 1
+            elif isinstance(enemy, GravityWell):
+                counts["gravity_well"] += 1
+            elif isinstance(enemy, Dreadnought):
+                counts["dreadnought"] += 1
             elif isinstance(enemy, IceGolem):
                 counts["ice_golem"] += 1
             elif isinstance(enemy, CuttingStorm):
@@ -812,6 +826,16 @@ class EnemySpawner:
         if (
             enemy_type == RepairDrone
             and counts["repair_drone"] >= SPAWNER_CAP_REPAIR_DRONE
+        ):
+            return True
+        if (
+            enemy_type == GravityWell
+            and counts["gravity_well"] >= SPAWNER_CAP_GRAVITY_WELL
+        ):
+            return True
+        if (
+            enemy_type == Dreadnought
+            and counts["dreadnought"] >= SPAWNER_CAP_DREADNOUGHT
         ):
             return True
         if enemy_type == IceGolem and counts["ice_golem"] >= SPAWNER_CAP_ICE_GOLEM:
@@ -914,6 +938,16 @@ class EnemySpawner:
             if (
                 enemy_type == RepairDrone
                 and counts["repair_drone"] >= SPAWNER_CAP_REPAIR_DRONE
+            ):
+                return False
+            if (
+                enemy_type == GravityWell
+                and counts["gravity_well"] >= SPAWNER_CAP_GRAVITY_WELL
+            ):
+                return False
+            if (
+                enemy_type == Dreadnought
+                and counts["dreadnought"] >= SPAWNER_CAP_DREADNOUGHT
             ):
                 return False
             if enemy_type == IceGolem and counts["ice_golem"] >= SPAWNER_CAP_ICE_GOLEM:
@@ -1154,6 +1188,12 @@ class EnemySpawner:
         if enemy_type == RepairDrone:
             return self._spawn_repair_drone(entity_manager, is_side_scroll)
 
+        if enemy_type == GravityWell:
+            return self._spawn_gravity_well(entity_manager, is_side_scroll)
+
+        if enemy_type == Dreadnought:
+            return self._spawn_dreadnought(entity_manager, is_side_scroll)
+
         if enemy_type == IceGolem:
             return self._spawn_ice_golem(entity_manager, is_side_scroll)
 
@@ -1260,6 +1300,50 @@ class EnemySpawner:
         )
         drone.health = max(1, int(drone.health * self.enemy_health_multiplier))
         entity_manager.enemies.append(drone)
+        return True
+
+    def _spawn_gravity_well(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        # Ancora num ponto do campo (não desce): entra pela borda e desliza até
+        # a âncora. Negação de área — evita o canto extremo para não ser trivial.
+        w = h = GravityWell.SIZE
+        anchor_x = random.uniform(
+            Config.SCREEN_WIDTH * 0.32, Config.SCREEN_WIDTH * 0.82
+        )
+        anchor_y = random.uniform(
+            Config.SCREEN_HEIGHT * 0.30, Config.SCREEN_HEIGHT * 0.62
+        )
+        x, y = self._entry_position(w, h, is_side_scroll)
+        well = GravityWell(
+            x,
+            y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+            anchor=(anchor_x, anchor_y),
+        )
+        well.health = max(1, int(well.health * self.enemy_health_multiplier))
+        entity_manager.enemies.append(well)
+        return True
+
+    def _spawn_dreadnought(
+        self, entity_manager: "EntityManager", is_side_scroll: bool
+    ) -> bool:
+        """Spawna 1 Couraçado "gatekeeper" (sozinho), entrando pela direita numa
+        faixa central — nave-capital que jockeia em torno do jogador."""
+        size = Dreadnought.SIZE
+        x = Config.SCREEN_WIDTH + random.uniform(10.0, 50.0)
+        y = random.uniform(
+            Config.SCREEN_HEIGHT * 0.28, Config.SCREEN_HEIGHT * 0.72 - size
+        )
+        ship = Dreadnought(
+            x,
+            y,
+            aggressiveness_multiplier=self.aggressiveness_multiplier,
+            side_scroll=is_side_scroll,
+        )
+        ship.health = max(1, int(ship.health * self.enemy_health_multiplier))
+        entity_manager.enemies.append(ship)
         return True
 
     def _spawn_ice_golem(

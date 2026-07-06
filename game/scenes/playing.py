@@ -1283,6 +1283,7 @@ class PlayingScene(Scene):
         self._update_ship(dt)
         self._update_revival_beacons(dt)
         self._apply_environmental_effects(dt)
+        self._apply_gravity_wells(dt)
         self._update_spawners(dt)
 
         self.entity_manager.update(
@@ -1474,6 +1475,41 @@ class PlayingScene(Scene):
                     ship.x -= prop.PUSH_FORCE * dt
                     wind_slow_factor = prop.SLOW_SPEED_MULT
             ship.wind_slow_factor = wind_slow_factor
+
+    def _apply_gravity_wells(self, dt: float) -> None:
+        """Gravity Well: arrasta cada nave viva para o centro de cada poço ativo
+        (força radial com falloff). Efeito de MOVIMENTO (mesma categoria do vento
+        do MountainPropeller), consumido e limpo por frame. Sempre esvazia a lista
+        para não acumular quando a jogabilidade está pausada."""
+        wells = self.entity_manager.gravity_wells
+        if not wells:
+            return
+        if self.can_handle_gameplay_actions() and not self._atmosphere_death_active:
+            for slot in self.roster.alive_slots():
+                ship = slot.ship
+                if ship.is_entering:
+                    continue
+                for wx, wy, radius, strength in wells:
+                    scx = ship.x + ship.w / 2
+                    scy = ship.y + ship.h / 2
+                    dx, dy = wx - scx, wy - scy
+                    dist = math.hypot(dx, dy)
+                    if dist >= radius or dist < 1e-3:
+                        continue
+                    falloff = (1.0 - dist / radius) ** 2  # mais forte perto do centro
+                    step = strength * falloff * dt
+                    ship.x += (dx / dist) * step
+                    ship.y += (dy / dist) * step
+                # Mantém em tela (mesmo clamp de ShipMovement._keep_in_bounds).
+                if ship.x < 0:
+                    ship.x = 0
+                if ship.y < 0:
+                    ship.y = 0
+                if ship.x + ship.w > Config.SCREEN_WIDTH:
+                    ship.x = Config.SCREEN_WIDTH - ship.w
+                if ship.y + ship.h > Config.SCREEN_HEIGHT:
+                    ship.y = Config.SCREEN_HEIGHT - ship.h
+        wells.clear()
 
     def _update_spawners(self, dt: float) -> None:
         if (
@@ -2072,7 +2108,8 @@ class PlayingScene(Scene):
         # além do dano, aplica o debuff de paralisia (reuso do sistema elétrico). É
         # identificada por class attribute (`applies_paralysis`), não por isinstance (§5).
         fence_beams = [
-            laser for laser in em.boss_lasers if getattr(laser, "applies_paralysis", False)
+            laser for laser in em.boss_lasers
+            if isinstance(laser, BossLaser) and getattr(laser, "applies_paralysis", False)
         ]
         boss_lasers = [
             laser for laser in em.boss_lasers

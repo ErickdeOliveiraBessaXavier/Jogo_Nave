@@ -31,6 +31,8 @@ from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin
 from ...entities.cutting_storm import CuttingStorm
 from ...entities.giant_meteor_boss import GiantMeteorBoss
 from ...entities.ice_golem import IceGolem
+from ...entities.Inimigos_Tema_Espaco.dreadnought import Dreadnought
+from ...entities.Inimigos_Tema_Espaco.gravity_well import GravityWell
 from ...entities.meteor import Meteor
 from ...entities.mountain_mage import MountainMage
 from ...entities.mountain_propeller import MountainPropeller
@@ -144,6 +146,8 @@ class DifficultyConfig:
         "orbital_turret": 12.0,
         "stealth_fighter": 7.0,
         "repair_drone": 14.0,
+        "gravity_well": 12.0,
+        "dreadnought": 22.0,
         "ice_golem": 18.0,
         "cutting_storm": 12.0,
         "stone_eagle": 7.0,
@@ -219,6 +223,8 @@ ENEMY_PRESSURE_TIER_BY_KEY: dict[str, str] = {
     "orbital_turret": "strong",
     "stealth_fighter": "intermediate",
     "repair_drone": "strong",
+    "gravity_well": "strong",
+    "dreadnought": "strong",
     "ice_golem": "strong",
     "cutting_storm": "strong",
     "stone_eagle": "intermediate",
@@ -252,6 +258,8 @@ ENEMY_PRESSURE_UNLOCK_START: dict[str, float] = {
     "stealth_fighter": 0.10,
     "orbital_turret": 0.30,
     "repair_drone": 0.50,
+    "gravity_well": 0.50,
+    "dreadnought": 0.62,
     "stone_eagle": 0.10,
     "cutting_storm": 0.40,
     "ice_golem": 0.50,
@@ -279,6 +287,8 @@ ENEMY_PRESSURE_UNLOCK_WINDOW: dict[str, float] = {
     "stealth_fighter": 0.30,
     "orbital_turret": 0.30,
     "repair_drone": 0.30,
+    "gravity_well": 0.30,
+    "dreadnought": 0.30,
     "stone_eagle": 0.30,
     "cutting_storm": 0.30,
     "ice_golem": 0.30,
@@ -830,10 +840,24 @@ class ProceduralLevelGenerator:
                 (turret_base / difficulty) / spawn_multiplier
             )
 
+        if stage_number >= 6:  # Poço Gravitacional (negação de área/controle) — X-6
+            well_base = 17.0 if stage_progress < 0.75 else 13.0
+            enemy_spawn_config[GravityWell] = self._clamp_spawn_time(
+                (well_base / difficulty) / spawn_multiplier
+            )
+
         if stage_progress >= 0.60:  # Drone Reparador (suporte) — tardio
             drone_base = 19.0 if stage_progress < 0.80 else 15.0
             enemy_spawn_config[RepairDrone] = self._clamp_spawn_time(
                 (drone_base / difficulty) / spawn_multiplier
+            )
+
+        # Couraçado (tank/gatekeeper) — o mais tardio, um único por vez (cap 1 no
+        # spawner). Gate por estágio absoluto E progresso, para fechar o mundo.
+        if stage_number >= 7 and stage_progress >= 0.55:
+            dread_base = 26.0 if stage_progress < 0.85 else 22.0
+            enemy_spawn_config[Dreadnought] = self._clamp_spawn_time(
+                (dread_base / difficulty) / spawn_multiplier
             )
 
     def _calculate_score_multiplier(self, level_number: int) -> float:

@@ -34,6 +34,8 @@ from ...entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone
 from ...entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
 from ...entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
 from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin
+from ...entities.Inimigos_Tema_Espaco.dreadnought import Dreadnought
+from ...entities.Inimigos_Tema_Espaco.gravity_well import GravityWell
 from ...entities.cutting_storm import CuttingStorm
 from ...entities.ice_golem import IceGolem
 from ...entities.meteor import Meteor
@@ -107,6 +109,8 @@ ENEMY_THEME_ALLOWLIST: dict[type, set[WorldTheme]] = {
     OrbitalTurret: {WorldTheme.STARFIELD},  # sentinela sniper — exclusivo do Espaço
     StealthFighter: {WorldTheme.STARFIELD},  # caça rush — exclusivo do Espaço
     RepairDrone: {WorldTheme.STARFIELD},  # suporte/cura — exclusivo do Espaço
+    GravityWell: {WorldTheme.STARFIELD},  # negação de área (poço) — exclusivo do Espaço
+    Dreadnought: {WorldTheme.STARFIELD},  # tanque/gatekeeper — exclusivo do Espaço
     CityDrone: {WorldTheme.CITY},
     NeonSniper: {WorldTheme.CITY},
     PoliceInterceptor: {WorldTheme.CITY},
@@ -359,7 +363,7 @@ THEME_FALLBACK_ENEMIES: dict[WorldTheme, list[type]] = {
     ],
     WorldTheme.STARFIELD: [
         Meteor, Alien, EyeEnemy, Satellite,
-        StealthFighter, OrbitalTurret, RepairDrone,
+        StealthFighter, OrbitalTurret, GravityWell, RepairDrone, Dreadnought,
     ],
     WorldTheme.CITY: [
         CityDrone, NeonSniper, PoliceInterceptor, CyberCaptor, TeslaTwin, CyberTank,
@@ -382,6 +386,8 @@ DEFAULT_ENEMY_SPAWN_TIME: dict[type, float] = {
     OrbitalTurret: 16.0,
     StealthFighter: 9.0,
     RepairDrone: 18.0,
+    GravityWell: 18.0,
+    Dreadnought: 26.0,
     IceGolem: 22.0,
     CuttingStorm: 16.0,
     StoneEagle: 9.0,
@@ -438,7 +444,9 @@ THEME_SIGNATURE_ENEMIES: dict[WorldTheme, tuple[type, ...]] = {
     # memory/variety-cap-exclui-specials-raros. Os emergentes do trio de
     # introdução (Alien/EyeEnemy, RockGlider/MountainMage) seguem o gate de
     # stage_number e não precisam de assinatura.
-    WorldTheme.STARFIELD: (StealthFighter, OrbitalTurret, RepairDrone),
+    WorldTheme.STARFIELD: (
+        StealthFighter, OrbitalTurret, GravityWell, RepairDrone, Dreadnought,
+    ),
     WorldTheme.MOUNTAINS: (StoneEagle, CuttingStorm, IceGolem),
 }
 
@@ -461,8 +469,9 @@ ENEMY_ARCHETYPE: dict[type, str] = {
     MountainMage: "support", JammerNode: "support", SapperDrone: "support",
     RepairDrone: "support",
     ElementalRobot: "elite", CyberTank: "tank", IceGolem: "tank",
+    Dreadnought: "tank",
     CyberCaptor: "area_denial", MortarDrone: "area_denial", TeslaTwin: "area_denial",
-    CuttingStorm: "area_denial",
+    CuttingStorm: "area_denial", GravityWell: "area_denial",
     CargoCarrier: "summoner", SplitterTank: "summoner", SquareMinionBoss: "summoner",
     MirrorPylon: "shield",
 }

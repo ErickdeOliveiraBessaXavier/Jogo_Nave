@@ -141,6 +141,9 @@ class EntityManager:
         # Blasts de área one-shot (cx, cy, raio) emitidos por efeitos/inimigos neste
         # frame; consumidos pela cena (handle_mine_explosion) p/ aplicar dano à nave.
         self.area_blasts: list[tuple[float, float, float]] = []
+        # Fontes de atração gravitacional ativas neste frame (cx, cy, raio, força)
+        # — ex.: Gravity Well. Consumidas pela cena p/ arrastar a nave (movimento).
+        self.gravity_wells: list[tuple[float, float, float, float]] = []
         self.mine_explosions: list[MineExplosion] = []
         self.ice_poison_zones: list[IcePoisonZone] = []
         self.fire_zones: list[FireZone] = []
@@ -857,6 +860,7 @@ class EntityManager:
         if ctx_emissions.new_enemies_behind:
             self.enemies[:0] = ctx_emissions.new_enemies_behind
         self.area_blasts.extend(ctx_emissions.new_area_blasts)
+        self.gravity_wells.extend(ctx_emissions.new_gravity_wells)
         for _ex in ctx_emissions.new_explosions:
             self.spawn_explosion(*_ex)
         for _z in ctx_emissions.new_ice_zones:
