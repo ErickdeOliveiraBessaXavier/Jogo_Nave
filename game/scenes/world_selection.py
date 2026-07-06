@@ -346,6 +346,14 @@ class WorldSelectionView:
         self.previous_background = None
         self.last_selected = -1
 
+        # O botão A do controle é tratado nativamente aqui (cursor-aware: sobre
+        # seta cicla, sobre card seleciona). Mas o app também traduz A → KEYDOWN
+        # K_RETURN sintético (Camada A, ver app._synthesize_menu_events), que
+        # cairia em `_select_current_world` e SELECIONAVA o mundo mesmo com a
+        # mira sobre a seta. Esta flag, setada no A nativo e consumida pelo
+        # K_RETURN sintético que vem logo em seguida, evita o disparo duplo.
+        self._suppress_synthetic_confirm = False
+
         # Transição de fade
         self.transition_progress = 0.0  # 0.0 a 1.0
         self.transition_duration = 0.3  # segundos
@@ -529,6 +537,13 @@ class WorldSelectionView:
                 sound_manager.play_sound("button_hover")
 
             elif event.key == pygame.K_RETURN:
+                # K_RETURN sintético logo após um A do controle: o handler nativo
+                # do A já resolveu a ação cursor-aware (seta/card/voltar). Ignora
+                # este para não sobrepor com uma seleção de mundo. Enter real do
+                # teclado nunca vem precedido de A → flag False → seleciona normal.
+                if self._suppress_synthetic_confirm:
+                    self._suppress_synthetic_confirm = False
+                    return
                 self._select_current_world()
 
             elif event.key == pygame.K_ESCAPE:
@@ -538,6 +553,10 @@ class WorldSelectionView:
             from ..core.gamepad import XboxButton
 
             if event.button == XboxButton.A:
+                # Tratamos o A por completo aqui (cursor-aware). Suprime o
+                # K_RETURN sintético que o app dispara em seguida — senão ele
+                # selecionaria o mundo por cima da ação da seta sob a mira.
+                self._suppress_synthetic_confirm = True
                 pos = pygame.mouse.get_pos()
                 if self.back_button_rect.collidepoint(pos):
                     sound_manager.play_sound("button_click")
@@ -626,6 +645,12 @@ class WorldSelectionView:
     def update(self, _dt: float) -> None:
         """Atualiza a lógica da view."""
         self.time += _dt
+
+        # Rede de segurança: o A nativo e seu K_RETURN sintético são processados
+        # no mesmo frame (antes deste update), então a flag já foi consumida.
+        # Se o sintético não chegar a disparar (ex.: gamepad conectado mas
+        # desabilitado), zerar aqui evita que ela suprima um Enter futuro.
+        self._suppress_synthetic_confirm = False
 
         # Detectar hover nas setas
         mouse_pos = pygame.mouse.get_pos()

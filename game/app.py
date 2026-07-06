@@ -275,8 +275,14 @@ class GameApp:
 
         Em gameplay esta tradução é pulada — a PlayingScene processa os
         eventos JOY diretamente para preservar semântica (botão A = tiro etc).
+        Cenas com `owns_gamepad_navigation` também são puladas: elas tratam o
+        DPad/analógico/botões nativamente (foco próprio), sem cursor virtual.
         """
-        if not self._any_gamepad_active() or self._scene_is_gameplay(scene):
+        if (
+            not self._any_gamepad_active()
+            or self._scene_is_gameplay(scene)
+            or getattr(scene, "owns_gamepad_navigation", False)
+        ):
             return
 
         if event.type == pygame.JOYBUTTONDOWN:
@@ -423,8 +429,14 @@ class GameApp:
         stick com maior magnitude.
         Em gameplay esta função retorna cedo; o LS continua livre para
         mover a nave (PlayingScene lê LS direto via input.gamepad_movement_vector).
+        Cenas com `owns_gamepad_navigation` também: o analógico move o FOCO
+        discreto delas, não o cursor (ver UpgradesSelectionScene).
         """
-        if not self._any_gamepad_active() or self._scene_is_gameplay(scene):
+        if (
+            not self._any_gamepad_active()
+            or self._scene_is_gameplay(scene)
+            or getattr(scene, "owns_gamepad_navigation", False)
+        ):
             return
 
         # Dead zone customizada com reescala linear: sem isso, drift mecânico

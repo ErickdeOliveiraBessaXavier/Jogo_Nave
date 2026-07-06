@@ -110,6 +110,17 @@ class FloatingMessage:
 class UpgradesSelectionScene(Scene):
     """Central de Loadout Unificada (Refinamento Visual e Alinhamento)."""
 
+    # A cena possui a navegação por controle: DPad/analógico movem um FOCO
+    # discreto próprio (não o cursor virtual do app). Faz o app pular o cursor
+    # virtual e a síntese de setas/teclas — ver app._update_virtual_cursor /
+    # app._synthesize_menu_events. Elimina o soft lock do snap-focus por cursor.
+    owns_gamepad_navigation = True
+
+    # Cadência da repetição ao segurar uma direção no analógico (feel de menu).
+    NAV_STICK_THRESHOLD = 0.5
+    NAV_INITIAL_DELAY = 0.32
+    NAV_REPEAT_RATE = 0.12
+
     def __init__(self, app: "GameApp"):
         super().__init__(app)
         self.r = app.renderer
@@ -169,6 +180,14 @@ class UpgradesSelectionScene(Scene):
         self.hovered_upgrade: Optional[UpgradeMeta] = None
         self.hovered_ship: Optional[ShipProfile] = None
         self.hovered_slot_idx: Optional[int] = None
+
+        # --- Navegação por FOCO (controle) --------------------------------
+        # Descritor do elemento focado: (região, índice). Regiões: "slot",
+        # "stock", "ship", "stock_chevron", "ship_chevron", "back". O foco é a
+        # única fonte de verdade da navegação por controle (não o cursor).
+        self.focus: tuple = ("slot", 0)
+        self._nav_stick_dir: tuple = (0, 0)
+        self._nav_repeat_timer: float = 0.0
 
         self.shaking_slot: Optional[int] = None
         self.shaking_ship_id: Optional[str] = None
@@ -389,6 +408,147 @@ class UpgradesSelectionScene(Scene):
         else:
             self._page_ships(delta)
 
+    # ------------------------------------------------------------------
+    # Navegação por FOCO (controle) — independente do cursor virtual
+    # ------------------------------------------------------------------
+
+    def _focus_nodes(self) -> List[Tuple[tuple, pygame.Rect]]:
+        """Todos os elementos navegáveis como (descritor, rect), na ordem
+        visual. Reconstruído a cada consulta pois página/layout mudam."""
+        nodes: List[Tuple[tuple, pygame.Rect]] = []
+        for i, r in enumerate(self.layout.active_slots):
+            nodes.append((("slot", i), r))
+        for i, r in enumerate(self.layout.upgrade_grid_cells):
+            nodes.append((("stock", i), r))
+        for i, r in enumerate(self.layout.ship_grid_cells):
+            nodes.append((("ship", i), r))
+        if self.max_upgrade_page > 0:
+            nodes.append((("stock_chevron", 0), self.layout.upgrade_left_chevron))
+            nodes.append((("stock_chevron", 1), self.layout.upgrade_right_chevron))
+        if self.max_ship_page > 0:
+            nodes.append((("ship_chevron", 0), self.layout.ship_left_chevron))
+            nodes.append((("ship_chevron", 1), self.layout.ship_right_chevron))
+        nodes.append((("back", 0), self.layout.back_button))
+        return nodes
+
+    def _focus_rect(self, desc: tuple) -> Optional[pygame.Rect]:
+        for d, r in self._focus_nodes():
+            if d == desc:
+                return r
+        return None
+
+    def _focused_rect(self) -> Optional[pygame.Rect]:
+        return self._focus_rect(self.focus)
+
+    def _validate_focus(self) -> None:
+        """Garante que `self.focus` aponta para um elemento existente. Após
+        paginar (grid encolheu) ou trocar de layout, reancora sem travar."""
+        nodes = self._focus_nodes()
+        descs = [d for d, _ in nodes]
+        if not descs:
+            return
+        if self.focus in descs:
+            return
+        region = self.focus[0] if self.focus else None
+        same = [d for d in descs if d[0] == region]
+        if same:
+            idx = self.focus[1] if len(self.focus) > 1 else 0
+            self.focus = same[max(0, min(idx, len(same) - 1))]
+        else:
+            self.focus = descs[0]
+
+    def _node_at_pos(self, pos: Tuple[int, int]) -> Optional[tuple]:
+        for desc, rect in self._focus_nodes():
+            if rect.collidepoint(pos):
+                return desc
+        return None
+
+    def _apply_nav(self, dx: int, dy: int) -> None:
+        """Move o foco em (dx, dy) e força o modo focus (esconde o cursor)."""
+        self.app._set_cursor_mode("focus")
+        self._move_focus(dx, dy)
+
+    def _move_focus(self, dx: int, dy: int) -> None:
+        """Foco → vizinho mais próximo na direção (dx +1=dir, dy +1=baixo).
+
+        Ancorado no rect do elemento FOCADO (não no cursor). Score = distância
+        no eixo principal + 2× o desvio lateral, favorecendo alvos alinhados e
+        evitando saltos diagonais. Sem alvo na direção (borda externa), não faz
+        nada — nunca trava, pois B sempre volta ao menu e as demais direções
+        seguem disponíveis."""
+        self._validate_focus()
+        cur = self._focused_rect()
+        if cur is None:
+            return
+        cx, cy = cur.center
+        best_desc: Optional[tuple] = None
+        best_score = float("inf")
+        for desc, rect in self._focus_nodes():
+            if desc == self.focus:
+                continue
+            tx, ty = rect.center
+            vx, vy = tx - cx, ty - cy
+            if dx != 0 and vx * dx <= 0:
+                continue
+            if dy != 0 and vy * dy <= 0:
+                continue
+            if dx != 0:
+                primary, lateral = abs(vx), abs(vy)
+            else:
+                primary, lateral = abs(vy), abs(vx)
+            score = primary + lateral * 2.0
+            if score < best_score:
+                best_score = score
+                best_desc = desc
+        if best_desc is not None and best_desc != self.focus:
+            self.focus = best_desc
+            sound_manager.play_sound("button_hover")
+
+    def _sync_hovered_from_focus(self) -> None:
+        """Deriva hovered_* (usados por render/tooltip/preview) do foco atual."""
+        self.hovered_upgrade = self.hovered_ship = self.hovered_slot_idx = None
+        if not self.focus:
+            return
+        region = self.focus[0]
+        idx = self.focus[1] if len(self.focus) > 1 else 0
+        if region == "stock" and idx < len(self.layout.visible_upgrades):
+            self.hovered_upgrade = self.layout.visible_upgrades[idx]
+        elif region == "ship" and idx < len(self.layout.visible_ships):
+            self.hovered_ship = self.layout.visible_ships[idx]
+        elif region == "slot" and idx < self.player_profile.unlocked_slots:
+            self.hovered_slot_idx = idx
+
+    def _poll_stick_nav(self, dt: float) -> None:
+        """Analógico (LS/RS de qualquer slot) move o foco discretamente, com
+        atraso inicial + repetição ao segurar. Só ativo com gamepad ligado."""
+        from ..core.gamepad import MAX_GAMEPAD_SLOTS
+
+        gp = self.app.gamepad
+        bx = by = 0.0
+        best_mag = 0.0
+        for slot in range(MAX_GAMEPAD_SLOTS):
+            if not gp.is_slot_active(slot):
+                continue
+            for side in ("left", "right"):
+                sx, sy = gp.get_stick(side, slot=slot)
+                mag = sx * sx + sy * sy
+                if mag > best_mag:
+                    best_mag, bx, by = mag, sx, sy
+        if best_mag < self.NAV_STICK_THRESHOLD ** 2:
+            self._nav_stick_dir = (0, 0)
+            self._nav_repeat_timer = 0.0
+            return
+        d = (1 if bx > 0 else -1, 0) if abs(bx) >= abs(by) else (0, 1 if by > 0 else -1)
+        if d != self._nav_stick_dir:
+            self._nav_stick_dir = d
+            self._nav_repeat_timer = self.NAV_INITIAL_DELAY
+            self._apply_nav(*d)
+        else:
+            self._nav_repeat_timer -= dt
+            if self._nav_repeat_timer <= 0.0:
+                self._nav_repeat_timer = self.NAV_REPEAT_RATE
+                self._apply_nav(*d)
+
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self._return_to_menu()
@@ -405,11 +565,18 @@ class UpgradesSelectionScene(Scene):
             )
             return
 
-        # Controle: A aciona equipar/retirar automaticamente no item sob o
-        # cursor virtual (movido pelo stick direito em app.py). Sem
-        # drag-and-drop — clicar o upgrade no Estoque manda para o primeiro
-        # slot livre; clicar o slot equipado devolve o item ao Estoque.
-        # LB/RB paginam o painel sob o cursor (atalho direto às setas).
+        # D-pad move o FOCO discreto (hat: y +1 = cima). Fonte única com o
+        # analógico (_poll_stick_nav): navegação sem depender do cursor.
+        if event.type == pygame.JOYHATMOTION:
+            x, y = event.value
+            if x:
+                self._apply_nav(1 if x > 0 else -1, 0)
+            elif y:
+                self._apply_nav(0, -1 if y > 0 else 1)
+            return
+
+        # Controle: A age sobre o ELEMENTO FOCADO (não sob o cursor). B volta.
+        # LB/RB paginam o grid da região focada (atalho às setas de página).
         if event.type == pygame.JOYBUTTONDOWN:
             from ..core.gamepad import XboxButton
 
@@ -419,11 +586,13 @@ class UpgradesSelectionScene(Scene):
             if event.button == XboxButton.B:
                 self._return_to_menu()
                 return
-            if event.button == XboxButton.LB:
-                self._page_panel_at(pygame.mouse.get_pos()[0], -1)
-                return
-            if event.button == XboxButton.RB:
-                self._page_panel_at(pygame.mouse.get_pos()[0], 1)
+            if event.button in (XboxButton.LB, XboxButton.RB):
+                delta = -1 if event.button == XboxButton.LB else 1
+                if self.focus and self.focus[0] in ("ship", "ship_chevron"):
+                    self._page_ships(delta)
+                else:
+                    self._page_upgrades(delta)
+                self._validate_focus()
                 return
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -483,39 +652,38 @@ class UpgradesSelectionScene(Scene):
         return False
 
     def _handle_gamepad_confirm(self) -> None:
-        """Aciona ``A`` do controle sobre o item embaixo do cursor virtual.
+        """Aciona ``A`` sobre o ELEMENTO FOCADO (não o cursor).
 
-        Substitui o drag-and-drop por auto-equip/auto-retirar:
-        - Botão Voltar: retorna ao menu.
-        - Card de nave: equivalente ao click do mouse (selecionar/comprar).
-        - Slot ativo equipado: retira o upgrade (volta ao Estoque).
-        - Slot ativo bloqueado: tenta desbloquear pelo custo em estrelas.
-        - Card do Estoque: equipa no primeiro slot livre que aceite o peso;
-          se já estiver equipado, retira (toggle).
+        - Voltar: retorna ao menu.
+        - Chevron: pagina o grid correspondente.
+        - Card de nave: seleciona/compra (igual ao click do mouse).
+        - Slot ativo equipado: retira o upgrade; bloqueado: tenta destravar.
+        - Card do Estoque: equipa no 1º slot livre; toggle se já equipado.
         """
-        pos = pygame.mouse.get_pos()
+        self._validate_focus()
+        if not self.focus:
+            return
+        region = self.focus[0]
+        idx = self.focus[1] if len(self.focus) > 1 else 0
 
-        if self.layout.back_button.collidepoint(pos):
+        if region == "back":
             self._return_to_menu()
-            return
-
-        if self._handle_chevron_click(pos):
-            return
-
-        for i, rect in enumerate(self.layout.ship_grid_cells):
-            if rect.collidepoint(pos):
-                self._handle_ship_click(self.layout.visible_ships[i], rect)
-                return
-
-        for i, rect in enumerate(self.layout.active_slots):
-            if rect.collidepoint(pos):
-                self._gamepad_slot_action(i, rect)
-                return
-
-        for i, rect in enumerate(self.layout.upgrade_grid_cells):
-            if rect.collidepoint(pos):
-                self._gamepad_stock_action(self.layout.visible_upgrades[i], rect)
-                return
+        elif region == "stock_chevron":
+            self._page_upgrades(-1 if idx == 0 else 1)
+            self._validate_focus()
+        elif region == "ship_chevron":
+            self._page_ships(-1 if idx == 0 else 1)
+            self._validate_focus()
+        elif region == "slot" and idx < len(self.layout.active_slots):
+            self._gamepad_slot_action(idx, self.layout.active_slots[idx])
+        elif region == "stock" and idx < len(self.layout.visible_upgrades):
+            self._gamepad_stock_action(
+                self.layout.visible_upgrades[idx], self.layout.upgrade_grid_cells[idx]
+            )
+        elif region == "ship" and idx < len(self.layout.visible_ships):
+            self._handle_ship_click(
+                self.layout.visible_ships[idx], self.layout.ship_grid_cells[idx]
+            )
 
     def _gamepad_slot_action(self, idx: int, _rect: pygame.Rect) -> None:
         """Slot ativo: retira o upgrade equipado ou tenta destravar slot."""
@@ -675,21 +843,23 @@ class UpgradesSelectionScene(Scene):
         ):
             self.shaking_slot = None
 
+        # Analógico → foco discreto (não move o cursor; ver owns_gamepad_navigation).
+        self._poll_stick_nav(dt)
+        self._validate_focus()
+
         m_pos = pygame.mouse.get_pos()
         self.hovered_upgrade = self.hovered_ship = self.hovered_slot_idx = None
         if not self.dragging_upgrade:
-            for i, r in enumerate(self.layout.upgrade_grid_cells):
-                if r.collidepoint(m_pos):
-                    self.hovered_upgrade = self.layout.visible_upgrades[i]
-                    break
-            for i, r in enumerate(self.layout.ship_grid_cells):
-                if r.collidepoint(m_pos):
-                    self.hovered_ship = self.layout.visible_ships[i]
-                    break
-            for i, r in enumerate(self.layout.active_slots):
-                if r.collidepoint(m_pos) and i < self.player_profile.unlocked_slots:
-                    self.hovered_slot_idx = i
-                    break
+            if self.app._cursor_navigation_mode == "cursor":
+                # Modo mouse: hover segue o cursor E sincroniza o foco, para a
+                # troca mouse↔controle continuar do mesmo ponto.
+                node = self._node_at_pos(m_pos)
+                if node is not None:
+                    self.focus = node
+                    self._sync_hovered_from_focus()
+            else:
+                # Modo focus (DPad/analógico): destaques derivam do foco.
+                self._sync_hovered_from_focus()
         else:
             self.drag_invalid_target = True
             for i, r in enumerate(self.layout.active_slots):
@@ -1262,6 +1432,10 @@ class UpgradesSelectionScene(Scene):
         pulse = (math.sin(self._time * 4) + 1) * 0.5
         alpha = int(120 + 135 * pulse)
         mouse = pygame.mouse.get_pos()
+        focus_rect = self._focused_rect()
+        # Realça a seta sob o cursor (mouse) OU com o foco do controle.
+        left_hot = left.collidepoint(mouse) or left == focus_rect
+        right_hot = right.collidepoint(mouse) or right == focus_rect
         # `<` com o bico à esquerda do box; `>` com o bico à direita.
         self._draw_pixel_chevron(
             surface,
@@ -1270,7 +1444,7 @@ class UpgradesSelectionScene(Scene):
             -1,
             CUSTOM_GOLD,
             alpha,
-            (1.3 if left.collidepoint(mouse) else 1.0) * self.ui_scale,
+            (1.3 if left_hot else 1.0) * self.ui_scale,
         )
         self._draw_pixel_chevron(
             surface,
@@ -1279,7 +1453,7 @@ class UpgradesSelectionScene(Scene):
             1,
             CUSTOM_GOLD,
             alpha,
-            (1.3 if right.collidepoint(mouse) else 1.0) * self.ui_scale,
+            (1.3 if right_hot else 1.0) * self.ui_scale,
         )
 
     @staticmethod
@@ -1431,6 +1605,9 @@ class UpgradesSelectionScene(Scene):
             255,
             0,
         )
+        # Anel de foco quando o controle está com o foco no botão Voltar.
+        if self.focus == ("back", 0):
+            self._draw_focus_ring(surface, self.layout.back_button)
 
     def _draw_dragging_upgrade(self, surface: pygame.Surface):
         if self.dragging_upgrade is None:
