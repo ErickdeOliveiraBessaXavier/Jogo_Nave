@@ -44,6 +44,8 @@ from ...entities.Inimigos_Tema_Cidade.police_interceptor import (  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank  # noqa: F401
 from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin  # noqa: F401
+from ...entities.Inimigos_Tema_Espaco.dreadnought import Dreadnought  # noqa: F401
+from ...entities.Inimigos_Tema_Espaco.gravity_well import GravityWell  # noqa: F401
 from ...entities.meteor import Meteor
 from ...entities.mountain_mage import MountainMage
 from ...entities.mountain_propeller import MountainPropeller
@@ -507,9 +509,10 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
 #   4. Desligue o flag (`False`) antes de commitar/jogar a campanha — com ele
 #      OFF a campanha é 100% normal (nada aqui afeta os fixed levels acima).
 #
-# NOTA DE DESIGN: MOUNTAINS, CITY e STARFIELD têm inimigos EXCLUSIVOS (Montanha e
-# Espaço ganharam 3 cada — tank/area_denial/rush e sniper/rush/support). Só
-# VOLCANIC ainda reusa o trio genérico (Meteor/Alien/EyeEnemy/SquareMinionBoss) —
+# NOTA DE DESIGN: MOUNTAINS, CITY e STARFIELD têm inimigos EXCLUSIVOS (Montanha
+# ganhou 3 — tank/area_denial/rush; Espaço ganhou 5 — sniper/rush/support
+# + area_denial/tank via GravityWell/Dreadnought). Só VOLCANIC ainda reusa o
+# trio genérico (Meteor/Alien/EyeEnemy/SquareMinionBoss) —
 # a arena deixa essa lacuna explícita: sem preenchimento com inimigos de outros
 # temas, mostra só o que o tema realmente tem hoje.
 
@@ -573,6 +576,8 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
             # StealthFighter: 6.0,  # rush (cloak + investida)
             # OrbitalTurret: 8.0,  # sniper (rajada de plasma)
             # RepairDrone: 10.0,  # suporte
+            GravityWell: 8.0,  # area_denial (poço gravitacional)
+            Dreadnought: 12.0,  # tank (couraçado com torres)
             # SquareMinionBoss: 12.0,
         },
         enemies_to_clear=40,
