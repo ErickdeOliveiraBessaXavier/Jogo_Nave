@@ -141,9 +141,10 @@ class EntityManager:
         # Blasts de área one-shot (cx, cy, raio) emitidos por efeitos/inimigos neste
         # frame; consumidos pela cena (handle_mine_explosion) p/ aplicar dano à nave.
         self.area_blasts: list[tuple[float, float, float]] = []
-        # Fontes de atração gravitacional ativas neste frame (cx, cy, raio, força)
-        # — ex.: Gravity Well. Consumidas pela cena p/ arrastar a nave (movimento).
-        self.gravity_wells: list[tuple[float, float, float, float]] = []
+        # Fontes de atração gravitacional ativas neste frame
+        # (cx, cy, raio, força_nave, curva_projéteis) — ex.: Gravity Well. A cena
+        # arrasta a nave e curva a trajetória dos projéteis (movimento).
+        self.gravity_wells: list[tuple[float, float, float, float, float]] = []
         self.mine_explosions: list[MineExplosion] = []
         self.ice_poison_zones: list[IcePoisonZone] = []
         self.fire_zones: list[FireZone] = []
@@ -943,6 +944,55 @@ class EntityManager:
             if shot:
                 new_alien_bullets.extend(shot)
         return new_alien_bullets
+
+    def apply_gravity_to_projectiles(self, dt: float) -> None:
+        """Curva a trajetória dos projéteis livres que cruzam o campo de um Gravity
+        Well — tanto os do jogador quanto os dos inimigos.
+
+        A gravidade soma uma aceleração radial (rumo ao centro, crescente ao se
+        aproximar do núcleo) à velocidade do tiro e depois RENORMALIZA a velocidade
+        ao módulo original: o efeito é DESVIO de rota contínuo e suave, preservado
+        após sair do campo (a velocidade fica alterada), e não um "ímã" que trava o
+        projétil no centro nem o acelera indefinidamente. Chamada pela cena a cada
+        frame, antes de esvaziar `gravity_wells`. Projéteis teleguiados (`homing`)
+        e de alvo fixo (orbes orbitais) são preservados — não entram na lista."""
+        wells = self.gravity_wells
+        if not wells:
+            return
+        for lst in (
+            self.bullets,
+            self.mini_ship_bullets,
+            self.alien_bullets,
+            self.neon_bolts,
+        ):
+            for p in lst:
+                if getattr(p, "homing", False):
+                    continue
+                vx, vy = p.vx, p.vy
+                speed = (vx * vx + vy * vy) ** 0.5
+                if speed < 1.0:
+                    continue
+                px, py = p.x, p.y
+                changed = False
+                for wx, wy, radius, _ship_pull, bend, *extra in wells:
+                    dx = wx - px
+                    dy = wy - py
+                    dist = (dx * dx + dy * dy) ** 0.5
+                    if dist >= radius or dist < 1.0:
+                        continue
+                    if extra:
+                        extra[0].is_pulling_something = True
+                    falloff = 1.0 - dist / radius        # cresce rumo ao núcleo
+                    dv = bend * falloff * dt
+                    vx += (dx / dist) * dv
+                    vy += (dy / dist) * dv
+                    changed = True
+                if changed:
+                    ns = (vx * vx + vy * vy) ** 0.5
+                    if ns > 1e-6:
+                        k = speed / ns                    # preserva o módulo (só curva)
+                        p.vx = vx * k
+                        p.vy = vy * k
 
     def _update_player_projectiles(self, dt: float) -> None:
         """Projéteis do jogador: bullets (com homing), homing dedicado, mini-ships, lasers."""

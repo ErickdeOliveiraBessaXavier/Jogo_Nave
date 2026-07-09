@@ -516,7 +516,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
 # a arena deixa essa lacuna explícita: sem preenchimento com inimigos de outros
 # temas, mostra só o que o tema realmente tem hoje.
 
-TEST_ARENA_ENABLED: bool = False
+TEST_ARENA_ENABLED: bool = True
 
 THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
     # ── MONTANHAS — linhagem própria completa ────────────────────────────────
@@ -577,7 +577,7 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
             # OrbitalTurret: 8.0,  # sniper (rajada de plasma)
             # RepairDrone: 10.0,  # suporte
             GravityWell: 8.0,  # area_denial (poço gravitacional)
-            Dreadnought: 12.0,  # tank (couraçado com torres)
+            # Dreadnought: 1.0,  # tank (couraçado com torres)
             # SquareMinionBoss: 12.0,
         },
         enemies_to_clear=40,

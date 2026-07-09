@@ -1484,19 +1484,33 @@ class PlayingScene(Scene):
         wells = self.entity_manager.gravity_wells
         if not wells:
             return
+
+        # Resetar o estado de atração de cada poço antes de recalcular
+        for w in wells:
+            if len(w) > 5 and w[5] is not None:
+                w[5].is_pulling_something = False
+
         if self.can_handle_gameplay_actions() and not self._atmosphere_death_active:
+            # Projéteis (jogador e inimigos) têm a rota curvada pela anomalia.
+            self.entity_manager.apply_gravity_to_projectiles(dt)
             for slot in self.roster.alive_slots():
                 ship = slot.ship
                 if ship.is_entering:
                     continue
-                for wx, wy, radius, strength in wells:
+                for wx, wy, radius, strength, _bend, *extra in wells:
                     scx = ship.x + ship.w / 2
                     scy = ship.y + ship.h / 2
                     dx, dy = wx - scx, wy - scy
                     dist = math.hypot(dx, dy)
                     if dist >= radius or dist < 1e-3:
                         continue
-                    falloff = (1.0 - dist / radius) ** 2  # mais forte perto do centro
+                    if extra:
+                        extra[0].is_pulling_something = True
+                    # Falloff LINEAR: força já perceptível ao passar pela borda e
+                    # cresce continuamente rumo ao centro (aceleração progressiva,
+                    # sem "liga/desliga"). No centro > velocidade base da nave, mas
+                    # a borda é vencível acelerando para fora (counterplay).
+                    falloff = 1.0 - dist / radius
                     step = strength * falloff * dt
                     ship.x += (dx / dist) * step
                     ship.y += (dy / dist) * step

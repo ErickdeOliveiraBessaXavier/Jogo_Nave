@@ -1329,13 +1329,15 @@ class EnemySpawner:
     def _spawn_dreadnought(
         self, entity_manager: "EntityManager", is_side_scroll: bool
     ) -> bool:
-        """Spawna 1 Couraçado "gatekeeper" (sozinho), entrando pela direita numa
-        faixa central — nave-capital que jockeia em torno do jogador."""
-        size = Dreadnought.SIZE
-        x = Config.SCREEN_WIDTH + random.uniform(10.0, 50.0)
-        y = random.uniform(
-            Config.SCREEN_HEIGHT * 0.28, Config.SCREEN_HEIGHT * 0.72 - size
+        """Spawna 1 Couraçado "gatekeeper" (sozinho), descendo pelo TOPO numa
+        coluna central (STARFIELD é top-view) — nave-capital que jockeia em torno
+        do jogador, pairando acima dele."""
+        w = Dreadnought.SIZE
+        h = Dreadnought.H
+        x = random.uniform(
+            Config.SCREEN_WIDTH * 0.20, Config.SCREEN_WIDTH * 0.80 - w
         )
+        y = -(h + random.uniform(10.0, 50.0))
         ship = Dreadnought(
             x,
             y,
