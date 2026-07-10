@@ -617,13 +617,12 @@ class EntityManager:
         self.ice_poison_zones.append(IcePoisonZone(x, y, radius, duration))
 
     def spawn_air_strike(self, target_x: float, target_y: float) -> None:
-        screen = pygame.display.get_surface()
-        sw, sh = screen.get_size() if screen else (1600, 900)
-        tx = max(40, min(sw - 40, target_x))
-        ty = max(60, min(sh - 40, target_y))
-        self.spawn_air_strike_bomb(tx, ty)
+        """Cria uma bomba do Air Strike caindo sobre ``(target_x, target_y)``.
 
-    def spawn_air_strike_bomb(self, target_x: float, target_y: float) -> None:
+        O alvo já vem dentro da área jogável (o ``AirStrikeUpgrade`` sorteia com
+        margem); a própria bomba reforça o clamp para o blast caber 100% na tela.
+        Som via callbacks do ``sound_manager`` — convenção local deste manager
+        (mesmo padrão dos sons de laser de boss)."""
         on_explode = (
             self.sound_manager.play_explosion_asteroid if self.sound_manager else None
         )

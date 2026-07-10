@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -435,47 +436,84 @@ class BlackHoleUpgrade(ActiveUpgrade):
 
 class AirStrikeUpgrade(ActiveUpgrade):
     """Ultimate: bombardeio aéreo massivo — uma salva de bombas cai em
-    posições aleatórias da tela ao longo de alguns segundos.
+    posições espalhadas da tela ao longo de alguns segundos.
 
     Um refactor antigo reduziu isto a uma única bomba fixa perto da nave (a
-    salva foi perdida). Aqui a contagem e o intervalo ficam na classe e o
-    disparo é sequencial, no mesmo padrão de WingmanUpgrade/GravityBombUpgrade:
-    ``on_activate_effect`` arma a contagem e ``update`` solta uma bomba por vez.
-    Como ``base_duration`` é 0, a salva não depende de ``self.active`` (o
-    contador ``_bombs_remaining`` é a única condição), igual ao Wingman.
+    salva foi perdida). Aqui o disparo é sequencial, no mesmo padrão de
+    WingmanUpgrade/GravityBombUpgrade: ``on_activate_effect`` sorteia todos os
+    alvos e ``update`` solta uma bomba por vez. Como ``base_duration`` é 0, a
+    salva não depende de ``self.active`` (a fila ``_targets`` é a única
+    condição), igual ao Wingman.
+
+    Os alvos são pré-computados por **amostragem estratificada** (uma bomba por
+    célula de uma grade com jitter) dentro de uma **margem de segurança = raio de
+    explosão**. Isso garante duas coisas pedidas no balanceamento: cobertura
+    equilibrada (sem aglomerar) e o círculo de explosão 100% dentro da área
+    visível, em qualquer borda.
     """
 
-    BOMB_COUNT = 10
     SPAWN_INTERVAL = 0.25  # segundos entre cada bomba da salva
 
     def __init__(self, meta: UpgradeMeta) -> None:
         super().__init__(meta)
-        self._bombs_remaining = 0
+        self._targets: list[tuple[float, float]] = []
         self._spawn_timer = 0.0
 
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
-        # Primeira bomba cai na hora (feedback imediato); o resto na salva.
-        self._bombs_remaining = self.BOMB_COUNT
+        # Sorteia a salva inteira de uma vez (distribuição equilibrada) e solta a
+        # primeira bomba na hora (feedback imediato); o resto sai na salva.
+        self._targets = self._build_targets()
         self._spawn_timer = 0.0
-        self._spawn_bomb(ctx)
-        self._bombs_remaining -= 1
+        self._spawn_next(ctx)
 
     def update(self, dt: float, ctx: Optional[UpgradeContextProtocol] = None) -> None:
         super().update(dt, ctx)
-        if self._bombs_remaining > 0 and ctx is not None:
+        if self._targets and ctx is not None:
             self._spawn_timer += dt
             if self._spawn_timer >= self.SPAWN_INTERVAL:
                 self._spawn_timer = 0.0
-                self._spawn_bomb(ctx)
-                self._bombs_remaining -= 1
+                self._spawn_next(ctx)
 
-    def _spawn_bomb(self, ctx: Optional[UpgradeContextProtocol]) -> None:
+    def _build_targets(self) -> list[tuple[float, float]]:
+        """Amostra ``AIR_STRIKE_BOMB_COUNT`` alvos por grade estratificada com
+        jitter, toda dentro da margem de segurança (blast inteiro na tela). A
+        ordem é embaralhada para a salva não varrer a tela em sequência óbvia."""
+        from .upgrades_config import AIR_STRIKE_BOMB_COUNT, AIR_STRIKE_SCREEN_MARGIN
+
+        count = AIR_STRIKE_BOMB_COUNT
+        margin = AIR_STRIKE_SCREEN_MARGIN
+        sw, sh = float(Config.SCREEN_WIDTH), float(Config.SCREEN_HEIGHT)
+
+        x_min, x_max = margin, sw - margin
+        y_min = margin
+        # Viés leve para o campo à frente (não concentrar no rodapé, onde fica a
+        # nave), sem nunca ultrapassar a margem inferior.
+        y_max = min(sh - margin, sh * 0.82)
+        area_w = max(1.0, x_max - x_min)
+        area_h = max(1.0, y_max - y_min)
+
+        # Grade com ~count células, proporcional à razão de aspecto da área.
+        cols = max(1, round(math.sqrt(count * area_w / area_h)))
+        rows = max(1, math.ceil(count / cols))
+        cells = [(c, r) for r in range(rows) for c in range(cols)]
+        random.shuffle(cells)
+
+        cell_w = area_w / cols
+        cell_h = area_h / rows
+        targets: list[tuple[float, float]] = []
+        for c, r in cells[:count]:
+            cx = x_min + c * cell_w
+            cy = y_min + r * cell_h
+            targets.append(
+                (random.uniform(cx, cx + cell_w), random.uniform(cy, cy + cell_h))
+            )
+        return targets
+
+    def _spawn_next(self, ctx: Optional[UpgradeContextProtocol]) -> None:
         em = self._ctx_entity_manager(ctx)
-        if not em or not hasattr(em, "spawn_air_strike"):
+        if not em or not hasattr(em, "spawn_air_strike") or not self._targets:
             return
-        sw, sh = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-        tx = random.uniform(sw * 0.08, sw * 0.92)
-        ty = random.uniform(sh * 0.10, sh * 0.75)
+        tx, ty = self._targets.pop()
         em.spawn_air_strike(tx, ty)
 
 
@@ -743,7 +781,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
     UpgradeType.AIR_STRIKE: UpgradeMeta(
         UpgradeType.AIR_STRIKE,
         "AIR",
-        "10 bombas caem em áreas aleatórias.",
+        "20 bombas caem em áreas aleatórias.",
         "air_strike",
         UpgradeCategory.OFFENSIVE,
         180,

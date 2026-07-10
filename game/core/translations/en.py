@@ -267,7 +267,7 @@ EN: dict[str, str] = {
     "upgrade.wingman.desc": "3 sequential escort drones (30s).",
     "upgrade.berserk.desc": "Rotating bursts (Spiral Star).",
     "upgrade.black_hole.desc": "Ultimate mobile black hole.",
-    "upgrade.air_strike.desc": "10 bombs fall in random areas.",
+    "upgrade.air_strike.desc": "20 bombs fall in random areas.",
     "upgrade.cannon_tower.desc": "Static mine towers.",
     "upgrade.link.desc": "High-voltage beam between players.",
 

@@ -59,6 +59,13 @@ def check_parity() -> list[str]:
 
 
 def main() -> int:
+    # Console do Windows (cp1252) não encoda os emojis abaixo; força UTF-8 com
+    # fallback tolerante para o script rodar igual em qualquer plataforma/CI.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
     problems = check_parity()
     total = len(next(iter(TABLES.values())))
     if problems:

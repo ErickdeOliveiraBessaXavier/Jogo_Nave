@@ -270,7 +270,7 @@ PT: dict[str, str] = {
     "upgrade.wingman.desc": "3 drones de escolta sequenciais (30s).",
     "upgrade.berserk.desc": "Rajadas rotativas (Estrela Espiral).",
     "upgrade.black_hole.desc": "Buraco negro móvel Ultimate.",
-    "upgrade.air_strike.desc": "10 bombas caem em áreas aleatórias.",
+    "upgrade.air_strike.desc": "20 bombas caem em áreas aleatórias.",
     "upgrade.cannon_tower.desc": "Torres de minas estáticas.",
     "upgrade.link.desc": "Feixe de alta voltagem entre jogadores.",
 

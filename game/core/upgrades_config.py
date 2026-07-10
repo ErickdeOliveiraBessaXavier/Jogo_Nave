@@ -80,9 +80,16 @@ EXPLOSIVE_BULLET_DAMAGE: int = 30  # Dano aplicado a cada inimigo na área
 EXPLOSIVE_BULLET_RADIUS: int = 60  # Raio da explosão em pixels
 
 # Parâmetros de balanceamento do Air Strike
+AIR_STRIKE_BOMB_COUNT: int = 20  # Bombas por ativação da ultimate
 AIR_STRIKE_BOMB_DAMAGE: int = 100
 AIR_STRIKE_BOMB_RADIUS: float = 80.0
 AIR_STRIKE_BOMB_FALL_SPEED: float = 800.0
+AIR_STRIKE_EXPLOSION_DURATION: float = 0.5  # segundos de animação/janela de dano
+# Margem de segurança das bordas = raio + folga, para o círculo de explosão INTEIRO
+# caber na tela em qualquer lado. A margem antiga (40/60px) era menor que o raio
+# (80px), então o blast dos impactos junto às bordas transbordava — horizontal e
+# verticalmente. Fonte única do clamp (gerador de alvos, entity_manager e a bomba).
+AIR_STRIKE_SCREEN_MARGIN: float = AIR_STRIKE_BOMB_RADIUS + 12.0
 
 # Parâmetros de balanceamento da Cannon Tower
 CANNON_MINE_DAMAGE: int = 120
