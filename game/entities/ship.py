@@ -106,6 +106,8 @@ class Ship:
         self.piercing_shot_timer: float = 0.0
         self.mini_ships_timer: float = 0.0
         self.damage_boost_timer: float = 0.0
+        # Giant Shot (upgrade): balas maiores enquanto o timer está ativo.
+        self.big_shot_timer: float = 0.0
         # Chain Shot power-up
         self.chain_shot_timer: float = 0.0
         # Repulsion Shield power-up (Vento Constante)
@@ -367,6 +369,18 @@ class Ship:
         return multiplier
 
     @property
+    def bullet_size_multiplier(self) -> float:
+        """Fator de escala das balas (visual + hitbox) enquanto o Giant Shot dura.
+
+        1.0 = tamanho normal. Lido pelo `ShootingSystem` no spawn de cada bala.
+        """
+        if self.big_shot_timer > 0.0:
+            from ..core.upgrades_config import GIANT_SHOT_SIZE_MULTIPLIER
+
+            return GIANT_SHOT_SIZE_MULTIPLIER
+        return 1.0
+
+    @property
     def rect(self) -> pygame.Rect:
         self._rect.update(int(self.x), int(self.y), self.w, self.h)
         return self._rect
@@ -419,6 +433,9 @@ class Ship:
 
     def activate_explosive_shots(self, charges: int) -> None:
         self._powerups.activate_explosive_shots(charges)
+
+    def activate_giant_shots(self, duration: float) -> None:
+        self._powerups.activate_giant_shots(duration)
 
     def activate_dash(self, duration: float) -> None:
         self._powerups.activate_dash(duration)

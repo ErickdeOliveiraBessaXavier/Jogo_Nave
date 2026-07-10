@@ -44,6 +44,7 @@ class BulletPool:
         direction: tuple[float, float] | None = None,
         ship_id: str = "padrao",
         owner_ship: Optional[Any] = None,
+        size_multiplier: float = 1.0,
     ) -> Bullet:
         """
         Obtém uma bala do pool, reutilizando uma inativa ou criando nova.
@@ -62,6 +63,7 @@ class BulletPool:
                 direction=direction,
                 ship_id=ship_id,
                 owner_ship=owner_ship,
+                size_multiplier=size_multiplier,
             )
             self.active.append(bullet)
             return bullet
@@ -79,6 +81,7 @@ class BulletPool:
             direction=direction,
             ship_id=ship_id,
             owner_ship=owner_ship,
+            size_multiplier=size_multiplier,
         )
         self.pool.append(bullet)
         self.active.append(bullet)

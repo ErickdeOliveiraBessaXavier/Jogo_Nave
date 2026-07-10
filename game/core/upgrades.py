@@ -22,6 +22,7 @@ class UpgradeType(Enum):
     HOMING_SHOT = auto()
     LASER_SHOT = auto()
     EXPLOSIVE_SHOT = auto()
+    GIANT_SHOT = auto()  # Tiros 3x maiores por um tempo
     AIR_STRIKE = auto()  # Ultimate: Bombardeio Aéreo
     BLACK_HOLE = auto()  # Ultimate: Buraco Negro
     CANNON_TOWER = auto()  # Ultimate: Torres de Canhão
@@ -571,6 +572,15 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
             ship.activate_explosive_shots(self.BULLETS_PER_ACTIVATION)
 
 
+class GiantShotUpgrade(ActiveUpgrade):
+    """Tiros temporariamente 3x maiores (escala visual e hitbox das balas)."""
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        if ship:
+            ship.activate_giant_shots(self.get_effective_duration(ctx))
+
+
 class CoopLinkUpgrade(ActiveUpgrade):
     """Feixe de alta voltagem que conecta dois jogadores."""
 
@@ -600,6 +610,7 @@ def upgrade_factory(upgrade_type: UpgradeType) -> ActiveUpgrade:
         UpgradeType.HOMING_SHOT: HomingShotUpgrade,
         UpgradeType.LASER_SHOT: LaserShotUpgrade,
         UpgradeType.EXPLOSIVE_SHOT: ExplosiveShotUpgrade,
+        UpgradeType.GIANT_SHOT: GiantShotUpgrade,
         UpgradeType.BLINK_DASH: BlinkDashUpgrade,
         UpgradeType.GRAVITY_BOMB: GravityBombUpgrade,
         UpgradeType.CHAIN_LIGHTNING: ChainLightningUpgrade,
@@ -687,6 +698,17 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         UpgradeCategory.OFFENSIVE,
         70,
         0,
+        None,
+        2,
+    ),
+    UpgradeType.GIANT_SHOT: UpgradeMeta(
+        UpgradeType.GIANT_SHOT,
+        "GIANT",
+        "Tiros 3x maiores por um tempo.",
+        "giant_shot",
+        UpgradeCategory.OFFENSIVE,
+        60,
+        12,
         None,
         2,
     ),
@@ -833,6 +855,7 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
         "homing_shot": "T",
         "laser_shot": "X",
         "explosive_shot": "V",
+        "giant_shot": "3",
         "air_strike": "A",
         "black_hole": "B",
         "blink_dash": "D",

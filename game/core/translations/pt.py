@@ -262,6 +262,7 @@ PT: dict[str, str] = {
     "upgrade.homing_shot.desc": "Tiros teleguiados com cadência reduzida.",
     "upgrade.laser_shot.desc": "Orbes laser disparam em sequência.",
     "upgrade.explosive_shot.desc": "Próximos tiros explodem em área.",
+    "upgrade.giant_shot.desc": "Tiros 3x maiores por um tempo.",
     "upgrade.blink_dash.desc": "Dash curto invulnerável.",
     "upgrade.gravity_bomb.desc": "5 mini-vórtices corrosivos (15s).",
     "upgrade.chain_lightning.desc": "Tiros que saltam entre inimigos.",

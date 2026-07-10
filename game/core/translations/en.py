@@ -259,6 +259,7 @@ EN: dict[str, str] = {
     "upgrade.homing_shot.desc": "Homing shots with reduced fire rate.",
     "upgrade.laser_shot.desc": "Laser orbs fire in sequence.",
     "upgrade.explosive_shot.desc": "Next shots explode in an area.",
+    "upgrade.giant_shot.desc": "Shots 3x larger for a while.",
     "upgrade.blink_dash.desc": "Short invulnerable dash.",
     "upgrade.gravity_bomb.desc": "5 corrosive mini-vortices (15s).",
     "upgrade.chain_lightning.desc": "Shots that jump between enemies.",

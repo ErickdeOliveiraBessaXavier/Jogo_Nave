@@ -131,10 +131,12 @@ class Bullet:
         direction: tuple[float, float] | None = None,
         ship_id: str = "padrao",
         owner_ship: Optional[Any] = None,
+        size_multiplier: float = 1.0,
     ):
         self.x, self.y = x, y
         self.damage = damage
         self.dead = False
+        self.size_multiplier = size_multiplier  # Giant Shot escala w/h (visual+hitbox)
         self.piercing = piercing
         self.homing = homing
         self.explosive = explosive  # Tiro explosivo
@@ -182,11 +184,13 @@ class Bullet:
         direction: tuple[float, float] | None = None,
         ship_id: str = "padrao",
         owner_ship: Optional[Any] = None,
+        size_multiplier: float = 1.0,
     ):
         """Reconfigura a bala para reutilização no pool."""
         self.x, self.y = x, y
         self.damage = damage
         self.dead = False
+        self.size_multiplier = size_multiplier
         self.piercing = piercing
         self.homing = homing
         self.explosive = explosive
@@ -287,6 +291,12 @@ class Bullet:
             base_w, base_h = 12, 4
         elif self.ship_id == "engenheiro":
             base_w, base_h = 6, 6
+
+        # Giant Shot: escala o tamanho base (visual e hitbox) mantendo a proporção.
+        mult = self.size_multiplier
+        if mult != 1.0:
+            base_w = max(1, round(base_w * mult))
+            base_h = max(1, round(base_h * mult))
 
         if direction is None:
             if self.is_side_scroll:

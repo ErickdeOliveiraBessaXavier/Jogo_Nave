@@ -45,6 +45,7 @@ DEFAULT_UNLOCKED: List[UpgradeType] = [
     UpgradeType.HOMING_SHOT,
     UpgradeType.LASER_SHOT,
     UpgradeType.EXPLOSIVE_SHOT,
+    UpgradeType.GIANT_SHOT,
     UpgradeType.AIR_STRIKE,
     UpgradeType.BLACK_HOLE,
     UpgradeType.CANNON_TOWER,
@@ -78,6 +79,9 @@ LASER_SHOT_DAMAGE: int = 80  # Dano do laser disparado pelas orbes
 # Parâmetros de balanceamento do Tiro Explosivo
 EXPLOSIVE_BULLET_DAMAGE: int = 30  # Dano aplicado a cada inimigo na área
 EXPLOSIVE_BULLET_RADIUS: int = 60  # Raio da explosão em pixels
+
+# Parâmetros do Tiro Gigante (Giant Shot)
+GIANT_SHOT_SIZE_MULTIPLIER: float = 3.0  # Balas 3x maiores (escala visual + hitbox)
 
 # Parâmetros de balanceamento do Air Strike
 AIR_STRIKE_BOMB_COUNT: int = 20  # Bombas por ativação da ultimate

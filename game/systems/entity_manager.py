@@ -1562,6 +1562,7 @@ class EntityManager:
         direction: tuple[float, float] | None = None,
         ship_id: str = "padrao",
         owner_ship: Any | None = None,
+        size_multiplier: float = 1.0,
     ) -> Bullet:
         bullet = self.bullet_pool.get(
             x=x,
@@ -1575,6 +1576,7 @@ class EntityManager:
             direction=direction,
             ship_id=ship_id,
             owner_ship=owner_ship,
+            size_multiplier=size_multiplier,
         )
         if homing:
             target = self._assign_homing_target(bullet)

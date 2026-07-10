@@ -142,6 +142,7 @@ class ShootingSystem:
                 direction=dir_vec,
                 ship_id="berserk",
                 owner_ship=ship,
+                size_multiplier=ship.bullet_size_multiplier,
             )
 
         # Efeito sonoro
@@ -186,6 +187,7 @@ class ShootingSystem:
             )
         )
 
+        size_mult = ship.bullet_size_multiplier
         for (
             x,
             y,
@@ -214,6 +216,7 @@ class ShootingSystem:
                 direction=direction,
                 ship_id=ship.profile.id,
                 owner_ship=ship,
+                size_multiplier=size_mult,
             )
             if is_explosive:
                 ship.consume_explosive_shot()

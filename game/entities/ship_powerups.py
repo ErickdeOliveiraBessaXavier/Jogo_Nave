@@ -73,6 +73,11 @@ class ShipPowerups:
         ship.explosive_shots_active = True
         ship.explosive_shots_remaining = charges
 
+    def activate_giant_shots(self, duration: float) -> None:
+        """Ativa (ou estende) o Giant Shot: balas maiores por ``duration`` s."""
+        ship = self.ship
+        ship.big_shot_timer = max(ship.big_shot_timer, duration)
+
     def activate_dash(self, duration: float) -> None:
         ship = self.ship
         ship.dash_timer = max(ship.dash_timer, duration)
@@ -142,6 +147,7 @@ class ShipPowerups:
         ship.piercing_shot_timer = max(0.0, ship.piercing_shot_timer - dt)
         ship.mini_ships_timer = max(0.0, ship.mini_ships_timer - dt)
         ship.damage_boost_timer = max(0.0, ship.damage_boost_timer - dt)
+        ship.big_shot_timer = max(0.0, ship.big_shot_timer - dt)
         ship.chain_shot_timer = max(0.0, ship.chain_shot_timer - dt)
         ship.repulsion_shield_timer = max(0.0, ship.repulsion_shield_timer - dt)
 
