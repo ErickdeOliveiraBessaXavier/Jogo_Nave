@@ -43,7 +43,7 @@ class _DustVortexState(Enum):
 class _VortexParticle:
     """Partícula individual de poeira ou detrito dentro do vórtice."""
 
-    __slots__ = ("x", "y", "vx", "vy", "orbit_radius", "angle", "angular_speed", "life", "max_life", "size", "color", "is_fragment", "img_idx")
+    __slots__ = ("x", "y", "vx", "vy", "orbit_radius", "angle", "angular_speed", "life", "max_life", "size", "color", "is_fragment", "img_idx", "bright")
 
     def __init__(
         self,
@@ -64,10 +64,26 @@ class _VortexParticle:
         self.life = self.max_life
         self.size = random.randint(1, 3) if not is_fragment else random.randint(4, 9)
 
-        # Cores de terra/areia/poeira (Mountain Palette)
-        self.color = random.choice([
-            (160, 140, 110), (140, 120, 90), (180, 160, 130), (120, 100, 80)
-        ])
+        # Tiers visuais de cor (§3: só afeta cor/render, não hitbox nem
+        # comportamento). A massa é poeira (areia/cinza escuros); uma fração é
+        # areia clara; poucas são "fios" de branco puro — highlights que dão
+        # volume e profundidade em vez de tudo no mesmo tom. `bright` marca o
+        # highlight p/ o draw reforçá-lo (inclusive na rajada), mantendo a coluna
+        # legível quando a densidade de partículas sobe.
+        roll = random.random()
+        if roll < 0.09:
+            self.color = (255, 255, 250)  # fio de vento — branco puro (highlight)
+            self.bright = True
+        elif roll < 0.34:
+            self.color = random.choice([  # areia clara / cinza claro
+                (214, 208, 198), (228, 222, 212), (196, 190, 182),
+            ])
+            self.bright = False
+        else:
+            self.color = random.choice([  # poeira/terra — a massa (mais escura)
+                (158, 140, 112), (138, 120, 94), (172, 154, 128), (120, 104, 84),
+            ])
+            self.bright = False
         self.is_fragment = is_fragment
         self.img_idx = img_idx
 
@@ -106,6 +122,47 @@ class _VortexParticle:
             self.y = cy + math.sin(self.angle) * self.orbit_radius * 0.4
 
         return self.life > 0.0
+
+
+class _WindStreak:
+    """Risco branco de vento — partícula independente com vida própria.
+
+    Diferente dos arcos do telegrama (que colapsam com o fim do ataque), o risco
+    é EMITIDO durante a rajada mas depois vive por conta própria: preserva sua
+    velocidade/direção e segue subindo até sair da tela OU esgotar a vida. Isso dá
+    a dissipação natural do fluxo (sem sumiço abrupto nem congelamento). Puramente
+    visual — não participa de dano nem colisão.
+    """
+
+    __slots__ = ("x", "y", "vx", "vy", "length", "width", "life", "max_life")
+
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        vx: float,
+        vy: float,
+        length: int,
+        width: int,
+        life: float,
+    ):
+        self.x = x
+        self.y = y
+        self.vx = vx
+        self.vy = vy
+        self.length = length
+        self.width = width
+        self.max_life = life
+        self.life = life
+
+    def update(self, dt: float) -> bool:
+        """Integra o movimento e envelhece. Retorna False p/ remoção quando a vida
+        acaba OU quando o risco sai por completo pelo topo da tela (`y` é o ponto
+        inferior; o risco vai de ``y-length`` a ``y``, então some quando ``y < 0``)."""
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.life -= dt
+        return self.life > 0.0 and self.y > 0.0
 
 
 class CuttingStorm:
@@ -147,6 +204,9 @@ class CuttingStorm:
     # Cache de surfaces de pixel (size, cor) reusadas no draw — evita alocar
     # uma Surface por partícula por frame (§7). Alpha varia via set_alpha.
     _pixel_cache: dict[tuple[int, tuple[int, int, int]], pygame.Surface] = {}
+    # Cache de barras brancas de risco (largura, comprimento) — reutilizadas por
+    # todos os _WindStreak; alpha por set_alpha no draw (§7).
+    _streak_cache: dict[tuple[int, int], pygame.Surface] = {}
 
     def __init__(
         self,
@@ -182,6 +242,11 @@ class CuttingStorm:
         self._state_timer = random.uniform(*self.GUST_INTERVAL) / self._aggr
 
         self._particles: List[_VortexParticle] = []
+        # Riscos de vento: partículas independentes (vida própria). Emitidos só
+        # durante a rajada, mas persistem após o fim da emissão até sair da
+        # tela/expirar — dissipação natural, sem sumiço abrupto.
+        self._wind_streaks: List[_WindStreak] = []
+        self._streak_emit_accum = 0.0
         self._anim_time = 0.0
         self._enemy_hit_cooldown: dict[int, float] = {}
 
@@ -319,6 +384,19 @@ class CuttingStorm:
             else:
                 i += 1
 
+        # Riscos de vento: emite SÓ na rajada (fim da emissão = fim do gust), mas
+        # atualiza SEMPRE — os já existentes seguem subindo e se dissipando
+        # naturalmente mesmo depois, até saírem da tela ou expirarem (§6).
+        if self._state == _DustVortexState.GUSTING:
+            self._emit_wind_streaks(dt)
+        i = 0
+        while i < len(self._wind_streaks):
+            if not self._wind_streaks[i].update(dt):
+                self._wind_streaks[i] = self._wind_streaks[-1]
+                self._wind_streaks.pop()
+            else:
+                i += 1
+
         self._rect.topleft = (int(self.x), int(self.y))
         return blasts
 
@@ -336,6 +414,31 @@ class CuttingStorm:
             idx = random.randint(0, len(self._fragment_sprites) - 1) if self._fragment_sprites else 0
             self._particles.append(_VortexParticle(cx, cy, orbit, is_frag, idx))
 
+    def _emit_wind_streaks(self, dt: float):
+        """Emite riscos brancos ao longo da coluna ativa da rajada. Cada um nasce
+        com velocidade ascendente própria — mantida após o fim da emissão, o que
+        cria a dissipação contínua do fluxo. Acumulador fracionário garante taxa
+        estável independente do `dt`."""
+        cx, cy = self._center
+        progress = 1.0 - (self._state_timer / self.GUST_DURATION)
+        max_h = self.PILLAR_MAX_HEIGHT * progress
+        self._streak_emit_accum += 14.0 * dt  # ~14 riscos/segundo na rajada
+        n = int(self._streak_emit_accum)
+        self._streak_emit_accum -= n
+        for _ in range(n):
+            h = random.uniform(0.0, max_h)  # posição ao longo da coluna
+            f = h / self.PILLAR_MAX_HEIGHT
+            r_col = self.RADIUS * (0.7 + f * 1.3)
+            self._wind_streaks.append(_WindStreak(
+                x=cx + random.uniform(-0.5, 0.5) * r_col,
+                y=cy - h,
+                vx=random.uniform(-25.0, 25.0),
+                vy=-random.uniform(320.0, 560.0),  # sobe (direção do vento)
+                length=random.randint(14, 26),
+                width=1,
+                life=random.uniform(0.7, 1.5),
+            ))
+
     @classmethod
     def _pixel_surf(cls, size: int, color: tuple[int, int, int]) -> pygame.Surface:
         """Surface de pixel reutilizável por (tamanho, cor). Alpha vem por
@@ -348,12 +451,33 @@ class CuttingStorm:
             cls._pixel_cache[key] = surf
         return surf
 
+    @classmethod
+    def _streak_surf(cls, width: int, length: int) -> pygame.Surface:
+        """Barra branca vertical reutilizável por (largura, comprimento). Alpha
+        vem por `set_alpha` no draw — a mesma surface serve a qualquer risco."""
+        key = (width, length)
+        surf = cls._streak_cache.get(key)
+        if surf is None:
+            surf = pygame.Surface((width, length))
+            surf.fill((255, 255, 250))
+            cls._streak_cache[key] = surf
+        return surf
+
     def draw(self, surface: pygame.Surface) -> None:
         cx, cy = self._center
         self._draw_telegraph_body(surface, cx, cy)
+        gusting = self._state == _DustVortexState.GUSTING
         for p in self._particles:
-            alpha = int(255 * (p.life / p.max_life))
+            life_frac = p.life / p.max_life
             if not p.is_fragment:
+                if p.bright:
+                    # Highlight: permanece mais opaco (destaque) e ainda mais forte
+                    # na rajada, para a coluna continuar legível com muita poeira.
+                    alpha = int(255 * (0.45 + 0.55 * life_frac))
+                    if gusting:
+                        alpha = min(255, int(alpha * 1.3))
+                else:
+                    alpha = int(255 * life_frac)
                 p_surf = self._pixel_surf(p.size, p.color)
                 p_surf.set_alpha(alpha)
                 surface.blit(p_surf, (int(p.x), int(p.y)))
@@ -363,21 +487,42 @@ class CuttingStorm:
                     rot = pygame.transform.rotate(img, self._anim_time * 240.0 + p.angle * 40)
                     if p.size != 16:
                         rot = pygame.transform.scale(rot, (p.size, p.size))
-                    rot.set_alpha(alpha)
+                    rot.set_alpha(int(255 * life_frac))
                     surface.blit(rot, rot.get_rect(center=(int(p.x), int(p.y))).topleft)
+
+        # Riscos de vento (highlights brancos) por cima da poeira. O alpha esvai
+        # com a vida → dissipação suave e contínua (draw só lê estado, §3).
+        for s in self._wind_streaks:
+            alpha = int(235 * (s.life / s.max_life))
+            if alpha <= 0:
+                continue
+            streak_surf = self._streak_surf(s.width, s.length)
+            streak_surf.set_alpha(alpha)
+            surface.blit(streak_surf, (int(s.x), int(s.y - s.length)))
 
     def _draw_telegraph_body(self, surface: pygame.Surface, cx: float, cy: float):
         """Desenha o corpo principal e o pilar usando o estilo de espiral de alta intensidade."""
         is_gusting = self._state == _DustVortexState.GUSTING
         is_dissipating = self._state == _DustVortexState.DISSIPATING
+        dissipation_fade = (
+            (self._state_timer / self.DISSIPATION_DURATION) if is_dissipating else 1.0
+        )
 
-        # Paleta rica de cores (tons de poeira, terra e areia)
-        WIND_COLORS = [
-            (215, 200, 180),  # Areia clara
-            (190, 175, 155),  # Poeira média
-            (225, 215, 200),  # Areia muito clara
-            (160, 145, 125),  # Terra seca
+        # Tiers de cor do vento (§3: só visual). Contraste entre camadas por papel:
+        #   DUST  = poeira/areia — a massa, mais escura e de alpha baixo
+        #   WIND  = espiral de vento clara — separa visualmente as camadas
+        #   HIGHLIGHT = fio de vento branco puro — destaque que dá volume
+        DUST_COLORS = [
+            (150, 134, 110),  # terra seca
+            (168, 150, 126),  # poeira média
+            (134, 120, 100),  # sombra de poeira
         ]
+        WIND_COLORS = [
+            (210, 202, 190),  # areia clara
+            (228, 222, 212),  # areia muito clara
+            (196, 188, 178),  # cinza areia
+        ]
+        HIGHLIGHT_COLOR = (255, 255, 250)
 
         num_body_layers = 10
         body_height = 80.0
@@ -401,12 +546,24 @@ class CuttingStorm:
                 rect.center = (int(cx + x_osc), int(y_layer))
 
                 angle = t % math.tau
-                dissipation_fade = (self._state_timer / self.DISSIPATION_DURATION) if is_dissipating else 1.0
-                alpha = int((40 + (layer % 3) * 15) * (1.0 - frac * 0.3) * dissipation_fade)
+                # Papel visual do arco: o 1º de cada camada é espiral clara (e,
+                # intermitentemente, um fio branco); os demais são poeira (massa).
+                # `depth` deixa a base/centro mais brilhante que o topo — variação
+                # sutil de luminosidade (§3: mexe só em cor/alpha, não na geometria).
+                depth = 1.0 - frac * 0.3
+                if i == 0:
+                    if (layer + int(self._anim_time * 3.0)) % 4 == 0:
+                        current_color = HIGHLIGHT_COLOR
+                        base_alpha = 96
+                    else:
+                        current_color = WIND_COLORS[layer % len(WIND_COLORS)]
+                        base_alpha = 70
+                else:
+                    current_color = DUST_COLORS[(layer + i) % len(DUST_COLORS)]
+                    base_alpha = 42 + (layer % 3) * 8
+                alpha = int(base_alpha * depth * dissipation_fade)
 
                 if alpha > 0:
-                    color_idx = (layer + i) % len(WIND_COLORS)
-                    current_color = WIND_COLORS[color_idx]
                     arc_surf = pygame.Surface((w, h), pygame.SRCALPHA)
                     arc_len = 1.0 + (i % 2) * 0.5
                     pygame.draw.arc(arc_surf, (*current_color, alpha), arc_surf.get_rect(), angle, angle + arc_len, 2)
@@ -414,12 +571,18 @@ class CuttingStorm:
 
         if is_gusting or is_dissipating:
             progress = 1.0 if is_dissipating else (1.0 - (self._state_timer / self.GUST_DURATION))
-            num_pillar_layers = 22
             max_h = self.PILLAR_MAX_HEIGHT * progress
+            # Densidade CONSTANTE: o nº de camadas acompanha a altura atual da
+            # coluna, então o espaçamento vertical NÃO aumenta conforme ela cresce.
+            # Antes eram 22 camadas fixas espalhadas por uma altura variável (com
+            # culling por `progress`) → arcos e fios ficavam cada vez mais esparsos
+            # no auge da rajada. Agora `f` varia 0..1 sobre a coluna real e não há
+            # culling: as camadas já existem apenas até `max_h`, cobrindo bem o
+            # telegrama (o hitbox, calculado em update(), continua ≤ este visual).
+            PILLAR_LAYER_SPACING = 16.0  # px entre camadas — mantém a coluna contígua
+            num_pillar_layers = max(2, int(max_h / PILLAR_LAYER_SPACING) + 1)
             for i in range(num_pillar_layers):
-                f = i / num_pillar_layers
-                if f > progress and not is_dissipating:
-                    continue
+                f = i / (num_pillar_layers - 1)
                 t_col = self._anim_time * 15.0 + i * 0.4
                 y_pos = cy - f * max_h
                 r_col = self.RADIUS * (0.7 + f * 1.3)
@@ -429,19 +592,21 @@ class CuttingStorm:
                 rect_col = pygame.Rect(0, 0, w_col, h_col)
                 rect_col.center = (int(cx + x_osc), int(y_pos))
 
-                alpha_col = int(75 * (1.0 - f * 0.6) * dissipation_fade)
+                alpha_col = int(78 * (1.0 - f * 0.6) * dissipation_fade)
                 if alpha_col > 0:
-                    pillar_color = WIND_COLORS[(i % len(WIND_COLORS))]
+                    # Alterna espiral clara / poeira ao longo da coluna para o olho
+                    # separar as camadas em vez de ler um bloco uniforme.
+                    if i % 3 == 0:
+                        pillar_color = WIND_COLORS[i % len(WIND_COLORS)]
+                    else:
+                        pillar_color = DUST_COLORS[i % len(DUST_COLORS)]
                     arc_surf = pygame.Surface((w_col, h_col), pygame.SRCALPHA)
                     pygame.draw.arc(arc_surf, (*pillar_color, alpha_col), arc_surf.get_rect(), t_col % math.tau, (t_col % math.tau) + 1.5, 2)
                     surface.blit(arc_surf, rect_col.topleft)
-                    if i % 3 == 0:
-                        line_col = (*pillar_color, int(alpha_col * 0.7))
-                        # Flicker derivado de _anim_time (não random): draw fica
-                        # reprodutível e não consome do RNG global (§3).
-                        lx = int(math.sin(t_col * 2.3 + i) * (w_col * 0.5))
-                        ly_len = int(17 + 8 * math.sin(t_col * 1.7 + i * 2.0))
-                        pygame.draw.line(surface, line_col, (int(cx + x_osc + lx), int(y_pos)), (int(cx + x_osc + lx), int(y_pos - ly_len)), 1)
+                    # Os "fios" brancos de vento agora são partículas independentes
+                    # (_WindStreak, emitidas em _emit_wind_streaks e desenhadas em
+                    # draw()) — assim persistem e se dissipam após o fim da rajada,
+                    # em vez de sumir junto com o telegrama.
 
     def on_ship_contact(self, _contact_x: float, _contact_y: float) -> "HitResult":
         from ..systems import hit_sounds
