@@ -5,6 +5,7 @@ import pygame
 from ..core import colors
 from ..core.assets import get_font
 from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
+from ..core.i18n import t
 from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_preferences_path, get_profile_path
 from ..core.preferences import UserPreferences
@@ -238,7 +239,7 @@ class SettingsView:
 
         # Seletor de Qualidade Visual — faixa inferior, centralizado. Própria
         # seção, sem disputar espaço com os dois cards já cheios.
-        q_label = "Qualidade Visual:"
+        q_label = t("settings.quality_label")
         q_label_w = self.item_font.size(q_label)[0]
         q_btn_w = self._s(90)
         q_btn_h = self._s(34)
@@ -259,7 +260,7 @@ class SettingsView:
 
         # Seletor de Pixelização — linha logo ACIMA do seletor de qualidade,
         # mesmo padrão (rótulo + botões, centralizado). 4 níveis.
-        p_label = "Pixelização:"
+        p_label = t("settings.pixelization_label")
         p_label_w = self.item_font.size(p_label)[0]
         p_btn_w = self._s(78)
         p_btn_h = self._s(34)
@@ -280,7 +281,7 @@ class SettingsView:
         self.layout_rects["pixelization_buttons"] = pixelization_buttons
 
         # Botão de Voltar (Canto inferior esquerdo)
-        back_text_width = self.item_font.size("Voltar")[0]
+        back_text_width = self.item_font.size(t("common.back"))[0]
         back_btn_width = back_text_width + self._s(60)
         self.layout_rects["back_button"] = pygame.Rect(
             outer_pad, screen_h - self._s(60), back_btn_width, self._s(40)
@@ -577,11 +578,7 @@ class SettingsView:
             return False
         if not self._is_runtime_coop_active():
             return False
-        self.info_popup_text = (
-            "Essa opção só pode ser alterada fora de uma partida "
-            "cooperativa. Volte ao menu principal e ajuste antes "
-            "de iniciar o coop."
-        )
+        self.info_popup_text = t("settings.coop_block_msg")
         return True
 
     def _activate_at(self, pos: tuple[int, int]) -> bool:
@@ -734,7 +731,7 @@ class SettingsView:
         offset_y = int(self._s(30) * (1.0 - self.entry_progress))
 
         # Título
-        title_surf = self.title_font.render("Configurações", True, CUSTOM_GOLD)
+        title_surf = self.title_font.render(t("common.settings"), True, CUSTOM_GOLD)
         title_surf.set_alpha(alpha)
         # Centralizar título
         title_x = (surface.get_width() - title_surf.get_width()) // 2
@@ -750,7 +747,7 @@ class SettingsView:
         self._draw_button(
             surface,
             self.layout_rects["back_button"],
-            "Voltar",
+            t("common.back"),
             CUSTOM_PURPLE,
             alpha,
             offset_y,
@@ -780,7 +777,7 @@ class SettingsView:
     ):
         """Desenha o seletor 'Qualidade Visual:' (faixa inferior) com o nível ativo."""
         label_rect = self.layout_rects["quality_label"]
-        label_surf = self.item_font.render("Qualidade Visual:", True, CUSTOM_GOLD)
+        label_surf = self.item_font.render(t("settings.quality_label"), True, CUSTOM_GOLD)
         label_surf.set_alpha(alpha)
         surface.blit(
             label_surf,
@@ -789,17 +786,19 @@ class SettingsView:
 
         buttons = self.layout_rects["quality_buttons"]
         for i, rect in enumerate(buttons):
-            name, label = self.quality_levels[i]
+            name, _label = self.quality_levels[i]
             is_selected = name == self.selected_quality
             color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
-            self._draw_button(surface, rect, label, color, alpha, offset_y)
+            self._draw_button(
+                surface, rect, t(f"settings.quality.{name}"), color, alpha, offset_y
+            )
 
     def _draw_pixelization_selector(
         self, surface: pygame.Surface, alpha: int = 255, offset_y: int = 0
     ):
         """Desenha o seletor 'Pixelização:' com o nível ativo em destaque."""
         label_rect = self.layout_rects["pixelization_label"]
-        label_surf = self.item_font.render("Pixelização:", True, CUSTOM_GOLD)
+        label_surf = self.item_font.render(t("settings.pixelization_label"), True, CUSTOM_GOLD)
         label_surf.set_alpha(alpha)
         surface.blit(
             label_surf,
@@ -808,10 +807,12 @@ class SettingsView:
 
         buttons = self.layout_rects["pixelization_buttons"]
         for i, rect in enumerate(buttons):
-            name, label = self.pixelization_levels[i]
+            name, _label = self.pixelization_levels[i]
             is_selected = name == self.selected_pixelization
             color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
-            self._draw_button(surface, rect, label, color, alpha, offset_y)
+            self._draw_button(
+                surface, rect, t(f"settings.pixelization.{name}"), color, alpha, offset_y
+            )
 
     def _draw_card(
         self,
@@ -847,10 +848,14 @@ class SettingsView:
         card_rect = self.layout_rects["audio_card"].copy()
         card_rect.y += offset_y
         self._draw_card(
-            surface, self.layout_rects["audio_card"], "Áudio", alpha, offset_y
+            surface, self.layout_rects["audio_card"], t("settings.audio_title"), alpha, offset_y
         )
 
-        labels = {"music": "Música", "sfx": "Efeitos (SFX)", "shot": "Tiros"}
+        labels = {
+            "music": t("settings.audio.music"),
+            "sfx": t("settings.audio.sfx"),
+            "shot": t("settings.audio.shot"),
+        }
 
         # Criar clipping para o card
         clip_inset = self._s(10)
@@ -933,25 +938,25 @@ class SettingsView:
         )
         if gamepad_active:
             instructions = [
-                "CONTROLES:",
-                "• LS: Mover",
-                "• RT: Atirar | X: Girar",
-                "• LT: Dash/Charge | D-pad+LB/RB: Poderes",
-                "• START: Pausar | BACK: Sair",
+                t("settings.controls_header"),
+                t("controls.gp.move"),
+                t("settings.gp.shoot_rotate"),
+                t("settings.gp.dash_powers"),
+                t("controls.gp.pause"),
                 "",
-                "DICA: Ative 'P1 no teclado / P2 no controle'",
-                "para deixar o controle livre para o segundo jogador.",
+                t("settings.tip"),
+                t("settings.tip_gamepad"),
             ]
         else:
             instructions = [
-                "CONTROLES:",
-                "• Mouse ou WASD/Setas: Mover",
-                "• Espaço: Atirar | Ctrl: Girar",
-                "• Shift: Dash | Teclado Num: Poderes",
-                "• P: Pausar | ESC: Sair",
+                t("settings.controls_header"),
+                t("settings.kb.move"),
+                t("settings.kb.shoot_rotate"),
+                t("settings.kb.dash_powers"),
+                t("controls.kb.pause"),
                 "",
-                "DICA: Ative 'P1 no teclado / P2 no controle'",
-                "para usar o controle no segundo jogador.",
+                t("settings.tip"),
+                t("settings.tip_keyboard"),
             ]
 
         slider_bottom = max(
@@ -988,7 +993,7 @@ class SettingsView:
         self._draw_card(
             surface,
             self.layout_rects["controls_card"],
-            "Controles & Resolução",
+            t("settings.controls_card_title"),
             alpha,
             offset_y,
         )
@@ -1000,10 +1005,10 @@ class SettingsView:
 
         # Toggles
         labels = {
-            "p1_prefers_keyboard": "P1 no teclado / P2 no controle",
-            "mouse_control": "Controle por Mouse",
-            "auto_fire": "Tiro Automático",
-            "gamepad_enabled": "Controle Xbox",
+            "p1_prefers_keyboard": t("settings.toggle.p1_keyboard"),
+            "mouse_control": t("settings.toggle.mouse"),
+            "auto_fire": t("settings.toggle.auto_fire"),
+            "gamepad_enabled": t("settings.toggle.gamepad"),
         }
         gamepad = getattr(self._app, "gamepad", None) if self._app is not None else None
         gamepad_connected = bool(gamepad is not None and gamepad.connected)
@@ -1037,12 +1042,12 @@ class SettingsView:
             label_color = colors.WHITE
             if key == "gamepad_enabled":
                 if not gamepad_connected:
-                    suffix = " (desconectado)"
+                    suffix = t("settings.status.disconnected")
                     label_color = colors.GRAY
                 elif slot0_active and slot1_active:
-                    suffix = " (2 controles — P1 + P2)"
+                    suffix = t("settings.status.two_pads")
                 else:
-                    suffix = " (1 controle conectado)"
+                    suffix = t("settings.status.one_pad")
                 label_text += suffix
             elif key == "p1_prefers_keyboard":
                 # Sinaliza quando há controle físico ocioso por causa desta
@@ -1050,10 +1055,10 @@ class SettingsView:
                 # deixa o 2º controle de fora pra preservar teclado em slot 0).
                 used = (1 if slot0_active else 0) + (1 if slot1_active else 0)
                 if is_checked and physical_count > used:
-                    suffix = f" ({physical_count - used} controle ocioso)"
+                    suffix = t("settings.status.idle_pad", n=physical_count - used)
                     label_text += suffix
             if coop_active and key in ("gamepad_enabled", "p1_prefers_keyboard"):
-                label_text += " (bloqueado em coop)"
+                label_text += t("settings.status.coop_locked")
                 label_color = colors.GRAY
             label_surf = self.item_font.render(label_text, True, label_color)
             label_surf.set_alpha(alpha)
@@ -1065,7 +1070,7 @@ class SettingsView:
         # Label da resolução
         label_rect = self.layout_rects["resolution_label"].copy()
         label_rect.y += offset_y
-        label_surf = self.item_font.render("Resolução:", True, CUSTOM_GOLD)
+        label_surf = self.item_font.render(t("settings.resolution_label"), True, CUSTOM_GOLD)
         label_surf.set_alpha(alpha)
         surface.blit(label_surf, (label_rect.x, label_rect.y))
 
@@ -1140,16 +1145,13 @@ class SettingsView:
         pygame.draw.rect(surface, colors.DARK_GRAY, popup_rect, border_radius=popup_radius)
         pygame.draw.rect(surface, CUSTOM_GOLD, popup_rect, 2, border_radius=popup_radius)
 
-        title_surf = self.header_font.render("Reinício Necessário", True, CUSTOM_GOLD)
+        title_surf = self.header_font.render(t("settings.restart_title"), True, CUSTOM_GOLD)
         surface.blit(
             title_surf,
             (popup_rect.centerx - title_surf.get_width() // 2, popup_rect.y + self._s(20)),
         )
 
-        message_text = (
-            "As alterações só serão vistas ao reiniciar o jogo. "
-            "Deseja fazer isso agora?"
-        )
+        message_text = t("settings.restart_msg")
         text_max_width = popup_rect.width - self._s(60)
         message_lines = wrap_text(self.item_font, message_text, text_max_width)
 
@@ -1182,10 +1184,10 @@ class SettingsView:
             y_offset += line_height + line_gap
 
         self._draw_button(
-            surface, self.layout_rects["popup_yes_button"], "Sim", colors.RED, 255, 0
+            surface, self.layout_rects["popup_yes_button"], t("common.yes"), colors.RED, 255, 0
         )
         self._draw_button(
-            surface, self.layout_rects["popup_no_button"], "Não", CUSTOM_PURPLE, 255, 0
+            surface, self.layout_rects["popup_no_button"], t("common.no"), CUSTOM_PURPLE, 255, 0
         )
 
     def _draw_info_popup(self, surface: pygame.Surface):
@@ -1202,7 +1204,7 @@ class SettingsView:
         pygame.draw.rect(surface, colors.DARK_GRAY, popup_rect, border_radius=popup_radius)
         pygame.draw.rect(surface, CUSTOM_GOLD, popup_rect, 2, border_radius=popup_radius)
 
-        title_surf = self.header_font.render("Aviso", True, CUSTOM_GOLD)
+        title_surf = self.header_font.render(t("settings.info_title"), True, CUSTOM_GOLD)
         surface.blit(
             title_surf,
             (popup_rect.centerx - title_surf.get_width() // 2, popup_rect.y + self._s(20)),
@@ -1239,7 +1241,7 @@ class SettingsView:
             y_offset += line_height + line_gap
 
         self._draw_button(
-            surface, self.layout_rects["info_popup_ok_button"], "OK", CUSTOM_PURPLE, 255, 0
+            surface, self.layout_rects["info_popup_ok_button"], t("common.ok"), CUSTOM_PURPLE, 255, 0
         )
 
 

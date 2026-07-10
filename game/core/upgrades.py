@@ -780,6 +780,13 @@ def list_all_upgrades_meta() -> list[UpgradeMeta]:
     return list(UPGRADES_META.values())
 
 
+def upgrade_desc(meta: UpgradeMeta) -> str:
+    """Descrição traduzida do upgrade (fallback = PT do UPGRADES_META)."""
+    from .i18n import t_or
+
+    return t_or(f"upgrade.{meta.icon_id}.desc", meta.desc)
+
+
 def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
     mapping = {
         "shield_burst": "S",

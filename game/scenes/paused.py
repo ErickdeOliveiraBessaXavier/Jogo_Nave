@@ -5,6 +5,7 @@ import pygame
 from ..core.assets import get_font
 from ..core.colors import CUSTOM_GOLD, CUSTOM_PURPLE, WHITE
 from ..core.config import config as Config
+from ..core.i18n import t
 from ..core.sound import sound_manager
 from ..core.state import Scene
 
@@ -174,7 +175,7 @@ class PausedScene(Scene):
         surface.blit(overlay, (0, 0))
 
         # Título
-        title = self.title_font.render("PAUSADO", True, CUSTOM_GOLD)
+        title = self.title_font.render(t("pause.title"), True, CUSTOM_GOLD)
         title_rect = title.get_rect(
             center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 4)
         )
@@ -184,7 +185,7 @@ class PausedScene(Scene):
         self._draw_button(
             surface,
             self.continue_button_rect,
-            "Continuar",
+            t("common.continue"),
             CUSTOM_GOLD,
             self.continue_button_hovered,
         )
@@ -192,7 +193,7 @@ class PausedScene(Scene):
         self._draw_button(
             surface,
             self.settings_button_rect,
-            "Configurações",
+            t("common.settings"),
             CUSTOM_PURPLE,
             self.settings_button_hovered,
         )
@@ -200,13 +201,13 @@ class PausedScene(Scene):
         self._draw_button(
             surface,
             self.menu_button_rect,
-            "Menu",
+            t("common.menu"),
             CUSTOM_PURPLE,
             self.menu_button_hovered,
         )
 
         # Hint
-        hint_text = self.hint_font.render("Pressione P para continuar", True, WHITE)
+        hint_text = self.hint_font.render(t("pause.hint"), True, WHITE)
         hint_rect = hint_text.get_rect(
             center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT - self._s(40))
         )

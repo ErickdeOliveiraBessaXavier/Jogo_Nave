@@ -15,6 +15,7 @@ import pygame
 from ..core.assets import BASE_DIR, get_font, get_image
 from ..core.colors import CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.config import config as Config
+from ..core.i18n import fmt_num, t, t_or
 from ..core.sound import sound_manager
 from ..core.levels.fixed_levels import TEST_ARENA_ENABLED
 from ..core.world_config import WorldConfig, get_all_worlds, resolve_theme_key
@@ -217,7 +218,7 @@ class WorldCard:
 
         # Título
         title_bottom = render_text_wrapped(
-            text=self.world_config.name,
+            text=t_or(f"world.{self.world_config.world_id}.name", self.world_config.name),
             font=self.title_font,
             color=self.title_color,
             surface=card_surf,
@@ -231,7 +232,10 @@ class WorldCard:
             (120, 120, 120) if self.state == WorldCardState.LOCKED else (200, 200, 200)
         )
         render_text_wrapped(
-            text=self.world_config.description,
+            text=t_or(
+                f"world.{self.world_config.world_id}.desc",
+                self.world_config.description,
+            ),
             font=self.desc_font,
             color=desc_color,
             surface=card_surf,
@@ -271,9 +275,9 @@ class WorldCard:
                     max(2, int(3 * s)),
                 )
         elif self.state == WorldCardState.CHECKPOINT:
-            line1 = self.checkpoint_font.render("CHECKPOINT ATUAL", True, CUSTOM_GOLD)
+            line1 = self.checkpoint_font.render(t("world.checkpoint"), True, CUSTOM_GOLD)
             line2 = self.checkpoint_font.render(
-                f"BEST: {self.best_score:,}", True, CUSTOM_GOLD
+                t("world.best", score=fmt_num(self.best_score)), True, CUSTOM_GOLD
             )
 
             card_surf.blit(
@@ -289,7 +293,7 @@ class WorldCard:
                 ),
             )
         else:
-            status_text = self.score_font.render("DESBLOQUEADO", True, CUSTOM_PURPLE)
+            status_text = self.score_font.render(t("world.unlocked"), True, CUSTOM_PURPLE)
             status_rect = status_text.get_rect(
                 centerx=self.base_width // 2, bottom=self.base_height - int(20 * s)
             )
@@ -372,7 +376,7 @@ class WorldSelectionView:
         self._inst_font = get_font(max(8, int(16 * self.ui_scale)))
 
         # Título
-        self.title_text = self.title_font.render("Selecione o Mundo", True, CUSTOM_GOLD)
+        self.title_text = self.title_font.render(t("world.title"), True, CUSTOM_GOLD)
         self.title_rect = self.title_text.get_rect(
             center=(Config.SCREEN_WIDTH // 2, int(80 * self.ui_scale))
         )
@@ -886,7 +890,7 @@ class WorldSelectionView:
         draw_bordered_button(
             surface,
             self.back_button_rect,
-            "Voltar",
+            t("common.back"),
             self._inst_font,
             CUSTOM_PURPLE,
             255,

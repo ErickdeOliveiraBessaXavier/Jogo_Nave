@@ -8,6 +8,7 @@ from ..core import colors
 from ..core.assets import get_font
 from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.difficulty import DifficultyPreset
+from ..core.i18n import fmt_num, t
 from ..core.meta_progression import (
     PerformanceState,
     PlayerProfile,
@@ -28,21 +29,31 @@ if TYPE_CHECKING:
 
 
 class StatTab(Enum):
-    """Abas disponíveis na tela de estatísticas."""
+    """Abas disponíveis na tela de estatísticas.
 
-    OVERVIEW = "Visão Geral"
-    LEVELS = "Níveis"
-    HIGH_SCORES = "Recordes"
-    # HISTORY = "Histórico" # Desativado por enquanto para simplificar
+    Os valores do enum são IDENTIDADE estável (não texto de UI). O rótulo exibido
+    vem do i18n via `_TAB_LABEL_KEYS`.
+    """
+
+    OVERVIEW = "overview"
+    LEVELS = "levels"
+    HIGH_SCORES = "high_scores"
+    # HISTORY = "history" # Desativado por enquanto para simplificar
 
 
-_DIFFICULTY_DISPLAY_NAMES: Dict[Optional[DifficultyPreset], str] = {
-    None: "Todas",
-    DifficultyPreset.CASUAL: "Casual",
-    DifficultyPreset.NORMAL: "Normal",
-    DifficultyPreset.HARDCORE: "Hardcore",
-    DifficultyPreset.NIGHTMARE: "Pesadelo",
+_TAB_LABEL_KEYS: Dict["StatTab", str] = {
+    StatTab.OVERVIEW: "stats.tab.overview",
+    StatTab.LEVELS: "stats.tab.levels",
+    StatTab.HIGH_SCORES: "stats.tab.high_scores",
 }
+
+
+def _difficulty_label(diff: Optional[DifficultyPreset]) -> str:
+    """Rótulo traduzido de uma dificuldade (None = filtro 'Todas')."""
+    if diff is None:
+        return t("stats.filter.all")
+    return t(f"difficulty.{diff.value}.name")
+
 
 _DIFFICULTY_TAG_COLORS: Dict[str, colors.Color] = {
     "casual": colors.LIGHT_BLUE,
@@ -293,7 +304,7 @@ class StatisticsView:
         offset_y = int(self._s(30) * (1.0 - self.entry_progress))
 
         # Título
-        title_surf = self.title_font.render("Estatísticas", True, CUSTOM_GOLD)
+        title_surf = self.title_font.render(t("menu.statistics"), True, CUSTOM_GOLD)
         title_surf.set_alpha(alpha)
         # Centralizar título
         title_x = (surface.get_width() - title_surf.get_width()) // 2
@@ -302,7 +313,7 @@ class StatisticsView:
         if not self.profile:
             # Tratamento se o perfil não carregar
             error_text = self.header_font.render(
-                "Perfil não encontrado.", True, colors.RED
+                t("stats.no_profile"), True, colors.RED
             )
             error_text.set_alpha(alpha)
             surface.blit(
@@ -322,7 +333,7 @@ class StatisticsView:
         self._draw_button(
             surface,
             self.layout_rects["back_button"],
-            "Voltar",
+            t("common.back"),
             CUSTOM_PURPLE,
             alpha,
             offset_y,
@@ -330,7 +341,7 @@ class StatisticsView:
         self._draw_button(
             surface,
             self.layout_rects["reset_button"],
-            "Resetar",
+            t("stats.reset"),
             colors.RED,
             alpha,
             offset_y,
@@ -384,7 +395,7 @@ class StatisticsView:
             )
             surface.blit(temp_surface, (rect.x - pad, rect.y - pad))
 
-            text_surf = self.item_font.render(tab.value, True, text_color)
+            text_surf = self.item_font.render(t(_TAB_LABEL_KEYS[tab]), True, text_color)
             text_surf.set_alpha(alpha)
             surface.blit(
                 text_surf,
@@ -438,15 +449,15 @@ class StatisticsView:
 
         # Dados para exibição
         stats_data = [
-            ("Nível Mais Alto:", f"{summary['highest_level']}"),
-            ("Tempo Total de Jogo:", f"{summary['total_playtime_hours']:.1f}h"),
-            ("Mortes Totais:", f"{self.profile.total_deaths}"),
-            ("Pontuação Total:", f"{self.profile.total_score:,}"),
-            ("Taxa de Sucesso Média:", f"{summary['avg_clear_rate']:.0%}"),
-            ("Estrelas Coletadas:", f"{self.profile.stars_collected}"),
-            ("Estrelas Gastas:", f"{self.profile.stars_spent}"),
-            ("Estrelas Disponíveis:", f"{self.profile.available_stars}"),
-            ("Slots Desbloqueados:", f"{self.profile.unlocked_slots}/9"),
+            (t("stats.highest_level"), f"{summary['highest_level']}"),
+            (t("stats.total_playtime"), f"{summary['total_playtime_hours']:.1f}h"),
+            (t("stats.total_deaths"), f"{self.profile.total_deaths}"),
+            (t("stats.total_score"), fmt_num(self.profile.total_score)),
+            (t("stats.avg_success"), f"{summary['avg_clear_rate']:.0%}"),
+            (t("stats.stars_collected"), f"{self.profile.stars_collected}"),
+            (t("stats.stars_spent"), f"{self.profile.stars_spent}"),
+            (t("stats.stars_available"), f"{self.profile.available_stars}"),
+            (t("stats.slots_unlocked"), f"{self.profile.unlocked_slots}/9"),
         ]
 
         # Configuração de Layout
@@ -482,7 +493,7 @@ class StatisticsView:
         card_rect = pygame.Rect(0, current_y, area.width, card1_height)
         self._draw_card_background(content_surface, card_rect, alpha)
 
-        header = self.header_font.render("Resumo do Piloto", True, CUSTOM_GOLD)
+        header = self.header_font.render(t("stats.summary_header"), True, CUSTOM_GOLD)
         header.set_alpha(alpha)
         content_surface.blit(header, (card_rect.x + indent_x, card_rect.y + self._s(15)))
 
@@ -508,7 +519,7 @@ class StatisticsView:
         recom_rect = pygame.Rect(0, current_y, area.width, card2_height)
         self._draw_card_background(content_surface, recom_rect, alpha)
 
-        header = self.header_font.render("Recomendações", True, CUSTOM_GOLD)
+        header = self.header_font.render(t("stats.recommendations_header"), True, CUSTOM_GOLD)
         header.set_alpha(alpha)
         content_surface.blit(header, (recom_rect.x + indent_x, recom_rect.y + self._s(15)))
 
@@ -523,7 +534,7 @@ class StatisticsView:
                 recom_y_inner += recom_lh
         else:
             recom_surf = self.small_font.render(
-                "Nenhuma recomendação no momento. Continue jogando!", True, colors.GRAY
+                t("stats.no_recommendations"), True, colors.GRAY
             )
             recom_surf.set_alpha(alpha)
             content_surface.blit(
@@ -547,14 +558,14 @@ class StatisticsView:
         line_spacing = self._s(25)
         card_extra = self._s(20) + self._s(10)  # padding topo+base do card
         card_gap = self._s(15)
-        header = self.header_font.render("Performance por Nível", True, CUSTOM_GOLD)
+        header = self.header_font.render(t("stats.levels_header"), True, CUSTOM_GOLD)
         header.set_alpha(alpha)
         surface.blit(header, (area.x + indent_x, area.y))
 
         y = area.y + self._s(50)
         if not self.profile.level_stats:
             text = self.item_font.render(
-                "Nenhum nível jogado ainda.", True, colors.GRAY
+                t("stats.no_levels"), True, colors.GRAY
             )
             text.set_alpha(alpha)
             surface.blit(text, (area.x + indent_x, y))
@@ -610,7 +621,7 @@ class StatisticsView:
             line_y = card_rect.y + self._s(15)
             gap5 = self._s(5)
 
-            level_label = self.item_font.render("Nível", True, colors.GRAY)
+            level_label = self.item_font.render(t("stats.level"), True, colors.GRAY)
             level_label.set_alpha(alpha)
             level_value = self.item_font.render(str(level_num), True, CUSTOM_PURPLE)
             level_value.set_alpha(alpha)
@@ -621,7 +632,7 @@ class StatisticsView:
             )
             line_y += line_spacing + self._s(10)
 
-            attempts_label = self.small_font.render("Tentativas:", True, colors.GRAY)
+            attempts_label = self.small_font.render(t("stats.attempts"), True, colors.GRAY)
             attempts_label.set_alpha(alpha)
             attempts_value = self.small_font.render(
                 str(stats.attempts), True, CUSTOM_PURPLE
@@ -634,7 +645,7 @@ class StatisticsView:
             )
             line_y += line_spacing
 
-            success_label = self.small_font.render("Sucesso:", True, colors.GRAY)
+            success_label = self.small_font.render(t("stats.success"), True, colors.GRAY)
             success_label.set_alpha(alpha)
             success_value = self.small_font.render(
                 f"{stats.clear_rate:.0%}", True, CUSTOM_PURPLE
@@ -648,7 +659,7 @@ class StatisticsView:
             line_y += line_spacing
 
             if stats.best_time:
-                time_label = self.small_font.render("Melhor tempo:", True, colors.GRAY)
+                time_label = self.small_font.render(t("stats.best_time"), True, colors.GRAY)
                 time_label.set_alpha(alpha)
                 time_value = self.small_font.render(
                     f"{stats.best_time:.1f}s", True, CUSTOM_PURPLE
@@ -662,11 +673,11 @@ class StatisticsView:
                 line_y += line_spacing
 
                 score_label = self.small_font.render(
-                    "Melhor pontuação:", True, colors.GRAY
+                    t("stats.best_score"), True, colors.GRAY
                 )
                 score_label.set_alpha(alpha)
                 score_value = self.small_font.render(
-                    f"{stats.best_score:,}", True, CUSTOM_PURPLE
+                    fmt_num(stats.best_score), True, CUSTOM_PURPLE
                 )
                 score_value.set_alpha(alpha)
                 content_surface.blit(score_label, (card_rect.x + indent_x, line_y))
@@ -696,7 +707,7 @@ class StatisticsView:
         # Indentação padrão para alinhar com as colunas da tabela
         indent_x = self._s(30)
 
-        header = self.header_font.render("HALL DA FAMA", True, CUSTOM_GOLD)
+        header = self.header_font.render(t("stats.hall_of_fame"), True, CUSTOM_GOLD)
         header.set_alpha(alpha)
         surface.blit(header, (area.x + indent_x, area.y))
 
@@ -725,7 +736,7 @@ class StatisticsView:
         }
 
         for diff in filter_options:
-            label = _DIFFICULTY_DISPLAY_NAMES[diff]
+            label = _difficulty_label(diff)
             text_w = self.small_font.size(label)[0]
             btn_w = text_w + btn_padding_x * 2
             rect = pygame.Rect(cursor_x, filters_y, btn_w, btn_h)
@@ -805,7 +816,7 @@ class StatisticsView:
 
         if not entries:
             empty = self.item_font.render(
-                "Nenhum recorde ainda. Sobreviva, marque sua glória.",
+                t("stats.no_scores"),
                 True,
                 colors.GRAY,
             )
@@ -828,12 +839,12 @@ class StatisticsView:
         header_y = list_top + self._s(10)
         header_color = CUSTOM_GOLD
         col_titles = [
-            ("#", col_rank_w),
-            ("PILOTO", col_initials_w),
-            ("SCORE", col_score_w),
-            ("NÍVEL", col_level_w),
-            ("DIF.", col_diff_w),
-            ("DATA", col_date_w),
+            (t("stats.col_rank"), col_rank_w),
+            (t("stats.col_pilot"), col_initials_w),
+            (t("stats.col_score"), col_score_w),
+            (t("stats.col_level"), col_level_w),
+            (t("stats.col_diff"), col_diff_w),
+            (t("stats.col_date"), col_date_w),
         ]
 
         cx = area.x + row_padding_x
@@ -861,7 +872,7 @@ class StatisticsView:
             (area.width, max(total_height, visible_rows_height)), pygame.SRCALPHA
         )
 
-        t = pygame.time.get_ticks() / 1000.0
+        anim_t = pygame.time.get_ticks() / 1000.0
 
         for idx, entry in enumerate(entries):
             row_y = idx * row_h
@@ -870,7 +881,7 @@ class StatisticsView:
             # Animação para o #1 global
             row_alpha = alpha
             if is_first:
-                pulse = 0.5 + 0.5 * math.sin(t * 10)
+                pulse = 0.5 + 0.5 * math.sin(anim_t * 10)
                 row_color = CUSTOM_GOLD
                 # Brilho de fundo para o primeiro lugar
                 glow_alpha = int(40 * pulse * (alpha / 255))
@@ -904,7 +915,7 @@ class StatisticsView:
             cx += col_initials_w
 
             # Score
-            score_str = f"{entry.score:,}".replace(",", ".")
+            score_str = fmt_num(entry.score)
             score_text = self.item_font.render(
                 score_str, True, CUSTOM_GOLD if is_first else CUSTOM_PURPLE
             )
@@ -916,7 +927,7 @@ class StatisticsView:
 
             # Nível
             level_text = self.item_font.render(
-                f"Lv {entry.level_reached:02d}", True, row_color
+                t("stats.level_short", n=f"{entry.level_reached:02d}"), True, row_color
             )
             level_text.set_alpha(row_alpha)
             content_surface.blit(
@@ -928,7 +939,7 @@ class StatisticsView:
             tag_color = _DIFFICULTY_TAG_COLORS.get(entry.difficulty, colors.WHITE)
             try:
                 diff_preset = DifficultyPreset(entry.difficulty)
-                diff_label = _DIFFICULTY_DISPLAY_NAMES[diff_preset].upper()
+                diff_label = _difficulty_label(diff_preset).upper()
             except ValueError:
                 diff_label = entry.difficulty.upper()
 
@@ -994,9 +1005,9 @@ class StatisticsView:
     def show_confirmation(self):
         self.dialog = ConfirmationDialog(
             [
-                "Tem certeza?",
-                "Estatísticas serão resetadas.",
-                "A campanha voltará ao Mundo 1.",
+                t("stats.confirm.line1"),
+                t("stats.confirm.line2"),
+                t("stats.confirm.line3"),
             ],
             self.reset_profile,
             self.close_confirmation,
@@ -1220,8 +1231,8 @@ class ConfirmationDialog:
             surface.blit(line_surface, rect)
 
         # Botões
-        self._draw_button(surface, self.yes_rect, "Sim", colors.GREEN)
-        self._draw_button(surface, self.no_rect, "Não", colors.RED)
+        self._draw_button(surface, self.yes_rect, t("common.yes"), colors.GREEN)
+        self._draw_button(surface, self.no_rect, t("common.no"), colors.RED)
 
     def _draw_button(
         self, surface: pygame.Surface, rect: pygame.Rect, text: str, color: colors.Color

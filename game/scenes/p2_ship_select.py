@@ -23,7 +23,14 @@ from ..core.assets import BASE_DIR, get_font, get_image
 from ..core.colors import CUSTOM_DARK_BG, CUSTOM_GOLD, CUSTOM_PURPLE, WHITE, GRAY
 from ..core.config import config as Config
 from ..core.gamepad import XboxButton
-from ..core.ship_types import ShipProfile, all_ship_profiles, format_ship_description
+from ..core.i18n import t
+from ..core.ship_types import (
+    ShipProfile,
+    all_ship_profiles,
+    format_ship_description,
+    ship_display_name,
+    ship_tags,
+)
 from ..core.sound import sound_manager
 from ..core.state import Scene
 
@@ -165,7 +172,7 @@ class P2ShipSelectScene(Scene):
         surface.blit(overlay, (0, 0))
 
         # Título
-        title_surf = self.title_font.render("JOGADOR 2 — NAVE", True, CUSTOM_GOLD)
+        title_surf = self.title_font.render(t("p2.title"), True, CUSTOM_GOLD)
         surface.blit(
             title_surf, ((Config.SCREEN_WIDTH - title_surf.get_width()) // 2, self._s(60))
         )
@@ -198,7 +205,7 @@ class P2ShipSelectScene(Scene):
             )
 
         # 2. Nome da Nave
-        name_surf = self.name_font.render(profile.display_name.upper(), True, WHITE)
+        name_surf = self.name_font.render(ship_display_name(profile).upper(), True, WHITE)
         surface.blit(
             name_surf,
             (
@@ -208,16 +215,17 @@ class P2ShipSelectScene(Scene):
         )
 
         # 3. Tags
-        if profile.tags:
+        tags = ship_tags(profile)
+        if tags:
             tag_y = self.card_rect.top + self._s(210)
             total_tags_w = (
-                sum(self.tag_font.size(t)[0] + self._s(20) for t in profile.tags)
+                sum(self.tag_font.size(tg)[0] + self._s(20) for tg in tags)
                 - self._s(10)
             )
             start_x = self.card_rect.centerx - total_tags_w // 2
 
             curr_x = start_x
-            for tag in profile.tags:
+            for tag in tags:
                 tag_surf = self.tag_font.render(tag, True, CUSTOM_GOLD)
                 tag_bg = pygame.Rect(
                     curr_x,
@@ -271,7 +279,11 @@ class P2ShipSelectScene(Scene):
 
         # Dicas de controles
         hint_y = Config.SCREEN_HEIGHT - self._s(60)
-        hints = [("L/R", "Navegar"), ("A", "Confirmar"), ("B", "Cancelar")]
+        hints = [
+            ("L/R", t("common.navigate")),
+            ("A", t("common.confirm")),
+            ("B", t("common.cancel")),
+        ]
 
         hint_x_start = Config.SCREEN_WIDTH // 2 - self._s(200)
         for btn, action in hints:

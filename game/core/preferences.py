@@ -18,6 +18,10 @@ class UserPreferences:
         self.resolution: Tuple[int, int] = (1280, 720)
         self.fullscreen: bool = True
 
+        # Idioma da interface: "pt" | "en". String vazia = ainda não escolhido
+        # → o 1º boot mostra a tela de seleção de idioma.
+        self.language: str = ""
+
         # Qualidade visual: "high" | "medium" | "low" (default: high).
         self.visual_quality: str = "high"
 
@@ -77,6 +81,11 @@ class UserPreferences:
 
                 self.fullscreen = data.get("fullscreen", self.fullscreen)
 
+                # Idioma (vazio/ausente = ainda não escolhido)
+                lang = data.get("language", self.language)
+                if lang in ("pt", "en"):
+                    self.language = lang
+
                 # Qualidade visual
                 vq = data.get("visual_quality", self.visual_quality)
                 if vq in ("high", "medium", "low"):
@@ -118,6 +127,7 @@ class UserPreferences:
             data: Dict[str, Any] = {
                 "resolution": list(self.resolution),
                 "fullscreen": self.fullscreen,
+                "language": self.language,
                 "visual_quality": self.visual_quality,
                 "pixelization": self.pixelization,
                 "music_volume": self.music_volume,
@@ -140,6 +150,7 @@ class UserPreferences:
         """Redefine para os padrões de fábrica."""
         self.resolution = (1280, 720)
         self.fullscreen = True
+        self.language = ""
         self.visual_quality = "high"
         self.pixelization = "light"
         self.music_volume = VOLUME_CONFIG["music"]

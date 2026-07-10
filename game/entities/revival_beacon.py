@@ -20,6 +20,7 @@ import pygame
 
 from ..core.assets import get_font
 from ..core.colors import CUSTOM_GOLD, CYAN, WHITE
+from ..core.i18n import t
 
 if TYPE_CHECKING:
     from ..systems.player_slot import PlayerSlot
@@ -212,8 +213,8 @@ class RevivalBeacon:
         pygame.draw.rect(surface, CUSTOM_GOLD, btn_bg, border_radius=15)
         surface.blit(btn_surf, btn_surf.get_rect(center=btn_bg.center))
 
-        # Texto "SEGURE PARA REVIVER"
-        txt_surf = self._hint_font.render("SEGURE PARA REVIVER", True, WHITE)
+        # Texto de instrução de revive
+        txt_surf = self._hint_font.render(t("revival.hold"), True, WHITE)
         surface.blit(txt_surf, (cx - txt_surf.get_width() // 2, cy - radius - 65))
 
         # Progresso em texto se estiver segurando

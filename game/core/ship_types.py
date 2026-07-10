@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .i18n import t, t_or
+
 DEFAULT_SHIP_ID: str = "padrao"
 
 
@@ -222,30 +224,64 @@ def get_ship_profile(ship_id: str) -> ShipProfile:
 # Placeholders permitidos nas descrições. Mantidos como dict literal — ao
 # adicionar uma nova habilidade input-específica em alguma nave, basta criar
 # uma chave aqui e usar `{nova_chave}` no `description` correspondente.
-_INPUT_TOKENS_KEYBOARD: dict[str, str] = {
-    "charge": "Alt + Espaço ou Mouse",
-    "cofre": "Q e E",
-    "dash": "Shift",
+# Placeholders de input traduzidos por token. Só `cofre`/`dash`/`charge` do
+# teclado carregam texto PT/EN; os do controle ("LT") são universais.
+def _input_tokens(gamepad_active: bool) -> dict[str, str]:
+    if gamepad_active:
+        return {"charge": "LT", "cofre": t("ship.token.cofre_gp"), "dash": "LT"}
+    return {
+        "charge": t("ship.token.charge_kb"),
+        "cofre": t("ship.token.cofre_kb"),
+        "dash": t("ship.token.dash_kb"),
+    }
+
+
+# Mapa tag (PT canônico nos dados) → slug estável usado nas chaves de tradução.
+_TAG_KEYS: dict[str, str] = {
+    "Equilibrada": "balanced",
+    "Coleta": "collection",
+    "Laser": "laser",
+    "Rápida": "fast",
+    "DPS sustentado": "sustained_dps",
+    "Tanque": "tank",
+    "Burst": "burst",
+    "Gerenciamento": "management",
+    "Mobilidade": "mobility",
+    "Frágil": "fragile",
+    "Drone": "drone",
+    "Suporte": "support",
+    "Precisão": "precision",
+    "Combo": "combo",
+    "Escalada": "scaling",
 }
 
-_INPUT_TOKENS_GAMEPAD: dict[str, str] = {
-    "charge": "LT",
-    "cofre": "Y e A",
-    "dash": "LT",
-}
+
+def ship_display_name(ship: ShipProfile) -> str:
+    """Nome da nave no idioma atual (fallback = PT do registry)."""
+    return t_or(f"ship.{ship.id}.name", ship.display_name)
+
+
+def translate_tag(tag: str) -> str:
+    """Traduz uma tag de nave; desconhecida passa intacta."""
+    slug = _TAG_KEYS.get(tag)
+    return t_or(f"ship.tag.{slug}", tag) if slug else tag
+
+
+def ship_tags(ship: ShipProfile) -> tuple[str, ...]:
+    """Tags da nave traduzidas, na ordem original."""
+    return tuple(translate_tag(tg) for tg in ship.tags)
 
 
 def format_ship_description(ship: ShipProfile, gamepad_active: bool = False) -> str:
-    """Substitui placeholders `{charge}/{cofre}/{dash}` pela tecla ou botão
-    do input ativo. Strings sem placeholders passam intactas.
+    """Descrição traduzida da nave com placeholders `{charge}/{cofre}/{dash}`
+    substituídos pela tecla/botão do input ativo. Fallback = PT do registry.
     """
-    tokens = _INPUT_TOKENS_GAMEPAD if gamepad_active else _INPUT_TOKENS_KEYBOARD
+    desc = t_or(f"ship.{ship.id}.desc", ship.description)
     try:
-        return ship.description.format(**tokens)
+        return desc.format(**_input_tokens(gamepad_active))
     except (KeyError, IndexError):
-        # Defensivo: se algum dia introduzirem um placeholder desconhecido
-        # sem registrar, devolve a string crua em vez de explodir.
-        return ship.description
+        # Defensivo: placeholder desconhecido → devolve a string crua.
+        return desc
 
 
 def all_ship_profiles() -> tuple[ShipProfile, ...]:

@@ -382,23 +382,21 @@ class PerformanceAnalyzer:
         profile: "PlayerProfile", skill_level: str, trend: str
     ) -> List[str]:
         """Gera recomendações personalizadas."""
+        from .i18n import t
+
         recommendations: List[str] = []
 
         # Recomendações baseadas em skill level
         if skill_level in ["Novato", "Aprendiz"]:
-            recommendations.append(
-                "💡 Dica: Colete power-ups de escudo para sobreviver mais tempo"
-            )
-            recommendations.append("🎯 Foque em desviar antes de atirar")
+            recommendations.append(t("stats.rec.novice_shield"))
+            recommendations.append(t("stats.rec.dodge"))
 
         # Recomendações baseadas em tendência
         if trend == "declining":
-            recommendations.append(
-                "⚠️ Notamos dificuldade recente. Considere fazer uma pausa!"
-            )
-            recommendations.append("🔄 Tente revisitar níveis anteriores para praticar")
+            recommendations.append(t("stats.rec.declining"))
+            recommendations.append(t("stats.rec.revisit"))
         elif trend == "improving":
-            recommendations.append("📈 Excelente progresso! Continue assim!")
+            recommendations.append(t("stats.rec.improving"))
 
         # Recomendações baseadas em padrões específicos
         struggling_levels = [
@@ -409,8 +407,10 @@ class PerformanceAnalyzer:
 
         if struggling_levels:
             recommendations.append(
-                f"🎮 Níveis desafiadores: {', '.join(map(str, struggling_levels[:3]))}. "
-                "Dificuldade foi ajustada sutilmente."
+                t(
+                    "stats.rec.challenging",
+                    levels=", ".join(map(str, struggling_levels[:3])),
+                )
             )
 
         return recommendations

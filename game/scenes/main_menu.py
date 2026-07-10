@@ -10,6 +10,7 @@ from ..core.assets import get_font
 from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE, GREEN, YELLOW, WHITE
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset
+from ..core.i18n import t
 from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
@@ -74,11 +75,8 @@ class MenuView(Enum):
 
 
 class MenuStrings:
-    START_GAME = "Iniciar Jogo"
-    STATISTICS = "Estatísticas"
-    UPGRADES = "Aprimoramentos"
-    SETTINGS = "Configurações"
-    EXIT = "Sair"
+    # Textos traduzíveis migraram para o i18n (ver `_create_buttons`, que lê via
+    # `t("menu.*")` no idioma atual). TITLE é o nome do jogo — não se traduz.
     TITLE = "Pixel Patrol"
 
 
@@ -599,10 +597,10 @@ class MainMenuScene(Scene):
     def _create_buttons(self):
         buttons_y_start = self.menu_y + int((AnimationConfig.TITLE_TOP_MARGIN + AnimationConfig.TITLE_HEIGHT + AnimationConfig.BUTTONS_TOP_MARGIN) * self.ui_scale)
         button_configs = [
-            (MenuStrings.START_GAME, CUSTOM_PURPLE, WHITE, self._start_world_selection),
-            (MenuStrings.STATISTICS, CUSTOM_PURPLE, WHITE, self._open_statistics),
-            (MenuStrings.UPGRADES, CUSTOM_PURPLE, WHITE, self._open_upgrades),
-            (MenuStrings.EXIT, CUSTOM_PURPLE, WHITE, lambda: setattr(self.app, "running", False)),
+            (t("menu.start"), CUSTOM_PURPLE, WHITE, self._start_world_selection),
+            (t("menu.statistics"), CUSTOM_PURPLE, WHITE, self._open_statistics),
+            (t("menu.upgrades"), CUSTOM_PURPLE, WHITE, self._open_upgrades),
+            (t("menu.exit"), CUSTOM_PURPLE, WHITE, lambda: setattr(self.app, "running", False)),
         ]
         for i, (text, color, hover_color, action) in enumerate(button_configs):
             if i == len(button_configs) - 1:

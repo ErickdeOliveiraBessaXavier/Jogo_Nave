@@ -17,6 +17,7 @@ from ..core.colors import (
 )
 from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
+from ..core.i18n import t
 from ..core.sound import sound_manager
 from ..core.state import Scene
 from .ui_helpers import UIParticle, draw_bordered_button, wrap_text
@@ -86,7 +87,7 @@ class DifficultySelectionView:
 
         # Título
         self.title_text = self.title_font.render(
-            "Selecione a Dificuldade", True, CUSTOM_GOLD
+            t("difficulty.title"), True, CUSTOM_GOLD
         )
         self.title_rect = self.title_text.get_rect(center=(center_x, int(80 * s)))
 
@@ -112,7 +113,7 @@ class DifficultySelectionView:
 
             # Descrição com quebra de linha
             desc_lines = wrap_text(
-                self.desc_font, settings["description"], card_size - int(30 * s)
+                self.desc_font, t(f"difficulty.{preset.value}.desc"), card_size - int(30 * s)
             )
             desc_surfaces = [
                 self.desc_font.render(line, True, WHITE) for line in desc_lines
@@ -120,7 +121,7 @@ class DifficultySelectionView:
 
             # Informações extras
             lives_text = self.desc_font.render(
-                f"Vidas: {settings['lives']}", True, WHITE
+                t("difficulty.lives", n=settings["lives"]), True, WHITE
             )
 
             # Parâmetros de tremor unificados pelo estilo do Pesadelo (sutil mas energético)
@@ -134,7 +135,7 @@ class DifficultySelectionView:
 
             self.difficulty_buttons[preset] = {
                 "rect": button_rect,
-                "name": settings["name"],
+                "name": t(f"difficulty.{preset.value}.name"),
                 "desc_surfaces": desc_surfaces,
                 "lives_text": lives_text,
                 "color": self.difficulty_colors[preset],
@@ -450,7 +451,7 @@ class DifficultySelectionView:
         draw_bordered_button(
             surface,
             self.back_button_rect,
-            "Voltar",
+            t("common.back"),
             self.button_font,
             CUSTOM_PURPLE,
             alpha,

@@ -6,6 +6,7 @@ from ..core import colors
 from ..core.assets import get_font
 from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE, WHITE
 from ..core.config import config as Config
+from ..core.i18n import t
 from ..core.sound import sound_manager
 from ..core.state import Scene
 from .ui_helpers import wrap_text, draw_bordered_button
@@ -139,7 +140,7 @@ class ControlsModalScene(Scene):
         )
 
         # Título
-        title_surf = self.title_font.render("Instruções de Voo", True, CUSTOM_GOLD)
+        title_surf = self.title_font.render(t("controls.title"), True, CUSTOM_GOLD)
         surface.blit(
             title_surf,
             (
@@ -160,25 +161,25 @@ class ControlsModalScene(Scene):
         )
         if gamepad_active:
             left_col_raw = [
-                "• LS: Mover",
-                "• RT: Atirar",
-                "• START: Pausar | BACK: Sair",
+                t("controls.gp.move"),
+                t("controls.gp.shoot"),
+                t("controls.gp.pause"),
             ]
             right_col_raw = [
-                "• X: Girar Nave",
-                "• LT: Dash / Charge",
-                "• D-pad ↑ + LB/RB/A: Poderes",
+                t("controls.gp.rotate"),
+                t("controls.gp.dash"),
+                t("controls.gp.powers"),
             ]
         else:
             left_col_raw = [
-                "• Mouse/WASD: Mover",
-                "• Espaço: Atirar",
-                "• P: Pausar | ESC: Sair",
+                t("controls.kb.move"),
+                t("controls.kb.shoot"),
+                t("controls.kb.pause"),
             ]
             right_col_raw = [
-                "• Ctrl: Girar Nave",
-                "• Shift: Dash",
-                "• Teclado Num: Poderes",
+                t("controls.kb.rotate"),
+                t("controls.kb.dash"),
+                t("controls.kb.powers"),
             ]
 
         def draw_column(items: list[str], start_x: int, start_y: int):
@@ -196,7 +197,7 @@ class ControlsModalScene(Scene):
         draw_column(right_col_raw, right_x, y_start)
 
         # Timer
-        timer_text = f"Iniciando em: {max(0, int(self.timer + 0.9))}s"
+        timer_text = t("controls.starting_in", n=max(0, int(self.timer + 0.9)))
         timer_surf = self.small_font.render(timer_text, True, colors.GRAY)
         surface.blit(
             timer_surf,
@@ -208,7 +209,7 @@ class ControlsModalScene(Scene):
 
         # Botão Entendi
         draw_bordered_button(
-            surface, self.button_rect, "Entendi", self.item_font, CUSTOM_PURPLE
+            surface, self.button_rect, t("controls.got_it"), self.item_font, CUSTOM_PURPLE
         )
 
         # Checkbox "Não mostrar mais" abaixo do botão
@@ -221,7 +222,7 @@ class ControlsModalScene(Scene):
 
         # Fonte menor para o checkbox
         tiny_font = get_font(max(8, int(12 * self.ui_scale)))
-        label_surf = tiny_font.render("Não mostrar novamente", True, colors.GRAY)
+        label_surf = tiny_font.render(t("controls.dont_show"), True, colors.GRAY)
         surface.blit(
             label_surf,
             (

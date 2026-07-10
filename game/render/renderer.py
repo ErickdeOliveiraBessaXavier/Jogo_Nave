@@ -10,7 +10,8 @@ import pygame
 from ..core import colors
 from ..core.assets import get_font, get_image
 from ..core.config import config as Config
-from ..core.difficulty import DifficultyPreset, DifficultySettings
+from ..core.difficulty import DifficultyPreset
+from ..core.i18n import t
 from ..core.sprite_loader import sprite_loader
 from ..core.world_config import WorldTheme
 from .backgrounds import (
@@ -226,17 +227,17 @@ class Renderer:
     ):
         # Renderizar com cache (só re-renderiza se valores mudaram)
         s = self._render_text_cached(
-            "score", score, "Pontos: {}", self.font_medium, colors.WHITE
+            "score", score, t("hud.score"), self.font_medium, colors.WHITE
         )
         lives_surf = self._render_text_cached(
-            "lives", lives, "Vidas: {}", self.font_medium, colors.WHITE
+            "lives", lives, t("hud.lives"), self.font_medium, colors.WHITE
         )
 
         # MODIFICADO: Mostrar estágio formatado (ex: "2-5" ao invés de "Fase: 15")
-        lvl = self.font_medium.render(f"Estágio: {level_display}", True, colors.WHITE)
+        lvl = self.font_medium.render(t("hud.stage", n=level_display), True, colors.WHITE)
 
         e = self._render_text_cached(
-            "enemies", enemies_destroyed, "Inimigos: {}", self.font_small, colors.WHITE
+            "enemies", enemies_destroyed, t("hud.enemies"), self.font_small, colors.WHITE
         )
 
         # Desenhar textos (mesmas posições)
@@ -249,7 +250,6 @@ class Renderer:
 
         # Indicador de dificuldade
         if difficulty_preset is not None:
-            settings = DifficultySettings.get_settings(difficulty_preset)
             difficulty_color = {
                 DifficultyPreset.CASUAL: colors.GREEN,
                 DifficultyPreset.NORMAL: colors.YELLOW,
@@ -260,7 +260,10 @@ class Renderer:
             diff_text = self._render_text_cached(
                 "difficulty",
                 difficulty_preset.value,  # Valor do enum — estável e sem risco de colisão
-                f"Dificuldade: {settings['name']}",
+                t(
+                    "hud.difficulty",
+                    name=t(f"difficulty.{difficulty_preset.value}.name"),
+                ),
                 self.font_small,
                 difficulty_color,
             )
@@ -273,8 +276,8 @@ class Renderer:
 
             def line(txt: str, color: tuple[int, int, int] = colors.GREEN):
                 nonlocal y
-                t = self.font_small.render(txt, True, color)
-                surface.blit(t, (10, y))
+                surf = self.font_small.render(txt, True, color)
+                surface.blit(surf, (10, y))
                 y += 18
 
             invuln_s = ship.get_invulnerable_time()
@@ -282,19 +285,19 @@ class Renderer:
             sp_s = ship.get_speed_boost_time()
 
             if invuln_s > 0:
-                line(f"[S] Escudo: {invuln_s:.1f}s", colors.BLUE)
+                line(t("hud.effect.shield", sec=f"{invuln_s:.1f}"), colors.BLUE)
             if ds_s > 0:
-                line(f"[2X] Tiro Duplo: {ds_s:.1f}s", colors.GREEN)
+                line(t("hud.effect.double", sec=f"{ds_s:.1f}"), colors.GREEN)
             if sp_s > 0:
-                line(f"[V] Velocidade: {sp_s:.1f}s", colors.YELLOW)
+                line(t("hud.effect.speed", sec=f"{sp_s:.1f}"), colors.YELLOW)
 
             # Mostrar multiplicador de score se ativo
             if score_multiplier_active and score_multiplier_timer > 0:
-                line(f"[x1.5] Score x1.5: {score_multiplier_timer:.1f}s", colors.YELLOW)
+                line(t("hud.effect.score", sec=f"{score_multiplier_timer:.1f}"), colors.YELLOW)
 
             # Mostrar mini ships se ativo
             if mini_ships_active and mini_ships_timer > 0:
-                line(f"[M] Mini Ships: {mini_ships_timer:.1f}s", colors.CYAN)
+                line(t("hud.effect.mini", sec=f"{mini_ships_timer:.1f}"), colors.CYAN)
 
             # Mostrar tiros explosivos restantes
             if explosive_shots_active and explosive_shots_remaining > 0:
@@ -304,7 +307,7 @@ class Renderer:
                     color = colors.ORANGE if blink else colors.RED
                 else:
                     color = colors.ORANGE
-                line(f"[💥] Explosivos: {explosive_shots_remaining}", color)
+                line(t("hud.effect.explosive", n=explosive_shots_remaining), color)
 
     def overlay(self, surface: pygame.Surface, title: str, subtitle: str = ""):
         overlay = pygame.Surface(
@@ -332,7 +335,7 @@ class Renderer:
         difficulty: Optional["DifficultyPreset"] = None,
     ):
         # Design aprimorado com animações e hierarquia
-        t = pygame.time.get_ticks() / 1000.0
+        anim_t = pygame.time.get_ticks() / 1000.0
 
         # Parâmetros de animação de saída
         exit_anim_active = remaining <= 0
@@ -377,7 +380,7 @@ class Renderer:
 
         # 2. Nome do Estágio (Acima do contador)
         if stage_name:
-            st_alpha = int((180 + int(75 * math.sin(t * 3))) * (1.0 - exit_progress))
+            st_alpha = int((180 + int(75 * math.sin(anim_t * 3))) * (1.0 - exit_progress))
             st_surf = info_font.render(stage_name, True, colors.CUSTOM_GOLD)
             st_surf.set_alpha(st_alpha)
             surface.blit(
@@ -396,7 +399,7 @@ class Renderer:
             ct_base = warning_font.render(f"{count_val}", True, colors.RED)
         else:
             pulse = exit_scale
-            ct_base = warning_font.render("COMBATE!", True, colors.YELLOW)
+            ct_base = warning_font.render(t("hud.combat"), True, colors.YELLOW)
             ct_base.set_alpha(global_alpha)
 
         ct_surf = pygame.transform.smoothscale(
@@ -410,9 +413,6 @@ class Renderer:
 
         # 4. Dificuldade (Abaixo do contador)
         if difficulty is not None:
-            from ..core.difficulty import DifficultyPreset, DifficultySettings
-
-            d_set = DifficultySettings.get_settings(difficulty)
             d_color = {
                 DifficultyPreset.CASUAL: colors.GREEN,
                 DifficultyPreset.NORMAL: colors.YELLOW,
@@ -421,7 +421,12 @@ class Renderer:
             }.get(difficulty, colors.WHITE)
 
             d_surf = diff_font.render(
-                f"DIFICULDADE: {d_set['name'].upper()}", True, d_color
+                t(
+                    "hud.difficulty_prep",
+                    name=t(f"difficulty.{difficulty.value}.name").upper(),
+                ),
+                True,
+                d_color,
             )
             d_surf.set_alpha(global_alpha)
 

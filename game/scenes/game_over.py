@@ -9,6 +9,7 @@ from ..core import colors
 from ..core.assets import get_font
 from ..core.colors import CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.config import config as Config
+from ..core.i18n import fmt_num, t
 from ..core.meta_progression import HighScoreEntry
 from ..core.sound import sound_manager
 from ..core.state import Scene
@@ -304,7 +305,9 @@ class InitialsEntryWidget:
             surface, (*CUSTOM_GOLD, alpha), self.rect, 2, border_radius=modal_radius
         )
 
-        title_text = self.font_label.render("DIGITE SUAS INICIAIS", True, colors.WHITE)
+        title_text = self.font_label.render(
+            t("game_over.initials_title"), True, colors.WHITE
+        )
         title_text.set_alpha(alpha)
         surface.blit(
             title_text,
@@ -313,7 +316,7 @@ class InitialsEntryWidget:
 
         if self.predicted_rank > 0 and self._rank_y is not None:
             rank_text = self.font_rank.render(
-                f"RECORDE: #{self.predicted_rank} LUGAR!", True, CUSTOM_GOLD
+                t("game_over.rank", n=self.predicted_rank), True, CUSTOM_GOLD
             )
             rank_text.set_alpha(alpha)
             surface.blit(
@@ -326,7 +329,7 @@ class InitialsEntryWidget:
 
         # Legenda em 2 linhas, posicionada pelo Y calculado em _build_layout.
         label_y = self._label_y
-        for line in ("↑ ↓: LETRA    ← →: COLUNA", "A/ENTER: SALVAR    B/ESC: PULAR"):
+        for line in (t("game_over.legend_move"), t("game_over.legend_action")):
             line_surf = self.font_label.render(line, True, (180, 180, 180))
             line_surf.set_alpha(alpha)
             surface.blit(
@@ -336,10 +339,10 @@ class InitialsEntryWidget:
             label_y += line_surf.get_height() + self._s(6)
 
         draw_bordered_button(
-            surface, self.save_button, "SALVAR", self.font_button, CUSTOM_GOLD, alpha
+            surface, self.save_button, t("game_over.save"), self.font_button, CUSTOM_GOLD, alpha
         )
         draw_bordered_button(
-            surface, self.skip_button, "PULAR", self.font_button, CUSTOM_PURPLE, alpha
+            surface, self.skip_button, t("game_over.skip"), self.font_button, CUSTOM_PURPLE, alpha
         )
 
     def _render_column(
@@ -645,7 +648,9 @@ class GameOverScene(Scene):
         center_y = Config.SCREEN_HEIGHT // 2
 
         # Título: GAME OVER
-        title_surf = self.game_over_font_title.render("GAME OVER", True, colors.WHITE)
+        title_surf = self.game_over_font_title.render(
+            t("game_over.title"), True, colors.WHITE
+        )
         title_surf.set_alpha(text_alpha)
         title_rect = title_surf.get_rect(center=(center_x, center_y - self._s(140)))
         surface.blit(title_surf, title_rect)
@@ -658,7 +663,7 @@ class GameOverScene(Scene):
             sub_alpha = int(sub_progress * 255)
 
             score_surf = self.game_over_font_score.render(
-                f"PONTUAÇÃO: {self.score:,}".replace(",", "."), True, colors.WHITE
+                t("game_over.score", score=fmt_num(self.score)), True, colors.WHITE
             )
             score_surf.set_alpha(sub_alpha)
             score_rect = score_surf.get_rect(center=(center_x, center_y - self._s(40)))
@@ -668,7 +673,7 @@ class GameOverScene(Scene):
                 self.entry_widget.render(surface, sub_alpha)
             else:
                 hint_surf = self.game_over_font_prompt.render(
-                    "Continuar reinicia esta fase com a pontuação zerada",
+                    t("game_over.continue_hint"),
                     True,
                     (180, 180, 180),
                 )
@@ -682,7 +687,7 @@ class GameOverScene(Scene):
                 draw_bordered_button(
                     surface,
                     self.back_to_menu_button,
-                    "VOLTAR AO MENU",
+                    t("game_over.back_to_menu"),
                     self.game_over_font_button,
                     CUSTOM_PURPLE,
                     sub_alpha,
@@ -693,7 +698,7 @@ class GameOverScene(Scene):
                 draw_bordered_button(
                     surface,
                     self.continue_button,
-                    "CONTINUAR DE ONDE PAROU",
+                    t("game_over.continue"),
                     self.game_over_font_button,
                     CUSTOM_GOLD,
                     sub_alpha,
@@ -701,7 +706,7 @@ class GameOverScene(Scene):
 
                 # Legenda do atalho de teclado para Continuar (tecla R).
                 r_hint_surf = self.game_over_font_button.render(
-                    "Pressione R", True, (150, 150, 160)
+                    t("game_over.press_r"), True, (150, 150, 160)
                 )
                 r_hint_surf.set_alpha(sub_alpha)
                 surface.blit(

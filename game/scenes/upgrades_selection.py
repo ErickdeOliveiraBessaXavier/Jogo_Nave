@@ -8,15 +8,23 @@ import pygame
 from ..core import colors
 from ..core.assets import BASE_DIR, get_font, get_image
 from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
+from ..core.i18n import t
 from ..core.ship_types import (
     ShipProfile,
     all_ship_profiles,
     format_ship_description,
     get_ship_profile,
+    ship_display_name,
+    ship_tags,
 )
 from ..core.sound import sound_manager
 from ..core.state import Scene
-from ..core.upgrades import UpgradeMeta, get_upgrade_icon, list_all_upgrades_meta
+from ..core.upgrades import (
+    UpgradeMeta,
+    get_upgrade_icon,
+    list_all_upgrades_meta,
+    upgrade_desc,
+)
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 from .ui_helpers import wrap_text, draw_bordered_button
 
@@ -707,7 +715,7 @@ class UpgradesSelectionScene(Scene):
 
         if upg.type not in profile.unlocked_upgrades:
             self.floating_messages.append(
-                FloatingMessage(_rect.centerx, _rect.top, "Bloqueado", colors.RED)
+                FloatingMessage(_rect.centerx, _rect.top, t("upgrades.msg.locked"), colors.RED)
             )
             return
 
@@ -728,7 +736,7 @@ class UpgradesSelectionScene(Scene):
         # Não coube — shake no slot 0 + mensagem.
         self.shaking_slot, self.shake_start_time = 0, time.time()
         self.floating_messages.append(
-            FloatingMessage(_rect.centerx, _rect.top, "Sem espaço", colors.RED)
+            FloatingMessage(_rect.centerx, _rect.top, t("upgrades.msg.no_space"), colors.RED)
         )
 
     def _handle_ship_click(self, ship: ShipProfile, rect: pygame.Rect):
@@ -742,7 +750,7 @@ class UpgradesSelectionScene(Scene):
                     FloatingMessage(
                         rect.centerx,
                         rect.top,
-                        f"{ship.display_name} Adquirida!",
+                        t("upgrades.msg.acquired", name=ship_display_name(ship)),
                         colors.GREEN,
                     )
                 )
@@ -750,7 +758,7 @@ class UpgradesSelectionScene(Scene):
             self.shaking_ship_id, self.shake_start_time = ship.id, time.time()
             self.floating_messages.append(
                 FloatingMessage(
-                    rect.centerx, rect.top, "Saldo Insuficiente", colors.RED
+                    rect.centerx, rect.top, t("upgrades.msg.insufficient"), colors.RED
                 )
             )
 
@@ -902,7 +910,7 @@ class UpgradesSelectionScene(Scene):
             else 1.0
         )
         alpha = int(255 * alpha_mult)
-        title = self.title_font.render("Central de Loadout", True, CUSTOM_GOLD)
+        title = self.title_font.render(t("upgrades.title"), True, CUSTOM_GOLD)
         surface.blit(
             title,
             title.get_rect(
@@ -990,7 +998,7 @@ class UpgradesSelectionScene(Scene):
         # Nome da nave logo abaixo do preview.
         cx = rect.centerx
         y = rect.bottom + self._s(8)
-        name_surf = self.title_font.render(ship.display_name.upper(), True, CUSTOM_GOLD)
+        name_surf = self.title_font.render(ship_display_name(ship).upper(), True, CUSTOM_GOLD)
         surface.blit(
             name_surf, name_surf.get_rect(center=(cx, y + name_surf.get_height() // 2))
         )
@@ -1027,7 +1035,7 @@ class UpgradesSelectionScene(Scene):
         # Tags (categoria) em uma linha discreta.
         if ship.tags:
             y = _draw_wrapped(
-                " · ".join(ship.tags), self.small_font, (160, 160, 200), y, max_lines=1
+                " · ".join(ship_tags(ship)), self.small_font, (160, 160, 200), y, max_lines=1
             )
             y += self._s(6)
 
@@ -1047,13 +1055,13 @@ class UpgradesSelectionScene(Scene):
         # Atributos numéricos: só os que diferem do padrão.
         stat_rows: list[tuple[str, str]] = []
         if abs(ship.damage_mult - 1.0) > 1e-6:
-            stat_rows.append(("Dano", self._fmt_mult(ship.damage_mult)))
+            stat_rows.append((t("upgrades.stat.damage"), self._fmt_mult(ship.damage_mult)))
         if abs(ship.fire_rate_mult - 1.0) > 1e-6:
-            stat_rows.append(("Cadência", self._fmt_mult(ship.fire_rate_mult)))
+            stat_rows.append((t("upgrades.stat.firerate"), self._fmt_mult(ship.fire_rate_mult)))
         if abs(ship.speed_mult - 1.0) > 1e-6:
-            stat_rows.append(("Velocidade", self._fmt_mult(ship.speed_mult)))
+            stat_rows.append((t("upgrades.stat.speed"), self._fmt_mult(ship.speed_mult)))
         if ship.extra_lives != 0:
-            stat_rows.append(("Vidas", f"{ship.extra_lives:+d}"))
+            stat_rows.append((t("upgrades.stat.lives"), f"{ship.extra_lives:+d}"))
 
         for label, value in stat_rows:
             y = _draw_wrapped(
@@ -1066,7 +1074,7 @@ class UpgradesSelectionScene(Scene):
         # Habilidades especiais com as teclas necessárias.
         ability_rows = self._ship_ability_descriptions(ship)
         if ability_rows:
-            header = self.small_font.render("HABILIDADES", True, CUSTOM_GOLD)
+            header = self.small_font.render(t("upgrades.abilities_header"), True, CUSTOM_GOLD)
             surface.blit(
                 header, header.get_rect(center=(cx, y + header.get_height() // 2))
             )
@@ -1106,28 +1114,35 @@ class UpgradesSelectionScene(Scene):
         lines: list[str] = []
         if ship.has_dash:
             dash_key = self._input_label("SHIFT", "LT")
-            lines.append(f"{dash_key}: dash i-frames ({ship.dash_cooldown:.0f}s cd)")
-        if ship.has_charge_shot:
-            charge_key = self._input_label("ALT+Espaço", "LT")
             lines.append(
-                f"{charge_key}: até {ship.charge_shot_damage_mult:.0f}× dano "
-                f"({ship.charge_shot_max_time:.1f}s)"
+                t("upgrades.ability.dash", keys=dash_key, cd=f"{ship.dash_cooldown:.0f}")
+            )
+        if ship.has_charge_shot:
+            charge_key = self._input_label(t("upgrades.key.charge_kb"), "LT")
+            lines.append(
+                t(
+                    "upgrades.ability.charge",
+                    keys=charge_key,
+                    mult=f"{ship.charge_shot_damage_mult:.0f}",
+                    time=f"{ship.charge_shot_max_time:.1f}",
+                )
             )
         if ship.powerup_slots > 0:
             powerup_keys = self._input_label("Q/E", "Y/A")
-            lines.append(f"{powerup_keys}: usa {ship.powerup_slots} slots de powerup")
+            lines.append(
+                t("upgrades.ability.powerup", keys=powerup_keys, n=ship.powerup_slots)
+            )
         if ship.permanent_mini_ships > 0:
             n = ship.permanent_mini_ships
-            lines.append(
-                f"{n} mini-nave{'s' if n > 1 else ''} permanente{'s' if n > 1 else ''}"
-            )
+            key = "upgrades.ability.mini_many" if n > 1 else "upgrades.ability.mini_one"
+            lines.append(t(key, n=n))
         if ship.pickup_radius_mult > 1.5:
-            lines.append("Raio amplo de coleta")
+            lines.append(t("upgrades.ability.pickup"))
         if ship.combo_damage_per_kill > 0:
             per_kill = int(ship.combo_damage_per_kill * 100)
             cap = int(ship.combo_damage_cap * 100) if ship.combo_damage_cap > 0 else 0
-            cap_txt = f", máx +{cap}%" if cap else ""
-            lines.append(f"Combo: +{per_kill}%/abate{cap_txt}")
+            cap_txt = t("upgrades.ability.combo_cap", cap=cap) if cap else ""
+            lines.append(t("upgrades.ability.combo", per=per_kill, cap=cap_txt))
         return lines
 
     def _draw_left_column(self, surface: pygame.Surface):
@@ -1135,7 +1150,7 @@ class UpgradesSelectionScene(Scene):
         total_weight = self.player_profile.get_total_equipped_weight()
         cap = self.player_profile.unlocked_slots
         txt = self.header_font.render(
-            f"Arsenal ({total_weight}/{cap})", True, colors.WHITE
+            t("upgrades.arsenal", weight=total_weight, cap=cap), True, colors.WHITE
         )
         surface.blit(txt, h)
 
@@ -1227,7 +1242,7 @@ class UpgradesSelectionScene(Scene):
 
         surface.blit(
             self.header_font.render(
-                self._page_header("Estoque", self.upgrade_page, self.max_upgrade_page),
+                self._page_header(t("upgrades.stock"), self.upgrade_page, self.max_upgrade_page),
                 True,
                 colors.WHITE,
             ),
@@ -1297,7 +1312,7 @@ class UpgradesSelectionScene(Scene):
         ship = self.hovered_ship or get_ship_profile(self.player_profile.selected_ship)
         curr = get_ship_profile(self.player_profile.selected_ship)
         surface.blit(
-            self.header_font.render("Atributos", True, colors.WHITE),
+            self.header_font.render(t("upgrades.attributes"), True, colors.WHITE),
             self.layout.stats_area.topleft,
         )
         sy = self.layout.stats_area.y + self._s(35)
@@ -1307,7 +1322,7 @@ class UpgradesSelectionScene(Scene):
             self.layout.stats_area.x,
             sy,
             self.layout.stats_area.width,
-            "POTÊNCIA",
+            t("upgrades.bar.power"),
             ship.damage_mult,
             curr.damage_mult,
         )
@@ -1316,7 +1331,7 @@ class UpgradesSelectionScene(Scene):
             self.layout.stats_area.x,
             sy + stat_gap,
             self.layout.stats_area.width,
-            "CADÊNCIA",
+            t("upgrades.bar.firerate"),
             ship.fire_rate_mult,
             curr.fire_rate_mult,
         )
@@ -1325,14 +1340,14 @@ class UpgradesSelectionScene(Scene):
             self.layout.stats_area.x,
             sy + stat_gap * 2,
             self.layout.stats_area.width,
-            "AGILIDADE",
+            t("upgrades.bar.agility"),
             ship.speed_mult,
             curr.speed_mult,
         )
 
         surface.blit(
             self.header_font.render(
-                self._page_header("Hangar", self.ship_page, self.max_ship_page),
+                self._page_header(t("upgrades.hangar"), self.ship_page, self.max_ship_page),
                 True,
                 colors.WHITE,
             ),
@@ -1406,7 +1421,7 @@ class UpgradesSelectionScene(Scene):
         )
         surface.blit(
             self.item_font.render(
-                f"{self.player_profile.available_stars} Estrelas", True, CUSTOM_GOLD
+                t("upgrades.stars", n=self.player_profile.available_stars), True, CUSTOM_GOLD
             ),
             (self.layout.right_area.x + self.MARGIN + self._s(25), bal_y + self._s(1)),
         )
@@ -1599,7 +1614,7 @@ class UpgradesSelectionScene(Scene):
         draw_bordered_button(
             surface,
             self.layout.back_button,
-            "Voltar",
+            t("common.back"),
             self.item_font,
             CUSTOM_PURPLE,
             255,
@@ -1638,12 +1653,18 @@ class UpgradesSelectionScene(Scene):
         Agrupa dois stats por linha para caber na largura do tooltip com a
         fonte pixelada. ``:g`` evita "0s" em durações fracionárias (ex.: dash
         de 0.4s) e mantém inteiros sem casas decimais."""
-        lines = [f"Recarga {upg.base_cooldown:g}s    Peso {upg.slot_weight}"]
+        lines = [
+            t(
+                "upgrades.tip.cooldown_weight",
+                cd=f"{upg.base_cooldown:g}",
+                weight=upg.slot_weight,
+            )
+        ]
         second: List[str] = []
         if upg.base_duration > 0:
-            second.append(f"Duração {upg.base_duration:g}s")
+            second.append(t("upgrades.tip.duration", d=f"{upg.base_duration:g}"))
         if upg.base_charges is not None:
-            second.append(f"Cargas {upg.base_charges}")
+            second.append(t("upgrades.tip.charges", n=upg.base_charges))
         if second:
             lines.append("    ".join(second))
         return lines
@@ -1661,7 +1682,7 @@ class UpgradesSelectionScene(Scene):
         stat_lh = self._s(16)
 
         # Quebrar o texto em linhas antes de calcular a altura
-        wrapped_lines = wrap_text(self.small_font, upg.desc, w - (padding * 2))
+        wrapped_lines = wrap_text(self.small_font, upgrade_desc(upg), w - (padding * 2))
         stat_lines = self._upgrade_stat_lines(upg)
 
         # Motivo de bloqueio por peso (mesma regra de `no_fit` do Estoque):
@@ -1675,7 +1696,7 @@ class UpgradesSelectionScene(Scene):
                 > profile.unlocked_slots
             )
         )
-        warn = "Sem peso — libere um slot" if no_fit else None
+        warn = t("upgrades.tip.no_weight") if no_fit else None
 
         # Altura: top + nome + separador + descrição + gap + stats + aviso + base
         h = (

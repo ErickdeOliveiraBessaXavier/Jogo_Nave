@@ -73,6 +73,13 @@ class GameApp:
         visual_quality.set_from_name(self.preferences.visual_quality)
         visual_quality.set_pixelization(self.preferences.pixelization)
 
+        # Idioma da interface aplicado ao singleton i18n no boot, ANTES de
+        # qualquer cena montar textos (botões pré-renderizam glifos). Vazio →
+        # cai no idioma base; a escolha real acontece na tela de seleção.
+        from .core.i18n import i18n
+
+        i18n.set_language(self.preferences.language or "pt")
+
         # Pós-processamento de frame inteiro (pixelização), aplicado no único
         # choke point de render, antes do flip. Reutiliza buffer entre frames.
         from .render.post_process import PixelizePost
@@ -179,7 +186,14 @@ class GameApp:
 
         self.selected_difficulty = DifficultyPreset.NORMAL
 
-        self.states.push(MainMenuScene(self))
+        # 1º boot (idioma ainda não escolhido) → tela de seleção de idioma, que
+        # ao confirmar troca para o menu. Depois disso, vai direto ao menu.
+        if self.preferences.language in ("pt", "en"):
+            self.states.push(MainMenuScene(self))
+        else:
+            from .scenes.language_selection import LanguageSelectionScene
+
+            self.states.push(LanguageSelectionScene(self))
 
     # ------------------------------------------------------------------
     # Suporte a controle (eventos sintéticos para cenas não-gameplay)

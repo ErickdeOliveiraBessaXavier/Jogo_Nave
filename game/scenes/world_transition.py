@@ -12,6 +12,7 @@ from .ui_helpers import wrap_text
 
 from ..core import colors
 from ..core.assets import get_font
+from ..core.i18n import t, t_or
 from ..core.state import Scene
 from ..core.world_config import WorldConfig
 
@@ -103,7 +104,7 @@ class WorldTransitionScene(Scene):
         # do título abaixo) e somamos a altura de uma linha extra quando há duas.
         card_width = min(self._s(760), surface.get_width() - self._s(80))
         title_wrap_w = card_width - self._s(80)
-        title_text = self.title_override or self.new_world.name
+        title_text = self.title_override or t_or(f"world.{self.new_world.world_id}.name", self.new_world.name)
         title_line_count = len(wrap_text(self.font_title, title_text, title_wrap_w)[:2])
         extra_title_height = (
             (self.font_title.get_height() + self._s(2)) if title_line_count > 1 else 0
@@ -145,7 +146,7 @@ class WorldTransitionScene(Scene):
         title_height = self._blit_wrapped_centered_text(
             overlay,
             self.font_title,
-            self.title_override or self.new_world.name,
+            self.title_override or t_or(f"world.{self.new_world.world_id}.name", self.new_world.name),
             colors.WHITE,
             center_x,
             current_y,
@@ -166,7 +167,10 @@ class WorldTransitionScene(Scene):
         desc_height = self._blit_wrapped_centered_text(
             overlay,
             self.font_desc,
-            self.description_override or self.new_world.description,
+            self.description_override
+            or t_or(
+                f"world.{self.new_world.world_id}.desc", self.new_world.description
+            ),
             (210, 210, 210),
             center_x,
             current_y,
@@ -181,7 +185,11 @@ class WorldTransitionScene(Scene):
         stage_text = (
             self.stage_text_override
             if self.stage_text_override is not None
-            else f"Estágios {self.new_world.start_level} - {self.new_world.end_level}"
+            else t(
+                "world_transition.stages",
+                start=self.new_world.start_level,
+                end=self.new_world.end_level,
+            )
         )
         if stage_text:
             self._blit_wrapped_centered_text(
