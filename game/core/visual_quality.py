@@ -34,6 +34,25 @@ class QualityLevel(Enum):
         return {"high": "Alto", "medium": "Médio", "low": "Baixo"}[self.value]
 
 
+# Pixelização (pós-processamento do frame inteiro): mapeia a intensidade
+# escolhida para o fator de bloco (downscale→upscale nearest). Sempre ativa —
+# não há "off"; o piso nativo é "light". Fatores maiores = pixels mais chunky.
+# Fatores fracionários (< 2) dão uma pixelização fina/suave, abaixo do menor
+# bloco inteiro (2×2). "strong" (2.0) era o antigo "light".
+PIXELIZATION_FACTORS: dict[str, float] = {
+    "light": 1.3,
+    "medium": 1.6,
+    "strong": 2.0,
+}
+
+# Rótulos exibidos no seletor (mesma ordem do seletor de qualidade).
+PIXELIZATION_LEVELS: list[tuple[str, str]] = [
+    ("light", "Leve"),
+    ("medium", "Médio"),
+    ("strong", "Forte"),
+]
+
+
 @dataclass(frozen=True)
 class QualityProfile:
     """Multiplicadores e gates de um nível de qualidade.
@@ -128,6 +147,9 @@ class VisualQuality:
     def __init__(self) -> None:
         self._level = QualityLevel.HIGH
         self._profile = _PROFILES[QualityLevel.HIGH]
+        # Pixelização é ortogonal ao nível de qualidade: efeito estético aplicado
+        # no frame final (não escala partículas). Sempre ativa; piso nativo Leve.
+        self._pixelization = "light"
 
     # ── Nível ────────────────────────────────────────────────────────────────
     @property
@@ -148,6 +170,26 @@ class VisualQuality:
     @property
     def name(self) -> str:
         return self._level.value
+
+    # ── Pixelização (pós-processamento) ──────────────────────────────────────
+    @property
+    def pixelization(self) -> str:
+        """Nome da intensidade atual ('off'/'light'/'medium'/'strong')."""
+        return self._pixelization
+
+    def set_pixelization(self, name: str) -> None:
+        """Aplica a intensidade por string; valor inválido → piso 'light'."""
+        key = str(name).lower()
+        self._pixelization = key if key in PIXELIZATION_FACTORS else "light"
+
+    @property
+    def pixelization_enabled(self) -> bool:
+        return self.pixelization_factor > 1.0
+
+    @property
+    def pixelization_factor(self) -> float:
+        """Fator de bloco (1.0 = desligado; sempre > 1 com os níveis atuais)."""
+        return PIXELIZATION_FACTORS.get(self._pixelization, 1.3)
 
     # ── Escala de contagens (efeito nunca some: piso 1 quando base ≥ 1) ──────
     @staticmethod

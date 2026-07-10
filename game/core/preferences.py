@@ -21,6 +21,10 @@ class UserPreferences:
         # Qualidade visual: "high" | "medium" | "low" (default: high).
         self.visual_quality: str = "high"
 
+        # Pixelização (pós-processamento): "light" | "medium" | "strong".
+        # Sempre ativa (sem "off"); piso nativo = "light".
+        self.pixelization: str = "light"
+
         # Áudio — defaults vindos de VOLUME_CONFIG (fonte única de verdade)
         self.music_volume: float = VOLUME_CONFIG["music"]
         self.sfx_volume: float = VOLUME_CONFIG["sfx"]
@@ -78,6 +82,12 @@ class UserPreferences:
                 if vq in ("high", "medium", "low"):
                     self.visual_quality = vq
 
+                # Pixelização (pós-processamento). Configs antigas com "off" já
+                # não são válidas → caem no piso "light" (default).
+                px = data.get("pixelization", self.pixelization)
+                if px in ("light", "medium", "strong"):
+                    self.pixelization = px
+
                 # Áudio
                 self.music_volume = float(data.get("music_volume", self.music_volume))
                 self.sfx_volume = float(data.get("sfx_volume", self.sfx_volume))
@@ -109,6 +119,7 @@ class UserPreferences:
                 "resolution": list(self.resolution),
                 "fullscreen": self.fullscreen,
                 "visual_quality": self.visual_quality,
+                "pixelization": self.pixelization,
                 "music_volume": self.music_volume,
                 "sfx_volume": self.sfx_volume,
                 "shot_volume": self.shot_volume,
@@ -130,6 +141,7 @@ class UserPreferences:
         self.resolution = (1280, 720)
         self.fullscreen = True
         self.visual_quality = "high"
+        self.pixelization = "light"
         self.music_volume = VOLUME_CONFIG["music"]
         self.sfx_volume = VOLUME_CONFIG["sfx"]
         self.shot_volume = VOLUME_CONFIG["shots"]

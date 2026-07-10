@@ -97,6 +97,13 @@ class SettingsView:
         ]
         self.selected_quality: str = self.preferences.visual_quality
 
+        # Pixelização (pós-processamento): seletor Off/Leve/Médio/Forte,
+        # aplicado ao vivo. Rótulos vêm da fonte única em visual_quality.
+        from ..core.visual_quality import PIXELIZATION_LEVELS
+
+        self.pixelization_levels: list[tuple[str, str]] = list(PIXELIZATION_LEVELS)
+        self.selected_pixelization: str = self.preferences.pixelization
+
         # Carregar resolução salva das preferências
         saved_res = self.preferences.resolution
         self.selected_resolution_index = 1  # default
@@ -142,8 +149,10 @@ class SettingsView:
         card_width = (available_width - card_gap) / 2
         card_height = screen_h - self._s(180)
 
-        # Centralizar cards verticalmente
-        card_y = (screen_h - card_height) // 2 + self._s(20)
+        # Centralizar cards verticalmente. Sobem um pouco (offset negativo) para
+        # abrir a faixa inferior, onde vivem DUAS linhas de seletores
+        # (Pixelização + Qualidade Visual).
+        card_y = (screen_h - card_height) // 2 - self._s(14)
 
         # Posição inicial X
         start_x = outer_pad
@@ -248,6 +257,28 @@ class SettingsView:
             bx += q_btn_w + q_gap
         self.layout_rects["quality_buttons"] = quality_buttons
 
+        # Seletor de Pixelização — linha logo ACIMA do seletor de qualidade,
+        # mesmo padrão (rótulo + botões, centralizado). 4 níveis.
+        p_label = "Pixelização:"
+        p_label_w = self.item_font.size(p_label)[0]
+        p_btn_w = self._s(78)
+        p_btn_h = self._s(34)
+        p_gap = self._s(10)
+        n_pix = len(self.pixelization_levels)
+        p_buttons_w = n_pix * p_btn_w + (n_pix - 1) * p_gap
+        p_group_w = p_label_w + self._s(14) + p_buttons_w
+        p_x = (screen_w - p_group_w) // 2
+        p_y = q_y - self._s(44)
+        self.layout_rects["pixelization_label"] = pygame.Rect(
+            p_x, p_y, p_label_w, p_btn_h
+        )
+        pixelization_buttons: list[pygame.Rect] = []
+        bx = p_x + p_label_w + self._s(14)
+        for _i in range(len(self.pixelization_levels)):
+            pixelization_buttons.append(pygame.Rect(bx, p_y, p_btn_w, p_btn_h))
+            bx += p_btn_w + p_gap
+        self.layout_rects["pixelization_buttons"] = pixelization_buttons
+
         # Botão de Voltar (Canto inferior esquerdo)
         back_text_width = self.item_font.size("Voltar")[0]
         back_btn_width = back_text_width + self._s(60)
@@ -302,6 +333,7 @@ class SettingsView:
         self.toggles["gamepad_enabled"] = self.preferences.gamepad_enabled
         self.toggles["p1_prefers_keyboard"] = self.preferences.p1_prefers_keyboard
         self.selected_quality = self.preferences.visual_quality
+        self.selected_pixelization = self.preferences.pixelization
 
         saved_res = self.preferences.resolution
         for i, (w, h, _) in enumerate(self.available_resolutions):
@@ -448,6 +480,14 @@ class SettingsView:
                     self._select_quality(self.quality_levels[i][0])
                     return True
 
+            # Botões de Pixelização
+            for i, rect in enumerate(
+                self.layout_rects.get("pixelization_buttons", [])
+            ):
+                if rect.collidepoint(pos):
+                    self._select_pixelization(self.pixelization_levels[i][0])
+                    return True
+
             # Toggles
             for key, rect in self.layout_rects["toggles"].items():
                 if rect.collidepoint(pos):
@@ -574,6 +614,11 @@ class SettingsView:
                 self._select_quality(self.quality_levels[i][0])
                 return True
 
+        for i, rect in enumerate(self.layout_rects.get("pixelization_buttons", [])):
+            if rect.collidepoint(pos):
+                self._select_pixelization(self.pixelization_levels[i][0])
+                return True
+
         for key, rect in self.layout_rects["toggles"].items():
             if rect.inflate(60, 0).collidepoint(pos):
                 # Hitbox inflado horizontalmente cobre rótulo — torna a
@@ -627,6 +672,15 @@ class SettingsView:
         self.selected_quality = name
         self.preferences.visual_quality = name
         visual_quality.set_from_name(name)
+        self.preferences.save()
+
+    def _select_pixelization(self, name: str) -> None:
+        """Aplica a intensidade de pixelização ao vivo (sem reinício) e persiste."""
+        from ..core.visual_quality import visual_quality
+
+        self.selected_pixelization = name
+        self.preferences.pixelization = name
+        visual_quality.set_pixelization(name)
         self.preferences.save()
 
     def _update_volume(self, key: str):
@@ -690,6 +744,7 @@ class SettingsView:
         self._draw_audio_card(surface, alpha, offset_y)
         self._draw_controls_card(surface, alpha, offset_y)
         self._draw_quality_selector(surface, alpha, offset_y)
+        self._draw_pixelization_selector(surface, alpha, offset_y)
 
         # Botão Voltar com alpha
         self._draw_button(
@@ -736,6 +791,25 @@ class SettingsView:
         for i, rect in enumerate(buttons):
             name, label = self.quality_levels[i]
             is_selected = name == self.selected_quality
+            color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
+            self._draw_button(surface, rect, label, color, alpha, offset_y)
+
+    def _draw_pixelization_selector(
+        self, surface: pygame.Surface, alpha: int = 255, offset_y: int = 0
+    ):
+        """Desenha o seletor 'Pixelização:' com o nível ativo em destaque."""
+        label_rect = self.layout_rects["pixelization_label"]
+        label_surf = self.item_font.render("Pixelização:", True, CUSTOM_GOLD)
+        label_surf.set_alpha(alpha)
+        surface.blit(
+            label_surf,
+            (label_rect.x, label_rect.centery - label_surf.get_height() // 2 + offset_y),
+        )
+
+        buttons = self.layout_rects["pixelization_buttons"]
+        for i, rect in enumerate(buttons):
+            name, label = self.pixelization_levels[i]
+            is_selected = name == self.selected_pixelization
             color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
             self._draw_button(surface, rect, label, color, alpha, offset_y)
 
@@ -1225,6 +1299,10 @@ class SettingsScene(Scene, FadeTransitionMixin):
             rects.append(r)
         for r in cast(
             List[pygame.Rect], self.view.layout_rects.get("quality_buttons", [])
+        ):
+            rects.append(r)
+        for r in cast(
+            List[pygame.Rect], self.view.layout_rects.get("pixelization_buttons", [])
         ):
             rects.append(r)
         if "back_button" in self.view.layout_rects:

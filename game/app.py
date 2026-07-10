@@ -71,6 +71,13 @@ class GameApp:
         from .core.visual_quality import visual_quality
 
         visual_quality.set_from_name(self.preferences.visual_quality)
+        visual_quality.set_pixelization(self.preferences.pixelization)
+
+        # Pós-processamento de frame inteiro (pixelização), aplicado no único
+        # choke point de render, antes do flip. Reutiliza buffer entre frames.
+        from .render.post_process import PixelizePost
+
+        self._pixelize_post = PixelizePost()
 
         base_width, base_height = self.preferences.resolution
 
@@ -512,6 +519,7 @@ class GameApp:
 
     def run(self):
         from .core.sound import MUSIC_END_EVENT, sound_manager
+        from .core.visual_quality import visual_quality
 
         try:
             while self.running:
@@ -556,6 +564,13 @@ class GameApp:
                     self._update_virtual_cursor(dt, current_scene)
                     current_scene.update(dt)
                     current_scene.render(self.screen)
+
+                # Pós-processamento: pixeliza o frame inteiro já renderizado
+                # (todas as cenas passam por aqui) antes de mostrar na tela.
+                if visual_quality.pixelization_enabled:
+                    self._pixelize_post.apply(
+                        self.screen, visual_quality.pixelization_factor
+                    )
 
                 pygame.display.flip()
         finally:
