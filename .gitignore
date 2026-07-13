@@ -153,3 +153,5 @@ scripts/
 # Build Linux via WSL (apenas local)
 venv-linux/
 build_linux.sh
+dist-linux/
+build-linux/
