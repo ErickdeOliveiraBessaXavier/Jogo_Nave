@@ -73,6 +73,7 @@ class GameApp:
 
         visual_quality.set_from_name(self.preferences.visual_quality)
         visual_quality.set_pixelization(self.preferences.pixelization)
+        visual_quality.set_lowres_background(self.preferences.retro_background)
 
         # Idioma da interface aplicado ao singleton i18n no boot, ANTES de
         # qualquer cena montar textos (botões pré-renderizam glifos). Vazio →

@@ -29,6 +29,10 @@ class UserPreferences:
         # Sempre ativa (sem "off"); piso nativo = "light".
         self.pixelization: str = "light"
 
+        # Fundo retrô: temas pesados (Mountains/City/Volcanic) renderizados em
+        # meia-resolução + upscale — visual pixel-art mais "chunky" e mais leve.
+        self.retro_background: bool = True
+
         # Áudio — defaults vindos de VOLUME_CONFIG (fonte única de verdade)
         self.music_volume: float = VOLUME_CONFIG["music"]
         self.sfx_volume: float = VOLUME_CONFIG["sfx"]
@@ -97,6 +101,10 @@ class UserPreferences:
                 if px in ("light", "medium", "strong"):
                     self.pixelization = px
 
+                self.retro_background = bool(
+                    data.get("retro_background", self.retro_background)
+                )
+
                 # Áudio
                 self.music_volume = float(data.get("music_volume", self.music_volume))
                 self.sfx_volume = float(data.get("sfx_volume", self.sfx_volume))
@@ -130,6 +138,7 @@ class UserPreferences:
                 "language": self.language,
                 "visual_quality": self.visual_quality,
                 "pixelization": self.pixelization,
+                "retro_background": self.retro_background,
                 "music_volume": self.music_volume,
                 "sfx_volume": self.sfx_volume,
                 "shot_volume": self.shot_volume,
@@ -153,6 +162,7 @@ class UserPreferences:
         self.language = ""
         self.visual_quality = "high"
         self.pixelization = "light"
+        self.retro_background = True
         self.music_volume = VOLUME_CONFIG["music"]
         self.sfx_volume = VOLUME_CONFIG["sfx"]
         self.shot_volume = VOLUME_CONFIG["shots"]

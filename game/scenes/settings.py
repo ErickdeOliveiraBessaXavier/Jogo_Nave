@@ -105,6 +105,10 @@ class SettingsView:
         self.pixelization_levels: list[tuple[str, str]] = list(PIXELIZATION_LEVELS)
         self.selected_pixelization: str = self.preferences.pixelization
 
+        # Fundo retrô (meia-resolução): seletor Ligado/Desligado, aplicado ao vivo.
+        self.retro_bg_levels: list[tuple[bool, str]] = [(True, "on"), (False, "off")]
+        self.selected_retro_bg: bool = self.preferences.retro_background
+
         # Carregar resolução salva das preferências
         saved_res = self.preferences.resolution
         self.selected_resolution_index = 1  # default
@@ -280,6 +284,34 @@ class SettingsView:
             bx += p_btn_w + p_gap
         self.layout_rects["pixelization_buttons"] = pixelization_buttons
 
+        # Seletor de Fundo Retrô — linha logo ACIMA da pixelização, 2 opções.
+        rb_label = t("settings.retro_bg_label")
+        rb_label_w = self.item_font.size(rb_label)[0]
+        # Largura por botão comporta o texto mais longo ("Desligado"/"Off") + folga.
+        rb_btn_w = max(
+            self._s(96),
+            max(
+                self.item_font.size(t("settings.retro_bg.on"))[0],
+                self.item_font.size(t("settings.retro_bg.off"))[0],
+            )
+            + self._s(28),
+        )
+        rb_btn_h = self._s(34)
+        rb_gap = self._s(10)
+        rb_buttons_w = 2 * rb_btn_w + rb_gap
+        rb_group_w = rb_label_w + self._s(14) + rb_buttons_w
+        rb_x = (screen_w - rb_group_w) // 2
+        rb_y = p_y - self._s(44)
+        self.layout_rects["retro_bg_label"] = pygame.Rect(
+            rb_x, rb_y, rb_label_w, rb_btn_h
+        )
+        retro_bg_buttons: list[pygame.Rect] = []
+        bx = rb_x + rb_label_w + self._s(14)
+        for _i in range(2):
+            retro_bg_buttons.append(pygame.Rect(bx, rb_y, rb_btn_w, rb_btn_h))
+            bx += rb_btn_w + rb_gap
+        self.layout_rects["retro_bg_buttons"] = retro_bg_buttons
+
         # Botão de Voltar (Canto inferior esquerdo)
         back_text_width = self.item_font.size(t("common.back"))[0]
         back_btn_width = back_text_width + self._s(60)
@@ -335,6 +367,7 @@ class SettingsView:
         self.toggles["p1_prefers_keyboard"] = self.preferences.p1_prefers_keyboard
         self.selected_quality = self.preferences.visual_quality
         self.selected_pixelization = self.preferences.pixelization
+        self.selected_retro_bg = self.preferences.retro_background
 
         saved_res = self.preferences.resolution
         for i, (w, h, _) in enumerate(self.available_resolutions):
@@ -489,6 +522,13 @@ class SettingsView:
                     self._select_pixelization(self.pixelization_levels[i][0])
                     return True
 
+            for i, rect in enumerate(
+                self.layout_rects.get("retro_bg_buttons", [])
+            ):
+                if rect.collidepoint(pos):
+                    self._select_retro_bg(self.retro_bg_levels[i][0])
+                    return True
+
             # Toggles
             for key, rect in self.layout_rects["toggles"].items():
                 if rect.collidepoint(pos):
@@ -616,6 +656,11 @@ class SettingsView:
                 self._select_pixelization(self.pixelization_levels[i][0])
                 return True
 
+        for i, rect in enumerate(self.layout_rects.get("retro_bg_buttons", [])):
+            if rect.collidepoint(pos):
+                self._select_retro_bg(self.retro_bg_levels[i][0])
+                return True
+
         for key, rect in self.layout_rects["toggles"].items():
             if rect.inflate(60, 0).collidepoint(pos):
                 # Hitbox inflado horizontalmente cobre rótulo — torna a
@@ -680,6 +725,16 @@ class SettingsView:
         visual_quality.set_pixelization(name)
         self.preferences.save()
 
+    def _select_retro_bg(self, enabled: bool) -> None:
+        """Liga/desliga o fundo retrô (meia-resolução) e persiste. O renderer
+        relê a preferência ao (re)entrar num mundo temático."""
+        from ..core.visual_quality import visual_quality
+
+        self.selected_retro_bg = enabled
+        self.preferences.retro_background = enabled
+        visual_quality.set_lowres_background(enabled)
+        self.preferences.save()
+
     def _update_volume(self, key: str):
         volume = self.sliders[key]
         if key == "music":
@@ -742,6 +797,7 @@ class SettingsView:
         self._draw_controls_card(surface, alpha, offset_y)
         self._draw_quality_selector(surface, alpha, offset_y)
         self._draw_pixelization_selector(surface, alpha, offset_y)
+        self._draw_retro_bg_selector(surface, alpha, offset_y)
 
         # Botão Voltar com alpha
         self._draw_button(
@@ -812,6 +868,29 @@ class SettingsView:
             color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
             self._draw_button(
                 surface, rect, t(f"settings.pixelization.{name}"), color, alpha, offset_y
+            )
+
+    def _draw_retro_bg_selector(
+        self, surface: pygame.Surface, alpha: int = 255, offset_y: int = 0
+    ):
+        """Desenha o seletor 'Fundo Retrô:' (Ligado/Desligado)."""
+        label_rect = self.layout_rects["retro_bg_label"]
+        label_surf = self.item_font.render(
+            t("settings.retro_bg_label"), True, CUSTOM_GOLD
+        )
+        label_surf.set_alpha(alpha)
+        surface.blit(
+            label_surf,
+            (label_rect.x, label_rect.centery - label_surf.get_height() // 2 + offset_y),
+        )
+
+        buttons = self.layout_rects["retro_bg_buttons"]
+        for i, rect in enumerate(buttons):
+            value, key = self.retro_bg_levels[i]
+            is_selected = value == self.selected_retro_bg
+            color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
+            self._draw_button(
+                surface, rect, t(f"settings.retro_bg.{key}"), color, alpha, offset_y
             )
 
     def _draw_card(

@@ -136,9 +136,16 @@ class Renderer:
 
         if theme in (WorldTheme.MOUNTAINS, WorldTheme.CITY, WorldTheme.VOLCANIC):
             # Fundo pesado em meia-resolução (fillrate ~4x menor) + upscale no
-            # background(). Aplicado em desktop e web (visual chunky intencional).
-            bw, bh = Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2
-            self._bg_lowres_scratch = pygame.Surface((bw, bh))
+            # background(). Controlado pela preferência "Fundo retrô" (opção nas
+            # Configurações); aplicada ao entrar/reentrar num mundo temático.
+            from ..core.visual_quality import visual_quality
+
+            if visual_quality.lowres_background:
+                bw, bh = Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2
+                self._bg_lowres_scratch = pygame.Surface((bw, bh))
+            else:
+                bw, bh = Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+                self._bg_lowres_scratch = None
 
             if theme == WorldTheme.MOUNTAINS:
                 self.current_background = MountainsBackground(bw, bh)

@@ -150,6 +150,17 @@ class VisualQuality:
         # Pixelização é ortogonal ao nível de qualidade: efeito estético aplicado
         # no frame final (não escala partículas). Sempre ativa; piso nativo Leve.
         self._pixelization = "light"
+        # Fundo retrô: temas pesados em meia-resolução + upscale (visual chunky
+        # e mais leve). Lido pelo renderer ao trocar de tema.
+        self._lowres_background = True
+
+    # ── Fundo retrô (meia-resolução) ─────────────────────────────────────────
+    @property
+    def lowres_background(self) -> bool:
+        return self._lowres_background
+
+    def set_lowres_background(self, enabled: bool) -> None:
+        self._lowres_background = bool(enabled)
 
     # ── Nível ────────────────────────────────────────────────────────────────
     @property
