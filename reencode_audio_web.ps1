@@ -40,7 +40,14 @@ $arquivos = Get-ChildItem $Origem -Recurse -Filter *.mp3
 $antes = 0.0; $depois = 0.0; $n = 0
 foreach ($f in $arquivos) {
     $rel = $f.FullName.Substring($srcRoot.Length).TrimStart('\')
-    $out = Join-Path (Join-Path $PSScriptRoot $Destino) $rel
+    # Musica (pasta audio) -> .ogg REAL: mixer.music detecta por extensao no web.
+    # SFX (pasta sounds) -> mantem .mp3: mixer.Sound detecta pelo conteudo.
+    if ($rel -like 'audio\*') {
+        $outRel = [System.IO.Path]::ChangeExtension($rel, '.ogg')
+    } else {
+        $outRel = $rel
+    }
+    $out = Join-Path (Join-Path $PSScriptRoot $Destino) $outRel
     New-Item -ItemType Directory -Force -Path (Split-Path $out) | Out-Null
 
     # -f ogg força o container OGG mesmo com a extensão .mp3

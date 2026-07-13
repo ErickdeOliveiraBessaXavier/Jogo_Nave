@@ -134,7 +134,13 @@ class GameApp:
         )
         sprite_loader.register("serpent_block", SerpentBlock.load_frames_for_preload)
         sprite_loader.register("Satellite", Satellite.load_animation_frames)
-        sprite_loader.load_all()
+        # No desktop carrega tudo aqui (síncrono). No web (emscripten) o
+        # carregamento é feito de forma cooperativa pelo entrypoint, via
+        # GameApp.preload(), para não congelar o navegador (tela de loading).
+        import sys
+
+        if sys.platform != "emscripten":
+            sprite_loader.load_all()
 
         pygame.display.set_caption("Pixel Patrol")
         self.clock = pygame.time.Clock()
@@ -531,6 +537,13 @@ class GameApp:
                 },
             )
             scene.handle_event(motion)
+
+    async def preload(self, on_progress=None) -> None:
+        """Carrega os sprites cedendo ao event loop, para a tela de loading web.
+        No desktop já foram carregados no __init__, então aqui vira no-op."""
+        from .core.sprite_loader import sprite_loader
+
+        await sprite_loader.load_all_async(on_progress)
 
     async def run(self):
         from .core.sound import MUSIC_END_EVENT, sound_manager

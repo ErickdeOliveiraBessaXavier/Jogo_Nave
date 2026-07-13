@@ -74,6 +74,14 @@ class Renderer:
         self.current_background: Background = self._starfield_bg
         self.current_theme: Optional[WorldTheme] = None
 
+        # Temas pesados de fundo (Mountains/City/Volcanic) são renderizados em
+        # MEIA-RESOLUÇÃO e sofrem upscale num único blit: corta ~4x o fillrate
+        # (essencial no web, onde o render é por software) e dá um visual
+        # pixel-art mais chunky (intencional, aplicado em desktop e web). Os
+        # sprites de gameplay NÃO são afetados (desenhados à parte em resolução
+        # cheia); menu/starfield seguem em resolução cheia.
+        self._bg_lowres_scratch: Optional[pygame.Surface] = None
+
         # === NOVO: Sistema de medição de FPS ===
         self.fps_counter = 0
         self.fps_timer = 0.0
@@ -126,20 +134,21 @@ class Renderer:
 
         self.current_theme = theme
 
-        if theme == WorldTheme.MOUNTAINS:
-            self.current_background = MountainsBackground(
-                Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-            )
-        elif theme == WorldTheme.CITY:
-            self.current_background = CityBackground(
-                Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-            )
-        elif theme == WorldTheme.VOLCANIC:
-            self.current_background = VolcanicBackground(
-                Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-            )
+        if theme in (WorldTheme.MOUNTAINS, WorldTheme.CITY, WorldTheme.VOLCANIC):
+            # Fundo pesado em meia-resolução (fillrate ~4x menor) + upscale no
+            # background(). Aplicado em desktop e web (visual chunky intencional).
+            bw, bh = Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2
+            self._bg_lowres_scratch = pygame.Surface((bw, bh))
+
+            if theme == WorldTheme.MOUNTAINS:
+                self.current_background = MountainsBackground(bw, bh)
+            elif theme == WorldTheme.CITY:
+                self.current_background = CityBackground(bw, bh)
+            else:
+                self.current_background = VolcanicBackground(bw, bh)
         else:  # STARFIELD ou PROCEDURAL
             self.current_background = self._starfield_bg
+            self._bg_lowres_scratch = None
 
     def set_atmosphere_mode(self, route: str) -> None:
         """Configura o background para a fase de atmosfera."""
@@ -152,6 +161,7 @@ class Renderer:
         self.current_background = create_background(
             "atmosphere", Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT, route=route
         )
+        self._bg_lowres_scratch = None
         self.current_theme = None
         logger.info("[RENDERER] Background de atmosfera ativado: %s", route)
 
@@ -163,8 +173,6 @@ class Renderer:
         draw_celestials: bool = True,
         atmosphere_progress: float = 0.0,
     ):
-        surface.fill(colors.BLACK)
-
         # Fluxo único: todo tema é um Background. Os hooks abaixo são no-op na
         # base e só fazem efeito onde importam (spawn de celestiais no starfield,
         # progresso na atmosfera) — sem if/else nem isinstance (§5).
@@ -172,7 +180,18 @@ class Renderer:
         bg.set_allow_spawning(draw_celestials)
         bg.set_progress(atmosphere_progress)
         bg.update(dt, speed_multiplier)
-        bg.draw(surface)
+
+        scratch = self._bg_lowres_scratch
+        if scratch is not None:
+            # Web, tema pesado: desenha em meia-resolução e faz upscale (1 blit).
+            scratch.fill(colors.BLACK)
+            bg.draw(scratch)
+            pygame.transform.scale(
+                scratch, (surface.get_width(), surface.get_height()), surface
+            )
+        else:
+            surface.fill(colors.BLACK)
+            bg.draw(surface)
 
     def _render_text_cached(
         self,

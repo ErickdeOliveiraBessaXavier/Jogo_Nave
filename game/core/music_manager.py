@@ -325,6 +325,14 @@ class MusicManager:
             return
 
         fade_duration = float(BEHAVIOR_CONFIG["music"]["fade_duration"])
+        # No web (emscripten), o streaming de música (mixer.music) detecta o
+        # formato pela EXTENSÃO — MP3 não é suportado. A build web fornece as
+        # músicas em .ogg real; aqui trocamos a extensão. SFX (mixer.Sound)
+        # detectam pelo conteúdo, então não precisam disso.
+        import sys
+
+        if sys.platform == "emscripten" and music_path.lower().endswith(".mp3"):
+            music_path = music_path[:-4] + ".ogg"
         try:
             pygame.mixer.music.load(music_path)
             # Volume-alvo já com master, multiplicador de boss e ducking

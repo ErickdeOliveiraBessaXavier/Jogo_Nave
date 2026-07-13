@@ -43,12 +43,15 @@ $sz = (Get-ChildItem $stage -Recurse | Measure-Object Length -Sum).Sum/1MB
 Write-Host (">> Staging pronto: {0}  ({1:N1} MB)" -f $stage, $sz) -ForegroundColor Green
 
 # --disable-sound-format-error: nosso audio ja e OGG (conteudo), so o nome e .mp3;
-# a flag pula a checagem por extensao do pygbag. SDL toca pelo conteudo.
+#   a flag pula a checagem por extensao do pygbag. SDL toca pelo conteudo.
+# --ume_block=0: nao espera o "desbloqueio de midia" (clique) antes de rodar o
+#   jogo; sem isso o pygbag fica preso na tela cinza esperando o gate de audio.
+$pygbagArgs = @("--disable-sound-format-error", "--ume_block=0")
 if ($Build) {
     Write-Host ">> pygbag --build (empacota p/ WebAssembly)..." -ForegroundColor Cyan
-    & $py -m pygbag --disable-sound-format-error --build "$stage\main.py"
+    & $py -m pygbag @pygbagArgs --build "$stage\main.py"
 }
 elseif ($Serve) {
     Write-Host ">> pygbag (servidor local em http://localhost:8000)..." -ForegroundColor Cyan
-    & $py -m pygbag --disable-sound-format-error --port 8000 "$stage\main.py"
+    & $py -m pygbag @pygbagArgs --port 8000 "$stage\main.py"
 }
