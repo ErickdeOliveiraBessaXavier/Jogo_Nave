@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import pygame
@@ -531,7 +532,7 @@ class GameApp:
             )
             scene.handle_event(motion)
 
-    def run(self):
+    async def run(self):
         from .core.sound import MUSIC_END_EVENT, sound_manager
         from .core.visual_quality import visual_quality
 
@@ -587,6 +588,10 @@ class GameApp:
                     )
 
                 pygame.display.flip()
+
+                # pygbag/web: cede o controle ao event loop do navegador uma
+                # vez por frame. No desktop é praticamente um no-op instantâneo.
+                await asyncio.sleep(0)
         finally:
             self.sound_system.cleanup()
             sound_manager.shutdown()
@@ -595,7 +600,7 @@ class GameApp:
 
 def main():
     app = GameApp()
-    app.run()
+    asyncio.run(app.run())
 
 
 if __name__ == "__main__":
