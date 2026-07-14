@@ -663,23 +663,29 @@ class WorldSelectionView:
         self.left_arrow_hover = self.left_arrow_rect.collidepoint(mouse_pos)
         self.right_arrow_hover = self.right_arrow_rect.collidepoint(mouse_pos)
 
-        # Interpolação suave do carrossel com lógica de loop (caminho mais curto)
+        # Interpolação suave do carrossel com lógica de loop (caminho mais curto).
+        # Animações off: sem deslize — snap direto no card selecionado.
         num_cards = len(self.world_cards)
-        diff = self.selected_index - self.visual_scroll_index
+        from ..core.visual_quality import visual_quality
 
-        # Ajustar para o caminho mais curto no loop
-        if abs(diff) > num_cards / 2:
-            if diff > 0:
-                diff -= num_cards
-            else:
-                diff += num_cards
-
-        if abs(diff) > 0.01:
-            self.visual_scroll_index += diff * _dt * self.scroll_speed
-            # Normalizar visual_scroll_index para manter dentro do range [0, num_cards)
-            self.visual_scroll_index = self.visual_scroll_index % num_cards
-        else:
+        if not visual_quality.ui_animations:
             self.visual_scroll_index = float(self.selected_index)
+        else:
+            diff = self.selected_index - self.visual_scroll_index
+
+            # Ajustar para o caminho mais curto no loop
+            if abs(diff) > num_cards / 2:
+                if diff > 0:
+                    diff -= num_cards
+                else:
+                    diff += num_cards
+
+            if abs(diff) > 0.01:
+                self.visual_scroll_index += diff * _dt * self.scroll_speed
+                # Normalizar para manter dentro do range [0, num_cards)
+                self.visual_scroll_index = self.visual_scroll_index % num_cards
+            else:
+                self.visual_scroll_index = float(self.selected_index)
 
         # Atualizar background se seleção mudou
         if self.selected_index != self.last_selected:
@@ -690,9 +696,14 @@ class WorldSelectionView:
             self.transition_progress = 0.0
             self._build_background_for(self.selected_index)
 
-        # Animar transição de fade do background
+        # Animar transição de fade do background (instantânea se animações off).
         if self.is_transitioning:
-            self.transition_progress += _dt / self.transition_duration
+            from ..core.visual_quality import visual_quality
+
+            if visual_quality.ui_animations:
+                self.transition_progress += _dt / self.transition_duration
+            else:
+                self.transition_progress = 1.0
             if self.transition_progress >= 1.0:
                 self.transition_progress = 1.0
                 self.is_transitioning = False
@@ -721,8 +732,13 @@ class WorldSelectionView:
             # amplitude reduzida para ser "atmosférico"
             amp_x, amp_y = 3, 2
             freq = 4.0
-            card_shake_x = math.sin(self.time * freq) * amp_x
-            card_shake_y = math.cos(self.time * freq * 1.1) * amp_y
+            from ..core.visual_quality import visual_quality
+
+            if visual_quality.ui_animations:
+                card_shake_x = math.sin(self.time * freq) * amp_x
+                card_shake_y = math.cos(self.time * freq * 1.1) * amp_y
+            else:
+                card_shake_x = card_shake_y = 0.0
 
             # Armazenar temporariamente no objeto view para o render usar
             # (Poderia ser um atributo do card, mas vamos injetar no render)
