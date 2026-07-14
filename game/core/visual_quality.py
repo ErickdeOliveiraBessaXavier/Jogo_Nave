@@ -150,6 +150,29 @@ class VisualQuality:
         # Pixelização é ortogonal ao nível de qualidade: efeito estético aplicado
         # no frame final (não escala partículas). Sempre ativa; piso nativo Leve.
         self._pixelization = "light"
+        # Fundo retrô: temas pesados em meia-resolução + upscale (visual chunky
+        # e mais leve). Lido pelo renderer ao trocar de tema.
+        self._lowres_background = True
+        # Animações da UI: quando False, transições/fades são instantâneos.
+        self._ui_animations = True
+
+    # ── Fundo retrô (meia-resolução) ─────────────────────────────────────────
+    @property
+    def lowres_background(self) -> bool:
+        return self._lowres_background
+
+    def set_lowres_background(self, enabled: bool) -> None:
+        self._lowres_background = bool(enabled)
+
+    # ── Animações da UI ──────────────────────────────────────────────────────
+    @property
+    def ui_animations(self) -> bool:
+        """Quando False, transições/fades/entradas da UI viram instantâneos —
+        opção de desempenho (evita picos de fillrate de tela cheia por frame)."""
+        return self._ui_animations
+
+    def set_ui_animations(self, enabled: bool) -> None:
+        self._ui_animations = bool(enabled)
 
     # ── Nível ────────────────────────────────────────────────────────────────
     @property

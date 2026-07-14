@@ -29,6 +29,18 @@ class UserPreferences:
         # Sempre ativa (sem "off"); piso nativo = "light".
         self.pixelization: str = "light"
 
+        # Fundo retrô: temas pesados (Mountains/City/Volcanic) renderizados em
+        # meia-resolução + upscale — visual pixel-art mais "chunky" e mais leve.
+        self.retro_background: bool = True
+
+        # Animações da UI: transições/fades/entradas. False = mudanças
+        # instantâneas (opção de desempenho para FPS baixo). No web (WASM) o
+        # padrão é DESLIGADO (desempenho); no desktop, ligado. Um valor salvo
+        # em disco (load) sobrepõe este padrão.
+        import sys as _sys
+
+        self.ui_animations: bool = _sys.platform != "emscripten"
+
         # Áudio — defaults vindos de VOLUME_CONFIG (fonte única de verdade)
         self.music_volume: float = VOLUME_CONFIG["music"]
         self.sfx_volume: float = VOLUME_CONFIG["sfx"]
@@ -97,6 +109,13 @@ class UserPreferences:
                 if px in ("light", "medium", "strong"):
                     self.pixelization = px
 
+                self.retro_background = bool(
+                    data.get("retro_background", self.retro_background)
+                )
+                self.ui_animations = bool(
+                    data.get("ui_animations", self.ui_animations)
+                )
+
                 # Áudio
                 self.music_volume = float(data.get("music_volume", self.music_volume))
                 self.sfx_volume = float(data.get("sfx_volume", self.sfx_volume))
@@ -122,6 +141,12 @@ class UserPreferences:
 
     def save(self):
         """Salva preferências no disco."""
+        import sys as _sys
+
+        # Web (emscripten): MEMFS volátil + I/O bloqueante no loop. Não persiste
+        # entre reloads, então escrever só custa stutter. Ver PlayerProfile.save.
+        if _sys.platform == "emscripten":
+            return
         try:
             self.file_path.parent.mkdir(parents=True, exist_ok=True)
             data: Dict[str, Any] = {
@@ -130,6 +155,8 @@ class UserPreferences:
                 "language": self.language,
                 "visual_quality": self.visual_quality,
                 "pixelization": self.pixelization,
+                "retro_background": self.retro_background,
+                "ui_animations": self.ui_animations,
                 "music_volume": self.music_volume,
                 "sfx_volume": self.sfx_volume,
                 "shot_volume": self.shot_volume,
@@ -153,6 +180,10 @@ class UserPreferences:
         self.language = ""
         self.visual_quality = "high"
         self.pixelization = "light"
+        self.retro_background = True
+        import sys as _sys
+
+        self.ui_animations = _sys.platform != "emscripten"
         self.music_volume = VOLUME_CONFIG["music"]
         self.sfx_volume = VOLUME_CONFIG["sfx"]
         self.shot_volume = VOLUME_CONFIG["shots"]

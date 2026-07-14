@@ -105,6 +105,14 @@ class SettingsView:
         self.pixelization_levels: list[tuple[str, str]] = list(PIXELIZATION_LEVELS)
         self.selected_pixelization: str = self.preferences.pixelization
 
+        # Fundo retrô (meia-resolução): seletor Ligado/Desligado, aplicado ao vivo.
+        self.retro_bg_levels: list[tuple[bool, str]] = [(True, "on"), (False, "off")]
+        self.selected_retro_bg: bool = self.preferences.retro_background
+
+        # Animações da UI: seletor Ligado/Desligado (desempenho).
+        self.ui_anim_levels: list[tuple[bool, str]] = [(True, "on"), (False, "off")]
+        self.selected_ui_anim: bool = self.preferences.ui_animations
+
         # Carregar resolução salva das preferências
         saved_res = self.preferences.resolution
         self.selected_resolution_index = 1  # default
@@ -142,47 +150,46 @@ class SettingsView:
 
         # Dimensões e espaçamentos
         outer_pad = self._s(40)
-        card_gap = self._s(40)
-        card_inner_pad_x = self._s(30)
+        card_gap = self._s(30)
+        card_inner_pad_x = self._s(25)
 
-        # Calcular largura dinâmica para ocupar a tela toda
+        # Calcular larguras assimétricas para dar mais espaço ao card de Controles (que possui textos longos)
         available_width = screen_w - (2 * outer_pad)
-        card_width = (available_width - card_gap) / 2
+        audio_width = self._s(320)
+        video_width = self._s(350)
+        controls_width = available_width - audio_width - video_width - (2 * card_gap)
         card_height = screen_h - self._s(180)
 
-        # Centralizar cards verticalmente. Sobem um pouco (offset negativo) para
-        # abrir a faixa inferior, onde vivem DUAS linhas de seletores
-        # (Pixelização + Qualidade Visual).
-        card_y = (screen_h - card_height) // 2 - self._s(14)
-
-        # Posição inicial X
-        start_x = outer_pad
+        # Centralizar cards verticalmente
+        card_y = (screen_h - card_height) // 2 - self._s(15)
 
         # Card de Áudio (Esquerda)
-        audio_card_rect = pygame.Rect(start_x, card_y, card_width, card_height)
+        audio_card_rect = pygame.Rect(outer_pad, card_y, audio_width, card_height)
         self.layout_rects["audio_card"] = audio_card_rect
 
         self.layout_rects["sliders"] = {}
-        slider_w = card_width - self._s(60)
+        slider_w = audio_width - (2 * card_inner_pad_x)
         slider_h = self._s(20)
-        y_offset = audio_card_rect.y + self._s(80)
+        # Mais espaçamento vertical para preencher o card harmoniosamente, já que não temos texto de dica nele
+        y_offset = audio_card_rect.y + self._s(110)
 
         for key in ["music", "sfx", "shot"]:
             self.layout_rects["sliders"][key] = pygame.Rect(
                 audio_card_rect.x + card_inner_pad_x, y_offset, slider_w, slider_h
             )
-            y_offset += self._s(100)
+            y_offset += self._s(110)
 
-        # Card de Controles (Direita)
+        # Card de Controles (Meio)
+        controls_x = outer_pad + audio_width + card_gap
         controls_card_rect = pygame.Rect(
-            start_x + card_width + card_gap, card_y, card_width, card_height
+            controls_x, card_y, controls_width, card_height
         )
         self.layout_rects["controls_card"] = controls_card_rect
 
         # Toggles de controle
         self.layout_rects["toggles"] = {}
-        toggle_w, toggle_h = self._s(30), self._s(30)
-        y_offset = controls_card_rect.y + self._s(60)
+        toggle_w, toggle_h = self._s(26), self._s(26)
+        y_offset = controls_card_rect.y + self._s(70)
 
         # Agrupar toggles
         for key in [
@@ -194,32 +201,36 @@ class SettingsView:
             self.layout_rects["toggles"][key] = pygame.Rect(
                 controls_card_rect.x + card_inner_pad_x, y_offset, toggle_w, toggle_h
             )
-            y_offset += self._s(50)
+            y_offset += self._s(45)
 
-        # Seletor de resolução
-        y_offset += self._s(20)
+        # Card de Vídeo/Gráficos (Direita)
+        video_x = controls_x + controls_width + card_gap
+        video_card_rect = pygame.Rect(
+            video_x, card_y, video_width, card_height
+        )
+        self.layout_rects["video_card"] = video_card_rect
+
+        # Elementos do Card de Vídeo/Gráficos:
+        # 1. Seletor de Resolução
+        y_offset = video_card_rect.y + self._s(60)
         self.layout_rects["resolution_label"] = pygame.Rect(
-            controls_card_rect.x + card_inner_pad_x,
+            video_card_rect.x + card_inner_pad_x,
             y_offset,
-            controls_card_rect.width - (2 * card_inner_pad_x),
-            self._s(30),
+            video_card_rect.width - (2 * card_inner_pad_x),
+            self._s(25),
         )
 
-        # Grid de botões de resolução
+        # Grid de botões de resolução (3 colunas, 4 linhas)
         self.layout_rects["resolution_buttons"] = []
-
-        # Configuração do grid
         cols = 3
-        button_gap_x = self._s(10)
-        button_gap_y = self._s(10)
-        available_width_for_buttons = controls_card_rect.width - (2 * card_inner_pad_x)
+        button_gap_x = self._s(8)
+        button_gap_y = self._s(8)
+        available_width_for_buttons = video_card_rect.width - (2 * card_inner_pad_x)
         button_w = (available_width_for_buttons - (cols - 1) * button_gap_x) / cols
-        button_h = self._s(35)
+        button_h = self._s(28)
 
-        grid_start_y = y_offset + self._s(40)
-
+        grid_start_y = y_offset + self._s(30)
         from typing import List, cast
-
         resolution_buttons = cast(
             List[pygame.Rect], self.layout_rects["resolution_buttons"]
         )
@@ -227,58 +238,95 @@ class SettingsView:
         for i in range(len(self.available_resolutions)):
             row = i // cols
             col = i % cols
-
             x = (
-                controls_card_rect.x
+                video_card_rect.x
                 + card_inner_pad_x
                 + col * (button_w + button_gap_x)
             )
             y = grid_start_y + row * (button_h + button_gap_y)
-
             resolution_buttons.append(pygame.Rect(x, y, button_w, button_h))
 
-        # Seletor de Qualidade Visual — faixa inferior, centralizado. Própria
-        # seção, sem disputar espaço com os dois cards já cheios.
-        q_label = t("settings.quality_label")
-        q_label_w = self.item_font.size(q_label)[0]
-        q_btn_w = self._s(90)
-        q_btn_h = self._s(34)
-        q_gap = self._s(10)
-        q_buttons_w = 3 * q_btn_w + 2 * q_gap
-        group_w = q_label_w + self._s(14) + q_buttons_w
-        q_x = (screen_w - group_w) // 2
-        q_y = screen_h - self._s(52)
-        self.layout_rects["quality_label"] = pygame.Rect(
-            q_x, q_y, q_label_w, q_btn_h
+        # Fim do grid de resoluções.
+        # Agora vamos posicionar os seletores de qualidade, pixelização e fundo retrô abaixo do grid
+        y_offset = grid_start_y + 4 * (button_h + button_gap_y) + self._s(15)
+
+        # 2. Seletor de Fundo Retrô (Ligado/Desligado)
+        self.layout_rects["retro_bg_label"] = pygame.Rect(
+            video_card_rect.x + card_inner_pad_x,
+            y_offset,
+            video_card_rect.width - (2 * card_inner_pad_x),
+            self._s(22),
         )
+        y_offset += self._s(24)
+
+        rb_btn_w = (available_width_for_buttons - button_gap_x) / 2
+        rb_btn_h = self._s(28)
+        retro_bg_buttons: list[pygame.Rect] = []
+        bx = video_card_rect.x + card_inner_pad_x
+        for _i in range(2):
+            retro_bg_buttons.append(pygame.Rect(bx, y_offset, rb_btn_w, rb_btn_h))
+            bx += rb_btn_w + button_gap_x
+        self.layout_rects["retro_bg_buttons"] = retro_bg_buttons
+
+        y_offset += rb_btn_h + self._s(15)
+
+        # 3. Seletor de Pixelização (Leve/Médio/Forte)
+        self.layout_rects["pixelization_label"] = pygame.Rect(
+            video_card_rect.x + card_inner_pad_x,
+            y_offset,
+            video_card_rect.width - (2 * card_inner_pad_x),
+            self._s(22),
+        )
+        y_offset += self._s(24)
+
+        p_btn_w = (available_width_for_buttons - 2 * button_gap_x) / 3
+        p_btn_h = self._s(28)
+        pixelization_buttons: list[pygame.Rect] = []
+        bx = video_card_rect.x + card_inner_pad_x
+        for _i in range(len(self.pixelization_levels)):
+            pixelization_buttons.append(pygame.Rect(bx, y_offset, p_btn_w, p_btn_h))
+            bx += p_btn_w + button_gap_x
+        self.layout_rects["pixelization_buttons"] = pixelization_buttons
+
+        y_offset += p_btn_h + self._s(15)
+
+        # 4. Seletor de Qualidade Visual (Alto/Médio/Baixo)
+        self.layout_rects["quality_label"] = pygame.Rect(
+            video_card_rect.x + card_inner_pad_x,
+            y_offset,
+            video_card_rect.width - (2 * card_inner_pad_x),
+            self._s(22),
+        )
+        y_offset += self._s(24)
+
+        q_btn_w = p_btn_w
+        q_btn_h = self._s(28)
         quality_buttons: list[pygame.Rect] = []
-        bx = q_x + q_label_w + self._s(14)
+        bx = video_card_rect.x + card_inner_pad_x
         for _i in range(3):
-            quality_buttons.append(pygame.Rect(bx, q_y, q_btn_w, q_btn_h))
-            bx += q_btn_w + q_gap
+            quality_buttons.append(pygame.Rect(bx, y_offset, q_btn_w, q_btn_h))
+            bx += q_btn_w + button_gap_x
         self.layout_rects["quality_buttons"] = quality_buttons
 
-        # Seletor de Pixelização — linha logo ACIMA do seletor de qualidade,
-        # mesmo padrão (rótulo + botões, centralizado). 4 níveis.
-        p_label = t("settings.pixelization_label")
-        p_label_w = self.item_font.size(p_label)[0]
-        p_btn_w = self._s(78)
-        p_btn_h = self._s(34)
-        p_gap = self._s(10)
-        n_pix = len(self.pixelization_levels)
-        p_buttons_w = n_pix * p_btn_w + (n_pix - 1) * p_gap
-        p_group_w = p_label_w + self._s(14) + p_buttons_w
-        p_x = (screen_w - p_group_w) // 2
-        p_y = q_y - self._s(44)
-        self.layout_rects["pixelization_label"] = pygame.Rect(
-            p_x, p_y, p_label_w, p_btn_h
+        y_offset += q_btn_h + self._s(15)
+
+        # 5. Seletor de Animações da UI (Ligado/Desligado)
+        self.layout_rects["ui_anim_label"] = pygame.Rect(
+            video_card_rect.x + card_inner_pad_x,
+            y_offset,
+            video_card_rect.width - (2 * card_inner_pad_x),
+            self._s(22),
         )
-        pixelization_buttons: list[pygame.Rect] = []
-        bx = p_x + p_label_w + self._s(14)
-        for _i in range(len(self.pixelization_levels)):
-            pixelization_buttons.append(pygame.Rect(bx, p_y, p_btn_w, p_btn_h))
-            bx += p_btn_w + p_gap
-        self.layout_rects["pixelization_buttons"] = pixelization_buttons
+        y_offset += self._s(24)
+
+        ua_btn_w = (available_width_for_buttons - button_gap_x) / 2
+        ua_btn_h = self._s(28)
+        ui_anim_buttons: list[pygame.Rect] = []
+        bx = video_card_rect.x + card_inner_pad_x
+        for _i in range(2):
+            ui_anim_buttons.append(pygame.Rect(bx, y_offset, ua_btn_w, ua_btn_h))
+            bx += ua_btn_w + button_gap_x
+        self.layout_rects["ui_anim_buttons"] = ui_anim_buttons
 
         # Botão de Voltar (Canto inferior esquerdo)
         back_text_width = self.item_font.size(t("common.back"))[0]
@@ -335,6 +383,8 @@ class SettingsView:
         self.toggles["p1_prefers_keyboard"] = self.preferences.p1_prefers_keyboard
         self.selected_quality = self.preferences.visual_quality
         self.selected_pixelization = self.preferences.pixelization
+        self.selected_retro_bg = self.preferences.retro_background
+        self.selected_ui_anim = self.preferences.ui_animations
 
         saved_res = self.preferences.resolution
         for i, (w, h, _) in enumerate(self.available_resolutions):
@@ -344,7 +394,12 @@ class SettingsView:
 
     def update(self, dt: float):
         """Atualiza a lógica da view."""
-        if self.is_entering and self.entry_progress < 1.0:
+        from ..core.visual_quality import visual_quality
+
+        if not visual_quality.ui_animations:
+            self.entry_progress = 1.0
+            self.is_entering = False
+        elif self.is_entering and self.entry_progress < 1.0:
             self.entry_progress = min(
                 1.0, self.entry_progress + dt / self.entry_duration
             )
@@ -489,9 +544,30 @@ class SettingsView:
                     self._select_pixelization(self.pixelization_levels[i][0])
                     return True
 
-            # Toggles
-            for key, rect in self.layout_rects["toggles"].items():
+            for i, rect in enumerate(
+                self.layout_rects.get("retro_bg_buttons", [])
+            ):
                 if rect.collidepoint(pos):
+                    self._select_retro_bg(self.retro_bg_levels[i][0])
+                    return True
+
+            for i, rect in enumerate(
+                self.layout_rects.get("ui_anim_buttons", [])
+            ):
+                if rect.collidepoint(pos):
+                    self._select_ui_anim(self.ui_anim_levels[i][0])
+                    return True
+
+            # Toggles (clique tolerante em toda a largura do rótulo correspondente)
+            for key, rect in self.layout_rects["toggles"].items():
+                card_rect = self.layout_rects["controls_card"]
+                click_rect = pygame.Rect(
+                    rect.x,
+                    rect.y,
+                    card_rect.right - self._s(25) - rect.x,
+                    rect.height,
+                )
+                if click_rect.collidepoint(pos):
                     if self._try_show_coop_block(key):
                         return True
                     self.toggles[key] = not self.toggles[key]
@@ -513,9 +589,9 @@ class SettingsView:
                     self.preferences.save()
                     return True
 
-            # Sliders
+            # Sliders (clique verticalmente tolerante)
             for key, rect in self.layout_rects["sliders"].items():
-                if rect.collidepoint(pos):
+                if rect.inflate(0, 10).collidepoint(pos):
                     self.dragging_slider = key
                     # Atualizar valor no clique
                     new_val = (pos[0] - rect.x) / rect.w
@@ -616,10 +692,25 @@ class SettingsView:
                 self._select_pixelization(self.pixelization_levels[i][0])
                 return True
 
+        for i, rect in enumerate(self.layout_rects.get("retro_bg_buttons", [])):
+            if rect.collidepoint(pos):
+                self._select_retro_bg(self.retro_bg_levels[i][0])
+                return True
+
+        for i, rect in enumerate(self.layout_rects.get("ui_anim_buttons", [])):
+            if rect.collidepoint(pos):
+                self._select_ui_anim(self.ui_anim_levels[i][0])
+                return True
+
         for key, rect in self.layout_rects["toggles"].items():
-            if rect.inflate(60, 0).collidepoint(pos):
-                # Hitbox inflado horizontalmente cobre rótulo — torna a
-                # mira do controle mais perdoadora ao apontar pro toggle.
+            card_rect = self.layout_rects["controls_card"]
+            click_rect = pygame.Rect(
+                rect.x,
+                rect.y,
+                card_rect.right - self._s(25) - rect.x,
+                rect.height,
+            )
+            if click_rect.collidepoint(pos):
                 if self._try_show_coop_block(key):
                     return True
                 self.toggles[key] = not self.toggles[key]
@@ -642,7 +733,7 @@ class SettingsView:
 
         # Slider: A em cima do slider seta o valor pra posição da mira.
         for key, rect in self.layout_rects["sliders"].items():
-            if rect.collidepoint(pos):
+            if rect.inflate(0, 10).collidepoint(pos):
                 new_val = (pos[0] - rect.x) / rect.w
                 self.sliders[key] = max(0.0, min(1.0, new_val))
                 self._update_volume(key)
@@ -678,6 +769,25 @@ class SettingsView:
         self.selected_pixelization = name
         self.preferences.pixelization = name
         visual_quality.set_pixelization(name)
+        self.preferences.save()
+
+    def _select_retro_bg(self, enabled: bool) -> None:
+        """Liga/desliga o fundo retrô (meia-resolução) e persiste. O renderer
+        relê a preferência ao (re)entrar num mundo temático."""
+        from ..core.visual_quality import visual_quality
+
+        self.selected_retro_bg = enabled
+        self.preferences.retro_background = enabled
+        visual_quality.set_lowres_background(enabled)
+        self.preferences.save()
+
+    def _select_ui_anim(self, enabled: bool) -> None:
+        """Liga/desliga as animações da UI e persiste (aplicado ao vivo)."""
+        from ..core.visual_quality import visual_quality
+
+        self.selected_ui_anim = enabled
+        self.preferences.ui_animations = enabled
+        visual_quality.set_ui_animations(enabled)
         self.preferences.save()
 
     def _update_volume(self, key: str):
@@ -740,8 +850,7 @@ class SettingsView:
         # Desenhar Cards com alpha
         self._draw_audio_card(surface, alpha, offset_y)
         self._draw_controls_card(surface, alpha, offset_y)
-        self._draw_quality_selector(surface, alpha, offset_y)
-        self._draw_pixelization_selector(surface, alpha, offset_y)
+        self._draw_video_card(surface, alpha, offset_y)
 
         # Botão Voltar com alpha
         self._draw_button(
@@ -772,16 +881,103 @@ class SettingsView:
             surface, rect, text, self.item_font, color, alpha, offset_y
         )
 
+    def _draw_video_card(
+        self, surface: pygame.Surface, alpha: int = 255, offset_y: int = 0
+    ):
+        """Desenha o card de vídeo contendo a resolução e os seletores gráficos."""
+        card_rect = self.layout_rects["video_card"].copy()
+        card_rect.y += offset_y
+        self._draw_card(
+            surface,
+            self.layout_rects["video_card"],
+            t("settings.video_title"),
+            alpha,
+            offset_y,
+        )
+
+        # Criar clipping para o card
+        clip_inset = self._s(10)
+        clip_rect = card_rect.inflate(-clip_inset, -clip_inset)
+        surface.set_clip(clip_rect)
+
+        # Label da resolução
+        label_rect = self.layout_rects["resolution_label"]
+        label_surf = self.item_font.render(t("settings.resolution_label"), True, CUSTOM_GOLD)
+        label_surf.set_alpha(alpha)
+        surface.blit(label_surf, (label_rect.x, label_rect.y + offset_y))
+
+        # Botões de resolução
+        from typing import List, cast
+
+        resolution_buttons = cast(
+            List[pygame.Rect], self.layout_rects["resolution_buttons"]
+        )
+        for i, (w, h, label) in enumerate(self.available_resolutions):
+            button_rect = resolution_buttons[i]
+            is_selected = i == self.selected_resolution_index
+            color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
+
+            self._draw_button(
+                surface,
+                button_rect,
+                label,
+                color,
+                alpha,
+                offset_y,
+            )
+
+        # Seletores gráficos internos
+        self._draw_retro_bg_selector(surface, alpha, offset_y)
+        self._draw_pixelization_selector(surface, alpha, offset_y)
+        self._draw_quality_selector(surface, alpha, offset_y)
+        self._draw_ui_anim_selector(surface, alpha, offset_y)
+
+        # Tooltip para resolução hoverada
+        if self.hovered_resolution_index is not None:
+            from ..core.config import config as Config
+
+            w, h, label = self.available_resolutions[self.hovered_resolution_index]
+            tooltip_text = f"{w}×{h} pixels"
+
+            tooltip_font = self.small_font
+            tooltip_surf = tooltip_font.render(tooltip_text, True, CUSTOM_GOLD)
+            tooltip_surf.set_alpha(int(alpha * 0.9))
+
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            tooltip_x = mouse_x - tooltip_surf.get_width() // 2
+            tooltip_y = mouse_y - self._s(35)
+
+            tooltip_x = max(
+                self._s(10),
+                min(tooltip_x, Config.SCREEN_WIDTH - tooltip_surf.get_width() - self._s(10)),
+            )
+            tooltip_y = max(self._s(10), tooltip_y)
+
+            bg_rect = pygame.Rect(
+                tooltip_x - self._s(5),
+                tooltip_y - self._s(3),
+                tooltip_surf.get_width() + self._s(10),
+                tooltip_surf.get_height() + self._s(6),
+            )
+            bg_surf = pygame.Surface((bg_rect.width, bg_rect.height))
+            bg_surf.fill(BLACK)
+            bg_surf.set_alpha(int(alpha * 0.7))
+            surface.blit(bg_surf, bg_rect)
+
+            surface.blit(tooltip_surf, (tooltip_x, tooltip_y))
+
+        surface.set_clip(None)
+
     def _draw_quality_selector(
         self, surface: pygame.Surface, alpha: int = 255, offset_y: int = 0
     ):
-        """Desenha o seletor 'Qualidade Visual:' (faixa inferior) com o nível ativo."""
+        """Desenha o seletor 'Qualidade Visual:' com o nível ativo."""
         label_rect = self.layout_rects["quality_label"]
         label_surf = self.item_font.render(t("settings.quality_label"), True, CUSTOM_GOLD)
         label_surf.set_alpha(alpha)
         surface.blit(
             label_surf,
-            (label_rect.x, label_rect.centery - label_surf.get_height() // 2 + offset_y),
+            (label_rect.x, label_rect.y + offset_y),
         )
 
         buttons = self.layout_rects["quality_buttons"]
@@ -802,7 +998,7 @@ class SettingsView:
         label_surf.set_alpha(alpha)
         surface.blit(
             label_surf,
-            (label_rect.x, label_rect.centery - label_surf.get_height() // 2 + offset_y),
+            (label_rect.x, label_rect.y + offset_y),
         )
 
         buttons = self.layout_rects["pixelization_buttons"]
@@ -812,6 +1008,51 @@ class SettingsView:
             color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
             self._draw_button(
                 surface, rect, t(f"settings.pixelization.{name}"), color, alpha, offset_y
+            )
+
+    def _draw_retro_bg_selector(
+        self, surface: pygame.Surface, alpha: int = 255, offset_y: int = 0
+    ):
+        """Desenha o seletor 'Fundo Retrô:' (Ligado/Desligado)."""
+        label_rect = self.layout_rects["retro_bg_label"]
+        label_surf = self.item_font.render(
+            t("settings.retro_bg_label"), True, CUSTOM_GOLD
+        )
+        label_surf.set_alpha(alpha)
+        surface.blit(
+            label_surf,
+            (label_rect.x, label_rect.y + offset_y),
+        )
+
+        buttons = self.layout_rects["retro_bg_buttons"]
+        for i, rect in enumerate(buttons):
+            value, key = self.retro_bg_levels[i]
+            is_selected = value == self.selected_retro_bg
+            color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
+            self._draw_button(
+                surface, rect, t(f"settings.retro_bg.{key}"), color, alpha, offset_y
+            )
+
+    def _draw_ui_anim_selector(
+        self, surface: pygame.Surface, alpha: int = 255, offset_y: int = 0
+    ):
+        """Desenha o seletor 'Animações:' (Ligado/Desligado)."""
+        label_rect = self.layout_rects["ui_anim_label"]
+        label_surf = self.item_font.render(
+            t("settings.ui_anim_label"), True, CUSTOM_GOLD
+        )
+        label_surf.set_alpha(alpha)
+        surface.blit(
+            label_surf,
+            (label_rect.x, label_rect.centery - label_surf.get_height() // 2 + offset_y),
+        )
+        buttons = self.layout_rects["ui_anim_buttons"]
+        for i, rect in enumerate(buttons):
+            value, key = self.ui_anim_levels[i]
+            is_selected = value == self.selected_ui_anim
+            color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
+            self._draw_button(
+                surface, rect, t(f"settings.ui_anim.{key}"), color, alpha, offset_y
             )
 
     def _draw_card(
@@ -868,7 +1109,10 @@ class SettingsView:
             rect.y += offset_y
 
             # Label
-            label_surf = self.item_font.render(labels[key], True, colors.WHITE)
+            # Detecta hover com tolerância vertical para acender o label correspondente
+            is_hovered = rect.inflate(0, 16).collidepoint(pygame.mouse.get_pos())
+            label_color = CUSTOM_GOLD if is_hovered else colors.WHITE
+            label_surf = self.item_font.render(labels[key], True, label_color)
             label_surf.set_alpha(alpha)
             surface.blit(label_surf, (rect.x, rect.y - self._s(30)))
 
@@ -930,59 +1174,6 @@ class SettingsView:
                 percent_surf, (percent_x, rect.centery - percent_surf.get_height() / 2)
             )
 
-        # Instruções de controles na coluna da esquerda.
-        gamepad_active = (
-            self._app.gamepad.is_active
-            if (self._app is not None and hasattr(self._app, "gamepad"))
-            else False
-        )
-        if gamepad_active:
-            instructions = [
-                t("settings.controls_header"),
-                t("controls.gp.move"),
-                t("settings.gp.shoot_rotate"),
-                t("settings.gp.dash_powers"),
-                t("controls.gp.pause"),
-                "",
-                t("settings.tip"),
-                t("settings.tip_gamepad"),
-            ]
-        else:
-            instructions = [
-                t("settings.controls_header"),
-                t("settings.kb.move"),
-                t("settings.kb.shoot_rotate"),
-                t("settings.kb.dash_powers"),
-                t("controls.kb.pause"),
-                "",
-                t("settings.tip"),
-                t("settings.tip_keyboard"),
-            ]
-
-        slider_bottom = max(
-            (
-                slider_rect.bottom
-                for slider_rect in self.layout_rects["sliders"].values()
-            ),
-            default=card_rect.y + self._s(80),
-        )
-        instruction_start_y = slider_bottom + self._s(18) + offset_y
-        instruction_x = card_rect.x + self._s(30)
-        instruction_max_width = card_rect.width - self._s(60)
-        instruction_font = self.small_font
-        instruction_lh = self._s(18)
-        for line in instructions:
-            if line == "":
-                instruction_start_y += self._s(8)
-                continue
-            color = CUSTOM_GOLD if ":" in line or "DICA" in line else colors.WHITE
-            wrapped_lines = wrap_text(instruction_font, line, instruction_max_width)
-            for wrapped_line in wrapped_lines:
-                text_surf = instruction_font.render(wrapped_line, True, color)
-                text_surf.set_alpha(alpha)
-                surface.blit(text_surf, (instruction_x, instruction_start_y))
-                instruction_start_y += instruction_lh
-
         surface.set_clip(None)
 
     def _draw_controls_card(
@@ -1024,9 +1215,19 @@ class SettingsView:
             rect = self.layout_rects["toggles"][key].copy()
             rect.y += offset_y
 
+            # Área de colisão estendida (inclui o rótulo) para hover e clique
+            click_rect = pygame.Rect(
+                rect.x,
+                rect.y,
+                card_rect.right - self._s(25) - rect.x,
+                rect.height,
+            )
+            is_hovered = click_rect.collidepoint(pygame.mouse.get_pos()) and not coop_active
+
             # Checkbox
             is_checked = self.toggles[key]
-            checkbox_color = CUSTOM_GOLD if is_checked else colors.GRAY
+            # Borda fica dourada se estiver checado ou se estiver sob hover do mouse
+            checkbox_color = CUSTOM_GOLD if (is_checked or is_hovered) else colors.GRAY
             pygame.draw.rect(
                 surface, (*checkbox_color, alpha), rect, 2, border_radius=self._s(5)
             )
@@ -1037,7 +1238,7 @@ class SettingsView:
                 check_surf.fill((*CUSTOM_GOLD, alpha))
                 surface.blit(check_surf, (rect.x + inset // 2, rect.y + inset // 2))
 
-            # Label (com sufixo de status para os toggles de gamepad)
+            # Label (com sufixo de status para os toggles de gamepad e quebra de linhas para evitar overflow)
             label_text = labels[key]
             label_color = colors.WHITE
             if key == "gamepad_enabled":
@@ -1060,75 +1261,76 @@ class SettingsView:
             if coop_active and key in ("gamepad_enabled", "p1_prefers_keyboard"):
                 label_text += t("settings.status.coop_locked")
                 label_color = colors.GRAY
-            label_surf = self.item_font.render(label_text, True, label_color)
-            label_surf.set_alpha(alpha)
-            surface.blit(
-                label_surf,
-                (rect.right + self._s(10), rect.centery - label_surf.get_height() / 2),
-            )
 
-        # Label da resolução
-        label_rect = self.layout_rects["resolution_label"].copy()
-        label_rect.y += offset_y
-        label_surf = self.item_font.render(t("settings.resolution_label"), True, CUSTOM_GOLD)
-        label_surf.set_alpha(alpha)
-        surface.blit(label_surf, (label_rect.x, label_rect.y))
+            # Mudar a cor do texto para dourado se passar o mouse sobre ele (e não estiver desabilitado)
+            if is_hovered and label_color == colors.WHITE:
+                label_color = CUSTOM_GOLD
 
-        # Botões de resolução
-        from typing import List, cast
+            # Quebra de texto inteligente para acomodar labels longos sem overflow
+            max_text_width = card_rect.right - self._s(25) - rect.right - self._s(10)
+            wrapped_lines = wrap_text(self.item_font, label_text, max_text_width)
+            line_height = self.item_font.get_linesize()
+            total_text_height = len(wrapped_lines) * line_height
+            text_y = rect.centery - total_text_height // 2
 
-        resolution_buttons = cast(
-            List[pygame.Rect], self.layout_rects["resolution_buttons"]
+            for line in wrapped_lines:
+                label_surf = self.item_font.render(line, True, label_color)
+                label_surf.set_alpha(alpha)
+                surface.blit(label_surf, (rect.right + self._s(10), text_y))
+                text_y += line_height
+
+        # Instruções de controles na coluna do meio (Controles)
+        gamepad_active = (
+            self._app.gamepad.is_active
+            if (self._app is not None and hasattr(self._app, "gamepad"))
+            else False
         )
-        for i, (w, h, label) in enumerate(self.available_resolutions):
-            button_rect = resolution_buttons[i].copy()
-            button_rect.y += offset_y
+        if gamepad_active:
+            instructions = [
+                t("settings.controls_header"),
+                t("controls.gp.move"),
+                t("settings.gp.shoot_rotate"),
+                t("settings.gp.dash_powers"),
+                t("controls.gp.pause"),
+                "",
+                t("settings.tip"),
+                t("settings.tip_gamepad"),
+            ]
+        else:
+            instructions = [
+                t("settings.controls_header"),
+                t("settings.kb.move"),
+                t("settings.kb.shoot_rotate"),
+                t("settings.kb.dash_powers"),
+                t("controls.kb.pause"),
+                "",
+                t("settings.tip"),
+                t("settings.tip_keyboard"),
+            ]
 
-            is_selected = i == self.selected_resolution_index
-            color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
-
-            self._draw_button(
-                surface,
-                button_rect,
-                label,
-                color,
-                alpha,
-                0,
-            )
-
-        # Tooltip para resolução hoverada
-        if self.hovered_resolution_index is not None:
-            from ..core.config import config as Config
-
-            w, h, label = self.available_resolutions[self.hovered_resolution_index]
-            tooltip_text = f"{w}×{h} pixels"
-
-            tooltip_font = self.small_font
-            tooltip_surf = tooltip_font.render(tooltip_text, True, CUSTOM_GOLD)
-            tooltip_surf.set_alpha(int(alpha * 0.9))
-
-            mouse_x, mouse_y = pygame.mouse.get_pos()
-            tooltip_x = mouse_x - tooltip_surf.get_width() // 2
-            tooltip_y = mouse_y - self._s(35)
-
-            tooltip_x = max(
-                self._s(10),
-                min(tooltip_x, Config.SCREEN_WIDTH - tooltip_surf.get_width() - self._s(10)),
-            )
-            tooltip_y = max(self._s(10), tooltip_y)
-
-            bg_rect = pygame.Rect(
-                tooltip_x - self._s(5),
-                tooltip_y - self._s(3),
-                tooltip_surf.get_width() + self._s(10),
-                tooltip_surf.get_height() + self._s(6),
-            )
-            bg_surf = pygame.Surface((bg_rect.width, bg_rect.height))
-            bg_surf.fill(BLACK)
-            bg_surf.set_alpha(int(alpha * 0.7))
-            surface.blit(bg_surf, bg_rect)
-
-            surface.blit(tooltip_surf, (tooltip_x, tooltip_y))
+        toggle_bottom = max(
+            (
+                rect.bottom
+                for rect in self.layout_rects["toggles"].values()
+            ),
+            default=card_rect.y + self._s(70),
+        )
+        instruction_start_y = toggle_bottom + self._s(30) + offset_y
+        instruction_x = card_rect.x + self._s(25)
+        instruction_max_width = card_rect.width - self._s(50)
+        instruction_font = self.small_font
+        instruction_lh = self._s(18)
+        for line in instructions:
+            if line == "":
+                instruction_start_y += self._s(8)
+                continue
+            color = CUSTOM_GOLD if ":" in line or "DICA" in line or "TIP" in line else colors.WHITE
+            wrapped_lines = wrap_text(instruction_font, line, instruction_max_width)
+            for wrapped_line in wrapped_lines:
+                text_surf = instruction_font.render(wrapped_line, True, color)
+                text_surf.set_alpha(alpha)
+                surface.blit(text_surf, (instruction_x, instruction_start_y))
+                instruction_start_y += instruction_lh
 
         surface.set_clip(None)
 
@@ -1289,24 +1491,38 @@ class SettingsScene(Scene, FadeTransitionMixin):
         rects: list[pygame.Rect] = []
         from typing import List, cast
 
+        # 1. Sliders (Card de Áudio - Esquerda)
+        for r in self.view.layout_rects.get("sliders", {}).values():
+            rects.append(r)
+
+        # 2. Toggles (Card de Controles - Meio)
+        # Inflo o toggle horizontalmente pra cobrir o rótulo (mesmo padrão do _activate_at).
+        for r in self.view.layout_rects.get("toggles", {}).values():
+            rects.append(r.inflate(60, 0))
+
+        # 3. Elementos do Card de Vídeo/Gráficos (Direita)
+        # Grid de Resoluções
         for r in cast(
             List[pygame.Rect], self.view.layout_rects.get("resolution_buttons", [])
         ):
             rects.append(r)
-        # Toggles e sliders viram alvos do DPad. Inflo o toggle horizontalmente
-        # pra cobrir o rótulo (mesmo padrão do _activate_at).
-        for r in self.view.layout_rects.get("toggles", {}).values():
-            rects.append(r.inflate(60, 0))
-        for r in self.view.layout_rects.get("sliders", {}).values():
-            rects.append(r)
+        # Fundo Retrô
         for r in cast(
-            List[pygame.Rect], self.view.layout_rects.get("quality_buttons", [])
+            List[pygame.Rect], self.view.layout_rects.get("retro_bg_buttons", [])
         ):
             rects.append(r)
+        # Pixelização
         for r in cast(
             List[pygame.Rect], self.view.layout_rects.get("pixelization_buttons", [])
         ):
             rects.append(r)
+        # Qualidade Visual
+        for r in cast(
+            List[pygame.Rect], self.view.layout_rects.get("quality_buttons", [])
+        ):
+            rects.append(r)
+
+        # 4. Botão Voltar (Inferior)
         if "back_button" in self.view.layout_rects:
             rects.append(self.view.layout_rects["back_button"])
         return rects

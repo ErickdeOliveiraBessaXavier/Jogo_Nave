@@ -129,9 +129,15 @@ class FadeTransitionMixin:
     fade_out: bool
 
     def _init_transition(self, duration: float = 0.3) -> None:
+        from ..core.visual_quality import visual_quality
+
         self.transitioning = False
         self.transition_progress = 0.0
-        self.transition_duration = duration
+        # Animações off: duração ~instantânea (transição completa em 1 frame,
+        # sem o fade de tela cheia por vários frames).
+        self.transition_duration = (
+            duration if visual_quality.ui_animations else 0.0001
+        )
         self.fade_out = False
 
     def _on_back(self) -> None:

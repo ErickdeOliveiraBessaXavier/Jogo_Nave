@@ -155,3 +155,9 @@ venv-linux/
 build_linux.sh
 dist-linux/
 build-linux/
+
+# Build Web (pygbag) — audio otimizado e saidas sao gerados/locais
+web/assets/
+web/build/
+web/dist/
+web/staging/

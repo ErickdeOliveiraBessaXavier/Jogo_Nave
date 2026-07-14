@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import pygame
@@ -55,8 +56,15 @@ _BUTTON_TO_KEY = {
 
 class GameApp:
     def __init__(self):
-        # Melhor qualidade/latência para o mixer antes do pygame.init()
-        pygame.mixer.pre_init(44100, -16, 2, 1024)
+        # Melhor qualidade/latência para o mixer antes do pygame.init().
+        # No web (WASM) o jogo é CPU-bound (~30fps): um frame cheio segura a
+        # thread principal por ~33ms, mais que os 23ms de um buffer de 1024
+        # samples → o áudio estoura (picote). Buffer maior no web dá folga pra
+        # sobreviver a frames longos (custa ~latência, tolerável p/ música).
+        import sys as _sys
+
+        _mixer_buffer = 4096 if _sys.platform == "emscripten" else 1024
+        pygame.mixer.pre_init(44100, -16, 2, _mixer_buffer)
         pygame.init()
 
         # EventBus central para comunicação desacoplada
@@ -72,6 +80,8 @@ class GameApp:
 
         visual_quality.set_from_name(self.preferences.visual_quality)
         visual_quality.set_pixelization(self.preferences.pixelization)
+        visual_quality.set_lowres_background(self.preferences.retro_background)
+        visual_quality.set_ui_animations(self.preferences.ui_animations)
 
         # Idioma da interface aplicado ao singleton i18n no boot, ANTES de
         # qualquer cena montar textos (botões pré-renderizam glifos). Vazio →
@@ -110,10 +120,19 @@ class GameApp:
         )
 
         # Define as flags da tela.
+        import sys
+
         flags = 0
-        if self.preferences.fullscreen:
-            flags |= pygame.FULLSCREEN
-        flags |= pygame.SCALED
+        if sys.platform == "emscripten":
+            # Web: o jogo roda no canvas da página. NÃO forçar fullscreen (só via
+            # gesto do usuário) e NÃO usar SCALED — o canvas do pygbag já escala
+            # pro tamanho de exibição, e o SCALED do pygame por cima desalinha a
+            # posição do mouse (hit-test) quando a janela é redimensionada.
+            pass
+        else:
+            if self.preferences.fullscreen:
+                flags |= pygame.FULLSCREEN
+            flags |= pygame.SCALED
 
         self.screen = pygame.display.set_mode((base_width, base_height), flags)
         self.screen_width = base_width
@@ -133,7 +152,13 @@ class GameApp:
         )
         sprite_loader.register("serpent_block", SerpentBlock.load_frames_for_preload)
         sprite_loader.register("Satellite", Satellite.load_animation_frames)
-        sprite_loader.load_all()
+        # No desktop carrega tudo aqui (síncrono). No web (emscripten) o
+        # carregamento é feito de forma cooperativa pelo entrypoint, via
+        # GameApp.preload(), para não congelar o navegador (tela de loading).
+        import sys
+
+        if sys.platform != "emscripten":
+            sprite_loader.load_all()
 
         pygame.display.set_caption("Pixel Patrol")
         self.clock = pygame.time.Clock()
@@ -531,7 +556,14 @@ class GameApp:
             )
             scene.handle_event(motion)
 
-    def run(self):
+    async def preload(self, on_progress=None) -> None:
+        """Carrega os sprites cedendo ao event loop, para a tela de loading web.
+        No desktop já foram carregados no __init__, então aqui vira no-op."""
+        from .core.sprite_loader import sprite_loader
+
+        await sprite_loader.load_all_async(on_progress)
+
+    async def run(self):
         from .core.sound import MUSIC_END_EVENT, sound_manager
         from .core.visual_quality import visual_quality
 
@@ -587,6 +619,10 @@ class GameApp:
                     )
 
                 pygame.display.flip()
+
+                # pygbag/web: cede o controle ao event loop do navegador uma
+                # vez por frame. No desktop é praticamente um no-op instantâneo.
+                await asyncio.sleep(0)
         finally:
             self.sound_system.cleanup()
             sound_manager.shutdown()
@@ -595,7 +631,7 @@ class GameApp:
 
 def main():
     app = GameApp()
-    app.run()
+    asyncio.run(app.run())
 
 
 if __name__ == "__main__":

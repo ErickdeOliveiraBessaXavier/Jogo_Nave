@@ -1,3 +1,4 @@
+import asyncio
 import faulthandler
 import logging
 import logging.handlers
@@ -94,7 +95,7 @@ def main():
         from game.app import GameApp
 
         app = GameApp()
-        app.run()
+        asyncio.run(app.run())
     except Exception:
         # Try to save the error to a file
         try:

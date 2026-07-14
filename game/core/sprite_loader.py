@@ -42,6 +42,35 @@ class SpriteLoader:
         self.loaders.clear()
         logging.info("✅ Todos os sprites carregados!\n")
 
+    async def load_all_async(self, on_progress=None) -> None:
+        """Versão cooperativa de ``load_all`` para o WASM/pygbag.
+
+        Cede o controle ao event loop (``await asyncio.sleep(0)``) entre cada
+        loader, para o navegador conseguir desenhar a tela de loading e não
+        congelar. ``on_progress(feitos, total, nome)`` é chamado antes de cada
+        passo para atualizar a barra.
+        """
+        import asyncio
+
+        if SpriteLoader._loaded:
+            if on_progress is not None:
+                on_progress(1, 1, "")
+            return
+
+        total = len(self.loaders)
+        for i, (name, loader_func) in enumerate(self.loaders):
+            if on_progress is not None:
+                on_progress(i, total, name)
+            await asyncio.sleep(0)  # deixa o navegador pintar o frame
+            loader_func()
+
+        if on_progress is not None:
+            on_progress(total, total, "")
+        await asyncio.sleep(0)
+
+        SpriteLoader._loaded = True
+        self.loaders.clear()
+
     @classmethod
     def load_animation_frames(
         cls,

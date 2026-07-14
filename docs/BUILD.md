@@ -1,6 +1,6 @@
 # Build & Publicação — Pixel Patrol
 
-Como gerar e publicar o jogo no itch.io (`erick-de-oliveira/pixel-patrol`) via **butler**.
+Como gerar e publicar o jogo no itch.io (`erick-de-oliveira/pixel-patrol`) via **butler** — canais **Windows**, **Linux** (download) e **Web** (`html5`, jogável no navegador).
 
 > ⚙️ A configuração do ambiente **já foi feita** neste PC. Para o dia a dia, use
 > só a seção **"Publicar uma nova versão"** abaixo. A seção de configuração no
@@ -10,8 +10,9 @@ Como gerar e publicar o jogo no itch.io (`erick-de-oliveira/pixel-patrol`) via *
 
 # 🚀 Publicar uma nova versão
 
-Regra de ouro: **a versão sobe só uma vez, no passo do Windows. O Linux herda a
-mesma versão.** Por isso faça sempre **Windows primeiro, Linux depois.**
+Regra de ouro: **a versão sobe só uma vez, no passo do Windows. Linux e Web
+herdam a mesma versão** (leem o `VERSION`). Por isso a ordem é sempre
+**Windows → Linux → Web.**
 
 ### Passo 1 — Windows
 No **PowerShell**, na pasta do projeto:
@@ -29,9 +30,25 @@ bash publicar_linux.sh
 ```
 ➜ builda e publica o canal **linux** usando a **mesma** versão do Passo 1.
 
-**Pronto.** Os dois canais ficam sincronizados na mesma versão.
+### Passo 3 — Web (navegador)
+No **PowerShell**, na pasta do projeto:
+```powershell
+.\publicar_web.ps1
+```
+➜ reempacota o bundle WASM (pygbag) e publica o canal **html5** (jogável no
+navegador) usando a **mesma** versão dos passos anteriores. **Não** incrementa.
 
-### Passo 3 — no site do itch (a cada release, opcional)
+> **Pré-requisito (uma vez):** o áudio web precisa existir em `web\assets\audio`.
+> Se faltar, o script aborta — rode antes `.\reencode_audio_web.ps1`.
+
+> **Config única no itch (só na 1ª publicação web):** no dashboard →
+> *Edit game → Uploads*, marque o upload `html5` como
+> **"This file will be played in the browser"**, defina o embed **1280×720** e
+> ligue **"Fullscreen button"**. Fica salvo para os próximos releases.
+
+**Pronto.** Os três canais ficam sincronizados na mesma versão.
+
+### Passo 4 — no site do itch (a cada release, opcional)
 Escreva um **devlog** contando as novidades (o butler não faz isso).
 
 ---
@@ -49,8 +66,9 @@ Por padrão o Passo 1 soma +1 no patch. Para mudar:
 |---|---|
 | **Só Windows** (correção rápida) | Só o Passo 1. O Linux fica na versão anterior (tudo bem). |
 | **Só Linux** | Suba a versão antes: edite o número no arquivo `VERSION`, depois faça o Passo 2. |
-| **Reenviar sem mudar a versão** | Win: `.\publicar_itch.ps1 -SemBump -SoPush`  ·  Linux: repita o Passo 2. |
-| **Reduzir tamanho do áudio** | `.\reencode_audio.ps1` (simula) e `.\reencode_audio.ps1 -Aplicar` (git é o backup). |
+| **Reenviar sem mudar a versão** | Win: `.\publicar_itch.ps1 -SemBump -SoPush`  ·  Linux: repita o Passo 2  ·  Web: `.\publicar_web.ps1` (sempre usa o `VERSION` atual). |
+| **Só Web** | `.\publicar_web.ps1` (lê o `VERSION` atual; use `-SoPush` para pular o build e só reenviar o bundle já gerado). |
+| **Reduzir tamanho do áudio** | Desktop: `.\reencode_audio.ps1` (simula) e `-Aplicar`  ·  Web: `.\reencode_audio_web.ps1` (gera o OGG leve em `web\assets`). |
 
 ## Conferir o que está publicado
 ```powershell
@@ -106,7 +124,12 @@ bit de execução do binário).
 | `build_linux.sh`          | gera a build **Linux** | WSL |
 | `publicar_linux.sh`       | publica o canal **Linux** (lê `VERSION`) | WSL |
 | `Pixel_Patrol_linux.spec` | config do build Linux | — |
+| `build_web.ps1`           | monta o staging Web + roda pygbag (`-Build`/`-Serve`) | PowerShell |
+| `publicar_web.ps1`        | build + publica o canal **html5** (lê `VERSION`, sem bump) | PowerShell |
+| `reencode_audio_web.ps1`  | gera o áudio OGG leve da Web em `web\assets` | PowerShell |
+| `web/main.py`             | entrypoint async da build Web (pygbag) | — |
 
 ### Onde ficam as saídas do build
 - **Windows:** `dist\Pixel_Patrol\`
 - **Linux:** `~/pixelpatrol-dist-linux/Pixel_Patrol` (dentro do WSL, não em `/mnt/c`)
+- **Web:** `web\staging\build\web\` (bundle WASM com `index.html`)

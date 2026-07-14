@@ -370,6 +370,10 @@ class WorldSelectionView:
         self._bg_scratch_b = pygame.Surface(
             (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
         )
+        # Buffer meia-res para o upscale do fundo retrô (mesmo do jogo).
+        self._bg_scratch_half = pygame.Surface(
+            (Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2), pygame.SRCALPHA
+        )
 
         # Fontes cacheadas fora do caminho de render (escaladas).
         self.title_font = get_font(max(12, int(36 * self.ui_scale)))
@@ -449,10 +453,9 @@ class WorldSelectionView:
                 self._background_cache.append(None)
             else:
                 try:
+                    bw, bh = self._bg_build_dims()
                     self._background_cache.append(
-                        _get_cached_background(
-                            theme_str, Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-                        )
+                        _get_cached_background(theme_str, bw, bh)
                     )
                 except (ValueError, OSError):
                     self._background_cache.append(None)
@@ -466,9 +469,8 @@ class WorldSelectionView:
             if theme_str == "starfield":
                 continue
             try:
-                _get_cached_background(
-                    theme_str, Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
-                )
+                bw, bh = self._bg_build_dims()
+                _get_cached_background(theme_str, bw, bh)
             except (ValueError, OSError):
                 pass
 
@@ -661,23 +663,29 @@ class WorldSelectionView:
         self.left_arrow_hover = self.left_arrow_rect.collidepoint(mouse_pos)
         self.right_arrow_hover = self.right_arrow_rect.collidepoint(mouse_pos)
 
-        # Interpolação suave do carrossel com lógica de loop (caminho mais curto)
+        # Interpolação suave do carrossel com lógica de loop (caminho mais curto).
+        # Animações off: sem deslize — snap direto no card selecionado.
         num_cards = len(self.world_cards)
-        diff = self.selected_index - self.visual_scroll_index
+        from ..core.visual_quality import visual_quality
 
-        # Ajustar para o caminho mais curto no loop
-        if abs(diff) > num_cards / 2:
-            if diff > 0:
-                diff -= num_cards
-            else:
-                diff += num_cards
-
-        if abs(diff) > 0.01:
-            self.visual_scroll_index += diff * _dt * self.scroll_speed
-            # Normalizar visual_scroll_index para manter dentro do range [0, num_cards)
-            self.visual_scroll_index = self.visual_scroll_index % num_cards
-        else:
+        if not visual_quality.ui_animations:
             self.visual_scroll_index = float(self.selected_index)
+        else:
+            diff = self.selected_index - self.visual_scroll_index
+
+            # Ajustar para o caminho mais curto no loop
+            if abs(diff) > num_cards / 2:
+                if diff > 0:
+                    diff -= num_cards
+                else:
+                    diff += num_cards
+
+            if abs(diff) > 0.01:
+                self.visual_scroll_index += diff * _dt * self.scroll_speed
+                # Normalizar para manter dentro do range [0, num_cards)
+                self.visual_scroll_index = self.visual_scroll_index % num_cards
+            else:
+                self.visual_scroll_index = float(self.selected_index)
 
         # Atualizar background se seleção mudou
         if self.selected_index != self.last_selected:
@@ -688,9 +696,14 @@ class WorldSelectionView:
             self.transition_progress = 0.0
             self._build_background_for(self.selected_index)
 
-        # Animar transição de fade do background
+        # Animar transição de fade do background (instantânea se animações off).
         if self.is_transitioning:
-            self.transition_progress += _dt / self.transition_duration
+            from ..core.visual_quality import visual_quality
+
+            if visual_quality.ui_animations:
+                self.transition_progress += _dt / self.transition_duration
+            else:
+                self.transition_progress = 1.0
             if self.transition_progress >= 1.0:
                 self.transition_progress = 1.0
                 self.is_transitioning = False
@@ -719,8 +732,13 @@ class WorldSelectionView:
             # amplitude reduzida para ser "atmosférico"
             amp_x, amp_y = 3, 2
             freq = 4.0
-            card_shake_x = math.sin(self.time * freq) * amp_x
-            card_shake_y = math.cos(self.time * freq * 1.1) * amp_y
+            from ..core.visual_quality import visual_quality
+
+            if visual_quality.ui_animations:
+                card_shake_x = math.sin(self.time * freq) * amp_x
+                card_shake_y = math.cos(self.time * freq * 1.1) * amp_y
+            else:
+                card_shake_x = card_shake_y = 0.0
 
             # Armazenar temporariamente no objeto view para o render usar
             # (Poderia ser um atributo do card, mas vamos injetar no render)
@@ -832,13 +850,36 @@ class WorldSelectionView:
         # 3. Instruções e Botão Voltar
         self._render_ui_elements(surface)
 
+    def _bg_build_dims(self) -> tuple[int, int]:
+        """Dims de construção do background do tema. Com fundo retrô (lowres),
+        meia-res — igual ao jogo (que aplica upscale)."""
+        from ..core.visual_quality import visual_quality
+
+        if visual_quality.lowres_background:
+            return Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2
+        return Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+
+    def _draw_themed_bg(self, bg: Background, scratch: pygame.Surface) -> None:
+        """Desenha o background do tema no scratch full-size com o MESMO upscale
+        do jogo: em fundo retrô, desenha em meia-res e amplia (nearest)."""
+        from ..core.visual_quality import visual_quality
+
+        if visual_quality.lowres_background:
+            self._bg_scratch_half.fill((0, 0, 0, 0))
+            bg.draw(self._bg_scratch_half)
+            pygame.transform.scale(
+                self._bg_scratch_half, scratch.get_size(), scratch
+            )
+        else:
+            scratch.fill((0, 0, 0, 0))
+            bg.draw(scratch)
+
     def _render_background(self, surface: pygame.Surface) -> None:
         """Renderiza o background com transição de fade."""
         if self.is_transitioning:
             if self.previous_background is not None:
                 try:
-                    self._bg_scratch_a.fill((0, 0, 0, 0))
-                    self.previous_background.draw(self._bg_scratch_a)
+                    self._draw_themed_bg(self.previous_background, self._bg_scratch_a)
                     self._bg_scratch_a.set_alpha(
                         int(76 * (1.0 - self.transition_progress))
                     )
@@ -858,8 +899,7 @@ class WorldSelectionView:
 
             if self.current_background is not None:
                 try:
-                    self._bg_scratch_b.fill((0, 0, 0, 0))
-                    self.current_background.draw(self._bg_scratch_b)
+                    self._draw_themed_bg(self.current_background, self._bg_scratch_b)
                     self._bg_scratch_b.set_alpha(int(76 * self.transition_progress))
                     surface.blit(self._bg_scratch_b, (0, 0))
                 except Exception:
@@ -875,8 +915,7 @@ class WorldSelectionView:
         else:
             if self.current_background is not None:
                 try:
-                    self._bg_scratch_a.fill((0, 0, 0, 0))
-                    self.current_background.draw(self._bg_scratch_a)
+                    self._draw_themed_bg(self.current_background, self._bg_scratch_a)
                     self._bg_scratch_a.set_alpha(76)
                     surface.blit(self._bg_scratch_a, (0, 0))
                 except Exception:

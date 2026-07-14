@@ -261,7 +261,12 @@ class DifficultySelectionView:
         self.time += dt
 
         # Animação de entrada
-        if self.is_entering and self.entry_progress < 1.0:
+        from ..core.visual_quality import visual_quality
+
+        if not visual_quality.ui_animations:
+            self.entry_progress = 1.0
+            self.is_entering = False
+        elif self.is_entering and self.entry_progress < 1.0:
             self.entry_progress = min(
                 1.0, self.entry_progress + dt / self.entry_duration
             )

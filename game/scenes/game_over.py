@@ -185,6 +185,16 @@ class InitialsEntryWidget:
     # ------------------------------------------------------------------
 
     def update(self, dt: float) -> None:
+        from ..core.visual_quality import visual_quality
+
+        if not visual_quality.ui_animations:
+            # Animações off: widget já cheio, sem pulso de destaque nem scroll.
+            self.entry_anim_timer = 1.0
+            self.highlight_pulse_timer = 0.0
+            for i in range(self.MAX_LEN):
+                self._scroll_offset[i] = 0.0
+            return
+
         self.entry_anim_timer = min(1.0, self.entry_anim_timer + dt * 2)
         self.highlight_pulse_timer += dt * 4
 
@@ -636,7 +646,16 @@ class GameOverScene(Scene):
         surface.blit(self.game_surface, shake_offset)
 
         # Overlay escurecido
-        progress = min(1.0, self.game_over_timer / Config.GAME_OVER_FADE_DURATION)
+        from ..core.visual_quality import visual_quality
+
+        anim = visual_quality.ui_animations
+        # Animações off: fade de tela cheia instantâneo (evita picos de fillrate
+        # por vários frames). O timer de pacing (RESTART_DELAY) permanece.
+        progress = (
+            min(1.0, self.game_over_timer / Config.GAME_OVER_FADE_DURATION)
+            if anim
+            else 1.0
+        )
         overlay = pygame.Surface(
             (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
         )
@@ -657,8 +676,10 @@ class GameOverScene(Scene):
 
         # Score
         if self.game_over_timer > Config.GAME_OVER_RESTART_DELAY:
-            sub_progress = min(
-                1.0, (self.game_over_timer - Config.GAME_OVER_RESTART_DELAY) / 0.8
+            sub_progress = (
+                min(1.0, (self.game_over_timer - Config.GAME_OVER_RESTART_DELAY) / 0.8)
+                if anim
+                else 1.0
             )
             sub_alpha = int(sub_progress * 255)
 

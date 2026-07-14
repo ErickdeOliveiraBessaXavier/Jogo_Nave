@@ -1,6 +1,7 @@
 import json
 import logging
 import shutil
+import sys
 import threading
 import time
 from collections import deque
@@ -972,6 +973,11 @@ class PlayerProfile:
 
     def auto_save(self):
         """Auto-save if dirty and enough time has passed."""
+        # Web (emscripten): sem I/O no loop. O filesystem é MEMFS volátil (some
+        # no reload), então o auto-save só custaria stutter de escrita a cada 10s
+        # sem persistir nada. Persistência web é feature à parte (IDBFS/localStorage).
+        if sys.platform == "emscripten":
+            return
         if self._dirty and (time.time() - self._last_save) > 10:
             self.save()
 
@@ -1523,6 +1529,10 @@ class PlayerProfile:
 
     def save(self):
         """Salva perfil no disco (síncrono, bloqueante)."""
+        # Web (emscripten): escrita é I/O bloqueante no loop, e o alvo é o MEMFS
+        # volátil (perdido no reload). Nada a persistir aqui; ver auto_save.
+        if sys.platform == "emscripten":
+            return
         # Criar diretório se não existir
         self.profile_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1539,6 +1549,10 @@ class PlayerProfile:
 
         Útil para auto-save durante gameplay. Para sessão/exit, use save().
         """
+        # Web (emscripten): threads são terreno minado no pygbag (ver crash de
+        # worker thread com pygame) e o MEMFS é volátil — não salva no web.
+        if sys.platform == "emscripten":
+            return
         # Preparar dados de forma síncrona (sem efeitos colaterais)
         data = self._prepare_save_data()
         path = self.profile_path

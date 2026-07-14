@@ -818,16 +818,26 @@ class UpgradesSelectionScene(Scene):
         self.player_profile.save()
 
     def update(self, dt: float):
+        from ..core.visual_quality import visual_quality
+
+        anim = visual_quality.ui_animations
         self.r.starfield.update(dt)
         self._time += dt
         if self.is_entering:
-            self.entry_progress = min(
-                1.0, self.entry_progress + dt / self.entry_duration
-            )
+            # Animações off: entrada instantânea (sem fade de tela cheia por frame).
+            if anim:
+                self.entry_progress = min(
+                    1.0, self.entry_progress + dt / self.entry_duration
+                )
+            else:
+                self.entry_progress = 1.0
             if self.entry_progress >= 1.0:
                 self.is_entering = False
         if self.transitioning:
-            self.transition_progress += dt / self.transition_duration
+            if anim:
+                self.transition_progress += dt / self.transition_duration
+            else:
+                self.transition_progress = 1.0
             if self.transition_progress >= 1.0:
                 from .main_menu import MainMenuScene
 
@@ -984,8 +994,15 @@ class UpgradesSelectionScene(Scene):
     def _draw_center_column_body(
         self, surface: pygame.Surface, ship: ShipProfile, rect: pygame.Rect
     ):
-        # Ícone da nave pulsando no preview.
-        pulse = 1.0 + 0.04 * math.sin(time.time() * 3)
+        # Ícone da nave pulsando no preview. Animações off: tamanho fixo (sem o
+        # re-scale por frame do sprite).
+        from ..core.visual_quality import visual_quality
+
+        pulse = (
+            1.0 + 0.04 * math.sin(time.time() * 3)
+            if visual_quality.ui_animations
+            else 1.0
+        )
         try:
             img = pygame.transform.scale(
                 get_image(BASE_DIR / "assets" / "icons" / ship.sprite_filename),
@@ -1444,7 +1461,9 @@ class UpgradesSelectionScene(Scene):
         seleção de mundos). Só aparecem quando há mais de uma página."""
         if max_page <= 0:
             return
-        pulse = (math.sin(self._time * 4) + 1) * 0.5
+        from ..core.visual_quality import visual_quality
+
+        pulse = (math.sin(self._time * 4) + 1) * 0.5 if visual_quality.ui_animations else 0.5
         alpha = int(120 + 135 * pulse)
         mouse = pygame.mouse.get_pos()
         focus_rect = self._focused_rect()
@@ -1525,7 +1544,9 @@ class UpgradesSelectionScene(Scene):
         navegação por D-pad, então este anel é a única indicação clara de
         qual card/slot está selecionado. Cor distinta das demais bordas
         (amarelo=hover/seleção, dourado=equipado) para não confundir."""
-        pulse = (math.sin(self._time * 6) + 1) * 0.5
+        from ..core.visual_quality import visual_quality
+
+        pulse = (math.sin(self._time * 6) + 1) * 0.5 if visual_quality.ui_animations else 0.5
         color = (int(80 + 70 * pulse), int(190 + 50 * pulse), 255)
         ring = rect.inflate(self._s(8), self._s(8))
         pygame.draw.rect(
