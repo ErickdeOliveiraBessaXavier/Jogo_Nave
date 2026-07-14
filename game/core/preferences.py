@@ -141,6 +141,12 @@ class UserPreferences:
 
     def save(self):
         """Salva preferências no disco."""
+        import sys as _sys
+
+        # Web (emscripten): MEMFS volátil + I/O bloqueante no loop. Não persiste
+        # entre reloads, então escrever só custa stutter. Ver PlayerProfile.save.
+        if _sys.platform == "emscripten":
+            return
         try:
             self.file_path.parent.mkdir(parents=True, exist_ok=True)
             data: Dict[str, Any] = {

@@ -88,17 +88,17 @@ if ($Plataformas -eq "windows" -or $Plataformas -eq "ambos") {
 if ($Plataformas -eq "linux" -or $Plataformas -eq "ambos") {
     $wsl = Get-Command wsl.exe -ErrorAction SilentlyContinue
     if (-not $wsl) {
-        Write-Host "AVISO: WSL nao encontrado -> canal 'linux' pulado (veja BUILD.md)." -ForegroundColor Yellow
+        Write-Host "AVISO: WSL nao encontrado -> canal 'linux' pulado (veja docs/BUILD.md)." -ForegroundColor Yellow
     } else {
         # Converte C:\...\Nave  ->  /mnt/c/.../Nave
         $mnt = "/mnt/" + $PSScriptRoot.Substring(0,1).ToLower() + ($PSScriptRoot.Substring(2) -replace '\\','/')
         Write-Host ">> Linux via WSL ($tag): build + push em $mnt" -ForegroundColor Cyan
         if (-not $SoPush) {
             wsl.exe -e bash -lc "cd '$mnt' && bash build_linux.sh"
-            if ($LASTEXITCODE -ne 0) { Write-Host "Build Linux (WSL) falhou. Ambiente configurado? Veja BUILD.md." -ForegroundColor Yellow }
+            if ($LASTEXITCODE -ne 0) { Write-Host "Build Linux (WSL) falhou. Ambiente configurado? Veja docs/BUILD.md." -ForegroundColor Yellow }
         }
         wsl.exe -e bash -lc "cd '$mnt' && bash publicar_linux.sh"
-        if ($LASTEXITCODE -ne 0) { Write-Host "Push Linux (WSL) falhou. Veja BUILD.md." -ForegroundColor Yellow }
+        if ($LASTEXITCODE -ne 0) { Write-Host "Push Linux (WSL) falhou. Veja docs/BUILD.md." -ForegroundColor Yellow }
     }
 }
 
