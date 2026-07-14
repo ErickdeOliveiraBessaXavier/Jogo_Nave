@@ -32,6 +32,12 @@ class PixelizePost:
     def __init__(self) -> None:
         self._buffer: pygame.Surface | None = None
         self._buffer_key: tuple[int, int, int] | None = None
+        import sys
+
+        # Web (WASM) usa render por software: smoothscale (média de área) de tela
+        # cheia por frame é caríssimo. No web caímos pra nearest no downscale —
+        # mantém o look pixelizado, custo bem menor.
+        self._is_web = sys.platform == "emscripten"
 
     def apply(self, surface: pygame.Surface, factor: float) -> None:
         """Aplica a pixelização in-place. ``factor <= 1`` é no-op (desligado).
@@ -53,7 +59,11 @@ class PixelizePost:
             self._buffer = pygame.Surface((sw, sh)).convert(surface)
             self._buffer_key = key
 
-        # Downscale com média de área (preserva feições finas), upscale nearest
-        # (mantém as bordas duras dos blocos = look pixelizado).
-        pygame.transform.smoothscale(surface, (sw, sh), self._buffer)
+        # Downscale: no desktop usa média de área (preserva feições finas); no
+        # web usa nearest (bem mais barato no render por software). Upscale sempre
+        # nearest (mantém as bordas duras dos blocos = look pixelizado).
+        if self._is_web:
+            pygame.transform.scale(surface, (sw, sh), self._buffer)
+        else:
+            pygame.transform.smoothscale(surface, (sw, sh), self._buffer)
         pygame.transform.scale(self._buffer, (w, h), surface)
