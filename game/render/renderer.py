@@ -361,6 +361,9 @@ class Renderer:
         difficulty: Optional["DifficultyPreset"] = None,
     ):
         # Design aprimorado com animações e hierarquia
+        from ..core.visual_quality import visual_quality
+
+        anim_on = visual_quality.ui_animations
         anim_t = pygame.time.get_ticks() / 1000.0
 
         # Parâmetros de animação de saída
@@ -394,9 +397,9 @@ class Renderer:
                 grad_surf.set_at((x, 0), (0, 0, 0, alpha))
                 grad_surf.set_at((x, 1), (0, 0, 0, alpha))
 
-        overlay = pygame.transform.smoothscale(
-            grad_surf, (Config.SCREEN_WIDTH, panel_h)
-        )
+        # Animações off: nearest no lugar do smoothscale (fullscreen por frame é caro).
+        _scale = pygame.transform.smoothscale if anim_on else pygame.transform.scale
+        overlay = _scale(grad_surf, (Config.SCREEN_WIDTH, panel_h))
         surface.blit(overlay, (0, panel_y))
 
         # Fontes (escaladas)
@@ -406,7 +409,8 @@ class Renderer:
 
         # 2. Nome do Estágio (Acima do contador)
         if stage_name:
-            st_alpha = int((180 + int(75 * math.sin(anim_t * 3))) * (1.0 - exit_progress))
+            _st_pulse = int(75 * math.sin(anim_t * 3)) if anim_on else 0
+            st_alpha = int((180 + _st_pulse) * (1.0 - exit_progress))
             st_surf = info_font.render(stage_name, True, colors.CUSTOM_GOLD)
             st_surf.set_alpha(st_alpha)
             surface.blit(
@@ -421,17 +425,20 @@ class Renderer:
         if not exit_anim_active:
             count_val = int(remaining) + 1
             fraction = remaining - int(remaining)
-            pulse = 1.0 + 0.2 * (1.0 - fraction)
+            pulse = (1.0 + 0.2 * (1.0 - fraction)) if anim_on else 1.0
             ct_base = warning_font.render(f"{count_val}", True, colors.RED)
         else:
             pulse = exit_scale
             ct_base = warning_font.render(t("hud.combat"), True, colors.YELLOW)
             ct_base.set_alpha(global_alpha)
 
-        ct_surf = pygame.transform.smoothscale(
-            ct_base,
-            (int(ct_base.get_width() * pulse), int(ct_base.get_height() * pulse)),
-        )
+        if pulse == 1.0:
+            ct_surf = ct_base  # sem escala (animações off): evita o smoothscale
+        else:
+            ct_surf = pygame.transform.smoothscale(
+                ct_base,
+                (int(ct_base.get_width() * pulse), int(ct_base.get_height() * pulse)),
+            )
         crect = ct_surf.get_rect(
             center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2)
         )

@@ -75,16 +75,19 @@ class WorldTransitionScene(Scene):
         """Renderiza a transição."""
         surface.fill(colors.BLACK)
 
-        # Calcular alpha (fade in/out)
+        # Calcular alpha (fade in/out). Animações off: sem fade (alpha cheio).
+        from ..core.visual_quality import visual_quality
+
         alpha = 255
         fade_duration = 0.5
 
-        if self.timer < fade_duration:
-            # Fade in
-            alpha = int((self.timer / fade_duration) * 255)
-        elif self.timer > self.duration - fade_duration:
-            # Fade out
-            alpha = int(((self.duration - self.timer) / fade_duration) * 255)
+        if visual_quality.ui_animations:
+            if self.timer < fade_duration:
+                # Fade in
+                alpha = int((self.timer / fade_duration) * 255)
+            elif self.timer > self.duration - fade_duration:
+                # Fade out
+                alpha = int(((self.duration - self.timer) / fade_duration) * 255)
 
         alpha = max(0, min(255, alpha))
 

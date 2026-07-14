@@ -155,6 +155,12 @@ class Button:
 
     def update_entry(self, dt: float):
         """Atualiza a animação de entrada do botão."""
+        from ..core.visual_quality import visual_quality
+
+        if not visual_quality.ui_animations:
+            self.entry_progress = 1.0
+            return
+
         if self.entry_delay > 0.0:
             self.entry_delay -= dt
             return
@@ -167,6 +173,18 @@ class Button:
     def update_animation(
         self, time_ms: float, dt: float, anim_speed: float, phase_shift: float, anim_range: float
     ):
+        from ..core.visual_quality import visual_quality
+
+        if not visual_quality.ui_animations:
+            # Animações off: sem flutuação/onda; glow vai direto ao alvo (sem pulso).
+            self.floating_offset = 0.0
+            self.glow_alpha = (
+                1.0 if self.state in (ButtonState.HOVERED, ButtonState.FOCUSED) else 0.0
+            )
+            for char_data in self.chars:
+                char_data["rect"].y = char_data["base_rect"].y
+            return
+
         # Pulsação de floating suave
         self.floating_offset = (
             math.sin(time_ms / 1000.0 * AnimationConfig.FLOATING_SPEED)
@@ -820,7 +838,12 @@ class MainMenuScene(Scene):
                 return
 
         if self.transitioning:
-            self.transition_progress += dt / self.TRANSITION_DURATION
+            from ..core.visual_quality import visual_quality
+
+            if visual_quality.ui_animations:
+                self.transition_progress += dt / self.TRANSITION_DURATION
+            else:
+                self.transition_progress = 1.0  # animações off: troca instantânea
             if self.transition_progress >= 1.0:
                 self.transition_progress = 1.0
                 self._finish_transition()

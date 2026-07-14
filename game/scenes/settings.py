@@ -109,6 +109,10 @@ class SettingsView:
         self.retro_bg_levels: list[tuple[bool, str]] = [(True, "on"), (False, "off")]
         self.selected_retro_bg: bool = self.preferences.retro_background
 
+        # Animações da UI: seletor Ligado/Desligado (desempenho).
+        self.ui_anim_levels: list[tuple[bool, str]] = [(True, "on"), (False, "off")]
+        self.selected_ui_anim: bool = self.preferences.ui_animations
+
         # Carregar resolução salva das preferências
         saved_res = self.preferences.resolution
         self.selected_resolution_index = 1  # default
@@ -304,6 +308,26 @@ class SettingsView:
             bx += q_btn_w + button_gap_x
         self.layout_rects["quality_buttons"] = quality_buttons
 
+        y_offset += q_btn_h + self._s(15)
+
+        # 5. Seletor de Animações da UI (Ligado/Desligado)
+        self.layout_rects["ui_anim_label"] = pygame.Rect(
+            video_card_rect.x + card_inner_pad_x,
+            y_offset,
+            video_card_rect.width - (2 * card_inner_pad_x),
+            self._s(22),
+        )
+        y_offset += self._s(24)
+
+        ua_btn_w = (available_width_for_buttons - button_gap_x) / 2
+        ua_btn_h = self._s(28)
+        ui_anim_buttons: list[pygame.Rect] = []
+        bx = video_card_rect.x + card_inner_pad_x
+        for _i in range(2):
+            ui_anim_buttons.append(pygame.Rect(bx, y_offset, ua_btn_w, ua_btn_h))
+            bx += ua_btn_w + button_gap_x
+        self.layout_rects["ui_anim_buttons"] = ui_anim_buttons
+
         # Botão de Voltar (Canto inferior esquerdo)
         back_text_width = self.item_font.size(t("common.back"))[0]
         back_btn_width = back_text_width + self._s(60)
@@ -360,6 +384,7 @@ class SettingsView:
         self.selected_quality = self.preferences.visual_quality
         self.selected_pixelization = self.preferences.pixelization
         self.selected_retro_bg = self.preferences.retro_background
+        self.selected_ui_anim = self.preferences.ui_animations
 
         saved_res = self.preferences.resolution
         for i, (w, h, _) in enumerate(self.available_resolutions):
@@ -369,7 +394,12 @@ class SettingsView:
 
     def update(self, dt: float):
         """Atualiza a lógica da view."""
-        if self.is_entering and self.entry_progress < 1.0:
+        from ..core.visual_quality import visual_quality
+
+        if not visual_quality.ui_animations:
+            self.entry_progress = 1.0
+            self.is_entering = False
+        elif self.is_entering and self.entry_progress < 1.0:
             self.entry_progress = min(
                 1.0, self.entry_progress + dt / self.entry_duration
             )
@@ -521,6 +551,13 @@ class SettingsView:
                     self._select_retro_bg(self.retro_bg_levels[i][0])
                     return True
 
+            for i, rect in enumerate(
+                self.layout_rects.get("ui_anim_buttons", [])
+            ):
+                if rect.collidepoint(pos):
+                    self._select_ui_anim(self.ui_anim_levels[i][0])
+                    return True
+
             # Toggles (clique tolerante em toda a largura do rótulo correspondente)
             for key, rect in self.layout_rects["toggles"].items():
                 card_rect = self.layout_rects["controls_card"]
@@ -660,6 +697,11 @@ class SettingsView:
                 self._select_retro_bg(self.retro_bg_levels[i][0])
                 return True
 
+        for i, rect in enumerate(self.layout_rects.get("ui_anim_buttons", [])):
+            if rect.collidepoint(pos):
+                self._select_ui_anim(self.ui_anim_levels[i][0])
+                return True
+
         for key, rect in self.layout_rects["toggles"].items():
             card_rect = self.layout_rects["controls_card"]
             click_rect = pygame.Rect(
@@ -737,6 +779,15 @@ class SettingsView:
         self.selected_retro_bg = enabled
         self.preferences.retro_background = enabled
         visual_quality.set_lowres_background(enabled)
+        self.preferences.save()
+
+    def _select_ui_anim(self, enabled: bool) -> None:
+        """Liga/desliga as animações da UI e persiste (aplicado ao vivo)."""
+        from ..core.visual_quality import visual_quality
+
+        self.selected_ui_anim = enabled
+        self.preferences.ui_animations = enabled
+        visual_quality.set_ui_animations(enabled)
         self.preferences.save()
 
     def _update_volume(self, key: str):
@@ -879,6 +930,7 @@ class SettingsView:
         self._draw_retro_bg_selector(surface, alpha, offset_y)
         self._draw_pixelization_selector(surface, alpha, offset_y)
         self._draw_quality_selector(surface, alpha, offset_y)
+        self._draw_ui_anim_selector(surface, alpha, offset_y)
 
         # Tooltip para resolução hoverada
         if self.hovered_resolution_index is not None:
@@ -979,6 +1031,28 @@ class SettingsView:
             color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
             self._draw_button(
                 surface, rect, t(f"settings.retro_bg.{key}"), color, alpha, offset_y
+            )
+
+    def _draw_ui_anim_selector(
+        self, surface: pygame.Surface, alpha: int = 255, offset_y: int = 0
+    ):
+        """Desenha o seletor 'Animações:' (Ligado/Desligado)."""
+        label_rect = self.layout_rects["ui_anim_label"]
+        label_surf = self.item_font.render(
+            t("settings.ui_anim_label"), True, CUSTOM_GOLD
+        )
+        label_surf.set_alpha(alpha)
+        surface.blit(
+            label_surf,
+            (label_rect.x, label_rect.centery - label_surf.get_height() // 2 + offset_y),
+        )
+        buttons = self.layout_rects["ui_anim_buttons"]
+        for i, rect in enumerate(buttons):
+            value, key = self.ui_anim_levels[i]
+            is_selected = value == self.selected_ui_anim
+            color = CUSTOM_GOLD if is_selected else CUSTOM_PURPLE
+            self._draw_button(
+                surface, rect, t(f"settings.ui_anim.{key}"), color, alpha, offset_y
             )
 
     def _draw_card(

@@ -33,6 +33,14 @@ class UserPreferences:
         # meia-resolução + upscale — visual pixel-art mais "chunky" e mais leve.
         self.retro_background: bool = True
 
+        # Animações da UI: transições/fades/entradas. False = mudanças
+        # instantâneas (opção de desempenho para FPS baixo). No web (WASM) o
+        # padrão é DESLIGADO (desempenho); no desktop, ligado. Um valor salvo
+        # em disco (load) sobrepõe este padrão.
+        import sys as _sys
+
+        self.ui_animations: bool = _sys.platform != "emscripten"
+
         # Áudio — defaults vindos de VOLUME_CONFIG (fonte única de verdade)
         self.music_volume: float = VOLUME_CONFIG["music"]
         self.sfx_volume: float = VOLUME_CONFIG["sfx"]
@@ -104,6 +112,9 @@ class UserPreferences:
                 self.retro_background = bool(
                     data.get("retro_background", self.retro_background)
                 )
+                self.ui_animations = bool(
+                    data.get("ui_animations", self.ui_animations)
+                )
 
                 # Áudio
                 self.music_volume = float(data.get("music_volume", self.music_volume))
@@ -139,6 +150,7 @@ class UserPreferences:
                 "visual_quality": self.visual_quality,
                 "pixelization": self.pixelization,
                 "retro_background": self.retro_background,
+                "ui_animations": self.ui_animations,
                 "music_volume": self.music_volume,
                 "sfx_volume": self.sfx_volume,
                 "shot_volume": self.shot_volume,
@@ -163,6 +175,9 @@ class UserPreferences:
         self.visual_quality = "high"
         self.pixelization = "light"
         self.retro_background = True
+        import sys as _sys
+
+        self.ui_animations = _sys.platform != "emscripten"
         self.music_volume = VOLUME_CONFIG["music"]
         self.sfx_volume = VOLUME_CONFIG["sfx"]
         self.shot_volume = VOLUME_CONFIG["shots"]

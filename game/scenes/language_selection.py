@@ -137,7 +137,11 @@ class LanguageSelectionScene(Scene):
         return [rect for _code, _label, rect in self.buttons]
 
     def update(self, dt: float) -> None:
-        if self.entry_progress < 1.0:
+        from ..core.visual_quality import visual_quality
+
+        if not visual_quality.ui_animations:
+            self.entry_progress = 1.0
+        elif self.entry_progress < 1.0:
             self.entry_progress = min(1.0, self.entry_progress + dt / self.entry_duration)
 
     def render(self, surface: pygame.Surface) -> None:
