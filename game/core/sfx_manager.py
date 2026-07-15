@@ -92,6 +92,7 @@ def load_sfx(
         "button_hover": ui.get("button_hover"),
         "button_click": ui.get("button_click"),
         "upgrade_activate": ui.get("upgrade_activate"),
+        "upgrade_denied": ui.get("upgrade_denied"),
         "laser_shot": ui.get("laser_shot"),
         "black_hole": ui.get("black_hole"),
         "hit_hurt_meteor_boss": ui.get("hit_hurt_meteor_boss"),

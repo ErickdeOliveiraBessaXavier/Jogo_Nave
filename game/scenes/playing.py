@@ -163,6 +163,7 @@ class PlayingScene(Scene):
         difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
         starting_level: int = 1,
         start_fade_duration: float = 0.45,
+        p2_profile: Optional[Any] = None,
     ) -> None:
         super().__init__(app)
         self.level_manager = level_manager
@@ -188,6 +189,14 @@ class PlayingScene(Scene):
         # `entity_manager` existe (criado em `_init_systems`).
         self._build_permanent_mini_ships()
         self._init_upgrades_from_profile()
+
+        # P2 sobrevive ao "Continuar" do game over. A cena é recriada do zero a
+        # cada continue, então quem estava jogando precisa ser reconstruído
+        # aqui — sem isto o P2 era silenciosamente largado e tinha que apertar
+        # START de novo a cada morte. Depende de `_init_systems` (entity_manager
+        # e os spawners que `_spawn_p2` atualiza).
+        if p2_profile is not None and self.app.gamepad.secondary_connected:
+            self._spawn_p2(p2_profile)
 
     @property
     def is_side_scroll(self) -> bool:
@@ -280,6 +289,8 @@ class PlayingScene(Scene):
         self.preparation_time_left: float = Config.PREPARATION_TIME
         self.upgrade_select_mode: bool = False
         self._upgrade_select_index: int = 0
+        # Slot → tempo de tremor restante ao tentar usar poder indisponível.
+        self._upgrade_denied_timers: dict[int, float] = {}
         self._apply_difficulty_settings()
 
         self.screen_shake_timer: float = 0.0
@@ -2603,19 +2614,33 @@ class PlayingScene(Scene):
         )
         self.app.states.push(modal)
 
+    def _p2_anchor(self) -> tuple[float, float]:
+        """Posição de P1 na qual ancorar o spawn de P2.
+
+        Enquanto P1 está entrando em cena, `x`/`y` ainda são o ponto de partida
+        FORA da tela — ancorar neles mandaria P2 voar para fora do quadro. O
+        destino da entrada é o ponto certo nesse caso. Importa no início da
+        partida (P2 rejuntando com a cena recém-criada) e quando P2 aperta
+        START durante a contagem de preparação.
+        """
+        primary_ship = self.roster.primary().ship
+        if primary_ship.is_entering:
+            return primary_ship.entry_target_pos
+        return primary_ship.x, primary_ship.y
+
     def _spawn_p2(self, profile: Any) -> None:
         """Cria a nave de P2 e adiciona ao roster com animação de entrada."""
-        primary_ship = self.roster.primary().ship
+        anchor_x, anchor_y = self._p2_anchor()
 
         # Define alvos de spawn baseados em P1
         if self.is_side_scroll:
-            target_x = primary_ship.x
-            target_y = primary_ship.y + 80.0
+            target_x = anchor_x
+            target_y = anchor_y + 80.0
             start_x = -100.0
             start_y = target_y
         else:
-            target_x = primary_ship.x + 80.0
-            target_y = primary_ship.y
+            target_x = anchor_x + 80.0
+            target_y = anchor_y
             start_x = target_x
             start_y = float(Config.SCREEN_HEIGHT + 100)
 
@@ -2625,6 +2650,7 @@ class PlayingScene(Scene):
             mouse_control=False,
             auto_fire=False,
             profile=profile,
+            player_index=1,  # sprite recolorido em ciano (nave, minis e HUD)
         )
 
         # Ativa animação de entrada similar ao P1
@@ -2814,6 +2840,7 @@ class PlayingScene(Scene):
             upgrade_select_index=self._upgrade_select_index,
             upgrade_slots=self.upgrade_slots,
             upgrade_keybindings=list(keybindings),
+            upgrade_denied_timers=dict(self._upgrade_denied_timers),
             world_transition_cutscene_active=(
                 self.transitions.phase == TransitionPhase.CUTSCENE_EXIT
                 or self.state == GameState.PREPARING
@@ -2890,6 +2917,7 @@ class PlayingScene(Scene):
         )
 
     def _update_upgrades(self, dt: float) -> None:
+        self._update_upgrade_denied_timers(dt)
         if not self.upgrade_slots:
             return
         ctx = self._build_upgrade_ctx()
@@ -3040,6 +3068,21 @@ class PlayingScene(Scene):
             return
         ctx = self._build_upgrade_ctx()
         try:
-            upg.activate(ctx)
+            # `activate` devolve False quando recusou (cooldown, sem cargas,
+            # já ativo) e o som de negação sai lá dentro, em `on_denied`. O
+            # retorno era descartado: agora arma o tremor do slot, para a
+            # recusa ter resposta VISUAL além da sonora — no caos, som some.
+            if not upg.activate(ctx):
+                self._upgrade_denied_timers[idx] = Config.UPGRADE_DENIED_SHAKE_TIME
         except (AttributeError, TypeError):
             pass
+
+    def _update_upgrade_denied_timers(self, dt: float) -> None:
+        """Escoa os tremores de uso negado (tempo real: é feedback de UI)."""
+        if not self._upgrade_denied_timers:
+            return
+        self._upgrade_denied_timers = {
+            idx: t - dt
+            for idx, t in self._upgrade_denied_timers.items()
+            if t - dt > 0.0
+        }

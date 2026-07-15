@@ -502,8 +502,15 @@ class SoundManager:
 
     @require_audio
     def play_upgrade_denied(self):
-        """Toca som de negação de aprimoramento (reutiliza hover para MVP)."""
-        if "button_hover" in self._sounds:
+        """Toca som de negação de aprimoramento (poder em cooldown).
+
+        `button_hover` era um placeholder de MVP: um blip de menu não lê como
+        recusa no meio da luta. `Usar_Depois.wav` já existia nos assets sem
+        nunca ter sido registrado — cai aqui, e o hover fica de reserva.
+        """
+        if "upgrade_denied" in self._sounds:
+            self._sounds["upgrade_denied"].play()
+        elif "button_hover" in self._sounds:
             self._sounds["button_hover"].play()
 
     @require_audio

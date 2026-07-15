@@ -45,6 +45,7 @@ class BulletPool:
         ship_id: str = "padrao",
         owner_ship: Optional[Any] = None,
         size_multiplier: float = 1.0,
+        boss_damage_mult: float = 1.0,
     ) -> Bullet:
         """
         Obtém uma bala do pool, reutilizando uma inativa ou criando nova.
@@ -64,6 +65,7 @@ class BulletPool:
                 ship_id=ship_id,
                 owner_ship=owner_ship,
                 size_multiplier=size_multiplier,
+                boss_damage_mult=boss_damage_mult,
             )
             self.active.append(bullet)
             return bullet
@@ -82,6 +84,7 @@ class BulletPool:
             ship_id=ship_id,
             owner_ship=owner_ship,
             size_multiplier=size_multiplier,
+            boss_damage_mult=boss_damage_mult,
         )
         self.pool.append(bullet)
         self.active.append(bullet)

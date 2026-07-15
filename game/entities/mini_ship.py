@@ -1,10 +1,10 @@
 import math
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 import pygame
 
-from ..core.assets import get_image
+from ..core.player_tint import player_sprite
 from ..core.config import config as Config
 from ..core.sound import sound_manager
 from ..systems import aiming
@@ -32,14 +32,20 @@ class MiniShip:
     # Sprite-base pré-escalado apontando para cima (cache de classe para não
     # recriar a cada instância). A rotação na direção do alvo é aplicada no
     # desenho via ``aiming.rotate_sprite_up``.
-    _sprite: Optional[pygame.Surface] = None
+    #
+    # Chaveado por (tamanho, jogador): as minis do P2 são recoloridas junto com
+    # a nave dele, então não podem dividir uma única surface de classe.
+    _sprites: Dict[Tuple[int, int], pygame.Surface] = {}
 
     @classmethod
-    def _ensure_sprite(cls, size: int) -> None:
-        if cls._sprite is not None:
-            return
-        raw = get_image(_SPRITE_PATH)
-        cls._sprite = pygame.transform.smoothscale(raw, (size, size))
+    def _get_sprite(cls, size: int, player_index: int) -> pygame.Surface:
+        key = (size, player_index)
+        sprite = cls._sprites.get(key)
+        if sprite is None:
+            raw = player_sprite(_SPRITE_PATH, player_index, cast_neutral=True)
+            sprite = pygame.transform.smoothscale(raw, (size, size))
+            cls._sprites[key] = sprite
+        return sprite
 
     def __init__(
         self,
@@ -56,7 +62,7 @@ class MiniShip:
         self.permanent = permanent
         self.w = 20
         self.h = 20
-        self._ensure_sprite(self.w)
+        self._sprite = self._get_sprite(self.w, player_ship.player_index)
         self.x = self.player.x
         self.y = self.player.y
         self.shoot_cooldown = 0.75

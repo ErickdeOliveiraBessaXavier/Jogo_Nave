@@ -70,6 +70,15 @@ class GameplayConfig:
     FIRE_RATE: float = 5.0
     BULLET_SPEED: float = 480.0
     BULLET_BASE_DAMAGE: int = 10
+    # Engorda o tamanho-base do tiro de TODAS as naves (visual + hitbox), antes
+    # do Giant Shot — que passa a escalar a partir do novo base.
+    #
+    # É um ACRÉSCIMO em pixels, não um fator: pixel é inteiro (pygame.Rect
+    # trunca float, então "2.5px" na tela não existe) e +1px é o menor passo
+    # que existe. Um fator escalaria o eixo comprido junto — 1.25x levava o
+    # Estilete de 2x14 a 3x18, quase o dobro de área, e o hitbox é o mesmo
+    # retângulo, então viraria buff de mira disfarçado de ajuste visual.
+    BULLET_BASE_SIZE_BONUS: int = 1
     MINI_SHIP_BULLET_DAMAGE: int = 10
     POWERUP_SPEED: float = 100.0
     INVULN_TIME: float = 3.0
@@ -406,6 +415,11 @@ class VisualEffectConfig:
     MOUNTAIN_MAGE_STALAGMITE_HEALTH: int = 3
     MOUNTAIN_MAGE_STALAGMITE_MIN_HEIGHT: int = 62
     MOUNTAIN_MAGE_STALAGMITE_MAX_HEIGHT: int = 150
+    # Tremor do slot ao tentar usar um poder indisponível. Curto de propósito:
+    # é uma negativa, não um evento — longo viraria distração no caos. Lido
+    # pela cena (arma o timer) e pelo renderer (decai a amplitude).
+    UPGRADE_DENIED_SHAKE_TIME: float = 0.28
+    UPGRADE_DENIED_SHAKE_AMPLITUDE: int = 5  # px de pico, no design 1280x720
     SCREEN_SHAKE_NORMAL: int = 10
     SCREEN_SHAKE_GAME_OVER: int = 15
     SCREEN_SHAKE_BOSS_DEATH: int = 25

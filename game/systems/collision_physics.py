@@ -7,6 +7,7 @@ import pygame
 from ..entities.bullet import Bullet
 from ..entities.explosion import ExplosionType
 from ..entities.floating_score import FloatingScore
+from ..entities.impact_styles import ImpactStyle
 from ..entities.mini_ship_bullet import MiniShipBullet
 from ..events import game_events as events
 from . import enemy_shield, hit_sounds
@@ -187,8 +188,16 @@ class CollisionPhysics:
         hit_y: float,
         entity_manager: "EntityManager",
         floating_scores: list[FloatingScore] | None = None,
+        impact: ImpactStyle | None = None,
     ) -> HitResult:
-        """Roteador único: chama `target.on_hit` e materializa o HitResult."""
+        """Roteador único: chama `target.on_hit` e materializa o HitResult.
+
+        `impact` é o estilo da nave que disparou (ver `entities.impact_styles`)
+        e só pinta hits NÃO-letais. A explosão de MORTE fica intacta — é a que o
+        inimigo pede (ALIEN verde, SLIME roxo...), no burst de sempre. É o que
+        preserva a identidade de tema dos hostis, inclusive a de quem morre no
+        primeiro tiro. None = efeito genérico de sempre.
+        """
         # Escudo temporário (enemy_shield): absorve antes do HP. Som de quebra
         # quando o escudo é esgotado; clink quando aguenta. Se engole o hit
         # inteiro, a entidade não recebe `on_hit` — feedback de centelha.
@@ -211,12 +220,21 @@ class CollisionPhysics:
         result: HitResult = target.on_hit(damage, hit_x, hit_y)
 
         if result.explosion_size > 0:
-            entity_manager.spawn_explosion(
-                hit_x,
-                hit_y,
-                size=result.explosion_size,
-                explosion_type=result.explosion_type,
-            )
+            if impact is not None and not result.killed:
+                entity_manager.spawn_explosion(
+                    hit_x,
+                    hit_y,
+                    size=result.explosion_size,
+                    explosion_type=impact.palette,
+                    pattern=impact.pattern,
+                )
+            else:
+                entity_manager.spawn_explosion(
+                    hit_x,
+                    hit_y,
+                    size=result.explosion_size,
+                    explosion_type=result.explosion_type,
+                )
 
         if result.sound is not None:
             result.sound()

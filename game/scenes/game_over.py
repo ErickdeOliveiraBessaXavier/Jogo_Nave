@@ -1,7 +1,7 @@
 import math
 import random
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 import pygame
 
@@ -584,6 +584,9 @@ class GameOverScene(Scene):
         `restart_level`) com a pontuação ZERADA — a `PlayingScene` é recriada do
         zero, então o score recomeça em 0. O high score já foi submetido antes
         desta tela.
+
+        Como a cena é recriada, o P2 precisa ser levado adiante explicitamente:
+        sem isso ele era largado a cada continue e tinha que reentrar com START.
         """
         from .playing import PlayingScene
 
@@ -595,8 +598,20 @@ class GameOverScene(Scene):
                 self.playing_scene.level_manager,
                 self.playing_scene.difficulty_preset,
                 starting_level=self.restart_level,
+                p2_profile=self._p2_profile_to_carry(),
             )
         )
+
+    def _p2_profile_to_carry(self) -> Any:
+        """Nave do P2 na partida que acabou, para ele voltar com ela.
+
+        None quando P2 não estava jogando — aí a run recomeça solo, e ele entra
+        por START como sempre.
+        """
+        slots = self.playing_scene.roster.all_slots()
+        if len(slots) < 2:
+            return None
+        return slots[1].ship.profile
 
     def _submit_high_score(self, initials_raw: str) -> None:
         initials = (initials_raw or "AAA").upper()[:3].ljust(3, "A")

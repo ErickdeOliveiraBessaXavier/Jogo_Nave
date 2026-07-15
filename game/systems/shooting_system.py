@@ -24,6 +24,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Nerf de dano do Berserk ("Estrela Espiral") aplicado SÓ contra bosses, sobre o
+# nerf global de upgrades. Ele cospe 4 balas a cada 0.1s com dano 1.5x: contra
+# um inimigo pequeno só a bala daquela direção acerta (~3x o DPS do tiro
+# normal), mas um boss é largo o bastante para comer VÁRIAS das 4 ao mesmo
+# tempo — até 12x. O Giant Shot piora porque engorda a bala (mais delas
+# conectam), sem tocar no dano; era esse par que derretia o boss.
+_BERSERK_BOSS_DAMAGE_MULT: float = 0.5
+
 
 class ShootingSystem:
     """Gerencia cooldown, disparo regular e charge shots especiais do jogador.
@@ -143,6 +151,7 @@ class ShootingSystem:
                 ship_id="berserk",
                 owner_ship=ship,
                 size_multiplier=ship.bullet_size_multiplier,
+                boss_damage_mult=_BERSERK_BOSS_DAMAGE_MULT,  # nerf só em boss
             )
 
         # Efeito sonoro

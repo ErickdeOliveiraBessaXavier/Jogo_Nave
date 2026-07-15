@@ -37,10 +37,14 @@ class Ship:
         mouse_control: bool = False,
         auto_fire: bool = False,
         profile: Optional[ShipProfile] = None,
+        player_index: int = 0,
     ):
         # ShipProfile aplica multiplicadores às stats base (velocidade, fire rate,
         # dano) e habilita mecânicas especiais (Cofre, Fantasma, Caçador, etc).
         self.profile: ShipProfile = profile or get_ship_profile("padrao")
+        # 0 = P1 (sprite original), 1 = P2 (recolorido em ciano). Só afeta a
+        # cor: as MiniShips leem daqui, e o ícone do HUD sai de `ship_image`.
+        self.player_index = player_index
 
         # Dimensões da nave (baseadas na imagem)
         self.w = 60
@@ -82,10 +86,11 @@ class Ship:
 
         # Carregar imagem da nave
         try:
-            from ..core.assets import BASE_DIR, get_image
+            from ..core.assets import BASE_DIR
+            from ..core.player_tint import player_sprite
 
             icon_path = BASE_DIR / "assets" / "icons" / self.profile.sprite_filename
-            self.ship_image = get_image(icon_path).convert_alpha()
+            self.ship_image = player_sprite(icon_path, self.player_index).convert_alpha()
             # Redimensionar para o tamanho apropriado (manter proporções)
             original_size = self.ship_image.get_size()
             scale_factor = min(self.w / original_size[0], self.h / original_size[1])

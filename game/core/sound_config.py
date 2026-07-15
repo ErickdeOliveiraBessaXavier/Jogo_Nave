@@ -129,6 +129,7 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "button_click": "sfx/ui/button_click.wav",
             "button_hover": "sfx/ui/sound_hover.wav",
             "upgrade_activate": "sfx/ui/Ativação_Aprimoramentos.wav",
+            "upgrade_denied": "sfx/ui/Usar_Depois.wav",  # Tentou usar poder em cooldown
             "meteor_rain": "sfx/ui/som_chuva_meteoro_{}.wav",  # {} = 1,2,3,4
             "laser_shot": "sfx/ui/som_laser_raio.mp3",  # Som do laser do upgrade LASER_SHOT
             "black_hole": "sfx/ui/Buraco_negro_Som.mp3",  # Som do buraco negro

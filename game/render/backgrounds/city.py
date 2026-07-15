@@ -20,6 +20,14 @@ class CityBackground(Background):
     NUM_STARS = 70
     NUM_CLOUDS = 5
 
+    # Quanto o conteúdo "engorda" no Fundo Retrô, onde o tema é desenhado em
+    # meia-res e ampliado: 0.0 = fiel à resolução cheia, 1.0 = o skyline
+    # gigante que a meia-res produzia antes de a escala existir. O meio-termo
+    # é estético (pedido: prédios imponentes) e não custa desempenho — a
+    # leveza vem do upscale, não do tamanho. Só afeta TAMANHOS: a velocidade
+    # do parallax segue fiel via `sf()`. Inócuo em resolução cheia.
+    RETRO_CHUNK = 0.40
+
     # Neon discreto (intencionalmente abaixo de 255 para casar com a paleta escura)
     _NEON_PALETTE: List[Tuple[int, int, int]] = [
         (0, 190, 210),    # ciano
@@ -35,6 +43,10 @@ class CityBackground(Background):
 
     def __init__(self, width: int, height: int):
         super().__init__(width, height)
+        # Interpola entre a escala fiel à tela e o comportamento antigo (1.0).
+        self._content_scale: float = self.res_scale + self.RETRO_CHUNK * (
+            1.0 - self.res_scale
+        )
         self._toggle_timer: float = 0.0
         self._next_toggle: float = random.uniform(0.5, 1.3)
         self.stars: List[Dict[str, Any]] = []
@@ -43,6 +55,8 @@ class CityBackground(Background):
         self._cloud_variants: List[pygame.Surface] = []
         self.fog_y: int = 0
         self.moon_pos: Tuple[int, int] = (0, 0)
+        self._win_w: int = self.cs(6)
+        self._win_h: int = self.cs(9)
 
         self.sky = self._create_sky()
         self.fog = self._create_fog()
@@ -51,6 +65,11 @@ class CityBackground(Background):
         self._create_stars()
         self._create_clouds()
         self._create_layers()
+
+    def cs(self, value: float) -> int:
+        """Como `s()`, mas com a compensação de `RETRO_CHUNK` — para tamanhos
+        do skyline. Velocidades continuam em `sf()` (fiéis à tela)."""
+        return max(1, int(round(value * self._content_scale)))
 
     # ------------------------------------------------------------------ #
     # Construção
@@ -92,14 +111,16 @@ class CityBackground(Background):
     def _create_moon(self) -> pygame.Surface:
         """Lua minguante: disco pálido + recorte de sombra deslocado, com halo
         suave. Pré-renderizada uma vez (§7); estática no céu."""
-        r = 32
-        pad = 14
+        r = self.cs(32)
+        pad = self.cs(14)
         size = (r + pad) * 2
         surf = pygame.Surface((size, size), pygame.SRCALPHA)
         cx = cy = size // 2
         # Halo suave atrás (escuro/frio, casa com a paleta)
         for extra, alpha in ((12, 16), (7, 24), (3, 34)):
-            pygame.draw.circle(surf, (170, 185, 225, alpha), (cx, cy), r + extra)
+            pygame.draw.circle(
+                surf, (170, 185, 225, alpha), (cx, cy), r + self.cs(extra)
+            )
         # Disco
         pygame.draw.circle(surf, (214, 220, 240), (cx, cy), r)
         # Recorte deslocado → crescente minguante (parte iluminada à esquerda).
@@ -112,8 +133,8 @@ class CityBackground(Background):
     def _create_cloud_variants(self) -> None:
         """Pré-renderiza algumas nuvens (blobs translúcidos escuros)."""
         for _ in range(3):
-            w = random.randint(220, 380)
-            h = random.randint(70, 120)
+            w = random.randint(self.cs(220), self.cs(380))
+            h = random.randint(self.cs(70), self.cs(120))
             surf = pygame.Surface((w, h), pygame.SRCALPHA)
             for _ in range(7):
                 ew = random.randint(w // 3, w // 2)
@@ -142,7 +163,7 @@ class CityBackground(Background):
                 "variant": random.randrange(len(self._cloud_variants)),
                 "x": random.uniform(0, self.width),
                 "y": random.uniform(self.height * 0.05, self.height * 0.4),
-                "speed": random.uniform(10.0, 22.0),
+                "speed": self.sf(random.uniform(10.0, 22.0)),
             })
 
     def _create_layers(self) -> None:
@@ -156,11 +177,19 @@ class CityBackground(Background):
             {"speed": 52.0, "color": (12, 10, 22), "count": 5, "wmin": 100, "wmax": 190, "hmin": 230, "hmax": 420, "neon": True},
             {"speed": 110.0, "color": (7, 6, 14), "count": 4, "wmin": 120, "wmax": 230, "hmin": 300, "hmax": 540, "neon": True},
         ]
+        # Tamanhos e velocidades acima estão em pixels de 720p: escalar para a
+        # resolução de construção (meia-res no fundo retrô) mantém a mesma
+        # silhueta e o mesmo ritmo de parallax na tela final.
+        for cfg in layer_configs:
+            for key in ("wmin", "wmax", "hmin", "hmax"):
+                cfg[key] = self.cs(cfg[key])
+            cfg["speed"] = self.sf(cfg["speed"])
+
         for cfg in layer_configs:
             buildings: List[Dict[str, Any]] = []
             spacing = self.width / cfg["count"]
             for i in range(cfg["count"]):
-                start_x = i * spacing + random.uniform(-30, 30)
+                start_x = i * spacing + random.uniform(-self.cs(30), self.cs(30))
                 buildings.append(self._make_building(cfg, start_x))
             self.layers.append({
                 "speed": cfg["speed"],
@@ -180,10 +209,11 @@ class CityBackground(Background):
         height = random.randint(cfg["hmin"], cfg["hmax"])
         windows: List[List[Any]] = []
         if cfg["neon"]:
-            wh, gap = 9, 15
+            wh, gap = self._win_h, self.cs(15)
             y_top = self.height - height
-            for wy in range(y_top + 12, self.height - 10, wh + gap):
-                for wx_rel in range(8, width - 8, gap):
+            margin_x = self.cs(8)
+            for wy in range(y_top + self.cs(12), self.height - self.cs(10), wh + gap):
+                for wx_rel in range(margin_x, width - margin_x, gap):
                     windows.append([wx_rel, wy, random.random() < 0.25])
         return {
             "x": x,
@@ -227,8 +257,10 @@ class CityBackground(Background):
             rightmost = max(b["x"] + b["width"] for b in buildings) if buildings else self.width
             for b in buildings:
                 b["x"] -= scroll
-                if b["x"] + b["width"] < -50:
-                    new_x = max(rightmost + random.randint(20, 120), self.width)
+                if b["x"] + b["width"] < -self.cs(50):
+                    new_x = max(
+                        rightmost + random.randint(self.cs(20), self.cs(120)), self.width
+                    )
                     nb = self._make_building(layer["cfg"], new_x)
                     b["x"] = new_x
                     b["width"] = nb["width"]
@@ -308,12 +340,13 @@ class CityBackground(Background):
 
         nc = b["neon_color"]
         # Linha de neon no topo (cumeeira)
-        draw_rect(surface, nc, (x, y, bw, 2))
+        draw_rect(surface, nc, (x, y, bw, self.cs(2)))
 
         # Janelas: desenha só as ACESAS (estado fixo, trocado esporadicamente).
+        ww, wh = self._win_w, self._win_h
         for w in b["windows"]:
             if w[2]:
-                draw_rect(surface, nc, (x + w[0], w[1], 6, 9))
+                draw_rect(surface, nc, (x + w[0], w[1], ww, wh))
 
     def reset(self) -> None:
         self._toggle_timer = 0.0

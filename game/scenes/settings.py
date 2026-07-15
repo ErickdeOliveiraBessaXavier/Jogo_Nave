@@ -772,13 +772,20 @@ class SettingsView:
         self.preferences.save()
 
     def _select_retro_bg(self, enabled: bool) -> None:
-        """Liga/desliga o fundo retrô (meia-resolução) e persiste. O renderer
-        relê a preferência ao (re)entrar num mundo temático."""
+        """Liga/desliga o fundo retrô (meia-resolução) ao vivo e persiste.
+
+        O background do tema é construído já na resolução final, então mudar a
+        opção exige reconstruí-lo — `refresh_background_quality` faz isso no
+        tema ativo (no-op no menu/starfield). A tela de seleção de mundos se
+        adapta sozinha: o memo dela é chaveado pelas dims de construção.
+        """
         from ..core.visual_quality import visual_quality
 
         self.selected_retro_bg = enabled
         self.preferences.retro_background = enabled
         visual_quality.set_lowres_background(enabled)
+        if self.renderer is not None:
+            self.renderer.refresh_background_quality()
         self.preferences.save()
 
     def _select_ui_anim(self, enabled: bool) -> None:

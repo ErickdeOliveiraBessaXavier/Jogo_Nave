@@ -81,6 +81,11 @@ class Renderer:
         # sprites de gameplay NÃO são afetados (desenhados à parte em resolução
         # cheia); menu/starfield seguem em resolução cheia.
         self._bg_lowres_scratch: Optional[pygame.Surface] = None
+        # Flag do Fundo Retrô com que o background ativo foi construído. A
+        # resolução de construção é imutável depois do fato, então trocar a
+        # opção exige reconstruir — comparar contra isto detecta a troca ao
+        # vivo (antes, só um restart pegava).
+        self._bg_lowres_built: Optional[bool] = None
 
         # === NOVO: Sistema de medição de FPS ===
         self.fps_counter = 0
@@ -128,19 +133,23 @@ class Renderer:
         Args:
             theme: Tema do mundo (WorldTheme enum)
         """
-        # Não recriar se já está no tema correto
-        if self.current_theme == theme:
+        from ..core.visual_quality import visual_quality
+
+        lowres = visual_quality.lowres_background
+
+        # Não recriar se já está no tema correto E na mesma escala de construção
+        if self.current_theme == theme and self._bg_lowres_built == lowres:
             return
 
         self.current_theme = theme
+        self._bg_lowres_built = lowres
 
         if theme in (WorldTheme.MOUNTAINS, WorldTheme.CITY, WorldTheme.VOLCANIC):
             # Fundo pesado em meia-resolução (fillrate ~4x menor) + upscale no
             # background(). Controlado pela preferência "Fundo retrô" (opção nas
-            # Configurações); aplicada ao entrar/reentrar num mundo temático.
-            from ..core.visual_quality import visual_quality
-
-            if visual_quality.lowres_background:
+            # Configurações); aplicada ao entrar/reentrar num mundo temático e
+            # ao trocar a opção ao vivo (via refresh_background_quality).
+            if lowres:
                 bw, bh = Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2
                 self._bg_lowres_scratch = pygame.Surface((bw, bh))
             else:
@@ -156,6 +165,19 @@ class Renderer:
         else:  # STARFIELD ou PROCEDURAL
             self.current_background = self._starfield_bg
             self._bg_lowres_scratch = None
+
+    def refresh_background_quality(self) -> None:
+        """Reconstrói o background do tema ativo se o Fundo Retrô mudou.
+
+        Chamado quando a opção é trocada nas Configurações: sem isto, o tema já
+        montado continuaria na resolução antiga até o próximo restart. No-op
+        fora de um mundo temático (starfield/atmosfera não usam meia-res) e
+        quando a opção não mudou — `set_world_theme` já compara ambos.
+        """
+        if self.current_theme is None:
+            self._bg_lowres_built = None
+            return
+        self.set_world_theme(self.current_theme)
 
     def set_atmosphere_mode(self, route: str) -> None:
         """Configura o background para a fase de atmosfera."""

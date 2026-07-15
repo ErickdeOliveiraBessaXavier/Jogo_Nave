@@ -83,6 +83,19 @@ EXPLOSIVE_BULLET_RADIUS: int = 60  # Raio da explosão em pixels
 # Parâmetros do Tiro Gigante (Giant Shot)
 GIANT_SHOT_SIZE_MULTIPLIER: float = 3.0  # Balas 3x maiores (escala visual + hitbox)
 
+# Quanto o Giant Shot puxa a PROPORÇÃO do tiro para o quadrado: 0.0 preserva a
+# proporção da nave (um tiro fino como o do padrão, 3x10, vira só uma barra
+# comprida de 9x30 — cresce nos dois eixos, mas continua lendo como "ficou mais
+# largo") e 1.0 vira um quadrado perfeito. A ÁREA é `mult²` vezes a original em
+# QUALQUER valor — só a forma muda —, então mexer aqui é escolha estética e não
+# um buff disfarçado. Naves de tiro já quadrado (magneto, engenheiro) ignoram.
+GIANT_SHOT_SQUARENESS: float = 0.5
+
+# Giant Shot também acelera o projétil levemente: o tiro grande "empurra" mais
+# rápido. Só vale enquanto o upgrade dura — `Config.BULLET_SPEED` (o tiro
+# normal, todas as naves) fica intacto.
+GIANT_SHOT_SPEED_MULTIPLIER: float = 1.15
+
 # Parâmetros de balanceamento do Air Strike
 AIR_STRIKE_BOMB_COUNT: int = 20  # Bombas por ativação da ultimate
 AIR_STRIKE_BOMB_DAMAGE: int = 100

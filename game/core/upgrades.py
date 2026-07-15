@@ -848,6 +848,12 @@ def upgrade_desc(meta: UpgradeMeta) -> str:
 
 
 def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
+    """Letra exibida no slot do HUD. Uma por upgrade, sem repetir.
+
+    TODO upgrade novo precisa entrar no mapa: um `icon_id` ausente cai no
+    fallback do nome (`CANNON` → "C") sem avisar, e foi assim que a Torre de
+    Canhão passou a colidir com o Link, ambos mostrando "C".
+    """
     mapping = {
         "shield_burst": "S",
         "heal": "H",
@@ -855,7 +861,7 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
         "homing_shot": "T",
         "laser_shot": "X",
         "explosive_shot": "V",
-        "giant_shot": "3",
+        "giant_shot": "M",  # Maior — "3" era sobra do "3x maiores" e lia como número
         "air_strike": "A",
         "black_hole": "B",
         "blink_dash": "D",
@@ -865,7 +871,8 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
         "plasma_beam": "P",
         "wingman": "W",
         "berserk": "Z",
-        "link": "C",
+        "cannon_tower": "C",  # Canhão — faltava no mapa, caía no fallback
+        "link": "F",  # Feixe — cedeu o "C" para o Canhão, que o usa melhor
     }
     if icon_id and icon_id in mapping:
         return mapping[icon_id]

@@ -20,6 +20,7 @@ from ..entities.eye_laser import EyeLaser
 from ..entities.fire_zone import FireZone
 from ..entities.floating_score import FloatingScore
 from ..entities.homing_bullet import HomingBullet
+from ..entities.impact_styles import ImpactStyle, impact_for_projectile
 from ..entities.Inimigos_Tema_Cidade.neon_bolt import NeonBolt
 from ..entities.electric_field_zone import ElectricFieldZone
 from ..entities.ice_poison_zone import IcePoisonZone
@@ -269,7 +270,20 @@ class Collisions:
         is_piercing = getattr(projectile, "piercing", False)
 
         if create_explosion and explosion_size > 0:
-            entity_manager.spawn_explosion(hit_x, hit_y, size=explosion_size)
+            # Impacto contra obstáculo (não é `apply_hit`, que só trata dano a
+            # entidades): usa o estilo da nave direto, já que não existe um
+            # HitResult com paleta de tema para respeitar aqui.
+            impact = impact_for_projectile(projectile)
+            if impact is not None:
+                entity_manager.spawn_explosion(
+                    hit_x,
+                    hit_y,
+                    size=explosion_size,
+                    explosion_type=impact.palette,
+                    pattern=impact.pattern,
+                )
+            else:
+                entity_manager.spawn_explosion(hit_x, hit_y, size=explosion_size)
 
         if not is_piercing:
             projectile.dead = True
@@ -304,9 +318,10 @@ class Collisions:
         hit_y: float,
         entity_manager: "EntityManager",
         floating_scores: list[FloatingScore] | None = None,
+        impact: ImpactStyle | None = None,
     ) -> HitResult:
         return self.physics.apply_hit(
-            target, damage, hit_x, hit_y, entity_manager, floating_scores
+            target, damage, hit_x, hit_y, entity_manager, floating_scores, impact
         )
 
     def _apply_ship_contact(
@@ -400,7 +415,13 @@ class Collisions:
                 * getattr(proj, "boss_damage_mult", 1.0)
             )
             result = self._apply_hit(
-                boss, damage, proj.x, proj.y, entity_manager, floating_scores
+                boss,
+                damage,
+                proj.x,
+                proj.y,
+                entity_manager,
+                floating_scores,
+                impact=impact_for_projectile(proj),
             )
             score_gain += result.points
 
@@ -874,13 +895,21 @@ class Collisions:
             bullet_chain_active = owner is not None and getattr(
                 owner, "has_chain_shot", False
             )
+            # Uma vez por bala, não por inimigo atingido: o estilo não muda
+            # entre os alvos da mesma bala (piercing acerta vários).
+            impact = impact_for_projectile(b)
 
             for enemy in potential_enemies:
                 if enemy.dead:
                     continue
                 if self._projectile_collides_with_enemy(b.rect, enemy):
                     result = self._apply_hit(
-                        enemy, getattr(b, "damage", 1), b.x, b.y, entity_manager
+                        enemy,
+                        getattr(b, "damage", 1),
+                        b.x,
+                        b.y,
+                        entity_manager,
+                        impact=impact,
                     )
                     score_gain += result.points
                     if result.killed:
@@ -1103,6 +1132,7 @@ class Collisions:
             potential_enemies = enemy_grid.query(
                 r.x - 10, r.y - 10, r.width + 20, r.height + 20
             )
+            impact = impact_for_projectile(b)
 
             for enemy in potential_enemies:
                 if enemy.dead:
@@ -1119,7 +1149,9 @@ class Collisions:
                     enemy_hp = getattr(enemy, "health", 1)
 
                     # Aplicar hit
-                    result = self._apply_hit(enemy, b.damage, b.x, b.y, entity_manager)
+                    result = self._apply_hit(
+                        enemy, b.damage, b.x, b.y, entity_manager, impact=impact
+                    )
 
                     # Consumir vida do projétil: se matou, consome o HP total do inimigo.
                     # Se não matou, consome o dano que a bala causou (b.damage).
@@ -1331,7 +1363,13 @@ class Collisions:
                 b.consume_life(amount_to_consume)
 
                 result = self._apply_hit(
-                    boss, damage, b.x, b.y, entity_manager, floating_scores
+                    boss,
+                    damage,
+                    b.x,
+                    b.y,
+                    entity_manager,
+                    floating_scores,
+                    impact=impact_for_projectile(b),
                 )
                 score_gain += result.points
 

@@ -580,23 +580,34 @@ class GameRenderer:
         p2_info: Any = None,
     ) -> None:
         """Helper para renderizar info de um jogador dentro de sua área alocada."""
+        # 0. Etiqueta P1/P2. Sem ela, nada na tela diz qual jogador é qual: quem
+        # é P1 sai da ordem de enumeração dos controles pelo SDL, que pode mudar
+        # entre execuções. Com a etiqueta, basta mover e ver qual nave responde
+        # — e, se estiver trocado, os jogadores trocam de controle entre si.
+        tag = "P2" if is_p2 else "P1"
+        tag_color = colors.CYAN if is_p2 else colors.WHITE
+        tag_surf = self.hud_font_tiny.render(tag, True, tag_color)
+        surface.blit(tag_surf, (rect.left, rect.top + self._s(2)))
+
         # 1. Ícone da Nave + Vidas
         if ship and ship.ship_image:
             icon_px = self._s(32)
             icon = pygame.transform.scale(ship.ship_image, (icon_px, icon_px))
 
-            # Vidas ou Status Morto
+            # Vidas ou Status Morto. Os offsets abrem espaço para a etiqueta
+            # P1/P2 acima (que ocupa até y≈13) sem encostar na linha de
+            # powerups (y≈55).
             if is_p2 and p2_info and p2_info.is_dead:
                 pct = int(p2_info.beacon_progress * 100)
                 txt = self.hud_font_small.render(f"{pct}%", True, colors.CYAN)
-                txt_y_offset = self._s(20)
+                txt_y_offset = self._s(24)
             else:
                 txt = self.hud_font_large.render(str(lives), True, colors.WHITE)
-                txt_y_offset = self._s(14)
+                txt_y_offset = self._s(18)
 
             # O rect passado já define a largura exata do bloco (Ícone + Gap + Texto)
             # Então apenas desenhamos a partir da esquerda do rect.
-            surface.blit(icon, (rect.left, rect.top + self._s(12)))
+            surface.blit(icon, (rect.left, rect.top + self._s(16)))
             surface.blit(txt, (rect.left + self._s(40), rect.top + txt_y_offset))
 
         # 2. Powerups Ativos (Mini ícones na parte de baixo do rect)
@@ -962,6 +973,69 @@ class GameRenderer:
 
             cur_x += group_w + group_gap
 
+    def _apply_cooldown_overlay(
+        self,
+        slot_surface: pygame.Surface,
+        slot_w: int,
+        slot_h: int,
+        cd_left: float,
+        cd_base: float,
+        font_cd: pygame.font.Font,
+    ) -> pygame.Surface:
+        """Marca o slot como indisponível: cinza + contador regressivo.
+
+        O feedback anterior era só uma barrinha de 4px na base do slot — some no
+        caos do gameplay. Aqui o slot inteiro perde a cor (leitura periférica
+        instantânea de "não posso usar") e ganha os segundos restantes em cima
+        (leitura precisa de "quando poderei"). A barra continua, agora colorida
+        sobre o cinza, dando o progresso contínuo que o número inteiro não dá.
+
+        Devolve uma surface nova — `grayscale()` não opera in-place.
+        """
+        # Cinza + escurecido. O cinza sozinho ainda lê como "aceso" contra o
+        # fundo escuro do container; o multiply é o que manda para o segundo
+        # plano sem apagar a silhueta do ícone.
+        out = pygame.transform.grayscale(slot_surface)
+        out.fill((115, 115, 115, 255), special_flags=pygame.BLEND_RGB_MULT)
+
+        pct = max(0.0, min(1.0, cd_left / cd_base if cd_base > 0 else 0.0))
+
+        # Contador: segundos arredondados para cima, então nunca mostra "0"
+        # enquanto ainda falta tempo (mostrar 0 e não poder usar seria mentira).
+        # Cooldowns aqui vão de 15s a 200s, daí o inteiro em vez de decimais:
+        # casas decimais a 60fps viram ruído ilegível.
+        secs = math.ceil(cd_left)
+        label = str(secs)
+        # Metade de baixo do slot: o ícone subiu para abrir este espaço (ver
+        # `icon_cy` em `_render_upgrades_hud`). O contorno preto garante leitura
+        # sobre qualquer coisa que sobre do ícone cinza atrás.
+        cd_rect = font_cd.render(label, True, colors.WHITE).get_rect(
+            center=(slot_w // 2, slot_h // 2 + self._s(8))
+        )
+        outline = font_cd.render(label, True, (0, 0, 0))
+        for ox, oy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+            out.blit(outline, cd_rect.move(ox, oy))
+        out.blit(font_cd.render(label, True, colors.WHITE), cd_rect)
+
+        # Barra de progresso (colorida, por cima do cinza).
+        bar_h = max(1, self._s(4))
+        inset = self._s(2)
+        bar_inner_w = slot_w - self._s(4)
+        bar_y = slot_h - bar_h - inset
+        pygame.draw.rect(
+            out,
+            (120, 120, 120, 150),
+            (inset, bar_y, bar_inner_w, bar_h),
+            border_radius=self._s(2),
+        )
+        pygame.draw.rect(
+            out,
+            (80, 180, 255, 200),
+            (inset, bar_y, int(bar_inner_w * pct), bar_h),
+            border_radius=self._s(2),
+        )
+        return out
+
     def _render_upgrades_hud(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """Exibe os slots de upgrades ativos centralizados na parte inferior."""
         active_slots: list[tuple[int, Any]] = [
@@ -974,6 +1048,9 @@ class GameRenderer:
             get_font(max(8, int(20 * self.ui_scale))),
             get_font(max(8, int(12 * self.ui_scale))),
         )
+        # Contador do cooldown: precisa caber "200" (o maior base_cooldown) na
+        # largura do slot, daí ser menor que a fonte do ícone.
+        font_cd = get_font(max(8, int(16 * self.ui_scale)))
         slot_w, slot_h = self._s(50), self._s(50)
         gap = self._s(10)
         pad_x, pad_y = self._s(15), self._s(10)
@@ -1007,6 +1084,20 @@ class GameRenderer:
             slot_x = start_x + display_index * (slot_w + gap)
             slot_y = container_rect.top + pad_y
 
+            # Tremor de uso negado: oscilação horizontal que decai até parar.
+            # Horizontal e não vertical porque o slot é uma peça de uma fileira
+            # — sacudir na transversal destaca sem parecer que a fileira inteira
+            # está tremendo. A amplitude decai com o tempo restante, então o
+            # movimento "assenta" em vez de cortar seco.
+            denied_left = frame.upgrade_denied_timers.get(i, 0.0)
+            if denied_left > 0.0:
+                decay = denied_left / Config.UPGRADE_DENIED_SHAKE_TIME
+                slot_x += int(
+                    math.sin(denied_left * 55.0)
+                    * self._s(Config.UPGRADE_DENIED_SHAKE_AMPLITUDE)
+                    * decay
+                )
+
             slot_surface = pygame.Surface((slot_w, slot_h), pygame.SRCALPHA)
             slot_radius = self._s(8)
             pygame.draw.rect(
@@ -1034,39 +1125,27 @@ class GameRenderer:
             )
 
             ui = upg.get_ui_state()
-            icon = get_upgrade_icon(
-                str(ui.get("name", "")),
-                str(ui.get("icon_id", "")) if ui.get("icon_id") else None,
-            )
-            icon_txt = font.render(icon, True, colors.CYAN)
-            slot_surface.blit(
-                icon_txt, icon_txt.get_rect(center=(slot_w // 2, slot_h // 2))
-            )
-
             cd_left = (
                 float(ui["cooldown_left"])
                 if ui.get("cooldown_left") is not None
                 else 0.0
             )
             cd_base = float(ui["cooldown"]) if ui.get("cooldown") is not None else 1.0
-            if cd_left > 0.0:
-                pct = max(0.0, min(1.0, cd_left / cd_base))
-                bar_h = max(1, self._s(4))
-                inset = self._s(2)
-                bar_inner_w = slot_w - self._s(4)
-                bar_y = slot_h - bar_h - inset
-                pygame.draw.rect(
-                    slot_surface,
-                    (120, 120, 120, 150),
-                    (inset, bar_y, bar_inner_w, bar_h),
-                    border_radius=self._s(2),
-                )
-                pygame.draw.rect(
-                    slot_surface,
-                    (80, 180, 255, 200),
-                    (inset, bar_y, int(bar_inner_w * pct), bar_h),
-                    border_radius=self._s(2),
-                )
+            on_cooldown = cd_left > 0.0
+
+            icon = get_upgrade_icon(
+                str(ui.get("name", "")),
+                str(ui.get("icon_id", "")) if ui.get("icon_id") else None,
+            )
+            # O ícone é um GLIFO centralizado — o contador ocuparia exatamente o
+            # mesmo pixel. Em cooldown ele sobe e cede a metade de baixo ao
+            # número, senão o slot indisponível viraria um número anônimo e você
+            # perderia de vista QUAL poder está recarregando.
+            icon_cy = slot_h // 2 - self._s(9) if on_cooldown else slot_h // 2
+            icon_txt = font.render(icon, True, colors.CYAN)
+            slot_surface.blit(
+                icon_txt, icon_txt.get_rect(center=(slot_w // 2, icon_cy))
+            )
 
             charges = ui.get("charges_left")
             if charges is not None:
@@ -1076,6 +1155,11 @@ class GameRenderer:
                     c_txt.get_rect(
                         bottomright=(slot_w - self._s(3), slot_h - self._s(3))
                     ),
+                )
+
+            if on_cooldown:
+                slot_surface = self._apply_cooldown_overlay(
+                    slot_surface, slot_w, slot_h, cd_left, cd_base, font_cd
                 )
 
             surface.blit(slot_surface, (slot_x, slot_y))

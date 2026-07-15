@@ -3,11 +3,11 @@ Pool de explosões para reutilização de objetos.
 Reduz alocação de memória e garbage collection.
 """
 
-from typing import Dict, List, Union
+from typing import Dict, List, Sequence, Union
 
 import pygame
 
-from ..entities.explosion import Explosion
+from ..entities.explosion import Explosion, ImpactPattern
 
 
 class ExplosionPool:
@@ -41,7 +41,8 @@ class ExplosionPool:
         x: float,
         y: float,
         size: int = 30,
-        explosion_type: list[tuple[int, int, int]] | None = None,
+        explosion_type: Sequence[tuple[int, int, int]] | None = None,
+        pattern: str = ImpactPattern.BURST,
     ) -> Explosion:
         """
         Obtém uma explosão do pool (reutiliza se possível).
@@ -50,6 +51,7 @@ class ExplosionPool:
             x, y: Posição da explosão
             size: Tamanho da explosão
             explosion_type: Tipo de explosão (ExplosionType.ALIEN, ExplosionType.SLIME, etc)
+            pattern: Forma do efeito (ImpactPattern.*)
 
         Returns:
             Explosão configurada e pronta para uso
@@ -57,10 +59,10 @@ class ExplosionPool:
         if self.available:
             # Reutilizar explosão existente
             explosion = self.available.pop()
-            explosion.reset(x, y, size, explosion_type)
+            explosion.reset(x, y, size, explosion_type, pattern)
         else:
             # Pool vazio, criar nova (acontece raramente)
-            explosion = Explosion(x, y, size, explosion_type)
+            explosion = Explosion(x, y, size, explosion_type, pattern)
 
         self.active.append(explosion)
         return explosion
@@ -78,6 +80,7 @@ class ExplosionPool:
             explosion.time = 0
             explosion.particles.clear()
             explosion.explosion_type = None  # ← ATUALIZAR ESTA LINHA
+            explosion.pattern = ImpactPattern.BURST
             self.available.append(explosion)
 
     def update(self, dt: float) -> None:

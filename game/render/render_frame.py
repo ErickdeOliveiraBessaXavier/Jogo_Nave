@@ -84,6 +84,12 @@ class RenderFrame:
     upgrade_select_index: int
     upgrade_slots: list["ActiveUpgrade | None"]
     upgrade_keybindings: list[int]
+    upgrade_denied_timers: dict[int, float]
+    """Índice do slot → segundos restantes de tremor por uso negado.
+
+    Alimenta o feedback de "tentei usar e não deu": sem isto, apertar a tecla de
+    um poder em cooldown não produz resposta visual nenhuma.
+    """
 
     # Cutscene de transição de mundo
     world_transition_cutscene_active: bool

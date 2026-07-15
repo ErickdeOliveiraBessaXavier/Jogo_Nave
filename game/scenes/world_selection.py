@@ -861,10 +861,15 @@ class WorldSelectionView:
 
     def _draw_themed_bg(self, bg: Background, scratch: pygame.Surface) -> None:
         """Desenha o background do tema no scratch full-size com o MESMO upscale
-        do jogo: em fundo retrô, desenha em meia-res e amplia (nearest)."""
-        from ..core.visual_quality import visual_quality
+        do jogo: em fundo retrô, desenha em meia-res e amplia (nearest).
 
-        if visual_quality.lowres_background:
+        A decisão sai do TAMANHO do bg, não da preferência: um bg em cache pode
+        ter sido construído com a opção no estado anterior, e aí consultar a
+        flag desenharia um fundo full-res dentro do scratch de meia-res
+        (recortando-o no canto). Pelo tamanho, cada bg é sempre ampliado na
+        proporção em que foi construído.
+        """
+        if bg.width < scratch.get_width():
             self._bg_scratch_half.fill((0, 0, 0, 0))
             bg.draw(self._bg_scratch_half)
             pygame.transform.scale(

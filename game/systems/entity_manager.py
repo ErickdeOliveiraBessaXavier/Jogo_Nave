@@ -21,7 +21,7 @@ from ..entities.cannon_tower import CannonTower
 from ..entities.chain_lightning import ChainLightning
 from ..entities.cloud_archmage_boss import CloudArchmageBoss
 from ..entities.emp_wave import EMPWave
-from ..entities.explosion import Explosion, ExplosionType
+from ..entities.explosion import Explosion, ExplosionType, ImpactPattern
 from ..entities.explosion_pool import ExplosionPool
 from ..entities.explosive_effect import ExplosiveEffect
 from ..entities.explosive_mine import ExplosiveMine
@@ -501,9 +501,10 @@ class EntityManager:
         x: float,
         y: float,
         size: int = 30,
-        explosion_type: list[tuple[int, int, int]] | None = None,
+        explosion_type: Sequence[tuple[int, int, int]] | None = None,
+        pattern: str = ImpactPattern.BURST,
     ) -> Explosion:
-        return self.explosion_pool.get(x, y, size, explosion_type)
+        return self.explosion_pool.get(x, y, size, explosion_type, pattern)
 
     def absorb_fragments(self, fragments: tuple[Any, ...]) -> None:
         """Materializa fragments oriundos de HitResult.
@@ -1563,6 +1564,7 @@ class EntityManager:
         ship_id: str = "padrao",
         owner_ship: Any | None = None,
         size_multiplier: float = 1.0,
+        boss_damage_mult: float = 1.0,
     ) -> Bullet:
         bullet = self.bullet_pool.get(
             x=x,
@@ -1577,6 +1579,7 @@ class EntityManager:
             ship_id=ship_id,
             owner_ship=owner_ship,
             size_multiplier=size_multiplier,
+            boss_damage_mult=boss_damage_mult,
         )
         if homing:
             target = self._assign_homing_target(bullet)

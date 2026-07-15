@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 
 import pygame
 
+from ...core.config import config as Config
+
 
 def optimize_surface(surf: pygame.Surface) -> pygame.Surface:
     """Aplica convert() para alinhar formato com o display (blits ~2-3x mais rápidos).
@@ -29,6 +31,21 @@ class Background(ABC):
     def __init__(self, width: int, height: int):
         self.width = width
         self.height = height
+        # Razão entre a altura de construção e a altura lógica da tela: 1.0 em
+        # resolução cheia, 0.5 com "Fundo retrô" (meia-res + upscale no blit).
+        # Dimensões e velocidades escritas em pixels de 720p precisam passar por
+        # `s()`/`sf()` para manter a mesma leitura na tela final — sem isso o
+        # conteúdo aparece com o dobro do tamanho e o dobro da velocidade.
+        self.res_scale: float = height / max(1, Config.SCREEN_HEIGHT)
+
+    def s(self, value: float) -> int:
+        """Escala um valor de pixel do design (720p) para a resolução de
+        construção, com mínimo de 1px (evita sumir em meia-res)."""
+        return max(1, int(round(value * self.res_scale)))
+
+    def sf(self, value: float) -> float:
+        """Como `s()`, mas sem arredondar — para velocidades e acumuladores."""
+        return value * self.res_scale
 
     @abstractmethod
     def update(self, dt: float, speed_mult: float = 1.0) -> None:

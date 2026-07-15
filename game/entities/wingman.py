@@ -1,11 +1,11 @@
 import math
 import random
 from pathlib import Path
-from typing import Any, Final, Optional, List
+from typing import Any, Dict, Final, Optional, List, Tuple
 
 import pygame
 
-from ..core.assets import get_image
+from ..core.player_tint import player_sprite
 from ..core.config import config as Config
 from ..core.sound import sound_manager
 from ..systems import aiming
@@ -22,19 +22,24 @@ _SPRITE_PATH = (
 _WINGMAN_BOSS_DAMAGE_MULT: Final = 0.5
 
 class Wingman:
-    _sprite: Optional[pygame.Surface] = None
+    # Chaveado por (tamanho, jogador): as escoltas do P2 são recoloridas junto
+    # com a nave dele, então não podem dividir uma surface única de classe.
+    _sprites: Dict[Tuple[int, int], pygame.Surface] = {}
 
     @classmethod
-    def _ensure_sprite(cls, size: int) -> None:
-        if cls._sprite is not None:
-            return
-        raw = get_image(_SPRITE_PATH)
-        cls._sprite = pygame.transform.smoothscale(raw, (size, size))
+    def _get_sprite(cls, size: int, player_index: int) -> pygame.Surface:
+        key = (size, player_index)
+        sprite = cls._sprites.get(key)
+        if sprite is None:
+            raw = player_sprite(_SPRITE_PATH, player_index, cast_neutral=True)
+            sprite = pygame.transform.smoothscale(raw, (size, size))
+            cls._sprites[key] = sprite
+        return sprite
 
     def __init__(self, player: Any, duration: float):
         self.player = player
         self.w, self.h = 24, 24
-        self._ensure_sprite(self.w)
+        self._sprite = self._get_sprite(self.w, getattr(player, "player_index", 0))
         
         # Inicia ao lado do jogador
         side_offset = 50 if random.random() > 0.5 else -50
