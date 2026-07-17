@@ -50,6 +50,11 @@ class UserPreferences:
         self.mouse_control: bool = False
         self.auto_fire: bool = False
         self.show_controls_modal: bool = True
+        # False até o modal de controles fechar pela 1ª vez. Enquanto False, o
+        # modal roda em modo "onboarding": esconde o checkbox "não mostrar mais"
+        # (para o novato não matar a própria descoberta por reflexo) e destaca os
+        # ajustes de controle. Uma vez True, o modal volta ao comportamento normal.
+        self.controls_modal_seen: bool = False
         self.gamepad_enabled: bool = False
         # True depois que o usuário marca/desmarca o checkbox do controle na
         # tela de opções. Enquanto False, o jogo pode LIGAR o gamepad sozinho
@@ -127,6 +132,9 @@ class UserPreferences:
                 self.show_controls_modal = data.get(
                     "show_controls_modal", self.show_controls_modal
                 )
+                self.controls_modal_seen = data.get(
+                    "controls_modal_seen", self.controls_modal_seen
+                )
                 self.gamepad_enabled = data.get("gamepad_enabled", self.gamepad_enabled)
                 self.gamepad_choice_made = data.get(
                     "gamepad_choice_made", self.gamepad_choice_made
@@ -163,6 +171,7 @@ class UserPreferences:
                 "mouse_control": self.mouse_control,
                 "auto_fire": self.auto_fire,
                 "show_controls_modal": self.show_controls_modal,
+                "controls_modal_seen": self.controls_modal_seen,
                 "gamepad_enabled": self.gamepad_enabled,
                 "gamepad_choice_made": self.gamepad_choice_made,
                 "p1_prefers_keyboard": self.p1_prefers_keyboard,
@@ -190,6 +199,7 @@ class UserPreferences:
         self.mouse_control = False
         self.auto_fire = False
         self.show_controls_modal = True
+        self.controls_modal_seen = False
         self.gamepad_enabled = False
         self.gamepad_choice_made = False
         self.p1_prefers_keyboard = False
