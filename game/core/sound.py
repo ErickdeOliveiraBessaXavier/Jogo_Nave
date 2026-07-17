@@ -64,8 +64,19 @@ class SoundManager:
         self.audio_available = True
 
         # Inicializar o mixer do pygame com tratamento de erro
+        import sys as _sys
+
         try:
             if not pygame.mixer.get_init():
+                # Web (WASM): o áudio é renderizado por software no navegador e
+                # um buffer pequeno faz o callback sofrer underrun → estalos. Um
+                # buffer maior (1024 quadros ≈ 23ms de latência, aceitável num
+                # shmup) elimina o crackle; freq/format fixos casam o OGG e evitam
+                # resample. No desktop mantemos o init padrão (sem regressão).
+                if _sys.platform == "emscripten":
+                    pygame.mixer.pre_init(
+                        frequency=44100, size=-16, channels=2, buffer=1024
+                    )
                 pygame.mixer.init()
         except pygame.error as e:
             logging.warning("Não foi possível inicializar o sistema de áudio: %s", e)
@@ -92,8 +103,13 @@ class SoundManager:
             self.music_state_manager = self.music_manager.music_state_manager
             return
 
-        # Configurar número de canais
-        pygame.mixer.set_num_channels(CHANNEL_CONFIG["max_channels"])
+        # Configurar número de canais. No web, menos canais = menos mixagem por
+        # callback de áudio (que disputa CPU com o loop no software do WASM).
+        # Mantém os 7 dedicados (0–6) + 5 livres p/ one-shots — suficiente.
+        max_channels = CHANNEL_CONFIG["max_channels"]
+        if _sys.platform == "emscripten":
+            max_channels = max(CHANNEL_CONFIG["reserved"] + 5, 12)
+        pygame.mixer.set_num_channels(max_channels)
 
         # Reserva os canais dedicados (0..reserved-1): `Sound.play()` (one-shots)
         # só será auto-alocado nos canais livres restantes. Sem isto, um one-shot

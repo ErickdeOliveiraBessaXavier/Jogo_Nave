@@ -42,6 +42,7 @@ PT: dict[str, str] = {
     "game_over.initials_title": "DIGITE SUAS INICIAIS",
     "game_over.rank": "RECORDE: #{n} LUGAR!",
     "game_over.legend_move": "↑ ↓: LETRA    ← →: COLUNA",
+    "game_over.legend_type": "DIGITE AS INICIAIS    ⌫ APAGA",
     "game_over.legend_action": "A/ENTER: SALVAR    B/ESC: PULAR",
     "game_over.save": "SALVAR",
     "game_over.skip": "PULAR",

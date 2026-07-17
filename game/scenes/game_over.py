@@ -49,6 +49,16 @@ class InitialsEntryWidget:
         self.score = score
         self.app = app
 
+        # Entrada híbrida adaptada ao dispositivo: TECLADO digita as iniciais
+        # direto (+ Backspace); CONTROLE usa a roleta (DPad/▲▼ + A). O default
+        # segue o dispositivo ativo e troca sozinho conforme o jogador usa um ou
+        # outro — ver handle_event. No teclado a roleta some (letra única +
+        # cursor), o que também é mais barato no web.
+        gp = getattr(app, "gamepad", None)
+        self.input_mode: str = (
+            "gamepad" if (gp is not None and getattr(gp, "is_active", False)) else "keyboard"
+        )
+
         # Escala de UI (convenções do projeto §12). Este widget não é uma Scene, então
         # mantém seu próprio fator e helper. As COL_*/LETTER_HEIGHT de classe
         # são o design base 1280×720; aqui derivamos as versões escaladas.
@@ -259,10 +269,19 @@ class InitialsEntryWidget:
             if event.key == pygame.K_RIGHT:
                 self._change_column(+1)
                 return None
-            # Atalho de teclado: digitar letra direta substitui a coluna ativa
-            # e avança automaticamente. Mantém compatibilidade com fluxo antigo.
+            # Backspace/Delete: volta uma coluna (comportamento natural de campo
+            # de texto — permite corrigir). Sinal inequívoco de teclado.
+            if event.key in (pygame.K_BACKSPACE, pygame.K_DELETE):
+                self.input_mode = "keyboard"
+                if self.active_pos > 0:
+                    self.active_pos -= 1
+                sound_manager.play_sound("button_hover")
+                return None
+            # Digitação direta: escreve a letra na coluna ativa e avança. É o
+            # caminho natural no teclado — some a roleta e liga o modo teclado.
             ch = (event.unicode or "").upper()
             if len(ch) == 1 and "A" <= ch <= "Z":
+                self.input_mode = "keyboard"
                 self.indices[self.active_pos] = ord(ch) - ord("A")
                 if self.active_pos < self.MAX_LEN - 1:
                     self.active_pos += 1
@@ -270,6 +289,8 @@ class InitialsEntryWidget:
             return None
 
         if event.type == pygame.JOYBUTTONDOWN:
+            # Botão do controle é sinal inequívoco de gamepad → volta pra roleta.
+            self.input_mode = "gamepad"
             from ..core.gamepad import XboxButton
 
             if event.button == XboxButton.A:
@@ -337,9 +358,15 @@ class InitialsEntryWidget:
         for i, rect in enumerate(self.col_rects):
             self._render_column(surface, i, rect, alpha)
 
-        # Legenda em 2 linhas, posicionada pelo Y calculado em _build_layout.
+        # Legenda em 2 linhas — a 1ª adapta ao dispositivo: instrução de digitação
+        # no teclado, instrução da roleta no controle.
+        move_line = (
+            t("game_over.legend_type")
+            if self.input_mode == "keyboard"
+            else t("game_over.legend_move")
+        )
         label_y = self._label_y
-        for line in (t("game_over.legend_move"), t("game_over.legend_action")):
+        for line in (move_line, t("game_over.legend_action")):
             line_surf = self.font_label.render(line, True, (180, 180, 180))
             line_surf.set_alpha(alpha)
             surface.blit(
@@ -374,11 +401,24 @@ class InitialsEntryWidget:
         )
         previous_clip = surface.get_clip()
         surface.set_clip(clip_rect)
+
+        # A roleta cheia (letras vizinhas ±1/±2 + setas) é o design do desktop e
+        # aparece sempre que as animações estão ligadas — para TECLADO e CONTROLE
+        # igualmente. Só o modo sem animações (padrão no web) reduz a letra única,
+        # cortando o burst de rasterização SDL_ttf que travava a música. O
+        # `input_mode` afeta apenas a legenda, não o visual das colunas.
+        from ..core.visual_quality import visual_quality
+
+        roulette = visual_quality.ui_animations
+        if roulette:
+            k_range = range(-self.VISIBLE_RADIUS, self.VISIBLE_RADIUS + 1)
+        else:
+            k_range = range(0, 1)
         try:
             # Desenha letras de -VISIBLE_RADIUS a +VISIBLE_RADIUS. A letra 0
             # é a ativa; offset = k * LETTER_HEIGHT + scroll. Fade conforme
             # distância da centro.
-            for k in range(-self.VISIBLE_RADIUS, self.VISIBLE_RADIUS + 1):
+            for k in k_range:
                 letter_idx = (self.indices[idx] + k) % len(_ALPHABET)
                 letter = _ALPHABET[letter_idx]
                 y = cy + k * self.letter_height + scroll
@@ -423,20 +463,23 @@ class InitialsEntryWidget:
                 border_radius=self._s(10),
             )
             surface.blit(border, box.topleft)
-            # Setinhas indicadoras (▲ ▼) em cima e embaixo.
-            arrow_gap = self._s(4)
-            arrow_up = self.font_label.render("▲", True, CUSTOM_GOLD)
-            arrow_up.set_alpha(int(alpha * pulse))
-            surface.blit(
-                arrow_up,
-                arrow_up.get_rect(centerx=cx, bottom=rect.top - arrow_gap),
-            )
-            arrow_dn = self.font_label.render("▼", True, CUSTOM_GOLD)
-            arrow_dn.set_alpha(int(alpha * pulse))
-            surface.blit(
-                arrow_dn,
-                arrow_dn.get_rect(centerx=cx, top=rect.bottom + arrow_gap),
-            )
+            # Setinhas indicadoras (▲ ▼) acompanham a roleta cheia (desktop /
+            # animações on). No modo simplificado (web) a caixa dourada sozinha
+            # marca o slot ativo.
+            if roulette:
+                arrow_gap = self._s(4)
+                arrow_up = self.font_label.render("▲", True, CUSTOM_GOLD)
+                arrow_up.set_alpha(int(alpha * pulse))
+                surface.blit(
+                    arrow_up,
+                    arrow_up.get_rect(centerx=cx, bottom=rect.top - arrow_gap),
+                )
+                arrow_dn = self.font_label.render("▼", True, CUSTOM_GOLD)
+                arrow_dn.set_alpha(int(alpha * pulse))
+                surface.blit(
+                    arrow_dn,
+                    arrow_dn.get_rect(centerx=cx, top=rect.bottom + arrow_gap),
+                )
         else:
             grow = self._s(4)
             box = pygame.Rect(0, 0, rect.width + grow, rect.height + grow)

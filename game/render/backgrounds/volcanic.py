@@ -25,6 +25,20 @@ class VolcanicBackground(Background):
         # Camadas de Parallax
         self.layers: List[Dict[str, Any]] = []
 
+        # Web (WASM): mesma lógica do fundo das Cordilheiras — a meia-resolução já
+        # corta fillrate, mas NÃO reduz o número de draw calls nem o custo dos
+        # loops Python por frame (o gargalo real no pygbag). As brasas são muitos
+        # draw.circle; a lava faz 2 sin() por vértice em cada pool. Reduzir a
+        # contagem de brasas e engrossar a malha da onda (menos vértices/sin)
+        # poupa esse custo com impacto visual mínimo. As 4 camadas de parallax e
+        # as formações rochosas ficam intactas.
+        import sys as _sys
+
+        self._is_web: bool = _sys.platform == "emscripten"
+        if self._is_web:
+            self.NUM_EMBERS = 24
+            self.LAVA_RESOLUTION = 40
+
         self._create_layers()
         self._create_lava()
         self._create_embers()

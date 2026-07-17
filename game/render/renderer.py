@@ -375,6 +375,33 @@ class Renderer:
             )
             surface.blit(s, rect)
 
+    def _prep_gradient_overlay(self, panel_h: int, anim_on: bool) -> pygame.Surface:
+        """Overlay de gradiente do painel de preparação (fase de contagem),
+        memoizado. É constante enquanto ``exit_progress == 0``, então basta
+        construí-lo uma vez e reaproveitar em todos os frames da contagem.
+
+        Nota sobre a altura 2 (não 1): ao expandir na vertical, o smoothscale
+        interpola com a linha vizinha; uma origem de 1px faria o filtro ler a
+        linha seguinte (inexistente) → leitura fora dos limites → access
+        violation intermitente no Windows. O gradiente varia só na horizontal,
+        então duplicar a linha é visualmente idêntico e seguro.
+        """
+        cache = getattr(self, "_prep_grad_cache", None)
+        if cache is not None and cache[0] == panel_h:
+            return cache[1]
+        grad_w = 200
+        half = grad_w // 2
+        grad_surf = pygame.Surface((grad_w, 2), pygame.SRCALPHA)
+        for x in range(grad_w):
+            alpha = max(0, 140 - int(abs(x - half) * (140 / half)))
+            if alpha > 0:
+                grad_surf.set_at((x, 0), (0, 0, 0, alpha))
+                grad_surf.set_at((x, 1), (0, 0, 0, alpha))
+        _scale = pygame.transform.smoothscale if anim_on else pygame.transform.scale
+        overlay = _scale(grad_surf, (Config.SCREEN_WIDTH, panel_h))
+        self._prep_grad_cache = (panel_h, overlay)
+        return overlay
+
     def preparation(
         self,
         surface: pygame.Surface,
@@ -398,30 +425,28 @@ class Renderer:
         panel_h = self._s(240)
         panel_y = Config.SCREEN_HEIGHT // 2 - panel_h // 2
 
-        # grad_w é só a resolução interna de amostragem do gradiente (é
-        # esticado para a largura da tela depois) — independe da resolução.
-        grad_w = 200
-        # Altura 2 (não 1): ao expandir na vertical, o smoothscale interpola com
-        # a linha vizinha; uma origem de 1px de altura faz o filtro ler a linha
-        # seguinte (inexistente) → leitura fora dos limites → access violation
-        # intermitente no Windows (depende do layout de heap). O gradiente varia
-        # só na horizontal, então duplicar a linha é visualmente idêntico e
-        # seguro — mesmo padrão do gradiente em render/backgrounds/atmosphere.py.
-        grad_surf = pygame.Surface((grad_w, 2), pygame.SRCALPHA)
-        for x in range(grad_w):
-            dist_center = abs(x - grad_w // 2)
-            alpha = max(
-                0,
-                int(140 * (1.0 - exit_progress))
-                - int(dist_center * (140 / (grad_w // 2))),
-            )
-            if alpha > 0:
-                grad_surf.set_at((x, 0), (0, 0, 0, alpha))
-                grad_surf.set_at((x, 1), (0, 0, 0, alpha))
-
-        # Animações off: nearest no lugar do smoothscale (fullscreen por frame é caro).
-        _scale = pygame.transform.smoothscale if anim_on else pygame.transform.scale
-        overlay = _scale(grad_surf, (Config.SCREEN_WIDTH, panel_h))
+        # Durante a contagem (exit_progress == 0) o gradiente é idêntico frame a
+        # frame — reconstruí-lo (loop de 200 `set_at` + scale de tela cheia) toda
+        # frame era puro desperdício, caro sobretudo no web bem no início da fase.
+        # Cacheia o overlay já escalado; só a curta animação de saída (o painel
+        # somindo) precisa recompor com o alpha variável.
+        if not exit_anim_active:
+            overlay = self._prep_gradient_overlay(panel_h, anim_on)
+        else:
+            grad_w = 200
+            grad_surf = pygame.Surface((grad_w, 2), pygame.SRCALPHA)
+            for x in range(grad_w):
+                dist_center = abs(x - grad_w // 2)
+                alpha = max(
+                    0,
+                    int(140 * (1.0 - exit_progress))
+                    - int(dist_center * (140 / (grad_w // 2))),
+                )
+                if alpha > 0:
+                    grad_surf.set_at((x, 0), (0, 0, 0, alpha))
+                    grad_surf.set_at((x, 1), (0, 0, 0, alpha))
+            _scale = pygame.transform.smoothscale if anim_on else pygame.transform.scale
+            overlay = _scale(grad_surf, (Config.SCREEN_WIDTH, panel_h))
         surface.blit(overlay, (0, panel_y))
 
         # Fontes (escaladas)
@@ -534,32 +559,44 @@ class Renderer:
             # Espera
             y_offset = self._s(20)
 
-        # Design do Pop-up
-        font = get_font(max(8, int(22 * self.ui_scale)))
-        txt_surf = font.render(text, True, colors.WHITE)
+        # Painel, brilho e texto dependem SÓ do texto do pop-up — recriá-los
+        # (Surfaces SRCALPHA + draw.rect + font.render) a cada frame durante os
+        # 2,5s de exibição era desperdício, caro sobretudo no web. Cacheia por
+        # texto e reusa; só a posição (y_offset do slide) muda por frame.
+        cache = getattr(self, "_level_popup_cache", None)
+        if cache is None or cache[0] != text:
+            font = get_font(max(8, int(22 * self.ui_scale)))
+            txt_surf = font.render(text, True, colors.WHITE)
+            box_w = txt_surf.get_width() + self._s(60)
+            box_h = self._s(45)
+            radius = self._s(10)
+            glow_pad = self._s(5)
 
-        box_w = txt_surf.get_width() + self._s(60)
-        box_h = self._s(45)
+            panel = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+            pygame.draw.rect(
+                panel, (0, 0, 0, 180), (0, 0, box_w, box_h), border_radius=radius
+            )
+            pygame.draw.rect(
+                panel, colors.CUSTOM_GOLD, (0, 0, box_w, box_h), 2, border_radius=radius
+            )
+
+            glow = pygame.Surface(
+                (box_w + glow_pad * 2, box_h + glow_pad * 2), pygame.SRCALPHA
+            )
+            pygame.draw.rect(
+                glow,
+                (218, 165, 32, 50),
+                (glow_pad, glow_pad, box_w, box_h),
+                border_radius=radius + self._s(2),
+            )
+            self._level_popup_cache = (
+                text, panel, glow, txt_surf, box_w, box_h, glow_pad
+            )
+            cache = self._level_popup_cache
+
+        _text, panel, glow, txt_surf, box_w, box_h, glow_pad = cache
         box_x = Config.SCREEN_WIDTH // 2 - box_w // 2
         box_y = y_offset
-        radius = self._s(10)
-        glow_pad = self._s(5)
-
-        # Fundo do painel
-        panel = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-        pygame.draw.rect(panel, (0, 0, 0, 180), (0, 0, box_w, box_h), border_radius=radius)
-        pygame.draw.rect(
-            panel, colors.CUSTOM_GOLD, (0, 0, box_w, box_h), 2, border_radius=radius
-        )
-
-        # Brilho sutil nas bordas
-        glow = pygame.Surface((box_w + glow_pad * 2, box_h + glow_pad * 2), pygame.SRCALPHA)
-        pygame.draw.rect(
-            glow,
-            (218, 165, 32, 50),
-            (glow_pad, glow_pad, box_w, box_h),
-            border_radius=radius + self._s(2),
-        )
 
         surface.blit(glow, (box_x - glow_pad, box_y - glow_pad))
         surface.blit(panel, (box_x, box_y))

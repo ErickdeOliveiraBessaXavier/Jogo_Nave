@@ -384,9 +384,17 @@ class PlayingScene(Scene):
         self._cutscene_launch_down: bool = False
 
     def _init_fade(self) -> None:
-        """Configura o fade-in inicial para evitar corte abrupto."""
-        self.start_fade_active: bool = True
-        self.start_fade_alpha: float = 255.0
+        """Configura o fade-in inicial para evitar corte abrupto.
+
+        Com "Animações da Interface" desligado (padrão no web), o fade preto de
+        tela cheia é pulado: a fase aparece instantânea, sem o overlay SRCALPHA
+        por vários frames — evita um pico de fillrate justo na transição de fase.
+        """
+        from ..core.visual_quality import visual_quality
+
+        anim_on = visual_quality.ui_animations
+        self.start_fade_active: bool = anim_on
+        self.start_fade_alpha: float = 255.0 if anim_on else 0.0
         self.start_fade_elapsed: float = 0.0
         self.start_fade_duration: float = self._start_fade_duration
         self.start_fade_overlay = pygame.Surface(

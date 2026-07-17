@@ -39,6 +39,7 @@ EN: dict[str, str] = {
     "game_over.initials_title": "ENTER YOUR INITIALS",
     "game_over.rank": "NEW RECORD: #{n} PLACE!",
     "game_over.legend_move": "↑ ↓: LETTER    ← →: COLUMN",
+    "game_over.legend_type": "TYPE YOUR INITIALS    ⌫ ERASE",
     "game_over.legend_action": "A/ENTER: SAVE    B/ESC: SKIP",
     "game_over.save": "SAVE",
     "game_over.skip": "SKIP",

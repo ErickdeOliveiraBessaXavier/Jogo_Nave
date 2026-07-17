@@ -230,6 +230,20 @@ class MountainsBackground(Background):
         # Quanto o sol desce verticalmente quando vai do meio-dia à noite.
         self._sun_dive_distance: int = int(self.height * 0.22)
 
+        # Web (WASM): a meia-resolução já corta fillrate, mas NÃO reduz o número
+        # de chamadas de blit nem o custo do loop Python por frame — que no pygbag
+        # é o gargalo real. Estrelas e nuvens são muitos blits SRCALPHA pequenos;
+        # reduzir a contagem (e o twinkle a 30 Hz) poupa esse custo com impacto
+        # visual mínimo em meia-res. As 6 camadas de parallax ficam intactas.
+        import sys as _sys
+
+        self._is_web: bool = _sys.platform == "emscripten"
+        self._twinkle_tick: int = 0
+        if self._is_web:
+            self.NUM_STARS = 16
+            self.NUM_CLOUDS_BACK = 2
+            self.NUM_CLOUDS_FRONT = 1
+
         # Criar elementos
         self._create_sky_gradients()
         self._create_layers()
@@ -515,6 +529,9 @@ class MountainsBackground(Background):
                     "variants": self._star_surf_cache[size],
                     "delay": random.random() * 5,
                     "base_alpha": random.uniform(0.3, 1.0),
+                    # Nível de alpha cacheado — no web o twinkle recalcula a 30 Hz
+                    # e reaproveita este valor nos frames intermediários.
+                    "level": 0,
                 }
             )
 
@@ -524,28 +541,46 @@ class MountainsBackground(Background):
         O brilho geral é escalado pelo ``_current_progress`` — estrelas quase
         invisíveis no pôr do sol (0) e fortes na noite fechada (1).
         """
-        current_time = pygame.time.get_ticks() / 1000.0
-        # Locals — atalho mais rápido que atributo/global em Python hot loops.
-        twinkle_phase = current_time * self.star_twinkle_speed
-        # Floor de 0.25 garante que estrelas existem mesmo de dia (apenas
-        # discretas); 1.0 é o brilho máximo na noite.
-        brightness_mult = 0.25 + self._current_progress * 0.75
-        max_level = self.STAR_ALPHA_LEVELS - 1
-        level_factor = max_level / 255.0
-        sin = math.sin
         blit = surface.blit
+        max_level = self.STAR_ALPHA_LEVELS - 1
+
+        # No web recalcula o twinkle a cada 2 frames (30 Hz) — o brilho é lento
+        # (star_twinkle_speed=2.0), então o passo é imperceptível e poupa os
+        # sin()/aritmética do loop. Os blits acontecem sempre (senão as estrelas
+        # sumiriam nos frames pulados). No desktop recalcula todo frame.
+        recompute = True
+        if self._is_web:
+            recompute = (self._twinkle_tick % 2) == 0
+            self._twinkle_tick += 1
+
+        if recompute:
+            current_time = pygame.time.get_ticks() / 1000.0
+            # Locals — atalho mais rápido que atributo/global em Python hot loops.
+            twinkle_phase = current_time * self.star_twinkle_speed
+            # Floor de 0.25 garante que estrelas existem mesmo de dia (apenas
+            # discretas); 1.0 é o brilho máximo na noite.
+            brightness_mult = 0.25 + self._current_progress * 0.75
+            level_factor = max_level / 255.0
+            sin = math.sin
+            for star in self.stars:
+                alpha_factor = (sin(twinkle_phase + star["delay"]) + 1) * 0.5
+                alpha = (
+                    star["base_alpha"]
+                    * (0.3 + alpha_factor * 0.7)
+                    * brightness_mult
+                    * 255
+                )
+                level = int(alpha * level_factor + 0.5)
+                if level < 0:
+                    level = 0
+                elif level > max_level:
+                    level = max_level
+                star["level"] = level
 
         for star in self.stars:
-            alpha_factor = (sin(twinkle_phase + star["delay"]) + 1) * 0.5
-            alpha = (
-                star["base_alpha"] * (0.3 + alpha_factor * 0.7) * brightness_mult * 255
-            )
-            level = int(alpha * level_factor + 0.5)
-            if level <= 0:
-                continue
-            if level > max_level:
-                level = max_level
-            blit(star["variants"][level], (int(star["x"]), int(star["y"])))
+            level = star["level"]
+            if level > 0:
+                blit(star["variants"][level], (int(star["x"]), int(star["y"])))
 
     def _create_sun(self) -> None:
         """Cria superfície do sol com brilho pré-renderizado."""
