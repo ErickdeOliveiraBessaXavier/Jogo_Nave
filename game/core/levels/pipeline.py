@@ -868,6 +868,67 @@ def _recency_penalty_for_level(
     return recency_penalty
 
 
+# — ESTREIA GARANTIDA POR ASSINATURA (guaranteed signature debut) —
+# A loteria de variedade (recência + histórico de combinação + salt por-run) dá
+# CHANCE a cada assinatura, mas não GARANTE que ela apareça: com o teto fixo em 3
+# (SWARM + 2) e poucos níveis não-fixos no fim do mundo, as assinaturas tardias
+# (ex.: CuttingStorm/IceGolem nas Cordilheiras) ficavam em ~65-75% das runs — e 0%
+# na campanha determinística (salt=0). Aqui damos a cada assinatura um SLOT DE
+# ESTREIA determinístico: os ÚLTIMOS `k` níveis NÃO-FIXOS do mundo (k = nº de
+# assinaturas), um por nível (sem colisão), mapeando a assinatura mais antiga ao
+# slot mais cedo e a mais nova ao mais tarde (o "pesado" novo estreia no clímax,
+# logo antes do boss final). No seu slot, a assinatura é FIXADA no encontro,
+# substituindo um special NÃO-assinatura (que já tem cobertura por outras vias) —
+# sem inflar o teto nem tocar na base (SWARM). Fecha o item pendente
+# "estreia garantida por assinatura" (memory/variety-per-run-salt-and-pending-debut).
+def _signature_debut_levels(world: "WorldConfig") -> dict[type, int]:
+    """Slot de estreia (nível) de cada assinatura do tema — determinístico.
+
+    Mapeia as assinaturas (ordem = ordem de desbloqueio em THEME_SIGNATURE_ENEMIES)
+    aos ÚLTIMOS `k` níveis NÃO-FIXOS do mundo, um por nível: a mais antiga no slot
+    mais cedo, a mais nova no mais tarde. Vazio se o tema não tem assinaturas ou não
+    há níveis não-fixos. É só a INTENÇÃO de estreia; a fixação em `_force_signature`
+    ainda exige que a assinatura esteja DISPONÍVEL (no pool) no nível — senão o slot
+    vira no-op (best-effort para temas cujas assinaturas desbloqueiam tarde demais
+    para o slot; para as Cordilheiras todos os slots caem dentro da disponibilidade).
+    """
+    signatures = THEME_SIGNATURE_ENEMIES.get(world.theme, ())
+    if not signatures:
+        return {}
+    non_fixed = [
+        lvl
+        for lvl in range(world.start_level, world.end_level + 1)
+        if lvl not in FIXED_LEVELS
+    ]
+    if not non_fixed:
+        return {}
+    slots = non_fixed[-len(signatures):]  # últimos k níveis não-fixos
+    # Alinha a assinatura mais NOVA ao slot mais TARDE (clímax): as duas listas já
+    # estão em ordem crescente, então basta emparelhar pela cauda.
+    offset = len(signatures) - len(slots)
+    return {signatures[offset + i]: slots[i] for i in range(len(slots))}
+
+
+def _force_signature(chosen: list[type], sig: type, world: "WorldConfig") -> list[type]:
+    """Fixa `sig` no encontro substituindo um special descartável (preserva o teto).
+
+    Não toca na base (SWARM) e prefere derrubar um special NÃO-assinatura (Mage/
+    Propeller/Sentry/Elemental já têm cobertura em outras fases); só derruba outra
+    assinatura se não houver alternativa. No-op se `sig` já está no encontro ou se
+    só a base está presente (cap==1, nível cedo demais — não inflar).
+    """
+    if sig in chosen:
+        return chosen
+    base = THEME_BASE_ENEMY.get(world.theme)
+    non_base = [t for t in chosen if t != base]
+    if not non_base:
+        return chosen
+    sigs = set(THEME_SIGNATURE_ENEMIES.get(world.theme, ()))
+    droppable = [t for t in non_base if t not in sigs] or non_base
+    drop = droppable[-1]
+    return [t for t in chosen if t is not drop] + [sig]
+
+
 def _apply_enemy_variety_cap(
     config: LevelConfig,
     world: "WorldConfig",
@@ -962,6 +1023,16 @@ def _apply_enemy_variety_cap(
         return picked
 
     chosen = _resolve(config.level_number)
+
+    # ESTREIA GARANTIDA — se este nível é o slot de estreia de uma assinatura E ela
+    # está disponível no pool (composition), fixa-a agora. Aplicado só ao nível
+    # ATUAL (pós-loteria/histórico), fora da reconstrução de vizinhos — a garantia é
+    # determinística por nível e não depende da aproximação de recência/combinação.
+    debut_level = _signature_debut_levels(world)
+    for sig, lvl in debut_level.items():
+        if lvl == config.level_number and sig in composition:
+            chosen = _force_signature(chosen, sig, world)
+            break  # no máximo uma assinatura por nível (slots são distintos)
 
     # Composição capada + ameaças ocasionais de volta (sempre presentes quando o
     # gate de spawn as liberou — não foram cortadas pelo teto).
