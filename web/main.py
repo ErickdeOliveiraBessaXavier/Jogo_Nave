@@ -45,6 +45,28 @@ def _install_text_cache(pygame):
         print(f"[web] AVISO: nao consegui instalar cache de font.render: {e}")
 
 
+def _apply_pixelated_canvas():
+    """Mantém o pixel art nítido ao escalar o canvas no navegador.
+
+    O pygbag escala a resolução lógica (1280×720) para o tamanho de exibição.
+    Sem isto o navegador interpola (bilinear) e borra a arte; ``pixelated`` força
+    nearest-neighbor, preservando as bordas dos pixels em qualquer escala. É
+    puramente cosmético e só faz sentido no web — o desktop usa ``pygame.SCALED``.
+    Deve rodar DEPOIS do ``set_mode`` (o canvas só existe então).
+    """
+    import sys
+    import platform
+
+    if sys.platform != "emscripten":
+        return
+    try:
+        platform.window.canvas.style.imageRendering = "pixelated"
+        print("[web] canvas imageRendering=pixelated aplicado")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        # DOM indisponível/mudou: não é fatal, só perde a nitidez do upscale.
+        print(f"[web] AVISO: nao consegui aplicar imageRendering=pixelated: {e}")
+
+
 async def main():
     print("[web] === entrypoint iniciado ===")
     try:
@@ -61,6 +83,8 @@ async def main():
 
         print("[web] construindo GameApp (init leve; sprites deferidos)...")
         app = GameApp()
+        # Canvas já criado pelo set_mode: força upscale nearest-neighbor (pixel art).
+        _apply_pixelated_canvas()
         print("[web] init OK — pre-carregando sprites com tela de loading")
 
         screen = app.screen
