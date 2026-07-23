@@ -113,7 +113,12 @@ venv.bak/
 # VSCode
 .vscode/
 
+# Save do jogador + arquivos da escrita atômica (§15: .bak backup, .corrupt
+# diagnóstico, .tmp intermediário). Nenhum deve ser versionado.
 player_profile.json
+player_profile.bak.json
+player_profile.corrupt.json
+player_profile.tmp
 user_preferences.json
 
 # Build outputs and executables
