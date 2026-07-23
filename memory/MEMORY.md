@@ -1,5 +1,50 @@
-# Memory Index
+# Memória do projeto — Pixel Patrol (Jogo_Nave)
 
-- [Menu UI scale convention](menu-ui-scale-convention.md) — menus escalam por ui_scale = SCREEN_WIDTH/1280 p/ resoluções diferentes
-- [Controller-first menu UX](controller-first-menu-ux.md) — usuário prioriza jogador de controle nos menus (D-pad focus, realce, sem legenda no rodapé)
-- [Targeting via target_point](targeting-via-target-point.md) — mira/seleção de inimigos usa target_point+is_targetable; x+w/2 quebra no boss Serpente (bug recorrente)
+Índice único das notas de contexto persistente. Convenções duráveis vivem no
+`CLAUDE.md` (raiz); estas notas são decisões, gotchas e estado de áreas.
+Versionado junto com o repositório.
+
+## Arquitetura e código
+
+- [scene-decomposition-pattern](scene-decomposition-pattern.md) — extrair fluxos da PlayingScene em sistemas próprios (RevivalSystem/UpgradeSelector); regra do grep-completo ao migrar estado (input handler lê estado cru e quebra com testes verdes).
+- [fire-timer-cadence-architecture](fire-timer-cadence-architecture.md) — cadência de disparo por FireTimer/carry_interval; `timer = INTERVALO` é proibido (descarta a sobra do frame). Lista o que NÃO migrar.
+- [targeting-via-target-point](targeting-via-target-point.md) — mira/seleção de inimigo usa target_point + is_targetable (systems/targeting.py), nunca x+w/2; x+w/2 quebra no boss Serpente (bug recorrente).
+- [enemy-health-multiplier-propagation](enemy-health-multiplier-propagation.md) — entidades emergentes recebem health_multiplier via construtor, como aggressiveness_multiplier; multiplicador que não chega na entidade é no-op.
+- [music-transitions-main-thread](music-transitions-main-thread.md) — crossfade de música roda na thread principal; pygame não é thread-safe (worker thread = access violation).
+- [visual-quality-system](visual-quality-system.md) — singleton visual_quality escala efeitos cosméticos por nível Alto/Médio/Baixo; estender efeito = one-liner vq.particles()/gates.
+
+## Balanceamento e progressão
+
+- [ship-balance-model](ship-balance-model.md) — balancear naves por abates/s por tier de HP (não DPS bruto); HP de inimigo não escala por nível; não buffar dano de nave lenta.
+- [ship-impact-identity](ship-impact-identity.md) — estilo de impacto por nave só em hits NÃO-letais; giro de matiz do tiro do P2 é 0.08, não 0.5.
+- [level-progression-onscreen-visibility](level-progression-onscreen-visibility.md) — avanço de fase só conta hostis VISÍVEIS na tela (teste estrito), não _is_enemy_off_screen.
+- [mine-explosion-respected-before-advance](mine-explosion-respected-before-advance.md) — explosões de mina ativas seguram o avanço até a animação/dano terminar.
+- [death-animations-respected-before-advance](death-animations-respected-before-advance.md) — avanço espera explosões/implosões cosméticas terminarem, sem tratá-las como hostis.
+
+## Variedade de inimigos (pipeline)
+
+- [swarm-base-and-combination-history](swarm-base-and-combination-history.md) — filosofia "SWARM (base) + N complementares" no teto de variedade + anti-repetição do triângulo entre fases vizinhas.
+- [city-variety-pyramid-rotation](city-variety-pyramid-rotation.md) — pirâmide de N: máx. 3 (Normal)/4 (Hard) variantes por nível, com rotação das assinaturas.
+- [variety-cap-exclui-specials-raros](variety-cap-exclui-specials-raros.md) — o variety cap exclui inimigos raros (spawn_time alto); garantir via THEME_SIGNATURE_ENEMIES.
+- [variety-per-run-salt-and-pending-debut](variety-per-run-salt-and-pending-debut.md) — semente de variedade por-partida + estreia garantida por assinatura (implementadas).
+- [new-theme-specials-gate-after-trio](new-theme-specials-gate-after-trio.md) — adicionar inimigo a tema existente: gatear após o trio de introdução + registrar na ordem; resto é automático (config global).
+
+## Inimigos e bosses (temas)
+
+- [boss-single-source-roadmap](boss-single-source-roadmap.md) — classe do boss só em WORLD_BOSS_ROADMAP via get_boss_for_level; nunca em WorldConfig nem FIXED_LEVELS.
+- [orbital-turret-zoneamento](orbital-turret-zoneamento.md) — OrbitalTurret de zoneamento (olho + 3 esferas, orbes destrutíveis → campos elétricos com paralisia).
+- [metropolis-overlord-city-boss](metropolis-overlord-city-boss.md) — 1º boss nativo do CITY (nível 30); FSM escudo vai-e-volta, Fase 2 minas + lasers, Fase 3 segmentação.
+- [city-mine-neon-residue](city-mine-neon-residue.md) — CityMine = subclasse ExplosiveMine + flag spawns_neon_residue; secundárias via ExplosiveEffect estendido.
+- [city-neon-design-intent](city-neon-design-intent.md) — decisões deliberadas do tema City Neon (Mundo 3, níveis 26-35); não tratar como bugs.
+
+## UI, menus e temas visuais
+
+- [menu-ui-scale-convention](menu-ui-scale-convention.md) — menus e HUD escalam UI por ui_scale = SCREEN_WIDTH/1280 (§12 do CLAUDE.md).
+- [controller-first-menu-ux](controller-first-menu-ux.md) — priorizar o jogador de controle nos menus (D-pad focus, realce, sem legenda no rodapé).
+- [retro-background-scale-city-only](retro-background-scale-city-only.md) — escala do Fundo Retrô corrigida só no City; volcanic/mountains têm o mesmo desvio mas a estética ampliada é intencional.
+- [i18n-translation-system](i18n-translation-system.md) — i18n PT/EN via singleton t() + tabelas por idioma; só o menu convertido, resto pendente.
+
+## Build e web
+
+- [itch-publishing-workflow](itch-publishing-workflow.md) — publicação no itch.io via butler (3 canais: Windows/Linux/Web), versão única em VERSION.
+- [web-no-save-persistence](web-no-save-persistence.md) — web não persiste save (MEMFS volátil no emscripten); persistência real é pendente.

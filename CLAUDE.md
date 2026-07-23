@@ -166,6 +166,20 @@ deve segui-los; código existente que os viola é candidato a revisão.
   os componentes centralizam a **lógica coesa**, não necessariamente os dados.
 - Mixins para contrato compartilhado entre uma família (ex.: `BossHitMixin`
   dá `is_boss`, `on_hit`, `collision_circle` fallback a todos os bosses).
+- **Extração de fluxo da `PlayingScene`** (padrão de referência: `RevivalSystem`,
+  `UpgradeSelector`): o sistema **não referencia a cena** (§1); dependências
+  entram pelo construtor — objetos de domínio + **callbacks** para o que a cena
+  mantém (`sync_lives`, `activate`). Estado que já vive na entidade fica lá
+  (`slot.revival_beacon`); a cena expõe **fachada fina** para a API que outros
+  já chamam. Prova de sucesso: o sistema fica **testável com stubs mínimos**,
+  sem instanciar o jogo.
+- **Ao migrar estado para um sistema, `grep` o projeto INTEIRO pelo nome do
+  atributo — não só pelos métodos que se movem.** Um leitor/escritor externo do
+  atributo cru (ex.: `gameplay_input_handler` mexendo em `scene.upgrade_select_mode`)
+  quebra em runtime mesmo com os testes e o lint verdes, porque nada o
+  exercitava. O DTO de render (`RenderFrame`) já isola o render dessa quebra; o
+  input handler e outros sistemas, não. Preserve o nome como property de
+  leitura na fachada quando houver leitores externos.
 
 ---
 
