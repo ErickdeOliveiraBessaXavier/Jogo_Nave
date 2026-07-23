@@ -33,9 +33,25 @@ DTO isola o render dessa classe de quebra; input handler e outros sistemas, não
 Quando houver leitor externo, preserve o nome como **property de leitura** na
 fachada e exponha um método pro write (`cancel_upgrade_select`).
 
-**Não extrair:** renderers de bosses e o `_finish` da cutscene de transição de
-mundo — leem estado privado de domínio acoplado ao FSM da cena; extrair vira
-callbacks demais (§1 alerta contra). Da cutscene, se um dia, tirar SÓ o animador
-(kinematics + partículas), deixando o `_finish` na cena.
+**Duas formas de melhorar a cena:** (1) extrair COMPORTAMENTO em sistema
+próprio quando a fronteira é limpa; (2) consolidar ESTADO num dataclass quando o
+comportamento é FSM-coupled mas os atributos estão soltos. A (2) limpa o
+`__init__` sem os callbacks demais.
 
-Próximo candidato limpo: AtmosphereProgression.
+Concluído: RevivalSystem, UpgradeSelector (extração de comportamento);
+**AtmosphereState** em `core/atmosphere_phase.py` (consolidação de estado: 13
+atributos `_atmosphere_*`/`_in_atmosphere` → 1 dataclass, 71 refs retargeteadas
+p/ `self._atmosphere.X`, métodos FSM ficaram na cena). Testes por extração.
+
+**Não extrair COMPORTAMENTO (avaliados, FSM-coupled — §1):**
+- **AtmosphereProgression**: `_start/_apply_death_penalty/_finish_atmosphere_*`
+  dão `app.states.push`, `_begin_level_preparation`, `spawner.set_level`,
+  `boss_controller.reset`, revivem slots — ~15 callbacks. Por isso foi feita a
+  consolidação de estado (AtmosphereState), não extração.
+- **Cutscene de transição de mundo** (`_*_world_transition_cutscene`): `_finish`
+  FSM-coupled. Se extrair, só o animador (charge→launch + partículas).
+- **Renderers de bosses**: estado privado de domínio acoplado ao FSM.
+
+**Lição:** "candidato limpo" só se confirma LENDO os corpos dos métodos, não
+pelo nome do cluster. AtmosphereProgression parecia limpo pela lista de métodos;
+ao ler, era FSM-coupled — virou consolidação de estado em vez de extração.

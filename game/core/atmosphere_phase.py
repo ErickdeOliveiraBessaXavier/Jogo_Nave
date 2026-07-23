@@ -13,8 +13,8 @@ Ver `código_teste/PLANO_FASE_ATMOSFERA.md`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 from .world_config import WorldConfig, WorldTheme
 
@@ -77,6 +77,42 @@ ATMOSPHERE_PHASES: dict[str, AtmospherePhaseConfig] = {
         altitude_length=120.0,
     ),
 }
+
+
+@dataclass
+class AtmosphereState:
+    """Estado de runtime da fase de atmosfera — só dados.
+
+    Agrupa os ~13 campos que antes ficavam soltos na `PlayingScene`. A lógica
+    que os muda (state machine, spawns, cinemática de morte) permanece na cena:
+    é acoplada ao FSM dela e ao `EntityManager`/`EnemySpawner`, então extrair o
+    comportamento converteria acoplamento intra-classe em callbacks demais
+    (§1 do CLAUDE.md). Aqui só concentramos o ESTADO, deixando o `__init__` da
+    cena limpo e a fase auto-documentada.
+
+    `phase_done` tem lifecycle próprio (marca que o interstício já rodou nesta
+    transição de mundo) e NÃO é resetado ao iniciar uma fase — só quando uma
+    nova transição de mundo começa. Por isso não há um `reset()` global aqui:
+    cada campo segue sendo escrito pela cena onde já era.
+    """
+
+    in_atmosphere: bool = False
+    route: Optional[str] = None
+    progress: float = 0.0
+    phase_done: bool = False
+
+    # Regressão de altitude ao morrer na atmosfera (animada).
+    regressing: bool = False
+    regress_from: float = 0.0
+    regress_to: float = 0.0
+    regress_elapsed: float = 0.0
+    regress_duration: float = 0.0
+
+    # Cinemática de "nocaute": nave desmaia e re-entra.
+    death_active: bool = False
+    death_phase: str = "out"  # "out" | "return"
+    death_timer: float = 0.0
+    death_ships: list[tuple[Any, float, float, float]] = field(default_factory=list)
 
 
 def get_phase_config(route: Optional[str]) -> Optional[AtmospherePhaseConfig]:
