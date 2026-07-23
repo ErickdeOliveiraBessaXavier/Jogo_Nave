@@ -102,8 +102,12 @@ class ActiveUpgrade:
             self.charges_left -= 1
 
         self.duration_left = self.get_effective_duration(ctx)
-        self.cooldown_left = self.get_effective_cooldown(ctx)
         self.active = True
+        # O cooldown NÃO começa aqui — parte só quando o efeito termina (ver
+        # `update`), de modo que a recarga venha DEPOIS da duração, não em
+        # paralelo. Upgrade instantâneo (duração 0) expira no tick seguinte e o
+        # cooldown parte aí. O `ShieldBurstUpgrade` já fazia isso à mão (cooldown
+        # ao consumir o escudo); agora é a regra da classe base.
 
         self.on_activate_effect(ctx)
         self.on_after_activate(ctx)
@@ -126,6 +130,8 @@ class ActiveUpgrade:
             if self.duration_left <= 0.0:
                 self.active = False
                 self.on_expire(ctx)
+                # Fim do efeito → o cooldown começa AGORA (não na ativação).
+                self.cooldown_left = self.get_effective_cooldown(ctx)
 
     @staticmethod
     def _ctx_ship(ctx: Optional[UpgradeContextProtocol]) -> Any:

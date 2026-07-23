@@ -878,8 +878,10 @@ class Ship:
             self.shield_hp -= amount
             if self.shield_hp <= 0:
                 self.shield_timer = 0.0
-            sound_manager.play_shield_hit()
-            self.invuln = 1000  # Pequena invuln após quebra
+            sound_manager.play_shield_break()  # play_shield_hit não existe (bug latente)
+            # Mesma invuln curta do caminho vivo de dano do jogador
+            # (scene._handle_ship_hit): protege de dano consecutivo imediato.
+            self.invuln = Config.SHIELD_ABSORB_INVULN_MS
             return False
 
         self.lives -= amount

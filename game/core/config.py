@@ -82,6 +82,10 @@ class GameplayConfig:
     MINI_SHIP_BULLET_DAMAGE: int = 10
     POWERUP_SPEED: float = 100.0
     INVULN_TIME: float = 3.0
+    # Invulnerabilidade curta (ms) concedida quando o escudo absorve um hit —
+    # evita perder duas cargas (ou tomar dano logo após a última) por dois
+    # acertos no mesmo instante/frames consecutivos.
+    SHIELD_ABSORB_INVULN_MS: float = 1000.0
     LEVEL_TRANSITION_DELAY: float = 2.0
     LEVEL_TRANSITION_PENDING_DELAY: float = 2.0
     LEVEL_TRANSITION_ANIMATION_TIMEOUT: float = 1.2

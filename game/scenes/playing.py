@@ -2403,6 +2403,11 @@ class PlayingScene(Scene):
             ship.shield_hp -= 1
             if ship.shield_hp <= 0:
                 ship.shield_timer = 0.0
+            # 1s de invulnerabilidade após absorver: protege contra dano
+            # consecutivo imediato (dois acertos no mesmo frame/instante
+            # gastariam duas cargas ou vazariam pra vida). `max` não encurta um
+            # invuln maior já em curso.
+            ship.invuln = max(ship.invuln, Config.SHIELD_ABSORB_INVULN_MS)
             # Emit powerup event for shield absorption
             self.app.event_bus.emit(events.PlaySound(sound_name="powerup", volume=1.0))
             return
