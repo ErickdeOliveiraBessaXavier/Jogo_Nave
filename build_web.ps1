@@ -19,8 +19,11 @@ Set-Location $PSScriptRoot
 $py    = ".\.venv\Scripts\python.exe"
 $stage = "web\staging"
 
-if (-not (Test-Path "web\assets\audio")) {
-    Write-Host "ERRO: web\assets\audio nao existe. Rode antes: .\reencode_audio_web.ps1" -ForegroundColor Red
+# Exige AMBOS: audio\ (musica OGG) e sounds\ (SFX OGG). O copy cru abaixo exclui
+# .mp3 E .wav, entao os SFX so chegam ao staging pelo overlay web\assets\sounds.
+# Sem ele (reencode antigo, so-audio) a build sairia MUDA de SFX.
+if (-not (Test-Path "web\assets\audio") -or -not (Test-Path "web\assets\sounds")) {
+    Write-Host "ERRO: web\assets\audio e/ou web\assets\sounds ausente. Rode antes: .\reencode_audio_web.ps1" -ForegroundColor Red
     exit 1
 }
 
@@ -28,10 +31,10 @@ Write-Host ">> Limpando staging..." -ForegroundColor Cyan
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path "$stage\game" | Out-Null
 
-Write-Host ">> Copiando codigo + assets (sem .mp3 e __pycache__)..." -ForegroundColor Cyan
-robocopy game "$stage\game" /E /XD __pycache__ /XF *.pyc *.mp3 /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
+Write-Host ">> Copiando codigo + assets (sem .mp3/.wav e __pycache__)..." -ForegroundColor Cyan
+robocopy game "$stage\game" /E /XD __pycache__ /XF *.pyc *.mp3 *.wav /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
 
-Write-Host ">> Inserindo audio OGG (web) no lugar dos .mp3..." -ForegroundColor Cyan
+Write-Host ">> Inserindo audio OGG (web) no lugar dos .mp3/.wav..." -ForegroundColor Cyan
 robocopy "web\assets" "$stage\game\assets" /E /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
 # robocopy usa exit codes 0-7 para sucesso; >=8 e erro real.
 if ($LASTEXITCODE -ge 8) { Write-Host "ERRO no robocopy ($LASTEXITCODE)" -ForegroundColor Red; exit 1 }

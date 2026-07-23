@@ -1,13 +1,14 @@
 # ============================================================
 #  Gera o AUDIO da build WEB (pygbag) em formato OGG.
 #
-#  O pygbag/SDL-no-navegador NAO aceita MP3 -> exige OGG. Para nao mexer em
-#  nenhum caminho no codigo (que referencia .mp3), gravamos CONTEUDO OGG
-#  mantendo a extensao .mp3 (ffmpeg -f ogg). O SDL detecta o formato pelo
-#  conteudo (magic bytes "OggS"), entao toca normalmente.
+#  O pygbag/SDL-no-navegador NAO aceita MP3 -> exige OGG; e WAV (PCM cru) e
+#  pesado demais para download web. Para nao mexer em nenhum caminho no codigo
+#  (que referencia .mp3/.wav), gravamos CONTEUDO OGG mantendo a extensao
+#  original nos SFX (ffmpeg -f ogg). O SDL detecta o formato pelo conteudo
+#  (magic bytes "OggS"), entao toca normalmente.
 #
-#  Converte TODO .mp3 sob game\assets (musica + SFX) -> web\assets\<mesmo caminho>.
-#  NAO altera os assets desktop.
+#  Converte TODO .mp3 E .wav sob game\assets (musica + SFX) ->
+#  web\assets\<mesmo caminho>. NAO altera os assets desktop.
 #
 #  Uso:  .\reencode_audio_web.ps1            (64 kbps OGG, padrao)
 #        .\reencode_audio_web.ps1 -Kbps 48   (mais agressivo)
@@ -33,15 +34,18 @@ $ffmpeg = Find-Exe "ffmpeg"
 if (-not $ffmpeg) { Write-Host "ERRO: ffmpeg nao encontrado (winget install Gyan.FFmpeg)" -ForegroundColor Red; exit 1 }
 if (-not (Test-Path $Origem)) { Write-Host "ERRO: origem nao existe: $Origem" -ForegroundColor Red; exit 1 }
 
-Write-Host "== Audio WEB (OGG @ ${Kbps}k, nome .mp3): $Origem -> $Destino ==" -ForegroundColor Cyan
+Write-Host "== Audio WEB (OGG @ ${Kbps}k, mesmo nome .mp3/.wav): $Origem -> $Destino ==" -ForegroundColor Cyan
 
 $srcRoot = (Resolve-Path $Origem).Path
-$arquivos = Get-ChildItem $Origem -Recurse -Filter *.mp3
+# Varre .mp3 (musica + SFX) E .wav (SFX). Ambos viram conteudo OGG no destino.
+$arquivos = Get-ChildItem $Origem -Recurse -File |
+    Where-Object { $_.Extension -in '.mp3', '.wav' }
 $antes = 0.0; $depois = 0.0; $n = 0
 foreach ($f in $arquivos) {
     $rel = $f.FullName.Substring($srcRoot.Length).TrimStart('\')
     # Musica (pasta audio) -> .ogg REAL: mixer.music detecta por extensao no web.
-    # SFX (pasta sounds) -> mantem .mp3: mixer.Sound detecta pelo conteudo.
+    # SFX (pasta sounds) -> mantem a extensao original (.mp3/.wav): mixer.Sound
+    # detecta o OGG pelo conteudo (build usa --disable-sound-format-error).
     if ($rel -like 'audio\*') {
         $outRel = [System.IO.Path]::ChangeExtension($rel, '.ogg')
     } else {
@@ -50,8 +54,11 @@ foreach ($f in $arquivos) {
     $out = Join-Path (Join-Path $PSScriptRoot $Destino) $outRel
     New-Item -ItemType Directory -Force -Path (Split-Path $out) | Out-Null
 
-    # -f ogg força o container OGG mesmo com a extensão .mp3
-    & $ffmpeg -hide_banner -loglevel error -y -i $f.FullName -map 0:a:0 -c:a libvorbis -b:a "${Kbps}k" -f ogg $out
+    # -f ogg força o container OGG mesmo com a extensão .mp3/.wav.
+    # -ar 44100: libvorbis nao inicia o encoder em sample-rates muito baixos
+    #   (ex.: SFX 8-bit a 5512 Hz -> "encoder setup failed"); reamostrar p/ 44100
+    #   resolve E casa com o mixer web (sound.py fixa 44100 p/ evitar resample).
+    & $ffmpeg -hide_banner -loglevel error -y -i $f.FullName -map 0:a:0 -c:a libvorbis -ar 44100 -b:a "${Kbps}k" -f ogg $out
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) {
         Write-Host ("  ERRO em {0}" -f $rel) -ForegroundColor Red; continue
     }
