@@ -95,6 +95,7 @@ from .boss_context import BossUpdateContext, BossUpdateResult
 from .collision_protocols import Removable
 from .entity_context import EnemyUpdateContext
 from .hit_result import MeteorSpec
+from .targeting import enemy_center, is_targetable
 
 if TYPE_CHECKING:
     from ..entities.ship import Ship
@@ -996,6 +997,13 @@ class EntityManager:
 
     def _update_player_projectiles(self, dt: float) -> None:
         """Projéteis do jogador: bullets (com homing), homing dedicado, mini-ships, lasers."""
+        # Antes de mover, redistribui os alvos dos teleguiados (evita que todos
+        # convirjam no mesmo inimigo) e zera o alvo quando não há hostil em tela
+        # (a bala fica pairando até o próximo entrar — ver Bullet._update_homing).
+        homing = [b for b in self.bullets if b.homing]
+        if homing:
+            self._assign_homing_targets(homing)
+
         for b in self.bullets:
             b.update(dt, self._cached_all_enemies if b.homing else None)
 
@@ -1019,6 +1027,67 @@ class EntityManager:
             s.update(dt)
         for beam in self.plasma_beams:
             beam.update(dt)
+
+    def _assign_homing_targets(self, homing_bullets: list[Any]) -> None:
+        """Distribui alvos VISÍVEIS entre os tiros teleguiados, balanceando a carga.
+
+        Resolve duas queixas:
+        - Vários teleguiados convergindo no mesmo inimigo: cada bala sem alvo
+          escolhe o candidato menos sobrecarregado (empate → o mais próximo dela),
+          então uma rajada se espalha pelos hostis em vez de empilhar em um só.
+        - Sem inimigo em tela: o alvo vira ``None`` e a bala paira no lugar
+          (``Bullet._update_homing``), esperando o próximo entrar — não sobe para
+          fora da tela mirando formações ainda acima do topo.
+
+        Atribuição *sticky*: a bala mantém o alvo atual enquanto ele seguir vivo e
+        em tela, evitando que fique oscilando entre inimigos frame a frame.
+        """
+        # Candidatos: vivos, que podem tomar dano AGORA e dentro da tela (teste
+        # estrito — formações em y=-100 durante a entrada não contam).
+        centers: dict[int, tuple[float, float]] = {}
+        by_id: dict[int, Any] = {}
+        for e in self._cached_all_enemies:
+            if not is_targetable(e) or not self.is_on_screen(e):
+                continue
+            c = enemy_center(e)
+            if c is not None:
+                centers[id(e)] = c
+                by_id[id(e)] = e
+
+        if not by_id:
+            for b in homing_bullets:
+                b.target = None
+                b.assigned_target_id = None
+            return
+
+        load: dict[int, int] = {tid: 0 for tid in by_id}
+
+        # 1ª passada: retém atribuições ainda válidas e contabiliza a carga.
+        pending: list[Any] = []
+        for b in homing_bullets:
+            tid = b.assigned_target_id
+            if tid is not None and tid in by_id:
+                b.target = by_id[tid]
+                load[tid] += 1
+            else:
+                pending.append(b)
+
+        # 2ª passada: balanceia as balas órfãs — menos carregado, depois mais perto.
+        for b in pending:
+            bx = b.x + b.w / 2
+            by = b.y + b.h / 2
+            best_id = None
+            best_key: tuple[int, float] | None = None
+            for tid, (cx, cy) in centers.items():
+                dx = cx - bx
+                dy = cy - by
+                key = (load[tid], dx * dx + dy * dy)
+                if best_key is None or key < best_key:
+                    best_key = key
+                    best_id = tid
+            b.target = by_id[best_id]
+            b.assigned_target_id = best_id
+            load[best_id] += 1
 
     def _update_enemy_projectiles(self, enemy_dt: float) -> None:
         """Projéteis inimigos: alien/serpent/boss/eye (todos respeitam freeze)."""

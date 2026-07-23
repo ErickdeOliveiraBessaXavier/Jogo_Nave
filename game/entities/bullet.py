@@ -6,13 +6,23 @@ import pygame
 from ..core import colors
 from ..core.config import config as Config
 from ..core.player_tint import player_shot_color
+from ..core.visual_quality import visual_quality as vq
 from ..core.upgrades_config import (
     GIANT_SHOT_SPEED_MULTIPLIER,
     GIANT_SHOT_SQUARENESS,
+    giant_visual_scale,
 )
+from ..systems.targeting import target_point
 
 # Velocidade de rastreamento do tiro teleguiado (px/s), antes do Giant Shot.
 _HOMING_BASE_SPEED: float = 300.0
+
+# Giro do '+' no próprio eixo (graus/s). Em VIAGEM (perseguindo um alvo) gira no
+# ritmo de sempre — 1 volta/s. Em ESPERA (sem inimigo em tela, pairando no
+# lugar) gira mais rápido: parado, o giro lento de um '+' quase simétrico lê como
+# estático; acelerar deixa claro que a bala está viva, à espreita do próximo.
+_HOMING_SPIN_SPEED: float = 360.0
+_HOMING_IDLE_SPIN_SPEED: float = 900.0
 
 
 # NOTA SOBRE OS CACHES DESTE MÓDULO
@@ -51,9 +61,11 @@ def _get_fantasma_surface(w: int, h: int, player_index: int) -> pygame.Surface:
 # Cache estático de frames pré-rotacionados do tiro teleguiado.
 # 24 frames = 15° por frame; suficiente para 360°/s a 60fps.
 # Cada frame é uma surface pequena (~20x20). Total ~10 KB de memória.
-# Chave: (player_index, explosive).
+# Chave: (player_index, explosive, scale_key) — `scale_key` distingue o tiro
+# normal do Giant Shot (combinação teleguiado + tiro aumentado), quantizado
+# em 1 casa para não estourar o cache com floats quase iguais.
 _HOMING_NUM_FRAMES: int = 24
-_HOMING_FRAMES: Dict[Tuple[int, bool], List[pygame.Surface]] = {}
+_HOMING_FRAMES: Dict[Tuple[int, bool, float], List[pygame.Surface]] = {}
 
 
 def _build_homing_base_surface(
@@ -89,18 +101,31 @@ def _build_homing_base_surface(
     return surf
 
 
-def _get_homing_frames(player_index: int, explosive: bool) -> List[pygame.Surface]:
-    """Frames rotacionados do teleguiado, memoizados por (jogador, explosivo).
+def _get_homing_frames(
+    player_index: int, explosive: bool, scale: float = 1.0
+) -> List[pygame.Surface]:
+    """Frames rotacionados do teleguiado, memoizados por (jogador, explosivo, escala).
 
     Renderizados sob demanda no primeiro draw — não no import — para garantir
     que o display já esteja inicializado quando o convert_alpha rodar.
+
+    `scale` (> 1.0 quando o Giant Shot está ativo) engorda a sprite para casar
+    com o hitbox aumentado, tornando visível a combinação teleguiado + tiro
+    grande. A escala é aplicada na surface base ANTES da rotação, para as bordas
+    rotacionadas saírem mais suaves.
     """
-    key = (player_index, explosive)
+    scale_key = round(scale, 1)
+    key = (player_index, explosive, scale_key)
     frames = _HOMING_FRAMES.get(key)
     if frames is not None:
         return frames
 
     base = _build_homing_base_surface(explosive, player_index)
+    if scale_key != 1.0:
+        bw, bh = base.get_size()
+        base = pygame.transform.scale(
+            base, (max(1, round(bw * scale_key)), max(1, round(bh * scale_key)))
+        )
     step = 360.0 / _HOMING_NUM_FRAMES
     frames = []
     for i in range(_HOMING_NUM_FRAMES):
@@ -161,14 +186,15 @@ def _get_berserk_frames(w: int, h: int, player_index: int) -> List[pygame.Surfac
 
 
 # Cache estático do corpo do tiro explosivo (outer + body sem o core pulsante).
-# Chave: (low_ammo_blink_on, player_index). O core e os sparks ficam dinâmicos.
-_EXPLOSIVE_BODY_CACHE: Dict[Tuple[bool, int], pygame.Surface] = {}
+# Chave: (low_ammo_blink_on, player_index, radius). O `radius` cresce com o
+# Giant Shot (combinação explosivo + tiro aumentado); o core e os sparks ficam
+# dinâmicos.
+_EXPLOSIVE_BODY_CACHE: Dict[Tuple[bool, int, int], pygame.Surface] = {}
 
 
 def _build_explosive_body_surface(
-    low_ammo_blink_on: bool, player_index: int
+    low_ammo_blink_on: bool, player_index: int, radius: int = 5
 ) -> pygame.Surface:
-    radius = 5
     surf_size = (radius + 1) * 2 + 2
     center = surf_size // 2
     surf = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
@@ -191,13 +217,54 @@ def _build_explosive_body_surface(
     return surf
 
 
-def _get_explosive_body(low_ammo_blink_on: bool, player_index: int) -> pygame.Surface:
-    key = (low_ammo_blink_on, player_index)
+def _get_explosive_body(
+    low_ammo_blink_on: bool, player_index: int, radius: int = 5
+) -> pygame.Surface:
+    key = (low_ammo_blink_on, player_index, radius)
     cached = _EXPLOSIVE_BODY_CACHE.get(key)
     if cached is None:
-        cached = _build_explosive_body_surface(low_ammo_blink_on, player_index)
+        cached = _build_explosive_body_surface(low_ammo_blink_on, player_index, radius)
         _EXPLOSIVE_BODY_CACHE[key] = cached
     return cached
+
+
+# Halo pulsante ('respiração') dos tiros de power-up. Sprite radial cacheada por
+# (raio, cor, passo) — o `passo` quantiza a fase do pulso em `_GLOW_STEPS`
+# níveis, então o brilho "respira" trocando de sprite cacheada em vez de alocar
+# por frame. Um blit por bala. Chave inclui a cor (já com a matiz do jogador).
+_GLOW_STEPS: int = 5
+_GLOW_CACHE: Dict[Tuple[int, Tuple[int, int, int], int], pygame.Surface] = {}
+
+
+def _get_power_glow(
+    radius: int, color: Tuple[int, int, int], step: int
+) -> pygame.Surface:
+    """Halo radial suave da cor pedida, com brilho central no nível `step`.
+
+    Construído do anel externo (alpha ~0) ao centro (alpha `peak`), com queda
+    quadrática — dá um degradê macio. Renderizado sob demanda no 1º uso (display
+    já inicializado) e memoizado.
+    """
+    key = (radius, color, step)
+    cached = _GLOW_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    size = radius * 2
+    surf = pygame.Surface((size, size), pygame.SRCALPHA)
+    peak = 30 + int((step / _GLOW_STEPS) * 130)  # alpha central pulsa ~30..160
+    r_col, g_col, b_col = color
+    for r in range(radius, 0, -1):
+        t = r / radius
+        a = int(peak * (1.0 - t) * (1.0 - t))
+        if a > 0:
+            pygame.draw.circle(surf, (r_col, g_col, b_col, a), (radius, radius), r)
+    try:
+        surf = surf.convert_alpha()
+    except pygame.error:
+        pass
+    _GLOW_CACHE[key] = surf
+    return surf
 
 
 class Bullet:
@@ -235,7 +302,11 @@ class Bullet:
         # `_configure_shape_and_velocity` (Giant Shot acelera) — o valor aqui é
         # só o default antes daquela chamada.
         self.homing_speed = _HOMING_BASE_SPEED
-        self.homing_turn_rate = 4.0  # Taxa de rotação (radianos/s)
+        self.homing_turn_rate = 4.0  # Curva de perseguição (radianos/s)
+        # Direção de voo do teleguiado (radianos). É virada gradualmente em
+        # direção ao alvo (limite = homing_turn_rate) para o rastreio ser
+        # orgânico e não mudar de rumo de forma abrupta. None = ainda não voou.
+        self.homing_heading: Optional[float] = None
         self.rotation_angle = 0.0  # Ângulo de rotação visual (graus)
         self.is_side_scroll = is_side_scroll  # Se está em modo side-scroll
         self.laser_sound_channel: Optional[pygame.mixer.Channel] = None
@@ -295,6 +366,7 @@ class Bullet:
         self.active = True
         self.target = None
         self.assigned_target_id = None
+        self.homing_heading = None
         self.rotation_angle = 0.0
         self.laser_sound_channel = None
         self.vx = 0.0
@@ -307,12 +379,17 @@ class Bullet:
         self._sync_rect()
 
     def update(self, dt: float, enemies: Optional[List[Any]] = None) -> None:
-        if self.homing and enemies:
-            self._update_homing(dt, enemies)
-            # Rotacionar o tiro teleguiado
-            self.rotation_angle += 360.0 * dt  # Uma rotação completa por segundo
-            if self.rotation_angle >= 360.0:
-                self.rotation_angle -= 360.0
+        if self.homing:
+            # `enemies` pode vir vazio (nenhum hostil): ainda assim entramos aqui
+            # para pairar no lugar, em vez de cair no `else` e subir para fora da
+            # tela. O alvo é atribuído pelo coordenador (EntityManager).
+            self._update_homing(dt)
+            # Gira no próprio eixo sempre — mais rápido enquanto espera (sem
+            # alvo), para pairar girando em vez de parecer congelado.
+            spin = (
+                _HOMING_IDLE_SPIN_SPEED if self.target is None else _HOMING_SPIN_SPEED
+            )
+            self.rotation_angle = (self.rotation_angle + spin * dt) % 360.0
         else:
             # Berserk: gira no próprio eixo enquanto viaja. Fica fora do `if
             # homing` acima porque as duas rotações são independentes — um tiro
@@ -338,45 +415,72 @@ class Bullet:
         if self.x < -50 or self.x > Config.SCREEN_WIDTH + 50:
             self.dead = True
 
-    def _update_homing(self, dt: float, enemies: List[Any]) -> None:
-        """Atualiza a posição do tiro teleguiado."""
-        # Se não tem alvo ou alvo está morto, procura novo alvo
-        if not self.target or getattr(self.target, "dead", True):
-            # Tentar encontrar o alvo original atribuído primeiro
-            if self.assigned_target_id is not None:
-                for enemy in enemies:
-                    if id(enemy) == self.assigned_target_id and not getattr(
-                        enemy, "dead", True
-                    ):
-                        self.target = enemy
-                        break
+    def _update_homing(self, dt: float) -> None:
+        """Persegue o alvo atribuído pelo coordenador (``EntityManager``).
 
-            # Se não encontrou o alvo atribuído, procura o mais próximo
-            if not self.target or getattr(self.target, "dead", True):
-                self.target = self._find_closest_enemy(enemies)
-                # Atualizar o ID do alvo atribuído
-                if self.target:
-                    self.assigned_target_id = id(self.target)
+        A seleção de alvo vive fora da bala: é balanceada entre todos os
+        teleguiados e restrita a inimigos em tela (ver
+        ``EntityManager._assign_homing_targets``). Aqui a bala só age sobre o
+        ``self.target`` já resolvido.
 
-        if self.target:
-            # Calcular direção para o alvo
-            target_x = self.target.x + getattr(self.target, "w", 0) / 2
-            target_y = self.target.y + getattr(self.target, "h", 0) / 2
+        Sem alvo — nenhum inimigo visível — a bala **paira no lugar**, esperando
+        o próximo entrar; não sobe para fora da tela.
 
-            dx = target_x - self.x
-            dy = target_y - self.y
-            distance = (dx * dx + dy * dy) ** 0.5
+        A perseguição é **orgânica**: em vez de apontar direto ao alvo a cada
+        frame (virada instantânea), a bala vira a própria direção de voo
+        (``homing_heading``) em direção ao alvo, limitada por
+        ``homing_turn_rate``. Ao trocar de alvo ou o alvo desviar, ela curva
+        suavemente em vez de mudar de rumo de repente.
+        """
+        target = self.target
+        if target is not None and getattr(target, "dead", True):
+            target = self.target = None
 
-            if distance > 0:
-                # Normalizar direção e mover
-                dx /= distance
-                dy /= distance
+        if target is None:
+            # Idle: zera a velocidade para que, parada, não seja morta pela
+            # checagem de fora-da-tela no fim de `update`. O heading é preservado
+            # para curvar a partir dele quando um novo alvo aparecer.
+            self.vx = 0.0
+            self.vy = 0.0
+            return
 
-                self.x += dx * self.homing_speed * dt
-                self.y += dy * self.homing_speed * dt
-        else:
-            # Sem alvo, move para cima normalmente
-            self.y -= Config.BULLET_SPEED * dt
+        # Ponto de mira preciso (segue a geometria real de bosses via
+        # collision_circle; cai para o centro do rect nos inimigos comuns).
+        aim = target_point(target)
+        if aim is None:
+            return
+        dx = aim[0] - self.x
+        dy = aim[1] - self.y
+        distance = (dx * dx + dy * dy) ** 0.5
+        if distance <= 0:
+            return
+
+        desired = math.atan2(dy, dx)
+
+        # 1º frame de voo: alinha o heading à direção com que a bala nasceu (ou
+        # já ao alvo, se nasceu parada) — evita uma curva inicial fantasma.
+        if self.homing_heading is None:
+            if self.vx != 0.0 or self.vy != 0.0:
+                self.homing_heading = math.atan2(self.vy, self.vx)
+            else:
+                self.homing_heading = desired
+
+        # Vira o heading em direção ao alvo, no máximo homing_turn_rate*dt.
+        # O delta é normalizado para (-π, π] para virar sempre pelo lado curto.
+        diff = (desired - self.homing_heading + math.pi) % (2 * math.pi) - math.pi
+        max_turn = self.homing_turn_rate * dt
+        if diff > max_turn:
+            diff = max_turn
+        elif diff < -max_turn:
+            diff = -max_turn
+        self.homing_heading += diff
+
+        hx = math.cos(self.homing_heading)
+        hy = math.sin(self.homing_heading)
+        self.vx = hx * self.homing_speed
+        self.vy = hy * self.homing_speed
+        self.x += hx * self.homing_speed * dt
+        self.y += hy * self.homing_speed * dt
 
     def _configure_shape_and_velocity(
         self, direction: tuple[float, float] | None
@@ -450,40 +554,72 @@ class Bullet:
         h = mult * (base_h ** (1.0 - k)) * (mean**k)
         return max(1, round(w)), max(1, round(h))
 
-    def _find_closest_enemy(self, enemies: List[Any]) -> Optional[Any]:
-        """Encontra o inimigo mais próximo disponível."""
-        closest = None
-        min_distance = float("inf")
-
-        for enemy in enemies:
-            if getattr(enemy, "dead", True):
-                continue
-
-            enemy_x = enemy.x + getattr(enemy, "w", 0) / 2
-            enemy_y = enemy.y + getattr(enemy, "h", 0) / 2
-
-            dx = enemy_x - self.x
-            dy = enemy_y - self.y
-            distance = (dx * dx + dy * dy) ** 0.5
-
-            if distance < min_distance:
-                min_distance = distance
-                closest = enemy
-
-        return closest
-
     def assign_target(self, target: Any) -> None:
         """Atribui um alvo específico ao tiro teleguiado."""
         self.target = target
         self.assigned_target_id = id(target) if target else None
 
     def draw(self, surface: pygame.Surface):
+        # Halo pulsante ANTES do corpo (fica atrás do tiro).
+        self._draw_power_pulse(surface)
         if self.homing:
             self._draw_homing_bullet(surface)
         elif self.explosive:
             self._draw_explosive_bullet(surface)
         else:
             self._draw_ship_specific_bullet(surface)
+
+    def _draw_power_pulse(self, surface: pygame.Surface) -> None:
+        """Halo pulsante ('respiração') dos tiros de power-up.
+
+        Dá vida às três habilidades — sobretudo ao Giant Shot, que sem isto é só
+        um tiro grande e estático. Cor por fantasia (explosivo laranja >
+        teleguiado verde > gigante âmbar) e raio proporcional ao tiro (o gigante
+        respira maior). Um blit de sprite cacheada por bala; gateado pela
+        Qualidade Visual — some no Baixo, encolhe no Médio.
+        """
+        if not vq.glow_enabled:
+            return
+        is_giant = self.size_multiplier > 1.0
+        if not (self.explosive or self.homing or is_giant):
+            return
+
+        # Cor + ritmo por fantasia. Prioridade quando combinados: o efeito mais
+        # dramático manda na cor do halo.
+        if self.explosive:
+            base_color = (255, 120, 0)  # laranja de pavio
+            speed = 0.009
+        elif self.homing:
+            base_color = (0, 255, 100)  # verde do '+'
+            # Em espera (sem alvo) pulsa mais rápido — casa com o giro idle.
+            speed = 0.011 if self.target is None else 0.006
+        else:
+            base_color = (255, 200, 90)  # âmbar do Giant Shot
+            speed = 0.005
+        color = player_shot_color(base_color, self.player_index)
+
+        pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() * speed)  # 0..1
+        step = int(round(pulse * _GLOW_STEPS))
+
+        radius = int(max(self.w, self.h) * 1.4 * vq.glow_scale)
+        radius = max(4, min(radius, 60))
+        radius -= radius % 2  # quantiza p/ limitar o cache
+
+        glow = _get_power_glow(radius, color, step)
+        cx = self.x + self.w / 2
+        cy = self.y + self.h / 2
+        surface.blit(glow, (int(cx - radius), int(cy - radius)))
+
+    def _breathing_rect(self, rect: pygame.Rect) -> pygame.Rect:
+        """Rect visual do Giant Shot pulsando ±12% em torno do centro.
+
+        Retorna uma CÓPIA inflada (``rect.inflate`` não muta o original), então o
+        hitbox em ``self._rect`` fica intacto — é só respiração cosmética. Ritmo
+        lento, alinhado ao halo âmbar do gigante. A amplitude é generosa (±12%)
+        porque, arredondada em pixels, uma dose menor sumiria nos tiros pequenos.
+        """
+        factor = 0.12 * math.sin(pygame.time.get_ticks() * 0.005)
+        return rect.inflate(round(rect.width * factor), round(rect.height * factor))
 
     def _draw_ship_specific_bullet(self, surface: pygame.Surface):
         """Desenha o projétil básico customizado conforme a nave.
@@ -492,6 +628,11 @@ class Bullet:
         e o P2 a mesma cor com a matiz girada, casando com o casco ciano dele.
         """
         rect = self.rect
+        # Giant Shot "respira": o corpo pulsa ±6% no tamanho VISUAL (o hitbox
+        # segue em self._rect, intacto). Berserk fica de fora — já gira no eixo e
+        # o tamanho variável estouraria o cache de frames pré-rotacionados.
+        if self.size_multiplier > 1.0 and self.ship_id != "berserk":
+            rect = self._breathing_rect(rect)
         center = rect.center
         tint = self.player_index
 
@@ -572,7 +713,11 @@ class Bullet:
     def _draw_homing_bullet(self, surface: pygame.Surface):
         """Desenha o tiro teleguiado como um '+' pixelizado que gira.
         Usa frames pré-rotacionados — 1 blit em vez de 26 draw.circle."""
-        frames = _get_homing_frames(self.player_index, self.explosive)
+        frames = _get_homing_frames(
+            self.player_index,
+            self.explosive,
+            giant_visual_scale(self.size_multiplier),
+        )
         idx = int(self.rotation_angle * _HOMING_NUM_FRAMES / 360.0) % _HOMING_NUM_FRAMES
         frame = frames[idx]
         fw, fh = frame.get_size()
@@ -587,7 +732,11 @@ class Bullet:
         center_y = self.y + self.h / 2
         cx_int = int(center_x)
         cy_int = int(center_y)
-        radius = 5
+        # Giant Shot engorda o hitbox (~3x); a granada acompanha pela raiz para
+        # crescer visível sem virar um borrão. `scale = 1.0` (sem Giant Shot)
+        # mantém o raio 5 original.
+        scale = giant_visual_scale(self.size_multiplier)
+        radius = max(1, round(5 * scale))
 
         ticks = pygame.time.get_ticks()  # 1 chamada em vez de 3
         tint = self.player_index
@@ -601,10 +750,10 @@ class Bullet:
                 core_color = (255, 150, 50)
             else:
                 core_color = (255, int(200 * pulse) + 55, 0)
-            body_surf = _get_explosive_body(blink_on, tint)
+            body_surf = _get_explosive_body(blink_on, tint, radius)
         else:
             core_color = (255, int(200 * pulse) + 55, 0)
-            body_surf = _get_explosive_body(False, tint)
+            body_surf = _get_explosive_body(False, tint, radius)
 
         # 1 blit em vez de 2 draw.circle (outer + body).
         bw, bh = body_surf.get_size()
@@ -612,7 +761,10 @@ class Bullet:
 
         # Núcleo pulsante (dinâmico — fica fora do cache).
         pygame.draw.circle(
-            surface, player_shot_color(core_color, tint), (cx_int, cy_int), radius - 2
+            surface,
+            player_shot_color(core_color, tint),
+            (cx_int, cy_int),
+            max(1, radius - 2),
         )
 
         # Sparks: posição dinâmica, mantém draw.circle.
@@ -623,10 +775,13 @@ class Bullet:
             (255, 100, 100) if self.low_ammo else (255, 255, 100), tint
         )
         angle_step = 2 * math.pi / num_sparks
+        spark_dot = max(1, round(scale))
         cos = math.cos
         sin = math.sin
         for i in range(num_sparks):
             angle = time_offset + i * angle_step
             spark_x = center_x + cos(angle) * spark_radius
             spark_y = center_y + sin(angle) * spark_radius
-            pygame.draw.circle(surface, spark_color, (int(spark_x), int(spark_y)), 1)
+            pygame.draw.circle(
+                surface, spark_color, (int(spark_x), int(spark_y)), spark_dot
+            )

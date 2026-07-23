@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import List
 
 import pygame
@@ -95,6 +96,21 @@ GIANT_SHOT_SQUARENESS: float = 0.5
 # rápido. Só vale enquanto o upgrade dura — `Config.BULLET_SPEED` (o tiro
 # normal, todas as naves) fica intacto.
 GIANT_SHOT_SPEED_MULTIPLIER: float = 1.15
+
+
+def giant_visual_scale(size_multiplier: float) -> float:
+    """Fator visual (sprite do tiro e efeito de impacto) sob o Giant Shot.
+
+    O hitbox já cresce pelo `size_multiplier` cheio (~3x via
+    `GIANT_SHOT_SIZE_MULTIPLIER`). Sprites pequenas — o '+' do teleguiado, a
+    granada do explosivo, o burst de impacto — ficariam exageradas nesse fator,
+    então tomamos a raiz quadrada: crescem de forma perceptível e coerente com o
+    hitbox maior, sem virar um borrão que engole a tela. `1.0` (sem Giant Shot)
+    passa reto — fonte única para bala e impacto não divergirem.
+    """
+    if size_multiplier <= 1.0:
+        return 1.0
+    return math.sqrt(size_multiplier)
 
 # Parâmetros de balanceamento do Air Strike
 AIR_STRIKE_BOMB_COUNT: int = 20  # Bombas por ativação da ultimate

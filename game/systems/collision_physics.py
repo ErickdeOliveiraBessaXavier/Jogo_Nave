@@ -189,6 +189,7 @@ class CollisionPhysics:
         entity_manager: "EntityManager",
         floating_scores: list[FloatingScore] | None = None,
         impact: ImpactStyle | None = None,
+        impact_scale: float = 1.0,
     ) -> HitResult:
         """Roteador único: chama `target.on_hit` e materializa o HitResult.
 
@@ -197,6 +198,10 @@ class CollisionPhysics:
         inimigo pede (ALIEN verde, SLIME roxo...), no burst de sempre. É o que
         preserva a identidade de tema dos hostis, inclusive a de quem morre no
         primeiro tiro. None = efeito genérico de sempre.
+
+        `impact_scale` (> 1.0 sob Giant Shot) engorda o burst do impacto da nave
+        junto com o tiro aumentado. Só afeta o efeito estético NÃO-letal — a
+        explosão de morte do hostil segue no tamanho que ele pede.
         """
         # Escudo temporário (enemy_shield): absorve antes do HP. Som de quebra
         # quando o escudo é esgotado; clink quando aguenta. Se engole o hit
@@ -221,10 +226,15 @@ class CollisionPhysics:
 
         if result.explosion_size > 0:
             if impact is not None and not result.killed:
+                scaled_size = (
+                    result.explosion_size
+                    if impact_scale == 1.0
+                    else max(1, round(result.explosion_size * impact_scale))
+                )
                 entity_manager.spawn_explosion(
                     hit_x,
                     hit_y,
-                    size=result.explosion_size,
+                    size=scaled_size,
                     explosion_type=impact.palette,
                     pattern=impact.pattern,
                 )

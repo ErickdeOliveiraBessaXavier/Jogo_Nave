@@ -20,7 +20,11 @@ from ..entities.eye_laser import EyeLaser
 from ..entities.fire_zone import FireZone
 from ..entities.floating_score import FloatingScore
 from ..entities.homing_bullet import HomingBullet
-from ..entities.impact_styles import ImpactStyle, impact_for_projectile
+from ..entities.impact_styles import (
+    ImpactStyle,
+    impact_for_projectile,
+    impact_scale_for_projectile,
+)
 from ..entities.Inimigos_Tema_Cidade.neon_bolt import NeonBolt
 from ..entities.electric_field_zone import ElectricFieldZone
 from ..entities.ice_poison_zone import IcePoisonZone
@@ -319,9 +323,17 @@ class Collisions:
         entity_manager: "EntityManager",
         floating_scores: list[FloatingScore] | None = None,
         impact: ImpactStyle | None = None,
+        impact_scale: float = 1.0,
     ) -> HitResult:
         return self.physics.apply_hit(
-            target, damage, hit_x, hit_y, entity_manager, floating_scores, impact
+            target,
+            damage,
+            hit_x,
+            hit_y,
+            entity_manager,
+            floating_scores,
+            impact,
+            impact_scale,
         )
 
     def _apply_ship_contact(
@@ -422,6 +434,7 @@ class Collisions:
                 entity_manager,
                 floating_scores,
                 impact=impact_for_projectile(proj),
+                impact_scale=impact_scale_for_projectile(proj),
             )
             score_gain += result.points
 
@@ -898,6 +911,7 @@ class Collisions:
             # Uma vez por bala, não por inimigo atingido: o estilo não muda
             # entre os alvos da mesma bala (piercing acerta vários).
             impact = impact_for_projectile(b)
+            impact_scale = impact_scale_for_projectile(b)
 
             for enemy in potential_enemies:
                 if enemy.dead:
@@ -910,6 +924,7 @@ class Collisions:
                         b.y,
                         entity_manager,
                         impact=impact,
+                        impact_scale=impact_scale,
                     )
                     score_gain += result.points
                     if result.killed:

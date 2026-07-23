@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 from ..core.player_tint import player_shot_color
+from ..core.upgrades_config import giant_visual_scale
 from .explosion import ImpactPattern
 
 Palette = Tuple[Tuple[int, int, int], ...]
@@ -138,3 +139,14 @@ def impact_for_projectile(projectile: object) -> Optional[ImpactStyle]:
         return None
 
     return impact_style(ship_id, getattr(owner, "player_index", 0))
+
+
+def impact_scale_for_projectile(projectile: object) -> float:
+    """Fator de tamanho do impacto do projétil sob o Giant Shot.
+
+    Lê o `size_multiplier` da bala (cheio ~3x quando o Giant Shot está ativo) e o
+    passa pela mesma suavização visual das sprites, para o burst de impacto
+    crescer junto com o tiro aumentado. Projéteis sem `size_multiplier` (ex.:
+    teleguiado do Caçador) caem em 1.0 — impacto do tamanho de sempre.
+    """
+    return giant_visual_scale(getattr(projectile, "size_multiplier", 1.0))
