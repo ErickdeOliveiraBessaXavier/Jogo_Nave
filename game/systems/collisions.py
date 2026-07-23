@@ -935,16 +935,23 @@ class Collisions:
 
                     if bullet_chain_active:
                         already_hit: set[int] = set()
+                        # Combos com a família de modificadores de tiro:
+                        # Giant → +1 salto (arco mais longo); Explosive → cada
+                        # salto detona uma mini-explosão (teia de estilhaços).
+                        is_giant_bullet = getattr(b, "size_multiplier", 1.0) > 1.0
+                        extra_jumps = 1 if is_giant_bullet else 0
                         eg, ed, ee = self._trigger_chain_shot(
                             hit_x=b.x,
                             hit_y=b.y,
                             source_enemy=enemy,
                             bullet_damage=getattr(b, "damage", 1),
-                            jumps_left=config_instance.CHAIN_SHOT_MAX_JUMPS,
+                            jumps_left=config_instance.CHAIN_SHOT_MAX_JUMPS
+                            + extra_jumps,
                             already_hit=already_hit,
                             enemy_grid=enemy_grid,
                             entity_manager=entity_manager,
                             owner_ship=owner,
+                            explosive=getattr(b, "explosive", False),
                         )
                         score_gain += eg
                         destroyed_count += ed
@@ -1404,6 +1411,7 @@ class Collisions:
         enemy_grid: "SpatialGrid[Any]",
         entity_manager: "EntityManager",
         owner_ship: Any | None = None,
+        explosive: bool = False,
     ) -> tuple[int, int, list[tuple[float, float, int]]]:
         """Executa os saltos do Chain Shot iterativamente.
 
@@ -1411,6 +1419,12 @@ class Collisions:
         que ainda não foi atingido nesta cadeia, aplica dano escalado e cria o
         efeito visual ChainLightning. Kills propagados são creditados ao
         `owner_ship` (mesma nave que disparou a bala original).
+
+        Combo Chain + Explosive: quando ``explosive`` é True (a bala original é
+        explosiva), cada salto também solta uma mini-explosão AoE no inimigo
+        encadeado — o raio elétrico vira uma teia de estilhaços. Usa o mesmo
+        ``ExplosiveEffect`` do tiro explosivo, com raio/dano reduzidos, então o
+        dano em área é resolvido pelo passe ``explosive_effects_vs_enemies``.
         """
         score_gain = 0
         destroyed_count = 0
@@ -1472,6 +1486,21 @@ class Collisions:
                     owner_ship.register_kill()
                 if result.points > 0:
                     score_events.append((best_cx, best_cy, result.points))
+
+            # Combo Chain + Explosive: cada salto detona uma mini-explosão. Raio e
+            # dano reduzidos (~60%/50% do tiro explosivo) para o combo ser um
+            # bônus de dispersão, não um apagão de tela. O AoE em si é resolvido
+            # no passe explosive_effects_vs_enemies.
+            if explosive:
+                mini_radius = CollisionConstants.EXPLOSIVE_BULLET_RADIUS * 0.6
+                entity_manager.spawn_explosive_effect(
+                    best_cx,
+                    best_cy,
+                    radius=mini_radius,
+                    damage=EXPLOSIVE_BULLET_DAMAGE // 2,
+                    color=(255, 140, 40),
+                )
+                entity_manager.spawn_explosion(best_cx, best_cy, size=int(mini_radius // 2))
 
             current_x = best_cx
             current_y = best_cy

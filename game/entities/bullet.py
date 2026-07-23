@@ -572,16 +572,19 @@ class Bullet:
     def _draw_power_pulse(self, surface: pygame.Surface) -> None:
         """Halo pulsante ('respiração') dos tiros de power-up.
 
-        Dá vida às três habilidades — sobretudo ao Giant Shot, que sem isto é só
-        um tiro grande e estático. Cor por fantasia (explosivo laranja >
-        teleguiado verde > gigante âmbar) e raio proporcional ao tiro (o gigante
-        respira maior). Um blit de sprite cacheada por bala; gateado pela
-        Qualidade Visual — some no Baixo, encolhe no Médio.
+        Dá vida às habilidades — sobretudo ao Giant Shot, que sem isto é só um
+        tiro grande e estático. Cor por fantasia (explosivo laranja > chain
+        azul-elétrico > teleguiado verde > gigante âmbar) e raio proporcional ao
+        tiro (o gigante respira maior). Um blit de sprite cacheada por bala;
+        gateado pela Qualidade Visual — some no Baixo, encolhe no Médio.
         """
         if not vq.glow_enabled:
             return
         is_giant = self.size_multiplier > 1.0
-        if not (self.explosive or self.homing or is_giant):
+        # Chain Lightning vive na nave (has_chain_shot), não na bala: lê o dono,
+        # como o próprio sistema de colisão faz para encadear.
+        is_chain = bool(getattr(self.owner_ship, "has_chain_shot", False))
+        if not (self.explosive or is_chain or self.homing or is_giant):
             return
 
         # Cor + ritmo por fantasia. Prioridade quando combinados: o efeito mais
@@ -589,6 +592,9 @@ class Bullet:
         if self.explosive:
             base_color = (255, 120, 0)  # laranja de pavio
             speed = 0.009
+        elif is_chain:
+            base_color = (70, 170, 255)  # azul-elétrico do raio
+            speed = 0.014  # tremular rápido, nervoso
         elif self.homing:
             base_color = (0, 255, 100)  # verde do '+'
             # Em espera (sem alvo) pulsa mais rápido — casa com o giro idle.
