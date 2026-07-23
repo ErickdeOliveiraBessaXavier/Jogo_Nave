@@ -138,7 +138,6 @@ Output/
 *.mov
 
 # Documentos de desenvolvimento e planejamento (mantidos só localmente)
-CLAUDE.md
 PLANO_*.md
 NOVO_PLANO_DE_REVISÃO.MD
 código_teste/
