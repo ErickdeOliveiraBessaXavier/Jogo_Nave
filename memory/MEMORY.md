@@ -6,6 +6,7 @@ Versionado junto com o repositório.
 
 ## Arquitetura e código
 
+- [entities-folder-structure](entities-folder-structure.md) — game/entities/ organizado por responsabilidade (player/projectiles/effects/bosses/pickups/_shared) + inimigos por tema (enemies/space|city|mountain); onde colocar arquivo novo e regra dos pontos relativos.
 - [scene-decomposition-pattern](scene-decomposition-pattern.md) — extrair fluxos da PlayingScene em sistemas próprios (RevivalSystem/UpgradeSelector); regra do grep-completo ao migrar estado (input handler lê estado cru e quebra com testes verdes).
 - [fire-timer-cadence-architecture](fire-timer-cadence-architecture.md) — cadência de disparo por FireTimer/carry_interval; `timer = INTERVALO` é proibido (descarta a sobra do frame). Lista o que NÃO migrar.
 - [targeting-via-target-point](targeting-via-target-point.md) — mira/seleção de inimigo usa target_point + is_targetable (systems/targeting.py), nunca x+w/2; x+w/2 quebra no boss Serpente (bug recorrente).

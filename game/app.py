@@ -142,9 +142,9 @@ class GameApp:
 
         # Registrar sprites para pré-carregamento
         from .core.sprite_loader import sprite_loader
-        from .entities.mountain_serpent_boss import MountainSerpentBoss, SerpentBlock
-        from .entities.slime_boss import SlimeBoss
-        from .entities.satellite import Satellite
+        from .entities.bosses.mountain_serpent_boss import MountainSerpentBoss, SerpentBlock
+        from .entities.bosses.slime_boss import SlimeBoss
+        from .entities.enemies.space.satellite import Satellite
 
         sprite_loader.register("slime_boss", SlimeBoss.load_frames_for_preload)
         sprite_loader.register(

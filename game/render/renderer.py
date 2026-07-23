@@ -29,7 +29,7 @@ from .backgrounds import (
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from ..entities.ship import Ship
+    from ..entities.player.ship import Ship
 
 
 class Renderer:

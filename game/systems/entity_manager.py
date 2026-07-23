@@ -6,90 +6,90 @@ import pygame
 from ..core.config import config as Config
 from ..core.spatial_grid import SpatialGrid
 from ..core.upgrades_config import EMP_LINGER_DURATION, EMP_SLOW_FACTOR
-from ..entities.air_strike_bomb import AirStrikeBomb
-from ..entities.alien import Alien
-from ..entities.alien_bullet import AlienBullet
-from ..entities.black_hole import BlackHole
-from ..entities.boss import Boss
-from ..entities.boss_laser import BossLaser
-from ..entities.boss_square import BossSquare
-from ..entities.bot_elemental import ElementalRobot, EnergyOrb
-from ..entities.bullet import Bullet
-from ..entities.bullet_pool import BulletPool
-from ..entities.cannon_mine import CannonMine
-from ..entities.cannon_tower import CannonTower
-from ..entities.chain_lightning import ChainLightning
-from ..entities.cloud_archmage_boss import CloudArchmageBoss
-from ..entities.emp_wave import EMPWave
-from ..entities.explosion import Explosion, ExplosionType, ImpactPattern
-from ..entities.explosion_pool import ExplosionPool
-from ..entities.explosive_effect import ExplosiveEffect
-from ..entities.explosive_mine import ExplosiveMine
-from ..entities.eye_enemy import EyeEnemy
-from ..entities.eye_laser import EyeLaser
-from ..entities.Inimigos_Tema_Cidade.captor_emp import CaptorEMP
-from ..entities.Inimigos_Tema_Cidade.core_implosion import CoreImplosion
-from ..entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
-from ..entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
-from ..entities.Inimigos_Tema_Cidade.jammer_node import JammerNode
-from ..entities.Inimigos_Tema_Cidade.metropolis_overlord_boss import (
+from ..entities.projectiles.air_strike_bomb import AirStrikeBomb
+from ..entities.enemies.space.alien import Alien
+from ..entities.projectiles.alien_bullet import AlienBullet
+from ..entities.enemies.space.black_hole import BlackHole
+from ..entities.bosses.boss import Boss
+from ..entities.projectiles.boss_laser import BossLaser
+from ..entities.bosses.boss_square import BossSquare
+from ..entities.enemies.space.bot_elemental import ElementalRobot, EnergyOrb
+from ..entities.projectiles.bullet import Bullet
+from ..entities.projectiles.bullet_pool import BulletPool
+from ..entities.projectiles.cannon_mine import CannonMine
+from ..entities.enemies.space.cannon_tower import CannonTower
+from ..entities.effects.chain_lightning import ChainLightning
+from ..entities.bosses.cloud_archmage_boss import CloudArchmageBoss
+from ..entities.effects.emp_wave import EMPWave
+from ..entities.effects.explosion import Explosion, ExplosionType, ImpactPattern
+from ..entities.effects.explosion_pool import ExplosionPool
+from ..entities.effects.explosive_effect import ExplosiveEffect
+from ..entities.projectiles.explosive_mine import ExplosiveMine
+from ..entities.enemies.space.eye_enemy import EyeEnemy
+from ..entities.projectiles.eye_laser import EyeLaser
+from ..entities.enemies.city.captor_emp import CaptorEMP
+from ..entities.enemies.city.core_implosion import CoreImplosion
+from ..entities.enemies.city.cyber_captor import CyberCaptor
+from ..entities.enemies.city.cyber_tank import CyberTank
+from ..entities.enemies.city.jammer_node import JammerNode
+from ..entities.enemies.city.metropolis_overlord_boss import (
     MetropolisOverlordBoss,
 )
-from ..entities.Inimigos_Tema_Cidade.neon_bolt import NeonBolt
-from ..entities.Inimigos_Tema_Cidade.splitter_debris import SplitterDebris
-from ..entities.Inimigos_Tema_Cidade.carrier_debris import CarrierDebris
-from ..entities.Inimigos_Tema_Cidade.cargo_carrier import CargoCarrier
-from ..entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
-from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
-from ..entities.Inimigos_Tema_Cidade.police_crash import PoliceCrash
-from ..entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
-from ..entities.Inimigos_Tema_Cidade.tank_meltdown import TankMeltdown
-from ..entities.electric_field_zone import ElectricFieldZone
-from ..entities.fire_zone import FireZone
-from ..entities.floating_score import FloatingScore
-from ..entities.formation import Formation
-from ..entities.giant_meteor_boss import GiantMeteorBoss
-from ..entities.homing_bullet import HomingBullet
-from ..entities.ice_poison_zone import IcePoisonZone
-from ..entities.meteor import Meteor
-from ..entities.meteor_pool import MeteorPool
-from ..entities.mine_explosion import MineExplosion
-from ..entities.mini_ship import MiniShip
-from ..entities.mini_ship_bullet import MiniShipBullet
-from ..entities.mountain_mage import (
+from ..entities.enemies.city.neon_bolt import NeonBolt
+from ..entities.enemies.city.splitter_debris import SplitterDebris
+from ..entities.enemies.city.carrier_debris import CarrierDebris
+from ..entities.enemies.city.cargo_carrier import CargoCarrier
+from ..entities.enemies.city.splitter_tank import SplitterTank
+from ..entities.enemies.city.neon_sniper import NeonSniper
+from ..entities.enemies.city.police_crash import PoliceCrash
+from ..entities.enemies.city.police_interceptor import PoliceInterceptor
+from ..entities.enemies.city.tank_meltdown import TankMeltdown
+from ..entities.effects.electric_field_zone import ElectricFieldZone
+from ..entities.effects.fire_zone import FireZone
+from ..entities.effects.floating_score import FloatingScore
+from ..entities.enemies.space.formation import Formation
+from ..entities.bosses.giant_meteor_boss import GiantMeteorBoss
+from ..entities.projectiles.homing_bullet import HomingBullet
+from ..entities.effects.ice_poison_zone import IcePoisonZone
+from ..entities.enemies.space.meteor import Meteor
+from ..entities.enemies.space.meteor_pool import MeteorPool
+from ..entities.effects.mine_explosion import MineExplosion
+from ..entities.player.mini_ship import MiniShip
+from ..entities.projectiles.mini_ship_bullet import MiniShipBullet
+from ..entities.enemies.mountain.mountain_mage import (
     MountainMage,
     MountainStalactite,
     MountainStalagmite,
 )
-from ..entities.mountain_propeller import MountainPropeller
-from ..entities.orbital_energy_orb import OrbitalEnergyOrb
-from ..entities.mountain_serpent_boss import (
+from ..entities.enemies.mountain.mountain_propeller import MountainPropeller
+from ..entities.enemies.space.orbital_energy_orb import OrbitalEnergyOrb
+from ..entities.bosses.mountain_serpent_boss import (
     MountainSerpentBoss,
     SerpentBlock,
     SerpentRockBullet,
 )
-from ..entities.player_laser import PlayerLaser
-from ..entities.powerup import PowerUp
-from ..entities.rock_glider_pool import RockGliderPool
-from ..entities.slime_boss import SlimeBoss
-from ..entities.slime_drip import SlimeDrip
-from ..entities.spike import Spike
-from ..entities.spike_boss import SpikeBoss
-from ..entities.orbital_shield import OrbitalShield
-from ..entities.plasma_beam import PlasmaBeam
-from ..entities.spike_boss_laser import SpikeBossLaser
-from ..entities.square_minion_boss import SquareMinionBoss
-from ..entities.star import Star
-from ..entities.stone_golem_boss import (
+from ..entities.projectiles.player_laser import PlayerLaser
+from ..entities.pickups.powerup import PowerUp
+from ..entities.enemies.mountain.rock_glider_pool import RockGliderPool
+from ..entities.bosses.slime_boss import SlimeBoss
+from ..entities.effects.slime_drip import SlimeDrip
+from ..entities.bosses.spike import Spike
+from ..entities.bosses.spike_boss import SpikeBoss
+from ..entities.enemies.space.orbital_shield import OrbitalShield
+from ..entities.projectiles.plasma_beam import PlasmaBeam
+from ..entities.projectiles.spike_boss_laser import SpikeBossLaser
+from ..entities.bosses.square_minion_boss import SquareMinionBoss
+from ..entities.pickups.star import Star
+from ..entities.bosses.stone_golem_boss import (
     AttackDebris,
     EmergeDebris,
     GolemMine,
     OrbitalDebris,
     StoneGolemBoss,
 )
-from ..entities.stone_sentry import StoneSentry
-from ..entities.wingman import Wingman
-from ..entities.coop_link import CoopLink
+from ..entities.enemies.mountain.stone_sentry import StoneSentry
+from ..entities.player.wingman import Wingman
+from ..entities.effects.coop_link import CoopLink
 from . import enemy_shield
 from .boss_context import BossUpdateContext, BossUpdateResult
 from .collision_protocols import Removable
@@ -98,7 +98,7 @@ from .hit_result import MeteorSpec
 from .targeting import enemy_center, is_targetable
 
 if TYPE_CHECKING:
-    from ..entities.ship import Ship
+    from ..entities.player.ship import Ship
 
 
 class EntityManager:

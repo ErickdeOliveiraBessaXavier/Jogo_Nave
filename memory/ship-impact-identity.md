@@ -7,7 +7,7 @@ metadata:
   originSessionId: 8f579ccf-a7d9-4f66-b075-41102b17a84f
 ---
 
-Identidade visual de tiro/impacto por nave (`game/entities/impact_styles.py`),
+Identidade visual de tiro/impacto por nave (`game/entities/_shared/impact_styles.py`),
 adicionada em 2026-07-15. `SHIP_IMPACT_STYLES` mapeia nave → (pattern, palette).
 
 **O estilo da nave só vale em hits NÃO-letais** (`CollisionPhysics.apply_hit`); a

@@ -22,7 +22,7 @@ from ..core.difficulty import DifficultyPreset
 from ..core.upgrades import get_upgrade_icon
 
 if TYPE_CHECKING:
-    from ..entities.ship import Ship
+    from ..entities.player.ship import Ship
     from ..systems.entity_manager import EntityManager
     from .render_frame import RenderFrame
 
@@ -198,7 +198,7 @@ class GameRenderer:
         if intro_active:
             boss = frame.entity_manager.boss
             if boss:
-                from ..entities.cloud_archmage_boss import CloudArchmageBoss
+                from ..entities.bosses.cloud_archmage_boss import CloudArchmageBoss
 
                 archmage = cast(CloudArchmageBoss, boss)
                 overlay_alpha = archmage.get_intro_dim_alpha()

@@ -22,8 +22,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Iterator, List, Optional
 
 if TYPE_CHECKING:
-    from ..entities.revival_beacon import RevivalBeacon
-    from ..entities.ship import Ship
+    from ..entities.player.revival_beacon import RevivalBeacon
+    from ..entities.player.ship import Ship
 
 
 @dataclass

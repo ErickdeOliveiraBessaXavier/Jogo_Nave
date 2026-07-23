@@ -21,7 +21,7 @@ from ..events import game_events as events
 
 if TYPE_CHECKING:
     from ..core.events import EventBus
-    from ..entities.ship import Ship
+    from ..entities.player.ship import Ship
     from ..systems.entity_manager import EntityManager
 
 logger = logging.getLogger(__name__)

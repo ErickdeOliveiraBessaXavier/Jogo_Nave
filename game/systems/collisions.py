@@ -7,37 +7,37 @@ from ..core.sound import sound_manager
 from ..core.spatial_grid import SpatialGrid
 from ..core.upgrades_config import EXPLOSIVE_BULLET_DAMAGE
 from ..core.upgrades_config import EXPLOSIVE_BULLET_RADIUS as _EXPLOSIVE_BULLET_RADIUS
-from ..entities.air_strike_bomb import AirStrikeBomb
-from ..entities.boss_laser import BossLaser
-from ..entities.boss_square import BossSquare
-from ..entities.bot_elemental_attacks import EnergyOrb
-from ..entities.bullet import Bullet
-from ..entities.cannon_mine import CannonMine, MineState
-from ..entities.chain_lightning import ChainLightning
-from ..entities.explosion import ExplosionType
-from ..entities.explosive_effect import ExplosiveEffect
-from ..entities.eye_laser import EyeLaser
-from ..entities.fire_zone import FireZone
-from ..entities.floating_score import FloatingScore
-from ..entities.homing_bullet import HomingBullet
-from ..entities.impact_styles import (
+from ..entities.projectiles.air_strike_bomb import AirStrikeBomb
+from ..entities.projectiles.boss_laser import BossLaser
+from ..entities.bosses.boss_square import BossSquare
+from ..entities.enemies.space.bot_elemental_attacks import EnergyOrb
+from ..entities.projectiles.bullet import Bullet
+from ..entities.projectiles.cannon_mine import CannonMine, MineState
+from ..entities.effects.chain_lightning import ChainLightning
+from ..entities.effects.explosion import ExplosionType
+from ..entities.effects.explosive_effect import ExplosiveEffect
+from ..entities.projectiles.eye_laser import EyeLaser
+from ..entities.effects.fire_zone import FireZone
+from ..entities.effects.floating_score import FloatingScore
+from ..entities.projectiles.homing_bullet import HomingBullet
+from ..entities._shared.impact_styles import (
     ImpactStyle,
     impact_for_projectile,
     impact_scale_for_projectile,
 )
-from ..entities.Inimigos_Tema_Cidade.neon_bolt import NeonBolt
-from ..entities.electric_field_zone import ElectricFieldZone
-from ..entities.ice_poison_zone import IcePoisonZone
-from ..entities.orbital_energy_orb import OrbitalEnergyOrb
-from ..entities.mine_explosion import MineExplosion
-from ..entities.mini_ship_bullet import MiniShipBullet
-from ..entities.player_laser import PlayerLaser
-from ..entities.powerup import PowerUp
-from ..entities.ship import Ship
-from ..entities.slime_drip import SlimeDrip
-from ..entities.spike import Spike
-from ..entities.spike_boss_laser import SpikeBossLaser
-from ..entities.star import Star
+from ..entities.enemies.city.neon_bolt import NeonBolt
+from ..entities.effects.electric_field_zone import ElectricFieldZone
+from ..entities.effects.ice_poison_zone import IcePoisonZone
+from ..entities.enemies.space.orbital_energy_orb import OrbitalEnergyOrb
+from ..entities.effects.mine_explosion import MineExplosion
+from ..entities.projectiles.mini_ship_bullet import MiniShipBullet
+from ..entities.projectiles.player_laser import PlayerLaser
+from ..entities.pickups.powerup import PowerUp
+from ..entities.player.ship import Ship
+from ..entities.effects.slime_drip import SlimeDrip
+from ..entities.bosses.spike import Spike
+from ..entities.projectiles.spike_boss_laser import SpikeBossLaser
+from ..entities.pickups.star import Star
 from .collision_physics import (
     CollisionPhysics,
     get_enemy_collision_mask_data,

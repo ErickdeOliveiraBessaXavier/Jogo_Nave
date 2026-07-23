@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 import pygame
 
-from ..entities.revival_beacon import RevivalBeacon
+from ..entities.player.revival_beacon import RevivalBeacon
 
 if TYPE_CHECKING:
     from ..core.gamepad import GamepadManager

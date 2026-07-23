@@ -4,11 +4,11 @@ from typing import TYPE_CHECKING, Any, Callable, Sequence, cast
 
 import pygame
 
-from ..entities.bullet import Bullet
-from ..entities.explosion import ExplosionType
-from ..entities.floating_score import FloatingScore
-from ..entities.impact_styles import ImpactStyle
-from ..entities.mini_ship_bullet import MiniShipBullet
+from ..entities.projectiles.bullet import Bullet
+from ..entities.effects.explosion import ExplosionType
+from ..entities.effects.floating_score import FloatingScore
+from ..entities._shared.impact_styles import ImpactStyle
+from ..entities.projectiles.mini_ship_bullet import MiniShipBullet
 from ..events import game_events as events
 from . import enemy_shield, hit_sounds
 from .collision_protocols import Enemy

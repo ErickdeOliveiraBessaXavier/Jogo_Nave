@@ -144,8 +144,8 @@ class BossFightController:
         if not boss:
             return 0
 
-        from ..entities.giant_meteor_boss import GiantMeteorBoss
-        from ..entities.mountain_serpent_boss import MountainSerpentBoss
+        from ..entities.bosses.giant_meteor_boss import GiantMeteorBoss
+        from ..entities.bosses.mountain_serpent_boss import MountainSerpentBoss
 
         if isinstance(boss, MountainSerpentBoss):
             boss_center: tuple[float, float] = (boss.head_x, boss.head_y)
@@ -310,13 +310,13 @@ class BossFightController:
     def _spawn_boss(
         self, level_config: LevelConfig, enemy_health_multiplier: float
     ) -> None:
-        from ..entities.cloud_archmage_boss import CloudArchmageBoss
-        from ..entities.giant_meteor_boss import GiantMeteorBoss
-        from ..entities.Inimigos_Tema_Cidade.metropolis_overlord_boss import (
+        from ..entities.bosses.cloud_archmage_boss import CloudArchmageBoss
+        from ..entities.bosses.giant_meteor_boss import GiantMeteorBoss
+        from ..entities.enemies.city.metropolis_overlord_boss import (
             MetropolisOverlordBoss,
         )
-        from ..entities.mountain_serpent_boss import MountainSerpentBoss
-        from ..entities.stone_golem_boss import StoneGolemBoss
+        from ..entities.bosses.mountain_serpent_boss import MountainSerpentBoss
+        from ..entities.bosses.stone_golem_boss import StoneGolemBoss
 
         boss_type = level_config.boss_type
         agg = self._em.aggressiveness_multiplier

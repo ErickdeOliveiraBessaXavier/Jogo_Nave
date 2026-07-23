@@ -17,48 +17,48 @@ import random
 from dataclasses import dataclass
 from typing import Any, Type
 
-from ...entities.alien import Alien
-from ...entities.bot_elemental import ElementalRobot
-from ...entities.cutting_storm import CuttingStorm  # noqa: F401  (arena de teste)
-from ...entities.eye_enemy import EyeEnemy
-from ...entities.giant_meteor_boss import GiantMeteorBoss
-from ...entities.ice_golem import IceGolem  # noqa: F401  (arena de teste)
-from ...entities.Inimigos_Tema_Cidade.cargo_carrier import CargoCarrier  # noqa: F401
+from ...entities.enemies.space.alien import Alien
+from ...entities.enemies.space.bot_elemental import ElementalRobot
+from ...entities.effects.cutting_storm import CuttingStorm  # noqa: F401  (arena de teste)
+from ...entities.enemies.space.eye_enemy import EyeEnemy
+from ...entities.bosses.giant_meteor_boss import GiantMeteorBoss
+from ...entities.enemies.mountain.ice_golem import IceGolem  # noqa: F401  (arena de teste)
+from ...entities.enemies.city.cargo_carrier import CargoCarrier  # noqa: F401
 
 # Linhagem CITY — todos com `# noqa: F401` porque são usados apenas no level de
 # debug (nível 1) e podem estar comentados lá; o noqa impede o autofix do ruff de
 # removê-los, mantendo-os disponíveis para ligar/desligar à vontade.
-from ...entities.Inimigos_Tema_Cidade.city_drone import CityDrone  # noqa: F401
-from ...entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor  # noqa: F401
-from ...entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank  # noqa: F401
-from ...entities.Inimigos_Tema_Cidade.jammer_node import JammerNode  # noqa: F401
-from ...entities.Inimigos_Tema_Cidade.metropolis_overlord_boss import (
+from ...entities.enemies.city.city_drone import CityDrone  # noqa: F401
+from ...entities.enemies.city.cyber_captor import CyberCaptor  # noqa: F401
+from ...entities.enemies.city.cyber_tank import CyberTank  # noqa: F401
+from ...entities.enemies.city.jammer_node import JammerNode  # noqa: F401
+from ...entities.enemies.city.metropolis_overlord_boss import (
     MetropolisOverlordBoss,
 )
-from ...entities.Inimigos_Tema_Cidade.mirror_pylon import MirrorPylon  # noqa: F401
-from ...entities.Inimigos_Tema_Cidade.mortar_drone import MortarDrone  # noqa: F401
-from ...entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper  # noqa: F401
-from ...entities.Inimigos_Tema_Cidade.police_interceptor import (  # noqa: F401
+from ...entities.enemies.city.mirror_pylon import MirrorPylon  # noqa: F401
+from ...entities.enemies.city.mortar_drone import MortarDrone  # noqa: F401
+from ...entities.enemies.city.neon_sniper import NeonSniper  # noqa: F401
+from ...entities.enemies.city.police_interceptor import (  # noqa: F401
     PoliceInterceptor,
 )
-from ...entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone  # noqa: F401
-from ...entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank  # noqa: F401
-from ...entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin  # noqa: F401
-from ...entities.Inimigos_Tema_Espaco.dreadnought import Dreadnought  # noqa: F401
-from ...entities.Inimigos_Tema_Espaco.gravity_well import GravityWell  # noqa: F401
-from ...entities.meteor import Meteor
-from ...entities.mountain_mage import MountainMage
-from ...entities.mountain_propeller import MountainPropeller
-from ...entities.orbital_turret import OrbitalTurret  # noqa: F401  (arena de teste)
-from ...entities.repair_drone import RepairDrone  # noqa: F401  (arena de teste)
-from ...entities.rock_glider import RockGlider
-from ...entities.satellite import Satellite  # noqa: F401  (só no level de debug)
-from ...entities.slime_boss import SlimeBoss
-from ...entities.square_minion_boss import SquareMinionBoss  # noqa: F401  (debug)
-from ...entities.stealth_fighter import StealthFighter  # noqa: F401  (arena de teste)
-from ...entities.stone_eagle import StoneEagle  # noqa: F401  (arena de teste)
-from ...entities.stone_golem_boss import StoneGolemBoss
-from ...entities.stone_sentry import StoneSentry
+from ...entities.enemies.city.sapper_drone import SapperDrone  # noqa: F401
+from ...entities.enemies.city.splitter_tank import SplitterTank  # noqa: F401
+from ...entities.enemies.city.tesla_twin import TeslaTwin  # noqa: F401
+from ...entities.enemies.space.dreadnought import Dreadnought  # noqa: F401
+from ...entities.enemies.space.gravity_well import GravityWell  # noqa: F401
+from ...entities.enemies.space.meteor import Meteor
+from ...entities.enemies.mountain.mountain_mage import MountainMage
+from ...entities.enemies.mountain.mountain_propeller import MountainPropeller
+from ...entities.enemies.space.orbital_turret import OrbitalTurret  # noqa: F401  (arena de teste)
+from ...entities.enemies.space.repair_drone import RepairDrone  # noqa: F401  (arena de teste)
+from ...entities.enemies.mountain.rock_glider import RockGlider
+from ...entities.enemies.space.satellite import Satellite  # noqa: F401  (só no level de debug)
+from ...entities.bosses.slime_boss import SlimeBoss
+from ...entities.bosses.square_minion_boss import SquareMinionBoss  # noqa: F401  (debug)
+from ...entities.enemies.space.stealth_fighter import StealthFighter  # noqa: F401  (arena de teste)
+from ...entities.enemies.mountain.stone_eagle import StoneEagle  # noqa: F401  (arena de teste)
+from ...entities.bosses.stone_golem_boss import StoneGolemBoss
+from ...entities.enemies.mountain.stone_sentry import StoneSentry
 from ..world_config import WorldTheme
 
 # Mínimo de spawn em segundos. Replicado também em DifficultyConfig.MIN_SPAWN_TIME
@@ -540,7 +540,7 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
         theme_name="[TESTE] Arena Montanhas",
         score_multiplier=1.0,
     ),
-    # ── CIDADE — linhagem Inimigos_Tema_Cidade completa ──────────────────────
+    # ── CIDADE — linhagem enemies/city completa ──────────────────────
     WorldTheme.CITY: LevelConfig(
         level_number=26,
         enemy_spawn_config={

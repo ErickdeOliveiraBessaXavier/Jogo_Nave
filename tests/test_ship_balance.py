@@ -27,7 +27,7 @@ def _kills_per_second(shots_per_s, damage, hp):
 
 def _composite_index(profile, baseline):
     """Índice de abates/s ponderado por mix de encontro, relativo à baseline."""
-    from game.entities.ship import Ship
+    from game.entities.player.ship import Ship
 
     def rate(prof):
         ship = Ship(0, 0, profile=prof)

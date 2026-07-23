@@ -93,8 +93,8 @@ def build_spawn_config(route: str) -> dict[type, float]:
     meteoro invertido no Entering) entram em passos seguintes. Import local de
     `Meteor` evita ciclo de import no load do módulo.
     """
-    from ..entities.meteor import Meteor
-    from ..entities.satellite import Satellite, SatelliteFragment
+    from ..entities.enemies.space.meteor import Meteor
+    from ..entities.enemies.space.satellite import Satellite, SatelliteFragment
 
     if route == EXITING:
         return {

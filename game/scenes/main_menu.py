@@ -15,8 +15,8 @@ from ..core.sound import sound_manager
 from ..core.sound_config import MusicState
 from ..core.state import Scene
 from ..core.world_config import get_world_for_level_by_id
-from ..entities.explosion_pool import ExplosionPool
-from ..entities.meteor import Meteor
+from ..entities.effects.explosion_pool import ExplosionPool
+from ..entities.enemies.space.meteor import Meteor
 from ..systems.cheat_input import CheatBuffer
 
 if TYPE_CHECKING:

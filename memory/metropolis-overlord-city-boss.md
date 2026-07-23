@@ -15,7 +15,7 @@ Decisão do usuário (2026-06-12): apesar de a proposta descrever um boss "ápic
 ele entra como o **opener** da Cidade (nível 30), não no final (40). Tuning de
 dificuldade fica mais sensível por isso — Fase 1 deliberadamente branda.
 
-Arquivos (em `game/entities/Inimigos_Tema_Cidade/`): `metropolis_overlord_boss.py`
+Arquivos (em `game/entities/enemies/city/`): `metropolis_overlord_boss.py`
 (FSM, BossProtocol), `metropolis_sentinel.py` (4 sentinelas da Fase 1/interlúdio, orbitam o
 PERÍMETRO inteiro por comprimento de arco — velocidade uniforme `BASE_SPEED=0.12`
 inalterada, ancoradas às bordas; **REFATORADA 2026-06-16** mesma qualidade da

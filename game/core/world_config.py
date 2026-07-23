@@ -131,7 +131,7 @@ def _get_worlds() -> dict[int, WorldConfig]:
             start_level=26,
             end_level=40,  # 15 estágios para acomodar os 4 bosses da Cidade (ver WORLD_BOSS_ROADMAP)
             boss_level=40,  # nível FINAL. Bosses (mid+final) no WORLD_BOSS_ROADMAP.
-            # CITY usa a própria linhagem (Inimigos_Tema_Cidade); o tuning de spawn/
+            # CITY usa a própria linhagem (enemies/city); o tuning de spawn/
             # frequência mora em pipeline.py/procedural.py (_configure_city_spawn,
             # ENEMY_*_WEIGHT_PROFILES). Não há theme_modifiers funcionais aqui:
             # "eye_weight" era no-op (EyeEnemy é banido do tema pelo allowlist) e
@@ -191,16 +191,16 @@ def _get_boss_roadmap() -> dict[int, tuple[BossSlot, ...]]:
     `get_boss_for_level`. Criar um chefe nativo = trocar a classe do slot e marcar
     "implemented" — sem tocar em `FIXED_LEVELS` nem em `WorldConfig`.
     """
-    from ..entities.boss import Boss
-    from ..entities.cloud_archmage_boss import CloudArchmageBoss
-    from ..entities.giant_meteor_boss import GiantMeteorBoss
-    from ..entities.Inimigos_Tema_Cidade.metropolis_overlord_boss import (
+    from ..entities.bosses.boss import Boss
+    from ..entities.bosses.cloud_archmage_boss import CloudArchmageBoss
+    from ..entities.bosses.giant_meteor_boss import GiantMeteorBoss
+    from ..entities.enemies.city.metropolis_overlord_boss import (
         MetropolisOverlordBoss,
     )
-    from ..entities.mountain_serpent_boss import MountainSerpentBoss
-    from ..entities.slime_boss import SlimeBoss
-    from ..entities.spike_boss import SpikeBoss
-    from ..entities.stone_golem_boss import StoneGolemBoss
+    from ..entities.bosses.mountain_serpent_boss import MountainSerpentBoss
+    from ..entities.bosses.slime_boss import SlimeBoss
+    from ..entities.bosses.spike_boss import SpikeBoss
+    from ..entities.bosses.stone_golem_boss import StoneGolemBoss
 
     return {
         1: (  # MOUNTAINS — chefes nativos
@@ -248,11 +248,11 @@ def _get_procedural_sector_boss(
     memory/level-progression-review-backlog).
     """
     # Imports locais (mesmo motivo de _get_worlds: evitar import circular).
-    from ..entities.cloud_archmage_boss import CloudArchmageBoss
-    from ..entities.giant_meteor_boss import GiantMeteorBoss
-    from ..entities.mountain_serpent_boss import MountainSerpentBoss
-    from ..entities.slime_boss import SlimeBoss
-    from ..entities.stone_golem_boss import StoneGolemBoss
+    from ..entities.bosses.cloud_archmage_boss import CloudArchmageBoss
+    from ..entities.bosses.giant_meteor_boss import GiantMeteorBoss
+    from ..entities.bosses.mountain_serpent_boss import MountainSerpentBoss
+    from ..entities.bosses.slime_boss import SlimeBoss
+    from ..entities.bosses.stone_golem_boss import StoneGolemBoss
 
     rosters: dict[WorldTheme, Tuple[Type[Any], ...]] = {
         # Montanhas tem 3 chefes próprios → rotaciona para variedade entre setores.

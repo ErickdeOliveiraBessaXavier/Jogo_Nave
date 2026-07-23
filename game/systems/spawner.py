@@ -31,44 +31,44 @@ from ..core.levels.fixed_levels import TEST_ARENA_ENABLED
 from ..core.powerup_weights import get_powerup_weights
 from ..core.time import Timer
 from ..core.world_config import WorldTheme, get_world_for_level
-from ..entities.alien import Alien
-from ..entities.bot_elemental import ElementalRobot
-from ..entities.cutting_storm import CuttingStorm
-from ..entities.explosive_mine import ExplosiveMine
-from ..entities.eye_enemy import EyeEnemy
-from ..entities.formation import Formation, FormationPattern
-from ..entities.guided_meteor import GuidedMeteor
-from ..entities.ice_golem import IceGolem
-from ..entities.Inimigos_Tema_Cidade.cargo_carrier import CargoCarrier
-from ..entities.Inimigos_Tema_Cidade.city_drone import CityDrone
-from ..entities.Inimigos_Tema_Cidade.cyber_captor import CyberCaptor
-from ..entities.Inimigos_Tema_Cidade.cyber_tank import CyberTank
-from ..entities.Inimigos_Tema_Cidade.interceptor_squad import InterceptorSquad
-from ..entities.Inimigos_Tema_Cidade.jammer_node import JammerNode
-from ..entities.Inimigos_Tema_Cidade.mirror_pylon import MirrorPylon
-from ..entities.Inimigos_Tema_Cidade.mortar_drone import MortarDrone
-from ..entities.Inimigos_Tema_Cidade.neon_sniper import NeonSniper
-from ..entities.Inimigos_Tema_Cidade.police_interceptor import PoliceInterceptor
-from ..entities.Inimigos_Tema_Cidade.sapper_drone import SapperDrone
-from ..entities.Inimigos_Tema_Cidade.splitter_tank import SplitterTank
-from ..entities.Inimigos_Tema_Cidade.tesla_link import TeslaLink
-from ..entities.Inimigos_Tema_Cidade.tesla_twin import TeslaTwin
-from ..entities.Inimigos_Tema_Espaco.dreadnought import Dreadnought
-from ..entities.Inimigos_Tema_Espaco.gravity_well import GravityWell
-from ..entities.meteor import Meteor
-from ..entities.meteor_pool import MeteorPool
-from ..entities.mountain_mage import MountainMage
-from ..entities.mountain_propeller import MountainPropeller
-from ..entities.orbital_turret import OrbitalTurret
-from ..entities.powerup import PowerUp
-from ..entities.repair_drone import RepairDrone
-from ..entities.rock_glider import RockGlider
-from ..entities.satellite import Satellite, SatelliteFragment
-from ..entities.square_minion_boss import SquareMinionBoss
-from ..entities.star import Star
-from ..entities.stealth_fighter import StealthFighter
-from ..entities.stone_eagle import StoneEagle
-from ..entities.stone_sentry import StoneSentry
+from ..entities.enemies.space.alien import Alien
+from ..entities.enemies.space.bot_elemental import ElementalRobot
+from ..entities.effects.cutting_storm import CuttingStorm
+from ..entities.projectiles.explosive_mine import ExplosiveMine
+from ..entities.enemies.space.eye_enemy import EyeEnemy
+from ..entities.enemies.space.formation import Formation, FormationPattern
+from ..entities.enemies.space.guided_meteor import GuidedMeteor
+from ..entities.enemies.mountain.ice_golem import IceGolem
+from ..entities.enemies.city.cargo_carrier import CargoCarrier
+from ..entities.enemies.city.city_drone import CityDrone
+from ..entities.enemies.city.cyber_captor import CyberCaptor
+from ..entities.enemies.city.cyber_tank import CyberTank
+from ..entities.enemies.city.interceptor_squad import InterceptorSquad
+from ..entities.enemies.city.jammer_node import JammerNode
+from ..entities.enemies.city.mirror_pylon import MirrorPylon
+from ..entities.enemies.city.mortar_drone import MortarDrone
+from ..entities.enemies.city.neon_sniper import NeonSniper
+from ..entities.enemies.city.police_interceptor import PoliceInterceptor
+from ..entities.enemies.city.sapper_drone import SapperDrone
+from ..entities.enemies.city.splitter_tank import SplitterTank
+from ..entities.enemies.city.tesla_link import TeslaLink
+from ..entities.enemies.city.tesla_twin import TeslaTwin
+from ..entities.enemies.space.dreadnought import Dreadnought
+from ..entities.enemies.space.gravity_well import GravityWell
+from ..entities.enemies.space.meteor import Meteor
+from ..entities.enemies.space.meteor_pool import MeteorPool
+from ..entities.enemies.mountain.mountain_mage import MountainMage
+from ..entities.enemies.mountain.mountain_propeller import MountainPropeller
+from ..entities.enemies.space.orbital_turret import OrbitalTurret
+from ..entities.pickups.powerup import PowerUp
+from ..entities.enemies.space.repair_drone import RepairDrone
+from ..entities.enemies.mountain.rock_glider import RockGlider
+from ..entities.enemies.space.satellite import Satellite, SatelliteFragment
+from ..entities.bosses.square_minion_boss import SquareMinionBoss
+from ..entities.pickups.star import Star
+from ..entities.enemies.space.stealth_fighter import StealthFighter
+from ..entities.enemies.mountain.stone_eagle import StoneEagle
+from ..entities.enemies.mountain.stone_sentry import StoneSentry
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager

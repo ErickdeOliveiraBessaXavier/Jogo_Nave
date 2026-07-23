@@ -9,7 +9,7 @@ parceiro no raio, gate pelo botão, e revive com os callbacks certos.
 import pygame
 import pytest
 
-from game.entities.revival_beacon import RevivalBeacon
+from game.entities.player.revival_beacon import RevivalBeacon
 from game.systems.revival_system import RevivalSystem
 
 

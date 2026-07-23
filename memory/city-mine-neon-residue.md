@@ -7,7 +7,7 @@ metadata:
   originSessionId: 9172b5af-11c9-477a-9068-3475e2b9614f
 ---
 
-A mina da Neon City (`game/entities/Inimigos_Tema_Cidade/city_mine.py`, classe
+A mina da Neon City (`game/entities/enemies/city/city_mine.py`, classe
 `CityMine`) segue o MESMO padrão da `MountainGeode`: subclasse de `ExplosiveMine`,
 herda todo o fluxo de explosão de `Collisions.check_mine_explosions` (MineExplosion
 + dano à nave via `handle_mine_explosion` + dano a inimigos). Explosão principal

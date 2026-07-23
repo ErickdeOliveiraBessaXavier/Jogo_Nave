@@ -21,8 +21,8 @@ import pygame
 if TYPE_CHECKING:
     from ..core.difficulty import DifficultyPreset
     from ..core.upgrades import ActiveUpgrade
-    from ..entities.revival_beacon import RevivalBeacon
-    from ..entities.ship import Ship
+    from ..entities.player.revival_beacon import RevivalBeacon
+    from ..entities.player.ship import Ship
     from .boss_backdrop_dim import BossBackdropDim
     from .damage_vignette import DamageVignette
     from ..scenes.playing import GameState, ThrusterParticle

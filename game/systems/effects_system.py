@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional, Protocol
 
-from ..entities.floating_score import FloatingScore
+from ..entities.effects.floating_score import FloatingScore
 from ..events import game_events as events
 
 if TYPE_CHECKING:

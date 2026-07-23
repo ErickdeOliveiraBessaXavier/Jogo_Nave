@@ -59,10 +59,10 @@ from ..core.world_config import (
     is_side_scroll_mode,
     resolve_theme_key,
 )
-from ..entities.mini_ship import MiniShip
-from ..entities.revival_beacon import RevivalBeacon
-from ..entities.ship import Ship
-from ..entities.spike_boss_laser import SpikeBossLaser
+from ..entities.player.mini_ship import MiniShip
+from ..entities.player.revival_beacon import RevivalBeacon
+from ..entities.player.ship import Ship
+from ..entities.projectiles.spike_boss_laser import SpikeBossLaser
 from ..events import game_events as events
 from ..render.game_renderer import GameRenderer
 from ..render.boss_backdrop_dim import BossBackdropDim
@@ -1450,7 +1450,7 @@ class PlayingScene(Scene):
 
         boss_pausing = False
         if self.boss_controller.boss_type == "spike" and self.entity_manager.boss:
-            from ..entities.spike_boss import SpikeBoss
+            from ..entities.bosses.spike_boss import SpikeBoss
 
             boss_pausing = cast(SpikeBoss, self.entity_manager.boss).is_pausing_game()
 
@@ -2103,7 +2103,7 @@ class PlayingScene(Scene):
             )
 
         if self.boss_controller.boss_type == "slime":
-            from ..entities.slime_boss import SlimeBoss
+            from ..entities.bosses.slime_boss import SlimeBoss
 
             # Slime drip per-slot: cada gota só pode atingir um ship (consumida
             # ao colidir). Iterar slots vivos resolve sem double-damage.
@@ -2155,7 +2155,7 @@ class PlayingScene(Scene):
         ):
             self._handle_ship_hit(slot)
 
-        from ..entities.boss_laser import BossLaser
+        from ..entities.projectiles.boss_laser import BossLaser
 
         # A cerca elétrica (Fase 3) também vive em boss_lasers, mas é tratada à parte:
         # além do dano, aplica o debuff de paralisia (reuso do sistema elétrico). É
@@ -2196,7 +2196,7 @@ class PlayingScene(Scene):
 
     def _check_stone_golem_sweep(self, em: EntityManager, slot: PlayerSlot) -> None:
         """Verifica dano do feixe sweep do StoneGolemBoss contra o slot."""
-        from ..entities.stone_golem_boss import StoneGolemBoss
+        from ..entities.bosses.stone_golem_boss import StoneGolemBoss
 
         golem = cast(StoneGolemBoss, em.boss)
         beam = golem.get_sweep_beam()
