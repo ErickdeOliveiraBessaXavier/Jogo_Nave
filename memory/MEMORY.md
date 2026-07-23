@@ -13,6 +13,7 @@ Versionado junto com o repositório.
 - [enemy-health-multiplier-propagation](enemy-health-multiplier-propagation.md) — entidades emergentes recebem health_multiplier via construtor, como aggressiveness_multiplier; multiplicador que não chega na entidade é no-op.
 - [music-transitions-main-thread](music-transitions-main-thread.md) — crossfade de música roda na thread principal; pygame não é thread-safe (worker thread = access violation).
 - [visual-quality-system](visual-quality-system.md) — singleton visual_quality escala efeitos cosméticos por nível Alto/Médio/Baixo; estender efeito = one-liner vq.particles()/gates.
+- [upgrade-cooldown-effect-end](upgrade-cooldown-effect-end.md) — cooldown de upgrade só parte quando o efeito termina; efeito por munição/cargas (base_duration=0) precisa sobrescrever `_effect_still_running` (explosivo/laser), senão o cooldown parte na ativação.
 
 ## Balanceamento e progressão
 

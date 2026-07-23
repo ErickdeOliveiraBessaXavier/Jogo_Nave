@@ -5,7 +5,10 @@ em paralelo. O tempo total indisponível = duração + cooldown.
 """
 
 from game.core.upgrades import (
+    UPGRADES_META,
     ActiveUpgrade,
+    ExplosiveShotUpgrade,
+    LaserShotUpgrade,
     UpgradeCategory,
     UpgradeMeta,
     UpgradeType,
@@ -85,3 +88,88 @@ def test_upgrade_instantaneo_ganha_cooldown_no_tick_seguinte():
     upg.update(0.016, ctx)
     assert not upg.active
     assert upg.cooldown_left == 3.0
+
+
+# --- Upgrades por munição: cooldown espera a última carga, não o relógio -----
+
+
+class _FakeExplosiveShip:
+    """Nave mínima: só o contrato de munição do tiro explosivo."""
+
+    def __init__(self) -> None:
+        self.explosive_shots_active = False
+        self.explosive_shots_remaining = 0
+
+    def activate_explosive_shots(self, charges: int) -> None:
+        self.explosive_shots_active = True
+        self.explosive_shots_remaining = charges
+
+    def consume_explosive_shot(self) -> bool:
+        if self.explosive_shots_remaining > 0:
+            self.explosive_shots_remaining -= 1
+            if self.explosive_shots_remaining <= 0:
+                self.explosive_shots_active = False
+            return True
+        return False
+
+
+class _FakeLaserShip:
+    def __init__(self) -> None:
+        self.orbital_lasers_active = False
+
+    def activate_orbital_lasers(self, _duration: float) -> None:
+        self.orbital_lasers_active = True
+
+
+def test_explosive_shot_cooldown_so_parte_quando_municao_acaba():
+    # base_duration é 0, mas o efeito é medido em BALAS: enquanto restar munição,
+    # o efeito segue ATIVO e o cooldown fica ZERADO (não conta em paralelo).
+    upg = ExplosiveShotUpgrade(UPGRADES_META[UpgradeType.EXPLOSIVE_SHOT])
+    ship = _FakeExplosiveShip()
+    ctx = _Ctx()
+    ctx.ship = ship
+
+    assert upg.activate(ctx)
+    assert upg.active
+    assert ship.explosive_shots_active
+    assert upg.cooldown_left == 0.0
+
+    # Vários ticks com balas ainda no cano: efeito ativo, cooldown parado.
+    for _ in range(20):
+        upg.update(0.5, ctx)
+    assert upg.active
+    assert upg.cooldown_left == 0.0
+
+    # Gasta toda a munição (fora do timer): efeito termina.
+    while ship.consume_explosive_shot():
+        pass
+    assert not ship.explosive_shots_active
+
+    # O próximo tick detecta o fim do efeito → cooldown parte CHEIO.
+    upg.update(0.016, ctx)
+    assert not upg.active
+    assert upg.cooldown_left == upg.get_effective_cooldown(ctx)
+    assert upg.cooldown_left > 0.0
+
+
+def test_laser_shot_cooldown_espera_cargas_dos_orbes():
+    upg = LaserShotUpgrade(UPGRADES_META[UpgradeType.LASER_SHOT])
+    ship = _FakeLaserShip()
+    ctx = _Ctx()
+    ctx.ship = ship
+
+    assert upg.activate(ctx)
+    assert upg.active
+    assert upg.cooldown_left == 0.0
+
+    # Enquanto os orbes têm carga, o cooldown não anda.
+    for _ in range(10):
+        upg.update(0.5, ctx)
+    assert upg.active
+    assert upg.cooldown_left == 0.0
+
+    # Orbes descarregam → efeito termina → cooldown parte.
+    ship.orbital_lasers_active = False
+    upg.update(0.016, ctx)
+    assert not upg.active
+    assert upg.cooldown_left == upg.get_effective_cooldown(ctx)

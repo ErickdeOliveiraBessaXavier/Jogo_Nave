@@ -104,16 +104,31 @@ class ActiveUpgrade:
         self.duration_left = self.get_effective_duration(ctx)
         self.active = True
         # O cooldown NÃO começa aqui — parte só quando o efeito termina (ver
-        # `update`), de modo que a recarga venha DEPOIS da duração, não em
-        # paralelo. Upgrade instantâneo (duração 0) expira no tick seguinte e o
-        # cooldown parte aí. O `ShieldBurstUpgrade` já fazia isso à mão (cooldown
-        # ao consumir o escudo); agora é a regra da classe base.
+        # `update`/`_effect_still_running`), de modo que a recarga venha DEPOIS
+        # da duração, não em paralelo. Upgrade instantâneo (duração 0) expira no
+        # tick seguinte e o cooldown parte aí; upgrade por munição (explosivo,
+        # laser) segue ativo até a última carga ser gasta, via override de
+        # `_effect_still_running`. O `ShieldBurstUpgrade` já fazia isso à mão
+        # (cooldown ao consumir o escudo); agora é a regra da classe base.
 
         self.on_activate_effect(ctx)
         self.on_after_activate(ctx)
         return True
 
     def update(self, dt: float, ctx: Optional[UpgradeContextProtocol] = None) -> None:
+        self._tick_cooldown(dt, ctx)
+
+        if self.active:
+            self.duration_left = max(0.0, self.duration_left - dt)
+            if not self._effect_still_running(ctx):
+                self.active = False
+                self.on_expire(ctx)
+                # Fim do efeito → o cooldown começa AGORA (não na ativação).
+                self.cooldown_left = self.get_effective_cooldown(ctx)
+
+    def _tick_cooldown(
+        self, dt: float, ctx: Optional[UpgradeContextProtocol]
+    ) -> None:
         if self.cooldown_left > 0.0:
             old_cooldown = self.cooldown_left
             self.cooldown_left = max(0.0, self.cooldown_left - dt)
@@ -125,13 +140,16 @@ class ActiveUpgrade:
                         if self.charges_left < self.meta.base_charges:
                             self.cooldown_left = self.get_effective_cooldown(ctx)
 
-        if self.active:
-            self.duration_left = max(0.0, self.duration_left - dt)
-            if self.duration_left <= 0.0:
-                self.active = False
-                self.on_expire(ctx)
-                # Fim do efeito → o cooldown começa AGORA (não na ativação).
-                self.cooldown_left = self.get_effective_cooldown(ctx)
+    def _effect_still_running(self, ctx: Optional[UpgradeContextProtocol]) -> bool:
+        """O efeito segue ativo enquanto restar DURAÇÃO (padrão temporal).
+
+        Upgrades cujo efeito NÃO é medido em tempo — mas em munição/cargas
+        (tiro explosivo, laser orbital) ou num recurso monitorado — sobrescrevem
+        para consultar o estado real da nave. É isso que mantém a regra do
+        `activate`: o cooldown só parte quando o efeito termina DE FATO, e não no
+        tick seguinte à ativação só porque a duração nominal é 0.
+        """
+        return self.duration_left > 0.0
 
     @staticmethod
     def _ctx_ship(ctx: Optional[UpgradeContextProtocol]) -> Any:
@@ -568,6 +586,13 @@ class LaserShotUpgrade(ActiveUpgrade):
         if ship:
             ship.activate_orbital_lasers(self.get_effective_duration(ctx))
 
+    def _effect_still_running(self, ctx: Optional[UpgradeContextProtocol]) -> bool:
+        # Efeito medido em cargas dos orbes, não em tempo (base_duration 0): o
+        # cooldown só parte quando a última descarga é consumida e a nave zera
+        # `orbital_lasers_active`.
+        ship = self._ctx_ship(ctx)
+        return bool(getattr(ship, "orbital_lasers_active", False))
+
 
 class ExplosiveShotUpgrade(ActiveUpgrade):
     BULLETS_PER_ACTIVATION = 15
@@ -576,6 +601,14 @@ class ExplosiveShotUpgrade(ActiveUpgrade):
         ship = self._ctx_ship(ctx)
         if ship:
             ship.activate_explosive_shots(self.BULLETS_PER_ACTIVATION)
+
+    def _effect_still_running(self, ctx: Optional[UpgradeContextProtocol]) -> bool:
+        # Efeito medido em munição (15 balas), não em tempo (base_duration 0): o
+        # efeito segue ativo — e o cooldown segue parado — até a nave gastar o
+        # último tiro explosivo (`explosive_shots_active` cai em
+        # `consume_explosive_shot`).
+        ship = self._ctx_ship(ctx)
+        return bool(getattr(ship, "explosive_shots_active", False))
 
 
 class GiantShotUpgrade(ActiveUpgrade):
