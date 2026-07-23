@@ -141,7 +141,6 @@ Output/
 PLANO_*.md
 NOVO_PLANO_DE_REVISÃO.MD
 código_teste/
-memory/
 .claude/
 
 # Ferramentas e scripts de desenvolvimento (não necessários para rodar)

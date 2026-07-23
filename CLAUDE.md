@@ -115,6 +115,12 @@ deve segui-los; código existente que os viola é candidato a revisão.
 - List comprehension de rebuild (`lst = [x for x in lst if not x.dead]`) é
   O(n) e aceitável fora do hot path (one-shot events, listas de partículas).
   Não confundir com o padrão O(n²) acima.
+- **Por que a regra existe** (medido): abaixo de ~50 elementos os dois padrões
+  empatam — o swap-and-pop chega a perder por pouco em listas minúsculas. O
+  ganho está na cauda: 2× em 100 itens, 6,7× em 200, 9× em 800. A regra vale
+  para listas **sem teto de crescimento**, que é o caso de efeitos e projéteis
+  em combate intenso. Não vale a pena reescrever uma lista comprovadamente
+  pequena e limitada só para seguir o padrão.
 
 ---
 
@@ -245,15 +251,101 @@ deve segui-los; código existente que os viola é candidato a revisão.
 ## §13 — Documentos do projeto
 
 - **`CLAUDE.md`** (este arquivo): princípios duráveis. Muda raramente.
+  **Versionado** — é a única fonte das convenções que o código cita ~300 vezes,
+  e precisa viajar com o repositório entre máquinas.
 - **`memory/`**: contexto persistente entre sessões (decisões, convenções
   específicas, estado de áreas).
 - **`NOVO_PLANO_DE_REVISÃO.MD`**: backlog de revisão técnica do ciclo atual,
   com gravidade e status.
 - **`PLANO_*.MD`**: planos temáticos (multiplayer, balanceamento, pendências).
+- Os itens acima, exceto este arquivo, estão no `.gitignore` — são locais por
+  decisão. Quem clonar o repositório não os encontra; ao citá-los em comentário
+  de código, lembre que o leitor pode não ter acesso.
 - Critérios de gravidade da revisão referenciam este arquivo: **Crítico** =
   viola um princípio daqui, causa bug observável, ou bloqueia evolução.
   **Médio** = degrada legibilidade/testabilidade/composição. **Baixo** =
   polimento.
+
+---
+
+## §14 — Cadência e tempo independentes de frame rate
+
+**Evento periódico acumula tempo; nunca reatribui o intervalo cheio.**
+
+- **Proibido:** `timer -= dt; if timer <= 0: agir(); timer = INTERVALO`. O
+  disparo só acontece em fronteira de frame, então o timer não zera exato —
+  estoura e fica negativo. Reatribuir o intervalo **descarta essa sobra**, o
+  período real vira um número inteiro de frames e o evento rende **menos** que o
+  configurado. Medido: Estilete a 8,5 tiros/s em vez de 9,35; rajada do
+  CyberTank 25% lenta a 30fps. O erro é invisível em teste manual porque é
+  pequeno e sistemático.
+- **Armas** usam `FireTimer` (`core/fire_timer.py`): `advance(dt, intervalo)` +
+  `while consume(intervalo)`. O `while` (não `if`) emite todos os tiros que
+  couberem no passo — é o que evita perder disparos quando o intervalo é menor
+  que o `dt`.
+- **Compensação sub-frame:** o `overshoot` do `FireTimer` é há quanto tempo o
+  disparo já era devido; aplicá-lo como deslocamento inicial do projétil
+  (`bullet.x += bullet.vx * overshoot`) torna o espaçamento no ar uniforme.
+  É esse espaçamento que o olho lê como ritmo — ninguém vê o instante da
+  emissão, e sim a fila de projéteis na tela.
+- **Eventos periódicos simples** de entidade (rajada, pulso de área) usam
+  `carry_interval(restante, intervalo)` — mesma matemática, sem o aparato de
+  arma.
+- **Não migrar** timers que não são cadência: FSM com sentinela, timer que
+  alimenta animação de carga (o `charge_ratio` lê o tempo restante), ou evento
+  *gated* por estado — nesse último, o crédito acumulado com o gate fechado
+  dispararia tudo no instante em que ele abre. Casos avaliados e mantidos:
+  `Alien`, `StoneSentry`, `CyberTank` RAILCANNON, `SpikeBoss`,
+  `MountainSerpentBoss`.
+- O `dt` do loop é clampado em `_MAX_FRAME_DT` (1/30) em `app.py`: abaixo de
+  30fps o jogo inteiro entra em câmera lenta, de propósito, para um frame longo
+  não teleportar a física. **Não** compensar isso dentro de um sistema
+  específico — a decisão é global e todos os sistemas desaceleram juntos.
+
+---
+
+## §15 — Persistência
+
+**Escrita de dados do jogador é atômica. Nunca direto sobre o arquivo real.**
+
+- Gravar com `open(path, "w")` deixa um arquivo truncado se o processo morrer no
+  meio — crash, queda de energia, fechar a janela durante um auto-save. O
+  perfil vira ilegível e o jogador perde moedas, naves, mundos e estatísticas
+  de uma vez. É a pior falha possível em retenção, e silenciosa.
+- Sequência obrigatória (`PlayerProfile._write_profile_atomic`): grava em
+  `.tmp` → `flush()` + `os.fsync()` → promove o arquivo íntegro atual a
+  `.bak.json` → `os.replace(tmp, final)`. O `os.replace` é **atômico** em POSIX
+  e Windows: ou o antigo continua inteiro, ou o novo está completo.
+- O `load` tem cadeia de recuperação: principal → `.bak.json` → defaults. Um
+  arquivo ilegível é preservado como `.corrupt.json` para diagnóstico, sem
+  sobrescrever o backup (que é o último estado **bom** conhecido).
+- Vale para qualquer dado durável novo (saves de partida, replays, telemetria).
+  Auto-save durante gameplay é o caso mais crítico: a janela de escrita
+  coincide com o jogador podendo fechar o jogo a qualquer momento.
+
+---
+
+## §16 — Testes
+
+**Lógica pura e convenções têm testes; o CI os roda em cada push.**
+
+- Testes ficam em `tests/`, rodam **headless** (SDL dummy via
+  `tests/conftest.py`) e não abrem janela nem exigem áudio. `python -m pytest`.
+- O alvo é **lógica pura** — o que dá para testar sem instanciar o jogo inteiro:
+  contratos de cadência (`FireTimer`), persistência atômica, invariantes de
+  balanceamento, filtros de entidade. Não perseguir cobertura de render/cena;
+  o retorno não paga o custo de mockar pygame.
+- **Testes de convenção** (`tests/test_conventions.py`) varrem o código-fonte
+  atrás dos anti-padrões que este documento proíbe (§6 `lst[:]`+`remove`, §1
+  acesso a `_privado` entre sistemas, §2 `bus.on` sem `off`). São o que impede
+  a erosão de voltar entre sessões. Exceção legítima entra na allowlist
+  explícita do teste, com o motivo — nunca afrouxe a varredura.
+- Invariante de balanceamento é **faixa**, não número exato: o teste trava
+  outliers grosseiros (uma nave 2× ou 0,5×), não o micro-ajuste, que muda
+  sempre.
+- O CI (`.github/workflows/ci.yml`) roda `ruff check` + `pytest` no push/PR.
+  Verde é pré-requisito de merge. Antes de abrir PR, reproduza local:
+  `ruff check game tests && python -m pytest`.
 
 ---
 
@@ -269,4 +361,7 @@ deve segui-los; código existente que os viola é candidato a revisão.
 - [ ] Colisão via spatial grid; dano via `apply_hit`/`HitResult`
 - [ ] Classe grande decomposta por composição, fachada preservada
 - [ ] Imports no topo; local só para ciclo real
+- [ ] Cadência por `FireTimer`/`carry_interval`; nenhum `timer = INTERVALO`
+- [ ] Persistência com escrita atômica (`.tmp` + `os.replace`), nunca sobre o arquivo real
 - [ ] UI (fontes/caixas/offsets) escalada por `ui_scale`; validada fora de 720p
+- [ ] `ruff check game tests` limpo e `pytest` verde antes do PR

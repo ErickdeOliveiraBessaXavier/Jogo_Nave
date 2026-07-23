@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import shutil
 import sys
 import threading
@@ -1414,22 +1415,47 @@ class PlayerProfile:
 
         return parsed
 
-    def load(self) -> None:
-        """Carrega perfil do disco. Transacional: self só é modificado em caso de sucesso total."""
-        if not self.profile_path.exists():
-            self._ensure_safe_world_defaults()
-            return
+    @property
+    def _backup_path(self) -> Path:
+        """Cópia do último perfil íntegro, escrita antes de cada save."""
+        return self.profile_path.with_suffix(".bak.json")
 
+    def _try_parse_profile(self, path: Path) -> Optional[Dict[str, Any]]:
+        """Lê e valida um arquivo de perfil. `None` se ausente ou ilegível."""
+        if not path.exists():
+            return None
         try:
-            with open(self.profile_path, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 data: Dict[str, Any] = json.load(f)
-            parsed = self._parse_profile_data(data)
+            return self._parse_profile_data(data)
         except (OSError, ValueError, KeyError, TypeError) as e:
-            logger.error("Erro ao carregar perfil: %s", e)
-            if self.profile_path.exists():
-                backup_path = self.profile_path.with_suffix(".backup.json")
-                shutil.copy2(self.profile_path, backup_path)
-                logger.info("Backup salvo em: %s", backup_path)
+            logger.error("Perfil ilegível em %s: %s", path, e)
+            return None
+
+    def load(self) -> None:
+        """Carrega perfil do disco. Transacional: self só é modificado em caso de sucesso total.
+
+        Cadeia de recuperação: principal → backup do save anterior → defaults.
+        O backup existe porque o save é atômico mas o CONTEÚDO pode estar
+        corrompido por outra via (edição manual, bug de serialização); sem ele,
+        um perfil ilegível zerava toda a progressão do jogador.
+        """
+        parsed = self._try_parse_profile(self.profile_path)
+
+        if parsed is None and self.profile_path.exists():
+            # Preserva o arquivo problemático para diagnóstico (não sobrescreve
+            # o backup, que é o último estado BOM conhecido) e tenta restaurar.
+            try:
+                shutil.copy2(
+                    self.profile_path, self.profile_path.with_suffix(".corrupt.json")
+                )
+            except OSError as e:
+                logger.warning("Não foi possível preservar o perfil corrompido: %s", e)
+            parsed = self._try_parse_profile(self._backup_path)
+            if parsed is not None:
+                logger.warning("Perfil restaurado do backup %s", self._backup_path)
+
+        if parsed is None:
             self._ensure_safe_world_defaults()
             return
 
@@ -1527,19 +1553,50 @@ class PlayerProfile:
         }
         return data
 
+    @staticmethod
+    def _write_profile_atomic(path: Path, backup_path: Path, data: Dict[str, Any]) -> None:
+        """Grava o perfil sem janela de corrupção (§15).
+
+        Escrever direto sobre o arquivo real (o que era feito aqui) deixa um
+        JSON truncado se o processo morrer no meio — queda de energia, crash,
+        fechar a janela durante um auto-save. O perfil vira ilegível e o
+        jogador perde moedas, naves, mundos e estatísticas de uma vez.
+
+        Sequência segura:
+        1. grava num `.tmp` e força o flush até o disco (`fsync`);
+        2. promove o perfil íntegro atual a `.bak.json`;
+        3. `os.replace` do `.tmp` para o nome final — operação **atômica** em
+           POSIX e Windows: ou o arquivo antigo continua inteiro, ou o novo
+           está completo. Nunca um estado intermediário.
+        """
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_suffix(".tmp")
+
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+
+        if path.exists():
+            try:
+                shutil.copy2(path, backup_path)
+            except OSError as e:
+                # Backup é rede de segurança, não pré-requisito: se falhar, o
+                # save principal ainda vale a pena (e segue atômico).
+                logger.warning("Falha ao atualizar backup do perfil: %s", e)
+
+        os.replace(tmp_path, path)
+
     def save(self):
         """Salva perfil no disco (síncrono, bloqueante)."""
         # Web (emscripten): escrita é I/O bloqueante no loop, e o alvo é o MEMFS
         # volátil (perdido no reload). Nada a persistir aqui; ver auto_save.
         if sys.platform == "emscripten":
             return
-        # Criar diretório se não existir
-        self.profile_path.parent.mkdir(parents=True, exist_ok=True)
 
-        data = self._prepare_save_data()
-
-        with open(self.profile_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        self._write_profile_atomic(
+            self.profile_path, self._backup_path, self._prepare_save_data()
+        )
 
         self._dirty = False
         self._last_save = time.time()
@@ -1556,12 +1613,15 @@ class PlayerProfile:
         # Preparar dados de forma síncrona (sem efeitos colaterais)
         data = self._prepare_save_data()
         path = self.profile_path
+        backup_path = self._backup_path
 
         def _write_to_disk():
             try:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=2, ensure_ascii=False)
+                # Mesma escrita atômica do save síncrono. Aqui ela importa
+                # ainda mais: o auto-save roda durante o gameplay, então a
+                # janela de escrita coincide com o jogador podendo fechar o
+                # jogo a qualquer momento.
+                self._write_profile_atomic(path, backup_path, data)
                 logger.debug("Async save completed for %s", path)
             except OSError as e:
                 logger.error("Async save failed for %s: %s", path, e)

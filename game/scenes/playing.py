@@ -80,7 +80,9 @@ from ..systems.level_progression_controller import (
 )
 from ..systems.player_slot import PlayerRoster, PlayerSlot
 from ..systems.powerup_system import PowerupSystem
+from ..systems.revival_system import RevivalSystem
 from ..systems.shooting_system import ShootingSystem
+from ..systems.upgrade_selector import UpgradeSelector
 from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
 from ..systems.transition_controller import TransitionController, TransitionPhase
 
@@ -287,8 +289,12 @@ class PlayingScene(Scene):
         self.god_mode: bool = False
         self.state: GameState = GameState.PREPARING
         self.preparation_time_left: float = Config.PREPARATION_TIME
-        self.upgrade_select_mode: bool = False
-        self._upgrade_select_index: int = 0
+        # Cursor de seleção de upgrade (gamepad). Getter lazy porque
+        # `upgrade_slots` é reatribuído a cada fase (§1).
+        self.upgrade_selector = UpgradeSelector(
+            get_slots=lambda: self.upgrade_slots,
+            activate=self.activate_upgrade_slot,
+        )
         # Slot → tempo de tremor restante ao tentar usar poder indisponível.
         self._upgrade_denied_timers: dict[int, float] = {}
         self._apply_difficulty_settings()
@@ -401,11 +407,16 @@ class PlayingScene(Scene):
             (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
         )
 
-    def _request_screen_shake(self, duration: float, intensity: int) -> None:
+    # Contrato PÚBLICO de feedback de tela (§1): o `EffectsSystem` reage a
+    # eventos do bus e precisa pedir shake/flash à cena. Enquanto estes métodos
+    # eram privados, ele os chamava por `hasattr` + acesso a `_privado`, com
+    # fallback escrevendo atributos direto — fronteira borrada e quebra
+    # silenciosa se o nome mudasse. Ver `ScreenFeedback` em `effects_system`.
+    def request_screen_shake(self, duration: float, intensity: int) -> None:
         self.screen_shake_timer = duration
         self.screen_shake_intensity = intensity
 
-    def _request_impact_flash(self, duration: float, alpha: int) -> None:
+    def request_impact_flash(self, duration: float, alpha: int) -> None:
         """Flash branco de impacto (white frames). Não acumula: um flash em curso
         só é substituído por outro de pico >= (evita que um fraco corte um forte)."""
         if self.impact_flash_timer > 0.0 and alpha < self.impact_flash_alpha:
@@ -448,7 +459,7 @@ class PlayingScene(Scene):
         self.boss_controller = BossFightController(
             entity_manager=self.entity_manager,
             event_bus=self.app.event_bus,
-            screen_shake_request=self._request_screen_shake,
+            screen_shake_request=self.request_screen_shake,
             background_getter=self._get_background,
         )
 
@@ -501,6 +512,15 @@ class PlayingScene(Scene):
         self.shooting = ShootingSystem(
             entity_manager=self.entity_manager,
             event_bus=self.app.event_bus,
+        )
+
+        # Revive cooperativo: a cena mantém a lógica de vidas e mini-naves (via
+        # callbacks); o beacon em si é do sistema. Não referencia a cena (§1).
+        self.revival_system = RevivalSystem(
+            roster=self.roster,
+            gamepad=self.app.gamepad,
+            sync_lives=self._sync_lives_for,
+            rebuild_mini_ships=self._build_permanent_mini_ships,
         )
 
     # ------------------------------------------------------------------
@@ -1051,7 +1071,7 @@ class PlayingScene(Scene):
         # Pausa a chuva durante o nocaute (religada quando a nave volta ao
         # controle, em `_finish_atmosphere_death`). Tranco do impacto.
         self.enemy_spawner.stopped = True
-        self._request_screen_shake(0.4, Config.SCREEN_SHAKE_NORMAL)
+        self.request_screen_shake(0.4, Config.SCREEN_SHAKE_NORMAL)
 
         initial_lives = int(self.difficulty_settings["lives"])
         for slot in self.roster.all_slots():
@@ -1300,7 +1320,7 @@ class PlayingScene(Scene):
         self._update_preparing_state(dt)
         self._update_timers(dt)
         self._update_ship(dt)
-        self._update_revival_beacons(dt)
+        self.revival_system.update(dt)
         self._apply_environmental_effects(dt)
         self._apply_gravity_wells(dt)
         self._update_spawners(dt)
@@ -2418,7 +2438,7 @@ class PlayingScene(Scene):
             self.entity_manager.mini_ships = [
                 m for m in self.entity_manager.mini_ships if m.player is not slot.ship
             ]
-            self._spawn_revival_beacon(slot)
+            self.revival_system.spawn_beacon(slot)
         # Game over quando ninguém tem vidas. Em single-player, com 1 slot,
         # equivale ao comportamento original (vida zero = game over imediato).
         # Em coop, se restar pelo menos um vivo, o beacon do morto pode ser
@@ -2698,63 +2718,23 @@ class PlayingScene(Scene):
     # Modo de seleção de upgrade via controle
     # ------------------------------------------------------------------
 
+    # Fachadas (§9) para o input handler — delegam ao UpgradeSelector.
+    @property
+    def upgrade_select_mode(self) -> bool:
+        """True enquanto o cursor de seleção de upgrade está ativo (só leitura)."""
+        return self.upgrade_selector.mode
+
     def toggle_upgrade_select_mode(self) -> None:
-        """Liga/desliga o modo de seleção. Ao ligar, alinha o cursor para um
-        slot válido, priorizando upgrades fora de cooldown."""
-        if self.upgrade_select_mode:
-            self.upgrade_select_mode = False
-            return
-        if not any(s is not None for s in self.upgrade_slots):
-            return  # Sem upgrades equipados — nada para selecionar.
-        self.upgrade_select_mode = True
-        self._snap_upgrade_select_to_valid()
-
-    def _upgrade_slot_is_ready(self, upg: ActiveUpgrade | None) -> bool:
-        if upg is None:
-            return False
-        return upg.cooldown_left <= 0.0
-
-    def _get_upgrade_select_order(self) -> list[int]:
-        """Retorna índices de slots com upgrades prontos primeiro."""
-        ready_slots = [
-            i
-            for i, upg in enumerate(self.upgrade_slots)
-            if self._upgrade_slot_is_ready(upg)
-        ]
-        cooling_slots = [
-            i
-            for i, upg in enumerate(self.upgrade_slots)
-            if upg is not None and not self._upgrade_slot_is_ready(upg)
-        ]
-        return ready_slots + cooling_slots
-
-    def _snap_upgrade_select_to_valid(self) -> None:
-        """Garante que ``_upgrade_select_index`` priorize um upgrade pronto."""
-        ordered_slots = self._get_upgrade_select_order()
-        if not ordered_slots:
-            return
-        self._upgrade_select_index = ordered_slots[0]
+        self.upgrade_selector.toggle()
 
     def navigate_upgrade_select(self, delta: int) -> None:
-        """Move o cursor entre upgrades ocupados, priorizando os prontos."""
-        ordered_slots = self._get_upgrade_select_order()
-        if not ordered_slots:
-            return
-        try:
-            current_pos = ordered_slots.index(self._upgrade_select_index)
-        except ValueError:
-            self._upgrade_select_index = ordered_slots[0]
-            return
-
-        next_pos = (current_pos + delta) % len(ordered_slots)
-        self._upgrade_select_index = ordered_slots[next_pos]
+        self.upgrade_selector.navigate(delta)
 
     def confirm_upgrade_select(self) -> None:
-        """Ativa o slot atualmente destacado e sai do modo."""
-        idx = self._upgrade_select_index
-        self.upgrade_select_mode = False
-        if 0 <= idx < len(self.upgrade_slots) and self.upgrade_slots[idx] is not None:
-            self.activate_upgrade_slot(idx)
+        self.upgrade_selector.confirm()
+
+    def cancel_upgrade_select(self) -> None:
+        self.upgrade_selector.cancel()
 
     def activate_stored_powerup(self, slot_index: int) -> None:
         """Compat: ativa Cofre do slot primário (P1). Mantido para
@@ -2774,19 +2754,8 @@ class PlayingScene(Scene):
         self._apply_powerup(kind, slot)
 
     def slot_inside_any_beacon(self, slot: PlayerSlot) -> bool:
-        """True se o slot vivo está dentro do raio de algum beacon ativo.
-
-        Usado pelo input handler pra suprimir a ativação do Cofre slot 0
-        (botão Y) quando o jogador está tentando reviver alguém — o Y é
-        compartilhado entre as duas ações e o revive (held) tem precedência.
-        """
-        ship = slot.ship
-        px, py = float(ship.rect.centerx), float(ship.rect.centery)
-        for dead in self.roster.dead_slots():
-            beacon = dead.revival_beacon
-            if beacon is not None and beacon.contains_point(px, py):
-                return True
-        return False
+        """Fachada (§9) para o input handler — delega ao RevivalSystem."""
+        return self.revival_system.slot_inside_any_beacon(slot)
 
     # ------------------------------------------------------------------
     # Render
@@ -2844,8 +2813,8 @@ class PlayingScene(Scene):
             start_fade_overlay=self.start_fade_overlay,
             show_fps=self.show_fps,
             show_enemy_hitboxes=self.show_enemy_hitboxes,
-            upgrade_select_mode=self.upgrade_select_mode,
-            upgrade_select_index=self._upgrade_select_index,
+            upgrade_select_mode=self.upgrade_selector.mode,
+            upgrade_select_index=self.upgrade_selector.index,
             upgrade_slots=self.upgrade_slots,
             upgrade_keybindings=list(keybindings),
             upgrade_denied_timers=dict(self._upgrade_denied_timers),
@@ -2952,109 +2921,6 @@ class PlayingScene(Scene):
 
     def change_lives_for(self, slot: PlayerSlot, delta: int) -> None:
         self._sync_lives_for(slot, slot.lives + delta)
-
-    # ------------------------------------------------------------------
-    # Beacon de revive (multiplayer)
-    # ------------------------------------------------------------------
-
-    def _spawn_revival_beacon(self, slot: PlayerSlot) -> None:
-        """Cria o beacon na posição da nave do slot que acabou de morrer."""
-        if self.roster.count() < 2:
-            return
-        ship = slot.ship
-        slot.revival_beacon = RevivalBeacon(
-            x=float(ship.rect.centerx),
-            y=float(ship.rect.centery),
-            for_slot=slot,
-            ship_image=ship.ship_image,
-        )
-        logger.info(
-            "Beacon de revive spawnou em (%.0f, %.0f) para slot morto.",
-            slot.revival_beacon.x,
-            slot.revival_beacon.y,
-        )
-
-    def _update_revival_beacons(self, dt: float) -> None:
-        """Processa todos os beacons ativos: detecta hold, acumula timer, revive."""
-        dead_with_beacon = [
-            s for s in self.roster.dead_slots() if s.revival_beacon is not None
-        ]
-        if not dead_with_beacon:
-            return
-
-        alive = self.roster.alive_slots()
-        for dead_slot in dead_with_beacon:
-            beacon = dead_slot.revival_beacon
-            assert beacon is not None
-            beacon.update_visual(dt)
-
-            # Proximidade visual: mostra a dica se qualquer player vivo estiver no raio
-            near_any = any(
-                beacon.contains_point(
-                    float(s.ship.rect.centerx), float(s.ship.rect.centery)
-                )
-                for s in alive
-            )
-            beacon.set_hint_visible(near_any)
-
-            qualifying_helper = self._find_revive_helper(beacon, alive)
-            if qualifying_helper is not None:
-                beacon.tick_hold(dt)
-                if beacon.is_complete:
-                    self._revive_slot(dead_slot)
-            else:
-                beacon.reset_progress()
-
-    def _find_revive_helper(
-        self, beacon: RevivalBeacon, alive_slots: list[PlayerSlot]
-    ) -> Optional[PlayerSlot]:
-        """Retorna o primeiro slot vivo dentro do raio segurando Y, ou None."""
-        for helper in alive_slots:
-            ship = helper.ship
-            if not beacon.contains_point(
-                float(ship.rect.centerx), float(ship.rect.centery)
-            ):
-                continue
-            if self._is_revive_button_held(helper):
-                return helper
-        return None
-
-    def _is_revive_button_held(self, slot: PlayerSlot) -> bool:
-        """Checa se o slot está segurando o botão de revive (Y / tecla Y)."""
-        from ..core.gamepad import XboxButton
-
-        gp = self.app.gamepad
-        slot_idx = slot.gamepad_slot if slot.gamepad_slot is not None else 0
-        if gp.is_button_pressed(XboxButton.Y, slot=slot_idx):
-            return True
-        # Fallback teclado só para P1 (slot 0 inclui teclado por convenção).
-        if slot_idx == 0:
-            keys = pygame.key.get_pressed()
-            if keys[pygame.K_y]:
-                return True
-        return False
-
-    def _revive_slot(self, slot: PlayerSlot) -> None:
-        """Ressuscita o slot na posição do beacon com vida e invuln inicial."""
-        beacon = slot.revival_beacon
-        if beacon is None:
-            return
-        ship = slot.ship
-        # Reposiciona a nave no beacon para o player "renascer" no local.
-        ship.x = beacon.x - ship.w / 2.0
-        ship.y = beacon.y - ship.h / 2.0
-        ship.invuln = RevivalBeacon.POST_REVIVE_INVULN_MS
-        slot.is_dead = False
-        slot.revival_beacon = None
-        self._sync_lives_for(slot, RevivalBeacon.LIVES_ON_REVIVE)
-        # Restaura mini-naves permanentes (Engenheiro): foram removidas na morte.
-        self._build_permanent_mini_ships(slot)
-        logger.info(
-            "Slot revivido em (%.0f, %.0f) com %d vida.",
-            beacon.x,
-            beacon.y,
-            RevivalBeacon.LIVES_ON_REVIVE,
-        )
 
     def apply_cooldown_reduction(self, reduction: float) -> None:
         """Reduz instantaneamente o cooldown de todos os upgrades ativos."""

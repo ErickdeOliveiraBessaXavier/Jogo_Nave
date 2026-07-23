@@ -1,4 +1,4 @@
-"""fire_timer.py — Temporizador de cadência independente de frame rate.
+"""fire_timer.py — Temporizador de cadência independente de frame rate (§14).
 
 Fonte ÚNICA de "quando o próximo disparo sai", para nave, mini-nave, wingman e
 qualquer arma futura. Substitui o padrão espalhado pelo projeto:

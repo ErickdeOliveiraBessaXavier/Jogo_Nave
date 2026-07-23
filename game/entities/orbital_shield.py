@@ -47,14 +47,13 @@ class OrbitalShield:
         if random.random() < 0.3:
             self._spawn_spark()
 
-        # Atualizar faíscas
-        for s in self.sparks[:]:
+        # Atualizar faíscas (§6: update in-place, rebuild por comprehension)
+        for s in self.sparks:
             s["life"] -= dt
-            if s["life"] <= 0:
-                self.sparks.remove(s)
-            else:
+            if s["life"] > 0:
                 s["x"] += s["vx"] * dt
                 s["y"] += s["vy"] * dt
+        self.sparks = [s for s in self.sparks if s["life"] > 0]
 
     def _spawn_spark(self):
         angle = random.uniform(0, math.pi * 2)

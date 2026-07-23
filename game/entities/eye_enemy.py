@@ -151,13 +151,20 @@ class EyeEnemy:
         return None
 
     def _update_charging_particles(self, dt: float):
-        for particle in self.charging_particles[:]:
-            direction = pygame.Vector2(self.rect.center) - particle["pos"]
+        # §6: update in-place, depois rebuild por comprehension (sem cópia por
+        # frame + remove O(n)). Uma partícula "morre" ao alcançar o centro.
+        center = pygame.Vector2(self.rect.center)
+        for particle in self.charging_particles:
+            direction = center - particle["pos"]
             if direction.length() > 1:
                 direction.normalize_ip()
                 particle["pos"] += direction * particle["speed"] * dt
+                particle["_arrived"] = False
             else:
-                self.charging_particles.remove(particle)
+                particle["_arrived"] = True
+        self.charging_particles = [
+            p for p in self.charging_particles if not p.get("_arrived")
+        ]
 
     def _initialize_charging_particles(self):
         self.charging_particles.clear()

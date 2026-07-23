@@ -1741,6 +1741,16 @@ class MountainSerpentBoss(BossHitMixin):
         quando block.side ainda não foi atualizado por _finalize_swap."""
         return all(b.dead for b in self._all_blocks)
 
+    def clear_blocks(self) -> None:
+        """Descarta os blocos da serpente na limpeza de fim de fase.
+
+        Contrato público (§1): o `EntityManager` limpava `self.boss._all_blocks`
+        direto — acesso a estado privado de outro objeto, marcado com um
+        `type: ignore`. A lista dos blocos é detalhe interno do boss; expor a
+        operação em vez do atributo mantém a fronteira.
+        """
+        self._all_blocks.clear()
+
     @property
     def block_wave_time(self) -> float:
         """Tempo acumulado da onda ondulante dos blocos."""

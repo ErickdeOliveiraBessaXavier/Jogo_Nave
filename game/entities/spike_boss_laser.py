@@ -108,12 +108,15 @@ class SpikeBossLaser:
             )
 
         elif self.state == "dying":
-            for p in self.death_particles[:]:
+            for p in self.death_particles:  # §6: update in-place, rebuild abaixo
                 p["pos"] += p["vel"] * dt
                 p["lifespan"] -= dt
                 p["size"] -= 4 * dt
-                if p["lifespan"] <= 0 or p["size"] <= 0:
-                    self.death_particles.remove(p)
+            self.death_particles = [
+                p
+                for p in self.death_particles
+                if p["lifespan"] > 0 and p["size"] > 0
+            ]
 
             if not self.death_particles:
                 self.dead = True

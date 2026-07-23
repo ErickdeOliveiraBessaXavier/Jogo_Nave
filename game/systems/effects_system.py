@@ -7,7 +7,7 @@ scores flutuantes e tremores de tela, ouvindo eventos do jogo.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Optional, Protocol
 
 from ..entities.floating_score import FloatingScore
 from ..events import game_events as events
@@ -17,13 +17,29 @@ if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
 
 
+class ScreenFeedback(Protocol):
+    """O que este sistema precisa da cena — e só isso (§1).
+
+    Contrato explícito no lugar do `scene: Any` + `hasattr` que existia aqui:
+    a dependência passa a ser verificável pelo type checker, e renomear um
+    método na cena vira erro em vez de um efeito que some sem aviso.
+    """
+
+    def request_screen_shake(self, duration: float, intensity: int) -> None: ...
+
+    def request_impact_flash(self, duration: float, alpha: int) -> None: ...
+
+
 class EffectsSystem:
     """
     Cria e gerencia efeitos visuais com base em eventos de jogo.
     """
 
     def __init__(
-        self, event_bus: EventBus, entity_manager: EntityManager, scene: Any = None
+        self,
+        event_bus: EventBus,
+        entity_manager: EntityManager,
+        scene: Optional[ScreenFeedback] = None,
     ):
         self._bus = event_bus
         self._entity_manager = entity_manager
@@ -40,18 +56,12 @@ class EffectsSystem:
     def _on_screen_shake(self, event: events.ScreenShake) -> None:
         """Handler para tremor de tela — repassa os dados para a cena."""
         if self._scene is not None:
-            # Chama o método de request da PlayingScene
-            if hasattr(self._scene, "_request_screen_shake"):
-                self._scene._request_screen_shake(event.duration, event.intensity)
-            else:
-                # Fallback direto caso o método mude
-                self._scene.screen_shake_timer = event.duration
-                self._scene.screen_shake_intensity = event.intensity
+            self._scene.request_screen_shake(event.duration, event.intensity)
 
     def _on_impact_flash(self, event: events.ImpactFlash) -> None:
         """Handler para o flash de impacto (white frames) — repassa para a cena."""
-        if self._scene is not None and hasattr(self._scene, "_request_impact_flash"):
-            self._scene._request_impact_flash(event.duration, event.alpha)
+        if self._scene is not None:
+            self._scene.request_impact_flash(event.duration, event.alpha)
 
     def _on_spawn_effect(self, event: events.SpawnEffect) -> None:
         """Handler genérico para criar efeitos visuais."""

@@ -372,13 +372,12 @@ class MountainPropeller:
                 }
             )
 
-        for p in self.sweat_particles[:]:
+        for p in self.sweat_particles:  # §6: update in-place, rebuild abaixo
             p["vy"] += 800 * dt
             p["x"] += p["vx"] * dt
             p["y"] += p["vy"] * dt
             p["life"] -= dt
-            if p["life"] <= 0:
-                self.sweat_particles.remove(p)
+        self.sweat_particles = [p for p in self.sweat_particles if p["life"] > 0]
 
     def draw(self, surface: pygame.Surface) -> None:
         if self.state == _PropellerState.BLOWING:

@@ -909,27 +909,24 @@ class EntityManager:
         return slow_active, slow_factor
 
     def _update_visual_effects(self, dt: float) -> None:
-        """Efeitos visuais com auto-cleanup: EMP, explosivos, zonas elementais, chain."""
-        for w in self.emp_waves[:]:
-            w.update(dt)
-            if w.dead:
-                self.emp_waves.remove(w)
-        for e in self.explosive_effects[:]:
-            e.update(dt)
-            if e.dead:
-                self.explosive_effects.remove(e)
-        for zone in self.ice_poison_zones[:]:
-            zone.update(dt)
-            if zone.dead:
-                self.ice_poison_zones.remove(zone)
-        for zone in self.fire_zones[:]:
-            zone.update(dt)
-            if zone.dead:
-                self.fire_zones.remove(zone)
-        for cl in self.chain_lightnings[:]:
-            cl.update(dt)
-            if cl.dead:
-                self.chain_lightnings.remove(cl)
+        """Efeitos visuais com auto-cleanup: EMP, explosivos, zonas elementais, chain.
+
+        Roda todo frame, então segue o §6: update in-place e remoção por
+        swap-and-pop via `_filter_dead_inplace`. O padrão anterior aqui era
+        `for x in lst[:]: ... lst.remove(x)` — alocava uma cópia de cada lista
+        por frame e cada `remove` era O(n), dando O(n²) justamente quando o
+        combate está mais intenso e as listas mais cheias (nenhuma tem teto).
+        """
+        for effects in (
+            self.emp_waves,
+            self.explosive_effects,
+            self.ice_poison_zones,
+            self.fire_zones,
+            self.chain_lightnings,
+        ):
+            for effect in effects:
+                effect.update(dt)
+            self._filter_dead_inplace(effects)
 
     def _update_formations(self, dt: float, enemy_dt: float) -> list[AlienBullet]:
         """Tick das formações com EMP/ice; retorna alien_bullets emitidas."""
@@ -1864,9 +1861,9 @@ class EntityManager:
         self.powerups.clear()
         self.stars.clear()
         self.floating_scores.clear()
-        # Limpeza especial para blocos da serpente
+        # Limpeza especial para blocos da serpente (via contrato público, §1).
         if isinstance(self.boss, MountainSerpentBoss):
-            self.boss._all_blocks.clear()  # type: ignore[attr-defined]
+            self.boss.clear_blocks()
         self.enemies.clear()
         self.boulders.clear()
         self.attack_debris.clear()

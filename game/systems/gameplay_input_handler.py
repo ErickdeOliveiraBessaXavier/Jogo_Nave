@@ -196,7 +196,7 @@ class GameplayInputHandler:
         # Start sempre abre pausa — qualquer controle, mesmo durante entry
         # ou modo de seleção. Não precisa resolver slot (pausa é global).
         if button == XboxButton.START:
-            scene.upgrade_select_mode = False
+            scene.cancel_upgrade_select()
             from ..scenes.paused import PausedScene
 
             scene.app.states.push(PausedScene(scene.app, previous_scene=scene))
@@ -218,7 +218,7 @@ class GameplayInputHandler:
             if button == XboxButton.A:
                 scene.confirm_upgrade_select()
             elif button == XboxButton.B:
-                scene.upgrade_select_mode = False
+                scene.cancel_upgrade_select()
             elif button == XboxButton.LB:
                 scene.navigate_upgrade_select(+1)
             elif button == XboxButton.RB:

@@ -386,8 +386,13 @@ class ShipPowerups:
                         continue
 
         # Streaks visuais decaem independente do timer do power-up.
-        for s in ship.repulsion_wind_streaks[:]:
+        # §6: update in-place, rebuild por comprehension.
+        max_dist = Config.REPULSION_SHIELD_RADIUS * 2.5
+        for s in ship.repulsion_wind_streaks:
             s["dist"] += s["speed"] * dt
             s["alpha"] -= 400 * dt
-            if s["alpha"] <= 0 or s["dist"] > Config.REPULSION_SHIELD_RADIUS * 2.5:
-                ship.repulsion_wind_streaks.remove(s)
+        ship.repulsion_wind_streaks = [
+            s
+            for s in ship.repulsion_wind_streaks
+            if s["alpha"] > 0 and s["dist"] <= max_dist
+        ]

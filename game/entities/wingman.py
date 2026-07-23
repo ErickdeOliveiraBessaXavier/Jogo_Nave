@@ -1,7 +1,7 @@
 import math
 import random
 from pathlib import Path
-from typing import Any, Dict, Final, Optional, List, Tuple
+from typing import Any, Dict, Final, List, Tuple
 
 import pygame
 

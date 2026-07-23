@@ -1,4 +1,4 @@
-[tool.ruff]
+[tool.ruff.lint]
 select = [
     "F",     # erros reais (undefined, unused imports)
     "E",     # estilo PEP8
@@ -15,6 +15,12 @@ ignore = [
 [tool.vulture]
 min_confidence = 80
 paths = ["game/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `-q` silencioso; sem plugins de descoberta lenta. Os testes rodam headless
+# (SDL dummy) via tests/conftest.py.
+addopts = "-q"
 
 # Config do pylint vive em .pylintrc (que tem precedência sobre este arquivo
 # na auto-descoberta do pylint). Mantida lá para evitar config duplicada.
