@@ -21,7 +21,10 @@ class EyeEnemy:
         self.x: float = x
         self.y: float = -self.h  # Start off-screen
         self.target_y: float = y
-        self.health: int = 20
+        # 18 e não 20: em 20 o tiro pesado (18 de dano) precisava de 2 tiros e
+        # desperdiçava 44% do segundo, virando o pior alvo do jogo para as naves
+        # de cadência baixa. 18 é múltiplo das grades de dano 6/9/18.
+        self.health: int = 18
 
         # Agressividade: Aumenta a velocidade de movimento
         self.speed_x: float = 75 * aggressiveness_multiplier

@@ -16,6 +16,7 @@ from .meteor import Meteor
 from .mini_ship_bullet import MiniShipBullet
 from .ship import Ship
 from .stone_sentry import StoneSentry
+from ..core.fire_timer import FireTimer
 
 if TYPE_CHECKING:
     from ..systems.entity_manager import EntityManager
@@ -66,7 +67,10 @@ class MiniShip:
         self.x = self.player.x
         self.y = self.player.y
         self.shoot_cooldown = 0.75
-        self.shoot_timer = self.shoot_cooldown
+        # Cadência pelo FireTimer compartilhado: o padrão antigo
+        # (`shoot_timer = shoot_cooldown` após atirar) descartava a sobra do
+        # frame e fazia a mini-nave atirar abaixo da cadência configurada.
+        self._fire_timer = FireTimer()
 
         self.target_offset_x = 0
         self.target_offset_y = 0
@@ -125,10 +129,9 @@ class MiniShip:
         )
 
         # Shooting
-        self.shoot_timer -= dt
-        if self.shoot_timer <= 0 and self.target is not None:
+        self._fire_timer.advance(dt, self.shoot_cooldown)
+        if self.target is not None and self._fire_timer.consume(self.shoot_cooldown):
             self.shoot(self.target, bullets)
-            self.shoot_timer = self.shoot_cooldown
 
     def _acquire_target(self, entity_manager: "EntityManager") -> None:
         """Mantém o alvo atual enquanto atacável e em alcance; senão re-adquire.

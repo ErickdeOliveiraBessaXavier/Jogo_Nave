@@ -41,6 +41,17 @@ class ShipProfile:
     agility_mult: float = 1.0  # >1 = responde mais rápido ao mouse/inércia
     extra_lives: int = 0  # vidas extra além do padrão
 
+    # Velocidade do projétil (× Config.BULLET_SPEED). É a contrapartida da
+    # cadência: quem atira pouco sente cada erro de mira por mais tempo, então
+    # o tiro pesado/preciso viaja mais rápido (menos antecipação necessária) e o
+    # tiro-metralhadora viaja mais devagar (obriga a se aproximar).
+    bullet_speed_mult: float = 1.0
+
+    # Alvos EXTRA que o tiro comum atravessa antes de morrer (0 = para no 1º).
+    # Existe para o tiro de dano alto não desperdiçar o excedente na massa de
+    # inimigos fracos — é onde a nave lenta perdia sem compensação.
+    pierce_count: int = 0
+
     # Mecânicas especiais (mutuamente exclusivas na maioria das naves).
     powerup_slots: int = 0  # Cofre: 2
     has_dash: bool = False  # Fantasma
@@ -53,6 +64,10 @@ class ShipProfile:
     charge_shot_damage_mult: float = 3.0
     combo_damage_per_kill: float = 0.0  # Reverberador
     combo_damage_cap: float = 0.0  # cap aditivo (0.0 = desativado)
+    # Bônus de cadência do combo, aplicado proporcional ao progresso até o cap
+    # (0.15 = +15% de fire rate com o combo cheio). Brando de propósito: o dano
+    # já é a recompensa principal, a cadência só dá o "embalo".
+    combo_fire_rate_bonus: float = 0.0
 
     # Lag de reação ao mouse (segundos). A nave persegue a posição que o cursor
     # estava há `reaction_delay` segundos atrás. 0.0 = reação imediata.
@@ -95,12 +110,22 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
     ShipProfile(
         id="estilete",
         display_name="Estilete",
-        description="Atira 60% mais rápido, mas cada tiro causa 35% menos dano.",
+        description=(
+            "A maior cadência do elenco (9,4 tiros/s), mas o tiro mais fraco "
+            "(60% menos dano) e 15% mais lento."
+        ),
         sprite_filename="ship_estilete.png",
         unlock_cost=40,
-        fire_rate_mult=1.60,
-        damage_mult=0.65,
-        speed_mult=1.2,  # Mais rápida que a padrão
+        # A nave ágil: toda a identidade está na cadência, e nenhuma no impacto.
+        # Com 5 de dano (2.00/0.50) ela varria a massa E acompanhava o alvo
+        # médio — não tinha ponto fraco. Em 4 de dano cada tier de HP custa
+        # ~25% mais tiros, e o output cai para 37 DPS, o menor do elenco.
+        fire_rate_mult=1.87,
+        damage_mult=0.40,
+        # Projétil lento é o custo real da cadência: obriga a lutar mais perto,
+        # onde a agilidade máxima dela é gasta em sobreviver, não em farmar.
+        bullet_speed_mult=0.85,
+        speed_mult=1.1,  # Ainda mais rápida que a padrão, sem ser a melhor em tudo
         agility_mult=1.6,  # Máxima agilidade (quase instantânea)
         thruster_intensity_mult=1.2,
         reaction_delay=0.0,  # Reage instantaneamente
@@ -109,16 +134,28 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
     ShipProfile(
         id="ariete",
         display_name="Aríete",
-        description=("Dano +80% e +1 vida, mas é 30% mais lenta e atira 25% menos."),
+        description=(
+            "Dano +80% e +1 vida. O tiro é rápido e atravessa 1 inimigo, "
+            "mas a cadência é 25% menor e a nave é 20% mais lenta."
+        ),
         sprite_filename="ship_ariete.png",
         unlock_cost=55,
         fire_rate_mult=0.75,
         damage_mult=1.80,
-        speed_mult=0.70,
-        agility_mult=0.75,  # Tanque de verdade — peso sentido no controle
+        # Projétil pesado e veloz: menos antecipação de mira, o que compensa o
+        # custo de errar com uma cadência baixa.
+        bullet_speed_mult=1.25,
+        # Atravessa 1 alvo — o excedente de dano vira um segundo abate na massa
+        # em vez de ser desperdiçado, sem alterar o TTK contra alvo único.
+        pierce_count=1,
+        # Mobilidade era punitiva a ponto de anular a vantagem de dano: a nave
+        # segue a mais pesada do elenco, mas sem pagar duas vezes pelo mesmo
+        # trade (cadência baixa JÁ é o custo do dano alto).
+        speed_mult=0.80,
+        agility_mult=0.85,
         thruster_intensity_mult=0.8,
         extra_lives=1,
-        reaction_delay=0.12,  # A mais lenta a reagir — tanque total
+        reaction_delay=0.08,  # Ainda a mais lenta a reagir
         tags=("Tanque", "Burst"),
     ),
     ShipProfile(
@@ -142,11 +179,13 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         display_name="Fantasma",
         description=(
             "{dash}: dash com invulnerabilidade (cd 4s). Atravessa minas. "
-            "-1 vida e dano -20%."
+            "-1 vida e dano -15%."
         ),
         sprite_filename="ship_fantasma.png",
         unlock_cost=80,
-        damage_mult=0.80,
+        # 0.85 e não 0.80: a −1 vida já é um custo pesado e o output ofensivo
+        # estava em 0.92 do elenco, sem o dash compensar a diferença.
+        damage_mult=0.85,
         speed_mult=1.1,
         agility_mult=1.5,  # Muito ágil para compensar fragilidade
         thruster_intensity_mult=1.25,
@@ -177,11 +216,18 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         display_name="Caçador",
         description=(
             "Charge shot: segure {charge} até 0.8s para 3× dano. "
-            "Falha se soltar antes. Fire rate base -30%."
+            "Falha se soltar antes. Projétil o mais rápido do elenco; "
+            "fire rate base -25%."
         ),
         sprite_filename="ship_cacador.png",
         unlock_cost=100,
-        fire_rate_mult=0.70,
+        # Alívio pequeno (era 0.70): o tiro comum rendia 0.70× contra QUALQUER
+        # alvo, sem vantagem alguma. Não mais que isso porque o charge já é
+        # caro de compensar — são 5 teleguiados de 3× dano (~150 de burst).
+        fire_rate_mult=0.75,
+        # O tiro mais veloz do jogo — identidade de sniper, e o que torna a
+        # cadência baixa uma escolha de estilo em vez de um imposto.
+        bullet_speed_mult=1.35,
         speed_mult=1.0,
         agility_mult=1.0,  # Charge shot exige posicionamento deliberado, não reflexo
         thruster_intensity_mult=0.95,
@@ -195,8 +241,8 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         id="reverberador",
         display_name="Reverberador",
         description=(
-            "Cada abate sem tomar dano adiciona +2% de dano (máx +100%). "
-            "Reset ao ser atingida. Stats base -10%."
+            "Cada abate sem tomar dano adiciona +2% de dano (máx +100%) e "
+            "acelera a cadência (até +15%). Reset ao ser atingida. Stats base -10%."
         ),
         sprite_filename="ship_reveberador.png",
         unlock_cost=100,
@@ -207,6 +253,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         thruster_intensity_mult=0.85,
         combo_damage_per_kill=0.02,
         combo_damage_cap=1.0,
+        combo_fire_rate_bonus=0.15,
         reaction_delay=0.07,  # Cautela reforçada
         tags=("Combo", "Escalada"),
     ),

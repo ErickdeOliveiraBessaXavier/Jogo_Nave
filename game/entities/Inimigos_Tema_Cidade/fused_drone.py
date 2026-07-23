@@ -23,6 +23,7 @@ from . import city_glow
 from . import city_palette as pal
 from .city_drone import CityDrone
 from .city_drone_pixel_map import PIXEL_COLS, build_static_surface
+from ...core.fire_timer import carry_interval
 
 if TYPE_CHECKING:
     from ...systems.entity_context import EnemyUpdateContext
@@ -144,7 +145,10 @@ class FusedDrone(EnemyHitMixin):
         # Rajada periódica de drones homing.
         self.attack_timer -= dt
         if self.attack_timer <= 0.0:
-            self.attack_timer = self.ATTACK_INTERVAL
+            # Preserva a sobra do frame (ver `carry_interval`): o intervalo é
+            # longo e o ganho é pequeno, mas o padrão de reagendamento do
+            # projeto é este — atribuição direta é o que produz deriva.
+            self.attack_timer = carry_interval(self.attack_timer, self.ATTACK_INTERVAL)
             return self._spawn_homing(cx, cy)
         return None
 

@@ -235,6 +235,57 @@ def _get_explosive_body(
 _GLOW_STEPS: int = 5
 _GLOW_CACHE: Dict[Tuple[int, Tuple[int, int, int], int], pygame.Surface] = {}
 
+# Halo do tiro COMUM: aditivo, com o RGB pré-multiplicado pela intensidade.
+# Alpha-blend (o caminho dos power-ups) precisa de alpha alto para aparecer, e
+# nessa dose o halo vira uma mancha chapada em volta de um tiro pequeno; somando
+# ao fundo, o brilho aparece sobre o preto do espaço sem borrar o projétil.
+# `_COMMON_GLOW_PEAK` = fração do brilho da cor somada no centro, no pico do pulso.
+# Doses baixas de propósito: com dezenas de tiros na tela os halos SOMAM entre si,
+# e o que era brilho individual vira uma mancha só, lavando inimigos e projéteis.
+_COMMON_GLOW_MIN: float = 0.22
+_COMMON_GLOW_PEAK: float = 0.45
+# Expoente da queda radial. Acima de 2 o brilho se concentra num núcleo apertado
+# em vez de se espalhar — é o que mantém o tiro "aceso" sem borrar a vizinhança.
+_COMMON_GLOW_FALLOFF: float = 3.0
+_COMMON_GLOW_CACHE: Dict[Tuple[int, Tuple[int, int, int], int], pygame.Surface] = {}
+
+
+def _get_common_shot_glow(
+    radius: int, color: Tuple[int, int, int], step: int
+) -> pygame.Surface:
+    """Halo radial aditivo do tiro comum, memoizado por (raio, cor, passo).
+
+    Mesma ideia de `_get_power_glow` — degradê quadrático do centro à borda —,
+    mas a cor já sai multiplicada pela intensidade para ser blitada com
+    ``BLEND_RGB_ADD`` (que ignora o canal alpha).
+    """
+    key = (radius, color, step)
+    cached = _COMMON_GLOW_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    size = radius * 2
+    surf = pygame.Surface((size, size), pygame.SRCALPHA)
+    peak = _COMMON_GLOW_MIN + (step / _GLOW_STEPS) * (
+        _COMMON_GLOW_PEAK - _COMMON_GLOW_MIN
+    )
+    r_col, g_col, b_col = color
+    for r in range(radius, 0, -1):
+        t = r / radius
+        f = peak * (1.0 - t) ** _COMMON_GLOW_FALLOFF
+        pygame.draw.circle(
+            surf,
+            (int(r_col * f), int(g_col * f), int(b_col * f), 255),
+            (radius, radius),
+            r,
+        )
+    try:
+        surf = surf.convert_alpha()
+    except pygame.error:
+        pass
+    _COMMON_GLOW_CACHE[key] = surf
+    return surf
+
 
 def _get_power_glow(
     radius: int, color: Tuple[int, int, int], step: int
@@ -265,6 +316,63 @@ def _get_power_glow(
         pass
     _GLOW_CACHE[key] = surf
     return surf
+
+
+# Rampa de cor do tiro do Reverberador: violeta apagado (sem combo) -> magenta
+# pleno (metade do cap) -> rosa quase branco (cap). O tiro esquenta junto com o
+# bônus de dano, então dá para ler a força do combo sem olhar o HUD.
+_REVERB_COLD = (140, 30, 180)
+_REVERB_MID = (255, 0, 255)
+_REVERB_HOT = (255, 190, 255)
+_REVERB_RING_COLD = (180, 70, 210)
+_REVERB_RING_HOT = (255, 225, 255)
+
+
+def _lerp_color(
+    a: Tuple[int, int, int], b: Tuple[int, int, int], t: float
+) -> Tuple[int, int, int]:
+    return (
+        int(a[0] + (b[0] - a[0]) * t),
+        int(a[1] + (b[1] - a[1]) * t),
+        int(a[2] + (b[2] - a[2]) * t),
+    )
+
+
+def _reverberador_colors(k: float) -> Tuple[Tuple[int, int, int], Tuple[int, int, int]]:
+    """Cores (corpo, anel) do tiro do Reverberador para o combo `k` (0..1)."""
+    if k < 0.5:
+        body = _lerp_color(_REVERB_COLD, _REVERB_MID, k / 0.5)
+    else:
+        body = _lerp_color(_REVERB_MID, _REVERB_HOT, (k - 0.5) / 0.5)
+    return body, _lerp_color(_REVERB_RING_COLD, _REVERB_RING_HOT, k)
+
+
+# Cor-base do halo do tiro COMUM de cada nave. Espelha o corpo desenhado em
+# `_draw_ship_specific_bullet` — mudou a cor do tiro lá, mude aqui também, senão
+# o halo deixa de refletir o próprio tiro. Naves ausentes caem no default
+# (roxo perfurante / amarelo).
+_SHIP_GLOW_COLORS: Dict[str, Tuple[int, int, int]] = {
+    "magneto": (150, 150, 255),  # média do corpo azul + núcleo claro
+    "estilete": (0, 255, 100),
+    "ariete": (255, 110, 20),
+    "cofre": (255, 220, 100),
+    "fantasma": (180, 255, 255),
+    "engenheiro": (0, 150, 255),
+    "cacador": (192, 192, 220),
+    "berserk": (200, 60, 255),  # entre o roxo externo e o rosa interno
+}
+
+
+def _owner_combo_intensity(owner_ship: Optional[Any]) -> float:
+    """Progresso do combo (0..1) do dono no instante do disparo.
+
+    Fica congelado na bala em vez de lido por frame: o tiro carrega a força com
+    que saiu, e um dano tomado no meio do voo não apaga os projéteis no ar.
+    """
+    try:
+        return max(0.0, min(1.0, float(getattr(owner_ship, "combo_progress", 0.0))))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 class Bullet:
@@ -321,11 +429,16 @@ class Bullet:
         # passa `owner_ship`, e uma cópia local evita um getattr encadeado por
         # cor por frame no draw. Sem dono, desenha como P1.
         self.player_index: int = getattr(owner_ship, "player_index", 0)
+        # Combo do Reverberador congelado no disparo (0..1) — pinta o projétil.
+        self.combo_intensity: float = _owner_combo_intensity(owner_ship)
+        # Cargas de perfuração restantes (Aríete). Consumidas em `collisions`.
+        self.pierce_remaining: int = 0
 
         # Rect persistente — atualizado in-place em vez de alocar por acesso.
         self._rect = pygame.Rect(int(x), int(y), 1, 1)
 
         self._configure_shape_and_velocity(direction)
+        self.pierce_remaining = self._owner_pierce_count()
         self._sync_rect()
 
     @property
@@ -375,7 +488,9 @@ class Bullet:
         self.ship_id = ship_id
         self.owner_ship = owner_ship
         self.player_index = getattr(owner_ship, "player_index", 0)
+        self.combo_intensity = _owner_combo_intensity(owner_ship)
         self._configure_shape_and_velocity(direction)
+        self.pierce_remaining = self._owner_pierce_count()
         self._sync_rect()
 
     def update(self, dt: float, enemies: Optional[List[Any]] = None) -> None:
@@ -482,6 +597,28 @@ class Bullet:
         self.x += hx * self.homing_speed * dt
         self.y += hy * self.homing_speed * dt
 
+    def _owner_bullet_speed_mult(self) -> float:
+        """`bullet_speed_mult` do perfil do dono (1.0 sem dono/perfil)."""
+        profile = getattr(self.owner_ship, "profile", None)
+        try:
+            return max(0.1, float(getattr(profile, "bullet_speed_mult", 1.0)))
+        except (TypeError, ValueError):
+            return 1.0
+
+    def _owner_pierce_count(self) -> int:
+        """Alvos extras que o tiro comum atravessa, vindos do perfil do dono.
+
+        Só vale para o tiro básico: teleguiado e explosivo têm as próprias
+        regras de impacto e não devem herdar a perfuração da nave.
+        """
+        if self.homing or self.explosive:
+            return 0
+        profile = getattr(self.owner_ship, "profile", None)
+        try:
+            return max(0, int(getattr(profile, "pierce_count", 0)))
+        except (TypeError, ValueError):
+            return 0
+
     def _configure_shape_and_velocity(
         self, direction: tuple[float, float] | None
     ) -> None:
@@ -508,13 +645,20 @@ class Bullet:
             base_w = max(1, base_w + bonus)
             base_h = max(1, base_h + bonus)
 
-        # Giant Shot: escala o tamanho base (visual e hitbox) e acelera o tiro.
+        # Velocidade por nave (`bullet_speed_mult`): contrapartida da cadência —
+        # o tiro pesado chega antes, o tiro-metralhadora chega depois. Lida do
+        # perfil do dono em vez de uma tabela local, para não duplicar o valor.
         mult = self.size_multiplier
-        speed = Config.BULLET_SPEED
+        speed = Config.BULLET_SPEED * self._owner_bullet_speed_mult()
+        giant_ratio = 1.0
         if mult != 1.0:
             base_w, base_h = self._giant_dims(base_w, base_h, mult)
             speed *= GIANT_SHOT_SPEED_MULTIPLIER
-        self.homing_speed = _HOMING_BASE_SPEED * (speed / Config.BULLET_SPEED)
+            giant_ratio = GIANT_SHOT_SPEED_MULTIPLIER
+        # O teleguiado segue só a escala do Giant Shot: ele tem tuning próprio
+        # (`_HOMING_BASE_SPEED` + turn rate), e herdar a velocidade da nave
+        # mexeria no raio de curva de um powerup já balanceado à parte.
+        self.homing_speed = _HOMING_BASE_SPEED * giant_ratio
 
         if direction is None:
             if self.is_side_scroll:
@@ -577,6 +721,11 @@ class Bullet:
         azul-elétrico > teleguiado verde > gigante âmbar) e raio proporcional ao
         tiro (o gigante respira maior). Um blit de sprite cacheada por bala;
         gateado pela Qualidade Visual — some no Baixo, encolhe no Médio.
+
+        O tiro COMUM também ganha halo, na cor do próprio projétil da nave
+        (`_common_shot_glow_color`), mas por soma ao fundo (`BLEND_RGB_ADD`) em
+        vez de alpha-blend: o tiro é pequeno e um halo translúcido nesse tamanho
+        desaparece contra o fundo escuro.
         """
         if not vq.glow_enabled:
             return
@@ -584,11 +733,11 @@ class Bullet:
         # Chain Lightning vive na nave (has_chain_shot), não na bala: lê o dono,
         # como o próprio sistema de colisão faz para encadear.
         is_chain = bool(getattr(self.owner_ship, "has_chain_shot", False))
-        if not (self.explosive or is_chain or self.homing or is_giant):
-            return
 
         # Cor + ritmo por fantasia. Prioridade quando combinados: o efeito mais
         # dramático manda na cor do halo.
+        is_common = not (self.explosive or is_chain or self.homing or is_giant)
+        radius_factor = 1.4
         if self.explosive:
             base_color = (255, 120, 0)  # laranja de pavio
             speed = 0.009
@@ -599,22 +748,48 @@ class Bullet:
             base_color = (0, 255, 100)  # verde do '+'
             # Em espera (sem alvo) pulsa mais rápido — casa com o giro idle.
             speed = 0.011 if self.target is None else 0.006
-        else:
+        elif is_giant:
             base_color = (255, 200, 90)  # âmbar do Giant Shot
             speed = 0.005
+        else:
+            base_color = self._common_shot_glow_color()
+            speed = 0.007
+            # Colado ao tiro: o suficiente para o halo aparecer em volta do
+            # corpo, sem virar uma bola que se funde com a do tiro vizinho.
+            radius_factor = 1.4
         color = player_shot_color(base_color, self.player_index)
 
         pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() * speed)  # 0..1
         step = int(round(pulse * _GLOW_STEPS))
 
-        radius = int(max(self.w, self.h) * 1.4 * vq.glow_scale)
-        radius = max(4, min(radius, 60))
+        radius = int(max(self.w, self.h) * radius_factor * vq.glow_scale)
+        radius = max(8 if is_common else 4, min(radius, 60))
         radius -= radius % 2  # quantiza p/ limitar o cache
 
-        glow = _get_power_glow(radius, color, step)
         cx = self.x + self.w / 2
         cy = self.y + self.h / 2
-        surface.blit(glow, (int(cx - radius), int(cy - radius)))
+        pos = (int(cx - radius), int(cy - radius))
+        if is_common:
+            surface.blit(
+                _get_common_shot_glow(radius, color, step),
+                pos,
+                special_flags=pygame.BLEND_RGB_ADD,
+            )
+        else:
+            surface.blit(_get_power_glow(radius, color, step), pos)
+
+    def _common_shot_glow_color(self) -> Tuple[int, int, int]:
+        """Cor-base do halo de um tiro comum: a mesma cor do corpo desenhado."""
+        if self.ship_id == "reverberador":
+            # A rampa do combo é contínua e cada cor vira uma entrada no cache
+            # de glow — quantizar em 5 passos mantém o cache pequeno sem que a
+            # transição fique perceptívelmente escalonada.
+            k = round(self.combo_intensity * 4) / 4.0
+            return _reverberador_colors(k)[0]
+        color = _SHIP_GLOW_COLORS.get(self.ship_id)
+        if color is not None:
+            return color
+        return colors.PURPLE if self.piercing else colors.YELLOW
 
     def _breathing_rect(self, rect: pygame.Rect) -> pygame.Rect:
         """Rect visual do Giant Shot pulsando ±12% em torno do centro.
@@ -694,12 +869,19 @@ class Bullet:
                 points = [rect.topleft, (rect.centerx, rect.bottom), rect.topright]
             pygame.draw.polygon(surface, player_shot_color((192, 192, 220), tint), points)
         elif self.ship_id == "reverberador":
-            # Reverberador: Magenta com anéis
-            pygame.draw.rect(surface, player_shot_color((255, 0, 255), tint), rect)
-            ring_color = player_shot_color((255, 100, 255, 100), tint)
-            for i in range(1, 3):
+            # Reverberador: magenta com anéis que ESQUENTA com o combo — quanto
+            # maior o bônus de dano, mais clara a cor e mais um anel entra.
+            k = self.combo_intensity
+            body_color, ring_color = _reverberador_colors(k)
+            pygame.draw.rect(surface, player_shot_color(body_color, tint), rect)
+            # Núcleo branco a partir da metade do combo: o tiro fica incandescente.
+            if k >= 0.5 and rect.width > 2 and rect.height > 2:
+                core = rect.inflate(-max(2, rect.width // 3), -max(2, rect.height // 3))
+                pygame.draw.rect(surface, player_shot_color((255, 255, 255), tint), core)
+            tinted_ring = player_shot_color(ring_color, tint)
+            for i in range(1, 4 if k >= 0.6 else 3):
                 ring_rect = rect.inflate(i * 4, i * 4)
-                pygame.draw.rect(surface, ring_color, ring_rect, 1)
+                pygame.draw.rect(surface, tinted_ring, ring_rect, 1)
         elif self.ship_id == "berserk":
             # Berserk: Rosa dos Ventos — roxo brilhante, girando no próprio eixo
             # (frames pré-rotacionados; 1 blit em vez de um transform por frame).

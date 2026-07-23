@@ -312,6 +312,19 @@ class Ship:
         cap: float = float(self.profile.combo_damage_cap)
         return float(min(raw, cap) if cap > 0 else raw)
 
+    @property
+    def combo_progress(self) -> float:
+        """Progresso do combo até o cap, de 0.0 a 1.0.
+
+        Sinal único de "quão quente" o Reverberador está: alimenta o bônus de
+        cadência e a cor do tiro, para os dois lerem a mesma escala do HUD.
+        """
+        bonus = self.combo_damage_bonus
+        if bonus <= 0:
+            return 0.0
+        cap: float = float(self.profile.combo_damage_cap)
+        return min(1.0, bonus / cap) if cap > 0 else min(1.0, bonus)
+
     def try_dash(self, current_move_vec: pygame.math.Vector2) -> bool:
         return self._movement.try_dash(current_move_vec)
 
@@ -336,6 +349,12 @@ class Ship:
             multiplier *= (
                 Config.EXPLOSIVE_SHOT_FIRE_RATE_PENALTY
             )  # Tiros explosivos são mais lentos
+
+        # Reverberador: o combo também embala a cadência, proporcional ao
+        # progresso até o cap (mesmo sinal da cor do tiro).
+        combo_fire = self.profile.combo_fire_rate_bonus
+        if combo_fire > 0:
+            multiplier *= 1.0 + combo_fire * self.combo_progress
 
         # Inferno debuff: Sobreaquecimento reduz cadência em 50%
         if self.fire_rate_modifier_timer > 0.0:

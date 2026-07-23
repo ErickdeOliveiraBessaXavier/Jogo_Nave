@@ -11,8 +11,10 @@ from __future__ import annotations
 import logging
 import math
 from typing import TYPE_CHECKING, Any
+from weakref import WeakKeyDictionary
 
 from ..core.config import config as Config
+from ..core.fire_timer import FireTimer
 from ..core.sound import sound_manager
 from ..core.upgrades_config import HOMING_DAMAGE_MULTIPLIER
 from ..events import game_events as events
@@ -31,6 +33,21 @@ logger = logging.getLogger(__name__)
 # tempo — até 12x. O Giant Shot piora porque engorda a bala (mais delas
 # conectam), sem tocar no dano; era esse par que derretia o boss.
 _BERSERK_BOSS_DAMAGE_MULT: float = 0.5
+
+
+# Intervalo entre rajadas do leque do Berserk (segundos).
+_BERSERK_INTERVAL: float = 0.1
+
+
+def _round_damage(value: float) -> int:
+    """Arredonda o dano meio-para-cima, com piso 1.
+
+    O truncamento anterior (`int()`) cortava a fração de TODA nave com
+    multiplicador quebrado — 10×0.85 virava 8, não 9 —, ou seja, o dano
+    efetivo não era o que o perfil declarava. `round()` embutido não serve:
+    usa banker's rounding e mandaria 8.5 para 8 do mesmo jeito.
+    """
+    return max(1, int(value + 0.5))
 
 
 class ShootingSystem:
@@ -62,39 +79,39 @@ class ShootingSystem:
     ) -> None:
         self._em = entity_manager
         self._bus = event_bus
-        # Cooldown por nave: chave = id(ship), valor = segundos restantes.
-        # Naves não-mapeadas têm cooldown 0 implícito (atira imediatamente).
-        self._cooldowns: dict[int, float] = {}
-        self._cooldowns_berserk: dict[int, float] = {}
+        # Um FireTimer por nave, para o tiro normal e para o leque do Berserk.
+        # Chave = a própria nave (WeakKeyDictionary): `id(ship)` era frágil
+        # porque o CPython reaproveita endereços — uma nave destruída e outra
+        # alocada no mesmo endereço herdavam o cooldown uma da outra —, e as
+        # entradas só sumiam no `reset()` de troca de fase. Com referência fraca
+        # a entrada morre junto com a nave, sozinha.
+        self._timers: "WeakKeyDictionary[Ship, FireTimer]" = WeakKeyDictionary()
+        self._berserk_timers: "WeakKeyDictionary[Ship, FireTimer]" = (
+            WeakKeyDictionary()
+        )
         self._charged_laser_channel: Any | None = None
         self._berserk_rotation: float = 0.0
 
     def is_ready(self, ship: Ship) -> bool:
-        return self._cooldowns.get(id(ship), 0.0) <= 0.0
+        timer = self._timers.get(ship)
+        return timer is None or timer.is_ready(self._interval_for(ship))
 
     def reset(self) -> None:
-        """Zera todos os cooldowns entre fases. O canal de áudio é liberado em update()."""
-        self._cooldowns.clear()
-        self._cooldowns_berserk.clear()
+        """Zera todos os timers entre fases. O canal de áudio é liberado em update()."""
+        self._timers.clear()
+        self._berserk_timers.clear()
 
     def update(self, dt: float) -> None:
-        """Decrementa cooldowns de todas as naves e libera o canal do laser quando não há lasers vivos."""
-        if self._cooldowns:
-            # Evita lista intermediária quando há poucos slots; mutação direta.
-            for ship_id in list(self._cooldowns.keys()):
-                new_cd = self._cooldowns[ship_id] - dt
-                if new_cd <= 0.0:
-                    del self._cooldowns[ship_id]
-                else:
-                    self._cooldowns[ship_id] = new_cd
+        """Credita `dt` nos timers e libera o canal do laser quando não há lasers vivos.
 
-        if self._cooldowns_berserk:
-            for ship_id in list(self._cooldowns_berserk.keys()):
-                new_cd = self._cooldowns_berserk[ship_id] - dt
-                if new_cd <= 0.0:
-                    del self._cooldowns_berserk[ship_id]
-                else:
-                    self._cooldowns_berserk[ship_id] = new_cd
+        O intervalo é recalculado a cada passo a partir da nave, então buffs e
+        debuffs de cadência (Speed Boost, sobreaquecimento do Inferno, combo do
+        Reverberador) valem já no frame em que entram, sem reconfiguração.
+        """
+        for ship, timer in list(self._timers.items()):
+            timer.advance(dt, self._interval_for(ship))
+        for timer in list(self._berserk_timers.values()):
+            timer.advance(dt, _BERSERK_INTERVAL)
 
         if self._charged_laser_channel is not None:
             has_alive = any(
@@ -109,26 +126,24 @@ class ShootingSystem:
         self, ship: Ship, player_damage_multiplier: float, dt: float
     ) -> None:
         """Dispara projéteis em leque rotativo (Estrela Espiral) durante o modo Berserk."""
-        ship_id = id(ship)
-
-        # Decrementar o timer de cooldown do berserk se ele existir (fallback caso update não tenha rodado)
-        if ship_id in self._cooldowns_berserk:
-            # Note: O update() já decrementa, mas em PlayingScene o fire_berserk é chamado antes do update do ShootingSystem
-            # em alguns frames. Garantimos que ele respeite o intervalo.
-            if self._cooldowns_berserk[ship_id] > 0:
-                return
+        timer = self._berserk_timers.get(ship)
+        if timer is None:
+            timer = self._berserk_timers[ship] = FireTimer()
+        # Quem credita o tempo é o `update`, como nos demais timers — o gate
+        # aqui é só o consumo. A ordem entre `fire_berserk` e `update` no frame
+        # deixou de importar: o crédito não se perde por ser lido antes ou
+        # depois, que era o motivo do fallback manual que existia aqui.
+        if not timer.consume(_BERSERK_INTERVAL):
+            return
 
         # Rotação global constante (Estilo Stone Golem)
         self._berserk_rotation += dt * 360  # Uma volta completa por segundo
-
-        # Intervalo entre rajadas (0.1s para manter a intensidade sem poluir demais)
-        self._cooldowns_berserk[ship_id] = 0.1
 
         cx = ship.x + ship.w / 2
         cy = ship.y + ship.h / 2
 
         # Bônus de dano Berserk (1.5x)
-        adjusted_damage = int(
+        adjusted_damage = _round_damage(
             Config.BULLET_BASE_DAMAGE
             * player_damage_multiplier
             * ship.damage_multiplier
@@ -162,9 +177,13 @@ class ShootingSystem:
 
         Magneto/Caçador com charge ativo emitem o projétil especial respectivo.
         """
+        # Gasta o intervalo ANTES de emitir: o `overshoot` resultante é há
+        # quanto tempo este disparo já era devido, e vira deslocamento inicial
+        # das balas — ver `_apply_subframe_catchup`.
+        overshoot = self._consume_shot(ship)
         bullet_specs = ship.bullet_spawn()
         charge_factor = ship.consume_charge()
-        adjusted_damage = int(
+        adjusted_damage = _round_damage(
             Config.BULLET_BASE_DAMAGE
             * player_damage_multiplier
             * ship.damage_multiplier
@@ -178,13 +197,11 @@ class ShootingSystem:
                 self._fire_magneto_charge(
                     ship, bullet_specs, adjusted_damage, charge_factor
                 )
-                self._cooldowns[id(ship)] = self._cooldown_for(ship)
                 return
             if ship_id == "cacador":
                 self._fire_cacador_charge(
                     ship, bullet_specs, adjusted_damage, charge_factor
                 )
-                self._cooldowns[id(ship)] = self._cooldown_for(ship)
                 return
 
         self._bus.emit(
@@ -214,7 +231,7 @@ class ShootingSystem:
                 if is_homing
                 else adjusted_damage
             )
-            self._em.spawn_bullet(
+            bullet = self._em.spawn_bullet(
                 x,
                 y,
                 damage=bullet_damage,
@@ -227,17 +244,59 @@ class ShootingSystem:
                 owner_ship=ship,
                 size_multiplier=size_mult,
             )
+            self._apply_subframe_catchup(bullet, overshoot)
             if is_explosive:
                 ship.consume_explosive_shot()
-        self._cooldowns[id(ship)] = self._cooldown_for(ship)
 
     # ------------------------------------------------------------------
     # Helpers privados
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _cooldown_for(ship: Ship) -> float:
-        return 1.0 / (ship.attack_speed_multiplier * Config.FIRE_RATE)
+    def _interval_for(ship: Ship) -> float:
+        """Intervalo alvo entre disparos, em segundos.
+
+        Recalculado a cada consulta a partir de `attack_speed_multiplier`, que
+        já compõe perfil da nave + power-ups + debuffs. Nenhum estado de cadência
+        é guardado: adicionar um modificador novo é mexer só naquele
+        multiplicador, sem tocar neste sistema.
+        """
+        rate = ship.attack_speed_multiplier * Config.FIRE_RATE
+        return 1.0 / rate if rate > 0.0 else float("inf")
+
+    def _consume_shot(self, ship: Ship) -> float:
+        """Gasta um intervalo do timer da nave e devolve o `overshoot`.
+
+        Disparo fora da cadência (charge shot, que sai no soltar da tecla sem
+        passar por `is_ready`) não tem intervalo para gastar: nesse caso o timer
+        é drenado, para o tiro seguinte respeitar a cadência cheia em vez de
+        sair de imediato com o crédito acumulado durante a carga.
+        """
+        timer = self._timers.get(ship)
+        if timer is None:
+            timer = self._timers[ship] = FireTimer()
+        if timer.consume(self._interval_for(ship)):
+            return timer.overshoot
+        timer.drain()
+        return 0.0
+
+    @staticmethod
+    def _apply_subframe_catchup(bullet: Any, overshoot: float) -> None:
+        """Adianta a bala pelo tempo que o disparo atrasou.
+
+        Sem isto, todas as balas nascem exatamente na boca da nave e o
+        espaçamento entre elas no ar herda o arredondamento do frame: numa
+        cadência de 6.4 frames, os vãos alternam entre 6 e 7 frames de distância
+        e a rajada parece engasgar.
+
+        Deslocando cada bala por `overshoot × velocidade`, o espaçamento no ar
+        fica uniforme — que é o que o olho lê como ritmo, já que ninguém vê o
+        instante da emissão, e sim a fila de projéteis subindo a tela.
+        """
+        if overshoot <= 0.0 or bullet is None:
+            return
+        bullet.x += bullet.vx * overshoot
+        bullet.y += bullet.vy * overshoot
 
     def _fire_magneto_charge(
         self,

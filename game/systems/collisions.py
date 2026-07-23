@@ -269,7 +269,8 @@ class Collisions:
             create_explosion: Se True, cria explosão visual
 
         Returns:
-            True se projétil foi destruído, False se é piercing
+            True se projétil foi destruído, False se segue vivo (piercing do
+            powerup, ilimitado, ou uma carga de perfuração da nave)
         """
         is_piercing = getattr(projectile, "piercing", False)
 
@@ -289,10 +290,19 @@ class Collisions:
             else:
                 entity_manager.spawn_explosion(hit_x, hit_y, size=explosion_size)
 
-        if not is_piercing:
-            projectile.dead = True
+        if is_piercing:
+            return False
 
-        return not is_piercing
+        # Perfuração limitada da nave (Aríete): gasta uma carga e segue em
+        # frente. Fica DEPOIS do piercing do powerup — quando os dois valem, o
+        # ilimitado manda e nenhuma carga é consumida à toa.
+        charges = projectile.pierce_remaining
+        if charges > 0:
+            projectile.pierce_remaining = charges - 1
+            return False
+
+        projectile.dead = True
+        return True
 
     def _check_mask_collision(
         self,

@@ -1155,11 +1155,28 @@ class UpgradesSelectionScene(Scene):
             lines.append(t(key, n=n))
         if ship.pickup_radius_mult > 1.5:
             lines.append(t("upgrades.ability.pickup"))
+        if ship.pierce_count > 0:
+            lines.append(t("upgrades.ability.pierce", n=ship.pierce_count))
+        if ship.bullet_speed_mult != 1.0:
+            key = (
+                "upgrades.ability.fast_shot"
+                if ship.bullet_speed_mult > 1.0
+                else "upgrades.ability.slow_shot"
+            )
+            pct = int(round(abs(ship.bullet_speed_mult - 1.0) * 100))
+            lines.append(t(key, pct=pct))
         if ship.combo_damage_per_kill > 0:
             per_kill = int(ship.combo_damage_per_kill * 100)
             cap = int(ship.combo_damage_cap * 100) if ship.combo_damage_cap > 0 else 0
             cap_txt = t("upgrades.ability.combo_cap", cap=cap) if cap else ""
             lines.append(t("upgrades.ability.combo", per=per_kill, cap=cap_txt))
+            if ship.combo_fire_rate_bonus > 0:
+                lines.append(
+                    t(
+                        "upgrades.ability.combo_fire",
+                        fire=int(round(ship.combo_fire_rate_bonus * 100)),
+                    )
+                )
         return lines
 
     def _draw_left_column(self, surface: pygame.Surface):

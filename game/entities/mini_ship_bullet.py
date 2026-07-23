@@ -27,6 +27,12 @@ class MiniShipBullet:
         self.damage = damage
         self.dead = False
         self.piercing = piercing  # Now configurable
+        # Cargas de perfuração limitada (ver `Bullet.pierce_remaining` e
+        # `Collisions._process_projectile_hit`). O tiro de escolta não herda a
+        # perfuração da nave — fica em 0 —, mas o atributo existe para que os
+        # dois tipos de projétil tenham o mesmo contrato: o sistema de colisão
+        # trata a família inteira sem distinguir quem é quem.
+        self.pierce_remaining = 0
         # Multiplicador extra aplicado SÓ contra bosses (1.0 = sem efeito).
         # Usado pelo Wingman, que tem cadência alta e some várias unidades —
         # sem isso o DPS dele em boss fica desproporcional.

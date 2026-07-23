@@ -11,6 +11,7 @@ from ..core.sound import sound_manager
 from ..systems import aiming
 from ..systems.targeting import is_targetable, target_point
 from .mini_ship_bullet import MiniShipBullet
+from ..core.fire_timer import FireTimer
 
 _SPRITE_PATH = (
     Path(__file__).resolve().parent.parent / "assets" / "icons" / "mini_ship.png"
@@ -56,7 +57,7 @@ class Wingman:
         self.dead = False
         
         self.shoot_cooldown = 0.4
-        self.shoot_timer = 0.0
+        self._fire_timer = FireTimer()
         
         self.target = None
         self.state = "FOLLOW"  # "FOLLOW" ou "HUNT"
@@ -136,11 +137,15 @@ class Wingman:
         self.x = max(margin, min(Config.SCREEN_WIDTH - self.w - margin, self.x))
         self.y = max(margin, min(Config.SCREEN_HEIGHT - self.h - margin, self.y))
 
-        # Disparo
-        self.shoot_timer -= dt
-        if self.state == "HUNT" and self.shoot_timer <= 0 and self.target:
+        # Disparo — cadência pelo FireTimer compartilhado (o padrão antigo
+        # descartava a sobra do frame a cada tiro e rendia abaixo do configurado).
+        self._fire_timer.advance(dt, self.shoot_cooldown)
+        if (
+            self.state == "HUNT"
+            and self.target
+            and self._fire_timer.consume(self.shoot_cooldown)
+        ):
             self._shoot(bullets)
-            self.shoot_timer = self.shoot_cooldown
 
     def _target_center(self, target: Any) -> tuple[float, float]:
         """Ponto de mira do alvo, usando a geometria precisa compartilhada.

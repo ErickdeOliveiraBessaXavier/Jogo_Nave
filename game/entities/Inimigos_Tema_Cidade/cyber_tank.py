@@ -44,6 +44,7 @@ from .cyber_tank_pixel_map import (
     build_pod_surface,
 )
 from .neon_bolt import NeonBolt
+from ...core.fire_timer import carry_interval
 
 if TYPE_CHECKING:
     from ...systems.entity_context import EnemyUpdateContext
@@ -387,10 +388,18 @@ class CyberTank(EnemyHitMixin):
                             shells = []
                         shells.append(self._fire(t, mx, my))
                         t.burst_count -= 1
-                        t.fire_timer = (
+                        # `carry_interval` e não atribuição direta: o intervalo
+                        # DENTRO da rajada é de 0.08s — cerca de 2 frames a
+                        # 30fps —, então descartar a sobra do frame atrasava
+                        # cada tiro para o frame seguinte e a rajada saía mais
+                        # lenta e irregular do que o configurado. O intervalo
+                        # entre rajadas (2.4s) não sofre com isso, mas usa o
+                        # mesmo caminho por consistência.
+                        t.fire_timer = carry_interval(
+                            t.fire_timer,
                             self.GATLING_BURST_GAP / agg
                             if t.burst_count > 0
-                            else self.GATLING_INTERVAL / agg
+                            else self.GATLING_INTERVAL / agg,
                         )
                 elif t.fire_timer <= 0.0:
                     t.burst_count = self.GATLING_BURST

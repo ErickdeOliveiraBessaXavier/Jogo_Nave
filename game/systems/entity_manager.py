@@ -1076,15 +1076,20 @@ class EntityManager:
         for b in pending:
             bx = b.x + b.w / 2
             by = b.y + b.h / 2
-            best_id = None
-            best_key: tuple[int, float] | None = None
-            for tid, (cx, cy) in centers.items():
-                dx = cx - bx
-                dy = cy - by
-                key = (load[tid], dx * dx + dy * dy)
-                if best_key is None or key < best_key:
-                    best_key = key
-                    best_id = tid
+            # `centers` nunca está vazio aqui (early-return em `if not by_id`
+            # acima, e os dois dicts são preenchidos juntos), então o mínimo
+            # sempre existe. `min` em vez do laço manual deixa isso explícito:
+            # com o acumulador `best_id = None` o tipo continuava `int | None` e
+            # os três usos abaixo apareciam como erro, apesar de corretos.
+            # Critério inalterado: menos carregado, empate pelo mais próximo, e
+            # em novo empate o primeiro da ordem de inserção.
+            best_id = min(
+                centers,
+                key=lambda tid: (
+                    load[tid],
+                    (centers[tid][0] - bx) ** 2 + (centers[tid][1] - by) ** 2,
+                ),
+            )
             b.target = by_id[best_id]
             b.assigned_target_id = best_id
             load[best_id] += 1
