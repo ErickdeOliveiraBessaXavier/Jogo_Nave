@@ -596,13 +596,28 @@ class PlayingScene(Scene):
         """Retorna True quando o jogador pode agir normalmente."""
         return self.transitions.can_handle_gameplay_actions
 
-    def _is_closing_level(self) -> bool:
-        """True durante o ENCERRAMENTO de fase (pós-vitória + espera de transição).
+    def _next_transition_is_theme_change(self) -> bool:
+        """True se a PRÓXIMA transição de nível cruza a fronteira de TEMA (mundo).
 
-        Janela em que não há mais spawns nem tiro do jogador, mas os projéteis já
-        em tela seguem voando e os coletáveis são magnetizados/dissolvidos antes de
-        a transição concluir."""
-        return self.level_transition_pending or self.level_transition_active
+        Peek puro (sem avançar), idêntico ao cálculo do LevelProgressionController
+        (`new_world.theme != current_world.theme`). Distingue a transição "grande"
+        — mudança de tema, com cutscene/atmosfera + limpeza total da fase — da
+        transição CONTÍNUA dentro do mesmo mundo (1-1→1-2), que preserva projéteis,
+        coletáveis e escoltas para não quebrar a continuidade do gameplay."""
+        next_level = self.level_controller.current_level_number + 1
+        return get_world_for_level(next_level).theme != self.current_world.theme
+
+    def _is_closing_level(self) -> bool:
+        """True durante o ENCERRAMENTO de fase — SÓ quando a próxima transição é
+        mudança de tema.
+
+        Janela (pós-vitória + espera) em que não há spawns nem tiro do jogador,
+        os projéteis já em tela seguem voando e os coletáveis são magnetizados/
+        dissolvidos antes da transição concluir. Dentro do mesmo tema não há
+        encerramento: a sequência é contínua (§ continuidade de mundo)."""
+        return (
+            self.level_transition_pending or self.level_transition_active
+        ) and self._next_transition_is_theme_change()
 
     def _begin_level_preparation(self) -> None:
         """Coloca a cena em modo de preparação para o próximo nível."""
@@ -655,19 +670,25 @@ class PlayingScene(Scene):
                 self.level_popup_timer = self.level_popup_duration
 
         self.boss_controller.reset()
-        self.entity_manager.clear_for_level_transition()
-
-        # Em coop, cada slot pode ter perfil próprio (ex: Engenheiro como P2).
-        # Itera sobre todos os slots vivos para rebuildar permanentes de cada
-        # um — chamada legada sem slot só restaurava o primário, perdendo as
-        # mini-naves de outros Engenheiros na transição.
-        for slot in self.roster.alive_slots():
-            if slot.ship.mini_ships_timer > 0.0:
-                self.build_mini_ships(slot)
-            else:
-                self._build_permanent_mini_ships(slot)
 
         if theme_changed:
+            # Mudança de TEMA = transição "grande": limpa a fase inteira
+            # (projéteis, coletáveis pendentes, referências de IA, estados
+            # temporários) e reconstrói as escoltas com a orientação do novo modo.
+            # Dentro do MESMO tema (1-1→1-2) NADA disso ocorre — os elementos
+            # persistentes seguem contínuos, preservando a sequência do mundo.
+            self.entity_manager.clear_for_level_transition()
+
+            # Em coop, cada slot pode ter perfil próprio (ex: Engenheiro como P2).
+            # Itera sobre todos os slots vivos para rebuildar permanentes de cada
+            # um — chamada legada sem slot só restaurava o primário, perdendo as
+            # mini-naves de outros Engenheiros na transição.
+            for slot in self.roster.alive_slots():
+                if slot.ship.mini_ships_timer > 0.0:
+                    self.build_mini_ships(slot)
+                else:
+                    self._build_permanent_mini_ships(slot)
+
             self._world_cutscene.start(new_world)
         else:
             self._begin_playing_state()
@@ -1477,9 +1498,17 @@ class PlayingScene(Scene):
         return bool(self.entity_manager.powerups or self.entity_manager.stars)
 
     def _ready_for_level_transition(self) -> bool:
-        """Gate de conclusão do encerramento: explosões terminaram, nenhum projétil
-        do jogador restou e os coletáveis foram resolvidos (coletados ou dissolvidos).
-        O timeout duro do `TransitionController` continua como rede de segurança."""
+        """Gate de conclusão da espera de transição.
+
+        MESMO tema (transição contínua): comportamento original — só espera as
+        animações de morte, sem segurar por projéteis/coletáveis (eles atravessam
+        para o próximo nível normalmente).
+
+        MUDANÇA de tema (encerramento limpo): também exige que nenhum projétil do
+        jogador reste e que os coletáveis tenham sido resolvidos (coletados ou
+        dissolvidos). O timeout duro do `TransitionController` é a rede de segurança."""
+        if not self._next_transition_is_theme_change():
+            return self._all_animations_finished()
         return (
             self._all_animations_finished()
             and not self._player_projectiles_pending()
