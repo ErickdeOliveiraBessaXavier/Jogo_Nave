@@ -27,10 +27,31 @@ o novo módulo (re-exportado em `scenes.playing` p/ o TYPE_CHECKING do render_fr
 Teste: `tests/test_world_transition_cutscene.py` (7, com stubs). `playing.py`
 2950→2766 linhas.
 
-**Etapas pendentes do #1 (ordem):** B) interstício de atmosfera (`_*_atmosphere_*`,
-~230 linhas, acoplamento baixo-médio); C) sessão do P2 (`_is_p2_*`/`_spawn_p2`/
-modal, médio); D) orquestração de colisões (`_check_*`/`_handle_collisions`, ~600
-linhas, ALTO acoplamento — **deixar por último**, com a rede de testes reforçada).
+**Etapa B (atmosfera) — ADIADA (2026-07-24), NÃO é bom alvo.** O mapeamento revelou
+acoplamento ALTO (≠ o "baixo-médio" estimado na revisão): os 8 métodos `_*_atmosphere_*`
+tocam ~20 pontos em ~10 subsistemas (renderer/spawner/roster/ship/level_controller/
+entity_manager + fluxo begin_level_preparation/build_mini_ships/sync_lives/screen_shake/
+world_cutscene/apply_pending_world_transition + estado pending_world_transition/
+is_side_scroll/popup/difficulty/app.states). E o `AtmosphereState` é lido em 6 outros
+pontos da cena. Uma extração §9 (sem referência à cena) exigiria construtor de ~15-18
+callbacks → converte acoplamento intra-classe em inter-objeto PIOR (viola §1). Mesma
+categoria da Fase 3 do refactor de progressão: adiada por custo>benefício. Retomar só
+se a atmosfera ganhar lógica própria que justifique, ou como parte de uma reorganização
+maior. Ganho leve possível sem extrair: mover a matemática pura do desmaio/re-entrada +
+constantes `_ATMOSPHERE_*` para um módulo.
+
+**Etapa C (sessão do P2) — ✅ CONCLUÍDA (2026-07-24).** `game/systems/p2_session_controller.py`
+(`P2SessionController`): entrada/saída/desconexão + spawn/despawn + HUD do co-op, sem
+referência à cena. Deps: roster, gamepad, entity_manager + callbacks `set_player_count`
+(trio level_controller+enemy_spawner+powerup_spawner, na cena como `_set_active_player_count`),
+`open_p2_modal` (o modal fica na cena pois usa `playing_scene` p/ render de fundo + perfil) e
+`build_permanent_mini_ships`. `handle_event` delega via `try_handle_event(event)->bool`;
+`_build_render_frame` usa `build_hud_info()`; a init (P2 sobrevive ao Continuar) chama
+`spawn_p2`. Teste: `tests/test_p2_session_controller.py` (8, com stubs). `playing.py`
+2737 linhas (−165 nesta etapa; ~2950→2737 no total do #1 até aqui).
+
+**Etapa D (colisões) — pendente, ALTO acoplamento, por último** (`_check_*`/
+`_handle_collisions`, ~600 linhas), com a rede de testes reforçada.
 
 **Outros achados da revisão (não priorizados ainda):** acessibilidade (sem daltônico
 nem escala de shake/flash), `EventBus.emit` engole exceção com `print`, sem

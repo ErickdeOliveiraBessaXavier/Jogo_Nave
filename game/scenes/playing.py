@@ -26,7 +26,7 @@ import math
 import random
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence, cast
 
 import pygame
 
@@ -68,7 +68,7 @@ from ..events import game_events as events
 from ..render.game_renderer import GameRenderer
 from ..render.boss_backdrop_dim import BossBackdropDim
 from ..render.damage_vignette import DamageVignette
-from ..render.render_frame import P2HudInfo, RenderFrame
+from ..render.render_frame import RenderFrame
 from ..systems.boss_fight_controller import BossFightController
 from ..systems.cheat_input import CheatBuffer
 from ..systems.collisions import Collisions
@@ -79,6 +79,7 @@ from ..systems.level_progression_controller import (
     LevelProgressionController,
     ProgressionStatus,
 )
+from ..systems.p2_session_controller import P2SessionController
 from ..systems.player_slot import PlayerRoster, PlayerSlot
 from ..systems.powerup_system import PowerupSystem
 from ..systems.revival_system import RevivalSystem
@@ -197,10 +198,10 @@ class PlayingScene(Scene):
         # P2 sobrevive ao "Continuar" do game over. A cena é recriada do zero a
         # cada continue, então quem estava jogando precisa ser reconstruído
         # aqui — sem isto o P2 era silenciosamente largado e tinha que apertar
-        # START de novo a cada morte. Depende de `_init_systems` (entity_manager
-        # e os spawners que `_spawn_p2` atualiza).
+        # START de novo a cada morte. Depende de `_init_systems` (entity_manager,
+        # spawners e o `_p2_session` que `spawn_p2` usa).
         if p2_profile is not None and self.app.gamepad.secondary_connected:
-            self._spawn_p2(p2_profile)
+            self._p2_session.spawn_p2(p2_profile)
 
     @property
     def is_side_scroll(self) -> bool:
@@ -507,6 +508,20 @@ class PlayingScene(Scene):
             gamepad=self.app.gamepad,
             sync_lives=self._sync_lives_for,
             rebuild_mini_ships=self._build_permanent_mini_ships,
+        )
+
+        # Sessão de co-op local (P2): entrada/saída/desconexão + spawn/HUD. Não
+        # referencia a cena (§1); o modal e o trio set_player_count entram por
+        # callback (o modal precisa da cena p/ render de fundo e perfil).
+        self._p2_session = P2SessionController(
+            roster=self.roster,
+            gamepad=self.app.gamepad,
+            entity_manager=self.entity_manager,
+            get_is_side_scroll=lambda: self.is_side_scroll,
+            get_lives=lambda: int(self.difficulty_settings.get("lives", 3)),
+            set_player_count=self._set_active_player_count,
+            open_p2_modal=self._open_p2_modal,
+            build_permanent_mini_ships=self._build_permanent_mini_ships,
         )
 
     # ------------------------------------------------------------------
@@ -2465,157 +2480,30 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        # Intercepta Start no gamepad de slot 1 quando P2 ainda não juntou:
-        # abre o modal de seleção de nave de P2. Demais eventos seguem para
-        # o handler padrão (que opera somente sobre P1).
-        if event.type == pygame.JOYBUTTONDOWN and self._is_p2_join_trigger(event):
-            self._open_p2_select_modal()
-            return
-        # Saída voluntária do P2: Back/Select no controle de P2 remove ele
-        # do roster. Score compartilhado fica preservado.
-        if event.type == pygame.JOYBUTTONDOWN and self._is_p2_leave_trigger(event):
-            self._remove_p2_slot(reason="voluntary")
-            return
-        # Desconexão do controle do P2: remove P2 do roster pra evitar nave
-        # parada na tela sem input. P2 pode rejoinar reconectando o controle.
-        if event.type == pygame.JOYDEVICEREMOVED and self._is_p2_disconnect(event):
-            self._remove_p2_slot(reason="disconnect")
+        # Sessão de co-op (P2): entrada (START), saída (BACK) e desconexão do
+        # controle. Se o controller consumiu o evento, não repassa ao input de P1.
+        if self._p2_session.try_handle_event(event):
             return
         self.input_handler.handle(event)
 
-    def _is_p2_leave_trigger(self, event: pygame.event.Event) -> bool:
-        """True se BACK foi pressionado no gamepad atribuído ao P2."""
-        from ..core.gamepad import XboxButton
+    def _set_active_player_count(self, count: int) -> None:
+        """Callback do `P2SessionController`: propaga a contagem de jogadores ao
+        controlador de nível e aos spawners (afeta scaling da PRÓXIMA fase e o cap
+        de tela imediatamente)."""
+        self.level_controller.set_player_count(count)
+        self.enemy_spawner.set_player_count(count)
+        self.powerup_spawner.set_player_count(count)
 
-        if event.button != XboxButton.BACK:
-            return False
-        if self.roster.count() < 2:
-            return False
-        return self.app.gamepad.slot_of_instance_id(event.instance_id) == 1
-
-    def _is_p2_disconnect(self, event: pygame.event.Event) -> bool:
-        """True se o gamepad desconectado era o atribuído ao P2."""
-        if self.roster.count() < 2:
-            return False
-        p2_slot = self.roster.all_slots()[1]
-        if p2_slot.gamepad_slot != 1:
-            return False
-        # GamepadManager já processou o JOYDEVICEREMOVED neste momento
-        # (handle_event() do app.py despacha pra cá depois de chamar
-        # gamepad.handle_event). Então slot 1 já está vazio se era o P2.
-        return not self.app.gamepad.is_slot_connected(1)
-
-    def _remove_p2_slot(self, *, reason: str) -> None:
-        """Remove o slot do P2 do roster. Beacon e companheiros são descartados."""
-        all_slots = self.roster.all_slots()
-        if len(all_slots) < 2:
-            return
-        p2 = all_slots[1]
-        p2.revival_beacon = None
-        # Companheiros vinculados à nave do P2 (mini-naves permanentes do
-        # Engenheiro ou temporárias do powerup, wingmen e o feixe de coop) somem
-        # junto — sem a nave delas, ficariam orbitando/apontando entidade fantasma.
-        self.entity_manager.remove_companions_of_ship(p2.ship)
-        self.roster.remove(p2)
-        # Volta ao escalonamento solo na próxima fase.
-        self.level_controller.set_player_count(self.roster.count())
-        self.enemy_spawner.set_player_count(self.roster.count())
-        self.powerup_spawner.set_player_count(self.roster.count())
-        logger.info("P2 saiu da partida (motivo=%s).", reason)
-
-    def _is_p2_join_trigger(self, event: pygame.event.Event) -> bool:
-        """True se o evento é START no segundo controle, e P2 ainda não juntou."""
-        from ..core.gamepad import XboxButton
-
-        if event.button != XboxButton.START:
-            return False
-        if self.roster.count() >= 2:
-            return False
-        gp = self.app.gamepad
-        if not gp.secondary_connected:
-            return False
-        return gp.slot_of_instance_id(event.instance_id) == 1
-
-    def _open_p2_select_modal(self) -> None:
-        """Empurra o modal de seleção de nave de P2 sobre a partida."""
+    def _open_p2_modal(self, on_confirm: Callable[[Any], None]) -> None:
+        """Callback do `P2SessionController`: empurra o modal de seleção de nave de
+        P2 sobre a partida. Fica na cena porque o modal usa `playing_scene` para o
+        render de fundo e o perfil (unlocked_ships)."""
         from .p2_ship_select import P2ShipSelectScene
 
         modal = P2ShipSelectScene(
-            self.app, playing_scene=self, on_confirm=self._spawn_p2
+            self.app, playing_scene=self, on_confirm=on_confirm
         )
         self.app.states.push(modal)
-
-    def _p2_anchor(self) -> tuple[float, float]:
-        """Posição de P1 na qual ancorar o spawn de P2.
-
-        Enquanto P1 está entrando em cena, `x`/`y` ainda são o ponto de partida
-        FORA da tela — ancorar neles mandaria P2 voar para fora do quadro. O
-        destino da entrada é o ponto certo nesse caso. Importa no início da
-        partida (P2 rejuntando com a cena recém-criada) e quando P2 aperta
-        START durante a contagem de preparação.
-        """
-        primary_ship = self.roster.primary().ship
-        if primary_ship.is_entering:
-            return primary_ship.entry_target_pos
-        return primary_ship.x, primary_ship.y
-
-    def _spawn_p2(self, profile: Any) -> None:
-        """Cria a nave de P2 e adiciona ao roster com animação de entrada."""
-        anchor_x, anchor_y = self._p2_anchor()
-
-        # Define alvos de spawn baseados em P1
-        if self.is_side_scroll:
-            target_x = anchor_x
-            target_y = anchor_y + 80.0
-            start_x = -100.0
-            start_y = target_y
-        else:
-            target_x = anchor_x + 80.0
-            target_y = anchor_y
-            start_x = target_x
-            start_y = float(Config.SCREEN_HEIGHT + 100)
-
-        p2_ship = Ship(
-            start_x,
-            start_y,
-            mouse_control=False,
-            auto_fire=False,
-            profile=profile,
-            player_index=1,  # sprite recolorido em ciano (nave, minis e HUD)
-        )
-
-        # Ativa animação de entrada similar ao P1
-        p2_ship.start_entering_animation(
-            (start_x, start_y),
-            (target_x, target_y),
-            1.5,  # Duração da animação
-        )
-        p2_ship.invuln = float(Config.INVULN_TIME * 1000)
-        p2_ship.apply_world_mode(self.is_side_scroll)
-
-        lives = int(self.difficulty_settings.get("lives", 3))
-        p2_slot = PlayerSlot(
-            ship=p2_ship,
-            lives=lives,
-            gamepad_slot=1,
-            apply_permanent_upgrades=False,
-        )
-        p2_ship.lives = lives
-        self.roster.add(p2_slot)
-        self._build_permanent_mini_ships(p2_slot)
-        # Atualiza scaling de coop pra próxima fase (a fase atual mantém o
-        # valor antigo — mudar inimigos vivos seria confuso pro jogador).
-        self.level_controller.set_player_count(self.roster.count())
-        # Cap de inimigos na tela cresce imediatamente (afeta próximos spawns).
-        self.enemy_spawner.set_player_count(self.roster.count())
-        # Frequência de powerups também aumenta a partir do próximo spawn.
-        self.powerup_spawner.set_player_count(self.roster.count())
-
-        logger.info(
-            "P2 entrou na partida com a nave '%s' (vidas=%d) e animação de entrada.",
-            profile.id,
-            lives,
-        )
 
     # ------------------------------------------------------------------
     # Modo de seleção de upgrade via controle
@@ -2742,29 +2630,13 @@ class PlayingScene(Scene):
                 if slot.revival_beacon is not None
             ),
             primary_alive=not self.roster.primary().is_dead,
-            p2_hud=self._build_p2_hud_info(),
+            p2_hud=self._p2_session.build_hud_info(),
             level_popup_text=self.level_popup_text,
             level_popup_timer=self.level_popup_timer,
             level_popup_duration=self.level_popup_duration,
             in_atmosphere=self._atmosphere.in_atmosphere,
             atmosphere_progress=self._atmosphere.progress,
             atmosphere_route=self._atmosphere.route,
-        )
-
-    def _build_p2_hud_info(self) -> Optional[P2HudInfo]:
-        """Monta o snapshot do P2 para o HUD secundário (None em single-player)."""
-        all_slots = self.roster.all_slots()
-        if len(all_slots) < 2:
-            return None
-        p2 = all_slots[1]
-        beacon_progress = (
-            p2.revival_beacon.progress_ratio if p2.revival_beacon is not None else 0.0
-        )
-        return P2HudInfo(
-            lives=p2.lives,
-            is_dead=p2.is_dead,
-            ship=p2.ship,
-            beacon_progress=beacon_progress,
         )
 
     # ===================== Upgrades (helpers) =====================
