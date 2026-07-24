@@ -1,9 +1,9 @@
 import math
-from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 import pygame
 
+from ...core.assets import BASE_DIR
 from ...core.player_tint import player_sprite
 from ...core.config import config as Config
 from ...core.sound import sound_manager
@@ -21,9 +21,9 @@ from ...core.fire_timer import FireTimer
 if TYPE_CHECKING:
     from ...systems.entity_manager import EntityManager
 
-_SPRITE_PATH = (
-    Path(__file__).resolve().parent.parent / "assets" / "icons" / "mini_ship.png"
-)
+# Asset em game/assets/icons/ (o caminho antigo `entities/assets/icons/` não
+# existia — o sprite não carregava e a mini caía no fallback).
+_SPRITE_PATH = BASE_DIR / "assets" / "icons" / "mini_ship.png"
 
 
 _MAX_TARGETING_RANGE_SQ = 400 * 400

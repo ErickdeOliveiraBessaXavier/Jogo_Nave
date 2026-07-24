@@ -21,10 +21,18 @@ from ...core.colors import (
 )
 from ...core.config import PowerUpType
 from ...core.config import config as Config
-from .._shared.attraction_utils import get_attraction_pulse_rect, update_magnetic_attraction
+from .._shared.attraction_utils import (
+    get_attraction_pulse_rect,
+    update_closing_pull,
+    update_magnetic_attraction,
+)
 
 
 class PowerUp:
+    # Duração do fade de encerramento (dissolver: alpha + encolher) quando o
+    # power-up não é coletado a tempo no fim da fase.
+    FADE_OUT_DURATION: float = 0.35
+
     def __init__(self, powerup_type: PowerUpType):
         self.type: PowerUpType = powerup_type
         self.kind: str = (
@@ -46,13 +54,36 @@ class PowerUp:
         self._is_being_attracted: bool = False
         self.attraction_shake_timer: float = 0.0
 
+        # Fade de encerramento de fase (dissolver).
+        self._fading: bool = False
+        self._fade_timer: float = 0.0
+
+    def begin_fade_out(self) -> None:
+        """Inicia o dissolver de encerramento (idempotente). Retardatário que não
+        foi coletado a tempo some com alpha+encolhe, sem atravessar a transição."""
+        if self._fading or self.dead:
+            return
+        self._fading = True
+        self._fade_timer = self.FADE_OUT_DURATION
+        self.attraction_shake_timer = 0.0
+
     def update(
         self,
         dt: float,
         attraction_pos: tuple[float, float] | None = None,
         attraction_mult: float = 1.0,
+        closing_pull: tuple[float, float] | None = None,
     ):
-        update_magnetic_attraction(self, dt, attraction_pos, attraction_mult)
+        if self._fading:
+            self._fade_timer -= dt
+            if self._fade_timer <= 0.0:
+                self.dead = True
+            return
+
+        if closing_pull is not None:
+            update_closing_pull(self, dt, closing_pull)
+        else:
+            update_magnetic_attraction(self, dt, attraction_pos, attraction_mult)
 
         # Animação de pulsação
         self.animation_timer += dt * 5  # velocidade da pulsação
@@ -60,7 +91,40 @@ class PowerUp:
             pygame.math.Vector2(1, 0).rotate(self.animation_timer * 57.3).x
         )
 
+    def _border_color(self) -> tuple[int, int, int]:
+        color_map = {
+            "life": POWERUP_LIFE,
+            "shield": POWERUP_SHIELD,
+            "double_shot": POWERUP_DOUBLE_SHOT,
+            "speed": POWERUP_SPEED,
+            "score": POWERUP_SCORE,
+            "piercing_shot": POWERUP_PIERCING_SHOT,
+            "mini_ships": POWERUP_MINI_SHIPS,
+            "rainbow": POWERUP_RAINBOW,
+            "cooldown_haste": POWERUP_COOLDOWN_HASTE,
+            "time_stop": POWERUP_TIME_STOP,
+            "damage_boost": POWERUP_DAMAGE_BOOST,
+        }
+        return color_map.get(self.kind, (255, 255, 255))
+
+    def _draw_fading(self, surface: pygame.Surface) -> None:
+        """Dissolver de encerramento: alpha decrescente + encolhimento."""
+        progress = max(0.0, min(1.0, self._fade_timer / self.FADE_OUT_DURATION))
+        size = max(2, int(self.w * (0.35 + 0.65 * progress)))  # encolhe
+        buf = pygame.Surface((size, size), pygame.SRCALPHA)
+        color = self._border_color()
+        buf_rect = buf.get_rect()
+        pygame.draw.ellipse(buf, color, buf_rect, max(1, size // 6))
+        pygame.draw.ellipse(buf, color, buf_rect.inflate(-size // 2, -size // 2))
+        buf.set_alpha(int(255 * progress))
+        surface.blit(
+            buf, (self.rect.centerx - size // 2, self.rect.centery - size // 2)
+        )
+
     def draw(self, surface: pygame.Surface):
+        if self._fading:
+            self._draw_fading(surface)
+            return
         color_map = {
             "life": POWERUP_LIFE,
             "shield": POWERUP_SHIELD,

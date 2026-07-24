@@ -23,5 +23,9 @@ mexer em `WorldConfig` nem pôr `boss_type` em `FIXED_LEVELS`. Bosses procedurai
 (setor) saem de `_get_procedural_sector_boss` + `get_procedural_midboss_for_level`,
 também via `get_boss_for_level`. A cascata de CONSTRUÇÃO do boss em
 `boss_fight_controller._spawn_boss` é separada e fica como está (§5, construtores
-divergem). Plano e Fase 3 (ThemeProfile, adiada) em `PLANO_REORGANIZACAO_PROGRESSAO.md`.
-Ver também [[city-variety-pyramid-rotation]].
+divergem). O refactor que unificou isso (`PLANO_REORGANIZACAO_PROGRESSAO.md`) foi **encerrado e
+o arquivo apagado** (2026-07-24): Fases 1-2 feitas; **Fase 3 (`ThemeProfile` único por
+tema) adiada de propósito** — só quando for adicionar um tema novo (colapsaria ~10
+tabelas de peso, risco de regressão sem forcing function). As cascatas `if/elif theme`
+em `_create_world_boss_level` (`pipeline.py`) e no dispatch `_configure_<tema>_spawn`
+(`procedural.py`) ficam como estão até lá (§5). Ver também [[city-variety-pyramid-rotation]].

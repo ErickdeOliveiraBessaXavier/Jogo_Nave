@@ -26,7 +26,7 @@ import math
 import random
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Optional, Sequence, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Optional, Sequence, cast
 
 import pygame
 
@@ -86,6 +86,10 @@ from ..systems.shooting_system import ShootingSystem
 from ..systems.upgrade_selector import UpgradeSelector
 from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
 from ..systems.transition_controller import TransitionController, TransitionPhase
+from ..systems.world_transition_cutscene import (
+    ThrusterParticle,
+    WorldTransitionCutscene,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -119,21 +123,18 @@ _HUD_UPGRADE_SLOT_GAP = 6
 # ---------------------------------------------------------------------------
 
 
+# Encerramento de fase: após este tempo (s) magnetizando os coletáveis, os que
+# ainda sobraram na tela começam a dissolver (fade), garantindo que a transição
+# não fique presa nem carregue power-ups/estrelas para a fase seguinte. Cabe com
+# folga na janela de espera (LEVEL_TRANSITION_DELAY 2.0s + timeout 1.2s).
+CLOSING_FADE_AFTER: float = 1.2
+
+
 class GameState(Enum):
     """Estado de jogo interno da cena (fase de preparação vs gameplay ativo)."""
 
     PREPARING = auto()
     PLAYING = auto()
-
-
-class ThrusterParticle(TypedDict):
-    offset_x: float
-    offset_y: float
-    vx: float
-    vy: float
-    lifetime: float
-    size: float
-    color: tuple[int, int, int]
 
 
 @dataclass
@@ -346,22 +347,26 @@ class PlayingScene(Scene):
         """
         self.pending_world_transition: Optional[WorldConfig] = None
 
-        self.world_transition_cutscene_timer: float = 0.0
-        self.world_transition_cutscene_duration: float = (
-            Config.WORLD_TRANSITION_CUTSCENE_DURATION
+        # Tempo acumulado no encerramento de fase (POST_VICTORY_DELAY +
+        # LEVEL_TRANSITION_WAIT). Dispara o fade dos coletáveis retardatários.
+        self._closing_elapsed: float = 0.0
+
+        # Cinemática de saída da nave (charge→launch + partículas). O estado da
+        # animação e a lógica vivem no controller (§9); a cena guarda a fachada
+        # fina — `world_transition_cutscene_active` (derivado do FSM) + as
+        # properties de leitura `world_transition_cutscene_timer`/
+        # `world_transition_thruster_particles` que o DTO de render consome — e o
+        # callback de FLUXO `_on_world_cutscene_complete` (painel/atmosfera/prep).
+        self._world_cutscene = WorldTransitionCutscene(
+            get_ship=lambda: self.ship,
+            get_side_scroll=lambda: self.is_side_scroll,
+            get_entity_manager=lambda: self.entity_manager,
+            is_active=lambda: self.transitions.is_cutscene_exit,
+            enter_cutscene_phase=lambda: self._set_transition_phase(
+                TransitionPhase.CUTSCENE_EXIT
+            ),
+            on_complete=self._on_world_cutscene_complete,
         )
-        self.world_transition_cutscene_charge_duration: float = (
-            Config.WORLD_TRANSITION_CUTSCENE_CHARGE_DURATION
-        )
-        self.world_transition_cutscene_launch_speed: float = (
-            Config.WORLD_TRANSITION_CUTSCENE_LAUNCH_SPEED
-        )
-        self.world_transition_cutscene_origin: tuple[float, float] = (0.0, 0.0)
-        self.world_transition_cutscene_recoil_offset: float = 0.0
-        self.world_transition_cutscene_launch_distance: float = 0.0
-        self.world_transition_cutscene_target_world: Optional[WorldConfig] = None
-        self.world_transition_cutscene_debug_mode: bool = False
-        self.world_transition_thruster_particles: list[ThrusterParticle] = []
 
         # Interstício "Entering/Exiting the Atmosphere". Todo o estado de runtime
         # (rota, altitude, regressão, cinemática de nocaute, flag in_atmosphere)
@@ -369,8 +374,6 @@ class PlayingScene(Scene):
         # `_*_atmosphere_*` desta cena (FSM acoplado — ver core/atmosphere_phase.py
         # e código_teste/PLANO_FASE_ATMOSFERA.md).
         self._atmosphere = AtmosphereState()
-        # Cutscene de chegada do re-entry (Entering) lança a nave para baixo.
-        self._cutscene_launch_down: bool = False
 
     def _init_fade(self) -> None:
         """Configura o fade-in inicial para evitar corte abrupto.
@@ -575,6 +578,16 @@ class PlayingScene(Scene):
                 else TransitionPhase.LEVEL_ENTRY
             )
 
+    # Fachada fina de leitura para o DTO de render (§9): o estado da animação
+    # mora no controller; o render lê estes valores via `RenderFrame`.
+    @property
+    def world_transition_cutscene_timer(self) -> float:
+        return self._world_cutscene.timer
+
+    @property
+    def world_transition_thruster_particles(self) -> list[ThrusterParticle]:
+        return self._world_cutscene.particles
+
     @property
     def awaiting_world_transition_panel(self) -> bool:
         return self.transitions.is_world_panel
@@ -583,11 +596,20 @@ class PlayingScene(Scene):
         """Retorna True quando o jogador pode agir normalmente."""
         return self.transitions.can_handle_gameplay_actions
 
+    def _is_closing_level(self) -> bool:
+        """True durante o ENCERRAMENTO de fase (pós-vitória + espera de transição).
+
+        Janela em que não há mais spawns nem tiro do jogador, mas os projéteis já
+        em tela seguem voando e os coletáveis são magnetizados/dissolvidos antes de
+        a transição concluir."""
+        return self.level_transition_pending or self.level_transition_active
+
     def _begin_level_preparation(self) -> None:
         """Coloca a cena em modo de preparação para o próximo nível."""
         self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
         self.state = GameState.PREPARING
         self.preparation_time_left = Config.PREPARATION_TIME
+        self._closing_elapsed = 0.0
         self.level_controller.reset_level_stats()
         self._reset_ship_for_level_entry()
 
@@ -646,7 +668,7 @@ class PlayingScene(Scene):
                 self._build_permanent_mini_ships(slot)
 
         if theme_changed:
-            self._start_world_transition_cutscene(new_world)
+            self._world_cutscene.start(new_world)
         else:
             self._begin_playing_state()
 
@@ -682,6 +704,7 @@ class PlayingScene(Scene):
         """Ativa o gameplay e registra a tentativa do nível uma única vez."""
         self._set_transition_phase(TransitionPhase.PLAYING)
         self.state = GameState.PLAYING
+        self._closing_elapsed = 0.0
         self.ship.is_entering = False
         self.level_controller.start_level_timer(self.score)
         self.level_controller.record_attempt_if_needed()
@@ -721,129 +744,20 @@ class PlayingScene(Scene):
         self._begin_level_preparation()
 
     # ------------------------------------------------------------------
-    # Cutscene de transição de mundo
+    # Cutscene de transição de mundo — cinemática/partículas no
+    # `WorldTransitionCutscene` (systems/, §9). Aqui fica só o FLUXO de
+    # conclusão, que depende de estado da partida (mundo, atmosfera, pilha).
     # ------------------------------------------------------------------
 
-    def _spawn_world_transition_thruster_particles(self, intensity: int) -> None:
-        """Gera partículas extras para o impulso da cutscene."""
-        if self.ship.ship_image is not None:
-            sprite_w, sprite_h = self.ship.ship_image.get_size()
-        else:
-            sprite_w, sprite_h = self.ship.w, self.ship.h
-
-        for _ in range(intensity):
-            if self.is_side_scroll:
-                particle: ThrusterParticle = {
-                    "offset_x": random.uniform(-14, 4),
-                    "offset_y": sprite_h / 2 + random.uniform(-8, 8),
-                    "vx": -random.uniform(220, 460),
-                    "vy": random.uniform(-120, 120),
-                    "lifetime": random.uniform(0.14, 0.34),
-                    "size": random.uniform(2.0, 4.8),
-                    "color": (255, random.randint(120, 230), 0),
-                }
-            else:
-                # Top-down
-                if self._cutscene_launch_down:
-                    # Re-entry: Nave desce, partículas sobem (saem do topo)
-                    particle = {
-                        "offset_x": sprite_w / 2 + random.uniform(-9, 9),
-                        "offset_y": random.uniform(-10, 4),
-                        "vx": random.uniform(-90, 90),
-                        "vy": -random.uniform(220, 460),
-                        "lifetime": random.uniform(0.14, 0.34),
-                        "size": random.uniform(2.0, 4.8),
-                        "color": (255, random.randint(120, 230), 0),
-                    }
-                else:
-                    # Normal / Exit: Nave sobe, partículas descem (saem da base)
-                    particle = {
-                        "offset_x": sprite_w / 2 + random.uniform(-9, 9),
-                        "offset_y": sprite_h + random.uniform(-4, 10),
-                        "vx": random.uniform(-90, 90),
-                        "vy": random.uniform(220, 460),
-                        "lifetime": random.uniform(0.14, 0.34),
-                        "size": random.uniform(2.0, 4.8),
-                        "color": (255, random.randint(120, 230), 0),
-                    }
-            self.world_transition_thruster_particles.append(particle)
-
-    def _update_world_transition_thruster_particles(self, dt: float) -> None:
-        """Atualiza e filtra partículas da cutscene (list comprehension imutável)."""
-        self.world_transition_thruster_particles = [
-            {
-                "offset_x": p["offset_x"] + p["vx"] * dt,
-                "offset_y": p["offset_y"] + p["vy"] * dt,
-                "vx": p["vx"],
-                "vy": p["vy"],
-                "lifetime": p["lifetime"] - dt,
-                "size": max(0.0, p["size"] - dt * 6.0),
-                "color": p["color"],
-            }
-            for p in self.world_transition_thruster_particles
-            if p["lifetime"] - dt > 0.0 and p["size"] - dt * 6.0 > 0.0
-        ]
-
-    def _start_world_transition_cutscene(
-        self,
-        target_world: WorldConfig,
-        debug_mode: bool = False,
-        launch_down: bool = False,
+    def _on_world_cutscene_complete(
+        self, target_world: Optional[WorldConfig], debug_mode: bool
     ) -> None:
-        """Inicia a cutscene de saída da nave antes do painel de transição.
+        """Callback disparado pelo controller quando a cutscene termina.
 
-        `launch_down=True` (re-entry/Entering) lança a nave para BAIXO em vez de
-        para cima no modo top-down — a nave está descendo na atmosfera.
+        Decide o próximo passo do fluxo: interstício de atmosfera (se a rota
+        qualifica), preparação de nível (debug/F8) ou abertura do painel de
+        transição de mundo.
         """
-        self._cutscene_launch_down = launch_down
-        self._set_transition_phase(TransitionPhase.CUTSCENE_EXIT)
-        self.world_transition_cutscene_timer = 0.0
-        self.world_transition_cutscene_launch_speed = (
-            Config.WORLD_TRANSITION_CUTSCENE_LAUNCH_SPEED
-        )
-        self.world_transition_cutscene_origin = (float(self.ship.x), float(self.ship.y))
-        self.world_transition_cutscene_recoil_offset = 0.0
-        self.world_transition_cutscene_launch_distance = 0.0
-        self.world_transition_cutscene_target_world = target_world
-        self.world_transition_cutscene_debug_mode = debug_mode
-        self.world_transition_thruster_particles.clear()
-
-        # Ativa o tremor visual da nave, mas desativa a interpolação automática
-        # de posição do Ship.update (entering_duration=0) para controle manual.
-        self.ship.is_entering = True
-        self.ship.entering_duration = 0.0
-        self.ship.is_side_scroll = self.is_side_scroll
-        # Força o sprite a apontar na direção do launch — evita que uma rotação
-        # CTRL anterior do jogador faça a nave voar de costas/de lado durante a
-        # cutscene. O facing volta ao default no próximo mundo via apply_world_mode.
-        if self.is_side_scroll:
-            cutscene_facing = "east"
-        elif launch_down:
-            cutscene_facing = "south"
-        else:
-            cutscene_facing = "north"
-        self.ship.set_facing(cutscene_facing)
-        logger.info(
-            "[CUTSCENE] Iniciando saída da nave para %s (debug=%s)",
-            target_world.name,
-            debug_mode,
-        )
-
-    def _finish_world_transition_cutscene(self) -> None:
-        """Finaliza a cutscene e abre o painel de transição."""
-        if not self.world_transition_cutscene_active:
-            return
-
-        target_world = self.world_transition_cutscene_target_world
-        debug_mode = self.world_transition_cutscene_debug_mode
-
-        self.world_transition_cutscene_timer = 0.0
-        self.world_transition_cutscene_target_world = None
-        self.world_transition_cutscene_debug_mode = False
-        self.world_transition_thruster_particles.clear()
-        self.world_transition_cutscene_recoil_offset = 0.0
-        self.world_transition_cutscene_launch_distance = 0.0
-
         if target_world is None:
             return
 
@@ -876,83 +790,6 @@ class PlayingScene(Scene):
 
         if debug_mode:
             logger.info("[CUTSCENE] Preview visual completo executado via F8")
-
-    def _update_world_transition_cutscene(self, dt: float) -> None:
-        """Atualiza a cinemática de saída da nave (charge → launch)."""
-        if not self.world_transition_cutscene_active:
-            return
-
-        self.world_transition_cutscene_timer += dt
-        t = self.world_transition_cutscene_timer
-        charge_end = self.world_transition_cutscene_charge_duration
-        charge_progress = min(1.0, max(0.0, t / charge_end))
-
-        recoil_sign = -1.0 if self.is_side_scroll else 1.0
-        if charge_progress < 0.28:
-            tremble_strength = 1.8 * (1.0 - charge_progress * 0.8)
-            ship_x = self.world_transition_cutscene_origin[0]
-            ship_y = self.world_transition_cutscene_origin[1]
-            ship_x += math.sin(t * 55.0) * tremble_strength
-            ship_y += math.cos(t * 47.0) * tremble_strength * 0.75
-            self.world_transition_cutscene_recoil_offset = 0.0
-            thruster_intensity = 6
-        elif charge_progress < 0.68:
-            recoil_progress = (charge_progress - 0.28) / (0.68 - 0.28)
-            self.world_transition_cutscene_recoil_offset = 12.0 * recoil_progress
-            ship_x = self.world_transition_cutscene_origin[0]
-            ship_y = self.world_transition_cutscene_origin[1]
-            ship_x += recoil_sign * self.world_transition_cutscene_recoil_offset
-            tremble_strength = 1.2 * (1.0 - recoil_progress)
-            ship_x += math.sin(t * 42.0) * tremble_strength * 0.55
-            ship_y += math.cos(t * 39.0) * tremble_strength * 0.55
-            thruster_intensity = 10
-        else:
-            hold_progress = (charge_progress - 0.68) / (1.0 - 0.68)
-            self.world_transition_cutscene_recoil_offset = 12.0
-            ship_x = (
-                self.world_transition_cutscene_origin[0]
-                + recoil_sign * self.world_transition_cutscene_recoil_offset
-            )
-            ship_y = self.world_transition_cutscene_origin[1]
-            thruster_intensity = 14 + int(6 * hold_progress)
-
-        self.ship.x = ship_x
-        self.ship.y = ship_y
-        self._spawn_world_transition_thruster_particles(intensity=thruster_intensity)
-
-        if t >= charge_end:
-            self.world_transition_cutscene_launch_speed += (
-                Config.WORLD_TRANSITION_CUTSCENE_LAUNCH_ACCELERATION * dt
-            )
-            launch_speed = self.world_transition_cutscene_launch_speed
-            self.world_transition_cutscene_launch_distance += launch_speed * dt
-            if self.is_side_scroll:
-                self.ship.x = (
-                    self.world_transition_cutscene_origin[0]
-                    + recoil_sign * self.world_transition_cutscene_recoil_offset
-                    + self.world_transition_cutscene_launch_distance
-                )
-            else:
-                launch_dir = 1.0 if self._cutscene_launch_down else -1.0
-                self.ship.y = (
-                    self.world_transition_cutscene_origin[1]
-                    + launch_dir * self.world_transition_cutscene_launch_distance
-                )
-            self._spawn_world_transition_thruster_particles(intensity=14)
-
-        ship_dt_multiplier = 3.4 if t >= charge_end else 2.2
-        self.ship.update(
-            dt * ship_dt_multiplier,
-            self.entity_manager,
-            is_side_scroll=self.is_side_scroll,
-        )
-        self._update_world_transition_thruster_particles(dt)
-
-        if (
-            self.world_transition_cutscene_timer
-            >= self.world_transition_cutscene_duration
-        ):
-            self._finish_world_transition_cutscene()
 
     # ------------------------------------------------------------------
     # Interstício "Entering / Exiting the Atmosphere" (esqueleto de fluxo)
@@ -1067,7 +904,9 @@ class PlayingScene(Scene):
             ) * 1000.0 + RevivalBeacon.POST_REVIVE_INVULN_MS
             self._build_permanent_mini_ships(slot)
 
-        # Recomeço limpo: remove meteoros/hostis em tela.
+        # Recomeço limpo: remove meteoros/hostis em tela. Invalida antes de
+        # esvaziar para nenhum companheiro (mini/wingman) ficar mirando fantasma.
+        self.entity_manager.invalidate_enemy_targets()
         self.entity_manager.meteor_pool.clear_active()
         self.entity_manager.enemies.clear()
 
@@ -1225,7 +1064,7 @@ class PlayingScene(Scene):
             self._apply_pending_world_transition()
             return
         # Re-entry (Entering): a nave desce na atmosfera — cutscene lança pra baixo.
-        self._start_world_transition_cutscene(target, launch_down=is_entering)
+        self._world_cutscene.start(target, launch_down=is_entering)
 
     def debug_force_world_transition(self) -> None:
         """[DEBUG/F8] Força a transição para o próximo mundo via fluxo REAL.
@@ -1295,7 +1134,7 @@ class PlayingScene(Scene):
         self._update_start_fade(dt)
 
         if self.transition_phase == TransitionPhase.CUTSCENE_EXIT:
-            self._update_world_transition_cutscene(dt)
+            self._world_cutscene.update(dt)
             return
 
         self.transitions.update_post_victory(dt)
@@ -1316,6 +1155,11 @@ class PlayingScene(Scene):
             screen_width=Config.SCREEN_WIDTH,
             screen_height=Config.SCREEN_HEIGHT,
             attraction_mult=self.ship.profile.pickup_radius_mult,
+            closing_pull_target=(
+                (self.ship.rect.centerx, self.ship.rect.centery)
+                if self._is_closing_level()
+                else None
+            ),
         )
 
         if self.transition_phase in (
@@ -1325,6 +1169,11 @@ class PlayingScene(Scene):
             self._handle_collisions()
             if self._game_over_triggered:
                 return
+        elif self._is_closing_level():
+            # Encerramento de fase: as colisões normais não rodam fora do PLAYING,
+            # então processamos aqui a coleta dos coletáveis magnetizados e o fade
+            # dos retardatários — nada de power-up/estrela atravessando a transição.
+            self._update_level_closing(dt)
 
         # self.entity_manager.cleanup()  # Removido: já chamado internamente em entity_manager.update()
         self._update_level_logic(dt)
@@ -1399,7 +1248,7 @@ class PlayingScene(Scene):
         self.boss_backdrop_dim.update(dt, boss_dim_active)
 
         if self.transitions.update_level_transition_wait(
-            dt, self._all_animations_finished()
+            dt, self._ready_for_level_transition()
         ):
             self._start_next_level()
 
@@ -1611,6 +1460,44 @@ class PlayingScene(Scene):
             not self.entity_manager.explosive_effects
             and pool_stats.get("active", 0) == 0
         )
+
+    def _player_projectiles_pending(self) -> bool:
+        """True se ainda há projéteis do jogador em tela — a transição espera eles
+        saírem/colidirem (§ encerramento limpo)."""
+        em = self.entity_manager
+        return bool(
+            em.bullets
+            or em.homing_bullets
+            or em.cacador_lasers
+            or em.mini_ship_bullets
+        )
+
+    def _collectibles_pending(self) -> bool:
+        """True enquanto houver power-up/estrela na tela (sendo coletado ou em fade)."""
+        return bool(self.entity_manager.powerups or self.entity_manager.stars)
+
+    def _ready_for_level_transition(self) -> bool:
+        """Gate de conclusão do encerramento: explosões terminaram, nenhum projétil
+        do jogador restou e os coletáveis foram resolvidos (coletados ou dissolvidos).
+        O timeout duro do `TransitionController` continua como rede de segurança."""
+        return (
+            self._all_animations_finished()
+            and not self._player_projectiles_pending()
+            and not self._collectibles_pending()
+        )
+
+    def _update_level_closing(self, dt: float) -> None:
+        """Encerramento de fase: coleta os coletáveis magnetizados (as colisões
+        normais não rodam fora do PLAYING) e, após `CLOSING_FADE_AFTER`, dissolve
+        os retardatários. A magnetização em si vem do `closing_pull_target` passado
+        ao `entity_manager.update`."""
+        self._closing_elapsed += dt
+        self.powerup_system.process_collection()
+        if self._closing_elapsed >= CLOSING_FADE_AFTER:
+            for p in self.entity_manager.powerups:
+                p.begin_fade_out()
+            for s in self.entity_manager.stars:
+                s.begin_fade_out()
 
     # ------------------------------------------------------------------
     # Cheat code
@@ -2590,17 +2477,16 @@ class PlayingScene(Scene):
         return not self.app.gamepad.is_slot_connected(1)
 
     def _remove_p2_slot(self, *, reason: str) -> None:
-        """Remove o slot do P2 do roster. Beacon e mini-naves são descartados."""
+        """Remove o slot do P2 do roster. Beacon e companheiros são descartados."""
         all_slots = self.roster.all_slots()
         if len(all_slots) < 2:
             return
         p2 = all_slots[1]
         p2.revival_beacon = None
-        # Mini-naves do P2 (permanentes do Engenheiro ou temporárias do powerup)
-        # somem junto — sem a nave delas, ficariam orbitando entidade fantasma.
-        self.entity_manager.mini_ships = [
-            m for m in self.entity_manager.mini_ships if m.player is not p2.ship
-        ]
+        # Companheiros vinculados à nave do P2 (mini-naves permanentes do
+        # Engenheiro ou temporárias do powerup, wingmen e o feixe de coop) somem
+        # junto — sem a nave delas, ficariam orbitando/apontando entidade fantasma.
+        self.entity_manager.remove_companions_of_ship(p2.ship)
         self.roster.remove(p2)
         # Volta ao escalonamento solo na próxima fase.
         self.level_controller.set_player_count(self.roster.count())

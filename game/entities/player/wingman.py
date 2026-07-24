@@ -1,10 +1,10 @@
 import math
 import random
-from pathlib import Path
 from typing import Any, Dict, Final, List, Tuple
 
 import pygame
 
+from ...core.assets import BASE_DIR
 from ...core.player_tint import player_sprite
 from ...core.config import config as Config
 from ...core.sound import sound_manager
@@ -13,9 +13,9 @@ from ...systems.targeting import is_targetable, target_point
 from ..projectiles.mini_ship_bullet import MiniShipBullet
 from ...core.fire_timer import FireTimer
 
-_SPRITE_PATH = (
-    Path(__file__).resolve().parent.parent / "assets" / "icons" / "mini_ship.png"
-)
+# Asset em game/assets/icons/ (o caminho antigo `entities/assets/icons/` não
+# existia — o sprite não carregava e o Wingman caía no fallback).
+_SPRITE_PATH = BASE_DIR / "assets" / "icons" / "mini_ship.png"
 
 # Nerf de dano aplicado SÓ contra bosses (sobre o multiplicador global de
 # upgrades). O Wingman tem cadência alta (0.4 s), dano 1.5x e podem existir

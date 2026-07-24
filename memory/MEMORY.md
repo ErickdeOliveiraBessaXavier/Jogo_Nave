@@ -8,6 +8,7 @@ Versionado junto com o repositório.
 
 - [entities-folder-structure](entities-folder-structure.md) — game/entities/ organizado por responsabilidade (player/projectiles/effects/bosses/pickups/_shared) + inimigos por tema (enemies/space|city|mountain); onde colocar arquivo novo e regra dos pontos relativos.
 - [scene-decomposition-pattern](scene-decomposition-pattern.md) — extrair fluxos da PlayingScene em sistemas próprios (RevivalSystem/UpgradeSelector); regra do grep-completo ao migrar estado (input handler lê estado cru e quebra com testes verdes).
+- [playing-scene-extraction-roadmap](playing-scene-extraction-roadmap.md) — revisão jul/2026: testes de pipeline feitos, cutscene extraída; etapas B/atmosfera, C/P2, D/colisões (última) pendentes + achados da revisão.
 - [fire-timer-cadence-architecture](fire-timer-cadence-architecture.md) — cadência de disparo por FireTimer/carry_interval; `timer = INTERVALO` é proibido (descarta a sobra do frame). Lista o que NÃO migrar.
 - [targeting-via-target-point](targeting-via-target-point.md) — mira/seleção de inimigo usa target_point + is_targetable (systems/targeting.py), nunca x+w/2; x+w/2 quebra no boss Serpente (bug recorrente).
 - [enemy-health-multiplier-propagation](enemy-health-multiplier-propagation.md) — entidades emergentes recebem health_multiplier via construtor, como aggressiveness_multiplier; multiplicador que não chega na entidade é no-op.
@@ -34,6 +35,7 @@ Versionado junto com o repositório.
 ## Inimigos e bosses (temas)
 
 - [boss-single-source-roadmap](boss-single-source-roadmap.md) — classe do boss só em WORLD_BOSS_ROADMAP via get_boss_for_level; nunca em WorldConfig nem FIXED_LEVELS.
+- [progression-refactor-closed](progression-refactor-closed.md) — refactor de fonte única de boss ENCERRADO (Fases 1-2 feitas); Fase 3 ThemeProfile adiada até adicionar tema novo.
 - [orbital-turret-zoneamento](orbital-turret-zoneamento.md) — OrbitalTurret de zoneamento (olho + 3 esferas, orbes destrutíveis → campos elétricos com paralisia).
 - [metropolis-overlord-city-boss](metropolis-overlord-city-boss.md) — 1º boss nativo do CITY (nível 30); FSM escudo vai-e-volta, Fase 2 minas + lasers, Fase 3 segmentação.
 - [city-mine-neon-residue](city-mine-neon-residue.md) — CityMine = subclasse ExplosiveMine + flag spawns_neon_residue; secundárias via ExplosiveEffect estendido.

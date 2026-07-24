@@ -7,7 +7,11 @@ import pygame
 
 from ...core.assets import BASE_DIR, get_image
 from ...core.config import config as Config
-from .._shared.attraction_utils import get_attraction_pulse_rect, update_magnetic_attraction
+from .._shared.attraction_utils import (
+    get_attraction_pulse_rect,
+    update_closing_pull,
+    update_magnetic_attraction,
+)
 
 
 class Star:
@@ -16,6 +20,9 @@ class Star:
 
     Usa a imagem icon_star.png com efeitos de rotação e pulsação.
     """
+
+    # Duração do fade de encerramento (dissolver) quando não coletada a tempo.
+    FADE_OUT_DURATION: float = 0.35
 
     def __init__(self, x: float, y: float):
         """
@@ -51,6 +58,18 @@ class Star:
         self._is_being_attracted: bool = False
         self.attraction_shake_timer: float = 0.0
 
+        # Fade de encerramento de fase (dissolver).
+        self._fading: bool = False
+        self._fade_timer: float = 0.0
+
+    def begin_fade_out(self) -> None:
+        """Inicia o dissolver de encerramento (idempotente)."""
+        if self._fading or self.dead:
+            return
+        self._fading = True
+        self._fade_timer = self.FADE_OUT_DURATION
+        self.attraction_shake_timer = 0.0
+
     def update(
         self,
         dt: float,
@@ -58,6 +77,7 @@ class Star:
         screen_height: int = 900,
         attraction_pos: tuple[float, float] | None = None,
         attraction_mult: float = 1.0,
+        closing_pull: tuple[float, float] | None = None,
     ) -> None:
         """
         Atualiza posição e animação da estrela.
@@ -68,8 +88,18 @@ class Star:
             screen_height: Altura da tela
             attraction_pos: Posição do jogador para atração
             attraction_mult: Multiplicador de atração da nave
+            closing_pull: Alvo do puxão de encerramento de fase (ignora range).
         """
-        update_magnetic_attraction(self, dt, attraction_pos, attraction_mult)
+        if self._fading:
+            self._fade_timer -= dt
+            if self._fade_timer <= 0.0:
+                self.dead = True
+            return
+
+        if closing_pull is not None:
+            update_closing_pull(self, dt, closing_pull)
+        else:
+            update_magnetic_attraction(self, dt, attraction_pos, attraction_mult)
 
         # Rotação da estrela (imagem interna)
         self.rotation += self.rotation_speed * dt
@@ -102,6 +132,10 @@ class Star:
         if self.dead:
             return
 
+        if self._fading:
+            self._draw_fading(surface)
+            return
+
         # Aplicar tremor visual e calcular o retângulo pulsante compartilhado
         _, _, pulse_rect = get_attraction_pulse_rect(self)
         pulse_size = pulse_rect.width
@@ -123,6 +157,19 @@ class Star:
         star_img = pygame.transform.rotate(star_img, -self.rotation)
         img_rect = star_img.get_rect(center=pulse_rect.center)
         surface.blit(star_img, img_rect)
+
+    def _draw_fading(self, surface: pygame.Surface) -> None:
+        """Dissolver de encerramento: alpha decrescente + encolhimento."""
+        progress = max(0.0, min(1.0, self._fade_timer / self.FADE_OUT_DURATION))
+        size = max(2, int(self.w * (0.35 + 0.65 * progress)))
+        buf = pygame.Surface((size, size), pygame.SRCALPHA)
+        pygame.draw.ellipse(buf, (255, 220, 100), buf.get_rect())
+        star_img = pygame.transform.scale(self.base_image, (size, size))
+        buf.blit(star_img, (0, 0))
+        buf.set_alpha(int(255 * progress))
+        surface.blit(
+            buf, (self.rect.centerx - size // 2, self.rect.centery - size // 2)
+        )
 
     def get_rect(self) -> pygame.Rect:
         """

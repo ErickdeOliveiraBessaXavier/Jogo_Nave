@@ -829,6 +829,7 @@ class EntityManager:
         screen_width: int = 1600,
         screen_height: int = 900,
         attraction_mult: float = 1.0,
+        closing_pull_target: tuple[float, float] | None = None,
     ) -> None:
         enemy_dt = 0.0 if freeze_enemies else dt
         self._screen_size = (screen_width, screen_height)
@@ -842,7 +843,12 @@ class EntityManager:
         self._update_misc_effects(dt)
 
         self._update_collectibles(
-            dt, (player_x, player_y), attraction_mult, screen_width, screen_height
+            dt,
+            (player_x, player_y),
+            attraction_mult,
+            screen_width,
+            screen_height,
+            closing_pull_target,
         )
         self._update_floating_scores_and_mini_ships(dt)
 
@@ -1134,10 +1140,17 @@ class EntityManager:
         attraction_mult: float,
         screen_width: int,
         screen_height: int,
+        closing_pull_target: tuple[float, float] | None = None,
     ) -> None:
-        """Powerups e estrelas — suportam atração do Magneto."""
+        """Powerups e estrelas — suportam atração do Magneto e o puxão de
+        encerramento de fase (`closing_pull_target`, quando a fase está fechando)."""
         for p in self.powerups:
-            p.update(dt, attraction_pos=player_pos, attraction_mult=attraction_mult)
+            p.update(
+                dt,
+                attraction_pos=player_pos,
+                attraction_mult=attraction_mult,
+                closing_pull=closing_pull_target,
+            )
         for s in self.stars:
             s.update(
                 dt,
@@ -1145,6 +1158,7 @@ class EntityManager:
                 screen_height,
                 attraction_pos=player_pos,
                 attraction_mult=attraction_mult,
+                closing_pull=closing_pull_target,
             )
 
     def _update_floating_scores_and_mini_ships(self, dt: float) -> None:
@@ -1593,6 +1607,22 @@ class EntityManager:
         self.coop_links.append(link)
         return link
 
+    def remove_companions_of_ship(self, ship: Any) -> None:
+        """Remove companheiros/efeitos vinculados a uma nave que saiu do jogo
+        (ex.: P2 desconectou).
+
+        Mini-naves e wingmen guardam a nave em `self.player`; o feixe de coop
+        guarda `ship1`/`ship2`. Sem esta limpeza eles ficariam orbitando/apontando
+        para uma nave removida (que nem é mais atualizada) — referência de DONO
+        fantasma, o análogo do alvo-fantasma dos inimigos."""
+        self.mini_ships = [m for m in self.mini_ships if m.player is not ship]
+        self.wingmen = [w for w in self.wingmen if w.player is not ship]
+        self.coop_links = [
+            link
+            for link in self.coop_links
+            if link.ship1 is not ship and link.ship2 is not ship
+        ]
+
     def spawn_orbital_shield(self, ship: Any, duration: float) -> list[OrbitalShield]:
         shields: list[OrbitalShield] = []
         for i in range(3): # Agora são três escudos
@@ -1838,7 +1868,26 @@ class EntityManager:
         self._filter_dead_inplace(self.orbital_debris)
         self._grid_needs_rebuild = True
 
+    def invalidate_enemy_targets(self) -> None:
+        """Marca todos os inimigos ativos (soltos, em formação e o boss) como
+        mortos ANTES de esvaziar as listas.
+
+        Companheiros (MiniShip/Wingman) e o homing da Ship guardam a referência ao
+        alvo e só a largam quando `is_targetable` vira False (checa `dead`). Um
+        `.clear()` seco esvazia a lista mas deixa o objeto "vivo": vira um
+        alvo-fantasma que sobrevive à transição/atmosfera, e a IA fica girando e
+        atirando num inimigo que já não existe. Invalidar aqui, de forma sistêmica,
+        conserta todos os consumidores de `is_targetable` de uma vez (§1)."""
+        for e in self.enemies:
+            e.dead = True
+        for f in self.formations:
+            for e in f.get_enemies():
+                e.dead = True
+        if self.boss is not None:
+            self.boss.dead = True
+
     def clear_all(self) -> None:
+        self.invalidate_enemy_targets()
         self.bullets.clear()
         self.homing_bullets.clear()
         self.alien_bullets.clear()
@@ -1896,6 +1945,7 @@ class EntityManager:
         self._grid_needs_rebuild = True
 
     def clear_for_level_transition(self) -> None:
+        self.invalidate_enemy_targets()
         self.alien_bullets.clear()
         self.serpent_bullets.clear()
         self.energy_orbs.clear()
@@ -1913,8 +1963,18 @@ class EntityManager:
         # Lasers do boss (incl. cerca elétrica da Fase 3): o boss já era; limpeza
         # definitiva aqui evita qualquer vazamento de feixe-limite para o próximo nível.
         self.boss_lasers.clear()
-        # homing_bullets e cacador_lasers são projéteis do jogador — preservados
-        # pela mesma razão que air_strike_bombs e black_holes (ver comentário abaixo).
+        # Projéteis do jogador e coletáveis: o encerramento de fase (na cena) já
+        # espera eles saírem/serem coletados; limpar aqui garante slate limpo no
+        # caso de timeout — nada de bala ou power-up congelado atravessando a
+        # transição. (air_strike_bombs/black_holes seguem preservados: são efeitos
+        # de área temporizados, não projéteis "presos".)
+        self.bullets.clear()
+        self.homing_bullets.clear()
+        self.cacador_lasers.clear()
+        self.mini_ship_bullets.clear()
+        self.powerups.clear()
+        self.stars.clear()
+        self.bullet_pool.clear_active()
         self.floating_scores.clear()
         self.enemies.clear()
         self.mine_explosions.clear()
