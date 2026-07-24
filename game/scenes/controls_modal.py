@@ -9,7 +9,7 @@ from ..core.config import config as Config
 from ..core.i18n import t
 from ..core.sound import sound_manager
 from ..core.state import Scene
-from .ui_helpers import wrap_text, draw_bordered_button
+from .ui_helpers import wrap_text, draw_bordered_button, layout_flow_buttons
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -44,7 +44,8 @@ class ControlsModalScene(Scene):
         self.title_font = get_font(max(8, int(32 * self.ui_scale)))
         self.item_font = get_font(max(8, int(18 * self.ui_scale)))
         self.small_font = get_font(max(8, int(16 * self.ui_scale)))
-        self.toggle_font = get_font(max(8, int(17 * self.ui_scale)))
+        # self.toggle_font é definida em _calculate_layout (pode encolher para o
+        # rótulo caber, ver layout_flow_buttons).
         self.hint_font = get_font(max(8, int(13 * self.ui_scale)))
 
         # Rects dos dois toggles de ajuste rápido ("control" e "autofire").
@@ -57,7 +58,44 @@ class ControlsModalScene(Scene):
 
         # Modal mais largo para garantir que as colunas não se sobreponham
         self.modal_w = self._s(760)
-        self.modal_h = self._s(460)
+
+        # --- Toggles de ajuste rápido: layout flex-wrap por conteúdo ---------
+        # Passamos TODOS os estados possíveis de cada toggle (não só o atual) para
+        # a largura ser estável ao alternar em runtime e caber sempre o rótulo
+        # mais longo do idioma. O helper devolve a geometria; a posição final é
+        # aplicada abaixo, depois de conhecer a altura do modal.
+        tg_h = self._s(40)
+        tg_gap_y = self._s(14)
+        self._toggle_order = ("control", "autofire")
+        toggle_states = [
+            [
+                t("controls.toggle.control", v=t("controls.method.mouse")),
+                t("controls.toggle.control", v=t("controls.method.keyboard")),
+            ],
+            [
+                t("controls.toggle.autofire", v=t("controls.on")),
+                t("controls.toggle.autofire", v=t("controls.off")),
+            ],
+        ]
+        tg_rel_rects, self.toggle_font, tg_block_w, tg_block_h, _tg_rows = (
+            layout_flow_buttons(
+                toggle_states,
+                get_font,
+                base_font_size=max(8, int(17 * self.ui_scale)),
+                avail_w=self.modal_w - self._s(80),
+                btn_h=tg_h,
+                gap_x=self._s(24),
+                gap_y=tg_gap_y,
+                pad_x=self._s(18),
+            )
+        )
+
+        # O modal cresce em altura quando os toggles quebram em >1 linha; a base
+        # (460) preserva o layout de 720p quando cabem numa linha só. Como o
+        # modal é centralizado e o botão é ancorado ao rodapé, o vão entre as
+        # instruções e os toggles fica constante (ambos deslocam junto).
+        extra_h = max(0, tg_block_h - tg_h)
+        self.modal_h = self._s(460) + extra_h
         self.modal_rect = pygame.Rect(
             (screen_w - self.modal_w) // 2,
             (screen_h - self.modal_h) // 2,
@@ -75,16 +113,15 @@ class ControlsModalScene(Scene):
             btn_h,
         )
 
-        # Toggles de ajuste rápido — linha centralizada acima do botão.
-        tg_w = self._s(320)
-        tg_h = self._s(40)
-        tg_gap = self._s(24)
-        row_w = tg_w * 2 + tg_gap
-        row_x = self.modal_rect.centerx - row_w // 2
-        row_y = self.button_rect.top - self._s(96)
+        # Posiciona o bloco de toggles: bottom fixo acima do botão (deixando vão
+        # para a dica), crescendo para cima conforme as linhas.
+        block_bottom = self.button_rect.top - self._s(56)
+        block_top = block_bottom - tg_block_h
+        block_x = self.modal_rect.centerx - tg_block_w // 2
+        self.toggle_block_bottom = block_bottom
         self.toggle_rects = {
-            "control": pygame.Rect(row_x, row_y, tg_w, tg_h),
-            "autofire": pygame.Rect(row_x + tg_w + tg_gap, row_y, tg_w, tg_h),
+            key: rel.move(block_x, block_top)
+            for key, rel in zip(self._toggle_order, tg_rel_rects)
         }
 
         # Checkbox "Não mostrar mais" - Abaixo do botão
@@ -317,7 +354,9 @@ class ControlsModalScene(Scene):
         )
         line_h = self.hint_font.get_height() + self._s(2)
         block_h = line_h * len(hint_lines)
-        gap_top = self.toggle_rects["control"].bottom
+        # Ancorar no fundo do BLOCO de toggles (não em "control", que pode estar
+        # na 1ª de várias linhas) para a dica ficar sempre abaixo de todos eles.
+        gap_top = self.toggle_block_bottom
         gap_bottom = self.button_rect.top
         hint_y = gap_top + ((gap_bottom - gap_top) - block_h) // 2
         for i, line in enumerate(hint_lines):
