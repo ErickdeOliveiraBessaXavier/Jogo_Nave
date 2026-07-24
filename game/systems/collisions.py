@@ -922,6 +922,11 @@ class Collisions:
             # entre os alvos da mesma bala (piercing acerta vários).
             impact = impact_for_projectile(b)
             impact_scale = impact_scale_for_projectile(b)
+            # Chain shot: UMA cadeia por bala. Uma bala perfurante acerta vários
+            # inimigos no mesmo frame; sem esta trava, cada acerto disparava uma
+            # cadeia independente (com `already_hit` próprio), fazendo os raios
+            # "nascerem" de vários pontos ao mesmo tempo — a sensação de teleporte.
+            chain_triggered = False
 
             for enemy in potential_enemies:
                 if enemy.dead:
@@ -943,16 +948,21 @@ class Collisions:
                         if result.points > 0:
                             score_events.append((b.x, b.y, result.points))
 
-                    if bullet_chain_active:
+                    if bullet_chain_active and not chain_triggered:
+                        chain_triggered = True
                         already_hit: set[int] = set()
+                        # A cadeia nasce no CENTRO do inimigo atingido (não no
+                        # canto da bala): o 1º raio parte do próprio alvo, e cada
+                        # salto seguinte parte do último inimigo — parent→filho.
+                        ecx, ecy, _ = enemy.collision_circle()
                         # Combos com a família de modificadores de tiro:
                         # Giant → +1 salto (arco mais longo); Explosive → cada
                         # salto detona uma mini-explosão (teia de estilhaços).
                         is_giant_bullet = getattr(b, "size_multiplier", 1.0) > 1.0
                         extra_jumps = 1 if is_giant_bullet else 0
                         eg, ed, ee = self._trigger_chain_shot(
-                            hit_x=b.x,
-                            hit_y=b.y,
+                            hit_x=ecx,
+                            hit_y=ecy,
                             source_enemy=enemy,
                             bullet_damage=getattr(b, "damage", 1),
                             jumps_left=config_instance.CHAIN_SHOT_MAX_JUMPS

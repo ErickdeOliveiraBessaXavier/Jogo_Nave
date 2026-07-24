@@ -1530,16 +1530,27 @@ class EntityManager:
         for e in self.explosive_effects:
             e.draw(surface)
 
-        # 5. Batch draw Chain Lightnings (Otimização de Performance)
+        # 5. Batch draw Chain Lightnings — fill/blit LIMITADOS à bounding box dos
+        # raios (dirty rect). Antes, limpar + blitar aditivo a TELA INTEIRA por
+        # frame (mesmo p/ 1 raio) custava dois passes de ~3,7MB/frame — o gargalo
+        # com vários raios. Só limpamos/blitamos a área que os raios cobrem;
+        # limpar a dirty rect antes de desenhar já remove os traços do frame anterior.
         if self.chain_lightnings:
             sw, sh = surface.get_size()
             overlay = ChainLightning.get_shared_overlay(sw, sh)
-            overlay.fill((0, 0, 0, 0))
 
-            for cl in self.chain_lightnings:
-                cl.draw_to_surface(overlay)
+            dirty = self.chain_lightnings[0].bounds.copy()
+            for cl in self.chain_lightnings[1:]:
+                dirty.union_ip(cl.bounds)
+            dirty = dirty.clip(overlay.get_rect())
 
-            surface.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+            if dirty.width > 0 and dirty.height > 0:
+                overlay.fill((0, 0, 0, 0), dirty)
+                for cl in self.chain_lightnings:
+                    cl.draw_to_surface(overlay)
+                surface.blit(
+                    overlay, dirty.topleft, dirty, special_flags=pygame.BLEND_RGBA_ADD
+                )
 
     def spawn_elemental_robot(
         self,
@@ -1927,6 +1938,10 @@ class EntityManager:
         self.air_strike_bombs.clear()
         self.cannon_towers.clear()
         self.cannon_mines.clear()
+        # Encerra o som de cada vórtice antes de descartá-los (o áudio segue o
+        # ciclo de vida do buraco; sem isto o clipe sobreviveria ao reset).
+        for _bh in self.black_holes:
+            _bh.stop_sound()
         self.black_holes.clear()
         self.emp_waves.clear()
         self.boss = None

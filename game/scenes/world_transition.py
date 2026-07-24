@@ -8,7 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Sequence
 
 import pygame
-from .ui_helpers import wrap_text
+from .ui_helpers import get_fade_scratch, wrap_text
 
 from ..core import colors
 from ..core.assets import get_font
@@ -91,7 +91,9 @@ class WorldTransitionScene(Scene):
 
         alpha = max(0, min(255, alpha))
 
-        overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+        # Overlay reutilizado (o `fill` abaixo cobre o frame anterior) — não aloca
+        # uma SRCALPHA de tela cheia por frame durante os ~segundos da transição.
+        overlay = get_fade_scratch(surface.get_size())
         primary_rgb = self._normalize_rgb(self.new_world.primary_color)
         secondary_rgb = self._normalize_rgb(self.new_world.secondary_color)
 

@@ -13,7 +13,7 @@ from ..core.i18n import fmt_num, t
 from ..core.meta_progression import HighScoreEntry
 from ..core.sound import sound_manager
 from ..core.state import Scene
-from .ui_helpers import draw_bordered_button
+from .ui_helpers import draw_bordered_button, get_fade_scratch
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -714,9 +714,9 @@ class GameOverScene(Scene):
             if anim
             else 1.0
         )
-        overlay = pygame.Surface(
-            (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
-        )
+        # Overlay reutilizado (o `fill` cobre o conteúdo do frame anterior) — não
+        # aloca uma SRCALPHA de tela cheia por frame durante os segundos de fade.
+        overlay = get_fade_scratch((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
         overlay.fill((0, 0, 0, int(progress * 200)))
         surface.blit(overlay, (0, 0))
 

@@ -50,8 +50,26 @@ referência à cena. Deps: roster, gamepad, entity_manager + callbacks `set_play
 `spawn_p2`. Teste: `tests/test_p2_session_controller.py` (8, com stubs). `playing.py`
 2737 linhas (−165 nesta etapa; ~2950→2737 no total do #1 até aqui).
 
-**Etapa D (colisões) — pendente, ALTO acoplamento, por último** (`_check_*`/
-`_handle_collisions`, ~600 linhas), com a rede de testes reforçada.
+**Etapa D (colisões) — ✅ CONCLUÍDA (2026-07-24) via result-DTO.**
+`game/systems/collision_orchestrator.py` (`CollisionOrchestrator` + `CollisionResult`):
+roda todos os passes de colisão do frame e RETORNA (score_gain já multiplicado,
+enemies_destroyed, floating_scores prontos); a cena APLICA. Inverte o padrão do
+RenderFrame. Ship-hits roteados via callback `on_ship_hit` DURANTE o run (imediato —
+preserva ordem/invuln entre fontes de dano no mesmo frame); score/kills/floating são
+diferidos ao resultado (ordem irrelevante). Deps: entity_manager, collisions, roster,
+boss_controller, level_controller + acessores get_last_dt/get_multiplier_state/
+get_batch_threshold. Truque de transcrição: campos nomeados IGUAIS aos da cena
+(`self.entity_manager`/`collisions`/`roster`/`boss_controller`/`level_controller`)
+p/ os ~180 usos ficarem verbatim; só mudaram `_handle_ship_hit`→`_on_ship_hit` e os
+acessores. Quirk preservado: spike usa só o bônus (sem base multiplier). Teste:
+`tests/test_collision_orchestrator.py` (6: multiplicador, batching, smoke run() com
+EntityManager real). `playing.py` **2111 linhas** (−626 nesta etapa).
+
+**#1 ENCERRADO (2026-07-24):** god-class **2950 → 2111** (−839, −28%). Extraídas A
+(cutscene), C (P2), D (colisões); B (atmosfera) adiada de propósito (acoplamento alto,
+§1). Sobra na cena: fluxo de transição/atmosfera, upgrades, powerups, timers, init — o
+núcleo de coordenação, que é papel legítimo da cena. Não há mais bloco grande
+extraível com ganho > custo.
 
 **Outros achados da revisão (não priorizados ainda):** acessibilidade (sem daltônico
 nem escala de shake/flash), `EventBus.emit` engole exceção com `print`, sem

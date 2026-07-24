@@ -233,7 +233,12 @@ def _get_explosive_body(
 # níveis, então o brilho "respira" trocando de sprite cacheada em vez de alocar
 # por frame. Um blit por bala. Chave inclui a cor (já com a matiz do jogador).
 _GLOW_STEPS: int = 5
-_GLOW_CACHE: Dict[Tuple[int, Tuple[int, int, int], int], pygame.Surface] = {}
+# Teto de cada eixo do halo (px), para o Giant Shot crescer sem estourar a tela
+# nem inchar o cache. Piso por eixo evita glow fino demais no laser estreito.
+_GLOW_MAX_PX: int = 140
+_GLOW_MIN_COMMON: int = 12
+_GLOW_MIN_POWER: int = 8
+_GLOW_CACHE: Dict[Tuple[int, int, Tuple[int, int, int], int], pygame.Surface] = {}
 
 # Halo do tiro COMUM: aditivo, com o RGB pré-multiplicado pela intensidade.
 # Alpha-blend (o caminho dos power-ups) precisa de alpha alto para aparecer, e
@@ -247,37 +252,43 @@ _COMMON_GLOW_PEAK: float = 0.45
 # Expoente da queda radial. Acima de 2 o brilho se concentra num núcleo apertado
 # em vez de se espalhar — é o que mantém o tiro "aceso" sem borrar a vizinhança.
 _COMMON_GLOW_FALLOFF: float = 3.0
-_COMMON_GLOW_CACHE: Dict[Tuple[int, Tuple[int, int, int], int], pygame.Surface] = {}
+_COMMON_GLOW_CACHE: Dict[Tuple[int, int, Tuple[int, int, int], int], pygame.Surface] = {}
 
 
 def _get_common_shot_glow(
-    radius: int, color: Tuple[int, int, int], step: int
+    w: int, h: int, color: Tuple[int, int, int], step: int
 ) -> pygame.Surface:
-    """Halo radial aditivo do tiro comum, memoizado por (raio, cor, passo).
+    """Halo ELÍPTICO aditivo do tiro comum, memoizado por (w, h, cor, passo).
 
-    Mesma ideia de `_get_power_glow` — degradê quadrático do centro à borda —,
-    mas a cor já sai multiplicada pela intensidade para ser blitada com
-    ``BLEND_RGB_ADD`` (que ignora o canal alpha).
+    A elipse acompanha as proporções do projétil — `w`/`h` já vêm trocados
+    conforme a orientação (side-scroll = largo, top-down = alto) e escalados pelo
+    tamanho-base da nave e pelo Giant Shot —, então o glow é sempre uma extensão
+    natural do tiro, não um círculo genérico. Degradê quadrático do centro à borda,
+    com a cor pré-multiplicada pela intensidade para blit com ``BLEND_RGB_ADD``.
     """
-    key = (radius, color, step)
+    key = (w, h, color, step)
     cached = _COMMON_GLOW_CACHE.get(key)
     if cached is not None:
         return cached
 
-    size = radius * 2
-    surf = pygame.Surface((size, size), pygame.SRCALPHA)
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
     peak = _COMMON_GLOW_MIN + (step / _GLOW_STEPS) * (
         _COMMON_GLOW_PEAK - _COMMON_GLOW_MIN
     )
     r_col, g_col, b_col = color
-    for r in range(radius, 0, -1):
-        t = r / radius
+    cx, cy = w / 2.0, h / 2.0
+    # Uma "casca" elíptica por ~pixel do maior semieixo — do exterior (apagado) ao
+    # centro (aceso), cada elipse menor sobrescrevendo, formando o degradê radial.
+    shells = max(2, max(w, h) // 2)
+    for i in range(shells, 0, -1):
+        t = i / shells
         f = peak * (1.0 - t) ** _COMMON_GLOW_FALLOFF
-        pygame.draw.circle(
+        ew = max(1, int(w * t))
+        eh = max(1, int(h * t))
+        pygame.draw.ellipse(
             surf,
             (int(r_col * f), int(g_col * f), int(b_col * f), 255),
-            (radius, radius),
-            r,
+            pygame.Rect(int(cx - ew / 2), int(cy - eh / 2), ew, eh),
         )
     try:
         surf = surf.convert_alpha()
@@ -288,28 +299,35 @@ def _get_common_shot_glow(
 
 
 def _get_power_glow(
-    radius: int, color: Tuple[int, int, int], step: int
+    w: int, h: int, color: Tuple[int, int, int], step: int
 ) -> pygame.Surface:
-    """Halo radial suave da cor pedida, com brilho central no nível `step`.
+    """Halo ELÍPTICO suave da cor pedida, com brilho central no nível `step`.
 
-    Construído do anel externo (alpha ~0) ao centro (alpha `peak`), com queda
-    quadrática — dá um degradê macio. Renderizado sob demanda no 1º uso (display
-    já inicializado) e memoizado.
+    Acompanha as proporções do projétil (`w`/`h`, já orientados e escalados).
+    Construído da casca externa (alpha ~0) ao centro (alpha `peak`), com queda
+    quadrática — degradê macio. Memoizado por (w, h, cor, passo).
     """
-    key = (radius, color, step)
+    key = (w, h, color, step)
     cached = _GLOW_CACHE.get(key)
     if cached is not None:
         return cached
 
-    size = radius * 2
-    surf = pygame.Surface((size, size), pygame.SRCALPHA)
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
     peak = 30 + int((step / _GLOW_STEPS) * 130)  # alpha central pulsa ~30..160
     r_col, g_col, b_col = color
-    for r in range(radius, 0, -1):
-        t = r / radius
+    cx, cy = w / 2.0, h / 2.0
+    shells = max(2, max(w, h) // 2)
+    for i in range(shells, 0, -1):
+        t = i / shells
         a = int(peak * (1.0 - t) * (1.0 - t))
         if a > 0:
-            pygame.draw.circle(surf, (r_col, g_col, b_col, a), (radius, radius), r)
+            ew = max(1, int(w * t))
+            eh = max(1, int(h * t))
+            pygame.draw.ellipse(
+                surf,
+                (r_col, g_col, b_col, a),
+                pygame.Rect(int(cx - ew / 2), int(cy - eh / 2), ew, eh),
+            )
     try:
         surf = surf.convert_alpha()
     except pygame.error:
@@ -749,7 +767,11 @@ class Bullet:
             # Em espera (sem alvo) pulsa mais rápido — casa com o giro idle.
             speed = 0.011 if self.target is None else 0.006
         elif is_giant:
-            base_color = (255, 200, 90)  # âmbar do Giant Shot
+            # Giant Shot só ESCALA o tiro da nave — o corpo continua na cor dela,
+            # então o halo acompanha (antes era âmbar fixo, destoando: um tiro
+            # verde do Estilete ficava com glow amarelo). A identidade do gigante
+            # vem do tamanho + respiração, não de uma cor genérica.
+            base_color = self._common_shot_glow_color()
             speed = 0.005
         else:
             base_color = self._common_shot_glow_color()
@@ -762,21 +784,29 @@ class Bullet:
         pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() * speed)  # 0..1
         step = int(round(pulse * _GLOW_STEPS))
 
-        radius = int(max(self.w, self.h) * radius_factor * vq.glow_scale)
-        radius = max(8 if is_common else 4, min(radius, 60))
-        radius -= radius % 2  # quantiza p/ limitar o cache
+        # Halo ELÍPTICO derivado do próprio tiro: cada eixo escala com o `w`/`h`
+        # atual da bala — que já embute a orientação (side/top-down), o tamanho-base
+        # da nave e o Giant Shot. `×2` porque o fator é semieixo (raio), a superfície
+        # é o diâmetro. Piso por eixo evita glow fino demais no laser estreito; teto
+        # deixa o gigante crescer sem estourar. Quantiza em par p/ limitar o cache.
+        min_px = _GLOW_MIN_COMMON if is_common else _GLOW_MIN_POWER
+        axis = radius_factor * 2.0 * vq.glow_scale
+        glow_w = max(min_px, min(int(self.w * axis), _GLOW_MAX_PX))
+        glow_h = max(min_px, min(int(self.h * axis), _GLOW_MAX_PX))
+        glow_w -= glow_w % 2
+        glow_h -= glow_h % 2
 
         cx = self.x + self.w / 2
         cy = self.y + self.h / 2
-        pos = (int(cx - radius), int(cy - radius))
+        pos = (int(cx - glow_w / 2), int(cy - glow_h / 2))
         if is_common:
             surface.blit(
-                _get_common_shot_glow(radius, color, step),
+                _get_common_shot_glow(glow_w, glow_h, color, step),
                 pos,
                 special_flags=pygame.BLEND_RGB_ADD,
             )
         else:
-            surface.blit(_get_power_glow(radius, color, step), pos)
+            surface.blit(_get_power_glow(glow_w, glow_h, color, step), pos)
 
     def _common_shot_glow_color(self) -> Tuple[int, int, int]:
         """Cor-base do halo de um tiro comum: a mesma cor do corpo desenhado."""

@@ -531,11 +531,28 @@ class SoundManager:
 
     @require_audio
     def play_black_hole(self):
-        """Toca o som do buraco negro."""
+        """Toca o som do buraco negro e RETORNA o Channel.
+
+        O chamador (BlackHole) guarda o canal e o para quando o vórtice morre —
+        senão o clipe (longo) sobrevive ao efeito e fica tocando depois que os
+        vórtices somem. Retorna None se o som não existe."""
         if "black_hole" in self._sounds:
             sound = self._sounds["black_hole"]
             sound.set_volume(self.sfx_volume * self.master_volume * 1.2)
-            sound.play()
+            return sound.play()
+        return None
+
+    def stop_black_hole(self, channel: Any) -> None:
+        """Para o som do buraco negro no `channel` — SÓ se ele ainda estiver
+        tocando ESTE som (o pygame pode ter reusado o canal para outro som; parar
+        cegamente cortaria o som errado)."""
+        if channel is None or "black_hole" not in self._sounds:
+            return
+        try:
+            if channel.get_busy() and channel.get_sound() is self._sounds["black_hole"]:
+                channel.stop()
+        except pygame.error:
+            pass
 
     @require_audio
     def play_meteor_boss_crack(self):

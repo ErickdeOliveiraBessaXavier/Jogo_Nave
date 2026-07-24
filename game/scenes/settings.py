@@ -13,6 +13,7 @@ from ..core.sound import sound_manager
 from ..core.state import Scene
 from .ui_helpers import (
     FadeTransitionMixin,
+    get_fade_scratch,
     wrap_text,
     draw_bordered_button,
     render_with_fade,
@@ -1345,7 +1346,10 @@ class SettingsView:
         """Desenha o pop-up de confirmação para reiniciar o jogo."""
         popup_rect = self.layout_rects["popup_rect"]
 
-        overlay = pygame.Surface((surface.get_width(), surface.get_height()))
+        # Dim reutilizado (não aloca por frame enquanto o modal está aberto).
+        overlay = get_fade_scratch(
+            (surface.get_width(), surface.get_height()), per_pixel_alpha=False
+        )
         overlay.fill((0, 0, 0))
         overlay.set_alpha(128)
         surface.blit(overlay, (0, 0))
@@ -1404,7 +1408,10 @@ class SettingsView:
         popup_rect = self.layout_rects["popup_rect"]
         message = self.info_popup_text or ""
 
-        overlay = pygame.Surface((surface.get_width(), surface.get_height()))
+        # Dim reutilizado (não aloca por frame enquanto o modal está aberto).
+        overlay = get_fade_scratch(
+            (surface.get_width(), surface.get_height()), per_pixel_alpha=False
+        )
         overlay.fill((0, 0, 0))
         overlay.set_alpha(128)
         surface.blit(overlay, (0, 0))
