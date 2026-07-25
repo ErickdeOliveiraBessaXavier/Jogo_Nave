@@ -188,7 +188,10 @@ class BossFightController:
                 )
             self._em.meteor_pool.clear_active()
 
-        # Limpar inimigos e formações
+        # Limpar inimigos e formações. Invalida os alvos antes: companheiros
+        # (mini/wingman) e o homing da Ship largam qualquer referência retida em
+        # vez de mirar um inimigo já removido (§ alvo-fantasma).
+        self._em.invalidate_enemy_targets()
         self._explode_entities(list(self._em.enemies))
         self._em.enemies.clear()
         for formation in self._em.formations:

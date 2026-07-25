@@ -28,19 +28,10 @@ class BlackHole:
     SPAWN_DURATION = 1.0  # Segundos para crescer
     DEATH_DURATION = 0.5  # Segundos para implodir
 
-    # Respiração do núcleo: amplitude em fração do raio e velocidade angular
-    # (rad/s → ciclo de ~2,6s). Puramente cosmético — o raio de dano é o
-    # ``core_radius`` cru, sem o pulso.
-    CORE_PULSE_AMPLITUDE = 0.07
-    CORE_PULSE_SPEED = 2.4
-
-    # Lentidão dentro da área do vórtice: o inimigo mantém 75% da velocidade.
-    # O linger existe por ordem de frame — `_update_environment` (buracos
-    # negros) roda DEPOIS de `_update_enemies`, então a marca feita aqui só é
-    # lida no frame seguinte; 0,12s cobre isso com folga até a 30fps (o piso do
-    # clamp de dt, §14) e ainda dá uma cauda imperceptível ao sair do campo.
-    VORTEX_SLOW_FACTOR = 0.75
-    VORTEX_SLOW_LINGER = 0.12
+    # Pulsação cosmética ("respiração" do buraco). Só afeta o desenho — a física
+    # (pull/dano) usa core_radius/pull_radius diretos, então o gameplay não muda.
+    _PULSE_AMPLITUDE = 0.12  # ±12% no raio visual
+    _PULSE_FREQ = 4.5  # rad/s — oscilação suave e contínua
 
     def __init__(
         self,
@@ -63,8 +54,8 @@ class BlackHole:
         self.state_timer = 0.0
         self.scale = 0.0  # 0.0 a 1.0 para animações
 
-        # Tocar som do buraco negro. Guardamos o canal para poder cortá-lo na
-        # implosão — o clipe dura mais que o vórtice do GRAVITY_BOMB.
+        # Tocar som do buraco negro e GUARDAR o canal — o ciclo de vida do áudio
+        # segue o do vórtice: paramos o canal em `stop_sound()` ao morrer/limpar.
         self._sound_channel = sound_manager.play_black_hole()
 
         # Movimento
@@ -168,6 +159,9 @@ class BlackHole:
         self.stop_sound()
 
     def update(self, dt: float):
+        if self.dead:
+            return  # já encerrado (som parado) — nada a processar
+
         self.lifetime += dt
         self.animation_timer += dt
         self.state_timer += dt
@@ -190,6 +184,7 @@ class BlackHole:
             self.scale = max(0.0, 1.0 - (self.state_timer / self.DEATH_DURATION))
             if self.state_timer >= self.DEATH_DURATION:
                 self.dead = True
+                self.stop_sound()
                 return
 
         # Movimento (apenas se não for vortex e estiver ativo)
@@ -372,9 +367,21 @@ class BlackHole:
                 hit_x, hit_y, size=expl_size, explosion_type=expl_type
             )
 
+    def stop_sound(self) -> None:
+        """Encerra o som deste vórtice (idempotente). Chamado ao morrer e na
+        limpeza da fase — o áudio segue o ciclo de vida do buraco."""
+        sound_manager.stop_black_hole(self._sound_channel)
+        self._sound_channel = None
+
     def draw(self, surface: pygame.Surface):
         if self.scale <= 0:
             return
+
+        # Respiração do buraco (só visual). Aplicada ao raio do núcleo e ao
+        # tamanho das partículas para o efeito parecer "vivo".
+        pulse = 1.0 + self._PULSE_AMPLITUDE * math.sin(
+            self.animation_timer * self._PULSE_FREQ
+        )
 
         # Partículas
         for particle in self.particles:
@@ -385,15 +392,11 @@ class BlackHole:
                 surface,
                 color_with_alpha,
                 (int(particle["x"]), int(particle["y"])),
-                max(1, int(particle["size"] * self.scale)),
+                max(1, int(particle["size"] * self.scale * pulse)),
             )
 
-        # Núcleo — respiração sutil. Lê o acumulador alimentado pelo update
-        # (§3: draw não muta nem usa time.time(), que ignoraria pausa/slow-mo).
-        breath = 1.0 + self.CORE_PULSE_AMPLITUDE * math.sin(
-            self.animation_timer * self.CORE_PULSE_SPEED
-        )
-        core_r = int(self.core_radius * self.scale * breath)
+        # Núcleo (respira com a pulsação)
+        core_r = int(self.core_radius * self.scale * pulse)
         if core_r > 0:
             pygame.draw.circle(surface, (0, 0, 0), (int(self.x), int(self.y)), core_r)
             pygame.draw.circle(

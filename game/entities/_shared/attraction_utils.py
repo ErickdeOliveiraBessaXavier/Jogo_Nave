@@ -47,6 +47,40 @@ def update_magnetic_attraction(
     entity.attraction_shake_timer = max(0.0, entity.attraction_shake_timer - dt)
 
 
+# Velocidade do puxão de encerramento de fase (px/s). Alta o bastante para varrer
+# a tela em ~1-1.5s, mas LIMITADA (não escala com a distância como o magneto) para
+# a leitura ser suave — nada de teleporte. Usada quando a fase fecha e nenhum
+# coletável pode sobrar em tela.
+CLOSING_PULL_SPEED: float = 950.0
+
+
+def update_closing_pull(
+    entity: Any,
+    dt: float,
+    target_pos: tuple[float, float],
+    speed: float = CLOSING_PULL_SPEED,
+) -> None:
+    """Puxa um coletável direto ao jogador no encerramento de fase.
+
+    Diferente do magneto (`update_magnetic_attraction`), ignora o range: atrai de
+    qualquer distância e com velocidade constante, garantindo que power-ups/estrelas
+    cheguem ao jogador (ou fiquem perto o bastante para serem coletados) antes do
+    fim da fase, sem objetos congelados atravessando a transição.
+    """
+    entity._is_being_attracted = True
+    if entity.attraction_shake_timer <= 0.0:
+        entity.attraction_shake_timer = 0.4
+
+    dx = float(target_pos[0]) - float(entity.rect.centerx)
+    dy = float(target_pos[1]) - float(entity.rect.centery)
+    dist = (dx * dx + dy * dy) ** 0.5
+    if dist > 1.0:
+        entity.x += (dx / dist) * speed * dt
+        entity.y += (dy / dist) * speed * dt
+    entity.rect.topleft = (int(entity.x), int(entity.y))
+    entity.attraction_shake_timer = max(0.0, entity.attraction_shake_timer - dt)
+
+
 def get_attraction_pulse_rect(entity: Any) -> tuple[int, int, pygame.Rect]:
     """Calcula a posição visual pulsante compartilhada entre coletáveis."""
     draw_x: int = int(entity.rect.x)

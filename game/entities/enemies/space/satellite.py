@@ -171,7 +171,14 @@ class Satellite(EnemyHitMixin):
     # Frames: satellite_pixel_map_01.png até satellite_pixel_map_05.png
     SPRITE_DIR = "Sprite_Inimigo_Satélite"
 
+    # Duração do "white frame" (flash de dano) ao levar hit sem morrer.
+    HIT_FLASH_DURATION = 0.10
+
     _frames_cache: List[pygame.Surface] = []
+    # Silhuetas brancas de cada frame (construídas 1x, sob demanda) para o flash
+    # de dano — sprite PNG não dá para redesenhar em branco como os inimigos
+    # procedurais, então pré-calculamos a versão branca e a blitamos no lugar.
+    _white_frames_cache: List[pygame.Surface] = []
 
     def __init__(self, inverted_vertical: bool = False):
         # Garante que os frames estão carregados
@@ -212,6 +219,19 @@ class Satellite(EnemyHitMixin):
 
         self.dead = False
         self.health = Config.SATELLITE_HEALTH
+        # Temporizador do white frame; > 0 desenha a silhueta branca.
+        self._hit_flash: float = 0.0
+
+    @classmethod
+    def _get_white_frame(cls, idx: int) -> pygame.Surface:
+        """Silhueta branca do frame `idx` (cacheada). Preserva o alpha do sprite;
+        só satura o RGB para branco (`BLEND_RGB_ADD`), então a forma é idêntica."""
+        if not cls._white_frames_cache and cls._frames_cache:
+            for frame in cls._frames_cache:
+                white = frame.copy()
+                white.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_ADD)
+                cls._white_frames_cache.append(white)
+        return cls._white_frames_cache[idx]
 
     @classmethod
     def load_animation_frames(cls) -> List[pygame.Surface]:
@@ -248,6 +268,7 @@ class Satellite(EnemyHitMixin):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
     def take_damage(self, amount: int) -> None:
+        self._hit_flash = self.HIT_FLASH_DURATION  # white frame ao levar dano
         self.health -= amount
         if self.health <= 0:
             self.health = 0
@@ -266,6 +287,8 @@ class Satellite(EnemyHitMixin):
                 ctx.new_enemies.append(fragment)
 
     def update(self, dt: float) -> None:
+        self._hit_flash = max(0.0, self._hit_flash - dt)
+
         self.x += self.speed_x * dt
         self.y += self.speed_y * dt
 
@@ -307,7 +330,13 @@ class Satellite(EnemyHitMixin):
     def draw(self, surface: pygame.Surface) -> None:
         if self.dead or not self.image:
             return
-        surface.blit(self.image, (int(self.x), int(self.y)))
+        # White frame ao levar dano: blita a silhueta branca do frame atual.
+        if self._hit_flash > 0.0 and self.frames:
+            surface.blit(
+                self._get_white_frame(self.current_frame), (int(self.x), int(self.y))
+            )
+        else:
+            surface.blit(self.image, (int(self.x), int(self.y)))
 
     def should_remove(self) -> bool:
         return self.dead

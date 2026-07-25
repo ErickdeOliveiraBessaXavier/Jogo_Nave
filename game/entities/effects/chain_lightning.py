@@ -34,6 +34,9 @@ class ChainLightning:
         self.dead = False
         self.timer = 0.0
         self.lightning_points: List[Tuple[int, int]] = []
+        # Bounding box dos pontos (fixa após a geração) — usada para limitar o
+        # fill/blit do overlay à área real do raio, não à tela inteira.
+        self.bounds: pygame.Rect = pygame.Rect(0, 0, 0, 0)
         self._generate_lightning_points()
 
     # ------------------------------------------------------------------
@@ -50,6 +53,7 @@ class ChainLightning:
                 (int(self.start_pos[0]), int(self.start_pos[1])),
                 (int(self.end_pos[0]), int(self.end_pos[1])),
             ]
+            self._compute_bounds()
             return
 
         distance = math.sqrt(distance_sq)
@@ -72,6 +76,23 @@ class ChainLightning:
 
         points.append((int(self.end_pos[0]), int(self.end_pos[1])))
         self.lightning_points = points
+        self._compute_bounds()
+
+    def _compute_bounds(self) -> None:
+        """Bounding box dos pontos + margem para a largura da linha de brilho."""
+        if not self.lightning_points:
+            return
+        xs = [p[0] for p in self.lightning_points]
+        ys = [p[1] for p in self.lightning_points]
+        margin = 4  # cobre a linha de brilho (largura 5)
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        self.bounds = pygame.Rect(
+            min_x - margin,
+            min_y - margin,
+            (max_x - min_x) + 2 * margin,
+            (max_y - min_y) + 2 * margin,
+        )
 
     # ------------------------------------------------------------------
     # Update / Draw

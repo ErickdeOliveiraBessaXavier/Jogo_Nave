@@ -7,6 +7,30 @@ import pygame
 from ..core import colors
 from ..core.colors import CUSTOM_GOLD, CUSTOM_PURPLE
 
+# Scratch de tela cheia REUTILIZÁVEL para fades/overlays. Alocar uma SRCALPHA de
+# tela cheia (~3,7 MB em 720p) a cada frame durante um fade gera churn de GC e os
+# "engasgos" perceptíveis. Como só há uma tela, um buffer por (tamanho, flag de
+# alpha) atende todos os caminhos de transição (mesma ideia do cache de glow das
+# balas). Não é estado de jogo (§4) — é buffer de render, análogo a _GLOW_CACHE.
+_FADE_SCRATCH: dict[tuple[int, int, bool], pygame.Surface] = {}
+
+
+def get_fade_scratch(
+    size: tuple[int, int], *, per_pixel_alpha: bool = True
+) -> pygame.Surface:
+    """Retorna um buffer de tela cheia reutilizado (nunca aloca por frame).
+
+    O chamador é responsável por limpar/preencher (`fill`) antes de desenhar, já
+    que o conteúdo do frame anterior persiste. Reuso elimina a alocação+zeragem
+    por frame — a fonte dos travamentos durante os fades.
+    """
+    key = (size[0], size[1], per_pixel_alpha)
+    surf = _FADE_SCRATCH.get(key)
+    if surf is None:
+        surf = pygame.Surface(size, pygame.SRCALPHA if per_pixel_alpha else 0)
+        _FADE_SCRATCH[key] = surf
+    return surf
+
 
 class UIParticle:
     """Simples sistema de partículas para UI."""
@@ -88,9 +112,10 @@ def render_with_fade(
 
     if transitioning:
         alpha_mult = (1.0 - transition_progress) if fade_out else transition_progress
-        temp = pygame.Surface(
-            (surface.get_width(), surface.get_height()), pygame.SRCALPHA
-        )
+        # Scratch reutilizado (não aloca por frame). Limpa antes de re-renderizar
+        # a view — o buffer carrega o conteúdo do frame anterior.
+        temp = get_fade_scratch(surface.get_size())
+        temp.fill((0, 0, 0, 0))
         view.render(temp)
         temp.set_alpha(int(255 * alpha_mult))
         surface.blit(temp, (0, 0))

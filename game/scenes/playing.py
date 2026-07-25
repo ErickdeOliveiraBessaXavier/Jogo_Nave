@@ -26,7 +26,7 @@ import math
 import random
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Optional, Sequence, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, cast
 
 import pygame
 
@@ -63,14 +63,14 @@ from ..core.world_config import (
 from ..entities.player.mini_ship import MiniShip
 from ..entities.player.revival_beacon import RevivalBeacon
 from ..entities.player.ship import Ship
-from ..entities.projectiles.spike_boss_laser import SpikeBossLaser
 from ..events import game_events as events
 from ..render.game_renderer import GameRenderer
 from ..render.boss_backdrop_dim import BossBackdropDim
 from ..render.damage_vignette import DamageVignette
-from ..render.render_frame import P2HudInfo, RenderFrame
+from ..render.render_frame import RenderFrame
 from ..systems.boss_fight_controller import BossFightController
 from ..systems.cheat_input import CheatBuffer
+from ..systems.collision_orchestrator import CollisionOrchestrator
 from ..systems.collisions import Collisions
 from ..systems.effects_system import EffectsSystem
 from ..systems.entity_manager import EntityManager
@@ -79,6 +79,7 @@ from ..systems.level_progression_controller import (
     LevelProgressionController,
     ProgressionStatus,
 )
+from ..systems.p2_session_controller import P2SessionController
 from ..systems.player_slot import PlayerRoster, PlayerSlot
 from ..systems.powerup_system import PowerupSystem
 from ..systems.revival_system import RevivalSystem
@@ -86,13 +87,15 @@ from ..systems.shooting_system import ShootingSystem
 from ..systems.upgrade_selector import UpgradeSelector
 from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
 from ..systems.transition_controller import TransitionController, TransitionPhase
+from ..systems.world_transition_cutscene import (
+    ThrusterParticle,
+    WorldTransitionCutscene,
+)
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..app import GameApp
-    from ..core.spatial_grid import SpatialGrid
-    from ..systems.collision_protocols import Enemy
 
 # ---------------------------------------------------------------------------
 # Constantes de módulo (eliminam "magic numbers" espalhados pela classe)
@@ -119,21 +122,18 @@ _HUD_UPGRADE_SLOT_GAP = 6
 # ---------------------------------------------------------------------------
 
 
+# Encerramento de fase: após este tempo (s) magnetizando os coletáveis, os que
+# ainda sobraram na tela começam a dissolver (fade), garantindo que a transição
+# não fique presa nem carregue power-ups/estrelas para a fase seguinte. Cabe com
+# folga na janela de espera (LEVEL_TRANSITION_DELAY 2.0s + timeout 1.2s).
+CLOSING_FADE_AFTER: float = 1.2
+
+
 class GameState(Enum):
     """Estado de jogo interno da cena (fase de preparação vs gameplay ativo)."""
 
     PREPARING = auto()
     PLAYING = auto()
-
-
-class ThrusterParticle(TypedDict):
-    offset_x: float
-    offset_y: float
-    vx: float
-    vy: float
-    lifetime: float
-    size: float
-    color: tuple[int, int, int]
 
 
 @dataclass
@@ -196,10 +196,10 @@ class PlayingScene(Scene):
         # P2 sobrevive ao "Continuar" do game over. A cena é recriada do zero a
         # cada continue, então quem estava jogando precisa ser reconstruído
         # aqui — sem isto o P2 era silenciosamente largado e tinha que apertar
-        # START de novo a cada morte. Depende de `_init_systems` (entity_manager
-        # e os spawners que `_spawn_p2` atualiza).
+        # START de novo a cada morte. Depende de `_init_systems` (entity_manager,
+        # spawners e o `_p2_session` que `spawn_p2` usa).
         if p2_profile is not None and self.app.gamepad.secondary_connected:
-            self._spawn_p2(p2_profile)
+            self._p2_session.spawn_p2(p2_profile)
 
     @property
     def is_side_scroll(self) -> bool:
@@ -346,22 +346,26 @@ class PlayingScene(Scene):
         """
         self.pending_world_transition: Optional[WorldConfig] = None
 
-        self.world_transition_cutscene_timer: float = 0.0
-        self.world_transition_cutscene_duration: float = (
-            Config.WORLD_TRANSITION_CUTSCENE_DURATION
+        # Tempo acumulado no encerramento de fase (POST_VICTORY_DELAY +
+        # LEVEL_TRANSITION_WAIT). Dispara o fade dos coletáveis retardatários.
+        self._closing_elapsed: float = 0.0
+
+        # Cinemática de saída da nave (charge→launch + partículas). O estado da
+        # animação e a lógica vivem no controller (§9); a cena guarda a fachada
+        # fina — `world_transition_cutscene_active` (derivado do FSM) + as
+        # properties de leitura `world_transition_cutscene_timer`/
+        # `world_transition_thruster_particles` que o DTO de render consome — e o
+        # callback de FLUXO `_on_world_cutscene_complete` (painel/atmosfera/prep).
+        self._world_cutscene = WorldTransitionCutscene(
+            get_ship=lambda: self.ship,
+            get_side_scroll=lambda: self.is_side_scroll,
+            get_entity_manager=lambda: self.entity_manager,
+            is_active=lambda: self.transitions.is_cutscene_exit,
+            enter_cutscene_phase=lambda: self._set_transition_phase(
+                TransitionPhase.CUTSCENE_EXIT
+            ),
+            on_complete=self._on_world_cutscene_complete,
         )
-        self.world_transition_cutscene_charge_duration: float = (
-            Config.WORLD_TRANSITION_CUTSCENE_CHARGE_DURATION
-        )
-        self.world_transition_cutscene_launch_speed: float = (
-            Config.WORLD_TRANSITION_CUTSCENE_LAUNCH_SPEED
-        )
-        self.world_transition_cutscene_origin: tuple[float, float] = (0.0, 0.0)
-        self.world_transition_cutscene_recoil_offset: float = 0.0
-        self.world_transition_cutscene_launch_distance: float = 0.0
-        self.world_transition_cutscene_target_world: Optional[WorldConfig] = None
-        self.world_transition_cutscene_debug_mode: bool = False
-        self.world_transition_thruster_particles: list[ThrusterParticle] = []
 
         # Interstício "Entering/Exiting the Atmosphere". Todo o estado de runtime
         # (rota, altitude, regressão, cinemática de nocaute, flag in_atmosphere)
@@ -369,8 +373,6 @@ class PlayingScene(Scene):
         # `_*_atmosphere_*` desta cena (FSM acoplado — ver core/atmosphere_phase.py
         # e código_teste/PLANO_FASE_ATMOSFERA.md).
         self._atmosphere = AtmosphereState()
-        # Cutscene de chegada do re-entry (Entering) lança a nave para baixo.
-        self._cutscene_launch_down: bool = False
 
     def _init_fade(self) -> None:
         """Configura o fade-in inicial para evitar corte abrupto.
@@ -506,6 +508,38 @@ class PlayingScene(Scene):
             rebuild_mini_ships=self._build_permanent_mini_ships,
         )
 
+        # Sessão de co-op local (P2): entrada/saída/desconexão + spawn/HUD. Não
+        # referencia a cena (§1); o modal e o trio set_player_count entram por
+        # callback (o modal precisa da cena p/ render de fundo e perfil).
+        self._p2_session = P2SessionController(
+            roster=self.roster,
+            gamepad=self.app.gamepad,
+            entity_manager=self.entity_manager,
+            get_is_side_scroll=lambda: self.is_side_scroll,
+            get_lives=lambda: int(self.difficulty_settings.get("lives", 3)),
+            set_player_count=self._set_active_player_count,
+            open_p2_modal=self._open_p2_modal,
+            build_permanent_mini_ships=self._build_permanent_mini_ships,
+        )
+
+        # Orquestração de colisões: roda todos os passes do frame e RETORNA um
+        # CollisionResult (score/kills/floating scores) que a cena aplica. Ship-hits
+        # são roteados via callback durante o run (ordem/invuln preservadas). §9.
+        self._collision_orch = CollisionOrchestrator(
+            entity_manager=self.entity_manager,
+            collisions=self.collisions,
+            roster=self.roster,
+            boss_controller=self.boss_controller,
+            level_controller=self.level_controller,
+            on_ship_hit=self._handle_ship_hit,
+            get_last_dt=lambda: self.last_dt,
+            get_multiplier_state=lambda: (
+                self.score_multiplier_active,
+                self.score_multiplier_value,
+            ),
+            get_batch_threshold=lambda: self.floating_score_batch_threshold,
+        )
+
     # ------------------------------------------------------------------
     # Configuração de dificuldade e cache
     # ------------------------------------------------------------------
@@ -581,6 +615,16 @@ class PlayingScene(Scene):
                 else TransitionPhase.LEVEL_ENTRY
             )
 
+    # Fachada fina de leitura para o DTO de render (§9): o estado da animação
+    # mora no controller; o render lê estes valores via `RenderFrame`.
+    @property
+    def world_transition_cutscene_timer(self) -> float:
+        return self._world_cutscene.timer
+
+    @property
+    def world_transition_thruster_particles(self) -> list[ThrusterParticle]:
+        return self._world_cutscene.particles
+
     @property
     def awaiting_world_transition_panel(self) -> bool:
         return self.transitions.is_world_panel
@@ -589,11 +633,35 @@ class PlayingScene(Scene):
         """Retorna True quando o jogador pode agir normalmente."""
         return self.transitions.can_handle_gameplay_actions
 
+    def _next_transition_is_theme_change(self) -> bool:
+        """True se a PRÓXIMA transição de nível cruza a fronteira de TEMA (mundo).
+
+        Peek puro (sem avançar), idêntico ao cálculo do LevelProgressionController
+        (`new_world.theme != current_world.theme`). Distingue a transição "grande"
+        — mudança de tema, com cutscene/atmosfera + limpeza total da fase — da
+        transição CONTÍNUA dentro do mesmo mundo (1-1→1-2), que preserva projéteis,
+        coletáveis e escoltas para não quebrar a continuidade do gameplay."""
+        next_level = self.level_controller.current_level_number + 1
+        return get_world_for_level(next_level).theme != self.current_world.theme
+
+    def _is_closing_level(self) -> bool:
+        """True durante o ENCERRAMENTO de fase — SÓ quando a próxima transição é
+        mudança de tema.
+
+        Janela (pós-vitória + espera) em que não há spawns nem tiro do jogador,
+        os projéteis já em tela seguem voando e os coletáveis são magnetizados/
+        dissolvidos antes da transição concluir. Dentro do mesmo tema não há
+        encerramento: a sequência é contínua (§ continuidade de mundo)."""
+        return (
+            self.level_transition_pending or self.level_transition_active
+        ) and self._next_transition_is_theme_change()
+
     def _begin_level_preparation(self) -> None:
         """Coloca a cena em modo de preparação para o próximo nível."""
         self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
         self.state = GameState.PREPARING
         self.preparation_time_left = Config.PREPARATION_TIME
+        self._closing_elapsed = 0.0
         self.level_controller.reset_level_stats()
         self._reset_ship_for_level_entry()
 
@@ -639,20 +707,26 @@ class PlayingScene(Scene):
                 self.level_popup_timer = self.level_popup_duration
 
         self.boss_controller.reset()
-        self.entity_manager.clear_for_level_transition()
-
-        # Em coop, cada slot pode ter perfil próprio (ex: Engenheiro como P2).
-        # Itera sobre todos os slots vivos para rebuildar permanentes de cada
-        # um — chamada legada sem slot só restaurava o primário, perdendo as
-        # mini-naves de outros Engenheiros na transição.
-        for slot in self.roster.alive_slots():
-            if slot.ship.mini_ships_timer > 0.0:
-                self.build_mini_ships(slot)
-            else:
-                self._build_permanent_mini_ships(slot)
 
         if theme_changed:
-            self._start_world_transition_cutscene(new_world)
+            # Mudança de TEMA = transição "grande": limpa a fase inteira
+            # (projéteis, coletáveis pendentes, referências de IA, estados
+            # temporários) e reconstrói as escoltas com a orientação do novo modo.
+            # Dentro do MESMO tema (1-1→1-2) NADA disso ocorre — os elementos
+            # persistentes seguem contínuos, preservando a sequência do mundo.
+            self.entity_manager.clear_for_level_transition()
+
+            # Em coop, cada slot pode ter perfil próprio (ex: Engenheiro como P2).
+            # Itera sobre todos os slots vivos para rebuildar permanentes de cada
+            # um — chamada legada sem slot só restaurava o primário, perdendo as
+            # mini-naves de outros Engenheiros na transição.
+            for slot in self.roster.alive_slots():
+                if slot.ship.mini_ships_timer > 0.0:
+                    self.build_mini_ships(slot)
+                else:
+                    self._build_permanent_mini_ships(slot)
+
+            self._world_cutscene.start(new_world)
         else:
             self._begin_playing_state()
 
@@ -688,6 +762,7 @@ class PlayingScene(Scene):
         """Ativa o gameplay e registra a tentativa do nível uma única vez."""
         self._set_transition_phase(TransitionPhase.PLAYING)
         self.state = GameState.PLAYING
+        self._closing_elapsed = 0.0
         self.ship.is_entering = False
         self.level_controller.start_level_timer(self.score)
         self.level_controller.record_attempt_if_needed()
@@ -727,129 +802,20 @@ class PlayingScene(Scene):
         self._begin_level_preparation()
 
     # ------------------------------------------------------------------
-    # Cutscene de transição de mundo
+    # Cutscene de transição de mundo — cinemática/partículas no
+    # `WorldTransitionCutscene` (systems/, §9). Aqui fica só o FLUXO de
+    # conclusão, que depende de estado da partida (mundo, atmosfera, pilha).
     # ------------------------------------------------------------------
 
-    def _spawn_world_transition_thruster_particles(self, intensity: int) -> None:
-        """Gera partículas extras para o impulso da cutscene."""
-        if self.ship.ship_image is not None:
-            sprite_w, sprite_h = self.ship.ship_image.get_size()
-        else:
-            sprite_w, sprite_h = self.ship.w, self.ship.h
-
-        for _ in range(intensity):
-            if self.is_side_scroll:
-                particle: ThrusterParticle = {
-                    "offset_x": random.uniform(-14, 4),
-                    "offset_y": sprite_h / 2 + random.uniform(-8, 8),
-                    "vx": -random.uniform(220, 460),
-                    "vy": random.uniform(-120, 120),
-                    "lifetime": random.uniform(0.14, 0.34),
-                    "size": random.uniform(2.0, 4.8),
-                    "color": (255, random.randint(120, 230), 0),
-                }
-            else:
-                # Top-down
-                if self._cutscene_launch_down:
-                    # Re-entry: Nave desce, partículas sobem (saem do topo)
-                    particle = {
-                        "offset_x": sprite_w / 2 + random.uniform(-9, 9),
-                        "offset_y": random.uniform(-10, 4),
-                        "vx": random.uniform(-90, 90),
-                        "vy": -random.uniform(220, 460),
-                        "lifetime": random.uniform(0.14, 0.34),
-                        "size": random.uniform(2.0, 4.8),
-                        "color": (255, random.randint(120, 230), 0),
-                    }
-                else:
-                    # Normal / Exit: Nave sobe, partículas descem (saem da base)
-                    particle = {
-                        "offset_x": sprite_w / 2 + random.uniform(-9, 9),
-                        "offset_y": sprite_h + random.uniform(-4, 10),
-                        "vx": random.uniform(-90, 90),
-                        "vy": random.uniform(220, 460),
-                        "lifetime": random.uniform(0.14, 0.34),
-                        "size": random.uniform(2.0, 4.8),
-                        "color": (255, random.randint(120, 230), 0),
-                    }
-            self.world_transition_thruster_particles.append(particle)
-
-    def _update_world_transition_thruster_particles(self, dt: float) -> None:
-        """Atualiza e filtra partículas da cutscene (list comprehension imutável)."""
-        self.world_transition_thruster_particles = [
-            {
-                "offset_x": p["offset_x"] + p["vx"] * dt,
-                "offset_y": p["offset_y"] + p["vy"] * dt,
-                "vx": p["vx"],
-                "vy": p["vy"],
-                "lifetime": p["lifetime"] - dt,
-                "size": max(0.0, p["size"] - dt * 6.0),
-                "color": p["color"],
-            }
-            for p in self.world_transition_thruster_particles
-            if p["lifetime"] - dt > 0.0 and p["size"] - dt * 6.0 > 0.0
-        ]
-
-    def _start_world_transition_cutscene(
-        self,
-        target_world: WorldConfig,
-        debug_mode: bool = False,
-        launch_down: bool = False,
+    def _on_world_cutscene_complete(
+        self, target_world: Optional[WorldConfig], debug_mode: bool
     ) -> None:
-        """Inicia a cutscene de saída da nave antes do painel de transição.
+        """Callback disparado pelo controller quando a cutscene termina.
 
-        `launch_down=True` (re-entry/Entering) lança a nave para BAIXO em vez de
-        para cima no modo top-down — a nave está descendo na atmosfera.
+        Decide o próximo passo do fluxo: interstício de atmosfera (se a rota
+        qualifica), preparação de nível (debug/F8) ou abertura do painel de
+        transição de mundo.
         """
-        self._cutscene_launch_down = launch_down
-        self._set_transition_phase(TransitionPhase.CUTSCENE_EXIT)
-        self.world_transition_cutscene_timer = 0.0
-        self.world_transition_cutscene_launch_speed = (
-            Config.WORLD_TRANSITION_CUTSCENE_LAUNCH_SPEED
-        )
-        self.world_transition_cutscene_origin = (float(self.ship.x), float(self.ship.y))
-        self.world_transition_cutscene_recoil_offset = 0.0
-        self.world_transition_cutscene_launch_distance = 0.0
-        self.world_transition_cutscene_target_world = target_world
-        self.world_transition_cutscene_debug_mode = debug_mode
-        self.world_transition_thruster_particles.clear()
-
-        # Ativa o tremor visual da nave, mas desativa a interpolação automática
-        # de posição do Ship.update (entering_duration=0) para controle manual.
-        self.ship.is_entering = True
-        self.ship.entering_duration = 0.0
-        self.ship.is_side_scroll = self.is_side_scroll
-        # Força o sprite a apontar na direção do launch — evita que uma rotação
-        # CTRL anterior do jogador faça a nave voar de costas/de lado durante a
-        # cutscene. O facing volta ao default no próximo mundo via apply_world_mode.
-        if self.is_side_scroll:
-            cutscene_facing = "east"
-        elif launch_down:
-            cutscene_facing = "south"
-        else:
-            cutscene_facing = "north"
-        self.ship.set_facing(cutscene_facing)
-        logger.info(
-            "[CUTSCENE] Iniciando saída da nave para %s (debug=%s)",
-            target_world.name,
-            debug_mode,
-        )
-
-    def _finish_world_transition_cutscene(self) -> None:
-        """Finaliza a cutscene e abre o painel de transição."""
-        if not self.world_transition_cutscene_active:
-            return
-
-        target_world = self.world_transition_cutscene_target_world
-        debug_mode = self.world_transition_cutscene_debug_mode
-
-        self.world_transition_cutscene_timer = 0.0
-        self.world_transition_cutscene_target_world = None
-        self.world_transition_cutscene_debug_mode = False
-        self.world_transition_thruster_particles.clear()
-        self.world_transition_cutscene_recoil_offset = 0.0
-        self.world_transition_cutscene_launch_distance = 0.0
-
         if target_world is None:
             return
 
@@ -882,83 +848,6 @@ class PlayingScene(Scene):
 
         if debug_mode:
             logger.info("[CUTSCENE] Preview visual completo executado via F8")
-
-    def _update_world_transition_cutscene(self, dt: float) -> None:
-        """Atualiza a cinemática de saída da nave (charge → launch)."""
-        if not self.world_transition_cutscene_active:
-            return
-
-        self.world_transition_cutscene_timer += dt
-        t = self.world_transition_cutscene_timer
-        charge_end = self.world_transition_cutscene_charge_duration
-        charge_progress = min(1.0, max(0.0, t / charge_end))
-
-        recoil_sign = -1.0 if self.is_side_scroll else 1.0
-        if charge_progress < 0.28:
-            tremble_strength = 1.8 * (1.0 - charge_progress * 0.8)
-            ship_x = self.world_transition_cutscene_origin[0]
-            ship_y = self.world_transition_cutscene_origin[1]
-            ship_x += math.sin(t * 55.0) * tremble_strength
-            ship_y += math.cos(t * 47.0) * tremble_strength * 0.75
-            self.world_transition_cutscene_recoil_offset = 0.0
-            thruster_intensity = 6
-        elif charge_progress < 0.68:
-            recoil_progress = (charge_progress - 0.28) / (0.68 - 0.28)
-            self.world_transition_cutscene_recoil_offset = 12.0 * recoil_progress
-            ship_x = self.world_transition_cutscene_origin[0]
-            ship_y = self.world_transition_cutscene_origin[1]
-            ship_x += recoil_sign * self.world_transition_cutscene_recoil_offset
-            tremble_strength = 1.2 * (1.0 - recoil_progress)
-            ship_x += math.sin(t * 42.0) * tremble_strength * 0.55
-            ship_y += math.cos(t * 39.0) * tremble_strength * 0.55
-            thruster_intensity = 10
-        else:
-            hold_progress = (charge_progress - 0.68) / (1.0 - 0.68)
-            self.world_transition_cutscene_recoil_offset = 12.0
-            ship_x = (
-                self.world_transition_cutscene_origin[0]
-                + recoil_sign * self.world_transition_cutscene_recoil_offset
-            )
-            ship_y = self.world_transition_cutscene_origin[1]
-            thruster_intensity = 14 + int(6 * hold_progress)
-
-        self.ship.x = ship_x
-        self.ship.y = ship_y
-        self._spawn_world_transition_thruster_particles(intensity=thruster_intensity)
-
-        if t >= charge_end:
-            self.world_transition_cutscene_launch_speed += (
-                Config.WORLD_TRANSITION_CUTSCENE_LAUNCH_ACCELERATION * dt
-            )
-            launch_speed = self.world_transition_cutscene_launch_speed
-            self.world_transition_cutscene_launch_distance += launch_speed * dt
-            if self.is_side_scroll:
-                self.ship.x = (
-                    self.world_transition_cutscene_origin[0]
-                    + recoil_sign * self.world_transition_cutscene_recoil_offset
-                    + self.world_transition_cutscene_launch_distance
-                )
-            else:
-                launch_dir = 1.0 if self._cutscene_launch_down else -1.0
-                self.ship.y = (
-                    self.world_transition_cutscene_origin[1]
-                    + launch_dir * self.world_transition_cutscene_launch_distance
-                )
-            self._spawn_world_transition_thruster_particles(intensity=14)
-
-        ship_dt_multiplier = 3.4 if t >= charge_end else 2.2
-        self.ship.update(
-            dt * ship_dt_multiplier,
-            self.entity_manager,
-            is_side_scroll=self.is_side_scroll,
-        )
-        self._update_world_transition_thruster_particles(dt)
-
-        if (
-            self.world_transition_cutscene_timer
-            >= self.world_transition_cutscene_duration
-        ):
-            self._finish_world_transition_cutscene()
 
     # ------------------------------------------------------------------
     # Interstício "Entering / Exiting the Atmosphere" (esqueleto de fluxo)
@@ -1073,7 +962,9 @@ class PlayingScene(Scene):
             ) * 1000.0 + RevivalBeacon.POST_REVIVE_INVULN_MS
             self._build_permanent_mini_ships(slot)
 
-        # Recomeço limpo: remove meteoros/hostis em tela.
+        # Recomeço limpo: remove meteoros/hostis em tela. Invalida antes de
+        # esvaziar para nenhum companheiro (mini/wingman) ficar mirando fantasma.
+        self.entity_manager.invalidate_enemy_targets()
         self.entity_manager.meteor_pool.clear_active()
         self.entity_manager.enemies.clear()
 
@@ -1231,7 +1122,7 @@ class PlayingScene(Scene):
             self._apply_pending_world_transition()
             return
         # Re-entry (Entering): a nave desce na atmosfera — cutscene lança pra baixo.
-        self._start_world_transition_cutscene(target, launch_down=is_entering)
+        self._world_cutscene.start(target, launch_down=is_entering)
 
     def debug_force_world_transition(self) -> None:
         """[DEBUG/F8] Força a transição para o próximo mundo via fluxo REAL.
@@ -1301,7 +1192,7 @@ class PlayingScene(Scene):
         self._update_start_fade(dt)
 
         if self.transition_phase == TransitionPhase.CUTSCENE_EXIT:
-            self._update_world_transition_cutscene(dt)
+            self._world_cutscene.update(dt)
             return
 
         self.transitions.update_post_victory(dt)
@@ -1322,6 +1213,11 @@ class PlayingScene(Scene):
             screen_width=Config.SCREEN_WIDTH,
             screen_height=Config.SCREEN_HEIGHT,
             attraction_mult=self.ship.profile.pickup_radius_mult,
+            closing_pull_target=(
+                (self.ship.rect.centerx, self.ship.rect.centery)
+                if self._is_closing_level()
+                else None
+            ),
         )
 
         if self.transition_phase in (
@@ -1331,6 +1227,11 @@ class PlayingScene(Scene):
             self._handle_collisions()
             if self._game_over_triggered:
                 return
+        elif self._is_closing_level():
+            # Encerramento de fase: as colisões normais não rodam fora do PLAYING,
+            # então processamos aqui a coleta dos coletáveis magnetizados e o fade
+            # dos retardatários — nada de power-up/estrela atravessando a transição.
+            self._update_level_closing(dt)
 
         # self.entity_manager.cleanup()  # Removido: já chamado internamente em entity_manager.update()
         self._update_level_logic(dt)
@@ -1427,7 +1328,7 @@ class PlayingScene(Scene):
         self.boss_backdrop_dim.update(dt, boss_dim_active)
 
         if self.transitions.update_level_transition_wait(
-            dt, self._all_animations_finished()
+            dt, self._ready_for_level_transition()
         ):
             self._start_next_level()
 
@@ -1640,6 +1541,52 @@ class PlayingScene(Scene):
             and pool_stats.get("active", 0) == 0
         )
 
+    def _player_projectiles_pending(self) -> bool:
+        """True se ainda há projéteis do jogador em tela — a transição espera eles
+        saírem/colidirem (§ encerramento limpo)."""
+        em = self.entity_manager
+        return bool(
+            em.bullets
+            or em.homing_bullets
+            or em.cacador_lasers
+            or em.mini_ship_bullets
+        )
+
+    def _collectibles_pending(self) -> bool:
+        """True enquanto houver power-up/estrela na tela (sendo coletado ou em fade)."""
+        return bool(self.entity_manager.powerups or self.entity_manager.stars)
+
+    def _ready_for_level_transition(self) -> bool:
+        """Gate de conclusão da espera de transição.
+
+        MESMO tema (transição contínua): comportamento original — só espera as
+        animações de morte, sem segurar por projéteis/coletáveis (eles atravessam
+        para o próximo nível normalmente).
+
+        MUDANÇA de tema (encerramento limpo): também exige que nenhum projétil do
+        jogador reste e que os coletáveis tenham sido resolvidos (coletados ou
+        dissolvidos). O timeout duro do `TransitionController` é a rede de segurança."""
+        if not self._next_transition_is_theme_change():
+            return self._all_animations_finished()
+        return (
+            self._all_animations_finished()
+            and not self._player_projectiles_pending()
+            and not self._collectibles_pending()
+        )
+
+    def _update_level_closing(self, dt: float) -> None:
+        """Encerramento de fase: coleta os coletáveis magnetizados (as colisões
+        normais não rodam fora do PLAYING) e, após `CLOSING_FADE_AFTER`, dissolve
+        os retardatários. A magnetização em si vem do `closing_pull_target` passado
+        ao `entity_manager.update`."""
+        self._closing_elapsed += dt
+        self.powerup_system.process_collection()
+        if self._closing_elapsed >= CLOSING_FADE_AFTER:
+            for p in self.entity_manager.powerups:
+                p.begin_fade_out()
+            for s in self.entity_manager.stars:
+                s.begin_fade_out()
+
     # ------------------------------------------------------------------
     # Cheat code
     # ------------------------------------------------------------------
@@ -1665,674 +1612,32 @@ class PlayingScene(Scene):
             logger.info("GOD MODE DESATIVADO - Invulnerabilidade desligada!")
 
     # ------------------------------------------------------------------
-    # Batching de floating scores
+    # Colisões — orquestração em CollisionOrchestrator (systems/, §9)
     # ------------------------------------------------------------------
-
-    def _batch_floating_scores(
-        self,
-        score_events: list[tuple[float, float, int]],
-        proximity_threshold: float = 60.0,
-    ) -> list[tuple[float, float, int]]:
-        """Agrupa score events próximos num único evento somado.
-
-        Para poucos eventos (≤8), usa O(n²) simples.
-        Para muitos eventos, usa grid spatial para melhor performance.
-        """
-        if not score_events:
-            return []
-
-        # Para poucos eventos, o custo O(n²) é negligenciável
-        if len(score_events) <= 8:
-            return self._batch_floating_scores_quadratic(
-                score_events, proximity_threshold
-            )
-
-        # Grid binning para muitos eventos (picos de dano)
-        cell_size = proximity_threshold
-        buckets: dict[tuple[int, int], list[tuple[float, float, int]]] = {}
-
-        for x, y, pts in score_events:
-            key = (int(x // cell_size), int(y // cell_size))
-            if key not in buckets:
-                buckets[key] = []
-            buckets[key].append((x, y, pts))
-
-        # Agregar pontos dentro de cada célula
-        batched: list[tuple[float, float, int]] = []
-        for event_list in buckets.values():
-            if not event_list:
-                continue
-            avg_x = sum(e[0] for e in event_list) / len(event_list)
-            avg_y = sum(e[1] for e in event_list) / len(event_list)
-            total_pts = sum(e[2] for e in event_list)
-            batched.append((avg_x, avg_y, total_pts))
-
-        return batched
-
-    def _batch_floating_scores_quadratic(
-        self,
-        score_events: list[tuple[float, float, int]],
-        proximity_threshold: float,
-    ) -> list[tuple[float, float, int]]:
-        """Batching O(n²) para poucos eventos (manutenção de compatibilidade)."""
-        batched: list[tuple[float, float, int]] = []
-        used = [False] * len(score_events)
-
-        for i, (x1, y1, pts1) in enumerate(score_events):
-            if used[i]:
-                continue
-            batch_x, batch_y, batch_pts, batch_count = x1, y1, pts1, 1
-            used[i] = True
-
-            for j, (x2, y2, pts2) in enumerate(score_events):
-                if used[j] or i == j:
-                    continue
-                dist = math.hypot(x2 - x1, y2 - y1)
-                if dist <= proximity_threshold:
-                    batch_x = (batch_x * batch_count + x2) / (batch_count + 1)
-                    batch_y = (batch_y * batch_count + y2) / (batch_count + 1)
-                    batch_pts += pts2
-                    batch_count += 1
-                    used[j] = True
-
-            batched.append((batch_x, batch_y, batch_pts))
-
-        return batched
-
-    # ------------------------------------------------------------------
-    # Colisões
-    # ------------------------------------------------------------------
-
-    def _check_projectile_vs_enemies(
-        self, enemy_grid: "SpatialGrid[Any]"
-    ) -> tuple[int, int, list[tuple[float, float, int]], set[int]]:
-        """Projéteis da nave vs. inimigos normais. Retorna (score, kills, events, ship_hits).
-
-        `ship_hits` é um set de `id(ship)` para naves atingidas por mine/fire zones.
-        """
-        enemies_view = cast(Sequence["Enemy"], self.entity_manager.enemies)
-        alive_ships = [slot.ship for slot in self.roster.alive_slots()]
-
-        all_player_projectiles = (
-            self.entity_manager.bullets + self.entity_manager.mini_ship_bullets
-        )
-        # Campos que bloqueiam tiros (parede do Tesla Twin, campo do Jammer Node):
-        # destroem os projéteis da nave que os cruzam antes de atingir inimigos
-        # atrás deles. Detecção duck-typed via `projectile_fields()` (§5).
-        self.collisions.projectiles_vs_blocker_fields(
-            all_player_projectiles, self.entity_manager.enemies
-        )
-        # Mirror Pylon reflete os tiros que cruzam a face espelhada (vira-os em
-        # bolts inimigos). Roda no mesmo ponto, antes de atingir inimigos atrás.
-        self.collisions.projectiles_vs_reflectors(
-            all_player_projectiles, self.entity_manager.enemies, self.entity_manager
-        )
-        gain, destroyed, score_events = self.collisions.projectiles_vs_enemies(
-            all_player_projectiles,
-            enemy_grid,
-            self.entity_manager,
-        )
-
-        laser_gain, laser_destroyed, laser_events = (
-            self.collisions.player_lasers_vs_enemies(
-                self.entity_manager.player_lasers,
-                enemies_view,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-                enemy_grid,
-            )
-        )
-        gain += laser_gain
-        destroyed += laser_destroyed
-        score_events.extend(laser_events)
-
-        # Orbes da Torreta Orbital são destrutíveis pelos tiros da nave (balas e
-        # lasers), impedindo que cheguem ao ponto memorizado e virem campo.
-        if self.entity_manager.orbital_orbs:
-            self.collisions.player_shots_vs_orbital_orbs(
-                self.entity_manager.orbital_orbs,
-                all_player_projectiles,
-                self.entity_manager.player_lasers,
-                self.entity_manager,
-            )
-
-        cacador_gain, cacador_destroyed, cacador_events = (
-            self.collisions.cacador_lasers_vs_enemies(
-                self.entity_manager.cacador_lasers,
-                enemies_view,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-                enemy_grid,
-            )
-        )
-        gain += cacador_gain
-        destroyed += cacador_destroyed
-        score_events.extend(cacador_events)
-
-        homing_gain, homing_destroyed, homing_events = (
-            self.collisions.homing_bullets_vs_enemies(
-                self.entity_manager.homing_bullets,
-                enemy_grid,
-                self.entity_manager,
-            )
-        )
-        gain += homing_gain
-        destroyed += homing_destroyed
-        score_events.extend(homing_events)
-
-        upgrade_dt = self.last_dt
-        if self.entity_manager.orbital_shields:
-            os_gain, os_destroyed, os_events = (
-                self.collisions.orbital_shields_vs_enemies(
-                    self.entity_manager.orbital_shields,
-                    enemy_grid,
-                    upgrade_dt,
-                    self.entity_manager,
-                )
-            )
-            gain += os_gain
-            destroyed += os_destroyed
-            score_events.extend(os_events)
-
-        if self.entity_manager.plasma_beams:
-            pb_gain, pb_destroyed, pb_events = (
-                self.collisions.plasma_beams_vs_enemies(
-                    self.entity_manager.plasma_beams,
-                    enemy_grid,
-                    upgrade_dt,
-                    self.entity_manager,
-                )
-            )
-            gain += pb_gain
-            destroyed += pb_destroyed
-            score_events.extend(pb_events)
-
-        if self.entity_manager.coop_links:
-            cl_gain, cl_destroyed, cl_events = (
-                self.collisions.coop_links_vs_enemies(
-                    self.entity_manager.coop_links,
-                    enemy_grid,
-                    upgrade_dt,
-                    self.entity_manager,
-                )
-            )
-            gain += cl_gain
-            destroyed += cl_destroyed
-            score_events.extend(cl_events)
-
-        mine_gain, mine_destroyed, mine_events, ship_hits = (
-            self.collisions.check_mine_explosions(
-                enemies_view,
-                self.entity_manager.mine_explosions,
-                alive_ships,
-                self.entity_manager,
-            )
-        )
-        gain += mine_gain
-        destroyed += mine_destroyed
-        score_events.extend(mine_events)
-
-        # Blasts de área one-shot (ex.: explosão do núcleo do CyberTank) — dano à
-        # nave no raio telegrafado, reusando o roteador de explosão de mina.
-        if self.entity_manager.area_blasts:
-            for bx, by, br in self.entity_manager.area_blasts:
-                ship_hits |= self.collisions.handle_mine_explosion(
-                    bx, by, int(br), alive_ships, self.entity_manager
-                )
-            self.entity_manager.area_blasts.clear()
-
-        if self.entity_manager.ice_poison_zones:
-            iz_gain, iz_dest, iz_events = self.collisions.ice_poison_zones_vs_entities(
-                self.entity_manager.ice_poison_zones,
-                enemies_view,
-                alive_ships,
-                self.entity_manager,
-            )
-            gain += iz_gain
-            destroyed += iz_dest
-            score_events.extend(iz_events)
-
-        if self.entity_manager.fire_zones:
-            fz_gain, fz_dest, fz_events, fz_ship_hits = (
-                self.collisions.fire_zones_vs_entities(
-                    self.entity_manager.fire_zones,
-                    enemies_view,
-                    alive_ships,
-                    self.entity_manager,
-                )
-            )
-            gain += fz_gain
-            destroyed += fz_dest
-            score_events.extend(fz_events)
-            ship_hits |= fz_ship_hits
-
-        # Campos elétricos deixados pelos orbes da Torreta Orbital: dano contínuo
-        # + debuff de paralisia a quem encosta. Não pontuam nem ferem inimigos.
-        if self.entity_manager.electric_fields:
-            ship_hits |= self.collisions.electric_fields_vs_ships(
-                self.entity_manager.electric_fields,
-                alive_ships,
-                self.entity_manager,
-            )
-
-        return gain, destroyed, score_events, ship_hits
-
-    def _check_formation_collisions(
-        self, gain: int, destroyed: int, score_events: list[tuple[float, float, int]]
-    ) -> tuple[int, int, list[tuple[float, float, int]], set[int]]:
-        """Colisões de área vs. formações e inimigos avulsos.
-
-        Retorna ship_hits como set de `id(ship)` para naves atingidas por
-        mine/fire zones (varredura de formações e inimigos avulsos).
-        """
-        ship_hits: set[int] = set()
-        alive_ships = [slot.ship for slot in self.roster.alive_slots()]
-
-        formation_enemy_ids = {
-            id(enemy)
-            for formation in self.entity_manager.formations
-            for enemy in formation.get_enemies()
-        }
-        enemies_view = [
-            enemy
-            for enemy in self.entity_manager.enemies
-            if id(enemy) not in formation_enemy_ids
-        ]
-
-        for formation in self.entity_manager.formations:
-            fe = formation.get_enemies()
-
-            f_gain, f_dest, f_events, f_ship_hits = (
-                self.collisions.check_mine_explosions(
-                    fe,
-                    self.entity_manager.mine_explosions,
-                    alive_ships,
-                    self.entity_manager,
-                )
-            )
-            gain += f_gain
-            destroyed += f_dest
-            score_events.extend(f_events)
-            ship_hits |= f_ship_hits
-
-            if self.entity_manager.ice_poison_zones:
-                iz_gain, iz_dest, iz_events = (
-                    self.collisions.ice_poison_zones_vs_entities(
-                        self.entity_manager.ice_poison_zones,
-                        fe,
-                        alive_ships,
-                        self.entity_manager,
-                    )
-                )
-                gain += iz_gain
-                destroyed += iz_dest
-                score_events.extend(iz_events)
-
-            if self.entity_manager.fire_zones:
-                fz_gain, fz_dest, fz_events, fz_ship_hits = (
-                    self.collisions.fire_zones_vs_entities(
-                        self.entity_manager.fire_zones,
-                        fe,
-                        alive_ships,
-                        self.entity_manager,
-                    )
-                )
-                gain += fz_gain
-                destroyed += fz_dest
-                score_events.extend(fz_events)
-                ship_hits |= fz_ship_hits
-
-            if self.entity_manager.cannon_mines:
-                cg, cd, ce = self.collisions.cannon_mines_vs_enemies(
-                    self.entity_manager.cannon_mines, fe, self.entity_manager
-                )
-                gain += cg
-                destroyed += cd
-                score_events.extend(ce)
-
-            if self.entity_manager.explosive_effects:
-                eg, ed, ee = self.collisions.explosive_effects_vs_enemies(
-                    self.entity_manager.explosive_effects, fe, self.entity_manager
-                )
-                gain += eg
-                destroyed += ed
-                score_events.extend(ee)
-
-            if self.entity_manager.air_strike_bombs:
-                ag, ad, ae = self.collisions.air_strike_bombs_vs_enemies(
-                    self.entity_manager.air_strike_bombs, fe, self.entity_manager
-                )
-                gain += ag
-                destroyed += ad
-                score_events.extend(ae)
-
-        if self.entity_manager.explosive_effects:
-            eg, ed, ee = self.collisions.explosive_effects_vs_enemies(
-                self.entity_manager.explosive_effects, enemies_view, self.entity_manager
-            )
-            gain += eg
-            destroyed += ed
-            score_events.extend(ee)
-
-        if self.entity_manager.air_strike_bombs:
-            ag, ad, ae = self.collisions.air_strike_bombs_vs_enemies(
-                self.entity_manager.air_strike_bombs, enemies_view, self.entity_manager
-            )
-            gain += ag
-            destroyed += ad
-            score_events.extend(ae)
-
-        if self.entity_manager.cannon_mines:
-            mg, md, me = self.collisions.cannon_mines_vs_enemies(
-                self.entity_manager.cannon_mines, enemies_view, self.entity_manager
-            )
-            gain += mg
-            destroyed += md
-            score_events.extend(me)
-
-        if self.entity_manager.fire_zones:
-            fz_gain, fz_dest, fz_events, fz_ship_hits = (
-                self.collisions.fire_zones_vs_entities(
-                    self.entity_manager.fire_zones,
-                    enemies_view,
-                    alive_ships,
-                    self.entity_manager,
-                )
-            )
-            gain += fz_gain
-            destroyed += fz_dest
-            score_events.extend(fz_events)
-            ship_hits |= fz_ship_hits
-
-        return gain, destroyed, score_events, ship_hits
-
-    def _check_boss_collisions(self, gain: int) -> int:
-        """Todas as colisões envolvendo o boss. Retorna score_gain total."""
-        score_gain = 0
-        boss = self.entity_manager.boss
-
-        if not (boss and self.boss_controller.boss_type):
-            return gain
-
-        all_player_projectiles = (
-            self.entity_manager.bullets + self.entity_manager.mini_ship_bullets
-        )
-        # Barreira FÍSICA (corpo sólido): bloqueia/destrói os tiros SEM dano ao corpo.
-        # Conceito separado do passe de dano abaixo. No-op em bosses sem barreira ativa.
-        self.collisions.projectiles_vs_boss_barrier(
-            all_player_projectiles,
-            boss,  # type: ignore[arg-type]
-            self.entity_manager,
-        )
-        score_gain = self.collisions.projectiles_vs_boss(
-            all_player_projectiles,
-            boss,  # type: ignore[arg-type]
-            self.entity_manager.floating_scores,
-            self.entity_manager,
-        )
-        score_gain += self.collisions.player_lasers_vs_boss(
-            self.entity_manager.player_lasers,
-            boss,  # type: ignore[arg-type]
-            self.entity_manager.floating_scores,
-            self.entity_manager,
-        )
-        score_gain += self.collisions.cacador_lasers_vs_boss(
-            self.entity_manager.cacador_lasers,
-            boss,  # type: ignore[arg-type]
-            self.entity_manager.floating_scores,
-            self.entity_manager,
-        )
-        score_gain += self.collisions.homing_bullets_vs_boss(
-            self.entity_manager.homing_bullets,
-            boss,  # type: ignore[arg-type]
-            self.entity_manager.floating_scores,
-            self.entity_manager,
-        )
-
-        if self.entity_manager.explosive_effects:
-            score_gain += self.collisions.explosive_effects_vs_boss(
-                self.entity_manager.explosive_effects,
-                boss,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
-
-        if self.entity_manager.air_strike_bombs:
-            score_gain += self.collisions.air_strike_bombs_vs_boss(
-                self.entity_manager.air_strike_bombs,
-                boss,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
-
-        if self.entity_manager.cannon_mines:
-            score_gain += self.collisions.cannon_mines_vs_boss(
-                self.entity_manager.cannon_mines,
-                boss,
-                self.entity_manager.floating_scores,
-                self.entity_manager,
-            )
-
-        if self.boss_controller.boss_type == "slime":
-            from ..entities.bosses.slime_boss import SlimeBoss
-
-            # Slime drip per-slot: cada gota só pode atingir um ship (consumida
-            # ao colidir). Iterar slots vivos resolve sem double-damage.
-            slime_boss = cast(SlimeBoss, boss)
-            for slot in self.roster.alive_slots():
-                drip_damage = slime_boss.check_drip_damage(
-                    slot.ship.rect, self.entity_manager
-                )
-                if drip_damage > 0:
-                    self._handle_ship_hit(slot)
-                    self.level_controller.notify_damage_taken(drip_damage)
-
-        score_gain = self._apply_score_multiplier(score_gain)
-
-        return gain + score_gain
-
-    def _check_ship_damage(self, slot: PlayerSlot) -> None:
-        """Verifica todas as colisões que causam dano à nave do slot."""
-        em = self.entity_manager
-        ship = slot.ship
-
-        if self.collisions.enemy_projectiles_vs_ship(
-            ship, em.alien_bullets, em.enemy_projectile_grid
-        ):
-            self._handle_ship_hit(slot)
-        if self.collisions.enemy_projectiles_vs_ship(
-            ship, em.serpent_bullets, em.enemy_projectile_grid
-        ):
-            self._handle_ship_hit(slot)
-        if self.collisions.enemy_projectiles_vs_ship(
-            ship, em.neon_bolts, em.enemy_projectile_grid
-        ):
-            self._handle_ship_hit(slot)
-        if self.collisions.eye_laser_vs_ship(ship, em.eye_lasers):
-            self._handle_ship_hit(slot)
-
-        orb_hit = self.collisions.energy_orbs_vs_ship(
-            ship, em.energy_orbs, em.enemy_projectile_grid
-        )
-        if orb_hit:
-            self._handle_ship_hit(slot)
-            if ship.invuln > 0:
-                orb_hit.apply_effect(ship)
-
-        # Contato com orbe da Torreta Orbital: dano; o orbe morre sem virar campo
-        # e solta um estouro de energia no impacto (feedback visual).
-        if self.collisions.orbital_orbs_vs_ship(
-            ship, em.orbital_orbs, em, em.enemy_projectile_grid
-        ):
-            self._handle_ship_hit(slot)
-
-        from ..entities.projectiles.boss_laser import BossLaser
-
-        # A cerca elétrica (Fase 3) também vive em boss_lasers, mas é tratada à parte:
-        # além do dano, aplica o debuff de paralisia (reuso do sistema elétrico). É
-        # identificada por class attribute (`applies_paralysis`), não por isinstance (§5).
-        fence_beams = [
-            laser for laser in em.boss_lasers
-            if isinstance(laser, BossLaser) and getattr(laser, "applies_paralysis", False)
-        ]
-        boss_lasers = [
-            laser for laser in em.boss_lasers
-            if isinstance(laser, BossLaser) and not getattr(laser, "applies_paralysis", False)
-        ]
-        if self.collisions.laser_vs_ship(ship, boss_lasers):
-            self._handle_ship_hit(slot)
-
-        if fence_beams and self.collisions.fence_vs_ship(ship, fence_beams):
-            self._handle_ship_hit(slot)
-
-        spike_lasers: list[SpikeBossLaser] = [
-            laser for laser in em.boss_lasers if isinstance(laser, SpikeBossLaser)
-        ]
-        if spike_lasers and self.collisions.spike_boss_laser_vs_ship(
-            ship, spike_lasers
-        ):
-            self._handle_ship_hit(slot)
-
-        if self.collisions.ship_vs_spikes(ship, em.spikes, em):
-            self._handle_ship_hit(slot)
-        if self.collisions.ship_vs_boss_squares(ship, em.boss_squares):
-            self._handle_ship_hit(slot)
-
-        if self.boss_controller.boss_type == "stone_golem" and em.boss:
-            self._check_stone_golem_sweep(em, slot)
-
-        if self.boss_controller.boss_type == "mountain_serpent" and em.boss:
-            if self.collisions.ship_vs_boss(ship, em.boss, self.entity_manager):
-                self._handle_ship_hit(slot)
-
-    def _check_stone_golem_sweep(self, em: EntityManager, slot: PlayerSlot) -> None:
-        """Verifica dano do feixe sweep do StoneGolemBoss contra o slot."""
-        from ..entities.bosses.stone_golem_boss import StoneGolemBoss
-
-        golem = cast(StoneGolemBoss, em.boss)
-        beam = golem.get_sweep_beam()
-        ship = slot.ship
-        if not beam or ship.invuln > 0:
-            return
-
-        px, py, ex, ey = beam
-        sx = float(ship.rect.centerx)
-        sy = float(ship.rect.centery)
-        dx, dy = ex - px, ey - py
-        len_sq = dx * dx + dy * dy
-        if len_sq <= 0:
-            return
-
-        t = max(0.0, min(1.0, ((sx - px) * dx + (sy - py) * dy) / len_sq))
-        closest_x = px + t * dx
-        closest_y = py + t * dy
-        dist = math.hypot(sx - closest_x, sy - closest_y)
-        if dist < golem.SCALE * 2 + ship.rect.width * 0.4:
-            self._handle_ship_hit(slot)
-
-    def _apply_score_multiplier(self, pts: int) -> int:
-        """Aplica multiplicador de score base + eventual bônus ativo."""
-        multiplier = self.level_controller.base_score_multiplier
-        if self.score_multiplier_active:
-            multiplier *= self.score_multiplier_value
-        return int(pts * multiplier)
 
     def _handle_collisions(self) -> None:
-        """
-        Orquestrador de colisões. Delega para métodos especializados:
-        1. Projéteis vs. inimigos normais
-        2. Formações e efeitos de área vs. inimigos
-        3. Score e floating scores dos inimigos
-        4. Mini ships vs. spikes
-        5. Nave vs. inimigos (físico)
-        6. Boss (projéteis, efeitos, físico, slime drips)
-        7. Balas vs. objetos indestrutíveis
-        8. Dano à nave
-        9. Power-ups e estrelas
-        """
-        enemy_grid = self.entity_manager.enemy_spatial_grid
+        """Roda o orquestrador de colisões e aplica o resultado ao estado da cena
+        (score, kills, floating scores). Ship-hits já foram roteados no run."""
+        result = self._collision_orch.run()
 
-        gain, destroyed, score_events, ship_hits_proj = (
-            self._check_projectile_vs_enemies(enemy_grid)
-        )
-        gain, destroyed, score_events, ship_hits_form = (
-            self._check_formation_collisions(gain, destroyed, score_events)
-        )
+        self.score += result.score_gain
+        self.total_enemies_destroyed += result.enemies_destroyed
+        self.level_controller.notify_enemies_destroyed(result.enemies_destroyed)
+        if result.enemies_destroyed > 0:
+            self.star_spawner.add_kills(
+                result.enemies_destroyed, self.entity_manager.stars
+            )
 
-        # Mine/fire zones devolvem set de `id(ship)` atingidos. Rotear o hit
-        # ao slot dono — ambos os players tomam dano em armadilhas.
-        zone_ship_hits = ship_hits_proj | ship_hits_form
-        if zone_ship_hits:
-            for slot in self.roster.alive_slots():
-                if id(slot.ship) in zone_ship_hits:
-                    self._handle_ship_hit(slot)
-
-        batched_events = self._batch_floating_scores(
-            score_events, proximity_threshold=self.floating_score_batch_threshold
-        )
-        for x, y, pts in batched_events:
-            # Emit event to display floating score
+        for x, y, pts in result.floating_scores:
             self.app.event_bus.emit(
                 events.SpawnFloatingScore(
                     x=x,
                     y=y,
-                    score=self._apply_score_multiplier(pts),
+                    score=pts,
                     color=(255, 255, 0),  # Amarelo para pontos de combate
                 )
             )
 
-        self.score += self._apply_score_multiplier(gain)
-        self.total_enemies_destroyed += destroyed
-        self.level_controller.notify_enemies_destroyed(destroyed)
-
-        if destroyed > 0:
-            self.star_spawner.add_kills(destroyed, self.entity_manager.stars)
-            # Reverberador: o combo agora é creditado per-projétil dentro de
-            # cada `collisions.*_vs_enemies`, via `_credit_kill(b)` que lê o
-            # `owner_ship` da bala/laser/feixe. Em coop, P1 não rouba combo
-            # do P2 e vice-versa. AoE sem owner rastreável (mine_explosion,
-            # air_strike) não atribui — combo é prêmio por skill, não por
-            # spray-and-pray.
-
-        if self.entity_manager.spikes:
-            all_player_projectiles = (
-                self.entity_manager.bullets + self.entity_manager.mini_ship_bullets
-            )
-            spike_gain = self.collisions.projectiles_vs_spikes(
-                all_player_projectiles,
-                self.entity_manager.spike_spatial_grid,
-                self.entity_manager,
-            )
-            if self.score_multiplier_active:
-                spike_gain = int(spike_gain * self.score_multiplier_value)
-            self.score += spike_gain
-
-        # Nave vs. inimigos (físico) — per-slot
-        for slot in self.roster.alive_slots():
-            if self.collisions.ship_vs_enemies(
-                slot.ship, enemy_grid, self.entity_manager
-            ):
-                self._handle_ship_hit(slot)
-
-        self.score += self._check_boss_collisions(0)
-
-        # Balas vs. objetos indestrutíveis
-        self.collisions.bullets_vs_boss_squares(
-            self.entity_manager.bullets,
-            self.entity_manager.boss_squares,
-            self.entity_manager,
-        )
-
-        if self.boss_controller.boss_type == "slime":
-            self.collisions.bullets_vs_slime_drips(
-                self.entity_manager.bullets,
-                self.entity_manager.slime_drips,
-                self.entity_manager,
-            )
-
-        # Damage per-slot: cada nave recebe os ataques que efetivamente acertam.
-        for slot in self.roster.alive_slots():
-            self._check_ship_damage(slot)
         self._process_powerups_and_stars()
 
     # ------------------------------------------------------------------
@@ -2577,158 +1882,30 @@ class PlayingScene(Scene):
     # ------------------------------------------------------------------
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        # Intercepta Start no gamepad de slot 1 quando P2 ainda não juntou:
-        # abre o modal de seleção de nave de P2. Demais eventos seguem para
-        # o handler padrão (que opera somente sobre P1).
-        if event.type == pygame.JOYBUTTONDOWN and self._is_p2_join_trigger(event):
-            self._open_p2_select_modal()
-            return
-        # Saída voluntária do P2: Back/Select no controle de P2 remove ele
-        # do roster. Score compartilhado fica preservado.
-        if event.type == pygame.JOYBUTTONDOWN and self._is_p2_leave_trigger(event):
-            self._remove_p2_slot(reason="voluntary")
-            return
-        # Desconexão do controle do P2: remove P2 do roster pra evitar nave
-        # parada na tela sem input. P2 pode rejoinar reconectando o controle.
-        if event.type == pygame.JOYDEVICEREMOVED and self._is_p2_disconnect(event):
-            self._remove_p2_slot(reason="disconnect")
+        # Sessão de co-op (P2): entrada (START), saída (BACK) e desconexão do
+        # controle. Se o controller consumiu o evento, não repassa ao input de P1.
+        if self._p2_session.try_handle_event(event):
             return
         self.input_handler.handle(event)
 
-    def _is_p2_leave_trigger(self, event: pygame.event.Event) -> bool:
-        """True se BACK foi pressionado no gamepad atribuído ao P2."""
-        from ..core.gamepad import XboxButton
+    def _set_active_player_count(self, count: int) -> None:
+        """Callback do `P2SessionController`: propaga a contagem de jogadores ao
+        controlador de nível e aos spawners (afeta scaling da PRÓXIMA fase e o cap
+        de tela imediatamente)."""
+        self.level_controller.set_player_count(count)
+        self.enemy_spawner.set_player_count(count)
+        self.powerup_spawner.set_player_count(count)
 
-        if event.button != XboxButton.BACK:
-            return False
-        if self.roster.count() < 2:
-            return False
-        return self.app.gamepad.slot_of_instance_id(event.instance_id) == 1
-
-    def _is_p2_disconnect(self, event: pygame.event.Event) -> bool:
-        """True se o gamepad desconectado era o atribuído ao P2."""
-        if self.roster.count() < 2:
-            return False
-        p2_slot = self.roster.all_slots()[1]
-        if p2_slot.gamepad_slot != 1:
-            return False
-        # GamepadManager já processou o JOYDEVICEREMOVED neste momento
-        # (handle_event() do app.py despacha pra cá depois de chamar
-        # gamepad.handle_event). Então slot 1 já está vazio se era o P2.
-        return not self.app.gamepad.is_slot_connected(1)
-
-    def _remove_p2_slot(self, *, reason: str) -> None:
-        """Remove o slot do P2 do roster. Beacon e mini-naves são descartados."""
-        all_slots = self.roster.all_slots()
-        if len(all_slots) < 2:
-            return
-        p2 = all_slots[1]
-        p2.revival_beacon = None
-        # Mini-naves do P2 (permanentes do Engenheiro ou temporárias do powerup)
-        # somem junto — sem a nave delas, ficariam orbitando entidade fantasma.
-        self.entity_manager.mini_ships = [
-            m for m in self.entity_manager.mini_ships if m.player is not p2.ship
-        ]
-        self.roster.remove(p2)
-        # Volta ao escalonamento solo na próxima fase.
-        self.level_controller.set_player_count(self.roster.count())
-        self.enemy_spawner.set_player_count(self.roster.count())
-        self.powerup_spawner.set_player_count(self.roster.count())
-        logger.info("P2 saiu da partida (motivo=%s).", reason)
-
-    def _is_p2_join_trigger(self, event: pygame.event.Event) -> bool:
-        """True se o evento é START no segundo controle, e P2 ainda não juntou."""
-        from ..core.gamepad import XboxButton
-
-        if event.button != XboxButton.START:
-            return False
-        if self.roster.count() >= 2:
-            return False
-        gp = self.app.gamepad
-        if not gp.secondary_connected:
-            return False
-        return gp.slot_of_instance_id(event.instance_id) == 1
-
-    def _open_p2_select_modal(self) -> None:
-        """Empurra o modal de seleção de nave de P2 sobre a partida."""
+    def _open_p2_modal(self, on_confirm: Callable[[Any], None]) -> None:
+        """Callback do `P2SessionController`: empurra o modal de seleção de nave de
+        P2 sobre a partida. Fica na cena porque o modal usa `playing_scene` para o
+        render de fundo e o perfil (unlocked_ships)."""
         from .p2_ship_select import P2ShipSelectScene
 
         modal = P2ShipSelectScene(
-            self.app, playing_scene=self, on_confirm=self._spawn_p2
+            self.app, playing_scene=self, on_confirm=on_confirm
         )
         self.app.states.push(modal)
-
-    def _p2_anchor(self) -> tuple[float, float]:
-        """Posição de P1 na qual ancorar o spawn de P2.
-
-        Enquanto P1 está entrando em cena, `x`/`y` ainda são o ponto de partida
-        FORA da tela — ancorar neles mandaria P2 voar para fora do quadro. O
-        destino da entrada é o ponto certo nesse caso. Importa no início da
-        partida (P2 rejuntando com a cena recém-criada) e quando P2 aperta
-        START durante a contagem de preparação.
-        """
-        primary_ship = self.roster.primary().ship
-        if primary_ship.is_entering:
-            return primary_ship.entry_target_pos
-        return primary_ship.x, primary_ship.y
-
-    def _spawn_p2(self, profile: Any) -> None:
-        """Cria a nave de P2 e adiciona ao roster com animação de entrada."""
-        anchor_x, anchor_y = self._p2_anchor()
-
-        # Define alvos de spawn baseados em P1
-        if self.is_side_scroll:
-            target_x = anchor_x
-            target_y = anchor_y + 80.0
-            start_x = -100.0
-            start_y = target_y
-        else:
-            target_x = anchor_x + 80.0
-            target_y = anchor_y
-            start_x = target_x
-            start_y = float(Config.SCREEN_HEIGHT + 100)
-
-        p2_ship = Ship(
-            start_x,
-            start_y,
-            mouse_control=False,
-            auto_fire=False,
-            profile=profile,
-            player_index=1,  # sprite recolorido em ciano (nave, minis e HUD)
-        )
-
-        # Ativa animação de entrada similar ao P1
-        p2_ship.start_entering_animation(
-            (start_x, start_y),
-            (target_x, target_y),
-            1.5,  # Duração da animação
-        )
-        p2_ship.invuln = float(Config.INVULN_TIME * 1000)
-        p2_ship.apply_world_mode(self.is_side_scroll)
-
-        lives = int(self.difficulty_settings.get("lives", 3))
-        p2_slot = PlayerSlot(
-            ship=p2_ship,
-            lives=lives,
-            gamepad_slot=1,
-            apply_permanent_upgrades=False,
-        )
-        p2_ship.lives = lives
-        self.roster.add(p2_slot)
-        self._build_permanent_mini_ships(p2_slot)
-        # Atualiza scaling de coop pra próxima fase (a fase atual mantém o
-        # valor antigo — mudar inimigos vivos seria confuso pro jogador).
-        self.level_controller.set_player_count(self.roster.count())
-        # Cap de inimigos na tela cresce imediatamente (afeta próximos spawns).
-        self.enemy_spawner.set_player_count(self.roster.count())
-        # Frequência de powerups também aumenta a partir do próximo spawn.
-        self.powerup_spawner.set_player_count(self.roster.count())
-
-        logger.info(
-            "P2 entrou na partida com a nave '%s' (vidas=%d) e animação de entrada.",
-            profile.id,
-            lives,
-        )
 
     # ------------------------------------------------------------------
     # Modo de seleção de upgrade via controle
@@ -2856,29 +2033,13 @@ class PlayingScene(Scene):
                 if slot.revival_beacon is not None
             ),
             primary_alive=not self.roster.primary().is_dead,
-            p2_hud=self._build_p2_hud_info(),
+            p2_hud=self._p2_session.build_hud_info(),
             level_popup_text=self.level_popup_text,
             level_popup_timer=self.level_popup_timer,
             level_popup_duration=self.level_popup_duration,
             in_atmosphere=self._atmosphere.in_atmosphere,
             atmosphere_progress=self._atmosphere.progress,
             atmosphere_route=self._atmosphere.route,
-        )
-
-    def _build_p2_hud_info(self) -> Optional[P2HudInfo]:
-        """Monta o snapshot do P2 para o HUD secundário (None em single-player)."""
-        all_slots = self.roster.all_slots()
-        if len(all_slots) < 2:
-            return None
-        p2 = all_slots[1]
-        beacon_progress = (
-            p2.revival_beacon.progress_ratio if p2.revival_beacon is not None else 0.0
-        )
-        return P2HudInfo(
-            lives=p2.lives,
-            is_dead=p2.is_dead,
-            ship=p2.ship,
-            beacon_progress=beacon_progress,
         )
 
     # ===================== Upgrades (helpers) =====================
