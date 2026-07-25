@@ -28,6 +28,20 @@ class BlackHole:
     SPAWN_DURATION = 1.0  # Segundos para crescer
     DEATH_DURATION = 0.5  # Segundos para implodir
 
+    # Respiração do núcleo: amplitude em fração do raio e velocidade angular
+    # (rad/s → ciclo de ~2,6s). Puramente cosmético — o raio de dano é o
+    # ``core_radius`` cru, sem o pulso.
+    CORE_PULSE_AMPLITUDE = 0.07
+    CORE_PULSE_SPEED = 2.4
+
+    # Lentidão dentro da área do vórtice: o inimigo mantém 75% da velocidade.
+    # O linger existe por ordem de frame — `_update_environment` (buracos
+    # negros) roda DEPOIS de `_update_enemies`, então a marca feita aqui só é
+    # lida no frame seguinte; 0,12s cobre isso com folga até a 30fps (o piso do
+    # clamp de dt, §14) e ainda dá uma cauda imperceptível ao sair do campo.
+    VORTEX_SLOW_FACTOR = 0.75
+    VORTEX_SLOW_LINGER = 0.12
+
     def __init__(
         self,
         x: float,
@@ -49,8 +63,9 @@ class BlackHole:
         self.state_timer = 0.0
         self.scale = 0.0  # 0.0 a 1.0 para animações
 
-        # Tocar som do buraco negro
-        sound_manager.play_black_hole()
+        # Tocar som do buraco negro. Guardamos o canal para poder cortá-lo na
+        # implosão — o clipe dura mais que o vórtice do GRAVITY_BOMB.
+        self._sound_channel = sound_manager.play_black_hole()
 
         # Movimento
         if self.is_vortex:
@@ -86,9 +101,9 @@ class BlackHole:
         # Inspirado em IcePoisonZone: dano em ticks discretos com feedback visual.
         self.damage_tick_timer = 0.0
         self.damage_interval = 0.25  # 4 ticks por segundo
-        # Queremos ~1HP a cada 3s. Total de 12 ticks em 3s.
-        # 1.0 / 12 = ~0.083 HP por tick.
-        self.damage_per_tick = 0.0834
+        # Queremos ~1HP a cada 2s. Total de 8 ticks em 2s.
+        # 1.0 / 8 = 0.125 HP por tick → 0,5 HP/s (era 0,33 HP/s, 1HP a cada 3s).
+        self.damage_per_tick = 0.125
 
         self.growth_rate = config.BLACK_HOLE_GROWTH_RATE
         self.particles: list[Particle] = []
@@ -133,6 +148,25 @@ class BlackHole:
             }
             self.particles.append(particle)
 
+    def stop_sound(self) -> None:
+        """Corta o som desta instância com fade. Idempotente.
+
+        Público porque o ``EntityManager`` precisa chamá-lo ao limpar a lista
+        (§1: nada de tocar em privado de outro objeto).
+        """
+        if self._sound_channel is not None:
+            sound_manager.stop_black_hole(
+                self._sound_channel, int(self.DEATH_DURATION * 1000)
+            )
+            self._sound_channel = None
+
+    def _enter_dying(self) -> None:
+        """Inicia a implosão e apaga o som junto, para o áudio morrer com a
+        entidade em vez de sobreviver a ela."""
+        self.state = "dying"
+        self.state_timer = 0.0
+        self.stop_sound()
+
     def update(self, dt: float):
         self.lifetime += dt
         self.animation_timer += dt
@@ -151,8 +185,7 @@ class BlackHole:
             self.scale = 1.0
             # Expira por tempo
             if self.is_vortex and self.lifetime >= self.duration:
-                self.state = "dying"
-                self.state_timer = 0.0
+                self._enter_dying()
         elif self.state == "dying":
             self.scale = max(0.0, 1.0 - (self.state_timer / self.DEATH_DURATION))
             if self.state_timer >= self.DEATH_DURATION:
@@ -182,11 +215,9 @@ class BlackHole:
         if not self.is_vortex and self.state == "active":
             if self.is_side_scroll:
                 if self.x > config.SCREEN_WIDTH + self.pull_radius:
-                    self.state = "dying"
-                    self.state_timer = 0.0
+                    self._enter_dying()
             elif self.y < -self.pull_radius:
-                self.state = "dying"
-                self.state_timer = 0.0
+                self._enter_dying()
 
         # Atualizar partículas
         for particle in self.particles:
@@ -262,6 +293,13 @@ class BlackHole:
 
             if dist_sq >= pull_radius_sq:
                 continue
+
+            # Lentidão por área (só o vórtice): marca o inimigo, e o
+            # EntityManager traduz a marca em multiplicador de dt no tick dele.
+            # Marcar aqui em vez de mexer na velocidade evita disputar o mesmo
+            # campo com EMP/gelo — os três se compõem por multiplicação.
+            if self.is_vortex:
+                enemy.vortex_slow_timer = self.VORTEX_SLOW_LINGER
 
             # Logica de Centro (Núcleo)
             if dist_sq < core_radius_sq:
@@ -350,8 +388,12 @@ class BlackHole:
                 max(1, int(particle["size"] * self.scale)),
             )
 
-        # Núcleo
-        core_r = int(self.core_radius * self.scale)
+        # Núcleo — respiração sutil. Lê o acumulador alimentado pelo update
+        # (§3: draw não muta nem usa time.time(), que ignoraria pausa/slow-mo).
+        breath = 1.0 + self.CORE_PULSE_AMPLITUDE * math.sin(
+            self.animation_timer * self.CORE_PULSE_SPEED
+        )
+        core_r = int(self.core_radius * self.scale * breath)
         if core_r > 0:
             pygame.draw.circle(surface, (0, 0, 0), (int(self.x), int(self.y)), core_r)
             pygame.draw.circle(

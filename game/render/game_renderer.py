@@ -43,6 +43,11 @@ class GameRenderer:
     - Aplicar efeitos de tela como screen-shake e fades.
     """
 
+    # Amplitude do 'pop' do número do score. Menor que os 18% do painel de
+    # combo porque a fonte do score é bem maior (32px): o mesmo percentual ali
+    # invadiria as bordas da caixa nos scores mais largos.
+    SCORE_POP_AMPLITUDE = 0.14
+
     # Cores e Símbolos de Power-ups para o HUD
     POWERUP_UI_DATA: dict[str, PowerupUiData] = {
         "shield": {"color": colors.BLUE, "symbol": "S", "label": "ESCUDO"},
@@ -471,8 +476,25 @@ class GameRenderer:
             else self.hud_font_score_small
         )
         score_surf = score_font.render(score_text, True, colors.WHITE)
+
+        # 'Pop' ao pontuar: cresce e relaxa, igual ao indicador de combo do
+        # Reverberador. Escala SÓ o número — a caixa e o texto de kills seguem
+        # medidos pelo tamanho original, então o HUD não treme junto nem muda
+        # de largura a cada abate.
+        cx = rect.centerx
+        cy = rect.top + self._s(15) + score_surf.get_height() // 2
+        if frame.score_pop > 0.0:
+            scale = 1.0 + self.SCORE_POP_AMPLITUDE * frame.score_pop
+            score_surf = pygame.transform.smoothscale(
+                score_surf,
+                (
+                    int(score_surf.get_width() * scale),
+                    int(score_surf.get_height() * scale),
+                ),
+            )
         surface.blit(
-            score_surf, (rect.centerx - score_surf.get_width() // 2, rect.top + self._s(15))
+            score_surf,
+            (cx - score_surf.get_width() // 2, cy - score_surf.get_height() // 2),
         )
 
         # Kills

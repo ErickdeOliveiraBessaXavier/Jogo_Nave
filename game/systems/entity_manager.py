@@ -310,6 +310,23 @@ class EntityManager:
         if ice_t > 0.0:
             setattr(entity, "_ice_slow_timer", max(0.0, ice_t - dt))
 
+    @staticmethod
+    def _vortex_multiplier(entity: Any) -> float:
+        """Retorna o multiplicador de velocidade por vórtice (GRAVITY_BOMB).
+
+        A marca é posta pelo próprio vórtice em `process_all_enemies`; aqui só
+        se lê. Compõe multiplicativamente com EMP e gelo, como os demais.
+        """
+        vortex_t = getattr(entity, "vortex_slow_timer", 0.0)
+        return BlackHole.VORTEX_SLOW_FACTOR if vortex_t > 0.0 else 1.0
+
+    @staticmethod
+    def _update_vortex_linger(entity: Any, dt: float) -> None:
+        """Decrementa o timer de slow de vórtice da entidade."""
+        vortex_t = getattr(entity, "vortex_slow_timer", 0.0)
+        if vortex_t > 0.0:
+            setattr(entity, "vortex_slow_timer", max(0.0, vortex_t - dt))
+
     @property
     def eye_enemy_count(self) -> int:
         return sum(1 for e in self.enemies if isinstance(e, EyeEnemy))
@@ -935,9 +952,12 @@ class EntityManager:
         for f in self.formations[:]:
             self._update_emp_linger(f, dt)
             self._update_ice_linger(f, dt)
-            mul = self._emp_multiplier(
-                f, slow_active, slow_factor, dt
-            ) * self._ice_multiplier(f)
+            self._update_vortex_linger(f, dt)
+            mul = (
+                self._emp_multiplier(f, slow_active, slow_factor, dt)
+                * self._ice_multiplier(f)
+                * self._vortex_multiplier(f)
+            )
             shot = f.update(enemy_dt * mul)
             if shot:
                 new_alien_bullets.extend(shot)
@@ -1161,9 +1181,12 @@ class EntityManager:
         for s in self.spikes:
             self._update_emp_linger(s, dt)
             self._update_ice_linger(s, dt)
-            mul = self._emp_multiplier(
-                s, slow_active, slow_factor, dt
-            ) * self._ice_multiplier(s)
+            self._update_vortex_linger(s, dt)
+            mul = (
+                self._emp_multiplier(s, slow_active, slow_factor, dt)
+                * self._ice_multiplier(s)
+                * self._vortex_multiplier(s)
+            )
             s.update(enemy_dt * mul, player_x, player_y, ac)
 
     def _update_boss(self, enemy_dt: float, player_x: float, player_y: float) -> None:
@@ -1222,9 +1245,12 @@ class EntityManager:
         for en in self.enemies:
             self._update_emp_linger(en, dt)
             self._update_ice_linger(en, dt)
-            mul = self._emp_multiplier(
-                en, slow_active, slow_factor, dt
-            ) * self._ice_multiplier(en)
+            self._update_vortex_linger(en, dt)
+            mul = (
+                self._emp_multiplier(en, slow_active, slow_factor, dt)
+                * self._ice_multiplier(en)
+                * self._vortex_multiplier(en)
+            )
             ctx.sdt = enemy_dt * mul
             update_in_ctx = getattr(en, "update_in_context", None)
             if update_in_ctx is not None:
@@ -1878,6 +1904,10 @@ class EntityManager:
         self.air_strike_bombs.clear()
         self.cannon_towers.clear()
         self.cannon_mines.clear()
+        # Buraco negro descartado sem implodir não passa pelo _enter_dying,
+        # então o som ficaria tocando sozinho depois do game over/restart.
+        for bh in self.black_holes:
+            bh.stop_sound()
         self.black_holes.clear()
         self.emp_waves.clear()
         self.boss = None

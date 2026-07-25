@@ -139,3 +139,7 @@ class RenderFrame:
     flash_timer: float = 0.0
     flash_duration: float = 0.0
     flash_alpha: int = 0
+
+    # 'Pop' do número do score: 1.0 no frame em que pontuou, decaindo a 0.0.
+    # A cena mantém o timer; aqui só chega a fração já normalizada.
+    score_pop: float = 0.0

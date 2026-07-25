@@ -530,12 +530,34 @@ class SoundManager:
             self._sounds["button_hover"].play()
 
     @require_audio
-    def play_black_hole(self):
-        """Toca o som do buraco negro."""
+    def play_black_hole(self) -> Optional[pygame.mixer.Channel]:
+        """Toca o som do buraco negro e devolve o canal em que ele caiu.
+
+        O clipe é mais longo que o vórtice do GRAVITY_BOMB; sem guardar o canal
+        não há como silenciá-lo quando a entidade implode, e o som sobrevive ao
+        que o produziu (5 vórtices → 5 caudas soltas). Ver ``stop_black_hole``.
+        """
         if "black_hole" in self._sounds:
             sound = self._sounds["black_hole"]
             sound.set_volume(self.sfx_volume * self.master_volume * 1.2)
-            sound.play()
+            return sound.play()
+        return None
+
+    @require_audio
+    def stop_black_hole(
+        self, channel: Optional[pygame.mixer.Channel], fade_ms: int = 500
+    ) -> None:
+        """Silencia com fade o canal de um buraco negro específico.
+
+        Confere ``get_sound()`` antes de cortar: o mixer recicla canais, então
+        se este clipe já tivesse terminado o canal poderia estar tocando o som
+        de outra entidade — que não é nossa para interromper.
+        """
+        if channel is None:
+            return
+        sound = self._sounds.get("black_hole")
+        if sound is not None and channel.get_sound() is sound:
+            channel.fadeout(fade_ms)
 
     @require_audio
     def play_meteor_boss_crack(self):

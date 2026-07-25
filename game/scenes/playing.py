@@ -518,6 +518,12 @@ class PlayingScene(Scene):
         self.enemy_health_multiplier: float = settings["enemy_health_multiplier"]
 
         self.score: int = 0
+        # 'Pop' do número do score no HUD, no mesmo espírito do combo do
+        # Reverberador. Detectamos a variação uma vez por frame em vez de
+        # instrumentar cada `self.score +=` (são vários pontos: abates, spikes,
+        # boss); assim nenhum caminho novo de pontuação esquece de disparar.
+        self._score_pop_timer: float = 0.0
+        self._score_pop_last: int = 0
         self._sync_lives(self.lives)
         self.total_enemies_destroyed: int = 0
         self.cheat.reset()
@@ -1352,6 +1358,26 @@ class PlayingScene(Scene):
         if self.preparation_time_left <= 0:
             self._begin_playing_state()
 
+    SCORE_POP_DURATION = 0.25
+
+    @property
+    def score_pop(self) -> float:
+        """Intensidade do 'pop' do score, 1.0 no instante da pontuação → 0.0.
+
+        Fração do timer, não tempo absoluto: o renderer não precisa de relógio
+        e a animação acompanha pausa e slow-motion de graça (§3).
+        """
+        return self._score_pop_timer / self.SCORE_POP_DURATION
+
+    def _update_score_pop(self, dt: float) -> None:
+        if self.score > self._score_pop_last:
+            self._score_pop_timer = self.SCORE_POP_DURATION
+        elif self._score_pop_timer > 0.0:
+            self._score_pop_timer = max(0.0, self._score_pop_timer - dt)
+        # Também sincroniza quando o score CAI (reset de game over): só
+        # subida dispara o pop, queda apenas realinha a referência.
+        self._score_pop_last = self.score
+
     def _update_timers(self, dt: float) -> None:
         self.time_stop_timer = max(0.0, self.time_stop_timer - dt)
         self.freeze_active = self.time_stop_timer > 0.0
@@ -1370,6 +1396,8 @@ class PlayingScene(Scene):
             if self.score_multiplier_timer <= 0.0:
                 self.score_multiplier_timer = 0.0
                 self.score_multiplier_active = False
+
+        self._update_score_pop(dt)
 
         self._update_upgrades(dt)
 
@@ -2785,6 +2813,7 @@ class PlayingScene(Scene):
             state=self.state,
             preparation_time_left=self.preparation_time_left,
             score=self.score,
+            score_pop=self.score_pop,
             lives=self.lives,
             total_enemies_destroyed=self.total_enemies_destroyed,
             difficulty_preset=self.difficulty_preset,
