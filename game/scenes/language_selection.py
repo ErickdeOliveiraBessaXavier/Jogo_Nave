@@ -100,7 +100,7 @@ class LanguageSelectionScene(Scene):
 
         from .main_menu import MainMenuScene
 
-        self.app.states.switch(MainMenuScene(self.app))
+        self.app.go_to(lambda: MainMenuScene(self.app))
 
     def _select_under_cursor(self) -> bool:
         pos = pygame.mouse.get_pos()

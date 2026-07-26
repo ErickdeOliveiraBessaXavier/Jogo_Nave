@@ -16,7 +16,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-import pygame
 
 if TYPE_CHECKING:
     from ..core.difficulty import DifficultyPreset
@@ -69,11 +68,6 @@ class RenderFrame:
     # Screen shake
     shake_timer: float
     shake_intensity: int
-
-    # Fade inicial
-    start_fade_active: bool
-    start_fade_alpha: float
-    start_fade_overlay: pygame.Surface
 
     # Debug overlays
     show_fps: bool

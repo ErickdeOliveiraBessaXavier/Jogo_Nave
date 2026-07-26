@@ -206,8 +206,9 @@ class UpgradesSelectionScene(Scene):
         self._calculate_layout()
 
         self.floating_messages: List[FloatingMessage] = []
-        self.transitioning, self.transition_progress, self.fade_out = False, 0.0, False
-        self.transition_duration = 0.3
+        # Sem campos de transição: o fade de entrar/sair é do `SceneTransition`
+        # global. `entry_progress` continua aqui porque NÃO é transição de
+        # cena — é a animação escalonada dos elementos da própria tela.
         self.entry_progress, self.is_entering, self.entry_duration = 0.0, True, 0.4
 
     def _ensure_slots(self):
@@ -833,19 +834,6 @@ class UpgradesSelectionScene(Scene):
                 self.entry_progress = 1.0
             if self.entry_progress >= 1.0:
                 self.is_entering = False
-        if self.transitioning:
-            if anim:
-                self.transition_progress += dt / self.transition_duration
-            else:
-                self.transition_progress = 1.0
-            if self.transition_progress >= 1.0:
-                from .main_menu import MainMenuScene
-
-                # Persistência defensiva: garante save antes do switch — algumas
-                # implementações de Scene não chamam exit() na transição.
-                self.player_profile.save()
-                self.app.states.switch(MainMenuScene(self.app))
-                return
         for m in self.floating_messages[:]:
             m.update(dt)
             if m.is_dead():
@@ -908,17 +896,7 @@ class UpgradesSelectionScene(Scene):
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
         self.r.starfield.draw(surface)
-        alpha_mult = (
-            (
-                1.0 - self.transition_progress
-                if self.fade_out
-                else self.transition_progress
-            )
-            if self.transitioning
-            else self.entry_progress
-            if self.is_entering
-            else 1.0
-        )
+        alpha_mult = self.entry_progress if self.is_entering else 1.0
         alpha = int(255 * alpha_mult)
         title = self.title_font.render(t("upgrades.title"), True, CUSTOM_GOLD)
         surface.blit(
@@ -1808,7 +1786,13 @@ class UpgradesSelectionScene(Scene):
         surface.blit(tooltip_surf, (x, y))
 
     def _return_to_menu(self):
-        self.fade_out, self.transitioning, self.transition_progress = True, True, 0.0
+        # Persistência defensiva: garante o save antes de sair — a troca de
+        # cena acontece dentro do fade, e nem todo caminho chama `exit()`.
+        self.player_profile.save()
+        # Desempilha (esta cena foi empilhada sobre o menu). O
+        # `switch(MainMenuScene(...))` anterior deixava o menu antigo preso na
+        # pilha — ver a nota em `SettingsScene._on_back`.
+        self.app.go_back()
 
     def _draw_floating_messages(self, surface: pygame.Surface):
         for m in self.floating_messages:

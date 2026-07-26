@@ -363,6 +363,68 @@ deve segui-los; código existente que os viola é candidato a revisão.
 
 ---
 
+## §17 — Transição de cena
+
+**Navegação passa pelo router. Nenhuma cena desenha o próprio fade de troca.**
+
+- Trocar de tela é `app.go_to(fábrica)` / `app.go_back()` / `app.open_overlay(fábrica)`.
+  Chamar `states.switch/push/pop` direto (fora do `app.py`) pula o fade **e** o
+  bloqueio de input da fase de saída. Varrido por `test_conventions`.
+- O argumento é uma **fábrica**, não uma cena pronta: a construção roda no pico
+  do fade, então o custo de montar cenas caras (`PlayingScene`) fica escondido
+  atrás do preto em vez de travar um frame visível.
+- Dois estilos. `BLACK` (padrão) escurece → troca → clareia; é a troca de tela
+  de verdade. `DIM` troca na hora e não pinta véu: é para quando a cena que
+  entra **continua desenhando** a de baixo (pausa, game over, modal do P2) —
+  ali um preto no meio pisca em vez de suavizar. A cena DIM anima a própria
+  escurecida lendo `app.transition.enter_progress`, sem timer próprio.
+- **Por que a regra existe** (medido): antes havia **sete** implementações
+  paralelas de fade e quatro telas sem nenhuma. Duas consequências reais —
+  o overlay do Game Over ficou 100% invisível porque o buffer compartilhado de
+  fade carregava um `set_alpha(0)` residual de outra tela, e Settings/
+  Statistics/Upgrades vazavam uma `MainMenuScene` na pilha por visita (faziam
+  `switch` de uma cena que tinha sido `push`ada).
+- Distinga **transição de cena** de **animação interna da tela**. O crossfade
+  entre as views do `MainMenu` (menu ↔ mundos ↔ dificuldade) não empilha nem
+  troca cena: é intra-cena e não passa pelo router. O reveal de 2s do Game Over
+  é conteúdo da tela, não transição. Só navegação vai pelo `SceneTransition`.
+- Buffer de fade compartilhado (`get_fade_scratch`) devolve sempre com
+  `set_alpha(255)`. `set_alpha` persiste no objeto `Surface` e `fill()` escreve
+  o alpha *por pixel*, não o de superfície — quem esquecia disso herdava o
+  alpha do consumidor anterior.
+
+---
+
+## §18 — Preferências e volume
+
+**Uma instância de `UserPreferences` por arquivo. Mudar o número de volume não
+muda o som — reaplique aos objetos carregados.**
+
+- `app.preferences` é a instância viva; telas que editam preferências recebem
+  **essa**, não constroem a própria sobre o mesmo JSON. Duas cópias divergem em
+  memória: a tela salva a dela, o resto do jogo lê a antiga, e um
+  `app.preferences.save()` qualquer (hot-plug de controle) regrava o valor
+  velho por cima da escolha do jogador.
+- `pygame.mixer.Sound` guarda o volume **dentro do objeto**, gravado no
+  `load_sfx()` da carga. Escrever `sound_manager.sfx_volume` não alcança um som
+  já carregado — todo caminho que mexe em volume termina em
+  `_update_all_volumes()`. Vale para qualquer preferência aplicada a recursos
+  já materializados, não só áudio.
+- **Por que a regra existe** (medido): o `sound_manager` é singleton construído
+  no import, antes de as preferências existirem, então os SFX nascem com o
+  volume de fábrica. O `load_config` do boot só atualizava os campos → em todo
+  boot o jogo tocava os efeitos ~3× mais alto que o configurado (0,2969 medido
+  contra 0,1000 pedido) **enquanto a tela exibia o valor certo**. Só mexer no
+  slider consertava, até o próximo boot — por isso passou tanto tempo
+  despercebido.
+- Música já segue o padrão certo e é a referência: `music_target_volume()` é
+  recalculado antes de cada `play`, então não existe estado assado para
+  dessincronizar.
+- Teste o **estado real do mixer**, não o campo. O campo era justamente o que
+  estava correto enquanto o jogador ouvia outra coisa (`tests/test_audio_config.py`).
+
+---
+
 ## Resumo (checklist de PR)
 
 - [ ] Nenhum sistema lê privado (`_x`) de outro objeto
@@ -378,4 +440,6 @@ deve segui-los; código existente que os viola é candidato a revisão.
 - [ ] Cadência por `FireTimer`/`carry_interval`; nenhum `timer = INTERVALO`
 - [ ] Persistência com escrita atômica (`.tmp` + `os.replace`), nunca sobre o arquivo real
 - [ ] UI (fontes/caixas/offsets) escalada por `ui_scale`; validada fora de 720p
+- [ ] Navegação por `app.go_to`/`go_back`/`open_overlay`; nenhuma cena desenha fade de troca
+- [ ] Preferência aplicada a recurso já carregado é reaplicada (volume → `_update_all_volumes`)
 - [ ] `ruff check game tests` limpo e `pytest` verde antes do PR

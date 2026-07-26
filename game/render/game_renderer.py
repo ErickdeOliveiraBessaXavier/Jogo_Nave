@@ -267,11 +267,6 @@ class GameRenderer:
                 frame.level_popup_duration,
             )
 
-        # 12. Fade-in inicial
-        if frame.start_fade_active:
-            frame.start_fade_overlay.fill((0, 0, 0, int(frame.start_fade_alpha)))
-            surface.blit(frame.start_fade_overlay, (0, 0))
-
     def _draw_impact_flash(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """White frames: clarão branco curto que esmaece em 1-3 frames (impact frame)."""
         if frame.flash_timer <= 0.0 or frame.flash_duration <= 0.0 or frame.flash_alpha <= 0:

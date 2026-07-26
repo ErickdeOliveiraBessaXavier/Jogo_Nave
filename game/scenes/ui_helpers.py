@@ -1,6 +1,6 @@
 import math
 import random
-from typing import Any, Callable
+from typing import Callable
 
 import pygame
 
@@ -23,12 +23,24 @@ def get_fade_scratch(
     O chamador é responsável por limpar/preencher (`fill`) antes de desenhar, já
     que o conteúdo do frame anterior persiste. Reuso elimina a alocação+zeragem
     por frame — a fonte dos travamentos durante os fades.
+
+    **O alpha de superfície é resetado para 255 a cada entrega.** `set_alpha()`
+    persiste no objeto Surface, e o buffer é COMPARTILHADO entre todos os
+    chamadores — quem chamasse `set_alpha` deixava o valor gravado para o
+    próximo. Foi exatamente isso que apagou o overlay do Game Over: o último
+    frame de um fade-out no antigo helper de fade das cenas deixava
+    `set_alpha(0)` gravado, e o Game Over só fazia `fill()` — que escreve o
+    alpha por pixel, não o de superfície — então o overlay saía 100%
+    transparente. Resetar aqui fecha a classe inteira do bug, em vez de exigir
+    que cada consumidor lembre.
     """
     key = (size[0], size[1], per_pixel_alpha)
     surf = _FADE_SCRATCH.get(key)
     if surf is None:
         surf = pygame.Surface(size, pygame.SRCALPHA if per_pixel_alpha else 0)
         _FADE_SCRATCH[key] = surf
+    else:
+        surf.set_alpha(255)
     return surf
 
 
@@ -96,31 +108,6 @@ def draw_bordered_button(
             adjusted.centery - text_surf.get_height() / 2,
         ),
     )
-
-
-def render_with_fade(
-    surface: pygame.Surface,
-    view: Any,
-    starfield: Any,
-    transitioning: bool,
-    fade_out: bool,
-    transition_progress: float,
-    background: tuple[int, int, int],
-) -> None:
-    surface.fill(background)
-    starfield.draw(surface)
-
-    if transitioning:
-        alpha_mult = (1.0 - transition_progress) if fade_out else transition_progress
-        # Scratch reutilizado (não aloca por frame). Limpa antes de re-renderizar
-        # a view — o buffer carrega o conteúdo do frame anterior.
-        temp = get_fade_scratch(surface.get_size())
-        temp.fill((0, 0, 0, 0))
-        view.render(temp)
-        temp.set_alpha(int(255 * alpha_mult))
-        surface.blit(temp, (0, 0))
-    else:
-        view.render(surface)
 
 
 def layout_flow_buttons(
@@ -205,28 +192,7 @@ def wrap_text(font: pygame.font.Font, text: str, max_width: int) -> list[str]:
     return lines
 
 
-class FadeTransitionMixin:
-    """Mixin para propriedades e métodos de transição fade."""
-
-    transitioning: bool
-    transition_progress: float
-    transition_duration: float
-    fade_out: bool
-
-    def _init_transition(self, duration: float = 0.3) -> None:
-        from ..core.visual_quality import visual_quality
-
-        self.transitioning = False
-        self.transition_progress = 0.0
-        # Animações off: duração ~instantânea (transição completa em 1 frame,
-        # sem o fade de tela cheia por vários frames).
-        self.transition_duration = (
-            duration if visual_quality.ui_animations else 0.0001
-        )
-        self.fade_out = False
-
-    def _on_back(self) -> None:
-        """Inicia a transição de fade out."""
-        self.fade_out = True
-        self.transitioning = True
-        self.transition_progress = 0.0
+# `FadeTransitionMixin` e `render_with_fade` viviam aqui. Foram removidos: o
+# fade de troca de tela é do `core/scene_transition.py`, global e único. Uma
+# cena que precise navegar chama `app.go_to` / `app.go_back` — e não desenha
+# transição nenhuma.

@@ -33,6 +33,7 @@ from ..core.ship_types import (
 )
 from ..core.sound import sound_manager
 from ..core.state import Scene
+from .ui_helpers import get_fade_scratch
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -164,11 +165,15 @@ class P2ShipSelectScene(Scene):
             logger.exception("Falha ao desenhar cena por baixo do modal P2")
             surface.fill((0, 0, 0))
 
-        # Overlay escuro
-        overlay = pygame.Surface(
-            (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
-        )
-        overlay.fill((0, 0, 0, 210))
+        # Overlay escuro, animado pelo relógio do `SceneTransition` (DIM, como
+        # a pausa): sobe ao abrir, cai ao fechar. Sem ler `overlay_progress` o
+        # modal ficaria parado durante a saída e sumiria de um frame para o
+        # outro no fim dela — pior que o corte seco que havia antes.
+        # Scratch compartilhado: nada de SRCALPHA de tela cheia por frame com a
+        # partida do P1 rodando por baixo.
+        enter = self.app.transition.overlay_progress
+        overlay = get_fade_scratch((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
+        overlay.fill((0, 0, 0, int(210 * enter)))
         surface.blit(overlay, (0, 0))
 
         # Título
@@ -349,7 +354,8 @@ class P2ShipSelectScene(Scene):
         chosen = self.profiles[self.index]
         logger.info("P2 escolheu nave: %s", chosen.id)
         sound_manager.play_sound("button_click")
-        self.app.states.pop()
+        # Overlay (DIM): fecha sem véu preto, a partida segue viva por baixo.
+        self.app.close_overlay()
         self.on_confirm(chosen)
 
     def _cancel(self) -> None:
@@ -357,7 +363,7 @@ class P2ShipSelectScene(Scene):
             return
         self._closed = True
         logger.info("P2 cancelou seleção de nave")
-        self.app.states.pop()
+        self.app.close_overlay()
 
     def get_focusable_rects(self) -> List[pygame.Rect]:
         return []

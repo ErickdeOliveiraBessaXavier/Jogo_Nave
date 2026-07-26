@@ -101,3 +101,71 @@ def test_handlers_de_evento_tem_cleanup_pareado():
             f"{f.relative_to(_ROOT)}: {n_on} bus.on() mas só {n_off} bus.off() "
             "— handler sem remoção é memory leak (§2)."
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Transição de cena — navegação passa pelo router, não pelo StateManager cru
+# ─────────────────────────────────────────────────────────────────────────────
+
+# `app.py` é o dono do router: é lá que `go_to`/`go_back` de fato chamam o
+# StateManager, e é lá que ficam os dois pushes do boot (antes de existir
+# qualquer cena para desaparecer com fade).
+_NAVEGACAO_DIRETA_PERMITIDA = {"app.py"}
+
+
+def test_navegacao_de_cena_passa_pelo_router():
+    """`states.switch/push/pop` fora do `app.py` volta a cortar a tela seco.
+
+    O fade de troca de tela é único e vive no `SceneTransition`; quem chama o
+    `StateManager` direto pula o fade E o bloqueio de input da fase de saída.
+    Este teste existe porque a alternativa — cada cena lembrar de fazer o fade —
+    já falhou uma vez: sete implementações diferentes e quatro telas sem
+    nenhuma. Use `app.go_to` / `app.go_back` / `app.open_overlay`.
+    """
+    padrao = re.compile(r"\bstates\.(switch|push|pop)\s*\(")
+    violacoes = []
+    for f in _py_files("scenes", "systems", "core", "render", "entities"):
+        if f.name in _NAVEGACAO_DIRETA_PERMITIDA:
+            continue
+        for i, linha in enumerate(f.read_text(encoding="utf-8").split("\n")):
+            if linha.strip().startswith("#"):
+                continue
+            m = padrao.search(linha)
+            if m:
+                violacoes.append(
+                    f"{f.relative_to(_ROOT)}:{i + 1}  states.{m.group(1)}("
+                )
+    assert not violacoes, (
+        "navegue por app.go_to/go_back/open_overlay — o StateManager cru pula "
+        "o fade global:\n" + "\n".join(violacoes)
+    )
+
+
+def test_sem_implementacoes_paralelas_de_fade_de_cena():
+    """Impede a volta do `FadeTransitionMixin` / `render_with_fade` e dos campos
+    `transitioning`/`fade_out` copiados de cena em cena.
+
+    `main_menu.py` é exceção: o `transitioning` dele é o crossfade ENTRE VIEWS
+    da própria cena (menu ↔ mundos ↔ dificuldade), que não empilha nem troca
+    cena — não é navegação, então não passa pelo router.
+    """
+    proibidos = ("FadeTransitionMixin", "render_with_fade", "start_fade_active")
+    # `main_menu.py`: crossfade entre views (ver docstring). `ui_helpers.py` e
+    # `scene_transition.py` citam os nomes removidos em comentário-lápide, para
+    # quem procurar por eles achar o substituto — só código conta, e as linhas
+    # de comentário são puladas abaixo.
+    excecoes = {"main_menu.py", "scene_transition.py"}
+    violacoes = []
+    for f in _py_files("scenes", "render", "core"):
+        if f.name in excecoes:
+            continue
+        for i, linha in enumerate(f.read_text(encoding="utf-8").split("\n")):
+            despido = linha.strip()
+            if despido.startswith("#") or despido.startswith("`"):
+                continue
+            for nome in proibidos:
+                if nome in linha:
+                    violacoes.append(f"{f.relative_to(_ROOT)}:{i + 1}: {nome}")
+    assert not violacoes, (
+        "fade de cena paralelo ao SceneTransition:\n" + "\n".join(violacoes)
+    )

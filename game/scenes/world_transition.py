@@ -61,15 +61,15 @@ class WorldTransitionScene(Scene):
         """Atualiza a transição."""
         self.timer += dt
         if self.timer >= self.duration:
-            self.app.states.pop()  # Remove transição
+            self.app.go_back()  # Remove transição
 
     def handle_event(self, event: pygame.event.Event) -> None:
         """Permite pular a transição."""
         if event.type == pygame.KEYDOWN:
             if event.key in [pygame.K_RETURN, pygame.K_SPACE, pygame.K_ESCAPE]:
-                self.app.states.pop()  # Pular transição
+                self.app.go_back()  # Pular transição
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            self.app.states.pop()  # Pular com clique
+            self.app.go_back()  # Pular com clique
 
     def render(self, surface: pygame.Surface) -> None:
         """Renderiza a transição."""

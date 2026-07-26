@@ -12,11 +12,9 @@ from ..core.preferences import UserPreferences
 from ..core.sound import sound_manager
 from ..core.state import Scene
 from .ui_helpers import (
-    FadeTransitionMixin,
     get_fade_scratch,
     wrap_text,
     draw_bordered_button,
-    render_with_fade,
 )
 
 if TYPE_CHECKING:
@@ -46,8 +44,17 @@ class SettingsView:
         self._app = app
         self._runtime_scene = runtime_scene
 
-        # Agora usamos ambos: preferências para sistema e profile para progressão (se necessário)
-        self.preferences = UserPreferences(get_preferences_path())
+        # As preferências do app são as MESMAS que esta tela edita — não uma
+        # cópia. Construir um `UserPreferences` próprio aqui criava dois
+        # objetos sobre o mesmo arquivo: a tela mexia no dela (e salvava), o
+        # resto do jogo continuava lendo o do app com o valor antigo, e
+        # qualquer `app.preferences.save()` posterior (ex.: hot-plug de
+        # controle) regravava o valor velho por cima do escolhido.
+        self.preferences = (
+            app.preferences
+            if app is not None and getattr(app, "preferences", None) is not None
+            else UserPreferences(get_preferences_path())
+        )
         self.player_profile = PlayerProfile(get_profile_path())
 
         # Escala de UI (convenções do projeto §12). Esta View não é uma Scene, mantém o
@@ -1461,8 +1468,12 @@ class SettingsView:
         )
 
 
-class SettingsScene(Scene, FadeTransitionMixin):
-    """Cena de configurações."""
+class SettingsScene(Scene):
+    """Cena de configurações.
+
+    O fade de entrada/saída é do `SceneTransition` (global) — esta cena não
+    desenha transição nenhuma.
+    """
 
     def __init__(
         self,
@@ -1479,7 +1490,18 @@ class SettingsScene(Scene, FadeTransitionMixin):
             app=app,
             runtime_scene=runtime_scene,
         )
-        self._init_transition(duration=0.3)
+
+    def _on_back(self) -> None:
+        """Volta desempilhando — tanto vinda do menu quanto da pausa, a cena de
+        origem continua viva embaixo.
+
+        Antes fazia `switch(MainMenuScene(...))` quando vinha do menu: como
+        `SettingsScene` foi EMPILHADA sobre o menu, o switch trocava as
+        configurações por um menu NOVO e deixava o antigo preso embaixo. A
+        pilha crescia [Menu, Menu, Menu…] a cada visita, e o menu recriado
+        perdia a `view_stack` (voltava sempre para a raiz).
+        """
+        self.app.go_back()
 
     def enter(self):
         pygame.mouse.set_visible(True)
@@ -1543,28 +1565,9 @@ class SettingsScene(Scene, FadeTransitionMixin):
 
     def update(self, dt: float):
         self.r.starfield.update(dt)
-
-        if self.transitioning:
-            self.transition_progress += dt / self.transition_duration
-
-            if self.transition_progress >= 1.0:
-                if self.return_to_game:
-                    self.app.states.pop()
-                else:
-                    from .main_menu import MainMenuScene
-
-                    self.app.states.switch(MainMenuScene(self.app))
-                return
-
         self.view.update(dt)
 
     def render(self, surface: pygame.Surface):
-        render_with_fade(
-            surface,
-            self.view,
-            self.r.starfield,
-            self.transitioning,
-            self.fade_out,
-            self.transition_progress,
-            BLACK,
-        )
+        surface.fill(BLACK)
+        self.r.starfield.draw(surface)
+        self.view.render(surface)

@@ -577,6 +577,12 @@ class SoundManager:
         """
         return self._sounds.get(sound_name)
 
+    def loaded_sound_names(self) -> List[str]:
+        """Nomes dos SFX carregados. Par público de `get_sound` (§1), para quem
+        precisa varrer todos — os testes de volume conferem o estado real de
+        cada `Sound`, e ler `_sounds` de fora borraria a fronteira."""
+        return list(self._sounds.keys())
+
     def set_master_volume(self, volume: float):
         """Define o volume mestre (0.0 a 1.0)."""
         self.master_volume = max(0.0, min(1.0, volume))
@@ -601,10 +607,22 @@ class SoundManager:
 
     @require_audio
     def _update_all_volumes(self):
-        """Atualiza o volume de todos os sons carregados."""
+        """Reaplica os volumes atuais a todos os sons JÁ carregados.
+
+        Ponto único de "os números mudaram, sincronize os objetos" — chamado
+        pelos setters e por `load_config`. Sem ele os campos e o que o jogador
+        ouve andam separados (ver `load_config`).
+
+        Os tiros ficam de fora do volume geral de SFX: eles têm escala própria
+        (`shot_volume_base`, mais baixa por serem disparados sem parar), que é a
+        mesma que `load_sfx` grava na carga. Tratá-los junto zeraria essa
+        distinção aqui e ela só voltaria no próximo `play_shot`.
+        """
         final_volume = self.sfx_volume * self.master_volume
+        shot_volume = self.shot_volume_base * self.master_volume
+        shots = set(id(s) for s in self._sound_groups.get("shots", ()))
         for sound in self._sounds.values():
-            sound.set_volume(final_volume)
+            sound.set_volume(shot_volume if id(sound) in shots else final_volume)
 
     @require_audio
     def stop_all(self):
@@ -662,7 +680,23 @@ class SoundManager:
 
     @require_audio
     def load_config(self, music_vol: float, sfx_volume: float, shot_volume: float):
+        """Aplica os volumes das preferências — números E sons já carregados.
+
+        O `_update_all_volumes()` no fim é obrigatório e era o que faltava. Os
+        `Sound` do pygame guardam o volume DENTRO do objeto, gravado por
+        `load_sfx()` no momento da carga; mudar só os campos
+        `self.sfx_volume`/`master_volume` não alcança um som já carregado.
+
+        E a carga sempre acontece ANTES: o `sound_manager` é um singleton
+        construído no import de `game.core.sound`, quando as preferências do
+        jogador ainda nem foram lidas — então os SFX nascem com o volume PADRÃO
+        embutido. Sem reaplicar aqui, todo boot tocava os efeitos no volume de
+        fábrica enquanto a tela de configurações exibia, corretamente, o valor
+        salvo. Só mexer no slider (que chama `set_sfx_volume` →
+        `_update_all_volumes`) consertava, até o próximo boot.
+        """
         self.music_manager.load_config(music_vol, sfx_volume, shot_volume)
+        self._update_all_volumes()
 
     @require_audio
     def fade_out_music(self, duration: float | None = None):

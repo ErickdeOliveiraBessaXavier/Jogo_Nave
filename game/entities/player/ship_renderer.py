@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from ...core.blink import SHIP_INVULN_BLINK
+
 if TYPE_CHECKING:
     from .ship import Ship
 
@@ -61,7 +63,12 @@ class ShipRenderer:
         if ship.charge_shot_active:
             self._draw_charge_indicator(surface)
 
-        if ship.invuln > 0 and int(ship.invuln / 100) % 2 == 0:
+        # Piscada dos i-frames: lenta no começo, acelerando perto do fim para
+        # avisar que a proteção está acabando sem o jogador olhar a HUD. A
+        # curva é do `SHIP_INVULN_BLINK` (§ parametrizado, reutilizável); aqui
+        # só se lê o tempo restante — nada de fase acumulada nesta classe, que
+        # é render puro (§3).
+        if not SHIP_INVULN_BLINK.visible(ship.invuln / 1000.0, ship.invuln_total / 1000.0):
             return
 
         # Desenhar partículas de thruster (atrás da nave)

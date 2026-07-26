@@ -59,8 +59,9 @@ class ShipMovement:
         ship.dash_dir = direction
         ship.dash_timer = ship.dash_duration
         ship.dash_cooldown_left = ship.profile.dash_cooldown
-        # I-frames: invuln expressa em ms.
-        ship.invuln = max(ship.invuln, int(ship.dash_duration * 1000))
+        # I-frames: invuln expressa em ms. O `max` virou o próprio contrato de
+        # `grant_invulnerability` (mantém o período maior em curso).
+        ship.grant_invulnerability(ship.dash_duration * 1000)
         return True
 
     def update_dash(self, dt: float) -> None:

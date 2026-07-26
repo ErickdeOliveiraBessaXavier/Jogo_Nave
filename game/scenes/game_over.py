@@ -635,13 +635,16 @@ class GameOverScene(Scene):
 
         sound_manager.duck_music(False)  # desfaz o ducking do Game Over
         sound_manager.stop_all_sfx()
-        self.app.states.switch(
-            PlayingScene(
+        level_manager = self.playing_scene.level_manager
+        preset = self.playing_scene.difficulty_preset
+        p2 = self._p2_profile_to_carry()
+        self.app.go_to(
+            lambda: PlayingScene(
                 self.app,
-                self.playing_scene.level_manager,
-                self.playing_scene.difficulty_preset,
+                level_manager,
+                preset,
                 starting_level=self.restart_level,
-                p2_profile=self._p2_profile_to_carry(),
+                p2_profile=p2,
             )
         )
 
@@ -677,7 +680,7 @@ class GameOverScene(Scene):
         sound_manager.music_state_manager.transition_to(MusicState.MENU, force=True)
         from .main_menu import MainMenuScene
 
-        self.app.states.switch(MainMenuScene(self.app))
+        self.app.go_to(lambda: MainMenuScene(self.app))
 
     def render(self, surface: pygame.Surface):
         dt = getattr(self.playing_scene, "last_dt", 1.0 / Config.FPS)
@@ -714,6 +717,12 @@ class GameOverScene(Scene):
             if anim
             else 1.0
         )
+        # Este dim NÃO é a transição de navegação (essa é do `SceneTransition`,
+        # e a entrada aqui vem em estilo DIM justamente para o mundo não piscar
+        # preto na morte). É conteúdo da tela: o reveal lento de 2s que escurece
+        # a partida e traz o texto. Por isso mantém o timer próprio, mais longo
+        # que o fade de troca de tela.
+        #
         # Overlay reutilizado (o `fill` cobre o conteúdo do frame anterior) — não
         # aloca uma SRCALPHA de tela cheia por frame durante os segundos de fade.
         overlay = get_fade_scratch((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))

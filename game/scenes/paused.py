@@ -8,6 +8,7 @@ from ..core.config import config as Config
 from ..core.i18n import t
 from ..core.sound import sound_manager
 from ..core.state import Scene
+from .ui_helpers import get_fade_scratch
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -75,18 +76,20 @@ class PausedScene(Scene):
         ]
 
     def _activate_continue(self) -> None:
-        self.app.states.pop()
+        # Fecha como abriu: DIM, sem véu preto — a partida está viva por baixo.
+        self.app.close_overlay()
 
     def _activate_settings(self) -> None:
         from .settings import SettingsScene
 
         self.go_to_settings = True
-        self.app.states.push(
-            SettingsScene(
+        self.app.go_to(
+            lambda: SettingsScene(
                 self.app,
                 return_to_game=True,
                 runtime_scene=self.previous_scene,
-            )
+            ),
+            push=True,
         )
 
     def _activate_menu(self) -> None:
@@ -98,14 +101,14 @@ class PausedScene(Scene):
         sound_manager.music_state_manager.transition_to(MusicState.MENU, force=True)
         from .main_menu import MainMenuScene
 
-        self.app.states.switch(MainMenuScene(self.app))
+        self.app.go_to(lambda: MainMenuScene(self.app))
 
     def update(self, dt: float):
         pass
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_p:
-            self.app.states.pop()
+            self._activate_continue()
             return
 
         if event.type == pygame.JOYBUTTONDOWN:
@@ -125,7 +128,7 @@ class PausedScene(Scene):
                     self._activate_continue()
                 return
             if event.button == XboxButton.B:
-                self.app.states.pop()
+                self._activate_continue()
                 return
 
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -168,14 +171,25 @@ class PausedScene(Scene):
             else:
                 self.previous_scene.render(surface)
 
-        overlay = pygame.Surface(
-            (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
-        )
-        overlay.fill((0, 0, 0, 160))
+        # Escurecida e UI sobem e descem juntas com o relógio do
+        # `SceneTransition` (estilo DIM — ver `GameApp.open_overlay`). O mesmo
+        # valor serve às duas metades: sobe 0→1 ao abrir, cai 1→0 ao retomar, e
+        # o `pop` só acontece quando ele chega a zero. Ler o relógio central em
+        # vez de manter um timer aqui é o que mantém a pausa na mesma cadência
+        # das outras telas sem duplicar a lógica.
+        enter = self.app.transition.overlay_progress
+
+        # Scratch compartilhado: uma SRCALPHA de tela cheia por frame (~3,7 MB
+        # em 720p) era churn de GC puro, com a partida rodando por baixo.
+        overlay = get_fade_scratch((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
+        overlay.fill((0, 0, 0, int(160 * enter)))
         surface.blit(overlay, (0, 0))
+
+        ui_alpha = int(255 * enter)
 
         # Título
         title = self.title_font.render(t("pause.title"), True, CUSTOM_GOLD)
+        title.set_alpha(ui_alpha)
         title_rect = title.get_rect(
             center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 4)
         )
@@ -188,6 +202,7 @@ class PausedScene(Scene):
             t("common.continue"),
             CUSTOM_GOLD,
             self.continue_button_hovered,
+            ui_alpha,
         )
 
         self._draw_button(
@@ -196,6 +211,7 @@ class PausedScene(Scene):
             t("common.settings"),
             CUSTOM_PURPLE,
             self.settings_button_hovered,
+            ui_alpha,
         )
 
         self._draw_button(
@@ -204,10 +220,12 @@ class PausedScene(Scene):
             t("common.menu"),
             CUSTOM_PURPLE,
             self.menu_button_hovered,
+            ui_alpha,
         )
 
         # Hint
         hint_text = self.hint_font.render(t("pause.hint"), True, WHITE)
+        hint_text.set_alpha(ui_alpha)
         hint_rect = hint_text.get_rect(
             center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT - self._s(40))
         )
@@ -220,6 +238,7 @@ class PausedScene(Scene):
         text: str,
         color: tuple[int, int, int],
         is_hovered: bool,
+        alpha: int = 255,
     ):
         """Desenha um botão com estilo moderno (apenas borda, sem fundo)."""
         # Inverter cores ao passar o mouse
@@ -228,10 +247,24 @@ class PausedScene(Scene):
         else:
             border_color = CUSTOM_GOLD if is_hovered else CUSTOM_PURPLE
 
-        # Apenas borda, sem fundo
-        pygame.draw.rect(surface, border_color, rect, 2, border_radius=self._s(10))
+        # Apenas borda, sem fundo. `pygame.draw` não aceita alpha na cor ao
+        # desenhar direto numa surface opaca, então a borda vai num buffer
+        # SRCALPHA do tamanho do botão (pequeno) quando há fade em curso.
+        if alpha >= 255:
+            pygame.draw.rect(surface, border_color, rect, 2, border_radius=self._s(10))
+        else:
+            border = pygame.Surface(rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(
+                border,
+                (*border_color, alpha),
+                border.get_rect(),
+                2,
+                border_radius=self._s(10),
+            )
+            surface.blit(border, rect.topleft)
 
         # Texto centralizado
         text_surf = self.button_font.render(text, True, WHITE)
+        text_surf.set_alpha(alpha)
         text_rect = text_surf.get_rect(center=rect.center)
         surface.blit(text_surf, text_rect)

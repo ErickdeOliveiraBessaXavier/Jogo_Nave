@@ -141,6 +141,11 @@ class ShipPowerups:
         ship = self.ship
         if ship.invuln > 0:
             ship.invuln = max(0, ship.invuln - dt * 1000)
+            if ship.invuln == 0:
+                # Zera a referência junto: um `invuln_total` órfão faria a
+                # próxima concessão herdar a duração da anterior por um frame,
+                # e a piscada começaria na fase errada.
+                ship.invuln_total = 0.0
 
         ship.double_shot_timer = max(0.0, ship.double_shot_timer - dt)
         ship.speed_boost_timer = max(0.0, ship.speed_boost_timer - dt)

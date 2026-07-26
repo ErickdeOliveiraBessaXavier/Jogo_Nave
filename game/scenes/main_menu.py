@@ -366,7 +366,6 @@ class MainMenuScene(Scene):
     """
 
     TRANSITION_DURATION = 0.35
-    GAME_START_BLACK_HOLD = 0.2
 
     def __init__(self, app: "GameApp"):
         super().__init__(app)
@@ -389,13 +388,11 @@ class MainMenuScene(Scene):
         self.from_view: Optional[MenuView] = None
         self.to_view: Optional[MenuView] = None
         self.transition_popping = False
-        self.transition_game_start = False
 
-        # Início de jogo (fade-to-black + hold)
+        # Dificuldade escolhida, consumida por `_start_game_with_preset`. O
+        # fade-to-black + hold que existia aqui saiu: é o `SceneTransition`
+        # global que escurece, troca e clareia (uma implementação só).
         self.pending_difficulty: Optional[DifficultyPreset] = None
-        self.game_start_black_hold_active = False
-        self.game_start_black_hold_timer = 0.0
-        self.force_blackout_frame = False
 
         # Surface reutilizada para o crossfade / overlay (sem alocar por frame)
         self._scratch = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -458,13 +455,12 @@ class MainMenuScene(Scene):
             return {v for v in (self.from_view, self.to_view) if v is not None}
         return {self.current_view}
 
-    def _begin_transition(self, to_view: Optional[MenuView], popping: bool = False, game_start: bool = False):
+    def _begin_transition(self, to_view: Optional[MenuView], popping: bool = False):
         if self.transitioning:
             return
         self.from_view = self.current_view
         self.to_view = to_view
         self.transition_popping = popping
-        self.transition_game_start = game_start
         self.transitioning = True
         self.transition_progress = 0.0
         # Preparar a view de destino para já aparecer correta durante o fade-in.
@@ -484,12 +480,6 @@ class MainMenuScene(Scene):
     def _finish_transition(self):
         self.transitioning = False
         self.transition_progress = 0.0
-        if self.transition_game_start:
-            self.transition_game_start = False
-            self.game_start_black_hold_active = True
-            self.game_start_black_hold_timer = self.GAME_START_BLACK_HOLD
-            self.from_view = self.to_view = None
-            return
         if self.transition_popping:
             if len(self.view_stack) > 1:
                 self.view_stack.pop()
@@ -549,18 +539,22 @@ class MainMenuScene(Scene):
         self._pop_view()
 
     def _on_difficulty_selected(self, preset: DifficultyPreset):
-        self.pending_difficulty = preset
-        self.game_start_black_hold_active = False
-        self.game_start_black_hold_timer = 0.0
-        self.force_blackout_frame = False
-        self._begin_transition(to_view=None, game_start=True)
+        # Vai direto: o escurecimento é do fade global agora, não de um
+        # crossfade de view seguido de um hold no preto.
+        self._start_game_with_preset(preset)
 
     def _start_game_with_preset(self, preset: DifficultyPreset) -> None:
+        """Sai do menu para a partida.
+
+        O fade-to-black daqui foi removido: quem escurece, troca e clareia é o
+        `SceneTransition` global. A `PlayingScene` (ou o modal de controles)
+        **substitui** o menu — antes havia um `pop()` seguido de `push()`, que
+        é a mesma coisa que `switch` só que em dois passos e com um frame de
+        pilha vazia no meio.
+        """
         from ..scenes.controls_modal import ControlsModalScene
-        self.force_blackout_frame = True
+
         self.pending_difficulty = None
-        self.game_start_black_hold_active = False
-        self.game_start_black_hold_timer = 0.0
         self.app.selected_difficulty = preset
         selected_world_id = self.app.player_profile.selected_world_id
         world_config = get_world_for_level_by_id(selected_world_id)
@@ -569,34 +563,34 @@ class MainMenuScene(Scene):
         if self.app.player_profile.current_session:
             self.app.player_profile.current_session.score = 0
 
-        def _push_playing_scene():
+        def _make_playing_scene():
             from ..scenes.playing import PlayingScene
-            self.app.states.push(
-                PlayingScene(
-                    self.app, self.app.level_manager,
-                    difficulty_preset=preset, starting_level=starting_level,
-                    start_fade_duration=0.8,
-                )
+            return PlayingScene(
+                self.app, self.app.level_manager,
+                difficulty_preset=preset, starting_level=starting_level,
             )
 
         if self.app.preferences.show_controls_modal:
-            self.app.states.pop()
-            self.app.states.push(ControlsModalScene(self.app, on_finish=_push_playing_scene))
+            self.app.go_to(
+                lambda: ControlsModalScene(
+                    self.app,
+                    on_finish=lambda: self.app.go_to(_make_playing_scene),
+                )
+            )
         else:
-            self.app.states.pop()
-            _push_playing_scene()
+            self.app.go_to(_make_playing_scene)
 
     def _open_statistics(self) -> None:
         from ..scenes.statistics import StatisticsScene
-        self.app.states.push(StatisticsScene(self.app))
+        self.app.go_to(lambda: StatisticsScene(self.app), push=True)
 
     def _open_upgrades(self) -> None:
         from ..scenes.upgrades_selection import UpgradesSelectionScene
-        self.app.states.push(UpgradesSelectionScene(self.app))
+        self.app.go_to(lambda: UpgradesSelectionScene(self.app), push=True)
 
     def _open_settings(self) -> None:
         from ..scenes.settings import SettingsScene
-        self.app.states.push(SettingsScene(self.app))
+        self.app.go_to(lambda: SettingsScene(self.app), push=True)
 
     # ------------------------------------------------------------------ #
     # Construção de UI
@@ -690,9 +684,6 @@ class MainMenuScene(Scene):
         self.transitioning = False
         self.transition_progress = 0.0
         self.from_view = self.to_view = None
-        self.transition_game_start = False
-        self.game_start_black_hold_active = False
-        self.force_blackout_frame = False
 
         if reset_background:
             self.auto_play.reset()
@@ -829,14 +820,6 @@ class MainMenuScene(Scene):
         if MenuView.MAIN in active:
             self.auto_play.update(dt)
 
-        # Black hold antes de iniciar o jogo
-        if self.game_start_black_hold_active:
-            self.game_start_black_hold_timer -= dt
-            if self.game_start_black_hold_timer <= 0.0:
-                if self.pending_difficulty is not None:
-                    self._start_game_with_preset(self.pending_difficulty)
-                return
-
         if self.transitioning:
             from ..core.visual_quality import visual_quality
 
@@ -884,19 +867,13 @@ class MainMenuScene(Scene):
         self.r.starfield.draw(surface)
 
         if self.transitioning:
+            # Crossfade ENTRE VIEWS da própria cena (menu ↔ mundos ↔
+            # dificuldade). Não é transição de cena: nada é empilhado nem
+            # trocado, então não passa pelo `SceneTransition`.
             self._draw_view(self.from_view, surface, 1.0 - self.transition_progress)
-            if not self.transition_game_start:
-                self._draw_view(self.to_view, surface, self.transition_progress)
+            self._draw_view(self.to_view, surface, self.transition_progress)
         else:
             self._draw_view(self.current_view, surface, 1.0)
-
-        # Início de jogo: tela escurece progressivamente e segura no preto.
-        if self.transition_game_start and self.transitioning:
-            self._scratch.set_alpha(255)
-            self._scratch.fill((0, 0, 0, int(255 * self.transition_progress)))
-            surface.blit(self._scratch, (0, 0))
-        elif self.game_start_black_hold_active or self.force_blackout_frame:
-            surface.fill(BLACK)
 
     def _draw_view(self, view: Optional[MenuView], surface: pygame.Surface, alpha_mult: float):
         if view is None or alpha_mult <= 0.0:

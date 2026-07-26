@@ -65,7 +65,11 @@ class GameplayInputHandler:
         if event.key == pygame.K_p:
             from ..scenes.paused import PausedScene
 
-            scene.app.states.push(PausedScene(scene.app, previous_scene=scene))
+            # Overlay: a partida continua desenhada por baixo, então a pausa
+            # entra com escurecida animada em vez de véu preto.
+            scene.app.open_overlay(
+                lambda: PausedScene(scene.app, previous_scene=scene)
+            )
         elif event.key == pygame.K_F3:
             scene.show_fps = not scene.show_fps
             logger.info("Debug FPS: %s", "ATIVADO" if scene.show_fps else "DESATIVADO")
@@ -199,7 +203,11 @@ class GameplayInputHandler:
             scene.cancel_upgrade_select()
             from ..scenes.paused import PausedScene
 
-            scene.app.states.push(PausedScene(scene.app, previous_scene=scene))
+            # Overlay: a partida continua desenhada por baixo, então a pausa
+            # entra com escurecida animada em vez de véu preto.
+            scene.app.open_overlay(
+                lambda: PausedScene(scene.app, previous_scene=scene)
+            )
             return
 
         slot = self._slot_for_instance_id(instance_id)

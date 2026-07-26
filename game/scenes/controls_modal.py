@@ -233,7 +233,9 @@ class ControlsModalScene(Scene):
         self.app.preferences.controls_modal_seen = True
         self.app.preferences.save()
 
-        self.app.states.pop()  # Remove a si mesma do stack
+        # Não se desempilha: `on_finish` chama `go_to`, que SUBSTITUI este modal
+        # pela cena seguinte dentro do fade. Um `pop()` aqui esvaziaria a pilha
+        # por um frame e ainda deixaria o modal sumir antes do fade começar.
         self.on_finish()
 
     def update(self, dt: float):

@@ -18,10 +18,8 @@ from ..core.meta_progression_service import ProfileStatsFormatter
 from ..core.paths import get_profile_path
 from ..core.state import Scene
 from .ui_helpers import (
-    FadeTransitionMixin,
     wrap_text,
     draw_bordered_button,
-    render_with_fade,
 )
 
 if TYPE_CHECKING:
@@ -1039,16 +1037,15 @@ class StatisticsView:
             self.profile.highest_level_reached = 1
             self.profile.save()
 
-        # Resetar preferências para os valores padrão
-        from ..core.paths import get_preferences_path
-        from ..core.preferences import UserPreferences
-
-        prefs = UserPreferences(get_preferences_path())
-        prefs.reset()
-
-        # Sincronizar o estado vivo do app (volumes, input) sem precisar reiniciar
+        # Resetar preferências para os valores padrão.
+        #
+        # Reseta o objeto VIVO do app, não uma instância nova sobre o mesmo
+        # arquivo: duas cópias do mesmo JSON é o que dessincronizava o volume
+        # (ver a nota em `SettingsView.__init__`). Com o app resetado e salvo,
+        # disco e memória contam a mesma história.
         if self._app is not None:
             self._app.preferences.reset()
+            self._app.preferences.save()
             from ..core.sound import sound_manager
 
             sound_manager.load_config(
@@ -1062,14 +1059,23 @@ class StatisticsView:
         self.close_confirmation()
 
 
-class StatisticsScene(Scene, FadeTransitionMixin):
-    """Cena de estatísticas do jogador (mantida para compatibilidade)."""
+class StatisticsScene(Scene):
+    """Cena de estatísticas do jogador.
+
+    O fade de entrada/saída é do `SceneTransition` (global) — esta cena não
+    desenha transição nenhuma.
+    """
 
     def __init__(self, game_app: "GameApp"):
         super().__init__(game_app)
         self.r = game_app.renderer  # Usar renderer compartilhado
         self.view = StatisticsView(on_back=self._on_back, renderer=self.r, app=game_app)
-        self._init_transition(duration=0.3)
+
+    def _on_back(self) -> None:
+        """Volta desempilhando. Ver a nota em `SettingsScene._on_back`: o
+        `switch(MainMenuScene(...))` que estava aqui vazava um menu na pilha a
+        cada visita, porque esta cena é empilhada sobre o menu."""
+        self.app.go_back()
 
     def enter(self):
         super().enter()
@@ -1082,18 +1088,6 @@ class StatisticsScene(Scene, FadeTransitionMixin):
 
     def update(self, dt: float):
         self.r.starfield.update(dt)
-
-        # Atualizar transição
-        if self.transitioning:
-            self.transition_progress += dt / self.transition_duration
-
-            if self.transition_progress >= 1.0:
-                # Completou o fade out, voltar ao menu
-                from .main_menu import MainMenuScene
-
-                self.app.states.switch(MainMenuScene(self.app))
-                return
-
         self.view.update(dt)
 
     def handle_event(self, event: pygame.event.Event):
@@ -1106,15 +1100,9 @@ class StatisticsScene(Scene, FadeTransitionMixin):
         return self.view.get_focusable_rects()
 
     def render(self, surface: pygame.Surface):
-        render_with_fade(
-            surface,
-            self.view,
-            self.r.starfield,
-            self.transitioning,
-            self.fade_out,
-            self.transition_progress,
-            BLACK,
-        )
+        surface.fill(BLACK)
+        self.r.starfield.draw(surface)
+        self.view.render(surface)
 
 
 class ConfirmationDialog:

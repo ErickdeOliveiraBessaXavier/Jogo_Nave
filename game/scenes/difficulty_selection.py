@@ -6,7 +6,6 @@ import pygame
 
 from ..core.assets import get_font
 from ..core.colors import (
-    CUSTOM_DARK_BG,
     CUSTOM_GOLD,
     CUSTOM_PURPLE,
     GREEN,
@@ -19,11 +18,10 @@ from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
 from ..core.i18n import t
 from ..core.sound import sound_manager
-from ..core.state import Scene
 from .ui_helpers import UIParticle, draw_bordered_button, wrap_text
 
 if TYPE_CHECKING:
-    from ..app import GameApp
+    pass
 
 
 class DifficultySelectionView:
@@ -462,76 +460,3 @@ class DifficultySelectionView:
             alpha,
             offset_y,
         )
-
-
-class DifficultySelectionScene(Scene):
-    """Cena para seleção de dificuldade antes de iniciar o jogo (mantida para compatibilidade)."""
-
-    def __init__(self, app: "GameApp"):
-        super().__init__(app)
-        self.view = DifficultySelectionView(
-            on_select=self._on_difficulty_selected, on_back=self._on_back
-        )
-
-    def _on_difficulty_selected(self, preset: DifficultyPreset):
-        """Callback quando uma dificuldade é selecionada."""
-        self.start_game(preset)
-
-    def _on_back(self):
-        """Callback quando o usuário quer voltar."""
-        self.app.states.pop()
-
-    def enter(self):
-        pygame.mouse.set_visible(True)
-        self.view.reset()
-
-    def handle_event(self, event: pygame.event.Event):
-        self.view.handle_event(event)
-
-    def get_focusable_rects(self) -> list[pygame.Rect]:
-        """Cards de dificuldade + botão Voltar. App.py usa pra navegar via DPad."""
-        rects = [data["rect"] for data in self.view.difficulty_buttons.values()]
-        rects.append(self.view.back_button_rect)
-        return rects
-
-    def start_game(self, preset: DifficultyPreset):
-        """Inicia o jogo com a dificuldade selecionada."""
-        from ..scenes.controls_modal import ControlsModalScene
-        from ..scenes.playing import PlayingScene
-
-        # Armazenar dificuldade no app
-        self.app.selected_difficulty = preset
-
-        def _push_playing_scene():
-            self.app.states.push(
-                PlayingScene(
-                    self.app,
-                    self.app.level_manager,
-                    difficulty_preset=preset,
-                    start_fade_duration=0.8,
-                )
-            )
-
-        # Se as preferências indicarem para mostrar o modal de controles
-        if self.app.preferences.show_controls_modal:
-            # Substitui a seleção de dificuldade pelo modal
-            self.app.states.switch(
-                ControlsModalScene(self.app, on_finish=_push_playing_scene)
-            )
-        else:
-            # Substitui a seleção de dificuldade pela cena de jogo
-            self.app.states.switch(
-                PlayingScene(
-                    self.app,
-                    self.app.level_manager,
-                    difficulty_preset=preset,
-                    start_fade_duration=0.8,
-                )
-            )
-
-    def update(self, dt: float):
-        self.view.update(dt)
-
-    def render(self, surface: pygame.Surface):
-        surface.fill(CUSTOM_DARK_BG)
-        self.view.render(surface)

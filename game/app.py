@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import TYPE_CHECKING, Callable, Optional
 
 import pygame
 
@@ -17,6 +18,9 @@ from .core.preferences import UserPreferences
 from .core.state import Scene, StateManager
 from .scenes.main_menu import MainMenuScene
 from .systems.sound_system import SoundSystem
+
+if TYPE_CHECKING:
+    from .core.scene_transition import TransitionStyle
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +213,12 @@ class GameApp:
 
         self.renderer = Renderer()
 
+        # Fade global de troca de tela. Fonte única — nenhuma cena desenha o
+        # próprio fade de navegação; todas pedem por `go_to`/`go_back`.
+        from .core.scene_transition import SceneTransition
+
+        self.transition = SceneTransition()
+
         self.selected_difficulty = DifficultyPreset.NORMAL
 
         # 1º boot (idioma ainda não escolhido) → tela de seleção de idioma, que
@@ -219,6 +229,94 @@ class GameApp:
             from .scenes.language_selection import LanguageSelectionScene
 
             self.states.push(LanguageSelectionScene(self))
+
+    # ------------------------------------------------------------------
+    # Navegação entre cenas (único caminho — não chamar states.* direto)
+    # ------------------------------------------------------------------
+
+    def go_to(
+        self,
+        factory: "Callable[[], Scene]",
+        *,
+        push: bool = False,
+        style: "TransitionStyle | None" = None,
+        fade_out: bool = True,
+        fade_in: bool = True,
+        duration: Optional[float] = None,
+    ) -> bool:
+        """Navega para uma cena nova, encoberto pelo fade global.
+
+        `factory` é uma **fábrica**, não uma cena pronta: a construção acontece
+        no pico do fade (tela preta), não no clique. Além de manter a semântica
+        de "só existe a partir daqui", isso esconde o custo de montar cenas
+        caras (a `PlayingScene` carrega nível, sprites e sistemas) atrás do
+        preto, em vez de travar um frame com a tela ainda visível.
+
+        `push` empilha (a cena de baixo continua viva, para voltar com
+        `go_back`); o padrão substitui. Devolve False se outra transição já
+        estava em curso — ver `SceneTransition.request`.
+        """
+        from .core.scene_transition import TransitionStyle
+
+        def _apply() -> None:
+            scene = factory()
+            if push:
+                self.states.push(scene)
+            else:
+                self.states.switch(scene)
+
+        return self.transition.request(
+            _apply,
+            style=style or TransitionStyle.BLACK,
+            fade_out=fade_out,
+            fade_in=fade_in,
+            duration=duration,
+        )
+
+    def go_back(
+        self,
+        *,
+        style: "TransitionStyle | None" = None,
+        fade_out: bool = True,
+        fade_in: bool = True,
+        duration: Optional[float] = None,
+    ) -> bool:
+        """Desempilha a cena atual (voltar), encoberto pelo fade global."""
+        from .core.scene_transition import TransitionStyle
+
+        return self.transition.request(
+            self.states.pop,
+            style=style or TransitionStyle.BLACK,
+            fade_out=fade_out,
+            fade_in=fade_in,
+            duration=duration,
+        )
+
+    def open_overlay(self, factory: "Callable[[], Scene]") -> bool:
+        """Empilha uma cena que **continua mostrando** a de baixo (pausa).
+
+        Estilo DIM (sem véu preto — piscar para abrir a pausa é pior que o
+        corte que estamos removendo) e **só a metade de entrada**: não há o que
+        despedir, a cena de baixo segue na tela. A que entra anima a própria
+        escurecida lendo `app.transition.overlay_progress`.
+        """
+        from .core.scene_transition import TransitionStyle
+
+        return self.go_to(
+            factory, push=True, style=TransitionStyle.DIM, fade_out=False
+        )
+
+    def close_overlay(self) -> bool:
+        """Fecha uma cena aberta por `open_overlay` (sem véu preto).
+
+        Espelho do `open_overlay`: **só a metade de saída**. A cena do topo
+        desaparece animada (`overlay_progress` caindo 1→0) e só é desempilhada
+        no FIM — é isso que faz o jogo voltar ao normal depois da animação, não
+        antes. A cena de baixo não "entra": nunca saiu da tela.
+        """
+        from .core.scene_transition import TransitionStyle
+
+        return self.go_back(style=TransitionStyle.DIM, fade_in=False)
 
     # ------------------------------------------------------------------
     # Suporte a controle (eventos sintéticos para cenas não-gameplay)
@@ -595,7 +693,11 @@ class GameApp:
                     # Removido: ESC global que fechava o jogo
                     # elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     #     self.running = False
-                    elif current_scene:
+                    # Durante o escurecimento a cena já está de saída: entregar
+                    # input a ela enfileiraria uma segunda navegação (dois
+                    # cliques rápidos = duas telas puladas). QUIT acima segue
+                    # valendo, para o jogo sempre poder fechar.
+                    elif current_scene and not self.transition.busy:
                         current_scene.handle_event(event)
                         # Camada A: traduz eventos JOY em KEYDOWN equivalentes
                         # para cenas que já reagem ao teclado (não-gameplay).
@@ -605,11 +707,22 @@ class GameApp:
                 # na thread principal — pygame não é thread-safe).
                 sound_manager.update_music(dt)
 
+                # Avança o fade global. A troca de cena acontece DENTRO deste
+                # update (no pico do escurecimento), por isso a cena é relida
+                # logo abaixo — senão o frame do commit ainda renderizaria a
+                # cena antiga, que já saiu da pilha.
+                self.transition.update(dt)
+                current_scene = self.states.current()
+
                 # Camada B: cursor virtual via stick direito (fora de gameplay).
                 if current_scene:
                     self._update_virtual_cursor(dt, current_scene)
                     current_scene.update(dt)
                     current_scene.render(self.screen)
+
+                # Véu do fade por cima da cena, antes da pixelização — assim a
+                # transição também é pixelizada e não destoa do resto.
+                self.transition.draw(self.screen)
 
                 # Pós-processamento: pixeliza o frame inteiro já renderizado
                 # (todas as cenas passam por aqui) antes de mostrar na tela.

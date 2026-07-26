@@ -56,7 +56,13 @@ class Ship:
         self._rect = pygame.Rect(int(x), int(y), self.w, self.h)
         # Multiplicadores do profile aplicados sobre os valores-base.
         self.speed = 250 * self.profile.speed_mult
-        self.invuln = 0  # ms
+        self.invuln = 0  # ms — quanto ainda resta
+        # Duração TOTAL do período de i-frames em curso (ms). O contador
+        # regressivo sozinho não diz "quão perto do fim estamos" em fração, e a
+        # piscada acelerada precisa disso (uma invuln de 1s e uma de 3s não
+        # podem acelerar no mesmo instante absoluto). Escrito por
+        # `grant_invulnerability`.
+        self.invuln_total = 0.0  # ms
         self.lives = max(1, Config.INITIAL_LIVES + self.profile.extra_lives)
         self.max_lives = self.lives
         self.visible = True
@@ -412,6 +418,22 @@ class Ship:
     @property
     def is_invulnerable(self) -> bool:
         return self.invuln > 0
+
+    def grant_invulnerability(self, duration_ms: float) -> None:
+        """Concede i-frames por `duration_ms`, guardando também a duração total.
+
+        Caminho ÚNICO para ligar invulnerabilidade — atribuir `self.invuln`
+        direto deixa `invuln_total` para trás e a piscada perde a referência de
+        quanto o período todo dura (acelera na hora errada, ou nunca).
+
+        Um período em curso MAIOR que o pedido é mantido: era a semântica que o
+        dash já tinha (`max(invuln, dash)`) e vale para todos — um toque de
+        escudo não deve encurtar os i-frames longos de uma vida perdida.
+        """
+        if duration_ms <= self.invuln:
+            return
+        self.invuln = duration_ms
+        self.invuln_total = duration_ms
 
     def get_invulnerable_time(self) -> float:
         return self.invuln / 1000.0
@@ -881,11 +903,11 @@ class Ship:
             sound_manager.play_shield_break()  # play_shield_hit não existe (bug latente)
             # Mesma invuln curta do caminho vivo de dano do jogador
             # (scene._handle_ship_hit): protege de dano consecutivo imediato.
-            self.invuln = Config.SHIELD_ABSORB_INVULN_MS
+            self.grant_invulnerability(Config.SHIELD_ABSORB_INVULN_MS)
             return False
 
         self.lives -= amount
-        self.invuln = Config.INVULN_TIME * 1000
+        self.grant_invulnerability(Config.INVULN_TIME * 1000)
         self.reset_combo()  # Reverberador perde o bônus ao tomar dano.
         return True
 

@@ -165,14 +165,12 @@ class PlayingScene(Scene):
         level_manager: LevelManager,
         difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
         starting_level: int = 1,
-        start_fade_duration: float = 0.45,
         p2_profile: Optional[Any] = None,
     ) -> None:
         super().__init__(app)
         self.level_manager = level_manager
         self.difficulty_preset = difficulty_preset
         self.difficulty_settings = DifficultySettings.get_settings(difficulty_preset)
-        self._start_fade_duration = start_fade_duration
         self.last_dt: float = 1.0 / Config.FPS
         self.r = app.renderer
 
@@ -185,7 +183,6 @@ class PlayingScene(Scene):
         self._init_ship()
         self._init_game_state()
         self._init_transition_state()
-        self._init_fade()
         self._init_systems()
 
         # Engenheiro: mini-naves permanentes só podem ser spawnadas depois que
@@ -373,24 +370,6 @@ class PlayingScene(Scene):
         # `_*_atmosphere_*` desta cena (FSM acoplado — ver core/atmosphere_phase.py
         # e código_teste/PLANO_FASE_ATMOSFERA.md).
         self._atmosphere = AtmosphereState()
-
-    def _init_fade(self) -> None:
-        """Configura o fade-in inicial para evitar corte abrupto.
-
-        Com "Animações da Interface" desligado (padrão no web), o fade preto de
-        tela cheia é pulado: a fase aparece instantânea, sem o overlay SRCALPHA
-        por vários frames — evita um pico de fillrate justo na transição de fase.
-        """
-        from ..core.visual_quality import visual_quality
-
-        anim_on = visual_quality.ui_animations
-        self.start_fade_active: bool = anim_on
-        self.start_fade_alpha: float = 255.0 if anim_on else 0.0
-        self.start_fade_elapsed: float = 0.0
-        self.start_fade_duration: float = self._start_fade_duration
-        self.start_fade_overlay = pygame.Surface(
-            (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA
-        )
 
     # Contrato PÚBLICO de feedback de tela (§1): o `EffectsSystem` reage a
     # eventos do bus e precisa pedir shake/flash à cena. Enquanto estes métodos
@@ -844,7 +823,9 @@ class PlayingScene(Scene):
 
         from .world_transition import WorldTransitionScene
 
-        self.app.states.push(WorldTransitionScene(self.app, target_world))
+        self.app.go_to(
+            lambda: WorldTransitionScene(self.app, target_world), push=True
+        )
 
         if debug_mode:
             logger.info("[CUTSCENE] Preview visual completo executado via F8")
@@ -905,10 +886,11 @@ class PlayingScene(Scene):
             from .world_transition import WorldTransitionScene
 
             is_exiting = route == "exiting"
-            self.app.states.push(
-                WorldTransitionScene(
+            world = self.pending_world_transition
+            self.app.go_to(
+                lambda: WorldTransitionScene(
                     self.app,
-                    self.pending_world_transition,
+                    world,
                     title_override=(
                         "SAINDO DA ATMOSFERA" if is_exiting else "ENTRANDO NA ATMOSFERA"
                     ),
@@ -918,7 +900,8 @@ class PlayingScene(Scene):
                         else "Atravessando a atmosfera do planeta."
                     ),
                     stage_text_override="",
-                )
+                ),
+                push=True,
             )
 
     def _apply_atmosphere_death_penalty(self) -> None:
@@ -1158,7 +1141,6 @@ class PlayingScene(Scene):
 
     def enter(self) -> None:
         pygame.mouse.set_visible(False)
-        self._init_fade()
         if self.first_entry:
             self.app.event_bus.emit(
                 events.MusicStateChange(
@@ -1189,7 +1171,6 @@ class PlayingScene(Scene):
             return
 
         self.last_dt = dt
-        self._update_start_fade(dt)
 
         if self.transition_phase == TransitionPhase.CUTSCENE_EXIT:
             self._world_cutscene.update(dt)
@@ -1236,19 +1217,6 @@ class PlayingScene(Scene):
         # self.entity_manager.cleanup()  # Removido: já chamado internamente em entity_manager.update()
         self._update_level_logic(dt)
         self.player_profile.auto_save()
-
-    def _update_start_fade(self, dt: float) -> None:
-        if not self.start_fade_active:
-            return
-        self.start_fade_elapsed = min(
-            self.start_fade_duration, self.start_fade_elapsed + dt
-        )
-        progress = self.start_fade_elapsed / self.start_fade_duration
-        eased = 1.0 - (1.0 - progress) ** 3  # ease-out cúbico
-        self.start_fade_alpha = 255.0 * (1.0 - eased)
-        if self.start_fade_elapsed >= self.start_fade_duration:
-            self.start_fade_alpha = 0.0
-            self.start_fade_active = False
 
     def _update_preparing_state(self, dt: float) -> None:
         """Gerencia o estado de preparação e o início da partida."""
@@ -1809,10 +1777,15 @@ class PlayingScene(Scene):
                 )
             )
 
+            from ..core.scene_transition import TransitionStyle
             from .game_over import GameOverScene
 
-            self.app.states.switch(
-                GameOverScene(self.app, final_score, self, next_level)
+            # DIM, não BLACK: o Game Over continua desenhando este mundo (nave
+            # explodindo, inimigos em slow-mo). Um véu preto no meio piscaria e
+            # cortaria justamente o beat da morte.
+            self.app.go_to(
+                lambda: GameOverScene(self.app, final_score, self, next_level),
+                style=TransitionStyle.DIM,
             )
 
     # ------------------------------------------------------------------
@@ -1902,10 +1875,13 @@ class PlayingScene(Scene):
         render de fundo e o perfil (unlocked_ships)."""
         from .p2_ship_select import P2ShipSelectScene
 
-        modal = P2ShipSelectScene(
-            self.app, playing_scene=self, on_confirm=on_confirm
+        # Overlay (DIM): o modal desenha a partida por baixo, então véu preto
+        # piscaria o jogo do P1, que continua rodando.
+        self.app.open_overlay(
+            lambda: P2ShipSelectScene(
+                self.app, playing_scene=self, on_confirm=on_confirm
+            )
         )
-        self.app.states.push(modal)
 
     # ------------------------------------------------------------------
     # Modo de seleção de upgrade via controle
@@ -2002,9 +1978,6 @@ class PlayingScene(Scene):
             flash_timer=self.impact_flash_timer,
             flash_duration=self.impact_flash_duration,
             flash_alpha=self.impact_flash_alpha,
-            start_fade_active=self.start_fade_active,
-            start_fade_alpha=self.start_fade_alpha,
-            start_fade_overlay=self.start_fade_overlay,
             show_fps=self.show_fps,
             show_enemy_hitboxes=self.show_enemy_hitboxes,
             upgrade_select_mode=self.upgrade_selector.mode,

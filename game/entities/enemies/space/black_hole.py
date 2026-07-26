@@ -28,13 +28,21 @@ class BlackHole:
     SPAWN_DURATION = 1.0  # Segundos para crescer
     DEATH_DURATION = 0.5  # Segundos para implodir
 
-    # Lentidão dentro da área do vórtice: o inimigo mantém 75% da velocidade.
-    # O linger existe por ordem de frame — `_update_environment` (buracos
+    # Lentidão do vórtice: o inimigo afetado mantém 75% da velocidade por
+    # VORTEX_SLOW_LINGER segundos.
+    #
+    # O campo REAPLICA a marca a cada frame enquanto o inimigo está dentro
+    # (`process_all_enemies`), então o linger é o que sobra DEPOIS de sair —
+    # ou seja, "10s de slow" contados a partir do último contato. É debuff de
+    # controle que sobrevive ao próprio vórtice (que dura 15s): quem atravessou
+    # o campo continua lento bem depois dele implodir.
+    #
+    # O linger também cobre a ordem de frame — `_update_environment` (buracos
     # negros) roda DEPOIS de `_update_enemies`, então a marca feita aqui só é
-    # lida no frame seguinte; 0,12s cobre isso com folga até a 30fps (o piso do
-    # clamp de dt, §14) e ainda dá uma cauda imperceptível ao sair do campo.
+    # lida no frame seguinte. Qualquer valor acima de 1/30s (o piso do clamp de
+    # dt, §14) resolve isso; os 10s são escolha de gameplay, não técnica.
     VORTEX_SLOW_FACTOR = 0.75
-    VORTEX_SLOW_LINGER = 0.12
+    VORTEX_SLOW_LINGER = 10.0
 
     # Pulsação cosmética ("respiração" do buraco). Só afeta o desenho — a física
     # (pull/dano) usa core_radius/pull_radius diretos, então o gameplay não muda.
@@ -100,9 +108,15 @@ class BlackHole:
         # Inspirado em IcePoisonZone: dano em ticks discretos com feedback visual.
         self.damage_tick_timer = 0.0
         self.damage_interval = 0.25  # 4 ticks por segundo
-        # Queremos ~1HP a cada 2s. Total de 8 ticks em 2s.
-        # 1.0 / 8 = 0.125 HP por tick → 0,5 HP/s (era 0,33 HP/s, 1HP a cada 3s).
-        self.damage_per_tick = 0.125
+        # 2 HP/s: 0,5 por tick × 4 ticks/s (era 0,5 HP/s — 4× mais dano).
+        #
+        # Orçamento real de uma vida inteira de vórtice: ~26 HP (medido). Não
+        # são 30: a duração de 15s inclui a rampa de spawn e o dano só corre no
+        # estado "active", então a janela efetiva é ~13s. Isso mata um meteoro
+        # pequeno/médio sozinho mas deixa o vórtice como ferramenta de CONTROLE
+        # de área contra os grandes (13% de um Dreadnought de 200 HP), não como
+        # fonte principal de dano.
+        self.damage_per_tick = 0.5
 
         self.growth_rate = config.BLACK_HOLE_GROWTH_RATE
         self.particles: list[Particle] = []
@@ -325,10 +339,15 @@ class BlackHole:
         hit_x = enemy.x + getattr(enemy, "w", 0) / 2
         hit_y = enemy.y + getattr(enemy, "h", 0) / 2
 
-        # 1. Tentar aplicar via on_hit (melhor para efeitos visuais e partes)
+        # 1. `on_hit` só para FEEDBACK VISUAL (flash, partes) — sempre com dano 0.
+        #
+        # O dano real é sempre aplicado no passo 2, nunca aqui. Motivo: `on_hit`
+        # recebe int, e o dano por tick é fracionário (0,5) — truncaria para 0 e
+        # o veneno não faria nada. Mandar o dano real para os dois lados seria
+        # pior: `on_hit` debita a vida E o passo 2 debita de novo, dobrando o
+        # dano em silêncio a partir de `damage >= 1`. Uma fonte de dano só.
         if hasattr(enemy, "on_hit"):
-            # Passamos o dano real. Se for tick visual puro, damage será 0 (não ocorre aqui, ocorre no loop caller)
-            res = enemy.on_hit(int(damage) if damage >= 1 else 0, hit_x, hit_y)
+            res = enemy.on_hit(0, hit_x, hit_y)
             if getattr(enemy, "dead", False):
                 killed = True
 
