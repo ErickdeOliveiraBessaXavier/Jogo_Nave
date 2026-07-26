@@ -28,6 +28,14 @@ class BlackHole:
     SPAWN_DURATION = 1.0  # Segundos para crescer
     DEATH_DURATION = 0.5  # Segundos para implodir
 
+    # Lentidão dentro da área do vórtice: o inimigo mantém 75% da velocidade.
+    # O linger existe por ordem de frame — `_update_environment` (buracos
+    # negros) roda DEPOIS de `_update_enemies`, então a marca feita aqui só é
+    # lida no frame seguinte; 0,12s cobre isso com folga até a 30fps (o piso do
+    # clamp de dt, §14) e ainda dá uma cauda imperceptível ao sair do campo.
+    VORTEX_SLOW_FACTOR = 0.75
+    VORTEX_SLOW_LINGER = 0.12
+
     # Pulsação cosmética ("respiração" do buraco). Só afeta o desenho — a física
     # (pull/dano) usa core_radius/pull_radius diretos, então o gameplay não muda.
     _PULSE_AMPLITUDE = 0.12  # ±12% no raio visual
@@ -138,18 +146,6 @@ class BlackHole:
                 "color": color,
             }
             self.particles.append(particle)
-
-    def stop_sound(self) -> None:
-        """Corta o som desta instância com fade. Idempotente.
-
-        Público porque o ``EntityManager`` precisa chamá-lo ao limpar a lista
-        (§1: nada de tocar em privado de outro objeto).
-        """
-        if self._sound_channel is not None:
-            sound_manager.stop_black_hole(
-                self._sound_channel, int(self.DEATH_DURATION * 1000)
-            )
-            self._sound_channel = None
 
     def _enter_dying(self) -> None:
         """Inicia a implosão e apaga o som junto, para o áudio morrer com a
@@ -369,7 +365,11 @@ class BlackHole:
 
     def stop_sound(self) -> None:
         """Encerra o som deste vórtice (idempotente). Chamado ao morrer e na
-        limpeza da fase — o áudio segue o ciclo de vida do buraco."""
+        limpeza da fase — o áudio segue o ciclo de vida do buraco.
+
+        Público porque o ``EntityManager`` precisa chamá-lo ao limpar a lista
+        (§1: nada de tocar em privado de outro objeto).
+        """
         sound_manager.stop_black_hole(self._sound_channel)
         self._sound_channel = None
 
