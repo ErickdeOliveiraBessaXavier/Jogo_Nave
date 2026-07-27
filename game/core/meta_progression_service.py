@@ -28,43 +28,35 @@ class MetaProgressionService:
     ) -> LevelConfig:
         """Resolve o `LevelConfig` da fase pela performance histórica do jogador.
 
-        **MUTA o perfil**: cada chamada avança o multiplicador do nível um passo
-        e o persiste (`record_level_adjustment`). O nome carrega o verbo por
-        isso — chamar em contexto de preview/UI faria a dificuldade derivar sem
-        o jogador ter jogado. Só deve ser chamado UMA vez por entrada de fase:
-        hoje, `PlayingScene._init_systems` (fase inicial da run) e
-        `LevelProgressionController.start_next_level` (cada virada).
-        """
-        level_num = base_config.level_number
+        **Query pura**: não escreve no perfil e não depende de quantas vezes foi
+        chamada. Pode ser usada livremente para preview/UI/debug.
 
-        if level_num not in profile.level_stats:
+        Isso é um contrato, não um detalhe. A versão anterior avançava e
+        persistia um multiplicador A CADA chamada, então o número de chamadas
+        virava parte do estado do jogo — ver `DifficultyAdjuster`.
+        """
+        stats = profile.level_stats.get(base_config.level_number)
+        if stats is None:
             return base_config
 
-        stats = profile.level_stats[level_num]
-        analysis = PerformanceAnalyzer.analyze_level_performance(stats)
-        previous_adjustment = profile.level_adjustments.get(level_num, 1.0)
-
-        adjusted_config, new_adjustment = DifficultyAdjuster.apply_adjustment(
-            base_config,
-            analysis,
-            previous_adjustment,
+        multiplier = DifficultyAdjuster.multiplier_for(
+            stats,
             allow_hardening=DifficultyAdjuster.hardening_allowed(
-                level_num, profile.highest_level_reached
+                base_config.level_number, profile.highest_level_reached
             ),
         )
+        if DifficultyAdjuster.is_neutral(multiplier):
+            return base_config
 
-        if new_adjustment != previous_adjustment:
-            profile.record_level_adjustment(level_num, new_adjustment)
-            direction = "mais fácil" if new_adjustment < 1.0 else "mais difícil"
-            logger.info(
-                "[Meta-Progression] Level %s ajustado %.0f%% %s",
-                level_num,
-                abs(new_adjustment - 1.0) * 100,
-                direction,
-            )
-            logger.info("  Motivo: %s", analysis["reason"])
-
-        return adjusted_config
+        direction = "mais fácil" if multiplier < 1.0 else "mais difícil"
+        logger.info(
+            "[Meta-Progression] Level %s: %.0f%% %s (%s)",
+            base_config.level_number,
+            abs(multiplier - 1.0) * 100,
+            direction,
+            PerformanceAnalyzer.analyze_level_performance(stats)["reason"],
+        )
+        return DifficultyAdjuster.apply_to_config(base_config, multiplier)
 
 
 class ProfileStatsFormatter:

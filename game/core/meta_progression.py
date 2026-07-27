@@ -229,71 +229,43 @@ class PerformanceAnalyzer:
 
     @staticmethod
     def analyze_level_performance(stats: LevelPerformance) -> Dict[str, Any]:
-        """
-        Análise completa de performance em um nível.
+        """Diagnóstico LEGÍVEL de um nível — para log e UI.
 
-        Returns:
-            Dict com diagnóstico e recomendações de ajuste
+        NÃO decide a dificuldade. O multiplicador vem de
+        `DifficultyAdjuster.multiplier_for`, que é contínuo no clear rate; aqui
+        os estados são rótulos discretos, cuja utilidade é explicar a um humano
+        o que o sistema está vendo. Manter os dois separados é de propósito:
+        um rótulo pode saltar de "lutando" para "confortável" sem que o número
+        salte junto.
         """
-        if stats.attempts < MIN_ATTEMPTS_TO_DIAGNOSE:
-            return {
-                "state": PerformanceState.LEARNING,
-                "adjustment": 1.0,  # Sem ajuste
-                "confidence": "low",
-                "reason": "Dados insuficientes",
-            }
-
         state = stats.get_performance_state()
-        adjustment = 1.0
-        confidence = "medium"
-        reason = ""
-
-        # Análise baseada no estado
-        if state == PerformanceState.STRUGGLING:
-            # Verificar tendência de melhoria
-            if stats.improvement_trend > PerformanceAnalyzer.IMPROVEMENT_THRESHOLD:
-                # Jogador está melhorando, dar mais tempo
-                adjustment = 0.95  # Facilitar sutilmente (5%)
-                confidence = "low"
-                reason = "Lutando mas melhorando - ajuste mínimo"
-            else:
-                # Sem melhoria, facilitar mais
-                adjustment = 0.85  # Facilitar moderadamente (15%)
-                confidence = "high"
-                reason = f"Clear rate baixo ({stats.clear_rate:.0%}) sem melhoria"
-
-        elif state == PerformanceState.DOMINATING:
-            # Verificar se é consistente
-            if stats.current_win_streak >= 3:
-                adjustment = 1.15  # Dificultar (15%)
-                confidence = "high"
-                reason = f"Dominando ({stats.clear_rate:.0%}) com {stats.current_win_streak} vitórias consecutivas"
-            else:
-                adjustment = 1.08  # Dificultar levemente (8%)
-                confidence = "medium"
-                reason = f"Clear rate alto ({stats.clear_rate:.0%})"
-
-        elif state == PerformanceState.INCONSISTENT:
-            # Manter estável, pode ser o nível que é inconsistente
-            adjustment = 1.0
-            confidence = "low"
-            reason = "Performance inconsistente - mantendo dificuldade"
-
-        elif state == PerformanceState.COMFORTABLE:
-            # Sweet spot! Não mexer
-            adjustment = 1.0
-            confidence = "high"
-            reason = f"Performance ideal ({stats.clear_rate:.0%})"
-
         return {
             "state": state,
-            "adjustment": adjustment,
-            "confidence": confidence,
-            "reason": reason,
+            "reason": PerformanceAnalyzer._describe(stats, state),
             "clear_rate": stats.clear_rate,
             "attempts": stats.attempts,
             "trend": stats.improvement_trend,
         }
+
+    @staticmethod
+    def _describe(stats: LevelPerformance, state: PerformanceState) -> str:
+        """Frase curta explicando o diagnóstico (vai para o log)."""
+        if stats.attempts < MIN_ATTEMPTS_TO_DIAGNOSE:
+            return "Dados insuficientes"
+        if state == PerformanceState.STRUGGLING:
+            if stats.improvement_trend > PerformanceAnalyzer.IMPROVEMENT_THRESHOLD:
+                return f"Clear rate baixo ({stats.clear_rate:.0%}) mas melhorando"
+            return f"Clear rate baixo ({stats.clear_rate:.0%}) sem melhoria"
+        if state == PerformanceState.DOMINATING:
+            return (
+                f"Dominando ({stats.clear_rate:.0%}), "
+                f"{stats.current_win_streak} vitórias consecutivas"
+            )
+        if state == PerformanceState.INCONSISTENT:
+            return "Performance inconsistente"
+        if state == PerformanceState.COMFORTABLE:
+            return f"Performance ideal ({stats.clear_rate:.0%})"
+        return f"Aprendendo ({stats.clear_rate:.0%})"
 
     @staticmethod
     def analyze_global_performance(profile: "PlayerProfile") -> Dict[str, Any]:
@@ -435,36 +407,60 @@ class PerformanceAnalyzer:
 
 
 class DifficultyAdjuster:
-    """Aplica ajustes adaptativos à configuração de níveis.
+    """Multiplicador de dificuldade de um nível — função PURA das estatísticas.
 
     A política inteira em uma frase: **ajudar rápido, apertar devagar, e nunca
     apertar o caminho de volta.**
 
-    O multiplicador é um número por nível (persistido em
-    `PlayerProfile.level_adjustments`) que anda em passos suaves na direção do
-    alvo sugerido pelo `PerformanceAnalyzer`. Três decisões definem o
-    comportamento e cada uma corrige um problema observado:
+    Três entradas, uma conta::
 
-    1. **Confiança escala o DESVIO, não o multiplicador.** A conta é
-       ``1.0 + (sugerido - 1.0) * fator``. Multiplicar o multiplicador direto
-       (``sugerido * fator``) invertia o sinal: "dominando, clear rate alto"
-       sugeria 1.08, virava ``1.08 * 0.6 = 0.648`` e o jogo ficava ~18% mais
-       FÁCIL para quem estava dominando. Do lado do alívio o erro era de
-       magnitude: 0.85 virava 0.51 e estourava direto no piso.
-    2. **Confiança baixa CONGELA, não zera.** Ver `apply_adjustment`.
-    3. **Endurecer exige estar na fronteira.** Ver `hardening_allowed`.
+        mult = 1.0 + (alvo(clear_rate) - 1.0) * evidência(attempts)
+
+    **Não há estado persistido.** Chamar duas vezes com as mesmas estatísticas
+    dá o mesmo número. A versão anterior guardava um valor por nível
+    (`PlayerProfile.level_adjustments`) e o avançava um passo A CADA CHAMADA:
+    o grau de adaptação era medido por *quantas vezes a função tinha sido
+    chamada* — um contador implícito, não-idempotente e gravado em disco, que
+    sombreava o `stats.attempts` já existente. Os dois só concordavam por
+    coincidência dos call sites; qualquer leitor a mais (preview de HUD, tela de
+    seleção, overlay de debug) teria acelerado a adaptação em silêncio, e o
+    desvio sobreviveria à sessão que o causou.
+
+    Duas propriedades sustentam isso:
+
+    1. **O alvo é CONTÍNUO no clear rate.** Antes se escolhia entre valores
+       discretos (0.85 / 1.0 / 1.15) por faixa, e o multiplicador saltava 15% de
+       uma fase para a outra quando o clear rate cruzava um limiar — com poucas
+       tentativas, um único abate ou morte cruzava. A versão com estado
+       amortecia esse salto por acidente (o passo suave escondia a
+       descontinuidade). Sendo contínuo, 0.299 e 0.301 de clear rate dão
+       praticamente o mesmo número, e nem histerese nem memória são necessárias:
+       a descontinuidade era a doença, o amortecimento era só o curativo.
+    2. **A evidência substitui a "confiança".** Era um enum (low/medium/high)
+       que gatilhava ramos distintos; agora é uma rampa sobre `attempts`, que é
+       a unidade em que a política sempre foi descrita ("por tentativa").
     """
 
-    # Limites de ajuste para evitar extremos
-    MIN_ADJUSTMENT = 0.75  # Máximo 25% mais fácil
-    MAX_ADJUSTMENT = 1.25  # Máximo 25% mais difícil
+    # Desvio máximo em cada direção. MIN/MAX_ADJUSTMENT derivam daqui para não
+    # existirem dois números dizendo a mesma coisa.
+    #
+    # Assimétricos, e isso é a política — não descuido. Além de o alívio chegar
+    # com menos evidência (ver as rampas), ele chega MAIS FUNDO. Há também uma
+    # razão geométrica: a faixa de alívio tem 0.30 de largura em clear rate
+    # (STRUGGLE_CLEAR_RATE até 0) e a de aperto só 0.10 (DOMINATE_CLEAR_RATE até
+    # 1.0). Tetos iguais fariam o aperto reagir 3x mais forte ao mesmo desvio de
+    # clear rate — exatamente o contrário de "apertar devagar".
+    MAX_EASE = 0.25  # piso 0.75 — 25% mais fácil
+    MAX_HARDEN = 0.15  # teto 1.15 — 15% mais difícil
 
-    # Velocidade de convergência por tentativa (fração do caminho até o alvo).
-    # Assimétrica de propósito: o alívio chega em ~2 tentativas, o aperto leva
-    # ~4. Errar para o lado fácil custa uma fase morna; errar para o lado
-    # difícil custa o jogador (§11).
-    EASE_SPEED = 0.5
-    HARDEN_SPEED = 0.25
+    MIN_ADJUSTMENT = 1.0 - MAX_EASE
+    MAX_ADJUSTMENT = 1.0 + MAX_HARDEN
+
+    # Tentativas (ALÉM do mínimo de diagnóstico) até o alvo valer integralmente.
+    # Assimétrico de propósito: errar para o lado fácil custa uma fase morna;
+    # errar para o lado difícil custa o jogador (§11).
+    EASE_RAMP_ATTEMPTS = 2
+    HARDEN_RAMP_ATTEMPTS = 4
 
     # Diferença imperceptível: trata como "sem ajuste" e devolve a config base.
     NEUTRAL_BAND = 0.02
@@ -496,78 +492,82 @@ class DifficultyAdjuster:
         return level_number + DifficultyAdjuster.FRONTIER_MARGIN >= highest_level_reached
 
     @staticmethod
-    def apply_adjustment(
-        base_config: LevelConfig,
-        analysis: Dict[str, Any],
-        previous_adjustment: float = 1.0,
-        allow_hardening: bool = True,
-    ) -> tuple[LevelConfig, float]:
-        """
-        Aplica ajuste adaptativo à configuração do nível.
+    def multiplier_for(
+        stats: LevelPerformance, *, allow_hardening: bool = True
+    ) -> float:
+        """O multiplicador de dificuldade deste nível. Puro e idempotente.
 
         Args:
-            base_config: Configuração base do nível
-            analysis: Resultado da análise de performance
-            previous_adjustment: Ajuste anterior aplicado (para suavizar transições)
-            allow_hardening: Se False, o alvo é limitado a 1.0 — o ajuste pode
-                ficar onde está ou decair para o neutro, nunca subir. Vem de
+            stats: desempenho acumulado do jogador NESTE nível.
+            allow_hardening: se False, o alvo é limitado a 1.0 — o resultado
+                pode aliviar ou ficar neutro, nunca apertar. Vem de
                 `hardening_allowed`.
 
         Returns:
-            Tupla com (config ajustada, novo multiplicador)
+            Multiplicador em [`MIN_ADJUSTMENT`, `MAX_ADJUSTMENT`]. Acima de 1.0
+            = mais difícil (spawn mais rápido, mais inimigos).
         """
-        confidence = analysis["confidence"]
-
-        if confidence == "low":
-            # CONGELA no ajuste vigente em vez de voltar para 1.0.
-            # Devolver 1.0 aqui tinha um efeito perverso: o jogador travado numa
-            # fase, já aliviado em 0.85, ao começar a MELHORAR caía no ramo
-            # "lutando mas melhorando" (confiança baixa) e levava os 15% de
-            # dificuldade de volta na cara de uma vez — punido exatamente no
-            # momento em que estava progredindo.
-            return DifficultyAdjuster._materialize(base_config, previous_adjustment)
-
-        confidence_factor = 1.0 if confidence == "high" else 0.6
-        target = 1.0 + (analysis["adjustment"] - 1.0) * confidence_factor
-
+        target = DifficultyAdjuster._target(stats)
         if not allow_hardening:
             target = min(target, 1.0)
 
-        speed = (
-            DifficultyAdjuster.EASE_SPEED
-            if target < previous_adjustment
-            else DifficultyAdjuster.HARDEN_SPEED
-        )
-        new_adjustment = previous_adjustment + (target - previous_adjustment) * speed
+        evidence = DifficultyAdjuster._evidence(stats, target)
+        multiplier = 1.0 + (target - 1.0) * evidence
 
-        return DifficultyAdjuster._materialize(base_config, new_adjustment)
-
-    @staticmethod
-    def _materialize(
-        config: LevelConfig, multiplier: float
-    ) -> tuple[LevelConfig, float]:
-        """Fecha o contrato de `apply_adjustment`: clampa e aplica o multiplicador.
-
-        Ponto ÚNICO de saída — todo caminho de decisão termina aqui, então os
-        limites e a banda neutra valem para todos sem repetição.
-
-        A banda neutra decide só se vale MATERIALIZAR uma config diferente; ela
-        nunca arredonda o multiplicador devolvido, que é o valor PERSISTIDO e
-        precisa acumular entre tentativas. Zerá-lo dentro da banda travava a
-        convergência lenta: um aperto de confiança média (alvo 1.048 a 0.25 por
-        tentativa) produz 1.012 no primeiro passo — arredondado para 1.0, o
-        passo seguinte recomeçava do zero e o ramo nunca escapava da banda.
-        """
-        multiplier = max(
+        return max(
             DifficultyAdjuster.MIN_ADJUSTMENT,
             min(DifficultyAdjuster.MAX_ADJUSTMENT, multiplier),
         )
-        if abs(multiplier - 1.0) <= DifficultyAdjuster.NEUTRAL_BAND:
-            return config, multiplier
-        return DifficultyAdjuster._apply_to_config(config, multiplier), multiplier
 
     @staticmethod
-    def _apply_to_config(config: LevelConfig, multiplier: float) -> LevelConfig:
+    def _target(stats: LevelPerformance) -> float:
+        """Para onde a dificuldade deveria ir, ignorando quanta evidência há.
+
+        Contínuo por construção: no limiar exato o desvio é ZERO e cresce
+        proporcionalmente a quão longe dele o jogador está. É o que dispensa
+        histerese — não há degrau para oscilar em cima.
+        """
+        clear_rate = stats.clear_rate
+
+        if clear_rate < STRUGGLE_CLEAR_RATE:
+            severity = (STRUGGLE_CLEAR_RATE - clear_rate) / STRUGGLE_CLEAR_RATE
+            # Quem já está melhorando sozinho precisa de menos ajuda. Atenuação
+            # proporcional à tendência, não um ramo à parte por limiar.
+            severity *= 1.0 - max(0.0, min(1.0, stats.improvement_trend))
+            return 1.0 - DifficultyAdjuster.MAX_EASE * severity
+
+        if clear_rate > DOMINATE_CLEAR_RATE:
+            severity = (clear_rate - DOMINATE_CLEAR_RATE) / (1.0 - DOMINATE_CLEAR_RATE)
+            return 1.0 + DifficultyAdjuster.MAX_HARDEN * severity
+
+        return 1.0
+
+    @staticmethod
+    def _evidence(stats: LevelPerformance, target: float) -> float:
+        """Quanto do alvo aplicar (0..1), dado o volume de tentativas.
+
+        Substitui o enum de confiança: a mesma ideia ("não reaja a ruído"), mas
+        na unidade em que a política é descrita. Abaixo de
+        `MIN_ATTEMPTS_TO_DIAGNOSE` é zero — sem dado, sem ajuste.
+        """
+        extra_attempts = stats.attempts - MIN_ATTEMPTS_TO_DIAGNOSE
+        if extra_attempts <= 0:
+            return 0.0
+
+        ramp = (
+            DifficultyAdjuster.EASE_RAMP_ATTEMPTS
+            if target < 1.0
+            else DifficultyAdjuster.HARDEN_RAMP_ATTEMPTS
+        )
+        return min(1.0, extra_attempts / ramp)
+
+    @staticmethod
+    def is_neutral(multiplier: float) -> bool:
+        """Diferença imperceptível — não vale materializar uma config nova."""
+        return abs(multiplier - 1.0) <= DifficultyAdjuster.NEUTRAL_BAND
+
+    @staticmethod
+    def apply_to_config(config: LevelConfig, multiplier: float) -> LevelConfig:
         """Aplica multiplicador à configuração do nível."""
         # Ajustar spawn times (inverso do multiplier)
         adjusted_spawn_config: Dict[Any, float] = {}
@@ -642,8 +642,10 @@ class PlayerProfile:
         self.current_session: Optional[SessionStats] = None
         self.session_history: List[SessionStats] = []
 
-        # Ajustes adaptativos por nível
-        self.level_adjustments: Dict[int, float] = {}  # level_num -> multiplier
+        # NOTA: não existe `level_adjustments`. O multiplicador de dificuldade é
+        # DERIVADO de `level_stats` a cada consulta (`DifficultyAdjuster`), não
+        # guardado. Perfis antigos ainda têm a chave no JSON; ela é ignorada na
+        # carga e some no próximo save.
 
         # Preferências detectadas
         self.preferred_difficulty: Optional[DifficultyPreset] = None
@@ -1045,11 +1047,6 @@ class PlayerProfile:
         self._stats_dirty = True  # OPT #4: Invalidate cache when data changes
         self._cached_global_stats = None
 
-    def record_level_adjustment(self, level_number: int, multiplier: float) -> None:
-        """Persiste novo multiplicador de ajuste de dificuldade para um nível."""
-        self.level_adjustments[level_number] = multiplier
-        self._mark_dirty()
-
     def get_global_stats(self) -> Dict[str, Any]:
         """OPT #4: Get cached global stats, recalculate only if dirty."""
         if self._cached_global_stats is None or self._stats_dirty:
@@ -1396,13 +1393,6 @@ class PlayerProfile:
                 )
         parsed["level_stats"] = level_stats
 
-        # Ajustes adaptativos
-        parsed["level_adjustments"] = {
-            int(k): v
-            for k, v in data.get("level_adjustments", {}).items()
-            if isinstance(v, (int, float))
-        }
-
         # Histórico de sessões
         session_history: List[SessionStats] = []
         for session_data in data.get("session_history", []):
@@ -1602,7 +1592,6 @@ class PlayerProfile:
             "mouse_control": self.mouse_control,
             "auto_fire": self.auto_fire,
             "level_stats": level_stats_data,
-            "level_adjustments": {str(k): v for k, v in self.level_adjustments.items()},
             "session_history": session_history_data,
             "unlocked_upgrades": unlocked_serialized,
             "upgrade_loadout": loadout_serialized,
@@ -1743,7 +1732,6 @@ class PlayerProfile:
         self.selected_world_id = 1
         self.current_session = None
         self.session_history = []
-        self.level_adjustments = {}
         self.preferred_difficulty = None
         self.resolution = (1280, 720)  # Default resolution
         self.mouse_control = False
