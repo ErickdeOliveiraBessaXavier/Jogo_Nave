@@ -570,12 +570,12 @@ class MainMenuScene(Scene):
                 difficulty_preset=preset, starting_level=starting_level,
             )
 
+        def _start_playing() -> None:
+            self.app.go_to(_make_playing_scene)
+
         if self.app.preferences.show_controls_modal:
             self.app.go_to(
-                lambda: ControlsModalScene(
-                    self.app,
-                    on_finish=lambda: self.app.go_to(_make_playing_scene),
-                )
+                lambda: ControlsModalScene(self.app, on_finish=_start_playing)
             )
         else:
             self.app.go_to(_make_playing_scene)
