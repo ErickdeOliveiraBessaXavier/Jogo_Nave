@@ -169,3 +169,40 @@ def test_sem_implementacoes_paralelas_de_fade_de_cena():
     assert not violacoes, (
         "fade de cena paralelo ao SceneTransition:\n" + "\n".join(violacoes)
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Invulnerabilidade — conceder passa por grant_invulnerability
+# ─────────────────────────────────────────────────────────────────────────────
+
+# `ship.py` define a API e o campo; `ship_powerups.py` faz a contagem
+# regressiva (decrementa e zera). Os dois escrevem `invuln` legitimamente.
+_ESCRITA_INVULN_PERMITIDA = {"ship.py", "ship_powerups.py"}
+
+
+def test_invulnerabilidade_concedida_por_metodo():
+    """`ship.invuln = X` cru deixa `invuln_total` para trás.
+
+    A piscada dos i-frames acelera em função da FRAÇÃO decorrida, então precisa
+    saber quanto o período todo dura — não só quanto resta. Quem atribui direto
+    deixa `invuln_total` com o valor da concessão anterior (ou zero), e a
+    piscada acelera na hora errada ou nunca.
+
+    Havia SEIS escritores diretos espalhados por cenas e sistemas quando o
+    campo foi introduzido; nenhum teste os exercitava. Use
+    `ship.grant_invulnerability(ms)`.
+    """
+    padrao = re.compile(r"\.invuln\s*=(?!=)")
+    violacoes = []
+    for f in _py_files("scenes", "systems", "entities", "core"):
+        if f.name in _ESCRITA_INVULN_PERMITIDA:
+            continue
+        for i, linha in enumerate(f.read_text(encoding="utf-8").split("\n")):
+            if linha.strip().startswith("#"):
+                continue
+            if padrao.search(linha):
+                violacoes.append(f"{f.relative_to(_ROOT)}:{i + 1}  {linha.strip()}")
+    assert not violacoes, (
+        "use ship.grant_invulnerability(ms) — atribuir invuln direto "
+        "dessincroniza invuln_total:\n" + "\n".join(violacoes)
+    )

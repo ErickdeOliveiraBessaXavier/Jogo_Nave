@@ -71,6 +71,23 @@ class DamageVignette:
         self._flash_age = 0.0
         self._spawn_cracks(strength)
 
+    def clear(self) -> None:
+        """Apaga o flash e as rachaduras em curso, na hora.
+
+        Para quando a nave é destruída: o que estava em voo era "você levou um
+        hit e continua em perigo", e isso deixou de ser verdade. A sequência de
+        destruição (e o beacon de revive, no coop) comunica muito mais forte —
+        uma borda vermelha decaindo por cima só polui.
+
+        Não mexe em `_critical`: aquele estado é reavaliado a cada `update()`
+        pela cena (`_primary_is_critical`), que já devolve False para um slot
+        morto. Zerá-lo aqui seria escrever num campo que o próximo frame
+        sobrescreve.
+        """
+        self._flash = 0.0
+        self._flash_age = 0.0
+        self._cracks.clear()
+
     def update(self, dt: float, critical: bool) -> None:
         """`critical` = jogador no limite (1 vida): libera o pulso de alerta
         contínuo. Acima disso, só o flash transiente decai e some."""

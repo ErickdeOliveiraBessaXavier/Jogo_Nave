@@ -198,3 +198,39 @@ def test_overlay_de_dim_escurece_de_fato_apos_um_fade_out():
 
     r, g, b = tela.get_at((32, 24))[:3]
     assert r < 30, f"o overlay não escureceu nada (pixel={r},{g},{b})"
+
+
+# ── Troca que É a própria animação não pode esperar uma saída ───────────────
+
+
+def test_sem_fade_out_a_cena_nova_nasce_no_frame_do_pedido():
+    """Quando a cena que ENTRA é quem executa o efeito, a saída atrasa o efeito.
+
+    Foi o que aconteceu com a morte: o `GameOverScene.__init__` dispara a
+    explosão, o som e o shake, mas o slot já saía marcado como morto (sumindo
+    do render) no instante do golpe. Com uma fase de saída antes do commit, a
+    nave sumia e ficavam ~0,3s (17 frames medidos) sem imagem nem som até a
+    cena nascer. `fade_out=False` faz nascer no mesmo frame.
+    """
+    tr = _idle()
+    marcos: list[str] = []
+
+    tr.request(
+        lambda: marcos.append("explodiu"),
+        style=TransitionStyle.DIM,
+        fade_out=False,
+    )
+    assert marcos == ["explodiu"], "a cena nova precisa nascer no frame do pedido"
+
+
+def test_com_fade_out_a_cena_nova_espera_a_saida():
+    """O contraponto: é o comportamento correto para navegação normal, e é por
+    isso que os dois casos precisam de flags separadas em vez de um padrão só."""
+    tr = _idle()
+    marcos: list[str] = []
+
+    tr.request(lambda: marcos.append("trocou"), fade_out=True)
+    assert marcos == []
+
+    tr.update(DEFAULT_DURATION * 1.1)
+    assert marcos == ["trocou"]

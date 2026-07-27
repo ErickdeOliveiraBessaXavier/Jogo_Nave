@@ -61,7 +61,7 @@ class BlinkProfile:
         t = max(0.0, remaining) / ramp
         return self.fast_hz + (self.slow_hz - self.fast_hz) * t
 
-    def _phase(self, remaining: float, total: float) -> float:
+    def _raw_phase(self, remaining: float, total: float) -> float:
         """Trocas de estado acumuladas entre o fim do efeito e `remaining`.
 
         Integral da frequência, contada de trás para frente (do fim para o
@@ -82,12 +82,44 @@ class BlinkProfile:
         # Rampa inteira (a média das pontas, por ser linear) + o trecho lento.
         return ramp * (fast + slow) / 2.0 + slow * (remaining - ramp)
 
+    def _phase_target(self, total: float) -> float:
+        """Ajuste fino para o efeito começar E terminar com o objeto visível.
+
+        A fase é contada do fim para trás, então o fim sempre cai limpo em 0
+        (visível). O COMEÇO, não: ele cai onde a integral der, quase sempre no
+        meio de um intervalo — a nave aparecia apagada no frame do dano e a
+        primeira piscada saía picotada.
+
+        Esticar a fase para um número ÍMPAR de trocas resolve os dois lados de
+        uma vez: com N ímpar os intervalos alternam começando e terminando em
+        "visível". O custo é a frequência mudar alguns por cento (27,4 → 27
+        trocas numa invuln de 3s), o que ninguém enxerga — bem menos do que a
+        piscada torta que isso remove.
+        """
+        raw = self._raw_phase(total, total)
+        if raw <= 1.0:
+            return 1.0
+        nearest_odd = round((raw - 1.0) / 2.0) * 2.0 + 1.0
+        return max(1.0, nearest_odd)
+
+    def _phase(self, remaining: float, total: float) -> float:
+        raw_total = self._raw_phase(total, total)
+        if raw_total <= 0.0:
+            return 0.0
+        target = self._phase_target(total)
+        phase = self._raw_phase(remaining, total) * (target / raw_total)
+        # No primeiro frame `remaining == total`, e a fase cai EXATAMENTE sobre
+        # o ímpar `target` — `int()` de um ímpar exato dá "apagado", um frame
+        # solto antes da primeira piscada. Segurar logo abaixo do inteiro põe
+        # esse frame dentro do primeiro intervalo visível, onde ele pertence.
+        return min(phase, target - 1e-9)
+
     def visible(self, remaining: float, total: float) -> bool:
         """A coisa que pisca deve ser desenhada NESTE frame?
 
         `remaining <= 0` devolve True: acabou o efeito, estado normal na hora,
-        sem piscada residual. A fase também vale 0 exatamente no fim, então não
-        há salto no último frame — o efeito termina com o objeto visível.
+        sem piscada residual. A fase vale 0 exatamente no fim e um ímpar exato
+        no começo, então as duas pontas terminam visíveis, sem salto.
         """
         if remaining <= 0.0 or total <= 0.0:
             return True

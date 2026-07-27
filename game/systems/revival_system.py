@@ -158,7 +158,7 @@ class RevivalSystem:
         # Reposiciona a nave no beacon para o player "renascer" no local.
         ship.x = beacon.x - ship.w / 2.0
         ship.y = beacon.y - ship.h / 2.0
-        ship.invuln = RevivalBeacon.POST_REVIVE_INVULN_MS
+        ship.grant_invulnerability(RevivalBeacon.POST_REVIVE_INVULN_MS)
         slot.is_dead = False
         slot.revival_beacon = None
         self._sync_lives(slot, RevivalBeacon.LIVES_ON_REVIVE)

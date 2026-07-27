@@ -20,7 +20,15 @@ class _Ship:
         self.x = cx - 10
         self.y = cy - 10
         self.invuln = 0
+        self.invuln_total = 0.0
         self.ship_image = pygame.Surface((20, 20))
+
+    def grant_invulnerability(self, duration_ms: float) -> None:
+        """Mesmo contrato de `Ship.grant_invulnerability` (mantém o maior)."""
+        if duration_ms <= self.invuln:
+            return
+        self.invuln = duration_ms
+        self.invuln_total = duration_ms
 
 
 class _Slot:

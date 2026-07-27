@@ -163,7 +163,7 @@ class P2SessionController:
             (target_x, target_y),
             1.5,  # Duração da animação
         )
-        p2_ship.invuln = float(Config.INVULN_TIME * 1000)
+        p2_ship.grant_invulnerability(float(Config.INVULN_TIME * 1000))
         p2_ship.apply_world_mode(is_side_scroll)
 
         lives = self._get_lives()

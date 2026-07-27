@@ -940,9 +940,11 @@ class PlayingScene(Scene):
             slot.revival_beacon = None
             self._sync_lives_for(slot, initial_lives)
             # Invuln cobre todo o cinematic + uma folga após o retorno.
-            slot.ship.invuln = (
-                _ATMOSPHERE_DEATH_OUT_DURATION + _ATMOSPHERE_DEATH_RETURN_DURATION
-            ) * 1000.0 + RevivalBeacon.POST_REVIVE_INVULN_MS
+            slot.ship.grant_invulnerability(
+                (_ATMOSPHERE_DEATH_OUT_DURATION + _ATMOSPHERE_DEATH_RETURN_DURATION)
+                * 1000.0
+                + RevivalBeacon.POST_REVIVE_INVULN_MS
+            )
             self._build_permanent_mini_ships(slot)
 
         # Recomeço limpo: remove meteoros/hostis em tela. Invalida antes de
@@ -1706,18 +1708,30 @@ class PlayingScene(Scene):
                 ship.shield_timer = 0.0
             # 1s de invulnerabilidade após absorver: protege contra dano
             # consecutivo imediato (dois acertos no mesmo frame/instante
-            # gastariam duas cargas ou vazariam pra vida). `max` não encurta um
-            # invuln maior já em curso.
-            ship.invuln = max(ship.invuln, Config.SHIELD_ABSORB_INVULN_MS)
+            # gastariam duas cargas ou vazariam pra vida). `grant_` não
+            # encurta um invuln maior já em curso.
+            ship.grant_invulnerability(Config.SHIELD_ABSORB_INVULN_MS)
             # Emit powerup event for shield absorption
             self.app.event_bus.emit(events.PlaySound(sound_name="powerup", volume=1.0))
             return
 
         self.change_lives_for(slot, -1)
-        # Vinheta de dano: flash transiente momentâneo ao tomar hit. O alerta
-        # contínuo (1 vida) é decidido no update via `_primary_is_critical`.
-        self.damage_vignette.trigger(damage=1)
         self.level_controller.notify_damage_taken()
+
+        # Vinheta de dano: SÓ se a nave sobreviveu ao golpe. O flash diz "você
+        # levou um hit e continua em perigo"; no golpe fatal isso é falso, e o
+        # que comunica é a sequência de destruição — no single-player a tela de
+        # Game Over entra em seguida e o efeito nem chega a ser desenhado, só
+        # gasta o spawn das rachaduras. O alerta contínuo (1 vida) é decidido
+        # no update via `_primary_is_critical`, que já ignora slot morto.
+        if slot.lives > 0:
+            self.damage_vignette.trigger(damage=1)
+        else:
+            # Corta também um flash ainda em voo de um hit anterior: no coop e
+            # no interstício de atmosfera a partida CONTINUA depois desta morte,
+            # e a borda vermelha decairia por cima da destruição da nave.
+            self.damage_vignette.clear()
+
         if slot.lives <= 0:
             # Marca o slot como morto — filtragem em alive_slots() impede que
             # o slot continue tomando dano, atirando, ou sendo renderizado.
@@ -1754,7 +1768,7 @@ class PlayingScene(Scene):
         )
 
         if not is_game_over:
-            ship.invuln = Config.INVULN_TIME * 1000
+            ship.grant_invulnerability(Config.INVULN_TIME * 1000)
         else:
             # Captura o score final ANTES de qualquer zeragem para a tela de
             # Game Over exibir o valor real (sem isso, permadeath mostraria 0).
@@ -1783,9 +1797,19 @@ class PlayingScene(Scene):
             # DIM, não BLACK: o Game Over continua desenhando este mundo (nave
             # explodindo, inimigos em slow-mo). Um véu preto no meio piscaria e
             # cortaria justamente o beat da morte.
+            #
+            # `fade_out=False` (troca no mesmo frame) é obrigatório aqui, e não
+            # otimização: quem dispara a explosão, o som e o shake da morte é o
+            # `GameOverScene.__init__`. Com uma fase de saída antes do commit, o
+            # slot já sai marcado como morto (some do render) mas a cena que faz
+            # a destruição só nasce no fim dela — a nave sumia e ficava ~0,3s
+            # sem imagem nem som antes da sequência começar. O tempo de leitura
+            # da morte é o reveal de 2s do próprio Game Over, DEPOIS da
+            # explosão, não um vazio antes dela.
             self.app.go_to(
                 lambda: GameOverScene(self.app, final_score, self, next_level),
                 style=TransitionStyle.DIM,
+                fade_out=False,
             )
 
     # ------------------------------------------------------------------

@@ -55,7 +55,7 @@ class PowerupSystem:
 
     def _apply_shield(self, slot: "PlayerSlot") -> None:
         ship = slot.ship
-        ship.invuln = max(ship.invuln, self._powerup_values["shield_duration"])
+        ship.grant_invulnerability(self._powerup_values["shield_duration"])
 
     def _apply_double_shot(self, slot: "PlayerSlot") -> None:
         ship = slot.ship
