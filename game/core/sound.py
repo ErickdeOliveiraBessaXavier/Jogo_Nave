@@ -164,9 +164,10 @@ class SoundManager:
         self.transition_thread: threading.Thread | None = None
         self.transition_lock = threading.Lock()
         self.original_music_volume: float = self.music_volume
-        # Fator de ducking da música (1.0 = sem duck). Persistente: honrado em
-        # todo cálculo de volume, sobrevive ao avanço de rotação.
-        self.music_duck_factor: float = 1.0
+        # Ducking da música POR FONTE (nome → fator). Persistente: honrado em
+        # todo cálculo de volume, sobrevive ao avanço de rotação. O fator
+        # efetivo é o PRODUTO das fontes ativas — ver `music_duck_factor`.
+        self._music_ducks: dict[str, float] = {}
         self.music_manager = MusicManager(self)
 
         # Carregar sons
@@ -492,16 +493,51 @@ class SoundManager:
             base *= self.boss_music_multiplier
         return min(1.0, base * self.master_volume) * self.music_duck_factor
 
+    @property
+    def music_duck_factor(self) -> float:
+        """Fator de ducking efetivo: o PRODUTO de todas as fontes ativas.
+
+        Era um float único, e isso fazia as fontes se atropelarem: o Game Over
+        abaixa a música e a restaura com `duck_music(False)`, que escrevia 1.0
+        no campo compartilhado. Morrer durante uma parada do tempo devolvia o
+        volume cheio no meio do efeito, e o efeito, ao terminar, apagava o duck
+        do Game Over. Com o produto, cada fonte só mexe na própria chave e as
+        duas compõem — quem sair por último não desfaz o duck de quem ficou.
+        """
+        fator = 1.0
+        for f in self._music_ducks.values():
+            fator *= f
+        return max(0.0, min(1.0, fator))
+
     @require_audio
-    def duck_music(self, active: bool, factor: float = 0.5) -> None:
+    def duck_music(
+        self, active: bool, factor: float = 0.5, source: str = "default"
+    ) -> None:
         """Liga/desliga o ducking da música (abaixa o volume sem cortar nada).
 
-        O fator é persistente: fica guardado em `music_duck_factor` e é honrado em
-        todo recálculo de volume, então sobrevive ao avanço de rotação (fim de
-        faixa) durante a tela de Game Over. `active=False` restaura o volume cheio.
+        Persistente: honrado em todo recálculo de volume, então sobrevive ao
+        avanço de rotação (fim de faixa) durante a tela de Game Over.
+        `active=False` remove a contribuição DESTA fonte, sem tocar nas outras.
         """
-        self.music_duck_factor = factor if active else 1.0
-        if pygame.mixer.music.get_busy():
+        self.set_music_duck(source, factor if active else 1.0)
+
+    def set_music_duck(self, source: str, factor: float) -> None:
+        """Define o ducking de UMA fonte. `factor >= 1.0` remove a fonte.
+
+        Sem `@require_audio`: é chamado por frame pelo envelope da parada do
+        tempo, e precisa manter o estado coerente mesmo com o áudio indisponível
+        (headless/CI) — o guard de mixer fica só na aplicação do volume.
+        """
+        anterior = self.music_duck_factor
+        if factor >= 1.0:
+            self._music_ducks.pop(source, None)
+        else:
+            self._music_ducks[source] = max(0.0, factor)
+
+        if self.music_duck_factor == anterior:
+            return
+        # §18: mudar o número não muda o som — tem que reaplicar ao stream.
+        if pygame.mixer.get_init() is not None and pygame.mixer.music.get_busy():
             pygame.mixer.music.set_volume(self.music_target_volume())
 
     @require_audio

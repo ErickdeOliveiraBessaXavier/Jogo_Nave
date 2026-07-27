@@ -633,7 +633,9 @@ class GameOverScene(Scene):
         """
         from .playing import PlayingScene
 
-        sound_manager.duck_music(False)  # desfaz o ducking do Game Over
+        # Desfaz só o duck do Game Over; outras fontes (ex.: parada do tempo)
+        # mantêm a sua contribuição.
+        sound_manager.duck_music(False, source="game_over")
         sound_manager.stop_all_sfx()
         level_manager = self.playing_scene.level_manager
         preset = self.playing_scene.difficulty_preset
@@ -672,7 +674,9 @@ class GameOverScene(Scene):
         self.app.player_profile.save()
 
     def _return_to_menu(self):
-        sound_manager.duck_music(False)  # desfaz o ducking do Game Over
+        # Desfaz só o duck do Game Over; outras fontes (ex.: parada do tempo)
+        # mantêm a sua contribuição.
+        sound_manager.duck_music(False, source="game_over")
         sound_manager.stop_music()
         sound_manager.stop_all_sfx()
         from ..core.sound_config import MusicState

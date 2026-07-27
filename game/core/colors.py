@@ -49,20 +49,56 @@ ALIEN_BULLET_GREEN_2: Color = (115, 255, 215)  # #4ED94A
 ARCADE_YELLOW: Color = (255, 255, 0)
 ARCADE_ORANGE: Color = (255, 128, 0)
 
-# Cores dos power-ups
-POWERUP_LIFE: Color = (255, 50, 50)
-POWERUP_SHIELD: Color = (50, 50, 255)
-POWERUP_DOUBLE_SHOT: Color = (50, 255, 50)
-POWERUP_SPEED: Color = (255, 255, 50)
-POWERUP_SCORE: Color = (255, 50, 255)
-POWERUP_PIERCING_SHOT: Color = (200, 0, 255)
-POWERUP_MINI_SHIPS: Color = (173, 216, 230)
-POWERUP_RAINBOW: Color = (255, 255, 255)
-POWERUP_COOLDOWN_HASTE: Color = (80, 200, 255)
-POWERUP_TIME_STOP: Color = (180, 120, 255)
-POWERUP_DAMAGE_BOOST: Color = (255, 140, 0)
-POWERUP_CHAIN_SHOT: Color = (80, 220, 255)
-POWERUP_REPULSION_SHIELD: Color = (100, 255, 80)
+# Cores dos power-ups.
+#
+# A paleta é separada perceptualmente: nenhum par fica abaixo de ΔE 40 em
+# CIELAB (travado por `tests/test_powerup_colors.py`). Antes cinco pares
+# ficavam abaixo de 25 e dois eram praticamente o mesmo tom na tela —
+# `cooldown_haste` × `chain_shot` diferiam em 20 num único canal (ΔE 13).
+#
+# As sete primeiras carregam significado estabelecido e não se mexe; as demais
+# eram arbitrárias e foram reposicionadas nos vãos livres do espaço de cor.
+POWERUP_LIFE: Color = (255, 50, 50)  # vermelho
+POWERUP_SHIELD: Color = (50, 50, 255)  # azul
+POWERUP_DOUBLE_SHOT: Color = (50, 255, 50)  # verde
+POWERUP_SPEED: Color = (255, 255, 50)  # amarelo
+POWERUP_SCORE: Color = (255, 50, 255)  # magenta
+POWERUP_RAINBOW: Color = (255, 255, 255)  # branco
+POWERUP_DAMAGE_BOOST: Color = (255, 140, 0)  # laranja
+POWERUP_PIERCING_SHOT: Color = (217, 43, 130)  # rosa-pink
+POWERUP_MINI_SHIPS: Color = (217, 184, 87)  # dourado
+POWERUP_COOLDOWN_HASTE: Color = (0, 130, 217)  # azul-médio
+POWERUP_TIME_STOP: Color = (145, 87, 217)  # roxo
+POWERUP_CHAIN_SHOT: Color = (0, 195, 217)  # turquesa
+POWERUP_REPULSION_SHIELD: Color = (102, 255, 178)  # verde-menta
+
+# Fonte ÚNICA da cor de cada power-up. Consumida pelo pickup no mundo
+# (`entities/pickups/powerup.py`) e pelo HUD (`render/game_renderer.py`), que
+# antes tinham tabelas independentes: o pickup usava as constantes acima e o
+# HUD usava as cores genéricas da paleta. O mesmo power-up aparecia em duas
+# cores na mesma tela — `time_stop` era (180,120,255) no chão e PURPLE
+# (200,0,255) no HUD — e `piercing_shot` ficava indistinguível dele no HUD
+# porque os dois caíam em PURPLE.
+#
+# As chaves são os valores de `PowerUpType` (`core/config.py`). Power-up novo
+# entra AQUI e os dois lados o pegam de graça; esquecer o registro faz cair no
+# branco do fallback, que foi o que aconteceu com `chain_shot` e
+# `repulsion_shield` — tinham constante definida e nenhum leitor.
+POWERUP_COLORS: dict[str, Color] = {
+    "life": POWERUP_LIFE,
+    "shield": POWERUP_SHIELD,
+    "double_shot": POWERUP_DOUBLE_SHOT,
+    "speed": POWERUP_SPEED,
+    "score": POWERUP_SCORE,
+    "piercing_shot": POWERUP_PIERCING_SHOT,
+    "mini_ships": POWERUP_MINI_SHIPS,
+    "rainbow": POWERUP_RAINBOW,
+    "cooldown_haste": POWERUP_COOLDOWN_HASTE,
+    "time_stop": POWERUP_TIME_STOP,
+    "damage_boost": POWERUP_DAMAGE_BOOST,
+    "chain_shot": POWERUP_CHAIN_SHOT,
+    "repulsion_shield": POWERUP_REPULSION_SHIELD,
+}
 
 RAINBOW_COLORS = [
     (255, 0, 0),  # vermelho

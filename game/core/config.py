@@ -143,7 +143,7 @@ class AlienConfig:
 @dataclass(frozen=True)
 class PowerUpConfig:
     POWERUP_SPAWN_INTERVAL: Tuple[float, float] = (15.0, 25.0)
-    POWERUP_SIZE: int = 48
+    POWERUP_SIZE: int = 50
     POWERUP_SCORE_BONUS: int = 500
     SHIELD_DURATION: float = 8.0
     DOUBLE_SHOT_DURATION: float = 10.0
@@ -152,7 +152,18 @@ class PowerUpConfig:
     PIERCING_SHOT_DURATION: float = 7.0
     MINI_SHIPS_DURATION: float = 25.0
     COOLDOWN_HASTE_REDUCTION: float = 20.0
-    TIME_STOP_DURATION: float = 3.0
+    TIME_STOP_DURATION: float = 8.0
+    # Janela final do congelamento em que o jogador é avisado de que vai acabar:
+    # o HUD pulsa e os inimigos tremem. Curta o bastante para virar urgência,
+    # longa o bastante para dar tempo de reposicionar a nave.
+    TIME_STOP_WARNING_TIME: float = 1.5
+    # Rampa de saída: os congelados voltam ACELERANDO ao longo deste tempo, em
+    # vez de destravarem na velocidade cheia de um frame para o outro.
+    TIME_STOP_RECOVERY_DURATION: float = 3.0
+    # Amplitude (px) do tremor dos congelados no auge da janela de aviso.
+    # Proposital de um dígito: precisa ler como "vibrando preso", não como
+    # "andando de novo".
+    TIME_STOP_TREMOR_PIXELS: float = 2.0
     DAMAGE_BOOST_DURATION: float = 8.0
     DAMAGE_BOOST_MULTIPLIER: float = 2.0
     SPEED_ATTACK_MULTIPLIER: float = 2.0
@@ -164,7 +175,7 @@ class PowerUpConfig:
     REPULSION_SHIELD_RADIUS: float = 140.0
     REPULSION_FORCE: float = 420.0
     PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER: float = 1.5
-    EXPLOSIVE_SHOT_FIRE_RATE_PENALTY: float = 0.5
+    EXPLOSIVE_SHOT_FIRE_RATE_PENALTY: float = 0.6
 
 
 @dataclass(frozen=True)

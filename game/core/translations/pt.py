@@ -313,6 +313,10 @@ PT: dict[str, str] = {
     "hud.effect.mini": "[M] Mini Ships: {sec}s",
     "hud.effect.explosive": "[💥] Explosivos: {n}",
 
+    # ── Parada do tempo ──────────────────────────────────────────────────────
+    "hud.time_stop": "TEMPO PARADO",
+    "hud.time_stop.ending": "O TEMPO VOLTA!",
+
     # ── Coop / revive ────────────────────────────────────────────────────────
     "revival.hold": "SEGURE PARA REVIVER",
 }

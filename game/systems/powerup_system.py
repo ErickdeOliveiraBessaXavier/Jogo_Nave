@@ -105,12 +105,9 @@ class PowerupSystem:
         )
 
     def _apply_time_stop(self, slot: "PlayerSlot") -> None:
-        # Efeito global: congela inimigos para todos.
-        scene = self.scene
-        scene.time_stop_timer = max(
-            scene.time_stop_timer, self._powerup_values["time_stop_duration"]
-        )
-        scene.freeze_active = True
+        # Efeito global: congela inimigos para todos. O `TimeStopState` cuida da
+        # renovação (não acumula), do aviso de fim e da rampa de volta.
+        self.scene.time_stop.trigger(self._powerup_values["time_stop_duration"])
 
     def _apply_damage_boost(self, slot: "PlayerSlot") -> None:
         ship = slot.ship

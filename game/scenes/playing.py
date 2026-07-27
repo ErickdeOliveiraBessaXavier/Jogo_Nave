@@ -86,6 +86,7 @@ from ..systems.revival_system import RevivalSystem
 from ..systems.shooting_system import ShootingSystem
 from ..systems.upgrade_selector import UpgradeSelector
 from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
+from ..systems.time_stop import TimeStopState
 from ..systems.transition_controller import TransitionController, TransitionPhase
 from ..systems.world_transition_cutscene import (
     ThrusterParticle,
@@ -310,8 +311,14 @@ class PlayingScene(Scene):
         self.boss_backdrop_dim = BossBackdropDim()
         self.warning_font = get_font(Config.WARNING_FONT_SIZE)
 
-        self.time_stop_timer: float = 0.0
-        self.freeze_active: bool = False
+        # Parada do tempo: congelamento + aviso de fim + rampa de volta.
+        self.time_stop = TimeStopState()
+        # Relógio próprio da vibração dos congelados. Avança no update (§3) e é
+        # lido pelo tremor; não usa `time.time()`, que ignoraria a pausa.
+        self._time_stop_phase: float = 0.0
+        # Relógio do envelope de música (tremolo). Separado do de cima porque
+        # continua correndo durante a recuperação, quando o tremor já parou.
+        self._time_stop_music_clock: float = 0.0
 
         self.show_fps: bool = False
         self.show_enemy_hitboxes: bool = False
@@ -1192,7 +1199,7 @@ class PlayingScene(Scene):
             dt,
             self.ship.rect.centerx,
             self.ship.rect.centery,
-            freeze_enemies=self.freeze_active,
+            enemy_time_scale=self.time_stop.enemy_time_scale,
             screen_width=Config.SCREEN_WIDTH,
             screen_height=Config.SCREEN_HEIGHT,
             attraction_mult=self.ship.profile.pickup_radius_mult,
@@ -1201,6 +1208,15 @@ class PlayingScene(Scene):
                 if self._is_closing_level()
                 else None
             ),
+        )
+
+        # Tremor dos congelados no fim da janela de aviso. Depois do update das
+        # entidades, para deslocar as posições já resolvidas do frame. Chamado
+        # sempre (não só quando treme): com amplitude 0 ele ASSENTA quem ficou
+        # deslocado, o que é o que devolve os inimigos ao lugar exato quando o
+        # congelamento acaba.
+        self.entity_manager.apply_freeze_tremor(
+            self.time_stop.tremor_pixels, self._time_stop_phase
         )
 
         if self.transition_phase in (
@@ -1250,9 +1266,34 @@ class PlayingScene(Scene):
         self._score_pop_last = self.score
 
     def _update_timers(self, dt: float) -> None:
-        self.time_stop_timer = max(0.0, self.time_stop_timer - dt)
-        self.freeze_active = self.time_stop_timer > 0.0
+        self.time_stop.update(dt)
+        if self.time_stop.is_frozen:
+            self._time_stop_phase += dt
+        self._apply_time_stop_music(dt)
         self.shooting.update(dt)
+
+    def _apply_time_stop_music(self, dt: float) -> None:
+        """Envelope de volume da música durante/depois da parada do tempo.
+
+        Aplicado aqui, na thread principal, e não numa thread de áudio: o
+        `music_manager` documenta que SDL não é thread-safe e que mexer no
+        stream fora do loop principal causava *access violation*.
+
+        O relógio é próprio (`_time_stop_music_clock`), alimentado pelo `dt` do
+        jogo, para o tremolo não correr durante a pausa.
+        """
+        if not self.time_stop.is_active and self._time_stop_music_clock == 0.0:
+            return  # nada a fazer nem a desfazer — caminho comum
+
+        self._time_stop_music_clock += dt
+        fator = self.time_stop.music_factor(self._time_stop_music_clock)
+        sound_manager.set_music_duck("time_stop", fator)
+
+        if not self.time_stop.is_active:
+            # Efeito encerrado: zera o relógio para o early-out acima voltar a
+            # valer, e garante que a fonte saiu do produto de ducking.
+            self._time_stop_music_clock = 0.0
+            sound_manager.set_music_duck("time_stop", 1.0)
 
         # Timer de preparação (continua negativo para animação de saída)
         if self.preparation_time_left > -1.5:
@@ -1453,9 +1494,14 @@ class PlayingScene(Scene):
             and not self.level_transition_active
             and not self.level_transition_pending
         ):
-            if not self.freeze_active:
+            # O spawn segue a mesma escala de tempo dos inimigos: zero durante o
+            # congelamento (idêntico ao antigo `if not freeze_active`) e em
+            # rampa durante a recuperação — o mundo volta a produzir inimigos no
+            # mesmo ritmo em que os existentes voltam a andar.
+            spawn_dt = dt * self.time_stop.enemy_time_scale
+            if spawn_dt > 0.0:
                 self.enemy_spawner.update(
-                    dt,
+                    spawn_dt,
                     self.entity_manager,
                     self.ship.rect.centerx,
                     self.ship.rect.centery,
@@ -1869,6 +1915,18 @@ class PlayingScene(Scene):
         )
         self._set_transition_phase(TransitionPhase.LEVEL_ENTRY)
 
+        # A parada do tempo não atravessa a virada de fase. Sem isto, limpar a
+        # fase durante o congelamento deixava a rampa de volta correndo, e os
+        # inimigos da fase SEGUINTE nasciam em câmera lenta por 3s sem motivo
+        # visível para o jogador.
+        self.time_stop.reset()
+        self._time_stop_phase = 0.0
+        self._time_stop_music_clock = 0.0
+        # Solta o duck junto: sem isto a fase seguinte começava com a música
+        # presa no volume do congelamento, já que nada mais recalcularia o
+        # envelope depois do reset.
+        sound_manager.set_music_duck("time_stop", 1.0)
+
         theme_changed, new_world = self.level_controller.start_next_level(
             self.current_world
         )
@@ -1997,6 +2055,11 @@ class PlayingScene(Scene):
             stage_name=stage_name,
             score_multiplier_active=self.score_multiplier_active,
             score_multiplier_timer=self.score_multiplier_timer,
+            time_stop_frozen=self.time_stop.is_frozen,
+            time_stop_warning=self.time_stop.warning_ratio,
+            time_stop_recovering=self.time_stop.is_recovering,
+            time_stop_recovery=self.time_stop.recovery_ratio,
+            time_stop_phase=self._time_stop_phase,
             shake_timer=self.screen_shake_timer,
             shake_intensity=self.screen_shake_intensity,
             flash_timer=self.impact_flash_timer,

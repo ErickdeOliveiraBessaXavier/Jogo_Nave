@@ -310,6 +310,10 @@ EN: dict[str, str] = {
     "hud.effect.mini": "[M] Mini Ships: {sec}s",
     "hud.effect.explosive": "[💥] Explosives: {n}",
 
+    # ── Time stop ────────────────────────────────────────────────────────────
+    "hud.time_stop": "TIME STOPPED",
+    "hud.time_stop.ending": "TIME RESUMING!",
+
     # ── Co-op / revive ───────────────────────────────────────────────────────
     "revival.hold": "HOLD TO REVIVE",
 }

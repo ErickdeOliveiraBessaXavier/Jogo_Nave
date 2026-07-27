@@ -6,17 +6,7 @@ import pygame
 
 from ...core.assets import get_font
 from ...core.colors import (
-    POWERUP_COOLDOWN_HASTE,
-    POWERUP_DAMAGE_BOOST,
-    POWERUP_DOUBLE_SHOT,
-    POWERUP_LIFE,
-    POWERUP_MINI_SHIPS,
-    POWERUP_PIERCING_SHOT,
-    POWERUP_RAINBOW,
-    POWERUP_SCORE,
-    POWERUP_SHIELD,
-    POWERUP_SPEED,
-    POWERUP_TIME_STOP,
+    POWERUP_COLORS,
     RAINBOW_COLORS,
 )
 from ...core.config import PowerUpType
@@ -32,6 +22,26 @@ class PowerUp:
     # Duração do fade de encerramento (dissolver: alpha + encolher) quando o
     # power-up não é coletado a tempo no fim da fase.
     FADE_OUT_DURATION: float = 0.35
+
+    # Rótulo curto desenhado dentro do pickup. Constante de classe, não literal
+    # dentro do `draw`: era um dict remontado a cada frame por power-up em tela
+    # (§7). A COR não mora aqui — vem de `colors.POWERUP_COLORS`, fonte única
+    # compartilhada com o HUD.
+    LABELS: dict[str, str] = {
+        "life": "[+]",
+        "shield": "[SHLD]",
+        "double_shot": "[DS]",
+        "speed": "[SPD]",
+        "score": "[SCR]",
+        "piercing_shot": "[PS]",
+        "mini_ships": "[MS]",
+        "rainbow": "[?]",
+        "cooldown_haste": "[CD]",
+        "time_stop": "[STOP]",
+        "damage_boost": "[DMG]",
+        "chain_shot": "[CS]",
+        "repulsion_shield": "[RS]",
+    }
 
     def __init__(self, powerup_type: PowerUpType):
         self.type: PowerUpType = powerup_type
@@ -92,20 +102,7 @@ class PowerUp:
         )
 
     def _border_color(self) -> tuple[int, int, int]:
-        color_map = {
-            "life": POWERUP_LIFE,
-            "shield": POWERUP_SHIELD,
-            "double_shot": POWERUP_DOUBLE_SHOT,
-            "speed": POWERUP_SPEED,
-            "score": POWERUP_SCORE,
-            "piercing_shot": POWERUP_PIERCING_SHOT,
-            "mini_ships": POWERUP_MINI_SHIPS,
-            "rainbow": POWERUP_RAINBOW,
-            "cooldown_haste": POWERUP_COOLDOWN_HASTE,
-            "time_stop": POWERUP_TIME_STOP,
-            "damage_boost": POWERUP_DAMAGE_BOOST,
-        }
-        return color_map.get(self.kind, (255, 255, 255))
+        return POWERUP_COLORS.get(self.kind, (255, 255, 255))
 
     def _draw_fading(self, surface: pygame.Surface) -> None:
         """Dissolver de encerramento: alpha decrescente + encolhimento."""
@@ -125,36 +122,6 @@ class PowerUp:
         if self._fading:
             self._draw_fading(surface)
             return
-        color_map = {
-            "life": POWERUP_LIFE,
-            "shield": POWERUP_SHIELD,
-            "double_shot": POWERUP_DOUBLE_SHOT,
-            "speed": POWERUP_SPEED,
-            "score": POWERUP_SCORE,
-            "piercing_shot": POWERUP_PIERCING_SHOT,
-            "mini_ships": POWERUP_MINI_SHIPS,
-            "rainbow": POWERUP_RAINBOW,
-            "cooldown_haste": POWERUP_COOLDOWN_HASTE,
-            "time_stop": POWERUP_TIME_STOP,
-            "damage_boost": POWERUP_DAMAGE_BOOST,
-        }
-
-        text_map = {
-            "life": "[+]",
-            "shield": "[SHLD]",
-            "double_shot": "[DS]",
-            "speed": "[SPD]",
-            "score": "[SCR]",
-            "piercing_shot": "[PS]",
-            "mini_ships": "[MS]",
-            "rainbow": "[?]",
-            "cooldown_haste": "[CD]",
-            "time_stop": "[STOP]",
-            "damage_boost": "[DMG]",
-            "chain_shot": "[CS]",
-            "repulsion_shield": "[RS]",
-        }
-
         # Aplicar tremor visual e calcular o retângulo pulsante compartilhado
         _, _, pulse_rect = get_attraction_pulse_rect(self)
         pulse_size = pulse_rect.width
@@ -185,7 +152,7 @@ class PowerUp:
             r, g, b = colorsys.hsv_to_rgb(hue / 360.0, 1.0, 1.0)
             border_color = (int(r * 255), int(g * 255), int(b * 255))
         else:
-            border_color = color_map.get(self.kind, (255, 255, 255))
+            border_color = self._border_color()
 
         # Borda colorida com espessura maior para destaque
         pygame.draw.ellipse(surface, border_color, pulse_rect, 3)
@@ -196,7 +163,7 @@ class PowerUp:
 
         # Desenha o texto - rainbow usa cor animada, outros usam branco
         text_color = border_color if self.kind == "rainbow" else (255, 255, 255)
-        self._draw_text(surface, text_map.get(self.kind, "[?]"), text_color)
+        self._draw_text(surface, self.LABELS.get(self.kind, "[?]"), text_color)
 
     def _draw_text(
         self,

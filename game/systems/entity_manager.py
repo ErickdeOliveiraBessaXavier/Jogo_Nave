@@ -1,3 +1,4 @@
+import math
 import random
 from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence, Union
 
@@ -842,13 +843,19 @@ class EntityManager:
         dt: float,
         player_x: float,
         player_y: float,
-        freeze_enemies: bool = False,
+        enemy_time_scale: float = 1.0,
         screen_width: int = 1600,
         screen_height: int = 900,
         attraction_mult: float = 1.0,
         closing_pull_target: tuple[float, float] | None = None,
     ) -> None:
-        enemy_dt = 0.0 if freeze_enemies else dt
+        # `enemy_time_scale` substituiu o antigo booleano `freeze_enemies`.
+        # 0.0 congela, 1.0 é normal, e o intervalo aberto é a rampa de saída da
+        # parada do tempo (§ `systems/time_stop.py`). Como todo o lado inimigo
+        # — inimigos, boss, projéteis, spikes, ambiente — já derivava deste
+        # `enemy_dt` único, escalar aqui cobre tudo sem tocar em entidade
+        # nenhuma. O lado do jogador segue no `dt` cru, de propósito.
+        enemy_dt = dt * enemy_time_scale
         self._screen_size = (screen_width, screen_height)
         self._rebuild_enemy_caches()
 
@@ -902,6 +909,71 @@ class EntityManager:
 
         self.cleanup()
         self.rebuild_all_grids()
+
+    # Deslocamento cosmético gravado em cada inimigo pelo tremor da parada do
+    # tempo. Nome PÚBLICO de propósito: é contrato entre o manager e a entidade
+    # (§1), não estado privado sendo espiado de fora.
+    _TREMOR_DX = "freeze_tremor_dx"
+    _TREMOR_DY = "freeze_tremor_dy"
+
+    def apply_freeze_tremor(self, amplitude: float, phase: float) -> None:
+        """Faz os inimigos congelados vibrarem no lugar.
+
+        Chamado do `update` da cena, nunca do draw — deslocar posição é mutação
+        de estado (§3). Roda só durante a janela de aviso, quando
+        `enemy_time_scale == 0`: como os inimigos estão com `sdt == 0`, eles não
+        reescrevem a própria posição, e o par desfaz/reaplica abaixo é estável.
+
+        Não acumula: o deslocamento do frame anterior fica guardado NA PRÓPRIA
+        entidade e é desfeito antes do novo. Guardar na entidade (em vez de uma
+        lista no manager) é o que torna isso seguro quando um inimigo morre ou
+        volta para o pool no meio do tremor — o resíduo vai embora com ele em
+        vez de ser aplicado a quem reusar o slot.
+
+        `amplitude` em pixels (0 desliga e assenta todo mundo); `phase` é o
+        relógio da vibração, vindo da cena.
+        """
+        dx_attr, dy_attr = self._TREMOR_DX, self._TREMOR_DY
+        sin, cos = math.sin, math.cos
+
+        for i, en in enumerate(self.enemies):
+            dx_old = getattr(en, dx_attr, 0.0)
+            dy_old = getattr(en, dy_attr, 0.0)
+
+            if amplitude <= 0.0:
+                if dx_old == 0.0 and dy_old == 0.0:
+                    continue
+                dx_new = dy_new = 0.0
+            else:
+                # Ângulo áureo por índice: vizinhos vibram fora de fase, então
+                # o conjunto treme em vez de deslizar junto (que leria como
+                # screen shake, não como "cada um preso tentando se soltar").
+                off = i * 2.399963
+                dx_new = sin(phase * 37.0 + off) * amplitude
+                dy_new = cos(phase * 31.0 + off * 1.7) * amplitude
+
+            ddx, ddy = dx_new - dx_old, dy_new - dy_old
+            if ddx == 0.0 and ddy == 0.0:
+                continue
+
+            if hasattr(en, "x"):
+                en.x += ddx
+            if hasattr(en, "y"):
+                en.y += ddy
+
+            rect = getattr(en, "rect", None)
+            if rect is not None:
+                # O passo do rect vem da diferença entre os offsets ABSOLUTOS
+                # já arredondados — nunca de `round(ddx)`. Arredondar o delta a
+                # cada frame acumula o erro no inteiro, e os congelados
+                # derivavam pixels inteiros ao longo do tremor (medido: 2px em
+                # 120 frames) em vez de vibrarem no lugar. Assim o offset total
+                # aplicado é sempre exatamente `round(dx_new)`, e zera exato.
+                rect.x += int(round(dx_new)) - int(round(dx_old))
+                rect.y += int(round(dy_new)) - int(round(dy_old))
+
+            setattr(en, dx_attr, dx_new)
+            setattr(en, dy_attr, dy_new)
 
     # ------------------------------------------------------------------
     # Sub-passos de update() — extraídos para isolar fronteiras de domínio.

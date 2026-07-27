@@ -18,6 +18,7 @@ import pygame
 from ..core import colors
 from ..core.assets import get_font
 from ..core.config import config as Config
+from ..core.i18n import t
 from ..core.difficulty import DifficultyPreset
 from ..core.upgrades import get_upgrade_icon
 
@@ -48,30 +49,90 @@ class GameRenderer:
     # invadiria as bordas da caixa nos scores mais largos.
     SCORE_POP_AMPLITUDE = 0.14
 
-    # Cores e Símbolos de Power-ups para o HUD
+    # Símbolos e rótulos dos efeitos ativos no HUD.
+    #
+    # A COR vem de `colors.POWERUP_COLORS` — a MESMA que o pickup usa no chão
+    # (`entities/pickups/powerup.py`). Antes esta tabela trazia cores próprias
+    # da paleta genérica, e o mesmo power-up aparecia em duas cores na tela ao
+    # mesmo tempo; pior, `piercing_shot` e `time_stop` caíam ambos em PURPLE e
+    # ficavam indistinguíveis aqui, embora sejam distintos como pickup.
+    #
+    # `explosive_shot` não é `PowerUpType`: é o upgrade (`core/upgrades.py`),
+    # que aparece nesta faixa de efeitos ativos mas não existe como pickup no
+    # chão. Por isso a cor dele mora aqui e não em `POWERUP_COLORS`.
+    EXPLOSIVE_SHOT_COLOR = colors.ORANGE
+
     POWERUP_UI_DATA: dict[str, PowerupUiData] = {
-        "shield": {"color": colors.BLUE, "symbol": "S", "label": "ESCUDO"},
-        "double_shot": {"color": colors.GREEN, "symbol": "2X", "label": "TIRO DUPLO"},
-        "speed": {"color": colors.YELLOW, "symbol": "V", "label": "VELOCIDADE"},
-        "score": {"color": colors.MAGENTA, "symbol": "$", "label": "SCORE X1.5"},
-        "mini_ships": {"color": colors.CYAN, "symbol": "M", "label": "MINI-SHIPS"},
+        "shield": {
+            "color": colors.POWERUP_COLORS["shield"],
+            "symbol": "S",
+            "label": "ESCUDO",
+        },
+        "double_shot": {
+            "color": colors.POWERUP_COLORS["double_shot"],
+            "symbol": "2X",
+            "label": "TIRO DUPLO",
+        },
+        "speed": {
+            "color": colors.POWERUP_COLORS["speed"],
+            "symbol": "V",
+            "label": "VELOCIDADE",
+        },
+        "score": {
+            "color": colors.POWERUP_COLORS["score"],
+            "symbol": "$",
+            "label": "SCORE X1.5",
+        },
+        "mini_ships": {
+            "color": colors.POWERUP_COLORS["mini_ships"],
+            "symbol": "M",
+            "label": "MINI-SHIPS",
+        },
         "explosive_shot": {
-            "color": colors.ORANGE,
+            "color": EXPLOSIVE_SHOT_COLOR,
             "symbol": "EX",
             "label": "EXPLOSIVOS",
         },
-        "life": {"color": colors.RED, "symbol": "+", "label": "VIDA"},
-        "piercing_shot": {"color": colors.PURPLE, "symbol": "P", "label": "PERFURANTE"},
-        "rainbow": {"color": colors.WHITE, "symbol": "*", "label": "RAINBOW"},
+        "life": {
+            "color": colors.POWERUP_COLORS["life"],
+            "symbol": "+",
+            "label": "VIDA",
+        },
+        "piercing_shot": {
+            "color": colors.POWERUP_COLORS["piercing_shot"],
+            "symbol": "P",
+            "label": "PERFURANTE",
+        },
+        "rainbow": {
+            "color": colors.POWERUP_COLORS["rainbow"],
+            "symbol": "*",
+            "label": "RAINBOW",
+        },
         "cooldown_haste": {
-            "color": colors.LIGHT_BLUE,
+            "color": colors.POWERUP_COLORS["cooldown_haste"],
             "symbol": "CD",
             "label": "RECARGA",
         },
-        "time_stop": {"color": colors.PURPLE, "symbol": "T", "label": "STOP"},
-        "damage_boost": {"color": colors.ORANGE, "symbol": "DMG", "label": "DANO+"},
-        "chain_shot": {"color": (80, 220, 255), "symbol": "Z", "label": "RAIO"},
-        "repulsion_shield": {"color": (100, 255, 80), "symbol": "W", "label": "VENTO"},
+        "time_stop": {
+            "color": colors.POWERUP_COLORS["time_stop"],
+            "symbol": "T",
+            "label": "STOP",
+        },
+        "damage_boost": {
+            "color": colors.POWERUP_COLORS["damage_boost"],
+            "symbol": "DMG",
+            "label": "DANO+",
+        },
+        "chain_shot": {
+            "color": colors.POWERUP_COLORS["chain_shot"],
+            "symbol": "Z",
+            "label": "RAIO",
+        },
+        "repulsion_shield": {
+            "color": colors.POWERUP_COLORS["repulsion_shield"],
+            "symbol": "W",
+            "label": "VENTO",
+        },
     }
 
     def __init__(self, base_renderer: Any) -> None:
@@ -79,6 +140,8 @@ class GameRenderer:
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
         # Surface branca reusada para o impact flash (set_alpha por frame; sem alocar).
         self._flash_surface: pygame.Surface | None = None
+        # Buffer SRCALPHA reusado da moldura de tempo parado (§7).
+        self._time_stop_surface: pygame.Surface | None = None
 
         # Escala de UI relativa ao design base (1280×720). Como todas as
         # resoluções ofertadas são 16:9, um único fator (largura) cobre os dois
@@ -240,6 +303,10 @@ class GameRenderer:
         # avisos). Early-out interno quando não há nada visível.
         frame.damage_vignette.draw(surface)
 
+        # 9c. Parada do tempo: moldura + rótulo. Sobre o mundo e a vinheta,
+        # abaixo dos avisos críticos (boss/preparação), que precisam vencer.
+        self._draw_time_stop_overlay(frame, surface)
+
         # 10. Warning de Boss
         warning_timer = frame.boss_controller.warning_timer
         if warning_timer > 0 and int(warning_timer * 5) % 2 == 1:
@@ -266,6 +333,76 @@ class GameRenderer:
                 frame.level_popup_timer,
                 frame.level_popup_duration,
             )
+
+    # Espessura base da moldura de tempo parado, em px do design 1280×720.
+    _TIME_STOP_BORDER = 6
+
+    def _draw_time_stop_overlay(
+        self, frame: RenderFrame, surface: pygame.Surface
+    ) -> None:
+        """Moldura + rótulo que comunicam o estado da parada do tempo.
+
+        Três leituras num só elemento, todas vindas prontas do DTO:
+
+        - **congelado**: moldura estável e discreta na cor do power-up. Diz
+          "o efeito está ativo" sem competir com o gameplay.
+        - **acabando** (`time_stop_warning`): a moldura engrossa, clareia e
+          passa a piscar cada vez mais rápido, e o rótulo troca para o aviso.
+          É o indicador de término pedido — a frequência subindo é o que
+          comunica "agora vai" sem precisar ler texto.
+        - **recuperando** (`time_stop_recovery`): a moldura se dissolve no
+          mesmo ritmo em que os inimigos voltam a acelerar, então o sumiço dela
+          É a barra de progresso da retomada.
+        """
+        frozen, warning = frame.time_stop_frozen, frame.time_stop_warning
+        recovery = frame.time_stop_recovery
+        if not frozen and not frame.time_stop_recovering:
+            return
+
+        color = colors.POWERUP_COLORS["time_stop"]
+
+        if frozen:
+            # Pisca acelerando: ~2Hz no começo do aviso, ~9Hz no fim.
+            piscada = 1.0
+            if warning > 0.0:
+                hz = 2.0 + 7.0 * warning
+                onda = math.sin(frame.time_stop_phase * hz * math.tau)
+                piscada = 1.0 - 0.55 * warning * (0.5 - 0.5 * onda)
+            alpha = int((70 + 150 * warning) * piscada)
+            espessura = self._s(self._TIME_STOP_BORDER * (1.0 + 1.4 * warning))
+        else:
+            # Dissolve junto com a rampa de volta.
+            alpha = int(70 * (1.0 - recovery))
+            espessura = self._s(self._TIME_STOP_BORDER)
+
+        alpha = max(0, min(255, alpha))
+        if alpha <= 0 or espessura <= 0:
+            return
+
+        w, h = surface.get_width(), surface.get_height()
+        # Buffer próprio e reusado (mesmo padrão do `_flash_surface`): desenhar
+        # com alpha exige SRCALPHA, e alocar tela cheia por frame é o tipo de
+        # custo que o §7 proíbe no hot path.
+        if self._time_stop_surface is None or self._time_stop_surface.get_size() != (
+            w,
+            h,
+        ):
+            self._time_stop_surface = pygame.Surface((w, h), pygame.SRCALPHA)
+        moldura = self._time_stop_surface
+        moldura.fill((0, 0, 0, 0))
+        pygame.draw.rect(moldura, (*color, alpha), (0, 0, w, h), espessura)
+        surface.blit(moldura, (0, 0))
+
+        if not frozen:
+            return
+
+        texto = t("hud.time_stop.ending") if warning > 0.0 else t("hud.time_stop")
+        rotulo = self.hud_font_tiny.render(texto, True, color)
+        rotulo.set_alpha(alpha)
+        surface.blit(
+            rotulo,
+            rotulo.get_rect(center=(w // 2, espessura + self._s(14))),
+        )
 
     def _draw_impact_flash(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """White frames: clarão branco curto que esmaece em 1-3 frames (impact frame)."""

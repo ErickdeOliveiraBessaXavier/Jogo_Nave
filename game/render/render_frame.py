@@ -137,3 +137,37 @@ class RenderFrame:
     # 'Pop' do número do score: 1.0 no frame em que pontuou, decaindo a 0.0.
     # A cena mantém o timer; aqui só chega a fração já normalizada.
     score_pop: float = 0.0
+
+    # ── Parada do tempo (power-up TIME_STOP) ──────────────────────────────
+    # Já normalizados pela cena a partir do `TimeStopState`; o renderer não
+    # conhece durações nem constantes, só desenha as frações.
+    time_stop_frozen: bool = False
+    """Inimigos parados. Liga a moldura e o rótulo de 'TEMPO PARADO'."""
+
+    time_stop_warning: float = 0.0
+    """0→1 conforme o congelamento se aproxima do fim.
+
+    Único canal do aviso de término: a intensidade da pulsação e o quanto a
+    moldura 'racha' saem daqui. Sobe em rampa, em vez de ser um liga/desliga,
+    para o aviso entrar suave e ir ficando mais aflito.
+    """
+
+    time_stop_recovering: bool = False
+    """Rampa de volta em curso.
+
+    Existe separado de `time_stop_recovery` porque a fração é AMBÍGUA: ela vale
+    0.0 tanto em "não há efeito nenhum" quanto em "a recuperação começou agora".
+    Guardar o overlay por `recovery <= 0.0` engolia o primeiro instante da
+    rampa — justo o frame do descongelamento, o mais visível de todos.
+    """
+
+    time_stop_recovery: float = 0.0
+    """0→1 durante a rampa em que os inimigos voltam a acelerar."""
+
+    time_stop_phase: float = 0.0
+    """Relógio da pulsação, em segundos de congelamento acumulados.
+
+    Vem da cena porque o render não tem (nem deve ter) relógio próprio: §3.
+    Um `time.time()` aqui continuaria correndo durante a pausa e faria a
+    moldura reaparecer fora de fase ao despausar.
+    """

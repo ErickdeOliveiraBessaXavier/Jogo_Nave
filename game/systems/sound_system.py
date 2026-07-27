@@ -58,7 +58,7 @@ class SoundSystem:
         """Game Over: abaixa o volume da música (ducking), sem cortar SFX. A
         música atual continua e os one-shots (explosão da nave) soam normalmente.
         O duck é desfeito ao sair da tela (continuar/menu) em game_over.py."""
-        sound_manager.duck_music(True)
+        sound_manager.duck_music(True, source="game_over")
 
     def _on_powerup_collected(self, _event: events.PowerupCollected) -> None:
         """Toca o som de coleta de power-up."""
