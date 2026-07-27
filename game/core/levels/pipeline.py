@@ -1197,6 +1197,58 @@ def _build_test_arena_config(level_number: int) -> LevelConfig | None:
     return config
 
 
+# Rampa de entrada de mundo: as primeiras fases de cada mundo entram amaciadas e
+# só chegam ao peso cheio no 4º estágio. Chave = estágio DENTRO do mundo
+# (`world.get_stage_number`); ausente = 1.0 (sem amaciamento).
+# Fator < 1.0 => menos inimigos para limpar E intervalo de spawn maior.
+_STAGE_ENTRY_GRACE: dict[int, float] = {1: 0.70, 2: 0.80, 3: 0.90}
+
+
+def _apply_stage_grace_and_coop(
+    config: LevelConfig,
+    world: "WorldConfig",
+    level_number: int,
+    player_count: int,
+) -> LevelConfig:
+    """Amacia a entrada do mundo e escala a fase para co-op.
+
+    Passo final COMUM aos três caminhos de `get_level_config` (fixo,
+    meteor_storm, procedural) — antes existiam três cópias verbatim deste
+    bloco, e mexer na rampa exigia lembrar das três.
+
+    Duas transformações, ambas em `enemy_spawn_config` e `enemies_to_clear`:
+
+    - **grace** (`_STAGE_ENTRY_GRACE`): fator < 1.0 nos primeiros estágios do
+      mundo. Divide o tempo de spawn (intervalo MAIOR = menos pressão) e
+      multiplica a contagem (menos inimigos).
+    - **co-op**: cada jogador extra adiciona +35% de inimigos e -20% no
+      intervalo de spawn.
+
+    O clamp em `MIN_SPAWN_TIME` é do co-op, não do grace: o grace só ALONGA o
+    intervalo, mas a divisão por `coop_spawn_multiplier` o encurta e roda depois
+    dos clamps do gerador procedural (`procedural.py`) e do
+    `_apply_difficulty_to_fixed_level`. Sem reclamp, 2 jogadores furavam o
+    mínimo declarado (0.5s / 1.2 = 0.417s).
+    """
+    grace = _STAGE_ENTRY_GRACE.get(world.get_stage_number(level_number), 1.0)
+    coop_enemies_multiplier = 1.0 + 0.35 * (player_count - 1)
+    coop_spawn_multiplier = 1.0 + 0.20 * (player_count - 1)
+
+    adjusted = copy.copy(config)
+    adjusted.enemy_spawn_config = {
+        enemy_type: max(
+            DifficultyConfig.MIN_SPAWN_TIME,
+            (spawn_time / grace) / coop_spawn_multiplier,
+        )
+        for enemy_type, spawn_time in config.enemy_spawn_config.items()
+    }
+    adjusted.enemies_to_clear = max(
+        DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
+        int(config.enemies_to_clear * grace * coop_enemies_multiplier),
+    )
+    return adjusted
+
+
 def get_level_config(
     level_number: int,
     difficulty_preset: DifficultyPreset = DifficultyPreset.NORMAL,
@@ -1216,9 +1268,6 @@ def get_level_config(
         if test_config is not None:
             return test_config
 
-    coop_enemies_multiplier = 1.0 + 0.35 * (player_count - 1)
-    coop_spawn_multiplier = 1.0 + 0.20 * (player_count - 1)
-
     world = get_world_for_level(level_number)
 
     # Fonte ÚNICA da classe do boss (mid + final, nomeado + procedural).
@@ -1227,6 +1276,12 @@ def get_level_config(
     # Boss SEM layout handcrafted (setores procedurais, final da Cidade/Vulcão):
     # adds paramétricos por tema. Bosses COM entrada em FIXED_LEVELS caem no branch
     # abaixo (mantêm o layout desenhado à mão) e recebem a classe injetada.
+    #
+    # Este é o ÚNICO caminho que não passa por `_apply_stage_grace_and_coop`, e é
+    # deliberado: boss-level é sempre estágio final de mundo (grace já seria 1.0),
+    # e a escala de co-op do boss é do próprio boss — HP via
+    # `PlayingScene._COOP_BOSS_HP_PER_EXTRA_PLAYER` (+40%/jogador extra), não a
+    # contagem de adds do `LevelConfig`.
     if (
         boss_cls is not None
         and level_number not in FIXED_LEVELS
@@ -1250,29 +1305,16 @@ def get_level_config(
         config = FIXED_LEVELS[level_number]
         config = _apply_world_theme_to_config(config, world)
         config = _apply_difficulty_to_fixed_level(config, difficulty_preset)
-
-        fixed_stage = world.get_stage_number(level_number)
-        fixed_grace = 1.0
-        if fixed_stage == 1:
-            fixed_grace = 0.70
-        elif fixed_stage == 2:
-            fixed_grace = 0.80
-        elif fixed_stage == 3:
-            fixed_grace = 0.90
-
-        adjusted_spawn = {
-            et: (spawn_time / fixed_grace) / coop_spawn_multiplier
-            for et, spawn_time in config.enemy_spawn_config.items()
-        }
-        adjusted_to_clear = max(
-            DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
-            int(config.enemies_to_clear * fixed_grace * coop_enemies_multiplier),
-        )
-        config = copy.copy(config)
-        config.enemy_spawn_config = adjusted_spawn
-        config.enemies_to_clear = adjusted_to_clear
+        config = _apply_stage_grace_and_coop(config, world, level_number, player_count)
         # Boss-level handcrafted: a CLASSE vem do roadmap (fonte única); FIXED_LEVELS
         # contribui só com o layout de inimigos/score/nome.
+        if config.boss_type is not None and boss_cls is None:
+            logger.warning(
+                "[Levels] Nível fixo %s declara boss %s mas o roadmap não prevê boss "
+                "nesse nível — o boss do FIXED_LEVELS será descartado.",
+                level_number,
+                config.boss_type.__name__,
+            )
         config.boss_type = boss_cls
         # Níveis handcrafted também seguem a regra global de variedade/elegibilidade
         # por tema (rampa X-1→1, X-2→2, X-3+→teto; filtro de tema).
@@ -1285,15 +1327,6 @@ def get_level_config(
         )
     generator = _procedural_generators[difficulty_preset]
 
-    stage_number = world.get_stage_number(level_number)
-    world_entry_grace = 1.0
-    if stage_number == 1:
-        world_entry_grace = 0.70
-    elif stage_number == 2:
-        world_entry_grace = 0.80
-    elif stage_number == 3:
-        world_entry_grace = 0.90
-
     if force_meteor_storm:
         difficulty = generator.calculate_difficulty(level_number)
         theme = LEVEL_THEMES["meteor_storm"]
@@ -1304,35 +1337,13 @@ def get_level_config(
             random.Random(generator.seed * 10_000 + level_number),
         )
         config = _apply_world_theme_to_config(config, world)
-        adjusted_spawn = {
-            et: (spawn_time / world_entry_grace) / coop_spawn_multiplier
-            for et, spawn_time in config.enemy_spawn_config.items()
-        }
-        adjusted_to_clear = max(
-            DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
-            int(config.enemies_to_clear * world_entry_grace * coop_enemies_multiplier),
-        )
-        config = copy.copy(config)
-        config.enemy_spawn_config = adjusted_spawn
-        config.enemies_to_clear = adjusted_to_clear
+        config = _apply_stage_grace_and_coop(config, world, level_number, player_count)
         config = _apply_theme_enemy_rules(config, world, difficulty_preset)
         return config
 
     config = generator.generate_level(level_number)
     config = _apply_world_theme_to_config(config, world)
-
-    adjusted_spawn = {
-        et: (spawn_time / world_entry_grace) / coop_spawn_multiplier
-        for et, spawn_time in config.enemy_spawn_config.items()
-    }
-    adjusted_to_clear = max(
-        DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
-        int(config.enemies_to_clear * world_entry_grace * coop_enemies_multiplier),
-    )
-    config = copy.copy(config)
-    config.enemy_spawn_config = adjusted_spawn
-    config.enemies_to_clear = adjusted_to_clear
-
+    config = _apply_stage_grace_and_coop(config, world, level_number, player_count)
     config = _apply_theme_enemy_rules(config, world, difficulty_preset)
     return config
 

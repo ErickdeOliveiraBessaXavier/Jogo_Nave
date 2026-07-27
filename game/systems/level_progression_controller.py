@@ -120,13 +120,18 @@ class LevelProgressionController:
         self._player_count = max(1, int(count))
 
     def get_adjusted_level_config(self, level_number: int) -> LevelConfig:
-        """Carrega LevelConfig ajustado pelo meta-progression."""
+        """Carrega LevelConfig ajustado pelo meta-progression.
+
+        MUTA o perfil (avança e persiste o multiplicador do nível — ver
+        `MetaProgressionService.resolve_level_config`). Chamar só ao ENTRAR na
+        fase, nunca para consultar/prever a config.
+        """
         base = get_level_config(
             level_number,
             self._difficulty_preset,
             player_count=self._player_count,
         )
-        return MetaProgressionService.get_adjusted_config(self._player_profile, base)
+        return MetaProgressionService.resolve_level_config(self._player_profile, base)
 
     def _cache_thresholds(self) -> None:
         assert self.level_config is not None

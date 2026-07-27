@@ -38,6 +38,23 @@ class PerformanceState(Enum):
     INCONSISTENT = "inconsistent"  # Resultados variados
 
 
+# ── Limiares de diagnóstico de performance ──────────────────────────────────
+# Fonte ÚNICA: lidos tanto por `LevelPerformance.get_performance_state`
+# (diagnóstico) quanto por `PerformanceAnalyzer` (recomendação de ajuste).
+#
+# Antes cada lado tinha a sua cópia: o analyzer declarava STRUGGLE_THRESHOLD /
+# DOMINATE_THRESHOLD que NINGUÉM lia, enquanto o diagnóstico usava 0.3/0.9
+# hardcoded. Mexer no knob documentado não fazia nada.
+STRUGGLE_CLEAR_RATE: float = 0.30  # clear rate abaixo disso = lutando
+DOMINATE_CLEAR_RATE: float = 0.90  # clear rate acima disso = dominando
+
+# Tentativas mínimas antes de emitir QUALQUER diagnóstico ou ajuste.
+# Vale igual para os dois lados de propósito: com gates diferentes (era 3 para
+# endurecer e 5 para aliviar) o sistema apertava quase 2x mais rápido do que
+# ajudava — viés silencioso contra quem já estava sofrendo.
+MIN_ATTEMPTS_TO_DIAGNOSE: int = 3
+
+
 @dataclass
 class SessionStats:
     """Estatísticas de uma sessão de jogo."""
@@ -144,15 +161,15 @@ class LevelPerformance:
 
     def get_performance_state(self) -> PerformanceState:
         """Determina estado atual de performance."""
-        if self.attempts < 2:
+        if self.attempts < MIN_ATTEMPTS_TO_DIAGNOSE:
             return PerformanceState.LEARNING
 
         # Dificuldade excessiva
-        if self.clear_rate < 0.3 and self.attempts >= 5:
+        if self.clear_rate < STRUGGLE_CLEAR_RATE:
             return PerformanceState.STRUGGLING
 
         # Dominando completamente
-        if self.clear_rate > 0.9 and self.attempts >= 3:
+        if self.clear_rate > DOMINATE_CLEAR_RATE:
             # Verificar consistência de tempos
             if self.clears >= 2 and self.best_time is not None and self.avg_time > 0:
                 time_consistency = self.best_time / self.avg_time
@@ -203,10 +220,9 @@ MAX_HIGH_SCORES = 10
 class PerformanceAnalyzer:
     """Analisa padrões de performance e sugere ajustes."""
 
-    # Configuração de sensibilidade
-    STRUGGLE_THRESHOLD = 0.35  # Clear rate abaixo disso = struggling
-    DOMINATE_THRESHOLD = 0.85  # Clear rate acima disso = dominating
-    MIN_ATTEMPTS_FOR_ANALYSIS = 3  # Mínimo de tentativas para análise
+    # Os limiares de clear rate e o mínimo de tentativas são módulo-level
+    # (STRUGGLE_CLEAR_RATE / DOMINATE_CLEAR_RATE / MIN_ATTEMPTS_TO_DIAGNOSE):
+    # fonte única compartilhada com `LevelPerformance.get_performance_state`.
 
     RECENT_ATTEMPTS_WINDOW = 10  # Quantas tentativas recentes considerar
     IMPROVEMENT_THRESHOLD = 0.2  # Melhoria mínima para considerar progresso
@@ -219,7 +235,7 @@ class PerformanceAnalyzer:
         Returns:
             Dict com diagnóstico e recomendações de ajuste
         """
-        if stats.attempts < PerformanceAnalyzer.MIN_ATTEMPTS_FOR_ANALYSIS:
+        if stats.attempts < MIN_ATTEMPTS_TO_DIAGNOSE:
             return {
                 "state": PerformanceState.LEARNING,
                 "adjustment": 1.0,  # Sem ajuste
@@ -419,20 +435,72 @@ class PerformanceAnalyzer:
 
 
 class DifficultyAdjuster:
-    """Aplica ajustes adaptativos à configuração de níveis."""
+    """Aplica ajustes adaptativos à configuração de níveis.
+
+    A política inteira em uma frase: **ajudar rápido, apertar devagar, e nunca
+    apertar o caminho de volta.**
+
+    O multiplicador é um número por nível (persistido em
+    `PlayerProfile.level_adjustments`) que anda em passos suaves na direção do
+    alvo sugerido pelo `PerformanceAnalyzer`. Três decisões definem o
+    comportamento e cada uma corrige um problema observado:
+
+    1. **Confiança escala o DESVIO, não o multiplicador.** A conta é
+       ``1.0 + (sugerido - 1.0) * fator``. Multiplicar o multiplicador direto
+       (``sugerido * fator``) invertia o sinal: "dominando, clear rate alto"
+       sugeria 1.08, virava ``1.08 * 0.6 = 0.648`` e o jogo ficava ~18% mais
+       FÁCIL para quem estava dominando. Do lado do alívio o erro era de
+       magnitude: 0.85 virava 0.51 e estourava direto no piso.
+    2. **Confiança baixa CONGELA, não zera.** Ver `apply_adjustment`.
+    3. **Endurecer exige estar na fronteira.** Ver `hardening_allowed`.
+    """
 
     # Limites de ajuste para evitar extremos
     MIN_ADJUSTMENT = 0.75  # Máximo 25% mais fácil
     MAX_ADJUSTMENT = 1.25  # Máximo 25% mais difícil
 
-    # Velocidade de ajuste (quão rápido o sistema adapta)
-    ADJUSTMENT_SPEED = 0.5  # 50% do ajuste sugerido por tentativa
+    # Velocidade de convergência por tentativa (fração do caminho até o alvo).
+    # Assimétrica de propósito: o alívio chega em ~2 tentativas, o aperto leva
+    # ~4. Errar para o lado fácil custa uma fase morna; errar para o lado
+    # difícil custa o jogador (§11).
+    EASE_SPEED = 0.5
+    HARDEN_SPEED = 0.25
+
+    # Diferença imperceptível: trata como "sem ajuste" e devolve a config base.
+    NEUTRAL_BAND = 0.02
+
+    # Quão atrás da fronteira do jogador uma fase pode estar e ainda ser
+    # candidata a endurecer. Ver `hardening_allowed`.
+    FRONTIER_MARGIN = 2
+
+    @staticmethod
+    def hardening_allowed(level_number: int, highest_level_reached: int) -> bool:
+        """A fase está perto o bastante da fronteira para poder endurecer?
+
+        Morrer manda o jogador de volta ao checkpoint do mundo, então as fases
+        de ENTRADA são rejogadas em toda run e limpas em toda run. Pelas
+        estatísticas puras elas parecem "dominadas" (clear rate ~100%, win
+        streak alto) e o adaptativo as endurecia em até +25% — enquanto a fase
+        onde o jogador realmente trava só amolecia depois de várias runs
+        inteiras. O resultado líquido era o caminho de volta ficando mais duro
+        justamente para quem já estava apanhando.
+
+        A fronteira (`highest_level_reached`) separa os dois casos sem precisar
+        de estado novo: uma fase muito atrás dela é trajeto, não desafio — o
+        jogador já provou que a domina, e apertá-la só cobra pedágio na
+        retomada. Perto da fronteira, "clear rate alto" significa de fato que a
+        fase está fácil demais, e aí endurecer é legítimo.
+
+        Alívio NUNCA passa por este gate: ajudar é sempre permitido.
+        """
+        return level_number + DifficultyAdjuster.FRONTIER_MARGIN >= highest_level_reached
 
     @staticmethod
     def apply_adjustment(
         base_config: LevelConfig,
         analysis: Dict[str, Any],
         previous_adjustment: float = 1.0,
+        allow_hardening: bool = True,
     ) -> tuple[LevelConfig, float]:
         """
         Aplica ajuste adaptativo à configuração do nível.
@@ -441,47 +509,62 @@ class DifficultyAdjuster:
             base_config: Configuração base do nível
             analysis: Resultado da análise de performance
             previous_adjustment: Ajuste anterior aplicado (para suavizar transições)
+            allow_hardening: Se False, o alvo é limitado a 1.0 — o ajuste pode
+                ficar onde está ou decair para o neutro, nunca subir. Vem de
+                `hardening_allowed`.
 
         Returns:
             Tupla com (config ajustada, novo multiplicador)
         """
-        suggested_adjustment = analysis["adjustment"]
         confidence = analysis["confidence"]
 
-        # Não ajustar se confiança for baixa (dados insuficientes)
         if confidence == "low":
-            return base_config, 1.0
+            # CONGELA no ajuste vigente em vez de voltar para 1.0.
+            # Devolver 1.0 aqui tinha um efeito perverso: o jogador travado numa
+            # fase, já aliviado em 0.85, ao começar a MELHORAR caía no ramo
+            # "lutando mas melhorando" (confiança baixa) e levava os 15% de
+            # dificuldade de volta na cara de uma vez — punido exatamente no
+            # momento em que estava progredindo.
+            return DifficultyAdjuster._materialize(base_config, previous_adjustment)
 
-        # Suavizar ajuste baseado em confiança
-        if confidence == "medium":
-            adjustment_factor = 0.6  # 60% do ajuste sugerido
-        else:  # high
-            adjustment_factor = 1.0  # Ajuste completo
+        confidence_factor = 1.0 if confidence == "high" else 0.6
+        target = 1.0 + (analysis["adjustment"] - 1.0) * confidence_factor
 
-        # Interpolar entre ajuste anterior e novo ajuste
-        target_adjustment = suggested_adjustment * adjustment_factor
-        new_adjustment = (
-            previous_adjustment
-            + (target_adjustment - previous_adjustment)
-            * DifficultyAdjuster.ADJUSTMENT_SPEED
+        if not allow_hardening:
+            target = min(target, 1.0)
+
+        speed = (
+            DifficultyAdjuster.EASE_SPEED
+            if target < previous_adjustment
+            else DifficultyAdjuster.HARDEN_SPEED
         )
+        new_adjustment = previous_adjustment + (target - previous_adjustment) * speed
 
-        # Aplicar limites
-        new_adjustment = max(
+        return DifficultyAdjuster._materialize(base_config, new_adjustment)
+
+    @staticmethod
+    def _materialize(
+        config: LevelConfig, multiplier: float
+    ) -> tuple[LevelConfig, float]:
+        """Fecha o contrato de `apply_adjustment`: clampa e aplica o multiplicador.
+
+        Ponto ÚNICO de saída — todo caminho de decisão termina aqui, então os
+        limites e a banda neutra valem para todos sem repetição.
+
+        A banda neutra decide só se vale MATERIALIZAR uma config diferente; ela
+        nunca arredonda o multiplicador devolvido, que é o valor PERSISTIDO e
+        precisa acumular entre tentativas. Zerá-lo dentro da banda travava a
+        convergência lenta: um aperto de confiança média (alvo 1.048 a 0.25 por
+        tentativa) produz 1.012 no primeiro passo — arredondado para 1.0, o
+        passo seguinte recomeçava do zero e o ramo nunca escapava da banda.
+        """
+        multiplier = max(
             DifficultyAdjuster.MIN_ADJUSTMENT,
-            min(DifficultyAdjuster.MAX_ADJUSTMENT, new_adjustment),
+            min(DifficultyAdjuster.MAX_ADJUSTMENT, multiplier),
         )
-
-        # Se o ajuste é muito próximo de 1.0, não aplicar
-        if 0.98 <= new_adjustment <= 1.02:
-            return base_config, 1.0
-
-        # Aplicar ajuste à configuração
-        adjusted_config = DifficultyAdjuster._apply_to_config(
-            base_config, new_adjustment
-        )
-
-        return adjusted_config, new_adjustment
+        if abs(multiplier - 1.0) <= DifficultyAdjuster.NEUTRAL_BAND:
+            return config, multiplier
+        return DifficultyAdjuster._apply_to_config(config, multiplier), multiplier
 
     @staticmethod
     def _apply_to_config(config: LevelConfig, multiplier: float) -> LevelConfig:
@@ -497,9 +580,13 @@ class DifficultyAdjuster:
 
             adjusted_spawn_config[enemy_type] = adjusted_time
 
-        # Ajustar quantidade de inimigos
-        adjusted_enemies = int(config.enemies_to_clear * multiplier)
-        adjusted_enemies = max(20, adjusted_enemies)  # Mínimo de 20 inimigos
+        # Ajustar quantidade de inimigos. O piso é o MESMO do pipeline
+        # (`_apply_stage_grace_and_coop`): antes era um `max(20, ...)` solto que
+        # deixava o adaptativo furar em 25% o mínimo que o pipeline declara.
+        adjusted_enemies = max(
+            DifficultyConfig.MIN_ENEMIES_TO_CLEAR,
+            int(config.enemies_to_clear * multiplier),
+        )
 
         return replace(
             config,

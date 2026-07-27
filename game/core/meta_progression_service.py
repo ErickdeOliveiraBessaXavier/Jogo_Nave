@@ -23,10 +23,18 @@ class MetaProgressionService:
     """Application service: aplica ajuste dinâmico de dificuldade por histórico."""
 
     @staticmethod
-    def get_adjusted_config(
+    def resolve_level_config(
         profile: "PlayerProfile", base_config: LevelConfig
     ) -> LevelConfig:
-        """Retorna LevelConfig ajustado baseado na performance histórica do jogador."""
+        """Resolve o `LevelConfig` da fase pela performance histórica do jogador.
+
+        **MUTA o perfil**: cada chamada avança o multiplicador do nível um passo
+        e o persiste (`record_level_adjustment`). O nome carrega o verbo por
+        isso — chamar em contexto de preview/UI faria a dificuldade derivar sem
+        o jogador ter jogado. Só deve ser chamado UMA vez por entrada de fase:
+        hoje, `PlayingScene._init_systems` (fase inicial da run) e
+        `LevelProgressionController.start_next_level` (cada virada).
+        """
         level_num = base_config.level_number
 
         if level_num not in profile.level_stats:
@@ -37,7 +45,12 @@ class MetaProgressionService:
         previous_adjustment = profile.level_adjustments.get(level_num, 1.0)
 
         adjusted_config, new_adjustment = DifficultyAdjuster.apply_adjustment(
-            base_config, analysis, previous_adjustment
+            base_config,
+            analysis,
+            previous_adjustment,
+            allow_hardening=DifficultyAdjuster.hardening_allowed(
+                level_num, profile.highest_level_reached
+            ),
         )
 
         if new_adjustment != previous_adjustment:

@@ -406,7 +406,7 @@ class PlayingScene(Scene):
             self.difficulty_preset,
             player_count=player_count,
         )
-        level_config = MetaProgressionService.get_adjusted_config(
+        level_config = MetaProgressionService.resolve_level_config(
             self.player_profile, base_config
         )
         self.game_surface = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
