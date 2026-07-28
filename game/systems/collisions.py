@@ -2122,7 +2122,10 @@ class Collisions:
             bullet_rect = bullet.rect
 
             for square in boss_squares:
-                if square.dead:
+                # Espalhando (`causes_damage` False) o quadrado deixa de ser
+                # obstáculo: uma bala em voo não pode ser comida por um bloco que
+                # já é só animação de encerramento.
+                if square.dead or not square.causes_damage:
                     continue
 
                 square_rect = square.get_rect()
@@ -2204,6 +2207,12 @@ class Collisions:
         ship_rect = ship.rect
 
         for square in boss_squares:
+            # `causes_damage` cai para False no instante em que o boss morre e os
+            # quadrados se soltam. Durante a sequência de morte a nave fica
+            # parada e sem controle: cobrar dano ali seria um golpe que o jogador
+            # não tinha como evitar. A partir daí eles são só efeito visual.
+            if square.dead or not square.causes_damage:
+                continue
             if ship_rect.colliderect(square.get_rect()):
                 return True
 

@@ -164,6 +164,9 @@ class Boss(BossHitMixin):
                 orbit_angle=orbit_angle,
                 orbit_speed=orbit_speed,
                 speed_var=random.uniform(0.85, 1.18),
+                # Sem dono o orbital não teria como saber que o boss acabou —
+                # ele não tem movimento nem morte próprios (ver `BossSquare.update`).
+                owner=self,
             )
             self.floating_squares.append(square)
 
@@ -278,9 +281,15 @@ class Boss(BossHitMixin):
         )
         # floating_squares orbitam o boss mas precisam estar em em.boss_squares
         # para que colisão e render do EM os capturem.
+        #
+        # O `not q.dead` não é redundante: entre o boss zerar a vida e o
+        # controlador soltar o `em.boss`, este método ainda roda alguns frames.
+        # Sem o filtro, todo orbital que acabou de se marcar morto seria
+        # re-inserido aqui no frame seguinte ao `_filter_dead_inplace` removê-lo
+        # — ressuscitado em loop, e o vazamento voltaria por outra porta.
         em_squares = ctx.entity_manager.boss_squares
         for q in self.floating_squares:
-            if q not in result.new_squares and q not in em_squares:
+            if not q.dead and q not in result.new_squares and q not in em_squares:
                 result.new_squares.append(q)
         return result
 
@@ -358,7 +367,10 @@ class Boss(BossHitMixin):
                 square.x += (target_x - square.x) * lerp_speed * dt
                 square.y += (target_y - square.y) * lerp_speed * dt
                 square.size = square.base_size * pulse_scale
-                square.rotation = 0.0
+                # (Havia um `square.rotation = 0.0` aqui. Era o segundo ponto que
+                # travava o giro — o outro estava no `BossSquare.update` — e
+                # juntos deixavam os 14 blocos parados enquanto orbitavam. A
+                # ÓRBITA continua sendo dirigida acima; só o giro do bloco mudou.)
             elif square.state in ("preparing", "launching"):
                 square.prepare_timer += dt
                 square.rotation += dt * 720
@@ -391,11 +403,10 @@ class Boss(BossHitMixin):
                     )
                     projectile.palette = self.current_palette
                     spawned_squares.append(projectile)
-                    square.state, square.prepare_timer, square.rotation = (
-                        "orbiting",
-                        0.0,
-                        0.0,
-                    )
+                    # `rotation` NÃO é zerada ao voltar à órbita: o bloco vinha
+                    # girando a 720°/s e um salto para 0° seria um tranco visível.
+                    # Ele apenas desacelera para o giro de órbita.
+                    square.state, square.prepare_timer = "orbiting", 0.0
                     self.square_launch_timer = 0.0
 
             ready_squares = [
