@@ -33,6 +33,7 @@ class BossSquare(SquareProjectileBase):
         orbit_speed: float = 0,
         speed_var: float = 1.0,
         palette: dict[str, tuple[int, int, int]] | None = None,
+        owner: object | None = None,
     ):
         super().__init__(x, y, size)
         self.vx = vx
@@ -40,6 +41,15 @@ class BossSquare(SquareProjectileBase):
 
         # Palette support
         self.palette = palette
+
+        # Dono do quadrado ORBITAL (o boss). Existe porque o orbital não tem
+        # movimento próprio: quem o posiciona a cada frame é o dono, com um lerp
+        # até um ponto derivado do centro dele. Sem dono vivo o quadrado não é uma
+        # entidade — é um resto parado na tela. Ver `update`.
+        #
+        # Projétil lançado NÃO tem dono: é um objeto novo, criado por
+        # `_create_square_projectile`, que voa sozinho e morre pela borda.
+        self.owner = owner
 
         # Orbital attributes
         self.is_orbital = is_orbital
@@ -73,6 +83,26 @@ class BossSquare(SquareProjectileBase):
         self, dt: float, screen_width: int = 1600, screen_height: int = 900
     ) -> None:
         """Update position and animation."""
+        # Orbital sem dono vivo deixa de existir.
+        #
+        # O quadrado orbital é a ÚNICA entidade do jogo sem caminho próprio de
+        # morte: a remoção por borda logo abaixo é explicitamente restrita a
+        # `not self.is_orbital`, porque um orbital nunca sai da tela — ele fica
+        # preso ao boss. Isso o deixava vivo para sempre depois que o boss
+        # morria, ainda colidindo e desenhando, até a limpeza da transição de
+        # fase varrer a lista.
+        #
+        # A condição mora AQUI, e não num handler de morte do boss, porque o
+        # invariante é do quadrado: ele depende do dono para se mover. Assim
+        # vale para toda forma de o dono sumir (abatido, force-kill de fim de
+        # estágio, troca de fase) em vez de só para o caminho que alguém lembrou
+        # de cobrir.
+        if self.is_orbital:
+            owner = self.owner
+            if owner is None or getattr(owner, "dead", True):
+                self.dead = True
+                return
+
         # Move only if not orbital
         if not self.is_orbital:
             self.x += self.vx * dt

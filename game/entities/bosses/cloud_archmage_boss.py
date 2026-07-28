@@ -604,8 +604,6 @@ class CloudArchmageBoss:
                 em.rock_glider_pool.pool.append(s)
                 em.rock_glider_pool.active.append(s)
                 em.enemies.append(s)
-            elif isinstance(s, MountainPropeller):
-                em.mountain_propellers.append(s)
             else:
                 regular_enemies.append(s)
         result.spawned_enemies = regular_enemies

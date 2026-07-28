@@ -184,7 +184,6 @@ class EntityManager:
         self.wingmen: list[Wingman] = []
         self.coop_links: list[CoopLink] = []
         self.formations: list[Formation] = []
-        self.mountain_propellers: list[MountainPropeller] = []
         self.spikes: list[Spike] = []
         self.boulders: list[GolemMine] = []
         self.attack_debris: list[AttackDebris] = []
@@ -389,7 +388,6 @@ class EntityManager:
             + len(self.cannon_towers)
             + len(self.cannon_mines)
             + len(self.black_holes)
-            + len(self.mountain_propellers)
             + len(self.attack_debris)
             + len(self.orbital_debris)
             + len(self.meteor_pool.active)
@@ -484,7 +482,6 @@ class EntityManager:
         _add(self.cannon_towers)
         _add(self.cannon_mines)
         _add(self.black_holes)
-        _add(self.mountain_propellers)
         _add(self.attack_debris)
         _add(self.orbital_debris)
         _add(self.bullets)
@@ -808,9 +805,6 @@ class EntityManager:
         for e in self.enemies:
             if not e.dead:
                 self.enemy_spatial_grid.insert_from_rect(e)
-        for prop in self.mountain_propellers:
-            if not prop.dead:
-                self.enemy_spatial_grid.insert_from_rect(prop)
         for m in self.boulders:
             if not m.dead:
                 self.enemy_spatial_grid.insert_from_rect(m)
@@ -947,7 +941,6 @@ class EntityManager:
         for _z in ctx_emissions.new_ice_zones:
             self.spawn_ice_poison_zone(*_z)
 
-        self._update_mountain_propellers(dt)
         self._update_energy_orbs(dt)
         self._update_orbital_orbs(dt)
         self._check_alien_collisions()
@@ -1408,11 +1401,6 @@ class EntityManager:
                 en.update(ctx.sdt)
         return ctx
 
-    def _update_mountain_propellers(self, dt: float) -> None:
-        for prop in self.mountain_propellers:
-            prop.update(dt)
-        self.mountain_propellers = [p for p in self.mountain_propellers if not p.dead]
-
     def _update_energy_orbs(self, dt: float) -> None:
         for o in self.energy_orbs:
             o.update(dt)
@@ -1611,8 +1599,6 @@ class EntityManager:
             for f in self.formations:
                 if is_v(f):
                     f.draw(surface)
-            for prop in self.mountain_propellers:
-                prop.draw(surface)
 
         # 2. Desenhar projéteis que ficam por BAIXO do boss (como o ataque da serpente)
         for b in self.serpent_bullets:
@@ -1764,7 +1750,7 @@ class EntityManager:
 
     def spawn_mountain_propeller(self, y: float | None = None) -> MountainPropeller:
         prop = MountainPropeller(y=y)
-        self.mountain_propellers.append(prop)
+        self.enemies.append(prop)
         return prop
 
     def spawn_giant_meteor_boss(
@@ -2100,7 +2086,6 @@ class EntityManager:
         self.fire_zones.clear()
         self.orbital_orbs.clear()
         self.electric_fields.clear()
-        self.mountain_propellers.clear()
         self.explosive_effects.clear()
         self.air_strike_bombs.clear()
         self.cannon_towers.clear()
@@ -2167,7 +2152,6 @@ class EntityManager:
         self.fire_zones.clear()
         self.orbital_orbs.clear()
         self.electric_fields.clear()
-        self.mountain_propellers.clear()
         self.boss = None
         # Mini-naves são limpas completamente; a cena reconstrói o estado
         # correto após o clear (permanentes vs par temporário do powerup ativo).

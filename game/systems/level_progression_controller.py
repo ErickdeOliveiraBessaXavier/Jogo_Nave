@@ -203,14 +203,11 @@ class LevelProgressionController:
             if not getattr(e, "dead", False) and on(e)
         )
         active_boulders = sum(1 for m in em.boulders if not m.dead and on(m))
-        # MountainPropeller vive em lista própria (`mountain_propellers`), fora de
-        # `em.enemies`. Sem contá-lo aqui, quando ele era o ÚLTIMO hostil vivo a
-        # cota "concluía" com tela ainda ocupada: a fase encerrava na hora e a
-        # limpeza geral o apagava instantaneamente, sem passar pelo blink de
-        # cleanup como os demais. Conta como hostil visível igual aos outros.
-        active_propellers = sum(
-            1 for p in em.mountain_propellers if not p.dead and on(p)
-        )
+        # (Havia aqui uma contagem à parte do MountainPropeller, porque ele vivia
+        # numa lista própria fora de `em.enemies` e, sendo o último hostil vivo, a
+        # cota "concluía" com a tela ainda ocupada. Ele foi migrado para
+        # `em.enemies` e agora entra na contagem geral acima como todos os
+        # outros.)
         active_attack_debris = sum(
             1 for s in em.attack_debris if not s.dead and on(s)
         )
@@ -228,7 +225,6 @@ class LevelProgressionController:
             active_enemies
             + active_formation_enemies
             + active_boulders
-            + active_propellers
             + active_attack_debris
             + active_orbital_debris
             + active_mine_explosions

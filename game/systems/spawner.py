@@ -736,10 +736,7 @@ class EnemySpawner:
                 counts["cutting_storm"] += 1
             elif isinstance(enemy, StoneEagle):
                 counts["stone_eagle"] += 1
-
-        for prop in entity_manager.mountain_propellers:
-            if not prop.dead:
-                counts["total"] += 1
+            elif isinstance(enemy, MountainPropeller):
                 counts["mountain_propeller"] += 1
 
         return counts
@@ -2140,9 +2137,17 @@ class EnemySpawner:
             return
 
         self.propeller_spawn_timer.start()
+        # Conta os vivos em `entity_manager.enemies` (o propeller deixou de ter
+        # lista própria). `len()` da lista antiga já não valeria: `enemies`
+        # carrega todos os tipos.
+        vivos = sum(
+            1
+            for e in entity_manager.enemies
+            if isinstance(e, MountainPropeller) and not e.dead
+        )
         if (
             random.random() < self.spawn_intensity
-            and len(entity_manager.mountain_propellers) < SPAWNER_CAP_MOUNTAIN_PROPELLER
+            and vivos < SPAWNER_CAP_MOUNTAIN_PROPELLER
         ):
             prop = entity_manager.spawn_mountain_propeller()
             prop.health = max(1, int(prop.health * self.enemy_health_multiplier))

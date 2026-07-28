@@ -1464,8 +1464,12 @@ class PlayingScene(Scene):
             return
 
         # Só as hélices soprando importam — calculado uma vez p/ todas as naves.
+        # Duck typing (§5) sobre `em.enemies`: o propeller deixou de ter lista
+        # própria, e quem expõe `is_blowing()` participa sem o loop saber o tipo.
         blowing = [
-            prop for prop in self.entity_manager.mountain_propellers if prop.is_blowing()
+            e
+            for e in self.entity_manager.enemies
+            if not e.dead and getattr(e, "is_blowing", None) and e.is_blowing()
         ]
 
         for slot in self.roster.alive_slots():

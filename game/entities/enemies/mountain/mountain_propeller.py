@@ -21,6 +21,25 @@ class _PropellerState(Enum):
 
 
 class MountainPropeller:
+    # Vive em `EntityManager.enemies` como todo mundo, e é isso que lhe dá de
+    # graça a parada do tempo, as quatro fontes de lentidão (EMP, gelo, vórtice,
+    # implosão), as zonas de veneno/fogo e qualquer efeito futuro. Antes tinha
+    # lista própria e um loop de update paralelo que passava o `dt` CRU, então
+    # nenhum desses efeitos o alcançava — e três sistemas (progressão de fase,
+    # force-kill de boss, cap do spawner) carregavam remendos para compensar.
+    #
+    # Não precisa de `update_in_context`: o `_update_enemies` cai no fallback
+    # `en.update(ctx.sdt)`, e o `sdt` já vem multiplicado pelos slows.
+
+    # Nasce FORA da tela, à direita (`x = SCREEN_WIDTH + BODY_W`), e entra
+    # deslizando. Sem esta isenção o backstop de limpeza o mataria no frame do
+    # spawn. Depois de posicionado ele nunca sai da área jogável sozinho —
+    # patrulha só na vertical —, então isentar de vez é seguro.
+    offscreen_cull_exempt: bool = True
+    # Era desenhado incondicionalmente no loop próprio; o loop de inimigos filtra
+    # por visibilidade, e sem isto ele sumiria durante a entrada.
+    draws_offscreen: bool = True
+
     WIND_DURATION: Final = 3.5
     WIND_UP_TIME: Final = 1.2
     COOLDOWN_TIME: Final = 3.0

@@ -411,12 +411,8 @@ class BossFightController:
         for m in em.boulders:
             if not m.dead:
                 m.dead = True
-        # MountainPropeller tem lista própria; precisa ser force-killed aqui pelo
-        # mesmo motivo que entra na contagem de hostis — senão o backstop de
-        # cleanup nunca o removeria e a fase travaria.
-        for p in em.mountain_propellers:
-            if not p.dead:
-                p.dead = True
+        # (O MountainPropeller tinha um force-kill próprio aqui, por viver numa
+        # lista separada. Migrado para `em.enemies`, o loop no topo já o cobre.)
         for s in em.attack_debris:
             if not s.dead:
                 s.dead = True
