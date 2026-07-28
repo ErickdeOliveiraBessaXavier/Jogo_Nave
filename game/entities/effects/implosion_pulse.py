@@ -5,6 +5,10 @@ Cada acerto abre um círculo que fecha em 2s. Quem estiver dentro dele fica
 contínuo pequeno**. Não há atração: o upgrade compra tempo e pressão sobre um
 grupo, não reposicionamento.
 
+"Dentro dele" é literal: a área de efeito é o círculo **no tamanho em que está
+desenhado agora** (`covers` → `current_radius`), não o raio de pico. A zona
+aperta junto com o anel — quem estava na borda escapa conforme ele fecha.
+
 *(Houve uma versão com sucção de verdade, puxando os inimigos para o impacto.
 Foi removida: exigia um caso especial por família de inimigo — quem deriva a
 posição de uma âncora interna desfazia o puxão no próprio `update`, quem tem
@@ -95,8 +99,10 @@ class ImplosionPulse:
     def reset(self, cx: float, cy: float) -> None:
         self.cx = cx
         self.cy = cy
-        # Congelado no spawn: o raio que o dano e a lentidão usam é o mesmo que
-        # o círculo desenha, então o visual não pode divergir da área real.
+        # Raio de PICO, congelado no spawn: a resolução não muda no meio da
+        # partida, mas congelar aqui garante que abertura, fechamento, área de
+        # efeito e círculo desenhado leiam todos o mesmo número. O alcance
+        # instantâneo é `current_radius()` — é ele que a zona aplica (`covers`).
         self.radius = suction_radius()
         self.t = 0.0
         self.dead = False
@@ -115,10 +121,24 @@ class ImplosionPulse:
             self.dead = True
 
     def covers(self, cx: float, cy: float, r: float = 0.0) -> bool:
-        """O ponto (com raio `r`) está dentro da zona?"""
+        """O ponto (com raio `r`) está dentro da zona NESTE instante?
+
+        Usa `current_radius()`, não o raio cheio: a área de efeito é o círculo
+        que está na tela, do primeiro frame ao último. Enquanto isto lia
+        `self.radius`, a zona freava e sangrava no raio inteiro enquanto o anel
+        desenhado já tinha encolhido — no último terço da vida ele vale menos de
+        metade do raio, e no frame final some sem que o efeito tenha parado.
+
+        Consequência de balanceamento aceita junto com a regra: a área média ao
+        longo da vida cai para ~64% da anterior (∫(1-u³)²du), e a zona deixa de
+        segurar quem está na borda muito antes de fechar. O ganho é o jogador
+        conseguir LER o alcance — que é a razão de o círculo existir.
+        """
+        alcance = self.current_radius() + r
+        if alcance <= 0.0:
+            return False
         dx = cx - self.cx
         dy = cy - self.cy
-        alcance = self.radius + r
         return dx * dx + dy * dy < alcance * alcance
 
     # ── Visual ──────────────────────────────────────────────────────────────

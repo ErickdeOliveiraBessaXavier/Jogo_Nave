@@ -1156,6 +1156,12 @@ class Collisions:
         for pulse in pulses:
             if pulse.dead:
                 continue
+            if pulse.current_radius() <= 0.0:
+                continue  # frame do spawn: o anel ainda não abriu
+            # Caixa de consulta pelo raio de PICO, não pelo instantâneo: a fase
+            # ampla tem que ser superconjunto da estreita (`covers`, que soma o
+            # raio do inimigo), senão a grid descarta um alvo que a zona ainda
+            # alcança. Os candidatos a mais custam um teste de distância.
             radius = pulse.radius
             for enemy in enemy_grid.query(
                 pulse.cx - radius, pulse.cy - radius, radius * 2, radius * 2

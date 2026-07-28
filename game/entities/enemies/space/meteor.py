@@ -8,6 +8,7 @@ import pygame
 
 from ....core import colors
 from ....core.config import config as Config
+from ..._shared.control_marks import clear_control_marks
 
 if TYPE_CHECKING:
     from ....systems.entity_context import EnemyUpdateContext
@@ -177,7 +178,16 @@ class Meteor:
         aggressiveness_multiplier: float = 1.0,
         inverted_vertical: bool = False,
     ):
-        """Reconfigura o meteoro para reutilização no pool."""
+        """Reconfigura o meteoro para reutilização no pool.
+
+        Vale para o RockGlider também, que chama este `reset` via `super()`.
+
+        A limpeza das marcas de controle é obrigatória aqui: o timer de lentidão
+        (Implosão, EMP, gelo, vórtice) só decai enquanto a entidade está no loop
+        de update, então quem volta ao pool marcado congela o resíduo e o
+        entrega ao próximo spawn — que nascia lento sem nenhuma zona na tela.
+        """
+        clear_control_marks(self)
         self.aggressiveness_multiplier = aggressiveness_multiplier
         self.inverted_vertical = inverted_vertical
         self.size = (

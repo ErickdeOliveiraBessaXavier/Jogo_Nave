@@ -163,6 +163,29 @@ class TestAlcance:
         próprio jogo: a explosão do tiro explosivo tem 60px."""
         assert 50.0 < IMPLOSION_RADIUS < 200.0
 
+    def test_a_area_de_efeito_E_o_circulo_desenhado(self):
+        """`covers` == `current_radius`, frame a frame.
+
+        Enquanto isto lia o raio de pico, a zona freava e sangrava num alcance
+        que o anel já não mostrava: no último terço da vida ele vale menos de
+        metade do raio, e no frame final some com o efeito ainda ativo. O
+        círculo existe para o jogador saber onde mirar — se ele mente, não
+        serve para nada.
+        """
+        pool = ImplosionPulsePool()
+        pool.get(CX, CY)
+        p = pool.active[0]
+        amostras = 0
+        while not p.dead:
+            pool.update(1 / 120)
+            r = p.current_radius()
+            if r <= 2.0:
+                continue
+            amostras += 1
+            assert p.covers(CX + r * 0.98, CY), f"não pega dentro do anel (r={r})"
+            assert not p.covers(CX + r + 1.0, CY), f"pega fora do anel (r={r})"
+        assert amostras > 60, "amostragem rasa demais para valer como prova"
+
     def test_e_area_e_nao_lista_congelada(self):
         """Zona é ÁREA: quem entra depois é pego.
 
@@ -276,12 +299,31 @@ class TestLentidao:
         assert IMPLOSION_SLOW_LINGER == 3.0
 
     def test_sobrevive_ao_fim_da_zona(self):
-        """O requisito central: a zona fecha e a lentidão continua."""
-        e = at_fraction(0.5)
+        """O requisito central: a zona fecha e a lentidão continua.
+
+        Alvo no CENTRO de propósito: o anel encolhe, e só quem está no meio
+        continua coberto até o último frame — é o caso em que o linger sai
+        cheio. Quem está na borda é solto antes (teste seguinte).
+        """
+        e = at_fraction(0.0)
         em, _, _ = rodar_zona([e])
         assert em.implosion_pool.get_active_count() == 0, "a zona não fechou"
         assert EntityManager._implosion_multiplier(e) == IMPLOSION_SLOW_FACTOR
         assert e.implosion_slow_timer == pytest.approx(IMPLOSION_SLOW_LINGER, abs=0.1)
+
+    def test_quem_esta_na_borda_e_solto_quando_o_anel_passa(self):
+        """A área de efeito é o anel DESENHADO, então ela aperta ao fechar.
+
+        Consequência direta de `covers` seguir `current_radius`: o alvo na
+        borda para de ser remarcado no instante em que o círculo passa por ele
+        — e sai de lá com o linger já correndo, não com os 3s cheios.
+        """
+        borda = at_fraction(0.85)
+        em, _, _ = rodar_zona([borda])
+        assert borda.implosion_slow_timer > 0.0, "nem chegou a ser marcado"
+        assert borda.implosion_slow_timer < IMPLOSION_SLOW_LINGER - 0.5, (
+            "continuou sendo marcado depois de o anel passar por ele"
+        )
 
     def test_expira_no_tempo_certo(self):
         e = at_fraction(0.5)
@@ -493,6 +535,117 @@ class TestCicloDeVida:
                 em.implosion_pool.active, grid_com(e), em
             )
         assert e.hits == antes
+
+    def test_recem_chegado_nao_pega_zona_de_ativacao_ANTERIOR(self):
+        """O sintoma relatado: a zona fechou, mas o LUGAR continuava freando.
+
+        Diferente de `test_para_de_agir_depois_de_fechar` (mesmo inimigo, que
+        pode carregar linger legítimo): aqui o inimigo chega ao ponto exato
+        DEPOIS de a zona morrer, sem nunca ter passado por ela.
+        """
+        em, _, _ = rodar_zona([at_fraction(0.5)])
+        col = Collisions(event_bus=Bus())
+
+        recem_chegado = at_fraction(0.3)
+        for _ in range(60):
+            col.implosion_pulses_vs_enemies(
+                em.implosion_pool.active, grid_com(recem_chegado), em
+            )
+        assert recem_chegado.hits == 0
+        assert getattr(recem_chegado, "implosion_slow_timer", 0.0) == 0.0
+        assert EntityManager._implosion_multiplier(recem_chegado) == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Resíduo entre ativações
+# ---------------------------------------------------------------------------
+
+
+class TestSemResiduoEntreAtivacoes:
+    """A marca de lentidão não pode atravessar o pool.
+
+    O timer só decai enquanto a entidade está viva no loop de update. Um
+    meteoro marcado que morre volta ao pool com o resíduo CONGELADO — e o
+    próximo spawn nascia lento, muito depois de o upgrade ter acabado e sem
+    nenhum círculo na tela para explicar. É o mesmo objeto reaproveitado, e por
+    isso o sintoma parecia preso ao LUGAR da zona antiga.
+    """
+
+    @staticmethod
+    def _marcar_e_reciclar(em, spawn):
+        alvo = spawn()
+        alvo.implosion_slow_timer = IMPLOSION_SLOW_LINGER
+        alvo.implosion_damage_cd = IMPLOSION_DAMAGE_INTERVAL
+        alvo.dead = True
+        em.cleanup()
+        return alvo
+
+    def test_meteoro_reciclado_nao_nasce_lento(self):
+        em = EntityManager()
+        antigo = self._marcar_e_reciclar(
+            em, lambda: em.spawn_meteor(size=20, x=CX, y=CY, vx=0.0, vy=0.0)
+        )
+        novo = em.spawn_meteor(size=20, x=100.0, y=100.0, vx=0.0, vy=0.0)
+
+        assert novo is antigo, "premissa: o pool devolveu o mesmo objeto"
+        assert novo.implosion_slow_timer == 0.0
+        assert novo.implosion_damage_cd == 0.0
+        assert EntityManager._implosion_multiplier(novo) == 1.0
+
+    def test_rock_glider_reciclado_nao_nasce_lento(self):
+        """O RockGlider é o swarm da montanha e passa pelo mesmo `reset`."""
+        em = EntityManager()
+        pool = em.rock_glider_pool
+        antigo = pool.get(x=CX, y=CY)
+        antigo.implosion_slow_timer = IMPLOSION_SLOW_LINGER
+        antigo.dead = True
+        pool.release(antigo)
+
+        novo = pool.get(x=100.0, y=100.0)
+        assert novo is antigo, "premissa: o pool devolveu o mesmo objeto"
+        assert novo.implosion_slow_timer == 0.0
+        assert EntityManager._implosion_multiplier(novo) == 1.0
+
+    def test_reset_limpa_TODAS_as_marcas_de_controle(self):
+        """EMP, gelo e vórtice vazam pelo mesmo caminho — a lista é uma só."""
+        from game.entities._shared.control_marks import CONTROL_MARKS
+
+        em = EntityManager()
+        antigo = em.spawn_meteor(size=20, x=CX, y=CY, vx=0.0, vy=0.0)
+        for marca in CONTROL_MARKS:
+            setattr(antigo, marca, 5.0)
+        antigo.dead = True
+        em.cleanup()
+
+        novo = em.spawn_meteor(size=20, x=100.0, y=100.0, vx=0.0, vy=0.0)
+        assert novo is antigo
+        residuos = {m: getattr(novo, m) for m in CONTROL_MARKS if getattr(novo, m)}
+        assert not residuos, f"marcas atravessaram o pool: {residuos}"
+
+    def test_ciclo_completo_pela_zona_de_verdade(self):
+        """Ponta a ponta: zona real marca o meteoro, ele morre, é reciclado.
+
+        Sem stub de marca — quem escreve o timer aqui é o handler de colisão.
+        """
+        em = EntityManager()
+        meteoro = em.spawn_meteor(size=20, x=CX - 20, y=CY - 20, vx=0.0, vy=0.0)
+        col = Collisions(event_bus=Bus())
+        em.spawn_implosion_pulse(CX, CY)
+
+        for _ in range(10):
+            g: SpatialGrid = SpatialGrid(cell_size=200)
+            r = meteoro.rect
+            g.insert(meteoro, r.x, r.y, r.width, r.height)
+            col.implosion_pulses_vs_enemies(em.implosion_pool.active, g, em)
+            em.implosion_pool.update(1 / 60)
+        assert meteoro.implosion_slow_timer > 0.0, "a zona não marcou o meteoro"
+
+        meteoro.dead = True
+        em.cleanup()
+        em.implosion_pool.clear_active()
+
+        novo = em.spawn_meteor(size=20, x=100.0, y=100.0, vx=0.0, vy=0.0)
+        assert EntityManager._implosion_multiplier(novo) == 1.0
 
 
 # ---------------------------------------------------------------------------

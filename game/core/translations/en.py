@@ -294,7 +294,7 @@ EN: dict[str, str] = {
     "upgrade.air_strike.desc": "20 bombs fall in random areas.",
     "upgrade.cannon_tower.desc": "Static mine towers.",
     "upgrade.link.desc": "High-voltage beam between players.",
-    "upgrade.implosion_shot.desc": "Every hit sucks nearby enemies in.",
+    "upgrade.implosion_shot.desc": "Every hit creates an area that slows enemies and deals light damage.",
 
     # ── HUD (in-game) ────────────────────────────────────────────────────────
     "hud.score": "Score: {}",

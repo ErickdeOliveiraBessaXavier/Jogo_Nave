@@ -35,7 +35,7 @@ class UpgradeType(Enum):
     WINGMAN = auto()  # Naves de escolta autônomas
     BERSERK = auto()  # Ataque omnidirecional insano
     COOP_LINK = auto()  # Feixe de dano cooperativo
-    IMPLOSION_SHOT = auto()  # Cada acerto suga os inimigos próximos para o impacto
+    IMPLOSION_SHOT = auto()  # Cada acerto abre uma área que deixa os inimigos lentos
 
 
 class UpgradeContextProtocol(Protocol):
@@ -622,7 +622,11 @@ class GiantShotUpgrade(ActiveUpgrade):
 
 
 class ImplosionShotUpgrade(ActiveUpgrade):
-    """Enquanto dura, cada acerto suga os inimigos vizinhos para o impacto.
+    """Enquanto dura, cada acerto abre uma área de controle no ponto do impacto.
+
+    Quem estiver dentro fica lento e sofre um dano contínuo pequeno. Não há
+    atração: a versão com sucção foi removida (ver `implosion_pulse`), e o que
+    sobrou não move ninguém — compra tempo sobre o grupo.
 
     Mesmo padrão dos outros modificadores de tiro por tempo (Giant, Chain): o
     upgrade só liga o timer da nave; quem cria os pulsos é o sistema de colisão,
@@ -888,12 +892,13 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         None,
         2,
     ),
-    # UTILITY, não OFFENSIVE: não soma um ponto de dano. O valor é reposicionar
-    # o inimigo, e quem transforma isso em dano é o tiro seguinte do jogador.
+    # UTILITY, não OFFENSIVE: o dano da área é pressão de fundo (menos que uma
+    # bala na vida inteira da zona). O valor é o controle — segurar o grupo no
+    # lugar; quem transforma isso em dano é o tiro seguinte do jogador.
     UpgradeType.IMPLOSION_SHOT: UpgradeMeta(
         UpgradeType.IMPLOSION_SHOT,
         "IMPL",
-        "Cada acerto suga os inimigos próximos.",
+        "Cada acerto cria uma área que deixa os inimigos lentos e causa dano leve.",
         "implosion_shot",
         UpgradeCategory.UTILITY,
         55,
